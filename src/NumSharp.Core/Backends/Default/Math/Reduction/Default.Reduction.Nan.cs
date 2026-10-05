@@ -164,8 +164,8 @@ namespace NumSharp.Backends
         /// skipped (complex: a NaN in either part), a tie keeping the EARLIER element in NumPy's visiting order, an all-NaN
         /// reduction returning its first NaN verbatim. Complex used
         /// to go to <c>np.amax</c> / <c>np.amin</c>, which PROPAGATE a NaN — a value bug. A broadcast float32 / float64
-        /// input — which the exact core declines (a zero stride changes NpyIter's axis sort) — keeps the previous kernels:
-        /// the right value, but a ±0 tie's sign and an all-NaN slice's payload are not pinned.
+        /// input — which the exact core declines (a zero stride changes NpyIter's axis sort) — runs the reduction iterator
+        /// of the keyword path (<see cref="MaxMinNumPy"/>), which ports that sort: bit-exact too since 2026-10-05.
         /// </para>
         /// </remarks>
         /// <param name="a">The array to reduce.</param>
@@ -211,6 +211,12 @@ namespace NumSharp.Backends
                 return NanMinMaxSequential(arr, axis, keepdims, isMax);
 
             bool exactDtype = tc == NPTypeCode.Single || tc == NPTypeCode.Double;
+
+            // A broadcast float32 / float64 input: the exact core declines it (a zero stride changes NpyIter's axis sort), so it
+            // runs the reduction iterator, which ports that sort and NumPy's fmax / fmin call cuts — bit-exact like every
+            // other layout (the kernels below matched only the value).
+            if (exactDtype && shape.IsBroadcasted)
+                return MaxMinNumPy(arr, axis, null, keepdims, null, null, op);
             if (axis == null)
             {
                 if (exactDtype)
@@ -477,7 +483,7 @@ namespace NumSharp.Backends
 
             // KEEPORDER: allocate the result in the input's memory order (F for an F-contig input),
             // so the strided-output kernel fills it in place with no post-hoc copy (issue #610).
-            var result = AllocateReductionResult(inputType, outputDims, shape);
+            var result = AllocateReductionResult(inputType, outputDims, shape, axis);
 
             long axisSize = shape.dimensions[axis];
             long outputSize = result.size > 0 ? result.size : 1;
@@ -512,7 +518,7 @@ namespace NumSharp.Backends
             // writes each element through the result's strides, so the F-order buffer fills correctly
             // (issue #610). outputDimStrides below are a C-order decomposition of the LOGICAL output
             // index used only to locate the INPUT slice — independent of the output's physical layout.
-            var result = AllocateReductionResult(inputType, outputDims, shape);
+            var result = AllocateReductionResult(inputType, outputDims, shape, axis);
 
             long axisSize = shape.dimensions[axis];
             long outputSize = result.size > 0 ? result.size : 1;

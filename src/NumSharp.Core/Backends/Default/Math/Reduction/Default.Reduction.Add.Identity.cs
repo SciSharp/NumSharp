@@ -135,7 +135,7 @@ namespace NumSharp.Backends
             var src = arr[slices];
             try
             {
-                var result = AllocateReductionResult(loopType, outDims, shape);
+                var result = AllocateReductionResult(loopType, outDims, shape, axis);
                 try
                 {
                     WriteIdentityPlus(src, result, loopType);
@@ -275,7 +275,7 @@ namespace NumSharp.Backends
             }
             int splitOut = !keepdims && split > ax ? split - 1 : split;
 
-            var full = AllocateReductionResult(loopType, outDims, arr.Shape);
+            var full = AllocateReductionResult(loopType, outDims, arr.Shape, ax);
             try
             {
                 var inSlices = new Slice[nd];

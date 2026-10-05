@@ -316,6 +316,29 @@ namespace NumSharp.Backends
                 *op = *xp;
         }
 
+        /// <summary>
+        /// <c>o[i] = v</c> over a run of <paramref name="n"/> elements — the result's start when the reduction has an initial
+        /// value (<c>raw_array_assign_scalar</c> in <c>PyUFunc_ReduceWrapper</c>), before any element folds in.
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <param name="o">First output element.</param>
+        /// <param name="os">Output element stride.</param>
+        /// <param name="v">The value (its bits are stored unchanged — a NaN keeps its payload, a zero its sign).</param>
+        /// <param name="n">Run length.</param>
+        internal static unsafe void FillRun<T>(T* o, long os, T v, long n) where T : unmanaged
+        {
+            if (os == 1)
+            {
+                new Span<T>(o, checked((int)Math.Min(n, int.MaxValue))).Fill(v);
+                for (long i = int.MaxValue; i < n; i++)
+                    o[i] = v;
+                return;
+            }
+
+            for (long i = 0; i < n; i++)
+                o[i * os] = v;
+        }
+
         /// <summary>Byte shuffle keeping the even bytes of a 16-byte load in its low 8 bytes (stride-2 1-byte runs).</summary>
         private static readonly Vector128<byte> s_evenBytes = Vector128.Create((byte)0, 2, 4, 6, 8, 10, 12, 14, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80);
 
@@ -1027,8 +1050,19 @@ namespace NumSharp.Backends
         /// <param name="axis">The reduced axis; <c>dims[axis] &gt;= 1</c>.</param>
         /// <param name="maximumSize">The buffer size in elements (<see cref="np.getbufsize"/>) — it shapes NumPy's call
         /// tiling, so it only matters for the P rules.</param>
+        /// <param name="hasSeed">True when the reduction has an initial value (<c>initial=</c>): every output starts as
+        /// <paramref name="seed"/> and EVERY reduced element is folded in — NumPy's path when <c>PyUFunc_ReduceWrapper</c>
+        /// assigns the initial value instead of copying each output's first element (no first-visit skip). A ROW is then one
+        /// call over the whole row, seeded with <paramref name="seed"/>; a SLAB folds from the first reduced index on.</param>
+        /// <param name="seed">The initial value, already packed into <typeparamref name="T"/> (ignored without
+        /// <paramref name="hasSeed"/>).</param>
+        /// <remarks>
+        /// With a seed, only the N rules (<c>np.max</c> / <c>np.min</c>) and integers are served here: their vector and scalar
+        /// ops agree, so every elementwise SLAB step is exact whatever NumPy's call cuts. The P rules with an initial value go
+        /// through <see cref="NumPyReduceIterator"/>, which reproduces the cuts (a seeded P-rule SLAB is not tiled here).
+        /// </remarks>
         internal static unsafe void ReduceAxis<T, TLane>(T* x, ReadOnlySpan<long> dims, ReadOnlySpan<long> xs, T* o,
-            ReadOnlySpan<long> os, int axis, long maximumSize)
+            ReadOnlySpan<long> os, int axis, long maximumSize, bool hasSeed = false, T seed = default)
             where T : unmanaged, INumber<T> where TLane : struct, ILane<T>
         {
             int nd = dims.Length;
@@ -1059,7 +1093,7 @@ namespace NumSharp.Backends
             Span<long> place = stackalloc long[nd];
             place.Clear();   // explicit: an N rule never writes it, and the walk reads it (as zeros) either way
             SlabCallTiling tiling = default;
-            bool tiled = !TLane.PropagatesNaN && !rows && inner >= 0 && K > 1;
+            bool tiled = !TLane.PropagatesNaN && !rows && inner >= 0 && K > 1 && !hasSeed;
             if (tiled)
                 tiling = SlabCallTiling.Build<T>(dims, xs, axis, maximumSize, place, out _);
 
@@ -1132,7 +1166,11 @@ namespace NumSharp.Backends
                 T* ob = o + offO;
                 if (rows)
                 {
-                    *ob = sK == 1 ? ReduceRow<T, TLane>(xb, K) : ReduceStridedRow<T, TLane>(xb, sK, K);
+                    // Seeded: NumPy's call covers the whole row from the initial value; unseeded: the copied first element
+                    // seeds the call over the rest.
+                    *ob = hasSeed
+                        ? Chain<T, TLane>(seed, xb, sK, K)
+                        : sK == 1 ? ReduceRow<T, TLane>(xb, K) : ReduceStridedRow<T, TLane>(xb, sK, K);
                 }
                 else if (tiled)
                 {
@@ -1147,8 +1185,20 @@ namespace NumSharp.Backends
                 }
                 else
                 {
-                    CopyRun(ob, runOs, xb, runXs, runN);
-                    long k = 1;
+                    // The result starts as the initial value (every reduced index then folds in), or as the first slab
+                    // (NumPy's first-visit copy, and the fold starts at index 1).
+                    long k;
+                    if (hasSeed)
+                    {
+                        FillRun(ob, runOs, seed, runN);
+                        k = 0;
+                    }
+                    else
+                    {
+                        CopyRun(ob, runOs, xb, runXs, runN);
+                        k = 1;
+                    }
+
                     // Contiguous runs fold eight reduced indices per pass (a regrouping of the same k-ordered fold —
                     // exact, see CombineRun8); a strided run and the axis' remainder take the one-slab step.
                     if (runOs == 1 && runXs == 1)
@@ -1193,41 +1243,51 @@ namespace NumSharp.Backends
         /// <param name="os">Output element strides indexed by input axis (reduced entry ignored).</param>
         /// <param name="axis">The reduced axis.</param>
         /// <param name="maximumSize">The buffer size in elements (<see cref="np.getbufsize"/>).</param>
+        /// <param name="seed">The initial value packed into <paramref name="t"/> (<see cref="ReductionInitial.TryPack"/>), or
+        /// <c>null</c> for NumPy's no-identity path (each output starts as its first element). See
+        /// <see cref="ReduceAxis{T,TLane}"/> for the rules a seed is served for.</param>
         /// <exception cref="NotSupportedException"><paramref name="t"/> is not a supported dtype.</exception>
         internal static unsafe void ReduceAxis(NPTypeCode t, MinMaxOp op, byte* x, ReadOnlySpan<long> dims, ReadOnlySpan<long> xs,
-            byte* o, ReadOnlySpan<long> os, int axis, long maximumSize)
+            byte* o, ReadOnlySpan<long> os, int axis, long maximumSize, byte* seed = null)
         {
             bool isMax = IsMaxLike(op);
+            bool s = seed != null;
             switch (t)
             {
                 case NPTypeCode.Double:
+                {
+                    double sv = s ? *(double*)seed : 0;
                     switch (op)
                     {
-                        case MinMaxOp.Max: ReduceAxis<double, MaxLane<double>>((double*)x, dims, xs, (double*)o, os, axis, maximumSize); break;
-                        case MinMaxOp.Min: ReduceAxis<double, MinLane<double>>((double*)x, dims, xs, (double*)o, os, axis, maximumSize); break;
-                        case MinMaxOp.FMax: ReduceAxis<double, FMaxLane<double>>((double*)x, dims, xs, (double*)o, os, axis, maximumSize); break;
-                        default: ReduceAxis<double, FMinLane<double>>((double*)x, dims, xs, (double*)o, os, axis, maximumSize); break;
+                        case MinMaxOp.Max: ReduceAxis<double, MaxLane<double>>((double*)x, dims, xs, (double*)o, os, axis, maximumSize, s, sv); break;
+                        case MinMaxOp.Min: ReduceAxis<double, MinLane<double>>((double*)x, dims, xs, (double*)o, os, axis, maximumSize, s, sv); break;
+                        case MinMaxOp.FMax: ReduceAxis<double, FMaxLane<double>>((double*)x, dims, xs, (double*)o, os, axis, maximumSize, s, sv); break;
+                        default: ReduceAxis<double, FMinLane<double>>((double*)x, dims, xs, (double*)o, os, axis, maximumSize, s, sv); break;
                     }
 
                     break;
+                }
                 case NPTypeCode.Single:
+                {
+                    float sv = s ? *(float*)seed : 0;
                     switch (op)
                     {
-                        case MinMaxOp.Max: ReduceAxis<float, MaxLane<float>>((float*)x, dims, xs, (float*)o, os, axis, maximumSize); break;
-                        case MinMaxOp.Min: ReduceAxis<float, MinLane<float>>((float*)x, dims, xs, (float*)o, os, axis, maximumSize); break;
-                        case MinMaxOp.FMax: ReduceAxis<float, FMaxLane<float>>((float*)x, dims, xs, (float*)o, os, axis, maximumSize); break;
-                        default: ReduceAxis<float, FMinLane<float>>((float*)x, dims, xs, (float*)o, os, axis, maximumSize); break;
+                        case MinMaxOp.Max: ReduceAxis<float, MaxLane<float>>((float*)x, dims, xs, (float*)o, os, axis, maximumSize, s, sv); break;
+                        case MinMaxOp.Min: ReduceAxis<float, MinLane<float>>((float*)x, dims, xs, (float*)o, os, axis, maximumSize, s, sv); break;
+                        case MinMaxOp.FMax: ReduceAxis<float, FMaxLane<float>>((float*)x, dims, xs, (float*)o, os, axis, maximumSize, s, sv); break;
+                        default: ReduceAxis<float, FMinLane<float>>((float*)x, dims, xs, (float*)o, os, axis, maximumSize, s, sv); break;
                     }
 
                     break;
-                case NPTypeCode.SByte: if (isMax) ReduceAxis<sbyte, MaxLane<sbyte>>((sbyte*)x, dims, xs, (sbyte*)o, os, axis, maximumSize); else ReduceAxis<sbyte, MinLane<sbyte>>((sbyte*)x, dims, xs, (sbyte*)o, os, axis, maximumSize); break;
-                case NPTypeCode.Byte: if (isMax) ReduceAxis<byte, MaxLane<byte>>(x, dims, xs, o, os, axis, maximumSize); else ReduceAxis<byte, MinLane<byte>>(x, dims, xs, o, os, axis, maximumSize); break;
-                case NPTypeCode.Int16: if (isMax) ReduceAxis<short, MaxLane<short>>((short*)x, dims, xs, (short*)o, os, axis, maximumSize); else ReduceAxis<short, MinLane<short>>((short*)x, dims, xs, (short*)o, os, axis, maximumSize); break;
-                case NPTypeCode.UInt16: if (isMax) ReduceAxis<ushort, MaxLane<ushort>>((ushort*)x, dims, xs, (ushort*)o, os, axis, maximumSize); else ReduceAxis<ushort, MinLane<ushort>>((ushort*)x, dims, xs, (ushort*)o, os, axis, maximumSize); break;
-                case NPTypeCode.Int32: if (isMax) ReduceAxis<int, MaxLane<int>>((int*)x, dims, xs, (int*)o, os, axis, maximumSize); else ReduceAxis<int, MinLane<int>>((int*)x, dims, xs, (int*)o, os, axis, maximumSize); break;
-                case NPTypeCode.UInt32: if (isMax) ReduceAxis<uint, MaxLane<uint>>((uint*)x, dims, xs, (uint*)o, os, axis, maximumSize); else ReduceAxis<uint, MinLane<uint>>((uint*)x, dims, xs, (uint*)o, os, axis, maximumSize); break;
-                case NPTypeCode.Int64: if (isMax) ReduceAxis<long, MaxLane<long>>((long*)x, dims, xs, (long*)o, os, axis, maximumSize); else ReduceAxis<long, MinLane<long>>((long*)x, dims, xs, (long*)o, os, axis, maximumSize); break;
-                case NPTypeCode.UInt64: if (isMax) ReduceAxis<ulong, MaxLane<ulong>>((ulong*)x, dims, xs, (ulong*)o, os, axis, maximumSize); else ReduceAxis<ulong, MinLane<ulong>>((ulong*)x, dims, xs, (ulong*)o, os, axis, maximumSize); break;
+                }
+                case NPTypeCode.SByte: { sbyte sv = s ? *(sbyte*)seed : (sbyte)0; if (isMax) ReduceAxis<sbyte, MaxLane<sbyte>>((sbyte*)x, dims, xs, (sbyte*)o, os, axis, maximumSize, s, sv); else ReduceAxis<sbyte, MinLane<sbyte>>((sbyte*)x, dims, xs, (sbyte*)o, os, axis, maximumSize, s, sv); break; }
+                case NPTypeCode.Byte: { byte sv = s ? *seed : (byte)0; if (isMax) ReduceAxis<byte, MaxLane<byte>>(x, dims, xs, o, os, axis, maximumSize, s, sv); else ReduceAxis<byte, MinLane<byte>>(x, dims, xs, o, os, axis, maximumSize, s, sv); break; }
+                case NPTypeCode.Int16: { short sv = s ? *(short*)seed : (short)0; if (isMax) ReduceAxis<short, MaxLane<short>>((short*)x, dims, xs, (short*)o, os, axis, maximumSize, s, sv); else ReduceAxis<short, MinLane<short>>((short*)x, dims, xs, (short*)o, os, axis, maximumSize, s, sv); break; }
+                case NPTypeCode.UInt16: { ushort sv = s ? *(ushort*)seed : (ushort)0; if (isMax) ReduceAxis<ushort, MaxLane<ushort>>((ushort*)x, dims, xs, (ushort*)o, os, axis, maximumSize, s, sv); else ReduceAxis<ushort, MinLane<ushort>>((ushort*)x, dims, xs, (ushort*)o, os, axis, maximumSize, s, sv); break; }
+                case NPTypeCode.Int32: { int sv = s ? *(int*)seed : 0; if (isMax) ReduceAxis<int, MaxLane<int>>((int*)x, dims, xs, (int*)o, os, axis, maximumSize, s, sv); else ReduceAxis<int, MinLane<int>>((int*)x, dims, xs, (int*)o, os, axis, maximumSize, s, sv); break; }
+                case NPTypeCode.UInt32: { uint sv = s ? *(uint*)seed : 0u; if (isMax) ReduceAxis<uint, MaxLane<uint>>((uint*)x, dims, xs, (uint*)o, os, axis, maximumSize, s, sv); else ReduceAxis<uint, MinLane<uint>>((uint*)x, dims, xs, (uint*)o, os, axis, maximumSize, s, sv); break; }
+                case NPTypeCode.Int64: { long sv = s ? *(long*)seed : 0L; if (isMax) ReduceAxis<long, MaxLane<long>>((long*)x, dims, xs, (long*)o, os, axis, maximumSize, s, sv); else ReduceAxis<long, MinLane<long>>((long*)x, dims, xs, (long*)o, os, axis, maximumSize, s, sv); break; }
+                case NPTypeCode.UInt64: { ulong sv = s ? *(ulong*)seed : 0UL; if (isMax) ReduceAxis<ulong, MaxLane<ulong>>((ulong*)x, dims, xs, (ulong*)o, os, axis, maximumSize, s, sv); else ReduceAxis<ulong, MinLane<ulong>>((ulong*)x, dims, xs, (ulong*)o, os, axis, maximumSize, s, sv); break; }
                 default: throw new NotSupportedException($"NumPy axis min/max schedule: dtype {t} is not served.");
             }
         }
@@ -1411,8 +1471,13 @@ namespace NumSharp.Backends
         /// <param name="dims">Operand extents (rank &lt;= 64; an empty span is a 0-d operand).</param>
         /// <param name="xs">Operand element strides (non-broadcast).</param>
         /// <param name="maximumSize">The buffer size in elements (<c>np.getbufsize()</c>).</param>
+        /// <param name="hasSeed">True when the reduction has an initial value: the result starts as <paramref name="seed"/>
+        /// and every element folds in — the first call no longer skips element 0 (NumPy's path with an identity or
+        /// <c>initial=</c>). The calls themselves are the same: the iterator does not depend on the initial value.</param>
+        /// <param name="seed">The initial value (ignored without <paramref name="hasSeed"/>).</param>
         /// <returns>The reduction, NumPy's bits.</returns>
-        internal static unsafe T ReduceFlat<T, TLane>(T* x, ReadOnlySpan<long> dims, ReadOnlySpan<long> xs, long maximumSize)
+        internal static unsafe T ReduceFlat<T, TLane>(T* x, ReadOnlySpan<long> dims, ReadOnlySpan<long> xs, long maximumSize,
+            bool hasSeed = false, T seed = default)
             where T : unmanaged, INumber<T> where TLane : struct, ILane<T>
         {
             int nd = dims.Length;
@@ -1420,9 +1485,19 @@ namespace NumSharp.Backends
             Span<long> cs = stackalloc long[Math.Max(nd, 1)];
             int c = FlatIteratorAxes(dims, xs, cd, cs);
 
+            if (hasSeed)
+            {
+                // A single element: NumPy's iterator still has one axis, of extent 1 and stride 0, so the call is the
+                // strided (scalar) form — N(seed, x[0]) with no lane reduce.
+                if (c == 0)
+                    return ChainStrided<T, TLane>(seed, x, 0, 1);
+                if (c == 1)
+                    return Chain<T, TLane>(seed, x, cs[0], cd[0]);
+            }
+
             // PyArray_CopyInitialReduceValues: the result starts as element 0, bits untouched (a NaN keeps its payload).
             T r = x[0];
-            if (c == 0)
+            if (!hasSeed && c == 0)
                 return r;   // a single element: the loop is never called
 
             // One run (the coalesced whole): one call over everything after the copied element — nothing buffers, and
@@ -1434,11 +1509,11 @@ namespace NumSharp.Backends
             var strides = cs[..c];
             int bestDim = FlatBufferingDim(axes, maximumSize, out long coreSize, out long bestSize);
             if (bestDim == 0)
-                return ReduceFlatRows<T, TLane>(x, axes, strides);
+                return ReduceFlatRows<T, TLane>(x, axes, strides, hasSeed, seed);
 
             // Buffered: a fill holds whole cores, capped to the buffer size (rounded down to a multiple of the core).
             long chunk = bestSize > maximumSize ? coreSize * Math.Max(1, maximumSize / coreSize) : bestSize;
-            return ReduceFlatBuffered<T, TLane>(x, axes, strides, bestSize, chunk);
+            return ReduceFlatBuffered<T, TLane>(x, axes, strides, bestSize, chunk, hasSeed, seed);
         }
 
         /// <summary>
@@ -1450,8 +1525,10 @@ namespace NumSharp.Backends
         /// <param name="x">Logical element 0 of the operand.</param>
         /// <param name="cd">Coalesced extents, innermost first (length &gt;= 2, rank &lt;= 64).</param>
         /// <param name="cs">Coalesced element strides, innermost first.</param>
+        /// <param name="hasSeed">True with an initial value: the first call covers its whole run from <paramref name="seed"/>.</param>
+        /// <param name="seed">The initial value (ignored without <paramref name="hasSeed"/>).</param>
         /// <returns>The reduction.</returns>
-        private static unsafe T ReduceFlatRows<T, TLane>(T* x, ReadOnlySpan<long> cd, ReadOnlySpan<long> cs)
+        private static unsafe T ReduceFlatRows<T, TLane>(T* x, ReadOnlySpan<long> cd, ReadOnlySpan<long> cs, bool hasSeed, T seed)
             where T : unmanaged, INumber<T> where TLane : struct, ILane<T>
         {
             int c = cd.Length;
@@ -1459,7 +1536,7 @@ namespace NumSharp.Backends
             Span<long> coord = stackalloc long[c];
             coord.Clear();   // explicit: the odometer must start at the origin whatever the method's locals-init policy
 
-            T r = Chain<T, TLane>(x[0], x + s0, s0, n0 - 1);
+            T r = hasSeed ? Chain<T, TLane>(seed, x, s0, n0) : Chain<T, TLane>(x[0], x + s0, s0, n0 - 1);
             long off = 0;
             while (true)
             {
@@ -1502,10 +1579,13 @@ namespace NumSharp.Backends
         /// <param name="cs">Coalesced element strides, innermost first.</param>
         /// <param name="blockElems">Elements one outer index spans (the core times the outer extent).</param>
         /// <param name="chunkElems">Elements one buffer fill holds (a multiple of the axis-0 extent).</param>
+        /// <param name="hasSeed">True with an initial value: the first fill is a whole call from <paramref name="seed"/> (no
+        /// first-element skip).</param>
+        /// <param name="seed">The initial value (ignored without <paramref name="hasSeed"/>).</param>
         /// <returns>The reduction.</returns>
         [SkipLocalsInit]
         private static unsafe T ReduceFlatBuffered<T, TLane>(T* x, ReadOnlySpan<long> cd, ReadOnlySpan<long> cs,
-            long blockElems, long chunkElems)
+            long blockElems, long chunkElems, bool hasSeed, T seed)
             where T : unmanaged, INumber<T> where TLane : struct, ILane<T>
         {
             int c = cd.Length;
@@ -1524,8 +1604,9 @@ namespace NumSharp.Backends
                 Span<long> coord = stackalloc long[c];
                 coord.Clear();   // [SkipLocalsInit]: the odometer's origin must be written, not assumed
 
-                T r = x[0];
-                bool first = true;
+                // Seeded, every fill is a whole call; unseeded, the first one skips the copied element 0.
+                T r = hasSeed ? seed : x[0];
+                bool first = !hasSeed;
                 long off = 0, rowInBlock = 0, rowsInChunk = 0;
                 T* d = buf;
                 while (true)
@@ -1591,39 +1672,47 @@ namespace NumSharp.Backends
         /// <param name="xs">Operand element strides (non-broadcast).</param>
         /// <param name="maximumSize">The buffer size in elements (<c>np.getbufsize()</c>).</param>
         /// <param name="slot">Receives the result (at least 8 bytes).</param>
+        /// <param name="seed">The initial value packed into <paramref name="t"/>, or <c>null</c> for NumPy's no-identity path.</param>
         /// <exception cref="NotSupportedException"><paramref name="t"/> is not a supported dtype.</exception>
         internal static unsafe void ReduceFlat(NPTypeCode t, MinMaxOp op, byte* x, ReadOnlySpan<long> dims, ReadOnlySpan<long> xs,
-            long maximumSize, byte* slot)
+            long maximumSize, byte* slot, byte* seed = null)
         {
             bool isMax = IsMaxLike(op);
+            bool s = seed != null;
             switch (t)
             {
                 case NPTypeCode.Double:
+                {
+                    double sv = s ? *(double*)seed : 0;
                     *(double*)slot = op switch
                     {
-                        MinMaxOp.Max => ReduceFlat<double, MaxLane<double>>((double*)x, dims, xs, maximumSize),
-                        MinMaxOp.Min => ReduceFlat<double, MinLane<double>>((double*)x, dims, xs, maximumSize),
-                        MinMaxOp.FMax => ReduceFlat<double, FMaxLane<double>>((double*)x, dims, xs, maximumSize),
-                        _ => ReduceFlat<double, FMinLane<double>>((double*)x, dims, xs, maximumSize),
+                        MinMaxOp.Max => ReduceFlat<double, MaxLane<double>>((double*)x, dims, xs, maximumSize, s, sv),
+                        MinMaxOp.Min => ReduceFlat<double, MinLane<double>>((double*)x, dims, xs, maximumSize, s, sv),
+                        MinMaxOp.FMax => ReduceFlat<double, FMaxLane<double>>((double*)x, dims, xs, maximumSize, s, sv),
+                        _ => ReduceFlat<double, FMinLane<double>>((double*)x, dims, xs, maximumSize, s, sv),
                     };
                     break;
+                }
                 case NPTypeCode.Single:
+                {
+                    float sv = s ? *(float*)seed : 0;
                     *(float*)slot = op switch
                     {
-                        MinMaxOp.Max => ReduceFlat<float, MaxLane<float>>((float*)x, dims, xs, maximumSize),
-                        MinMaxOp.Min => ReduceFlat<float, MinLane<float>>((float*)x, dims, xs, maximumSize),
-                        MinMaxOp.FMax => ReduceFlat<float, FMaxLane<float>>((float*)x, dims, xs, maximumSize),
-                        _ => ReduceFlat<float, FMinLane<float>>((float*)x, dims, xs, maximumSize),
+                        MinMaxOp.Max => ReduceFlat<float, MaxLane<float>>((float*)x, dims, xs, maximumSize, s, sv),
+                        MinMaxOp.Min => ReduceFlat<float, MinLane<float>>((float*)x, dims, xs, maximumSize, s, sv),
+                        MinMaxOp.FMax => ReduceFlat<float, FMaxLane<float>>((float*)x, dims, xs, maximumSize, s, sv),
+                        _ => ReduceFlat<float, FMinLane<float>>((float*)x, dims, xs, maximumSize, s, sv),
                     };
                     break;
-                case NPTypeCode.SByte: *(sbyte*)slot = isMax ? ReduceFlat<sbyte, MaxLane<sbyte>>((sbyte*)x, dims, xs, maximumSize) : ReduceFlat<sbyte, MinLane<sbyte>>((sbyte*)x, dims, xs, maximumSize); break;
-                case NPTypeCode.Byte: *slot = isMax ? ReduceFlat<byte, MaxLane<byte>>(x, dims, xs, maximumSize) : ReduceFlat<byte, MinLane<byte>>(x, dims, xs, maximumSize); break;
-                case NPTypeCode.Int16: *(short*)slot = isMax ? ReduceFlat<short, MaxLane<short>>((short*)x, dims, xs, maximumSize) : ReduceFlat<short, MinLane<short>>((short*)x, dims, xs, maximumSize); break;
-                case NPTypeCode.UInt16: *(ushort*)slot = isMax ? ReduceFlat<ushort, MaxLane<ushort>>((ushort*)x, dims, xs, maximumSize) : ReduceFlat<ushort, MinLane<ushort>>((ushort*)x, dims, xs, maximumSize); break;
-                case NPTypeCode.Int32: *(int*)slot = isMax ? ReduceFlat<int, MaxLane<int>>((int*)x, dims, xs, maximumSize) : ReduceFlat<int, MinLane<int>>((int*)x, dims, xs, maximumSize); break;
-                case NPTypeCode.UInt32: *(uint*)slot = isMax ? ReduceFlat<uint, MaxLane<uint>>((uint*)x, dims, xs, maximumSize) : ReduceFlat<uint, MinLane<uint>>((uint*)x, dims, xs, maximumSize); break;
-                case NPTypeCode.Int64: *(long*)slot = isMax ? ReduceFlat<long, MaxLane<long>>((long*)x, dims, xs, maximumSize) : ReduceFlat<long, MinLane<long>>((long*)x, dims, xs, maximumSize); break;
-                case NPTypeCode.UInt64: *(ulong*)slot = isMax ? ReduceFlat<ulong, MaxLane<ulong>>((ulong*)x, dims, xs, maximumSize) : ReduceFlat<ulong, MinLane<ulong>>((ulong*)x, dims, xs, maximumSize); break;
+                }
+                case NPTypeCode.SByte: { sbyte sv = s ? *(sbyte*)seed : (sbyte)0; *(sbyte*)slot = isMax ? ReduceFlat<sbyte, MaxLane<sbyte>>((sbyte*)x, dims, xs, maximumSize, s, sv) : ReduceFlat<sbyte, MinLane<sbyte>>((sbyte*)x, dims, xs, maximumSize, s, sv); break; }
+                case NPTypeCode.Byte: { byte sv = s ? *seed : (byte)0; *slot = isMax ? ReduceFlat<byte, MaxLane<byte>>(x, dims, xs, maximumSize, s, sv) : ReduceFlat<byte, MinLane<byte>>(x, dims, xs, maximumSize, s, sv); break; }
+                case NPTypeCode.Int16: { short sv = s ? *(short*)seed : (short)0; *(short*)slot = isMax ? ReduceFlat<short, MaxLane<short>>((short*)x, dims, xs, maximumSize, s, sv) : ReduceFlat<short, MinLane<short>>((short*)x, dims, xs, maximumSize, s, sv); break; }
+                case NPTypeCode.UInt16: { ushort sv = s ? *(ushort*)seed : (ushort)0; *(ushort*)slot = isMax ? ReduceFlat<ushort, MaxLane<ushort>>((ushort*)x, dims, xs, maximumSize, s, sv) : ReduceFlat<ushort, MinLane<ushort>>((ushort*)x, dims, xs, maximumSize, s, sv); break; }
+                case NPTypeCode.Int32: { int sv = s ? *(int*)seed : 0; *(int*)slot = isMax ? ReduceFlat<int, MaxLane<int>>((int*)x, dims, xs, maximumSize, s, sv) : ReduceFlat<int, MinLane<int>>((int*)x, dims, xs, maximumSize, s, sv); break; }
+                case NPTypeCode.UInt32: { uint sv = s ? *(uint*)seed : 0u; *(uint*)slot = isMax ? ReduceFlat<uint, MaxLane<uint>>((uint*)x, dims, xs, maximumSize, s, sv) : ReduceFlat<uint, MinLane<uint>>((uint*)x, dims, xs, maximumSize, s, sv); break; }
+                case NPTypeCode.Int64: { long sv = s ? *(long*)seed : 0L; *(long*)slot = isMax ? ReduceFlat<long, MaxLane<long>>((long*)x, dims, xs, maximumSize, s, sv) : ReduceFlat<long, MinLane<long>>((long*)x, dims, xs, maximumSize, s, sv); break; }
+                case NPTypeCode.UInt64: { ulong sv = s ? *(ulong*)seed : 0UL; *(ulong*)slot = isMax ? ReduceFlat<ulong, MaxLane<ulong>>((ulong*)x, dims, xs, maximumSize, s, sv) : ReduceFlat<ulong, MinLane<ulong>>((ulong*)x, dims, xs, maximumSize, s, sv); break; }
                 default: throw new NotSupportedException($"NumPy flat min/max schedule: dtype {t} is not served.");
             }
         }
@@ -1631,6 +1720,16 @@ namespace NumSharp.Backends
 
     public partial class DefaultEngine
     {
+        /// <summary>
+        /// <see cref="TryExactAxisMinMax(NDArray, int, MinMaxOp, byte*)"/> without an initial value — the call np.max / np.min /
+        /// np.nanmax / np.nanmin and np.evaluate make (a pointer parameter would force every caller into an unsafe context).
+        /// </summary>
+        /// <param name="arr">The array to reduce.</param>
+        /// <param name="axis">The already-normalized reduction axis.</param>
+        /// <param name="op">The reduction op.</param>
+        /// <returns>The fresh reduced array, or null when the exact schedule declines.</returns>
+        internal unsafe NDArray TryExactAxisMinMax(NDArray arr, int axis, MinMaxOp op) => TryExactAxisMinMax(arr, axis, op, null);
+
         /// <summary>
         /// Axis <c>Min</c> / <c>Max</c> of an existing array with NumPy's exact per-element schedule
         /// (<see cref="NumPyMinMaxReduce.ReduceAxis{T,TLane}"/>), into a fresh result allocated in NumPy's K order
@@ -1650,15 +1749,18 @@ namespace NumSharp.Backends
         /// <param name="axis">The already-normalized reduction axis.</param>
         /// <param name="op">The reduction op (<see cref="MinMaxOp.FMax"/> / <see cref="MinMaxOp.FMin"/> for
         /// <c>np.nanmax</c> / <c>np.nanmin</c>).</param>
+        /// <param name="seed">The initial value packed into the array's dtype, or <c>null</c> (NumPy's no-identity path).
+        /// With a seed, an empty input along the axis is served too (every output is the seed), and the reduced axis may
+        /// have any extent; the P rules must not be seeded here (see <see cref="NumPyMinMaxReduce.ReduceAxis{T,TLane}"/>).</param>
         /// <returns>The fresh reduced array (the reduced axis removed; a 0-d result for a 1-D input), or null.</returns>
-        internal unsafe NDArray TryExactAxisMinMax(NDArray arr, int axis, MinMaxOp op)
+        internal unsafe NDArray TryExactAxisMinMax(NDArray arr, int axis, MinMaxOp op, byte* seed)
         {
             if (NDExpr.DisableExactMinMax)
                 return null;
             var t = arr.GetTypeCode;
             var shape = arr.Shape;
             int nd = shape.NDim;
-            if (!NumPyMinMaxReduce.Supports(t) || shape.IsBroadcasted || nd == 0 || nd > 64 || shape.size == 0)
+            if (!NumPyMinMaxReduce.Supports(t) || shape.IsBroadcasted || nd == 0 || nd > 64 || (shape.size == 0 && seed == null))
                 return null;
 
             var dims = shape.dimensions;
@@ -1667,7 +1769,12 @@ namespace NumSharp.Backends
                 if (d != axis)
                     outputDims[od++] = dims[d];
 
-            var result = AllocateReductionResult(t, outputDims, shape);
+            var result = AllocateReductionResult(t, outputDims, shape, axis);
+            // An empty RESULT (a non-reduced axis of extent 0) has nothing to compute — and the walk below skips extent <= 1
+            // axes, so it would write the seed past the zero-size buffer. (An empty REDUCED axis keeps the walk: every output
+            // is the seed, FillRun's job.)
+            if (result.size == 0)
+                return result;
             try
             {
                 // Output strides indexed by INPUT axis (the reduced axis' entry is never read).
@@ -1681,7 +1788,7 @@ namespace NumSharp.Backends
                 // base with a non-zero offset — Address + offset·itemsize is right for both.
                 byte* x = (byte*)arr.Address + shape.offset * es;
                 byte* o = (byte*)result.Address + result.Shape.offset * es;
-                NumPyMinMaxReduce.ReduceAxis(t, op, x, dims, shape.strides, o, os, axis, np.getbufsize());
+                NumPyMinMaxReduce.ReduceAxis(t, op, x, dims, shape.strides, o, os, axis, np.getbufsize(), seed);
                 NDExpr.ExactMinMaxRuns++;
                 return result;
             }
@@ -1711,34 +1818,53 @@ namespace NumSharp.Backends
         /// <param name="arr">The array to reduce (any non-broadcast layout; views honored through offset and strides).</param>
         /// <param name="op">The reduction op.</param>
         /// <param name="slot">Receives the result at the array's dtype (at least 8 bytes).</param>
+        /// <param name="seed">The initial value packed into the array's dtype, or <c>null</c> (NumPy's no-identity path).
+        /// With a seed an empty array is served (the result is the seed).</param>
         /// <returns>True when the reduction was computed here.</returns>
-        internal unsafe bool TryExactFlatMinMaxArray(NDArray arr, MinMaxOp op, byte* slot)
+        internal unsafe bool TryExactFlatMinMaxArray(NDArray arr, MinMaxOp op, byte* slot, byte* seed = null)
         {
             if (NDExpr.DisableExactMinMax)
                 return false;
             var t = arr.GetTypeCode;
             var shape = arr.Shape;
-            if (!NumPyMinMaxReduce.Supports(t) || shape.IsBroadcasted || shape.NDim > 64 || shape.size == 0)
+            if (!NumPyMinMaxReduce.Supports(t) || shape.IsBroadcasted || shape.NDim > 64 || (shape.size == 0 && seed == null))
                 return false;
+
+            if (shape.size == 0)
+            {
+                // An empty reduction with an initial value: NumPy's loop is never called, the result is the value.
+                Buffer.MemoryCopy(seed, slot, t.SizeOf(), t.SizeOf());
+                return true;
+            }
 
             // Logical element 0 (Address + offset·itemsize is right for a re-seated contiguous slice and a strided view).
             byte* x = (byte*)arr.Address + shape.offset * t.SizeOf();
-            NumPyMinMaxReduce.ReduceFlat(t, op, x, shape.dimensions, shape.strides, np.getbufsize(), slot);
+            NumPyMinMaxReduce.ReduceFlat(t, op, x, shape.dimensions, shape.strides, np.getbufsize(), slot, seed);
             NDExpr.ExactMinMaxRuns++;
             return true;
         }
 
         /// <summary>
-        /// <see cref="TryExactFlatMinMaxArray(NDArray, MinMaxOp, byte*)"/> as a fresh 0-d array of the input's dtype — the
-        /// shape <c>np.max(x)</c> / <c>np.nanmax(x)</c> returns before its keepdims / scalar-marking step.
+        /// <see cref="TryExactFlatMinMaxScalar(NDArray, MinMaxOp, byte*)"/> without an initial value — the call np.max / np.min /
+        /// np.nanmax / np.nanmin make (no pointer parameter, so their callers need no unsafe context).
         /// </summary>
         /// <param name="arr">The array to reduce.</param>
         /// <param name="op">The reduction op.</param>
         /// <returns>The 0-d result, or null when the exact schedule declined (nothing allocated).</returns>
-        internal unsafe NDArray TryExactFlatMinMaxScalar(NDArray arr, MinMaxOp op)
+        internal unsafe NDArray TryExactFlatMinMaxScalar(NDArray arr, MinMaxOp op) => TryExactFlatMinMaxScalar(arr, op, null);
+
+        /// <summary>
+        /// <see cref="TryExactFlatMinMaxArray(NDArray, MinMaxOp, byte*, byte*)"/> as a fresh 0-d array of the input's dtype — the
+        /// shape <c>np.max(x)</c> / <c>np.nanmax(x)</c> returns before its keepdims / scalar-marking step.
+        /// </summary>
+        /// <param name="arr">The array to reduce.</param>
+        /// <param name="op">The reduction op.</param>
+        /// <param name="seed">The initial value packed into the array's dtype, or <c>null</c> (NumPy's no-identity path).</param>
+        /// <returns>The 0-d result, or null when the exact schedule declined (nothing allocated).</returns>
+        internal unsafe NDArray TryExactFlatMinMaxScalar(NDArray arr, MinMaxOp op, byte* seed)
         {
             ulong slot = 0;   // 8 bytes: the widest served dtype
-            if (!TryExactFlatMinMaxArray(arr, op, (byte*)&slot))
+            if (!TryExactFlatMinMaxArray(arr, op, (byte*)&slot, seed))
                 return null;
 
             var t = arr.GetTypeCode;

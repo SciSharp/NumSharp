@@ -1437,7 +1437,7 @@ namespace NumSharp.Backends
         /// <typeparam name="TLane">The lane rule.</typeparam>
         /// <param name="acc">The accumulator vector.</param>
         /// <returns>The horizontal result.</returns>
-        private static unsafe T ReduceLanes<T, TLane>(Vector256<T> acc)
+        internal static unsafe T ReduceLanes<T, TLane>(Vector256<T> acc)
             where T : unmanaged, INumber<T> where TLane : struct, ILane<T>
         {
             // x == x fails only for a NaN lane; an integer vector always passes (so neither branch is ever taken for it).
@@ -1494,7 +1494,7 @@ namespace NumSharp.Backends
         /// <typeparam name="T">double or float.</typeparam>
         /// <returns>The canonical NaN.</returns>
         /// <exception cref="InvalidOperationException">An integer lane type — unreachable, integer vectors hold no NaN.</exception>
-        private static T CanonicalNaN<T>() where T : unmanaged, INumber<T>
+        internal static T CanonicalNaN<T>() where T : unmanaged, INumber<T>
         {
             if (typeof(T) == typeof(double))
             {

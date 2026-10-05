@@ -8,22 +8,21 @@ using System.Runtime.ExceptionServices;
 namespace NumSharp.Tests
 {
     /// <summary>
-    ///     Open bugs in the KEYWORD surface of the max/min reduction family: <c>np.max</c>, <c>np.min</c>,
-    ///     <c>np.amax</c>, <c>np.amin</c>, <c>np.nanmax</c>, <c>np.nanmin</c> and the methods <c>ndarray.max</c> /
-    ///     <c>ndarray.min</c>. NumPy 2.4.2 gives every one of them <c>out=</c>, <c>initial=</c> and <c>where=</c>;
-    ///     NumSharp has none of the three. A ported call that names one does not compile, and NumSharp cannot
-    ///     write a max/min into a caller's buffer, start it from a value (which is also the only way NumPy reduces
-    ///     an EMPTY slice without an error) or skip masked elements. Each test asserts NumPy's answer, so it FAILS
-    ///     while the keywords are missing and passes once they behave like NumPy's.
+    ///     The KEYWORD surface of the max/min reduction family: <c>np.max</c>, <c>np.min</c>, <c>np.amax</c>,
+    ///     <c>np.amin</c>, <c>np.nanmax</c>, <c>np.nanmin</c> and the methods <c>ndarray.max</c> / <c>ndarray.min</c>.
+    ///     NumPy 2.4.2 gives every one of them <c>out=</c>, <c>initial=</c> and <c>where=</c>; NumSharp had none of the
+    ///     three until 2026-10-05 (plan <c>docs/plans/api-parameter-parity.md</c>, item A4 — these were its
+    ///     <c>[OpenBugs]</c> pins). Each test asserts NumPy's answer for the same call. The whole surface — every layout,
+    ///     dtype pairing, initial kind, mask form, buffer fill and error order — is gated by the <c>minmax_kwargs</c>
+    ///     oracle tier; the cases here are the readable core plus the behaviours that tier cannot express (the LP64
+    ///     error texts, C#'s <c>where: true</c>).
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///     <b>Why the calls go through reflection.</b> A direct <c>np.max(a, initial: 10.0)</c> does not compile
-    ///     today, and a test file that does not compile cannot pin anything. <see cref="Np"/> and <see cref="Nd"/>
-    ///     therefore bind the overload whose parameter names are NumPy's, in NumPy's order
-    ///     (<c>a, axis, out, keepdims, initial, where</c>; the method form drops <c>a</c>). Today no such overload
-    ///     exists, so every case records "no overload". Once the overload exists, the SAME cases check NumPy's
-    ///     values with no edit here; remove <c>[OpenBugs]</c> then, and move the tests next to the functions' own.
+    ///     <b>Why the calls go through reflection.</b> <see cref="Np"/> and <see cref="Nd"/> bind the overload whose
+    ///     parameter names are NumPy's, in NumPy's order (<c>a, axis, out, keepdims, initial, where</c>; the method
+    ///     form drops <c>a</c>), so every case also proves that a ported named-argument call binds the NumPy form —
+    ///     a renamed or reordered keyword fails here even when the values would be right.
     ///     </para>
     ///     <para>
     ///     <b>What NumPy does</b> (<c>numpy/_core/fromnumeric.py</c> and <c>_methods.py</c>): <c>np.max</c> /
@@ -48,11 +47,10 @@ namespace NumSharp.Tests
     ///     are in <c>Logic/np.all_any.tuple_out_where.Test.cs</c> and the <c>reduce_kwargs</c> oracle tier.
     ///     </para>
     ///     <para>
-    ///     <b>Also observed, not pinned:</b> NumSharp's static overloads are <c>(a, axis, keepdims, dtype)</c>. The
-    ///     <c>dtype</c> parameter does not exist in NumPy (a ported call never passes it), but the THIRD positional
-    ///     slot is <c>keepdims</c> where NumPy's is <c>out</c>, so a positional port such as <c>np.max(a, 1, o)</c>
-    ///     does not compile either. NumPy's tuple <c>axis</c> is out of scope here: every NumSharp reduction is
-    ///     single-axis, a library-wide gap.
+    ///     <b>NumSharp's earlier forms stay</b>, below the NumPy form in overload priority: <c>(a, axis, keepdims,
+    ///     dtype)</c> (the <c>dtype</c> extension NumPy does not have) and <c>(a, axis, keepdims)</c> for a positional
+    ///     keepdims. NumPy's tuple <c>axis</c> is out of scope here: every NumSharp reduction is single-axis, a
+    ///     library-wide gap.
     ///     </para>
     ///     <para>
     ///     Every expected string is NumPy 2.4.2's output for the same call, probed on 2026-10-04, in
@@ -60,7 +58,7 @@ namespace NumSharp.Tests
     ///     </para>
     /// </remarks>
     [TestClass]
-    public class OpenBugsReductionKeywordTests : TestClass
+    public class MaxMinKeywordTests : TestClass
     {
         /// <summary>The <c>np.*</c> functions of the family; NumPy gives each the same signature.</summary>
         private static readonly string[] NpMaxMin = { "max", "min", "amax", "amin", "nanmax", "nanmin" };
@@ -85,7 +83,7 @@ namespace NumSharp.Tests
         /// <summary>
         ///     Every function of the family must have an overload with NumPy's parameter NAMES in NumPy's ORDER, and
         ///     every parameter after the array must be optional, so a ported call (<c>np.max(a, axis: 1, out: o)</c>,
-        ///     <c>a.min(where: m, initial: 9.0)</c>) compiles and binds. NumSharp's overloads are
+        ///     <c>a.min(where: m, initial: 9.0)</c>) compiles and binds. Before plan item A4 NumSharp's overloads were
         ///     <c>(a, axis, keepdims, dtype)</c> and <c>(axis, keepdims, dtype)</c> / <c>(dtype)</c>.
         /// </summary>
         /// <remarks>
@@ -94,7 +92,7 @@ namespace NumSharp.Tests
         ///     overloads may exist next to the NumPy form (NumSharp's <c>dtype</c> extension, the generic
         ///     <c>amax&lt;T&gt;</c>).
         /// </remarks>
-        [TestMethod, OpenBugs]
+        [TestMethod]
         public void MaxMinFamily_TakesNumPysKeywords_InNumPysOrder()
         {
             var fails = new List<string>();
@@ -108,15 +106,14 @@ namespace NumSharp.Tests
         /// <summary>
         ///     <c>out=</c> must receive the result and be returned ITSELF, for every function of the family, the
         ///     method forms and a 0-d out; the result is cast into an out of another dtype (int64, float32, bool), and
-        ///     an out whose shape is not the result's raises NumPy's broadcast error. NumSharp has no <c>out</c>
-        ///     parameter, so every reduction allocates and a caller's buffer is never written.
+        ///     an out whose shape is not the result's raises NumPy's broadcast error.
         /// </summary>
         /// <remarks>
         ///     NumPy routes <c>out</c> through <c>ufunc.reduce</c>: the reduction runs in the input's dtype and the
         ///     result is cast into <c>out</c> with the 'unsafe' rule, which is why a float64 max lands in a bool out
         ///     as <c>True</c>. A wrong-shape out is NpyIter's error, verbatim (trailing space included).
         /// </remarks>
-        [TestMethod, OpenBugs]
+        [TestMethod]
         public void MaxMinFamily_Out_WritesIntoAndReturnsTheGivenArray()
         {
             var fails = new List<string>();
@@ -142,7 +139,7 @@ namespace NumSharp.Tests
         ///     has no identity" without it), a NaN on either side propagates through max/min while nanmax/nanmin skip
         ///     a NaN element (an all-NaN slice returns <c>initial</c>), it is cast to the reduction dtype (<c>7.5</c>
         ///     truncates into int64), it raises when it does not fit an integer dtype, and <c>initial=None</c> means
-        ///     no initial. NumSharp has no <c>initial</c> parameter.
+        ///     no initial.
         /// </summary>
         /// <remarks>
         ///     The integer cases are NumPy's Python-int rule (NEP 50): a C# integer literal is a weak Python int, so
@@ -150,7 +147,7 @@ namespace NumSharp.Tests
         ///     implementation that types <c>initial</c> as <c>double?</c> cannot tell <c>7</c> from <c>7.0</c> and
         ///     loses exactness past 2^53 in an int64 reduction; <c>object</c> (or per-kind overloads) keeps it.
         /// </remarks>
-        [TestMethod, OpenBugs]
+        [TestMethod]
         public void MaxMinFamily_Initial_JoinsEveryOutputAsOneMoreElement()
         {
             var fails = new List<string>();
@@ -184,15 +181,14 @@ namespace NumSharp.Tests
         ///     <c>(2,1)</c> row mask, a <c>(3,)</c> column mask), with <c>keepdims</c>, for nanmax too, and an output
         ///     whose whole slice is masked off gets <c>initial</c>. Because max/min have no identity, NumPy REQUIRES
         ///     <c>initial</c> with any <c>where</c> (even an all-True mask), rejects a non-bool mask and a mask that
-        ///     does not broadcast. NumSharp has no <c>where</c> parameter (<c>np.all</c> / <c>np.any</c> already
-        ///     have one).
+        ///     does not broadcast.
         /// </summary>
         /// <remarks>
         ///     The required-initial error names the ufunc the function reduces with: 'maximum' for np.max, 'minimum'
         ///     for np.min, 'fmax' for np.nanmax of a float array. The non-bool mask error is NumPy's TypeError text
         ///     (<c>_wheremask_converter</c> casts with the 'safe' rule).
         /// </remarks>
-        [TestMethod, OpenBugs]
+        [TestMethod]
         public void MaxMinFamily_Where_ReducesOnlyTheSelectedElements()
         {
             var fails = new List<string>();
@@ -213,6 +209,162 @@ namespace NumSharp.Tests
             CheckRaises(fails, "np.max(a, where=int64 mask, initial=0.0) (TypeError)", () => Np("max", ("a", A()), ("where", np.array(new long[] { 1, 0, 1, 0, 1, 1 }).reshape(2, 3)), ("initial", 0.0)), "Cannot cast array data from dtype('int64') to dtype('bool') according to the rule 'safe'");
             CheckRaises(fails, "np.max(a, where=(2,) mask, initial=-1.0) (ValueError)", () => Np("max", ("a", A()), ("where", np.array(new[] { true, false })), ("initial", -1.0)), "operands could not be broadcast together with remapped shapes [original->remapped]: (2,3) (2,) ");
             AssertNoMismatch(fails, "NumPy's where= drops the masked elements and needs initial= for max/min");
+        }
+
+        /// <summary>
+        ///     A Python int past what the loop's C long holds raises NumPy's LP64 texts — the Linux / macOS ones, which
+        ///     NumSharp pins on every platform (the oracle tier drops these cells: Windows NumPy converts through a 32-bit
+        ///     C long and says "too large" from ±2**31 on). Probed against Linux NumPy 2.4.2 on 2026-10-05.
+        /// </summary>
+        /// <remarks>
+        ///     The rule (<c>@TYPE@_safe_pyint_setitem</c>): every integer loop reads the int as a C <c>long</c> — uint32 and
+        ///     uint64 as <c>unsigned long</c>, falling back to <c>long</c> for a negative — so a value outside that is
+        ///     "Python int too large to convert to C long", and a value inside it but outside the dtype is "Python integer
+        ///     … out of bounds for …". A float is truncated first, then meets the same rule.
+        /// </remarks>
+        [TestMethod]
+        public void MaxMinFamily_Initial_PythonIntPastCLong_RaisesLP64Texts()
+        {
+            var fails = new List<string>();
+            NDArray I8() => np.array(new sbyte[] { 1, 2 });
+            NDArray I32() => np.array(new[] { 1, 2 });
+            NDArray I64() => np.array(new long[] { 1, 2 });
+            NDArray U32() => np.array(new uint[] { 1, 2 });
+            NDArray U64() => np.array(new ulong[] { 1, 2 });
+            var p63 = System.Numerics.BigInteger.Pow(2, 63);
+            var p64 = System.Numerics.BigInteger.Pow(2, 64);
+            CheckRaises(fails, "int8, initial=2**40", () => Np("max", ("a", I8()), ("initial", 1L << 40)), "Python integer 1099511627776 out of bounds for int8");
+            CheckRaises(fails, "int8, initial=-2**40", () => Np("max", ("a", I8()), ("initial", -(1L << 40))), "Python integer -1099511627776 out of bounds for int8");
+            CheckRaises(fails, "int8, initial=2**63", () => Np("max", ("a", I8()), ("initial", p63)), "Python int too large to convert to C long");
+            CheckRaises(fails, "int32, initial=2**31", () => Np("max", ("a", I32()), ("initial", 1L << 31)), "Python integer 2147483648 out of bounds for int32");
+            CheckRaises(fails, "int64, initial=2**63", () => Np("max", ("a", I64()), ("initial", p63)), "Python int too large to convert to C long");
+            CheckRaises(fails, "int64, initial=-2**63-1", () => Np("max", ("a", I64()), ("initial", -p63 - 1)), "Python int too large to convert to C long");
+            CheckRaises(fails, "uint64, initial=2**64", () => Np("max", ("a", U64()), ("initial", p64)), "Python int too large to convert to C long");
+            CheckRaises(fails, "uint64, initial=-1", () => Np("max", ("a", U64()), ("initial", -1)), "Python integer -1 out of bounds for uint64");
+            CheckRaises(fails, "uint64, initial=-2**63-1", () => Np("max", ("a", U64()), ("initial", -p63 - 1)), "Python int too large to convert to C long");
+            CheckRaises(fails, "uint32, initial=2**32", () => Np("max", ("a", U32()), ("initial", 1L << 32)), "Python integer 4294967296 out of bounds for uint32");
+            CheckRaises(fails, "uint32, initial=2**64", () => Np("max", ("a", U32()), ("initial", p64)), "Python int too large to convert to C long");
+            CheckRaises(fails, "uint32, initial=-2**40", () => Np("max", ("a", U32()), ("initial", -(1L << 40))), "Python integer -1099511627776 out of bounds for uint32");
+            CheckRaises(fails, "int8, initial=1e10", () => Np("max", ("a", I8()), ("initial", 1e10)), "Python integer 10000000000 out of bounds for int8");
+            CheckRaises(fails, "int8, initial=1e300", () => Np("max", ("a", I8()), ("initial", 1e300)), "Python int too large to convert to C long");
+            CheckRaises(fails, "int64, initial=1e19", () => Np("max", ("a", I64()), ("initial", 1e19)), "Python int too large to convert to C long");
+            Check(fails, "uint64, initial=1e19", () => Np("max", ("a", U64()), ("initial", 1e19)), "uint64 () 10000000000000000000");
+            CheckRaises(fails, "uint64, initial=2e19", () => Np("max", ("a", U64()), ("initial", 2e19)), "Python int too large to convert to C long");
+            AssertNoMismatch(fails, "NumPy's integer setitem range-checks a Python int through the LP64 C long");
+        }
+
+        /// <summary>
+        ///     A NumPy scalar initial value (<see cref="Half"/> is np.float16, <c>char</c> NumSharp's np.uint16) packs by the
+        ///     loop's DType class: a SIGNED integer loop knows every NumPy scalar and int()-converts it with the range check,
+        ///     every other loop CASTS it (unsafe), where a Python int would raise. Probed against NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void MaxMinFamily_Initial_NumPyScalar_IsCastUnlessTheLoopIsSigned()
+        {
+            var fails = new List<string>();
+            NDArray U8() => np.array(new byte[] { 1, 5, 3 });
+            NDArray I8() => np.array(new sbyte[] { 1, 5, -3 });
+            Check(fails, "uint8, initial=np.float16(300)", () => Np("max", ("a", U8()), ("initial", (Half)300)), "uint8 () 44");
+            Check(fails, "uint8, initial=np.uint16(300)", () => Np("max", ("a", U8()), ("initial", (char)300)), "uint8 () 44");
+            Check(fails, "uint8, initial=np.uint16(2)", () => Np("max", ("a", U8()), ("initial", (char)2)), "uint8 () 5");
+            CheckRaises(fails, "int8, initial=np.float16(300)", () => Np("max", ("a", I8()), ("initial", (Half)300)), "Python integer 300 out of bounds for int8");
+            CheckRaises(fails, "int8, initial=np.uint16(300)", () => Np("max", ("a", I8()), ("initial", (char)300)), "Python integer 300 out of bounds for int8");
+            CheckRaises(fails, "uint8, initial=300 (a Python int)", () => Np("max", ("a", U8()), ("initial", 300)), "Python integer 300 out of bounds for uint8");
+            AssertNoMismatch(fails, "NumPy casts a NumPy scalar initial into any loop but a signed integer one");
+        }
+
+        /// <summary>
+        ///     C#'s <c>where: true</c> is Python's <c>where=True</c> — no mask at all, so no initial value is needed — and
+        ///     <c>where: false</c> is a mask that selects nothing, which needs one.
+        /// </summary>
+        [TestMethod]
+        public void MaxMinFamily_Where_CSharpBoolIsPythonBool()
+        {
+            np.max(A(), @where: true).GetDouble().Should().Be(6.0);
+            np.max(A(), axis: 1, @where: true).ToArray<double>().Should().Equal(5.0, 6.0);
+            np.min(A(), @where: false, initial: 9.0).GetDouble().Should().Be(9.0);
+            Action noInitial = () => np.max(A(), @where: false);
+            noInitial.Should().Throw<ValueError>()
+                .WithMessage("reduction operation 'maximum' does not have an identity, so to use a where mask one has to specify 'initial'");
+        }
+
+        /// <summary>
+        ///     NumPy's <c>np.True_</c> (or <c>np.array(True)</c>) is a MASK, and a mask needs <c>initial=</c> for max/min.
+        ///     C# cannot tell it from the literal <c>true</c> — both arrive as a 0-d bool array — so NumSharp reads every 0-d
+        ///     true mask as Python's <c>where=True</c> and answers where NumPy raises. With an initial value the two agree.
+        /// </summary>
+        [TestMethod, Misaligned]
+        public void MaxMinFamily_Where_ZeroDTrueArray_ReadsAsWhereTrue()
+        {
+            np.max(A(), @where: NDArray.Scalar(true)).GetDouble().Should().Be(6.0, "NumPy raises the no-identity ValueError here");
+            np.max(A(), @where: NDArray.Scalar(true), initial: 0.5).GetDouble().Should().Be(6.0);
+        }
+
+        /// <summary>
+        ///     An <c>out=</c> of another dtype is buffered: NumPy reads it into the loop dtype at the start of each buffer
+        ///     fill and writes it back (cast) at the end. A flat reduction re-reads it at every fill, so the running maximum
+        ///     round-trips through the out's dtype (int8(300) = 44 after the first 8192-element fill, then 100 wins); in the
+        ///     reduce double loop an out whose pointer did not move keeps its buffer instead (NPY_OP_ITFLAG_BUF_REUSABLE), so
+        ///     the running maximum stays in the loop dtype and only the final 300 is cast (44). Probed against NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void MaxMinFamily_Out_CastOutRoundTripsOnlyWhereNumPyRereadsIt()
+        {
+            var flat = np.full(new Shape(20000), (short)100, np.int16);
+            flat[100] = (short)300;
+            var o0 = np.zeros(Shape.Scalar, np.int8);
+            np.max(flat, @out: o0).GetSByte().Should().Be(100, "the flat iteration re-reads the out at every fill");
+
+            var cols = np.full(new Shape(20000, 2), (short)100, np.int16);
+            cols[100, 0] = (short)300;
+            var o1 = np.zeros(new Shape(2), np.int8);
+            np.max(cols, axis: 0, @out: o1).ToArray<sbyte>().Should().Equal((sbyte)44, (sbyte)100);
+        }
+
+        /// <summary>
+        ///     complex128 max / min copy an element (<c>CDOUBLE_maximum</c>: a NaN in either part wins, the first one in
+        ///     NumPy's visiting order) — so which NaN comes back is NumPy's order, a reversed view included. Probed against
+        ///     NumPy 2.4.2: of <c>[1+1j, nan+1j, 2, 1+nanj, 3+3j]</c> (distinct payloads) reversed, max and min return the
+        ///     element <c>1+nanj</c>.
+        /// </summary>
+        [TestMethod]
+        public void MaxMin_Complex_ReturnsTheFirstNaNInNumPysOrder()
+        {
+            var parts = new[] { 1.0, 1.0, 0, 1.0, 2.0, 0.0, 1.0, 0, 3.0, 3.0 };
+            parts[2] = BitConverter.Int64BitsToDouble(0x7ff8000000000001);
+            parts[7] = BitConverter.Int64BitsToDouble(0x7ff8000000000002);
+            var z = np.array(Enumerable.Range(0, 5).Select(i => new System.Numerics.Complex(parts[2 * i], parts[2 * i + 1])).ToArray());
+            foreach (var r in new[] { np.max(z["::-1"]), np.min(z["::-1"]) })
+            {
+                var v = r.GetAtIndex<System.Numerics.Complex>(0);
+                BitConverter.DoubleToInt64Bits(v.Real).Should().Be(0x3ff0000000000000);
+                BitConverter.DoubleToInt64Bits(v.Imaginary).Should().Be(0x7ff8000000000002);
+            }
+
+            var fwd = np.max(z).GetAtIndex<System.Numerics.Complex>(0);
+            BitConverter.DoubleToInt64Bits(fwd.Real).Should().Be(0x7ff8000000000001);
+        }
+
+        /// <summary>
+        ///     An initial value makes an empty reduction legal, and the result can itself be empty (a non-reduced axis of
+        ///     extent 0): nothing may be written then. The exact engine's walk skips extent &lt;= 1 axes, so before the
+        ///     guard it wrote the initial value past the zero-size result — heap corruption that crashed the test host
+        ///     later and elsewhere. The loop repeats the call so a regression is likely to corrupt something visible.
+        /// </summary>
+        [TestMethod]
+        public void MaxMinFamily_Initial_EmptyResult_WritesNothing()
+        {
+            for (int i = 0; i < 2000; i++)
+            {
+                using var x = np.zeros(new Shape(0, 5, 2), np.float64);
+                using var r = np.max(x, axis: 1, initial: 7.0);
+                r.shape.Should().Equal(new long[] { 0, 2 });
+                using var y = np.zeros(new Shape(3, 0), np.int32);
+                using var s = np.min(y, axis: 0, initial: 4);
+                s.shape.Should().Equal(new long[] { 0 });
+                using var t = np.max(y, axis: 1, initial: 4);
+                t.ToArray<int>().Should().Equal(4, 4, 4);
+            }
         }
 
         // ======================================================================================================

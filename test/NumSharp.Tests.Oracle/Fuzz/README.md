@@ -292,6 +292,7 @@ python test/oracle/gen_oracle.py mean_loops       # np.mean as NumPy's _mean: la
 python test/oracle/gen_oracle.py nanmean          # np.nanmean as NumPy's nanmean: NaN patterns, dtype= for every loop, fills, empties
 python test/oracle/gen_oracle.py clip_ufunc       # np.clip as a ufunc: broadcast bounds, out=, where=, overlap, the float loop
 python test/oracle/gen_oracle.py reduce_kwargs    # reductions through their NumPy-shaped overload: out=, where=, axis forms, prologue errors
+python test/oracle/gen_oracle.py minmax_kwargs    # the max / min family with out= / initial= / where=: loops, casts, fills, run cuts, errors
 python test/oracle/gen_oracle.py precision        # truthful-vs-precise (adversarial accumulation; needs mpmath)
 python test/oracle/gen_oracle.py products         # CBLAS product family values (inner/vdot/vecdot/matvec/...)
 python test/oracle/gen_oracle.py fft              # np.fft.* — 1-D/N-D/hermitian transforms + freq/shift helpers
@@ -1796,6 +1797,43 @@ that is true when out itself was returned. Arguments use the `clip_ufunc` spec g
 port of NumPy's `PyUFunc_GenericReduction` / `PyUFunc_ReduceWrapper` / `npyiter_fill_axisdata`
 (`ReductionArguments.cs`), which each later reduction reuses. Against the code before that port, 432 of the 4,752
 cases diverge (np.all / np.any accepted a non-bool mask, stretched the input, and raised generic texts).
+
+### The max / min family with NumPy's keywords (`minmax_kwargs` tier) — 2026-10-05
+
+`minmax_kwargs.jsonl` (`gen_oracle.py minmax_kwargs`, 35,847 cases, floor 35,000; plan
+`docs/plans/api-parameter-parity.md` A4) calls `np.max` / `np.min` / `np.amax` / `np.amin` / `np.nanmax` / `np.nanmin` /
+`ndarray.max` / `ndarray.min` (`params.fn`) through their NumPy-shaped overloads. Each is a ufunc reduction
+(`np.maximum.reduce`, `np.minimum.reduce`, `np.fmax.reduce` / `np.fmin.reduce` for an ndarray's nanmax / nanmin), so
+the keywords are `PyUFunc_ReduceWrapper`'s: the reduce prologue (the `reduce_kwargs` rules); the loop dtype
+`promote_types(out, a)`; `initial=` packed into it by `PyArray_Pack`; no identity without it; then ONE buffered NpyIter
+whose inner-loop calls decide the float bits and whose fills round-trip a cast out through its own dtype. Sections:
+- **A** — every catalog layout × axis × keepdims × {initial, initial + where, out, out + initial + where}, four
+  functions;
+- **M** — the mask forms (a row, a column, an F mask, a leading-axis mask, 0-d, Python bools) and the no-identity
+  errors;
+- **O** — out= of every dtype pairing (the loop is the promotion) in C / strided / F / reversed layouts;
+- **V / V2** — the float bits: ±0 ties and NaN payloads under where= runs, strides and SIMD-width boundaries, 2-D
+  slabs in C / F / transposed layouts;
+- **F** — `np.setbufsize(16 / 32)` fills and a narrowing out past 8,192 elements (the round trip at every fill:
+  `np.max(int16 [300 at index 100, 100, ...], out=int8)` is 100, the first fill leaves `int8(300) = 44`);
+- **P** — initial= of every kind (Python ints past every range, floats, NaN payloads, complex, np.float16 and np.uint16
+  scalars, str, sequences, 0-d arrays) into every loop dtype;
+- **E / X / L** — NumPy's errors in NumPy's order; an out overlapping the input; the aliases;
+- **K** — the fresh result's layout (`npyiter_new_temp_array`; `params.facet == "strides"` records it);
+- **R** — 3,000 seeded random combinations (permuted / reversed / stepped / offset / broadcast inputs up to 4-D, masks
+  of every broadcast form, outs of every dtype and layout, small buffers);
+- **W** — arrays sized for NumSharp's wide paths, which smaller arrays leave to scalar tails: complex128 past a
+  1024-element block, several input rows folded per call (with zeros of both signs and NaNs of distinct payloads in
+  consecutive rows, so the row order shows), masked float runs of every length and the tie of a run's lanes with the
+  running value, and a broadcast input spread along a non-reduced axis (from 16,384 elements).
+
+Every value case is a TUPLE: the returned array, then (with out=) the whole base buffer behind out and a 0-d bool that
+is true when out itself was returned. `initial=` specs spell every kind a C# caller can pass (`OpRegistry.MinMaxKwargs.cs`).
+NaN payloads compare raw (`params.nan_bits`). Python ints past ±2³¹ convert through the platform C long, so NumPy's
+OverflowError text differs between Windows and Linux; those cases are dropped (282 + 42) and the LP64 texts are pinned by
+unit tests against Linux NumPy. Char rides the uint16 proxy. **Bit-exact, 0 excused:** `minmax_kwargs` is in the strict
+list. 24 planted bugs (buffer reuse, run cuts, first visit, the buffer cap, the C-wins axis rule, the initial
+conversion, and the wide paths) each turn 1–558 cases red.
 
 ### F-ordered broadcast pairs (`pp_fbcast_*` in the binary tiers) — 2026-10-05
 

@@ -419,7 +419,7 @@ namespace NumSharp.Backends
                 if (d != ax)
                     outputDims[od++] = dims[d];
 
-            var result = AllocateReductionResult(NPTypeCode.Half, outputDims, shape);
+            var result = AllocateReductionResult(NPTypeCode.Half, outputDims, shape, ax);
             try
             {
                 // Output strides indexed by INPUT axis (the reduced axis' entry is never read).

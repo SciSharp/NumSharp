@@ -34,11 +34,17 @@ namespace NumSharp
         /// otherwise empty array returns the empty result. A broadcast (stride-0) float input gets the right value, but its
         /// <c>±0</c> sign and NaN payload are not pinned to NumPy's.
         /// </para>
+        /// <para>
+        /// This is the positional <c>(a, axis, keepdims)</c> form NumSharp callers wrote before NumPy's keywords existed (NumPy's
+        /// third parameter is <c>out</c>); NumPy's keyword form lives in <c>np.max.Keywords.cs</c>, and this one shares its overload
+        /// priority so <c>nanmax(a, 1, true)</c> keeps meaning keepdims.
+        /// </para>
         /// </remarks>
         /// <exception cref="System.ArgumentException">The reduction is empty — NumPy's text, <c>zero-size array to reduction
         /// operation fmax which has no identity</c>.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="a"/>'s rank.</exception>
-        public static NDArray nanmax(NDArray a, int? axis = null, bool keepdims = false)
+        [System.Runtime.CompilerServices.OverloadResolutionPriority(1)]
+        public static NDArray nanmax(NDArray a, int? axis, bool keepdims)
             => a.TensorEngine.NanMax(a, axis, keepdims);
     }
 }

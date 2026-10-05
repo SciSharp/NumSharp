@@ -1469,8 +1469,10 @@ contiguous `simd_reduce_c` call, so fill boundaries decide ties and re-canonical
 associative, so the strided unroll is "the latest of x[0], lane 0…7, tail wins a tie" (probed 1,056/1,056) — which is
 why its eight accumulators run as VECTOR lanes (a stride of −1 is one contiguous load + a lane reverse). A NaN-free
 fast fold (plain `vmaxp` on groups proven NaN-free by `vcmpunordp`, breaking to NumPy's blend at the first NaN group)
-keeps the exact contiguous path fast. Declines (old kernels, value-exact): broadcast operands, Decimal/Complex/
-Bool/Char, `dtype=` casts, rank > 64 (float16 never reaches it — its own exact route, below). Hooks `NDExpr.DisableExactMinMax`/`ExactMinMaxRuns` (shared with np.evaluate).
+keeps the exact contiguous path fast. Declines: broadcast operands and complex128 (→ the keyword path's reduction
+iterator below, NumPy's bits; since 2026-10-05), Decimal/Bool/Char (old kernels, value-exact; bool along its innermost
+axis → the keyword path's early-exit `logical_or` loop, 0.19× → ~2× NumPy at 10M), `dtype=` casts, rank > 64 (float16
+never reaches it — its own exact route, below). Hooks `NDExpr.DisableExactMinMax`/`ExactMinMaxRuns` (shared with np.evaluate).
 NPY/NS @100K: flat 1.14–2.30 on every layout (F/transposed/permuted 1.61–1.85, were 0.61–0.63), axis 1.28–5.2 (were
 0.28–1.0 on non-C layouts); the slab fusion put the SLAB cells at 1.38–3.08 @100K (were 1.10–2.31) and the DRAM-bound
 f64-family ones at 1.75–2.10 @4M (were 1.06–1.45). Gates: `Backends/Kernels/MinMaxExactScheduleTests.cs` (27,
@@ -1480,6 +1482,45 @@ NumPy-probed literals incl. the every-lane-pair tie test and a ±0 tie / NaN pai
 NumPy's identical schedule (flat/row 0.70–0.87, f32/i32 slab 0.87–0.95; pre-existing, NumSharp's 16-byte buffer
 alignment suspected); the UNFUSED `np.max(x * 1, axis)` over a permuted input differs because NumSharp's eager
 elementwise writes C order where NumPy's ufunc keeps the K-order layout.
+
+**`np.max`/`np.min`/`np.amax`/`np.amin`/`np.nanmax`/`np.nanmin`/`ndarray.max`/`ndarray.min` take NumPy's `out=`/`initial=`/
+`where=` in NumPy's order** (2026-10-05, plan `docs/plans/api-parameter-parity.md` A4; `Sorting_Searching_Counting/np.max.Keywords.cs`,
+`Statistics/NDArray.max.Keywords.cs`, engine `DefaultEngine.MaxMinNumPy` in `Default.Reduction.MinMax.Keywords.cs`). Each is
+a ufunc reduction (`np.maximum.reduce`; np.nanmax of an ndarray is `np.fmax.reduce`), so the keywords are
+`PyUFunc_ReduceWrapper`'s, in its order: A1's reduce prologue (`ReductionArguments`); the loop dtype `promote_types(out, a)`;
+`initial=` packed into it by a port of `PyArray_Pack` (`ReductionInitial.cs`: a C# integer literal is a Python int —
+range-checked with the LP64 texts, never wrapped —, a `double` a Python float truncated into an integer loop, `Half`/`char`
+NumPy scalars `int()`-converted by a SIGNED integer loop and CAST by every other, a 0-d array cast, a str parsed, a
+sequence refused); without it a mask raises "... does not have an identity, so to use a where mask one has to specify
+'initial'" and an empty axis "zero-size array to reduction operation ..."; the result starts as the initial value or each
+output's first element (an unsafe cast). Overloads: NumPy's form at priority 1, NumSharp's positional `(a, axis, keepdims)`
+(also priority 1: `np.max(a, 1, true)` must not bind `true` as a 0-d out) and its `dtype=` extension at 0; a keyword-less
+call keeps the engine route above. The C# literal `true` for `where=` is NumPy's `where=True` (no mask) — so is a 0-d bool
+ARRAY holding true, where NumPy treats `np.array(True)` as a mask needing `initial=` (`[Misaligned]`). Four routes:
+(1) a broadcast input whose answer cannot depend on how often an element recurs reduces ONE copy (`MaxMinBroadcastShortcut`:
+every loop but float32/float64; those only when every NumPy call is elementwise, since each reduce-form `simd_reduce_c` call
+re-canonicalizes a NaN; a non-reduced stride-0 axis from 16,384 elements: 10–560× NumPy); (2) an integer input under a
+wider loop reduces in its own dtype then casts (`max` commutes with a monotone cast; 3.6–11.6×); (3) same dtype, no `where=` →
+the exact engines above SEEDED with the initial (np.max's own speed); (4) everything else → `NumPyReduceIterator`
+(`Backends/Default/Math/Reduction/NumPyReduceIterator.cs`), a port of NumPy's reduction NpyIter: the axis sort (C wins a
+tie), coalescing, `npyiter_find_buffering_setup`, fills, the reduce double loop, the first-visit skip, masked runs
+(`generic_masked_strided_loop`), and a cast out's round trip through its own dtype at every fill unless the buffer is
+REUSED (`NPY_OP_ITFLAG_BUF_REUSABLE`: only from the reduce double loop's own iternext, the out's pointer unchanged — this is
+why `np.max(int16 [300, 100…], out=int8)` is 100 past 8,192 elements: the first fill leaves `int8(300) = 44`). Its loops
+(`NumPyMinMaxLoops`): the SIMD rules for float32/float64/integers, `logical_or`/`logical_and` for bool (early exit; NumPy's
+`min(a|b, 1)` elementwise), the sequential BINARY_LOOPs for float16/char/decimal, and complex128 VECTORIZED — each rule is an
+associative SELECTION, so a 1024-element block folds in two vector passes (the extreme VALUE and whether a NaN occurs, then
+the first element equal to it / the first NaN), 1.5–3.9× NumPy's scalar `CDOUBLE_maximum` (was 0.97–1.37×). Loop forms
+beyond NumPy's two: a WHOLE masked call (order-free loops fold the selected elements in one pass; the float SIMD loops make
+NumPy's per-run calls but compose each run through a closed form of `simd_reduce_c` — `NRunContiguous`/`PRunContiguous`, from
+the lane ops' associativity — so only a compare-and-select stays on the out's dependency chain: float64 `where=` 0.94× →
+2.2×) and SEVERAL ROWS per call where the out does not move (`Loop.BinaryRows`; rows folded in pairs by associativity). A fresh
+axis result of every reduction that allocates through `AllocateReductionResult` (sum / mean / var / std / the nan family /
+min / max) is now laid out like NumPy's (`Shape.ReductionOutputShape`, `npyiter_new_temp_array`: the input's axis order, not
+C order). Gates: oracle tier `minmax_kwargs.jsonl` (35,847 cases, zero excuses, 24/24 planted bugs killed; README "The max /
+min family with NumPy's keywords"), `Selection/np.max.Keywords.Test.cs` (11). NPY/NS over 237 cells: geomean 3.98×; the cells
+under 1.5× ride the engine above (10M L3/DRAM-bound, its 100K slab gaps) or follow NumPy's own structure (a float64 →
+float32 out round-tripping at every fill 1.0–1.3×, a broadcast float64 input reduced flat 1.1–1.3×).
 
 **float16 `np.max`/`np.min`/`np.nanmax`/`np.nanmin` (flat AND axis, every layout incl. broadcast) are NumPy's sequential
 HALF loops, bit for bit** (`Backends/Default/Math/Reduction/Default.Reduction.MinMax.Half.cs`, `DefaultEngine.HalfMinMaxReduce`,
@@ -1572,7 +1613,8 @@ not reproduce), F 2.98, rows of 1000 3.54 / f32 4.31, axis slab 2.07–2.55, eva
 quoted was measured while NumPy's temporary page-faulted — the allocator-regime trap); rows below the threshold
 0.96–1.05× unchanged. Known gaps: complex128 axis & non-C cells are a scalar fold (float16's were 0.41–0.69× NumPy until
 2026-10-03, now the SIMD walks at ~25× geomean); flat contiguous @4M is DRAM-bound (0.89–1.06× the old kernel in-process, NPY/NS f64 ~1.5–1.6 / f32 ~1.0); a
-broadcast float32/float64 input keeps the old kernels (value-exact only). Design + measurements + gates:
+broadcast float32/float64 input runs the keyword path's reduction iterator (NumPy's bits; it kept the old, value-exact
+kernels until 2026-10-05, plan api-parameter-parity A4). Design + measurements + gates:
 `docs/plans/ndexpr-evaluate.md` → "The P rules' order-free aligned fold".
 
 **`np.nanvar` / `np.nanstd` are NumPy's `nanvar` / `nanstd`, statement for statement**
@@ -4253,6 +4295,11 @@ direction **everywhere** — matrices, geomeans, commit messages, and the per-su
 
 - Icons used in the matrices: ✅ `≥1.0` · 🟡 `≥0.5` · 🟠 `≥0.2` · 🔴 `<0.2`.
 - Timing scripts MUST run `dotnet run -c Release - < script.cs` (Debug taints hand-written kernels ~2×; see `benchmark/CLAUDE.md`).
+- Pin a C# timing process to TWO CPUs (`start /affinity 14`: two P-cores on this host), never one. A process pinned to a
+  single CPU starves .NET's background tier-1 compiler even at normal priority, so a hot path can stay at tier 0 for
+  good (np.max into a cast out measured ~100 µs per call on one CPU, 12–13 µs on two once tiered up after ~0.4 s); a run
+  mixes the regimes, because a cell tiers up only when the main thread happens to block (plan api-parameter-parity
+  finding 12). Pin the NumPy twin the same way.
 - best-of-rounds (take the min), warmup excluded, correctness checked before every timed row.
 - The canonical harness is `benchmark/run_benchmark.py` — the op/dtype/N matrix plus five appended subsystems: `benchmark/nditer/` (iterator aspects), `benchmark/layout/` (reduction/copy/elementwise × memory layout × dtype), `benchmark/operand/` (1-D/scalar/mixed-operand/broadcast layouts), `benchmark/cast/` (astype src→dst matrix), `benchmark/fusion/` (np.evaluate). The `run-benchmarks.ps1` "Status Icons" table reports the *inverse* (NS/NPY, lower = better) — prefer this NPY/NS convention.
 - The op/dtype/N matrix is **BenchmarkDotNet** (`benchmark/NumSharp.Benchmark.CSharp`) timed against a **warm NumPy** process (`benchmark/NumSharp.Benchmark.Python`) across **1K / 100K / 10M × all 15 dtypes** (~615 ops/size), joined on `(op, dtype, N)`. Two methodology guards beyond `-c Release`: the **InProcessEmit** toolchain (sibling `.claude/worktrees/` checkouts hold same-named projects the out-of-process toolchain refuses to build) and a **25 ms-capped 50-iteration** job (so µs–ms array ops skip BenchmarkDotNet's nanosecond invocation ramp — without it the full matrix takes days). The NDIter subsystem reports a section that crashes all retries (the known intermittent `AccessViolation`) as **NA/IGNORED**, never a failure.
@@ -4469,7 +4516,7 @@ dotnet test --filter "TestCategory=Misaligned"
 dotnet test --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory&TestCategory!=WindowsOnly"
 ```
 
-**OpenBugs files**: `OpenBugs.cs` (general), `OpenBugs.Bitmap.cs` (bitmap), `OpenBugs.ApiAudit.cs` (API audit), `OpenBugs.ILKernelBattle.cs` (IL kernel), `OpenBugs.Random.cs` (random), `OpenBugs.BroadcastReduce.cs` (broadcast reduce), `OpenBugs.Reductions.cs` (how a reduction STARTS: flat `cumsum` loses a leading `-0.0`, the managed size-1 `dot`/`inner` operands take the opposite of NumPy's scalar branch, complex one-element `prod` skips the `1+0j` identity, `median` returns the middle element instead of its `np.mean`, complex `cumprod` multiplies element 0 by `1+0j`, the default `einsum`'s zero-filled accumulator for bare products; the N-D size-1 flat `cumprod` returning 0-d, `np.trapezoid`'s out-of-`y` axis error vs NumPy's leaked `IndexError`, which NaN a flat sum of several NaNs keeps, an axis sum in a cast loop whose pinned rows are longer than `np.getbufsize()` (group 9: NumPy splits them across fills), an axis sum over a view with a reversed axis walking memory order (group 10, plan finding 5) and the flat sum of a broadcast operand not following NumPy's per-row call schedule (group 11, finding 10); raw-bit asserts, because `0.0 == -0.0`. The add.reduce identity class — a sum/mean/nansum/nanmean/average/trapezoid/einsum-sum/np.evaluate-sum of only `-0.0` keeping `-0.0`, one-element nan-reductions returning `(1,)`, the complex 1-D `nansum` throw, the float16 nan-axis wrong-element reads, `np.mean`'s float64 empty result — is fixed and its tests moved to `Math/np.sum.Identity.Test.cs`), `OpenBugs.ReductionKeywords.cs` (`np.max`/`np.min`/`np.amax`/`np.amin`/`np.nanmax`/`np.nanmin` and `ndarray.max`/`ndarray.min` lack NumPy's `out=`/`initial=`/`where=`; the cases bind NumPy's signature by reflection, so they compile today and check NumPy's values once the overload exists), `OpenBugs.FancyIndex.cs` (fancy indexing against NumPy's three `mapping.c` routes: an N-D index array that is not C-contiguous, beside a slice / ellipsis / integer, is read in MEMORY order — wrong values from the getter, wrong positions from the setter; and the result LAYOUT — NumPy's transposed MapIter view for an index behind a slice, the index arrays' order for a lone index or arrays on every axis, the source's order for the other axes of a non-C source, incl. `Generator.permutation` of a non-C 3-D source), `OpenBugs.EmptyStrides.cs` (a zero-size array NumPy allocates has all-zero strides, a slice keeps its parent's strides on an extent-0 axis; NumSharp does neither). Group 5 (`np.var`/`np.std` at a degenerate size) is fixed: np.var / np.std are NumPy's `_var` since 2026-10-05, its tests moved to `Math/np.var.NumPyPort.Test.cs`, and the registry's **V1** branch is gone. Group 4 (`np.nanstd`/`np.nanvar` returning `(1,)` for a 1-D axis) is fixed the same day: they are NumPy's `nanvar`, and its test moved to `Math/np.nanvar.NumPyPort.Test.cs`.
+**OpenBugs files**: `OpenBugs.cs` (general), `OpenBugs.Bitmap.cs` (bitmap), `OpenBugs.ApiAudit.cs` (API audit), `OpenBugs.ILKernelBattle.cs` (IL kernel), `OpenBugs.Random.cs` (random), `OpenBugs.BroadcastReduce.cs` (broadcast reduce), `OpenBugs.Reductions.cs` (how a reduction STARTS: flat `cumsum` loses a leading `-0.0`, the managed size-1 `dot`/`inner` operands take the opposite of NumPy's scalar branch, complex one-element `prod` skips the `1+0j` identity, `median` returns the middle element instead of its `np.mean`, complex `cumprod` multiplies element 0 by `1+0j`, the default `einsum`'s zero-filled accumulator for bare products; the N-D size-1 flat `cumprod` returning 0-d, `np.trapezoid`'s out-of-`y` axis error vs NumPy's leaked `IndexError`, which NaN a flat sum of several NaNs keeps, an axis sum in a cast loop whose pinned rows are longer than `np.getbufsize()` (group 9: NumPy splits them across fills), an axis sum over a view with a reversed axis walking memory order (group 10, plan finding 5) and the flat sum of a broadcast operand not following NumPy's per-row call schedule (group 11, finding 10); raw-bit asserts, because `0.0 == -0.0`. The add.reduce identity class — a sum/mean/nansum/nanmean/average/trapezoid/einsum-sum/np.evaluate-sum of only `-0.0` keeping `-0.0`, one-element nan-reductions returning `(1,)`, the complex 1-D `nansum` throw, the float16 nan-axis wrong-element reads, `np.mean`'s float64 empty result — is fixed and its tests moved to `Math/np.sum.Identity.Test.cs`), `OpenBugs.FancyIndex.cs` (fancy indexing against NumPy's three `mapping.c` routes: an N-D index array that is not C-contiguous, beside a slice / ellipsis / integer, is read in MEMORY order — wrong values from the getter, wrong positions from the setter; and the result LAYOUT — NumPy's transposed MapIter view for an index behind a slice, the index arrays' order for a lone index or arrays on every axis, the source's order for the other axes of a non-C source, incl. `Generator.permutation` of a non-C 3-D source), `OpenBugs.EmptyStrides.cs` (a zero-size array NumPy allocates has all-zero strides, a slice keeps its parent's strides on an extent-0 axis; NumSharp does neither). Group 5 (`np.var`/`np.std` at a degenerate size) is fixed: np.var / np.std are NumPy's `_var` since 2026-10-05, its tests moved to `Math/np.var.NumPyPort.Test.cs`, and the registry's **V1** branch is gone. `OpenBugs.ReductionKeywords.cs` (the max / min family without NumPy's `out=`/`initial=`/`where=`) is fixed the same day (plan A4): its tests moved to `Selection/np.max.Keywords.Test.cs`. Group 4 (`np.nanstd`/`np.nanvar` returning `(1,)` for a 1-D axis) is fixed the same day: they are NumPy's `nanvar`, and its test moved to `Math/np.nanvar.NumPyPort.Test.cs`.
 
 ## Differential-Fuzz Pipeline (NumPy oracle)
 

@@ -145,6 +145,8 @@ namespace NumSharp.Tests.Fuzz
             // The reductions' keyword surface: all / any reduce bools (no arithmetic), and its error cases carry ONE
             // operand, so no excuse may apply.
             "reduce_kwargs",
+            // The max / min family with NumPy's keywords: a selection (no arithmetic, no rounding), so no excuse may apply.
+            "minmax_kwargs",
             // np.var / np.std are NumPy's _var / _std statement for statement since 2026-10-05 (plan
             // api-parameter-parity A2): NumPy's sum schedule, a subtract and a multiply, and an IEEE square root —
             // no platform libm, so a ULP drift is a regression. (ma.var / ma.std keep the reduction blankets, which

@@ -395,7 +395,7 @@ namespace NumSharp.Backends
                     for (int d = 0, k = 0; d < nd; d++)
                         if (d != axis)
                             reduced[k++] = dims[d];
-                    ret = AllocateReductionResult(part.GetTypeCode, reduced, layout);
+                    ret = AllocateReductionResult(part.GetTypeCode, reduced, layout, axis);
                     if (keepdims)
                         ret.Storage.ExpandDimension(axis);
                 }
@@ -527,7 +527,7 @@ namespace NumSharp.Backends
             for (int d = 0, k = 0; d < nd; d++)
                 if (d != axis)
                     reduced[k++] = dims[d];
-            var ret = AllocateReductionResult(acc.GetTypeCode, reduced, layout);
+            var ret = AllocateReductionResult(acc.GetTypeCode, reduced, layout, axis);
             np.copyto(ret, accLogical);
             if (keepdims)
                 ret.Storage.ExpandDimension(axis);

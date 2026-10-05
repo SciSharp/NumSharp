@@ -428,16 +428,16 @@ namespace NumSharp.Tests.View
         }
 
         // ============================================================================
-        // Group 12: documented residual — a genuinely transposed (neither-C-nor-F) input.
-        //           NumPy's full stride-sort KEEPORDER can pick F; NumSharp's C/F-only 'K'
-        //           model (shared with cumsum / np.copy(order='K')) yields C. The VALUES are
-        //           byte-correct either way, which is what actually matters (and all the
-        //           oracle checks, since it compares ascontiguousarray on both sides).
+        // Group 12: a genuinely transposed (neither-C-nor-F) input. NumPy's reduce iterator
+        //           sorts the input's axes by stride and lays the result out in that order
+        //           (npyiter_new_temp_array), so the remaining axes keep the input's memory
+        //           order. NumSharp resolved this to C until 2026-10-05 (a C/F-only 'K'
+        //           model); AllocateReductionResult now takes NumPy's order
+        //           (Shape.ReductionOutputShape, plan api-parameter-parity A4).
         // ============================================================================
 
         [TestMethod]
-        [Misaligned]
-        public void Sum_TransposedInput_ValuesCorrect_LayoutIsCNotF()
+        public void Sum_TransposedInput_ValuesCorrect_LayoutIsNumPys()
         {
             // t[a,b,c] = C3[b,a,c] = b*12 + a*4 + c ; sum over axis2 -> 48*b + 16*a + 6.
             var t = np.transpose(C3d(), new int[] { 1, 0, 2 }); // (3,2,4), neither C nor F
@@ -449,8 +449,20 @@ namespace NumSharp.Tests.View
             // Values match NumPy exactly.
             ((double)r[0, 0]).Should().Be(6);
             ((double)r[2, 1]).Should().Be(86);
-            // Layout: NumSharp resolves 'K' to C for a non-C/non-F input; NumPy 2.4.2 reports F here.
-            r.Shape.IsContiguous.Should().BeTrue("NumSharp's C/F-only KEEPORDER yields C for a transposed input (NumPy: F)");
+            // Layout: NumPy 2.4.2 gives element strides (1, 3) — F-contiguous (probed).
+            r.Shape.IsFContiguous.Should().BeTrue("NumPy's reduction keeps the input's memory order of the remaining axes");
+            r.Shape.strides.Should().Equal(new long[] { 1, 3 });
+        }
+
+        [TestMethod]
+        public void Max_Transposed3D_Axis1_LayoutIsNumPys()
+        {
+            // np.max(np.ones((2, 3, 4)).transpose(2, 0, 1), axis=1): element strides (1, 4) in NumPy 2.4.2 (probed).
+            var x = np.transpose(np.arange(24.0).reshape(2, 3, 4), new int[] { 2, 0, 1 });
+            var r = np.max(x, axis: 1);
+            r.shape.Should().Equal(new long[] { 4, 3 });
+            r.Shape.strides.Should().Equal(new long[] { 1, 4 });
+            ((double)r[1, 2]).Should().Be(21);
         }
 
         // ============================================================================

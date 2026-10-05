@@ -206,6 +206,11 @@ namespace NumSharp.Tests.Fuzz
                 case "reduce_kwargs":
                     return ReduceKwargsFromCorpus(p, ops);
 
+                // The max / min family with out= / initial= / where=: [returned] or [returned, out base buffer,
+                // returned-is-out] (OpRegistry.MinMaxKwargs.cs).
+                case "minmax_kwargs":
+                    return MinMaxKwargsFromCorpus(p, ops);
+
                 // (index, value) for every element, in flatiter C-order whatever the layout.
                 case "ndenumerate":
                 {

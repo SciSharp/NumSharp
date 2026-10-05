@@ -294,6 +294,50 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     The layout NumPy allocates a single-axis reduction's result in — <c>npyiter_new_temp_array</c> over the
+        ///     reduction iterator: the input's axes sorted by NpyIter's rule (<see cref="NpyIterOutputShape"/>'s vote, the
+        ///     input the only voter — the allocated result has no strides yet, so it cannot vote), then the result laid out
+        ///     dense along that order, the reduced axis dropped (or kept with extent 1, which takes the running stride without
+        ///     growing it).
+        /// </summary>
+        /// <param name="outputDims">The result's dims: the input's without <paramref name="axis"/>, or (the keepdims form)
+        ///     the input's with <paramref name="axis"/> set to 1 — told apart by their length. Adopted by the returned
+        ///     shape: pass a fresh array.</param>
+        /// <param name="input">The reduced array's shape (any layout; a stride-0 or extent-1 axis abstains from the
+        ///     vote, as in NpyIter).</param>
+        /// <param name="axis">The reduced axis, already normalized.</param>
+        /// <returns>A fresh, offset-0, dense shape of <paramref name="outputDims"/>.</returns>
+        /// <remarks>
+        ///     A C-contiguous input gives a C result and an F-contiguous one an F result, as before; what this adds is every
+        ///     other order — a transposed 3-D input reduced along one axis leaves the other two in the input's memory order
+        ///     (probed 2.4.2: <c>np.max(np.ones((2, 3, 4)).transpose(2, 0, 1), axis=1)</c> has element strides (1, 4)), where
+        ///     a C-only allocation reordered them.
+        /// </remarks>
+        internal static Shape ReductionOutputShape(long[] outputDims, Shape input, int axis)
+        {
+            int nd = input.NDim;
+            bool keepdimsForm = outputDims.Length == nd;
+            var full = NpyIterOutputShape((long[])input.dimensions.Clone(), new ReadOnlySpan<Shape>(in input));
+            int[] outerFirst = full.DenseAxisOrder();
+
+            // npyiter_new_temp_array: strides assigned walking the iteration order innermost first; a dropped reduced axis
+            // takes none, every other result axis the running stride.
+            var strides = new long[outputDims.Length];
+            long stride = 1;
+            for (int i = outerFirst.Length - 1; i >= 0; i--)
+            {
+                int ax = outerFirst[i];
+                int r = keepdimsForm ? ax : ax == axis ? -1 : ax > axis ? ax - 1 : ax;
+                if (r < 0)
+                    continue;
+                strides[r] = stride;
+                stride *= outputDims[r];
+            }
+
+            return Adopt(outputDims, strides);
+        }
+
+        /// <summary>
         ///     Largest vote table (operands × rank) and permutation <see cref="NpyIterOutputShape"/> keeps on the stack —
         ///     256 longs = 2 KB, far above any ufunc's operand count times a realistic rank; beyond it the tables go to
         ///     the heap rather than risk the stack.

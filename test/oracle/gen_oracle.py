@@ -1419,6 +1419,928 @@ def gen_reduce_kwargs(fns=None, dtypes=None):
 
 
 # ---------------------------------------------------------------------------------------------
+# minmax_kwargs — np.max / np.min / np.amax / np.amin / np.nanmax / np.nanmin / ndarray.max / ndarray.min with
+# NumPy's keywords (plan docs/plans/api-parameter-parity.md A4), op key minmax_kwargs, corpus minmax_kwargs.jsonl.
+#
+# Each function is a ufunc reduction — np.max / np.amax / ndarray.max are np.maximum.reduce, np.min the minimum
+# one, np.nanmax / np.nanmin of an ndarray np.fmax.reduce / np.fmin.reduce — so its keywords are ufunc.reduce's,
+# in PyUFunc_ReduceWrapper's order (umath/reduction.c): the reduce prologue (read-only out, the mask dtype, the
+# axis, out's rank, the iterator's shape checks); the loop dtype, promote_types(out, a) when out= is given;
+# initial= packed into the loop dtype by PyArray_Pack (multiarray/array_coercion.c: a Python int range-checked, a
+# Python float truncated then range-checked, a NumPy scalar int()-converted by a SIGNED integer loop and CAST by
+# every other, a 0-d array cast, a str parsed); with no initial, a where= mask raises "... does not have an
+# identity ..." and an empty reduced axis "zero-size array to reduction operation ..."; then ONE buffered iterator
+# over [out, a, where] whose inner-loop calls decide the float bits (a ±0 tie, which NaN survives) and whose fills
+# round-trip a cast out through its own dtype. Python's `where=True` is no mask at all, while np.True_ is a mask
+# (one that needs initial=); C# cannot spell that difference, so the tier passes only the Python bools.
+#
+# Each case records NumPy's whole outcome: the tuple [returned, the whole base buffer behind out (when out= is
+# given), returned-is-out as a 0-d bool], or NumPy's error verbatim. NaN payloads are part of the contract
+# (params.nan_bits: compared raw on x86-64-v3 hosts).
+#
+# Params: {"fn", "a": spec, "axis": null | int, "keepdims": bool, "out": spec?, "where": spec?, "initial": ispec?,
+# "bufsize": int?}. spec is the clip_ufunc grammar ({"op": k} an operand, {"of": k, "view": dsl} a view of one,
+# {"py": b, "t": "bool"} a Python bool). ispec spells every initial= kind a C# caller can (the house boundary map):
+# {"op": k} an ndarray; {"t": "int", "py": "<digits>"} a Python int; {"t": "float", "bits": "<hex>"} a Python
+# float; {"t": "bool", "py": b}; {"t": "complex", "re": "<hex>", "im": "<hex>"}; {"t": "half", "bits": "<hex>"}
+# an np.float16 scalar (C# Half); {"t": "char", "py": v} an np.uint16 scalar (C# char); {"t": "str", "py": s};
+# {"t": "list" | "tuple", "py": [...]}; {"t": "none"} (initial=None: no initial value).
+#
+# Portability: an integer loop converts a Python int through the platform's C long, so past +-2**31 (int64 / uint64:
+# past their own range) NumPy's OverflowError text differs between Windows ("Python int too large to convert to C
+# long", "int too big to convert") and Linux / macOS ("Python integer ... out of bounds for ..."). Those cases are
+# dropped (the clip_pyint policy); NumSharp's LP64 texts are pinned by C# unit tests against Linux NumPy.
+# ---------------------------------------------------------------------------------------------
+
+MINMAX_KWARGS_FNS = {
+    "max": lambda a, **kw: np.max(a, **kw),
+    "min": lambda a, **kw: np.min(a, **kw),
+    "amax": lambda a, **kw: np.amax(a, **kw),
+    "amin": lambda a, **kw: np.amin(a, **kw),
+    "nanmax": lambda a, **kw: np.nanmax(a, **kw),
+    "nanmin": lambda a, **kw: np.nanmin(a, **kw),
+    "ndarray.max": lambda a, **kw: a.max(**kw),
+    "ndarray.min": lambda a, **kw: a.min(**kw),
+}
+# The NaN-ignoring pair differs from max / min only on these dtypes (an integer fmax IS maximum): it rides them through
+# the whole matrix and the rest of the dtypes through the error and alias sections.
+MINMAX_KWARGS_NAN_DTYPES = ["bool", "int8", "uint64", "float16", "float32", "float64", "complex128"]
+# Section A's input layouts (the catalog's, refilled with the tier's values).
+MINMAX_KWARGS_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d", "strided_2d_cols",
+                         "negstride_2d_offset", "c_contiguous_3d", "transposed_3d", "broadcast_1d_to_2d", "highrank_5d",
+                         "scalar_0d", "one_element_1d", "empty_2d"]
+# min mirrors max (the same iterator and engines with the mirrored rule): it rides a subset of the dtypes through the
+# larger sections.
+MINMAX_KWARGS_MIN_DTYPES = ["bool", "int8", "uint16", "int64", "uint64", "float16", "float32", "float64", "complex128"]
+# The pool of float values: small, exactly representable in float16, with +0 / -0 ties.
+_MMK_FLOATS = [0.0, -0.0, 1.5, -2.25, 3.0, -0.5, 2.75, -3.5, 0.25, 1.0, -1.0, 2.5, -0.0, 0.0, 3.0, -3.5]
+
+
+def _mmk_bits_of(v, dt):
+    """The raw bits of `v` stored as dtype `dt` (an int)."""
+    a = np.array([v], dtype=dt)
+    return int(a.view({2: np.uint16, 4: np.uint32, 8: np.uint64}[a.itemsize])[0])
+
+
+def _mmk_from_bits(bits, dt):
+    """The `dt` scalar whose raw bits are `bits`."""
+    size = np.dtype(dt).itemsize
+    return np.array([bits], dtype={2: np.uint16, 4: np.uint32, 8: np.uint64}[size]).view(dt)[0]
+
+
+def _mmk_int(v):
+    """A Python int initial spec (decimal digits: exact past 2**53)."""
+    return {"t": "int", "py": str(int(v))}
+
+
+def _mmk_float(v=None, bits=None):
+    """A Python float initial spec, by value or by raw float64 bits (a NaN payload, -0.0)."""
+    if bits is None:
+        bits = _mmk_bits_of(v, np.float64)
+    return {"t": "float", "bits": f"{bits:016x}"}
+
+
+def _mmk_complex(z):
+    """A Python complex initial spec (both parts by raw bits)."""
+    return {"t": "complex", "re": f"{_mmk_bits_of(z.real, np.float64):016x}",
+            "im": f"{_mmk_bits_of(z.imag, np.float64):016x}"}
+
+
+def _mmk_half(v=None, bits=None):
+    """An np.float16 scalar initial spec (C# Half), by value or by raw bits."""
+    if bits is None:
+        bits = _mmk_bits_of(v, np.float16)
+    return {"t": "half", "bits": f"{bits:04x}"}
+
+
+def _mmk_initial(spec, ops):
+    """The Python value an initial spec stands for (see the tier header)."""
+    if "op" in spec:
+        return ops[spec["op"]]
+    t = spec["t"]
+    if t == "none":
+        return None
+    if t == "int":
+        return int(spec["py"])
+    if t == "float":
+        return float(_mmk_from_bits(int(spec["bits"], 16), np.float64))
+    if t == "bool":
+        return bool(spec["py"])
+    if t == "complex":
+        return complex(float(_mmk_from_bits(int(spec["re"], 16), np.float64)),
+                       float(_mmk_from_bits(int(spec["im"], 16), np.float64)))
+    if t == "half":
+        return _mmk_from_bits(int(spec["bits"], 16), np.float16)
+    if t == "char":
+        return np.uint16(spec["py"])
+    if t == "str":
+        return spec["py"]
+    if t == "list":
+        return list(spec["py"])
+    if t == "tuple":
+        return tuple(spec["py"])
+    raise ValueError(f"minmax_kwargs: unknown initial kind {t!r}")
+
+
+def _mmk_nan_bits(dt, k):
+    """A quiet NaN of float dtype `dt` with a payload made of k (odd k: the sign bit set too)."""
+    if dt == "float16":
+        bits, sign = 0x7E00 | (k * 37 & 0x1FF), 0x8000
+    elif dt == "float32":
+        bits, sign = 0x7FC00000 | (k * 1031 & 0x3FFFFF), 0x80000000
+    else:
+        bits, sign = 0x7FF8000000000000 | (k * 1048583 & 0x7FFFFFFFFFFFF), 1 << 63
+    return bits | sign if k % 2 else bits
+
+
+def _mmk_values(dt, shape, seed, nan=0):
+    """Deterministic values of `shape` (C order): floats from _MMK_FLOATS (±0 ties) with a NaN of a distinct payload at
+    every `nan`-th element (0: none); integers spanning the dtype's range; bools mixed; complex parts from the pool
+    (ties in the real part), a NaN in one part."""
+    shape = tuple(shape)
+    n = int(np.prod(shape)) if shape else 1
+    dt = np.dtype(dt)
+    if dt.kind == "b":
+        return np.array([(k * 5 + seed) % 3 != 0 for k in range(n)], dtype=bool).reshape(shape)
+    if dt.kind in "iu":
+        info = np.iinfo(dt)
+        pool = [0, 1, -1, 7, -7, 100, -100, int(info.max), int(info.min), int(info.max) - 1, int(info.min) + 1,
+                42, -42, 3, 120]
+        pool = [v for v in pool if info.min <= v <= info.max]
+        return np.array([pool[(k * 7 + seed) % len(pool)] for k in range(n)], dtype=object).astype(dt).reshape(shape)
+    if dt.kind == "f":
+        v = np.array([_MMK_FLOATS[(k * 5 + seed) % len(_MMK_FLOATS)] for k in range(n)]).astype(dt)
+        if nan:
+            u = v.view({2: np.uint16, 4: np.uint32, 8: np.uint64}[dt.itemsize])
+            for k in range(n):
+                if (k + seed) % nan == 1:
+                    u[k] = _mmk_nan_bits(dt.name, k + seed)
+        return v.reshape(shape)
+    re = np.array([_MMK_FLOATS[(k * 5 + seed) % len(_MMK_FLOATS)] for k in range(n)])
+    im = np.array([_MMK_FLOATS[(k * 3 + seed + 1) % len(_MMK_FLOATS)] for k in range(n)])
+    if nan:
+        for k in range(n):
+            if (k + seed) % nan == 1:
+                nv = _mmk_from_bits(_mmk_nan_bits("float64", k + seed), np.float64)
+                if k % 2:
+                    im[k] = nv
+                else:
+                    re[k] = nv
+    z = np.empty(n, np.complex128)
+    z.real = re
+    z.imag = im
+    return z.reshape(shape)
+
+
+def _mmk_layout(ln, s, seed, nan=0):
+    """(base, view) of catalog layout `ln` and dtype `s`, its base refilled with _mmk_values."""
+    base, view = LAYOUTS[ln](np.dtype(s))
+    if base.size:
+        base[...] = _mmk_values(s, base.shape, seed, nan)
+    return base, view
+
+
+def _mmk_mask(shape, phase, kind="C"):
+    """A bool mask (base, view) of `shape`: True except every third C-order element (shifted by `phase`); `kind` "F" is
+    the same mask in column-major memory."""
+    shape = tuple(shape)
+    cnt = int(np.prod(shape)) if shape else 1
+    vals = (np.arange(cnt) + phase) % 3 != 1
+    if kind == "F" and len(shape) >= 2:
+        base = vals.reshape(shape[::-1]).copy()
+        return base, base.T
+    base = vals.reshape(shape).copy()
+    return base, base
+
+
+def _mmk_runs_mask(n, pattern):
+    """A 1-D bool mask of length n (base, view) built from a run pattern: (on, off) repeated."""
+    on, off = pattern
+    period = on + off
+    base = np.array([(k % period) < on for k in range(n)], dtype=bool)
+    return base, base
+
+
+def _mmk_default_initial(s, k):
+    """An in-range initial value for dtype `s` (k picks one of two), so the result depends on it for some outputs."""
+    kind = np.dtype(s).kind
+    if kind == "b":
+        return {"t": "bool", "py": bool(k % 2)}
+    if kind == "u":
+        return _mmk_int((7, 100)[k % 2])
+    if kind == "i":
+        return _mmk_int((7, -7)[k % 2])
+    if kind == "f":
+        return _mmk_float((1.0, -0.0)[k % 2])
+    return _mmk_complex((complex(1.0, 0.5), complex(-0.0, 0.0))[k % 2])
+
+
+def _mmk_result_shape(shape, axis, keepdims):
+    """NumPy's reduced shape for (shape, axis, keepdims), or None when the axis is invalid."""
+    try:
+        return np.add.reduce(np.zeros(shape, np.int8), axis=axis, keepdims=keepdims).shape
+    except Exception:                               # noqa: BLE001 — an invalid axis: the case is an error case
+        return None
+
+
+def _mmk_portable(exc):
+    """False for an outcome whose text depends on the platform's C long (see the tier header)."""
+    text = str(exc)
+    return not ("too large to convert to C long" in text or "too big to convert" in text)
+
+
+def gen_minmax_kwargs(dtypes=None):
+    """The max / min family with NumPy's keywords (op key ``minmax_kwargs``) — see the header above.
+
+    Sections: A. every catalog layout x axis x keepdims x {initial, initial + where, out, out + initial + where} for each
+    of max / min / nanmax / nanmin; M. the mask forms (row, column, F-ordered, 0-d, Python bools) and the no-identity
+    errors; O. out= of every dtype pairing (the loop is promote_types(out, a)) in C / strided / F / reversed layouts;
+    V. the float bits: ±0 ties and NaN payloads under where= runs, strides and SIMD-width boundaries; F. buffer fills:
+    np.setbufsize(16 / 32) and arrays past 8192 elements with a narrowing out; P. initial= of every kind into every
+    loop dtype; E. NumPy's errors in NumPy's order; X. an out overlapping the input; L. the aliases (amax / amin /
+    ndarray.max / ndarray.min).
+    """
+    dtypes = ALL_DTYPES if dtypes is None else dtypes
+    nan_dtypes = [d for d in dtypes if d in MINMAX_KWARGS_NAN_DTYPES] or list(dtypes)
+    cases = []
+    n = 0
+    dropped = 0
+
+    def fn_dtypes(fn, inexact_only_nan=False):
+        """The dtypes a section runs `fn` over: max all, min the mirror subset, the NaN pair its dtypes (only the inexact
+        ones when `inexact_only_nan`: an integer or bool fmax IS maximum)."""
+        if fn in ("max", "amax", "ndarray.max"):
+            return list(dtypes)
+        if fn in ("min", "amin", "ndarray.min"):
+            return [d for d in dtypes if d in MINMAX_KWARGS_MIN_DTYPES] or list(dtypes)
+        if inexact_only_nan:
+            return [d for d in nan_dtypes if np.dtype(d).kind in "fc"]
+        return nan_dtypes
+
+    def emit(tag, fn, operands, args, layout, nan_bits=True, bufsize=None, facet=None):
+        """Record one call. `operands` are (base, view) pairs; `args` maps a NumPy parameter name to its spec. A
+        `facet` of "strides" records WHERE the fresh result's elements live (_result_strides) instead of their values."""
+        nonlocal n, dropped
+        ops = [view for _, view in operands]
+
+        def resolve(spec):
+            if "py" in spec:
+                return spec["py"]
+            if "of" in spec:
+                return _clip_ufunc_apply_view(ops[spec["of"]], spec["view"])
+            return ops[spec["op"]]
+
+        kw = {}
+        for name in ("axis", "keepdims"):
+            if name in args:
+                kw[name] = args[name]
+        for name in ("out", "where"):
+            if name in args:
+                kw[name] = resolve(args[name])
+        if "initial" in args:
+            kw["initial"] = _mmk_initial(args["initial"], ops)
+        params = dict(args, fn=fn)
+        if nan_bits:
+            params["nan_bits"] = True
+        if bufsize is not None:
+            params["bufsize"] = bufsize
+        if facet is not None:
+            params["facet"] = facet
+        descs = [describe(base, view) for base, view in operands]
+        cid = f"minmax_kwargs/{fn}/{tag}/{n}"
+        previous = np.getbufsize()
+        try:
+            if bufsize is not None:
+                np.setbufsize(bufsize)
+            with warnings.catch_warnings(), np.errstate(all="ignore"):
+                warnings.simplefilter("ignore")    # all-NaN slices, complex -> real out casts, invalid casts
+                r = MINMAX_KWARGS_FNS[fn](resolve(args["a"]), **kw)
+        except Exception as e:                    # noqa: BLE001 — NumPy's outcome is recorded verbatim
+            if not _mmk_portable(e):
+                dropped += 1
+                return
+            n += 1
+            cases.append(_error_case("minmax_kwargs", params, descs, e, layout, cid=cid, kind="tuple"))
+            return
+        finally:
+            np.setbufsize(previous)
+        n += 1
+        if facet == "strides":
+            cases.append(_case("minmax_kwargs", params, descs, _tuple_expected([_result_strides(r)]), layout, "mixed",
+                               cid=cid))
+            return
+        slots = [np.asarray(r)]
+        if "out" in args:
+            owner = args["out"].get("op", args["out"].get("of"))
+            slots.append(operands[owner][0].ravel())
+            slots.append(np.array(r is kw["out"]))
+        cases.append(_case("minmax_kwargs", params, descs, _tuple_expected(slots), layout, "mixed", cid=cid))
+
+    def fresh(shape, dt, kind="C", roll=0):
+        """(base, view) of an out array: pool values (overwritten by the call) in layout C / F / S / R."""
+        return _clip_ufunc_view(tuple(shape), np.dtype(dt), kind, roll)
+
+    def same(arr):
+        """An array that is its own base."""
+        return arr, arr
+
+    A = {"a": {"op": 0}}
+
+    # ---- A. layouts x axis x keepdims x the keyword forms --------------------------------------------------------
+    for fn in ("max", "min", "nanmax", "nanmin"):
+        for s in fn_dtypes(fn, inexact_only_nan=True):
+            floaty = np.dtype(s).kind in "fc"
+            for li, ln in enumerate(MINMAX_KWARGS_LAYOUTS):
+                base, view = _mmk_layout(ln, s, li, nan=7 if floaty and li % 2 else 0)
+                two_d = view.ndim == 2 or view.ndim == 0 or view.size == 0
+                axes = [None, 0, -1] + ([1] if view.ndim >= 3 else [])
+                for axis in axes:
+                    for keepdims in ((False, True) if axis is None else (False,)):
+                        rshape = _mmk_result_shape(view.shape, axis, keepdims)
+                        k = li + (axis or 0) + int(keepdims)
+                        init = _mmk_default_initial(s, k)
+                        mask = _mmk_mask(view.shape, li + k)
+                        tag = f"A/{s}/{ln}/{axis}/{int(keepdims)}"
+                        args = dict(A, axis=axis, keepdims=keepdims)
+                        emit(f"{tag}/i", fn, [(base, view)], dict(args, initial=init), ln)
+                        emit(f"{tag}/oiw", fn, [(base, view), fresh(rshape or (), s, "C", k), mask],
+                             dict(args, initial=init, out={"op": 1}, where={"op": 2}), ln) if rshape is not None else None
+                        if not two_d:
+                            continue
+                        emit(f"{tag}/iw", fn, [(base, view), mask], dict(args, initial=init, where={"op": 1}), ln)
+                        if rshape is not None:
+                            emit(f"{tag}/o", fn, [(base, view), fresh(rshape, s, "C", k + 1)],
+                                 dict(args, out={"op": 1}), ln)
+
+    # ---- M. mask forms and the no-identity errors ------------------------------------------------------------------
+    for fn in ("max", "min", "nanmax", "nanmin"):
+        for s in fn_dtypes(fn):
+            floaty = np.dtype(s).kind in "fc"
+            for ln in ("c_contiguous_2d", "f_contiguous_2d"):
+                base, view = _mmk_layout(ln, s, 3, nan=5 if floaty else 0)
+                shape = view.shape
+                masks = {
+                    "row": _mmk_mask(shape[-1:], 1),
+                    "col": _mmk_mask(shape[:-1] + (1,), 2),
+                    "fullF": _mmk_mask(shape, 4, "F"),
+                    "lead": _mmk_mask((1,) + shape[1:], 5),
+                    "zerodF": same(np.array(False)),
+                    "zerodT": same(np.array(True)),
+                    "allF": same(np.zeros(shape, bool)),
+                }
+                for mk, mask in masks.items():
+                    for axis in (None, 0, -1):
+                        k = len(mk) + (axis or 0)
+                        args = dict(A, axis=axis, keepdims=False, initial=_mmk_default_initial(s, k), where={"op": 1})
+                        emit(f"M/{s}/{ln}/{mk}/{axis}", fn, [(base, view), mask], args, ln)
+                for pyw in (True, False):
+                    for axis in (None, 1):
+                        emit(f"M/{s}/{ln}/py{pyw}/{axis}", fn, [(base, view)],
+                             dict(A, axis=axis, keepdims=False, where={"py": pyw, "t": "bool"}), ln)
+                        emit(f"M/{s}/{ln}/py{pyw}/{axis}/i", fn, [(base, view)],
+                             dict(A, axis=axis, keepdims=False, where={"py": pyw, "t": "bool"},
+                                  initial=_mmk_default_initial(s, 1)), ln)
+                # where= without initial: NumPy's no-identity error (after every shape check).
+                emit(f"M/{s}/{ln}/noinit", fn, [(base, view), _mmk_mask(shape, 0)],
+                     dict(A, axis=0, keepdims=False, where={"op": 1}), ln)
+
+    # ---- O. out= dtypes and layouts (the loop is promote_types(out, a)) --------------------------------------------
+    out_partner = {"bool": "int8", "int8": "uint8", "uint8": "int8", "int16": "uint8", "uint16": "int16",
+                   "int32": "int16", "uint32": "int32", "int64": "uint64", "uint64": "int64", "float16": "float32",
+                   "float32": "float16", "float64": "float32", "complex128": "float64"}
+    for fn in ("max", "nanmax", "min", "nanmin"):
+        full = fn == "max"
+        for s in fn_dtypes(fn):
+            floaty = np.dtype(s).kind in "fc"
+            out_dts = list(dict.fromkeys([s, "int8", "float64", out_partner.get(s, s)] + (["bool", "complex128"] if full else [])))
+            for ln in (("c_contiguous_2d", "f_contiguous_2d") if full else ("c_contiguous_2d",)):
+                base, view = _mmk_layout(ln, s, 5, nan=7 if floaty else 0)
+                shape = view.shape
+                for axis, keepdims in ((None, False), (0, False), (1, False), (1, True), (None, True)):
+                    rshape = _mmk_result_shape(shape, axis, keepdims)
+                    for odt in out_dts:
+                        kinds = ("C", "S", "F", "R") if full and odt in (s, "float64", "int8") else ("C",)
+                        for okind in kinds:
+                            if okind != "C" and len(rshape) == 0:
+                                continue
+                            if okind == "F" and len(rshape) < 2:
+                                continue
+                            ob = fresh(rshape, odt, okind, 2)
+                            tag = f"O/{s}/{ln}/{axis}/{int(keepdims)}/{odt}/{okind}"
+                            args = dict(A, axis=axis, keepdims=keepdims, out={"op": 1})
+                            emit(f"{tag}/o", fn, [(base, view), ob], args, f"out_{okind}")
+                            emit(f"{tag}/oi", fn, [(base, view), ob], dict(args, initial=_mmk_default_initial(s, 0)),
+                                 f"out_{okind}")
+                            if okind == "C" or odt == s:
+                                emit(f"{tag}/oiw", fn, [(base, view), ob, _mmk_mask(shape, 1)],
+                                     dict(args, initial=_mmk_default_initial(s, 1), where={"op": 2}), f"out_{okind}")
+
+    # ---- V. the float bits: ±0 ties, NaN payloads, where= runs, strides and SIMD-width boundaries -------------------
+    float_dts = [d for d in ("float16", "float32", "float64", "complex128") if d in dtypes]
+    patterns = [(1, 1), (3, 2), (9, 4), (40, 1)]
+    for fn in ("max", "min", "nanmax", "nanmin"):
+        for s in float_dts:
+            for length in (8, 15, 33, 67):
+                for vk, (seed, nan) in enumerate(((1, 0), (2, 5), (4, 2))):
+                    vals = _mmk_values(s, (2 * length,), seed, nan)
+                    head = vals[:length].copy()
+                    for vn, (base, view) in (("C", same(head)), ("S", (vals, vals[::2])), ("R", (head, head[::-1]))):
+                        tagv = f"V/{s}/{length}/{vk}/{vn}"
+                        emit(f"{tagv}/plain", fn, [(base, view)], dict(A, axis=None, keepdims=False), "values")
+                        for ik, init in enumerate((_mmk_float(0.0), _mmk_float(-0.0),
+                                                   _mmk_float(bits=_mmk_nan_bits("float64", 9)))):
+                            emit(f"{tagv}/i{ik}", fn, [(base, view)], dict(A, axis=None, keepdims=False, initial=init),
+                                 "values")
+                        for pk, pat in enumerate(patterns):
+                            mask = _mmk_runs_mask(length, pat)
+                            emit(f"{tagv}/w{pk}", fn, [(base, view), mask],
+                                 dict(A, axis=None, keepdims=False, initial=_mmk_float(-0.0), where={"op": 1}),
+                                 "values")
+            # 2-D: a reduced axis whose calls are cut by the layout (C rows, F slabs, a strided out).
+            for shape in ((5, 37), (37, 5)):
+                cnt = shape[0] * shape[1]
+                vals = _mmk_values(s, (cnt,), 6, 9)
+                c_base = vals.reshape(shape).copy()
+                f_base = vals.reshape(shape[::-1]).copy()
+                # C: the shape in C order; F: the same shape in column-major memory; T: the transposed (reversed) shape.
+                for vn, (base, view) in (("C", same(c_base)), ("F", (f_base, f_base.T)), ("T", (c_base, c_base.T))):
+                    for axis in (None, 0, 1):
+                        rshape = _mmk_result_shape(view.shape, axis, False)
+                        tagv = f"V2/{s}/{shape}/{vn}/{axis}"
+                        emit(f"{tagv}/i", fn, [(base, view)], dict(A, axis=axis, keepdims=False, initial=_mmk_float(-0.0)),
+                             "values")
+                        emit(f"{tagv}/iw", fn, [(base, view), _mmk_mask(view.shape, 2)],
+                             dict(A, axis=axis, keepdims=False, initial=_mmk_float(0.0), where={"op": 1}), "values")
+                        if len(rshape):
+                            emit(f"{tagv}/oS", fn, [(base, view), fresh(rshape, s, "S", 1)],
+                                 dict(A, axis=axis, keepdims=False, out={"op": 1}), "values")
+
+    # ---- F. buffer fills: np.setbufsize and arrays past the default buffer ----------------------------------------------
+    for fn in ("max", "nanmax"):
+        fdts = [d for d in fn_dtypes(fn) if d in ("bool", "int8", "uint64", "int32", "float16", "float32", "float64",
+                                                  "complex128", "uint16")]
+        for s in fdts:
+            floaty = np.dtype(s).kind in "fc"
+            base2, _ = _mmk_layout("c_contiguous_2d", s, 7, nan=13 if floaty else 0)
+            big = _mmk_values(s, (6, 23), 8, nan=17 if floaty else 0)
+            for ln, (base, view) in (("C", same(big)), ("F", (np.ascontiguousarray(big.T), None)),
+                                     ("S", (np.ascontiguousarray(np.repeat(big, 2, axis=1)), None))):
+                if view is None:
+                    view = base.T if ln == "F" else base[:, ::2]
+                for bufsize in ((16, 32) if ln == "C" else (16,)):
+                    for axis in (None, 0, 1):
+                        rshape = _mmk_result_shape(view.shape, axis, False)
+                        tag = f"F/{s}/{ln}/{bufsize}/{axis}"
+                        emit(f"{tag}/i", fn, [(base, view)], dict(A, axis=axis, keepdims=False,
+                                                                  initial=_mmk_default_initial(s, 0)),
+                             "fills", bufsize=bufsize)
+                        emit(f"{tag}/iw", fn, [(base, view), _mmk_mask(view.shape, 1)],
+                             dict(A, axis=axis, keepdims=False, initial=_mmk_default_initial(s, 1), where={"op": 1}),
+                             "fills", bufsize=bufsize)
+                        for odt in dict.fromkeys(("int8", out_partner.get(s, s))):
+                            ob = fresh(rshape, odt, "C", 3)
+                            emit(f"{tag}/o{odt}", fn, [(base, view), ob], dict(A, axis=axis, keepdims=False, out={"op": 1}),
+                                 "fills", bufsize=bufsize)
+                            emit(f"{tag}/oi{odt}", fn, [(base, view), ob, _mmk_mask(view.shape, 2)],
+                                 dict(A, axis=axis, keepdims=False, out={"op": 1}, initial=_mmk_default_initial(s, 0),
+                                      where={"op": 2}), "fills", bufsize=bufsize)
+    # Past the default 8192-element buffer: the out's round trip through a narrowing dtype at every fill (probed: the
+    # max of int16 [100] * 20000 with 300 at index 100 into an int8 out is 100 — the first fill leaves int8(300) = 44).
+    for s in [d for d in ("int16", "float32") if d in dtypes]:
+        vals = np.full(20000, 100, dtype=s)
+        vals[100] = 300
+        vals[9000] = 250
+        vals[15000] = -300
+        for fn in ("max", "min"):
+            emit(f"F/big/{s}/{fn}", fn, [same(vals), fresh((), "int8", "C", 0)],
+                 dict(A, axis=None, keepdims=False, out={"op": 1}), "fills_big")
+            emit(f"F/big/{s}/{fn}/i", fn, [same(vals), fresh((), "int8", "C", 0)],
+                 dict(A, axis=None, keepdims=False, out={"op": 1}, initial=_mmk_int(5)), "fills_big")
+        m2 = vals.reshape(2, 10000)
+        emit(f"F/big2/{s}", "max", [(vals, m2), fresh((2,), "int8", "C", 0)],
+             dict(A, axis=1, keepdims=False, out={"op": 1}), "fills_big")
+        emit(f"F/big2T/{s}", "max", [(vals, m2.T), fresh((2,), "uint8", "C", 0)],
+             dict(A, axis=0, keepdims=False, out={"op": 1}), "fills_big")
+
+    # ---- P. initial= of every kind into every loop dtype ------------------------------------------------------------
+    py_ints = [0, 1, -1, 5, 127, 128, -128, -129, 255, 256, 32767, 32768, 65535, 65536, 2**31 - 1, 2**31, -2**31,
+               -2**31 - 1, 2**32 - 1, 2**32, 2**53 + 1, 2**63 - 1, 2**63, -2**63, -2**63 - 1, 2**64 - 1, 2**64, 2**70]
+    py_floats = [0.0, -0.0, 1.5, -1.5, 7.9, -7.9, 300.7, -300.7, 65504.0, 65520.0, 1e10, 1e300, 3.4028235677973366e38,
+                 1e-8, 5e-324, float("inf"), float("-inf")]
+    nan_floats = [0x7FF8000000000000, 0xFFF8000000000000, 0x7FF800000000ABCD, 0x7FF0000000000001]
+    halves = [3.5, -0.0, 300.0, 65504.0, float("inf"), float("-inf")]
+    half_nans = [0x7E00, 0xFE00, 0x7E5A, 0x7C01]
+    strs = ["5", " 7 ", "1.5", "-2.5", "nan", "-inf", "inf", "1_000", "1e3", "abc", "", "1+2j", "0x10", "+3", "Infinity"]
+    for s in dtypes:
+        ip = _mmk_values(s, (5,), 1)
+        ip2 = _mmk_values(s, (3, 4), 2)
+        inputs = (("1d", same(ip), None), ("2d", same(ip2), 0))
+        zero_d = {
+            "i64_1000": np.array(1000, np.int64), "i64_m1": np.array(-1, np.int64),
+            "u64_max": np.array(2**64 - 1, np.uint64), "f64_nan": np.array(np.nan),
+            "f64_300": np.array(300.7), "f64_m0": np.array(-0.0), "f16_nan": np.array(np.nan, np.float16),
+            "c128": np.array(1 + 2j), "b_true": np.array(True), "i8_m5": np.array(-5, np.int8),
+            "f32_15": np.array(1.5, np.float32), "u16_300": np.array(300, np.uint16),
+        }
+        arrays = {"f64_1": np.array([9.0]), "i64_2": np.array([1, 2]), "f64_0": np.zeros(0)}
+        specs = [(f"int{v}", _mmk_int(v)) for v in py_ints]
+        specs += [(f"float{v!r}", _mmk_float(v)) for v in py_floats]
+        specs += [(f"fnan{b:x}", _mmk_float(bits=b)) for b in nan_floats]
+        specs += [("true", {"t": "bool", "py": True}), ("false", {"t": "bool", "py": False})]
+        specs += [(f"complex{z!r}", _mmk_complex(z)) for z in (1 + 0j, 1 + 2j, complex(np.nan, 0), complex(0, -0.0))]
+        specs += [(f"half{v!r}", _mmk_half(v)) for v in halves]
+        specs += [(f"hnan{b:x}", _mmk_half(bits=b)) for b in half_nans]
+        specs += [(f"char{v}", {"t": "char", "py": v}) for v in (0, 5, 300, 65535)]
+        specs += [(f"str{v!r}", {"t": "str", "py": v}) for v in strs]
+        specs += [("list1", {"t": "list", "py": [1]}), ("list0", {"t": "list", "py": []}),
+                  ("list2", {"t": "list", "py": [1, 2]}), ("tuple1", {"t": "tuple", "py": [1]}),
+                  ("none", {"t": "none"})]
+        for iname, (base, view), axis in inputs:
+            for sname, spec in specs:
+                emit(f"P/{s}/{iname}/{sname}", "max", [(base, view)],
+                     dict(A, axis=axis, keepdims=False, initial=spec), "initial")
+            for zname, z in zero_d.items():
+                emit(f"P/{s}/{iname}/0d_{zname}", "max", [(base, view), same(z)],
+                     dict(A, axis=axis, keepdims=False, initial={"op": 1}), "initial")
+            for aname, arr in arrays.items():
+                emit(f"P/{s}/{iname}/arr_{aname}", "max", [(base, view), same(arr)],
+                     dict(A, axis=axis, keepdims=False, initial={"op": 1}), "initial")
+        # min, and the out= loop: initial is packed into promote_types(out, a), not into a's dtype.
+        for sname, spec in specs[::3]:
+            emit(f"P/{s}/min/{sname}", "min", [same(ip)], dict(A, axis=None, keepdims=False, initial=spec), "initial")
+            for odt in ("int8", "float64"):
+                emit(f"P/{s}/out{odt}/{sname}", "max", [same(ip), fresh((), odt, "C", 1)],
+                     dict(A, axis=None, keepdims=False, initial=spec, out={"op": 1}), "initial")
+
+    # ---- E. errors in NumPy's order ------------------------------------------------------------------------------------
+    for fn in MINMAX_KWARGS_FNS:
+        for s in [d for d in ("float64", "int8", "complex128", "bool", "float16", "uint16") if d in dtypes]:
+            base, view = _mmk_layout("c_contiguous_2d", s, 9)
+            shape = view.shape
+            ro_base, _ = fresh((5,), s)
+            ro_base = ro_base.copy()
+            ro_base.flags.writeable = False
+            readonly_out = (ro_base, ro_base)
+            e_base = np.zeros((0, 3), dtype=s)
+            e3_base = np.zeros((3, 0), dtype=s)
+            bad_init = {"t": "str", "py": "abc"}
+            good_init = _mmk_default_initial(s, 0)
+            err = [
+                ("where_noinit", [(base, view), _mmk_mask(shape, 1)], dict(A, axis=None, keepdims=False, where={"op": 1})),
+                ("pyfalse_noinit", [(base, view)], dict(A, axis=0, keepdims=False, where={"py": False, "t": "bool"})),
+                ("pytrue_noinit", [(base, view)], dict(A, axis=0, keepdims=False, where={"py": True, "t": "bool"})),
+                ("empty_flat", [same(e_base)], dict(A, axis=None, keepdims=False)),
+                ("empty_ax0", [same(e_base)], dict(A, axis=0, keepdims=False)),
+                ("empty_ax1", [same(e_base)], dict(A, axis=1, keepdims=False)),
+                ("empty_ax1_kd", [same(e3_base)], dict(A, axis=1, keepdims=True)),
+                ("empty_init", [same(e_base)], dict(A, axis=0, keepdims=True, initial=good_init)),
+                ("empty_init_flat", [same(e_base)], dict(A, axis=None, keepdims=False, initial=good_init)),
+                ("empty_where_noinit", [same(e_base), same(np.zeros((0, 3), bool))],
+                 dict(A, axis=0, keepdims=False, where={"op": 1})),
+                ("empty_where_init", [same(e3_base), same(np.ones((3, 0), bool))],
+                 dict(A, axis=1, keepdims=False, where={"op": 1}, initial=good_init)),
+                ("readonly_out", [(base, view), readonly_out], dict(A, axis=0, keepdims=False, out={"op": 1})),
+                ("readonly_out_badinit", [(base, view), readonly_out],
+                 dict(A, axis=0, keepdims=False, out={"op": 1}, initial=bad_init)),
+                ("badinit", [(base, view)], dict(A, axis=0, keepdims=False, initial=bad_init)),
+                ("badinit_where", [(base, view), _mmk_mask(shape, 0)],
+                 dict(A, axis=0, keepdims=False, initial=bad_init, where={"op": 1})),
+                ("badinit_empty", [same(e_base)], dict(A, axis=None, keepdims=False, initial=bad_init)),
+                ("badinit_axis", [(base, view)], dict(A, axis=5, keepdims=False, initial=bad_init)),
+                ("badinit_mask_shape", [(base, view), _mmk_mask((2,), 0)],
+                 dict(A, axis=0, keepdims=False, initial=bad_init, where={"op": 1})),
+                ("int_mask", [(base, view), fresh(shape, "int64", "C", 1)],
+                 dict(A, axis=0, keepdims=False, initial=good_init, where={"op": 1})),
+                ("mask_more_dims", [(base, view), _mmk_mask((3,) + shape, 0)],
+                 dict(A, axis=None, keepdims=False, initial=good_init, where={"op": 1})),
+                ("axis_oob", [(base, view)], dict(A, axis=2, keepdims=False, initial=good_init)),
+                ("axis_oob_neg", [(base, view)], dict(A, axis=-3, keepdims=False)),
+                ("out_rank", [(base, view), fresh((4, 1), s)], dict(A, axis=1, keepdims=False, out={"op": 1})),
+                ("out_extent", [(base, view), fresh((3,), s)], dict(A, axis=1, keepdims=False, out={"op": 1})),
+                ("out_extent_init", [(base, view), fresh((3,), s)],
+                 dict(A, axis=1, keepdims=False, out={"op": 1}, initial=bad_init)),
+                ("out_keepdims", [(base, view), fresh((4, 1), s)], dict(A, axis=1, keepdims=True, out={"op": 1})),
+                ("out_flat_0d", [(base, view), fresh((), "float64")], dict(A, axis=None, keepdims=False, out={"op": 1})),
+                ("out_flat_kd", [(base, view), fresh((1, 1), s)], dict(A, axis=None, keepdims=True, out={"op": 1})),
+                ("none_init_where", [(base, view), _mmk_mask(shape, 0)],
+                 dict(A, axis=0, keepdims=False, initial={"t": "none"}, where={"op": 1})),
+                ("none_init", [(base, view)], dict(A, axis=0, keepdims=False, initial={"t": "none"})),
+            ]
+            for tag, operands, args in err:
+                emit(f"E/{s}/{tag}", fn, operands, args, "errors")
+            # 0-d inputs: axis 0 / -1 reduce flat, 1 is out of bounds; a 0-d where= with initial.
+            z_base, z_view = _mmk_layout("scalar_0d", s, 2)
+            for axis in (None, 0, -1, 1):
+                emit(f"E/{s}/zerod/{axis}", fn, [(z_base, z_view)], dict(A, axis=axis, keepdims=False, initial=good_init),
+                     "scalar_0d")
+                emit(f"E/{s}/zerod/{axis}/kd", fn, [(z_base, z_view), fresh((), s, "C", 1)],
+                     dict(A, axis=axis, keepdims=True, out={"op": 1}), "scalar_0d")
+
+    # ---- X. an out overlapping the input (COPY_IF_OVERLAP) ----------------------------------------------------------
+    for fn in ("max", "min", "nanmax"):
+        for s in [d for d in ("float64", "int32", "float16", "complex128", "bool") if d in dtypes]:
+            base = _mmk_values(s, (4, 5), 4, nan=0).copy()
+            for tag, axis, view in (("row0", 0, "[0]"), ("col0", 1, "[:, 0]"), ("row3rev", 0, "[3, ::-1]"),
+                                    ("diag", 1, "[:, 1]")):
+                for init in (None, _mmk_default_initial(s, 1)):
+                    args = dict(A, axis=axis, keepdims=False, out={"of": 0, "view": view})
+                    if init is not None:
+                        args["initial"] = init
+                    emit(f"X/{s}/{tag}/{int(init is not None)}", fn, [same(base.copy())], args, "overlap")
+                    margs = dict(args, initial=init or _mmk_default_initial(s, 0), where={"of": 0, "view": "[0]"}) \
+                        if s == "bool" else None
+                    if margs is not None:
+                        emit(f"X/{s}/{tag}/maskalias", fn, [same(base.copy())], margs, "overlap")
+
+    # ---- L. the aliases: amax / amin / ndarray.max / ndarray.min ------------------------------------------------------
+    for fn in ("amax", "amin", "ndarray.max", "ndarray.min"):
+        for s in [d for d in ("float64", "int32", "bool", "float16", "uint16") if d in dtypes]:
+            floaty = np.dtype(s).kind in "fc"
+            for ln in ("c_contiguous_2d", "f_contiguous_2d", "scalar_0d"):
+                base, view = _mmk_layout(ln, s, 4, nan=5 if floaty else 0)
+                for axis in (None, 0, -1):
+                    for keepdims in (False, True):
+                        rshape = _mmk_result_shape(view.shape, axis, keepdims)
+                        args = dict(A, axis=axis, keepdims=keepdims)
+                        tag = f"L/{s}/{ln}/{axis}/{int(keepdims)}"
+                        emit(f"{tag}/plain", fn, [(base, view)], args, ln)
+                        emit(f"{tag}/i", fn, [(base, view)], dict(args, initial=_mmk_default_initial(s, 1)), ln)
+                        emit(f"{tag}/iw", fn, [(base, view), _mmk_mask(view.shape, 1)],
+                             dict(args, initial=_mmk_default_initial(s, 0), where={"op": 1}), ln)
+                        if rshape is not None:
+                            emit(f"{tag}/o", fn, [(base, view), fresh(rshape, "float64", "C", 2)],
+                                 dict(args, out={"op": 1}), ln)
+    # ---- K. the fresh result's layout: npyiter_new_temp_array lays it out in the iterator's axis order (a mask votes) ----
+    for fn in ("max", "nanmax"):
+        for s in [d for d in ("float64", "bool", "float16", "complex128", "uint16") if d in dtypes]:
+            floaty = np.dtype(s).kind in "fc"
+            for ln in ("c_contiguous_3d", "f_contiguous_3d", "transposed_3d", "highrank_5d", "f_contiguous_2d",
+                       "transposed_2d", "singleton_dim_3d", "broadcast_row_partial"):
+                base, view = _mmk_layout(ln, s, 2, nan=5 if floaty else 0)
+                nd = view.ndim
+                for axis in range(-nd, nd) if nd <= 3 else (0, 2, -1):
+                    for keepdims in (False, True):
+                        tag = f"K/{s}/{ln}/{axis}/{int(keepdims)}"
+                        args = dict(A, axis=axis, keepdims=keepdims)
+                        emit(f"{tag}/plain", fn, [(base, view)], args, ln, facet="strides")
+                        emit(f"{tag}/i", fn, [(base, view)], dict(args, initial=_mmk_default_initial(s, 0)), ln,
+                             facet="strides")
+                        for mk in ("C", "F"):
+                            emit(f"{tag}/iw{mk}", fn, [(base, view), _mmk_mask(view.shape, 1, mk)],
+                                 dict(args, initial=_mmk_default_initial(s, 1), where={"op": 1}), ln, facet="strides")
+
+    # ---- R. seeded random combinations: layout x axis x keepdims x initial x where x out x buffer size ---------------
+    # The sections above vary one thing at a time; these vary everything at once (permuted / reversed / stepped / offset /
+    # broadcast inputs up to 4-D, masks of every broadcast form and layout, outs of every dtype and layout, small buffers),
+    # which is where the iterator's axis order, coalescing, buffering and call cuts interact.
+    rng = np.random.default_rng(20261005)
+    all_out = [d for d in ALL_DTYPES]
+
+    def random_view(shape, s, nan):
+        """A view of `shape` over a fresh base: stepped, reversed, offset and permuted at random; sometimes broadcast."""
+        nd = len(shape)
+        if nd and rng.random() < 0.15:
+            # Broadcast: a stride-0 axis (read-only), from a base with that axis of length 1.
+            ax = int(rng.integers(nd))
+            src_shape = tuple(1 if i == ax else d for i, d in enumerate(shape))
+            base = _mmk_values(s, src_shape, int(rng.integers(100)), nan).copy()
+            return base, np.broadcast_to(base, shape)
+        perm = list(rng.permutation(nd)) if nd else []
+        steps = [int(rng.choice([1, 1, 2, -1, -2])) for _ in range(nd)]
+        # The base holds the permuted shape, stretched by the steps, plus an offset.
+        pshape = [shape[p] for p in perm] if nd else []
+        bshape = [abs(st) * d + int(rng.integers(0, 2)) for st, d in zip(steps, pshape)]
+        base = _mmk_values(s, tuple(bshape), int(rng.integers(100)), nan).copy()
+        sl = []
+        for st, d, bd in zip(steps, pshape, bshape):
+            o = bd - abs(st) * d                       # the spare element (0 or 1): an offset start
+            if d == 0:
+                sl.append(slice(0, 0))
+            elif st > 0:
+                sl.append(slice(o, o + st * d, st))
+            else:
+                hi = o + abs(st) * (d - 1)            # the first element visited; the last is o
+                sl.append(slice(hi, o - 1 if o > 0 else None, st))
+        v = base[tuple(sl)] if nd else base
+        if nd:
+            inv = np.argsort(perm)
+            v = v.transpose(inv)
+        assert v.shape == tuple(shape), (v.shape, shape)
+        return base, v
+
+    def random_mask(shape):
+        """A bool mask (base, view) broadcasting to `shape`: full, axes of length 1, fewer leading axes, F or reversed."""
+        nd = len(shape)
+        mshape = list(shape)
+        drop = int(rng.integers(0, nd + 1)) if nd and rng.random() < 0.3 else 0
+        mshape = mshape[drop:]
+        for i in range(len(mshape)):
+            if rng.random() < 0.25:
+                mshape[i] = 1
+        p = float(rng.choice([0.2, 0.5, 0.8, 1.0]))
+        vals = rng.random(tuple(mshape)) < p
+        kind = rng.choice(["C", "F", "R"]) if mshape else "C"
+        if kind == "F" and len(mshape) >= 2:
+            base = np.ascontiguousarray(vals.T)
+            return base, base.T
+        if kind == "R" and mshape:
+            base = np.ascontiguousarray(vals[..., ::-1])
+            return base, base[..., ::-1]
+        base = np.ascontiguousarray(vals)
+        return base, base
+
+    n_random = 3000 if len(dtypes) > 1 else 400
+    fns = list(MINMAX_KWARGS_FNS)
+    for i in range(n_random):
+        fn = fns[int(rng.integers(len(fns)))]
+        s = dtypes[int(rng.integers(len(dtypes)))]
+        floaty = np.dtype(s).kind in "fc"
+        nd = int(rng.choice([0, 1, 1, 2, 2, 2, 3, 3, 4]))
+        if nd == 1 and rng.random() < 0.3:
+            shape = (int(rng.integers(30, 140)),)            # SIMD widths and tails
+        else:
+            shape = tuple(int(rng.choice([1, 2, 3, 4, 5, 6, 7] if nd < 4 else [1, 2, 3, 4])) for _ in range(nd))
+        if nd and rng.random() < 0.04:
+            shape = tuple(0 if k == 0 else d for k, d in enumerate(shape))
+        base, view = random_view(shape, s, int(rng.choice([0, 0, 3, 7])) if floaty else 0)
+        axis = None if nd == 0 or rng.random() < 0.3 else int(rng.integers(-nd, nd))
+        keepdims = bool(rng.random() < 0.3)
+        operands = [(base, view)]
+        args = dict(A, axis=axis, keepdims=keepdims)
+        if rng.random() < 0.7:
+            args["initial"] = _mmk_default_initial(s, int(rng.integers(2)))
+        r = rng.random()
+        if r < 0.45:
+            operands.append(random_mask(shape))
+            args["where"] = {"op": len(operands) - 1}
+        elif r < 0.55:
+            args["where"] = {"py": bool(rng.random() < 0.5), "t": "bool"}
+        rshape = _mmk_result_shape(shape, axis, keepdims)
+        if rshape is not None and rng.random() < 0.55:
+            odt = s if rng.random() < 0.4 else all_out[int(rng.integers(len(all_out)))]
+            okind = str(rng.choice(["C", "S", "F", "R"])) if len(rshape) else "C"
+            if okind == "F" and len(rshape) < 2:
+                okind = "C"
+            operands.append(fresh(rshape, odt, okind, int(rng.integers(5))))
+            args["out"] = {"op": len(operands) - 1}
+        bufsize = int(rng.choice([16, 32, 64, 128])) if rng.random() < 0.3 else None
+        emit(f"R/{s}/{i}", fn, operands, args, "random", bufsize=bufsize)
+        if "out" not in args and rshape is not None and len(rshape) >= 2 and i % 3 == 0:
+            emit(f"R/{s}/{i}/strides", fn, operands, args, "random", bufsize=bufsize, facet="strides")
+
+    # ---- W. sizes the wide paths need: NumSharp's vectorized loops take over past a few elements --------------------------
+    # The sections above use small arrays, which the vector paths leave to their scalar tails. These are big enough to reach
+    # them: complex128 blocks (two vector passes per 1024 elements), several input rows folded into one out row per call,
+    # masked float runs of every length (the per-run transfer functions), and a broadcast input spread along a non-reduced
+    # axis (taken from 16384 elements on). Its own generator, so section R's cases do not move.
+    wrng = np.random.default_rng(20261006)
+
+    def runs_mask(length, longest):
+        """A 1-D bool mask (base, view) of random selected / unselected runs, each 1..longest long."""
+        vals = np.zeros(length, dtype=bool)
+        k = 0
+        sel = bool(wrng.random() < 0.5)
+        while k < length:
+            run = int(wrng.integers(1, longest + 1))
+            vals[k:k + run] = sel
+            k += run
+            sel = not sel
+        return vals, vals
+
+    # Complex blocks: flat past one block (1024 elements), rows of a few hundred per axis, rows of 37 folded elementwise,
+    # NaN parts at two rates, ±0 ties in both parts. The shapes are the smallest that reach each path (the corpus stores
+    # every operand byte).
+    if "complex128" in dtypes:
+        for fn in ("max", "min", "nanmax", "nanmin"):
+            for shape, axes, kinds in (((1100,), (None,), ("plain", "i")), ((300,), (None,), ("plain", "i", "o")),
+                                       ((2, 520), (0, 1), ("plain", "i")), ((12, 37), (None, 0, 1), ("plain", "i", "o"))):
+                for nan in (0, 61):
+                    vals = _mmk_values("complex128", shape, 3 + nan, nan)
+                    base, view = same(vals)
+                    for axis in axes:
+                        tag = f"W/c128/{'x'.join(map(str, shape))}/{nan}/{axis}"
+                        if "plain" in kinds:
+                            emit(f"{tag}/plain", fn, [(base, view)], dict(A, axis=axis, keepdims=False), "c_contiguous")
+                        if "i" in kinds:
+                            emit(f"{tag}/i", fn, [(base, view)], dict(A, axis=axis, keepdims=False,
+                                                                       initial=_mmk_default_initial("complex128", nan % 2)),
+                                 "c_contiguous")
+                        if "o" in kinds:
+                            rshape = _mmk_result_shape(shape, axis, False)
+                            emit(f"{tag}/o", fn, [(base, view), fresh(rshape, "complex128", "C", 1)],
+                                 dict(A, axis=axis, keepdims=False, out={"op": 1}), "c_contiguous")
+
+    # Several rows per call: an axis-0 reduction through the iterator (bool; a cast out; a broadcast input under a cast out).
+    for fn, s, odt, shape, nan in (("max", "bool", None, (9, 300), 0), ("min", "bool", None, (9, 300), 0),
+                                   ("max", "float64", "float32", (9, 70), 7), ("min", "float64", "float32", (9, 70), 7),
+                                   ("nanmax", "float64", "float32", (9, 70), 5), ("nanmin", "float32", "float16", (9, 70), 5),
+                                   ("max", "int16", "int8", (9, 70), 0), ("min", "uint16", "int8", (9, 70), 0)):
+        if s not in dtypes:
+            continue
+        vals = _mmk_values(s, shape, 11, nan)
+        row = vals[:1].copy()
+        for ln, (base, view) in (("C", same(vals)), ("B", (row, np.broadcast_to(row, shape)))):
+            tag = f"W/rows/{s}/{ln}/{odt}"
+            for bufsize in (None, 64):
+                args = dict(A, axis=0, keepdims=False)
+                if odt is None:
+                    emit(f"{tag}/i/{bufsize}", fn, [(base, view)], dict(args, initial=_mmk_default_initial(s, 1)),
+                         "rows", bufsize=bufsize)
+                    emit(f"{tag}/plain/{bufsize}", fn, [(base, view)], args, "rows", bufsize=bufsize)
+                else:
+                    emit(f"{tag}/o/{bufsize}", fn, [(base, view), fresh((shape[1],), odt, "C", 2)],
+                         dict(args, out={"op": 1}), "rows", bufsize=bufsize)
+
+    # Masked float runs of every length: the per-run transfer functions (runs shorter than a vector, of one to seven
+    # vectors, of eight or more) against NumPy's per-run calls, flat and per row, with ±0 ties and NaN payloads.
+    for fn in ("max", "min", "nanmax", "nanmin"):
+        for s in [d for d in ("float32", "float64") if d in dtypes]:
+            for shape in ((300,), (4, 75)):
+                for nan in (0, 41):
+                    vals = _mmk_values(s, shape, 5 + nan, nan)
+                    base, view = same(vals)
+                    for longest in (3, 12, 70):
+                        mb, _ = runs_mask(int(np.prod(shape)), longest)
+                        mask = same(mb.reshape(shape))
+                        for axis in ((None,) if len(shape) == 1 else (None, 1)):
+                            for ik, init in enumerate((_mmk_float(-0.0), _mmk_float(bits=_mmk_nan_bits(s, 3)))):
+                                emit(f"W/runs/{s}/{'x'.join(map(str, shape))}/{nan}/{longest}/{axis}/{ik}", fn,
+                                     [(base, view), mask], dict(A, axis=axis, keepdims=False, initial=init,
+                                                                where={"op": 1}), "runs")
+
+    # The spread route: a stride-0 axis that is NOT reduced, from 16384 logical elements.
+    for fn in ("max", "min", "nanmax"):
+        for s in [d for d in ("int32", "bool", "complex128", "float16", "uint16", "int8") if d in dtypes]:
+            if fn == "nanmax" and np.dtype(s).kind not in "fc":
+                continue
+            floaty = np.dtype(s).kind in "fc"
+            # Small bases with a large repeat (the corpus stores every base byte): 20000, 16384 and 19200 elements.
+            for src_shape, shape, axis in (((1, 100), (200, 100), 1), ((1, 4, 64), (64, 4, 64), 2),
+                                           ((300, 1), (300, 64), 0)):
+                src = _mmk_values(s, src_shape, 13, 11 if floaty else 0).copy()
+                base, view = src, np.broadcast_to(src, shape)
+                for keepdims in (False, True):
+                    tag = f"W/spread/{s}/{'x'.join(map(str, shape))}/{axis}/{int(keepdims)}"
+                    args = dict(A, axis=axis, keepdims=keepdims)
+                    emit(f"{tag}/plain", fn, [(base, view)], args, "spread")
+                    emit(f"{tag}/i", fn, [(base, view)], dict(args, initial=_mmk_default_initial(s, 0)), "spread")
+                    emit(f"{tag}/strides", fn, [(base, view)], args, "spread", facet="strides")
+                    rshape = _mmk_result_shape(shape, axis, keepdims)
+                    emit(f"{tag}/o", fn, [(base, view), fresh(rshape, s, "C", 3)], dict(args, out={"op": 1}), "spread")
+
+    # The tie of a masked run: its lanes' extreme EQUAL to the running value, both zeros of either sign. NumPy's
+    # horizontal reduce then sees every lane at that value and returns the LAST lane — that lane's zero when it holds the
+    # extreme, else the running value's. Runs at multiples of the vector width (no scalar tail to decide it instead) and
+    # one past it; the running value ±0; NaNs in the pools of the NaN-skipping pair.
+    for fn, pool in (("max", (-0.0, 0.0, -1.0, -0.5)), ("nanmax", (-0.0, 0.0, -1.0, float("nan"))),
+                     ("min", (0.0, -0.0, 1.0, 0.5)), ("nanmin", (0.0, -0.0, 1.0, float("nan")))):
+        for s in [d for d in ("float32", "float64") if d in dtypes]:
+            width = 32 // np.dtype(s).itemsize
+            for k in range(16):
+                length = 96
+                vals = np.array([pool[int(wrng.integers(len(pool)))] for _ in range(length)], dtype=s)
+                mvals = np.zeros(length, dtype=bool)
+                pos = int(wrng.integers(0, 3))
+                while pos < length:
+                    run = width * int(wrng.integers(1, 4)) + (1 if wrng.random() < 0.2 else 0)
+                    mvals[pos:pos + run] = True
+                    pos += run + int(wrng.integers(1, 3))
+                init = _mmk_float(-0.0) if k % 2 else _mmk_float(0.0)
+                emit(f"W/tie/{s}/{k}", fn, [same(vals), same(mvals)],
+                     dict(A, axis=None, keepdims=False, initial=init, where={"op": 1}), "runs")
+
+    # Several rows per call where the ORDER of the rows shows: zeros of both signs and NaNs of distinct payloads in
+    # consecutive rows of one column (a tie keeps the later row in the vector op; two NaNs keep the earlier row under
+    # maximum / minimum and fmax's vector op, the later one under the CRT fmax of the scalar tail). Through the iterator:
+    # np.nanmax / np.nanmin with initial= (every float32 / float64 keyword call), np.max / np.min into a cast out.
+    for fn, s, odt in (("nanmax", "float64", None), ("nanmin", "float32", None), ("max", "float64", "float32"),
+                       ("min", "float64", "float32"), ("nanmax", "float32", "float64")):
+        if s not in dtypes:
+            continue
+        uint = {4: np.uint32, 8: np.uint64}[np.dtype(s).itemsize]
+        for k in range(6):
+            shape = (7, 45)
+            vals = np.empty(shape, dtype=s)
+            bits = vals.view(uint)
+            for r in range(shape[0]):
+                for c in range(shape[1]):
+                    pick = int(wrng.integers(5))
+                    if pick == 4 and fn.startswith("nan") or pick == 4 and k % 2:
+                        bits[r, c] = _mmk_nan_bits(s, int(wrng.integers(1, 9)) * 64 + r)
+                    else:
+                        vals[r, c] = (0.0, -0.0, -0.5 if "max" in fn else 0.5, -0.0)[pick % 4]
+            args = dict(A, axis=0, keepdims=False)
+            tag = f"W/rows2/{s}/{odt}/{k}"
+            if odt is None:
+                emit(f"{tag}/i", fn, [same(vals)], dict(args, initial=_mmk_float(-1.0 if "max" in fn else 1.0)), "rows")
+            else:
+                emit(f"{tag}/o", fn, [same(vals), fresh((shape[1],), odt, "C", 4)], dict(args, out={"op": 1}), "rows")
+
+    print(f"  minmax_kwargs: {len(cases)} cases, {dropped} platform-dependent outcomes dropped", file=sys.stderr)
+    return cases
+
+
+# ---------------------------------------------------------------------------------------------
 # The identity-seeded add reduction — op keys sum / mean / nansum / nanmean / average /
 # ndarray.sum, corpus sum_identity.jsonl.
 #
@@ -7155,6 +8077,8 @@ def char_tier(mode):
         raw = gen_mean_loops([_C])
     elif mode == "nanmean":                                        # Char has no NaN: np.mean's route, like uint16
         raw = gen_nanmean([_C])
+    elif mode == "minmax_kwargs":                                  # Char's loop is uint16's; its texts name uint16
+        raw = gen_minmax_kwargs([_C])
     return _relabel_dtype(raw, _C, "char")
 
 
@@ -17680,6 +18604,13 @@ def main():
         # axis forms and NumPy's reduce-prologue errors, through each function's NumPy-shaped overload. Its own
         # file, so regenerating it renumbers nothing else.
         write_jsonl(os.path.join(corpus_dir, "reduce_kwargs.jsonl"), gen_reduce_kwargs())
+    elif mode == "minmax_kwargs":
+        # np.max / np.min / np.amax / np.amin / np.nanmax / np.nanmin / ndarray.max / ndarray.min with NumPy's out=,
+        # initial= and where= (plan docs/plans/api-parameter-parity.md A4): the layouts, the loop dtype of out=, the
+        # float bits of the iterator's calls, buffer fills, every initial= kind, NumPy's errors. Its own file.
+        cases = gen_minmax_kwargs()
+        cases += char_tier("minmax_kwargs")
+        write_jsonl(os.path.join(corpus_dir, "minmax_kwargs.jsonl"), cases)
     elif mode == "varstd":
         # np.var / np.std as NumPy's _var / _std (plan docs/plans/api-parameter-parity.md A2): every layout, dtype,
         # ddof and dtype= pair, special values, np.setbufsize fills and order-sensitive sizes. Its own file.

@@ -385,7 +385,12 @@ class CommittedCorpusTests(unittest.TestCase):
         self.assertEqual({"flags:setflags"}, self.evidence("numpy.ndarray.setflags").keys)
         self.assertEqual({"evaluate"}, self.evidence("numsharp.np.evaluate").keys)
         self.assertEqual("numpy.abs", self.evidence("numpy.absolute").via["id"])
-        self.assertEqual("numpy.max", self.evidence("numpy.amax").via["id"], "layout contracts keep the value alias")
+        # np.amax / np.amin were aliases of np.max / np.min until the minmax_kwargs tier (plan api-parameter-parity A4)
+        # gated them directly through their own NumPy-shaped overloads.
+        for row_id, fn in (("numpy.amax", "amax"), ("numpy.amin", "amin")):
+            evidence = self.evidence(row_id)
+            self.assertIsNone(evidence.via, f"{row_id} has direct contracts")
+            self.assertIn(f"minmax_kwargs:{fn}", evidence.keys)
         self.assertEqual(["numpy.power"], self.labels["power"], "np.power shadows np.random.power")
 
     def test_reviewed_aliases_mirror_the_csharp_oracle_gate(self):

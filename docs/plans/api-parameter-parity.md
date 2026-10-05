@@ -212,12 +212,84 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     10M 5.2×; float64 along axis 0 at 10M 2.75×; float16 along axis 1 at 1K 1.72× (the eager route).
   - Left open: B7's `out=` / `where=` / `mean=` / `correction=` and NumPy's order; `ddof` as a float (finding 6);
     np.nanmean's integer keepdims (A7, found here).
-- [ ] **A4 max/min family: `out=`, `initial=`, `where=` and NumPy's order** for `np.max`, `np.min`, `np.amax`,
+- [x] **A4 max/min family: `out=`, `initial=`, `where=` and NumPy's order** for `np.max`, `np.min`, `np.amax`,
   `np.amin`, `np.nanmax`, `np.nanmin`, `ndarray.max`, `ndarray.min`. NumPy: `(a, axis=None, out=None, keepdims,
-  initial, where)`; NumSharp: `(a, axis, keepdims, dtype)`. Pins: the 4 `MaxMinFamily_*` tests.
-  - [ ] A4a NumPy's parameter order + `out=`
-  - [ ] A4b `initial=`
-  - [ ] A4c `where=`
+  initial, where)`; NumSharp: `(a, axis, keepdims, dtype)`. Pins: the 4 `MaxMinFamily_*` tests. Done 2026-10-05 (this
+  commit).
+  - [x] A4a NumPy's parameter order + `out=`
+  - [x] A4b `initial=`
+  - [x] A4c `where=`
+  - Proof (2026-10-05, at `a0d64cbd`): the parameters did not exist — `np.max(a, axis=0, out=o)`, `initial=` and
+    `where=` do not compile, and the 4 pins (bound to NumPy's signature by reflection) failed. Building the oracle tier
+    against plain `np.max` found three more divergences behind the keywords: complex128 along a reversed axis returned
+    another NaN than NumPy's first (the IL kernels walk memory order), a broadcast float input lost NumPy's NaN payloads
+    and ±0 ties (the old kernels match only the value), and the fresh result of an axis reduction over a permuted input
+    was C-ordered where NumPy keeps the input's axis order (292 cases of the tier's strides facet; library-wide, see
+    the fix). `np.max(bool, axis=1)` was 0.19× NumPy at 10M (no early exit).
+  - NumPy (`numpy/_core/fromnumeric.py::_wrapreduction`, `umath/reduction.c`, `nditer_constr.c`): `np.max` IS
+    `np.maximum.reduce` (`np.min` minimum, `np.nanmax` / `np.nanmin` of an ndarray `np.fmax.reduce` / `np.fmin.reduce`),
+    so the keywords are `PyUFunc_ReduceWrapper`'s, in its order: the reduce prologue (A1's `ReductionArguments`); the
+    loop dtype `promote_types(out, a)` (out acts as the first input); `PyArray_Pack(initial)` into the loop dtype (a
+    Python int range-checked, a Python float truncated, NaN / inf refused for an integer loop, a NumPy scalar
+    `int()`-converted by a SIGNED integer loop and cast by every other, a 0-d array cast, a str parsed, a sequence
+    refused with NumPy's texts); no identity: a mask raises "... does not have an identity, so to use a where mask one
+    has to specify 'initial'", an empty reduced axis "zero-size array to reduction operation ..."; the result starts as
+    the initial value or as each output's first element (`PyArray_CopyInitialReduceValues`, an unsafe cast from the
+    input), then ONE buffered NpyIter over `[out, a, where]` folds the rest in: inner-loop calls whose cuts decide the
+    float bits (each `simd_reduce_c` call re-canonicalizes a NaN; a ±0 tie depends on the call's vector section),
+    masked calls cut into runs of selected elements (`generic_masked_strided_loop`), and a cast out round-trips through
+    its own dtype at every buffer fill unless the buffer is reused (`NPY_OP_ITFLAG_BUF_REUSABLE`: only inside the reduce
+    double loop, with the previous fill's pointers). A fresh result is laid out in the iterator's axis order
+    (`npyiter_new_temp_array`).
+  - Fix: `np.max.Keywords.cs` / `NDArray.max.Keywords.cs` (NumPy's form at overload priority 1; NumSharp's positional
+    `(a, axis, keepdims)` and its `dtype=` extension stay, documented there); `DefaultEngine.MaxMinNumPy`
+    (`Default.Reduction.MinMax.Keywords.cs`): NumPy's statements in order, then one of four routes — a broadcast input
+    whose answer cannot depend on how often an element recurs reduces one copy (`MaxMinBroadcastShortcut`: every loop
+    but float32 / float64 always; those only when every NumPy call is elementwise); an integer input under a wider
+    loop reduces in its own dtype and casts (`max` commutes with a monotone cast); a same-dtype call without `where=`
+    runs the exact engines seeded with the initial value (`TryMaxMinSeeded`: np.max's speed); everything else runs
+    `NumPyReduceIterator`, a port of NumPy's reduction iterator (axis sort with C winning ties, coalescing,
+    `npyiter_find_buffering_setup`, fills, the reduce double loop, the first-visit skip, masked runs, the out buffer's
+    reuse, SIMD cast kernels for buffer copies) over NumPy's loops: the SIMD rules for float32 / float64 / integers,
+    `logical_or` / `logical_and` for bool, sequential `BINARY_LOOP`s for float16 / char / decimal, vectorized complex128.
+    `ReductionInitial` is `PyArray_Pack`. Also fixed: plain `np.max` / `np.min` of complex128 and of a broadcast input
+    go through the iterator (NumPy's bits), plain bool along its innermost axis too (early exit), np.nanmax / np.nanmin
+    of a broadcast float input; `AllocateReductionResult` lays a fresh axis result out like NumPy for every reduction
+    that uses it (`Shape.ReductionOutputShape`: np.sum / np.mean / np.var / the nan-family along an axis of an F-ordered
+    or permuted input were C-ordered; `ReductionKeepOrderTests` now asserts NumPy's layout).
+  - Performance work (each route proven bit-identical to NumPy's per-call structure, then measured): the masked calls of
+    every loop in one piece where the loop is order-free (integers, bool, sequential) and, for the float SIMD loops,
+    NumPy's per-run calls through per-run transfer functions (a run's own work leaves the out's dependency chain:
+    `NRunContiguous` / `PRunContiguous`, closed forms of `simd_reduce_c` derived from the associativity of the lane
+    ops); several input rows folded per call where the out does not move (`Loop.BinaryRows`); complex128 in two vector
+    passes per 1024-element block (the fold of a block is one of its elements: the first NaN, else the first extreme)
+    and a vectorized elementwise keep-blend; the out's per-core buffer copies as one strided conversion.
+  - Proof of the fix: the tier below, every case exact. Randomized probes against the per-call reference: complex
+    loops 64,000 cases, several-row folds 42,000, masked runs 192,000 — 0 mismatches. Planted bugs: 24 mutants over the
+    iterator (buffer reuse, run cuts, first visit, buffer cap, C-wins rule), the initial conversion and the wide paths
+    (complex lane order and NaN path, the run transfer functions' ties and canonicalization, the row pairing, the
+    broadcast shortcut, the cast rewrite, the strided walk, the mask scan) — every one turns 1–558 tier cases red.
+  - Gates: oracle tier `minmax_kwargs.jsonl` (35,847 cases, zero excuses: every catalog layout × axis × keepdims × the
+    keyword forms for the four functions; mask forms; out= of every dtype pairing in C / strided / F / reversed layouts;
+    the float bits under where= runs; `np.setbufsize` fills and a narrowing out past 8,192 elements; initial= of every
+    kind into every loop dtype; NumPy's errors in order; an out overlapping the input; the aliases; the fresh result's
+    layout; 3,000 seeded random combinations; section W sized for the wide paths; the char proxy), strict in
+    `MisalignedRegistry`; coverage key `minmax_kwargs` (np.amax / np.amin lost their reviewed aliases: they are gated
+    directly); unit tests `Selection/np.max.Keywords.Test.cs` (11: the 4 former pins, the LP64 overflow texts, NumPy
+    scalars, the bool literals, the cast-out round trip, complex NaN order, an empty result).
+  - Speed (NPY/NS, both sides pinned to two P-cores — finding 12; 237 cells: init= / where= / out= / cast out / nanmax /
+    complex / broadcast / bool forms × float64 / float32 / int32 / int8 / float16 / bool / complex128 × flat and both
+    axes × 1K / 100K / 10M, plus plain-np.max twins): geomean 3.98×, minimum 0.93×. where= 1.5–10,000× (NumPy cuts every
+    call into runs; a bool OR stops at the first selected True); complex128 1.5–3.9× (were 0.97–1.37×); a broadcast
+    integer input 10–560×; an integer input into a wider out 3.6–11.6×. Of the 34 cells under 1.5×, 27 ride plain
+    np.max's engine and match their plain twins (10M inputs bound by L3 / DRAM bandwidth — a float64 10M stream is at
+    one core's ~27.8 GB/s — and plain np.max's documented 100K slab gaps); 7 are keyword paths that are NumPy's own
+    structure: a float64 → float32 out (a round trip at every fill; 1.0–1.3×), a broadcast float64 input reduced flat
+    (each fill reduces the row copied into the buffer 8 times; 1.1–1.3×), bool along axis 0 at 10M (1.02×, L3-bound).
+  - Left open: plain np.max's 10M / slab gaps (its engine, documented under "Math — Reductions"); the cast-out and
+    broadcast-flat float routes above; a 0-d bool ARRAY holding true is read as Python's `where=True` (C# cannot tell
+    `np.array(True)` from the literal; `[Misaligned]`, NumPy raises the no-identity error without initial=); X10
+    (np.any / np.all keep C order: they do not use `AllocateReductionResult`).
 - [ ] **A5 `np.trapezoid`: an `axis=` outside `y`.** NumPy raises `IndexError: list assignment index out of range`;
   NumSharp raises `ArgumentOutOfRangeException`. Pin: `Trapezoid_AxisOutsideY_RaisesNumPysIndexError`.
 - [ ] **A6 `np.ma.var` / `np.ma.std` with a mask: the masked path is not NumPy's.** `NDMaskedArray.var` computes its
@@ -538,9 +610,29 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 11. **Hold the ported function strict across every tier, not only its own** (X9, as finding 7 for A2). The reduce tier's
    mean cases sat under the unbounded summation branch, which had hidden a gross divergence (a broadcast uint64 mean
    of 101.8 for NumPy's 3.69e18) and a dtype one (decimal); the new tier alone would not have reached either.
+12. **Pin a .NET benchmark to TWO CPUs, never one** (A4). A process pinned to a single CPU (`start /affinity 4`)
+   starves .NET's background tier-1 compiler even at normal priority: a hot path stays at tier 0 forever. np.max with a
+   float32 out over a float64 `(100, 1000)` measured ~100 µs per call pinned to one CPU, 13 µs with tiered compilation
+   off, and 12–13 µs pinned to two P-cores (mask `0x14`) once it tiers up after ~0.4 s; a JIT summary showed 2 tier-1
+   compilations in the whole one-CPU process. A full benchmark mixes the two regimes (a cell tiers up only when the
+   main thread happens to block), so earlier one-CPU numbers are suspect for paths that tier up late.
+13. **A repeated element changes nothing an order-free or idempotent loop can see** (A4). Integer / bool / sequential
+   max and min give the same answer over one copy of a broadcast axis as over every repeat, so the reduction can cut
+   it (10–560× for broadcast integer inputs). The float SIMD loops cannot in their reduce form — every `simd_reduce_c`
+   call re-canonicalizes a NaN, so the number of calls shows in the bits — but can in their elementwise form, where each
+   op is idempotent bit for bit.
+14. **Compose a NumPy call's runs off the dependency chain** (A4). A masked reduction is one inner-loop call per run of
+   selected elements, and each call is a ~40-cycle chain through the out's value; with runs of a few elements the run
+   count, not the element count, sets the time (NumPy ~9 ns per run). The lane ops are associative, so each call's
+   result is a closed form of the out's value and numbers taken from the run alone — only a compare-and-select stays on
+   the chain (float64 where= 0.94× → 2.2× NumPy).
 
 ## 7. State log
 
+- **2026-10-05**: A4 done (np.max / np.min / np.amax / np.amin / np.nanmax / np.nanmin / ndarray.max / ndarray.min take
+  NumPy's `out=` / `initial=` / `where=` in NumPy's order, through a port of NumPy's reduction iterator; the
+  `minmax_kwargs` oracle tier; plain np.max of complex128, broadcast and bool inputs and the fresh axis-result layout of
+  every reduction fixed on the way); findings 12–14 recorded. Commit: this one.
 - **2026-10-05**: D7 marked done: the np.ndarray parity session fixed it in `f17c3b2d` (plan `np-ndarray-parity.md`);
   its behaviors checked here against NumPy's values. Next: A4.
 - **2026-10-05**: A7 done (np.nanmean is NumPy's nanmean; `dtype=` added, B6's first part; the `nanmean` oracle tier;

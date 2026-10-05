@@ -405,7 +405,7 @@ namespace NumSharp.Backends
                 if (d != ax)
                     outputDims[od++] = dims[d];
 
-            var result = AllocateReductionResult(tc, outputDims, shape);
+            var result = AllocateReductionResult(tc, outputDims, shape, ax);
             try
             {
                 // Output strides indexed by INPUT axis (the reduced axis' entry is never read).

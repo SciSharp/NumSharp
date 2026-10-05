@@ -569,6 +569,23 @@ namespace NumSharp.Tests.Fuzz
         [TestMethod]
         public void ReduceKwargs() => RunCorpus("reduce_kwargs.jsonl");
 
+        /// <summary>
+        /// The max / min family with NumPy's keywords (gen_minmax_kwargs, plan docs/plans/api-parameter-parity.md A4):
+        /// np.max / np.min / np.amax / np.amin / np.nanmax / np.nanmin / ndarray.max / ndarray.min through their NumPy-shaped
+        /// overloads with out= (every dtype pairing: the loop is promote_types(out, a); C / strided / F / reversed views;
+        /// an out overlapping the input), initial= (every kind a C# caller can pass, into every loop dtype), where= (every
+        /// broadcast form, Python bools), the float bits of NumPy's iterator calls (±0 ties, NaN payloads compared raw on
+        /// x86-64-v3 hosts), np.setbufsize fills, and NumPy's errors in NumPy's order. Each value case also asserts the
+        /// whole buffer behind out and that out itself is returned. Section W sizes its arrays for NumSharp's wide paths
+        /// (complex128 blocks, several rows per call, masked float runs of every length, a broadcast input spread along a
+        /// non-reduced axis), which smaller arrays leave to scalar tails. Zero excuses.
+        /// </summary>
+        /// <exception cref="AssertFailedException">The tier holds fewer cases than its floor, or a case's result, dtype,
+        /// shape, out base buffer or error differs from NumPy's and no MisalignedRegistry entry excuses it.</exception>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void MinMaxKwargs() => RunCorpus("minmax_kwargs.jsonl");
+
         // W7 logic (T13): isnan/isinf/isfinite (unary->bool), maximum/minimum (NaN-propagating),
         // fmax/fmin (NaN-ignoring), isclose (binary->bool) — NaN/inf-laced operands.
         [TestMethod]
@@ -1057,6 +1074,7 @@ namespace NumSharp.Tests.Fuzz
             ["stat.jsonl"] = 3412,
             ["clip_ufunc.jsonl"] = 2100,   // np.clip as a ufunc call: 2,302 at delivery (broadcast bounds, out=, where=, overlap, the float loop choice, errors)
             ["reduce_kwargs.jsonl"] = 4500, // the reductions' keyword surface: 4,752 at delivery (np.all / np.any)
+            ["minmax_kwargs.jsonl"] = 35000, // the max / min family with out= / initial= / where= (2026-10-05, plan api-parameter-parity A4): 35,689 at delivery, sections A / M / O / V / V2 / F / P / E / X / L / K / R / W + the char proxy weave
             ["clip_pyint.jsonl"] = 3900,   // np.clip with Python-int bounds: 4,175 at delivery (8 integer dtypes + Char x bound pairs x 12 layouts, the dtype=/out= rows, bool/float/complex)
             ["tail.jsonl"] = 1872,
             ["unary.jsonl"] = 5969,
@@ -1187,3 +1205,4 @@ namespace NumSharp.Tests.Fuzz
         }
     }
 }
+
