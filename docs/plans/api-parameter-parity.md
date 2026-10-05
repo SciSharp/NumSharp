@@ -292,7 +292,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     (np.any / np.all keep C order: they do not use `AllocateReductionResult`).
 - [x] **A5 `np.trapezoid`: an `axis=` outside `y`.** NumPy raises `IndexError: list assignment index out of range`;
   NumSharp raises `ArgumentOutOfRangeException`. Pin: `Trapezoid_AxisOutsideY_RaisesNumPysIndexError`. Done
-  2026-10-05 (this commit).
+  2026-10-05 (`f18bc09e`).
   - Proof (2026-10-05, at `76b03855`): a 480-case NumPy 2.4.2 matrix (y of rank 0–3 × axis −6..5 × ten x forms: none,
     a 1-D x of the axis's length / of 5 / empty / of shape `(4,)`, a 0-d x, N-D x of shapes `(1,4)`, `(3,4)`,
     `(2,3,4)`, `(2,2,3,4)`), each outcome compared as type + text, or dtype + shape: 217 equal, 224 differ — every one
@@ -660,7 +660,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 - **2026-10-05**: A5 done (np.trapezoid raises NumPy's `IndexError: list assignment index out of range` for an axis
   outside y; 106 `err_axis_outside_y` cases in the `multioutput` tier; trapezoid out of the registry's K7 branch); finding
-  15 recorded. Commit: this one.
+  15 recorded. Commit `f18bc09e`.
 - **2026-10-05**: A4 done (np.max / np.min / np.amax / np.amin / np.nanmax / np.nanmin / ndarray.max / ndarray.min take
   NumPy's `out=` / `initial=` / `where=` in NumPy's order, through a port of NumPy's reduction iterator; the
   `minmax_kwargs` oracle tier; plain np.max of complex128, broadcast and bool inputs and the fresh axis-result layout of
