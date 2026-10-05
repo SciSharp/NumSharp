@@ -64,6 +64,7 @@ namespace NumSharp.Examples.MaterialLab.Verification
 
             Section("Robustness");
             CheckEverySceneRunsClean();
+            CheckBlownUpParticleIsContained();
             CheckDeterminism();
 
             Console.WriteLine();
@@ -589,6 +590,47 @@ namespace NumSharp.Examples.MaterialLab.Verification
                     $"scene \"{scene.Name}\" runs clean",
                     $"{w.ParticleCount} particles, {bad} non-finite, {outside} outside the tank, {ms:F1} ms/frame at {Rows} rows");
             }
+        }
+
+        /// <summary>
+        /// A particle whose state blew up must neither crash the transfers nor spread. Three water particles of a
+        /// running Dam Break are corrupted — a NaN position (<c>(int)NaN</c> is <c>int.MinValue</c>, which the fused
+        /// kernels used to turn into a pointer far outside the node array: the AccessViolationException that killed
+        /// the lab on 2026-09-25), an infinite velocity (the speed clamp used to make NaN of it, <c>Inf·0</c>) and a
+        /// position a million units below the tank — and the world runs on with the fused transfers. Every particle
+        /// must end finite and inside the tank: the stencil clamps keep each read and write inside the grid buffer,
+        /// and the particle finish contains the bad values instead of carrying them into the next substep.
+        /// </summary>
+        /// <remarks>
+        /// Before the fix this check did not fail — it crashed the harness (an access violation is not catchable
+        /// in .NET), which is exactly the failure it guards against. The world is disposed even if a check throws.
+        /// </remarks>
+        private static void CheckBlownUpParticleIsContained()
+        {
+            using var w = NewWorld();
+            Scenes.Load(w, 0);   // Dam Break: a plain water column, so the corrupted particles are liquid
+            Run(w, 5);
+            var g = w.Groups.First(x => x.Count >= 3);
+            float* X = g.Ptr(PField.X), Y = g.Ptr(PField.Y), VX = g.Ptr(PField.VX);
+            X[0] = float.NaN;
+            VX[1] = float.PositiveInfinity;
+            Y[2] = -1e6f;
+            Run(w, 30);
+            int bad = 0, outside = 0;
+            float width = w.Grid.Width;
+            foreach (var group in w.Groups)
+            {
+                for (int i = 0; i < group.Count; i++)
+                {
+                    float x = group.Ptr(PField.X)[i], y = group.Ptr(PField.Y)[i];
+                    for (int k = 0; k < ParticleGroup.FieldCount; k++)
+                        if (!float.IsFinite(group.Ptr((PField)k)[i])) { bad++; break; }
+                    if (x <= 0 || y <= 0 || x >= width || y >= 1) outside++;
+                }
+            }
+            Check(bad == 0 && outside == 0,
+                "a blown-up particle (NaN position, infinite velocity, far outside) is contained, not a crash",
+                $"{w.ParticleCount} particles after 30 frames: {bad} non-finite, {outside} outside the tank");
         }
 
         /// <summary>Two worlds with the same seed and the same scene evolve bit-for-bit identically (single-threaded, no hidden state).</summary>

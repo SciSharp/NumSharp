@@ -84,7 +84,16 @@ namespace NumSharp.Examples.MaterialLab.Simulation
         /// <param name="mass">Particle mass for this material.</param>
         /// <param name="volume">Particle volume V₀ (same for every material: 2×2 particles per cell).</param>
         /// <param name="coolant">Whether this material counts as coolant (water) for the lava quench field.</param>
-        /// <remarks>Compiled fully optimized from the first call — see the matching remark on <see cref="G2PFused"/>.</remarks>
+        /// <remarks>
+        /// <para>Compiled fully optimized from the first call — see the matching remark on <see cref="G2PFused"/>.</para>
+        /// <para>
+        /// <b>Memory safety.</b> The stencil base cell is clamped to the node array before it becomes a pointer, so a
+        /// particle whose position went non-finite or left the domain (a numeric blow-up, a scene or input bug) can
+        /// only scatter into edge nodes — it can never WRITE outside the grid buffer, which would corrupt the process
+        /// heap silently. <see cref="GridSampler.ClampToDomain"/> keeps healthy particles inside, where the clamp
+        /// changes nothing (fused and reference results stay identical).
+        /// </para>
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static void P2GFused(MpmGrid grid, ParticleGroup g, float mass, float volume, bool coolant)
         {
@@ -94,11 +103,16 @@ namespace NumSharp.Examples.MaterialLab.Simulation
             float* a00 = g.Ptr(SField.A00), a01 = g.Ptr(SField.A01), a10 = g.Ptr(SField.A10), a11 = g.Ptr(SField.A11);
             float invDx = grid.InvDx, dx = grid.Dx, m = mass, cool = coolant ? mass : 0f;
             int nx = grid.Nx, n = g.Count;
+            // The largest base cell whose 3×3 stencil still lies inside the (Ny, Nx) node array.
+            int maxBx = nx - 3, maxBy = grid.Ny - 3;
             const int L = MpmGrid.Lanes;
             for (int p = 0; p < n; p++)
             {
                 float xs = X[p] * invDx, ys = Y[p] * invDx;
-                int bx = (int)(xs - 0.5f), by = (int)(ys - 0.5f);
+                // (int)NaN is int.MinValue on .NET 8 x64, so an unclamped non-finite position becomes a pointer far
+                // outside the node array and the scatter below WRITES through it. Clamping keeps every store inside
+                // the grid; for a particle inside the domain the base is already in range and nothing changes.
+                int bx = Math.Clamp((int)(xs - 0.5f), 0, maxBx), by = Math.Clamp((int)(ys - 0.5f), 0, maxBy);
                 float fx = xs - bx, fy = ys - by;
                 float wx0 = 0.5f * (1.5f - fx) * (1.5f - fx), wx1 = 0.75f - (fx - 1f) * (fx - 1f), wx2 = 0.5f * (fx - 0.5f) * (fx - 0.5f);
                 float wy0 = 0.5f * (1.5f - fy) * (1.5f - fy), wy1 = 0.75f - (fy - 1f) * (fy - 1f), wy2 = 0.5f * (fy - 0.5f) * (fy - 0.5f);
@@ -156,6 +170,14 @@ namespace NumSharp.Examples.MaterialLab.Simulation
         /// compilation the first calls run through on-stack replacement code, and an app would stutter through its
         /// first second; <see cref="MethodImplOptions.AggressiveOptimization"/> compiles it fully optimized once.
         /// </para>
+        /// <para>
+        /// <b>Memory safety.</b> The stencil base cell is clamped to the node array before the nine row pointers are
+        /// formed. Without the clamp, a particle whose position went non-finite (a stress or drift blow-up upstream:
+        /// <c>(int)NaN</c> is <c>int.MinValue</c> on .NET 8 x64) made this loop read far outside the grid buffer —
+        /// the <see cref="AccessViolationException"/> that killed the lab on 2026-09-25. Healthy particles never reach
+        /// the clamp bounds (<see cref="GridSampler.ClampToDomain"/> keeps them inside), so their results are
+        /// unchanged; a broken one now reads edge nodes and is then contained by <see cref="FinishParticle"/>.
+        /// </para>
         /// </remarks>
         /// <param name="grid">The grid after the grid update (lanes 1–2 = velocity).</param>
         /// <param name="g">The group.</param>
@@ -172,6 +194,8 @@ namespace NumSharp.Examples.MaterialLab.Simulation
             float* T = g.Ptr(PField.Temp), J = g.Ptr(PField.Jp);
             float invDx = grid.InvDx, k4 = 4f * grid.InvDx;
             int nx = grid.Nx, n = g.Count;
+            // The largest base cell whose 3×3 stencil still lies inside the (Ny, Nx) node array.
+            int maxBx = nx - 3, maxBy = grid.Ny - 3;
             const int L = MpmGrid.Lanes;
             var ctx = new GridSampler(grid);
             float maxSpeedSq = 0f;
@@ -183,7 +207,9 @@ namespace NumSharp.Examples.MaterialLab.Simulation
             for (int p = 0; p < n; p++)
             {
                 float xs = X[p] * invDx, ys = Y[p] * invDx;
-                int bx = (int)(xs - 0.5f), by = (int)(ys - 0.5f);
+                // Clamp before the base becomes the r0..r2 pointers: an out-of-domain or non-finite position must
+                // never read outside the node array (see the memory-safety remark). In-domain particles: no change.
+                int bx = Math.Clamp((int)(xs - 0.5f), 0, maxBx), by = Math.Clamp((int)(ys - 0.5f), 0, maxBy);
                 float fx = xs - bx, fy = ys - by;
                 float ex0 = 1.5f - fx, ex1 = fx - 1f, ex2 = fx - 0.5f;
                 float ey0 = 1.5f - fy, ey1 = fy - 1f, ey2 = fy - 0.5f;
@@ -210,15 +236,17 @@ namespace NumSharp.Examples.MaterialLab.Simulation
                 Vector256.Store(MulAdd(sv, Vector256.Create(-fx), MulAdd(m0, wy0, MulAdd(m1, wy1, m2 * wy2))), sum + L);
                 Vector256.Store(MulAdd(sv, Vector256.Create(-fy), MulAdd(s2, wy2d, s1 * wy1)), sum + 2 * L);
                 float vx = sum[MpmGrid.LaneMomX], vy = sum[MpmGrid.LaneMomY];
-                c00[p] = k4 * sum[L + MpmGrid.LaneMomX]; c01[p] = k4 * sum[2 * L + MpmGrid.LaneMomX];
-                c10[p] = k4 * sum[L + MpmGrid.LaneMomY]; c11[p] = k4 * sum[2 * L + MpmGrid.LaneMomY];
+                float ca = k4 * sum[L + MpmGrid.LaneMomX], cb = k4 * sum[2 * L + MpmGrid.LaneMomX];
+                float cc = k4 * sum[L + MpmGrid.LaneMomY], cd = k4 * sum[2 * L + MpmGrid.LaneMomY];
+                ContainAffine(ref ca, ref cb, ref cc, ref cd);
+                c00[p] = ca; c01[p] = cb; c10[p] = cc; c11[p] = cd;
                 float massSum = sum[MpmGrid.LaneMass], volSum = sum[MpmGrid.LaneVolume];
                 // Divisions only where a material uses them (a divide costs more than the rest of the tail).
                 float coolantFraction = lava ? sum[MpmGrid.LaneCoolant] / MathF.Max(massSum, 1e-30f) : 0f;
                 float mixDensity = drift ? massSum / MathF.Max(volSum, 1e-30f) : 0f;
                 // Occupancy counts the obstacle as full (its wall-volume lane), the mixture density does not.
                 float occupancy = (volSum + sum[MpmGrid.LaneWall]) * invArea;
-                if (fluid) J[p] = 1f / MathF.Max(occupancy, 0.05f);   // J = 1/φ
+                if (fluid) J[p] = FluidVolumeRatio(occupancy);   // J = 1/φ
                 float x = X[p], y = Y[p], t = T[p];
                 float sp2 = FinishParticle(ref ctx, par, ref x, ref y, ref vx, ref vy, ref t, coolantFraction, mixDensity, occupancy);
                 X[p] = x; Y[p] = y; VX[p] = vx; VY[p] = vy; T[p] = t;
@@ -228,6 +256,47 @@ namespace NumSharp.Examples.MaterialLab.Simulation
         }
 
         // ------------------------------------------------------------------ shared particle finish
+
+        /// <summary>
+        /// A liquid particle's volume ratio J = 1/φ from its gathered occupancy φ, with φ floored at 0.05 (so a
+        /// nearly empty neighbourhood reads as stretched, J ≤ 20, never infinite) and a non-finite φ read as rest
+        /// packing (J = 1). Shared by both transfer paths so they keep agreeing exactly.
+        /// </summary>
+        /// <remarks>
+        /// The non-finite case exists because <see cref="MathF.Max(float, float)"/> propagates NaN: a NaN occupancy
+        /// (from a blown-up node) used to yield J = NaN, which the next substep's pressure turned into NaN momentum on
+        /// every node the particle touches — spreading the blow-up to its neighbours. J = 1 contributes no pressure.
+        /// </remarks>
+        /// <param name="occupancy">The gathered occupancy φ (1 = rest packing).</param>
+        /// <returns>The volume ratio J, always finite and in (0, 20].</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static float FluidVolumeRatio(float occupancy)
+            => float.IsFinite(occupancy) ? 1f / MathF.Max(occupancy, 0.05f) : 1f;
+
+        /// <summary>
+        /// Zeroes a particle's APIC velocity gradient C when any entry is non-finite (NaN or ±Inf), leaving a finite C
+        /// untouched. Shared by both transfer paths so they keep agreeing exactly.
+        /// </summary>
+        /// <remarks>
+        /// A particle that gathered from a blown-up node gets a NaN C; the next P2G multiplies it into the affine
+        /// momentum it scatters, so without this one bad substep would re-poison every node the particle touches,
+        /// substep after substep, and the NaN would spread through the material. C = 0 means "no velocity
+        /// gradient" (plain PIC for that particle for one substep) — physically harmless.
+        /// </remarks>
+        /// <param name="c00">C₀₀ (updated).</param>
+        /// <param name="c01">C₀₁ (updated).</param>
+        /// <param name="c10">C₁₀ (updated).</param>
+        /// <param name="c11">C₁₁ (updated).</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static void ContainAffine(ref float c00, ref float c01, ref float c10, ref float c11)
+        {
+            // Four separate tests, not one test of the sum: a sum of four finite but huge entries can overflow to
+            // Inf, which would zero a C that is in fact finite.
+            if (!(float.IsFinite(c00) && float.IsFinite(c01) && float.IsFinite(c10) && float.IsFinite(c11)))
+            {
+                c00 = 0f; c01 = 0f; c10 = 0f; c11 = 0f;
+            }
+        }
 
         /// <summary>
         /// Bilinear access to the obstacle distance field and its normals at particle positions (the grid's
@@ -258,14 +327,25 @@ namespace NumSharp.Examples.MaterialLab.Simulation
             /// <summary>Cell size.</summary>
             public float Dx => _dx;
 
-            /// <summary>Clamps a position into the valid stencil range (a backstop — walls normally keep particles far inside).</summary>
+            /// <summary>
+            /// Clamps a position into the valid stencil range (a backstop — walls normally keep particles far inside).
+            /// A NaN coordinate becomes the lower bound, so the result is ALWAYS a finite in-range position.
+            /// </summary>
+            /// <remarks>
+            /// <see cref="Math.Clamp(float, float, float)"/> returns NaN unchanged (both of its comparisons are false),
+            /// and every caller turns the clamped position into an array index or pointer — <see cref="Nearest"/>,
+            /// <see cref="Sample"/>, the next substep's stencil — so a NaN that survived the clamp became an
+            /// out-of-bounds read. The comparisons below are written so that NaN takes the lower-bound branch; for
+            /// every non-NaN value the result is identical to <see cref="Math.Clamp(float, float, float)"/>.
+            /// </remarks>
             /// <param name="x">X (updated).</param>
             /// <param name="y">Y (updated).</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void ClampToDomain(ref float x, ref float y)
             {
-                x = Math.Clamp(x, _lo, _hiX);
-                y = Math.Clamp(y, _lo, _hiY);
+                // `v >= lo` is false for NaN, so NaN lands on the lower bound instead of passing through.
+                x = x >= _lo ? (x <= _hiX ? x : _hiX) : _lo;
+                y = y >= _lo ? (y <= _hiY ? y : _hiY) : _lo;
             }
 
             /// <summary>
@@ -303,8 +383,19 @@ namespace NumSharp.Examples.MaterialLab.Simulation
         /// The per-particle tail of G2P shared by both transfer paths: clamp the speed (CFL safety net), advect with
         /// the grid velocity plus the buoyant drift, push out of any obstacle the particle ended up inside
         /// (projecting away the velocity into the wall), clamp to the domain, and cool lava (faster when
-        /// surrounded by water).
+        /// surrounded by water). Non-finite inputs are CONTAINED here: the particle stays where it was, at rest.
         /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <b>Blow-up containment.</b> A NaN or infinite gathered velocity (a stress blow-up or an empty node
+        /// upstream) used to flow straight into the position — the speed clamp even manufactured NaN from an infinite
+        /// speed (<c>Inf·0</c>) — and a NaN position then became a wild pointer in the next substep's stencil. Now a
+        /// non-finite velocity is dropped to zero, and a non-finite advected position (the drift term reads gathered
+        /// lanes too) is replaced by the entry position. Healthy particles take neither branch, so results are
+        /// unchanged; a broken particle freezes in place instead of crashing the process or teleporting.
+        /// </para>
+        /// <para>A non-finite lava temperature is floored to 0 for the same reason (its colour lookup reads it).</para>
+        /// </remarks>
         /// <param name="s">Obstacle sampler.</param>
         /// <param name="ap">Advection parameters.</param>
         /// <param name="x">Position x (updated).</param>
@@ -315,13 +406,21 @@ namespace NumSharp.Examples.MaterialLab.Simulation
         /// <param name="coolantFraction">Mass fraction of water around the particle (0..1).</param>
         /// <param name="mixDensity">Local mixture density ρ_mix = Σw·m / Σw·V at the particle.</param>
         /// <param name="occupancy">Local occupancy φ = Σw·(V + V_wall) / Δx² (1 = packed; ≈0.6 at a free surface).</param>
-        /// <returns>The particle's final speed SQUARED (callers track the maximum and take one square root).</returns>
+        /// <returns>The particle's final speed SQUARED (callers track the maximum and take one square root); always finite.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static float FinishParticle(ref GridSampler s, in AdvectParams ap, ref float x, ref float y,
             ref float vx, ref float vy, ref float temp, float coolantFraction, float mixDensity, float occupancy)
         {
+            // The entry position is the fallback when this update produces a non-finite one (see the remarks).
+            float x0 = x, y0 = y;
             float sp2 = vx * vx + vy * vy;
-            if (sp2 > ap.MaxSpeed * ap.MaxSpeed)
+            if (!float.IsFinite(sp2))
+            {
+                // NaN/Inf from the grid gather (or a speed so large its square overflows). The clamp below would
+                // turn Inf into NaN (Inf·0) and carry it into the position; drop the velocity instead.
+                vx = 0f; vy = 0f;
+            }
+            else if (sp2 > ap.MaxSpeed * ap.MaxSpeed)
             {
                 float k = ap.MaxSpeed / MathF.Sqrt(sp2);
                 vx *= k; vy *= k;
@@ -342,6 +441,15 @@ namespace NumSharp.Examples.MaterialLab.Simulation
             }
             x += ap.Dt * px;
             y += ap.Dt * py;
+            if (!float.IsFinite(x) || !float.IsFinite(y))
+            {
+                // The drift reads the gathered mixture density and occupancy, which a blown-up node makes NaN even
+                // when the velocity was finite. Keep the particle where it was, at rest, rather than teleport it to
+                // a domain corner (which is where ClampToDomain would put a NaN).
+                x = x0; y = y0; vx = 0f; vy = 0f;
+            }
+            // Also the belt for an entry position that was ALREADY non-finite: always yields a finite in-range point,
+            // which Nearest / Sample below and the next substep's stencil index with.
             s.ClampToDomain(ref x, ref y);
             if (s.Nearest(x, y) < 1.5f)
             {
@@ -357,7 +465,12 @@ namespace NumSharp.Examples.MaterialLab.Simulation
                 }
             }
             if (ap.IsLava)
-                temp = MathF.Max(0f, temp - ap.Dt * (ap.CoolRate + ap.QuenchRate * coolantFraction));
+            {
+                float cooled = temp - ap.Dt * (ap.CoolRate + ap.QuenchRate * coolantFraction);
+                // MathF.Max(0, NaN) is NaN (NaN propagates); `>` is false for NaN, so a NaN temperature (from a NaN
+                // coolant fraction) floors to 0 instead. Identical to MathF.Max(0f, cooled) for every other value.
+                temp = cooled > 0f ? cooled : 0f;
+            }
             return vx * vx + vy * vy;
         }
 
@@ -463,11 +576,14 @@ namespace NumSharp.Examples.MaterialLab.Simulation
             var ctx = new GridSampler(grid);
             float* X = g.Ptr(PField.X), Y = g.Ptr(PField.Y), VX = g.Ptr(PField.VX), VY = g.Ptr(PField.VY), T = g.Ptr(PField.Temp);
             float* cf = g.Ptr(SField.E0), rho = g.Ptr(SField.E1), occ = g.Ptr(SField.E2), J = g.Ptr(PField.Jp);
+            float* c00 = g.Ptr(PField.C00), c01 = g.Ptr(PField.C01), c10 = g.Ptr(PField.C10), c11 = g.Ptr(PField.C11);
             float maxSpeedSq = 0f;
             for (int p = 0; p < n; p++)
             {
+                // The same containment as the fused path, so the two paths keep agreeing on a blown-up particle too.
+                ContainAffine(ref c00[p], ref c01[p], ref c10[p], ref c11[p]);
                 float occupancy = occ[p] * ap.InvCellArea;
-                if (ap.IsFluid) J[p] = 1f / MathF.Max(occupancy, 0.05f);   // J = 1/φ, as the fused path
+                if (ap.IsFluid) J[p] = FluidVolumeRatio(occupancy);   // J = 1/φ, as the fused path
                 float x = X[p], y = Y[p], vx = VX[p], vy = VY[p], t = T[p];
                 float sp2 = FinishParticle(ref ctx, ap, ref x, ref y, ref vx, ref vy, ref t, cf[p], rho[p], occupancy);
                 X[p] = x; Y[p] = y; VX[p] = vx; VY[p] = vy; T[p] = t;
