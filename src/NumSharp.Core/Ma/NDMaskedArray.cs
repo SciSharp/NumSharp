@@ -2224,26 +2224,33 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Writes the pre-op data back into masked slots of <paramref name="result"/>. Plain path copies
-        ///     <paramref name="source"/> straight in; the domained path zeroes first and only re-adds
-        ///     <paramref name="source"/> when it casts safely to the result dtype (NumPy's exact behavior).
-        ///     Both are best-effort: an incompatible cast is swallowed, leaving the computed/zeroed value, as
-        ///     NumPy's <c>try/except</c> does.
+        ///     Writes the pre-op data back into masked slots of <paramref name="result"/>. The plain path copies
+        ///     <paramref name="source"/> straight in (<c>copyto(result, da, where=m)</c>). The domained path is NumPy's
+        ///     <c>_DomainedBinaryOperation</c> arithmetic exactly: zero the masked slots, then — when <c>m * da</c> casts
+        ///     safely to the result dtype — ADD <c>m * da</c> to the WHOLE result. That add is observable in the bits: a masked
+        ///     slot gets <c>0 + da</c> (a <c>-0.0</c> dividend comes back <c>+0.0</c>), and an unmasked slot gets
+        ///     <c>result + 0 * da</c> (a <c>-0.0</c> quotient of a positive dividend, such as <c>0.0 / -1</c>, comes back
+        ///     <c>+0.0</c>). Both paths are best-effort: an incompatible cast is swallowed, leaving the computed/zeroed value,
+        ///     as NumPy's <c>try/except</c> does.
         /// </summary>
         /// <param name="result">The result array to patch in place.</param>
-        /// <param name="source">The data to restore at masked positions.</param>
+        /// <param name="source">The data to restore at masked positions (the left operand, <c>da</c>).</param>
         /// <param name="m">The boolean mask (result-shaped).</param>
-        /// <param name="domainedZeroFill">Selects the domained zero-then-readd path.</param>
+        /// <param name="domainedZeroFill">Selects the domained zero-then-add path.</param>
+        /// <param name="casting">The plain path's copy casting: <c>"same_kind"</c> for a unary op (NumPy's default),
+        /// <c>"unsafe"</c> for a binary one.</param>
         private static void FillBack(NDArray result, NDArray source, NDArray m, bool domainedZeroFill, string casting)
         {
             try
             {
                 if (domainedZeroFill)
                 {
-                    // NumPy: copyto(result, 0, where=m); then result += m*da only if da casts safely.
+                    // NumPy: np.copyto(result, 0, casting='unsafe', where=m); masked_da = umath.multiply(m, da);
+                    // if np.can_cast(masked_da.dtype, result.dtype, casting='safe'): result += masked_da.
                     np.copyto(result, NDArray.Scalar(0), casting: "unsafe", where: m);
-                    if (np.can_cast(source.dtype, result.dtype, "safe"))
-                        np.copyto(result, source, casting: "unsafe", where: m);
+                    var maskedDa = np.multiply(m, source);
+                    if (np.can_cast(maskedDa.dtype, result.dtype, "safe"))
+                        np.add(result, maskedDa, @out: result);
                 }
                 else
                 {
@@ -2509,8 +2516,11 @@ namespace NumSharp
         /// <summary>DomainSafeDivide: masks where <c>|a|·tiny ≥ |b|</c>, i.e. the denominator is (near) zero.</summary>
         /// <param name="a">Numerator data.</param><param name="b">Denominator data.</param>
         /// <returns>Boolean mask, True where division is unsafe.</returns>
+        /// <remarks><c>tiny</c> is NumPy's <c>np.finfo(float).tiny</c>, an <c>np.float64</c> scalar — STRONG — so
+        /// <c>|a| * tiny</c> is float64 for every <paramref name="a"/> dtype (a float16 or float32 <c>|a|</c> would turn
+        /// tiny into 0 and an inf <c>|a|</c> into NaN). <c>|a|</c> is widened first, which is the float64 loop's own cast.</remarks>
         private static NDArray SafeDivideDomain(NDArray a, NDArray b)
-            => np.greater_equal(np.multiply(np.abs(a), NDArray.Scalar(SafeDivideTiny)), np.abs(b));
+            => np.greater_equal(np.multiply(np.abs(a).astype(np.float64, copy: false), SafeDivideTiny), np.abs(b));
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Unary ufuncs — domain-free (mask passes through)
@@ -2882,11 +2892,32 @@ namespace NumSharp
         {
             using var scope = NDScope.Open();
             var mask = (a as NDMaskedArray)?._mask;
-            var d = mask is null ? AsData(a) : ((NDMaskedArray)a).filled(identity);
+            var d = mask is null ? AsData(a) : FilledForReduction(((NDMaskedArray)a)._data, mask, identity);
             var result = fn(d, axis, keepdims);
             if (mask is null)
                 return Yield(scope, new NDMaskedArray(result, null));
             return Yield(scope, Finalize(result, AllAlongAxis(mask, axis, keepdims)));
+        }
+
+        /// <summary>
+        ///     NumPy's <c>MaskedArray.filled(fill)</c> as numpy.ma's reductions (<c>self.filled(0).sum(...)</c>, prod, min,
+        ///     max, all, any) call it: the data ITSELF when no slot is masked, otherwise a K-order copy
+        ///     (<c>self._data.copy('K')</c>) with <paramref name="fill"/> written at the masked slots. The reduction then walks
+        ///     the data's own memory order, as NumPy's does — a float sum or product along an axis of an F-ordered input
+        ///     adds in NumPy's order (the public <see cref="NDMaskedArray.filled(object)"/> returns a C-order copy).
+        /// </summary>
+        /// <param name="data">The masked array's data (any layout); never written.</param>
+        /// <param name="mask">Its mask (not null).</param>
+        /// <param name="fill">The value for the masked slots, cast unsafely into the data dtype.</param>
+        /// <returns><paramref name="data"/> itself, or a fresh K-order filled copy.</returns>
+        private static NDArray FilledForReduction(NDArray data, NDArray mask, object fill)
+        {
+            // `elif not m.any(): return self._data` — nothing to substitute, and no copy.
+            if (!np.any(mask))
+                return data;
+            var r = data.copy('K');
+            np.copyto(r, NDArray.Scalar(fill), casting: "unsafe", where: mask);
+            return r;
         }
 
         /// <summary>Sum over the axis; masked slots contribute 0. A cell is masked iff its whole slice was.
@@ -2952,99 +2983,375 @@ namespace NumSharp
             // The count is over the logical DIMENSIONS. See DimsOf.
             => CountUnmasked((a as NDMaskedArray)?._mask, DimsOf(AsData(a)), axis, keepdims);
 
-        /// <summary>Mean over unmasked elements = sum/count (masked slots excluded from BOTH). A cell whose
-        /// whole slice was masked is masked. Result is float (int/bool promote to float64).</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>
-        /// <param name="dtype">Sum accumulator dtype.</param><param name="keepdims">Keep reduced axes.</param>
-        /// <returns>The masked mean.</returns>
-        /// <remarks>Scoped by hand: the zero-filled copy, the sum and count (and their casts), the raw quotient
-        /// and the masked-slot rewrite are reclaimed; only the mean and its mask leave.</remarks>
+        // ─────────────────────────────────────────────────────────────────────────────
+        //  mean / var / std — NumPy's MaskedArray.mean / var / std, statement for statement
+        // ─────────────────────────────────────────────────────────────────────────────
+        //
+        // numpy/ma/core.py runs these as Python over the masked ufunc wrappers, and almost every statement decides a
+        // bit or a mask of the result (plan docs/plans/api-parameter-parity.md, item A6):
+        //   * WITH a mask (an all-False one too): `mean` is `self.sum(dtype=f8 | f4 | None) * 1. / self.count()` in masked
+        //     arithmetic (ma.multiply, then ma.true_divide, which MASKS a non-finite slice mean). `var` is
+        //     `danom = self - self.mean(keepdims=True)`; `danom *= danom` (complex: `abs(danom) ** 2`, which masks a
+        //     non-finite square); `divide(danom.sum(axis), count - ddof)`; then the result's mask is REPLACED by
+        //     `mask_or(self._mask.all(axis), cnt <= 0)`. So a slice holding an unmasked inf or NaN has a masked mean, a fully
+        //     masked anomaly, a zero sum, and comes back 0.0 UNMASKED.
+        //   * WITHOUT a mask: `super().mean / var(...)[()]`. numpy's _mean / _var run on the MaskedArray itself, so each
+        //     `true_divide(..., out=...)` goes through MaskedArray.__array_wrap__, which evaluates ma's divide domain
+        //     (|quotient| * tiny >= count) on the QUOTIENT, writes 1 there and masks it: an inf mean becomes 1.0 before
+        //     the deviations are formed, and an inf variance comes back masked with data 1.0.
+        //   * `std` is ma.sqrt(var(...)) — `mean=` is not forwarded — which masks a non-finite or negative variance.
+        // These statements were proven against numpy.ma on 548,794 cases (result kind, dtype, shape, the data bits at
+        // every slot, the mask, nomask-ness, the error type) by a plain-numpy model before this port was written.
+        //
+        // NumSharp's np.* ufuncs read a 0-d operand as WEAK (oracle registry K7), while numpy.ma's 0-d operands are
+        // STRONG: getdata(1.) is np.array(1.), a flat count is an np.intp, a scalar mean is a numpy scalar. So every binary
+        // step below computes NumPy's result dtype first (strong promotion, StrongCast) and hands the ufunc two operands
+        // of that dtype; a same-dtype call has no promotion left to get wrong.
+
+        /// <summary>
+        ///     Mean over the unmasked elements: NumPy's <c>MaskedArray.mean</c>, statement for statement. With a mask
+        ///     (even an all-False one) it is <c>self.sum(axis, dtype) * 1. / self.count(axis)</c> in masked arithmetic, so a
+        ///     slice whose mean is not finite (an unmasked inf or NaN in it) is MASKED, and a fully masked slice is masked.
+        ///     Without a mask it is numpy's <c>_mean</c> run on a masked array: an inf mean (or a mean of at least
+        ///     <c>count / tiny</c>) comes back masked with data 1.0.
+        /// </summary>
+        /// <param name="a">Operand: a <see cref="NDMaskedArray"/> (its mask decides the path), an <see cref="NDArray"/>, a C#
+        /// array or scalar (no mask).</param>
+        /// <param name="axis">The reduced axis (negative counts from the end), or null for every axis.</param>
+        /// <param name="dtype">NumPy's <c>dtype=</c>, the sum's loop. When null an integer, bool or char input sums in
+        /// float64 and a float16 input in float32 with the mean cast back to float16; every other input sums in its own
+        /// dtype.</param>
+        /// <param name="keepdims">When true the reduced axes stay in the result with length 1.</param>
+        /// <returns>The masked mean: the <see cref="NDMasked"/> singleton for a masked 0-d result, an unmasked 0-d array for
+        /// a scalar, otherwise an array with the mask NumPy gives it (null for nomask). With a mask the dtype is float64 for
+        /// an integer, bool, char, float32 or float64 input (NumPy's <c>* 1.</c> multiplies by a STRONG float64), float16 for
+        /// float16, complex128 for complex128; without one it is numpy's <c>_mean</c> dtype (float32 stays float32).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
+        /// <remarks>Scoped by hand (a masked-array return): the filled copy, the sums, counts and quotients are reclaimed;
+        /// only the result's data and mask leave.</remarks>
         public NDMaskedArray mean(object a, int? axis = null, DType dtype = null, bool keepdims = false)
         {
             using var scope = NDScope.Open();
-            var mask = (a as NDMaskedArray)?._mask;
-            var d = AsData(a);
-            var tc = d.typecode;
-            // NumPy mean dtype (default): int/bool → float64; float16 is COMPUTED in float32 then cast BACK to
-            // float16; float32/float64/complex128 are preserved. A masked complex mean must stay complex.
-            DType compute = tc == NPTypeCode.Complex ? np.complex128 : tc == NPTypeCode.Half ? np.float32 : np.float64;
-            // NumPy's `dsum * 1.` promotes float32→float64, so ONLY float16 (cast back) and complex128 keep a
-            // non-f8 result; float32/float64/int/bool all yield float64.
-            DType outdt = dtype ?? (tc switch
-            {
-                NPTypeCode.Half => np.float16,
-                NPTypeCode.Complex => np.complex128,
-                _ => np.float64, // int/bool/float32/float64
-            });
-            var filled0 = mask is null ? d : ((NDMaskedArray)a).filled(0);
-            var dsum = np.sum(filled0, axis, keepdims, dtype ?? compute).astype(compute);
-            var cnt = CountUnmasked(mask, d.Shape, axis, keepdims).astype(compute);
-            var result = np.divide(dsum, cnt).astype(outdt);     // count==0 slots → nan, masked below
-            if (mask is null)
-                return Yield(scope, new NDMaskedArray(result, null));
-            var newmask = AllAlongAxis(mask, axis, keepdims);
-            // NumPy computes the mean through MASKED arithmetic, so a fully-masked slice's .data is 0 (the
-            // sum's identity), NOT the raw 0/0=NaN. Match it at the masked (count==0) positions.
-            if (result.ndim != 0)
-                result = np.where(newmask, NDArray.Scalar(0.0), result).astype(outdt);
-            return Yield(scope, Finalize(result, newmask));
+            var m = a as NDMaskedArray;
+            // `if self._mask is nomask: result = super().mean(...)[()]` — a non-masked operand is MaskedArray(a) there.
+            if (m?._mask is null)
+                return Yield(scope, NomaskMeanLikeNumPy(AsData(a), axis, dtype, keepdims));
+            return Yield(scope, MaskedMeanLikeNumPy(m, axis, dtype, keepdims));
         }
 
-        /// <summary>Variance over unmasked elements (masked contribute nothing); a cell is masked where its
-        /// whole slice was masked OR the unmasked count minus <paramref name="ddof"/> is ≤ 0. When
-        /// <paramref name="mean"/> is supplied (NumPy 2.0's keyword-only <c>mean</c>) it is used as the centering
-        /// value INSTEAD of the computed slice mean — it must already broadcast to the keepdims-reduced shape.</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param>
-        /// <param name="ddof">Delta degrees of freedom (divisor is count − ddof).</param><param name="keepdims">Keep reduced axes.</param>
-        /// <param name="mean">Precomputed centering mean (broadcast to the keepdims shape), or null to compute it.</param>
-        /// <returns>The masked variance (real-valued, even for complex input).</returns>
-        /// <remarks>Scoped by hand: the zero-filled copy, the keepdims count and centering mean, the deviations
-        /// and their squares, the masked-slot rewrite and the predicate masks are reclaimed; only the variance and
-        /// its mask leave.</remarks>
+        /// <summary>
+        ///     The masked branch of NumPy's <c>MaskedArray.mean</c>:
+        ///     <c>dsum = self.sum(axis, dtype, keepdims); cnt = self.count(axis, keepdims)</c>; a 0-d zero count is
+        ///     <c>masked</c>; otherwise <c>dsum * 1. / cnt</c> — masked arithmetic for an array <c>dsum</c>, plain scalar
+        ///     arithmetic for a 0-d one — cast back to float16 for a float16 input without <c>dtype=</c>.
+        /// </summary>
+        /// <param name="self">The operand; its mask is not null.</param>
+        /// <param name="axis">The reduced axis, or null.</param>
+        /// <param name="dtype">The sum's loop, or null for NumPy's default.</param>
+        /// <param name="keepdims">Keep the reduced axes.</param>
+        /// <returns><see cref="NDMasked"/>, an unmasked 0-d mean, or a masked array of means.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand (ma.sum's reduction raises it; a
+        /// 0-d operand takes axis 0 / -1, as ufunc.reduce does).</exception>
+        private NDMaskedArray MaskedMeanLikeNumPy(NDMaskedArray self, int? axis, DType dtype, bool keepdims)
+        {
+            var d = self._data;
+            // `if dtype is None: integer / bool -> f8; float16 -> f4 (is_float16_result)`. NumSharp's char is an integer.
+            bool float16Result = false;
+            if (dtype is null)
+            {
+                var tc = d.typecode;
+                if (tc.IsInteger() || tc == NPTypeCode.Boolean || tc == NPTypeCode.Char)
+                    dtype = np.float64;
+                else if (tc == NPTypeCode.Half)
+                {
+                    dtype = np.float32;
+                    float16Result = true;
+                }
+            }
+
+            var dsum = sum(self, axis, dtype, keepdims);
+            var cnt = CountUnmasked(self._mask, DimsOf(d), axis, keepdims);
+            // `if cnt.shape == () and (cnt == 0): result = masked` — a 0-d count only; an array of zero counts is the
+            // domain's business below.
+            if (cnt.ndim == 0 && cnt.GetInt64() == 0)
+                return NDMasked;
+
+            NDMaskedArray result;
+            if (dsum._data.ndim > 0)
+            {
+                // `dsum * 1. / cnt` on a MaskedArray: ma.multiply by getdata(1.) — a STRONG float64 0-d, so a float32 sum
+                // becomes float64 — then ma.true_divide by the count, which masks a non-finite or domain quotient.
+                result = MaDivideLikeNumPy(MaMultiplyByStrongOneLikeNumPy(dsum), cnt);
+            }
+            else
+            {
+                // A 0-d sum is a numpy SCALAR: plain scalar arithmetic, nothing masked. `np.float32 * 1.` stays float32 (the
+                // Python float is weak); `/ cnt` (an np.intp) runs in result_type(sum, int64).
+                var (sv, one) = StrongCast(dsum._data, WeakFloatOne(dsum._data.dtype));
+                result = new NDMaskedArray(StrongDivide(np.multiply(sv, one), cnt), null);
+            }
+
+            // `self.dtype.type(dsum * 1. / cnt)`: np.float16 of a MaskedArray keeps its mask (data cast at every slot), of a
+            // scalar is a float16 scalar.
+            if (float16Result)
+                result = new NDMaskedArray(result._data.astype(d.dtype), result._mask);
+            return result;
+        }
+
+        /// <summary>
+        ///     The nomask branch of NumPy's <c>MaskedArray.mean</c>, <c>super().mean(axis, dtype, keepdims)[()]</c>: numpy's
+        ///     <c>_mean</c> run ON the masked array. <c>umr_sum</c> then <c>true_divide(ret, rcount, out=ret,
+        ///     casting='unsafe')</c>, whose <c>__array_wrap__</c> masks the quotients in ma's divide domain and writes 1 there
+        ///     (<see cref="ArrayWrapDivideDomainFill"/>); float16 is summed in float32 and cast back — and the cast of a 0-d
+        ///     masked array is a plain scalar, so a 0-d float16 mean loses that mask (an inf mean is 1.0, unmasked).
+        /// </summary>
+        /// <param name="d">The data (any layout).</param>
+        /// <param name="axis">The reduced axis, or null.</param>
+        /// <param name="dtype">The sum's loop, or null for <c>_mean</c>'s default.</param>
+        /// <param name="keepdims">Keep the reduced axes.</param>
+        /// <returns>The mean: <see cref="NDMasked"/> for a masked 0-d result, an unmasked 0-d scalar, or an array with the
+        /// domain mask (null when nothing hit).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside <paramref name="d"/> (<c>_count_reduce_items</c>
+        /// normalizes it first).</exception>
+        private NDMaskedArray NomaskMeanLikeNumPy(NDArray d, int? axis, DType dtype, bool keepdims)
+        {
+            long rcount = ReduceItemCount(d, axis);
+            bool float16Result = false;
+            if (dtype is null)
+            {
+                var tc = d.typecode;
+                if (tc.IsInteger() || tc == NPTypeCode.Boolean || tc == NPTypeCode.Char)
+                    dtype = np.float64;
+                else if (tc == NPTypeCode.Half)
+                {
+                    dtype = np.float32;
+                    float16Result = true;
+                }
+            }
+
+            // ret = umr_sum(arr, axis, dtype, out=None, keepdims); true_divide(ret, rcount, out=ret, casting='unsafe').
+            var ret = WriteableReduction(np.sum(d, axis, keepdims, dtype));
+            DefaultEngine.DivideByCountLikeNumPy(ret, rcount);
+            var mask = ArrayWrapDivideDomainFill(ret, rcount);
+
+            if (float16Result)
+            {
+                ret = ret.astype(d.dtype);
+                // np.float16(<0-d MaskedArray>) is a numpy scalar: the domain mask does not survive the cast.
+                if (ret.ndim == 0)
+                    return new NDMaskedArray(ret, null);
+            }
+            return ItemOfMaskedResult(ret, mask);
+        }
+
+        /// <summary>
+        ///     Variance over the unmasked elements: NumPy's <c>MaskedArray.var</c>, statement for statement. With a mask
+        ///     (even an all-False one) the anomaly is formed against the MASKED mean, squared in place
+        ///     (<c>danom *= danom</c>; complex <c>abs(danom) ** 2</c>, masked where not finite), summed over its unmasked
+        ///     slots, divided by <c>count - ddof</c> in ma's domained divide, and then the mask is REPLACED by
+        ///     <c>mask_or(self._mask.all(axis), cnt &lt;= 0)</c>. A slice with an unmasked inf or NaN therefore gives 0.0,
+        ///     unmasked, and a flat result with <c>count - ddof &lt; 0</c> is a plain (negative-zero or negative) scalar.
+        ///     Without a mask it is numpy's <c>_var</c> run on a masked array (ma's divide domain on the mean and on the
+        ///     result; see the section header).
+        /// </summary>
+        /// <param name="a">Operand: a <see cref="NDMaskedArray"/> (its mask decides the path), an <see cref="NDArray"/>, a C#
+        /// array or scalar (no mask).</param>
+        /// <param name="axis">The reduced axis (negative counts from the end), or null for every axis.</param>
+        /// <param name="dtype">NumPy's <c>dtype=</c>. With a mask it only selects the MEAN's sum loop (the squared
+        /// anomalies sum in their own dtype), so a complex <c>dtype</c> makes a real input's variance complex; without a
+        /// mask it is <c>_var</c>'s loop of both sums.</param>
+        /// <param name="ddof">Delta degrees of freedom: the divisor is <c>count - ddof</c> (with a mask, possibly ≤ 0) or
+        /// <c>max(n - ddof, 0)</c> (without).</param>
+        /// <param name="keepdims">When true the reduced axes stay in the result with length 1.</param>
+        /// <param name="mean">NumPy 2's <c>mean=</c>, or null to compute it. With a mask it is subtracted through
+        /// <c>ma.subtract</c>, which makes a C# number a STRONG array (int64 / float64 / complex128, as numpy.ma's
+        /// <c>getdata</c> does); without a mask it reaches <c>_var</c> as given, so a C# number stays WEAK there. An
+        /// <see cref="NDMaskedArray"/> mean brings its mask.</param>
+        /// <returns>The masked variance: <see cref="NDMasked"/> for a masked 0-d result, an unmasked 0-d scalar, or an
+        /// array with NumPy's mask (null for nomask). Its dtype is float64 for every input but float16 without a mask
+        /// (float16), and complex128 when <paramref name="dtype"/> (or <paramref name="mean"/>) is complex.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
+        /// <exception cref="ValueError">
+        ///     Without a mask, NumPy's two failures of <c>_var</c> on a masked array:
+        ///     <list type="bullet">
+        ///         <item>"output array is read-only" — a 0-d operand whose mean is masked (in ma's divide domain, or a masked
+        ///         <paramref name="mean"/>): the 0-d <c>subtract</c> returns the read-only <c>masked</c> singleton, which the
+        ///         next in-place ufunc writes into.</item>
+        ///         <item>"Changing the dtype to a subarray type is only supported if the total itemsize is unchanged" — a
+        ///         complex (or bool with a complex <paramref name="dtype"/>) operand whose deviation carries a mask: numpy's
+        ///         <c>x.view(dtype=(f8, (2,)))</c> cannot view that mask.</item>
+        ///     </list>
+        /// </exception>
+        /// <remarks>Scoped by hand (a masked-array return): the mean, the anomaly, its squares, the sums and counts are
+        /// reclaimed; only the variance's data and mask leave.</remarks>
         public NDMaskedArray var(object a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null)
         {
             using var scope = NDScope.Open();
-            var mask = (a as NDMaskedArray)?._mask;
-            var d = AsData(a);
-            bool cplx = d.typecode == NPTypeCode.Complex;
-            var computeType = cplx ? np.complex128 : np.float64;
-
-            // Fast path only when there is NOTHING to special-case: no mask AND no supplied mean.
-            if (mask is null && mean is null)
-            {
-                var rn = axis is null ? np.var(d, keepdims, ddof, dtype) : np.var(d, axis.Value, keepdims, ddof, dtype);
-                return Yield(scope, new NDMaskedArray(rn, null));
-            }
-
-            // `maskEff` is the real mask, or an all-false stand-in when only a supplied mean took us off the fast
-            // path — so every mask-driven step (where/AllAlongAxis) has a non-null operand and, with no real mask,
-            // zeroes nothing and masks nothing.
-            var maskEff = mask ?? np.zeros(DimsOf(d), np.@bool);
-            var filled0 = mask is null ? d : ((NDMaskedArray)a).filled(0);
-            var cntK = CountUnmasked(mask, d.Shape, axis, true).astype(computeType);
-            // keepdims mean for centering — the SUPPLIED mean if given, else the unmasked slice mean.
-            var meanK = mean is null
-                ? np.divide(np.sum(filled0, axis, true, dtype).astype(computeType), cntK)
-                : AsData(mean).astype(computeType);
-            var dev = np.subtract(d.astype(computeType), meanK);
-            var devsq = cplx ? np.multiply(np.abs(dev), np.abs(dev)) : np.multiply(dev, dev);
-            devsq = np.where(maskEff, NDArray.Scalar(0.0), devsq.astype(np.float64)); // masked → 0 contribution
-            var cnt = np.subtract(CountUnmasked(mask, d.Shape, axis, keepdims).astype(np.float64), NDArray.Scalar((double)ddof));
-            var dvar = np.divide(np.sum(devsq, axis, keepdims, np.float64), cnt);
-            var newmask = np.logical_or(AllAlongAxis(maskEff, axis, keepdims), np.less_equal(cnt, NDArray.Scalar(0.0)));
-            // As with mean, masked (all-masked / cnt<=0) slices carry .data 0, not the raw NaN.
-            if (dvar.ndim != 0)
-                dvar = np.where(newmask, NDArray.Scalar(0.0), dvar);
-            return Yield(scope, Finalize(dvar, newmask));
+            var m = a as NDMaskedArray;
+            if (m?._mask is null)
+                return Yield(scope, NomaskVarLikeNumPy(AsData(a), axis, dtype, ddof, keepdims, mean));
+            return Yield(scope, MaskedVarLikeNumPy(m, axis, dtype, ddof, keepdims, mean));
         }
 
-        /// <summary>Standard deviation = sqrt(<see cref="var"/>), preserving the variance's mask.</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param>
+        /// <summary>
+        ///     The masked branch of NumPy's <c>MaskedArray.var</c> (see <see cref="var"/>), in its statement order:
+        ///     <c>cnt = self.count(axis) - ddof</c>; <c>danom = self - mean</c> (the masked keepdims mean when none is given);
+        ///     square in place; <c>dvar = divide(danom.sum(axis), cnt)</c>; replace the mask of an array result, collapse a
+        ///     masked 0-d one to <c>masked</c>.
+        /// </summary>
+        /// <param name="self">The operand; its mask is not null.</param>
+        /// <param name="axis">The reduced axis, or null.</param>
+        /// <param name="dtype">The mean's sum loop, or null.</param>
+        /// <param name="ddof">Delta degrees of freedom.</param>
+        /// <param name="keepdims">Keep the reduced axes.</param>
+        /// <param name="mean">The given mean, or null.</param>
+        /// <returns><see cref="NDMasked"/>, an unmasked 0-d variance, or a masked array of variances.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand (the count's reduction raises it).</exception>
+        /// <exception cref="IncorrectShapeException">A given <paramref name="mean"/> does not broadcast against the operand:
+        /// the subtract ufunc's "operands could not be broadcast together with shapes …" text.</exception>
+        private NDMaskedArray MaskedVarLikeNumPy(NDMaskedArray self, int? axis, DType dtype, int ddof, bool keepdims, object mean)
+        {
+            var d = self._data;
+            var mask = self._mask;
+            var cnt = np.subtract(CountUnmasked(mask, DimsOf(d), axis, keepdims), (long)ddof);
+
+            // `danom = self - mean` / `self - self.mean(axis, dtype, keepdims=True)`: ma.subtract.
+            var danom = MaSubtractLikeNumPy(self, mean ?? MaskedMeanLikeNumPy(self, axis, dtype, keepdims: true));
+
+            if (d.typecode == NPTypeCode.Complex)
+                danom = AbsSquaredLikeNumPy(danom, self);   // `umath.absolute(danom) ** 2`
+            else
+                danom = SquareInPlaceLikeNumPy(danom);      // `danom *= danom`
+
+            // `danom.sum(axis, **kwargs)` — MaskedArray.sum with no dtype; a numpy scalar's or `masked`'s own sum.
+            NDMaskedArray ssum;
+            if (ReferenceEquals(danom, NDMasked))
+                ssum = NDMasked;
+            else if (danom._data.ndim == 0 && danom._mask is null)
+                ssum = danom;
+            else
+                ssum = sum(danom, axis, null, keepdims);
+
+            var dvar = MaDivideLikeNumPy(ssum, cnt);
+            if (ReferenceEquals(dvar, NDMasked))
+                return NDMasked;
+            if (dvar._data.ndim == 0)
+                // `elif getmask(dvar): dvar = masked` — an unmasked 0-d result stays, even with cnt <= 0.
+                return dvar._mask is not null && np.any(dvar._mask) ? NDMasked : new NDMaskedArray(dvar._data, null);
+
+            // `dvar._mask = mask_or(self._mask.all(axis, **kwargs), (cnt <= 0)); dvar._update_from(self)` — the divide's
+            // own mask (non-finite and domain slots) is DROPPED, and mask_or shrinks an all-False result to nomask.
+            var newmask = ShrinkMask(np.logical_or(AllAlongAxis(mask, axis, keepdims), np.less_equal(cnt, 0L)));
+            return new NDMaskedArray(dvar._data, newmask).UpdateFrom(self);
+        }
+
+        /// <summary>
+        ///     The nomask branch of NumPy's <c>MaskedArray.var</c>, <c>super().var(axis, dtype, ddof=ddof, keepdims [,
+        ///     mean])[()]</c>: numpy's <c>_var</c> run ON the masked array, statement for statement. Its two
+        ///     <c>true_divide(..., out=...)</c> steps go through <c>MaskedArray.__array_wrap__</c>
+        ///     (<see cref="ArrayWrapDivideDomainFill"/>): a mean in ma's divide domain becomes 1.0 before the deviations are
+        ///     formed, and a variance in it comes back masked with data 1.0.
+        /// </summary>
+        /// <param name="d">The data (any layout).</param>
+        /// <param name="axis">The reduced axis, or null.</param>
+        /// <param name="dtype"><c>_var</c>'s loop of both sums, or null.</param>
+        /// <param name="ddof">Delta degrees of freedom: the divisor is <c>max(n - ddof, 0)</c>.</param>
+        /// <param name="keepdims">Keep the reduced axes.</param>
+        /// <param name="mean">The given mean (a C# number stays weak), or null to compute it.</param>
+        /// <returns>The variance: <see cref="NDMasked"/>, an unmasked 0-d scalar, or an array with the domain mask.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside <paramref name="d"/>.</exception>
+        /// <exception cref="ValueError">The two <c>_var</c>-on-a-masked-array failures documented on <see cref="var"/>.</exception>
+        private NDMaskedArray NomaskVarLikeNumPy(NDArray d, int? axis, DType dtype, int ddof, bool keepdims, object mean)
+        {
+            long rcount = ReduceItemCount(d, axis);
+            var inT = d.typecode;
+            // `if dtype is None and issubclass(arr.dtype.type, (nt.integer, nt.bool)): dtype = f8`.
+            if (dtype is null && (inT.IsInteger() || inT == NPTypeCode.Boolean || inT == NPTypeCode.Char))
+                dtype = np.float64;
+
+            NDArray x;
+            bool meanMasked;
+            if (mean is null)
+            {
+                // arrmean = umr_sum(arr, axis, dtype, keepdims=True); true_divide(arrmean, rcount, out=arrmean) — whose wrap
+                // writes 1 into (and masks) the means in ma's divide domain.
+                var arrmean = WriteableReduction(np.sum(d, axis, true, dtype));
+                DefaultEngine.DivideByCountLikeNumPy(arrmean, rcount);
+                meanMasked = ArrayWrapDivideDomainFill(arrmean, rcount) is not null;
+                x = StrongSubtract(d, arrmean);
+            }
+            else
+            {
+                // `arrmean = mean`, handed to um.subtract as given: a C# number is a WEAK Python scalar there; an array keeps
+                // its dtype; a masked array subtracts its raw data and brings its mask into x's.
+                var mm = mean as NDMaskedArray;
+                meanMasked = mm?._mask is not null && np.any(mm._mask);
+                var md = AsData(mean);
+                x = mean is NDArray || mean is Array || mm is not null ? StrongSubtract(d, md) : WeakSubtract(d, mean);
+            }
+
+            // x's mask is mask_or(getmaskarray(arr), getmaskarray(mean)) over the broadcast: an EMPTY x has no True slot,
+            // so it shrinks to nomask whatever the mean's mask holds.
+            if (x.size == 0)
+                meanMasked = false;
+
+            // A 0-d x with a mask is the `masked` singleton (the subtract's wrap); the next ufunc writes into it.
+            if (d.ndim == 0 && meanMasked)
+                throw new ValueError("output array is read-only");
+
+            // Every square below is written IN PLACE into x, as NumPy's `out=x` writes it: x is the subtract's fresh
+            // result in NumPy's ufunc layout (an input's permuted axis order included), and the sum then walks that
+            // memory order. A new array would be C-ordered, and a flat sum of a permuted input would add in another
+            // order (2 ULP apart on a transposed 3-D int32 input).
+            NDArray x2;
+            if (inT.IsFloatingPoint() || inT.IsInteger() || inT == NPTypeCode.Char || inT == NPTypeCode.Decimal)
+            {
+                // umr_multiply(x, x, out=x): the multiply loop, not square's (complex x from a complex dtype= takes
+                // NumPy's complex MULTIPLY here, x * x, never |x|**2).
+                np.multiply(x, x, @out: x);
+                x2 = x;
+            }
+            else if (x.typecode == NPTypeCode.Complex)
+            {
+                // xv = x.view(dtype=(f8, (2,))) fails on a masked x. Otherwise um.square(xv, out=xv) squares both parts IN
+                // PLACE and um.add(xv[..., 0], xv[..., 1], out=x.real) leaves re**2 + im**2 in x.real — a stride-2 view in
+                // x's own layout, which is what the sum then walks (a fresh array would add in another order).
+                if (meanMasked)
+                    throw new ValueError("Changing the dtype to a subarray type is only supported if the total itemsize is unchanged");
+                var re = np.real(x);
+                var im = np.imag(x);
+                np.multiply(re, re, @out: re);
+                np.multiply(im, im, @out: im);
+                np.add(re, im, @out: re);
+                x2 = re;
+            }
+            else
+            {
+                // um.multiply(x, um.conjugate(x), out=x).real — a bool input's real x (conjugate is the identity there).
+                np.multiply(x, np.conjugate(x), @out: x);
+                x2 = np.real(x);
+            }
+
+            // ret = umr_sum(x, axis, dtype, out, keepdims); true_divide(ret, max(rcount - ddof, 0), out=ret).
+            var ret = WriteableReduction(np.sum(x2, axis, keepdims, dtype));
+            long rc = Math.Max(rcount - ddof, 0);
+            DefaultEngine.DivideByCountLikeNumPy(ret, rc);
+            var rmask = ArrayWrapDivideDomainFill(ret, rc);
+            return ItemOfMaskedResult(ret, rmask);
+        }
+
+        /// <summary>Standard deviation: NumPy's <c>MaskedArray.std</c>, <c>sqrt(self.var(axis, dtype, ddof=ddof,
+        /// keepdims))</c> through ma's domained sqrt, which masks a non-finite or negative variance (and keeps the
+        /// variance's own mask). A <c>masked</c> variance is returned as is.</summary>
+        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="dtype">The variance's
+        /// <c>dtype=</c> (see <see cref="var"/>).</param>
         /// <param name="ddof">Delta degrees of freedom.</param><param name="keepdims">Keep reduced axes.</param>
         /// <param name="mean">Accepted for signature parity but IGNORED — NumPy's <c>ma.std</c> forwards only
         /// <c>keepdims</c> to <c>var</c>, never <c>mean</c> (a NumPy quirk: <c>ma.std(mean=X)</c> yields the PLAIN
         /// std, unlike <c>ma.var(mean=X)</c>). Reproduced here so a ported call behaves identically.</param>
         /// <returns>The masked standard deviation.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
+        /// <exception cref="ValueError">The variance's own failures (see <see cref="var"/>).</exception>
         public NDMaskedArray std(object a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null)
         {
             // Scoped by hand: the variance is only sqrt's operand; its data is reclaimed once the root is taken
@@ -3056,15 +3363,381 @@ namespace NumSharp
             return Yield(scope, ReferenceEquals(v, NDMasked) ? NDMasked : sqrt(v));
         }
 
-        /// <summary>Anomalies (deviations from the mean along the axis) = <c>a − mean(a, axis, keepdims)</c>,
-        /// mask preserved from the input.</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="dtype">Mean accumulator dtype.</param>
-        /// <returns>The masked anomalies, same shape as the input.</returns>
+        // ── Building blocks of mean / var: numpy.ma's statements on NumSharp arrays ──────────────────
+
+        /// <summary>
+        ///     <c>_count_reduce_items(arr, axis)</c>: the number of elements each output reduces, with the axis normalized
+        ///     first (so a bad axis raises NumPy's <c>AxisError</c> before any arithmetic).
+        /// </summary>
+        /// <param name="d">The operand.</param>
+        /// <param name="axis">The reduced axis, or null for every element.</param>
+        /// <returns>The element count of one reduced slice.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside <paramref name="d"/>.</exception>
+        private static long ReduceItemCount(NDArray d, int? axis)
+            => axis is null ? d.size : d.Shape.dimensions[DefaultEngine.NormalizeAxis(axis.Value, d.ndim)];
+
+        /// <summary>
+        ///     A reduction result that the next in-place divide may overwrite: a 0-d reduction comes back as NumSharp's
+        ///     read-only reduction scalar, which is copied; an array result is fresh and returned as is.
+        /// </summary>
+        /// <param name="r">The reduction result.</param>
+        /// <returns><paramref name="r"/> or a writeable copy of it.</returns>
+        private static NDArray WriteableReduction(NDArray r) => r.Shape.IsWriteable ? r : r.copy();
+
+        /// <summary>
+        ///     The domain step of <c>MaskedArray.__array_wrap__</c> after <c>true_divide(q, count, out=q)</c>: ma's divide
+        ///     domain <c>|q| * tiny &gt;= count</c> is evaluated on the QUOTIENT (the output already holds it), and where it
+        ///     holds the quotient is overwritten with ufunc_fills[divide][-1] = 1 and masked. <c>tiny</c> is an
+        ///     <c>np.float64</c> (strong), so the product is float64 for every quotient dtype: an inf quotient hits, a NaN
+        ///     never does, and a zero count masks every non-NaN quotient.
+        /// </summary>
+        /// <param name="q">The quotient, overwritten with 1 where the domain holds. Writeable.</param>
+        /// <param name="count">The divisor the quotient came from.</param>
+        /// <returns>The domain mask (q's shape), or null when nothing hit (NumPy's mask_or shrinks it to nomask).</returns>
+        private static NDArray ArrayWrapDivideDomainFill(NDArray q, long count)
+        {
+            var hit = np.greater_equal(np.multiply(np.abs(q).astype(np.float64, copy: false), SafeDivideTiny), (double)Math.Abs(count));
+            if (!np.any(hit))
+                return null;
+            np.copyto(q, NDArray.Scalar(1), casting: "unsafe", where: hit);
+            return hit;
+        }
+
+        /// <summary>
+        ///     <c>result[()]</c> of a masked reduction result: a 0-d result is <c>masked</c> when its mask is set and an
+        ///     unmasked scalar otherwise; an array is returned as a masked array over its mask.
+        /// </summary>
+        /// <param name="r">The result data.</param>
+        /// <param name="mask">Its mask, or null for nomask.</param>
+        /// <returns><see cref="NDMasked"/>, an unmasked 0-d array, or the masked array.</returns>
+        private NDMaskedArray ItemOfMaskedResult(NDArray r, NDArray mask)
+        {
+            if (r.ndim == 0)
+                return mask is not null && np.any(mask) ? NDMasked : new NDMaskedArray(r, null);
+            return new NDMaskedArray(r, mask);
+        }
+
+        /// <summary>
+        ///     numpy.ma's <c>make_mask(m, shrink=True)</c> as <c>mask_or</c> applies it: an all-False mask is nomask.
+        /// </summary>
+        /// <param name="m">A boolean mask.</param>
+        /// <returns><paramref name="m"/>, or null when no element is set.</returns>
+        private static NDArray ShrinkMask(NDArray m) => m is not null && np.any(m) ? m : null;
+
+        /// <summary>
+        ///     NumPy's strong promotion of two array operands: both are cast to <c>result_type(a.dtype, b.dtype)</c>, so the
+        ///     NumSharp ufunc that follows sees two operands of one dtype and cannot read a 0-d one as weak.
+        /// </summary>
+        /// <param name="a">First operand.</param>
+        /// <param name="b">Second operand.</param>
+        /// <returns>The two operands in the common dtype (a no-op cast returns the operand itself).</returns>
+        private static (NDArray A, NDArray B) StrongCast(NDArray a, NDArray b)
+        {
+            var rt = np.result_type(a.dtype, b.dtype);
+            return (a.astype(rt, copy: false), b.astype(rt, copy: false));
+        }
+
+        /// <summary>
+        ///     <c>np.subtract(a, b)</c> with both operands STRONG (two arrays, a 0-d one included), written into a result
+        ///     laid out as NumPy's ufunc lays it out (<see cref="UfuncResultBuffer"/>). The layout is observable: the
+        ///     anomaly's sum along an axis (or flat, through numpy.ma's K-order <c>filled</c>) adds in this memory order.
+        /// </summary>
+        /// <param name="a">Minuend.</param><param name="b">Subtrahend.</param>
+        /// <returns>The difference in <c>result_type(a, b)</c>.</returns>
+        private static NDArray StrongSubtract(NDArray a, NDArray b)
+        {
+            var rt = np.result_type(a.dtype, b.dtype);
+            // The layout is voted by the ORIGINAL operands: a cast copy would carry its own (C) strides.
+            var r = UfuncResultBuffer(rt, a, b);
+            np.subtract(a.astype(rt, copy: false), b.astype(rt, copy: false), @out: r);
+            return r;
+        }
+
+        /// <summary>
+        ///     A fresh, uninitialized result buffer of a ufunc over <paramref name="operands"/>, laid out as NumPy's NpyIter
+        ///     allocates it (<see cref="Shape.NpyIterOutputShape"/>: each operand votes its memory order and abstains on a
+        ///     stride-0 or extent-1 axis, C order wins a conflict). A permuted input thus gets a result in its own axis
+        ///     order and a broadcast view (stride 0) a C-ordered one, where NumSharp's eager ufuncs write C order for any
+        ///     input that is neither C- nor F-contiguous. The layout is observable in numpy.ma's mean / var: a later sum
+        ///     walks this memory order.
+        /// </summary>
+        /// <param name="dtype">The result dtype.</param>
+        /// <param name="operands">The ufunc's operands as it receives them (their strides vote), at least one.</param>
+        /// <returns>An uninitialized array of the broadcast shape in NumPy's layout.</returns>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast together: NumPy's ufunc text, "operands
+        /// could not be broadcast together with shapes (4,5) (4,) " (each operand's shape and a space), which is what a
+        /// <c>mean=</c> of the reduced shape without keepdims meets in <c>self - mean</c>.</exception>
+        private static NDArray UfuncResultBuffer(DType dtype, params NDArray[] operands)
+        {
+            var shapes = new Shape[operands.Length];
+            for (int i = 0; i < operands.Length; i++)
+                shapes[i] = operands[i].Shape;
+            // np.broadcast_shapes, not Shape.ResolveReturnShape: the latter reads a (1,) operand as a scalar, so (1,) with
+            // () would come back () where NumPy's broadcast is (1,).
+            Shape bs;
+            try
+            {
+                bs = np.broadcast_shapes(shapes);
+            }
+            catch (IncorrectShapeException ex)
+            {
+                // The buffer stands for the ufunc's own allocation, so a mismatch is the ufunc's error, not
+                // np.broadcast_shapes' ("shape mismatch: objects cannot be broadcast to a single shape...").
+                var text = new System.Text.StringBuilder("operands could not be broadcast together with shapes ");
+                foreach (var s in shapes)
+                    text.Append(s.ToPythonTuple()).Append(' ');
+                throw new IncorrectShapeException(text.ToString(), ex);
+            }
+            // A private copy of the dimensions: broadcast_shapes may hand back an operand's own shape, whose dimension
+            // array that operand shares.
+            var dims = bs.NDim == 0 ? Array.Empty<long>() : (long[])bs.dimensions.Clone();
+            return new NDArray(dtype, Shape.NpyIterOutputShape(dims, shapes), false);
+        }
+
+        /// <summary><c>np.true_divide(a, b)</c> with both operands STRONG.</summary>
+        /// <param name="a">Dividend.</param><param name="b">Divisor.</param>
+        /// <returns>The quotient in <c>result_type(a, b)</c> (float64 for an integer divisor and a float32 or float64
+        /// dividend, NumPy's float64 loop).</returns>
+        private static NDArray StrongDivide(NDArray a, NDArray b)
+        {
+            var (ca, cb) = StrongCast(a, b);
+            return np.true_divide(ca, cb);
+        }
+
+        /// <summary>
+        ///     <c>np.subtract(a, number)</c> with the number a WEAK Python scalar, as numpy's <c>_var</c> receives a numeric
+        ///     <c>mean=</c>: the loop is NEP 50's <c>result_type(a.dtype, number)</c>, both operands cast to it.
+        /// </summary>
+        /// <param name="a">The array.</param>
+        /// <param name="number">A boxed C# number.</param>
+        /// <returns>The difference in the weak-promoted dtype.</returns>
+        private static NDArray WeakSubtract(NDArray a, object number)
+        {
+            var rt = np.result_type(new object[] { a.dtype, number });
+            var b = NDArray.Scalar(number).astype(rt);
+            // NumPy's `arr - mean` allocates in arr's own axis order (the 0-d number abstains from the vote), and the
+            // squares of x are then summed in that memory order.
+            var r = UfuncResultBuffer(rt, a, b);
+            np.subtract(a.astype(rt, copy: false), b, @out: r);
+            return r;
+        }
+
+        /// <summary>
+        ///     The 0-d <c>1</c> of NumPy's <c>dsum * 1.</c> on a numpy scalar: the weak Python float takes the scalar's dtype
+        ///     when it is inexact (float32 stays float32, complex stays complex — the full complex multiply by 1+0j, which
+        ///     turns an infinite imaginary part into a NaN real one) and float64 otherwise.
+        /// </summary>
+        /// <param name="dt">The scalar's dtype.</param>
+        /// <returns>A 0-d one of <c>result_type(dt, 1.0)</c>.</returns>
+        private static NDArray WeakFloatOne(DType dt)
+            => NDArray.Scalar(1.0).astype(np.result_type(new object[] { dt, 1.0 }));
+
+        /// <summary>
+        ///     numpy.ma's <c>subtract(a, b)</c> (<c>_MaskedBinaryOperation</c>) for <c>self - mean</c> (var, anom): the data
+        ///     difference in <c>result_type(getdata(a), getdata(b))</c> — <c>getdata</c> makes a C# number a STRONG array,
+        ///     int64 / float64 / complex128, and a 0-d mean is strong too —, the masks OR-ed (nomask when neither side has
+        ///     one, a mask-free side counted as all-False otherwise), the minuend's data put back (unsafe) at masked slots,
+        ///     and a 0-d result collapsed to <c>masked</c> or a plain scalar.
+        /// </summary>
+        /// <param name="a">The minuend: a <see cref="NDMaskedArray"/> (with or without a mask), an <see cref="NDArray"/>,
+        /// a C# array or number.</param>
+        /// <param name="b">The subtrahend: a <see cref="NDMaskedArray"/> (the masked mean, <c>masked</c>, a scalar), an
+        /// <see cref="NDArray"/>, or a C# number.</param>
+        /// <returns>The masked difference, a plain scalar, or <see cref="NDMasked"/>.</returns>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast together.</exception>
+        private NDMaskedArray MaSubtractLikeNumPy(object a, object b)
+        {
+            var da = AsData(a);
+            var db = AsData(b);
+            // getdata(number) is np.array(number): int64 / float64 / complex128 / bool — strong.
+            var strongA = BareScalarStrongDtype(a);
+            if (strongA.HasValue)
+                da = da.astype(strongA.Value);
+            var strongB = BareScalarStrongDtype(b);
+            if (strongB.HasValue)
+                db = db.astype(strongB.Value);
+            var result = StrongSubtract(da, db);
+            var amask = (a as NDMaskedArray)?._mask;
+            var bmask = (b as NDMaskedArray)?._mask;
+            // `m = nomask` when both are nomask, else logical_or(getmaskarray(a) or ma, getmaskarray(b) or mb): a missing
+            // side is all-False, which a 0-d False broadcasts to.
+            NDArray m = null;
+            if (amask is not null || bmask is not null)
+                m = np.logical_or(amask ?? NDArray.Scalar(false), bmask ?? NDArray.Scalar(false));
+            if (result.ndim == 0)
+                return m is not null && np.any(m) ? NDMasked : new NDMaskedArray(result, null);
+            if (m is null)
+                return new NDMaskedArray(result, null);
+            if (!m.Shape.Equals(result.Shape))
+                m = np.broadcast_to(m, result.Shape).copy();
+            if (np.any(m))
+                np.copyto(result, da, casting: "unsafe", where: m);
+            return new NDMaskedArray(result, m);
+        }
+
+        /// <summary>
+        ///     numpy.ma's <c>multiply(dsum, 1.)</c> (<c>_MaskedBinaryOperation</c>), the <c>dsum * 1.</c> of the masked mean:
+        ///     the data times <c>getdata(1.)</c> = <c>np.array(1.)</c>, a STRONG float64 0-d (a float16 or float32 sum becomes
+        ///     float64, an integer or bool <c>dtype=</c> sum too, complex stays complex), into a fresh result in NumPy's ufunc
+        ///     layout (dsum's own axis order: the 0-d abstains). The mask is dsum's (<c>logical_or(ma, False)</c>), and the
+        ///     masked slots get dsum's data back.
+        /// </summary>
+        /// <param name="dsum">The masked sum of an array (ndim &gt; 0) operand.</param>
+        /// <returns>The masked product.</returns>
+        private static NDMaskedArray MaMultiplyByStrongOneLikeNumPy(NDMaskedArray dsum)
+        {
+            var da = dsum._data;
+            var one = NDArray.Scalar(1.0);
+            var (ca, cb) = StrongCast(da, one);
+            // The layout is voted by the original operands, as in StrongSubtract.
+            var result = UfuncResultBuffer(ca.dtype, da, one);
+            np.multiply(ca, cb, @out: result);
+            var m = dsum._mask;
+            // `if m is not nomask and m.any(): np.copyto(result, da, casting='unsafe', where=m)`.
+            if (m is not null && np.any(m))
+                np.copyto(result, da, casting: "unsafe", where: m);
+            return new NDMaskedArray(result, m);
+        }
+
+        /// <summary>
+        ///     <c>danom *= danom</c> (<c>MaskedArray.__imul__</c>) in place: the masked slots multiply by 1 (they keep the
+        ///     minuend's data), the others are squared in danom's own layout, which the next sum's order follows. A numpy
+        ///     scalar is squared plainly; <c>masked</c> stays <c>masked</c>.
+        /// </summary>
+        /// <param name="danom">The anomaly (its array data is a fresh array this method overwrites).</param>
+        /// <returns><paramref name="danom"/> itself with its data squared in place, a new scalar for a numpy scalar, or
+        /// <see cref="NDMasked"/>.</returns>
+        private static NDMaskedArray SquareInPlaceLikeNumPy(NDMaskedArray danom)
+        {
+            if (danom is NDMaskedConstant)
+                return danom;
+            var data = danom._data;
+            if (danom._mask is null)
+                // A numpy scalar (`x *= x` rebinds the name): a new 0-d value, never a write into the subtract's result.
+                return new NDMaskedArray(np.multiply(data, data), null);
+            // other_data = np.where(self._mask, other_data.dtype.type(1), other_data); self._data *= other_data — in place,
+            // so the squares keep danom's layout (the next sum's order).
+            var other = np.where(danom._mask, NDArray.Scalar(1).astype(data.dtype), data);
+            np.multiply(data, other, @out: data);
+            return danom;
+        }
+
+        /// <summary>
+        ///     <c>umath.absolute(danom) ** 2</c> for a complex anomaly: the magnitude of every slot (masked ones too) under
+        ///     danom's mask, then numpy.ma's <c>power(x, 2)</c> — <c>where(m, x, power(x, 2))</c>, and a non-finite square
+        ///     is MASKED and overwritten with the fill value (so the sum skips it). A numpy scalar takes the plain
+        ///     <c>abs(x) ** 2</c>; <c>masked</c> stays <c>masked</c>.
+        /// </summary>
+        /// <param name="danom">The complex anomaly.</param>
+        /// <param name="self">The variance's operand, whose fill value numpy.ma writes over a non-finite square.</param>
+        /// <returns>The squared magnitudes as a float64 masked array, a plain scalar, or <see cref="NDMasked"/>.</returns>
+        private NDMaskedArray AbsSquaredLikeNumPy(NDMaskedArray danom, NDMaskedArray self)
+        {
+            if (ReferenceEquals(danom, NDMasked))
+                return NDMasked;
+            var data = danom._data;
+            // getdata(2) is np.array(2), a strong int64: power(float64 |danom|, int64 2) runs the float64 loop.
+            var two = NDArray.Scalar(2L).astype(np.float64);
+            if (data.ndim == 0 && danom._mask is null)
+                return new NDMaskedArray(np.power(np.abs(data), two), null);
+
+            // umath.absolute(danom) and umath.power(fa, fb) are fresh ufunc results in NumPy's layout (danom's own axis
+            // order), and so is np.where's: the masked sum that follows walks that memory order.
+            var fa = UfuncResultBuffer(np.float64, data);
+            np.abs(data, @out: fa);
+            // power's values only: NumPy's DOUBLE_power takes its scalar-exponent fast path here (a stride-0 2.0 is
+            // `x * x`), which the plain np.power call takes too; the out= route does not (it calls pow, 1 ULP off on
+            // ~0.05 % of inputs), so the result buffer is filled by copies below rather than written by power.
+            var pw = np.power(fa, two);
+
+            // m = mask_or(getmask(a), nomask): danom's mask, shrunk to nomask when nothing is set.
+            var m = ShrinkMask(danom._mask);
+            NDArray result;
+            if (m is null)
+            {
+                // np.where(nomask, fa, pw): the 0-d False abstains from the layout vote and selects pw everywhere; fa
+                // and the power result share danom's layout, which the result takes.
+                result = UfuncResultBuffer(np.float64, fa);
+                np.copyto(result, pw);
+            }
+            else
+            {
+                // np.where(m, fa, pw) — NpyIter's layout over the three operands (pw votes with fa's layout, the one
+                // NumPy's power result has), filled in two copies.
+                result = UfuncResultBuffer(np.float64, m, fa, fa);
+                np.copyto(result, pw);
+                np.copyto(result, fa, where: m);
+            }
+            var invalid = np.logical_not(np.isfinite(result));
+            NDArray rmask = m is null ? null : np.logical_or(m, invalid);
+            if (np.any(invalid))
+            {
+                rmask ??= invalid;
+                // result._data[invalid] = result.fill_value: the operand's fill value (real part), else float64's 1e20.
+                object fv = self._fill_value ?? 1e20;
+                if (fv is Complex c)
+                    fv = c.Real;
+                np.copyto(result, NDArray.Scalar(fv), casting: "unsafe", where: invalid);
+            }
+            return new NDMaskedArray(result, rmask);
+        }
+
+        /// <summary>
+        ///     numpy.ma's <c>divide(a, b)</c> (<c>_DomainedBinaryOperation(umath.divide)</c>) with both operands STRONG: the
+        ///     quotient in <c>result_type(a, b)</c>; a slot is masked where the quotient is not finite, an operand is masked,
+        ///     or ma's divide domain <c>|a| * tiny &gt;= |b|</c> holds; a 0-d result collapses to <c>masked</c> or a plain
+        ///     scalar; otherwise the masked slots are zeroed and <c>m * a</c> is ADDED to the whole result (NumPy's
+        ///     <c>result += masked_da</c>, which also turns a -0.0 quotient of a positive dividend into +0.0).
+        /// </summary>
+        /// <param name="a">The dividend: a masked array, a plain scalar, or <see cref="NDMasked"/>.</param>
+        /// <param name="b">The divisor (an unmasked count array or 0-d count).</param>
+        /// <returns>The masked quotient, a plain scalar, or <see cref="NDMasked"/>.</returns>
+        private NDMaskedArray MaDivideLikeNumPy(NDMaskedArray a, NDArray b)
+        {
+            var da = a._data;
+            var (ca, cb) = StrongCast(da, b);
+            // `self.f(da, db)`: a fresh quotient in NumPy's ufunc layout, voted by the original operands (a cast copy
+            // would carry C strides). The mean it becomes votes again in the anomaly's subtract. true_divide's loop
+            // keeps a float or complex dtype and divides integers (an integer `mean=` minus integer data) in float64.
+            var tc = ca.typecode;
+            var qdt = tc.IsFloatingPoint() || tc == NPTypeCode.Complex ? ca.dtype : np.float64;
+            var result = UfuncResultBuffer(qdt, da, b);
+            np.true_divide(ca, cb, @out: result);
+            var m = np.logical_not(np.isfinite(result));
+            if (a._mask is not null)
+                m = np.logical_or(m, a._mask);
+            m = np.logical_or(m, SafeDivideDomain(da, b));
+            if (m.ndim == 0)
+                return m.GetBoolean() ? NDMasked : new NDMaskedArray(result, null);
+            if (!m.Shape.Equals(result.Shape))
+                m = np.broadcast_to(m, result.Shape).copy();
+            FillBack(result, da, m, domainedZeroFill: true, casting: "unsafe");
+            return new NDMaskedArray(result, m);
+        }
+
+        /// <summary>
+        ///     Anomalies (deviations from the mean along the axis): NumPy's <c>MaskedArray.anom</c>,
+        ///     <c>m = self.mean(axis, dtype)</c>, then <c>self - m</c> when <c>not axis</c> (no axis, AND axis 0) and
+        ///     <c>self - expand_dims(m, axis)</c> otherwise, through numpy.ma's subtract. The mean is the plain one (no
+        ///     keepdims), which is observable: a flat or 1-D mean is a numpy scalar (an inf one unmasked, a float32 one turned
+        ///     float64 by <c>dsum * 1.</c>) or <c>masked</c>, which then masks every anomaly.
+        /// </summary>
+        /// <param name="a">Operand: a <see cref="NDMaskedArray"/>, an <see cref="NDArray"/>, a C# array or scalar.</param>
+        /// <param name="axis">The axis of the mean, or null for the flattened array.</param>
+        /// <param name="dtype">The mean's <c>dtype=</c> (see <see cref="mean"/>).</param>
+        /// <returns>The masked anomalies, the input's shape, in <c>result_type(a, mean)</c>.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
+        /// <remarks>Scoped by hand: the mean (and its expanded view) is only the subtraction's operand and is
+        /// reclaimed.</remarks>
         public NDMaskedArray anom(object a, int? axis = null, DType dtype = null)
         {
-            // Scoped by hand: the keepdims mean is only the subtraction's operand and is reclaimed.
             using var scope = NDScope.Open();
-            return Yield(scope, subtract(a, mean(a, axis, dtype, keepdims: true)));
+            var m = mean(a, axis, dtype);
+            // `if not axis: return self - m` — None and 0 are both falsy, so axis 0 subtracts the reduced mean by
+            // broadcasting (its shape is the input's without axis 0, which aligns from the right).
+            if (axis is null || axis.Value == 0)
+                return Yield(scope, MaSubtractLikeNumPy(a, m));
+            return Yield(scope, MaSubtractLikeNumPy(a, expand_dims(m, axis.Value)));
         }
 
         /// <summary>Alias of <see cref="anom"/> (NumPy's <c>anomalies</c>).</summary>

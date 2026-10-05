@@ -796,6 +796,493 @@ def gen_ma_extras():
 
 
 # ---------------------------------------------------------------------------------------------
+# ma.mean / ma.var / ma.std / ma.anom, held to numpy.ma's bits with NO excuse (plan api-parameter-parity A6).
+#
+# NumSharp computes these four as numpy.ma's own statements (src/NumSharp.Core/Ma/NDMaskedArray.cs). Without a mask,
+# ndarray's _mean / _var run ON the masked array, so both of their true_divide(out=...) steps pass through
+# MaskedArray.__array_wrap__'s divide domain. With a mask (an all-False one included) the mean is `sum * 1. / count`
+# through ma.true_divide, the anomalies are `self - mean` through ma.subtract, the square is taken in place (complex:
+# abs(danom) ** 2 through ma.power), the sum is divided by count - ddof, and the result's mask is replaced. std is
+# ma.sqrt of the variance (NumPy ignores its mean=, so does NumSharp); anom is `self - mean`.
+#
+# The other ma tiers compare filled(0) bytes and getmaskarray bytes. Every case here records two more fields, which
+# FuzzCorpusTests.Ma compares for valueclass "mameanvar" (MisalignedRegistry never excuses that valueclass, and the
+# ma harness's own excuses do not run for it):
+#   raw  - the result's data at EVERY slot in C order: masked slots too, where NumPy leaves its domain fills and the
+#          minuend's put-back data (NaN tokenized, like every value comparison of the oracle);
+#   form - the object NumPy returned: "masked" (the singleton), "scalar" (a NumPy scalar, or a 0-d result without a
+#          mask), "nomask" (an array whose _mask is nomask) or "mask" (an array with a mask array, all-False included).
+# NumPy's errors are cases too (expects_throw, with NumPy's exception type and text).
+#
+# Sections: L every catalog layout x the 13 dtypes x {nomask, all-False, some} (mean, var, anom); K the mask classes
+# (all masked, one unmasked element per row, a masked first row, some) with keepdims and ddof 0 / 1 / 2 / 5; T dtype=
+# for every input in eight loops; V the mean= forms of var (and of std, which ignores them); S special values
+# (non-finite, huge, -0.0, integer extremes); M sizes where the pairwise order of the sums shows (130 / 1031 elements,
+# a 19x13 block in C, F and a permuted 3-D layout); E empty inputs; Z 0-d inputs with an axis and out-of-range axes.
+#
+# Carved (_mv_carved, counted per rule): a case whose mean sums the operand VIEW itself, because the operand has no
+# mask or an all-False one (filled(0) returns the data unchanged then; a mask with a True slot makes a K-order copy,
+# whose forward strides np.sum walks in NumPy's order), on a layout np.sum still sums in another order:
+#   finding5  - an axis reduction over a view with a reversed axis and several outputs (plan finding 5,
+#               OpenBugsReductionTests.Sum_ReversedViewAxis_WalksTheLogicalOrder);
+#   broadcast - a broadcast operand reduced flat (plan finding 10, Sum_BroadcastOperand_Flat_IsNumPysCallSchedule) or
+#               along a stride-0 axis (plan X12, Sum_AlongBroadcastAxis_IsNumPysOrder);
+# each only where that sum is not exact in every order (_mv_order_free).
+# ---------------------------------------------------------------------------------------------
+MV_DTYPES = ["bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64",
+             "float16", "float32", "float64", "complex128"]
+# The dtype= loops of section T: every kind of arithmetic a loop selects (float widths, complex, integer widths, bool).
+MV_LOOPS = ["float16", "float32", "float64", "complex128", "int32", "int64", "uint8", "bool"]
+# The largest integer each float loop holds exactly: a float sum of integers inside it is exact in every order.
+_MV_EXACT_INT = {"float16": 2.0 ** 11, "float32": 2.0 ** 24, "float64": 2.0 ** 53, "complex128": 2.0 ** 53}
+# A mean= argument left out (None is a valid NumPy value for nothing here, so a sentinel marks "not passed").
+_MV_NO_MEAN = object()
+
+
+def _mv_values(dtype, n, rng, special="plain"):
+    """`n` values of `dtype` drawn from `rng` (deterministic for a seeded generator).
+
+    plain: floats with fractional parts, so a float sum's bits depend on its order; small integers; random bools.
+    nonfinite: a quarter of the slots inf / -inf / nan (complex: in either part). huge: most squares overflow while the
+    sums stay finite (float64 and complex times 1e155, float32 1e19, float16 1e3), so var meets inf squares: masked by
+    ma.power on the complex path, in the divide domain without a mask. negzero: half the slots -0.0. extreme: an integer
+    dtype's min / max / 0 / 1.
+    """
+    dt = np.dtype(dtype)
+    k = dt.kind
+    if k == "b":
+        return rng.integers(0, 2, n).astype(bool)
+    if k in "iu":
+        if special == "extreme":
+            info = np.iinfo(dt)
+            return np.array([info.min, info.max, 0, 1], dtype=dt)[rng.integers(0, 4, n)]
+        lo, hi = (0, 50) if k == "u" else (-50, 50)
+        return rng.integers(lo, hi, n).astype(dt)
+    if k == "f":
+        v = rng.standard_normal(n) * 10
+        if special == "nonfinite" and n > 0:
+            idx = rng.choice(n, size=max(1, n // 4), replace=False)
+            v[idx] = rng.choice([np.inf, -np.inf, np.nan], size=len(idx))
+        elif special == "huge":
+            v = v * {"float64": 1e155, "float32": 1e19, "float16": 1e3}[dt.name]
+        elif special == "negzero":
+            v[: n // 2] = -0.0
+        return v.astype(dt)
+    re_ = rng.standard_normal(n) * 10
+    im_ = rng.standard_normal(n) * 10
+    if special == "nonfinite" and n > 0:
+        idx = rng.choice(n, size=max(1, n // 4), replace=False)
+        re_[idx] = rng.choice([np.inf, -np.inf, np.nan], size=len(idx))
+        idx2 = rng.choice(n, size=max(1, n // 5), replace=False)
+        im_[idx2] = rng.choice([np.inf, np.nan], size=len(idx2))
+    elif special == "huge":
+        re_ *= 1e155
+        im_ *= 1e155
+    elif special == "negzero":
+        re_[: n // 2] = -0.0
+        im_[n // 4: (3 * n) // 4] = -0.0
+    return (re_ + 1j * im_).astype(dt)
+
+
+def _mv_mask_fits(shape, kind):
+    """Whether mask class `kind` means something for `shape` (row classes need rows)."""
+    if kind == "row1":
+        return len(shape) >= 1 and shape[-1] > 0
+    if kind == "row0":
+        return len(shape) >= 2 and shape[0] > 0
+    return True
+
+
+def _mv_mask(shape, kind, rng):
+    """The operand's mask for class `kind`: none (nomask), false (an all-False array: numpy.ma's masked path, but
+    filled(0) returns the data itself), some (about a third masked), all, row1 (one unmasked element per row: index 0
+    of the last axis), row0 (some, with the first row along axis 0 fully masked)."""
+    if kind == "none":
+        return None
+    if kind == "false":
+        return np.zeros(shape, dtype=bool)
+    if kind == "all":
+        return np.ones(shape, dtype=bool)
+    if kind == "some":
+        return rng.random(shape) < 0.35 if len(shape) else np.array(bool(rng.random() < 0.35))
+    if kind == "row1":
+        m = np.ones(shape, dtype=bool)
+        m[..., 0] = False
+        return m
+    if kind == "row0":
+        m = rng.random(shape) < 0.3
+        m[0] = True
+        return m
+    raise ValueError(f"unknown mask class {kind!r}")
+
+
+def _mv_expected(r):
+    """The ma tiers' masked expectation (filled(0) bytes + getmaskarray bytes) plus this tier's `raw` (the data at
+    every slot, C order) and `form` (masked / scalar / nomask / mask: which object NumPy returned)."""
+    e = _ma_expected(r)
+    if r is np.ma.masked:
+        form, raw = "masked", np.asarray(r.data)
+    elif isinstance(r, np.ma.MaskedArray):
+        raw = np.asarray(r.data)
+        if r._mask is np.ma.nomask:
+            form = "scalar" if raw.ndim == 0 else "nomask"
+        else:
+            form = "mask"
+    else:
+        form, raw = "scalar", np.asarray(r)
+    e["raw"] = np.ascontiguousarray(raw).tobytes().hex()
+    e["form"] = form
+    return e
+
+
+def _mv_order_free(view, axis, loop):
+    """Whether np.sum(view, axis, dtype=loop) is exact in every summation order: an integer / bool loop (modular add,
+    logical OR), or a float loop where every element cast to it is finite and every partial sum is representable. The
+    elements are all multiples of 2**E (E: the exponent of the lowest set bit over every element), so every partial sum
+    is a multiple of 2**E no larger than extent * max|x|; with K = max|x| / 2**E, extent * K <= 2**precision makes every
+    partial sum exact, and then no addition rounds in any order. (gen_oracle._mean_order_free, generalized from integers
+    to any binary scale for this generator's carve: a float16 mean sums in float32, where such sums are exact.)"""
+    if np.dtype(loop).kind in "biu" or view.size == 0:
+        return True
+    with warnings.catch_warnings(), np.errstate(all="ignore"):
+        warnings.simplefilter("ignore")
+        v = view.astype(loop)
+        parts = [v.real, v.imag] if np.dtype(loop).kind == "c" else [v]
+        extent = view.size if axis is None else view.shape[axis]
+        for p in parts:
+            p64 = np.asarray(p, dtype=np.float64).ravel()
+            if not np.all(np.isfinite(p64)):
+                return False
+            nz = p64[p64 != 0]
+            if nz.size == 0:
+                continue
+            mant, exp = np.frexp(np.abs(nz))                           # |x| = mant * 2**exp, 0.5 <= mant < 1
+            ints = (mant * 2.0 ** 53).astype(np.int64)                  # the 53-bit significand as an integer
+            low = np.log2((ints & -ints).astype(np.float64)).astype(np.int64)   # its trailing zero bits
+            e_min = int(np.min(exp - 53 + low))                          # every element is a multiple of 2**e_min
+            k = float(np.max(np.abs(nz))) / 2.0 ** e_min                 # max|x| in units of 2**e_min (exact)
+            if k * extent > _MV_EXACT_INT[np.dtype(loop).name]:
+                return False
+            # A partial sum past the loop's range overflows in some orders and not in others (inf - inf is nan).
+            if float(np.max(np.abs(nz))) * extent > float(np.finfo(np.dtype(loop)).max):
+                return False
+    return True
+
+
+def _mv_sum_loops(view, dtype, op, has_mask):
+    """The loop dtypes of the sums that walk the operand view: the mean's (numpy.ma's masked mean and ndarray's _mean:
+    dtype=, else float64 for bool / integers, float32 for float16, else the input's) and, for var / std without a
+    mask, _var's first sum (dtype=, else float64 for bool / integers, else the input's: float16 sums in float16)."""
+    k = view.dtype.kind
+    if dtype is not None:
+        return [np.dtype(dtype).name]
+    loops = ["float64" if k in "biu" else ("float32" if view.dtype == np.float16 else view.dtype.name)]
+    if op in ("var", "std") and not has_mask:
+        loops.append("float64" if k in "biu" else view.dtype.name)
+    return loops
+
+
+def _mv_carved(view, mask, axis, dtype, op):
+    """The np.sum residual a case inherits ("finding5" / "broadcast", see the section header), or None."""
+    if mask is not None and mask.any():
+        return None                       # filled(0) is a forward K-order copy: np.sum walks it in NumPy's order
+    if view.ndim == 0 or view.size == 0:
+        return None
+    ax = axis
+    if ax is not None:
+        if not -view.ndim <= ax < view.ndim:
+            return None                   # NumPy raises before any sum
+        ax %= view.ndim
+    if all(_mv_order_free(view, ax, loop) for loop in _mv_sum_loops(view, dtype, op, mask is not None)):
+        return None
+    if ax is not None and view.ndim >= 2 and any(st < 0 and sh > 1 for st, sh in zip(view.strides, view.shape)):
+        return "finding5"
+    if any(st == 0 and sh > 1 for st, sh in zip(view.strides, view.shape)):
+        if ax is None or (view.strides[ax] == 0 and view.shape[ax] > 1):
+            return "broadcast"
+    return None
+
+
+def _mv_call(op, m, params, mean_obj):
+    """NumPy's call for one case: np.ma.<op>(m, axis=, dtype=, ddof=, keepdims=, mean=) with only the keywords the
+    case sets (keepdims only when True; ddof always for var / std; mean only when a form is given)."""
+    kw = {}
+    if "axis" in params:
+        kw["axis"] = params["axis"]
+    if "dtype" in params:
+        kw["dtype"] = params["dtype"]
+    if op in ("var", "std"):
+        kw["ddof"] = params.get("ddof", 0)
+    if params.get("keepdims"):
+        kw["keepdims"] = True
+    if mean_obj is not _MV_NO_MEAN:
+        kw["mean"] = mean_obj
+    return getattr(np.ma, op)(m, **kw)
+
+
+def _mv_axes(view, last=True):
+    """The axes a section reduces over: None, every axis of a view up to 3-D (0, 2 and the last of a 5-D one), and -1
+    when `last` (the negative spelling of the last axis)."""
+    nd = view.ndim
+    if nd == 0:
+        return [None]
+    axes = [None] + (list(range(nd)) if nd <= 3 else [0, 2, nd - 1])
+    if last and nd >= 2:
+        axes.append(-1)
+    return axes
+
+
+def gen_ma_meanvar(carve=True):
+    """ma.mean / ma.var / ma.std / ma.anom cases (valueclass "mameanvar"); see the section header.
+
+    carve: True (the committed tier) leaves out the cells _mv_carved names; False emits them too, for a check that
+    every carved cell is one the replay gets wrong for the named reason (python gen_ma_oracle.py meanvar --uncarved
+    <path>).
+    """
+    cases, n = [], _N()
+    carved = {"finding5": 0, "broadcast": 0}
+
+    def emit(op, base, view, mask, params, ln, tag, mean=None):
+        """Record one case. `mean` is None (no mean=) or (param descriptor, NumPy object, extra operand or None)."""
+        mean_param, mean_obj, extra = (None, _MV_NO_MEAN, None) if mean is None else mean
+        if carve and mean is None:
+            # A given mean= replaces the computed mean (var's masked path) or reaches _var as given (nomask path), so
+            # no sum walks the view in the mean's loop; only a computed mean inherits np.sum's order.
+            rule = _mv_carved(view, mask, params.get("axis"), params.get("dtype"), op)
+            if rule is not None:
+                carved[rule] += 1
+                return
+        if carve and mean is not None and op == "std":
+            rule = _mv_carved(view, mask, params.get("axis"), params.get("dtype"), op)
+            if rule is not None:          # std ignores mean=: its variance computes the mean
+                carved[rule] += 1
+                return
+        p = dict(params)
+        if mean_param is not None:
+            p["mean"] = mean_param
+        operands = [_ma_operand(base, view, mask)]
+        if extra is not None:
+            operands.append(extra)
+        m = _ma_build(view, mask)
+        cid = f"ma.{op}/{tag}/{ln}/{n.next()}"
+        try:
+            r = _mv_call(op, m, p, mean_obj)
+        except Exception as e:  # noqa: BLE001 — NumPy's error is the expectation
+            cases.append({"id": cid, "op": f"ma.{op}", "params": p, "operands": operands, "expected": {},
+                          "expects_throw": True, "error": {"type": type(e).__name__, "text": str(e)},
+                          "layout": ln, "valueclass": "mameanvar"})
+            return
+        cases.append({"id": cid, "op": f"ma.{op}", "params": p, "operands": operands, "expected": _mv_expected(r),
+                      "layout": ln, "valueclass": "mameanvar"})
+
+    def refill(base, s, rng, special="plain"):
+        """Overwrite the catalog's base with this tier's values (the catalog pools open with NaN / inf)."""
+        if base.size:
+            base[...] = _mv_values(s, base.size, rng, special).reshape(base.shape)
+
+    # Section L: every catalog layout, every dtype, nomask / all-False / some; mean, var and anom over each axis (std is
+    # ma.sqrt of the same variance: the other sections cover it).
+    rng = np.random.default_rng(20261006)
+    for ln, fn_layout in LAYOUTS.items():
+        for s in MV_DTYPES:
+            base, view = fn_layout(np.dtype(s))
+            refill(base, s, rng)
+            for mk in ("none", "false", "some"):
+                mask = _mv_mask(view.shape, mk, rng)
+                tag = f"L/{s}.{mk}"
+                for ax in _mv_axes(view, last=False):
+                    axp = {} if ax is None else {"axis": ax}
+                    emit("mean", base, view, mask, axp, ln, tag)
+                    emit("var", base, view, mask, axp, ln, tag)
+                    emit("anom", base, view, mask, axp, ln, tag)
+
+    # Section K: the mask classes with keepdims and ddof 0 / 1 / 2 / 5 (5 is past every slice: cnt - ddof <= 0).
+    k_dtypes = ["bool", "int32", "int64", "uint64", "float16", "float32", "float64", "complex128"]
+    for ln in ("c_contiguous_2d", "f_contiguous_2d", "strided_2d_cols", "transposed_3d", "c_contiguous_1d"):
+        for s in k_dtypes:
+            base, view = LAYOUTS[ln](np.dtype(s))
+            refill(base, s, rng)
+            for mk in ("all", "row1", "row0", "some"):
+                if not _mv_mask_fits(view.shape, mk):
+                    continue
+                mask = _mv_mask(view.shape, mk, rng)
+                tag = f"K/{s}.{mk}"
+                axes = _mv_axes(view) if view.ndim <= 2 else [None, 0, view.ndim - 1, -1]
+                for ax in axes:
+                    axp = {} if ax is None else {"axis": ax}
+                    for kd in (False, True):
+                        emit("mean", base, view, mask, dict(axp, keepdims=True) if kd else axp, ln, tag)
+                    for ddof in (0, 1, 2, 5):
+                        emit("var", base, view, mask, dict(axp, ddof=ddof), ln, tag)
+                    for ddof in (0, 5):
+                        emit("std", base, view, mask, dict(axp, ddof=ddof), ln, tag)
+                for ax in (None, 0):
+                    axp = {} if ax is None else {"axis": ax}
+                    emit("var", base, view, mask, dict(axp, ddof=1, keepdims=True), ln, tag)
+                emit("std", base, view, mask, {"keepdims": True}, ln, tag)
+
+    # Section T: dtype= for every input in eight loops; nomask and some.
+    for s in MV_DTYPES:
+        for shape, ln in (((3, 5), "c_contiguous_2d"), ((7,), "c_contiguous_1d")):
+            base = np.ascontiguousarray(_mv_values(s, int(np.prod(shape)), rng).reshape(shape))
+            for mk in ("none", "some"):
+                mask = _mv_mask(shape, mk, rng)
+                for loop in MV_LOOPS:
+                    tag = f"T/{s}->{loop}.{mk}"
+                    for ax in [None] + list(range(len(shape))):
+                        axp = {"dtype": loop} if ax is None else {"axis": ax, "dtype": loop}
+                        emit("mean", base, base, mask, axp, ln, tag)
+                        emit("var", base, base, mask, axp, ln, tag)
+                        emit("anom", base, base, mask, axp, ln, tag)
+                    emit("std", base, base, mask, {"dtype": loop, "ddof": 1}, ln, tag)
+
+    # Section V: the mean= forms of var (and of std, which ignores them).
+    def mean_forms(view, ax, s):
+        """(descriptor, NumPy object, extra operand) for each mean= form: a Python float / int (weak without a mask,
+        strong float64 / int64 through ma.subtract's getdata with one), a Python complex where NumPy's weak complex
+        stays complex128 (not with float16 / float32), np.float32 / np.float64 scalars (strong), and arrays of the
+        keepdims shape — plain, masked, 0-d — carried as a second operand."""
+        yield {"kind": "pyfloat", "value": 1.5}, 1.5, None
+        yield {"kind": "pyint", "value": 2}, 2, None
+        yield {"kind": "npf32", "value": 1.25}, np.float32(1.25), None
+        yield {"kind": "npf64", "value": -0.75}, np.float64(-0.75), None
+        if s not in ("float16", "float32"):
+            yield {"kind": "pycomplex", "real": 1.0, "imag": -2.0}, complex(1.0, -2.0), None
+        a0 = np.array(np.float32(0.5))
+        yield {"kind": "array"}, a0, _ma_operand(a0, a0, None)
+        if view.ndim == 0:
+            return
+        kshape = tuple(1 if (ax is None or i == ax % view.ndim) else d for i, d in enumerate(view.shape))
+        arr = rng.standard_normal(kshape) * 3
+        if s == "complex128":
+            arr = arr + 1j * rng.standard_normal(kshape)
+        arr = np.ascontiguousarray(arr)
+        yield {"kind": "array"}, arr, _ma_operand(arr, arr, None)
+        am = rng.random(kshape) < 0.4
+        yield {"kind": "masked"}, np.ma.array(arr, mask=am), _ma_operand(arr, arr, am)
+
+    for ln in ("c_contiguous_2d", "f_contiguous_2d", "c_contiguous_1d", "scalar_0d"):
+        for s in MV_DTYPES:
+            base, view = LAYOUTS[ln](np.dtype(s))
+            refill(base, s, rng)
+            for mk in ("none", "false", "some") + (("all",) if ln == "c_contiguous_2d" else ()):
+                mask = _mv_mask(view.shape, mk, rng)
+                tag = f"V/{s}.{mk}"
+                for ax in ([None] if view.ndim == 0 else [None, 0, -1]):
+                    axp = {} if ax is None else {"axis": ax}
+                    forms = list(mean_forms(view, ax, s))
+                    for form in forms:
+                        emit("var", base, view, mask, axp, ln, tag, mean=form)
+                    # std ignores mean=: one scalar and the last (keepdims-shaped or 0-d) array form pin that.
+                    for form in (forms[0], forms[-1]):
+                        emit("std", base, view, mask, dict(axp, ddof=1), ln, tag, mean=form)
+            if ln == "c_contiguous_2d":
+                # A mean of the reduced shape without keepdims does not broadcast back: NumPy's subtract raises.
+                bad = np.ascontiguousarray(rng.standard_normal(view.shape[:1]))
+                for mk in ("none", "some"):
+                    mask = _mv_mask(view.shape, mk, rng)
+                    emit("var", base, view, mask, {"axis": 1}, ln, f"V/{s}.{mk}",
+                         mean=({"kind": "array"}, bad, _ma_operand(bad, bad, None)))
+
+    # Section S: special values.
+    special_sets = [(s, sp) for sp in ("nonfinite", "huge", "negzero") for s in ("float16", "float32", "float64",
+                                                                                  "complex128")]
+    special_sets += [(s, "extreme") for s in ("int8", "uint8", "int16", "uint16", "int32", "uint32", "int64",
+                                             "uint64")]
+    for s, sp in special_sets:
+        for ln in ("c_contiguous_2d", "f_contiguous_2d", "c_contiguous_1d", "scalar_0d", "one_element_1d"):
+            base, view = LAYOUTS[ln](np.dtype(s))
+            refill(base, s, rng, sp)
+            for mk in ("none", "false", "some"):
+                mask = _mv_mask(view.shape, mk, rng)
+                tag = f"S/{s}.{sp}.{mk}"
+                for ax in ([None] if view.ndim == 0 else [None, 0, -1]):
+                    axp = {} if ax is None else {"axis": ax}
+                    emit("mean", base, view, mask, axp, ln, tag)
+                    emit("var", base, view, mask, axp, ln, tag)
+                    emit("std", base, view, mask, axp, ln, tag)
+                    emit("anom", base, view, mask, axp, ln, tag)
+                emit("var", base, view, mask, {"ddof": 1}, ln, tag)
+
+    # Section M: sizes where the pairwise sums show their order: 130 elements (past NumPy's 128-element pairwise block),
+    # 1031 (several levels of the recursion; float64 only, the operand bytes are large) and a 19x13 block (flat past the
+    # block; rows of 13 and columns of 19 in the 8-accumulator loop) in C, F and a permuted 3-D layout.
+    def big(s, size):
+        """`size` values whose sums cancel: near 1000 (float16 near 8), complex with a large imaginary offset, int64
+        near +-2**52 (their float64 sums round)."""
+        if s == "int64":
+            return rng.integers(-2 ** 52, 2 ** 52, size).astype(s)
+        vals = 1000.0 + rng.normal(0.0, 3.0, size) if s != "float16" else 8.0 + rng.normal(0.0, 1.5, size)
+        if s == "complex128":
+            vals = vals + 1j * (-250.0 + rng.normal(0.0, 7.0, size))
+        return np.ascontiguousarray(np.asarray(vals).astype(s))
+
+    for s in ("float16", "float32", "float64", "complex128", "int64"):
+        for size in ((130, 1031) if s == "float64" else (130,)):
+            base = big(s, size)
+            views = [("c_contiguous_1d", base), ("negstride_1d", base[::-1])]
+            if size == 130:
+                views.append(("strided_step2_1d", base[::2]))
+            for ln, view in views:
+                for mk in ("none", "some"):
+                    mask = _mv_mask(view.shape, mk, rng)
+                    tag = f"M/{s}/{size}.{mk}"
+                    emit("mean", base, view, mask, {}, ln, tag)
+                    emit("var", base, view, mask, {}, ln, tag)
+                    emit("var", base, view, mask, {"axis": 0, "ddof": 1}, ln, tag)
+                    emit("std", base, view, mask, {}, ln, tag)
+                    emit("anom", base, view, mask, {}, ln, tag)
+        base = big(s, 19 * 13)
+        for ln, view in (("c_contiguous_2d", base.reshape(19, 13)), ("f_contiguous_2d", base.reshape(13, 19).T),
+                         ("transposed_3d", base[: 18 * 13].reshape(3, 6, 13).transpose(2, 0, 1))):
+            for mk in ("none", "some"):
+                mask = _mv_mask(view.shape, mk, rng)
+                tag = f"M/{s}/block.{mk}"
+                for ax in [None] + list(range(view.ndim)):
+                    axp = {} if ax is None else {"axis": ax}
+                    emit("mean", base, view, mask, axp, ln, tag)
+                    emit("var", base, view, mask, axp, ln, tag)
+                emit("std", base, view, mask, {"axis": 0}, ln, tag)
+                emit("anom", base, view, mask, {"axis": view.ndim - 1}, ln, tag)
+
+    # Section E: empty inputs (count 0: masked results, nan, NumPy's own error texts).
+    for s in ("bool", "int32", "uint8", "float16", "float32", "float64", "complex128"):
+        for shape in ((0,), (0, 3), (3, 0)):
+            base = np.zeros(shape, dtype=s)
+            for mk in ("none", "false", "all"):
+                mask = _mv_mask(shape, mk, rng)
+                tag = f"E/{s}.{mk}"
+                for ax in [None] + list(range(len(shape))):
+                    axp = {} if ax is None else {"axis": ax}
+                    emit("mean", base, base, mask, axp, "empty", tag)
+                    emit("mean", base, base, mask, dict(axp, keepdims=True), "empty", tag)
+                    emit("var", base, base, mask, axp, "empty", tag)
+                    emit("var", base, base, mask, dict(axp, ddof=1), "empty", tag)
+                    emit("std", base, base, mask, axp, "empty", tag)
+                    emit("anom", base, base, mask, axp, "empty", tag)
+
+    # Section Z: 0-d inputs with an axis (the nomask path normalizes it against rank 0; the masked path's ufunc
+    # reduction takes 0 / -1), and out-of-range axes.
+    for s in ("bool", "int32", "float16", "float32", "float64", "complex128"):
+        base = np.array(_mv_values(s, 1, rng)[0])
+        for mk in ("none", "false", "some", "all"):
+            mask = _mv_mask((), mk, rng)
+            tag = f"Z/{s}.{mk}"
+            for ax in (0, -1, 1):
+                for op in ("mean", "var", "std", "anom"):
+                    emit(op, base, base, mask, {"axis": ax}, "scalar_0d", tag)
+        b2 = np.ascontiguousarray(_mv_values(s, 6, rng).reshape(2, 3))
+        for mk in ("none", "some"):
+            mask = _mv_mask((2, 3), mk, rng)
+            for ax in (2, -3):
+                for op in ("mean", "var", "std", "anom"):
+                    emit(op, b2, b2, mask, {"axis": ax}, "c_contiguous_2d", f"Z/{s}.{mk}")
+
+    print(f"  (ma_meanvar carved: {carved})")
+    return cases
+
+
+# ---------------------------------------------------------------------------------------------
 TIERS = {
     "unary": ("ma_unary.jsonl", gen_ma_unary),
     "binary": ("ma_binary.jsonl", gen_ma_binary),
@@ -806,6 +1293,7 @@ TIERS = {
     "select": ("ma_select.jsonl", gen_ma_select),
     "sortsetops": ("ma_sortsetops.jsonl", gen_ma_sortsetops),
     "extras": ("ma_extras.jsonl", gen_ma_extras),
+    "meanvar": ("ma_meanvar.jsonl", gen_ma_meanvar),
 }
 
 
@@ -821,6 +1309,10 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
     mode = sys.argv[1] if len(sys.argv) > 1 else "all"
+    if mode == "meanvar" and len(sys.argv) > 3 and sys.argv[2] == "--uncarved":
+        # The carve check: every cell, carved ones included, written to the given path (never the corpus).
+        write_jsonl(os.path.abspath(sys.argv[3]), gen_ma_meanvar(carve=False))
+        return
     tiers = TIERS.keys() if mode == "all" else [mode]
     for t in tiers:
         if t not in TIERS:

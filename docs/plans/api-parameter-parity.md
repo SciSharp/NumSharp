@@ -313,11 +313,68 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     moved to `Math/np.trapezoid.Test.cs` without `[OpenBugs]` and widened to 14 cases; `Trapezoid_0D_Throws` and
     `Trapezoid_XErrorsComeBeforeYAxisErrors` assert the type and text again. With the old error planted back, 78 tier
     cases turn red (66 before the K7 change).
-- [ ] **A6 `np.ma.var` / `np.ma.std` with a mask: the masked path is not NumPy's.** `NDMaskedArray.var` computes its
+- [x] **A6 `np.ma.var` / `np.ma.std` with a mask: the masked path is not NumPy's.** `NDMaskedArray.var` computes its
   own formula (it never reaches `np.var`): 242 cases of the ma oracle tier differ — a slice NumPy masks (all masked,
   or `count - ddof <= 0`) carries NaN instead of the masked 0, and some slices are finite where NumPy has +inf. They
   were hidden by the registry's unbounded "summation precision" blanket until A2 removed var/std from it (finding 7);
-  `MisalignedRegistry.IsMaVarStd` keeps the blanket for the ma ids only and names this item.
+  `MisalignedRegistry.IsMaVarStd` keeps the blanket for the ma ids only and names this item. Widened to `np.ma.mean`
+  (var's mean) and `np.ma.anom` (`self - mean`). Done 2026-10-06 (this commit).
+  - Proof (2026-10-05, at `f18bc09e`): with the ma ids' blankets removed, 254 of the 28,782 `ma_reduce` cases differed
+    (masked slots holding NaN for NumPy's masked 0, unmasked infinities NumPy masks, other dtypes). A Python model of
+    numpy.ma's statements (below) equalled NumPy 2.4.2 on 548,794 cases, so the port follows the statements, not the
+    observed outputs.
+  - NumPy's statements (`numpy/ma/core.py`). `mean` without a mask is `super().mean(axis, dtype)[()]` — ndarray's
+    `_mean` run ON the masked array, so its `true_divide(ret, rcount, out=ret)` passes `MaskedArray.__array_wrap__`,
+    whose divide domain (`|ret| * tiny >= rcount`) writes 1 into a quotient and masks it; a masked 0-d result is the
+    `masked` singleton. With a mask (an all-False one too) it is `dsum * 1. / cnt`: `self.sum(dtype=f8 | f4 | None)`
+    (the sum of `filled(0)`, a K-order copy, or the data itself under an all-False mask), times a STRONG float64 0-d
+    through ma.multiply, divided through ma.true_divide (non-finite and domain quotients masked, the dividend put back),
+    a 0-d sum plain scalar arithmetic, a 0-d count of zero `masked`, a float16 result `np.float16(...)` (mask kept).
+    `var` without a mask is `_var` on the masked array (`mean=` passed on, a Python number WEAK there): both divides
+    meet the same domain, the deviations are squared IN PLACE (`multiply(x, x, out=x)`, complex
+    `x.view((f8, (2,)))`), a 0-d operand whose mean is masked raises "output array is read-only", a complex deviation
+    carrying a mask raises "Changing the dtype to a subarray type…". With a mask: `cnt = count - ddof`;
+    `danom = self - mean` through ma.subtract (`getdata` makes a Python number a STRONG array); `danom *= danom` in
+    place (complex: `abs(danom) ** 2` through ma.power, a non-finite square masked); `divide(danom.sum(axis), cnt)`;
+    an array result's mask REPLACED by `mask_or(mask.all(axis), cnt <= 0)` (shrunk to nomask when all-False), a masked
+    0-d one `masked`, an unmasked 0-d one a scalar even for `cnt < 0`. `std` is `sqrt(var(...))` through ma.sqrt and
+    IGNORES `mean=`. `anom` is `self - mean`, the mean expanded only for a nonzero axis (`if not axis`).
+  - Fix (`src/NumSharp.Core/Ma/NDMaskedArray.cs`): those statements — `NomaskMeanLikeNumPy` / `MaskedMeanLikeNumPy`,
+    `NomaskVarLikeNumPy` / `MaskedVarLikeNumPy`, `std`, `anom`, over `ArrayWrapDivideDomainFill`, `ItemOfMaskedResult`,
+    `MaMultiplyByStrongOneLikeNumPy`, `MaDivideLikeNumPy`, `MaSubtractLikeNumPy`, `SquareInPlaceLikeNumPy`,
+    `AbsSquaredLikeNumPy`, `FilledForReduction` (NumPy's K-order `filled`) and `DefaultEngine.DivideByCountLikeNumPy`
+    (now internal). Every intermediate a later sum walks is allocated in NumPy's ufunc layout (`UfuncResultBuffer`,
+    `Shape.NpyIterOutputShape`) and squared in place (finding 16); np.power's result is computed by the plain call and
+    copied, because its out= route is not NumPy's (X13); a `mean=` that does not broadcast raises the subtract ufunc's
+    text.
+  - Proof of the fix: the four functions over 2,147,745 probe calls (13 dtypes; shapes `()` to `(40,33)` and 130
+    elements; C / F / transposed / stepped / reversed / broadcast and every 3-D axis permutation; nomask, all-False,
+    random, all-masked, one-unmasked-per-row and masked-first-row masks; every axis, keepdims, ddof 0–2, four `dtype=` loops,
+    five `mean=` forms; special values): every result equal (kind, dtype, shape, data at EVERY slot, mask or nomask)
+    but NaN payloads (9,062) and np.sum's own order residuals the operand view reaches (4,663: finding 5 on reversed
+    views, findings 10 / X12 on broadcast operands).
+  - Gates: oracle tier `ma_meanvar.jsonl` (26,379 cases, zero excuses: every catalog layout × the 13 dtypes ×
+    nomask / all-False / some; the mask classes with keepdims and ddof 0 / 1 / 2 / 5; `dtype=` in eight loops; the
+    `mean=` forms; special values incl. overflowing squares; sizes past the pairwise block; empty and 0-d inputs; 294
+    NumPy errors). Beyond `filled(0)` and `getmaskarray`, each case pins the raw data at every slot and the result's
+    form (the singleton, a scalar, nomask or a mask array). The generator carves 165 cells whose mean sums the operand
+    view on a residual layout (38 finding 5, 127 broadcast, each only where the sum is not order-free); replaying the
+    uncarved file, 64 differ, all of them carved. `ma_reduce`: mean / var / std / anom are out of every blanket
+    (`IsMaVarStd` / `IsMaMean` deleted; the harness's own excuses skip them too) but a narrow finding-5 branch (3 cases);
+    tightness tests `MaMeanVarStd_NoDivergenceIsExcused` and `Mean_ReversedViewAxis_IsTheOnlyExcusedLayout`; unit tests
+    `Ma/np.ma.meanvar.NumPyPort.Test.cs` (9). Planted bugs: 14 / 14 killed by the unit tests and, separately, by the
+    tier (two needed new unit cases, one a tier fix: the "huge" values now overflow the squares).
+  - Speed (NPY/NS, two pinned P-cores, best of rounds; 310 cells: float64 / float32 / float16 / complex128 / int32 ×
+    nomask / random mask (+ all-False for float64) × mean / var / std / anom × flat and axis forms × 1K / 100K / 1M):
+    geomean 2.83×, minimum 0.78×; 1K 4.51×, 100K 2.16×, 1M 2.23×. The 49 cells under 1.5× are shared primitives:
+    `np.copyto(where=)` under a random mask, numpy.ma's `filled` (X11: 266–627 µs of a 100K masked mean; NumPy's own
+    copy costs 300–395 µs, so these cells sit at 0.93–1.5×), float16 subtraction with a column-broadcast operand (X15:
+    float16 nomask anom along axis 1, 0.86×), and the memory-bound nomask means of 1M elements along axis 0 (1.00×
+    float64, 0.93× complex128). Re-measure after X11 and X15.
+  - Left open: X11–X15 (below); `out=` of ma.mean / var / std (NumPy's MaskError text included); the public
+    `NDMaskedArray.filled()` returns a C-order copy where NumPy returns the data itself or a K-order copy (the
+    reductions use `FilledForReduction`); `Shape.ResolveReturnShape` reads a `(1,)` operand as a scalar (the port uses
+    `np.broadcast_shapes`).
 - [x] **A7 `np.nanmean`: an integer or bool input drops `keepdims` for `axis=None`.** NumPy keeps the reduced axes
   (shape `(1,)*ndim`); NumSharp returns 0-d. 117 cases of the nanreduce oracle tier (every integer dtype and bool ×
   13 layouts) sit under the registry's (W4-A) shape branch, which names only this bug since A3. Found by A3. Done
@@ -575,11 +632,47 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   a `(1, 0, 2)`-permuted float64 input along axis 2 gives NumPy strides `(1, 5)` (elements), NumSharp `(3, 1)`. The
   values are right, and the oracle compares C-order bytes, so only a flags or strides facet sees it. np.sum's bool
   loop (`dtype=bool`) and np.mean's bool loop are np.any and inherit it. Found by X9's probe.
-- [ ] **X11 `np.copyto(dst, scalar, where=mask)` into a float16 array is slow.** 2.5 ns per element over a `(250, 400)`
-  float16 with every 7th element masked: 253 µs, where `np.putmask(dst, mask, scalar)` — the same assignment for a
-  same-shape mask — takes 21 µs (float32 / float64 masked copies are fast). Speed only. nanvar / nanmean's eager float16
-  route now zeroes with putmask (A7, `ZeroWhereMask`); other callers of `np.copyto(where=)` into float16 keep the gap.
-  Found by A7's benchmark.
+- [ ] **X11 `np.copyto(dst, src, where=mask)` runs a branch per element (and a generic loop for float16 / complex).**
+  2.5 ns per element over a `(250, 400)` float16 with every 7th element masked: 253 µs, where
+  `np.putmask(dst, mask, scalar)` — the same assignment for a same-shape mask — takes 21 µs. Speed only. nanvar /
+  nanmean's eager float16 route now zeroes with putmask (A7, `ZeroWhereMask`). Found by A7's benchmark.
+  - A6 (2026-10-06) widened it: with a RANDOM mask (35 % set; a regular mask hides it, the branch predicts) every
+    dtype is slow — `np.copyto(dst, 0, where=m)` over 100K elements is 266 µs for float64 / float32 / int32 and
+    579–601 µs for complex128 / float16 (NumPy 300–395 µs), and `np.putmask` is 205–225 µs (NumPy 265–290 µs): both
+    branch per element. Three causes in `DirectILKernelGenerator.Cast.Masked.cs`: `ResolveStrategy` returns
+    `(MemoryCopy, simdBits 0, vstep 0)` for a same-dtype pair, so the kernel's SIMD `ConditionalSelect` blend for
+    same-dtype rows is dead code; a 0-d (stride-0) source never takes the SIMD path; and float16 / char / bool / complex /
+    decimal have no masked kernel at all (np.copyto's generic per-element `ConvertValue` loop). numpy.ma's `filled` is
+    this copy, so it is most of every masked ma reduction (A6's cells under 1.5×). The lever: a branch-free blend for
+    same-dtype copies of every element width (1 / 2 / 4 / 8 / 16 bytes; a bit copy needs no dtype), a broadcast-vector
+    path for a stride-0 source, a 1-element source cast once to the destination dtype, and a branch-free scalar select
+    for the strided rows.
+- [ ] **X12 `np.sum` / `np.mean` along an axis of a broadcast operand are not NumPy's order.** NumPy's reduction
+  iterator adds an operand with a stride-0 axis in its own call schedule: a `(k,1)` column broadcast to `(k,m)` and
+  reduced over axis 0 is m sequential sums (the stride-0 axis is the inner loop), a float16 sum along the stride-0 axis
+  rounds once per call (HALF's float32 accumulator), a cast loop casts in buffered fills. NumSharp's axis kernels add in
+  another order: float32 `(9,1)→(9,3)` axis 0 `0x40466668` vs NumPy `0x40466664`; float16 `(3,1)→(3,7)` axis 1 rounds
+  per element; int32 `(1,9)→(4,9)` axis 1 in float32 `0xce2eb2a8` vs `0xce2eb2aa`. A probe over rows, columns, a middle
+  stride-0 axis and a 0-d broadcast in every loop found 510 of 5,382 cases differing (the flat ones are finding 10).
+  Pinned by `OpenBugsReductionTests.Sum_BroadcastOperand_Axis_IsNumPysOrder`; carved from `ma_meanvar.jsonl`
+  ("broadcast"). Found by A6. Belongs with B1.
+- [ ] **X13 `np.power(x, scalar, out=o)` misses NumPy's scalar-exponent fast paths.** NumPy's DOUBLE_power /
+  FLOAT_power take `1/x`, 1, `sqrt(x)`, `x`, `x*x` for a stride-0 exponent of -1, 0, 0.5, 1, 2 on every route; NumSharp's
+  plain call does too, its ufunc out= route calls the CRT `pow`: one ULP off on 116 of 200,000 float64 and 22 of
+  200,000 float32 inputs for 2.0 (`757.7617475757002 ** 2` is `...03c1` in NumPy, `...03c2` through out=). Pinned by
+  `OpenBugsUfuncOutTests.Power_Out_ScalarExponent_TakesNumPysFastPath`. Found by A6 (its `abs(danom) ** 2` uses the
+  plain call and copies).
+- [ ] **X14 The engine's flat mean of a broadcast float16 / complex128 operand ignores `dtype=`.**
+  `TensorEngine.Mean(b, null, float32)` of a broadcast float16 `(4,5)` is the float16 `0x3c33` where NumPy's
+  `np.mean(b, dtype=np.float32)` is the float32 `0x3f866666`; a broadcast complex128 with `dtype=float64` stays complex
+  (NumPy: the real parts' mean). `ReduceMean`'s flat route sends a broadcast float / complex operand, which
+  `TryExactFlatMean` declines, to the elementwise fold, which keeps the input dtype. `np.mean` has no flat `dtype=`
+  overload yet (B3), so callers meet it through the engine. Pinned by
+  `OpenBugsReductionTests.Mean_BroadcastOperand_Flat_HonorsDtype`. Found by A6: the mean_loops tier carves every flat
+  broadcast float cell as finding 10, an order residual, which also hid this dtype bug (finding 18).
+- [ ] **X15 A float16 binary ufunc with a column-broadcast operand is slow.** `np.subtract(float16 (250,400),
+  float16 (250,1))` takes 1,141 µs (11 ns per element) where NumPy takes 377 µs and the same-shape float16 subtract takes
+  72 µs. Speed only. numpy.ma's anom of float16 along axis 1 meets it (0.86× NumPy). Found by A6's benchmark.
 
 ## 6. Findings
 
@@ -628,6 +721,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    `OpenBugsReductionTests.Sum_BroadcastOperand_Flat_IsNumPysCallSchedule`. Belongs with B1. An integer operand in a
    float32 / float16 loop reaches it too, through np.sum's cast copy (one pairwise call over the materialized copy where
    NumPy fills a buffer per row): A7's view-chain probe found it for `nanmean(int32 broadcast row, dtype=float32)`.
+   Its axis twin is X12 (A6), and numpy.ma's mean / var / anom reach both wherever `filled(0)` is the view itself
+   (no mask, or an all-False one).
 11. **Hold the ported function strict across every tier, not only its own** (X9, as finding 7 for A2). The reduce tier's
    mean cases sat under the unbounded summation branch, which had hidden a gross divergence (a broadcast uint64 mean
    of 101.8 for NumPy's 3.69e18) and a dtype one (decimal); the new tier alone would not have reached either.
@@ -655,8 +750,31 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    it; on the fixed build it excuses 6 cases in the whole oracle suite, all in `errors_full` and all its documented
    class (`bitwise_and` / `bitwise_or` / `bitwise_xor` of an int64 / uint64 pair with a 0-d operand), checked by
    tagging its reason with the case id for one run.
+16. **A port's eager intermediates must take NumPy's layout** (A6). NumPy lays a ufunc's result out with NpyIter (a
+   permuted input's axis order is kept), and a later sum walks that memory order. NumSharp's eager ufuncs write C order
+   for an input that is neither C- nor F-contiguous, so a port composed of them adds in another order (two ULP on a
+   transposed 3-D int32 variance). numpy.ma's port allocates each intermediate with `Shape.NpyIterOutputShape` and
+   writes into it in place, as NumPy's `out=x` does.
+17. **An out= route is not always the plain call** (A6). np.power's out= route skips NumPy's scalar-exponent fast
+   paths (X13), so writing power's result into a layout buffer with out= changed 73 probe cases; computing it with the
+   plain call and copying keeps NumPy's bits.
+18. **A carve can hide a bug of another class** (A6). The mean_loops tier carves every flat broadcast float cell as an
+   order residual (finding 10); the cells' uncarved replay showed a dtype bug under them (X14). Replay a tier uncarved
+   and classify every carved divergence before committing the carve (the `ma_meanvar` generator takes `--uncarved`).
+19. **Benchmark masked operations with a random mask** (A6). X11's first measurement (every 7th element masked) made
+   the branchy masked copy look fast for float32 / float64; with a 35 % random mask every same-dtype masked copy costs
+   2.5–6 ns per element, in NumPy too.
+20. **Check what a probe layout is** (A6). The A6 probe's "T" layout (`np.ascontiguousarray(x.swapaxes(0, -1))
+   .swapaxes(0, -1)`) reverses every axis of a 2-D or 3-D input, which is F-contiguous, the same as "F": it covered no
+   other permutation. The in-place-square layout bug (finding 16) showed only in a second probe over the explicit axis
+   permutations.
 
 ## 7. State log
+
+- **2026-10-06**: A6 done (np.ma.mean / var / std / anom are numpy.ma's statements; the `ma_meanvar` oracle tier with
+  raw data and result forms, zero excuses; `ma_reduce` holds the four strict but a finding-5 branch; 14 planted bugs
+  killed); X11 widened (random masks, the dead same-dtype SIMD blend); X12–X15 and findings 16–20 recorded. This
+  commit.
 
 - **2026-10-05**: A5 done (np.trapezoid raises NumPy's `IndexError: list assignment index out of range` for an axis
   outside y; 106 `err_axis_outside_y` cases in the `multioutput` tier; trapezoid out of the registry's K7 branch); finding

@@ -418,7 +418,8 @@ namespace NumSharp.Tests
         /// The one mean layout still excused: an axis reduction over a view with a REVERSED axis, which inherits np.sum's
         /// order there (plan api-parameter-parity finding 5, pinned by
         /// <c>OpenBugsReductionTests.Sum_ReversedViewAxis_WalksTheLogicalOrder</c>). The same values over a forward view
-        /// are not excused.
+        /// are not excused. <c>ma.mean</c> and <c>ma.anom</c> share the branch since plan item A6: with nomask or an
+        /// all-False mask numpy.ma sums the data view itself, so they meet np.sum's residual on the same layout.
         /// </summary>
         [TestMethod]
         public void Mean_ReversedViewAxis_IsTheOnlyExcusedLayout()
@@ -440,38 +441,65 @@ namespace NumSharp.Tests
             MisalignedRegistry.Classify(flatReversed, DivergenceKind.Value, BitConverter.GetBytes(v),
                 BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
                 .Should().BeNull("the flat mean of a reversed view runs the exact flat engine");
+            // ma.mean shares it (A6): with nomask or an all-False mask numpy.ma sums the data view itself.
+            var maReversed = WithAxis(Case("mean", ("float32", new long[] { 4, 5 })), 0);
+            maReversed.Id = "ma.mean/selftest";
+            maReversed.Operands[0].Strides = new long[] { -5, -1 };
+            maReversed.Operands[0].Offset = 19;
+            MisalignedRegistry.Classify(maReversed, DivergenceKind.Value, BitConverter.GetBytes(v),
+                BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                .Should().Contain("finding 5", "ma.mean of a reversed view sums it through np.sum");
+            var maAnom = WithAxis(Case("anom", ("float32", new long[] { 4, 5 })), 0);
+            maAnom.Id = "ma.anom/selftest";
+            maAnom.Operands[0].Strides = new long[] { -5, -1 };
+            maAnom.Operands[0].Offset = 19;
+            MisalignedRegistry.Classify(maAnom, DivergenceKind.Value, BitConverter.GetBytes(v),
+                BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                .Should().Contain("finding 5", "ma.anom subtracts that mean");
+            var maAnomForward = WithAxis(Case("anom", ("float32", new long[] { 4, 5 })), 0);
+            maAnomForward.Id = "ma.anom/selftest";
+            MisalignedRegistry.Classify(maAnomForward, DivergenceKind.Value, BitConverter.GetBytes(v),
+                BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                .Should().BeNull("ma.anom of a forward view is numpy.ma's statements bit for bit");
         }
 
         /// <summary>
-        /// <c>ma.mean</c> keeps the reduction blankets: <c>NDMaskedArray.mean</c> is its own masked arithmetic, not
-        /// <c>np.mean</c>. The scope is the <c>ma.*</c> id only.
+        /// <c>ma.mean</c> / <c>ma.var</c> / <c>ma.std</c> / <c>ma.anom</c> left the reduction blankets and the harness's
+        /// own excuses on 2026-10-05 (plan api-parameter-parity A6): <c>NDMaskedArray</c>'s mean / var / std / anom are
+        /// numpy.ma's <c>MaskedArray.mean</c> / <c>var</c> / <c>std</c> / <c>anom</c> statement for statement, so a value off
+        /// by one ULP over an axis or flat, a NaN missed over an axis, and a result dtype that is not NumPy's are real bugs
+        /// (anom's one operand made the unary ULP branch take it). The ma harness strips the <c>ma.</c> prefix before it asks the ledger,
+        /// so these are the cases the ledger sees (the id keeps the prefix). Before A6 the unbounded summation blanket and
+        /// the dtype blanket hid gross gaps there: a slice with an unmasked inf came back NaN where NumPy has 0.0.
         /// </summary>
         [TestMethod]
-        public void MaMean_KeepsTheReductionBlankets_OnlyForMaIds()
+        public void MaMeanVarStd_NoDivergenceIsExcused()
         {
+            var none = System.Array.Empty<BitDiff.Diff>();
             double v = 1.2345;
-            var c = WithAxis(Case("mean", ("float64", new long[] { 4, 8 })), 0);
-            c.Id = "ma.mean/selftest";
-            MisalignedRegistry.Classify(c, DivergenceKind.Value, BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)),
-                NPTypeCode.Double, OneDiff).Should().NotBeNull("ma.mean's masked path keeps the summation blanket");
-        }
-
-        /// <summary>
-        /// <c>ma.var</c> / <c>ma.std</c> keep the reduction blankets: <c>NDMaskedArray.var</c>'s masked path is its own
-        /// arithmetic, not <c>np.var</c>, and its known gaps are plan item A6. The scope is the <c>ma.*</c> id only.
-        /// </summary>
-        [TestMethod]
-        public void MaVarStd_KeepsTheReductionBlankets_OnlyForMaIds()
-        {
-            double v = 1.2345;
-            var c = WithAxis(Case("var", ("float64", new long[] { 4, 8 })), 0);
-            c.Id = "ma.var/selftest";
-            MisalignedRegistry.Classify(c, DivergenceKind.Value, BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)),
-                NPTypeCode.Double, OneDiff).Should().NotBeNull("ma.var's masked path is a known gap (plan A6)");
-            var d = Case("std", ("float32", new long[] { 8 }));
-            d.Id = "ma.std/selftest";
-            MisalignedRegistry.Classify(d, DivergenceKind.Dtype, null, null, NPTypeCode.Single,
-                System.Array.Empty<BitDiff.Diff>()).Should().NotBeNull("ma.std's dtype gap stays under the dtype blanket");
+            byte[] nan = BitConverter.GetBytes(double.NaN), one = BitConverter.GetBytes(1.0);
+            var nanVsOne = new[] { new BitDiff.Diff(0, "NaN", "000000000000f03f") };
+            foreach (var op in new[] { "mean", "var", "std", "anom" })
+            {
+                var axisCase = WithAxis(Case(op, ("float64", new long[] { 4, 8 })), 0);
+                axisCase.Id = $"ma.{op}/selftest";
+                MisalignedRegistry.Classify(axisCase, DivergenceKind.Value, BitConverter.GetBytes(v),
+                    BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"ma.{op} one ULP off over an axis is numpy.ma's statements, not summation order");
+                var flat = Case(op, ("float64", new long[] { 8 }));
+                flat.Id = $"ma.{op}/selftest";
+                MisalignedRegistry.Classify(flat, DivergenceKind.Value, BitConverter.GetBytes(v),
+                    BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"ma.{op} one ULP off flat (neither the summation blanket nor the unary-ULP branch)");
+                var nanCase = WithAxis(Case(op, ("float64", new long[] { 4, 8 })), 1);
+                nanCase.Id = $"ma.{op}/selftest";
+                MisalignedRegistry.Classify(nanCase, DivergenceKind.Value, nan, one, NPTypeCode.Double, nanVsOne)
+                    .Should().BeNull($"ma.{op} missing NumPy's NaN over an axis");
+                var dtypeCase = Case(op, ("float32", new long[] { 8 }));
+                dtypeCase.Id = $"ma.{op}/selftest";
+                MisalignedRegistry.Classify(dtypeCase, DivergenceKind.Dtype, null, null, NPTypeCode.Single, none)
+                    .Should().BeNull($"ma.{op} of float32 returning another dtype (the dtype blanket hid ma.std's)");
+            }
         }
 
         // ---- B4: modf threw excuse excludes f32/f64 ----

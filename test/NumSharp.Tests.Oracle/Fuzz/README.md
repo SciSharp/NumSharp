@@ -553,7 +553,7 @@ widening that set is C#-oracle work tracked in its own memory topic.
 | complex corrcoef: `cov`'s managed complex GEMM vs zgemm (division itself is now bit-exact) | corrcoef × complex input/result × Value, ≤2 ULP | 1 |
 | complex add/subtract within 2 ULP (FMA contraction) | add/subtract × complex × Value, ≤2 ULP | 0 |
 | complex power, NON-integer/complex exponent ~ULP / gross inf-NaN edge (Complex.Pow vs npy_cpow's host cpow) (F5, ledger L6) — INTEGER exponents are now BIT-EXACT (ComplexPowNumPy ports npy_cpow's exact repeated-multiplication branch), so this is scoped OFF integer exponents | power × complex × non-integer exponent × Value, ≤512 element-magnitude ULP or non-finite | 30 |
-| reduction summation/two-pass precision (algorithm order) — np.var / np.std / ndarray.var / ndarray.std are NumPy's `_var` / `_std` since 2026-10-05 and no longer reach it (the `varstd` tier), and np.mean / ndarray.mean are NumPy's `_mean` since the same day (the `mean_loops` tier, plan X9: it had hidden a broadcast uint64 mean read through a wrapping integer sum); `ma.var` / `ma.std` / `ma.mean` still do (`IsMaVarStd`, `IsMaMean`, plan `docs/plans/api-parameter-parity.md` A6) | sum/prod (+ ma.var/ma.std/ma.mean) × float-family result (Half/Single/Double/Complex) × Value | 358 (2026-10-05) |
+| reduction summation/two-pass precision (algorithm order) — np.var / np.std / ndarray.var / ndarray.std are NumPy's `_var` / `_std` since 2026-10-05 and no longer reach it (the `varstd` tier), and np.mean / ndarray.mean are NumPy's `_mean` since the same day (the `mean_loops` tier, plan X9: it had hidden a broadcast uint64 mean read through a wrapping integer sum); `ma.var` / `ma.std` / `ma.mean` / `ma.anom` are numpy.ma's statements since 2026-10-06 and left it too (`IsMaVarStd` / `IsMaMean` deleted, plan `docs/plans/api-parameter-parity.md` A6) | sum/prod × float-family result (Half/Single/Double/Complex) × Value | 106 (2026-10-06; 358 before A6) |
 | complex reduction/scan NaN ordering/propagation differs | reduce+cumsum/cumprod × complex × Value, diffs must contain a NaN token | 35 |
 | decimal std last digit (independent 28-digit sqrts) (ledger L7) — 13 since 2026-10-05: the AXIS std carries 28 digits now (it rounded the variance through a double before, and the oracle replicated that), so it meets the same last-digit difference as the flat one | std × Decimal × Value, ≤1 unit in the 28th significant digit | 13 (2026-10-05) |
 | **S1** expm1/log1p small-\|x\| precision loss / -0 / subnormal flush (`Exp(x)-1`, `Log(1+x)`; NumPy calls the CRT, non-portable) | expm1/log1p × Value, every diff ≤2 ULP **or** ≤~ulp(1) abs | 20 |
@@ -628,8 +628,8 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | modf(float16/int): no Half kernel, no int→float64 promotion | modf × dtype ∉ {f32,f64} × Threw | 32 | |
 | unary hyperbolic/inverse-trig/angle: no Half kernel | sinh…arctan × {bool,i8,u8,f16} (+deg2rad/rad2deg×c128) × Threw | 0 | |
 | unary preserve-dtype pending: square/floor/ceil/trunc widen int→float64 | those 4 ops × Dtype | 78 | F3b |
-| reduction result dtype differs (NEP50 accumulator / complex→real) — sum/prod/cumprod NOW bit-exact on EVERY size incl. flat 0-d/size-1 (fixed 2026-09-13) & EXCLUDED from the excuse (regression-guarded). Residual (traced 2026-10-04, recounted 2026-10-05): `ma.mean` of float32 is float64 (86), 2 `ma.var` float32 slices; np.var / np.std / ndarray.var / ndarray.std, and np.mean / ndarray.mean, are exact on dtype since 2026-10-05 and EXCLUDED (only `ma.var` / `ma.std` / `ma.mean` reach the branch, `IsMaVarStd` / `IsMaMean`; the 11 decimal `mean` cases — a flat decimal mean returned float64 — were fixed by plan X9); no complex→real case remains; the empty float16/float32/complex128 `np.mean` (18) keeps its dtype since the identity-seeded add reduction | reductions × Dtype (excl. sum/prod/cumprod, np./ndarray. var/std/mean) | 88 (2026-10-05) | #10 |
-| np.mean along an axis of a view with a reversed axis: np.sum's order there (plan `docs/plans/api-parameter-parity.md` finding 5, pinned by `OpenBugsReductionTests.Sum_ReversedViewAxis_WalksTheLogicalOrder`). np.mean left the summation blanket with plan X9; this narrow branch keeps only the layout np.sum's own cases share (`IsReversedAxisReduction`) | mean (not ma.mean) × an axis reduction of an operand with a negative stride × float-family result × Value | 2 (2026-10-05) | #10 |
+| ~~reduction result dtype differs (NEP50 accumulator / complex→real)~~ — **REMOVED 2026-10-06.** sum/prod/cumprod became bit-exact on dtype on every size on 2026-09-13, np. / ndarray. var / std / mean on 2026-10-05 (the 11 decimal `mean` cases with plan X9, the 18 empty means with the identity-seeded add reduction), and its last 88 cases — the masked mean of a float32 (float64 in NumPy) and two float32 `ma.var` slices — went with numpy.ma's statements (plan A6). It then excused nothing in any tier; a reduction's dtype divergence is red (the ma harness's own `MaDtypeExcuse` for `ma.median` / `ma.average` runs after the registry, unchanged) | — | 0 (88 on 2026-10-05) | #10 |
+| np.mean along an axis of a view with a reversed axis: np.sum's order there (plan `docs/plans/api-parameter-parity.md` finding 5, pinned by `OpenBugsReductionTests.Sum_ReversedViewAxis_WalksTheLogicalOrder`). np.mean left the summation blanket with plan X9, `ma.mean` and `ma.anom` with A6 (their nomask or all-False-mask path sums the view itself); this narrow branch keeps only the layout np.sum's own cases share (`IsReversedAxisReduction`; anom its own branch) | mean / ma.mean / ma.anom × an axis reduction of an operand with a negative stride × float-family result × Value | 5 (2026-10-06: 4 mean, 1 anom) | #10 |
 | axis-reduction NaN propagation: axis SIMD min/max skips NaN (flat fixed) — DEAD since 2026-10-04: every hit it still had was a var/std one-element case (fixed 2026-10-05, np.var / np.std are NumPy's `_var`; the branch skips them now, `ma.var` / `ma.std` excepted), and no min/max case reaches it; removal candidate | min/max × axis≠null × all-NaN diffs | 0 (2026-10-05) | #10 |
 | bool min/max along axis diverges | min/max × Boolean × Value | 0 | #10 |
 | complex 1-D axis reduction throws (NDCoordinatesAxisIncrementor) — FIXED 2026-10-04 (the complex axis nansum is NumPy's composition, np.sum of the NaN-replaced array); both registry branches removed, now regression-guarded | (nan)reductions × complex 1-D × Threw | 0 | #10 |
@@ -664,6 +664,8 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | `gen_mean_loops` section B, "pinned row longer than the buffer" | 5 cells: a cast-loop np.mean along the axis innermost in memory under `np.setbufsize(16 / 32)`, rows longer than the buffer, unless order-free (np.sum's X6 residual, as in the varstd tiers) | `OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills` |
 | `gen_mean_loops`, "broadcast" | 24 cells (12 differ by 1 ULP): the FLAT np.mean of a float / complex operand with a broadcast (stride-0) axis whose sum is not order-free. NumPy calls the add loop once per broadcast row (`out += pairwise(row)`); np.sum's exact flat engine declines a broadcast operand and the elementwise fold sums in its own order | `OpenBugsReductionTests.Sum_BroadcastOperand_Flat_IsNumPysCallSchedule` |
 | `gen_nanmean` section B, "pinned row longer than the buffer" | 5 cells: an inexact nanmean with `dtype=` (a cast loop) along the axis innermost in memory under `np.setbufsize(16 / 32)`, rows longer than the buffer (np.sum's X6 residual over the K-order copy) | `OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills` |
+| `gen_ma_oracle._mv_carved` (`ma_meanvar`), "finding5" | 38 cells: ma.mean / var / std / anom along an axis of a 2-D view with a reversed axis, without a mask or with an all-False one (`filled(0)` is the view itself then), whose mean's sum is not order-free (`_mv_order_free`: the elements as multiples of their lowest set bit, every partial sum exact) | `OpenBugsReductionTests.Sum_ReversedViewAxis_WalksTheLogicalOrder` |
+| `gen_ma_oracle._mv_carved` (`ma_meanvar`), "broadcast" | 127 cells: the same functions over a broadcast operand reduced flat or along its stride-0 axis, without a mask or with an all-False one, unless order-free (plan finding 10 and X12). Replaying the tier uncarved (`gen_ma_oracle.py meanvar --uncarved <path>`), 64 of the 165 carved cells differ, every one of them float32 / float64 / complex128 on those layouts | `OpenBugsReductionTests.Sum_BroadcastOperand_Flat_IsNumPysCallSchedule`, `Sum_BroadcastOperand_Axis_IsNumPysOrder` |
 | `gen_random_parity` carve list | `multivariate_normal` only: byte-identical only through a LAPACK backend's `gesdd` (the managed Jacobi SVD flips a singular vector's sign). The other seven samplers (gamma shape<1, f, pareto, standard_cauchy, binomial, negative_binomial, multinomial) were uncarved 2026-09-25 — legacy-distributions.c ports — and every sampler is also covered by the `random_api` tiers | `OpenBugsRandom.RandomParity_MultivariateNormal_Seed42_ShouldMatchNumPy` (the seven former pins are ordinary tests) |
 
 **FIXED on this branch or before it** (classifier branch/carve removed — the matrix now verifies
@@ -992,8 +994,8 @@ for any size or keyword, so its bits depend on the reduction schedule, the layou
 
 **Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the tier's valueclass (`varstd`), and `var` / `std` are
 in `ByteExactArithmeticUnaryOps`. No summation-order, unary-ULP, NaN-propagation or dtype branch excuses an `np.var` /
-`np.std` case in ANY tier; only `ma.var` / `ma.std` keep the reduction blankets (`IsMaVarStd`: the masked path is its
-own arithmetic, plan item A6). `FuzzCorpusTests.VarStd` replays the tier. `FuzzCorpusTests.VarStdChunked` replays it
+`np.std` case in ANY tier, and since 2026-10-06 neither do `ma.var` / `ma.std` (numpy.ma's statements, plan item A6,
+the `ma_meanvar` tier below). `FuzzCorpusTests.VarStd` replays the tier. `FuzzCorpusTests.VarStdChunked` replays it
 again with `DefaultEngine.VarStdChunkBytesTestOverride = 64`, which sends every reduction through the chunked deviation
 sums that the default threshold (8 MiB of squared deviations) takes only for large inputs, and asserts that the chunked
 routes ran more than 1,000 times.
@@ -1131,6 +1133,46 @@ broadcast flat schedule) unless order-free; the tier's integer values are, so no
 struct kernels in double: an integer or bool input dropped keepdims for a flat reduction, float16 / float32 were summed
 in double (float16 overflow stayed finite), a complex sum was divided part by part, and `dtype=` did not exist. The
 nanreduce tier hid it under the nan-family branches: 117 shape and 45 value cases at the time.
+
+### numpy.ma's mean / var / std / anom (`ma_meanvar` tier) — 2026-10-06
+
+`ma_meanvar.jsonl` (`gen_ma_oracle.py meanvar`, 26,379 cases, floor 21,000) gates `np.ma.mean` / `np.ma.var` /
+`np.ma.std` / `np.ma.anom` as numpy.ma's statements (`numpy/ma/core.py`, plan `docs/plans/api-parameter-parity.md` A6):
+without a mask, ndarray's `_mean` / `_var` run on the masked array (their `true_divide(out=...)` meets
+`MaskedArray.__array_wrap__`'s divide domain); with a mask (an all-False one too), `sum * 1. / count` through
+ma.true_divide, `self - mean` through ma.subtract, the square in place (complex `abs(danom) ** 2` through ma.power), the
+division by `count - ddof` and the replaced mask; std is ma.sqrt of the variance (and ignores `mean=`); anom is
+`self - mean`.
+
+**Two more fields, and error cases.** The other ma tiers compare `filled(0)` and `getmaskarray`, which leave a masked
+slot's data a wildcard and cannot tell an all-False mask from nomask. Each case here also records `raw` (the result's
+data at EVERY slot, C order, NaN tokenized) and `form` (`masked` for the singleton, `scalar` for a NumPy scalar or a
+0-d result without a mask, `nomask`, or `mask` for a mask array, an all-False one included), and `RunMaCorpus` compares
+both (`CompareMaskedRaw`, `MaResultForm`). NumPy's errors are cases too (294: AxisError texts, the broadcast ValueError
+of a `mean=` that does not broadcast, the "output array is read-only" of a 0-d domain hit, the "Changing the dtype to a
+subarray type" of a masked complex deviation, the boolean-subtract TypeError), checked by `CheckMaError` — the first ma
+tier with error cases.
+
+**Sections:** L (every catalog layout × the 13 dtypes × nomask / all-False / some; mean, var, anom over each axis),
+K (all masked, one unmasked element per row, a masked first row, some; keepdims; ddof 0 / 1 / 2 / 5), T (`dtype=` in
+eight loops for every input), V (the `mean=` forms of var: Python float / int / complex — weak without a mask, strong
+through ma.subtract with one — np.float32 / np.float64, plain / masked / 0-d arrays carried as a second operand, a
+mean that does not broadcast; std with two of them, which it ignores), S (non-finite values, squares that overflow,
+-0.0, integer extremes), M (130 / 1031 elements and a 19x13 block in C, F and permuted layouts: the pairwise order),
+E (empty inputs), Z (0-d inputs with an axis, out-of-range axes).
+
+**Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the `mameanvar` valueclass and `CompareMasked` runs none
+of the ma harness's own excuses for it (`strict`); `ma_reduce` holds the four functions strict too, but for the
+finding-5 branch (3 cases). The carve (Table 2): 165 cells whose mean sums the operand view on a layout np.sum still
+orders differently. **Planted bugs:** 14 edits to the port (the mask not replaced, squares into a C-order buffer, the
+domain fill 0, no `* 1.`, no put-back, no non-finite square mask, a strong `mean=` without a mask, `cnt < 0`, C-order
+intermediates, no mask shrink, no float16 cast back, anom expanding axis 0, no zero-count `masked`, no domain without a
+mask), each killed by the tier (2 to 3,197 cases) and separately by `Ma/np.ma.meanvar.NumPyPort.Test.cs`.
+
+**What it replaced** (fixed 2026-10-06). The old masked reductions computed their own formula: a slice NumPy masks
+carried NaN instead of the masked 0, an unmasked inf stayed where NumPy masks it into 0.0, the variance kept the
+divide's mask, and the masked mean of a float32 stayed float32. `ma_reduce` hid it under the summation and dtype
+blankets (`IsMaVarStd` / `IsMaMean`, 254 cases).
 
 ### float16 selections (`half_minmax` tier + the selection contract) — 2026-10-03
 

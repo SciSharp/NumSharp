@@ -11,7 +11,10 @@ namespace NumSharp.Tests
     ///     Open bugs in how NumSharp STARTS a reduction, a scan or a size-1 product — found while making
     ///     <c>np.trapezoid</c> bit-exact (commit 94c9eb6b, 2026-10-03) and by the 2026-10-04 reduction-start probe —
     ///     plus the probe's wrong shapes (group 6; its trapezoid error, group 7, is fixed), which NaN a flat sum of several NaNs returns
-    ///     (group 8), and an axis sum in a cast loop whose rows are longer than the buffer (group 9). Each test asserts NumPy
+    ///     (group 8), and an axis sum in a cast loop whose rows are longer than the buffer (group 9); then the summation
+    ///     orders np.sum's routes still miss (an axis sum over a reversed view, group 10; the flat sum of a broadcast
+    ///     operand, group 11; an axis sum of a broadcast operand, group 12) and the engine's flat mean of a broadcast
+    ///     operand ignoring <c>dtype=</c> (group 13). Each test asserts NumPy
     ///     2.4.2's answer — dtype, shape and the raw bits of every element — so it FAILS while the bug lives and passes
     ///     once it is fixed. Remove <c>[OpenBugs]</c> from a test when its path is fixed, and move the test next to the
     ///     function's own tests.
@@ -573,6 +576,73 @@ namespace NumSharp.Tests
             Check(fails, "sum f64 scalar broadcast (3,4)", () => np.sum(s), "float64 () c024b46dc5d63887");
             Check(fails, "mean f64 scalar broadcast (3,4)", () => np.mean(s), "float64 () bfeb9b3d07c84b5f");
             AssertNoMismatch(fails, "NumPy adds a broadcast operand one row (one add-loop call) at a time");
+        }
+
+        // ======================================================================================================
+        //  GROUP 12 — an AXIS sum of a broadcast operand (a stride-0 axis anywhere in it). NumPy's reduction iterator
+        //  adds it in its own call schedule: a (k,1) column broadcast to (k,m) and reduced over axis 0 is m sequential
+        //  sums (the stride-0 axis is the inner loop), a float16 sum along the stride-0 axis rounds once per call (the
+        //  HALF loop's float32 accumulator), and a cast loop casts in buffered fills. NumSharp's axis kernels add the
+        //  elements in another order.
+        // ======================================================================================================
+
+        /// <summary>
+        ///     <c>np.sum</c> along an axis of a broadcast operand must add in NumPy's order. A float32 column of nine values
+        ///     broadcast to <c>(9, 3)</c> and summed over axis 0 is <c>0x40466664</c> in every output (NumPy adds the rows
+        ///     sequentially); NumSharp gives <c>0x40466668</c>. A float16 column broadcast to <c>(3, 7)</c> and summed along
+        ///     the stride-0 axis 1 rounds once (<c>0xcce7</c>); NumSharp rounds each addition (<c>0xcce6</c>). An int32 row
+        ///     broadcast to <c>(4, 9)</c> and summed over axis 1 in a float32 loop is <c>0xce2eb2aa</c>; NumSharp gives
+        ///     <c>0xce2eb2a8</c>. <c>np.mean</c> inherits each through its sum.
+        /// </summary>
+        /// <remarks>
+        ///     Found by the A6 work (plan <c>docs/plans/api-parameter-parity.md</c> X12, 2026-10-06): a probe of np.sum /
+        ///     np.mean over broadcast operands (rows, columns, a middle stride-0 axis, a 0-d broadcast) in every loop dtype
+        ///     found 510 of 5,382 cases differing, along the stride-0 axis and along the others, in same-dtype and in cast
+        ///     loops. The ma_meanvar oracle tier carves the cells it reaches (<c>gen_ma_oracle._mv_carved</c>, "broadcast",
+        ///     which also names group 11) and names this test.
+        /// </remarks>
+        [TestMethod, OpenBugs]
+        public void Sum_BroadcastOperand_Axis_IsNumPysOrder()
+        {
+            var fails = new List<string>();
+            var col = np.broadcast_to(np.array(new[] { -4.6f, 3.6f, 5.2f, -1.6f, 4.7f, 3.5f, -4f, 3.3f, -7f }).reshape(9, 1), new Shape(9, 3));
+            Check(fails, "sum f32 (9,1)->(9,3) axis0", () => np.sum(col, 0), "float32 (3,) 40466664 40466664 40466664");
+            var h = np.broadcast_to(np.array(new[] { (Half)1.5, (Half)5.19921875, (Half)(-2.80078125) }).reshape(3, 1), new Shape(3, 7));
+            Check(fails, "sum f16 (3,1)->(3,7) axis1", () => np.sum(h, 1), "float16 (3,) 4940 508d cce7");
+            var row = np.broadcast_to(np.array(new[] { 257711264, 906851054, -438111839, -971706796, 1928501897, 1173551007, -1835420885, 201676561, -1955788270 })
+                                        .reshape(1, 9), new Shape(4, 9));
+            Check(fails, "sum i32 (1,9)->(4,9) axis1 dtype=f32", () => np.sum(row, 1, false, np.float32),
+                  "float32 (4,) ce2eb2aa ce2eb2aa ce2eb2aa ce2eb2aa");
+            AssertNoMismatch(fails, "NumPy adds a broadcast operand along an axis in its iterator's call schedule");
+        }
+
+        // ======================================================================================================
+        //  GROUP 13 — the engine's FLAT mean of a broadcast float16 or complex128 operand ignores dtype=.
+        // ======================================================================================================
+
+        /// <summary>
+        ///     <c>TensorEngine.Mean</c> of a broadcast float16 operand with <c>dtype=float32</c> must be float32 (<c>1.05</c>,
+        ///     <c>0x3f866666</c>: NumPy's <c>np.mean(b, dtype=np.float32)</c>); NumSharp returns the float16 <c>0x3c33</c>. Of a
+        ///     broadcast complex128 operand with <c>dtype=float64</c> it must be the float64 mean of the real parts
+        ///     (<c>0.5</c>); NumSharp returns the complex mean <c>0.5+1.5j</c>.
+        /// </summary>
+        /// <remarks>
+        ///     Root cause: <c>DefaultEngine.ReduceMean</c>'s flat route (<c>Default.Reduction.Mean.cs</c>) sends a broadcast
+        ///     float or complex operand, which <c>TryExactFlatMean</c> declines, to the elementwise fold
+        ///     (<c>mean_elementwise_il</c>), which keeps the input dtype for these two. <c>np.mean</c> has no flat
+        ///     <c>dtype=</c> overload yet (plan B3), so a caller reaches it through the engine. Plan
+        ///     <c>docs/plans/api-parameter-parity.md</c> X14, found by the A6 work (2026-10-06): the mean_loops tier carves
+        ///     every flat broadcast float cell as finding 10 (an ORDER residual), which also hid this DTYPE bug.
+        /// </remarks>
+        [TestMethod, OpenBugs]
+        public void Mean_BroadcastOperand_Flat_HonorsDtype()
+        {
+            var fails = new List<string>();
+            var h = np.broadcast_to(np.array(new[] { (Half)1.5, (Half)2.25, (Half)(-3.0), (Half)0.5, (Half)4.0 }), new Shape(4, 5));
+            Check(fails, "mean f16 broadcast dtype=f32", () => h.TensorEngine.Mean(h, null, np.float32, false), "float32 () 3f866666");
+            var c = np.broadcast_to(np.array(new[] { new Complex(1.5, 2), new Complex(-0.5, 1) }), new Shape(3, 2));
+            Check(fails, "mean c128 broadcast dtype=f64", () => c.TensorEngine.Mean(c, null, np.float64, false), "float64 () 3fe0000000000000");
+            AssertNoMismatch(fails, "NumPy's mean sums and returns in the dtype= loop");
         }
     }
 }

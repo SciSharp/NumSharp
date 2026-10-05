@@ -73,9 +73,10 @@ Every masked op key is prefixed **`ma.`** (`ma.add`, `ma.sum`, `ma.masked_where`
 the `np.*` key of the same name (`sum` exists in both registries). `OpRegistry.Ma.ApplyMasked(op, params,
 MaskedArray[])` dispatches the prefixed name and returns `object` (MaskedArray / MaskedArray[] / NDArray /
 boxed scalar / DType). Divergences route through the shared `MisalignedRegistry` with the `ma.` prefix
-STRIPPED — ma delegates to the identical `np.*` op on the data, so the same excuse ledger applies — plus two
-ma-local excuse branches (`var`/`std` accumulation-order ≤ small ULP, and the complex-unary ≤3-ULP envelope),
-matching the honest boundary in `MA_MODULE_AUDIT §5.6/§5.8`.
+STRIPPED — ma delegates to the identical `np.*` op on the data, so the same excuse ledger applies — plus the
+ma-local excuse branches of `FuzzCorpusTests.Ma` (the complex-unary ≤3-ULP envelope and the known gaps below),
+matching the honest boundary in `MA_MODULE_AUDIT §5.6/§5.8`. Since 2026-10-06 none of them takes `mean` / `var` /
+`std` / `anom`, which are numpy.ma's statements (plan `docs/plans/api-parameter-parity.md` A6, Pass 3 below).
 
 ## Tier map (what goes where)
 
@@ -83,7 +84,8 @@ matching the honest boundary in `MA_MODULE_AUDIT §5.6/§5.8`.
 |-----------|-----------|-----|--------------|----------|
 | `ma_unary.jsonl` | `gen_ma_unary` | abs/absolute/negative/conjugate/sqrt/exp/log/log2/log10/sin/cos/tan/sinh/cosh/tanh/arcsin/arccos/arctan/arcsinh/arccosh/arctanh/floor/ceil/fabs/around/angle/logical_not | masked | yes (libm/complex) |
 | `ma_binary.jsonl` | `gen_ma_binary` | add/subtract/multiply/divide/true_divide/floor_divide/mod/remainder/fmod/power/arctan2/hypot + equal/not_equal/less/less_equal/greater/greater_equal + logical_and/or/xor + bitwise_and/or/xor/left_shift/right_shift + maximum/minimum | masked | partial (power/libm) |
-| `ma_reduce.jsonl` | `gen_ma_reduce` | sum/prod/product/mean/min/max/amin/amax/ptp/var/std/all/any/anom/median/average + count/count_masked/argmin/argmax(→array) | masked, array | var/std ma-excused |
+| `ma_reduce.jsonl` | `gen_ma_reduce` | sum/prod/product/mean/min/max/amin/amax/ptp/var/std/all/any/anom/median/average + count/count_masked/argmin/argmax(→array) | masked, array | no (mean/var/std/anom strict but finding 5) |
+| `ma_meanvar.jsonl` | `gen_ma_meanvar` | mean/var/std/anom with every layout, mask class, keepdims, ddof, dtype= loop and mean= form, NumPy's errors (Pass 3) | masked (+ `raw`, `form`), errors | no; zero excuses |
 | `ma_scan.jsonl` | `gen_ma_scan` | cumsum/cumprod/diff/ediff1d | masked | no |
 | `ma_manip.jsonl` | `gen_ma_manip` | ravel/flatten/reshape/transpose/swapaxes/moveaxis/squeeze/expand_dims/repeat/concatenate/stack/hstack/vstack/dstack/column_stack/atleast_1d/2d/3d/diag/diagflat/diagonal/append/resize + hsplit(→masked_tuple) + compressed/getdata/getmask/getmaskarray/filled(→array) | masked, array, masked_tuple | no |
 | `ma_construct.jsonl` | `gen_ma_construct` | masked_where/masked_equal/masked_greater/…/masked_values/masked_inside/masked_outside/masked_invalid/fix_invalid/masked_all/masked_all_like + array/masked_array | masked | no |
@@ -157,15 +159,15 @@ gate is green AND every divergence is catalogued and printed at run time).
 | `unique` (masked) | numpy treats each MASKED element as a distinct value (ill-specified quirk); nomask is byte-exact | generator restricts unique to nomask |
 | `unique` (complex128 NaN) | the NaN element's imaginary lane is non-contractual | `[known gap]` excuse |
 | `all`/`any`/`median` (axis=None, keepdims=True) | flat keepdims returns 0-d, numpy returns (1,)*ndim | generator skips that one combo |
-| `var`/`std`/`mean`/`average`/`anom` | mask a NON-FINITE (nan/inf) reduction result where NumSharp leaves it unmasked (the masked-op composition differs) | `[known gap]` mask/value excuse (float/complex) |
-| `average`/`anom`/`median` | return-dtype widens narrow-float → float64 where numpy keeps the width | `[known gap]` dtype excuse |
-| `anom`/`median` | VALUE diverges on a non-contiguous 1-D input (their internal mean/sort over a strided view) | `[known gap]` value excuse |
+| `average` (was also `var`/`std`/`mean`/`anom`: FIXED 2026-10-06, Pass 3) | mask a NON-FINITE (nan/inf) reduction result where NumSharp leaves it unmasked (the masked-op composition differs) | `[known gap]` mask/value excuse (float/complex) |
+| `average`/`median` (was also `anom`: FIXED 2026-10-06) | return-dtype widens narrow-float → float64 where numpy keeps the width | `[known gap]` dtype excuse |
+| `median` (was also `anom`: FIXED 2026-10-06) | VALUE diverges on a non-contiguous 1-D input (its internal sort over a strided view) | `[known gap]` value excuse |
 | `sort` (NaN in unmasked) | masked-slot position vs NaN-ordering differs | `[known gap]` mask excuse |
 | `isin`/`in1d` | do NOT propagate the element operand's mask to the bool result | `[known gap]` mask excuse |
 | `arctanh`/complex-unary at nan/inf | inherited complex-unary special-value FINITENESS edge (msun vs System.Numerics) flips the `~isfinite` mask bit | `[documented]` complex-edge excuse (MisalignedRegistry branch 7 sibling) |
 | `divide`/`mod` domained → ±0 | signed-zero of a division-to-zero (IEEE non-contractual) | `[documented]` signed-zero excuse |
 | `power` complex | result FINITENESS at a pathological input differs (F5 class) | `[documented]` excuse |
-| `var`/`std` accumulation | ~1 ULP order-dependence (the shared reduce-accumulation class) | reused shared `MisalignedRegistry` excuse (prefix-stripped) |
+| ~~`var`/`std` accumulation~~ | FIXED 2026-10-06 (Pass 3): numpy.ma's own statements, bit-exact; the shared summation blanket no longer takes them | — |
 
 **Not included** (unit-test-only, same policy as the NDArray corpus): `cov`/`corrcoef`/large `dot`
 (GEMM-bound, allclose), `convolve`/`correlate` (long-kernel float), `apply_along_axis`/`apply_over_axes`/
@@ -202,7 +204,7 @@ mode=wrap/clip**; and parameter variations (`diagonal` offset, `diag` k, `moveax
 
 | Area | Divergence | Disposition |
 |------|-----------|-------------|
-| `anom`/`median` value on 2-D non-contiguous (`strided_2d_cols`/`negstride_2d_offset`) | internal mean/sort over a strided view reads the wrong stride (anom yields -inf) | extended the pass-1 anom/median non-contiguous `[known gap]` excuse |
+| `median` value on 2-D non-contiguous (`strided_2d_cols`/`negstride_2d_offset`); `anom` FIXED 2026-10-06 (Pass 3) | internal sort over a strided view reads the wrong stride | extended the pass-1 median non-contiguous `[known gap]` excuse |
 | complex128 `cumprod` | ~ULP per component — host-FMA-contracted `npy_cmul` vs .NET `Complex operator*` (bounded ≤256 ULP/component) | `[documented]` the nanscan complex-cumprod carve-out class |
 
 ### Noted (identified by code-read, not corpus-plumbed)
@@ -217,3 +219,29 @@ manip/construct/select/sortsetops/binary all stayed byte-exact across the edge l
 operands and new params — notably the pass-12 strong-scalar-widening fix holds across the 6 added dtype
 pairs and the 0-d scalar-operand layouts, and complex128 `sort`/`unique` on empty/edge shapes did NOT crash
 (only `median` did).
+
+## Pass 3 (2026-10-06) — mean / var / std / anom as numpy.ma's statements
+
+Plan `docs/plans/api-parameter-parity.md` A6. The four functions computed a masked reduction of their own: a slice
+NumPy masks (all masked, `count - ddof <= 0`) held NaN instead of the masked 0, an unmasked inf stayed where NumPy
+masks it into 0.0, the variance kept the divide's mask, and the masked mean of a float32 stayed float32. `ma_reduce`
+excused them under the shared summation and dtype blankets (`IsMaVarStd` / `IsMaMean`, 254 cases).
+
+**The port** (`src/NumSharp.Core/Ma/NDMaskedArray.cs`) runs NumPy's statements: without a mask, ndarray's `_mean` /
+`_var` on the masked array (their `true_divide(out=...)` meets `MaskedArray.__array_wrap__`'s divide domain: a quotient
+with `|q| * tiny >= count` becomes 1.0, masked); with a mask, `dsum * 1. / cnt` through ma.multiply and
+ma.true_divide, `self - mean` through ma.subtract, the square in place (complex `abs(danom) ** 2` through ma.power),
+the division by `count - ddof` and the replaced mask `mask_or(mask.all(axis), cnt <= 0)`; std is ma.sqrt of the
+variance and ignores `mean=`; anom is `self - mean`. Each intermediate a later sum walks takes NumPy's ufunc layout.
+
+**The tier** `ma_meanvar.jsonl` (26,379 cases) extends this corpus's contract with two fields, `raw` (the data at every
+slot, masked ones included) and `form` (`masked` / `scalar` / `nomask` / `mask`), and with NumPy's errors
+(`expects_throw`, type + text, checked by `CheckMaError`). It is held to zero excuses; the cells whose mean sums the
+operand view itself on a layout np.sum still orders differently (finding 5, finding 10 / X12) are carved by
+`_mv_carved` and pinned in `OpenBugs.Reductions.cs`. `ma_reduce` holds the four strict too, but for the finding-5
+branch (3 cases). Gates: `FuzzCorpusTests.MaMeanVar`, `MaReduce`, `Ma/np.ma.meanvar.NumPyPort.Test.cs`, and the
+tightness test `MaMeanVarStd_NoDivergenceIsExcused`.
+
+**Still open** (plan items): the masked copy behind `filled` is slow under a random mask (X11, most of a masked
+reduction's time); float16 subtraction with a column-broadcast operand (X15); `out=` of the four; the public
+`NDMaskedArray.filled()` returns a C-order copy where NumPy returns the data itself or a K-order copy.

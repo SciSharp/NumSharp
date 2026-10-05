@@ -133,6 +133,23 @@ namespace NumSharp.Tests.Fuzz
             /// </summary>
             public string Mask { get; set; }
 
+            /// <summary>
+            ///     MASKED-ARRAY corpus, ma_meanvar.jsonl only: hex of the result's data at EVERY slot in C order
+            ///     (<c>np.asarray(r.data)</c>; the <c>masked</c> singleton's float64 0.0), masked slots included. Where
+            ///     <see cref="Buffer"/> leaves a masked slot a wildcard, this pins what NumPy leaves there (its divide-domain
+            ///     fills, the minuend's put-back data). Null on every other tier, which then skips the comparison.
+            /// </summary>
+            public string Raw { get; set; }
+
+            /// <summary>
+            ///     MASKED-ARRAY corpus, ma_meanvar.jsonl only: the object NumPy returned — <c>masked</c> (the singleton),
+            ///     <c>scalar</c> (a NumPy scalar, or a 0-d result without a mask), <c>nomask</c> (an array whose mask is
+            ///     nomask) or <c>mask</c> (an array with a mask array, an all-False one included). <c>getmaskarray</c>
+            ///     (<see cref="Mask"/>) cannot tell an all-False mask from nomask, nor the singleton from a masked 0-d
+            ///     array; this can. Null on every other tier.
+            /// </summary>
+            public string Form { get; set; }
+
             /// <summary>Per-slot results for kind=tuple / masked_tuple, in NumPy's tuple order.</summary>
             public Expected[] Slots { get; set; }
 

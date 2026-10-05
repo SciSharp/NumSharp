@@ -110,17 +110,19 @@ namespace NumSharp.Tests.Fuzz
                 case "sum": return np.ma.sum(ops[0], ParseAxis(p), null, ParseKeepdims(p));
                 case "prod": return np.ma.prod(ops[0], ParseAxis(p), null, ParseKeepdims(p));
                 case "product": return np.ma.product(ops[0], ParseAxis(p), null, ParseKeepdims(p));
-                case "mean": return np.ma.mean(ops[0], ParseAxis(p), null, ParseKeepdims(p));
+                // ma_meanvar.jsonl gives mean / var / std / anom a dtype= and var / std a mean= (ParseMaDtype, ParseMaMean);
+                // the older tiers carry neither, which reads as null.
+                case "mean": return np.ma.mean(ops[0], ParseAxis(p), ParseMaDtype(p), ParseKeepdims(p));
                 case "min": return np.ma.min(ops[0], ParseAxis(p), null, ParseKeepdims(p));
                 case "max": return np.ma.max(ops[0], ParseAxis(p), null, ParseKeepdims(p));
                 case "amin": return np.ma.amin(ops[0], ParseAxis(p), null, ParseKeepdims(p));
                 case "amax": return np.ma.amax(ops[0], ParseAxis(p), null, ParseKeepdims(p));
                 case "ptp": return np.ma.ptp(ops[0], ParseAxis(p), null, ParseKeepdims(p));
-                case "var": return np.ma.var(ops[0], ParseAxis(p), null, ParseDdof(p), ParseKeepdims(p));
-                case "std": return np.ma.std(ops[0], ParseAxis(p), null, ParseDdof(p), ParseKeepdims(p));
+                case "var": return np.ma.var(ops[0], ParseAxis(p), ParseMaDtype(p), ParseDdof(p), ParseKeepdims(p), ParseMaMean(p, ops));
+                case "std": return np.ma.std(ops[0], ParseAxis(p), ParseMaDtype(p), ParseDdof(p), ParseKeepdims(p), ParseMaMean(p, ops));
                 case "all": return np.ma.all(ops[0], ParseAxis(p), ParseKeepdims(p));
                 case "any": return np.ma.any(ops[0], ParseAxis(p), ParseKeepdims(p));
-                case "anom": return np.ma.anom(ops[0], ParseAxis(p), null);
+                case "anom": return np.ma.anom(ops[0], ParseAxis(p), ParseMaDtype(p));
                 case "median": return np.ma.median(ops[0], ParseAxis(p), ParseKeepdims(p));
                 case "average": return np.ma.average(ops[0], ParseAxis(p), null, ParseKeepdims(p));
                 case "count": return np.ma.count(ops[0], ParseAxis(p), ParseKeepdims(p));
@@ -272,6 +274,45 @@ namespace NumSharp.Tests.Fuzz
                 default:
                     throw new NotSupportedException($"ma tuple op '{op}' not registered in OpRegistry.ApplyMaskedTuple");
             }
+        }
+
+        /// <summary>
+        ///     The <c>dtype=</c> of ma.mean / ma.var / ma.std / ma.anom: a NumPy dtype name, or null when the case has none
+        ///     (NumPy's <c>dtype=None</c>; the older ma tiers never set one).
+        /// </summary>
+        /// <param name="p">The case params.</param>
+        /// <returns>The dtype, or null.</returns>
+        /// <exception cref="NotSupportedException">The name is not a NumSharp dtype (a corpus/registry drift).</exception>
+        private static DType ParseMaDtype(IReadOnlyDictionary<string, JsonElement> p)
+            => p.TryGetValue("dtype", out var v) && v.ValueKind != JsonValueKind.Null ? np.dtype(v.GetString()) : null;
+
+        /// <summary>
+        ///     The <c>mean=</c> of ma.var / ma.std as the C# argument that stands for NumPy's: a Python float / int / complex is
+        ///     a boxed <see cref="double"/> / <see cref="long"/> / <see cref="System.Numerics.Complex"/> (the house's weak
+        ///     Python scalars), <c>np.float32</c> / <c>np.float64</c> a strong 0-d array, and an array form the case's second
+        ///     operand — its plain data for an ndarray, the masked array itself for a MaskedArray. Null when the case has no
+        ///     mean= (the computed mean).
+        /// </summary>
+        /// <param name="p">The case params; <c>mean</c> is an object with a <c>kind</c>.</param>
+        /// <param name="ops">The reconstructed operands; an array form reads <c>ops[1]</c>.</param>
+        /// <returns>The mean argument, or null.</returns>
+        /// <exception cref="NotSupportedException">An unknown mean kind (a corpus/registry drift).</exception>
+        private static object ParseMaMean(IReadOnlyDictionary<string, JsonElement> p, NDMaskedArray[] ops)
+        {
+            if (!p.TryGetValue("mean", out var m) || m.ValueKind == JsonValueKind.Null)
+                return null;
+            return m.GetProperty("kind").GetString() switch
+            {
+                "pyfloat" => m.GetProperty("value").GetDouble(),
+                "pyint" => m.GetProperty("value").GetInt64(),
+                "pycomplex" => new System.Numerics.Complex(m.GetProperty("real").GetDouble(), m.GetProperty("imag").GetDouble()),
+                "npf32" => NDArray.Scalar((float)m.GetProperty("value").GetDouble()),
+                "npf64" => NDArray.Scalar(m.GetProperty("value").GetDouble()),
+                // The harness wraps every operand in a masked array; an ndarray mean= passes its data, as NumPy's does.
+                "array" => ops[1].data,
+                "masked" => ops[1],
+                var k => throw new NotSupportedException($"ma mean= kind '{k}' not registered in OpRegistry.ParseMaMean"),
+            };
         }
 
         /// <summary>ddof param for var/std (default 0), read like the ordinary registry's scalar ints.</summary>

@@ -751,7 +751,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="a">The sum to divide; overwritten with the quotient. Writeable.</param>
         /// <param name="count">The divisor (the element count, or <c>max(n - ddof, 0)</c>); 0 gives NumPy's NaN / ±inf.</param>
-        private static void DivideByCountLikeNumPy(NDArray a, long count)
+        internal static void DivideByCountLikeNumPy(NDArray a, long count)
         {
             // The divisor and the integer branch's quotient are this method's own temporaries: disposed here, because
             // np.mean's route (MeanLikeNumPy) runs outside any [NDScoped] member (np.var / np.std's scopes disposed them

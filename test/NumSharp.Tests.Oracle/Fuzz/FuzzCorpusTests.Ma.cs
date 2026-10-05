@@ -19,9 +19,11 @@ namespace NumSharp.Tests.Fuzz
     ///
     ///     <para><b>Excuses.</b> np.ma delegates to the identical <c>np.*</c> op on the data, so every
     ///     value divergence is routed through the SHARED <see cref="MisalignedRegistry"/> with the
-    ///     <c>ma.</c> op-name prefix STRIPPED — the same ledger that excuses e.g. float var/std
-    ///     accumulation order and the complex-unary ≤3-ULP envelope for the plain ops. A MASK
-    ///     divergence is never excused: NumSharp claims bit-exact masks, so a wrong mask is always red.</para>
+    ///     <c>ma.</c> op-name prefix STRIPPED — the same ledger that excuses e.g. the complex-unary
+    ///     ≤3-ULP envelope for the plain ops. ma.mean / ma.var / ma.std are numpy.ma's statements since
+    ///     2026-10-05 (plan api-parameter-parity A6) and no excuse of this file or of the ledger's blankets
+    ///     takes them. A MASK divergence is never excused: NumSharp claims bit-exact masks, so a wrong
+    ///     mask is always red.</para>
     /// </summary>
     public partial class FuzzCorpusTests
     {
@@ -41,11 +43,27 @@ namespace NumSharp.Tests.Fuzz
         public void MaBinary() => RunHostLibmMaCorpus("ma_binary.jsonl");
 
         // Reductions (sum/prod/mean/min/max/ptp/var/std/all/any/anom/median/average) + count/argmin/
-        // argmax(->array). var/std accumulation order + float sum/mean are excused via the shared
-        // reduce branch (prefix-stripped); the MASK (which slice reduced to masked) is bit-exact.
+        // argmax(->array). Float sum/prod accumulation order is excused via the shared reduce branch
+        // (prefix-stripped); mean/var/std are held to NumPy's bits (plan api-parameter-parity A6) but for
+        // the reversed-view axis layout they inherit from np.sum (finding 5); the MASK is bit-exact.
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void MaReduce() => RunMaCorpus("ma_reduce.jsonl");
+
+        /// <summary>
+        ///     ma.mean / ma.var / ma.std / ma.anom held to numpy.ma's bits with NO excuse (plan api-parameter-parity A6):
+        ///     every catalog layout × the 13 NumPy dtypes × the mask classes, keepdims, ddof, dtype= loops, the mean= forms,
+        ///     special values, sizes past the pairwise block, empty and 0-d inputs, and NumPy's errors (type and text).
+        ///     Beyond filled(0) and getmaskarray each case pins the raw data at EVERY slot (masked ones included) and which
+        ///     object NumPy returned (the masked singleton, a scalar, an array with nomask or with a mask array).
+        /// </summary>
+        /// <remarks>
+        ///     The cells that inherit np.sum's residuals (findings 5 and 10, X12) are carved by the generator
+        ///     (<c>gen_ma_oracle._mv_carved</c>), never excused here; a failure is a real divergence of the port.
+        /// </remarks>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void MaMeanVar() => RunMaCorpus("ma_meanvar.jsonl");
 
         // Scans: cumsum/cumprod/diff/ediff1d — per-position mask; portable arithmetic (bit-exact).
         [TestMethod]
@@ -98,6 +116,8 @@ namespace NumSharp.Tests.Fuzz
             ["ma_select.jsonl"] = 680,
             ["ma_sortsetops.jsonl"] = 790,
             ["ma_extras.jsonl"] = 58,
+            // ~80% of the 26,328 committed cases (plan api-parameter-parity A6, 2026-10-06).
+            ["ma_meanvar.jsonl"] = 21000,
         };
 
         /// <summary>
@@ -148,6 +168,14 @@ namespace NumSharp.Tests.Fuzz
                         // mask==null keeps _mask==null (NumPy's nomask fast path); an explicit mask pairs
                         // with the data view exactly as the generator's np.ma.array(view, mask=…) does.
                         ops[i] = np.ma.masked_array(data, mask);
+                    }
+
+                    // NumPy raised (ma_meanvar.jsonl records its errors; the older ma tiers skip such cells). The op must
+                    // throw too, with a plausible type and NumPy's text.
+                    if (c.Expects_Throw)
+                    {
+                        CheckMaError(sc, ops, failures, documented);
+                        continue;
                     }
 
                     switch (c.Expected.KindOrArray)
@@ -206,14 +234,39 @@ namespace NumSharp.Tests.Fuzz
         /// <summary>
         ///     Compare a masked result: data dtype + shape + <c>filled(0)</c> bytes (BitDiff, NaN
         ///     tokenized) + <c>getmaskarray</c> bytes (bit-exact). Value divergences route through the
-        ///     shared registry under the bare op name; a mask divergence is a HARD failure.
+        ///     shared registry under the bare op name; a mask divergence is a HARD failure. When the case
+        ///     records them (ma_meanvar.jsonl), the result's FORM (which object came back) and its RAW data at
+        ///     every slot are compared too, and a case of valueclass <c>mameanvar</c> gets no excuse at all.
         /// </summary>
+        /// <param name="sc">The case, its op name stripped of <c>ma.</c> (the registry's key).</param>
+        /// <param name="result">NumSharp's result.</param>
+        /// <param name="exp">NumPy's recorded result (a whole case's, or one tuple slot's).</param>
+        /// <param name="slot">The tuple slot label for failure lines, or null.</param>
+        /// <param name="failures">Collects one line per unexcused divergence.</param>
+        /// <param name="documented">Counts the excused divergences by reason.</param>
         private static void CompareMasked(
             FuzzCorpus.Case sc, NDMaskedArray result, FuzzCorpus.Expected exp, string slot,
             List<string> failures, Dictionary<string, int> documented)
         {
             var empty = Array.Empty<BitDiff.Diff>();
             string at = slot == null ? "" : $" {slot}";
+
+            // ma_meanvar.jsonl is held to ZERO excuses: MisalignedRegistry returns null for its valueclass, and none of
+            // this file's own excuses below run for it either.
+            bool strict = sc.Valueclass == "mameanvar";
+
+            // FORM: the masked singleton, a scalar, an array with nomask or with a mask array. getmaskarray cannot tell
+            // these apart (an all-False mask reads like nomask, the singleton like a masked 0-d array), so the object
+            // kind is checked before any value.
+            if (exp.Form != null)
+            {
+                string gotForm = MaResultForm(result);
+                if (!string.Equals(gotForm, exp.Form, StringComparison.Ordinal))
+                {
+                    failures.Add($"{sc.Id} [{sc.Layout}]{at}: result form '{gotForm}' != NumPy '{exp.Form}'");
+                    return;
+                }
+            }
 
             NPTypeCode tc;
             try { tc = FuzzCorpus.DtypeToTC(exp.Dtype); }
@@ -230,7 +283,7 @@ namespace NumSharp.Tests.Fuzz
             if (data0.typecode != tc)
             {
                 var reason = MisalignedRegistry.Classify(sc, DivergenceKind.Dtype, null, null, tc, empty)
-                             ?? MaDtypeExcuse(sc);
+                             ?? (strict ? null : MaDtypeExcuse(sc));
                 if (reason != null) Bump(documented, reason);
                 else failures.Add($"{sc.Id} [{sc.Layout}]{at}: data dtype {data0.typecode} != NumPy {exp.Dtype}");
                 return;
@@ -258,7 +311,7 @@ namespace NumSharp.Tests.Fuzz
                 // MisalignedRegistry branch 7), not an ma mask bug — excused precisely: every differing
                 // slot must be a NON-FINITE complex INPUT of a complex-unary op. Any other mask diff
                 // (a real mask-propagation bug) still fails.
-                var maskReason = MaComplexEdgeMaskExcuse(sc, maskDiff) ?? MaReductionMaskExcuse(sc);
+                var maskReason = strict ? null : MaComplexEdgeMaskExcuse(sc, maskDiff) ?? MaReductionMaskExcuse(sc);
                 if (maskReason != null)
                 {
                     // The mask AND the filled(0) data both diverge at that slot (NumSharp masks -> 0,
@@ -277,12 +330,17 @@ namespace NumSharp.Tests.Fuzz
             var expected = FuzzCorpus.FromHex(exp.Buffer);
             var diffs = BitDiff.Compare(expected, actual, tc, false);
             if (diffs.Count == 0)
+            {
+                CompareMaskedRaw(sc, result, exp, tc, at, failures);
                 return;
+            }
 
             // Signed-zero ±0 differences are non-contractual (IEEE, order/algorithm dependent) — the K13
             // class. The domained divide/mod fill-back and numpy's masked-machinery canonicalization land
             // on different zero signs at a division-to-zero; excuse when EVERY diff is a pure ±0 flip.
-            if (AllSignedZeroFlips(expected, actual, diffs, tc))
+            // mean / var / std reproduce that fill-back statement for statement (plan api-parameter-parity A6),
+            // so a zero sign they miss is a real bug (a flat ddof=2 variance of one element is -0.0 in NumPy).
+            if (!strict && sc.Op is not ("mean" or "var" or "std" or "anom") && AllSignedZeroFlips(expected, actual, diffs, tc))
             {
                 Bump(documented, "signed-zero ±0 non-contractual (masked domained divide/mod fill-back) [documented]");
                 return;
@@ -292,7 +350,7 @@ namespace NumSharp.Tests.Fuzz
             // MSVC while .NET's System.Numerics.Complex operator* is not, so the chain drifts a few ULP per
             // component — the same non-portable host-FMA class the main nanscan tier CARVES complex128 out of
             // nancumprod for. Bounded so a gross cumprod bug (wrong exponent) still fails.
-            if (sc.Op == "cumprod" && tc == NPTypeCode.Complex &&
+            if (!strict && sc.Op == "cumprod" && tc == NPTypeCode.Complex &&
                 diffs.All(d => ComplexComponentsWithinUlp(expected, actual, d.Index, 256)))
             {
                 Bump(documented, "complex128 cumprod ~ULP: host-FMA-contracted npy_cmul vs .NET Complex operator* " +
@@ -302,7 +360,7 @@ namespace NumSharp.Tests.Fuzz
 
             var truth = exp.Truth == null ? null : FuzzCorpus.FromHex(exp.Truth);
             var vreason = MisalignedRegistry.Classify(sc, DivergenceKind.Value, expected, actual, tc, diffs, truth)
-                          ?? MaValueExcuse(sc);
+                          ?? (strict ? null : MaValueExcuse(sc));
             if (vreason != null)
             {
                 Bump(documented, vreason);
@@ -312,6 +370,104 @@ namespace NumSharp.Tests.Fuzz
             failures.Add($"{sc.Id} [{sc.Layout}]{at}: filled(0) " +
                 string.Join(", ", diffs.Take(3).Select(d => $"@{d.Index} exp {d.Expected} act {d.Actual}")) +
                 (diffs.Count > 3 ? $" (+{diffs.Count - 3} more)" : ""));
+        }
+
+        /// <summary>
+        ///     The RAW comparison of ma_meanvar.jsonl: the result's data at EVERY slot, masked ones included (NumPy's
+        ///     divide-domain fills, the minuend's put-back data), NaN tokenized like the filled(0) comparison. A case
+        ///     without a recorded <see cref="FuzzCorpus.Expected.Raw"/> (every other ma tier) skips it.
+        /// </summary>
+        /// <param name="sc">The case (for the failure line).</param>
+        /// <param name="result">NumSharp's result; the masked singleton's data is its 0-d float64 0.0, like NumPy's.</param>
+        /// <param name="exp">NumPy's recorded result.</param>
+        /// <param name="tc">The data dtype, already checked equal to NumPy's.</param>
+        /// <param name="at">The tuple-slot suffix of the failure line.</param>
+        /// <param name="failures">Collects the failure line.</param>
+        private static void CompareMaskedRaw(
+            FuzzCorpus.Case sc, NDMaskedArray result, FuzzCorpus.Expected exp, NPTypeCode tc, string at, List<string> failures)
+        {
+            if (exp.Raw == null)
+                return;
+            var expected = FuzzCorpus.FromHex(exp.Raw);
+            var actual = FuzzCorpus.ResultBytes(result.data);
+            var diffs = BitDiff.Compare(expected, actual, tc, false);
+            if (diffs.Count == 0)
+                return;
+            failures.Add($"{sc.Id} [{sc.Layout}]{at}: raw data " +
+                string.Join(", ", diffs.Take(3).Select(d => $"@{d.Index} exp {d.Expected} act {d.Actual}")) +
+                (diffs.Count > 3 ? $" (+{diffs.Count - 3} more)" : ""));
+        }
+
+        /// <summary>
+        ///     The object kind of a masked result, in the corpus's <c>form</c> words: <c>masked</c> (the
+        ///     <see cref="np.ma"/> singleton), <c>scalar</c> (a 0-d result without a mask: NumPy's scalar), <c>nomask</c>
+        ///     (an array whose mask is nomask) or <c>mask</c> (an array with a mask array, an all-False one included).
+        /// </summary>
+        /// <param name="r">The result.</param>
+        /// <returns>The form word.</returns>
+        private static string MaResultForm(NDMaskedArray r)
+        {
+            if (ReferenceEquals(r, np.ma.NDMasked))
+                return "masked";
+            if (r._mask is null)
+                return r.data.ndim == 0 ? "scalar" : "nomask";
+            return "mask";
+        }
+
+        /// <summary>
+        ///     Error parity for a masked case whose NumPy call raised (<see cref="FuzzCorpus.Case.Expects_Throw"/>): the op
+        ///     must throw, as a type <see cref="ErrorTypeMap"/> pairs with NumPy's, with NumPy's text (the same three
+        ///     checks as the ordinary tiers' CheckError). A silent result is always a failure.
+        /// </summary>
+        /// <param name="sc">The case, its op name stripped of <c>ma.</c>.</param>
+        /// <param name="ops">The reconstructed operands.</param>
+        /// <param name="failures">Collects one line per unexcused mismatch.</param>
+        /// <param name="documented">Counts the excused mismatches by reason.</param>
+        private static void CheckMaError(
+            FuzzCorpus.Case sc, NDMaskedArray[] ops, List<string> failures, Dictionary<string, int> documented)
+        {
+            var empty = Array.Empty<BitDiff.Diff>();
+            Exception caught = null;
+            try
+            {
+                _ = OpRegistry.ApplyMasked(sc.Op, sc.Params, ops);
+            }
+            catch (Exception e)
+            {
+                caught = e;
+            }
+
+            if (caught == null)
+            {
+                var reason = MisalignedRegistry.Classify(sc, DivergenceKind.Value, null, null, default, empty);
+                if (reason != null) Bump(documented, reason);
+                else failures.Add($"{sc.Id} [{sc.Layout}]: NumPy raises {sc.Error?.Type ?? "an error"} but NumSharp " +
+                                  "produced a result (error-parity gap)");
+                return;
+            }
+            if (sc.Error == null)
+                return;
+
+            string gotType = caught.GetType().Name;
+            string gotText = NormalizeMessage(caught.Message);
+            string wantText = (sc.Error.Text ?? "").Trim();
+            // An exception named after NumPy's (Exceptions/{ValueError,TypeError,AxisError}.cs) is the strongest match.
+            bool typeOk = gotType == sc.Error.Type
+                          || !ErrorTypeMap.TryGetValue(sc.Error.Type, out var allowed)
+                          || allowed.Contains(gotType);
+            bool textOk = string.Equals(gotText, wantText, StringComparison.Ordinal);
+            if (typeOk && textOk)
+                return;
+
+            var er = MisalignedRegistry.Classify(sc, DivergenceKind.ErrorText, null, null, default, empty);
+            if (er != null)
+            {
+                Bump(documented, er);
+                return;
+            }
+            failures.Add($"{sc.Id} [{sc.Layout}]: error mismatch\n" +
+                         $"      numpy:    {sc.Error.Type}: {Show(wantText)}\n" +
+                         $"      numsharp: {gotType}: {Show(gotText)}");
         }
 
         // ---- helpers -----------------------------------------------------------------------------
@@ -340,13 +496,13 @@ namespace NumSharp.Tests.Fuzz
         {
             "average" => "[known gap] ma.average promotes the result to float64 where NumPy keeps the input float width",
             "median" => "[known gap] ma.median widens a narrow-float / all-masked result to float64 where NumPy keeps the width",
-            "anom" => "[known gap] ma.anom (x - mean) promotes a narrow-float result to float64 where NumPy keeps the width",
             _ => null,
         };
 
         /// <summary>
-        ///     KNOWN-GAP mask divergences on NON-FINITE unmasked data: var/std/mean/average mask a nan/inf
-        ///     reduction result where NumSharp leaves it unmasked (the masked-op composition differs), and
+        ///     KNOWN-GAP mask divergences on NON-FINITE unmasked data: average masks a nan/inf
+        ///     reduction result where NumSharp leaves it unmasked (the masked-op composition differs; var/std/mean/
+        ///     anom were in this class until they became numpy.ma's statements, plan api-parameter-parity A6), and
         ///     ma.sort places a masked slot differently when the UNMASKED data carries NaN (NaN-ordering vs
         ///     strict masked-to-end). Scoped to those ops at a float/complex dtype so a real mask-propagation
         ///     bug in any other op still fails. Documented in docs/MA_ORACLE_DESIGN.md "Known gaps".
@@ -367,8 +523,8 @@ namespace NumSharp.Tests.Fuzz
             bool floatc = sc.Operands.Length >= 1 &&
                           sc.Operands[0].Dtype is "float16" or "float32" or "float64" or "complex128";
             if (!floatc) return null;
-            if (sc.Op is "var" or "std" or "mean" or "average" or "anom")
-                return "[known gap] ma var/std/mean/average/anom mask a non-finite (nan/inf) reduction result " +
+            if (sc.Op == "average")
+                return "[known gap] ma.average masks a non-finite (nan/inf) reduction result " +
                        "where NumSharp leaves it unmasked (nan/inf present in the UNMASKED data)";
             if (sc.Op == "sort")
                 return "[known gap] ma.sort masked-slot position differs when the UNMASKED data carries NaN " +
@@ -378,27 +534,27 @@ namespace NumSharp.Tests.Fuzz
 
         /// <summary>
         ///     KNOWN-GAP value divergences the mask/dtype branches do not already cover: ma.average over
-        ///     non-finite unmasked data (NumPy masks the slot -> filled(0)=0, NumSharp keeps nan/inf). The
-        ///     var/std/mean value drift is covered by the shared reduce-accumulation excuse; this adds only
-        ///     average. Scoped to average at a float/complex dtype. Documented in docs/MA_ORACLE_DESIGN.md.
+        ///     non-finite unmasked data (NumPy masks the slot -> filled(0)=0, NumSharp keeps nan/inf).
+        ///     var/std/mean/anom have no value excuse (numpy.ma's statements since plan api-parameter-parity A6).
+        ///     Scoped to average at a float/complex dtype. Documented in docs/MA_ORACLE_DESIGN.md.
         /// </summary>
         private static string MaValueExcuse(FuzzCorpus.Case sc)
         {
-            // anom/median VALUE diverges on a NON-CONTIGUOUS input (1-D strided/negstride/offset AND the 2-D
-            // strided/negstride edge layouts) — a real strided-reduction gap in these two niche ops (their
-            // internal mean/sort over a strided view reads the wrong stride, e.g. anom yields -inf), any
-            // dtype; contiguous/F/transposed are byte-exact. Documented in docs/MA_ORACLE_DESIGN.md.
-            if ((sc.Op is "anom" or "median") &&
+            // median VALUE diverges on a NON-CONTIGUOUS input (1-D strided/negstride/offset AND the 2-D
+            // strided/negstride edge layouts) — a real strided-reduction gap (its internal sort over a strided
+            // view reads the wrong stride), any dtype; contiguous/F/transposed are byte-exact. anom shared it until
+            // it became numpy.ma's statements (plan api-parameter-parity A6). Documented in docs/MA_ORACLE_DESIGN.md.
+            if (sc.Op == "median" &&
                 (sc.Layout is "strided_step2_1d" or "negstride_1d" or "simple_slice_offset_1d"
                     or "strided_2d_cols" or "negstride_2d_offset"))
-                return "[known gap] ma.anom/median value diverges on a non-contiguous (strided/negstride/offset) input";
+                return "[known gap] ma.median value diverges on a non-contiguous (strided/negstride/offset) input";
 
             bool floatc = sc.Operands.Length >= 1 &&
                           sc.Operands[0].Dtype is "float16" or "float32" or "float64" or "complex128";
             if (!floatc) return null;
-            if (sc.Op is "average" or "anom")
-                return "[known gap] ma.average/anom value differs on non-finite unmasked data (NumPy masks -> 0, " +
-                       "NumSharp keeps nan/inf); same class as var/std/mean non-finite masking";
+            if (sc.Op == "average")
+                return "[known gap] ma.average value differs on non-finite unmasked data (NumPy masks -> 0, " +
+                       "NumSharp keeps nan/inf); the class var/std/mean/anom left in plan api-parameter-parity A6";
             if (sc.Op == "median")
                 return "[known gap] ma.median value differs on a slice carrying non-finite (nan/inf) unmasked data " +
                        "(sort/interpolation of inf; NumSharp finite vs NumPy inf)";

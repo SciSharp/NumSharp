@@ -149,21 +149,24 @@ namespace NumSharp.Tests.Fuzz
             "minmax_kwargs",
             // np.var / np.std are NumPy's _var / _std statement for statement since 2026-10-05 (plan
             // api-parameter-parity A2): NumPy's sum schedule, a subtract and a multiply, and an IEEE square root —
-            // no platform libm, so a ULP drift is a regression. (ma.var / ma.std keep the reduction blankets, which
-            // classify them before this branch: IsMaVarStd.)
+            // no platform libm, so a ULP drift is a regression. ma.var / ma.std are numpy.ma's MaskedArray.var / std
+            // statement for statement since 2026-10-05 (plan item A6) and are held to the same.
             "var", "std",
             // np.nanvar / np.nanstd are NumPy's nanvar / nanstd statement for statement since 2026-10-05 (plan
             // api-parameter-parity A3): two sums in NumPy's schedule over the K-order copy, a subtract, a multiply (the
             // complex one for a complex input), divisions and an IEEE square root — no platform libm either.
             "nanvar", "nanstd",
             // np.mean is NumPy's _mean statement for statement since 2026-10-05 (plan api-parameter-parity X9): np.sum's
-            // add reduction in the loop dtype and the division by the count — no platform libm. (ma.mean keeps the
-            // reduction blankets, which classify it before this branch: IsMaMean.)
+            // add reduction in the loop dtype and the division by the count — no platform libm. ma.mean is numpy.ma's
+            // MaskedArray.mean statement for statement since 2026-10-05 (plan item A6) and is held to the same.
             "mean",
             // np.nanmean is NumPy's nanmean statement for statement since 2026-10-05 (plan api-parameter-parity A7): the
             // count and the NaN-zeroed sum in NumPy's schedule over the K-order copy, the division by the count; an
             // integer input is np.mean (X9).
-            "nanmean"
+            "nanmean",
+            // ma.anom is numpy.ma's MaskedArray.anom since 2026-10-05 (plan api-parameter-parity A6): ma.mean and numpy.ma's
+            // subtract — no platform libm. Its one operand made it look like a unary op.
+            "anom"
         };
 
         /// <summary>
@@ -317,6 +320,12 @@ namespace NumSharp.Tests.Fuzz
             // nanmean.jsonl (np.nanmean as NumPy's nanmean, plan api-parameter-parity A7: every layout, dtype, NaN pattern
             // and dtype= loop, special values, np.setbufsize fills, empty and 0-d inputs) is held to ZERO excuses too.
             if (c.Valueclass == "nanmean")
+                return null;
+            // ma_meanvar.jsonl (np.ma.mean / var / std / anom as numpy.ma's statements, plan api-parameter-parity A6: every
+            // layout, dtype, mask class, ddof, dtype= loop and mean= form, special values, empty and 0-d inputs, NumPy's
+            // errors) is held to ZERO excuses too; the cells that inherit np.sum's residuals (findings 5 and 10, X12) are
+            // carved by the generator (gen_ma_oracle._mv_carved), each pinned.
+            if (c.Valueclass == "mameanvar")
                 return null;
 
             // reduce_start.jsonl (valueclass "negzero": every operand all -0.0, every result a signed zero) is held to
@@ -768,17 +777,14 @@ namespace NumSharp.Tests.Fuzz
                 //      are NumPy's _var / _std statement for statement now (plan api-parameter-parity A2), so every
                 //      var/std case is held to NumPy's bits, dtype and shape with no excuse here or below.
 
-                // Reduction result dtype differs (NEP50 accumulator width / complex->real for std/var).
-                // sum/prod now apply NEP50 accumulator widening on EVERY size — including the degenerate
-                // 0-d scalar / single-element 1-D flat path (fixed 2026-09-13: HandleScalarReduction was
-                // cloning the input dtype instead of casting to GetAccumulatingType) — so they are BIT-
-                // EXACT on dtype and are NO LONGER excused: a regression that drops the widening again
-                // must turn the gate red. np.var / np.std / ndarray.var / ndarray.std are exact on dtype too
-                // since 2026-10-05 (NumPy's _var: the input's float dtype, float64 for integer/bool/complex,
-                // dtype= when given); ma.var / ma.std keep the branch (IsMaVarStd).
-                if (kind == DivergenceKind.Dtype && c.Op != "sum" && c.Op != "prod"
-                    && ((c.Op != "var" && c.Op != "std" && c.Op != "mean") || IsMaVarStd(c) || IsMaMean(c)))
-                    return "reduction result dtype differs (NEP50 accumulator / complex->real) [known bug]";
+                // (removed 2026-10-06) "reduction result dtype differs (NEP50 accumulator / complex->real)". sum/prod
+                //      became bit-exact on dtype on every size on 2026-09-13 (HandleScalarReduction cloned the input
+                //      dtype instead of casting to GetAccumulatingType), np./ndarray. var / std / mean on 2026-10-05
+                //      (NumPy's _var / _mean), and the branch's last 88 cases — the masked mean of a float32 (float64 in
+                //      NumPy, float32 in the old port) and two float32 ma.var slices — went with numpy.ma's statements
+                //      (plan api-parameter-parity A6). It then excused no case in any tier, so a reduction's dtype divergence
+                //      is red; the ma harness's own excuses (MaDtypeExcuse: ma.median / ma.average) run after this
+                //      registry and are unchanged.
                 // Complex axis reductions work on every rank since 2026-10-04 (the 1-D case used to throw
                 // "NDCoordinatesAxisIncrementor with a vector shape"); no Threw case is excused any more.
 
@@ -787,10 +793,10 @@ namespace NumSharp.Tests.Fuzz
                 // CombineVectors), so it is NOT excused — a flat regression fails the gate. The
                 // axis (vertical/strided) SIMD min/max path still drops NaN; excuse only that.
                 // (mean/std/var/sum propagate NaN on both paths already, via arithmetic.)
-                // var/std (np.* / ndarray.*) are NumPy's _var since 2026-10-05: a NaN they miss is a real bug, not
-                // this min/max one (ma.var / ma.std keep it with their other gaps, IsMaVarStd).
+                // var/std/mean (np.*, ndarray.* and ma.*) are NumPy's statements since 2026-10-05 (_var, _mean and
+                // numpy.ma's MaskedArray methods): a NaN they miss is a real bug, not this min/max one.
                 if (kind == DivergenceKind.Value && diffs.Count > 0 && diffs.Count > 0 && diffs.All(d => d.Expected == "NaN")
-                    && ((c.Op != "var" && c.Op != "std" && c.Op != "mean") || IsMaVarStd(c) || IsMaMean(c))
+                    && c.Op != "var" && c.Op != "std" && c.Op != "mean"
                     && c.Params != null
                     && c.Params.TryGetValue("axis", out var axEl)
                     && axEl.ValueKind != System.Text.Json.JsonValueKind.Null)
@@ -802,8 +808,10 @@ namespace NumSharp.Tests.Fuzz
                 //      api-parameter-parity finding 5): NumPy walks the reversed axis in logical order, the axis kernel in
                 //      memory order, which shows where the values cancel. Everything else of np.mean is NumPy's _mean bit
                 //      for bit (plan item X9), so the unbounded summation blanket below no longer takes mean: only this
-                //      layout, which np.sum's own cases (still under the blanket) share.
-                if (kind == DivergenceKind.Value && c.Op == "mean" && !IsMaMean(c) && IsReversedAxisReduction(c)
+                //      layout, which np.sum's own cases (still under the blanket) share. ma.mean (prefix stripped)
+                //      reaches it too since A6: with nomask or an all-False mask numpy.ma sums the data view itself
+                //      (ma.anom, which subtracts that mean, has its own branch after this block).
+                if (kind == DivergenceKind.Value && c.Op == "mean" && IsReversedAxisReduction(c)
                     && (tc == NPTypeCode.Half || tc == NPTypeCode.Single || tc == NPTypeCode.Double || tc == NPTypeCode.Complex))
                     return "mean along an axis of a reversed view: np.sum's order there (finding 5) [known bug]";
                 // Floating accumulation: NumPy pairwise summation / two-pass var vs NumSharp order.
@@ -817,10 +825,17 @@ namespace NumSharp.Tests.Fuzz
                 if (kind == DivergenceKind.Value && truth == null
                     && (tc == NPTypeCode.Half || tc == NPTypeCode.Single
                         || tc == NPTypeCode.Double || tc == NPTypeCode.Complex)
-                    && (c.Op == "sum" || c.Op == "prod" || IsMaVarStd(c) || IsMaMean(c))
+                    && (c.Op == "sum" || c.Op == "prod")
                     && !IsIdentitySumSignedZeroFlip(c.Op, expected, actual, tc, diffs))
                     return "reduction summation/two-pass precision (algorithm order)";
             }
+
+            // (A6) ma.anom (prefix stripped) is numpy.ma's MaskedArray.anom — `self - self.mean(axis)` — so along an axis
+            //      of a view with a REVERSED axis it inherits ma.mean's finding-5 residual above (np.sum's order there).
+            //      Nothing else of anom is excused: it is in ByteExactArithmeticUnaryOps, out of the unary ULP branches.
+            if (kind == DivergenceKind.Value && c.Op == "anom" && IsReversedAxisReduction(c)
+                && (tc == NPTypeCode.Half || tc == NPTypeCode.Single || tc == NPTypeCode.Double || tc == NPTypeCode.Complex))
+                return "anom along an axis of a reversed view: its mean's np.sum order there (finding 5) [known bug]";
 
             // Decimal std (surfaced by scoping B1 to float-family): var — the exact decimal
             // mean-of-squared-deviations — is bit-exact, so the divergence is purely sqrt(var):
@@ -1336,30 +1351,6 @@ namespace NumSharp.Tests.Fuzz
         private static bool IsSignedZeroPairSingle(BitDiff.Diff d) =>
             (d.Expected == "00000000" || d.Expected == "00000080")
             && (d.Actual == "00000000" || d.Actual == "00000080");
-
-        /// <summary>
-        ///     Whether case <paramref name="c"/> is <c>ma.var</c> / <c>ma.std</c> (an <c>ma.*</c> id, prefix stripped): the only
-        ///     var/std cases the reduction blankets still excuse. <c>NDMaskedArray.var</c>'s masked path is its own
-        ///     arithmetic, not <c>np.var</c>, and still diverges from NumPy beyond any summation order: a slice NumPy
-        ///     masks (all masked, or <c>count - ddof &lt;= 0</c>) carries NaN instead of the masked 0, and some slices
-        ///     come back finite where NumPy has +inf (242 ma tier cases on 2026-10-05, hidden until then by the unbounded
-        ///     summation blanket; plan <c>docs/plans/api-parameter-parity.md</c> item A6).
-        /// </summary>
-        /// <param name="c">The case (prefix already stripped).</param>
-        /// <returns>True for an <c>ma.var</c> / <c>ma.std</c> case.</returns>
-        private static bool IsMaVarStd(FuzzCorpus.Case c)
-            => (c.Op == "var" || c.Op == "std") && c.Id != null && c.Id.StartsWith("ma.", StringComparison.Ordinal);
-
-        /// <summary>
-        ///     Whether case <paramref name="c"/> is <c>ma.mean</c> (an <c>ma.*</c> id, prefix stripped): the only mean cases
-        ///     the reduction blankets still excuse. <c>NDMaskedArray.mean</c> is its own masked arithmetic, not
-        ///     <c>np.mean</c>; <c>np.mean</c> and <c>ndarray.mean</c> are NumPy's <c>_mean</c> statement for statement since
-        ///     2026-10-05 (plan <c>docs/plans/api-parameter-parity.md</c> item X9) and are held to NumPy's bits.
-        /// </summary>
-        /// <param name="c">The case (prefix already stripped).</param>
-        /// <returns>True for an <c>ma.mean</c> case.</returns>
-        private static bool IsMaMean(FuzzCorpus.Case c)
-            => c.Op == "mean" && c.Id != null && c.Id.StartsWith("ma.", StringComparison.Ordinal);
 
         /// <summary>
         ///     Whether case <paramref name="c"/> reduces along an axis (an <c>axis</c> param that is not null) of an operand
