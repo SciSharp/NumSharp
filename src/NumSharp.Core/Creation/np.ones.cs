@@ -92,10 +92,14 @@ namespace NumSharp
 
         /// <summary>
         ///     The storage-lane core behind every public <c>ones(..., dtype)</c> overload (which all take the single
-        ///     <see cref="DType"/> descriptor parameter, like NumPy's <c>dtype=</c>).
+        ///     <see cref="DType"/> descriptor parameter, like NumPy's <c>dtype=</c>) and <c>ones_like</c>.
         /// </summary>
-        /// <param name="shape">Shape of the new array.</param>
+        /// <param name="shape">Shape of the new array. A dense layout (C, F or a KEEPORDER permutation at offset 0) is
+        ///     kept, which is how <c>ones_like(a, order='K')</c> gets <c>a</c>'s memory order; any view layout is re-laid out
+        ///     in C order (<see cref="Shape.ForFreshAllocation"/>).</param>
         /// <param name="typeCode">The desired data-type for the array.</param>
+        /// <returns>A fresh, owned, writeable array of <paramref name="shape"/>'s dimensions with every element one.</returns>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows (<see cref="AllocationGuard"/>).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
         private static NDArray OnesCore(Shape shape, NPTypeCode typeCode)
         {
@@ -128,10 +132,13 @@ namespace NumSharp
             // dimension guard has to be explicit here — see np.full.
             AllocationGuard.CheckDimensions(shape.dimensions, typeCode);
 
-            // The wrapping constructor installs the shape as given, so the fresh-layout rule of the allocating funnel has
+            // The storage constructor installs the shape as given, so the fresh-layout rule of the allocating funnel has
             // to be applied here: a view's Shape (np.ones(x.Shape) for x = a[::4]) would otherwise address past the
-            // `size`-element buffer, and a read-only source's Shape would make the new array read-only.
-            return new NDArray(ArraySlice.Allocate(typeCode, shape.size, one), shape.ForFreshAllocation());
+            // `size`-element buffer, and a read-only source's Shape would make the new array read-only. It must be the
+            // storage constructor, as in np.full: the public wrap constructor new NDArray(IArraySlice, Shape) reads
+            // dimensions only (NumPy's ndarray(shape, buffer=...)), which would turn the kept F / KEEPORDER layout of
+            // ones_like(a, order='K') into C order.
+            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, one), shape.ForFreshAllocation()));
         }
 
         /// <summary>

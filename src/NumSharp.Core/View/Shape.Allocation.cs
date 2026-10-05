@@ -137,6 +137,100 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     The layout NumPy's <c>ndarray(shape, buffer=values, order=order)</c> installs over a CALLER'S buffer: this
+        ///     shape's dimensions with C strides (F strides when <paramref name="order"/> is <c>'F'</c>), offset 0, a buffer
+        ///     size equal to the element count, writeable. The public wrap constructors <c>new NDArray(Array, Shape, char)</c>
+        ///     and <c>new NDArray(IArraySlice, Shape, char)</c> route their <c>shape</c> argument through here, so the strides,
+        ///     offset, buffer size and flags a view's shape carries (<c>x.Shape</c> of <c>a[::4]</c>, <c>a[::-1]</c>,
+        ///     <c>a.T</c> or a broadcast) never address the caller's values.
+        /// </summary>
+        /// <param name="order">The PHYSICAL order: <c>'F'</c> for column-major, anything else for row-major. Callers resolve
+        ///     the user's char first with <see cref="OrderResolver.ResolveBufferOrder"/>.</param>
+        /// <returns>
+        ///     This shape when it already is exactly that layout and writeable, so the common call allocates nothing; the
+        ///     same layout with <see cref="ArrayFlags.WRITEABLE"/> set when only the flag differs; otherwise a new shape of
+        ///     the same dimensions in that layout (its dimension array is a copy, so it shares nothing with this shape). An
+        ///     uninitialized shape (<see cref="IsEmpty"/>) is returned unchanged: the wrap constructors replace it with the
+        ///     values' own shape before they call here.
+        /// </returns>
+        /// <remarks>
+        ///     <para>
+        ///     <b>NumPy's rule.</b> <c>array_new</c> (<c>numpy/_core/src/multiarray/arrayobject.c</c>) reads <c>shape</c> as a
+        ///     sequence of dimensions and, with a buffer and no <c>strides</c>, lets <c>PyArray_NewFromDescr_int</c> compute
+        ///     them with <c>_array_fill_strides</c>: C order, or F order for <c>order='F'</c>. Probed against NumPy 2.4.2:
+        ///     <c>np.ndarray(a[::4].shape, buffer=v)</c> reads <c>v</c> densely, <c>np.ndarray(a[::-1].shape, buffer=v)</c> reads
+        ///     it forwards, and <c>np.ndarray(a.T.shape, buffer=v)</c> reads it in C order.
+        ///     </para>
+        ///     <para>
+        ///     <b>Why not <see cref="ForFreshAllocation"/>.</b> That rule keeps a dense F or permuted layout, because NumSharp
+        ///     allocates its KEEPORDER outputs that way. A wrap is a dimensions-only request, so even a dense transposed
+        ///     layout is re-laid out in the requested order, as NumPy does.
+        ///     </para>
+        ///     <para>
+        ///     <b>Why the strides are compared exactly.</b> The C and F flags skip extent-1 axes and are set on every empty
+        ///     shape, so a stepped empty view (strides <c>(0, 1)</c> for dims <c>(0, 3)</c>) would pass them and keep strides
+        ///     NumPy does not produce (it gives <c>(3, 1)</c>).
+        ///     </para>
+        ///     <para>
+        ///     <b>Why the result is always writeable.</b> The buffer is the caller's own memory, so the read-only flag of the
+        ///     shape's source array (a broadcast, a read-only memmap) is not the new array's (NumPy: writeable).
+        ///     </para>
+        /// </remarks>
+        internal readonly Shape ForWrappedBuffer(char order)
+        {
+            // default(Shape) has no dimensions; the wrap constructors replace it with the values' own shape first.
+            if (IsEmpty)
+                return this;
+
+            bool fortran = order == 'F';
+            if (offset == 0 && (bufferSize == size || bufferSize == 0) && HasExactContiguousStrides(fortran))
+                return IsWriteable ? this : WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
+
+            // Clean() clones the dimensions and computes C strides; the F constructor gets a clone too, so the new layout
+            // never shares a dimension array with the caller's shape.
+            return fortran ? new Shape((long[])dimensions.Clone(), 'F') : Clean();
+        }
+
+        /// <summary>
+        ///     Whether the strides are exactly the C strides of the dimensions (or the F strides when
+        ///     <paramref name="fortran"/> is true), axis by axis, in NumSharp's running-product convention (the one
+        ///     <c>ComputeContiguousStrides</c> and <c>ComputeFContiguousStrides</c> use, where an empty extent zeroes the
+        ///     strides outside it).
+        /// </summary>
+        /// <param name="fortran">True to compare against the F strides, false against the C strides.</param>
+        /// <returns>True when every axis has exactly the expected stride, including extent-1 and empty axes, which the
+        ///     cached C/F flags skip.</returns>
+        private readonly bool HasExactContiguousStrides(bool fortran)
+        {
+            var dims = dimensions;
+            var strd = strides;
+            if (strd == null || strd.Length != dims.Length)
+                return false;
+
+            long expected = 1;
+            if (fortran)
+            {
+                for (int i = 0; i < dims.Length; i++)
+                {
+                    if (strd[i] != expected)
+                        return false;
+                    expected *= dims[i];
+                }
+            }
+            else
+            {
+                for (int i = dims.Length - 1; i >= 0; i--)
+                {
+                    if (strd[i] != expected)
+                        return false;
+                    expected *= dims[i];
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
         ///     Whether the strides visit every element of <c>[0, size)</c> exactly once with no negative step, in SOME axis
         ///     order — the neither-C-nor-F layouts NumPy's KEEPORDER allocates (<c>a.transpose(1, 0, 2).copy(order='K')</c>
         ///     keeps the transposed stride order). Use it only on a shape whose offset is 0; it does not read

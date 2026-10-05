@@ -1373,12 +1373,28 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Allocate <paramref name="values"/> into memory.
+        ///     Makes <paramref name="values"/> this storage's data and installs <paramref name="shape"/>'s layout over it AS
+        ///     GIVEN — strides, offset and flags included. This is the analog of NumPy's C API
+        ///     (<c>PyArray_NewFromDescr</c> with a data pointer and strides, where the caller is responsible for correctness),
+        ///     not of the Python-level <c>np.ndarray(shape, buffer=...)</c>.
         /// </summary>
-        /// <param name="values">The array to set as internal data storage</param>
-        /// <param name="shape">The shape of the array.</param>
-        /// <param name="copy">Should perform a copy of <paramref name="values"/></param>
-        /// <remarks>Does not copy <paramref name="values"/></remarks>
+        /// <param name="values">The buffer to adopt as this storage's data.</param>
+        /// <param name="shape">The exact layout to install. Every element it addresses must lie inside
+        ///     <paramref name="values"/>; nothing here checks that.</param>
+        /// <param name="copy">True to adopt a clone of <paramref name="values"/> instead of the slice itself.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="shape"/> is uninitialized (<c>default(Shape)</c>).</exception>
+        /// <exception cref="ArgumentException">The element count of <paramref name="values"/> is not the size of
+        ///     <paramref name="shape"/>.</exception>
+        /// <remarks>
+        ///     <para>Does not copy <paramref name="values"/> unless <paramref name="copy"/> is true.</para>
+        ///     <para>
+        ///     A view's layout installed here reads past the buffer: for <c>x = arange(20)["::4"]</c>,
+        ///     <c>Allocate(fiveElements, x.Shape)</c> reads element i at i * 4. The public wrap constructors
+        ///     (<c>new NDArray(IArraySlice, Shape, char)</c>, <c>new NDArray(Array, Shape, char)</c>) therefore lay out the
+        ///     dimensions afresh first (<see cref="Shape.ForWrappedBuffer"/>), as NumPy's <c>ndarray</c> does, and only pass
+        ///     a layout they built.
+        ///     </para>
+        /// </remarks>
         public void Allocate(IArraySlice values, Shape shape, bool copy = false)
         {
             if (shape.IsEmpty)

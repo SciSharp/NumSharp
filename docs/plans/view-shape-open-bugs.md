@@ -19,7 +19,7 @@ divergence proved), B (confirmed as a parity bug) and F (fixed and gated).
 
 | # | Bug | Tests that pin it | P | D | B | F | Commit |
 |---|---|---|---|---|---|---|---|
-| 1 | The wrap constructors install the caller's layout | 4 pins + new | [x] | [x] | [x] | [ ] | |
+| 1 | The wrap constructors install the caller's layout | 4 pins + new | [x] | [x] | [x] | [x] | (the commit after `0cb7ed09`) |
 | 2a | The `Shape` indexer has a setter | 3 pins + `AuditV2.T1_10` | [x] | [x] | [x] | [ ] | |
 | 2b | `NDArray.shape` returns the array's own dimension array | new | [x] | [x] | [x] | [ ] | |
 | 2c | `Shape.Dimensions` and `Shape.Strides` return the shape's own arrays | new | [x] | [x] | [x] | [ ] | |
@@ -104,10 +104,58 @@ Only `order='F'` with `NDim > 1` rebuilt the layout.
 - B1.10: a buffer that is too small. NumPy raises `TypeError: buffer is too small for requested array`; NumSharp raises
   `ArgumentException: values.Length does not match shape.Size`. Same outcome (an error), different type and text.
 - B1.11: a buffer that is larger than the shape. NumPy uses a prefix; NumSharp raises the same `ArgumentException`.
+- NumSharp's own `np.ndarray(shape, dtype, buffer, order)` defaults to `order='F'` and float32 (NumPy: `order=None`,
+  i.e. C, and float64), and ignores `order` without a buffer (NumPy: `np.ndarray((2,3), order='F')` is F-contiguous).
 
 ### Status
 
-Not started.
+**Done.** What changed:
+
+- `OrderResolver.ResolveBufferOrder(char)`: NumPy's `ndarray` order rule. `'F'`/`'f'` is F; `'C'`, `'A'`, `'K'` in
+  either case are C; anything else is `ValueError: order must be one of 'C', 'F', 'A', or 'K' (got 'X')` (verbatim).
+  The constructors ignored invalid codes and treated lowercase `'f'` as C before.
+- `Shape.ForWrappedBuffer(char)` (`View/Shape.Allocation.cs`): the dimensions-only layout. It keeps a shape that
+  already has exactly that layout (no allocation), sets `WRITEABLE` when only the flag differs, and otherwise builds a
+  new C or F layout from a copy of the dimensions. Strides are compared exactly, because the C/F flags skip extent-1
+  axes and are set on every empty shape.
+- Both public wrap constructors (and the `NDArray<T>` twins, through them) call it after validating `order`.
+- `np.ones`' core now installs its kept layout through `new UnmanagedStorage(slice, shape)`, as `np.full` does. The
+  audit below showed it was the only internal caller that passed a non-C layout to a public wrap constructor on
+  purpose (the KEEPORDER layout of `ones_like(a, order='K')`).
+- `UnmanagedStorage.Allocate(IArraySlice, Shape, bool)` documents that it installs its layout as given, like NumPy's C
+  API.
+
+Audit of internal callers: a temporary check logged every non-C layout that reached the two constructors during the
+full NumSharp.Tests and Oracle runs (2,084 lines). Apart from the 4 pins, every hit came from `np.ones` /
+`np.ones_like` with a dense F or permuted layout. A grep of Core and the interop packages found no other caller that
+passes a view layout.
+
+Tests (`test/NumSharp.Tests/Creation/WrapConstructor.ViewShape.Tests.cs`, 20 tests, every value probed against NumPy
+2.4.2): the 4 former pins, the untested triggers (reversed, transposed in C and F, broadcast, empty stepped), guards
+(contiguous slice, 0-d, F at rank 3), the order codes and the invalid-order error, all 15 dtypes through both
+overloads, the generic twins, in-place wrapping of a 1-D array, a multi-dimensional C# array, the unchanged size
+check, and `np.ones` / `np.ones_like` keeping KEEPORDER layouts. Against the old constructors, 14 of the 20 fail; the 6
+that pass are guards of behavior that was already right.
+
+Gates: NumSharp.Tests net10.0 17,873 passed and net8.0 17,872 passed (CI filter, 0 failed); Oracle 226 passed; the
+`[OpenBugs]` set fails 68 (was 72: exactly the 4 moved pins).
+
+Cost (ns per call, best of 15, the baseline build `0cb7ed09` and the fix measured in two interleaved runs; NumPy
+2.4.2 alongside):
+
+| Call | Baseline | Fixed | NumPy |
+|---|---|---|---|
+| `new NDArray(double[1000], (1000,))` | 462 / 584 | 514 / 445 | 269 |
+| `new NDArray(double[10000], (100,100))` | 194 / 320 | 186 / 203 | 272 |
+| `new NDArray(double[10000], (100,100), 'F')` | 200 / 207 | 222 / 236 | 394 |
+| `np.ones((1000,))` | 325 / 323 | 327 / 324 | 769 |
+| `np.ones((100,100))` | 1,581 / 1,519 | 1,521 / 1,478 | 1,695 |
+| `np.ones_like(F (100,100))` | 1,570 / 1,532 | 1,523 / 1,573 | 1,863 |
+
+No change beyond run-to-run noise, except about +15 ns on the F wrap: the F layout is built from a copy of the
+dimensions, so it does not share the caller's array while bug 2 is open. Drop the copy once 2d makes shapes immutable.
+The 1-D wrap of a `double[1000]` stays slower than NumPy (0.5 to 0.6 NPY/NS) in both builds: pinning the managed array
+(`GCHandle.Alloc`) is that floor, not the layout rule.
 
 ---
 

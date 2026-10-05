@@ -260,47 +260,102 @@ namespace NumSharp
         public NDArray(DType dtype) : this(dtype, BackendFactory.GetEngine()) { }
 
         /// <summary>
-        /// Constructor which takes .NET array
-        /// dtype and shape is determined from array
+        ///     Wraps a .NET array as an <see cref="NDArray"/> — the C# port of NumPy's
+        ///     <c>np.ndarray(shape, buffer=values, order=order)</c>. The element type of <paramref name="values"/> is the
+        ///     dtype, and <paramref name="shape"/> contributes its DIMENSIONS only: the array lays <paramref name="values"/>
+        ///     out densely in <paramref name="order"/>, whatever strides or offset the shape carried.
         /// </summary>
-        /// <param name="values"></param>
-        /// <param name="shape"></param>
-        /// <param name="order"></param>
-        /// <returns>Array with values</returns>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        /// <param name="values">
+        ///     The elements, read in the order <paramref name="order"/> lays them out. A one-dimensional array is wrapped in
+        ///     place, without a copy, so writes through the result reach it. A multi-dimensional or jagged array is first
+        ///     flattened, row by row, into a new one-dimensional array.
+        /// </param>
+        /// <param name="shape">
+        ///     The dimensions of the result, like NumPy's <c>shape</c> argument. Only <see cref="Shape.Dimensions"/> is read:
+        ///     the shape of a view (<c>x.Shape</c> of <c>a[::4]</c>, <c>a[::-1]</c>, <c>a.T</c> or a broadcast) gives the
+        ///     same array as a fresh shape of the same dimensions. <c>default</c> (an uninitialized <see cref="Shape"/>) uses
+        ///     the dimensions of <paramref name="values"/> itself.
+        /// </param>
+        /// <param name="order">
+        ///     <c>'C'</c> (the default) lays the values out row-major and <c>'F'</c> column-major, for every number of
+        ///     dimensions. <c>'A'</c> and <c>'K'</c> mean <c>'C'</c> here, as in NumPy's <c>ndarray</c>; lowercase is
+        ///     accepted.
+        /// </param>
+        /// <exception cref="NullReferenceException"><paramref name="values"/> is null (its element type is read first).</exception>
+        /// <exception cref="ValueError"><paramref name="order"/> is not one of <c>'C'</c>, <c>'F'</c>, <c>'A'</c>, <c>'K'</c>
+        ///     in either case (NumPy's text: <c>order must be one of 'C', 'F', 'A', or 'K' (got 'X')</c>).</exception>
+        /// <exception cref="ArgumentException">The element count of <paramref name="values"/> is not the size of
+        ///     <paramref name="shape"/>. NumSharp requires an exact match; NumPy also accepts a larger buffer and reads a
+        ///     prefix of it.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     <b>Why dimensions only.</b> NumPy's <c>array_new</c> computes the strides for <c>shape</c> itself
+        ///     (<c>_array_fill_strides</c>), so the port <c>new NDArray(values, x.Shape)</c> of
+        ///     <c>np.ndarray(x.shape, buffer=values)</c> must not install a view's layout over the caller's buffer. It used
+        ///     to: for <c>x = arange(20)["::4"]</c> element i was read at i * 4 of a 5-element array, past its end; a reversed
+        ///     view's shape read the values backwards, a transposed view's in F order, and a broadcast view's repeated row 0
+        ///     and made the result read-only. <see cref="Shape.ForWrappedBuffer"/> is the rule.
+        ///     </para>
+        ///     <para>
+        ///     Internal code that must install a specific layout over a fresh buffer (a KEEPORDER result) builds the storage
+        ///     with <c>new UnmanagedStorage(slice, shape)</c> instead, which trusts its layout as NumPy's C API does.
+        ///     </para>
+        /// </remarks>
         public NDArray(Array values, Shape shape = default, char order = 'C') : this(values.GetType().GetElementType())
         {
+            // NumPy validates `order` while it parses the arguments, before it looks at the buffer.
+            char physical = OrderResolver.ResolveBufferOrder(order);
+
             if (shape.IsEmpty)
                 shape = Shape.ExtractShape(values);
 
-            // Honor an explicit 'F' request: the (row-major) values buffer is reinterpreted as
-            // column-major by rebuilding the shape with F-contiguous strides — mirroring NumPy's
-            // ndarray(buffer=..., order='F'). 'C' (the default) keeps the extracted C-order layout.
-            if (order == 'F' && shape.NDim > 1)
-                shape = new Shape(shape.dimensions, 'F');
+            // Only the dimensions reach the buffer: with 'F' the (row-major flattened) values are read column-major, as
+            // NumPy's ndarray(buffer=..., order='F') does; any view layout the shape carried is dropped.
+            shape = shape.ForWrappedBuffer(physical);
 
             Storage.Allocate(values.ResolveRank() != 1 ? ArraySlice.FromArray(Arrays.Flatten(values), false) : ArraySlice.FromArray(values, false), shape);
             InitializeArc();
         }
 
         /// <summary>
-        /// Constructor which takes .NET array
-        /// dtype and shape is determined from array
+        ///     Wraps an existing <see cref="IArraySlice"/> as an <see cref="NDArray"/> — the C# port of NumPy's
+        ///     <c>np.ndarray(shape, buffer=values, order=order)</c> for NumSharp's own buffers. The slice's element type is the
+        ///     dtype, and <paramref name="shape"/> contributes its DIMENSIONS only: the array lays the slice out densely in
+        ///     <paramref name="order"/>, whatever strides or offset the shape carried.
         /// </summary>
-        /// <param name="values"></param>
-        /// <param name="shape"></param>
-        /// <param name="order"></param>
-        /// <returns>Array with values</returns>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        /// <param name="values">
+        ///     The buffer, wrapped without a copy: the result reads and writes these elements, and shares the slice's memory
+        ///     lifetime.
+        /// </param>
+        /// <param name="shape">
+        ///     The dimensions of the result, like NumPy's <c>shape</c> argument. Only <see cref="Shape.Dimensions"/> is read
+        ///     (see <see cref="NDArray(Array, Shape, char)"/>). <c>default</c> makes a one-dimensional array of
+        ///     <c>values.Count</c> elements.
+        /// </param>
+        /// <param name="order">
+        ///     <c>'C'</c> (the default) lays the slice out row-major and <c>'F'</c> column-major, for every number of
+        ///     dimensions. <c>'A'</c> and <c>'K'</c> mean <c>'C'</c>, as in NumPy's <c>ndarray</c>; lowercase is accepted.
+        /// </param>
+        /// <exception cref="NullReferenceException"><paramref name="values"/> is null (its type code is read first).</exception>
+        /// <exception cref="ValueError"><paramref name="order"/> is not one of <c>'C'</c>, <c>'F'</c>, <c>'A'</c>, <c>'K'</c>
+        ///     in either case.</exception>
+        /// <exception cref="ArgumentException">The element count of <paramref name="values"/> is not the size of
+        ///     <paramref name="shape"/>.</exception>
+        /// <remarks>
+        ///     This constructor is public API, so it follows NumPy's dimensions-only rule (<see cref="Shape.ForWrappedBuffer"/>).
+        ///     To install a specific layout over a fresh buffer, internal code uses <c>new UnmanagedStorage(slice, shape)</c>,
+        ///     which trusts its layout.
+        /// </remarks>
         public NDArray(IArraySlice values, Shape shape = default, char order = 'C') : this(values.TypeCode)
         {
+            // NumPy validates `order` while it parses the arguments, before it looks at the buffer.
+            char physical = OrderResolver.ResolveBufferOrder(order);
+
             if (shape.IsEmpty)
                 shape = Shape.Vector(values.Count);
 
-            // Honor an explicit 'F' request: reinterpret the buffer as column-major by rebuilding
-            // the shape with F-contiguous strides (NumPy's ndarray(buffer=..., order='F')).
-            if (order == 'F' && shape.NDim > 1)
-                shape = new Shape(shape.dimensions, 'F');
+            // Only the dimensions reach the buffer; any view layout the shape carried is dropped.
+            shape = shape.ForWrappedBuffer(physical);
 
             Storage.Allocate(values, shape);
             InitializeArc();
