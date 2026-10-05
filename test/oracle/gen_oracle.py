@@ -32,7 +32,7 @@ np.seterr(all="ignore")
 warnings.simplefilter("ignore")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from layout_catalog import LAYOUTS, PAIR_LAYOUTS, WHERE_LAYOUTS, describe, _fill, _cbase  # noqa: E402
+from layout_catalog import LAYOUTS, PAIR_LAYOUTS, WHERE_LAYOUTS, BINARY_PAIR_LAYOUTS, BINARY_LAYOUT_NAMES, describe, _fill, _cbase  # noqa: E402
 
 # 13 NumPy-representable dtypes (Char + Decimal have no NumPy analog -> covered by
 # NumSharp's Converts-oracle tests, not by this differential corpus).
@@ -451,7 +451,7 @@ def gen_binary(ops, dt_pairs, pair_layout_names):
     n = 0
     skipped = 0
     for ln in pair_layout_names:
-        fn = PAIR_LAYOUTS[ln]
+        fn = BINARY_PAIR_LAYOUTS[ln]   # PAIR_LAYOUTS plus the F-broadcast pairs (layout_catalog, item X3)
         for (sa, sb) in dt_pairs:
             ba, va, bb, vb = fn(np.dtype(sa), np.dtype(sb))
             op_a = describe(ba, va)
@@ -16354,15 +16354,15 @@ def main():
         cases += char_tier("astype_full")
         write_jsonl(os.path.join(corpus_dir, "astype_full.jsonl"), cases)
     elif mode == "binary":
-        cases = gen_binary(BINARY_OPS, DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+        cases = gen_binary(BINARY_OPS, DT_PAIRS, BINARY_LAYOUT_NAMES)
         cases += char_tier("binary")
         write_jsonl(os.path.join(corpus_dir, "binary_arith.jsonl"), cases)
     elif mode == "divmod_power":
-        cases = gen_binary(DIVMOD_POWER_OPS, DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+        cases = gen_binary(DIVMOD_POWER_OPS, DT_PAIRS, BINARY_LAYOUT_NAMES)
         cases += char_tier("divmod_power")
         write_jsonl(os.path.join(corpus_dir, "binary_divmod_power.jsonl"), cases)
     elif mode == "comparison":
-        cases = gen_binary(COMPARISON_OPS, DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+        cases = gen_binary(COMPARISON_OPS, DT_PAIRS, BINARY_LAYOUT_NAMES)
         cases += char_tier("comparison")
         write_jsonl(os.path.join(corpus_dir, "comparison.jsonl"), cases)
     elif mode == "unary":
@@ -16398,7 +16398,7 @@ def main():
         cases += char_tier("rounding")                                 # G9
         write_jsonl(os.path.join(corpus_dir, "rounding.jsonl"), cases)
     elif mode == "bitwise":
-        cases = gen_binary(BITWISE_BIN_OPS, BITWISE_DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+        cases = gen_binary(BITWISE_BIN_OPS, BITWISE_DT_PAIRS, BINARY_LAYOUT_NAMES)
         cases += gen_unary(INVERT_OP, INT_BOOL_DTYPES, list(LAYOUTS.keys()))
         cases += gen_unary(BITWISE_COUNT_OP, INT_BOOL_DTYPES, list(LAYOUTS.keys()))
         cases += gen_shift(SHIFT_OPS, SHIFT_DTYPES)
@@ -16408,7 +16408,7 @@ def main():
         # np.gcd / np.lcm — integer-only binary ufuncs across every valid integer dtype pair × layout.
         # Invalid pairs (float/complex/bool+bool, uint64+signed -> float64) are skipped by gen_binary;
         # their no-loop errors are gated in errors_full. Char woven via char_tier.
-        cases = gen_binary(GCDLCM_OPS, GCDLCM_DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+        cases = gen_binary(GCDLCM_OPS, GCDLCM_DT_PAIRS, BINARY_LAYOUT_NAMES)
         cases += char_tier("gcd")
         write_jsonl(os.path.join(corpus_dir, "gcd.jsonl"), cases)
     elif mode == "unary_extra":
@@ -16492,15 +16492,15 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "sum_identity.jsonl"), cases)
     elif mode == "logic":
         cases = gen_unary(LOGIC_UNARY_OPS, LOGIC_UNARY_DTYPES, list(LAYOUTS.keys()))
-        cases += gen_binary(LOGIC_BIN_OPS, LOGIC_BIN_PAIRS, list(PAIR_LAYOUTS.keys()))
-        cases += gen_binary(LOGICAL_BIN_OPS, LOGICAL_PAIRS, list(PAIR_LAYOUTS.keys()))   # Group A B1
+        cases += gen_binary(LOGIC_BIN_OPS, LOGIC_BIN_PAIRS, BINARY_LAYOUT_NAMES)
+        cases += gen_binary(LOGICAL_BIN_OPS, LOGICAL_PAIRS, BINARY_LAYOUT_NAMES)   # Group A B1
         cases += gen_unary(LOGICAL_NOT_OP, ALL_DTYPES, list(LAYOUTS.keys()))             # Group A B1
-        cases += gen_binary(ARCTAN2_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))        # Group A B1
-        cases += gen_binary(LOGADDEXP_OPS, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))      # logaddexp/logaddexp2
-        cases += gen_binary(NEXTAFTER_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))       # nextafter (bit-exact)
-        cases += gen_binary(COPYSIGN_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))        # copysign (bit-exact)
-        cases += gen_binary(HYPOT_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))           # hypot (f32/f16 exact, f64 <=1 ULP)
-        cases += gen_binary(HEAVISIDE_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))       # heaviside (bit-exact, all dtypes)
+        cases += gen_binary(ARCTAN2_OP, ARCTAN2_PAIRS, BINARY_LAYOUT_NAMES)        # Group A B1
+        cases += gen_binary(LOGADDEXP_OPS, ARCTAN2_PAIRS, BINARY_LAYOUT_NAMES)      # logaddexp/logaddexp2
+        cases += gen_binary(NEXTAFTER_OP, ARCTAN2_PAIRS, BINARY_LAYOUT_NAMES)       # nextafter (bit-exact)
+        cases += gen_binary(COPYSIGN_OP, ARCTAN2_PAIRS, BINARY_LAYOUT_NAMES)        # copysign (bit-exact)
+        cases += gen_binary(HYPOT_OP, ARCTAN2_PAIRS, BINARY_LAYOUT_NAMES)           # hypot (f32/f16 exact, f64 <=1 ULP)
+        cases += gen_binary(HEAVISIDE_OP, ARCTAN2_PAIRS, BINARY_LAYOUT_NAMES)       # heaviside (bit-exact, all dtypes)
         cases += gen_binary(ALLCLOSE_OPS, ALLCLOSE_PAIRS, list(PAIR_LAYOUTS.keys()))     # Group A B3
         cases += gen_unary(ISCOMPLEX_OPS, ISCOMPLEX_DTYPES, list(LAYOUTS.keys()))         # G5 (full)
         cases += char_tier("logic")                                                       # G9

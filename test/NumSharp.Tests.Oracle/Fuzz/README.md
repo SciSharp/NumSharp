@@ -1589,6 +1589,19 @@ port of NumPy's `PyUFunc_GenericReduction` / `PyUFunc_ReduceWrapper` / `npyiter_
 (`ReductionArguments.cs`), which each later reduction reuses. Against the code before that port, 432 of the 4,752
 cases diverge (np.all / np.any accepted a non-bool mask, stretched the input, and raised generic texts).
 
+### F-ordered broadcast pairs (`pp_fbcast_*` in the binary tiers) — 2026-10-05
+
+The elementwise binary tiers (`binary_arith`, `binary_divmod_power`, `comparison`, `bitwise`, `gcd` and the binary
+sections of `logic`) replay four pair layouts beyond `PAIR_LAYOUTS`: two F-ordered operands where one BROADCASTS —
+`(2,3,4)` F with `(2,1,4)` F (middle axis), `(1,3,4)` F (the F-innermost first axis), `(2,3,1)` F (the last axis), and
+the middle case with the broadcast operand on the left (`layout_catalog.py` `FBCAST_PAIR_LAYOUTS`, plan
+`docs/plans/api-parameter-parity.md` item X3). They live in their own registry, `BINARY_LAYOUT_NAMES` appends them
+after `PAIR_LAYOUTS`, so every existing case keeps its id and bytes and the iterator / evaluate / dtype-text tiers that
+iterate `PAIR_LAYOUTS` are unchanged. 3,074 cases. The direct binary route used to allocate such a result in F order
+(each operand is strictly F by its own flags) and write it in C order over dims the broadcast axis kept from
+coalescing: 388 of these cases diverge on the code before the fix (add / subtract / multiply / divide, maximum /
+minimum / fmax / fmin, the bitwise ops; every SIMD dtype under the small-broadcast cutoff, float16 at any size).
+
 ### np.random byte-parity (`random_parity` tiers)
 
 The documented claim — MT19937 with 1-to-1 seed/state parity, "byte-identical sequences" — was

@@ -92,9 +92,21 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   - Also fixed: a bare `null` axis (`np.all(a, null, null, false, w)`, NumPy's positional `None`) was ambiguous
     between the `int?` and `int[]` overloads (CS0121); the `int[]` overloads now carry `OverloadResolutionPriority(-1)`.
     The other functions with the same ambiguity are item G4.
-- [ ] **A2 `np.var` / `np.std` at a degenerate size: `ddof=` and `dtype=` do not work.** One element per output, an
-  axis of length 1, `ddof >= n`, empty float16/float32 input. Pins: the 7 `VarStd_*` tests in
-  `OpenBugs.Reductions.cs`; oracle excuse `MisalignedRegistry` V1.
+- [~] **A2 `np.var` / `np.std`: `ddof=` and `dtype=` do not work** — at a degenerate size (one element per output,
+  an axis of length 1, `ddof >= n`, empty float16/float32 input) and, as the proof below found, at every size for
+  `dtype=`. Pins: the 7 `VarStd_*` tests in `OpenBugs.Reductions.cs`; oracle excuse `MisalignedRegistry` V1.
+  - Proof (2026-10-05, at `bb5b2fcf`): a 22,110-case NumPy 2.4.2 matrix (`var`/`std` × 13 dtypes × one element per
+    output / empty / `ddof` at or past the count / `dtype=` of every kind at ordinary sizes × C/F/strided/reversed/
+    transposed layouts × axis forms × keepdims). NumSharp: 12,212 exact, 678 within 64 ULP, 8,284 grossly different
+    (wrong dtype, NaN against a number, a value where NumPy raises), and 936 cases WRITE PAST THE RESULT BUFFER:
+    the empty-input path does `SetAtIndex(double.NaN, i)` into a float16/float32/int32/complex128 result (heap
+    corruption, `0xC0000374`, for float16). NumPy's `_var` has no special path for a small size; it is
+    `sum((x - mean)**2) / max(n - ddof, 0)` computed with ufuncs in the input's float dtype or in `dtype=` (an
+    integer `dtype=` truncates the mean; `np.std(..., axis, dtype=int)` raises the `sqrt` output-cast
+    UFuncTypeError; a complex input with `dtype=float64` keeps only the real part of the mean).
+  - Design proof: a prototype that ports `_var` statement for statement over NumSharp's own ufuncs matched NumPy in
+    22,102 of the 22,110 cases, error texts included. The 8 others: 2 are the `np.sum` reversed-view finding (§6,
+    item 5), 6 were item X3 (fixed first).
 - [ ] **A3 `np.nanstd` / `np.nanvar`: `axis=` and `keepdims=` give the wrong shape.** A 1-D float32/float64 array
   along axis 0 gives `(1,)` (NumPy 0-d); one element with `keepdims` drops the axis. Pin:
   `NanStdVar_1DAxis_ReturnNumPysShape`.
@@ -184,6 +196,27 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   NumPy (returned object, values, dtype, shape, errors). Each finding becomes an item here.
 - [ ] X2 `np.maximum`, `np.minimum`, `np.add` (binary ufuncs): an out-of-range C# integer literal wraps
   (`np.maximum(int8, 1000)` gives -24); NumPy raises `OverflowError` (NEP 50 packing). Found by the `np.clip` work.
+- [x] **X3 binary ufuncs: two F-ordered operands where one broadcasts give WRONG values.** Found by A2 (the `_var`
+  port subtracts a keepdims mean from an F-ordered input). Done 2026-10-05.
+  - Proof: `np.subtract(F (2,3,2), F (2,1,2))` paired the elements wrongly (NumPy `[-100, -199, -98, …]`, NumSharp
+    `[-100, -294, -98, …]`). A 2,814-case probe (every binary function × 9 dtypes × 7 shape pairs × both operand
+    orders, against the same call on C copies): 824 wrong — `add` / `subtract` / `multiply` / `true_divide`,
+    `maximum` / `minimum` / `fmax` / `fmin`, `bitwise_and` / `or` / `xor` and the C# operators, every 3-D and 4-D
+    pair, every SIMD dtype under the small-broadcast cutoff (8,192 elements), float16 at any size. 2-D pairs,
+    complex, bool and the scalar-only ops were right.
+  - Cause: the direct binary route allocated the result in F order when every non-scalar operand was strictly F
+    by its OWN flags — a `(2,1,2)` F array is — but its kernels write the result linearly in C-coordinate order
+    over the coalesced dims, and the broadcast axis (stride 0) keeps the dims from coalescing into one run.
+  - Fix (`DefaultEngine.BinaryOp.cs`): the direct route allocates F only when every non-scalar operand has the
+    result's own dims (`HasNonScalarBroadcastOperand`); otherwise it computes C and the existing post-kernel branch
+    relabels it F (NumPy's layout). The small-broadcast shortcut no longer sends an all-F set to the direct route:
+    `NDIter` allocates it F with no copy (16³ float64: 1.4 µs, NumPy 2.7 µs; the direct route + copy measured 7.1).
+  - Gate: the `pp_fbcast_*` pair layouts of the binary oracle tiers, 3,074 cases (388 diverge before the fix), and
+    `Backends/Kernels/FOrderBroadcastBinaryTests.cs` (3 tests, NumPy-probed literals; all 3 fail before the fix).
+- [ ] X4 float16 `add` / `subtract` / `multiply` / `divide` with a broadcast, non-contiguous operand set run the
+  direct route's scalar General loop: `(30,40,20) F * (30,1,20) F` takes 328 µs (NumPy 72 µs, 0.22×), and
+  `(100,100,100)` 27 ms (NumPy 3.0 ms). The same before X3 (HEAD measured 320 µs while computing wrong values).
+  Speed only; the values are NumPy's.
 
 ## 6. Findings
 
@@ -197,10 +230,22 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    shared check said "array data" for every mask (fixed with A1). NumPy accepts a NumPy SCALAR mask (`np.int64(1)`)
    by value; NumSharp has no separate scalar type, so a 0-d non-bool mask always raises, like NumPy's 0-d array.
 3. **A positional `None` axis does not compile** where an `int?` and an `int[]` overload coexist (G4).
+4. **A function built from ufuncs inherits their bugs; probe the building blocks first** (A2). Composing `_var`
+   from NumSharp's ufuncs found X3 in `np.subtract` within the first replay.
+5. **`np.sum` along an axis of a view with a reversed axis is not NumPy's order** (found by A2's building-block
+   check, 452 cases over float16/float32/float64/complex128 × C/F/stepped/reversed/transposed × flat/axis). Every
+   layout is bit-exact except an axis reduction over a reversed view (`a[::-1]` reduced along an axis: 5 of 7
+   per dtype differ along the reversed axis, 1–3 along the other). A `_var` port inherits it only there (the mean's
+   sum; the deviation sum runs over a fresh array). Belongs with B1.
+6. **`ddof` is an `int?` in NumSharp; NumPy accepts a float** (`np.var(x, ddof=1.5)` divides by `n - 1.5`). Belongs
+   with B4 / B7 (`correction=` is NumPy's float alias of `ddof`).
 
 ## 7. State log
 
+- **2026-10-05**: X3 done (binary ufuncs with an F-ordered broadcast operand), found while proving A2; X4 and
+  findings 4–6 recorded; A2 in progress (proof and design proof above). Commit: the X3 commit on `journey4` (see
+  `git log -- docs/plans/api-parameter-parity.md`).
 - **2026-10-05**: A1 done (np.all / np.any reduce prologue, the `reduce_kwargs` tier S2, the null-axis priority);
-  G4 added from its finding. Commit: the A1 commit on `journey4` (see `git log -- docs/plans/api-parameter-parity.md`).
+  G4 added from its finding. Commit `bb5b2fcf`.
 - **2026-10-05**: plan written from the inventory at `2821a708` (66 `np.*` + 14 `ndarray` names with a gap) and the
   `[OpenBugs]` pins of 2026-10-03/04.

@@ -392,6 +392,8 @@ Both classes use these helpers at `src/NumSharp.Core/Backends/Kernels/` (root, o
 2. **ScalarFull** - Both contiguous, non-SIMD dtype (Decimal) → Scalar loop
 3. **General** - Strided/broadcast → Coordinate-based iteration
 
+**The direct binary route writes its result in C-coordinate order over the coalesced dims** (`ExecuteKernelCoalesced` passes no result strides), so an F-allocated result is correct there only when every dim coalesces into one run. Two strictly F operands where one BROADCASTS (`(2,3,2)` F with `(2,1,2)` F) do not coalesce, and until 2026-10-05 that route allocated F for them anyway: scrambled values for add / subtract / multiply / divide, maximum / minimum / fmax / fmin and the bitwise ops (every SIMD dtype under the 8,192-element small-broadcast cutoff, float16 at any size). Now `HasNonScalarBroadcastOperand` keeps such a set C there (the post-kernel branch relabels it F) and the small-broadcast shortcut sends all-F sets to `NDIter`, which allocates F (plan `docs/plans/api-parameter-parity.md` X3; gate: the binary tiers' `pp_fbcast_*` layouts + `Backends/Kernels/FOrderBroadcastBinaryTests.cs`).
+
 **NEP50 Dtype Alignment (NumPy 2.x):**
 | Operation | Returns |
 |-----------|---------|

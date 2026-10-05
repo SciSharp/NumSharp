@@ -345,6 +345,56 @@ def _(da, db):
 
 
 # ---------------------------------------------------------------------------
+# F-ordered pairs where one operand BROADCASTS (plan docs/plans/api-parameter-parity.md, item X3).
+# A strictly F-contiguous operand can still broadcast: a (2,1,4) F array against a (2,3,4) F array.
+# NumSharp's direct binary kernels allocated such a result in F order but write it in C order over
+# the coalesced dims, and the broadcast operand's stride-0 axis kept the dims from coalescing, so
+# the values came out scrambled (every SIMD dtype under the small-broadcast cutoff, float16
+# add/subtract/multiply/divide at any size). Each view is the transpose of a C base (describe()
+# serializes the base in C order). Kept OUT of PAIR_LAYOUTS, which every pairwise tier iterates;
+# the elementwise binary tiers (gen_binary's callers) add them through BINARY_LAYOUT_NAMES.
+# ---------------------------------------------------------------------------
+FBCAST_PAIR_LAYOUTS = {}
+
+
+def _fpair(name):
+    def deco(fn):
+        FBCAST_PAIR_LAYOUTS[name] = fn
+        return fn
+    return deco
+
+
+@_fpair("pp_fbcast_mid")          # (2,3,4) F op (2,1,4) F: broadcast along the middle axis
+def _(da, db):
+    a = _cbase((4, 3, 2), da); b = _cbase((4, 1, 2), db)
+    return a, a.T, b, b.T
+
+
+@_fpair("pp_fbcast_first")        # (2,3,4) F op (1,3,4) F: along the F-innermost (first) axis
+def _(da, db):
+    a = _cbase((4, 3, 2), da); b = _cbase((4, 3, 1), db)
+    return a, a.T, b, b.T
+
+
+@_fpair("pp_fbcast_last")         # (2,3,4) F op (2,3,1) F: along the F-outermost (last) axis
+def _(da, db):
+    a = _cbase((4, 3, 2), da); b = _cbase((1, 3, 2), db)
+    return a, a.T, b, b.T
+
+
+@_fpair("pp_fbcast_mid_left")     # (2,1,4) F op (2,3,4) F: the broadcast operand on the left
+def _(da, db):
+    a = _cbase((4, 1, 2), da); b = _cbase((4, 3, 2), db)
+    return a, a.T, b, b.T
+
+
+# Every pair layout the elementwise binary tiers replay: the shared PAIR_LAYOUTS, then the F-broadcast
+# pairs (appended, so the existing cases keep their ids and bytes).
+BINARY_PAIR_LAYOUTS = {**PAIR_LAYOUTS, **FBCAST_PAIR_LAYOUTS}
+BINARY_LAYOUT_NAMES = list(BINARY_PAIR_LAYOUTS.keys())
+
+
+# ---------------------------------------------------------------------------
 # Triple-operand layouts for np.where(cond, x, y). Each builder takes (dtx, dty) and returns
 # (cond_base, cond_view, x_base, x_view, y_base, y_view). cond is always bool; x/y carry the
 # data dtypes (result = result_type(x, y)). Operands at natural shapes; where() broadcasts.

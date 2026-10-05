@@ -901,11 +901,11 @@ namespace NumSharp.Tests.Fuzz
             ["aliasing.jsonl"] = 70,
             ["astype_full.jsonl"] = 4056,
             ["astype_smoke.jsonl"] = 249,
-            ["binary_arith.jsonl"] = 1296,
-            ["binary_divmod_power.jsonl"] = 1360,
-            ["bitwise.jsonl"] = 590,
-            ["gcd.jsonl"] = 244,
-            ["comparison.jsonl"] = 1857,
+            ["binary_arith.jsonl"] = 1782,   // +608 F-broadcast pairs (pp_fbcast_*, plan api-parameter-parity X3) - 2228
+            ["binary_divmod_power.jsonl"] = 1896,   // +668 pp_fbcast_* (X3) - 2371
+            ["bitwise.jsonl"] = 700,   // +180 pp_fbcast_* (X3) - 1178
+            ["gcd.jsonl"] = 334,   // +112 pp_fbcast_* (X3) - 418
+            ["comparison.jsonl"] = 2587,   // +912 pp_fbcast_* (X3) - 3234
             ["creation.jsonl"] = 241,
             ["conversion.jsonl"] = 862,
             ["copyto.jsonl"] = 91,
@@ -934,7 +934,7 @@ namespace NumSharp.Tests.Fuzz
             ["fft.jsonl"] = 1700,
             ["groupa.jsonl"] = 590,   // 364 before the complex convolve / correlate section: infinities / NaNs (zdotu's C99 result) and one-element operands with their own strides (CDOUBLE_dot's plain loop) — 601
             ["iter.jsonl"] = 4400,
-            ["logic.jsonl"] = 2648,   // +873: iscomplex/isreal widened to ALL dtypes (complex128) × EVERY layout
+            ["logic.jsonl"] = 2959,   // +873: iscomplex/isreal widened to ALL dtypes (complex128) × EVERY layout; +452 pp_fbcast_* (X3) - 4227
             ["manip.jsonl"] = 13397,
             ["matmul.jsonl"] = 769,
             ["matmul_parity.jsonl"] = 470,

@@ -248,7 +248,17 @@ namespace NumSharp.Backends
             // strides, partial broadcast), the kernel writes positions that don't match
             // the input's logical coords. The legacy `result.copy('F')` path stays for
             // the looser "any F, no strict C" case via the post-kernel branch below.
-            bool allStrictFContig = AreAllOperandsStrictFContig(lhs, rhs, cleanShape);
+            //
+            // A strictly F operand can still BROADCAST: a (2,1,2) F array against a (2,3,2) F
+            // array is "strict F" by its own flags, yet its stride-0 middle axis blocks the
+            // F-order merge below, so the coalesced iteration keeps several dims and the linear
+            // C-order write over an F result scrambles the values (every SIMD dtype under the
+            // small-broadcast cutoff, and float16 add/subtract/multiply/divide at any size,
+            // which always take this route). So an F result is allocated here only when every
+            // non-scalar operand has the result's own dims; a broadcast all-F set computes in C
+            // order and the post-kernel branch relabels it F, NumPy's layout for that set.
+            bool allStrictFContig = AreAllOperandsStrictFContig(lhs, rhs, cleanShape)
+                                    && !HasNonScalarBroadcastOperand(lhs, rhs, cleanShape);
             Shape resultShape = allStrictFContig
                 ? new Shape((long[])cleanShape.dimensions.Clone(), 'F')
                 : cleanShape;
@@ -412,13 +422,19 @@ namespace NumSharp.Backends
             //   • both operands C- or F-contiguous — SimdChunk mishandles a strided /
             //     trailing-size-1 / negative-stride operand that NDIter absorbs
             //     (the (N,1)-strided-view and reshape-view integration gates), so
-            //     only clean-layout inputs take this route.
+            //     only clean-layout inputs take this route;
+            //   • NOT every non-scalar operand strictly F — NumPy lays such a set out F,
+            //     and the direct route can only write it in C and copy it to F (its F
+            //     allocation is unsafe once an operand broadcasts, see ExecuteBinaryOp),
+            //     which measured 4-6× slower than this route's F allocation (16³ float64:
+            //     7.1 µs vs 1.7 µs; NumPy 2.7 µs).
             // Above DirectBroadcastMaxElements NDIter's coalescing/vectorization wins,
             // so the op stays here.
             if (lhsType == rhsType && lhsType == resultType
                 && cleanShape.size < DirectBroadcastMaxElements
                 && (leftShape.IsBroadcasted ^ rightShape.IsBroadcasted)
                 && IsContiguousCorF(lhs.Shape) && IsContiguousCorF(rhs.Shape)
+                && !AreAllOperandsStrictFContig(lhs, rhs, cleanShape)
                 && DirectILKernelGenerator.CanUseSimdBinary(op, resultType))
                 return null;
 
@@ -1016,6 +1032,29 @@ namespace NumSharp.Backends
             // At least one non-scalar op must be pure-F (otherwise both are scalars,
             // which the upstream IsScalar+IsScalar path already short-circuits).
             return lhsPureF || rhsPureF;
+        }
+
+        /// <summary>
+        ///     True when a non-scalar operand of a binary op broadcasts to the result shape, i.e.
+        ///     its own dimensions differ from <paramref name="resultShape"/>'s (a scalar or any
+        ///     one-element operand does not count: it broadcasts as a scalar the kernels read once).
+        ///     The direct kernels (<see cref="ExecuteKernelCoalesced"/>) write the result linearly,
+        ///     in C-coordinate order over the coalesced dims, so an F-allocated result is correct
+        ///     only when every dim coalesces into one run. Strictly F operands of the result's own
+        ///     dims always do; a broadcast operand's stride-0 axis blocks the merge, so the direct
+        ///     path must not allocate F for such a set (see <see cref="ExecuteBinaryOp"/>).
+        /// </summary>
+        /// <param name="lhs">The left operand, before broadcasting.</param>
+        /// <param name="rhs">The right operand, before broadcasting.</param>
+        /// <param name="resultShape">The broadcast result shape.</param>
+        /// <returns>True when a non-scalar operand's dimensions differ from the result's.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static bool HasNonScalarBroadcastOperand(NDArray lhs, NDArray rhs, Shape resultShape)
+        {
+            bool lhsScalar = lhs.Shape.IsScalar || lhs.Shape.size <= 1;
+            bool rhsScalar = rhs.Shape.IsScalar || rhs.Shape.size <= 1;
+            return (!lhsScalar && !SameDims(lhs.Shape, resultShape))
+                || (!rhsScalar && !SameDims(rhs.Shape, resultShape));
         }
 
         /// <summary>
