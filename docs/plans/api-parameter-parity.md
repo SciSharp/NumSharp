@@ -75,7 +75,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 ### Phase A: pinned parameter defects
 
 - [x] **A1 `np.all` / `np.any` / `ndarray.all` / `ndarray.any`: a non-bool `where=` mask** (and the rest of the reduce
-  prologue). Done 2026-10-05.
+  prologue). Done 2026-10-05 (`bb5b2fcf`).
   - Proof: NumPy 2.4.2 raises `TypeError: Cannot cast array data from dtype('X') to dtype('bool') according to the
     rule 'safe'` for every non-bool mask dtype ("Cannot cast scalar from" for a 0-d mask), before it checks the axis
     or any shape. NumSharp returned a value for all 11 mask dtypes, and with a bad shape or axis it reported that
@@ -95,7 +95,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - [x] **A2 `np.var` / `np.std`: `ddof=` and `dtype=` do not work** — at a degenerate size (one element per output,
   an axis of length 1, `ddof >= n`, empty float16/float32 input) and, as the proof below found, at every size for
   `dtype=`. Pins: the 7 `VarStd_*` tests in `OpenBugs.Reductions.cs`; oracle excuse `MisalignedRegistry` V1. Done
-  2026-10-05.
+  2026-10-05 (`41785501`).
   - Proof (2026-10-05, at `bb5b2fcf`): a 22,110-case NumPy 2.4.2 matrix (`var`/`std` × 13 dtypes × one element per
     output / empty / `ddof` at or past the count / `dtype=` of every kind at ordinary sizes × C/F/strided/reversed/
     transposed layouts × axis forms × keepdims). NumSharp: 12,212 exact, 678 within 64 ULP, 8,284 grossly different
@@ -162,7 +162,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     `np.ma.var` / `np.ma.std` (A6); the unused var/std kernels (X8).
 - [x] **A3 `np.nanstd` / `np.nanvar`: `axis=` and `keepdims=` give the wrong shape** — and, as the proof below
   found, the values, the NaN rules and `dtype=` too. Pin: `NanStdVar_1DAxis_ReturnNumPysShape`; oracle excuses: the
-  nan-family branches (W4-A shape, W4-B value, dtype). Done 2026-10-05.
+  nan-family branches (W4-A shape, W4-B value, dtype). Done 2026-10-05 (`d1759ec8`).
   - Proof (2026-10-05, at `41785501`): a 45,832-case NumPy 2.4.2 matrix (`nanvar`/`nanstd` × float16/32/64,
     complex128, bool and five integer dtypes × NaN patterns — none, one, every third, all, a NaN row, ±inf, a complex
     NaN or inf part, `-0.0`, float16 overflow — × shapes `()` to `(2,3,2)` and empties × axis forms × keepdims × `ddof`
@@ -228,7 +228,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - [x] **A7 `np.nanmean`: an integer or bool input drops `keepdims` for `axis=None`.** NumPy keeps the reduced axes
   (shape `(1,)*ndim`); NumSharp returns 0-d. 117 cases of the nanreduce oracle tier (every integer dtype and bool ×
   13 layouts) sit under the registry's (W4-A) shape branch, which names only this bug since A3. Found by A3. Done
-  2026-10-05, with B6's `dtype=`.
+  2026-10-05 (`a7f11b3e`), with B6's `dtype=`.
   - Proof (2026-10-05, at `d1759ec8`): an 11,415-case NumPy 2.4.2 matrix (`nanmean` over float16 / float32 / float64 /
     complex128, bool and integer dtypes × NaN patterns as A3's × shapes `()` to `(2,3,2)` and empties × axis forms ×
     keepdims × C / F / stepped / reversed / transposed × `dtype=`): 9,429 exact (errors included), 207 within 64 ULP,
@@ -308,7 +308,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - [ ] D4 `np.indices`: `sparse=` (array-or-tuple result type; `np.indices_sparse` exists today).
 - [ ] D5 `np.asanyarray`: `copy=`.
 - [ ] D6 `np.array`: `ndmax=`; first parameter named `object`.
-- [ ] D7 `np.ndarray(shape, dtype, buffer, offset, strides, order)`: `offset=`, `strides=`. Unblocked: the view-`Shape`
+- [x] D7 `np.ndarray(shape, dtype, buffer, offset, strides, order)`: `offset=`, `strides=`. Unblocked: the view-`Shape`
   plan is done (2026-10-05). It adds three follow-ups of its bug 1 (`docs/plans/view-shape-open-bugs.md`, "Not in this
   bug"):
   - B1.10: a buffer that is too small must raise `TypeError: buffer is too small for requested array` (NumSharp:
@@ -317,6 +317,13 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     `ArgumentException`).
   - NumSharp's `np.ndarray(shape, dtype, buffer, order)` defaults to `order='F'` and float32 (NumPy: `order=None`, which
     is C, and float64), and ignores `order` without a buffer (NumPy: `np.ndarray((2,3), order='F')` is F-contiguous).
+
+  **Done by a parallel session** in `f17c3b2d` (its own plan, `docs/plans/np-ndarray-parity.md`, items N1–N13 — N6 is
+  B1.10 / B1.11, N7 / N8 are `offset=` / `strides=`; its oracle tier `ndarray_ctor.jsonl` has zero excuses). Checked
+  here after the fact with the same inputs as above: `np.ndarray((2,3))` is float64 and C-contiguous,
+  `order: 'F'` without a buffer is F-contiguous, `offset: 8` and byte `strides: [8]` over a 48-byte buffer read
+  `[185207048 252579084]` and `[50462976 185207048 319951120]` (NumPy's values), a 100-element int32 shape over it
+  raises `TypeError: buffer is too small for requested array`, and a 2-element uint8 shape reads the prefix `[0 1]`.
 
 ### Phase E: manipulation
 
@@ -356,7 +363,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - [ ] X2 `np.maximum`, `np.minimum`, `np.add` (binary ufuncs): an out-of-range C# integer literal wraps
   (`np.maximum(int8, 1000)` gives -24); NumPy raises `OverflowError` (NEP 50 packing). Found by the `np.clip` work.
 - [x] **X3 binary ufuncs: two F-ordered operands where one broadcasts give WRONG values.** Found by A2 (the `_var`
-  port subtracts a keepdims mean from an F-ordered input). Done 2026-10-05.
+  port subtracts a keepdims mean from an F-ordered input). Done 2026-10-05 (`d3c863ef`).
   - Proof: `np.subtract(F (2,3,2), F (2,1,2))` paired the elements wrongly (NumPy `[-100, -199, -98, …]`, NumSharp
     `[-100, -294, -98, …]`). A 2,814-case probe (every binary function × 9 dtypes × 7 shape pairs × both operand
     orders, against the same call on C copies): 824 wrong — `add` / `subtract` / `multiply` / `true_divide`,
@@ -373,7 +380,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   - Gate: the `pp_fbcast_*` pair layouts of the binary oracle tiers, 3,074 cases (388 diverge before the fix), and
     `Backends/Kernels/FOrderBroadcastBinaryTests.cs` (3 tests, NumPy-probed literals; all 3 fail before the fix).
 - [x] **X5 `np.sum(a, axis, dtype=…)`: an axis that leaves one output, in a cast loop, is not NumPy's order.** Found
-  by A2's large-size check (`np.var(x, axis=0, dtype=np.float32)` of a 1-D float64 array). Done 2026-10-05.
+  by A2's large-size check (`np.var(x, axis=0, dtype=np.float32)` of a 1-D float64 array). Done 2026-10-05 (`4d06d591`).
   - Proof: `np.sum(x, axis=0, dtype=np.float32)` of a 1-D float64 array of 20,000 elements gave `0x4706ada8` where
     NumPy (and NumSharp's own `axis=None`) give `0x4706ada6`; the same for `(n,1)` along 0, `(1,n)` along 1 and
     `(1,n,1)` along 1, at 20,000 and 100,003 elements. The cast-free forms, float32 → float64 and int → float matched.
@@ -425,7 +432,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   Decide: remove them, or keep them for a future non-NumPy fast mode.
 - [x] **X9 `np.mean`: every `dtype=` loop along an axis, an integer loop flat, a flat decimal mean and a broadcast
   uint64 mean are not NumPy's.** Found by A7: np.nanmean of an integer input is np.mean, and its one ULP case was
-  `np.mean(int32, axis=0, dtype=complex128)`. Done 2026-10-05.
+  `np.mean(int32, axis=0, dtype=complex128)`. Done 2026-10-05 (`f8b32354`).
   - Proof (2026-10-05, at `d1759ec8`): a 9,660-case NumPy 2.4.2 matrix (`np.mean` over int8 / int32 / int64 / uint64 /
     bool / float16 / float32 / float64 / complex128 × no dtype and nine loops × shapes `(1,)` to `(2049,)` with
     length-1 axes and empties × axis forms × keepdims × C / transposed / stepped / reversed): 6,724 exact, 2,936 off.
@@ -534,22 +541,23 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 ## 7. State log
 
+- **2026-10-05**: D7 marked done: the np.ndarray parity session fixed it in `f17c3b2d` (plan `np-ndarray-parity.md`);
+  its behaviors checked here against NumPy's values. Next: A4.
 - **2026-10-05**: A7 done (np.nanmean is NumPy's nanmean; `dtype=` added, B6's first part; the `nanmean` oracle tier;
   nanmean left the registry's nan-family blankets and the (W4-A) shape branch is gone; the eager float16 zero fill of
-  nanmean and nanvar / nanstd is `np.putmask`); X11 recorded, X8 and finding 10 extended. Commit: the A7 commit on
-  `journey4`.
+  nanmean and nanvar / nanstd is `np.putmask`); X11 recorded, X8 and finding 10 extended. Commit `a7f11b3e`.
 - **2026-10-05**: X9 done (np.mean is NumPy's `_mean`: every `dtype=` loop, the flat integer loops, decimal, a broadcast
   uint64; the `mean_loops` oracle tier; np.mean held strict in every tier), with X7's integer / bool part; X10 and
-  findings 10–11 recorded, finding 5 pinned. Found by A7, which is in progress. Commit: the X9 commit on `journey4`.
+  findings 10–11 recorded, finding 5 pinned. Found by A7, which is in progress. Commit `f8b32354`.
 - **2026-10-05**: A3 done (np.nanvar / np.nanstd are NumPy's nanvar / nanstd; `dtype=` added, B7's first part; the
   `nanvarstd` oracle tier; nanvar / nanstd left the registry's nan-family blankets); A7 and finding 9 recorded; the
-  generator's unknown-mode list completed (13 modes were missing). Commit: the A3 commit on `journey4`.
+  generator's unknown-mode list completed (13 modes were missing). Commit `d1759ec8`.
 - **2026-10-05**: A2 done (np.var / np.std are NumPy's `_var` / `_std`; the `varstd` oracle tier; the chunked
   deviation sums); A6, X6, X7, X8 and findings 7–8 recorded. Rebased onto `5c9d7925` (the view-`Shape` plan's last fix:
   the new code adopts the shapes it builds with `Shape.Adopt`); D7 unblocked and given that plan's `np.ndarray`
-  follow-ups. Commit: the A2 commit on `journey4`.
+  follow-ups. Commit `41785501`.
 - **2026-10-05**: X5 done (`np.sum` along an axis that leaves one output, in a cast loop), found by A2's large-size
-  check; B3 widened (`np.mean` has no flat `dtype=` overload). Commit: the X5 commit on `journey4`.
+  check; B3 widened (`np.mean` has no flat `dtype=` overload). Commit `4d06d591`.
 - **2026-10-05**: X3 done (binary ufuncs with an F-ordered broadcast operand), found while proving A2; X4 and
   findings 4–6 recorded; A2 in progress (proof and design proof above). Commit `d3c863ef`.
 - **2026-10-05**: A1 done (np.all / np.any reduce prologue, the `reduce_kwargs` tier S2, the null-axis priority);
