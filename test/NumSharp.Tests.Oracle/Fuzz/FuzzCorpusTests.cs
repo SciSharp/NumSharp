@@ -849,6 +849,18 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Copyto() => RunCorpus("copyto.jsonl");
 
+        /// <summary>
+        ///     np.copyto as NumPy's <c>array_copyto</c> (plan <c>docs/plans/api-parameter-parity.md</c> X16 + X11):
+        ///     where= masks of every layout, sources of every layout and rank, all 13 NumPy dtypes through the masked bit
+        ///     copy, cross-dtype casts, overlapping views (NumPy's temporary or its raw 1-D order), C# literal sources
+        ///     (NumPy's weak Python scalars), 0-d and empty destinations, and NumPy's errors in NumPy's order. Each case
+        ///     compares the destination's WHOLE buffer, so a write outside the view or into a masked-off slot fails.
+        /// </summary>
+        /// <remarks>Zero excuses: <see cref="MisalignedRegistry"/> never classifies a <c>copyto_full</c> case.</remarks>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void CopytoFull() => RunCorpus("copyto_full.jsonl");
+
         // Seeded random fuzzer corpus (offline-generated; reproducible from its seed).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
@@ -1000,6 +1012,7 @@ namespace NumSharp.Tests.Fuzz
             ["ndarray_ctor.jsonl"] = 5900,   // np.ndarray (plan np-ndarray-parity): values + layout facets, 5,919 at delivery
             ["conversion.jsonl"] = 862,
             ["copyto.jsonl"] = 91,
+            ["copyto_full.jsonl"] = 12000,
             ["decimal_astype.jsonl"] = 17,
             ["decimal_binary.jsonl"] = 78,
             ["decimal_manip.jsonl"] = 28,

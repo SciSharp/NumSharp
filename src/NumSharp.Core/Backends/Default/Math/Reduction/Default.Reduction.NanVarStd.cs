@@ -272,18 +272,14 @@ namespace NumSharp.Backends
         /// <param name="arr">The array to zero in place; writeable, any layout.</param>
         /// <param name="mask">The bool mask, the same shape as <paramref name="arr"/>.</param>
         /// <remarks>
-        ///     <c>np.putmask</c> with one scalar value is the same assignment (each masked logical position takes the value)
-        ///     and runs a typed scatter: 21 µs where <c>np.copyto(where=)</c>'s masked cast took 253 µs over a float16
-        ///     <c>(250, 400)</c> with every 7th element masked (that path is not vectorized for float16). <c>np.putmask</c> has
-        ///     only its IL kernel, so a host without dynamic code keeps <c>np.copyto(where=)</c>.
+        ///     NumPy's own statement (<c>_copyto(arr, 0, mask)</c>: a weak Python 0, <c>casting='unsafe'</c>). Since the
+        ///     masked copy is a bit-copy kernel (plan X11, 2026-10-06) it is also the fastest route: 3.7 µs over a float16
+        ///     <c>(250, 400)</c> with every 7th element masked, where <c>np.putmask</c> with one scalar (the route A7 took
+        ///     while the masked copy cost 253 µs) takes 22.7 µs. The masked kernel has a C# fallback, so a host without dynamic
+        ///     code runs the same statement.
         /// </remarks>
         private static void ZeroWhereMask(NDArray arr, NDArray mask)
-        {
-            if (DirectILKernelGenerator.Enabled)
-                np.putmask(arr, mask, NDArray.Scalar(0.0));
-            else
-                np.copyto(arr, NDArray.Scalar(0.0), where: mask);
-        }
+            => np.copyto(arr, 0, casting: "unsafe", where: mask);
 
         /// <summary>
         ///     NumPy's <c>_divide_by_count(a, b)</c> for an array divisor: <c>divide(a, b, out=a, casting='unsafe')</c> (and

@@ -327,6 +327,11 @@ namespace NumSharp.Tests.Fuzz
             // carved by the generator (gen_ma_oracle._mv_carved), each pinned.
             if (c.Valueclass == "mameanvar")
                 return null;
+            // copyto_full.jsonl (np.copyto as NumPy's array_copyto, plan api-parameter-parity X16 + X11: where= masks,
+            // layouts, every dtype, casts, overlap, C# literal sources, 0-d / empty arrays, NumPy's errors and their
+            // order) is held to ZERO excuses, its error cases (valueclass "error") included — hence the op test.
+            if (c.Op == "copyto_full")
+                return null;
 
             // reduce_start.jsonl (valueclass "negzero": every operand all -0.0, every result a signed zero) is held to
             // ZERO excuses as well. Its cells exist to show how a reduction STARTS, which only the sign of a zero

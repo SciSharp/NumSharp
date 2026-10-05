@@ -4409,10 +4409,27 @@ namespace NumSharp.Backends.Iteration
             // (NDMemOverlap = NumPy solve_may_share_memory) directly on the storages — NOT via
             // throwaway NDArray wrappers, which under ARC would retain the buffers. A cross-dtype
             // copy targets a distinct buffer, so the bounds test short-circuits to No for free.
+            //
+            // A 1-D destination with both runs in the same direction is NOT copied first in NumPy:
+            // raw_array_assign_array walks it in its own order (a negative destination stride
+            // flipped, then backward when the source starts below the destination inside it),
+            // and with unequal strides that order reads elements it has already written —
+            // a[3:19:2] = a[6:14] gives NumPy's "smeared" values, not the copy-first ones. Such a
+            // run takes AssignRaw1DLikeNumPy; a unit-stride forward run of one dtype stays on the
+            // default path, whose memmove is NumPy's result. An overlap between different dtypes
+            // (two reinterpreting views of one buffer) is copied first: NumPy's element order inside
+            // a cast loop is not defined (its contiguous casts are vectorized).
             UnmanagedStorage overlapTemp = null;
-            if (NeedsAssignmentTemp(dst.Shape, src.Shape)
-                && NDMemOverlap.StoragesMayShareMemory(src, dst))
+            bool needsTemp = NeedsAssignmentTemp(dst.Shape, src.Shape);
+            bool rawOrder = !needsTemp && RawAssignOrderMatters(dst, src);
+            if ((needsTemp || rawOrder) && NDMemOverlap.StoragesMayShareMemory(src, dst))
             {
+                if (!needsTemp && src.TypeCode == dst.TypeCode)
+                {
+                    AssignRaw1DLikeNumPy(dst, src);
+                    return;
+                }
+
                 // Reassigning the parameter here drops the clone on method exit, leaking its pooled
                 // buffer to a future GC + finalizer pass. The clone is a bare UnmanagedStorage — NOT
                 // an NDArray — so NO [NDScoped] ambient scope reclaims it (NDScope.Track fires only
@@ -4525,16 +4542,18 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// NumPy's array_assign_array.c:371-381 gate: which (dst, src) layouts can corrupt
-        /// themselves under a forward copy when the operands overlap. A 1-D copy is memmove-safe
-        /// ONLY as a same-direction UNIT-stride run — it coalesces to a single Buffer.MemoryCopy,
-        /// which tolerates overlap. A non-unit stride walks element-by-element (no memmove) and an
-        /// opposite-direction stride reverses the read order; either way a write-before-read overlap
-        /// clobbers the source mid-copy. So everything except a unit-stride forward run — non-unit
-        /// strides, opposite directions, or any <c>dst.ndim &gt; 1</c> — must copy through a temporary
-        /// when src and dst share memory. Allocation-free; the actual overlap test runs only when
-        /// this returns true (and a distinct-buffer / non-overlapping pair short-circuits to No there).
+        /// NumPy's array_assign_array.c gate for copying an overlapping source first: a destination
+        /// of more than one axis, or a 1-D destination whose run points the OTHER way than the
+        /// source's last axis (<c>dst.strides[0] * src.strides[-1] &lt; 0</c>, e.g. <c>a[:] = a[::-1]</c>).
+        /// Every other overlapping 1-D copy is walked in NumPy's raw order instead
+        /// (<see cref="RawAssignOrderMatters"/>, <see cref="AssignRaw1DLikeNumPy"/>), which with
+        /// equal strides equals copying first and with unequal strides does not
+        /// (<c>a[3:19:2] = a[6:14]</c> reads its own writes in NumPy). Allocation-free; the overlap
+        /// test runs only when this or <see cref="RawAssignOrderMatters"/> is true.
         /// </summary>
+        /// <param name="dst">The destination's shape.</param>
+        /// <param name="src">The source's shape (its ORIGINAL strides: NumPy tests them before broadcasting).</param>
+        /// <returns><c>true</c> when an overlapping source must be copied to a temporary first.</returns>
         private static bool NeedsAssignmentTemp(Shape dst, Shape src)
         {
             int dn = (int)dst.NDim;
@@ -4542,18 +4561,75 @@ namespace NumSharp.Backends.Iteration
                 return true;
 
             int sn = (int)src.NDim;
-            if (dn == 1 && sn >= 1)
-            {
-                long ds = dst.strides[0];
-                long ss = src.strides[sn - 1];
-                // Memmove-safe only when BOTH innermost strides are unit (same forward block).
-                // Non-unit (element-by-element, no memmove) or opposite-direction needs a temp:
-                // e.g. copyto(a[2:8:2], a[0:6:2]) writes a[2] then reads it for the next element.
-                if (!(ds == 1 && ss == 1))
-                    return true;
-            }
+            return dn == 1 && sn >= 1 && dst.strides[0] * src.strides[sn - 1] < 0;
+        }
 
-            return false;
+        /// <summary>
+        /// Whether a 1-D copy that NumPy does NOT copy first can still differ from NumSharp's default
+        /// path when the operands overlap — so that an overlap must take NumPy's raw order (or, for
+        /// two dtypes, a temporary). False for a one-element or broadcast-scalar copy (no order to
+        /// observe) and for a unit-stride forward run of one dtype (memmove, which NumPy's contiguous
+        /// copy also is); true otherwise.
+        /// </summary>
+        /// <param name="dst">The destination storage (1-D for a true result).</param>
+        /// <param name="src">The source storage.</param>
+        /// <returns><c>true</c> when an overlap needs <see cref="AssignRaw1DLikeNumPy"/> or a temporary.</returns>
+        private static bool RawAssignOrderMatters(UnmanagedStorage dst, UnmanagedStorage src)
+        {
+            if (dst.Shape.NDim != 1 || dst.Shape.dimensions[0] <= 1)
+                return false;
+            if (!TryEffectiveSourceStride1D(dst.Shape.dimensions[0], src.Shape, out long ss) || ss == 0)
+                return false;
+            if (dst.TypeCode != src.TypeCode)
+                return true;
+            return !(ss == 1 && dst.Shape.strides[0] == 1);
+        }
+
+        /// <summary>
+        /// The element stride a source walks a 1-D destination of <paramref name="n"/> elements with:
+        /// 0 when it broadcasts one element (0-d, or a last axis of extent 1), its last stride when that
+        /// axis has extent <paramref name="n"/>. Leading axes must all have extent 1.
+        /// </summary>
+        /// <param name="n">The destination's extent.</param>
+        /// <param name="src">The source's shape.</param>
+        /// <param name="stride">The effective element stride.</param>
+        /// <returns><c>false</c> when the source does not broadcast to <paramref name="n"/> elements (the
+        /// default path then reports the error).</returns>
+        private static bool TryEffectiveSourceStride1D(long n, Shape src, out long stride)
+        {
+            stride = 0;
+            int sn = (int)src.NDim;
+            if (sn == 0)
+                return true;
+            for (int d = 0; d < sn - 1; d++)
+                if (src.dimensions[d] != 1)
+                    return false;
+            long last = src.dimensions[sn - 1];
+            if (last == 1)
+                return true;
+            if (last != n)
+                return false;
+            stride = src.strides[sn - 1];
+            return true;
+        }
+
+        /// <summary>
+        /// NumPy's 1-D <c>raw_array_assign_array</c> for an overlapping same-dtype copy: the destination's
+        /// negative stride flipped, then a backward walk when the source starts below the destination
+        /// inside it, element by element (<see cref="DirectILKernelGenerator.AssignRaw1D"/>).
+        /// </summary>
+        /// <param name="dst">The 1-D destination storage.</param>
+        /// <param name="src">The same-dtype source storage (checked by <see cref="RawAssignOrderMatters"/>).</param>
+        /// <exception cref="ValueError">The destination is read-only ("assignment destination is read-only").</exception>
+        private static void AssignRaw1DLikeNumPy(UnmanagedStorage dst, UnmanagedStorage src)
+        {
+            NumSharpException.ThrowIfNotWriteable(dst.Shape);
+            long n = dst.Shape.dimensions[0];
+            TryEffectiveSourceStride1D(n, src.Shape, out long ss);
+            int itemsize = dst.TypeCode.SizeOf();
+            byte* d = dst.Address + dst.Shape.offset * itemsize;
+            byte* s = src.Address + src.Shape.offset * itemsize;
+            DirectILKernelGenerator.AssignRaw1D(d, dst.Shape.strides[0] * itemsize, s, ss * itemsize, n, itemsize);
         }
 
         private static bool ReduceBoolGeneral<T, TKernel>(ref NDIterState state)

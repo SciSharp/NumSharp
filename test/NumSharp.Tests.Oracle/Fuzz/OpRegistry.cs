@@ -360,6 +360,11 @@ namespace NumSharp.Tests.Fuzz
                     return dst;
                 }
 
+                // np.copyto as NumPy's array_copyto (copyto_full.jsonl): where= masks, layouts, overlap, C# literal
+                // sources and errors; the result is the destination's whole buffer (OpRegistry.Copyto.cs).
+                case "copyto_full":
+                    return ApplyCopytoFull(p, ops);
+
                 // Sorting / searching (T14).
                 case "argsort": return ApplyArgsort(ops[0], p["axis"].GetInt32());
                 case "sort": return np.sort(ops[0], p["axis"].GetInt32());          // Group A B2: value sort

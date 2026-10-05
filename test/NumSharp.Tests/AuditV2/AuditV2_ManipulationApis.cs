@@ -257,7 +257,9 @@ public class AuditV2_ManipulationApis
     }
 
     /// <summary>
-    /// T1.18 — where with non-boolean array raises ArgumentException.
+    /// T1.18 — where with a non-boolean array raises NumPy's text (array_copyto converts the mask with
+    /// PyArray_FromAny under the 'safe' rule): "Cannot cast array data from dtype('int32') to dtype('bool')
+    /// according to the rule 'safe'", NumPy's TypeError under the house ArgumentException every where= check raises.
     /// </summary>
     [TestMethod]
     public void T1_18_Copyto_Where_NonBoolean_Throws()
@@ -268,7 +270,7 @@ public class AuditV2_ManipulationApis
 
         Action act = () => np.copyto(dst, src, @where: maskInt);
         act.Should().Throw<ArgumentException>()
-            .WithMessage("*where*bool*int32*");
+            .WithMessage("Cannot cast array data from dtype('int32') to dtype('bool') according to the rule 'safe'");
     }
 
     /// <summary>

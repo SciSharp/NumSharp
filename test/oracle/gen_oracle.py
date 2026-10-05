@@ -4742,6 +4742,461 @@ def gen_copyto(overlap_dtypes, cross_pairs):
     return cases
 
 
+# ---- copyto_full: np.copyto as NumPy's array_copyto (plan api-parameter-parity X16 + X11) ------------------
+#
+# np.copyto(dst, src, casting, where) over every axis the port touches: where= masks of every layout (dense,
+# random, broadcast rows / columns, strided, reversed, 0-d, a C# literal bool), sources of every layout and
+# rank (broadcast, 0-d, extra leading unit axes that NumPy strips), all 13 NumPy dtypes through the masked
+# bit copy (every element width 1/2/4/8/16), long runs for the SIMD paths, cross-dtype casts, overlapping views
+# of one buffer (masked and unmasked: NumPy's temporary or its raw 1-D order), C# literal sources (NumPy's
+# weak Python scalars, including the 'equiv' quirk and the range errors), 0-d and empty destinations, and
+# NumPy's errors in NumPy's order. Every case records the destination's WHOLE base buffer after the call
+# (operand 0 carries its prior contents), so a write outside the view or into a masked-off slot is caught.
+# Strict: valueclass "copytofull", which MisalignedRegistry never excuses.
+
+CT_DTYPES = ["bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64",
+             "float16", "float32", "float64", "complex128"]
+
+
+def _ct_src_fill(n, dt):
+    """Source values: the shared edge pools (a C-contiguous fresh array)."""
+    return _fill(n, np.dtype(dt)).copy()
+
+
+def _ct_dst_fill(n, dt):
+    """Destination prior contents: the pools reversed and shifted, so a write of the source is visible."""
+    return np.ascontiguousarray(_fill(n + 3, np.dtype(dt))[::-1][:n])
+
+
+def _ct_view(shape, dt, kind, filler):
+    """A (C-contiguous base, view) pair whose view has exactly `shape` in the requested layout; None when the
+    layout does not apply to the rank. describe() serializes the base with tobytes(), so the base stays C."""
+    dt = np.dtype(dt)
+    shape = tuple(shape)
+    n = int(np.prod(shape)) if shape else 1
+    if kind == "c":
+        b = filler(n, dt).reshape(shape)
+        return b, b
+    if kind == "f":
+        if len(shape) < 2:
+            return None
+        b = filler(n, dt).reshape(tuple(reversed(shape)))
+        return b, b.T
+    if kind == "strided":
+        if not shape:
+            return None
+        wide = shape[:-1] + (shape[-1] * 2,)
+        b = filler(int(np.prod(wide)), dt).reshape(wide)
+        return b, b[..., ::2]
+    if kind == "negstride":
+        if not shape:
+            return None
+        b = filler(n, dt).reshape(shape)
+        return b, b[..., ::-1]
+    if kind == "offset":
+        b = filler(n + 3, dt)
+        return b, b[3:].reshape(shape)
+    if kind == "transposed":
+        if len(shape) < 3:
+            return None
+        src = (shape[1], shape[0]) + shape[2:]
+        b = filler(n, dt).reshape(src)
+        return b, b.transpose(1, 0, *range(2, len(shape)))
+    if kind == "readonly":
+        b = filler(n, dt).reshape(shape)
+        b.flags.writeable = False
+        return b, b
+    raise ValueError(kind)
+
+
+def _ct_src(shape, dt, kind):
+    """A source (base, view) of `kind`: the _ct_view layouts, or a shape that broadcasts to `shape`."""
+    shape = tuple(shape)
+    if kind in ("c", "f", "strided", "negstride", "offset", "transposed"):
+        return _ct_view(shape, dt, kind, _ct_src_fill)
+    if kind == "row":                                  # (1, ..., k): broadcast down the leading axes
+        if len(shape) < 2:
+            return None
+        s = (1,) * (len(shape) - 1) + (shape[-1],)
+    elif kind == "col":                                # (..., k, 1): broadcast across the last axis
+        if len(shape) < 2:
+            return None
+        s = shape[:-1] + (1,)
+    elif kind == "zero_d":                             # PyArray_AssignRawScalar
+        s = ()
+    elif kind == "one":                                # (1,): a stride-0 broadcast of one element
+        s = (1,)
+    elif kind == "lead1":                              # (1, *shape): NumPy strips the leading unit axis
+        s = (1,) + shape
+    elif kind == "bcast_view":                         # a read-only np.broadcast_to view (stride 0)
+        if not shape:
+            return None
+        row = _ct_src_fill(shape[-1], dt)
+        return row, np.broadcast_to(row, shape)
+    else:
+        raise ValueError(kind)
+    b = _ct_src_fill(int(np.prod(s)) if s else 1, dt).reshape(s)
+    return b, b
+
+
+def _ct_mask(shape, kind, rng):
+    """The where= operand: (base, view) for an array mask, ("lit", True/False) for a literal bool, None for
+    no where=. Returns "skip" when the kind does not apply to the rank."""
+    shape = tuple(shape)
+    n = int(np.prod(shape)) if shape else 1
+    if kind is None:
+        return None
+    if kind == "lit_true":
+        return ("lit", True)
+    if kind == "lit_false":
+        return ("lit", False)
+    if kind == "rand":                                 # ~35 % true, seeded: every run pattern
+        b = np.ascontiguousarray((rng.random(n) < 0.35).reshape(shape))
+        return b, b
+    if kind == "all_true":
+        b = np.ones(shape, dtype=bool)
+        return b, b
+    if kind == "all_false":
+        b = np.zeros(shape, dtype=bool)
+        return b, b
+    if kind == "alt":
+        b = np.ascontiguousarray((np.arange(n) % 2 == 0).reshape(shape))
+        return b, b
+    if kind == "row":
+        if len(shape) < 2:
+            return "skip"
+        m = np.zeros((1,) * (len(shape) - 1) + (shape[-1],), dtype=bool)
+        m[..., ::2] = True
+        return m, m
+    if kind == "col":
+        if len(shape) < 2:
+            return "skip"
+        m = np.zeros(shape[:-1] + (1,), dtype=bool)
+        m.reshape(-1)[::2] = True
+        return m, m
+    if kind == "strided":
+        if not shape:
+            return "skip"
+        wide = np.ascontiguousarray((rng.random(n * 2) < 0.5).reshape(shape[:-1] + (shape[-1] * 2,)))
+        return wide, wide[..., ::2]
+    if kind == "negstride":
+        if not shape:
+            return "skip"
+        b = np.ascontiguousarray((rng.random(n) < 0.5).reshape(shape))
+        return b, b[..., ::-1]
+    if kind == "zero_d_true":
+        b = np.array(True)
+        return b, b
+    if kind == "zero_d_false":
+        b = np.array(False)
+        return b, b
+    if kind == "one_true":
+        b = np.array([True])
+        return b, b
+    raise ValueError(kind)
+
+
+def _ct_scalar_param(value):
+    """A Python scalar source as the C# literal the harness passes (weak int / float / complex, strong bool)."""
+    if isinstance(value, bool):
+        return {"kind": "bool", "value": value}
+    if isinstance(value, int):
+        return {"kind": "int", "value": str(value)}
+    if isinstance(value, float):
+        return {"kind": "float", "bits": np.float64(value).view(np.uint64).item().to_bytes(8, "little").hex()}
+    if isinstance(value, complex):
+        return {"kind": "complex",
+                "re": np.float64(value.real).view(np.uint64).item().to_bytes(8, "little").hex(),
+                "im": np.float64(value.imag).view(np.uint64).item().to_bytes(8, "little").hex()}
+    raise TypeError(type(value))
+
+
+def gen_copyto_full():
+    import warnings
+    rng = np.random.default_rng(20261006)
+    cases = []
+    n = 0
+
+    def emit(tag, dst_pair, src, mask, casting="same_kind", layout="copyto", keep_error=None):
+        """Run np.copyto on dst's own base and record (prior dst + src + mask) -> dst's whole base after.
+        src: ("array", base, view) | ("overlap", view_of_dst_base) | ("scalar", python value).
+        mask: None | ("lit", bool) | (base, view)."""
+        nonlocal n
+        dbase, dview = dst_pair
+        operands = [describe(dbase, dview)]
+        params = {"casting": casting}
+        if src[0] == "array":
+            operands.append(describe(src[1], src[2]))
+            srcv = src[2]
+        elif src[0] == "overlap":
+            params["src_view"] = _viewspec(dbase, src[1])
+            srcv = src[1]
+        else:
+            params["src_scalar"] = _ct_scalar_param(src[1])
+            srcv = src[1]
+        kw = {}
+        if mask is not None:
+            if isinstance(mask[0], str):               # ("lit", bool): a C# literal where=true/false
+                params["where"] = bool(mask[1])
+                kw["where"] = bool(mask[1])
+            else:
+                operands.append(describe(mask[0], mask[1]))
+                params["where"] = "array"
+                kw["where"] = mask[1]
+        cid = f"copyto_full/{tag}/{n}"
+        try:
+            with np.errstate(all="ignore"), warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                np.copyto(dview, srcv, casting=casting, **kw)
+        except Exception as e:
+            if keep_error is not None and not keep_error(e):
+                return
+            cases.append(_error_case("copyto_full", params, operands, e, layout, cid=cid))
+            n += 1
+            return
+        cases.append(_case("copyto_full", params, operands, _arr_expected(dbase.ravel()), layout,
+                           "copytofull", cid=cid))
+        n += 1
+
+    # ---- M1: every dtype x destination layout x mask (a C-contiguous source) --------------------------------
+    m1_masks = [None, "rand", "all_true", "all_false", "alt", "row", "col", "strided", "negstride",
+                "zero_d_true", "zero_d_false", "lit_true", "lit_false", "one_true"]
+    for dt in CT_DTYPES:
+        for shape in [(5,), (3, 4), (2, 3, 4)]:
+            for dk in ["c", "f", "strided", "negstride", "offset", "transposed"]:
+                for mk in m1_masks:
+                    d = _ct_view(shape, dt, dk, _ct_dst_fill)
+                    if d is None:
+                        continue
+                    m = _ct_mask(shape, mk, rng)
+                    if m == "skip":
+                        continue
+                    s = _ct_src(shape, dt, "c")
+                    emit(f"m1/{dt}/{'x'.join(map(str, shape))}/dst={dk}/where={mk}", d, ("array",) + s, m,
+                         layout=f"dst_{dk}")
+
+    # ---- M2: every dtype x source layout / rank x a few masks (a C-contiguous destination) -------------------
+    m2_masks = [None, "rand", "row", "zero_d_false", "lit_true"]
+    for dt in CT_DTYPES:
+        for shape in [(5,), (3, 4), (2, 3, 4)]:
+            for sk in ["f", "strided", "negstride", "offset", "transposed", "row", "col", "zero_d", "one",
+                       "lead1", "bcast_view"]:
+                for mk in m2_masks:
+                    s = _ct_src(shape, dt, sk)
+                    if s is None:
+                        continue
+                    m = _ct_mask(shape, mk, rng)
+                    if m == "skip":
+                        continue
+                    d = _ct_view(shape, dt, "c", _ct_dst_fill)
+                    emit(f"m2/{dt}/{'x'.join(map(str, shape))}/src={sk}/where={mk}", d, ("array",) + s, m,
+                         layout=f"src_{sk}")
+
+    # ---- M3: long runs (the SIMD blend, its unrolled pairs, single vectors and tails at every width) ---------
+    for dt in ["bool", "int8", "uint16", "float16", "int32", "float32", "float64", "uint64", "complex128"]:
+        for shape in [(131,), (4, 37)]:
+            for dk in ["c", "f", "strided", "negstride"]:
+                for sk in ["c", "row", "zero_d", "strided"]:
+                    for mk in [None, "rand", "row", "strided"]:
+                        d = _ct_view(shape, dt, dk, _ct_dst_fill)
+                        s = _ct_src(shape, dt, sk)
+                        if d is None or s is None:
+                            continue
+                        m = _ct_mask(shape, mk, rng)
+                        if m == "skip":
+                            continue
+                        emit(f"m3/{dt}/{'x'.join(map(str, shape))}/dst={dk}/src={sk}/where={mk}", d, ("array",) + s,
+                             m, layout=f"long_{dk}")
+
+    # ---- X: cross-dtype casts (the source cast into the destination's dtype first) ---------------------------
+    cross = [("float64", "int32"), ("float64", "float32"), ("float32", "float16"), ("float64", "float16"),
+             ("int64", "int8"), ("int32", "uint8"), ("uint64", "float32"), ("int64", "float64"),
+             ("complex128", "float64"), ("float64", "complex128"), ("bool", "float64"), ("int32", "bool"),
+             ("float16", "float64"), ("uint8", "int16"), ("int16", "uint16"), ("float32", "int64")]
+    for (ss, ds) in cross:
+        for shape in [(5,), (3, 4), (4, 37)]:
+            for dk in ["c", "f", "strided"]:
+                for sk in ["c", "row", "zero_d", "negstride"]:
+                    for mk in [None, "rand", "row"]:
+                        for casting in ["same_kind", "unsafe"]:
+                            d = _ct_view(shape, ds, dk, _ct_dst_fill)
+                            s = _ct_src(shape, ss, sk)
+                            if d is None or s is None:
+                                continue
+                            m = _ct_mask(shape, mk, rng)
+                            if m == "skip":
+                                continue
+                            emit(f"x/{ss}->{ds}/{'x'.join(map(str, shape))}/dst={dk}/src={sk}/where={mk}/{casting}",
+                                 d, ("array",) + s, m, casting=casting, layout=f"cross_{dk}")
+
+    # ---- O: overlapping views of ONE buffer (masked and unmasked) --------------------------------------------
+    import random as _random
+    orng = _random.Random(20261006)
+
+    def axis_slice(n_ax, length):
+        for _ in range(60):
+            step = orng.choice([1, 1, 1, 2, 3, -1, -1, -2])
+            if step > 0:
+                hi = n_ax - 1 - step * (length - 1)
+                if hi < 0:
+                    continue
+                start = orng.randint(0, hi)
+                return slice(start, start + step * length, step)
+            lo = -step * (length - 1)
+            if lo > n_ax - 1:
+                continue
+            start = orng.randint(lo, n_ax - 1)
+            stop = start + step * length
+            return slice(start, None if stop < 0 else stop, step)
+        return None
+
+    for dt in ["float64", "int8", "uint16", "complex128", "float32"]:
+        made = 0
+        while made < 220:
+            two = orng.random() < 0.5
+            bshape = (orng.randint(3, 6), orng.randint(3, 7)) if two else (orng.randint(4, 24),)
+            dshape = (orng.randint(1, bshape[0]), orng.randint(1, bshape[1])) if two else (orng.randint(1, bshape[0]),)
+            dT = two and orng.random() < 0.2
+            want = dshape[::-1] if dT else dshape
+            dsl = [axis_slice(bshape[i], want[i]) for i in range(len(bshape))]
+            sshape = list(dshape)
+            if orng.random() < 0.2:
+                sshape[orng.randrange(len(sshape))] = 1
+            sT = two and orng.random() < 0.2
+            swant = tuple(sshape[::-1]) if sT else tuple(sshape)
+            ssl = [axis_slice(bshape[i], swant[i]) for i in range(len(bshape))]
+            if None in dsl or None in ssl:
+                continue
+            base = _ct_dst_fill(int(np.prod(bshape)), dt).reshape(bshape)
+            dv = base[tuple(dsl)]
+            dv = dv.T if dT else dv
+            sv = base[tuple(ssl)]
+            sv = sv.T if sT else sv
+            if orng.random() < 0.3:
+                m = None
+            else:
+                ms = list(dshape)
+                if orng.random() < 0.2:
+                    ms[orng.randrange(len(ms))] = 1
+                mb = np.array([orng.random() < 0.6 for _ in range(int(np.prod(ms)))]).reshape(ms)
+                m = (mb, mb)
+            emit(f"o/{dt}/{'x'.join(map(str, bshape))}", (base, dv), ("overlap", sv), m, layout="overlap")
+            made += 1
+
+    # ---- S: C# literal sources — NumPy's weak Python scalars (and a strong Python bool) -----------------------
+    ints = [0, 1, -1, 7, 127, 128, 255, 256, 1000, -129, 2**31, -2**31 - 1, 2**53 + 1, 2**63 - 1, 2**63,
+            2**64 - 1, 2**64, -2**63 - 1]
+    floats = [0.0, -0.0, 1.5, -2.5, 0.1, 1e10, 65504.0, 65520.0, 1e300, float("inf"), float("-inf"), float("nan")]
+    complexes = [1 + 2j, complex(-0.0, -5.0), complex(float("inf"), 0.0), complex(0.0, float("nan")), 3 + 0j]
+    for dt in CT_DTYPES:
+        for casting in ["same_kind", "unsafe", "safe", "no", "equiv"]:
+            for mk in [None, "rand"]:
+                for v in ints + floats + complexes + [True, False]:
+                    d = _ct_view((7,), dt, "c", _ct_dst_fill)
+                    m = _ct_mask((7,), mk, rng)
+                    big = isinstance(v, int) and not isinstance(v, bool) and abs(v) >= 2**31
+                    emit(f"s/{dt}/{casting}/where={mk}/{type(v).__name__}={v!r}", d, ("scalar", v), m,
+                         casting=casting, layout="scalar",
+                         keep_error=lambda e, big=big: not (big and isinstance(e, OverflowError))
+                         and "complex64" not in str(e))
+
+    # ---- Z: 0-d and empty destinations, strong 0-d sources -----------------------------------------------------
+    for dt in ["float64", "int32", "complex128", "bool"]:
+        for sk in ["zero_d", "one", "lead1"]:
+            for mk in [None, "lit_true", "lit_false", "zero_d_true", "zero_d_false", "one_true"]:
+                d = _ct_view((), dt, "c", _ct_dst_fill)
+                s = _ct_src((), dt, sk) if sk != "lead1" else (lambda b: (b, b))(_ct_src_fill(1, dt).reshape(1, 1))
+                m = _ct_mask((), mk, rng)
+                emit(f"z/0d/{dt}/src={sk}/where={mk}", d, ("array",) + s, m, layout="zero_d")
+        for shape in [(0,), (2, 0), (0, 3)]:
+            for sk_shape in [(0,), (1,), (), (3,)]:
+                for mk in [None, "rand"]:
+                    d = _ct_view(shape, dt, "c", _ct_dst_fill)
+                    sb = _ct_src_fill(int(np.prod(sk_shape)) if sk_shape else 1, dt).reshape(sk_shape)
+                    m = _ct_mask(shape, mk, rng)
+                    emit(f"z/empty/{dt}/{'x'.join(map(str, shape))}/src={'x'.join(map(str, sk_shape))}/where={mk}",
+                         d, ("array", sb, sb), m, layout="empty")
+    # strong 0-d arrays: cast, never range-checked
+    for (val, sdt, ddt, casting) in [(1000, "int64", "int8", "same_kind"), (1000, "int32", "int8", "same_kind"),
+                                     (1.5, "float64", "int32", "same_kind"), (0.1, "float64", "float32", "safe"),
+                                     (0.1, "float64", "float16", "unsafe"), (-1, "int64", "uint8", "same_kind"),
+                                     (-1, "int64", "uint8", "unsafe"), (5, "int64", "bool", "unsafe")]:
+        for mk in [None, "rand"]:
+            d = _ct_view((7,), ddt, "c", _ct_dst_fill)
+            sb = np.array(val, dtype=sdt)
+            emit(f"z/strong0d/{sdt}={val}->{ddt}/{casting}/where={mk}", d, ("array", sb, sb), _ct_mask((7,), mk, rng),
+                 casting=casting, layout="strong_zero_d")
+
+    # ---- E: NumPy's errors and their order --------------------------------------------------------------------
+    def arr(shape, dt="float64", fill=_ct_src_fill):
+        b = fill(int(np.prod(shape)) if shape else 1, dt).reshape(shape)
+        return b, b
+
+    def ro(shape, dt="float64"):
+        return _ct_view(shape, dt, "readonly", _ct_dst_fill)
+
+    int_mask = arr((3,), "int64")
+    error_jobs = [
+        ("casting_bogus", arr((3,), fill=_ct_dst_fill), ("array",) + arr((3,)), None, "bogus"),
+        ("casting_upper", arr((3,), fill=_ct_dst_fill), ("array",) + arr((3,)), None, "SAFE"),
+        ("casting_same_value", arr((3,), fill=_ct_dst_fill), ("array",) + arr((3,)), None, "same_value"),
+        ("casting_none", arr((3,), fill=_ct_dst_fill), ("array",) + arr((3,)), None, None),
+        ("casting_none_badmask", arr((3,), fill=_ct_dst_fill), ("array",) + arr((3,)), int_mask, None),
+        ("casting_bogus_badmask", arr((3,), fill=_ct_dst_fill), ("array",) + arr((3,)), int_mask, "bogus"),
+        ("mask_int64", arr((3,), fill=_ct_dst_fill), ("array",) + arr((3,)), int_mask, "same_kind"),
+        ("mask_float64", arr((3,), fill=_ct_dst_fill), ("array",) + arr((3,)), arr((3,), "float64"), "same_kind"),
+        ("mask_uint8", arr((3,), fill=_ct_dst_fill), ("array",) + arr((3,)), arr((3,), "uint8"), "same_kind"),
+        ("mask_0d_int64", arr((3,), fill=_ct_dst_fill), ("array",) + arr((3,)), arr((), "int64"), "same_kind"),
+        ("mask_11_into_3", arr((3,), fill=_ct_dst_fill), ("array",) + arr((3,)), (np.ones((1, 1), bool),) * 2, "same_kind"),
+        ("mask_2_into_3", arr((3,), fill=_ct_dst_fill), ("array",) + arr((3,)), (np.ones(2, bool),) * 2, "same_kind"),
+        ("mask_2_into_23", arr((2, 3), fill=_ct_dst_fill), ("array",) + arr((3,)), (np.ones(2, bool),) * 2, "same_kind"),
+        ("mask_1_into_0d", arr((), fill=_ct_dst_fill), ("array",) + arr(()), (np.ones(1, bool),) * 2, "same_kind"),
+        ("mask_11_0dsrc", arr((3,), fill=_ct_dst_fill), ("array",) + arr(()), (np.ones((1, 1), bool),) * 2, "same_kind"),
+        ("src_4_into_3", arr((3,), fill=_ct_dst_fill), ("array",) + arr((4,)), None, "same_kind"),
+        ("src_23_into_3", arr((3,), fill=_ct_dst_fill), ("array",) + arr((2, 3)), None, "same_kind"),
+        ("src_123_into_3", arr((3,), fill=_ct_dst_fill), ("array",) + arr((1, 2, 3)), None, "same_kind"),
+        ("src_4_into_0", arr((0,), fill=_ct_dst_fill), ("array",) + arr((4,)), None, "same_kind"),
+        ("src_0_into_3", arr((3,), fill=_ct_dst_fill), ("array",) + arr((0,)), None, "same_kind"),
+        ("src_3_into_24", arr((2, 4), fill=_ct_dst_fill), ("array",) + arr((3,)), None, "same_kind"),
+        ("src_4_into_3_whereFalse", arr((3,), fill=_ct_dst_fill), ("array",) + arr((4,)), ("lit", False), "same_kind"),
+        ("src_4_into_3_where0dFalse", arr((3,), fill=_ct_dst_fill), ("array",) + arr((4,)),
+         (np.array(False),) * 2, "same_kind"),
+        ("src_4_into_3_where1False", arr((3,), fill=_ct_dst_fill), ("array",) + arr((4,)),
+         (np.array([False]),) * 2, "same_kind"),
+        ("cast_f64_i32", arr((3,), "int32", _ct_dst_fill), ("array",) + arr((3,)), None, "same_kind"),
+        ("cast_f64_i32_0d", arr((3,), "int32", _ct_dst_fill), ("array",) + arr(()), None, "same_kind"),
+        ("cast_c128_f64", arr((3,), fill=_ct_dst_fill), ("array",) + arr((3,), "complex128"), None, "same_kind"),
+        ("cast_i64_bool", arr((3,), "bool", _ct_dst_fill), ("array",) + arr((3,), "int64"), None, "same_kind"),
+        ("cast_f64_f32_safe", arr((3,), "float32", _ct_dst_fill), ("array",) + arr((3,)), None, "safe"),
+        ("cast_i32_i64_no", arr((3,), "int64", _ct_dst_fill), ("array",) + arr((3,), "int32"), None, "no"),
+        ("cast_i32_i64_equiv", arr((3,), "int64", _ct_dst_fill), ("array",) + arr((3,), "int32"), None, "equiv"),
+        ("ro_plain", ro((3,)), ("array",) + arr((3,)), None, "same_kind"),
+        ("ro_0dsrc", ro((3,)), ("array",) + arr(()), None, "same_kind"),
+        ("ro_badcast", ro((3,), "int32"), ("array",) + arr((3,)), None, "same_kind"),
+        ("ro_badmask", ro((3,)), ("array",) + arr((3,)), int_mask, "same_kind"),
+        ("ro_badsrcshape", ro((3,)), ("array",) + arr((4,)), None, "same_kind"),
+        ("ro_0dsrc_badcast", ro((3,), "int32"), ("array",) + arr(()), None, "same_kind"),
+        ("badcast_badsrcshape", arr((3,), "int32", _ct_dst_fill), ("array",) + arr((4,)), None, "same_kind"),
+        ("badcast_badmask", arr((3,), "int32", _ct_dst_fill), ("array",) + arr((3,)), int_mask, "same_kind"),
+        ("badmaskshape_badsrcshape", arr((3,), fill=_ct_dst_fill), ("array",) + arr((4,)),
+         (np.ones(2, bool),) * 2, "same_kind"),
+        ("scalar_overflow_badmask", arr((3,), "int8", _ct_dst_fill), ("scalar", 1000), int_mask, "same_kind"),
+        ("scalar_overflow_ro", ro((3,), "int8"), ("scalar", 1000), None, "same_kind"),
+        ("scalar_equiv_badmask", arr((3,), "int32", _ct_dst_fill), ("scalar", 7), int_mask, "equiv"),
+    ]
+    for (tag, d, src, m, casting) in error_jobs:
+        emit(f"e/{tag}", d, src, m, casting=casting, layout="error")
+
+    # Redundant self-copy: NumPy returns before the read-only check (an array source only).
+    for dk in ["readonly", "c"]:
+        for mk in [None, "rand", "lit_true"]:
+            base, view = _ct_view((3, 4), "float64", dk, _ct_dst_fill)
+            emit(f"r/self/{dk}/where={mk}", (base, view), ("overlap", view), _ct_mask((3, 4), mk, rng), layout="redundant")
+    base, view = _ct_view((), "float64", "readonly", _ct_dst_fill)
+    emit("r/self/readonly0d", (base, view), ("overlap", view), None, layout="redundant")
+    return cases
+
+
 def _relabel_dtype(cases, frm, to):
     """Re-label a NumPy proxy dtype to a NumSharp-only dtype across a case's operand /
     expected / params descriptors (+ id). The RAW BYTES are untouched — this only rewrites
@@ -18736,6 +19191,9 @@ def main():
         cases = gen_copyto(COPYTO_OVERLAP_DTYPES, COPYTO_CROSS)
         cases += char_tier("copyto")                                   # G9
         write_jsonl(os.path.join(corpus_dir, "copyto.jsonl"), cases)
+    elif mode == "copyto_full":
+        # np.copyto as NumPy's array_copyto: where= masks, layouts, overlap, C# literal sources, errors (X16 + X11).
+        write_jsonl(os.path.join(corpus_dir, "copyto_full.jsonl"), gen_copyto_full())
     elif mode == "errors":
         cases = gen_errors()
         write_jsonl(os.path.join(corpus_dir, "errors.jsonl"), cases)

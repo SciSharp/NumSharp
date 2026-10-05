@@ -371,6 +371,10 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     copy costs 300–395 µs, so these cells sit at 0.93–1.5×), float16 subtraction with a column-broadcast operand (X15:
     float16 nomask anom along axis 1, 0.86×), and the memory-bound nomask means of 1M elements along axis 0 (1.00×
     float64, 0.93× complex128). Re-measure after X11 and X15.
+  - Re-measured after X11 (2026-10-06, the same 310 cells, NumPy's numbers reused): geomean 4.60× (was 2.83×), minimum
+    0.86×; random-mask cells 5.40× (were 1.89×, minimum 2.27×). Six cells stay under 1.5×, none of them the masked
+    copy: float16 nomask anom along axis 1 at 100K (0.86×, X15) and the nomask means of 1M elements (1.03–1.35×,
+    memory-bound: the same-type slab mean of X9).
   - Left open: X11–X15 (below); `out=` of ma.mean / var / std (NumPy's MaskError text included); the public
     `NDMaskedArray.filled()` returns a C-order copy where NumPy returns the data itself or a K-order copy (the
     reductions use `FilledForReduction`); `Shape.ResolveReturnShape` reads a `(1,)` operand as a scalar (the port uses
@@ -632,7 +636,9 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   a `(1, 0, 2)`-permuted float64 input along axis 2 gives NumPy strides `(1, 5)` (elements), NumSharp `(3, 1)`. The
   values are right, and the oracle compares C-order bytes, so only a flags or strides facet sees it. np.sum's bool
   loop (`dtype=bool`) and np.mean's bool loop are np.any and inherit it. Found by X9's probe.
-- [ ] **X11 `np.copyto(dst, src, where=mask)` runs a branch per element (and a generic loop for float16 / complex).**
+- [x] **X11 `np.copyto(dst, src, where=mask)` runs a branch per element (and a generic loop for float16 / complex).**
+  Done with X16 (2026-10-06, this commit): the masked copy is a new bit-copy kernel per element width; the speed is in
+  X16.
   2.5 ns per element over a `(250, 400)` float16 with every 7th element masked: 253 µs, where
   `np.putmask(dst, mask, scalar)` — the same assignment for a same-shape mask — takes 21 µs. Speed only. nanvar /
   nanmean's eager float16 route now zeroes with putmask (A7, `ZeroWhereMask`). Found by A7's benchmark.
@@ -673,6 +679,83 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - [ ] **X15 A float16 binary ufunc with a column-broadcast operand is slow.** `np.subtract(float16 (250,400),
   float16 (250,1))` takes 1,141 µs (11 ns per element) where NumPy takes 377 µs and the same-shape float16 subtract takes
   72 µs. Speed only. numpy.ma's anom of float16 along axis 1 meets it (0.86× NumPy). Found by A6's benchmark.
+- [x] **X16 `np.copyto` is not NumPy's `array_copyto`: wrong values for an overlapping copy, NumPy's checks missing or
+  in another order, weak scalars wrapped.** Found by X11's probe (2026-10-06). Done 2026-10-06 (this commit).
+  - Proof (NumPy 2.4.2 vs NumSharp at `04e0e703`; `copyto_probe`, 86 calls; the house exception types mapped to
+    NumPy's): 54 differ.
+    - Silent wrong values. A masked copy never checked overlap: `np.copyto(a[1:], a[:-1], where=m)` gave
+      `[0, 0, 2, 2, 2, 5, 5, 5, 8, 8]`, NumPy `[0, 0, 2, 2, 3, 5, 5, 6, 8, 8]`. An overlap probe (1,500 random views of
+      one buffer, 1-D and 2-D, stepped / reversed / transposed, masked or not) differed in 251 cases: 112 masked 1-D, 135
+      masked 2-D, and 4 unmasked 1-D, where NDIter.Copy copied the source first and NumPy walks its raw order, which
+      reads its own writes when the strides differ (`a[3:19:2] = a[6:14]`: NumPy `[…, 12, 10, 14, 12, 16, 10, …]`,
+      NumSharp `[…, 12, 11, 14, 12, 16, 13, …]`; slice assignment shares the path).
+    - Accepted where NumPy refuses: a mask that does not broadcast (`(1,1)` into `(3,)` — NumPy never strips a mask's
+      axes), a source that does not broadcast under a false, 0-d false or `(1,)` false mask (NumPy checks the source
+      first), a `(1,)` mask into a 0-d destination.
+    - Refused where NumPy accepts: a source with leading unit axes beyond the destination's rank (`(1,3)` and
+      `(1,1,3)` into `(3,)`, `(1,)` and `(1,1)` into `()`), a redundant self-copy of a read-only array
+      (`np.copyto(b, b)`), a C# float into float32 under `'safe'` and `'no'`, a C# int into int64 under `'equiv'` (both
+      legal for NumPy's weak Python scalars), a C# int into float32 under `'safe'`.
+    - Wrapped where NumPy raises: `np.copyto(int8, 1000)` gave `-24` (NumPy "Python integer 1000 out of bounds for
+      int8", masked or not); `'equiv'` accepted an int into int32 (NumPy "cannot cast Python int to int32 under the
+      casting rule 'equiv'"); `-1` into uint8 reported a cast error instead of NumPy's OverflowError.
+    - Other errors and orders: "where must be a boolean array, got dtype('int64')" instead of NumPy's cast text; the
+      iterator's "operands could not be broadcast together with remapped shapes …" instead of "could not broadcast input
+      array / where mask from shape … into shape …"; the casting-name errors as ArgumentException / ArgumentNullException;
+      "Cannot cast array data" where NumPy says "Cannot cast scalar"; a read-only destination and a bad cast reported
+      before a bad mask, a bad source shape reported as a cast error.
+  - Fix (`Manipulation/np.copyto.cs`): a statement-for-statement port of `array_copyto` → `PyArray_AssignArray` /
+    `PyArray_AssignRawScalar`.
+    - Arguments: the casting converter, the mask's bool check, a C# number as NumPy's Python scalar (`copyto<T>`:
+      `npy_mark_tmp_array_if_pyscalar`, `npy_find_descr_for_scalar` — the common DType of the abstract Python class and
+      the destination's — `npy_update_operand_for_scalar`'s `'equiv'` TypeError, then `PyArray_Pack`'s range checks
+      through `ReductionInitial.TryPack`), a `BigInteger` overload for a Python int of any size. bool / Half / char /
+      decimal are strong.
+    - The checks in NumPy's order (above), each with NumPy's text.
+    - The masked copy: `RawArrayIter.PrepareThree` (`PyArray_PrepareThreeRawArrayIter`) and the 1-D backward rule, then
+      a new kernel (`DirectILKernelGenerator.MaskedAssign.cs`, X11): a bit copy of the destination's element width, one
+      kernel per width (1 / 2 / 4 / 8 / 16 bytes) for all 15 dtypes; an IL walker over the outer axes; a run stage with a
+      SIMD blend for contiguous runs (`ConditionalSelect`, AVX2 mask widening, a hoisted vector for a broadcast source),
+      a branch-free select off running pointers for strided runs and tails, memmove / fill for a constant-true run. With
+      more than one prepared axis the operands cannot overlap, so the walk puts innermost the axis where most operands are
+      contiguous (NumPy's order wins ties; the bits are the same either way).
+    - A source of another dtype, or an overlapping source NumPy copies first, is staged in the destination's memory
+      order: one element per distinct source element, on the stack up to 16 KB, else a pooled buffer, through the cast
+      kernels NDIter.Copy uses.
+    - NDIter.Copy's overlap rule (np.copyto's unmasked copy, slice assignment, every assignment through it) is NumPy's:
+      copy first for a multi-axis destination or an opposite-direction 1-D one; otherwise NumPy's raw 1-D order
+      (`AssignRaw1D`).
+    - nanmean / nanvar's eager zero fill (`ZeroWhereMask`, A3 / A7) is NumPy's own `np.copyto(arr, 0, where=mask,
+      casting='unsafe')` again: 3.7 µs over a float16 `(250, 400)` with every 7th element masked, where the
+      `np.putmask` route A7 took takes 22.7 µs (NumPy's copyto 124 µs).
+  - Gates: the `copyto_full` oracle tier (13,462 cases, zero excuses: every check against every later one, the texts,
+    13 dtypes × 25 layouts × 14 mask forms, long runs, 16 cast pairs, 1,100 overlaps, C# literal sources under every
+    casting rule, 0-d / empty); unit `Manipulation/np.copyto.NumPyPort.Test.cs` (21 tests; 12 of the first 18 fail
+    on `04e0e703`, the last three were added for mutants only the tier caught); the overlap probe 1,500 / 1,500 and the call probe 82 / 86 (the four left: the house exception types
+    aside, NumPy's `where=1` scalar mask (finding 2), a Python list of ints with no C# spelling, the LP64 text for a
+    Python int past int64, and the probe's own complex print format). Planted bugs: 21 edits (the redundant self-copy, the 2-D
+    overlap temporary, the source's axis stripping, the 0-d mask, the lane mask, the 1-D backward rule, the staging's
+    coalescing and stride rewrite, the `'equiv'` check, the weak scalar's dtype, NDIter's temporary rule and raw order,
+    the 1-D flip, the SIMD blend, the 16-byte pair mask, the unrolled select, a scalar source's mask, the overlap
+    staging, the 0-d source route, the strided staging copy, a broadcast run's memmove): the tier kills 20, the unit
+    tests all 21 (the tier cannot build the 21st's input, a source view whose axes overlap: `np.ndarray` with strides
+    `(8, 8)`).
+  - Divergences left (documented): the exception types are the house's; a 0-d non-bool mask always raises; NumSharp
+    pins the LP64 Python-int texts; one complex width.
+  - Speed: NPY/NS, two pinned P-cores, best of rounds; 192 cells: bool / int8 / uint16 / float16 / int32 / float32 /
+    float64 / int64 / complex128 × 1K / 100K / 1M × a 0-d source, an array source, a row source, a row mask, a strided
+    destination, an F destination, a float32 → float64 cast (each under a 35 % random mask), and no mask. Geomean
+    9.46×. The 165 masked cells: geomean 12.4×, minimum 1.51× (the row-mask complex128 1M cell streams 32 MB, DRAM /
+    L3-bound on both sides, 1.21–1.51× across runs); by form: 0-d source 38×, array 23×, row source 23×, row mask
+    10.6×, strided destination 4.0×, F destination 4.6×, cast 5.5× (were 2.5–6 ns per element: X11). The unmasked copy
+    is memcpy on both sides: 1K 4.3–7×, 100K / 1M 0.73–1.18× (finding 23). Two levers measured on the way: staging the
+    cast source on the stack instead of in an NDArray took the 1K masked float32 → float64 copy from 0.78 to 0.32 µs
+    (NumPy 1.15 µs; finding 22), and running pointers in the strided select loop took a 1K strided-destination copy
+    from 0.77 to 0.48 µs (NumPy 1.15 µs; finding 24). numpy.ma's masked reductions, whose `filled` is this copy, went
+    from 2.83× to 4.60× (A6).
+- [ ] **X17 The old masked cast kernels have no caller left.** `DirectILKernelGenerator.Cast.Masked.cs`
+  (`TryGetMaskedCastKernel`, the per-pair masked cast with the dead same-dtype blend X11 found) served only np.copyto's
+  masked path, which X16 replaced. Delete it, or route a future masked cast through it after a parity check.
 
 ## 6. Findings
 
@@ -768,9 +851,31 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    .swapaxes(0, -1)`) reverses every axis of a 2-D or 3-D input, which is F-contiguous, the same as "F": it covered no
    other permutation. The in-place-square layout bug (finding 16) showed only in a second probe over the explicit axis
    permutations.
+21. **NumPy copies an overlapping source first only for a multi-axis or an opposite-direction 1-D destination** (X16).
+   Every other overlapping 1-D assignment walks NumPy's raw order: a negative destination stride flipped (both operands
+   from their last element), then backward when the source starts below the destination inside it. With equal strides
+   that order equals copying first; with unequal strides it reads its own writes (`a[3:19:2] = a[6:14]`). NDIter.Copy
+   (every assignment: np.copyto, slice assignment) copied first for every non-unit-stride 1-D overlap, and np.copyto's
+   masked path never checked overlap at all.
+22. **A small internal temporary must not be an NDArray** (X16). A 1K masked float32 → float64 copy spent 0.54 of its
+   0.78 µs building the staged source as an NDArray and running NDIter.Copy (allocation, ARC, the iterator's state)
+   around a 0.2 µs cast. A stack buffer (≤ 16 KB, `[SkipLocalsInit]`) or a pooled one, filled by the same cast kernels,
+   takes it to 0.32 µs.
+23. **An unmasked copy is memcpy, in NumPy too** (X16). `np.copyto(dst, src)` of one dtype runs at
+   `Buffer.MemoryCopy`'s speed (probed: 13.1 µs for 1 MB, 14.0 µs for 800 KB, both equal to the bare call); NumPy's
+   memmove is as fast. At 100K and 1M the cells sit at 0.73–1.18× run to run, bandwidth-bound on both sides; only the
+   1K cells, where NumPy's call overhead counts, are faster (4.3–7×).
+24. **Address a strided loop with running pointers** (X16). The select loop's `dst + i * stride` (three multiplies per
+   element) cost a third of its time: 0.77 → 0.48 µs for 1,000 strided elements with pointers bumped by the stride and
+   the loop unrolled four times (each element's store still before the next element's loads, so an overlapping run
+   keeps NumPy's order).
 
 ## 7. State log
 
+- **2026-10-06**: X16 done with X11 (np.copyto is NumPy's `array_copyto`: the checks in NumPy's order, weak C#
+  scalars, the overlap rule shared with NDIter.Copy and slice assignment, a new masked bit-copy kernel; the
+  `copyto_full` oracle tier, zero excuses; 21 planted bugs killed); A6 re-measured (4.60×); X17 and findings 21–24
+  recorded. This commit.
 - **2026-10-06**: A6 done (np.ma.mean / var / std / anom are numpy.ma's statements; the `ma_meanvar` oracle tier with
   raw data and result forms, zero excuses; `ma_reduce` holds the four strict but a finding-5 branch; 14 planted bugs
   killed); X11 widened (random masks, the dead same-dtype SIMD blend); X12–X15 and findings 16–20 recorded. Commit

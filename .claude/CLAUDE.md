@@ -1471,9 +1471,9 @@ masks carried NaN, an unmasked inf stayed where NumPy masks it into 0.0, and the
   165 cells carved where the mean sums the view on a layout np.sum still orders differently, finding 5 / 10 / X12);
   `ma_reduce` holds the four strict but for a finding-5 branch; unit `Ma/np.ma.meanvar.NumPyPort.Test.cs` (9). 14 planted
   bugs, each killed by the unit tests and by the tier.
-- **Perf** (310 cells): geomean 2.83×, min 0.78×. The cells under 1.5× are shared primitives: the masked copy behind
-  `filled` (`np.copyto(where=)`, plan X11: a branch per element under a random mask, and a generic loop for float16 /
-  complex), float16 subtraction with a column-broadcast operand (X15), the memory-bound 1M nomask means.
+- **Perf** (310 cells): geomean 4.60× since X11's masked copy (2026-10-06; 2.83× before), min 0.86×. The six cells
+  under 1.5× are shared primitives: float16 subtraction with a column-broadcast operand (X15: float16 nomask anom
+  along axis 1, 0.86×) and the memory-bound 1M nomask means (1.03–1.35×).
 
 **`np.max`/`np.min`/`np.ptp` (flat AND axis) run NumPy's own reduction schedules, bit for bit**
 (`Backends/Default/Math/Reduction/Default.Reduction.MinMax.Exact.cs`, `NumPyMinMaxReduce`; hooked first in
@@ -1682,8 +1682,9 @@ takes 0 / -1 as flat), the non-NaN count (`keepdims=keepdims`), the sum of the N
 the in-place division (`DivideByCountsLikeNumPy`: the float64 loop, Smith's complex division; an all-NaN slice keeps
 `0 / 0`). Routes as nanvar's: the count streams; a dense input without a cast streams its zeroed sum; otherwise the
 K-order copy is materialized for `ReduceAdd`; float16 and hosts without dynamic code run NumPy's eager statements, whose
-zero fill (shared with nanvar, `ZeroWhereMask`) is `np.putmask` with a scalar — 21 µs where `np.copyto(where=)` took
-253 µs into a float16 `(250, 400)` (plan X11). Perf (72 cells): geomean 5.82×, min 1.70×. Gates: `nanmean.jsonl` (5,017
+zero fill (shared with nanvar, `ZeroWhereMask`) is NumPy's own `np.copyto(arr, 0, where=mask)` — 3.7 µs into a
+float16 `(250, 400)` since X11's masked kernel (A7 had routed it through `np.putmask`, 21 µs, while that copy took
+253 µs). Perf (72 cells): geomean 5.82×, min 1.70×. Gates: `nanmean.jsonl` (5,017
 cases, zero excuses; nanmean left `NanReduceOps` and joined `ByteExactArithmeticUnaryOps`), unit
 `Math/np.nanmean.NumPyPort.Test.cs` (5).
 
@@ -4178,6 +4179,48 @@ non-structured subset would only re-expose `loadtxt`.
 ### Other
 `around`, `asscalar`, `copyto`, `round_`, `size`, `multithreading` (NumSharp extension — `np.multithreading(enabled, max_threads)` opt-in threaded kernels)
 
+**`np.copyto(dst, src, casting='same_kind', where=True)` is NumPy's `array_copyto` → `PyArray_AssignArray` /
+`PyArray_AssignRawScalar`, statement for statement** (`Manipulation/np.copyto.cs`; 2026-10-06, plan
+`docs/plans/api-parameter-parity.md` X16 + X11; probed against 2.4.2):
+- **Arguments.** The casting name first (`ValueError` "casting must be one of …", `TypeError` for null), then the mask's
+  dtype (NumPy's "Cannot cast array data|scalar from dtype('int64') to dtype('bool') according to the rule 'safe'" under
+  the house `ArgumentException`). A C# integer / `float` / `double` / `Complex` binds `copyto<T>` and is NumPy's WEAK
+  Python scalar (`npy_find_descr_for_scalar`: the common DType of `_PyLongDType` / `_PyFloatDType` / `_PyComplexDType`
+  and the destination's; stored with `PyArray_Pack`'s range checks — `np.copyto(int8, 1000)` raises "Python integer
+  1000 out of bounds for int8", never wraps; `'equiv'` refuses any dtype but the scalar's own default). A `BigInteger`
+  is a Python int of any size. `bool` / `Half` / `char` / `decimal` and every `NDArray` (0-d too) are STRONG: a 0-d
+  int64 into int8 wraps, as `np.array(1000)` does.
+- **Checks in NumPy's order:** 0-d source → AssignRawScalar ("Cannot cast scalar from …"); a redundant self-copy (same
+  data, dtype, shape, strides) returns BEFORE the writeable check (`np.copyto(b, b)` on a read-only view is legal); read-only
+  → "assignment destination is read-only"; the cast rule (`InvalidCastException`, NumPy's text); an overlapping source is
+  copied first unless dst is 1-D with both runs in the same direction; the source broadcast with its leading extent-1
+  axes beyond dst's rank STRIPPED ("could not broadcast input array from shape (2,3) into shape (3,)"); a 0-d mask
+  (after the source check: false copies nothing); the mask broadcast, never stripped ("could not broadcast where mask
+  from shape (1,3) into shape (3,)").
+- **The masked copy** is a BIT copy of dst's element width (`DirectILKernelGenerator.MaskedAssign.cs`: one kernel per
+  width 1/2/4/8/16 serves all 15 dtypes) over NumPy's prepared iteration (`Backends/Iterators/RawArrayIter.cs` =
+  `PyArray_PrepareThreeRawArrayIter`: axes by dst's |stride|, negative dst strides flipped, coalescing) plus the 1-D
+  backward rule. An IL walker drives a run stage: a SIMD blend for contiguous runs (`ConditionalSelect`, AVX2 `vpmovzx`
+  mask widening, a hoisted vector for a broadcast source), a branch-free select off running pointers for strided runs
+  and tails, memmove / fill for a constant-true run. With more than one prepared axis the operands cannot overlap, so the
+  innermost axis is the one where most operands are contiguous (NumPy's order wins ties; `np.CopytoNumPyOrderOnly` is the
+  A/B hook). A source of another dtype, or an overlapping one NumPy copies first, is staged in dst's memory order — one
+  element per distinct source element, on the stack up to 16 KB, else a pooled buffer — through NDIter.Copy's cast
+  kernels.
+- **The unmasked copy** is `NDIter.Copy`, whose overlap rule is now NumPy's for every caller (slice assignment too):
+  copy first for a multi-axis destination or an opposite-direction 1-D one; otherwise NumPy's raw 1-D order
+  (`DirectILKernelGenerator.AssignRaw1D`), which reads its own writes when the strides differ (`a[3:19:2] = a[6:14]`).
+  It used to copy first for every non-unit-stride 1-D overlap.
+- **Divergences** (house conventions): the exception types (TypeError → `ArgumentException` for the mask,
+  `InvalidCastException` for casts; OverflowError → `OverflowException`); a 0-d non-bool mask always raises (NumPy takes
+  `where=1`); LP64 texts for a Python int past int64; one complex width.
+- **Gates:** `copyto_full.jsonl` (13,462 cases, zero excuses), unit `Manipulation/np.copyto.NumPyPort.Test.cs` (21);
+  21 planted bugs, all killed by the unit tests, 20 by the tier.
+- **Perf** (NPY/NS, two pinned P-cores, 192 cells: 9 dtypes × 1K/100K/1M × scalar / array / row-source / row-mask /
+  strided dst / F dst / cast / no mask): see the plan item X16. The masked forms beat NumPy 1.5–60× but for two
+  complex128 1M cells that stream 32+ MB (DRAM / L3-bound on both sides, 1.2–1.5×); the unmasked copy is memcpy on both
+  sides (0.97–1.22× at 100K / 1M).
+
 ### Operators
 - Arithmetic: `+`, `-`, `*`, `/`, `%`, unary `-`
 - Comparison: `==`, `!=`, `<`, `>`, `<=`, `>=`
@@ -4637,7 +4680,7 @@ test/NumSharp.Tests/IO/            .npy/.npz format gate (no Python)
 - **Regenerate** (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>`
   (modes include `conversion creation multioutput iter dtype_text out_where errors_full smoke astype_full
   binary divmod_power comparison unary reduce where place matmul rounding bitwise unary_extra nanreduce
-  scan stat logic modf manip sort tail params aliasing copyto errors groupa numpy_f32 matmul_parity
+  scan stat logic modf manip sort tail params aliasing copyto copyto_full errors groupa numpy_f32 matmul_parity
   linalg_parity poly einsum specials precision products random_parity fft`; `precision` additionally
   needs `mpmath`) + the index/Decimal/NPY generators, then `dotnet build` to copy corpus assets.
 - **Truthful vs precise** (`precision.jsonl`, 72 truth-bearing cases): each case carries `expected.truth` — the correctly-rounded mathematical reference (exact `Fraction` / 200-bit mpmath, generator-side only) — over precision-ADVERSARIAL inputs (wide-magnitude/cancellation sums at N≤2049, large-mean variance, near-1 products, expm1/log1p small-|x|) the ordinary 8–36-element pools cannot express. Policy (the vision is byte-identical NumPy parity): **bit-exact to NumPy passes without truth ever being read — precise never fails**; truth only adjudicates divergences. Not-less-truthful than NumPy → excused "prefer-precise" parity debt (being MORE accurate than NumPy is still a divergence to close by porting NumPy's algorithm, never a win); less truthful beyond 4×/+8 ULP slack → precision LOSS, red unless a bounded known-bug branch covers it (`MisalignedRegistry` P1–P3; the unbounded summation blanket is gated on truth-absence so losses can't hide in it). Findings on arrival, excused bounded ≤256 ULP (P3): f32 var/std accumulation 55/26 ULP vs truth (NumPy 3/2), negative-stride reduce path 11–32 ULP (NumPy exact).
@@ -4647,6 +4690,7 @@ test/NumSharp.Tests/IO/            .npy/.npz format gate (no Python)
 - **mean** (`mean_loops.jsonl`, 6,550 cases, 2026-10-05, `gen_oracle.py mean_loops`): np.mean as NumPy's `_mean` over every catalog layout × dtype × axis × keepdims, `dtype=` for every input against nine loops (float16 / float32 / float64 / complex128 / int8 / uint8 / int32 / int64 / bool), empty and 0-d inputs, special values (complex parts, uint64 past 2**63, broadcast), order-sensitive sizes (float offsets; int64 near 2**62) and `np.setbufsize` fills. Held to ZERO excuses (valueclass `meanloops`; mean is in `ByteExactArithmeticUnaryOps` and out of the reduction blankets in every tier, `ma.mean` too since A6; one narrow branch takes np.sum's finding-5 layout in the older tiers). Carves, each pinned: finding 5 (16 cells), X6 (5), the broadcast flat schedule (24).
 - **nanmean** (`nanmean.jsonl`, 5,017 cases, 2026-10-05, `gen_oracle.py nanmean`): np.nanmean as NumPy's `nanmean` over every catalog layout (refilled with finite values and NaNs) × dtype × axis × keepdims, NaN patterns (one, all, an all-NaN slice per axis, NaN / inf complex parts), `dtype=` for every input against nine loops, special values, `np.setbufsize` fills, order-sensitive sizes, empty and 0-d inputs. Held to ZERO excuses (valueclass `nanmean`; nanmean left `NanReduceOps` and joined `ByteExactArithmeticUnaryOps`; the nan-family shape branch is removed). Carve: 5 cast-loop cells (np.sum's X6 residual).
 - **ma mean / var / std / anom** (`ma_meanvar.jsonl`, 26,379 cases, 2026-10-06, `gen_ma_oracle.py meanvar`): numpy.ma's statements (plan A6) over every catalog layout × the 13 dtypes × nomask / all-False / some masks, the mask classes (all masked, one unmasked element per row, a masked first row) with keepdims and ddof 0 / 1 / 2 / 5, `dtype=` in eight loops, the `mean=` forms (Python float / int / complex, np.float32 / np.float64, plain / masked / 0-d arrays, a non-broadcastable one), special values (non-finite, overflowing squares, -0.0, integer extremes), sizes past the pairwise block, empty and 0-d inputs, and 294 NumPy errors (`expects_throw`, type + text — the first ma tier with error cases). Each case also records `raw` (the data at EVERY slot, masked ones included) and `form` (`masked` singleton / `scalar` / `nomask` / `mask`), which `FuzzCorpusTests.Ma` compares; held to ZERO excuses (valueclass `mameanvar`: the registry returns null and the ma harness's own excuses skip it). Carve (`_mv_carved`): 165 cells whose mean sums the operand view (no mask or an all-False one) on a layout np.sum still orders differently — finding 5 (38) and broadcast operands (127, finding 10 / X12) — each only where the sum is not order-free; `python gen_ma_oracle.py meanvar --uncarved <path>` writes the whole matrix for the check that every carved divergence is one of those (64 of the 165 differ).
+- **np.copyto** (`copyto_full.jsonl`, 13,462 cases, 2026-10-06, `gen_oracle.py copyto_full`): np.copyto as NumPy's `array_copyto` (plan api-parameter-parity X16 / X11) over 13 dtypes × destination and source layouts × 14 mask forms (dense, random, row, column, strided, reversed, 0-d, the C# literals), long runs at every element width, 16 cast pairs, 1,100 overlapping views of one buffer (masked and unmasked), C# literal sources as NumPy's Python scalars (weak ints / floats / complexes, the strong bool, every casting rule), 0-d and empty destinations, and 43 error jobs that gate NumPy's check ORDER. Every case records the destination's whole base buffer. Held to ZERO excuses (`MisalignedRegistry` returns null for the op). Generator drops: a Python int at or past 2**31 that NumPy rejects with its platform C `long` text (LP64 pinned), and complex64 texts.
 - **Products & random streams**: `products.jsonl` (408) gates the CBLAS family, tensor products,
   cross/cov/corrcoef, and Array-API vector/matrix norms. `random_parity.jsonl` (38 portable) +
   `random_parity_host.jsonl` (108 host-libm) pin 35 stream methods/distributions; only managed

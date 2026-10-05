@@ -1174,6 +1174,38 @@ carried NaN instead of the masked 0, an unmasked inf stayed where NumPy masks it
 divide's mask, and the masked mean of a float32 stayed float32. `ma_reduce` hid it under the summation and dtype
 blankets (`IsMaVarStd` / `IsMaMean`, 254 cases).
 
+### np.copyto as NumPy's `array_copyto` (`copyto_full` tier) — 2026-10-06
+
+`copyto_full.jsonl` (`gen_oracle.py copyto_full`, 13,462 cases, floor 12,000) gates `np.copyto(dst, src, casting,
+where)` as NumPy's `array_copyto` → `PyArray_AssignArray` / `PyArray_AssignRawScalar` (plan
+`docs/plans/api-parameter-parity.md` X16, with X11's masked kernel). Each case records the destination's WHOLE base
+buffer after the call (operand 0 carries its prior contents), so a write outside the view, into a masked-off slot or
+through an overlapping source is caught, and NumPy's errors are cases too (`_error_case`, verbatim texts).
+
+**Sections:** M1 (13 dtypes × 1-D / 2-D / 3-D × destination C / F / strided / reversed / offset / transposed × 14 masks:
+none, random, all true / false, alternating, row, column, strided, reversed, 0-d true / false, the C# literals
+`true` / `false`, a one-element mask), M2 (13 dtypes × source F / strided / reversed / offset / transposed / row /
+column / 0-d / one element / an extra leading unit axis / a read-only `broadcast_to` view × 5 masks), M3 (131 and
+4 × 37 elements: the SIMD blend's unrolled pairs, single vectors and tails at every element width), X (16 cast pairs ×
+layouts × masks × `same_kind` / `unsafe`), O (1,100 overlapping views of ONE buffer, 1-D and 2-D, stepped, reversed
+and transposed, masked or not: NumPy's temporary or its raw 1-D order), S (C# literal sources as NumPy's Python
+scalars: weak ints from 0 to 2**64 and below -2**63, floats with ±0 / inf / NaN / 65504 / 65520, complexes, and the
+strong bool, × 13 dtypes × the five casting rules × masked or not), Z (0-d and empty destinations, strong 0-d
+sources: cast and wrapped, never range-checked), E (43 error jobs: every check against every later one, so the ORDER
+is gated), R (a redundant self-copy, read-only or not). Cases per section: M1 2,626, M2 1,729, M3 819, X 2,688, O 1,100, S 4,266, Z 184, E 43, R 7; 2,662 of them are NumPy errors.
+
+**Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the `copyto_full` op. The generator drops two classes
+it cannot gate on win-amd64: a Python int at or past 2**31 that NumPy rejects with its platform-specific C `long` text
+(NumSharp pins the LP64 text, as the other Python-int tiers do), and a text naming complex64 (NumSharp has one complex
+width). The C# harness binds a scalar source to `np.copyto<T>` / the `BigInteger` overload by its spec kind
+(`OpRegistry.Copyto.cs`), so the weak / strong split is the C# binding a port would get.
+
+**What it replaced** (fixed 2026-10-06). A probe of 86 calls found 54 divergences on the old build: silent wrong
+values for an overlapping masked copy (251 of 1,500 overlap cases), masks and sources accepted that do not broadcast,
+sources with leading unit axes refused, a read-only redundant self-copy refused, weak scalars wrapped instead of
+range-checked, and other errors, texts and orders. **Planted bugs:** see the plan item (each killed by the tier or
+by `Manipulation/np.copyto.NumPyPort.Test.cs`).
+
 ### float16 selections (`half_minmax` tier + the selection contract) — 2026-10-03
 
 `half_minmax.jsonl` (5,900 cases, 1,180 per op, `gen_oracle.py half_minmax`) runs `max` / `min` / `nanmax` / `nanmin`
