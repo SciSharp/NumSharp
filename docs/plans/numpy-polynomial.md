@@ -1868,6 +1868,23 @@ tests: 1 and 2 of 3. Full suites, both TFMs: NumSharp.Tests 18,186 / 18,185 pass
   (1,2,6) where NumPy has (12,1,3), and `np.zeros((0,3))` has (24,8) bytes where NumPy has (0,0). The strides are
   pinned in `OpenBugs.EmptyStrides.cs` (264e3793).
 
+**Pinned as failing OpenBugs tests (2026-10-06).** The three open classes above (except the complex128 one, already
+pinned in `OpenBugs.NaNOperandOrder.cs`) now have `[OpenBugs]` tests that assert NumPy 2.4.2's raw bytes and so FAIL
+while the bug lives:
+- `OpenBugs.PolynomialNaN.cs` (`OpenBugsPolynomialNaNTests.PolynomialIntegral_StepTableKeepsWrongNaN`) — the U3/U4
+  step-table integral class, three cases verified to diverge on a CLEAN 7026b3e5 rebuild: `lagint` float16 that
+  overflows to `inf - inf`, `hermeint` float16 with a NaN in the integration-constant vector `k`, and `lagint`
+  float64 with `scl = +inf` over a 3-D transposed series.
+- `OpenBugs.SortUniqueNaN.cs` — `Unique_KeepsInputNaNBits_InsteadOfCanonicalQuietNaN` (np.unique / unique_values
+  float32 + float64, negative and payload NaN) and `Sort_IgnoresKind_CanonicalizesWhereStableKindsPreserveNaNBits`
+  (np.sort `kind='stable'`/`'mergesort'`).
+- Footgun recorded in the tests: the exact float step-table diverging SET is overflow-order sensitive, so it shifts
+  slightly between builds (on a clean 7026b3e5 the `hermval2d` case the §12 tally counted now MATCHES NumPy; the
+  `lagint`/`hermeint` integrals still diverge). Each pin therefore uses a case verified to diverge on the shipped
+  build AND asserts NumPy's CORRECT bytes, so it stays a valid target whatever wrong bits NumSharp happens to produce.
+  The `scl` NaN sign is load-bearing: `lagint(c, scl=nan)` with `double.NaN` (negative) already matches NumPy, only a
+  positive-NaN scale diverges.
+
 ---
 
 ## Appendix A — operation × basis matrix (the 186 basis-module names; + 7 `polyutils` = 193)
