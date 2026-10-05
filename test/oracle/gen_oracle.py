@@ -7998,9 +7998,260 @@ def gen_creation(dtypes):
     return cases
 
 
+# ---- np.ndarray: the low-level constructor ------------------------------------------
+
+def _ndarray_layout(a):
+    """The "layout" facet of an np.ndarray result: [C, F, OWNDATA, WRITEABLE, ALIGNED, base-is-set, *byte strides]
+    as int64 — where and how the array lies, which its values cannot show."""
+    f = a.flags
+    rec = [f.c_contiguous, f.f_contiguous, f.owndata, f.writeable, f.aligned, a.base is not None]
+    return np.array([int(x) for x in rec] + [int(s) for s in a.strides], dtype=np.int64)
+
+
+def gen_ndarray():
+    """np.ndarray(shape, dtype, buffer, offset, strides, order) — NumPy's ndarray.__new__ (array_new, arrayobject.c).
+
+    Every success records two cases (params.facet): "values", the result itself (dtype, shape and C-order bytes; an
+    array allocated without a buffer is uninitialized, so both sides fill it with 0 first and only its dtype and shape
+    are compared), and "layout", _ndarray_layout's record: the flags and byte strides the values cannot show. A failure
+    records NumPy's exception verbatim.
+
+    params.buffer names the buffer and how the C# replay (OpRegistry.Ndarray.cs) passes it: {"kind": "bytearray"} ->
+    a byte[] of operand 0's bytes, "bytes" -> a ReadOnlyMemory<byte> of them (read-only), "ndarray" -> operand 0
+    itself, "memoryview" -> operand 0's .data, "none" -> null, and the non-buffers "list" / "int" / "str" ->
+    object[] / 7 / "abcdefgh".
+
+    Left out, as documented NumSharp divergences pinned by [Misaligned] unit tests (docs/plans/np-ndarray-parity.md):
+    the inputs NumPy lays OUTSIDE the buffer (a negative offset under a non-empty array, shape -1 with a negative
+    stride, an offset near 2**63, strides over an empty buffer), byte strides that split an element, the reported
+    stride of an unused axis that splits an element, non-native dtypes, complex64, a bad dtype string (NumSharp raises
+    NotSupportedException with NumPy's text), and multi-character order strings.
+    """
+    cases = []
+    n = 0
+    M = object()  # an argument left out (NumPy's default)
+
+    def u8(nbytes, fill=None):
+        raw = bytes(fill) if fill is not None else bytes((i * 7 + 3) & 0xFF for i in range(nbytes))
+        return np.frombuffer(raw, dtype=np.uint8).copy()
+
+    def emit(cid, shape, dtype=M, buffer=M, offset=M, strides=M, order=M, operand=None, buffer_obj=None):
+        nonlocal n
+        params = {"shape": shape}
+        kw = {}
+        if dtype is not M:
+            params["dtype"] = dtype
+            kw["dtype"] = dtype
+        if buffer is not M:
+            params["buffer"] = buffer
+            kw["buffer"] = buffer_obj
+        if offset is not M:
+            params["offset"] = offset
+            kw["offset"] = offset
+        if strides is not M:
+            params["strides"] = strides
+            kw["strides"] = None if strides is None else tuple(strides)
+        if order is not M:
+            params["order"] = order
+            kw["order"] = order
+        operands = [] if operand is None else [operand]
+        pyshape = tuple(shape) if isinstance(shape, list) else shape
+        try:
+            r = np.ndarray(pyshape, **kw)
+        except Exception as e:  # noqa: BLE001 - NumPy's exception is the oracle
+            cases.append(_error_case("ndarray", params, operands, e, "ndarray", cid=f"ndarray/{cid}/{n}"))
+            n += 1
+            return
+        layout = _ndarray_layout(r)
+        if buffer_obj is None:
+            r.fill(0)  # uninitialized memory: the values facet then compares dtype and shape only
+        cases.append(_case("ndarray", dict(params, facet="values"), operands, _arr_expected(r),
+                           "ndarray", "ndarray", cid=f"ndarray/{cid}/values/{n}"))
+        n += 1
+        cases.append(_case("ndarray", dict(params, facet="layout"), operands, _arr_expected(layout),
+                           "ndarray", "ndarray", cid=f"ndarray/{cid}/layout/{n}"))
+        n += 1
+
+    def bytes_buffer(nbytes, kind="bytearray", fill=None):
+        a = u8(nbytes, fill)
+        obj = bytearray(a.tobytes()) if kind == "bytearray" else a.tobytes()
+        return {"kind": kind}, describe(a, a), obj
+
+    # (A) no buffer: every dtype x shape x order. The memory is NumPy's np.empty: C or F strides, all-zero strides
+    #     for an empty array.
+    shapes = [[2, 3], 5, [], [0], [2, 0, 3], [3, 0], [1, 3], [2, 3, 4], [1], [4, 1, 2]]
+    for dt in ALL_DTYPES:
+        for shape in shapes:
+            for order in (M, "C", "F"):
+                emit(f"alloc/{dt}", shape, dtype=dt, order=order)
+    emit("alloc/default_dtype", [2, 3])
+    emit("alloc/default_dtype", [2, 3], order="F")
+    emit("alloc/none_buffer", [2, 3], dtype="int32", buffer={"kind": "none"}, buffer_obj=None)
+    for order in ["A", "K", "c", "f", "a", "k"]:
+        for shape in ([2, 3], [2, 3, 4], [0, 3]):
+            emit(f"alloc/order_{order}", shape, dtype="float64", order=order)
+    for order in ["Q", "x", "B", "1"]:
+        emit("alloc/order_bad", [2, 3], order=order)
+    emit("alloc/shape_none", None)
+    for shape in ([-1], [2, -3], -1, -5, [2 ** 31, 2 ** 31], [2 ** 62, 2 ** 62], [0, 2 ** 62], [-1, 2 ** 62],
+                  [2 ** 62, -1], [0, -1]):
+        emit("alloc/bad_dims", shape, dtype="float64")
+    emit("alloc/bad_dims", [2 ** 62, 2 ** 62], dtype="int8")
+    emit("alloc/bad_dims", [2 ** 61, 4], dtype="int8")
+    for off in (8, -5, 3):
+        emit("alloc/offset_ignored", [2, 3], dtype="float64", offset=off)
+        emit("alloc/offset_ignored", [2, 3], dtype="float64", offset=off, order="F")
+
+    # (A2) strides without a buffer (multiples of the itemsize): checked against the array's own size at offset 0.
+    stride_specs = [
+        ([2, 3], [3, 1]), ([2, 3], [1, 2]), ([2, 3], [0, 1]), ([2, 3], [1, 1]), ([2, 3], [0, 0]),
+        ([3, 2], [1, 3]), ([6], [1]), ([3], [2]), ([], []), ([6], [-1]), ([2, 3], [6, 1]),
+        ([2, 3], [1]), ([2, -3], [1, 1]), ([-2, 3], [1]), ([3, 0], [1, 1]), ([2, 1, 3], [3, 0, 1]),
+        ([2, 3], [-3, 1]), ([1, 6], [0, 1]),
+    ]
+    for dt in ALL_DTYPES:
+        isz = np.dtype(dt).itemsize
+        for shape, st in stride_specs:
+            emit(f"alloc_strides/{dt}", shape, dtype=dt, strides=[s * isz for s in st])
+        emit(f"alloc_strides/{dt}", [0, 3], dtype=dt, strides=[7, 5])  # empty: zeroed, any stride
+        emit(f"alloc_strides/{dt}", [2, 3], dtype=dt, strides=[3 * isz, isz], order="F")  # strides win
+        emit(f"alloc_strides/{dt}", [2, 3], dtype=dt, strides=[3 * isz, isz], offset=8)  # offset ignored
+    emit("alloc_strides/none", [2, 3], dtype="float64", strides=None)
+
+    # (B) a bytearray buffer (C#: byte[]): the bytes read as dtype, a view that does not own them.
+    for dt in ALL_DTYPES:
+        isz = np.dtype(dt).itemsize
+        for shape, order in [([2, 3], M), ([2, 3], "F"), ([2, 3, 2], "F"), ([2, 3, 2], M), ([6], M), ([], M),
+                             ([1, 3], "F"), ([3, 1], "F"), ([2, 3], "A"), ([2, 3], "k"), ([2, 3], "f")]:
+            size = int(np.prod(shape)) if shape else 1
+            b, op, obj = bytes_buffer(size * isz)
+            emit(f"buf/{dt}/exact", shape, dtype=dt, buffer=b, order=order, operand=op, buffer_obj=obj)
+            b, op, obj = bytes_buffer(size * isz + 5)
+            emit(f"buf/{dt}/larger", shape, dtype=dt, buffer=b, order=order, operand=op, buffer_obj=obj)
+        for shape, order in [([0], M), ([0, 3], M), ([3, 0], M), ([3, 0], "F"), ([2, 0, 3], "F")]:
+            b, op, obj = bytes_buffer(0)
+            emit(f"buf/{dt}/empty", shape, dtype=dt, buffer=b, order=order, operand=op, buffer_obj=obj)
+            b, op, obj = bytes_buffer(3 * isz)
+            emit(f"buf/{dt}/empty_in_larger", shape, dtype=dt, buffer=b, order=order, offset=isz, operand=op,
+                 buffer_obj=obj)
+        # Offsets: whole elements, an odd byte (misaligned when the itemsize is > 1), the end of the buffer.
+        for off in (isz, 3, 1, 2 * isz + 1):
+            b, op, obj = bytes_buffer(6 * isz + off)
+            emit(f"buf/{dt}/offset", [2, 3], dtype=dt, buffer=b, offset=off, operand=op, buffer_obj=obj)
+            emit(f"buf/{dt}/offset", [2, 3], dtype=dt, buffer=b, offset=off, order="F", operand=op, buffer_obj=obj)
+            emit(f"buf/{dt}/offset", [1], dtype=dt, buffer=b, offset=off, operand=op, buffer_obj=obj)
+        b, op, obj = bytes_buffer(6 * isz)
+        emit(f"buf/{dt}/offset_end", [0], dtype=dt, buffer=b, offset=6 * isz, operand=op, buffer_obj=obj)
+        emit(f"buf/{dt}/offset_past", [0], dtype=dt, buffer=b, offset=6 * isz + 1, operand=op, buffer_obj=obj)
+        emit(f"buf/{dt}/offset_neg_empty", [0], dtype=dt, buffer=b, offset=-isz, operand=op, buffer_obj=obj)
+        emit(f"buf/{dt}/too_small", [2, 3], dtype=dt, buffer=b, offset=1, operand=op, buffer_obj=obj)
+        emit(f"buf/{dt}/too_small", [7], dtype=dt, buffer=b, operand=op, buffer_obj=obj)
+        b, op, obj = bytes_buffer(isz - 1)
+        emit(f"buf/{dt}/too_small_0d", [], dtype=dt, buffer=b, operand=op, buffer_obj=obj)
+        # Shape -1: every whole element after the offset (C division).
+        for nbytes, off in [(6 * isz, M), (6 * isz, isz), (6 * isz + isz - 1, M), (6 * isz, 6 * isz - 1),
+                            (6 * isz, 6 * isz + 2 * isz), (0, M), (6 * isz, 3)]:
+            b, op, obj = bytes_buffer(nbytes)
+            emit(f"buf/{dt}/minus_one", -1, dtype=dt, buffer=b, offset=off, operand=op, buffer_obj=obj)
+            emit(f"buf/{dt}/minus_one", [-1], dtype=dt, buffer=b, offset=off, order="F", operand=op, buffer_obj=obj)
+        b, op, obj = bytes_buffer(6 * isz)
+        for shape in ([2, -1], [-2, -3], -2, [-1, 2], [3, -2]):
+            emit(f"buf/{dt}/bad_dims", shape, dtype=dt, buffer=b, operand=op, buffer_obj=obj)
+        # Strides (multiples of the itemsize), checked against the buffer and the offset.
+        for shape, st, nbytes, off in [
+            ([2, 3], [3, 1], 6, M), ([2, 3], [1, 2], 6, M), ([2, 3], [2, 1], 6, M), ([6], [-1], 6, 5),
+            ([2, 3], [-3, -1], 6, 5), ([2, 3], [0, 1], 6, M), ([2, 3], [0, 0], 1, M), ([2, 3], [6, 1], 6, M),
+            ([2, 3], [3, 1], 8, M), ([2, 3], [3, 1], 7, 1), ([2, 3], [3, 1], 6, 1), ([6], [-1], 6, M),
+            ([2, 3], [3, 1], 7, -1), ([3], [2], 6, M), ([2, 3], [1, 2], 7, 1), ([3, 2], [1, 3], 6, M),
+            ([0, 3], [1, 2], 0, M), ([0, 3], [3, 1], 6, 6), ([], [], 1, M), ([], [], 2, 1), ([2, 1, 3], [3, 0, 1], 6, M),
+            (-1, [1], 6, M), (-1, [1], 6, 1), ([2, 3], [1], 6, M),
+        ]:
+            b, op, obj = bytes_buffer(nbytes * isz)
+            emit(f"buf/{dt}/strides", shape, dtype=dt, buffer=b, strides=[s * isz for s in st],
+                 offset=M if off is M else off * isz, operand=op, buffer_obj=obj)
+        b, op, obj = bytes_buffer(6 * isz)
+        emit(f"buf/{dt}/strides_odd_offset", [2, 3], dtype=dt, buffer=b, strides=[3 * isz, isz], offset=3,
+             operand=op, buffer_obj=obj)
+        emit(f"buf/{dt}/strides_order", [2, 3], dtype=dt, buffer=b, strides=[isz, 2 * isz], order="C",
+             operand=op, buffer_obj=obj)
+
+    # Raw byte patterns read as bool / other dtypes (NumPy keeps the bytes, bool included).
+    b, op, obj = bytes_buffer(4, fill=[0, 1, 2, 255])
+    emit("buf/bool_bytes", [4], dtype="bool", buffer=b, operand=op, buffer_obj=obj)
+    emit("buf/bool_bytes", [2, 2], dtype="bool", buffer=b, order="F", operand=op, buffer_obj=obj)
+    b, op, obj = bytes_buffer(16, fill=[0, 0, 0, 0, 0, 0, 0xF8, 0x7F, 0, 0, 0, 0, 0, 0, 0xF0, 0xFF])
+    emit("buf/float_bits", [2], dtype="float64", buffer=b, operand=op, buffer_obj=obj)
+    emit("buf/float_bits", [4], dtype="float32", buffer=b, operand=op, buffer_obj=obj)
+    emit("buf/float_bits", [8], dtype="float16", buffer=b, operand=op, buffer_obj=obj)
+
+    # (C) a bytes buffer (C#: ReadOnlyMemory<byte>): read-only, so is the result.
+    for dt in ["float64", "int32", "uint8", "complex128", "bool", "float16", "int64"]:
+        isz = np.dtype(dt).itemsize
+        b, op, obj = bytes_buffer(6 * isz + 3, kind="bytes")
+        emit(f"bytes/{dt}", [2, 3], dtype=dt, buffer=b, operand=op, buffer_obj=obj)
+        emit(f"bytes/{dt}", [2, 3], dtype=dt, buffer=b, order="F", operand=op, buffer_obj=obj)
+        emit(f"bytes/{dt}", [2, 3], dtype=dt, buffer=b, offset=3, operand=op, buffer_obj=obj)
+        emit(f"bytes/{dt}", [2, 3], dtype=dt, buffer=b, strides=[0, isz], operand=op, buffer_obj=obj)
+        emit(f"bytes/{dt}", -1, dtype=dt, buffer=b, offset=isz, operand=op, buffer_obj=obj)
+        emit(f"bytes/{dt}", [3, 3], dtype=dt, buffer=b, operand=op, buffer_obj=obj)
+        b, op, obj = bytes_buffer(0, kind="bytes")
+        emit(f"bytes/{dt}", [0, 2], dtype=dt, buffer=b, operand=op, buffer_obj=obj)
+
+    # (D) an ndarray buffer (and its memoryview): its bytes in memory order, C- or F-contiguous only.
+    nd_layouts = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d", "c_contiguous_3d", "f_contiguous_3d",
+                  "simple_slice_offset_1d", "scalar_0d", "one_element_1d", "empty_2d", "reshape_view_2d",
+                  "transposed_2d", "singleton_dim_3d", "zerod_from_index",
+                  "strided_step2_1d", "negstride_1d", "broadcast_1d_to_2d", "strided_2d_cols", "transposed_3d",
+                  "sliced_composed", "negstride_2d_offset", "strided_outer_2d"]
+    for src in ["float64", "int32", "uint8", "complex128", "bool", "float16", "int64", "uint16"]:
+        d = np.dtype(src)
+        for ln in nd_layouts:
+            base, view = LAYOUTS[ln](d)
+            op = describe(base, view)
+            nd_kind = {"kind": "ndarray"}
+            for tgt in sorted({src, "uint8", "int16", "float64"}):
+                emit(f"nd/{src}/{ln}/as_{tgt}", -1, dtype=tgt, buffer=nd_kind, operand=op, buffer_obj=view)
+            if view.ndim:
+                emit(f"nd/{src}/{ln}/own_shape", [int(x) for x in view.shape], dtype=src, buffer=nd_kind,
+                     operand=op, buffer_obj=view)
+                emit(f"nd/{src}/{ln}/own_shape_F", [int(x) for x in view.shape], dtype=src, buffer=nd_kind,
+                     order="F", operand=op, buffer_obj=view)
+            if view.size >= 2:
+                emit(f"nd/{src}/{ln}/offset", [int(view.size) - 1], dtype=src, buffer=nd_kind, offset=d.itemsize,
+                     operand=op, buffer_obj=view)
+            if view.size >= 4:
+                emit(f"nd/{src}/{ln}/strides", [2], dtype=src, buffer=nd_kind, strides=[2 * d.itemsize],
+                     operand=op, buffer_obj=view)
+            emit(f"nd/{src}/{ln}/memoryview", -1, dtype=src, buffer={"kind": "memoryview"}, operand=op,
+                 buffer_obj=memoryview(view))
+    ro = np.arange(6, dtype=np.float64)
+    ro.setflags(write=False)
+    for shape, order in (([2, 3], M), ([3, 2], "F"), (-1, M)):
+        emit("nd/readonly", shape, buffer={"kind": "ndarray"}, order=order, operand=describe(ro, ro), buffer_obj=ro)
+        emit("nd/readonly_memoryview", shape, buffer={"kind": "memoryview"}, order=order, operand=describe(ro, ro),
+             buffer_obj=memoryview(ro))
+
+    # (E) objects that are not buffers, and NumPy's check ORDER when several arguments are wrong.
+    for kind, obj in (("list", list(range(6))), ("int", 7), ("str", "abcdefgh")):
+        emit(f"not_a_buffer/{kind}", [2, 3], buffer={"kind": kind}, buffer_obj=obj)
+        emit(f"not_a_buffer/{kind}", [2, 3], buffer={"kind": kind}, order="Q", buffer_obj=obj)  # buffer first
+    b, op, obj = bytes_buffer(8)
+    emit("order/order_before_strides", [2, 3], strides=[8], order="Q")
+    emit("order/strides_len_before_dims", [-2, 3], strides=[8])
+    emit("order/strides_before_small", [2, 3], buffer=b, strides=[48, 8], operand=op, buffer_obj=obj)
+    emit("order/negative_strides_before_small", [3], buffer=b, strides=[-8], operand=op, buffer_obj=obj)
+    emit("order/order_before_dims", [-2], order="Q")
+    emit("order/order_before_dims_buffer", [-2], buffer=b, order="Q", operand=op, buffer_obj=obj)
+    emit("order/too_big_buffer", [2 ** 62, 2 ** 62], buffer=b, operand=op, buffer_obj=obj)
+    b0, op0, obj0 = bytes_buffer(0)
+    emit("order/neg_dim_small_buffer", [2, -3], buffer=b0, operand=op0, buffer_obj=obj0)
+    emit("order/neg_dims_small_buffer", [-2, -3], buffer=b0, operand=op0, buffer_obj=obj0)
+    return cases
+
+
 # ---- array conversion ---------------------------------------------------------------
 
-CONVERSION_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d",
+CONVERSION_LAYOUTS =["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d",
                       "strided_step2_1d", "negstride_1d", "scalar_0d", "empty_2d",
                       "broadcast_1d_to_2d"]
 
@@ -16759,6 +17010,9 @@ def main():
         cases = gen_creation(ALL_DTYPES)
         cases += _relabel_dtype(gen_creation(["uint16"]), "uint16", "char")
         write_jsonl(os.path.join(corpus_dir, "creation.jsonl"), cases)
+    elif mode == "ndarray":
+        # np.ndarray(shape, dtype, buffer, offset, strides, order): values + layout facets, NumPy's errors.
+        write_jsonl(os.path.join(corpus_dir, "ndarray_ctor.jsonl"), gen_ndarray())
     elif mode == "multioutput":
         write_jsonl(os.path.join(corpus_dir, "multioutput.jsonl"), gen_multioutput())
     elif mode == "iter":

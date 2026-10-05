@@ -17,6 +17,8 @@ namespace NumSharp.Tests
     // (24, 8), np.zeros(0) → (8,)) and zeroes the stride of a sliced axis of extent 0 (a[:0] → (0, 8), a[:, :0] → (24, 0)).
     // A wrap constructor over a caller's buffer is NOT part of this: NumPy's np.ndarray((0, 3), buffer=…) keeps the C
     // strides (24, 8) (the buffer exists, so nothing is zeroed), which Creation/WrapConstructor.ViewShape.Tests.cs pins.
+    // np.ndarray(shape) WITHOUT a buffer already follows the allocation rule (all-zero strides, plan
+    // docs/plans/np-ndarray-parity.md; Creation/np.ndarray.Test.cs pins it); the allocators below do not yet.
     //
     // Only `strides` is observable here (an empty array has no element to read); the flags already agree.
     // EXPECTED (when fixed): each test passes; remove its [OpenBugs] and move it next to the Shape tests.

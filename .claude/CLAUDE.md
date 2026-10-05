@@ -440,7 +440,7 @@ public readonly partial struct Shape
 | `C_CONTIGUOUS` | 0x0001 | Data is row-major contiguous |
 | `F_CONTIGUOUS` | 0x0002 | Data is column-major contiguous |
 | `OWNDATA` | 0x0004 | Array owns its data buffer |
-| `ALIGNED` | 0x0100 | Always true for managed allocations |
+| `ALIGNED` | 0x0100 | Shape bit (cleared by `setflags(align=False)`); `flags.aligned` also needs `UnmanagedStorage.IsDataAligned` (false over a caller's buffer at a misaligning byte offset) |
 | `WRITEABLE` | 0x0400 | False for broadcast views |
 | `BROADCASTED` | 0x1000 | Has stride=0 with dim > 1 |
 
@@ -507,7 +507,9 @@ draws) and returns its input unchanged when it already is the C layout. The WRAP
 `new NDArray(Array | IArraySlice, Shape, order)` (and the `NDArray<T>` twins) are NumPy's `np.ndarray(shape, buffer=…,
 order=…)` and read the shape's DIMENSIONS only (`Shape.ForWrappedBuffer`, fixed 2026-10-05): C strides, or F for
 `order='F'` at any rank, offset 0, writeable; `'A'`/`'K'` mean C and an invalid code is NumPy's `ValueError`
-(`OrderResolver.ResolveBufferOrder`). A view's Shape used to be installed as given (a stepped view read past the
+(`OrderResolver.ResolveBufferOrder`); and NumPy's size rule (2026-10-05): a smaller buffer is `TypeError: buffer is too
+small for requested array`, a larger one is read from its start (a prefix sharing the caller's memory), the lone `-1`
+takes every element. A view's Shape used to be installed as given (a stepped view read past the
 buffer, a reversed one read backwards, a transposed one in F order, a broadcast one repeated row 0 read-only). Internal
 code that must install a specific layout over a fresh buffer (`np.ones`'s KEEPORDER result) uses
 `new UnmanagedStorage(IArraySlice, Shape)`, which trusts its layout like NumPy's C API. `Shape` is immutable: its
@@ -540,9 +542,38 @@ nd["..., -1"]     // Ellipsis fills dimensions
 Tested against NumPy 2.x.
 
 ### Array Creation
-`arange`, `array`, `asanyarray`, `asarray`, `asarray_chkfinite`, `ascontiguousarray`, `asfortranarray`, `asmatrix`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `geomspace`, `identity`, `linspace`, `logspace`, `meshgrid`, `mgrid`, `ogrid`, `ones`, `ones_like`, `require`, `tri`, `zeros`, `zeros_like`
+`arange`, `array`, `asanyarray`, `asarray`, `asarray_chkfinite`, `ascontiguousarray`, `asfortranarray`, `asmatrix`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `geomspace`, `identity`, `linspace`, `logspace`, `meshgrid`, `mgrid`, `ndarray`, `ogrid`, `ones`, `ones_like`, `require`, `tri`, `zeros`, `zeros_like`
 
-The `as*` conversion family mirrors NumPy: `asarray_chkfinite(a, dtype=None, order='K')` = `asarray` then raise `ValueError("array must not contain infs or NaNs")` if a **float-family** dtype (Half/Single/Double/Complex — NumPy's `typecodes['AllFloat']`; Decimal/int/bool skip the check) holds any inf/NaN, via a **fused single-pass NaN-poison SIMD reduction** (`Backends/Kernels/FiniteScan.cs`: `acc += v - v` — +0 for finite, absorbing-NaN for non-finite; AVX2 gather + reversed-contiguous fast path for strided/negative-stride views; ~2–27× NumPy contiguous, ≥1× strided). `require(a, dtype=None, requirements=None)` parses C/F/A/W/O/E flags (+aliases; single-string requirements iterate by char like NumPy, so `"F_CONTIGUOUS"` as one string raises), resolves an order and copies only if a remaining ALIGNED/WRITEABLE/OWNDATA flag is unsatisfied (ALIGNED is always true in NumSharp, so only broadcast-non-writeable and views force a copy). `asmatrix(data, dtype=None)` returns a **2-D view** (NumSharp has no `matrix` subclass — the deprecated NumPy one; no `*`-as-matmul/`.H`/`.I`): 0-D→(1,1), 1-D→(1,N), 2-D unchanged, >2-D drops length-1 axes and must land on 2-D else `ValueError("shape too large to be a matrix.")`; also parses matrix strings (`"1 2; 3 4"`). See `Creation/np.{asarray_chkfinite,require,asmatrix}.cs`.
+**`np.ndarray(shape, dtype=float64, buffer=None, offset=0, strides=None, order='C')`** is NumPy's low-level
+constructor (`ndarray.__new__`, `array_new` in `arrayobject.c`; plan `docs/plans/np-ndarray-parity.md`; probed against
+2.4.2). Without a buffer it is `np.empty`'s allocation (uninitialized; C or F strides; an EMPTY result has all-zero
+strides, as NumPy allocates it; explicit byte `strides` give an owning array under that layout, a stride of 0 stays
+writeable). With a buffer it lays the array over the buffer's BYTES as `dtype` without copying: `offset` is a byte
+offset, `strides` are BYTE strides, the shape `(-1,)` takes every whole element, a larger buffer is read from its
+start. The checks run in NumPy's order (buffer, order, strides length, `PyArray_CheckStrides` with C's wrapping
+arithmetic, `-1`/too-small, dimensions) with NumPy's texts. **Buffers** (`Backends/Unmanaged/NDBuffer.cs`, the port of
+`PyArray_BufferConverter`): a C- or F-contiguous `NDArray` (else `ValueError: ndarray is not contiguous`) or its `.data`
+memoryview (else `BufferError: memoryview: underlying buffer is not contiguous`) is BORROWED (the result counts its
+references on the buffer array's block, its base collapses to the owner); a C# array of any rank whose elements hold no
+references, `ArraySegment<byte>`/`Memory<byte>` (writable) and `ReadOnlyMemory<byte>` (read-only for good, NumPy's
+`bytes`) are PINNED until the last array over them is released or collected (a failed call frees the pin at once);
+`Half`/`char`/`decimal` export a read-only copy of their bytes (NumPy scalars); anything else is `TypeError: a
+bytes-like object is required, not 'list'` with the Python type name. The result is ONE storage
+(`UnmanagedStorage.OverBuffer`) over the buffer array's own slice when dtype and element grid match, else over a
+forwarding alias of the occupied span (`ArraySlice.WrapShared(NPTypeCode, …)`). **Safer than NumPy:** after NumPy's
+checks pass, an exact byte-range check refuses the four inputs NumPy lays outside the buffer (negative offset, `-1` with
+a negative stride, an offset near 2^63, strides over an empty buffer). Other divergences (`[Misaligned]`): a stride that
+splits an element is `NotSupportedException` (a stride that addresses no element is stored truncated), a non-native
+dtype over a buffer decodes into a new array. The old signature's fourth positional `order` would bind the new `long
+offset` (a `char` converts): an `[Obsolete(error: true)]` overload makes `np.ndarray(s, d, b, 'F')` a compile error.
+**`flags.aligned` is computed from memory** (`UnmanagedStorage.IsDataAligned`: NumSharp's whole-element strides make the
+storage's base address decide), so an odd-offset buffer and every view of it report unaligned, `setflags(align=True)`
+raises NumPy's ValueError there, and `np.require(…, 'A')` copies. Perf (NPY/NS): over an `NDArray` 1.8–2.8×, over a
+`byte[]` 1.0–1.4× (the GC pin + the base object); without a buffer it is `np.empty`'s allocator floor (0.1–0.9×, shared).
+Gates: the `ndarray_ctor.jsonl` oracle tier (5,919 cases: values + a "layout" facet of flags and byte strides, zero
+excuses) and `Creation/np.ndarray.Test.cs` (39). See `Creation/np.ndarray.cs`.
+
+The `as*` conversion family mirrors NumPy: `asarray_chkfinite(a, dtype=None, order='K')` = `asarray` then raise `ValueError("array must not contain infs or NaNs")` if a **float-family** dtype (Half/Single/Double/Complex — NumPy's `typecodes['AllFloat']`; Decimal/int/bool skip the check) holds any inf/NaN, via a **fused single-pass NaN-poison SIMD reduction** (`Backends/Kernels/FiniteScan.cs`: `acc += v - v` — +0 for finite, absorbing-NaN for non-finite; AVX2 gather + reversed-contiguous fast path for strided/negative-stride views; ~2–27× NumPy contiguous, ≥1× strided). `require(a, dtype=None, requirements=None)` parses C/F/A/W/O/E flags (+aliases; single-string requirements iterate by char like NumPy, so `"F_CONTIGUOUS"` as one string raises), resolves an order and copies only if a remaining ALIGNED/WRITEABLE/OWNDATA flag is unsatisfied (ALIGNED fails after `setflags(align=False)` or over a caller's buffer at a misaligning byte offset; WRITEABLE for broadcast views; OWNDATA for views). `asmatrix(data, dtype=None)` returns a **2-D view** (NumSharp has no `matrix` subclass — the deprecated NumPy one; no `*`-as-matmul/`.H`/`.I`): 0-D→(1,1), 1-D→(1,N), 2-D unchanged, >2-D drops length-1 axes and must land on 2-D else `ValueError("shape too large to be a matrix.")`; also parses matrix strings (`"1 2; 3 4"`). See `Creation/np.{asarray_chkfinite,require,asmatrix}.cs`.
 
 **`np.logspace` / `np.geomspace` — the log-scale linspace family** (NumPy 2.4.2 `numpy/_core/function_base.py`;
 all probed against 2.4.2; gates `Creation/np.logspace.geomspace.Test.cs` (20) + the `creation` oracle tier —

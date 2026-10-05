@@ -35,6 +35,15 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Creation() => RunCorpus("creation.jsonl");
 
+        /// <summary>
+        ///     <c>np.ndarray(shape, dtype, buffer, offset, strides, order)</c> against NumPy's <c>ndarray.__new__</c>: every
+        ///     success as its values and its layout (flags + byte strides), every failure as NumPy's exception (plan
+        ///     <c>docs/plans/np-ndarray-parity.md</c>).
+        /// </summary>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void NdarrayCtor() => RunCorpus("ndarray_ctor.jsonl");
+
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Conversion() => RunCorpus("conversion.jsonl");
@@ -949,6 +958,7 @@ namespace NumSharp.Tests.Fuzz
             ["gcd.jsonl"] = 334,   // +112 pp_fbcast_* (X3) - 418
             ["comparison.jsonl"] = 2587,   // +912 pp_fbcast_* (X3) - 3234
             ["creation.jsonl"] = 241,
+            ["ndarray_ctor.jsonl"] = 5900,   // np.ndarray (plan np-ndarray-parity): values + layout facets, 5,919 at delivery
             ["conversion.jsonl"] = 862,
             ["copyto.jsonl"] = 91,
             ["decimal_astype.jsonl"] = 17,

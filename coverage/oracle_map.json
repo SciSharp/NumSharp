@@ -59,6 +59,7 @@
       "minimum_out": {"ids": ["numpy.minimum"], "note": "Aliasing tier: np.minimum with out= aliasing an input."},
       "modf_frac": {"ids": ["numpy.modf"], "note": "The fractional slot of np.modf."},
       "modf_int": {"ids": ["numpy.modf"], "note": "The integral slot of np.modf."},
+      "ndarray": {"ids": ["numpy.ndarray"], "note": "np.ndarray(shape, dtype, buffer, offset, strides, order): the ndarray type's constructor (ndarray.__new__), gated by ndarray_ctor.jsonl. The catalog row is the class, which the namespace rules skip."},
       "ndarray.__len__": {"ids": ["numpy.ndarray"], "note": "len(a). The catalog has no ndarray.__len__ row, so the contracts attach to the ndarray type."},
       "ndenumerate": {"ids": ["numpy.ndenumerate"], "note": "Materialized (index, value) trace."},
       "ndindex": {"ids": ["numpy.ndindex"], "note": "Materialized index trace."},

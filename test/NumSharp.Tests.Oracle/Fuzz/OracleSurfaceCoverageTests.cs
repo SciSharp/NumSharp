@@ -147,7 +147,7 @@ namespace NumSharp.Tests.Fuzz
         private static readonly HashSet<string> CompatibilityOnly = new()
         {
             "are_broadcastable", "asscalar", "find_common_type", "issctype", "issubsctype",
-            "maximum_sctype", "multithreading", "ndarray", "save_version", "sctype2char",
+            "maximum_sctype", "multithreading", "save_version", "sctype2char",
         };
 
         // RandomState construction and its str() (ToString, "RandomState(MT19937)") — dedicated state tests

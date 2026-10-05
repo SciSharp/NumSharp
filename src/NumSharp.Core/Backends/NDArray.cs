@@ -284,9 +284,11 @@ namespace NumSharp
         /// <exception cref="NullReferenceException"><paramref name="values"/> is null (its element type is read first).</exception>
         /// <exception cref="ValueError"><paramref name="order"/> is not one of <c>'C'</c>, <c>'F'</c>, <c>'A'</c>, <c>'K'</c>
         ///     in either case (NumPy's text: <c>order must be one of 'C', 'F', 'A', or 'K' (got 'X')</c>).</exception>
-        /// <exception cref="ArgumentException">The element count of <paramref name="values"/> is not the size of
-        ///     <paramref name="shape"/>. NumSharp requires an exact match; NumPy also accepts a larger buffer and reads a
-        ///     prefix of it.</exception>
+        /// <exception cref="TypeError"><paramref name="values"/> holds fewer elements than <paramref name="shape"/> needs
+        ///     (NumPy's <c>buffer is too small for requested array</c>). A larger array is fine: the result views its first
+        ///     elements, as NumPy reads a prefix of a larger buffer.</exception>
+        /// <exception cref="ValueError">A dimension is negative (other than the lone <c>-1</c>, which takes every element), or
+        ///     the byte count overflows.</exception>
         /// <remarks>
         ///     <para>
         ///     <b>Why dimensions only.</b> NumPy's <c>array_new</c> computes the strides for <c>shape</c> itself
@@ -311,9 +313,11 @@ namespace NumSharp
 
             // Only the dimensions reach the buffer: with 'F' the (row-major flattened) values are read column-major, as
             // NumPy's ndarray(buffer=..., order='F') does; any view layout the shape carried is dropped.
+            IArraySlice slice = values.ResolveRank() != 1 ? ArraySlice.FromArray(Arrays.Flatten(values), false) : ArraySlice.FromArray(values, false);
+            slice = WrappedBufferPrefix(slice, ref shape);
             shape = shape.ForWrappedBuffer(physical);
 
-            Storage.Allocate(values.ResolveRank() != 1 ? ArraySlice.FromArray(Arrays.Flatten(values), false) : ArraySlice.FromArray(values, false), shape);
+            Storage.Allocate(slice, shape);
             InitializeArc();
         }
 
@@ -339,8 +343,11 @@ namespace NumSharp
         /// <exception cref="NullReferenceException"><paramref name="values"/> is null (its type code is read first).</exception>
         /// <exception cref="ValueError"><paramref name="order"/> is not one of <c>'C'</c>, <c>'F'</c>, <c>'A'</c>, <c>'K'</c>
         ///     in either case.</exception>
-        /// <exception cref="ArgumentException">The element count of <paramref name="values"/> is not the size of
-        ///     <paramref name="shape"/>.</exception>
+        /// <exception cref="TypeError"><paramref name="values"/> holds fewer elements than <paramref name="shape"/> needs
+        ///     (NumPy's <c>buffer is too small for requested array</c>). A larger slice is fine: the result views its first
+        ///     elements.</exception>
+        /// <exception cref="ValueError">A dimension is negative (other than the lone <c>-1</c>), or the byte count
+        ///     overflows.</exception>
         /// <remarks>
         ///     This constructor is public API, so it follows NumPy's dimensions-only rule (<see cref="Shape.ForWrappedBuffer"/>).
         ///     To install a specific layout over a fresh buffer, internal code uses <c>new UnmanagedStorage(slice, shape)</c>,
@@ -354,11 +361,46 @@ namespace NumSharp
             if (shape.IsEmpty)
                 shape = Shape.Vector(values.Count);
 
+            values = WrappedBufferPrefix(values, ref shape);
             // Only the dimensions reach the buffer; any view layout the shape carried is dropped.
             shape = shape.ForWrappedBuffer(physical);
 
             Storage.Allocate(values, shape);
             InitializeArc();
+        }
+
+        /// <summary>
+        ///     NumPy's size rule for a buffer laid out from dimensions (<c>array_new</c>, as
+        ///     <see cref="np.ndarray(Shape, DType, object, long, long[], char)"/> follows it), for the wrap constructors: the
+        ///     lone dimension <c>-1</c> takes every element; a buffer with fewer elements than the shape needs is refused;
+        ///     a larger one is read from its start.
+        /// </summary>
+        /// <param name="values">The buffer, in elements of the result's dtype.</param>
+        /// <param name="shape">The requested shape; <c>(-1,)</c> is replaced by <c>(values.Count,)</c>.</param>
+        /// <returns><paramref name="values"/> itself when it holds exactly the shape's elements, else a prefix of it that
+        ///     shares its memory block (and with it its reference counting).</returns>
+        /// <exception cref="TypeError">The buffer is too small (NumPy's text).</exception>
+        /// <exception cref="ValueError">A negative dimension, or a byte count that overflows (NumPy's texts).</exception>
+        /// <remarks>The checks run in NumPy's order: the too-small check uses NumPy's wrapping product, so <c>(2, -3)</c>
+        ///     passes it and fails the dimension check, while <c>(-2, -3)</c> over a short buffer is too small.</remarks>
+        private static IArraySlice WrappedBufferPrefix(IArraySlice values, ref Shape shape)
+        {
+            long[] dims = shape.dimensions;
+            int itemSize = values.ItemLength;
+
+            if (dims.Length == 1 && dims[0] == -1)
+            {
+                shape = Shape.Vector(values.Count);
+                return values;
+            }
+
+            if (values.BytesLength < unchecked(itemSize * Shape.MultiplyListWrapping(dims)))
+                throw new TypeError("buffer is too small for requested array");
+
+            AllocationGuard.CheckDimensions(dims, itemSize);
+
+            long size = shape.size;
+            return values.Count == size ? values : values.Slice(0, size);
         }
 
         /// <summary>

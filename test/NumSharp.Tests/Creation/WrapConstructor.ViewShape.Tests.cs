@@ -361,18 +361,32 @@ namespace NumSharp.Tests.Creation
         }
 
         /// <summary>
-        ///     The exact-size rule is unchanged: a buffer whose element count differs from the shape's size raises
-        ///     <see cref="ArgumentException"/>. (NumPy raises <c>TypeError: buffer is too small for requested array</c> for a
-        ///     smaller buffer and reads a prefix of a larger one; the plan records that as a separate follow-up.)
+        ///     NumPy's size rule (plan <c>docs/plans/np-ndarray-parity.md</c>, item N13; probed 2026-10-05): a buffer with
+        ///     fewer elements than the shape needs raises <c>TypeError: buffer is too small for requested array</c>; a larger
+        ///     one is read from its start and still shared (<c>np.ndarray((3,), buffer=v)</c> of a 5-element <c>v</c> views
+        ///     <c>v[:3]</c>); the lone <c>-1</c> takes every element; another negative dimension is NumPy's ValueError. The
+        ///     constructors required an exact size before (an <see cref="ArgumentException"/> both ways).
         /// </summary>
         [TestMethod]
-        public void SizeMismatch_StillRaises()
+        public void SizeRule_IsNumPys()
         {
             Action smaller = () => new NDArray(new double[] { 1, 2, 3, 4, 5 }, new Shape(6));
-            smaller.Should().Throw<ArgumentException>();
+            smaller.Should().Throw<TypeError>().WithMessage("buffer is too small for requested array");
 
-            Action larger = () => new NDArray(new double[] { 1, 2, 3, 4, 5 }, new Shape(3));
-            larger.Should().Throw<ArgumentException>();
+            var values = new double[] { 1, 2, 3, 4, 5 };
+            using var prefix = new NDArray(values, new Shape(3));
+            prefix.ToArray<double>().Should().Equal(1.0, 2.0, 3.0);
+            prefix[0] = 9.0;
+            values[0].Should().Be(9.0, "the prefix shares the caller's array");
+
+            using var all = new NDArray(values, new Shape(-1L));
+            all.shape.Should().Equal(5L);
+
+            Action negative = () => new NDArray(values, new Shape(2L, -1L));
+            negative.Should().Throw<ValueError>().WithMessage("negative dimensions are not allowed");
+
+            using var slicePrefix = new NDArray(ArraySlice.FromArray(new double[] { 1, 2, 3, 4 }), new Shape(2L), 'F');
+            slicePrefix.ToArray<double>().Should().Equal(1.0, 2.0);
         }
 
         /// <summary>

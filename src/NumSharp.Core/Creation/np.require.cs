@@ -29,10 +29,10 @@ namespace NumSharp
         ///     <c>asanyarray(a, dtype)</c>. Otherwise it resolves an order ('A' by default, or 'C'/'F' when
         ///     requested), routes through <see cref="asarray(NDArray, DType, char, bool?, NDArray, string)"/>,
         ///     then makes a single copy (in the resolved order) if any of the remaining ALIGNED / WRITEABLE /
-        ///     OWNDATA flags is not already satisfied. ALIGNED is always satisfied in NumSharp (managed
-        ///     allocations), so only WRITEABLE (false for broadcast views) and OWNDATA (false for views)
-        ///     can force a copy. 'ENSUREARRAY' is accepted and stripped but has no effect — NumSharp has no
-        ///     ndarray subclasses to demote.
+        ///     OWNDATA flags is not already satisfied: ALIGNED (false after <c>setflags(align=False)</c> or over
+        ///     a caller's buffer at a misaligning byte offset), WRITEABLE (false for broadcast views) and
+        ///     OWNDATA (false for views). 'ENSUREARRAY' is accepted and stripped but has no effect — NumSharp has
+        ///     no ndarray subclasses to demote.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.require.html
         /// </remarks>
         public static NDArray require(NDArray a, DType dtype = null, string[] requirements = null, NDArray like = null)
@@ -133,16 +133,21 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Whether <paramref name="arr"/> already satisfies a single ALIGNED / WRITEABLE / OWNDATA flag.
-        ///     ALIGNED is always true for NumSharp's managed allocations; WRITEABLE is false for broadcast
-        ///     views; OWNDATA is false for any view (slice / reshape / transpose / broadcast).
+        ///     Whether <paramref name="arr"/> already satisfies a single ALIGNED / WRITEABLE / OWNDATA flag —
+        ///     NumPy's <c>arr.flags[prop]</c> test in <c>require</c>. ALIGNED is false after
+        ///     <c>setflags(align=False)</c> and over a caller's buffer at a misaligning byte offset; WRITEABLE is
+        ///     false for broadcast views; OWNDATA is false for any view (slice / reshape / transpose / broadcast).
         /// </summary>
+        /// <param name="arr">The array after the dtype/order conversion.</param>
+        /// <param name="flag">'A', 'W' or 'O'.</param>
+        /// <returns>True when no copy is needed for this flag.</returns>
         private static bool RequirementSatisfied(NDArray arr, char flag)
         {
             switch (flag)
             {
                 case 'A':
-                    return true; // ALIGNED — always satisfied in NumSharp
+                    // The flags' ALIGNED: the shape bit (setflags) and the memory's real alignment.
+                    return (arr.Shape.Flags & ArrayFlags.ALIGNED) != 0 && arr.Storage.IsDataAligned;
                 case 'W':
                     return arr.Shape.IsWriteable;
                 case 'O':

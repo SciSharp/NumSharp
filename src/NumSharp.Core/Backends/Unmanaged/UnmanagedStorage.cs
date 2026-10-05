@@ -184,6 +184,40 @@ namespace NumSharp.Backends
         internal bool OwnsData => _baseStorage is null && !ExternalBase;
 
         /// <summary>
+        ///     Is every element of this storage's array aligned for its dtype — the memory half of NumPy's
+        ///     <c>ALIGNED</c> flag (<c>raw_array_is_aligned</c>, <c>numpy/_core/src/common/array_assign.c</c>), which
+        ///     NumPy recomputes for every new array object. <see cref="NDArray.flags"/> reports <c>aligned</c> only when
+        ///     this holds AND the shape's <see cref="ArrayFlags.ALIGNED"/> bit (cleared by <c>setflags(align=False)</c>)
+        ///     is set; <c>setflags(align=True)</c> refuses when it does not hold.
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy ORs the data pointer with the byte stride of every axis longer than 1 and tests the low bits.
+        ///     NumSharp's offsets and strides are whole elements, and every dtype's itemsize is a multiple of its
+        ///     alignment, so those terms never add a misaligned bit: the storage's base address alone decides. An empty
+        ///     array is always aligned, as in NumPy.
+        ///     </para>
+        ///     <para>
+        ///     NumSharp's own allocations are always aligned. Misaligned data comes from a caller's buffer at an odd
+        ///     byte offset (<c>np.ndarray(shape, buffer=b, offset=3)</c>, <c>np.frombuffer(b, offset=3)</c>) or a field
+        ///     view at an odd byte offset (<c>getfield</c>), and every view of such an array shares its address, so the
+        ///     flag follows to every view without each view path computing it.
+        ///     </para>
+        /// </remarks>
+        internal unsafe bool IsDataAligned
+        {
+            get
+            {
+                if (_shape.size == 0)
+                    return true;
+
+                // A storage without a known descriptor has no alignment requirement to check.
+                int alignment = Descr?.alignment ?? 1;
+                return ((nuint)Address & (nuint)(alignment - 1)) == 0;
+            }
+        }
+
+        /// <summary>
         ///     Post-transition hook — run after this storage's <see cref="_shape"/> is (re)assigned or its
         ///     ownership links (<see cref="_baseStorage"/> / <see cref="ExternalBase"/>) change. Reconciles
         ///     the shape's <see cref="ArrayFlags.OWNDATA"/> bit with <see cref="OwnsData"/> — the NumSharp

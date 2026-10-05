@@ -485,6 +485,9 @@ namespace NumSharp.Tests.Fuzz
         private static readonly Dictionary<string, string> KnownBypassByDesign = new(StringComparer.Ordinal)
         {
             ["frombuffer"] = "by design — zero-copy wrap of the caller's buffer; no allocation occurs",
+            // np.ndarray over a byte[] / ReadOnlyMemory<byte> buffer is a view of that pinned managed memory; without a
+            // buffer it allocates through the pool like np.empty and is not a bypass.
+            ["ndarray"] = "by design — a result over a caller's buffer is a zero-copy view of it; no allocation occurs",
             ["fromfile"] = "by design — result constructed from the parsed managed array (no native alloc)",
             ["loadtxt"] = "by design — result constructed from the parsed managed array (no native alloc)",
         };

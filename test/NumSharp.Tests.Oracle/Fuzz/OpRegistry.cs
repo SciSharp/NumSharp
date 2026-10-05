@@ -657,6 +657,8 @@ namespace NumSharp.Tests.Fuzz
                 }
                 case "indices": return np.indices(ParseIntArray(p["dimensions"]),
                     FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                // np.ndarray(shape, dtype, buffer, offset, strides, order): OpRegistry.Ndarray.cs.
+                case "ndarray": return NdarrayCtor(p, ops);
 
                 // ---- array conversion -------------------------------------------------
                 case "array": return np.array(ops[0]);

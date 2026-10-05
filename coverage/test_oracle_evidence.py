@@ -378,7 +378,8 @@ class CommittedCorpusTests(unittest.TestCase):
             # tier. So the row is partly pinned, like np.fft.fft, and not "pinned" as a whole.
             self.assertGreater(normal.contracts - normal.portable, 0, "legacy normal's values are host-libm pinned")
             self.assertLessEqual(normal.portable, normal.errors, "only error contracts of normal are portable")
-        self.assertEqual({"get", "set", "ndarray.__len__"}, self.evidence("numpy.ndarray").keys)
+        # "ndarray" is the constructor np.ndarray(shape, dtype, buffer, offset, strides, order) (ndarray_ctor.jsonl).
+        self.assertEqual({"get", "set", "ndarray.__len__", "ndarray"}, self.evidence("numpy.ndarray").keys)
         self.assertEqual({"npy:header", "npy:npy"}, self.evidence("numpy.save").keys)
         self.assertEqual({"npy:npz:compressed"}, self.evidence("numpy.savez_compressed").keys)
         self.assertEqual({"flags:setflags"}, self.evidence("numpy.ndarray.setflags").keys)
