@@ -799,12 +799,25 @@ namespace NumSharp
             return new Shape(new long[ndim], new long[ndim], 0, 0);
         }
 
+        /// <summary>
+        ///     The extent of dimension <paramref name="dim"/> — NumPy's <c>a.shape[dim]</c>. Read-only: a
+        ///     <see cref="Shape"/> is immutable, like the tuple NumPy hands out.
+        /// </summary>
+        /// <param name="dim">The axis; a negative axis counts from the end (<c>-1</c> is the last).</param>
+        /// <returns>The number of elements along that axis.</returns>
+        /// <exception cref="IndexOutOfRangeException"><paramref name="dim"/> is outside <c>[-NDim, NDim)</c>.</exception>
+        /// <remarks>
+        ///     There is no setter, on purpose. Shapes and arrays SHARE dimension arrays (an allocation keeps the caller's
+        ///     shape, an elementwise result keeps its input's), so a setter that wrote into the array changed every array
+        ///     sharing it — and only its dimensions: the cached size and the buffer stayed, so the new rows read past the
+        ///     buffer (<c>var s = new Shape(3, 4); var a = np.zeros(s); s[0] = 100;</c> made <c>a</c> <c>(100, 4)</c> over
+        ///     12 elements). NumPy's arrays own their dimensions and hand out immutable tuples; build a new shape instead
+        ///     (<c>new Shape(...)</c>, <c>reshape</c>).
+        /// </remarks>
         public readonly long this[int dim]
         {
             [MethodImpl(Inline)]
             get => dimensions[dim < 0 ? dimensions.Length + dim : dim];
-            [MethodImpl(Inline)]
-            set => dimensions[dim < 0 ? dimensions.Length + dim : dim] = value;
         }
 
         /// <summary>

@@ -498,10 +498,11 @@ order=…)` and read the shape's DIMENSIONS only (`Shape.ForWrappedBuffer`, fixe
 (`OrderResolver.ResolveBufferOrder`). A view's Shape used to be installed as given (a stepped view read past the
 buffer, a reversed one read backwards, a transposed one in F order, a broadcast one repeated row 0 read-only). Internal
 code that must install a specific layout over a fresh buffer (`np.ones`'s KEEPORDER result) uses
-`new UnmanagedStorage(IArraySlice, Shape)`, which trusts its layout like NumPy's C API. Still open (plan
-`docs/plans/view-shape-open-bugs.md`, bug 2): a kept shape SHARES its dimension array with the caller's, and `Shape`'s
-public indexer setter writes into it (`var s = new Shape(3, 4); var a = np.zeros(s); s[0] = 100;` makes `a.shape`
-`(100, 4)` over 12 elements) — pinned in `OpenBugs.ViewShape.cs`. Gates: `View/Shape.ForFreshAllocation.Tests.cs`,
+`new UnmanagedStorage(IArraySlice, Shape)`, which trusts its layout like NumPy's C API. `Shape` is immutable: its
+indexer has no setter (removed 2026-10-05; it wrote into a dimension array that shapes and arrays share). Still open
+(plan `docs/plans/view-shape-open-bugs.md`, bug 2b-2d): the public `Shape` constructors keep the caller's `long[]`
+(`long[] s = {3, 4}; var a = np.zeros(s); s[0] = 100;` makes `a.shape` `(100, 4)` over 12 elements, pinned in
+`OpenBugs.ViewShape.cs`), and `a.shape`, `Shape.Dimensions` and `Shape.Strides` return the shared arrays. Gates: `View/Shape.ForFreshAllocation.Tests.cs`,
 `Creation/FreshAllocation.ViewShape.Tests.cs`, `Creation/WrapConstructor.ViewShape.Tests.cs`,
 `RandomSampling/RandomSizeViewShape.Test.cs`, and the oracle replay
 `FuzzCorpusTests.RandomApiSizeLayouts` (every random overload taking a `Shape`, its size handed over as a view's layout

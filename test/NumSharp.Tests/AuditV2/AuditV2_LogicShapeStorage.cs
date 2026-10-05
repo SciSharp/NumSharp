@@ -15,52 +15,33 @@ namespace NumSharp.Tests.AuditV2
     {
         // ============================================================================
         // T1.10 — Shape is a `readonly struct` with a mutating set indexer.
-        // File: src/NumSharp.Core/View/Shape.cs (lines 754-760)
+        // File: src/NumSharp.Core/View/Shape.cs
         //
-        // Although Shape is declared `public readonly partial struct Shape`, the
-        // indexer at line 754-760 exposes a `set` accessor that mutates the
-        // referenced `long[] dimensions` array.  Because `_flags`, `size`, and
-        // `_hashCode` are computed once at construction, mutating `dimensions[i]`
-        // via `shape[i] = x` leaves the cached fields stale and silently breaks
-        // any downstream check (Equals/GetHashCode/Size/IsContiguous).
+        // FIXED (2026-10-05, docs/plans/view-shape-open-bugs.md bug 2a): the indexer
+        // has no setter any more. It used to write into the referenced
+        // `long[] dimensions` array, leaving `_flags`, `size` and `_hashCode` stale
+        // (Equals/GetHashCode/Size/IsContiguous silently wrong), and because shapes
+        // and arrays share dimension arrays, it also changed every array sharing it.
         // ============================================================================
         /// <summary>
-        /// T1.10 — Mutating the Shape indexer breaks immutability and invalidates
-        /// the cached _flags / size / _hashCode (Shape is supposed to be immutable
-        /// per NumPy semantics and per the struct's `readonly` modifier).
+        /// T1.10 — FIXED: the <see cref="Shape"/> indexer is read-only, so a shape cannot be mutated through it and its
+        /// cached size, hash and equality always agree with its dimensions (NumPy's shape is an immutable tuple).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.10")]
-        public void T1_10_Shape_SetIndexer_Mutates_Readonly_Struct()
+        [TestMethod]
+        public void T1_10_Shape_Indexer_IsReadOnly()
         {
+            var indexer = typeof(Shape).GetProperty("Item", new[] { typeof(int) });
+            indexer.Should().NotBeNull("Shape keeps its read accessor shape[i]");
+            indexer!.CanWrite.Should().BeFalse("Shape is immutable, like the tuple NumPy hands out");
+
             var shape = new Shape(new long[] { 4, 5, 6 });
+            shape[0].Should().Be(4);
+            shape[-1].Should().Be(6, "a negative axis counts from the end");
+            shape.Size.Should().Be(120);
 
-            // Capture initial state
-            long originalSize = shape.Size;        // 4 * 5 * 6 = 120
-            int originalHash = shape.GetHashCode();
-            int originalFlags = shape._flags;
-
-            originalSize.Should().Be(120);
-
-            // Mutate via set indexer (this should NOT compile, or it should be
-            // a no-op, on a readonly struct that promises immutability).
-            shape[0] = 99;
-
-            // The dimensions array IS mutated (proving mutation occurred):
-            shape[0].Should().Be(99);
-            shape.Dimensions[0].Should().Be(99);
-
-            // BUG: Cached size is stale — still reports the pre-mutation value.
-            // Expected: 99 * 5 * 6 = 2970 (or, ideally, the mutation should not be possible).
-            shape.Size.Should().Be(99L * 5 * 6, "Shape.Size must reflect actual dimensions or mutation must be disallowed");
-
-            // BUG: Cached hash code is stale (Shape contract: equal shapes -> equal hash).
-            var rebuilt = new Shape(new long[] { 99, 5, 6 });
-            shape.GetHashCode().Should().Be(rebuilt.GetHashCode(),
-                "GetHashCode must agree with an equivalently-constructed shape");
-
-            // BUG: Equality compares using cached size + dims, so even though
-            // dimensions now match (99,5,6), Equals returns false (size mismatch).
-            shape.Equals(rebuilt).Should().BeTrue("two shapes with the same dimensions must be equal");
+            var rebuilt = new Shape(new long[] { 4, 5, 6 });
+            shape.GetHashCode().Should().Be(rebuilt.GetHashCode());
+            shape.Equals(rebuilt).Should().BeTrue();
         }
 
         // ============================================================================

@@ -19,12 +19,12 @@ divergence proved), B (confirmed as a parity bug) and F (fixed and gated).
 
 | # | Bug | Tests that pin it | P | D | B | F | Commit |
 |---|---|---|---|---|---|---|---|
-| 1 | The wrap constructors install the caller's layout | 4 pins + new | [x] | [x] | [x] | [x] | (the commit after `0cb7ed09`) |
-| 2a | The `Shape` indexer has a setter | 3 pins + `AuditV2.T1_10` | [x] | [x] | [x] | [ ] | |
+| 1 | The wrap constructors install the caller's layout | 4 pins + new | [x] | [x] | [x] | [x] | `ec28e5b1` |
+| 2a | The `Shape` indexer has a setter | 3 pins + `AuditV2.T1_10` | [x] | [x] | [x] | [x] | (the commit after `ec28e5b1`) |
 | 2b | `NDArray.shape` returns the array's own dimension array | new | [x] | [x] | [x] | [ ] | |
 | 2c | `Shape.Dimensions` and `Shape.Strides` return the shape's own arrays | new | [x] | [x] | [x] | [ ] | |
 | 2d | The public `Shape` constructors keep the caller's array | new | [x] | [x] | [x] | [ ] | |
-| 3 | `choice` without replacement returns a view | 3 pins + 1 control | [x] | [x] | [x] | [ ] | |
+| 3 | `choice` without replacement returns a view | 3 pins + 1 control | [x] | [x] | [x] | [ ] | (another session, see bug 3) |
 
 Order of work: 1, 2a, 2b, 2c, 2d, 3 (highest severity first; see the 2026-10-05 scoring: bug 1 scored 72 to 85, bug 2
 scored 75 to 80, bug 3 scored 8).
@@ -236,7 +236,23 @@ internal path.
 
 ### Status
 
-Not started.
+**2a done.** The indexer `Shape.this[int]` has no setter (documented why). Removing it compiled every project that
+references Core: Core, Bitmap, the OpenBLAS / pythonnet / MLNet / OnnxRuntime / ParquetNet packages, NumSharp.Tests,
+Oracle, the five interop test suites and the C# benchmark; a grep of the examples found no writer. Only four tests wrote
+through it:
+
+- `AuditV2_LogicShapeStorage.T1_10` (a master-era `[OpenBugs]` pin of the same setter) is now the regression test
+  `T1_10_Shape_Indexer_IsReadOnly`.
+- The three bug-2 pins now hold NumPy's list as the caller's own `long[]` (`np.zeros(dims)`,
+  `new NDArray(dtype, new Shape(dims))`, `rng.random(new Shape(dims))`, then `dims[0] = 100`) and stay `[OpenBugs]`
+  until 2d.
+- New `test/NumSharp.Tests/View/Shape.Immutability.Tests.cs`: no `Shape` indexer is writable; the read accessor keeps
+  NumPy's tuple indexing (negative axes, an out-of-range axis throws).
+
+Gates: NumSharp.Tests net10.0 17,876 passed and net8.0 17,875 passed (0 failed), Oracle 226 passed, `[OpenBugs]` set
+fails 67 (was 68: `T1_10` left it). No runtime cost (a removed setter).
+
+2b, 2c and 2d: not started.
 
 ---
 
@@ -274,4 +290,8 @@ uniform path without replacement stays a view (the control test).
 
 ### Status
 
-Not started.
+**Held.** On 2026-10-05, while bug 1 was being committed, an uncommitted change to
+`src/NumSharp.Core/RandomSampling/Generator.Choice.Sampler.cs` appeared in the main working tree. It is another
+session's work on this very bug (it writes the result straight into a fresh array of the final shape, "that owns its
+data, as NumPy's result does"). To avoid a conflicting fix, bug 3 is left to that change; tick this row when it lands
+with the three pins un-pinned and the control still a view.
