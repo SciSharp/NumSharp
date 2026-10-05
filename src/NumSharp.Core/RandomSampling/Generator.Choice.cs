@@ -46,7 +46,7 @@ namespace NumSharp
                 return;
             }
 
-            long m = x.shape[ax];
+            long m = x.Shape.dimensions[ax];
             if (m <= 1)
                 return;
 
@@ -85,7 +85,12 @@ namespace NumSharp
         /// </summary>
         /// <param name="x">The array to permute (at least 1-D).</param>
         /// <param name="axis">The axis whose slices are permuted.</param>
-        /// <returns>A permuted copy (C-contiguous); <paramref name="x"/> is not modified.</returns>
+        /// <returns>
+        ///     The permuted data, never sharing <paramref name="x"/>'s memory, laid out as NumPy lays it out: for 1-D input or
+        ///     <c>axis=0</c>, a fresh C-contiguous array that owns its data; for <c>axis &gt; 0</c> of an N-D input, a VIEW of a
+        ///     fresh array whose first axis is the permuted one (<c>owndata</c> False; F-contiguous for 2-D, permuted strides
+        ///     beyond) — NumPy's fancy-index result.
+        /// </returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside <c>[-x.ndim, x.ndim)</c> — which every axis is for a 0-d
         /// <paramref name="x"/>, and for a null one (NumPy's <c>np.asarray(None)</c> is 0-d): <c>axis 0 is out of bounds for
         /// array of dimension 0</c>.</exception>
@@ -93,8 +98,10 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.permutation.html
         ///     <br/>1-D input: a copy shuffled in place; N-D input: a shuffled index vector gathered with
         ///     <c>take</c> (NumPy's <c>arr[tuple(slices)]</c>), consuming the stream identically.
+        ///     <br/>The layout is observable (<c>flags.owndata</c>, the contiguity flags, <c>strides</c>), so it follows
+        ///     NumPy's indexing machinery rather than <c>np.take</c>'s C-ordered result; see the method body.
         /// </remarks>
-        [NDScoped] // reclaims the N-D path's index-array temp; the gathered result is yielded
+        [NDScoped] // reclaims the index array; the gathered result (a fresh array, or for axis > 0 a view of one) is yielded
         public NDArray permutation(NDArray x, int axis = 0)
         {
             // NumPy: arr = np.asarray(x) — None is a 0-d object array, so it takes the 0-d axis error below.
@@ -113,8 +120,21 @@ namespace NumSharp
 
             long[] idx;
             lock (_bitGenerator.@lock)
-                idx = BoundedIntegers.FisherYatesIndices(_bitGenerator, x.shape[ax]);
-            return np.take(x, np.array(idx), axis: ax);
+                idx = BoundedIntegers.FisherYatesIndices(_bitGenerator, x.Shape.dimensions[ax]);
+            var order = np.array(idx);
+
+            // NumPy's arr[idx] (the fancy index on the leading axis): a fresh C-contiguous array that owns its data,
+            // which take along axis 0 builds directly.
+            if (ax == 0)
+                return np.take(x, order, axis: 0);
+
+            // NumPy's arr[tuple(slices)] with its one fancy index at axis ax > 0 (mapping.c): MapIter fills a fresh
+            // C-contiguous array whose FIRST axis is the indexed one (the other axes follow in their order), then
+            // PyArray_MapIterSwapAxes transposes it back into x's axis order and returns that transpose — a VIEW
+            // (owndata False; F-contiguous for 2-D, permuted strides beyond). np.take along `ax` would give the same
+            // values C-ordered and owning, which NumPy never returns here. `order` is a permutation of the axis, the
+            // in-range indices FancyIndexAlongAxis requires.
+            return np.FancyIndexAlongAxis(x, order, ax);
         }
 
         /// <summary>
@@ -229,7 +249,7 @@ namespace NumSharp
         /// <remarks>The caller holds the bit generator's lock.</remarks>
         private unsafe void PermutedAlongAxis(NDArray target, int ax)
         {
-            long axlen = target.shape[ax];
+            long axlen = target.Shape.dimensions[ax];
             if (axlen <= 1 || target.size == 0)
                 return;
 
@@ -243,7 +263,7 @@ namespace NumSharp
             var strides = new long[nd - 1];
             int k = 0;
             for (int d = 0; d < nd; d++)
-                if (d != ax) { dims[k] = target.shape[d]; strides[k] = target.Shape.strides[d] * itemsize; k++; }
+                if (d != ax) { dims[k] = target.Shape.dimensions[d]; strides[k] = target.Shape.strides[d] * itemsize; k++; }
 
             long outerCount = target.size / axlen;
             var coord = new long[nd - 1];
@@ -267,7 +287,7 @@ namespace NumSharp
         /// <remarks>The caller holds the bit generator's lock.</remarks>
         private unsafe void Shuffle1D(NDArray x)
         {
-            long n = x.shape[0];
+            long n = x.Shape.dimensions[0];
             if (n <= 1)
                 return;
             int itemsize = x.dtypesize;

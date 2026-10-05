@@ -64,7 +64,7 @@ namespace NumSharp
             }
             else
             {
-                popSize = a.shape[0];
+                popSize = a.Shape.dimensions[0];
                 if (popSize == 0 && count != 0)
                     throw new ValueError("'a' cannot be empty unless no samples are taken");
             }
@@ -166,14 +166,24 @@ namespace NumSharp
         /// <summary>
         ///     The legacy weighted sampling without replacement (NumPy's <c>mtrand.pyx</c> choice, the
         ///     <c>p is not None</c> branch): rounds of <c>rand(size - n_uniq)</c> mapped through the found-zeroed
-        ///     normalized CDF with <c>searchsorted(side='right')</c>, keeping each round's first-occurrence-unique hits.
+        ///     normalized CDF with <c>searchsorted(side='right')</c>, keeping each round's first-occurrence-unique hits,
+        ///     written straight into a fresh array that owns its data, as NumPy's <c>found</c> does.
         /// </summary>
         /// <param name="pw">The validated float64 probabilities (a private copy — found entries are zeroed in place).</param>
-        /// <param name="size">The number of distinct samples.</param>
-        /// <param name="shape">The output shape.</param>
-        /// <returns>The int64 (<c>np.long</c>, modelled LP64) indices shaped to <paramref name="shape"/>.</returns>
-        /// <exception cref="ValueError">Fewer non-zero probabilities than <paramref name="size"/>.</exception>
-        /// <remarks>The caller holds the bit generator's lock.</remarks>
+        /// <param name="size">The number of distinct samples (equals the element count of <paramref name="shape"/>).</param>
+        /// <param name="shape">The output shape: <see cref="Shape.Scalar"/> for <c>size=None</c> / <c>()</c>, else the
+        ///     caller's size (dimensions only — its layout is ignored).</param>
+        /// <returns>A fresh C-contiguous int64 (<c>np.long</c>, modelled LP64) array of <paramref name="shape"/> that owns
+        ///     its data.</returns>
+        /// <exception cref="ValueError">Fewer non-zero probabilities than <paramref name="size"/> (checked before anything is
+        ///     allocated or drawn, NumPy's order).</exception>
+        /// <remarks>
+        ///     The caller holds the bit generator's lock. NumPy's <c>found = np.zeros(shape, dtype=np.long)</c> is the
+        ///     result itself (its <c>ravel()</c> view takes the writes), so it owns its data; the former
+        ///     <c>np.array(long[]).reshape(shape)</c> returned a reshape VIEW. The zero fill is skipped because every slot
+        ///     is written before the method returns. (The UNWEIGHTED legacy path stays a view: NumPy's
+        ///     <c>permutation(pop_size)[:size]</c> is a slice.)
+        /// </remarks>
         private unsafe NDArray LegacyChoiceNoReplaceWeighted(double[] pw, long size, Shape shape)
         {
             long d = pw.LongLength;
@@ -183,7 +193,10 @@ namespace NumSharp
             if (nonzero < size)
                 throw new ValueError("Fewer non-zero entries in p than size");
 
-            var found = new long[size]; // np.zeros(shape, dtype=np.long): the LP64 long, int64
+            // np.zeros(shape, dtype=np.long): the LP64 long, int64, laid out in C order from the size's dimensions so the
+            // flat writes below are NumPy's flat_found.
+            var result = new NDArray(LegacyLong, shape.AsClean(), false);
+            long* found = (long*)result.Address;
             var seen = new HashSet<long>();
             var cdf = new double[d];
             long nUniq = 0;
@@ -208,7 +221,7 @@ namespace NumSharp
                 }
             }
 
-            return np.array(found).reshape(shape);
+            return result;
         }
 
         /// <summary>bisect_right on a sorted double[] (NumPy's <c>searchsorted(side='right')</c>): the first index whose value exceeds <paramref name="v"/>.</summary>

@@ -160,12 +160,12 @@ namespace NumSharp
             // Check preconditions on arguments (NumPy's order; nothing drawn yet).
             if (mean.ndim != 1)
                 throw new ValueError("mean must be 1 dimensional");
-            if (cov.ndim != 2 || cov.shape[0] != cov.shape[1])
+            if (cov.ndim != 2 || cov.Shape.dimensions[0] != cov.Shape.dimensions[1])
                 throw new ValueError("cov must be 2 dimensional and square");
-            if (mean.shape[0] != cov.shape[0])
+            if (mean.Shape.dimensions[0] != cov.Shape.dimensions[0])
                 throw new ValueError("mean and cov must have same length");
 
-            long n = mean.shape[0];
+            long n = mean.Shape.dimensions[0];
 
             // final_shape = list(size) + [N]; the normals are drawn BEFORE the SVD, so every later failure has already
             // advanced the stream, exactly as in NumPy.
@@ -206,7 +206,10 @@ namespace NumSharp
 
             NDArray transformed = np.dot(x, np.sqrt(s)[":", np.newaxis] * v);
             np.add(transformed, mean, @out: transformed);   // x += mean
-            return transformed.reshape(new Shape(finalShape));
+            // NumPy: x.shape = tuple(final_shape) — an IN-PLACE shape assignment on the fresh product, so the result owns
+            // its data. reshape() would return a view (owndata False, and a size-changing resize would refuse).
+            transformed.shape = finalShape;
+            return transformed;
         }
 
         /// <summary>

@@ -136,7 +136,7 @@ namespace NumSharp
         private unsafe NDArray MultinomialCore(NDArray on, NDArray parr, bool castMessage, Shape size)
         {
             int ndim = parr.ndim;
-            long d = ndim >= 1 ? parr.shape[ndim - 1] : 0;
+            long d = ndim >= 1 ? parr.Shape.dimensions[ndim - 1] : 0;
             if (d == 0)
                 throw new ValueError("pvals must have at least 1 dimension and the last dimension of pvals must be greater than 0.");
 
@@ -242,7 +242,7 @@ namespace NumSharp
             // offsets = arange(0, parr.size, d).reshape(parr.shape[:-1]) — each broadcast position's row start.
             var rowShape = new long[parr.ndim - 1];
             for (int i = 0; i < rowShape.Length; i++)
-                rowShape[i] = parr.shape[i];
+                rowShape[i] = parr.Shape.dimensions[i];
 
             Shape itShape;
             try
@@ -997,12 +997,12 @@ namespace NumSharp
         {
             if (mean.ndim != 1)
                 throw new ValueError("mean must be 1 dimensional");
-            if (cov.ndim != 2 || cov.shape[0] != cov.shape[1])
+            if (cov.ndim != 2 || cov.Shape.dimensions[0] != cov.Shape.dimensions[1])
                 throw new ValueError("cov must be 2 dimensional and square");
-            if (mean.shape[0] != cov.shape[0])
+            if (mean.Shape.dimensions[0] != cov.Shape.dimensions[0])
                 throw new ValueError("mean and cov must have same length");
 
-            long n = mean.shape[0];
+            long n = mean.Shape.dimensions[0];
             long[] finalShape = OutputDimsWithTrailing(size, n);
             // The normals are drawn BEFORE the factorisation, so a later failure has already advanced the stream.
             NDArray normals = standard_normal(new Shape(finalShape));
@@ -1040,7 +1040,10 @@ namespace NumSharp
                 : u * np.sqrt(s);
 
             NDArray result = mean + np.matmul(x, factor.T);
-            return result.reshape(new Shape(finalShape));
+            // NumPy: x.shape = tuple(final_shape) — an IN-PLACE shape assignment on the fresh product, so the result owns
+            // its data. reshape() would return a view (owndata False, and a size-changing resize would refuse).
+            result.shape = finalShape;
+            return result;
         }
 
         /// <summary>

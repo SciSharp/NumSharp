@@ -24,7 +24,7 @@ divergence proved), B (confirmed as a parity bug) and F (fixed and gated).
 | 2b | `NDArray.shape` returns the array's own dimension array | new | [x] | [x] | [x] | [x] | (the commit after `bb5b2fcf`) |
 | 2c | `Shape.Dimensions` and `Shape.Strides` return the shape's own arrays | new | [x] | [x] | [x] | [ ] | |
 | 2d | The public `Shape` constructors keep the caller's array | new | [x] | [x] | [x] | [ ] | |
-| 3 | `choice` without replacement returns a view | 3 pins + 1 control | [x] | [x] | [x] | [ ] | (another session, see bug 3) |
+| 3 | `choice` without replacement returns a view | 3 pins + 1 control | [x] | [x] | [x] | [x] | (the commit after `b88bcb81`) |
 
 Order of work: 1, 2a, 2b, 2c, 2d, 3 (highest severity first; see the 2026-10-05 scoring: bug 1 scored 72 to 85, bug 2
 scored 75 to 80, bug 3 scored 8).
@@ -330,8 +330,41 @@ uniform path without replacement stays a view (the control test).
 
 ### Status
 
-**Held.** On 2026-10-05, while bug 1 was being committed, an uncommitted change to
-`src/NumSharp.Core/RandomSampling/Generator.Choice.Sampler.cs` appeared in the main working tree. It is another
-session's work on this very bug (it writes the result straight into a fresh array of the final shape, "that owns its
-data, as NumPy's result does"). To avoid a conflicting fix, bug 3 is left to that change; tick this row when it lands
-with the three pins un-pinned and the control still a view.
+**Fixed** on 2026-10-05 (the commit after `b88bcb81`), together with three more ownership and layout gaps of random
+results that a probe found. (Earlier the same day this section read "held": the fix was the other session's uncommitted
+change that bug 1's work saw in the main working tree.)
+
+- **The fix.** `ChoiceNoReplaceUniform`, `ChoiceNoReplaceWeighted` (`Generator.Choice.Sampler.cs`) and
+  `LegacyChoiceNoReplaceWeighted` (`np.random.choice.cs`) write their draws straight into a fresh array of the final
+  shape (`shape.AsClean()`), and that array is the result: NumPy's `idx.shape = shape` on a fresh array. The `reshape`
+  view is gone. The legacy uniform path stays NumPy's slice view (the control test).
+- **The probe.** 780 cases on NumPy 2.4.2 and NumSharp: every `choice` path at the sizes None, `()`, `(k,)`, `(2,3)` and
+  `(0,)`; every sampler of both APIs at five sizes; `permutation`; `multivariate_normal`. It compared values, dtype,
+  shape, strides and flags. It found three more gaps, fixed in the same commit:
+  - `multivariate_normal` (both APIs) returned a reshape view. NumPy ends with `x.shape = tuple(final_shape)`, an
+    in-place assignment, so its result owns its data. Now `result.shape = finalShape`.
+  - `Generator.permutation(x, axis > 0)` returned `np.take`'s C-ordered array, which owns its data. NumPy's
+    `arr[tuple(slices)]` returns its MapIter buffer (the indexed axis first) transposed back: a view, F-contiguous for
+    2-D input, with permuted strides beyond. The new `np.FancyIndexAlongAxis` builds that buffer with one tiled IL
+    gather (`DirectILKernelGenerator.TakeLeading.cs`).
+  - The transpose of an EMPTY array was a fresh array that owned its data, and it was writeable even when its source
+    was read-only. NumPy's `PyArray_Transpose` always returns a view. `Default.Transpose` no longer has a size-0
+    shortcut.
+- **Rode along.** The 19 `x.shape` reads that `b88bcb81` left in the five random-sampling files for this change now
+  read `x.Shape.dimensions` (the bug 2b rule: inside Core, never the copying getter).
+- **Gates.** `RandomSampling/RandomResultOwnership.Test.cs` (17: the three pins without `[OpenBugs]`, the control, every
+  `choice` path and size, `multivariate_normal` at four sizes on both APIs, the `permutation` layouts, a sweep of every
+  sampler of both APIs at five sizes), `Indexing/np.take.FancyAxis.Test.cs` (8: every dtype, every unroll remainder,
+  several tiles, empty operands, every source layout, the argument checks) and `Manipulation/np.transpose.Empty.Test.cs`
+  (3). On the code before the fix, 17 of the 20 ownership and transpose tests fail; the 3 that pass guard paths that
+  were already correct.
+- **Perf** (NPY/NS, P-cores pinned, best of 15):
+  - `choice` tail shuffle 3.9–5.0× (was 2.0–2.6×: the reshape copy and a managed array are gone);
+  - Floyd 1.05–4.1× (was 1.02–3.5×; 1.05× at `choice(1_000_000, 10_000)` is the PCG64 draws, the same count on
+    both sides); weighted 1.5–2.9× on both APIs;
+  - `multivariate_normal` unchanged, 1.5–2.0×;
+  - `permutation` along a non-leading axis 2.2–6.2× on 11 shapes and 1.19× for a 1-byte last axis. NumPy's strided
+    byte loop is about 2 cycles an element there; the old `np.take` route ran 0.48× on that shape.
+- **Not done.** NumSharp's general fancy index `a[:, idx]` still returns a C-ordered array that owns its data, where NumPy
+  returns the same transposed MapIter view. That is a library-wide indexing gap; `np.FancyIndexAlongAxis` is a building
+  block for it.

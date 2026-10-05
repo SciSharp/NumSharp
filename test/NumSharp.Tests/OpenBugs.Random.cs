@@ -8,11 +8,12 @@ namespace NumSharp.Tests
     ///     History: NumSharp's RandomState once ran .NET's subtractive generator, so every seeded stream differed from
     ///     NumPy's MT19937. It runs NumPy's MT19937 with the legacy seeding now, and the tests without <c>[OpenBugs]</c>
     ///     pin that. Since 2026-09-25 every legacy sampler is a port of NumPy's <c>legacy-distributions.c</c> (the seven
-    ///     former <c>RandomParity_*</c> pins below now pass and are ordinary tests); the <c>[OpenBugs]</c> pins left are
+    ///     former <c>RandomParity_*</c> pins below now pass and are ordinary tests); the <c>[OpenBugs]</c> pin left is
     ///     <c>multivariate_normal</c> WITHOUT a LAPACK backend, whose managed Jacobi SVD cannot reproduce LAPACK's
     ///     singular-vector signs (with <c>NumSharp.Interop.OpenBLAS</c> it is byte-identical — see
-    ///     <c>LegacyRandomStateTests.MultivariateNormal_WithLapackBackend_ByteIdenticalToNumPy</c>), and <c>choice</c>'s
-    ///     ownership flag on three paths without replacement (right values, a view where NumPy owns its data).
+    ///     <c>LegacyRandomStateTests.MultivariateNormal_WithLapackBackend_ByteIdenticalToNumPy</c>). The three
+    ///     <c>choice</c> ownership pins added 2026-10-03 (a view where NumPy owns its data) are fixed; they and their
+    ///     control live in <c>RandomSampling/RandomResultOwnership.Test.cs</c>.
     ///
     ///     NumPy 2.4.2 expected values generated with:
     ///     <code>
@@ -433,74 +434,6 @@ namespace NumSharp.Tests
             var r = np.random.multivariate_normal(new[] { 0.0, 1.0 }, cov, new[] { 2 });
             r.GetDouble(0, 0).Should().Be(0.16865044563071147, "mvn([0,1], [[1,.5],[.5,2]]) first row, seed 42");
             r.GetDouble(0, 1).Should().Be(1.728877966541595);
-        }
-
-        // ===== choice's ownership flag (found 2026-10-03 by the view-Shape size sweep, de35a0f2) ==================
-        //
-        // The values are NumPy's; only flags.owndata differs. NumPy's choice ends `idx.shape = shape`, an IN-PLACE shape
-        // assignment on the index array it just built, so the result owns its data. NumSharp's Generator.choice
-        // (Generator.Choice.Sampler.cs: ChoiceNoReplaceUniform / ChoiceNoReplaceWeighted) and the legacy weighted path
-        // (np.random.choice.cs: LegacyChoiceNoReplaceWeighted) end with `arr.reshape(shape)`, which returns a VIEW of
-        // that array (owndata False). The one case where NumPy itself returns a view is the legacy uniform path
-        // without replacement (`self.permutation(pop_size)[:size]`, a slice), pinned as a passing control below.
-        // NumPy 2.4.2:
-        //   np.random.default_rng(42).choice(1000, 6, replace=False)                     -> [652 770 432 858 438 88], owndata True
-        //   np.random.default_rng(42).choice(5, 3, replace=False, p=[.1,.2,.3,.2,.2])    -> [3 2 4], owndata True
-        //   np.random.RandomState(42).choice(5, 3, replace=False, p=[.1,.2,.3,.2,.2])    -> [2 4 3], owndata True
-        //   np.random.RandomState(42).choice(10, 6, replace=False)                       -> owndata False (a slice)
-
-        /// <summary>The weights of the weighted <c>choice</c> pins below.</summary>
-        private static NDArray ChoiceWeights() => np.array(new[] { .1, .2, .3, .2, .2 });
-
-        /// <summary>
-        ///     <c>Generator.choice(1000, 6, replace=False)</c> owns its data in NumPy; NumSharp returns a reshape view of its
-        ///     index array.
-        /// </summary>
-        [TestMethod]
-        [OpenBugs(IssueUrl = "choice-owndata")]
-        public void Choice_GeneratorWithoutReplacement_ShouldOwnItsData()
-        {
-            using var r = np.random.default_rng(42).choice(1000L, new Shape(6L), replace: false);
-            r.ToArray<long>().Should().Equal(652L, 770L, 432L, 858L, 438L, 88L);
-            r.flags.owndata.Should().BeTrue("NumPy assigns idx.shape in place, so the result owns its buffer");
-        }
-
-        /// <summary>
-        ///     <c>Generator.choice(5, 3, replace=False, p=...)</c> owns its data in NumPy; NumSharp returns a reshape view.
-        /// </summary>
-        [TestMethod]
-        [OpenBugs(IssueUrl = "choice-owndata")]
-        public void Choice_GeneratorWithoutReplacementWeighted_ShouldOwnItsData()
-        {
-            using var p = ChoiceWeights();
-            using var r = np.random.default_rng(42).choice(5L, new Shape(3L), replace: false, p: p);
-            r.ToArray<long>().Should().Equal(3L, 2L, 4L);
-            r.flags.owndata.Should().BeTrue("NumPy assigns idx.shape in place, so the result owns its buffer");
-        }
-
-        /// <summary>
-        ///     <c>RandomState.choice(5, 3, replace=False, p=...)</c> owns its data in NumPy (its weighted path builds a fresh
-        ///     index array); NumSharp returns a reshape view.
-        /// </summary>
-        [TestMethod]
-        [OpenBugs(IssueUrl = "choice-owndata")]
-        public void Choice_RandomStateWithoutReplacementWeighted_ShouldOwnItsData()
-        {
-            using var p = ChoiceWeights();
-            using var r = np.random.RandomState(42).choice(5L, new Shape(3L), replace: false, p: p);
-            r.ToArray<long>().Should().Equal(2L, 4L, 3L);
-            r.flags.owndata.Should().BeTrue("NumPy's weighted path assigns idx.shape in place on a fresh array");
-        }
-
-        /// <summary>
-        ///     Control, passing today: <c>RandomState.choice(10, 6, replace=False)</c> is a VIEW in NumPy too (a slice of
-        ///     <c>permutation(10)</c>), so a fix for the pins above must not make this path own its data.
-        /// </summary>
-        [TestMethod]
-        public void Choice_RandomStateWithoutReplacement_IsAViewLikeNumPy()
-        {
-            using var r = np.random.RandomState(42).choice(10L, new Shape(6L), replace: false);
-            r.flags.owndata.Should().BeFalse("NumPy returns permutation(pop_size)[:size], a view");
         }
     }
 }

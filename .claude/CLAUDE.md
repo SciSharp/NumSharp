@@ -358,7 +358,7 @@ Carries the bulk of NumSharp's elementwise, reduction, scan, cast, and selection
 | Scan | `.Scan.cs` (CumSum, CumProd) |
 | Masking | `.Masking.Boolean.cs`, `.Masking.NaN.cs`, `.Masking.VarStd.cs` |
 | Cast & Copy | `.Cast.cs`, `.Cast.Masked.cs`, `.Cast.Scalar.cs`, `.Cast.Half.cs`, `.Cast.ToHalf.cs`, `.Cast.FloatNarrow.cs`, `.Cast.FloatWideInt.cs`, `.Cast.FloatToUInt.cs`, `.Cast.IntNarrow.cs`, `.Cast.ShortNarrow.cs`, `.Cast.SubwordCopy.cs`, `.Cast.SubwordNarrow.cs`, `.Cast.SubwordWiden.cs`, `.Cast.ToBool.cs`, `.Cast.Complex.cs`, `.Copy.cs` |
-| Selection | `.Where.cs`, `.Where.Scalar.cs`, `.Place.cs`, `.Put.cs`, `.Take.cs`, `.NonZero.cs`, `.Argwhere.cs`, `.Indices.cs`, `.Filter.cs`, `.Search.cs` |
+| Selection | `.Where.cs`, `.Where.Scalar.cs`, `.Place.cs`, `.Put.cs`, `.Take.cs`, `.TakeLeading.cs`, `.NonZero.cs`, `.Argwhere.cs`, `.Indices.cs`, `.Filter.cs`, `.Search.cs` |
 | Linear algebra | `.MatMul.cs`, `.Trace.cs` |
 | Other | `.Clip.cs`, `.Modf.cs`, `.Repeat.cs`, `.Quantile.cs`, `.WeightedSum.cs`, `.RavelMultiIndex.cs`, `.UnravelIndex.cs`, `.InnerLoop.cs` |
 
@@ -709,7 +709,7 @@ the scalar (NumPy's `m[()]`), `flip(m, 0)` raises AxisError. `fliplr` requires n
 
 `permute_dims` and `matrix_transpose` are the NumPy 2.x / Array-API transpose aliases (both pure O(1) views). `np.permute_dims(a, axes=null)` is a straight alias of `transpose` (delegates to `TensorEngine.Transpose`). `np.matrix_transpose(x)` swaps the two innermost axes (`(..., M, N)→(..., N, M)`, i.e. `swapaxes(x, -1, -2)`) and requires `ndim ≥ 2`, else `ArgumentException "Input array must be at least 2-dimensional, but it is {ndim}"`; the companion property `ndarray.mT` does the same but raises the NumPy-verbatim `"matrix transpose with ndim < 2 is undefined"` (distinct message, both probed against 2.4.2). Read-only/broadcast inputs stay non-writeable through the alias. See `Manipulation/np.permute_dims.cs`, `Manipulation/np.matrix_transpose.cs`, `Backends/NDArray.cs` (`mT`).
 
-`Transpose` axis-handling is NumPy-exact (probed against 2.4.2, shared by `transpose`/`permute_dims`/`swapaxes`/`moveaxis`/`rollaxis`): only `axes=null` reverses — an explicit **length-0** `axes` (`new int[0]`, NumPy's `()`/`[]`) is a length-0 permutation that matches **only a 0-d array** and raises `ArgumentException "axes don't match array"` for any `ndim ≥ 1` (NumPy's `ValueError`); wrong-length and repeated/negative-duplicate axes raise `ArgumentException` ("axes don't match array" / "repeated axis in transpose", NumPy `ValueError`); out-of-range axes raise `AxisOutOfRangeException` (NumPy `AxisError`). See `Backends/Default/ArrayManipulation/Default.Transpose.cs`.
+`Transpose` axis-handling is NumPy-exact (probed against 2.4.2, shared by `transpose`/`permute_dims`/`swapaxes`/`moveaxis`/`rollaxis`): only `axes=null` reverses — an explicit **length-0** `axes` (`new int[0]`, NumPy's `()`/`[]`) is a length-0 permutation that matches **only a 0-d array** and raises `ArgumentException "axes don't match array"` for any `ndim ≥ 1` (NumPy's `ValueError`); wrong-length and repeated/negative-duplicate axes raise `ArgumentException` ("axes don't match array" / "repeated axis in transpose", NumPy `ValueError`); out-of-range axes raise `AxisOutOfRangeException` (NumPy `AxisError`). Every transpose is a view, an EMPTY array's too (`PyArray_Transpose` has no size-0 case; until 2026-10-05 NumSharp allocated a fresh owning array there, writeable even for a read-only broadcast — gate `Manipulation/np.transpose.Empty.Test.cs`). See `Backends/Default/ArrayManipulation/Default.Transpose.cs`.
 
 **Stacking/joining details** (all probed against NumPy 2.4.2; tests in `Creation/np.{block,column_stack,concat,unstack}.Test.cs`):
 - `concat` — NumPy 2.0 Array-API alias of `concatenate`; mirrors every overload (array form with `axis`/`out`/`dtype`/`casting` + tuple-arity forms). `Creation/np.concat.cs`.
@@ -3744,6 +3744,19 @@ Per-width chunk loops (the scalar `Fill` → `FillUInt8/16/32/64/Bool` shape, Nu
 `_rand_<dtype>_broadcast`) are the known fix, deferred because the np-function rule forbids per-dtype functions. The
 uint8 Lemire threshold `(255 - rng) % (rng + 1)` is a 256-entry table (`BoundedIntegers.LemireThreshold8`): the
 division ran on 78% of draws at rng 199 — the pre-existing scalar uint8 fill went 1.00× → 1.21×, same stream.
+
+**The KIND of array a random function returns is NumPy's (2026-10-05; gate `RandomSampling/RandomResultOwnership.Test.cs`,
+plan `docs/plans/view-shape-open-bugs.md` bug 3).** Every sampler of both APIs returns a fresh writeable C-ordered array
+that owns its data — `choice` without replacement and `multivariate_normal` included: NumPy ends them with an in-place
+`idx.shape = shape` / `x.shape = final_shape`, so they allocate the final shape (`shape.AsClean()`) or assign
+`result.shape`, never `reshape` (a view). NumPy's own two exceptions are kept: the legacy `RandomState.choice(int, size,
+replace=False)` without `p` is a slice of `permutation(pop_size)` (a view), and `Generator.permutation(x, axis > 0)` is
+`arr[tuple(slices)]`, NumPy's fancy-index layout — a VIEW of a fresh buffer whose first axis is the permuted one
+(MapIter's buffer transposed back: F-contiguous for 2-D, permuted strides beyond). `np.FancyIndexAlongAxis`
+(`Indexing/np.take.FancyAxis.cs`) builds it with ONE tiled IL gather (`DirectILKernelGenerator.TakeLeading.cs`: tiles of
+~1 MB of source rows, each index writing one contiguous run, typed MOVs 4× unrolled or `cpblk`) — 2.2–6.2× NumPy over
+11 shapes, but 1.19× for a 1-byte last axis (NumPy's strided byte loop is ~2 cycles/element). NumSharp's general
+`a[:, idx]` does NOT follow that layout yet (C-ordered, owning) — a library-wide indexing gap.
 
 ### File I/O
 `fromfile`, `fromstring`, `load`, `load_npy`, `load_npz`, `loadtxt`, `save`, `savetxt`, `savez`, `savez_compressed`, `tofile`

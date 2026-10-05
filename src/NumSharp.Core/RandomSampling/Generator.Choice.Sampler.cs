@@ -66,7 +66,7 @@ namespace NumSharp
                     throw new IndexError("tuple index out of range");
                 if (axis < 0)
                     axis += a.ndim;
-                popSize = a.shape[axis];
+                popSize = a.Shape.dimensions[axis];
                 if (popSize == 0 && count != 0)
                     throw new ValueError("a cannot be empty unless no samples are taken");
             }
@@ -108,12 +108,12 @@ namespace NumSharp
                         throw new ValueError("negative dimensions are not allowed");
 
                     if (pw is not null)
-                        idx = ChoiceNoReplaceWeighted(pw, count, shape, isScalar);
+                        idx = ChoiceNoReplaceWeighted(pw, count, shape);
                     else if (popExceedsInt64)
                         // NumPy assigns pop_size to a C int64 here: OverflowError.
                         throw new OverflowException("Python int too large to convert to C long");
                     else
-                        idx = ChoiceNoReplaceUniform(popSize, count, shuffle, shape, isScalar);
+                        idx = ChoiceNoReplaceUniform(popSize, count, shuffle, shape);
                 }
             }
 
@@ -257,40 +257,61 @@ namespace NumSharp
 
         /// <summary>
         ///     <c>replace=False, p=None</c>: Floyd's algorithm (small samples) or a tail partial-shuffle (large
-        ///     samples of a large population), then the optional full shuffle — NumPy's heuristic and draws.
+        ///     samples of a large population), then the optional full shuffle — NumPy's heuristic and draws, written
+        ///     straight into a fresh array that owns its data, as NumPy's result does.
         /// </summary>
         /// <param name="popSize">The population size.</param>
-        /// <param name="size">The number of samples (validated &lt;= <paramref name="popSize"/>).</param>
-        /// <param name="shuffle">Whether to shuffle the Floyd selection.</param>
-        /// <param name="shape">The output shape.</param>
-        /// <param name="isScalar">Whether the request was <c>size=None</c> (0-d result).</param>
-        /// <returns>The int64 indices shaped to <paramref name="shape"/>.</returns>
-        /// <remarks>Both branches draw with <c>random_bounded_uint64(0, j, 0, 0)</c> == <see cref="BoundedUInt64Scalar"/>. The caller holds the lock.</remarks>
-        private NDArray ChoiceNoReplaceUniform(long popSize, long size, bool shuffle, Shape shape, bool isScalar)
+        /// <param name="size">The number of samples (validated &lt;= <paramref name="popSize"/>; equals the element count of
+        ///     <paramref name="shape"/>).</param>
+        /// <param name="shuffle">Whether to shuffle the Floyd selection (it also lowers the tail-shuffle cutoff from 1/20 to
+        ///     1/50 of the population, NumPy's tuning).</param>
+        /// <param name="shape">The output shape: <see cref="Shape.Scalar"/> for <c>size=None</c> / <c>()</c>, else the
+        ///     caller's size (dimensions only — its layout is ignored).</param>
+        /// <returns>A fresh C-contiguous int64 array of <paramref name="shape"/> that owns its data.</returns>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy fills a 1-D <c>np.empty(size)</c> (Floyd) or copies the tail of a shuffled <c>arange(pop_size)</c>
+        ///     (<c>idx[(pop_size - size):].copy()</c>, "to allow potentially large array backing idx to be gc"), and both
+        ///     end with <c>idx.shape = shape</c> — an IN-PLACE shape assignment, so the result owns its data. Allocating
+        ///     the final shape once and writing its flat C-order buffer is the same sequence with nothing observable in
+        ///     between. The former <c>np.array(long[]).reshape(shape)</c> returned a reshape VIEW (<c>owndata</c> False,
+        ///     so a size-changing <c>resize</c> refused) after a managed array and a second copy.
+        ///     </para>
+        ///     <para>
+        ///     Both branches draw with <c>random_bounded_uint64(0, j, 0, 0)</c> == <see cref="BoundedUInt64Scalar"/>, one
+        ///     sequential, data-dependent draw per step, so neither loop can be vectorized without changing the stream.
+        ///     The caller holds the lock.
+        ///     </para>
+        /// </remarks>
+        private unsafe NDArray ChoiceNoReplaceUniform(long popSize, long size, bool shuffle, Shape shape)
         {
-            long[] result;
+            // NumPy's size is dimensions only: lay the result out in C order whatever layout the caller's Shape carries
+            // (AsClean, as every sampler allocates), so the flat writes below land in NumPy's element order.
+            var idx = new NDArray(NPTypeCode.Int64, shape.AsClean(), false);
+            long* data = (long*)idx.Address;
             int cutoff = shuffle ? 50 : 20;
 
             if (popSize > 10000 && size > popSize / cutoff)
             {
-                // Tail-shuffle 'size' elements out of arange(pop_size).
-                var idxAll = new long[popSize];
-                for (long k = 0; k < popSize; k++)
-                    idxAll[k] = k;
-                ShuffleIntBuffer(idxAll, popSize, Math.Max(popSize - size, 1));
-                result = new long[size];
-                Array.Copy(idxAll, popSize - size, result, 0, size);
+                // Tail shuffle: idx = np.arange(pop_size); _shuffle_int(pop_size, max(pop_size - size, 1), idx). Only the
+                // last `size` slots are swapped into place, but each swap may read any lower slot, so the whole range is
+                // materialized (by the IL arange fill). NumPy then COPIES the tail so the large range can be freed — the
+                // memcpy into the result is that copy, and disposing `all` frees the range at once.
+                using var all = np.arange(popSize);
+                long* range = (long*)all.Address;
+                ShuffleIntBuffer(range, popSize, Math.Max(popSize - size, 1));
+                Buffer.MemoryCopy(range + (popSize - size), data, size * sizeof(long), size * sizeof(long));
             }
             else
             {
-                // Floyd's algorithm.
-                result = new long[size];
+                // Floyd's algorithm over a linear-probing hash set of the smallest power of two above 1.2 * size slots
+                // (NumPy's np.full(set_size, <uint64_t>-1)): -1 marks an empty slot, which no drawn value can be because
+                // every value is < pop_size <= int64.MaxValue.
                 ulong setSize = (ulong)(1.2 * size);
                 ulong mask = GenMask(setSize);
                 setSize = 1 + mask;
                 var hashSet = new ulong[setSize];
-                for (ulong t = 0; t < setSize; t++)
-                    hashSet[t] = ulong.MaxValue;
+                Array.Fill(hashSet, ulong.MaxValue);
 
                 for (long j = popSize - size; j < popSize; j++)
                 {
@@ -300,47 +321,56 @@ namespace NumSharp
                         loc = (loc + 1) & mask;
                     if (hashSet[loc] == ulong.MaxValue)
                     {
+                        // val not yet selected: take it.
                         hashSet[loc] = val;
-                        result[j - popSize + size] = (long)val;
+                        data[j - popSize + size] = (long)val;
                     }
                     else
                     {
+                        // val already selected: take j instead (it cannot be selected yet — every earlier draw was < j).
                         loc = (ulong)j & mask;
                         while (hashSet[loc] != ulong.MaxValue)
                             loc = (loc + 1) & mask;
                         hashSet[loc] = (ulong)j;
-                        result[j - popSize + size] = j;
+                        data[j - popSize + size] = j;
                     }
                 }
 
+                // Floyd leaves the selection in a biased order; NumPy's shuffle=True draws a full Fisher-Yates over it.
                 if (shuffle)
-                    ShuffleIntBuffer(result, size, 1);
+                    ShuffleIntBuffer(data, size, 1);
             }
 
-            var arr = np.array(result);
-            if (isScalar)
-                return arr.reshape(Shape.Scalar); // 0-d
-            return arr.reshape(shape);
+            return idx;
         }
 
         /// <summary>
-        ///     <c>replace=False, p!=None</c>: weighted sampling without replacement (NumPy's
-        ///     <c>_generator.pyx</c> choice, the <c>p is not None</c> branch).
+        ///     <c>replace=False, p!=None</c>: weighted sampling without replacement (NumPy's <c>_generator.pyx</c> choice,
+        ///     the <c>p is not None</c> branch), written straight into a fresh array that owns its data, as NumPy's
+        ///     <c>found</c> does.
         /// </summary>
         /// <param name="pw">The validated float64 probabilities (a private copy — found entries are zeroed in place).</param>
-        /// <param name="size">The number of distinct samples.</param>
-        /// <param name="shape">The output shape.</param>
-        /// <param name="isScalar">Whether the request was <c>size=None</c> (0-d result).</param>
-        /// <returns>The int64 indices shaped to <paramref name="shape"/>.</returns>
-        /// <exception cref="ValueError">Fewer non-zero probabilities than <paramref name="size"/>.</exception>
+        /// <param name="size">The number of distinct samples (equals the element count of <paramref name="shape"/>).</param>
+        /// <param name="shape">The output shape: <see cref="Shape.Scalar"/> for <c>size=None</c> / <c>()</c>, else the
+        ///     caller's size (dimensions only — its layout is ignored).</param>
+        /// <returns>A fresh C-contiguous int64 array of <paramref name="shape"/> that owns its data.</returns>
+        /// <exception cref="ValueError">Fewer non-zero probabilities than <paramref name="size"/> (checked before anything is
+        ///     allocated or drawn, NumPy's order).</exception>
         /// <remarks>
+        ///     <para>
         ///     Each round draws <c>size - n_uniq</c> uniforms, maps them through the current (found-zeroed)
         ///     normalized CDF via <c>searchsorted(side='right')</c>, and keeps the batch's first-occurrence-unique
         ///     hits, until <paramref name="size"/> distinct indices are found. Composed from the byte-exact
         ///     <c>random</c> draw + sequential cumsum + bisect_right, so the stream matches
         ///     <c>default_rng(seed).choice(..., replace=False, p=...)</c> bit-for-bit. The caller holds the lock.
+        ///     </para>
+        ///     <para>
+        ///     NumPy's <c>found = np.zeros(shape, dtype=np.int64)</c> is the result itself (its <c>ravel()</c> view takes the
+        ///     writes), so it owns its data; the former <c>np.array(long[]).reshape(shape)</c> returned a reshape VIEW. The
+        ///     zero fill is skipped here because every slot is written before the method returns.
+        ///     </para>
         /// </remarks>
-        private unsafe NDArray ChoiceNoReplaceWeighted(double[] pw, long size, Shape shape, bool isScalar)
+        private unsafe NDArray ChoiceNoReplaceWeighted(double[] pw, long size, Shape shape)
         {
             long d = pw.LongLength;
             long nonzero = 0;
@@ -349,7 +379,9 @@ namespace NumSharp
             if (nonzero < size)
                 throw new ValueError("Fewer non-zero entries in p than size");
 
-            var found = new long[size];
+            // NumPy's size is dimensions only: lay the result out in C order, so the flat writes are NumPy's flat_found.
+            var result = new NDArray(NPTypeCode.Int64, shape.AsClean(), false);
+            long* found = (long*)result.Address;
             var seen = new HashSet<long>();
             var cdf = new double[d];
             long nUniq = 0;
@@ -377,8 +409,7 @@ namespace NumSharp
                 }
             }
 
-            var arr = np.array(found);
-            return isScalar ? arr.reshape(Shape.Scalar) : arr.reshape(shape);
+            return result;
         }
 
         /// <summary>bisect_right on a sorted double[] (numpy searchsorted side='right'): first index i with a[i] &gt; v.</summary>
@@ -397,11 +428,18 @@ namespace NumSharp
             return lo;
         }
 
-        /// <summary>NumPy's <c>_shuffle_int</c>: Fisher-Yates over an int64 buffer using <c>random_bounded_uint64(0, i, 0, 0)</c>.</summary>
-        /// <param name="data">The buffer shuffled in place.</param>
-        /// <param name="n">The number of elements considered.</param>
+        /// <summary>
+        ///     NumPy's <c>_shuffle_int</c>: Fisher-Yates over an int64 buffer using <c>random_bounded_uint64(0, i, 0, 0)</c>,
+        ///     from the last slot down to <paramref name="first"/> — so <c>first = n - k</c> settles only the last
+        ///     <c>k</c> slots (the tail shuffle) while drawing exactly <c>k</c> values.
+        /// </summary>
+        /// <param name="data">The buffer shuffled in place: the result array itself or the tail shuffle's range, so the
+        ///     draws land where the caller returns them without an intermediate managed copy.</param>
+        /// <param name="n">The number of elements considered (<paramref name="data"/> must hold at least that many).</param>
         /// <param name="first">The smallest index swapped (1 shuffles everything; larger values shuffle only the tail).</param>
-        private void ShuffleIntBuffer(long[] data, long n, long first)
+        /// <remarks>The caller holds the bit generator's lock. Each swap may read any slot below it, so the walk is
+        ///     inherently sequential (the swap target is the draw).</remarks>
+        private unsafe void ShuffleIntBuffer(long* data, long n, long first)
         {
             for (long i = n - 1; i >= first; i--)
             {

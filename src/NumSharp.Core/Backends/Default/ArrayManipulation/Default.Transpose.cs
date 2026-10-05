@@ -162,14 +162,10 @@ namespace NumSharp.Backends
                 }
             }
 
-            // Handle empty arrays: just create a new array with permuted dimensions, no data copy needed
-            if (nd.Shape.size == 0)
-            {
-                var emptyDims = new long[n];
-                for (i = 0; i < n; i++)
-                    emptyDims[i] = nd.Shape.dimensions[permutation[i]];
-                return new NDArray(nd.dtype, emptyDims);
-            }
+            // An EMPTY array takes the same view path as any other: NumPy's PyArray_Transpose always returns a view of
+            // its input with permuted dimensions AND strides (owndata False, the source's writeability kept). A former
+            // shortcut here allocated a fresh array instead, so a transposed empty array owned its data, lost the
+            // permuted strides, and was writeable even when its source was read-only.
 
             // NumPy-aligned: Transpose returns a VIEW by permuting strides.
             // For contiguous arrays, this is a simple stride permutation.
