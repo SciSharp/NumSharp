@@ -31,22 +31,22 @@ B = confirmed as a parity bug, F = fixed and gated.
 
 | # | Item | P | D | B | F | Commit |
 |---|---|---|---|---|---|---|
-| N1 | `dtype` defaults to float32 (NumPy: float64) | [x] | [x] | [x] | [x] | this change |
-| N2 | `order` defaults to `'F'` (NumPy: `None`, i.e. C) | [x] | [x] | [x] | [x] | this change |
-| N3 | Without a buffer, `order` is ignored and not validated | [x] | [x] | [x] | [x] | this change |
-| N4 | With a buffer, `dtype` is ignored (NumPy reads the buffer's BYTES as `dtype`) | [x] | [x] | [x] | [x] | this change |
-| N5 | Buffer kinds: only `System.Array`; no `NDArray`, `ndarray.data`, NumSharp slice; wrong errors | [x] | [x] | [x] | [x] | this change |
-| N6 | Buffer size: too small and larger buffers (B1.10, B1.11) | [x] | [x] | [x] | [x] | this change |
-| N7 | No `offset=` parameter | [x] | [x] | [x] | [x] | this change |
-| N8 | No `strides=` parameter | [x] | [x] | [x] | [x] | this change |
-| N9 | Shape `-1` with a buffer | [x] | [x] | [x] | [x] | this change |
-| N10 | The result over a buffer reports `OWNDATA` and no base | [x] | [x] | [x] | [x] | this change |
-| N11 | Flags: `ALIGNED`, writeable zero strides, empty strides | [x] | [x] | [x] | [x] | this change |
-| N12 | Error order | [x] | [x] | [x] | [x] | this change |
-| N13 | The wrap constructors (`new NDArray(Array, Shape, char)`) share N6 | [x] | [x] | [x] | [x] | this change |
+| N1 | `dtype` defaults to float32 (NumPy: float64) | [x] | [x] | [x] | [x] | f17c3b2d |
+| N2 | `order` defaults to `'F'` (NumPy: `None`, i.e. C) | [x] | [x] | [x] | [x] | f17c3b2d |
+| N3 | Without a buffer, `order` is ignored and not validated | [x] | [x] | [x] | [x] | f17c3b2d |
+| N4 | With a buffer, `dtype` is ignored (NumPy reads the buffer's BYTES as `dtype`) | [x] | [x] | [x] | [x] | f17c3b2d |
+| N5 | Buffer kinds: only `System.Array`; no `NDArray`, `ndarray.data`, NumSharp slice; wrong errors | [x] | [x] | [x] | [x] | f17c3b2d |
+| N6 | Buffer size: too small and larger buffers (B1.10, B1.11) | [x] | [x] | [x] | [x] | f17c3b2d |
+| N7 | No `offset=` parameter | [x] | [x] | [x] | [x] | f17c3b2d |
+| N8 | No `strides=` parameter | [x] | [x] | [x] | [x] | f17c3b2d |
+| N9 | Shape `-1` with a buffer | [x] | [x] | [x] | [x] | f17c3b2d |
+| N10 | The result over a buffer reports `OWNDATA` and no base | [x] | [x] | [x] | [x] | f17c3b2d |
+| N11 | Flags: `ALIGNED`, writeable zero strides, empty strides | [x] | [x] | [x] | [x] | f17c3b2d |
+| N12 | Error order | [x] | [x] | [x] | [x] | f17c3b2d |
+| N13 | The wrap constructors (`new NDArray(Array, Shape, char)`) share N6 | [x] | [x] | [x] | [x] | f17c3b2d |
 
-All 13 items are fixed together, because they are one function's argument handling (the commit that lands this plan
-is the one to cite; its message lists every item). Status: the 185-case probe matches NumPy on 167 cases (21 before);
+All 13 items are fixed together in `f17c3b2d`, because they are one function's argument handling (its message lists
+every item). Status: the 185-case probe matches NumPy on 167 cases (21 before);
 the other 18 are the documented divergences of §3. Gates: the `ndarray_ctor.jsonl` oracle tier (5,919 cases, zero
 excuses) and `Creation/np.ndarray.Test.cs` (39 tests).
 
