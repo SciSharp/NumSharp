@@ -836,6 +836,62 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     Whether every axis of <paramref name="shape"/> other than <paramref name="axis"/> has extent 1, so a reduction
+        ///     along <paramref name="axis"/> has exactly one output. NumPy's iterator drops extent-1 axes, so such a
+        ///     reduction runs the flat (<c>axis=None</c>) call schedule.
+        /// </summary>
+        /// <param name="shape">The operand's shape.</param>
+        /// <param name="axis">The normalized reduced axis.</param>
+        /// <returns>True when no other axis has extent greater than 1 (always true for a 1-D operand).</returns>
+        internal static bool IsOnlyNonUnitAxis(Shape shape, int axis)
+        {
+            var dims = shape.dimensions;
+            for (int d = 0; d < dims.Length; d++)
+                if (d != axis && dims[d] != 1)
+                    return false;
+            return true;
+        }
+
+        /// <summary>
+        ///     <c>np.sum</c> along an axis that leaves ONE output (see <see cref="IsOnlyNonUnitAxis"/>) through
+        ///     <see cref="NumPyAddReduce"/>'s flat engine — the schedule NumPy runs for it, a cast loop's buffer fills
+        ///     included — shaped as the axis reduction's result.
+        /// </summary>
+        /// <param name="arr">The operand (size &gt;= 2).</param>
+        /// <param name="axis">The normalized reduced axis; every other axis has extent 1.</param>
+        /// <param name="keepdims">When true the reduced axis stays with length 1 (the result has the input's rank).</param>
+        /// <param name="loopType">The loop dtype (float16 / float32 / float64 / complex128).</param>
+        /// <returns>The sum: a read-only 0-d scalar when the result has no dimensions (a 1-D operand without
+        /// <paramref name="keepdims"/>, NumPy's scalar), otherwise a fresh array of the axis result's shape (all extents
+        /// 1); null when the engine declines (a broadcast operand, rank &gt; 64, a Decimal cast, no dynamic code for a
+        /// cast), so the caller keeps its axis route.</returns>
+        private unsafe NDArray TryExactOneOutputAxisSum(NDArray arr, int axis, bool keepdims, NPTypeCode loopType)
+        {
+            byte* slot = stackalloc byte[16];
+            if (!NumPyAddReduce.TryReduceFlat(arr, loopType, np.getbufsize(), slot))
+                return null;
+
+            // The axis result's shape: the operand's dims (all 1 but the axis) with the axis kept as 1 or removed.
+            int nd = arr.ndim;
+            var dims = new long[keepdims ? nd : nd - 1];
+            for (int d = 0, o = 0; d < nd; d++)
+            {
+                if (d == axis)
+                {
+                    if (keepdims)
+                        dims[o++] = 1;
+                }
+                else
+                    dims[o++] = 1;
+            }
+
+            var r = dims.Length == 0 ? new NDArray(loopType, Shape.NewScalar(), false) : new NDArray(loopType, new Shape(dims), false);
+            int size = loopType.SizeOf();
+            Buffer.MemoryCopy(slot, (byte*)r.Address, size, size);
+            return dims.Length == 0 ? r.MarkReductionScalar() : r;
+        }
+
+        /// <summary>
         ///     The flat (<c>axis=None</c>) <c>np.mean</c> through <see cref="NumPyAddReduce"/>, NumPy's <c>_methods._mean</c>
         ///     statement for statement: the sum runs in float64 for bool / integer / char input, in float32 for float16
         ///     input (the result narrowed back to float16), in the input's own dtype for float32 / float64 / complex128, or

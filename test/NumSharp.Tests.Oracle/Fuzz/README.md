@@ -874,7 +874,7 @@ summation-order". Narrowing those branches to the classes they name is a separat
 
 ### np.sum's add reduction (`sum_identity` tier) — 2026-10-04
 
-`sum_identity.jsonl` (`gen_oracle.py sum_identity`, 23,121 cases, floor 22,500) gates `np.sum` as NumPy's
+`sum_identity.jsonl` (`gen_oracle.py sum_identity`, 23,953 cases, floor 23,300) gates `np.sum` as NumPy's
 `add.reduce` and the reductions built on it (`mean`, `nansum`, `nanmean`, `average`, `ndarray.sum`). Two NumPy rules
 decide its bits:
 
@@ -901,6 +901,13 @@ decide its bits:
   small buffers, operands of a few hundred elements reach every regime: one run, per-run calls, buffered fills,
   3-D / 4-D outer blocks, F order, reversed runs, and the float16 `mean` whose keepdims spelling rounds twice.
 - **e** (7): the axes a one-element `np.sum` must still refuse (AxisError, verbatim).
+- **o** (832, 2026-10-05, emitted last so every earlier case keeps its id): an AXIS that leaves ONE output — a 1-D
+  operand's only axis, or an axis whose siblings all have extent 1 (`(n,1)` along 0, `(1,n)` along 1, `(1,n,1)`
+  along 1), plain, stepped and reversed — with section s's (source, loop) pairs, both axis spellings and keepdims,
+  under the same small buffers. NumPy's iterator drops the extent-1 axes, so this is section s's flat schedule, the
+  fills of a cast loop included. NumSharp's axis routes summed a cast loop's whole cast copy in one pairwise call,
+  and walked a reversed axis in memory order even without a cast (NumPy walks it in logical order): 248 of these
+  cases diverge before the fix (plan `docs/plans/api-parameter-parity.md`, item X5).
 
 **Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the tier's valueclass (`sum_identity`). It also
 excuses nothing for a FLAT float `sum` / `mean` over a non-broadcast operand in any other tier

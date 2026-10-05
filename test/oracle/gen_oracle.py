@@ -1451,6 +1451,11 @@ def gen_reduce_kwargs(fns=None, dtypes=None):
 #     NumPy's np.setbufsize; the replay sets and restores it) reach every regime with operands of a few
 #     hundred elements: one run, per-run calls, buffered fills, 3-D / 4-D outer blocks, F order, reversed
 #     runs, and the float16 mean whose keepdims spelling rounds twice.
+#   * section "o": an AXIS that leaves ONE output (a 1-D operand's only axis, or an axis whose siblings all have
+#     extent 1: (n,1) along 0, (1,n) along 1, (1,n,1) along 1) under the same small buffer sizes and the same
+#     (source, loop) pairs. NumPy's iterator drops the extent-1 axes, so this is the flat schedule above, buffer
+#     fills of a cast loop included; NumSharp's axis routes summed a cast loop's whole cast copy in one call
+#     (plan docs/plans/api-parameter-parity.md, item X5).
 # ---------------------------------------------------------------------------------------------
 SUM_IDENTITY_INEXACT = ["float16", "float32", "float64", "complex128"]
 
@@ -1462,6 +1467,17 @@ _SUM_SCHED_PAIRS = [
     ("bool", "float32"),
 ]
 _SUM_SCHED_MEAN_SRCS = ["float64", "float32", "float16", "complex128", "int32", "uint8", "bool"]
+# Section "o": (name, base shape, view builder, the one non-unit axis). Sized for buffer sizes of 16 / 32.
+_SUM_ONE_OUTPUT_LAYOUTS = [
+    ("one_run_1d", (83,), lambda b: b, 0),
+    ("strided_1d", (166,), lambda b: b[::2], 0),
+    ("reversed_1d", (69,), lambda b: b[::-1], 0),
+    ("col_nx1", (83, 1), lambda b: b, 0),
+    ("col_strided_nx1", (166, 1), lambda b: b[::2], 0),
+    ("row_1xn", (1, 83), lambda b: b, 1),
+    ("row_reversed_1xn", (1, 69), lambda b: b[:, ::-1], 1),
+    ("mid_1xnx1", (1, 83, 1), lambda b: b, 1),
+]
 _SUM_SCHED_BUFSIZES = [16, 32]
 # (name, base shape, view builder) — view operations only. Sized for buffer sizes of 16 / 32 elements.
 _SUM_SCHED_LAYOUTS = [
@@ -1710,6 +1726,7 @@ def gen_sum_identity():
                              lambda v, kd=kd: np.mean(v, keepdims=kd), ln, f"s/{src}/b{bufsize}")
         finally:
             np.setbufsize(previous)
+
     # The float16 mean whose two spellings round differently (sum/n -> float16 once, keepdims: through the
     # float32 sum array first): 4096 ones and 4097 x (1 + 2**-10) put the float32 quotient on a float16 tie.
     tie = np.array([1.0] * 4096 + [1 + 2 ** -10] * 4097, dtype=np.float16)
@@ -1734,6 +1751,25 @@ def gen_sum_identity():
                               "expected": {}, "expects_throw": True, "error": _exc(e),
                               "layout": ln, "valueclass": "sum_identity"})
                 n += 1
+
+    # Section "o" (emitted last, so every earlier case keeps its id): the one-output axis schedule (see the section header), every axis spelling of the non-unit axis.
+    for bufsize in _SUM_SCHED_BUFSIZES:
+        previous = np.setbufsize(bufsize)
+        try:
+            for li, (ln, shape, fn, axis) in enumerate(_SUM_ONE_OUTPUT_LAYOUTS):
+                for si, (src, loop) in enumerate(_SUM_SCHED_PAIRS):
+                    base = _sum_sched_values(shape, src, 11000 + 97 * li + si)
+                    view = fn(base)
+                    for ax in (axis, axis - view.ndim):
+                        for kd in (False, True):
+                            params = {"axis": ax, "keepdims": kd, "bufsize": bufsize}
+                            if loop is not None:
+                                params["dtype"] = loop
+                            emit("sum", base, view, params,
+                                 lambda v, loop=loop, ax=ax, kd=kd: np.sum(v, axis=ax, keepdims=kd, dtype=loop), ln,
+                                 f"o/{src}->{loop or src}/b{bufsize}")
+        finally:
+            np.setbufsize(previous)
     if skipped:
         print(f"  (skipped {skipped} sum_identity cases where NumPy raised)")
     return cases

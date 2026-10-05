@@ -1326,9 +1326,13 @@ bit** (`Backends/Default/Math/Reduction/Default.Reduction.Add{,.Exact,.Identity}
 - **Residuals:** a broadcast operand declines to the old fold (value-exact, not order-exact); a sum of SEVERAL NaNs keeps
   another NaN's payload (MSVC's `pairwise_sum` operand order, an `[OpenBugs]` pin); the multi-element nan-reductions
   keep their own folds (the W4-B excuse); an axis reduction in a cast loop whose reduced runs exceed the buffer is not
-  modeled.
-- **Gates:** `sum_identity.jsonl` (23,121 cases, zero excuses; section "s" = 704 order-sensitive flat schedule cases
-  under `np.setbufsize` 16 / 32), `reduce_start.jsonl` (zero excuses), unit `Math/np.sum.{Identity,FlatSchedule,
+  modeled, except when the axis leaves ONE output (a 1-D operand's only axis, or siblings all of extent 1): NumPy runs
+  that as the flat schedule, and so does NumSharp since 2026-10-05 (`TryExactOneOutputAxisSum`, plan
+  `docs/plans/api-parameter-parity.md` X5; the axis route summed the whole cast copy in one call), and a one-output
+  REVERSED axis takes the same route without a cast (the axis kernel walks it in memory order, NumPy in logical
+  order; with several outputs that is still open).
+- **Gates:** `sum_identity.jsonl` (23,953 cases, zero excuses; section "s" = 704 order-sensitive flat schedule cases
+  under `np.setbufsize` 16 / 32, section "o" = 832 one-output axis schedules), `reduce_start.jsonl` (zero excuses), unit `Math/np.sum.{Identity,FlatSchedule,
   CastLoopBlocks}.Test.cs` and `Backends/Kernels/{PairwiseFoldRunKind,CopyRunSubword}Tests.cs`. The gist ports' 150 live
   metric scalars are byte-exact since (134 before; their tests are 0-ULP now).
 

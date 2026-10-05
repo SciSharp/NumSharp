@@ -114,6 +114,41 @@ namespace NumSharp.Tests.Math
         }
 
         /// <summary>
+        ///     An AXIS that leaves ONE output — a 1-D operand's only axis, or an axis whose siblings all have extent 1 — is
+        ///     the flat reduction in NumPy (its iterator drops the extent-1 axes), so a cast loop runs the flat schedule:
+        ///     fills of <c>np.getbufsize()</c> elements, <c>*out += pairwise_sum(fill)</c> each. The axis routes summed the
+        ///     whole cast copy in one pairwise call instead, and walked a REVERSED axis in memory order even without a cast
+        ///     (plan <c>docs/plans/api-parameter-parity.md</c>, item X5); the forward no-cast case was already right and
+        ///     stays as a guard. Every expectation is NumPy 2.4.2's result for the same
+        ///     call on the same ramp.
+        /// </summary>
+        [TestMethod]
+        public void Sum_AxisLeavingOneOutput_RunsTheFlatSchedule()
+        {
+            var fails = new List<string>();
+            const string f32 = "float32 () 6233ce6c";
+            Check(fails, "sum float64 1-D axis 0 dtype=float32", () => np.sum(Ramp(20000, np.float64), 0, np.float32), f32);
+            Check(fails, "sum float64 1-D axis -1 keepdims dtype=float32", () => np.sum(Ramp(20000, np.float64), -1, true, np.float32), "float32 (1,) 6233ce6c");
+            Check(fails, "sum float64 (n,1) axis 0 dtype=float32", () => np.sum(Ramp(20000, np.float64).reshape(20000, 1), 0, np.float32), "float32 (1,) 6233ce6c");
+            Check(fails, "sum float64 (1,n) axis 1 keepdims dtype=float32", () => np.sum(Ramp(20000, np.float64).reshape(1, 20000), 1, true, np.float32), "float32 (1,1) 6233ce6c");
+            Check(fails, "sum float64 (1,n,1) axis -2 dtype=float32", () => np.sum(Ramp(20000, np.float64).reshape(1, 20000, 1), -2, np.float32), "float32 (1,1) 6233ce6c");
+            Check(fails, "sum float64 [::2] axis 0 dtype=float32", () => np.sum(Ramp(40000, np.float64)["::2"], 0, np.float32), "float32 () e0235140");
+            Check(fails, "sum float64 reversed axis 0 dtype=float32", () => np.sum(Ramp(30000, np.float64)["::-1"], 0, np.float32), "float32 () e293ec22");
+            Check(fails, "sum float32 1-D axis 0 dtype=float64", () => np.sum(Ramp(20000, np.float32), 0, np.float64), "float64 () 426a98b40852fbf0");
+            Check(fails, "sum float32 (n,1) axis 0 dtype=float16 (overflows to NaN)", () => np.sum(Ramp(20000, np.float32).reshape(20000, 1), 0, np.float16), "float16 (1,) nan");
+            Check(fails, "sum float16 1-D axis 0 dtype=float32", () => np.sum(Ramp(20000, np.float16), 0, np.float32), "float32 () 44563800");
+            Check(fails, "sum complex128 1-D axis 0 dtype=float64", () => np.sum(Ramp(20000, np.complex128), 0, np.float64), "float64 () 444679cd12d6ca8a");
+            Check(fails, "sum float64 1-D axis 0 dtype=complex128", () => np.sum(Ramp(20000, np.float64), 0, np.complex128), "complex128 () 444679cd12d6ca8e 0000000000000000");
+            Check(fails, "sum int32 1-D axis 0 dtype=float16", () => np.sum(Ramp(20000, np.int32), 0, np.float16), "float16 () 6d33");
+            Check(fails, "sum float64 1-D axis 0 (no cast: already right)", () => np.sum(Ramp(20000, np.float64), 0), "float64 () 444679cd12d6ca88");
+            // A REVERSED axis without a cast: NumPy walks it in logical order (DONT_NEGATE_STRIDES) — axis=None's values.
+            Check(fails, "sum float64 reversed axis 0 (no cast)", () => np.sum(Ramp(30000, np.float64)["::-1"], 0), "float64 () c4527d846302e4ff");
+            Check(fails, "sum float32 reversed axis 0 (no cast)", () => np.sum(Ramp(30000, np.float32)["::-1"], 0), "float32 () 53365e0a");
+            Check(fails, "sum complex128 reversed axis 0 (no cast)", () => np.sum(Ramp(30000, np.complex128)["::-1"], 0), "complex128 () c4527d846302e4fa c4520b0fa2bc75bd");
+            AssertNoMismatch(fails, "an axis that leaves one output runs NumPy's flat schedule, buffer fills of a cast loop included");
+        }
+
+        /// <summary>
         ///     One coalesced run (contiguous, strided, reversed, a transposed or F-order dense block, both axes reversed)
         ///     is ONE call over the whole run — in place, at its stride, whatever its length: a 20000-element run is not
         ///     split at the buffer size, a reversed run is summed in its logical order, a transposed block in memory order.

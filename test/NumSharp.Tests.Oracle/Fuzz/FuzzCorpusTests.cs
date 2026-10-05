@@ -949,7 +949,7 @@ namespace NumSharp.Tests.Fuzz
             ["numpy_f32_kernels.jsonl"] = 140,
             ["numpy_f64_kernels.jsonl"] = 24,
             ["reduce_start.jsonl"] = 8300,   // reduction start rules through the sign of a zero result (2026-10-04): 7,942 at delivery (the uncarved 9,448-cell probe minus 1,506 carved cells); 8,586 once the identity-seeded add reduction fixed the sum / mean / nan-family / trapezoid / evaluate rules (862 carved cells left, pinned in NumSharp.Tests/OpenBugs.Reductions.cs)
-            ["sum_identity.jsonl"] = 22500,  // np.sum's identity add + dtype= loops + the reductions built on it (2026-10-04): 23,121 at delivery, incl. section "s" (704 flat float sum / mean schedule cases: layouts x np.setbufsize 16 / 32)
+            ["sum_identity.jsonl"] = 23300,  // np.sum's identity add + dtype= loops + the reductions built on it (2026-10-04): 23,121 at delivery, incl. section "s" (704 flat float sum / mean schedule cases: layouts x np.setbufsize 16 / 32); +832 section "o" (one-output axis schedules, plan api-parameter-parity X5) - 23,953
             ["nan_order.jsonl"] = 2750,   // float add / multiply NaN-operand order (win-amd64), NaN payloads raw: 2,678 at delivery, + 118 the 2026-10-03 gap probe validated as matching (section G: float16 scans, complex128 subtract, buffered N-D / cast / where= / evaluate / dtype= paths) — 2,796; the paths that differ are [OpenBugs] in NumSharp.Tests/OpenBugs.NaNOperandOrder.cs
             ["out_where.jsonl"] = 6300,   // §B2 out_scan/out_round/out_clip/out_nanarg + the f16/uint8 lanes (dtype-spread gate)
             ["params.jsonl"] = 1190,      // +288 §C1: multi-axis median/average/nanmedian (tuple-axis int[] overloads)

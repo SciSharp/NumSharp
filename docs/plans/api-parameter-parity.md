@@ -132,7 +132,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 - [ ] B1 `np.sum`, `ndarray.sum`: `out=`, `initial=`, `where=`; NumPy's order `(a, axis, dtype, out, keepdims, …)`.
 - [ ] B2 `np.prod`, `ndarray.prod`: `out=`, `initial=`, `where=`.
-- [ ] B3 `np.mean`, `ndarray.mean`: `out=`, `where=`.
+- [ ] B3 `np.mean`, `ndarray.mean`: `out=`, `where=`; and `dtype=` without an axis (no overload takes it: `np.mean(a,
+  dtype=np.float32)` does not compile; the axis forms do).
 - [ ] B4 `np.std`, `np.var`, `ndarray.std`, `ndarray.var`: `out=`, `where=`, `mean=`, `correction=`; NumPy's order
   `(a, axis, dtype, out, ddof, keepdims)`.
 - [ ] B5 `np.nansum`, `np.nanprod`: `dtype=`, `out=`, `initial=`, `where=`.
@@ -213,6 +214,24 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     `NDIter` allocates it F with no copy (16³ float64: 1.4 µs, NumPy 2.7 µs; the direct route + copy measured 7.1).
   - Gate: the `pp_fbcast_*` pair layouts of the binary oracle tiers, 3,074 cases (388 diverge before the fix), and
     `Backends/Kernels/FOrderBroadcastBinaryTests.cs` (3 tests, NumPy-probed literals; all 3 fail before the fix).
+- [x] **X5 `np.sum(a, axis, dtype=…)`: an axis that leaves one output, in a cast loop, is not NumPy's order.** Found
+  by A2's large-size check (`np.var(x, axis=0, dtype=np.float32)` of a 1-D float64 array). Done 2026-10-05.
+  - Proof: `np.sum(x, axis=0, dtype=np.float32)` of a 1-D float64 array of 20,000 elements gave `0x4706ada8` where
+    NumPy (and NumSharp's own `axis=None`) give `0x4706ada6`; the same for `(n,1)` along 0, `(1,n)` along 1 and
+    `(1,n,1)` along 1, at 20,000 and 100,003 elements. The cast-free forms, float32 → float64 and int → float matched.
+  - Cause: NumPy's iterator drops extent-1 axes, so an axis that leaves one output runs the FLAT schedule — a cast
+    loop in fills of `np.getbufsize()`, `*out += pairwise_sum(fill)` each. NumSharp's axis cast route cast a whole
+    copy and summed it in one pairwise call. (`.claude/CLAUDE.md` listed "an axis reduction in a cast loop whose
+    reduced runs exceed the buffer is not modeled" as a residual; this is its one-output part.)
+  - Fix (`Default.Reduction.Add.cs`, `TryExactOneOutputAxisSum`): a cast loop over such an axis runs the flat engine
+    and returns the axis result's shape; so does a REVERSED axis without a cast (the axis kernel walks it in memory
+    order, NumPy in logical order — finding 5; the new oracle section found 32 such cases). Cast-free forward calls
+    keep the axis kernel (already exact, and 10–20 % faster there). NPY/NS for 1-D float64 → float32: 4.5× at 1K, 2.0× at 100K, 1.3× at 10M (the old route took 1.37 µs /
+    20.6 µs / 6.8 ms; NumPy 2.0 µs / 37 µs / 5.9 ms).
+  - Gate: section "o" of the `sum_identity` oracle tier (832 cases under `np.setbufsize(16/32)`; 248 diverge before
+    the fix) and `np_sum_flat_schedule_tests.Sum_AxisLeavingOneOutput_RunsTheFlatSchedule` (17 NumPy-probed cases).
+  - Open (the rest of that residual): an axis reduction with SEVERAL outputs whose reduced runs exceed the buffer in
+    a cast loop (`(2, 20000)` along 1 with `dtype=float32`).
 - [ ] X4 float16 `add` / `subtract` / `multiply` / `divide` with a broadcast, non-contiguous operand set run the
   direct route's scalar General loop: `(30,40,20) F * (30,1,20) F` takes 328 µs (NumPy 72 µs, 0.22×), and
   `(100,100,100)` 27 ms (NumPy 3.0 ms). The same before X3 (HEAD measured 320 µs while computing wrong values).
@@ -242,9 +261,10 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 ## 7. State log
 
+- **2026-10-05**: X5 done (`np.sum` along an axis that leaves one output, in a cast loop), found by A2's large-size
+  check; B3 widened (`np.mean` has no flat `dtype=` overload). Commit: the X5 commit on `journey4`.
 - **2026-10-05**: X3 done (binary ufuncs with an F-ordered broadcast operand), found while proving A2; X4 and
-  findings 4–6 recorded; A2 in progress (proof and design proof above). Commit: the X3 commit on `journey4` (see
-  `git log -- docs/plans/api-parameter-parity.md`).
+  findings 4–6 recorded; A2 in progress (proof and design proof above). Commit `d3c863ef`.
 - **2026-10-05**: A1 done (np.all / np.any reduce prologue, the `reduce_kwargs` tier S2, the null-axis priority);
   G4 added from its finding. Commit `bb5b2fcf`.
 - **2026-10-05**: plan written from the inventory at `2821a708` (66 `np.*` + 14 `ndarray` names with a gap) and the

@@ -72,6 +72,26 @@ namespace NumSharp.Backends
                     return exact;
             }
 
+            // An axis that leaves ONE output — a 1-D operand's only axis, or any axis whose siblings all have extent 1
+            // ((n,1) along 0, (1,n,1) along 1) — is the flat reduction in NumPy: its iterator drops the extent-1 axes, so
+            // the call schedule is the axis=None one, np.getbufsize() fills of a cast loop included. The axis routes
+            // below summed a cast loop's whole cast copy in one pairwise call instead (float64 -> float32 over 20,000
+            // elements: 0x4706ada8 where NumPy gives 0x4706ada6; plan docs/plans/api-parameter-parity.md, item X5).
+            // A cast-free loop over a forward axis stays on the axis kernel: both routes are then one pairwise call over
+            // the run, and the kernel measured 10-20 % faster for it (1-D float64 at 100K: 6.2 vs 7.4 µs). A REVERSED
+            // axis takes the flat engine even without a cast: NumPy walks it in logical order (DONT_NEGATE_STRIDES),
+            // the flat engine does too, and the axis kernel walks memory order (finding 5 of the plan).
+            if (axis_ != null && shape.size > 1 && @out is null && NumPyAddReduce.SupportsLoop(loopType))
+            {
+                int oneAxis = NormalizeAxis(axis_.Value, shape.NDim);
+                if (IsOnlyNonUnitAxis(shape, oneAxis) && (loopType != inputType || shape.strides[oneAxis] < 0))
+                {
+                    var exact = TryExactOneOutputAxisSum(arr, oneAxis, keepdims, loopType);
+                    if (exact is not null)
+                        return exact;
+                }
+            }
+
             // ONE element per output — a one-element input reduced flat (or over its only axis; a 0-d input reads axis 0
             // and -1 as every axis) — is still identity + x in NumPy, never a copy of x. HandleScalarReduction stays the
             // copy amin/amax need (they have no identity). Taken before the cast-loop and bool-loop branches: the
