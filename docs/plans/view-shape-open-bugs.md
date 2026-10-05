@@ -23,11 +23,15 @@ divergence proved), B (confirmed as a parity bug) and F (fixed and gated).
 | 2a | The `Shape` indexer has a setter | 3 pins + `AuditV2.T1_10` | [x] | [x] | [x] | [x] | `bd26afb8` |
 | 2b | `NDArray.shape` returns the array's own dimension array | new | [x] | [x] | [x] | [x] | `b88bcb81` |
 | 2c | `Shape.Dimensions` and `Shape.Strides` return the shape's own arrays | new | [x] | [x] | [x] | [x] | `95fd5149` |
-| 2d | The public `Shape` constructors keep the caller's array | 3 pins + new | [x] | [x] | [x] | [x] | (the commit after `4d06d591`) |
+| 2d | The public `Shape` constructors keep the caller's array | 3 pins + new | [x] | [x] | [x] | [x] | `5c9d7925` |
 | 3 | `choice` without replacement returns a view | 3 pins + 1 control | [x] | [x] | [x] | [x] | `0f904216` |
 
 Order of work: 1, 2a, 2b, 2c, 2d, 3 (highest severity first; see the 2026-10-05 scoring: bug 1 scored 72 to 85, bug 2
 scored 75 to 80, bug 3 scored 8).
+
+**All rows are done (2026-10-05).** The open follow-ups are listed under each bug's status: B1.10, B1.11 and the
+`np.ndarray` defaults (bug 1), the random module's inline `params long[]` sizes and `np.ndindex` (bug 2d), and the
+general fancy-index layout (bug 3, pinned in `OpenBugs.FancyIndex.cs`).
 
 ## The process for each bug
 
