@@ -548,15 +548,16 @@ namespace NumSharp
         ///     along each dimension. Equal to the element strides times the <see cref="dtypesize"/>
         ///     (itemsize), so a stride-0 broadcast axis stays 0 and a negative-stride (reversed) view
         ///     stays negative. A 0-d array reports an empty array. A fresh array is returned on each
-        ///     access. Internal kernels that need ELEMENT strides must read
-        ///     <see cref="Shape"/>.<see cref="View.Shape.Strides"/> instead.
+        ///     access. ELEMENT strides are <see cref="NumSharp.Shape.Strides"/> (also a fresh
+        ///     array per read); code inside NumSharp reads the internal <c>Shape.strides</c> field, which
+        ///     does not allocate.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.strides.html</remarks>
         public long[] strides
         {
             get
             {
-                long[] elementStrides = Storage.Shape.Strides;
+                long[] elementStrides = Storage.Shape.strides;
                 int itemsize = Storage.DTypeSize;
                 var byteStrides = new long[elementStrides.Length];
                 for (int i = 0; i < elementStrides.Length; i++)

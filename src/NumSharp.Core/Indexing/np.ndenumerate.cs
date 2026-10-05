@@ -302,7 +302,7 @@ namespace NumSharp
 
             internal NDIndexWalker(Shape shape)
             {
-                _dims = shape.Dimensions ?? Array.Empty<long>();
+                _dims = shape.dimensions ?? Array.Empty<long>();
                 // A 0-d array has size 1 and an EMPTY coordinate array — one step, index ().
                 _size = shape.size;
             }

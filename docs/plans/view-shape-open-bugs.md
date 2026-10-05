@@ -21,10 +21,10 @@ divergence proved), B (confirmed as a parity bug) and F (fixed and gated).
 |---|---|---|---|---|---|---|---|
 | 1 | The wrap constructors install the caller's layout | 4 pins + new | [x] | [x] | [x] | [x] | `ec28e5b1` |
 | 2a | The `Shape` indexer has a setter | 3 pins + `AuditV2.T1_10` | [x] | [x] | [x] | [x] | `bd26afb8` |
-| 2b | `NDArray.shape` returns the array's own dimension array | new | [x] | [x] | [x] | [x] | (the commit after `bb5b2fcf`) |
-| 2c | `Shape.Dimensions` and `Shape.Strides` return the shape's own arrays | new | [x] | [x] | [x] | [ ] | |
+| 2b | `NDArray.shape` returns the array's own dimension array | new | [x] | [x] | [x] | [x] | `b88bcb81` |
+| 2c | `Shape.Dimensions` and `Shape.Strides` return the shape's own arrays | new | [x] | [x] | [x] | [x] | (the commit after `d3c863ef`) |
 | 2d | The public `Shape` constructors keep the caller's array | new | [x] | [x] | [x] | [ ] | |
-| 3 | `choice` without replacement returns a view | 3 pins + 1 control | [x] | [x] | [x] | [x] | (the commit after `b88bcb81`) |
+| 3 | `choice` without replacement returns a view | 3 pins + 1 control | [x] | [x] | [x] | [x] | `0f904216` |
 
 Order of work: 1, 2a, 2b, 2c, 2d, 3 (highest severity first; see the 2026-10-05 scoring: bug 1 scored 72 to 85, bug 2
 scored 75 to 80, bug 3 scored 8).
@@ -288,11 +288,55 @@ Against the old getter the four copy tests fail; the guards pass.
 
 Gates (on `bb5b2fcf` + 2b): NumSharp.Tests net10.0 17,885 passed and net8.0 17,884 passed (0 failed), Oracle 227
 passed, the four interop suites that need no native binary pass (System.Numerics.Tensors 101 passed, OnnxRuntime 207
-passed + 2 skipped, MLNet 206 passed + 1 skipped, ParquetNet 11 passed; 0 failed). The `[OpenBugs]` failing set is the same as on `bb5b2fcf` without 2b: 69 tests by name. One more
-pin, the timing test `T2_NonZero_Is_Much_Slower_Than_NumPy`, failed once in the baseline's full run and passes alone on
-both builds (noise).
+passed + 2 skipped, MLNet 206 passed + 1 skipped, ParquetNet 11 passed; 0 failed). The `[OpenBugs]` failing set is
+the same as on `bb5b2fcf` without 2b: 69 tests by name. One more pin, the timing test
+`T2_NonZero_Is_Much_Slower_Than_NumPy`, failed once in the baseline's full run and passes alone on both builds (noise).
 
-2c and 2d: not started.
+**2c done.** `Shape.Dimensions` and `Shape.Strides` return a copy on every read (a 0-d shape returns its empty array and
+an uninitialized `default(Shape)` returns `null`, as before), documented why. NumPy: the shape and the strides are
+tuples (B2.4, B2.5), and its `strides` setter validates the request, so no NumPy route reaches an array's own arrays
+(probes P4, P5).
+
+The list of reads came from the compiler again, this time over the whole solution: `[Obsolete]` WARNINGS (CS0618, not
+suppressed anywhere) on `Shape.Dimensions`, `Shape.Strides` and `NDArray.shape` for one build, so every project
+(Core, the friend packages, the tests, the examples and the benchmark) compiled and reported its sites:
+
+- Core: 13 `Dimensions` + 26 `Strides` reads in 12 files. An alias analysis over all 186 `Dimensions`/`Strides` sites
+  of the solution found no write through an alias (indexed assignment, `ref`/`out`, an in-place `Array.*` call or
+  `AsSpan`) and no escape to a caller (`NDIndexWalker._dims` is a private read-only field, read only). So the 39 Core
+  reads were switched mechanically to the internal fields (`dimensions`, `strides`): exactly the behavior before 2c.
+- The friend packages (MLNet 4 + 2, OnnxRuntime 3, pythonnet 3 + 2) keep the public getters. They run once per export,
+  not per element, write nothing through the result, and read through the public surface on purpose (`.claude/CLAUDE.md`:
+  a backend reads `a.Shape.Strides`); the cost is one small allocation per export.
+- The same build listed `NDArray.shape` in Core at exactly the 22 sites 2b kept on purpose, so no target framework
+  hides another internal read.
+- The change was written on `b88bcb81` and rebased onto `d3c863ef` (bug 3's fix `0f904216`, which also switched the 19
+  random-sampling `x.shape` reads, and an F-order broadcast fix). A second whole-solution audit build on the rebased
+  tree found no `Dimensions`/`Strides` read left in Core, and `NDArray.shape` only at the three public wrappers 2b kept
+  (plus two uses of its setter, `result.shape = finalShape`).
+
+Cost: the calls whose Core paths had the 39 reads (`m.strides`, memoryview `Length` and indexer, an N-D `np.dot`,
+a strided integer `np.reciprocal`, `np.cumsum`/`np.cumprod` over an axis and transposed, a strided `np.std`/`np.var`,
+`np.array(double[][])`, `np.indices(Shape)`, `np.unique(..., return_inverse, axis=0)`, an `np.ndenumerate` walk)
+allocate the same bytes as at `b88bcb81` (`np.cumprod` over 1,000 / 10,000 / 100,000 calls: 2,290,344 /
+22,891,720 / 228,914,856 B in both builds) and their times are within the run-to-run noise (two interleaved rounds;
+`np.std` moved between 9.0 and 13.3 µs on both builds).
+
+Tests (`View/Shape.Immutability.Tests.cs`, +7): a write into `x.Shape.Dimensions` / `x.Shape.Strides` leaves `x` alone
+and each read is a new array; it does not reach an array sharing them (`y = x + 1`); a view's (a reversed axis) and a
+free `Shape` value's are copies; 0-d returns empty arrays and `default(Shape)` null (guards). Against the old getters
+the five copy tests fail; the guards pass.
+
+Gates (on `d3c863ef` + 2c, with the OpenBLAS binary staged, so the backend and host-pinned tests run instead of
+skipping): NumSharp.Tests net10.0 18,168 passed and net8.0 18,167 passed (0 failed, 12 skipped), Oracle 255 passed
+(1 skipped); the interop suites pass: System.Numerics.Tensors 101, OnnxRuntime 207 + 2 skipped, MLNet 206 + 1 skipped,
+ParquetNet 11, pythonnet 736 of 736. The `[OpenBugs]` failing set is the same 66 tests by name as on `d3c863ef`
+without 2c (bug 3's fix took the count from 69). On `b88bcb81` the change gave the same answers: 17,892 / 17,891
+passed without the binary staged and the same 69 `[OpenBugs]` tests as 2b. The pythonnet suite needs the staged binary
+(gitignored, `tools/fetch_openblas.py`): without it, 26 of its tests fail the same way with and without 2c ("the interop
+suite runs with OpenBLAS as the default backend").
+
+2d: not started.
 
 ---
 
@@ -330,7 +374,7 @@ uniform path without replacement stays a view (the control test).
 
 ### Status
 
-**Fixed** on 2026-10-05 (the commit after `b88bcb81`), together with three more ownership and layout gaps of random
+**Fixed** on 2026-10-05 (`0f904216`), together with three more ownership and layout gaps of random
 results that a probe found. (Earlier the same day this section read "held": the fix was the other session's uncommitted
 change that bug 1's work saw in the main working tree.)
 

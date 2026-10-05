@@ -66,7 +66,7 @@ namespace NumSharp.Backends
             long n = nd.size;
             bool contig = nd.Shape.IsContiguous;
             var dims = nd.Shape.dimensions;
-            var strides = nd.Shape.Strides;
+            var strides = nd.Shape.strides;
             int ndim = nd.ndim;
             byte* basePtr = (byte*)nd.Address + nd.Shape.offset * nd.dtypesize;
             switch (tc)

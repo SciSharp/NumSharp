@@ -144,5 +144,118 @@ namespace NumSharp.Tests.View
 
             a.shape.Should().Equal(new long[] { 3, 2 });
         }
+
+        /// <summary>
+        ///     Bug 2c: <see cref="Shape.Dimensions"/> is a copy too (NumPy's shape is a tuple, B2.4). It returned the
+        ///     array's own dimension array, so <c>x.Shape.Dimensions[0] = 100</c> made <c>x</c> <c>(100, 4)</c> over 12
+        ///     elements (probe P5).
+        /// </summary>
+        [TestMethod]
+        public void ShapeDimensions_ReturnsACopy()
+        {
+            using var x = np.zeros(new Shape(3, 4));
+            var d = x.Shape.Dimensions;
+            d[0] = 100;
+
+            x.shape.Should().Equal(new long[] { 3, 4 }, "the caller's copy is not the array's dimensions");
+            x.size.Should().Be(12);
+            ReferenceEquals(x.Shape.Dimensions, x.Shape.Dimensions).Should().BeFalse("each read is a fresh array");
+        }
+
+        /// <summary>
+        ///     Bug 2c: <see cref="Shape.Strides"/> is a copy (NumPy's strides are a tuple, B2.5, and its setter validates).
+        ///     It returned the array's own stride array, so <c>x.Shape.Strides[0] = 1000</c> retargeted <c>x</c>'s reads
+        ///     past the buffer while its contiguity flag still said C (probe P4).
+        /// </summary>
+        [TestMethod]
+        public void ShapeStrides_ReturnsACopy()
+        {
+            using var x = np.zeros(new Shape(3, 4));
+            var st = x.Shape.Strides;
+            st[0] = 1000;
+
+            x.Shape.Strides.Should().Equal(new long[] { 4, 1 }, "the caller's copy is not the array's strides");
+            x.strides.Should().Equal(new long[] { 32, 8 }, "NumPy's byte strides follow the unchanged element strides");
+            ReferenceEquals(x.Shape.Strides, x.Shape.Strides).Should().BeFalse("each read is a fresh array");
+        }
+
+        /// <summary>
+        ///     An elementwise result shares its input's dimension and stride arrays, so a write through the input's old
+        ///     <c>Shape.Dimensions</c> / <c>Shape.Strides</c> changed BOTH arrays. NumPy: <c>y.shape == (3, 4)</c>.
+        /// </summary>
+        [TestMethod]
+        public void ShapeDimensionsAndStrides_WriteDoesNotReachArraysSharingThem()
+        {
+            using var x = np.zeros(new Shape(3, 4));
+            using var y = x + 1;
+            var d = x.Shape.Dimensions;
+            var st = x.Shape.Strides;
+            d[1] = 9;
+            st[0] = 7;
+
+            y.shape.Should().Equal(new long[] { 3, 4 });
+            y.Shape.Strides.Should().Equal(new long[] { 4, 1 });
+            x.shape.Should().Equal(new long[] { 3, 4 });
+            x.Shape.Strides.Should().Equal(new long[] { 4, 1 });
+        }
+
+        /// <summary>
+        ///     A view's dimensions and strides (here a reversed axis, stride -1) are copies too.
+        /// </summary>
+        [TestMethod]
+        public void ShapeDimensionsAndStrides_OfAView_AreCopies()
+        {
+            using var x = np.zeros(new Shape(3, 4));
+            using var v = x[":, ::-1"];
+            var d = v.Shape.Dimensions;
+            var st = v.Shape.Strides;
+            d[0] = 50;
+            st[1] = 1;
+
+            v.shape.Should().Equal(new long[] { 3, 4 });
+            v.Shape.Strides.Should().Equal(new long[] { 4, -1 });
+        }
+
+        /// <summary>
+        ///     A <see cref="Shape"/> value that belongs to no array keeps its own dimensions and strides too: its cached
+        ///     size was computed from them at construction.
+        /// </summary>
+        [TestMethod]
+        public void ShapeValue_DimensionsAndStrides_AreCopies()
+        {
+            var s = new Shape(3, 4);
+            var d = s.Dimensions;
+            var st = s.Strides;
+            d[0] = 100;
+            st[1] = 9;
+
+            s.Dimensions.Should().Equal(new long[] { 3, 4 });
+            s.Strides.Should().Equal(new long[] { 4, 1 });
+            s.Size.Should().Be(12);
+        }
+
+        /// <summary>
+        ///     A 0-d shape's dimensions and strides are empty (NumPy's <c>()</c>); there is no element to write into. This
+        ///     already held; it guards the edge the copy rule hands out as is.
+        /// </summary>
+        [TestMethod]
+        public void ShapeDimensionsAndStrides_ZeroDimensional_AreEmpty()
+        {
+            using var a = np.array(5.0);
+            a.Shape.Dimensions.Should().BeEmpty();
+            a.Shape.Strides.Should().BeEmpty();
+        }
+
+        /// <summary>
+        ///     An uninitialized <c>default(Shape)</c> has no arrays, and the getters keep returning <c>null</c> for it
+        ///     rather than throwing. This already held; it guards the copy rule's null branch.
+        /// </summary>
+        [TestMethod]
+        public void DefaultShape_DimensionsAndStrides_AreNull()
+        {
+            Shape s = default;
+            s.Dimensions.Should().BeNull();
+            s.Strides.Should().BeNull();
+        }
     }
 }

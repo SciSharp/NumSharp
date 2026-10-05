@@ -97,7 +97,7 @@ namespace NumSharp
         public static NDArray indices(Shape dimensions, DType dtype = null)
         {
             // A Shape's Dimensions is the live long[] of sizes (null for a default(Shape)).
-            return indices(dimensions.Dimensions ?? Array.Empty<long>(), dtype);
+            return indices(dimensions.dimensions ?? Array.Empty<long>(), dtype);
         }
 
         // ─────────────────────────────────────────────────────────────────────────────
@@ -165,7 +165,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.indices.html</remarks>
         public static NDArray[] indices_sparse(Shape dimensions, DType dtype = null)
         {
-            return indices_sparse(dimensions.Dimensions ?? Array.Empty<long>(), dtype);
+            return indices_sparse(dimensions.dimensions ?? Array.Empty<long>(), dtype);
         }
 
         // ─────────────────────────────────────────────────────────────────────────────

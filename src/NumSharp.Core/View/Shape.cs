@@ -492,16 +492,68 @@ namespace NumSharp
             get => dimensions.Length;
         }
 
+        /// <summary>
+        ///     The extent of every axis (NumPy's <c>ndarray.shape</c>), as a NEW array on every read: NumPy hands out an
+        ///     immutable tuple, so writing into the returned array never changes this shape or any array built on it.
+        /// </summary>
+        /// <value>A copy of the dimensions, the caller's to keep or change. A 0-d shape returns its empty array (there is
+        ///     no element to write into) and an uninitialized <c>default(Shape)</c> returns <c>null</c>.</value>
+        /// <remarks>
+        ///     <para>
+        ///     <b>Why a copy.</b> Shapes and arrays SHARE dimension arrays (an allocation keeps its caller's shape, an
+        ///     elementwise result keeps its input's), so returning the shared array let <c>x.Shape.Dimensions[0] = 100</c>
+        ///     change <c>x</c>, and every array sharing it, to <c>(100, 4)</c> over 12 elements: the cached size, flags and
+        ///     buffer stayed, so the new rows read past the buffer. Plan <c>docs/plans/view-shape-open-bugs.md</c>, bug 2c.
+        ///     </para>
+        ///     <para>
+        ///     The copy costs one small allocation per read. Code inside NumSharp reads the internal <c>dimensions</c> field
+        ///     instead; a caller that needs one extent should use <see cref="this[int]"/> or <see cref="NDim"/>, which do not
+        ///     allocate, and a caller that reads the whole array in a hot loop should hoist it.
+        ///     </para>
+        /// </remarks>
         public readonly long[] Dimensions
         {
             [MethodImpl(Inline)]
-            get => dimensions;
+            get
+            {
+                // An empty array (0-d) has no element to write into and a default Shape has no array at all, so both are
+                // handed out as they are; anything else is cloned so the shared array never leaves the struct.
+                var dims = dimensions;
+                return dims is null || dims.Length == 0 ? dims : (long[])dims.Clone();
+            }
         }
 
+        /// <summary>
+        ///     The stride of every axis in ELEMENTS, as a NEW array on every read: writing into the returned array never
+        ///     changes this shape or any array built on it. NumPy's <c>ndarray.strides</c> counts BYTES; that is
+        ///     <see cref="NDArray.strides"/>, which scales these by the item size.
+        /// </summary>
+        /// <value>A copy of the element strides (0 on a broadcast axis, negative on a reversed one), the caller's to keep or
+        ///     change. A 0-d shape returns its empty array and an uninitialized <c>default(Shape)</c> returns
+        ///     <c>null</c>.</value>
+        /// <remarks>
+        ///     <para>
+        ///     <b>Why a copy.</b> Shapes and arrays SHARE stride arrays, and the cached flags (C/F-contiguity, broadcast,
+        ///     writeable) and every kernel's addressing come from them. Returning the shared array let
+        ///     <c>x.Shape.Strides[0] = 1000</c> retarget <c>x</c>'s reads past its buffer with no check and with stale flags.
+        ///     NumPy has no unchecked route: its <c>strides</c> setter validates the request (<c>PyArray_CheckStrides</c>).
+        ///     Plan <c>docs/plans/view-shape-open-bugs.md</c>, bug 2c.
+        ///     </para>
+        ///     <para>
+        ///     The copy costs one small allocation per read. Code inside NumSharp reads the internal <c>strides</c> field
+        ///     instead; a caller that reads the whole array in a hot loop should hoist it.
+        ///     </para>
+        /// </remarks>
         public readonly long[] Strides
         {
             [MethodImpl(Inline)]
-            get => strides;
+            get
+            {
+                // Same rule as Dimensions: the empty and the missing array are handed out as they are, anything else is
+                // cloned so the shared array never leaves the struct.
+                var st = strides;
+                return st is null || st.Length == 0 ? st : (long[])st.Clone();
+            }
         }
 
         /// <summary>
