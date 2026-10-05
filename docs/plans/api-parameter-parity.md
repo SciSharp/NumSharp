@@ -214,8 +214,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     np.nanmean's integer keepdims (A7, found here).
 - [x] **A4 max/min family: `out=`, `initial=`, `where=` and NumPy's order** for `np.max`, `np.min`, `np.amax`,
   `np.amin`, `np.nanmax`, `np.nanmin`, `ndarray.max`, `ndarray.min`. NumPy: `(a, axis=None, out=None, keepdims,
-  initial, where)`; NumSharp: `(a, axis, keepdims, dtype)`. Pins: the 4 `MaxMinFamily_*` tests. Done 2026-10-05 (this
-  commit).
+  initial, where)`; NumSharp: `(a, axis, keepdims, dtype)`. Pins: the 4 `MaxMinFamily_*` tests. Done 2026-10-05
+  (`1dcaf0d8`).
   - [x] A4a NumPy's parameter order + `out=`
   - [x] A4b `initial=`
   - [x] A4c `where=`
@@ -632,7 +632,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - **2026-10-05**: A4 done (np.max / np.min / np.amax / np.amin / np.nanmax / np.nanmin / ndarray.max / ndarray.min take
   NumPy's `out=` / `initial=` / `where=` in NumPy's order, through a port of NumPy's reduction iterator; the
   `minmax_kwargs` oracle tier; plain np.max of complex128, broadcast and bool inputs and the fresh axis-result layout of
-  every reduction fixed on the way); findings 12–14 recorded. Commit: this one.
+  every reduction fixed on the way); findings 12–14 recorded. Commit `1dcaf0d8`.
 - **2026-10-05**: D7 marked done: the np.ndarray parity session fixed it in `f17c3b2d` (plan `np-ndarray-parity.md`);
   its behaviors checked here against NumPy's values. Next: A4.
 - **2026-10-05**: A7 done (np.nanmean is NumPy's nanmean; `dtype=` added, B6's first part; the `nanmean` oracle tier;
