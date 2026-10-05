@@ -1185,6 +1185,240 @@ def gen_clip_ufunc(dtypes=None, extras=True):
 
 
 # ---------------------------------------------------------------------------------------------
+# reduce_kwargs — the reductions' keyword surface (plan docs/plans/api-parameter-parity.md), op key reduce_kwargs,
+# corpus reduce_kwargs.jsonl.
+#
+# Every ufunc.reduce-based reduction takes (a, axis, [dtype,] out, keepdims, [initial,] where) and runs the same
+# prologue before it reads an element (umath/ufunc_object.c PyUFunc_GenericReduction, umath/reduction.c
+# PyUFunc_ReduceWrapper, multiarray/nditer_constr.c npyiter_fill_axisdata): a read-only out, then a where= mask that
+# does not cast to bool under 'safe', then the axis, then out's rank, then the reduction iterator over
+# [out, input, where] (the "remapped shapes" broadcast text, a mask with more axes than the input, an input that
+# would stretch, a kept reduced axis of out that is not 1 long, an out axis of length 1 that would broadcast).
+# This tier calls each reduction through its NumPy-shaped overload with those keywords and records NumPy's whole
+# outcome: a tuple [returned, the whole base buffer behind out (when out= is given), returned-is-out as a 0-d bool],
+# or NumPy's error verbatim. Masked-off elements count as the reduction's identity, so a where= result is
+# deterministic even without out= (unlike an elementwise ufunc's).
+#
+# Params: {"fn", "a": spec, "axis": null | int | [int, ...], "keepdims": bool, "out": spec?, "where": spec?,
+# "initial": spec?} with the clip_ufunc spec grammar ({"op": k} an operand, {"py": v, "t": kind} a Python scalar).
+# REDUCE_KWARGS_FNS lists the functions whose NumPy-shaped overload exists in NumSharp; each plan item adds its
+# function here when it lands, so a regeneration never records a call the registry cannot make.
+# ---------------------------------------------------------------------------------------------
+
+REDUCE_KWARGS_FNS = {
+    # name: (NumPy callable, whether it takes initial=)
+    "all": (np.all, False),
+    "any": (np.any, False),
+}
+REDUCE_KWARGS_DTYPES = ["bool", "int8", "uint8", "int32", "int64", "float16", "float32", "float64", "complex128"]
+
+
+def gen_reduce_kwargs(fns=None, dtypes=None):
+    """The reductions' keyword surface (op key ``reduce_kwargs``) — see the header above.
+
+    Sections, per function and dtype: A. where= masks of every broadcast form x axis x keepdims, with and without
+    out=, over C / F / strided / transposed / reversed inputs; B. out= of other dtypes and layouts (a strided view of
+    a larger base, an F result, keepdims); C. NumPy's errors in NumPy's order (read-only out first, the mask dtype,
+    the axis, a repeated axis, out's rank, the iterator's shape checks, and pairs of faults that show the order).
+    """
+    fns = fns or list(REDUCE_KWARGS_FNS)
+    dtypes = dtypes or list(REDUCE_KWARGS_DTYPES)
+    cases = []
+    n = 0
+
+    def emit(tag, fn, operands, args, layout):
+        """Record one call. `operands` are (base, view) pairs; `args` maps a NumPy parameter name to its spec."""
+        nonlocal n
+        ops = [view for _, view in operands]
+
+        def resolve(spec):
+            if "py" in spec:
+                return spec["py"]
+            return ops[spec["op"]]
+
+        kw = {}
+        if "axis" in args:
+            ax = args["axis"]
+            kw["axis"] = tuple(ax) if isinstance(ax, list) else ax
+        for name in ("out", "where", "initial"):
+            if name in args:
+                kw[name] = resolve(args[name])
+        if "keepdims" in args:
+            kw["keepdims"] = args["keepdims"]
+        params = dict(args, fn=fn)
+        descs = [describe(base, view) for base, view in operands]
+        cid = f"reduce_kwargs/{fn}/{tag}/{n}"
+        n += 1
+        try:
+            with warnings.catch_warnings(), np.errstate(all="ignore"):
+                warnings.simplefilter("ignore")
+                r = REDUCE_KWARGS_FNS[fn][0](resolve(args["a"]), **kw)
+        except Exception as e:                    # noqa: BLE001 — NumPy's outcome is recorded verbatim
+            cases.append(_error_case("reduce_kwargs", params, descs, e, layout, cid=cid, kind="tuple"))
+            return
+        slots = [np.asarray(r)]
+        if "out" in args:
+            owner = args["out"]["op"]
+            slots.append(operands[owner][0].ravel())
+            slots.append(np.array(r is ops[owner]))
+        cases.append(_case("reduce_kwargs", params, descs, _tuple_expected(slots), layout, "mixed", cid=cid))
+
+    def fresh(shape, dt, kind="C", roll=0):
+        """(base, view) from the value pools in layout C / F / S (stride 2) / R (last axis reversed)."""
+        return _clip_ufunc_view(shape, np.dtype(dt), kind, roll)
+
+    def bool_mask(shape, phase, kind="C"):
+        """A deterministic bool mask (base, view) of `shape`: True except every third element (shifted by phase)."""
+        shape = tuple(shape)
+        cnt = int(np.prod(shape)) if shape else 1
+        if kind == "F" and len(shape) >= 2:
+            base = ((np.arange(cnt) + phase) % 3 != 1).reshape(shape[::-1]).copy()
+            return base, base.T
+        base = ((np.arange(cnt) + phase) % 3 != 1).reshape(shape).copy()
+        return base, base
+
+    def _same(arr):
+        """An array that is its own base: (arr, arr), so describe() serializes it as a view of itself."""
+        return arr, arr
+
+    def result_shape(shape, axis, keepdims):
+        """The reduced shape NumPy gives (axis None / int / list)."""
+        nd = len(shape)
+        axes = range(nd) if axis is None else ([a % nd for a in axis] if isinstance(axis, list) else [axis % nd])
+        if keepdims:
+            return tuple(1 if i in axes else d for i, d in enumerate(shape))
+        return tuple(d for i, d in enumerate(shape) if i not in axes)
+
+    for fn in fns:
+        for s in dtypes:
+            dt = np.dtype(s)
+
+            # ---- A. where= forms x axis x keepdims, over input layouts --------------------------------------------
+            inputs_2d = [("c_contiguous_2d", "C"), ("f_contiguous_2d", "F"), ("strided_2d_cols", "S"),
+                         ("transposed_2d", "T"), ("negstride_2d_offset", "R")]
+            for li, (ln, short) in enumerate(inputs_2d):
+                base, view = LAYOUTS[ln](dt)
+                shape = view.shape
+                masks = {
+                    "full": bool_mask(shape, li),
+                    "fullF": bool_mask(shape, li + 1, "F"),
+                    "row": bool_mask(shape[-1:], li),
+                    "col": bool_mask((shape[0], 1), li + 2),
+                    "zerodT": _same(np.array(True)),
+                    "zerodF": _same(np.array(False)),
+                }
+                for mk, mask in masks.items():
+                    for axis in (None, 0, -1, [0, 1]):
+                        for keepdims in (False, True):
+                            if mk not in ("full", "row") and (axis == [0, 1] or keepdims):
+                                continue                    # the rarer forms ride the plain axes only
+                            args = {"a": {"op": 0}, "axis": axis, "keepdims": keepdims, "where": {"op": 1}}
+                            emit(f"A/{short}/{mk}/{axis}/{int(keepdims)}", fn, [(base, view), mask], args, f"where_{mk}")
+                for pyw in (True, False):
+                    emit(f"A/{short}/py{pyw}", fn, [(base, view)],
+                         {"a": {"op": 0}, "axis": 0, "keepdims": False, "where": {"py": pyw, "t": "bool"}}, "where_pybool")
+
+            # 3-D: a middle axis, a tuple of non-adjacent axes, a transposed input.
+            for ln in ("c_contiguous_3d", "transposed_3d"):
+                base, view = LAYOUTS[ln](dt)
+                shape = view.shape
+                for mk, mask in {"full": bool_mask(shape, 1), "mid": bool_mask((shape[0], shape[1], 1), 2)}.items():
+                    for axis in (1, [0, 2], None):
+                        emit(f"A3/{ln}/{mk}/{axis}", fn, [(base, view), mask],
+                             {"a": {"op": 0}, "axis": axis, "keepdims": False, "where": {"op": 1}}, f"where3_{mk}")
+
+            # ---- B. out= dtypes and layouts, with and without a mask -------------------------------------------
+            base, view = LAYOUTS["c_contiguous_2d"](dt)
+            shape = view.shape
+            for axis, keepdims in ((None, False), (0, False), (1, False), (1, True), ([0, 1], True)):
+                rshape = result_shape(shape, axis, keepdims)
+                for odt in ("bool", "int8", "float64", "complex128"):
+                    for okind in ("C", "S", "F"):
+                        if okind != "C" and (len(rshape) == 0 or odt not in ("bool", "float64")):
+                            continue
+                        if okind == "F" and len(rshape) < 2:
+                            continue
+                        ob = fresh(rshape, odt, okind, 3)
+                        for masked in (False, True):
+                            operands = [(base, view), ob]
+                            args = {"a": {"op": 0}, "axis": axis, "keepdims": keepdims, "out": {"op": 1}}
+                            if masked:
+                                operands.append(bool_mask(shape, 2))
+                                args["where"] = {"op": 2}
+                            emit(f"B/{axis}/{int(keepdims)}/{odt}/{okind}/{'w' if masked else 'u'}", fn, operands, args,
+                                 f"out_{okind}")
+
+            # ---- C. errors in NumPy's order --------------------------------------------------------------------
+            ro_base, ro_view = fresh((5,), "bool")
+            ro_base = ro_base.copy()
+            ro_base.flags.writeable = False
+            readonly_out = (ro_base, ro_base)
+            int_mask = fresh(shape, "int64", "C", 1)
+            int_mask0 = _same(np.array(1, np.int64))
+            f_mask0 = _same(np.array(1.0))
+            short_mask = bool_mask((2,), 0)
+            big_mask = bool_mask((3, 4, 5), 0)
+            lead1_mask = bool_mask((1,) + shape, 0)
+            stretch_in = fresh((1, 5), s, "C", 2)
+            err_cases = [
+                # (tag, operands, args)
+                ("readonly_out", [(base, view), readonly_out], {"a": {"op": 0}, "axis": 0, "keepdims": False, "out": {"op": 1}}),
+                ("readonly_then_mask", [(base, view), readonly_out, int_mask],
+                 {"a": {"op": 0}, "axis": 0, "keepdims": False, "out": {"op": 1}, "where": {"op": 2}}),
+                ("readonly_then_axis", [(base, view), readonly_out], {"a": {"op": 0}, "axis": 7, "keepdims": False, "out": {"op": 1}}),
+                ("int_mask", [(base, view), int_mask], {"a": {"op": 0}, "axis": None, "keepdims": False, "where": {"op": 1}}),
+                ("int_mask_0d", [(base, view), int_mask0], {"a": {"op": 0}, "axis": None, "keepdims": False, "where": {"op": 1}}),
+                ("float_mask_0d", [(base, view), f_mask0], {"a": {"op": 0}, "axis": 1, "keepdims": False, "where": {"op": 1}}),
+                ("mask_then_axis", [(base, view), int_mask], {"a": {"op": 0}, "axis": 7, "keepdims": False, "where": {"op": 1}}),
+                ("mask_then_shape", [(base, view), fresh((2,), "int64")], {"a": {"op": 0}, "axis": None, "keepdims": False, "where": {"op": 1}}),
+                ("axis_oob", [(base, view)], {"a": {"op": 0}, "axis": -3, "keepdims": False, "where": {"py": True, "t": "bool"}}),
+                ("axis_dup", [(base, view), bool_mask(shape, 0)], {"a": {"op": 0}, "axis": [1, -1], "keepdims": False, "where": {"op": 1}}),
+                ("axis_oob_before_dup", [(base, view), bool_mask(shape, 0)], {"a": {"op": 0}, "axis": [0, 0, 9], "keepdims": False, "where": {"op": 1}}),
+                ("out_rank", [(base, view), fresh((4, 1), "bool")], {"a": {"op": 0}, "axis": 1, "keepdims": False, "out": {"op": 1}}),
+                ("out_rank_keepdims", [(base, view), fresh((4,), "bool")], {"a": {"op": 0}, "axis": 1, "keepdims": True, "out": {"op": 1}}),
+                ("out_rank_flat", [(base, view), fresh((1,), "bool")], {"a": {"op": 0}, "axis": None, "keepdims": False, "out": {"op": 1}}),
+                ("out_extent", [(base, view), fresh((3,), "bool")], {"a": {"op": 0}, "axis": 1, "keepdims": False, "out": {"op": 1}}),
+                ("out_extent_masked", [(base, view), fresh((3,), "bool"), bool_mask(shape, 1)],
+                 {"a": {"op": 0}, "axis": 1, "keepdims": False, "out": {"op": 1}, "where": {"op": 2}}),
+                ("out_extent_0d_masked", [(base, view), fresh((), "bool"), short_mask],
+                 {"a": {"op": 0}, "axis": None, "keepdims": False, "out": {"op": 1}, "where": {"op": 2}}),
+                ("out_len1", [(base, view), fresh((1,), "bool")], {"a": {"op": 0}, "axis": 1, "keepdims": False, "out": {"op": 1}}),
+                ("out_keepdims_len1", [(base, view), fresh((1, 1), "bool")], {"a": {"op": 0}, "axis": 1, "keepdims": True, "out": {"op": 1}}),
+                ("out_reduction_len", [(base, view), fresh(shape, "bool")], {"a": {"op": 0}, "axis": 1, "keepdims": True, "out": {"op": 1}}),
+                ("out_reduction_len_flat", [(base, view), fresh((4, 1), "bool")], {"a": {"op": 0}, "axis": None, "keepdims": True, "out": {"op": 1}}),
+                ("out_keepdims_extent", [(base, view), fresh((4, 2), "bool")], {"a": {"op": 0}, "axis": 1, "keepdims": True, "out": {"op": 1}}),
+                ("mask_short", [(base, view), short_mask], {"a": {"op": 0}, "axis": 0, "keepdims": False, "where": {"op": 1}}),
+                ("mask_more_dims", [(base, view), big_mask], {"a": {"op": 0}, "axis": None, "keepdims": False, "where": {"op": 1}}),
+                ("mask_lead1", [(base, view), lead1_mask], {"a": {"op": 0}, "axis": 0, "keepdims": False, "where": {"op": 1}}),
+                ("input_stretch", [stretch_in, bool_mask(shape, 0)], {"a": {"op": 0}, "axis": 0, "keepdims": False, "where": {"op": 1}}),
+                ("input_stretch_flat", [stretch_in, bool_mask(shape, 0)], {"a": {"op": 0}, "axis": None, "keepdims": False, "where": {"op": 1}}),
+                ("rank_before_shape", [(base, view), fresh((2, 2, 2), "bool"), short_mask],
+                 {"a": {"op": 0}, "axis": 1, "keepdims": False, "out": {"op": 1}, "where": {"op": 2}}),
+                ("stretch_and_out", [stretch_in, fresh((3,), "bool"), bool_mask(shape, 0)],
+                 {"a": {"op": 0}, "axis": 0, "keepdims": False, "out": {"op": 1}, "where": {"op": 2}}),
+            ]
+            for tag, operands, args in err_cases:
+                emit(f"C/{tag}", fn, operands, args, "errors")
+
+            # 0-d input: axis 0 and -1 mean "no axis"; a mask with an axis is too many dimensions.
+            z_base, z_view = LAYOUTS["scalar_0d"](dt)
+            for axis in (None, 0, -1, 1):
+                emit(f"Z/axis{axis}", fn, [(z_base, z_view), _same(np.array(False))],
+                     {"a": {"op": 0}, "axis": axis, "keepdims": False, "where": {"op": 1}}, "scalar_0d")
+            emit("Z/mask1d", fn, [(z_base, z_view), bool_mask((1,), 0)],
+                 {"a": {"op": 0}, "axis": None, "keepdims": False, "where": {"op": 1}}, "scalar_0d")
+            emit("Z/out0d", fn, [(z_base, z_view), fresh((), "float64")],
+                 {"a": {"op": 0}, "axis": None, "keepdims": True, "out": {"op": 1}}, "scalar_0d")
+
+            # Empty input: a reduced empty axis is the identity everywhere.
+            e_base, e_view = LAYOUTS["empty_2d"](dt)
+            for axis in (None, 0, 1):
+                emit(f"E/axis{axis}", fn, [(e_base, e_view), bool_mask(e_view.shape, 0)],
+                     {"a": {"op": 0}, "axis": axis, "keepdims": False, "where": {"op": 1}}, "empty_2d")
+    return cases
+
+
+# ---------------------------------------------------------------------------------------------
 # The identity-seeded add reduction — op keys sum / mean / nansum / nanmean / average /
 # ndarray.sum, corpus sum_identity.jsonl.
 #
@@ -16245,6 +16479,11 @@ def main():
         cases = gen_clip_ufunc()
         cases += char_tier("clip_ufunc")
         write_jsonl(os.path.join(corpus_dir, "clip_ufunc.jsonl"), cases)
+    elif mode == "reduce_kwargs":
+        # The reductions' keyword surface (plan docs/plans/api-parameter-parity.md): out= / where= / keepdims /
+        # axis forms and NumPy's reduce-prologue errors, through each function's NumPy-shaped overload. Its own
+        # file, so regenerating it renumbers nothing else.
+        write_jsonl(os.path.join(corpus_dir, "reduce_kwargs.jsonl"), gen_reduce_kwargs())
     elif mode == "sum_identity":
         # np.sum's identity-seeded add reduction (+0.0 + -0.0 = +0.0) and its dtype= loop, with the
         # reductions built on it (mean / nansum / nanmean / average / ndarray.sum). No Char rows: the

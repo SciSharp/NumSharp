@@ -287,6 +287,7 @@ python test/oracle/gen_oracle.py nan_order        # float add/multiply NaN-opera
 python test/oracle/gen_oracle.py reduce_start     # how reductions/scans/products START, via the sign of a zero result (carve: _rs_carved)
 python test/oracle/gen_oracle.py sum_identity     # np.sum's identity start, dtype= loops, and the flat add.reduce schedule (np.setbufsize 16 / 32)
 python test/oracle/gen_oracle.py clip_ufunc       # np.clip as a ufunc: broadcast bounds, out=, where=, overlap, the float loop
+python test/oracle/gen_oracle.py reduce_kwargs    # reductions through their NumPy-shaped overload: out=, where=, axis forms, prologue errors
 python test/oracle/gen_oracle.py precision        # truthful-vs-precise (adversarial accumulation; needs mpmath)
 python test/oracle/gen_oracle.py products         # CBLAS product family values (inner/vdot/vecdot/matvec/...)
 python test/oracle/gen_oracle.py fft              # np.fft.* — 1-D/N-D/hermitian transforms + freq/shift helpers
@@ -1559,6 +1560,34 @@ using .NET's NaN bits, calls NumPy runs on its const loop (array bounds constant
 one-element calls off the trivial loop) running on the general one, and — library-wide — the ufunc
 out=/where= routes writing heap garbage into the masked-off positions of an out that overlaps an input
 (the masked out must be READWRITE, NumPy's rule).
+
+### The reductions' keyword surface (`reduce_kwargs` tier)
+
+`reduce_kwargs.jsonl` (`gen_oracle.py reduce_kwargs`, 4,752 cases, floor 4,500; 2026-10-05; plan
+`docs/plans/api-parameter-parity.md`) calls each reduction through its NumPy-shaped overload with the keywords
+NumPy's `ufunc.reduce` takes. `REDUCE_KWARGS_FNS` in the generator lists the functions whose overload exists; it
+starts with `np.all` / `np.any` (plan item A1) and grows with each plan item. Sections, per function and dtype
+(bool, int8, uint8, int32, int64, float16, float32, float64, complex128 — the value pools' NaN / ±0 / inf exercise the
+truth value):
+- **A** — `where=` in every broadcast form (full C and F masks, a row, a column, 0-d True / False arrays, Python
+  bools) x axis (None, 0, -1, a tuple) x keepdims, over C / F / strided / transposed / reversed inputs, and a 3-D
+  input with a middle axis and a non-adjacent tuple;
+- **B** — `out=` of another dtype (bool, int8, float64, complex128) and layout (C, a strided view of a larger base,
+  F), keepdims-shaped, with and without a mask;
+- **C** — NumPy's reduce-prologue errors and their ORDER: a read-only out first (it is checked while the arguments
+  are parsed), then a non-bool mask (`Cannot cast array data|scalar from dtype(...)`), the axis, a repeated axis,
+  out's rank (`...has the wrong number of dimensions...`), then the reduction iterator's shape checks — the
+  remapped-shapes broadcast text, `input operand has more dimensions than allowed by the axis remapping`,
+  `non-broadcastable operand with shape ... doesn't match the broadcast shape ...` (the input is never stretched),
+  `operand was set up as a reduction along axis ...` and `output operand requires a reduction along dimension ...`;
+- **Z / E** — a 0-d input (axis 0 and -1 mean "no axis") and an empty one.
+
+Every value case is a TUPLE: the returned array, then (with out=) the whole base buffer behind out and a 0-d bool
+that is true when out itself was returned. Arguments use the `clip_ufunc` spec grammar
+(`OpRegistry.ReduceKwargs.cs`). Zero excuses: `reduce_kwargs` is in `ByteExactArithmeticUnaryOps`. The checks are one
+port of NumPy's `PyUFunc_GenericReduction` / `PyUFunc_ReduceWrapper` / `npyiter_fill_axisdata`
+(`ReductionArguments.cs`), which each later reduction reuses. Against the code before that port, 432 of the 4,752
+cases diverge (np.all / np.any accepted a non-bool mask, stretched the input, and raised generic texts).
 
 ### np.random byte-parity (`random_parity` tiers)
 

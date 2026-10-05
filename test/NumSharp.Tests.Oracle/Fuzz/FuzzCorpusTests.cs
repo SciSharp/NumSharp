@@ -488,6 +488,16 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void ClipUfunc() => RunCorpus("clip_ufunc.jsonl");
 
+        /// <summary>
+        /// The reductions' keyword surface (gen_reduce_kwargs, plan docs/plans/api-parameter-parity.md): each reduction
+        /// through its NumPy-shaped overload with out= (dtypes, strided / F views, keepdims), where= (every broadcast
+        /// form, Python bools, 0-d), every axis form, 0-d and empty inputs, and NumPy's reduce-prologue errors in
+        /// NumPy's order (read-only out, the mask dtype, the axis, out's rank, the reduction iterator's shape checks).
+        /// Each value case also asserts the whole buffer behind out and that out itself is returned. Zero excuses.
+        /// </summary>
+        [TestMethod]
+        public void ReduceKwargs() => RunCorpus("reduce_kwargs.jsonl");
+
         // W7 logic (T13): isnan/isinf/isfinite (unary->bool), maximum/minimum (NaN-propagating),
         // fmax/fmin (NaN-ignoring), isclose (binary->bool) — NaN/inf-laced operands.
         [TestMethod]
@@ -970,6 +980,7 @@ namespace NumSharp.Tests.Fuzz
             ["specials.jsonl"] = 1920,
             ["stat.jsonl"] = 3412,
             ["clip_ufunc.jsonl"] = 2100,   // np.clip as a ufunc call: 2,302 at delivery (broadcast bounds, out=, where=, overlap, the float loop choice, errors)
+            ["reduce_kwargs.jsonl"] = 4500, // the reductions' keyword surface: 4,752 at delivery (np.all / np.any)
             ["clip_pyint.jsonl"] = 3900,   // np.clip with Python-int bounds: 4,175 at delivery (8 integer dtypes + Char x bound pairs x 12 layouts, the dtype=/out= rows, bool/float/complex)
             ["tail.jsonl"] = 1872,
             ["unary.jsonl"] = 5969,

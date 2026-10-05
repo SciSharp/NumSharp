@@ -160,13 +160,20 @@ namespace NumSharp.Backends
         /// NumPy requires the where mask to be exactly bool — its converter
         /// casts with the 'safe' rule, and only bool→bool passes
         /// (_wheremask_converter, ufunc_object.c:580). Error text verbatim.
+        /// Shared by the elementwise ufuncs and every reduction's <c>where=</c>
+        /// (<see cref="ReductionArguments"/>), which use the same converter.
         /// </summary>
-        private static void ValidateWhereMask(NDArray? where)
+        /// <param name="where">The caller's mask, or <c>null</c> for NumPy's <c>where=True</c>.</param>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array. NumPy raises
+        /// <c>TypeError</c>; the house type for this check is <see cref="ArgumentException"/>, with NumPy's text:
+        /// "Cannot cast array data from …" for an array, "Cannot cast scalar from …" for a 0-d array
+        /// (PyArray_FromAny reports a 0-d source as a scalar; probed 2.4.2 with <c>np.array(1)</c>).</exception>
+        internal static void ValidateWhereMask(NDArray? where)
         {
             if (where is null || where.typecode == NPTypeCode.Boolean)
                 return;
             throw new ArgumentException(
-                $"Cannot cast array data from dtype('{where.typecode.AsNumpyDtypeName()}') " +
+                $"Cannot cast {(where.ndim == 0 ? "scalar" : "array data")} from dtype('{where.typecode.AsNumpyDtypeName()}') " +
                 "to dtype('bool') according to the rule 'safe'");
         }
 

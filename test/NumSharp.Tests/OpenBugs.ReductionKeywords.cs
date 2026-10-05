@@ -43,8 +43,9 @@ namespace NumSharp.Tests
     ///     and this file pins the keywords, not that mapping.
     ///     </para>
     ///     <para>
-    ///     <b>A sibling pin</b> (<see cref="AllAny_Where_NonBoolMask_RaisesNumPysCastError"/>): <c>np.all</c> /
-    ///     <c>np.any</c> already HAVE <c>where=</c>, but accept a non-bool mask where NumPy raises.
+    ///     <b>A former sibling pin</b>: <c>np.all</c> / <c>np.any</c> already had <c>where=</c> but accepted a
+    ///     non-bool mask. Fixed by the shared reduce prologue (<c>ReductionArguments</c>, plan item A1); its cases
+    ///     are in <c>Logic/np.all_any.tuple_out_where.Test.cs</c> and the <c>reduce_kwargs</c> oracle tier.
     ///     </para>
     ///     <para>
     ///     <b>Also observed, not pinned:</b> NumSharp's static overloads are <c>(a, axis, keepdims, dtype)</c>. The
@@ -212,44 +213,6 @@ namespace NumSharp.Tests
             CheckRaises(fails, "np.max(a, where=int64 mask, initial=0.0) (TypeError)", () => Np("max", ("a", A()), ("where", np.array(new long[] { 1, 0, 1, 0, 1, 1 }).reshape(2, 3)), ("initial", 0.0)), "Cannot cast array data from dtype('int64') to dtype('bool') according to the rule 'safe'");
             CheckRaises(fails, "np.max(a, where=(2,) mask, initial=-1.0) (ValueError)", () => Np("max", ("a", A()), ("where", np.array(new[] { true, false })), ("initial", -1.0)), "operands could not be broadcast together with remapped shapes [original->remapped]: (2,3) (2,) ");
             AssertNoMismatch(fails, "NumPy's where= drops the masked elements and needs initial= for max/min");
-        }
-
-        /// <summary>
-        ///     <c>np.all</c> / <c>np.any</c> / <c>ndarray.all</c> / <c>ndarray.any</c> already take <c>where=</c>, but a
-        ///     NON-BOOL mask (int64, float64, uint8) must raise NumPy's cast error: NumPy converts the mask with the
-        ///     'safe' rule, and only bool reaches bool. NumSharp reads the mask's truthiness and reduces, so a numeric
-        ///     array passed by mistake (an index array, a weight vector) silently selects elements.
-        /// </summary>
-        /// <remarks>
-        ///     Root cause: <c>Logic/np.all.cs</c> <c>ApplyWhereForAll</c> / <c>ApplyWhereForAny</c> convert the mask
-        ///     with <c>ToBool</c> (nonzero = True). The elementwise ufunc routes already reject a non-bool mask with
-        ///     NumPy's text (<c>DefaultEngine.UfuncOut.ValidateWhereMask</c>), so the fix is that same check here.
-        ///     Found on 2026-10-04 while validating this file's reflection plumbing against <c>np.all</c>, the one
-        ///     reduction that already has NumPy's <c>where=</c>. These overloads exist, so the cases call them
-        ///     directly.
-        /// </remarks>
-        [TestMethod, OpenBugs]
-        public void AllAny_Where_NonBoolMask_RaisesNumPysCastError()
-        {
-            var fails = new List<string>();
-            var b = np.array(new[] { true, false, true, true, true, true }).reshape(2, 3);
-            var int64Mask = np.array(new long[] { 1, 0, 1, 0, 1, 1 }).reshape(2, 3);
-            var float64Mask = np.array(new[] { 1.0, 0.0, 1.0, 0.0, 1.0, 1.0 }).reshape(2, 3);
-            var uint8Mask = np.array(new byte[] { 1, 0, 1, 0, 1, 1 }).reshape(2, 3);
-            CheckRaises(fails, "np.all(b, where=int64 mask) (TypeError)", () => np.all(b, where: int64Mask),
-                        "Cannot cast array data from dtype('int64') to dtype('bool') according to the rule 'safe'");
-            CheckRaises(fails, "np.any(b, where=int64 mask) (TypeError)", () => np.any(b, where: int64Mask),
-                        "Cannot cast array data from dtype('int64') to dtype('bool') according to the rule 'safe'");
-            CheckRaises(fails, "np.all(b, where=float64 mask) (TypeError)", () => np.all(b, where: float64Mask),
-                        "Cannot cast array data from dtype('float64') to dtype('bool') according to the rule 'safe'");
-            CheckRaises(fails, "np.any(b, where=uint8 mask) (TypeError)", () => np.any(b, where: uint8Mask),
-                        "Cannot cast array data from dtype('uint8') to dtype('bool') according to the rule 'safe'");
-            CheckRaises(fails, "b.all(where=int64 mask) (TypeError)", () => b.all(where: int64Mask),
-                        "Cannot cast array data from dtype('int64') to dtype('bool') according to the rule 'safe'");
-            CheckRaises(fails, "b.any(where=float64 mask) (TypeError)", () => b.any(where: float64Mask),
-                        "Cannot cast array data from dtype('float64') to dtype('bool') according to the rule 'safe'");
-            Check(fails, "np.all(b, where=bool mask) (already right)", () => np.all(b, where: M()), "bool () True");
-            AssertNoMismatch(fails, "NumPy casts where= to bool with the 'safe' rule, which only bool passes");
         }
 
         // ======================================================================================================

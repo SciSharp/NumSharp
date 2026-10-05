@@ -137,7 +137,10 @@ namespace NumSharp.Tests.Fuzz
             "clip_pyint",
             // np.clip as a ufunc call: the same selection, and its overlap / keyword cases carry ONE operand
             // (every argument a view of it, or a Python scalar), so it must not ride the unary-ULP excuse either.
-            "clip_ufunc"
+            "clip_ufunc",
+            // The reductions' keyword surface: all / any reduce bools (no arithmetic), and its error cases carry ONE
+            // operand, so no excuse may apply.
+            "reduce_kwargs"
         };
 
         /// <summary>

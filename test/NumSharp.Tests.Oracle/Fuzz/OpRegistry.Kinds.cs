@@ -201,6 +201,11 @@ namespace NumSharp.Tests.Fuzz
                 case "clip_ufunc":
                     return ClipUfuncFromCorpus(p, ops);
 
+                // A reduction through its NumPy-shaped overload: [returned] or [returned, out base buffer,
+                // returned-is-out] (OpRegistry.ReduceKwargs.cs).
+                case "reduce_kwargs":
+                    return ReduceKwargsFromCorpus(p, ops);
+
                 // (index, value) for every element, in flatiter C-order whatever the layout.
                 case "ndenumerate":
                 {
