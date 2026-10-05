@@ -112,8 +112,17 @@ public class AuditV2_NDArrayCreation
     //
     //   NumPy: `arr.astype(dtype, copy=False)` returns a new view-or-array
     //   *without* mutating arr itself.
+    //
+    //   RESOLVED by e5274cdc (astype(copy:false) follows NumPy — never mutates
+    //   the input on conversion). T1.16 and T1.43 were [OpenBugs] until the
+    //   2026-10-05 run of the whole OpenBugs category found them passing.
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.16")]
+    /// <summary>
+    ///     A converting <c>Cast(copy: false)</c> must return a NEW array and leave the caller's array, its storage and
+    ///     its dtype untouched. The audit-time engine swapped the caller's storage, so every other reference to the
+    ///     array silently changed dtype.
+    /// </summary>
+    [TestMethod] // RESOLVED: the input is never mutated (was [OpenBugs] audit-v2-T1.16).
     public void T1_16_Cast_CopyFalse_MutatesCallerStorage()
     {
         var orig = np.array(new int[] { 1, 2, 3, 4, 5, 6 }).reshape(2, 3);
@@ -122,7 +131,7 @@ public class AuditV2_NDArrayCreation
 
         var result = orig.TensorEngine.Cast(orig, typeof(double), copy: false);
 
-        // The bug: result is `orig` itself, and `orig.Storage` was replaced.
+        // The audit-time bug: result was `orig` itself, and `orig.Storage` was replaced.
         ReferenceEquals(orig, result).Should().BeFalse(
             "Cast(copy=false) must NOT return the same NDArray reference (caller mutation)");
         ReferenceEquals(origStorage, orig.Storage).Should().BeTrue(
@@ -131,13 +140,17 @@ public class AuditV2_NDArrayCreation
             "Cast(copy=false) must NOT change the dtype on the input NDArray");
     }
 
-    // T1.43 is the same defect as T1.16 — Default.Cast.cs reassigns BOTH
-    // nd.Storage AND nd.TensorEngine when copy=false. The engine reassignment
-    // is a no-op aliasing today (engine = nd.TensorEngine captured at line 15,
-    // then written back to nd.TensorEngine), but it documents the intent: the
-    // cast path mutates the caller in-place rather than returning a clean
-    // value. Tracking the bug fix through T1.16 — no separate test needed.
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.43")]
+    // T1.43 is the same defect as T1.16 — at audit time Default.Cast.cs reassigned
+    // BOTH nd.Storage AND nd.TensorEngine when copy=false. The engine reassignment
+    // was a no-op aliasing (engine = nd.TensorEngine captured at the top, then
+    // written back to nd.TensorEngine), but it documented the intent: the cast
+    // path mutated the caller in-place rather than returning a clean value.
+    /// <summary>
+    ///     The empty-array branch of a converting <c>Cast(copy: false)</c> must not mutate the caller either: it returns
+    ///     a new array and leaves the caller's storage in place. The empty branch is a separate early return, so it
+    ///     needs its own pin next to <see cref="T1_16_Cast_CopyFalse_MutatesCallerStorage"/>.
+    /// </summary>
+    [TestMethod] // RESOLVED: the empty input is never mutated (was [OpenBugs] audit-v2-T1.43).
     public void T1_43_Cast_CopyFalse_EmptyArray_AlsoMutatesCaller()
     {
         // The empty-array branch (Default.Cast.cs:18-26) has the same defect
@@ -291,10 +304,18 @@ public class AuditV2_NDArrayCreation
     //     >>> np.ascontiguousarray(np.array(42)).shape
     //     (1,)
     //
-    //   The NumSharp docstring even claims "Return a contiguous array
-    //   (ndim >= 1)", but the implementation does not promote.
+    //   The NumSharp docstring even claimed "Return a contiguous array
+    //   (ndim >= 1)", but the implementation did not promote.
+    //
+    //   RESOLVED by b2a8374b: a 0-D input now returns a length-one view
+    //   (shape (1,), shares storage). Both tests were [OpenBugs] until the
+    //   2026-10-05 run of the whole OpenBugs category found them passing.
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.48")]
+    /// <summary>
+    ///     <c>np.ascontiguousarray</c> of a 0-D array returns shape <c>(1,)</c>: NumPy's contract is <c>ndim &gt;= 1</c>,
+    ///     and callers that index <c>[0]</c> or read <c>shape[0]</c> rely on it.
+    /// </summary>
+    [TestMethod] // RESOLVED: 0-D promotes to (1,) (was [OpenBugs] audit-v2-T1.48).
     public void T1_48_AsContiguousArray_Scalar_DoesNotPromoteTo_1D()
     {
         var scalar = NDArray.Scalar(42);
@@ -306,7 +327,11 @@ public class AuditV2_NDArrayCreation
         r.shape.Should().Equal(new long[] { 1L });
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.48")]
+    /// <summary>
+    ///     <c>np.asfortranarray</c> of a 0-D array returns shape <c>(1,)</c>, the same <c>ndim &gt;= 1</c> contract as
+    ///     <see cref="T1_48_AsContiguousArray_Scalar_DoesNotPromoteTo_1D"/>.
+    /// </summary>
+    [TestMethod] // RESOLVED: 0-D promotes to (1,) (was [OpenBugs] audit-v2-T1.48).
     public void T1_48_AsFortranArray_Scalar_DoesNotPromoteTo_1D()
     {
         var scalar = NDArray.Scalar(42);

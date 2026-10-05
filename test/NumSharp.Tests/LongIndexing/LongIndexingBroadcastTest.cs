@@ -340,11 +340,15 @@ public class LongIndexingBroadcastTest
     }
 
     /// <summary>
-    /// LIMITATION: Sum on broadcast uses inefficient iterator.
-    /// Currently throws "index < Count, Memory corruption expected" for large broadcast.
+    /// np.sum over a broadcast view of ~2.36 billion uint8 ones (more elements than int.MaxValue, one element of
+    /// storage) returns the exact count: the reduction must index with 64-bit counts and must not materialize the view.
     /// </summary>
+    /// <remarks>
+    /// Was [OpenBugs] ("LIMITATION: Sum on broadcast uses inefficient iterator", then throwing "index &lt; Count, Memory
+    /// corruption expected" for a large broadcast) until the 2026-10-05 run of the whole OpenBugs category found it
+    /// passing in under 30 ms, cheap enough for CI unlike the [LargeMemoryTest] siblings in this class.
+    /// </remarks>
     [TestMethod]
-    [OpenBugs]
     public void Broadcast_Sum_InternalError()
     {
         var arr = BroadcastScalar((byte)1);

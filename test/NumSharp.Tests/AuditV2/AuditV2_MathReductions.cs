@@ -151,18 +151,25 @@ public class AuditV2_MathReductions
     }
 
     // ============================================================================
-    // T1.14 — np.convolve accumulates in double, loses int64 precision
+    // T1.14 — np.convolve accumulated in double, lost int64 precision (RESOLVED)
     // ============================================================================
-    // File: src/NumSharp.Core/Math/NDArray.Convolve.cs:138-188 (ConvolveFullTyped<T>)
+    // File (at audit time): src/NumSharp.Core/Math/NDArray.Convolve.cs (ConvolveFullTyped<T>)
     //
-    // The inner loop accumulates `double sum = 0` even for int64 input. Values whose
-    // magnitude exceeds 2^53 (double's mantissa precision) lose precision. NumPy uses
+    // The inner loop accumulated `double sum = 0` even for int64 input. Values whose
+    // magnitude exceeds 2^53 (double's mantissa precision) lost precision. NumPy uses
     // type-specific accumulators (int64 sum for int64 input).
+    //
+    // Resolved by the shared correlate / convolve engine (NDArray.SlidingDot.cs, added
+    // in 12f484c3), which accumulates in the operand dtype, so integer results are exact
+    // at every size. The test was [OpenBugs] until the 2026-10-05 run of the whole
+    // OpenBugs category found it passing.
 
     /// <summary>
-    /// T1.14 — np.convolve with int64 values around 2^53 must preserve full int64 precision.
+    /// T1.14 — np.convolve with int64 values around 2^53 must preserve full int64 precision:
+    /// a double accumulator cannot hold 2^53 + 1, so an int64 signal past 2^53 would come back
+    /// silently changed.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.14")]
+    [TestMethod] // RESOLVED: int64 accumulates exactly (was [OpenBugs] audit-v2-T1.14).
     public void T1_14_Convolve_Int64_PrecisionPreserved()
     {
         // 2^53 + 1 is the smallest positive int64 not exactly representable as double.
@@ -354,28 +361,36 @@ public class AuditV2_MathReductions
     }
 
     // ============================================================================
-    // T1.37 — var / std with ddof >= n returns NaN; NumPy returns +inf
+    // T1.37 — var / std with ddof >= n returned NaN; NumPy returns +inf (RESOLVED)
     // ============================================================================
-    // File: src/NumSharp.Core/Backends/Kernels/DirectILKernelGenerator.Masking.VarStd.cs:42-43
+    // File (at audit time): src/NumSharp.Core/Backends/Kernels/DirectILKernelGenerator.Masking.VarStd.cs
     //
     //   if (size <= ddof)
     //       return double.NaN; // Division by zero or negative
     //
-    // NumPy uses raw IEEE divide: sumOfSquares / (n - ddof). When n-ddof = 0:
+    // NumPy uses raw IEEE divide: sumOfSquares / max(n - ddof, 0). When n-ddof <= 0:
     //   - non-zero numerator -> +inf  (with RuntimeWarning)
     //   - zero numerator     -> NaN  (constant array, 0/0)
     //
-    // NumSharp's element-wise VarSimdHelper unconditionally returns NaN, so non-constant
-    // arrays with ddof >= n return NaN instead of +inf.
+    // NumSharp's element-wise VarSimdHelper unconditionally returned NaN, so non-constant
+    // arrays with ddof >= n returned NaN instead of +inf.
     //
-    // The AXIS path (Default.Reduction.Var.cs:355-366) uses Math.Max(axisSize-ddof, 0)
-    // and `*= adjustment`, which yields +inf correctly for non-zero variance but NaN for
-    // constant slices (0*inf=NaN). Axis path appears to match NumPy. Bug is element-wise only.
+    // The AXIS path (Default.Reduction.Var.cs at audit time) used Math.Max(axisSize-ddof, 0)
+    // and `*= adjustment`, which yielded +inf correctly for non-zero variance but NaN for
+    // constant slices (0*inf=NaN). The axis path appeared to match NumPy; the bug was
+    // element-wise only.
+    //
+    // Resolved by 41785501: np.var / np.std are NumPy's _var / _std statement for
+    // statement, which divide by max(n - ddof, 0) at every size and on every route.
+    // T1.37a/b were [OpenBugs] until the 2026-10-05 run of the whole OpenBugs category
+    // found them passing.
 
     /// <summary>
-    /// T1.37a — np.var on non-constant array with ddof >= n must return +inf (NumPy).
+    /// T1.37a — np.var on a non-constant array with ddof >= n must return +inf (NumPy): the
+    /// positive sum of squares divided by max(n - ddof, 0) = 0. NaN here would hide that the
+    /// data has spread.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.37")]
+    [TestMethod] // RESOLVED: +inf, not NaN (was [OpenBugs] audit-v2-T1.37).
     public void T1_37a_Var_DdofGreaterThanN_NonConstant_ReturnsPositiveInfinity()
     {
         var r = np.var(np.array(new double[] { 1, 2, 3, 4, 5 }), ddof: 10);
@@ -385,9 +400,10 @@ public class AuditV2_MathReductions
     }
 
     /// <summary>
-    /// T1.37b — np.std on non-constant array with ddof >= n must return +inf.
+    /// T1.37b — np.std on a non-constant array with ddof >= n must return +inf: the square
+    /// root of T1.37a's +inf variance.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.37")]
+    [TestMethod] // RESOLVED: +inf, not NaN (was [OpenBugs] audit-v2-T1.37).
     public void T1_37b_Std_DdofGreaterThanN_NonConstant_ReturnsPositiveInfinity()
     {
         var r = np.std(np.array(new double[] { 1, 2, 3, 4, 5 }), ddof: 10);

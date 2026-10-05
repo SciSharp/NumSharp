@@ -17,17 +17,21 @@ namespace NumSharp.Tests.AuditV2;
 public class AuditV2_ManipulationApis
 {
     // =====================================================================
-    // T1.17 — np.expand_dims drops new axis for empty arrays
+    // T1.17 — np.expand_dims dropped the new axis for empty arrays (RESOLVED)
+    //
+    // Fixed by 1fcd6f1e (NumPy-parity for empty arrays in expand_dims / stack /
+    // vstack / cumprod). Both tests were [OpenBugs] until the 2026-10-05 run of
+    // the whole OpenBugs category found them passing.
     // =====================================================================
 
     /// <summary>
-    /// T1.17 — np.expand_dims drops the new axis when input is empty.
+    /// T1.17 — np.expand_dims must add the new axis when the input is empty.
     ///
     /// NumPy 2.4.2: np.expand_dims(np.array([], dtype=float), 0).shape == (1, 0)
-    /// NumSharp:    returns shape (0,) — the empty short-circuit at lines 7-12 returns 'a' unchanged.
-    /// File: src/NumSharp.Core/Manipulation/np.expand_dims.cs:8
+    /// At audit time NumSharp returned shape (0,): an empty short-circuit in
+    /// src/NumSharp.Core/Manipulation/np.expand_dims.cs returned 'a' unchanged.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.17")]
+    [TestMethod] // RESOLVED: the empty input gains the axis (was [OpenBugs] audit-v2-T1.17).
     public void T1_17_ExpandDims_EmptyArray_AddsDimension()
     {
         var e = np.array(new double[] { });
@@ -40,10 +44,11 @@ public class AuditV2_ManipulationApis
     }
 
     /// <summary>
-    /// T1.17 — also broken when expanding to (1, 1, 0) via repeated calls.
+    /// T1.17 — repeated calls must keep adding axes to an empty array (this was
+    /// broken the same way at audit time).
     /// NumPy: np.expand_dims(np.expand_dims(e, 0), 0).shape == (1, 1, 0).
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.17")]
+    [TestMethod] // RESOLVED: nested expansion reaches (1, 1, 0) (was [OpenBugs] audit-v2-T1.17).
     public void T1_17_ExpandDims_EmptyArray_NestedAdd()
     {
         var e = np.array(new double[] { });

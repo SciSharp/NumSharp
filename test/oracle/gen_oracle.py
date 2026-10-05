@@ -5944,8 +5944,10 @@ def gen_groupa():
 # (binary_arith / unary / reduce / ...), so the existing per-tier FuzzMatrix test
 # replays Char alongside int32/float64/etc. — Char is a first-class grid axis member.
 #
-# CARVE-OUTS (kept OUT of the green corpus; each reproduced under [OpenBugs] in
-# OpenBugs.Char.cs / class OpenBugsCharTests): the combos that hit verified NumSharp Char bugs —
+# CARVE-OUTS (kept OUT of the green corpus; each reproduced in OpenBugs.Char.cs /
+# class OpenBugsCharTests): the combos that hit verified NumSharp Char bugs. All of these
+# bugs were FIXED by 22589ad6 (2026-06-30); the pins are plain regression tests since the
+# 2026-10-05 OpenBugs run, and the carve stays until a regeneration re-adds the combos —
 #   * any Char × {uint8,bool} pair   -> promote(Char,Byte)->Byte truncation (arith,
 #     comparison, bitwise) + (Boolean,Char) missing kernel  [BUG: char-promote]
 #   * reciprocal(char)               -> result dtype Double, should be uint16/char

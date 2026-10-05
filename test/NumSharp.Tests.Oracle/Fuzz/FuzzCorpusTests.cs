@@ -305,7 +305,9 @@ namespace NumSharp.Tests.Fuzz
         // where/logic/matmul/rounding/copyto/creation/conversion — 20 tier files). So the existing per-tier gates
         // assert NumSharp's Char ≡ uint16. The verified Char bugs (promote(Char,Byte)->Byte,
         // reciprocal/power/invert, dot 1-D) are carved out of the green corpus and reproduced in
-        // OpenBugs.Char.cs (OpenBugsCharTests) / OpenBugs.FuzzGaps.cs under [OpenBugs].
+        // OpenBugs.Char.cs (OpenBugsCharTests) / OpenBugs.FuzzGaps.cs. The OpenBugs.Char.cs ones are
+        // fixed (22589ad6) and plain regression tests since the 2026-10-05 OpenBugs run, their combos
+        // still carved until a regeneration; dot 1-D is still open under [OpenBugs].
 
         // W3 unary stragglers: exp2/expm1/log2/log10/log1p/sinh/cosh/tanh/arcsin/arccos/arctan/
         // deg2rad/rad2deg/positive across all 13 dtypes and all 26 single-array layouts.

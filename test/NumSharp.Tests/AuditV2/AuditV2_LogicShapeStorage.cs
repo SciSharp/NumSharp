@@ -218,9 +218,14 @@ namespace NumSharp.Tests.AuditV2
         }
 
         // ============================================================================
-        // Tier 2 — Performance gap >2× confirmed (not exact ratio).
+        // Tier 2 — Performance gap >2× confirmed at audit time (not exact ratio).
         // np.all / np.any contiguous int32: ~3× slower than NumPy on 1M elements
         // np.nonzero: ~17× slower than NumPy on 1M elements
+        //
+        // Status of the 2026-10-05 run of the whole OpenBugs category (i9-13900K,
+        // timed sections replayed 5× per configuration, limit / measured):
+        //   np.all     Release 3.5-3.8× under its limit, Debug 0.6× (fails) -> stays [OpenBugs]
+        //   np.nonzero Release 5-8× under its limit,     Debug 1.9-2.7×     -> RESOLVED, tag removed
         // ============================================================================
         /// <summary>
         /// T2 perf — `np.all` on a contiguous all-true int32 1M array is much
@@ -228,6 +233,12 @@ namespace NumSharp.Tests.AuditV2
         /// assert only that the gap exceeds 2× (which is well above the
         /// SIMD/short-circuit headroom available in `NDAllKernel&lt;T&gt;`).
         /// </summary>
+        /// <remarks>
+        /// Still [OpenBugs] after the 2026-10-05 run although it passes in Release: 100 calls take 11-12 ms there
+        /// against the 42 ms limit, but 63-70 ms in a Debug build of NumSharp.Core, so a local Debug run would fail.
+        /// The limit is a hard-coded NumPy baseline, so the test measures the host as much as the code; remove the tag
+        /// only together with a limit that holds for a Debug build too.
+        /// </remarks>
         [TestMethod, OpenBugs(IssueUrl = "audit-v2-T2-all-perf")]
         public void T2_All_Contiguous_Is_Much_Slower_Than_NumPy()
         {
@@ -248,10 +259,17 @@ namespace NumSharp.Tests.AuditV2
         }
 
         /// <summary>
-        /// T2 perf — `np.nonzero` is dramatically slower than NumPy because of
-        /// per-element `long[ndim]` allocation in the masking kernel.
+        /// T2 perf — `np.nonzero` was dramatically slower than NumPy at audit time because of
+        /// per-element `long[ndim]` allocation in the masking kernel. The test now guards the fix:
+        /// 10 calls over 1M elements must stay under 2× the 16 ms NumPy baseline (32 ms).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "audit-v2-T2-nonzero-perf")]
+        /// <remarks>
+        /// Measured on 2026-10-05 (i9-13900K): 4-6 ms in Release (CI's configuration) and 12-17 ms in a Debug build, so
+        /// on that host the limit holds with a 5× margin in Release and about 2× in Debug. Like every hard-coded
+        /// wall-clock limit it can fail on a host that is several times slower or heavily loaded; a failure there is a
+        /// host signal first.
+        /// </remarks>
+        [TestMethod] // RESOLVED: within 2× of NumPy (was [OpenBugs] audit-v2-T2-nonzero-perf).
         public void T2_NonZero_Is_Much_Slower_Than_NumPy()
         {
             const long numpyBaselineMs = 16;
