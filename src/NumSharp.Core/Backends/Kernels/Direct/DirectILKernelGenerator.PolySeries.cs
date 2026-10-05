@@ -1096,7 +1096,14 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldloc, pb);
             EmitLoadIndirect(il, tb);
             EmitConvertTo(il, tb, tr);
-            EmitScalarOperation(il, op == PolyCombineOp.Subtract ? BinaryOp.Subtract : BinaryOp.Add, tr);
+            // NumPy's update is an in-place ufunc over two arrays (`a[:nb] += b`, `a[:nb] -= b`), and its win-amd64 loops
+            // keep the SECOND operand's NaN when an add meets two NaNs (b's, here: the other series, or c1 after `_sub`'s
+            // negation). The bare instruction keeps whichever operand RyuJIT puts first — the target's, as compiled — so
+            // the add is pinned explicitly. Subtract is not commutative and already keeps the first operand's NaN, NumPy's
+            // rule; the pinned emitter forwards it, and float16 / complex unchanged (float16's helper pins the rule
+            // itself, complex follows MSVC's per-part pattern the house kernels do not model either). The long-series
+            // route (CombineViaHouseKernels) gets the same rule from the house kernels.
+            EmitScalarOperation(il, op == PolyCombineOp.Subtract ? BinaryOp.Subtract : BinaryOp.Add, tr, NaNOperandOrder.NumPyUfunc);
             EmitStoreIndirect(il, tr);
             EmitPolyAdvance(il, pa, () => il.Emit(OpCodes.Ldarg_1));
             EmitPolyAdvance(il, pb, () => il.Emit(OpCodes.Ldarg, 4));

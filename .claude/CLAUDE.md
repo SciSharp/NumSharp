@@ -602,7 +602,8 @@ excluded from `intersect1d` but each NaN survives `setxor1d`/`union1d`/`setdiff1
 surviving **float32/float64** NaN is **canonicalized to NumPy's positive quiet NaN** (`0x7ff8000000000000` /
 `0x7fc00000`): NumPy's SIMD float sort (which `unique`/`sort` drive) rewrites EVERY NaN — negative-signed,
 signalling, or payload-bearing — to that single value, while **float16 and complex128 NaNs are left exactly as-is**
-(probed 2.4.2). NumSharp's own `sort` yields .NET's negative NaN and `unique` preserves payloads, so
+(probed 2.4.2). NumSharp's `sort` writes that NaN too (since 2026-10-05: `AxisSort.SortLineF32/F64`; it wrote .NET's
+negative NaN before, which also flipped `{p}fromroots`' NaN sign), but `unique` preserves payloads, so
 `union1d`/`setxor1d`/`setdiff1d` run a guarded NaN-rewrite pass on a float32/float64 result — `np.where(np.isnan(r),
 canonical, r)`, entered only when `np.any(np.isnan(r))` (≈0.3 ms on a 490 K result, skipped when no NaN survives) —
 to stay bit-identical (`CanonicalizeSetOpNaN` in `np.setops.cs`; verified across neg/payload/multi-NaN × f16/f32/f64
@@ -3264,15 +3265,23 @@ step) for a mix of NumPy scalars and Python ints; a typed program per argument-k
   from both. It only reverses axes for all-F operands. `np.add(xp, 1.0, out=)` costs 41 µs into xp's own (3-D
   transposed, 32³) layout against 17.5 µs into C — library-wide. So `MapDomainWith` runs every route over
   `np.transpose(x, layout.DenseAxisOrder())`, which is C-contiguous for a dense permuted x and takes the affine SIMD
-  route. Then `AdoptLayout` relabels the C result's storage with NumPy's layout (`UnmanagedStorage.SetShapeUnsafe`):
-  no element moves, OWNDATA is kept. That shape had been 0.62× NumPy (the 867-cell matrix measured 1-D layouts only)
-  and is now 2.13×.
+  route. Then `NDArray.AdoptLayout` (`Backends/NDArray.AdoptLayout.cs`, shared with np.clip and np.trapezoid) relabels
+  the C result's storage with NumPy's layout (`UnmanagedStorage.SetShapeUnsafe`): no element moves, OWNDATA is kept. It
+  checks the contract (a fresh C-contiguous, offset-0 result) and copies when it does not hold. That shape had been
+  0.62× NumPy (the 867-cell matrix measured 1-D layouts only) and is now 2.13×.
 - **RyuJIT rewrites `(-a) + b` into `b - a`, and that changes a NaN's sign.** The NegateAdd combine kernel (`_sub`'s
   "negate c2, then add c1") got it when the subtrahend's conversion was an inlined float16 → float32/float64 helper.
   `b - a` gives a NaN subtrahend the subtraction's sign rule instead of the negated sign. Fixed by storing the
   negated value and reloading it before the add (`EmitPolyCombine`), and pinned by
   `Sub_EqualLengths_ConvertedFloat16Subtrahend_StillNegatesFirst`. The oracle tokenizes NaN, so only a byte-level
   unit test sees it.
+- **Two NaNs meeting in `_add` / `_sub` keep NumPy's operand's NaN (re-review 2026-10-05).** NumPy's update is an
+  in-place ufunc over two arrays, and its win-amd64 add keeps the SECOND operand's NaN (the other series, or c1 after
+  `_sub`'s negation); subtract keeps the first. The short-series combine kernel (series under 64 elements) kept the
+  target's NaN on every add, while longer series (the house kernels, 3169579a) already matched. `EmitPolyCombine` now
+  emits the add through `EmitScalarOperation(…, NaNOperandOrder.NumPyUfunc)`. Pinned by
+  `AddSub_NaNPair_KeepsNumPysOperand`; it also reaches the U2 algebra, which runs `_add` / `_sub` in every step.
+  Measured cost: none (fixed/unfixed 0.93–1.05 over 11 cells).
 
 ### Polynomial package — calculus family (U4)
 `{p}der` and `{p}int` for the six bases (12 names), with every parameter — `m`, `k`, `lbnd`, `scl`, `axis`
@@ -3510,6 +3519,8 @@ multiply 5.
 where +0.0 and −0.0 meet, NumPy's x86-simd-sort keeps an order that depends on the CPU. NumSharp's sort puts −0.0
 first, which decides a zero coefficient's sign in the recurrence bases. (A second one — a complex product of
 non-finite values without the backend — was zdotu's C99 result construction, now modelled: see the wholeness pass.)
+A NaN root is not a divergence: the sort turns it into the positive quiet NaN and `-r` negates it, as in NumPy (np.sort
+wrote .NET's negative NaN until 2026-10-05, which flipped every NaN coefficient's sign; plan §12, F5).
 
 **The wholeness pass (2026-09-30).** A probe generator (every C# argument kind of the boundary map × every U2
 function and module, pow / maxpower kinds, error-order pairs, non-finite complex products, np.convolve /

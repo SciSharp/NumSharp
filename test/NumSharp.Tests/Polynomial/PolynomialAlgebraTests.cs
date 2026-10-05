@@ -817,6 +817,27 @@ namespace NumSharp.Tests.Polynomial
         }
 
         /// <summary>
+        ///     A NaN root's SIGN follows NumPy's <c>roots.sort()</c> (the 2026-10-05 re-review): NumPy's float sort turns
+        ///     every NaN into the positive quiet NaN, <c>line(-r, 1)</c> negates it, and the products carry that negative
+        ///     NaN into every coefficient it reaches. NumSharp's sort wrote .NET's negative NaN, so the negation made them
+        ///     all positive. Inputs: a positive payload NaN (float64) and a negative payload NaN (float32, whose lines are
+        ///     float64 by array coercion) — the sort's canonical NaN, not the input's bits, decides the result.
+        /// </summary>
+        [TestMethod]
+        public void FromRoots_NaNRoot_TakesTheSortsCanonicalNaN()
+        {
+            double nan5 = BitConverter.UInt64BitsToDouble(0x7ff8000000000005UL);
+            // P.polyfromroots(np.array([1.0, nan5, -2.0])) and C.chebfromroots(...) on NumPy 2.4.2:
+            AssertBytes(np.polynomial.polynomial.polyfromroots(np.array(new[] { 1.0, nan5, -2.0 })), "float64", new long[] { 4 },
+                        "000000000000f8ff000000000000f8ff000000000000f8ff000000000000f03f", "polyfromroots");
+            AssertBytes(np.polynomial.chebyshev.chebfromroots(np.array(new[] { 1.0, nan5, -2.0 })), "float64", new long[] { 4 },
+                        "000000000000f8ff000000000000f8ff000000000000f8ff000000000000d03f", "chebfromroots");
+            // P.polyfromroots(np.array([0.25, -nan(payload 5)], np.float32)) -> float64 [-nan, -nan, 1.0]
+            AssertBytes(np.polynomial.polynomial.polyfromroots(np.array(new[] { 0.25f, BitConverter.UInt32BitsToSingle(0xffc00005U) })),
+                        "float64", new long[] { 3 }, "000000000000f8ff000000000000f8ff000000000000f03f", "float32 roots");
+        }
+
+        /// <summary>
         ///     A complex product of NON-FINITE values without the OpenBLAS backend is NumPy's, byte for byte. NumPy
         ///     reduces a complex convolution position with cblas <c>zdotu</c>, which sums the four products separately
         ///     and returns C99 complex <c>re + im*_Complex_I</c> — the real part picks up <c>im*0</c>, a NaN whenever the

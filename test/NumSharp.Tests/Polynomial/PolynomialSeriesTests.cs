@@ -160,6 +160,76 @@ namespace NumSharp.Tests.Polynomial
             Bits(P.polysub(np.array(new long[] { 1, 2 }), h).GetDouble(0)).Should().Be(0xfff8000000000000UL);
         }
 
+        /// <summary>
+        ///     Pins WHICH NaN <c>_add</c> / <c>_sub</c> keep when both operands hold one at the same position (the
+        ///     2026-10-05 re-review). NumPy's update is an in-place ufunc over two arrays, whose win-amd64 add keeps the
+        ///     SECOND operand's NaN — the other series, or c1 after <c>_sub</c>'s negation — and whose subtract keeps the
+        ///     first. The short-series combine kernel kept the target's NaN on every add until then, while series of 64
+        ///     or more elements (the house kernels) already matched; the U2 algebra (products, division, powers,
+        ///     fromroots, conversions) runs the same kernel through <c>_add</c> / <c>_sub</c>. The oracle tokenizes NaN,
+        ///     so only bytes can gate it.
+        /// </summary>
+        [TestMethod]
+        public void AddSub_NaNPair_KeepsNumPysOperand()
+        {
+            // a = 0x7ff8000000000001 and b = 0xfff8000000000002 at index 0 (NumPy 2.4.2, tobytes().hex()):
+            var a3 = FromBits64(0x7ff8000000000001UL, 0x3ff0000000000000UL, 0x4000000000000000UL);
+            var a2 = FromBits64(0x7ff8000000000001UL, 0x3ff0000000000000UL);
+            var b2 = FromBits64(0xfff8000000000002UL, 0x4008000000000000UL);
+            // c1 longer: c1[:2] += c2 -> add(c1, c2) keeps c2's NaN (b).
+            AssertBytes(P.polyadd(a3, b2), "float64", new long[] { 3 }, "020000000000f8ff00000000000010400000000000000040");
+            // c1 shorter: c2[:2] += c1 -> add(c2, c1) keeps c1's NaN (b again).
+            AssertBytes(P.polyadd(b2, a3), "float64", new long[] { 3 }, "020000000000f8ff00000000000010400000000000000040");
+            // equal lengths take the else branch: c2 += c1 keeps c1's NaN (a).
+            AssertBytes(P.polyadd(a2, b2), "float64", new long[] { 2 }, "010000000000f87f0000000000001040");
+            // c1 longer: c1[:2] -= c2 -> subtract keeps the FIRST operand's NaN (a).
+            AssertBytes(P.polysub(a3, b2), "float64", new long[] { 3 }, "010000000000f87f00000000000000c00000000000000040");
+            // otherwise c2 = -c2; c2[:n] += c1 -> c1's NaN, unnegated (b here, a for the equal lengths).
+            AssertBytes(P.polysub(b2, a3), "float64", new long[] { 3 }, "020000000000f8ff000000000000004000000000000000c0");
+            AssertBytes(P.polysub(a2, b2), "float64", new long[] { 2 }, "010000000000f87f00000000000000c0");
+            // every basis shares the kernel
+            AssertBytes(LA.lagadd(a3, b2), "float64", new long[] { 3 }, "020000000000f8ff00000000000010400000000000000040");
+            AssertBytes(LA.lagsub(b2, a3), "float64", new long[] { 3 }, "020000000000f8ff000000000000004000000000000000c0");
+
+            // float32: the same rule (a = 0x7fc00001, b = 0xffc00002).
+            var f3 = FromBits32(0x7fc00001U, 0x3f800000U, 0x40000000U);
+            var f2 = FromBits32(0x7fc00001U, 0x3f800000U);
+            var g2 = FromBits32(0xffc00002U, 0x40400000U);
+            AssertBytes(P.polyadd(f3, g2), "float32", new long[] { 3 }, "0200c0ff0000804000000040");
+            AssertBytes(P.polyadd(f2, g2), "float32", new long[] { 2 }, "0100c07f00008040");
+            AssertBytes(P.polysub(g2, f3), "float32", new long[] { 3 }, "0200c0ff00000040000000c0");
+            AssertBytes(P.polysub(f3, g2), "float32", new long[] { 3 }, "0100c07f000000c000000040");
+
+            // Long series (the house kernels' route) agree: polyadd(80 ones, 70 ones) and polysub(70, 80) with the
+            // pair at index 0 keep b's NaN: 020000000000f8ff.
+            var la = np.ones(new Shape(80));
+            var lb = np.ones(new Shape(70));
+            la.SetDouble(BitConverter.UInt64BitsToDouble(0x7ff8000000000001UL), 0);
+            lb.SetDouble(BitConverter.UInt64BitsToDouble(0xfff8000000000002UL), 0);
+            Bits(P.polyadd(la, lb).GetDouble(0)).Should().Be(0xfff8000000000002UL);
+            Bits(P.polysub(lb, la).GetDouble(0)).Should().Be(0xfff8000000000002UL);
+        }
+
+        /// <summary>A float64 array holding exactly <paramref name="bits"/> (NaN payloads and signs included).</summary>
+        /// <param name="bits">The element bit patterns.</param>
+        /// <returns>A new C-contiguous 1-D float64 array.</returns>
+        private static NDArray FromBits64(params ulong[] bits)
+        {
+            var d = new double[bits.Length];
+            for (int i = 0; i < bits.Length; i++) d[i] = BitConverter.UInt64BitsToDouble(bits[i]);
+            return np.array(d);
+        }
+
+        /// <summary>A float32 array holding exactly <paramref name="bits"/> (NaN payloads and signs included).</summary>
+        /// <param name="bits">The element bit patterns.</param>
+        /// <returns>A new C-contiguous 1-D float32 array.</returns>
+        private static NDArray FromBits32(params uint[] bits)
+        {
+            var f = new float[bits.Length];
+            for (int i = 0; i < bits.Length; i++) f[i] = BitConverter.UInt32BitsToSingle(bits[i]);
+            return np.array(f);
+        }
+
         [TestMethod]
         public void AddSub_Dtypes_FollowCommonType()
         {

@@ -378,6 +378,9 @@ machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
   - **NaN sign.** `{p}sub` lost a NaN's sign when a float16 subtrahend was converted to float32 or float64 inside
     the fused NegateAdd kernel: RyuJIT rewrote `(-a)+b` as `b-a`. Fixed.
   - **Oracle.** Section R (780 cases: values and a "strides" facet).
+- **Re-review 2026-10-05 (§12), F4.** When an add of `_add` / `_sub` met two NaNs, the short-series combine kernel
+  kept the target's NaN, where NumPy's in-place ufunc keeps the second operand's (the house kernels' route for 64 or
+  more elements already did). Fixed by pinning the add (`NaNOperandOrder.NumPyUfunc`). The U2 algebra inherits it.
 
 - **Scope:**
   - facades: `np.polynomial` + 7 submodules, `[ModuleName]` ×8;
@@ -1787,7 +1790,7 @@ an isolated worktree; NumPy numbers are best-of-9 on the same host, NumSharp's p
 - **NaN bits.** 91 of the 19,837 probe calls differ ONLY in a NaN's sign or payload. They come from NaNs a
   recurrence generates (`inf - inf`) and from NaN-vs-NaN operand priority, where RyuJIT may swap commutative
   operands. This is library-wide ([np-multiply-nan-priority] in the session memory), and the oracle tokenizes NaN,
-  so it is ungated.
+  so it is ungated. (Updated by §12: the house kernels and two package paths now follow NumPy; 59 remain.)
 - **M1 — complex64 values in U3.** NumSharp has one complex width (#569). U1's mapdomain, U4 and U7 emulate NumPy's
   complex64 VALUES on float32 kernels. U3's evaluation computes complex64 loops in complex128, so those values are
   more precise than NumPy's: the dtype divergence of #569 plus a value divergence the other units avoid.
@@ -1796,6 +1799,74 @@ an isolated worktree; NumPy numbers are best-of-9 on the same host, NumSharp's p
   - The general ufunc output allocation is C or F, not NpyIter's K-order. `c0(2,1,1) + F(3,4)` is (12,1,3) in
     NumPy and (1,2,6) here, and NDIter's ALLOCATE operands are C.
   - NumPy 2.x reports all-zero strides for a zero-size array.
+
+---
+
+## 12. Re-review 2026-10-05 — the commits since §11
+
+A second review of the package at ec230a8b. Since §11's d494e83d (6314e156 before the 2026-10-02 rebase) there were
+41 commits, and none of them added or changed polynomial behavior. The polynomial code changed only mechanically:
+14 files, +68 / −98.
+- **Shape immutability** (bd26afb8, b88bcb81, 95fd5149, 5c9d7925): `x.shape` reads became `x.Shape.dimensions`, and
+  a shape over an array Core built became `Shape.Adopt(...)`.
+- **94c9eb6b:** mapdomain's private relabel became the shared `NDArray.AdoptLayout`. It also checks the C-contiguous
+  contract and copies when it does not hold. np.clip and np.trapezoid use it too.
+- **15625040:** the tests read the host's default NaN bits from `HostCpu`, and a vander test uses a 2^56 degree.
+
+**Measured, HEAD vs d494e83d, each build in its own worktree:**
+- **Gates.** On both TFMs: polynomial unit tests 212/212 (the pinned OpenBLAS staged), the six oracle tiers, the
+  host-pinned polyalgebra_parity and polyroots_parity tiers, and BlasBackendDelta pass.
+- **§11's 19,837-call probe, NaN tokenized.** Identical on both builds. The 43 differences are the complex64 class:
+  #569's dtype cells, plus M1's 2 grid2d values.
+- **§11's layout probe.** 5,418 exact, 0 value differences and 22 extent-1-stride-only, on both builds.
+- **Allocations.** Managed bytes per call are identical on 20 of 21 calls. chebval with an F series allocates 576 B
+  less on HEAD. The shape migration added no allocation.
+- **Speed.** 28 cells, one per route and weighted to small calls (P-cores pinned, best of 9, two alternating
+  rounds): HEAD / d494e83d is 0.93–1.06 per cell, which is noise. A focused 3-round A/B of the two slowest cells
+  (chebvander 1K, polypow) overlapped. Against NumPy the geomean is 24.6×. Every cell is ≥ 4.4× except
+  `polyline(1, 2)` at 1.40×, the documented NDArray allocation floor (0.80–1.03× in the U1 matrix).
+
+**The same probe with RAW NaN bits** found 136 differences, 93 of them NaN-only (d494e83d: 91). Four lagint cases with
+lbnd = ±inf changed: three now differ, and one now matches. 3169579a made the house add keep the SECOND operand's NaN,
+as NumPy does. In the N-D integral `tmp[0] += k[i] - lagval(lbnd, tmp)`, that operand is U3's lagval result, and its
+NaN sign or payload is not NumPy's. The old first-operand rule had hidden it. Two of the classes behind the 93 were
+package or library defects, now fixed:
+- **F4 — `_add` / `_sub` kept the wrong NaN (U1, used by U2).** The short-series combine kernel (series under 64
+  elements) kept the target's NaN when an add met two NaNs. NumPy's in-place ufunc keeps the second operand's: the
+  other series, or c1 after `_sub`'s negation. Series of 64 or more elements went through the house kernels and
+  already matched, so one function gave two answers by length. A 216-case NaN-pair probe (6 bases × float64 /
+  float32 / float16 × 6 length pairs × add / sub) had 60 differences, and now has 0. `EmitPolyCombine` emits the
+  add through `EmitScalarOperation(…, NaNOperandOrder.NumPyUfunc)`. Cost: none measured (fixed / unfixed 0.93–1.05
+  over 11 cells).
+- **F5 — np.sort wrote the wrong NaN (library-wide, reached through fromroots).** NumPy's default float32 / float64
+  sort rewrites every NaN of a line longer than one element to the POSITIVE quiet NaN (`0x7ff8000000000000` /
+  `0x7fc00000`). `AxisSort` wrote .NET's negative `double.NaN` / `float.NaN`. `{p}fromroots` sorts its roots, and its
+  lines negate them (`-r`), so every NaN coefficient came out with the wrong sign. The sort's NaN tail is now NumPy's
+  constant; a one-element line and float16 keep their bits, as in NumPy.
+
+Gates: `PolynomialSeriesTests.AddSub_NaNPair_KeepsNumPysOperand`,
+`PolynomialAlgebraTests.FromRoots_NaNRoot_TakesTheSortsCanonicalNaN` and
+`NpSortTests.Sort_FloatNaN_IsNumPysCanonicalQuietNaN` (NumPy-probed bytes). A planted revert of either fix fails its
+tests: 1 and 2 of 3. Full suites, both TFMs: NumSharp.Tests 18,186 / 18,185 passed, Oracle 255 passed, 0 failed.
+
+**NaN bits left (59 of 19,837 probe calls, all NaN-only):**
+- **50 complex128** (conversions 11, products 27, powers 5, fromroots 3, integrals 3, division 1): the library-wide
+  complex add / multiply class. MSVC picks the NaN per part, and per unrolled vector pair for add. The house kernels
+  do not model it either; it is pinned in `OpenBugs.NaNOperandOrder.cs`.
+- **8 float integrals** (lagint 7, hermeint 1) and **1 float hermval2d** (U3 / U4): the package's own step-table
+  kernels do not pin NumPy's NaN order per statement. That needs the second-operand rule for an array-array ufunc
+  statement, the first operand's for scalar math (a 1-D series in U4), and the broadcast-block rule for a statement
+  with a broadcast operand (the body keeps the broadcast operand's NaN, the tail the array's).
+
+**Found, library-wide, not polynomial (open):**
+- `np.unique` / `unique_values` keep a float32 / float64 NaN's payload and sign. NumPy's unique sorts first, so it
+  returns the positive quiet NaN. The set operations already rewrite their results (`CanonicalizeSetOpNaN`); np.unique
+  itself does not.
+- np.sort ignores `kind`. NumPy's 'stable' and 'mergesort' kinds keep every NaN's bits; NumSharp writes the default
+  kind's canonical NaN for every kind.
+- The ufunc output layout (§11) and zero-size strides are unchanged: `c0(2,1,1) + F(3,4)` has element strides
+  (1,2,6) where NumPy has (12,1,3), and `np.zeros((0,3))` has (24,8) bytes where NumPy has (0,0). The strides are
+  pinned in `OpenBugs.EmptyStrides.cs` (264e3793).
 
 ---
 

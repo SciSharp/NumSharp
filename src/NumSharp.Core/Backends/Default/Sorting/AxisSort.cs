@@ -347,21 +347,58 @@ namespace NumSharp.Backends.Sorting
         }
 
         // ----- float radix with NaN-last partition -----
+
+        /// <summary>
+        ///     The NaN NumPy's float32 sort writes: the positive quiet NaN <c>0x7FC00000</c>. NumPy's default sort
+        ///     (x86-simd-sort for 'quicksort' / 'heapsort') replaces every NaN of a line longer than one element —
+        ///     negative, signalling or payload-bearing — with <c>std::numeric_limits&lt;float&gt;::quiet_NaN()</c> after
+        ///     sorting. .NET's <see cref="float.NaN"/> is the NEGATIVE <c>0xFFC00000</c>, so writing it gave every sorted
+        ///     NaN the opposite sign of NumPy's (np.sort, ndarray.sort, and everything that sorts first — polyfromroots'
+        ///     <c>roots.sort()</c> then carried the wrong sign through <c>-r</c> into every coefficient).
+        /// </summary>
+        private static readonly float NumPySortNaN32 = BitConverter.UInt32BitsToSingle(0x7FC00000U);
+
+        /// <summary>
+        ///     The NaN NumPy's float64 sort writes: the positive quiet NaN <c>0x7FF8000000000000</c> (see
+        ///     <see cref="NumPySortNaN32"/>; .NET's <see cref="double.NaN"/> is the negative <c>0xFFF8…</c>).
+        /// </summary>
+        private static readonly double NumPySortNaN64 = BitConverter.UInt64BitsToDouble(0x7FF8000000000000UL);
+
+        /// <summary>
+        ///     Sorts one float32 line in place: the non-NaN values by radix, then the NaN tail.
+        /// </summary>
+        /// <param name="line">The line's first element (byte address).</param>
+        /// <param name="c">The line context: length, stride and the radix scratch buffers.</param>
+        /// <remarks>
+        ///     The tail is NumPy's canonical NaN (<see cref="NumPySortNaN32"/>), not the input NaNs: NumPy's default
+        ///     kind rewrites them all. A one-element line never reaches here (the driver leaves it untouched, as NumPy
+        ///     does), so its NaN keeps its bits. NumPy's 'stable' / 'mergesort' kinds keep each NaN's bits instead;
+        ///     NumSharp ignores <c>kind</c>, so those calls get the default kind's NaN.
+        /// </remarks>
         private static void SortLineF32(byte* line, LineCtx* c)
         {
             long n = c->n; long s = c->inStride; long m = 0;
             for (long i = 0; i < n; i++) { float v = *(float*)(line + i * s); if (!float.IsNaN(v)) c->k32[m++] = FKey32(v); }
             uint* r = RadixSort.SortU32(c->k32, c->t32, m, 4, c->count);
             for (long i = 0; i < m; i++) *(float*)(line + i * s) = FVal32(r[i]);
-            for (long i = m; i < n; i++) *(float*)(line + i * s) = float.NaN;
+            float nan = NumPySortNaN32;
+            for (long i = m; i < n; i++) *(float*)(line + i * s) = nan;
         }
+
+        /// <summary>
+        ///     Sorts one float64 line in place: the non-NaN values by radix, then the NaN tail.
+        /// </summary>
+        /// <param name="line">The line's first element (byte address).</param>
+        /// <param name="c">The line context: length, stride and the radix scratch buffers.</param>
+        /// <remarks>The tail is NumPy's canonical NaN (<see cref="NumPySortNaN64"/>); see <see cref="SortLineF32"/>.</remarks>
         private static void SortLineF64(byte* line, LineCtx* c)
         {
             long n = c->n; long s = c->inStride; long m = 0;
             for (long i = 0; i < n; i++) { double v = *(double*)(line + i * s); if (!double.IsNaN(v)) c->k64[m++] = FKey64(v); }
             ulong* r = RadixSort.SortU64(c->k64, c->t64, m, c->count);
             for (long i = 0; i < m; i++) *(double*)(line + i * s) = FVal64(r[i]);
-            for (long i = m; i < n; i++) *(double*)(line + i * s) = double.NaN;
+            double nan = NumPySortNaN64;
+            for (long i = m; i < n; i++) *(double*)(line + i * s) = nan;
         }
         private static void ArgLineF32(byte* inLine, byte* outLine, LineCtx* c)
         {
