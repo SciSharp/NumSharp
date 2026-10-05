@@ -56,10 +56,13 @@ namespace NumSharp.Tests.Fuzz
         ///     exact SIMD schedules; float16 / complex128 — the sequential loops, which fixed complex NaN propagation and the
         ///     float16 non-C-layout values) and are held BIT-EXACT on every dtype and layout of the nanreduce and specials
         ///     tiers (0 divergences on 2,168 cases when removed from this set — a regression now fails the gate).
+        ///     <c>nanvar</c> / <c>nanstd</c> left on 2026-10-05 (plan api-parameter-parity A3): they are NumPy's
+        ///     <c>nanvar</c> / <c>nanstd</c> statement for statement and are held bit-exact in every tier (the
+        ///     <c>nanvarstd</c> tier included).
         /// </summary>
         private static readonly System.Collections.Generic.HashSet<string> NanReduceOps = new()
         {
-            "nansum", "nanprod", "nanmean", "nanstd", "nanvar", "nanmedian"
+            "nansum", "nanprod", "nanmean", "nanmedian"
         };
 
         private static readonly System.Collections.Generic.HashSet<string> QuantileOps = new()
@@ -145,7 +148,11 @@ namespace NumSharp.Tests.Fuzz
             // api-parameter-parity A2): NumPy's sum schedule, a subtract and a multiply, and an IEEE square root —
             // no platform libm, so a ULP drift is a regression. (ma.var / ma.std keep the reduction blankets, which
             // classify them before this branch: IsMaVarStd.)
-            "var", "std"
+            "var", "std",
+            // np.nanvar / np.nanstd are NumPy's nanvar / nanstd statement for statement since 2026-10-05 (plan
+            // api-parameter-parity A3): two sums in NumPy's schedule over the K-order copy, a subtract, a multiply (the
+            // complex one for a complex input), divisions and an IEEE square root — no platform libm either.
+            "nanvar", "nanstd"
         };
 
         /// <summary>
@@ -285,6 +292,11 @@ namespace NumSharp.Tests.Fuzz
             // every statement of _var is reproduced, so any divergence is a bug. Cells that inherit a residual of
             // np.sum's own schedule are carved by the generator instead, each naming its [OpenBugs] pin.
             if (c.Valueclass == "varstd")
+                return null;
+            // nanvarstd.jsonl (np.nanvar / np.nanstd as NumPy's nanvar / nanstd, plan api-parameter-parity A3: every
+            // layout, dtype, NaN pattern, ddof and dtype= pair, special values, np.setbufsize fills) is held to ZERO
+            // excuses as well.
+            if (c.Valueclass == "nanvarstd")
                 return null;
 
             // reduce_start.jsonl (valueclass "negzero": every operand all -0.0, every result a signed zero) is held to
@@ -631,28 +643,30 @@ namespace NumSharp.Tests.Fuzz
             // making the clip SIMD min/max NaN-aware (the scalar path already propagated). The
             // classifier branch is removed so the matrix verifies clip(NaN) bit-exact.
 
-            // --- NaN-aware reductions (T10 / W4): the nan* family is broadly broken — nanmax / nanmin excepted: they left
-            // NanReduceOps (2026-09-23) and are ENFORCED bit-exact, so none of the excuses below reaches them ---
+            // --- NaN-aware reductions (T10 / W4): the nan* family is broadly broken — nanmax / nanmin (2026-09-23) and
+            // nanvar / nanstd (2026-10-05, plan api-parameter-parity A3) excepted: they left NanReduceOps and are ENFORCED
+            // bit-exact, so none of the excuses below reaches them ---
             if (NanReduceOps.Contains(c.Op))
             {
-                // (W4-E) nanmean/nanstd/nanvar over an EMPTY float16 array (axis=None) throw
+                // (W4-E) nanmean over an EMPTY float16 array (axis=None) throws
                 // "Can't construct NDIterator with an empty shape" instead of returning NaN.
                 if (kind == DivergenceKind.Threw && c.Operands[0].Shape.Any(d => d == 0))
                     return "nan-reduction(empty): throws 'NDIterator empty shape' instead of NaN [known bug]";
                 // (W4-D FIXED 2026-10-04) the complex 1-D axis nansum no longer throws: NanSumComplex's axis route is
                 // NumPy's composition (np.sum of the NaN-replaced array) instead of the NDCoordinatesAxisIncrementor walk
                 // that refused a 1-D shape. The excuse is removed, so a regression turns the gate red.
-                // (W4-A) shape: nanmean/nanstd/nanvar collapse a 1-D axis reduction to [1] instead of
-                // a scalar [], and drop keepdims entirely on the integer input path.
+                // (W4-A) shape: nanmean of an integer / bool input drops keepdims for axis=None (117 nanreduce cases on
+                // 2026-10-05, plan api-parameter-parity A7). Its float path's 1-D axis shape was fixed 2026-10-04, and
+                // nanstd / nanvar, which had both bugs, left this set with A3.
                 if (kind == DivergenceKind.Shape)
-                    return "nan-reduction shape: nanmean/nanstd/nanvar give [1] not scalar on 1-D axis, and ignore keepdims on int input [known bug]";
-                // result dtype (NEP50 accumulator width / complex->real for nanstd/nanvar).
+                    return "nan-reduction shape: nanmean of an integer / bool input drops keepdims for axis=None [known bug]";
+                // result dtype (NEP50 accumulator width).
                 if (kind == DivergenceKind.Dtype)
                     return "nan-reduction result dtype differs (NEP50 accumulator / complex->real) [known bug]";
                 // (W4-C) nanmedian propagates NaN instead of ignoring it.
                 if (kind == DivergenceKind.Value && c.Op == "nanmedian")
                     return "nanmedian: propagates NaN instead of ignoring it [known bug]";
-                // (W4-B) nansum/nanmean/nanstd/nanvar: wrong NaN masking / count, or summation order. Never a
+                // (W4-B) nansum/nanmean/nanprod: wrong NaN masking / count, or summation order. Never a
                 // -0.0 out of nansum / nanmean: they are np.sum / np.mean of the NaN-replaced array, which start from
                 // the identity +0.0 and so cannot be -0.0 in any summation order (see IsIdentitySumSignedZeroFlip).
                 if (kind == DivergenceKind.Value && !IsIdentitySumSignedZeroFlip(c.Op, expected, actual, tc, diffs))

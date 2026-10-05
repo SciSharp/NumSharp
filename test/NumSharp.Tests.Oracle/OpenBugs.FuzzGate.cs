@@ -323,6 +323,36 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
+        /// Every nanvar/nanstd divergence is a real bug since they left the nan-family blankets (2026-10-05, plan
+        /// api-parameter-parity A3): the (W4-A) shape cell of a 1-D axis reduction, the (W4-B) value cell (NaN masking /
+        /// count / summation order), the nan-family dtype cell, and a one-ULP value difference that the single-operand
+        /// unary-ULP branch would otherwise take.
+        /// </summary>
+        [TestMethod]
+        public void NanVarStd_NoDivergenceIsExcused()
+        {
+            var none = System.Array.Empty<BitDiff.Diff>();
+            double v = 1.2345;
+            byte[] nan = BitConverter.GetBytes(double.NaN), zero = BitConverter.GetBytes(0.0);
+            var nanVsZero = new[] { new BitDiff.Diff(0, "NaN", "0000000000000000") };
+            foreach (var op in new[] { "nanvar", "nanstd" })
+            {
+                MisalignedRegistry.Classify(WithAxis(Case(op, ("float64", new long[] { 3 })), 0), DivergenceKind.Shape,
+                    null, null, NPTypeCode.Double, none).Should().BeNull($"{op} of a 1-D array along axis 0 (the old W4-A cell)");
+                MisalignedRegistry.Classify(Case(op, ("float32", new long[] { 8 })), DivergenceKind.Dtype, null, null,
+                    NPTypeCode.Single, none).Should().BeNull($"{op} of float32 returning another dtype");
+                MisalignedRegistry.Classify(Case(op, ("float64", new long[] { 4 })), DivergenceKind.Value,
+                    nan, zero, NPTypeCode.Double, nanVsZero).Should().BeNull($"{op} giving 0 where NumPy has NaN (ddof past the count)");
+                MisalignedRegistry.Classify(WithAxis(Case(op, ("float64", new long[] { 4, 8 })), 0), DivergenceKind.Value,
+                    BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"{op} one ULP off over an axis is not NaN masking or summation order: it is NumPy's nanvar");
+                MisalignedRegistry.Classify(Case(op, ("float64", new long[] { 8 })), DivergenceKind.Value,
+                    BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"{op} one ULP off flat (the unary-ULP branch must not take it)");
+            }
+        }
+
+        /// <summary>
         /// <c>ma.var</c> / <c>ma.std</c> keep the reduction blankets: <c>NDMaskedArray.var</c>'s masked path is its own
         /// arithmetic, not <c>np.var</c>, and its known gaps are plan item A6. The scope is the <c>ma.*</c> id only.
         /// </summary>

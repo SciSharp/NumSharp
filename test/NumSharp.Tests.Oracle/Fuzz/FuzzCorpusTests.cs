@@ -142,6 +142,17 @@ namespace NumSharp.Tests.Fuzz
                 "the forced chunked routes ran only " + (NumSharp.Backends.DefaultEngine.VarStdChunkedRuns - before) + " times");
         }
 
+        // np.nanvar / np.nanstd as NumPy's nanvar / nanstd (gen_nanvarstd, plan api-parameter-parity A3): every catalog
+        // layout (refilled with finite values and NaNs) x dtype x axis x keepdims x ddof {0, 1}, NaN patterns (one, all,
+        // an all-NaN slice per axis, NaN in a complex part, inf), ddof past the non-NaN count of uneven slices, dtype= for
+        // every (input, loop) pair, special values, np.setbufsize fills of a cast loop, order-sensitive sizes, empty
+        // inputs and 0-d axes. Held to ZERO excuses (the "nanvarstd" valueclass): before the port, a 1-D axis gave (1,),
+        // keepdims was dropped, ddof past the count gave 0 instead of NaN, an inf gave 0, float16 / float32 summed in
+        // double, and dtype= did not exist.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void NanVarStd() => RunCorpus("nanvarstd.jsonl");
+
         // np.evaluate / NDExpr: fused trees over the pairwise + single layouts, every dtype, weak /
         // strong literals, comparisons / where / min-max / logical nodes, the unary catalog, root
         // reductions (flat + axis + keepdims) and out= (returned view + whole out base). NumPy has
@@ -980,7 +991,8 @@ namespace NumSharp.Tests.Fuzz
             ["numpy_f32_kernels.jsonl"] = 140,
             ["numpy_f64_kernels.jsonl"] = 24,
             ["reduce_start.jsonl"] = 8300,   // reduction start rules through the sign of a zero result (2026-10-04): 7,942 at delivery (the uncarved 9,448-cell probe minus 1,506 carved cells); 8,586 once the identity-seeded add reduction fixed the sum / mean / nan-family / trapezoid / evaluate rules (862 carved cells left, pinned in NumSharp.Tests/OpenBugs.Reductions.cs)
-            ["varstd.jsonl"] = 15800,  // np.var / np.std as NumPy's _var / _std (2026-10-05, plan api-parameter-parity A2): 16,120 at delivery, sections L / D / T / S / B / M + the char proxy weave
+            ["varstd.jsonl"] = 15800,  // np.var / np.std as NumPy's _var / _std (2026-10-05, plan api-parameter-parity A2): 16,108 at delivery, sections L / D / T / S / B / M + the char proxy weave
+            ["nanvarstd.jsonl"] = 13000,  // np.nanvar / np.nanstd as NumPy's nanvar / nanstd (2026-10-05, plan api-parameter-parity A3): 13,382 at delivery, sections L / N / D / T / S / B / M / E + the char proxy weave
             ["sum_identity.jsonl"] = 23300,  // np.sum's identity add + dtype= loops + the reductions built on it (2026-10-04): 23,121 at delivery, incl. section "s" (704 flat float sum / mean schedule cases: layouts x np.setbufsize 16 / 32); +832 section "o" (one-output axis schedules, plan api-parameter-parity X5) - 23,953
             ["nan_order.jsonl"] = 2750,   // float add / multiply NaN-operand order (win-amd64), NaN payloads raw: 2,678 at delivery, + 118 the 2026-10-03 gap probe validated as matching (section G: float16 scans, complex128 subtract, buffered N-D / cast / where= / evaluate / dtype= paths) — 2,796; the paths that differ are [OpenBugs] in NumSharp.Tests/OpenBugs.NaNOperandOrder.cs
             ["out_where.jsonl"] = 6300,   // §B2 out_scan/out_round/out_clip/out_nanarg + the f16/uint8 lanes (dtype-spread gate)

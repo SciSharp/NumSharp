@@ -10,7 +10,7 @@ namespace NumSharp.Tests
     /// <summary>
     ///     Open bugs in how NumSharp STARTS a reduction, a scan or a size-1 product — found while making
     ///     <c>np.trapezoid</c> bit-exact (commit 94c9eb6b, 2026-10-03) and by the 2026-10-04 reduction-start probe —
-    ///     plus the probe's wrong shapes and errors (groups 4, 6, 7), which NaN a flat sum of several NaNs returns
+    ///     plus the probe's wrong shapes and errors (groups 6, 7), which NaN a flat sum of several NaNs returns
     ///     (group 8), and an axis sum in a cast loop whose rows are longer than the buffer (group 9). Each test asserts NumPy
     ///     2.4.2's answer — dtype, shape and the raw bits of every element — so it FAILS while the bug lives and passes
     ///     once it is fixed. Remove <c>[OpenBugs]</c> from a test when its path is fixed, and move the test next to the
@@ -52,16 +52,22 @@ namespace NumSharp.Tests
     ///     excuses any var/std case (the new <c>varstd.jsonl</c> tier holds them to zero excuses).
     ///     </para>
     ///     <para>
+    ///     Group 4 (2026-10-04) was <c>np.nanstd</c> / <c>np.nanvar</c> returning <c>(1,)</c> for a 1-D axis reduction
+    ///     and dropping <c>keepdims</c> for one element. It is fixed — they are NumPy's <c>nanvar</c> / <c>nanstd</c>
+    ///     statement for statement since 2026-10-05 (plan <c>docs/plans/api-parameter-parity.md</c> A3) — and its test
+    ///     moved to <c>Math/np.nanvar.NumPyPort.Test.cs</c>; the <c>nanvarstd.jsonl</c> tier holds them to zero excuses.
+    ///     </para>
+    ///     <para>
     ///     The 2026-10-04 reduction-start probe ran every reduction, scan and product over all-<c>-0.0</c> operands
     ///     (size 1, length-1 axes, longer runs; C, transposed, reversed and stepped layouts; float64, float32,
     ///     float16 and complex128) against NumPy 2.4.2 bit for bit. The cells NumSharp gets right are the
     ///     <c>reduce_start.jsonl</c> oracle tier (<c>FuzzCorpusTests.ReductionStart</c>; 7,942 at delivery, 8,586
-    ///     once the identity add landed, 8,610 once np.var / np.std became NumPy's <c>_var</c>). The cells it gets
-    ///     wrong are that tier's carve (<c>gen_oracle._rs_carved</c>, one rule per root cause, exactly the 838 differing
-    ///     cells), and every rule names the test below that pins it.
+    ///     once the identity add landed, 8,610 once np.var / np.std became NumPy's <c>_var</c>, 8,666 once np.nanvar /
+    ///     np.nanstd became NumPy's <c>nanvar</c>). The cells it gets wrong are that tier's carve (<c>gen_oracle._rs_carved</c>,
+    ///     one rule per root cause, exactly the 782 differing cells), and every rule names the test below that pins it.
     ///     </para>
     ///     <para>
-    ///     The probe also found reductions that return the wrong shape (groups 4 and 6) and <c>np.trapezoid</c>'s
+    ///     The probe also found reductions that return the wrong shape (group 6; group 4 is fixed) and <c>np.trapezoid</c>'s
     ///     error for an axis outside <c>y</c> (group 7). Those tests use ordinary values, where a value comparison
     ///     alone already fails.
     ///     </para>
@@ -373,38 +379,6 @@ namespace NumSharp.Tests
                 // Restore the engine-wide backend even when an assertion throws (see the test above).
                 engine.Blas = saved;
             }
-        }
-
-        // ======================================================================================================
-        //  GROUP 4 — nanstd / nanvar return the wrong shape for a 1-D axis reduction and a one-element keepdims
-        //  (the rest of the nan family's size-1 and 1-D shapes is fixed; see np.sum.Identity.Test.cs).
-        // ======================================================================================================
-
-        /// <summary>
-        ///     <c>np.nanstd</c> and <c>np.nanvar</c> of a float32/float64 1-D array along <c>axis=0</c> must return a
-        ///     0-d result (shape <c>(1,)</c> with <c>keepdims</c>). NumSharp returns <c>(1,)</c>, and <c>(1,1)</c> with
-        ///     <c>keepdims</c>. A one-element input with <c>keepdims</c> has the opposite bug, for every float dtype:
-        ///     NumSharp drops <c>keepdims</c> and returns 0-d where NumPy returns <c>(1,)</c>.
-        /// </summary>
-        /// <remarks>
-        ///     Root cause: <c>Statistics/np.nanstd.cs</c> / <c>np.nanvar.cs</c> build the float32/float64 axis output
-        ///     shape from the non-reduced axes and add a <c>1</c> when none is left, and <c>keepdims</c> then expands
-        ///     that <c>(1,)</c> again; their one-element shortcut returns a scalar without applying <c>keepdims</c>.
-        ///     The float16 and complex128 axis routes allocate NumPy's shape. <c>np.nanmean</c> had the same pattern
-        ///     and is fixed (<c>ApplyKeepdims</c> reshapes a reduced 1-D input to <c>()</c>); its cases moved to
-        ///     <c>np_sum_identity_tests.NanMean_OneDimensionalAxis_ReturnsZeroDimensional</c>. Values are right in
-        ///     every case below.
-        /// </remarks>
-        [TestMethod, OpenBugs]
-        public void NanStdVar_1DAxis_ReturnNumPysShape()
-        {
-            var fails = new List<string>();
-            var v = np.array(new[] { 1.0, 2.0, 3.0 });
-            Check(fails, "nanstd f64 [1,2,3] axis0", () => np.nanstd(v, 0), "float64 () 3fea20bd700c2c3e");
-            Check(fails, "nanvar f64 [1,2,3] axis0 keepdims", () => np.nanvar(v, 0, true), "float64 (1,) 3fe5555555555555");
-            Check(fails, "nanstd f64 [5] keepdims", () => np.nanstd(np.array(new[] { 5.0 }), keepdims: true), "float64 (1,) 0000000000000000");
-            Check(fails, "nanvar f64 [5] axis0 keepdims", () => np.nanvar(np.array(new[] { 5.0 }), 0, true), "float64 (1,) 0000000000000000");
-            AssertNoMismatch(fails, "NumPy reduces the only axis of a 1-D array to a 0-d result");
         }
 
         // ======================================================================================================

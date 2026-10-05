@@ -160,9 +160,58 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   - Left open: finding 5 and a broadcast operand's sum (inherited, B1); item X6 (cast-loop rows longer than the
     buffer, inherited, pinned); `ddof` as a float (finding 6, B4); `out=` / `where=` / `mean=` / `correction=` (B4);
     `np.ma.var` / `np.ma.std` (A6); the unused var/std kernels (X8).
-- [ ] **A3 `np.nanstd` / `np.nanvar`: `axis=` and `keepdims=` give the wrong shape.** A 1-D float32/float64 array
-  along axis 0 gives `(1,)` (NumPy 0-d); one element with `keepdims` drops the axis. Pin:
-  `NanStdVar_1DAxis_ReturnNumPysShape`.
+- [x] **A3 `np.nanstd` / `np.nanvar`: `axis=` and `keepdims=` give the wrong shape** — and, as the proof below
+  found, the values, the NaN rules and `dtype=` too. Pin: `NanStdVar_1DAxis_ReturnNumPysShape`; oracle excuses: the
+  nan-family branches (W4-A shape, W4-B value, dtype). Done 2026-10-05.
+  - Proof (2026-10-05, at `41785501`): a 45,832-case NumPy 2.4.2 matrix (`nanvar`/`nanstd` × float16/32/64,
+    complex128, bool and five integer dtypes × NaN patterns — none, one, every third, all, a NaN row, ±inf, a complex
+    NaN or inf part, `-0.0`, float16 overflow — × shapes `()` to `(2,3,2)` and empties × axis forms × keepdims × `ddof`
+    0, 1 and past the non-NaN count × C/F/stepped/reversed/transposed × `dtype=`). NumSharp: 33,013 exact, 1,005 within
+    64 ULP, 7,666 grossly different, and the 4,148 `dtype=` cases could not be called (no parameter). The gross
+    classes: keepdims dropped for every integer input and for a flat or one-element float input; a 1-D axis gave
+    `(1,)`; `ddof` at or past the non-NaN count gave 0 instead of NaN; a ±inf element gave 0 instead of NaN; float16
+    overflow stayed finite; an axis on a 0-d integer input did not raise. The ULP class: float16/float32 summed in
+    double, complex squared as `re² + im²`.
+  - NumPy's `nanvar` (`numpy/lib/_nanfunctions_impl.py`): `_replace_nan` (a K-order copy, NaN -> 0) — an input that
+    is not inexact has no mask and returns `np.var` —, the `dtype` check (TypeError "If a is inexact, then dtype must be
+    inexact"), `cnt = np.sum(~mask, axis, dtype=intp, keepdims=True)`, `avg = np.sum(arr, axis, dtype, keepdims=True) /
+    cnt` (in place, `casting='unsafe'`), `np.subtract(arr, avg, out=arr, casting='unsafe')` — the deviations are
+    rounded into the INPUT's dtype —, zeros at the NaNs again, `np.multiply(arr, arr, out=arr)` (complex:
+    `np.multiply(arr, arr.conj(), out=arr).real`), `var = np.sum(sqr, axis, dtype, keepdims)`, `dof = cnt - ddof`,
+    `var / dof` in place, and `np.nan` wherever `dof <= 0`; `nanstd` takes `sqrt(var, out=var)` (a scalar:
+    `var.dtype.type(np.sqrt(var))`).
+  - Fix (`Default.Reduction.NanVarStd.cs`, `NanVarStdNumPy`; `np.nanvar` / `np.nanstd` are thin wrappers and gained
+    `dtype=`, B7's first part): those statements, in order. A non-inexact input (and NumSharp's decimal, which holds no
+    NaN) takes `np.var` / `np.std` (A2). The axis follows ufunc.reduce's rule, because nanvar's first axis consumer is
+    `np.sum`: on a 0-d input axis 0 and -1 reduce flat, any other axis is AxisError. Both sums run over NumPy's K-order
+    copy (`Shape.KeepOrder()`): a dense input (one memory run flat, C/F along an axis) without a cast is that copy
+    already, so the mean's sum streams over the input with its NaNs zeroed and a flat variance streams the squared
+    deviations too (three reads, no buffer); otherwise the copy is materialized for `ReduceAdd` and the squared
+    deviations are written by one fused `np.evaluate` pass into a K-order buffer (`Cast(a - avg, T)`, then `Square` or
+    `Real(d * Conj(d))` — both proved bit-exact against NumPy's `simd_cmul`, 0 of 1,036 values differ). float16 and
+    hosts without dynamic code take NumPy's own eager statements. The divisions take the float64 loop (int64 counts)
+    and Smith's complex loop; `dof <= 0` writes the positive quiet NaN.
+  - Proof of the fix: the 45,832-case matrix — all exact, errors included; a 2,872-case large-size matrix (up to
+    1,000,003 elements; sparse NaNs, all-NaN rows and columns; C/F/stepped/reversed/transposed incl. 3-D; `dtype=`
+    casts; keepdims) — all exact; a 10,306-case view-chain matrix (every 3-D permutation with and without a reversed
+    axis, steps, offsets, broadcasts, 0-d, 5-D; NaN-sparse and all-NaN-slice bases) — all exact and none inherited
+    (finding 9).
+  - Gates: oracle tier `nanvarstd.jsonl` (13,382 cases, zero excuses: every catalog layout refilled with finite values
+    and NaNs × dtype × axis × keepdims × `ddof` {0, 1}; NaN patterns; `ddof` past uneven non-NaN counts; `dtype=` for
+    every (input, loop) pair; special values; `np.setbufsize` fills; order-sensitive sizes; empty inputs; 0-d axes;
+    the char proxy); `nanvar` / `nanstd` left the registry's nan-family blankets (`NanReduceOps`) and joined
+    `ByteExactArithmeticUnaryOps` (tightness test `NanVarStd_NoDivergenceIsExcused`, which fails when they are put
+    back); `reduce_start.jsonl` gained the 56 nanstd/nanvar cells it carved (8,666); unit tests
+    `Math/np.nanvar.NumPyPort.Test.cs` (12: the moved pin, NaN for no degrees of freedom and its positive bits, inf,
+    `dtype=` rounding, the complex square, the TypeError, the 0-d axes, integer inputs, float16, empty inputs, the
+    permuted layout).
+  - Speed (NPY/NS, one pinned P-core, best of rounds; 86 cells: float64 / float32 / float16 / complex128 / int32 ×
+    {nanvar and nanstd flat, nanvar per axis} × 1K / 100K / 10M, plus F / strided / `dtype=` forms of the two float
+    dtypes; NaNs every 7th element): geomean 3.71×, minimum 1.51× (int32 along an axis at 1K: `np.var`'s route, where
+    NumPy's nanvar is np.var too). NumPy's nanvar makes about 11 passes over the data; flat float64 at 100K 9.1×, at
+    10M 5.2×; float64 along axis 0 at 10M 2.75×; float16 along axis 1 at 1K 1.72× (the eager route).
+  - Left open: B7's `out=` / `where=` / `mean=` / `correction=` and NumPy's order; `ddof` as a float (finding 6);
+    np.nanmean's integer keepdims (A7, found here).
 - [ ] **A4 max/min family: `out=`, `initial=`, `where=` and NumPy's order** for `np.max`, `np.min`, `np.amax`,
   `np.amin`, `np.nanmax`, `np.nanmin`, `ndarray.max`, `ndarray.min`. NumPy: `(a, axis=None, out=None, keepdims,
   initial, where)`; NumSharp: `(a, axis, keepdims, dtype)`. Pins: the 4 `MaxMinFamily_*` tests.
@@ -176,6 +225,9 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   or `count - ddof <= 0`) carries NaN instead of the masked 0, and some slices are finite where NumPy has +inf. They
   were hidden by the registry's unbounded "summation precision" blanket until A2 removed var/std from it (finding 7);
   `MisalignedRegistry.IsMaVarStd` keeps the blanket for the ma ids only and names this item.
+- [ ] **A7 `np.nanmean`: an integer or bool input drops `keepdims` for `axis=None`.** NumPy keeps the reduced axes
+  (shape `(1,)*ndim`); NumSharp returns 0-d. 117 cases of the nanreduce oracle tier (every integer dtype and bool ×
+  13 layouts) sit under the registry's (W4-A) shape branch, which names only this bug since A3. Found by A3.
 
 ### Phase S: signature gate
 
@@ -196,7 +248,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   `(a, axis, dtype, out, ddof, keepdims)`.
 - [ ] B5 `np.nansum`, `np.nanprod`: `dtype=`, `out=`, `initial=`, `where=`.
 - [ ] B6 `np.nanmean`: `dtype=`, `out=`, `where=`.
-- [ ] B7 `np.nanstd`, `np.nanvar`: `dtype=`, `out=`, `where=`, `mean=`, `correction=`; NumPy's order.
+- [ ] B7 `np.nanstd`, `np.nanvar`: `out=`, `where=`, `mean=`, `correction=`; NumPy's order. (`dtype=` landed with A3.)
 - [ ] B8 `np.argmax`, `np.argmin`, `ndarray.argmax`, `ndarray.argmin`: `out=`.
 - [ ] B9 `np.cumsum`, `np.cumprod`: parameter names `a` and `dtype` (today `arr` and `typeCode`).
 - [ ] B10 `np.average`: `returned=` (one result type for NumPy's array-or-tuple return, as `np.unique` does).
@@ -314,7 +366,10 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - [ ] **X8 The var/std kernels A2 no longer reaches.** `DirectILKernelGenerator.VarSimdHelper` / `StdSimdHelper`
   (`Masking.VarStd.cs`), the `ReductionOp.Var` / `ReductionOp.Std` axis kernels (`Reduction.Axis.VarStd.cs`) and
   `NDAxisIter`'s `VarAxisDoubleKernel` / `StdAxisDoubleKernel` computed var/std in their own order; nothing calls them
-  since the port. Decide: remove them, or keep them for a future non-NumPy fast mode.
+  since the port. A3 left the same for nanvar / nanstd: `NDNanReductionKernels`' four `NanSquaredDeviation*Kernel`
+  structs, `DirectILKernelGenerator.NanVarSimdHelperFloat` / `NanVarSimdHelperDouble` (`Masking.NaN.cs`) and the
+  `ReductionOp.NanVar` / `ReductionOp.NanStd` IL kernels (no caller outside the generator). Decide: remove them, or
+  keep them for a future non-NumPy fast mode.
 
 ## 6. Findings
 
@@ -348,9 +403,17 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    differed from the port in the last digit on `f_contiguous_2d`. Its reference now sums the way NumSharp does: a
    dense operand in address order, anything else in logical order; per output along the axis. Its axis cases used to
    replicate the old kernel's double intermediate (15 digits).
+9. **A function that copies its input first does not inherit np.sum's view residuals** (A3). NumPy's nanvar sums a
+   K-order copy (`np.array(a, copy=True)`: dense, positive strides), never the view, so the np.sum differences that
+   np.var inherits on a view with a reversed axis or a broadcast operand (finding 5) cannot reach it: the 10,306-case
+   view-chain matrix is exact without exceptions, where np.var's had 490 inherited cases. A port that streams over
+   the view instead must prove the view's walk equals the copy's (dense inputs only, here).
 
 ## 7. State log
 
+- **2026-10-05**: A3 done (np.nanvar / np.nanstd are NumPy's nanvar / nanstd; `dtype=` added, B7's first part; the
+  `nanvarstd` oracle tier; nanvar / nanstd left the registry's nan-family blankets); A7 and finding 9 recorded; the
+  generator's unknown-mode list completed (13 modes were missing). Commit: the A3 commit on `journey4`.
 - **2026-10-05**: A2 done (np.var / np.std are NumPy's `_var` / `_std`; the `varstd` oracle tier; the chunked
   deviation sums); A6, X6, X7, X8 and findings 7–8 recorded. Rebased onto `5c9d7925` (the view-`Shape` plan's last fix:
   the new code adopts the shapes it builds with `Shape.Adopt`); D7 unblocked and given that plan's `np.ndarray`

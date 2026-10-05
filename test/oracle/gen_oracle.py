@@ -6029,10 +6029,9 @@ def _rs_carved(op, layout, dt, params, shape):
     if op == "nanprod":
         # A lone complex element (identity 1+0j, as prod). Pinned by Prod_OneComplexElement_*.
         return dt == "complex128" and (one_element_flat or ext == 1)
-    if op in ("nanstd", "nanvar"):
-        # A float32 / float64 1-D axis reduction comes back (1,) (keepdims: (1,1)); one element drops keepdims (every
-        # dtype). The float16 / complex128 axis routes give NumPy's shape. Pinned by NanStdVar_1DAxis_*.
-        return nd == 1 and ((size == 1 and kd) or (ax == 0 and size > 1 and dt in ("float32", "float64")))
+    # nanstd / nanvar have no rule since 2026-10-05: they are NumPy's nanvar / nanstd (plan
+    # docs/plans/api-parameter-parity.md A3), so the 1-D axis shape and the one-element keepdims cells are exact (their
+    # pin moved to NumSharp.Tests/Math/np.nanvar.NumPyPort.Test.cs).
     if op in ("cumsum", "nancumsum"):
         # The flat scan starts from +0.0 instead of copying element 0 (every flat cell past the one-element 1-D
         # shortcut). Pinned by CumSum_Flat_* and NanCumSum_Flat_*.
@@ -6333,6 +6332,236 @@ def gen_varstd(dtypes=None):
     return cases
 
 
+# ---------------------------------------------------------------------------
+# np.nanvar / np.nanstd — NumPy's nanvar / nanstd (plan docs/plans/api-parameter-parity.md, item A3)
+# ---------------------------------------------------------------------------
+# NumPy's nanvar (numpy/lib/_nanfunctions_impl.py): a K-order copy with its NaNs zeroed, cnt = np.sum(~mask, axis,
+# dtype=intp, keepdims=True), avg = np.sum(arr, axis, dtype, keepdims=True) / cnt, the deviations rounded into the
+# input's dtype (out=arr) and zeroed at the NaNs, squared (the real part of x * conj(x) for complex), np.sum again, / (cnt
+# - ddof), and NaN wherever cnt - ddof <= 0; nanstd takes sqrt(out=var) / var.dtype.type(sqrt(var)). An integer or bool
+# input has no mask and is np.var. Sections (the id carries the letter):
+#   L  every catalog layout (refilled with finite values and NaNs) x dtype x {nanvar, nanstd} x axis {None, each axis,
+#      -1, out of range} x keepdims x ddof {0, 1}
+#   N  NaN patterns: one NaN, all NaN, one all-NaN slice per axis, NaN in a complex imaginary part, +-inf with NaN
+#   D  ddof at and past the non-NaN count of slices whose counts differ (some slices get NaN, others a value)
+#   T  dtype= for every inexact input against seven loops (an integer loop over a float input is NumPy's TypeError), and
+#      int32 / bool inputs (np.var's route)
+#   S  special values in one element and over a length-1 axis
+#   B  np.setbufsize(16 / 32): the buffered fills of a cast loop, flat and per axis (a pinned row longer than the
+#      buffer is carved: np.sum's cast-loop axis route, OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_*)
+#   M  order-sensitive values (a mean offset plus noise, 129-1031 elements, NaNs every 7th) per layout
+#   E  empty inputs; Z  0-d inputs with axis 0 / -1 (ufunc.reduce reads them as every axis) and axes out of range
+# Params: axis (int or null), keepdims, ddof, dtype (a NumPy dtype name or null) and, in section B, bufsize.
+
+NANVARSTD_LOOPS = ["float16", "float32", "float64", "complex128", "int32", "int64", "bool"]
+
+
+def _nvs_values(dtype, shape, seed, nan_every=5):
+    """Deterministic values of `shape`: small finite ones (exact sums are not the point; the schedule decides the
+    bits) with NaN at every `nan_every`-th C-order element (0: none) for an inexact dtype."""
+    n = int(np.prod(shape)) if len(shape) else 1
+    i = np.arange(n)
+    dt = np.dtype(dtype)
+    if dt.kind == "b":
+        return ((i * 3 + seed) % 2 == 0).reshape(shape)
+    if dt.kind in "iu":
+        return np.array([((k * 7 + seed) % 11) for k in range(n)], dtype=object).astype(dt).reshape(shape)
+    v = (((i * 7 + seed) % 11) * 0.375 - 1.25).astype(np.float64)
+    if dt.kind == "c":
+        v = v + 1j * (((i * 5 + seed) % 7) * 0.5 - 1.0)
+    if nan_every:
+        v[(i + seed) % nan_every == 1] = np.nan
+    return v.astype(dt).reshape(shape)
+
+
+def gen_nanvarstd(dtypes=None):
+    """np.nanvar / np.nanstd cases (op keys nanvar / nanstd) over `dtypes` (default: ALL_DTYPES); see the header."""
+    dtypes = ALL_DTYPES if dtypes is None else dtypes
+    cases = []
+    n = 0
+
+    def emit(fn, base, view, axis, keepdims, ddof, dt, ln, tag, bufsize=None):
+        nonlocal n
+        params = {"axis": axis, "keepdims": keepdims, "ddof": ddof, "dtype": dt}
+        if bufsize is not None:
+            params["bufsize"] = bufsize
+        operand = describe(base, view)
+        cid = f"{fn}/{tag}/{ln}/{n}"
+        n += 1
+        f = np.nanvar if fn == "nanvar" else np.nanstd
+        previous = np.getbufsize()
+        try:
+            if bufsize is not None:
+                np.setbufsize(bufsize)
+            with warnings.catch_warnings(), np.errstate(all="ignore"):
+                warnings.simplefilter("ignore")      # degrees of freedom <= 0, all-NaN slices, complex -> real casts
+                r = f(view, axis=axis, keepdims=keepdims, ddof=ddof, dtype=dt)
+        except Exception as e:                       # noqa: BLE001 — NumPy's error is the expectation
+            cases.append(_error_case(fn, params, [operand], e, ln, cid=cid))
+            return
+        finally:
+            np.setbufsize(previous)
+        cases.append({"id": cid, "op": fn, "params": params, "operands": [operand],
+                      "expected": _arr_expected(r), "layout": ln, "valueclass": "nanvarstd"})
+
+    def axes_of(view):
+        if view.ndim == 0:
+            return [None, 0, -1, 1]                  # 0 / -1 reduce flat (ufunc.reduce); 1 is NumPy's AxisError
+        return [None] + list(range(view.ndim)) + [-1, view.ndim]   # view.ndim: out of range
+
+    # Section L: every layout of the catalog, refilled (the catalog's pools start with NaN, +-inf).
+    for ln, fn_layout in LAYOUTS.items():
+        for s in dtypes:
+            base, view = fn_layout(np.dtype(s))
+            if base.size:
+                base[...] = _nvs_values(s, base.shape, 1)
+            for axis in axes_of(view):
+                for kd in ((False, True) if axis in (None, 0) else (False,)):
+                    for ddof in (0, 1):
+                        for fn in ("nanvar", "nanstd"):
+                            emit(fn, base, view, axis, kd, ddof, None, ln, f"L/{s}")
+
+    inexact = [d for d in ("float16", "float32", "float64", "complex128") if d in dtypes]
+
+    # Section N: NaN patterns over fixed shapes.
+    for s in inexact:
+        for shape in ((5,), (3, 4), (2, 3, 4)):
+            nanv = complex(np.nan, 0) if s == "complex128" else np.nan
+            pats = {}
+            one = _nvs_values(s, shape, 2, 0)
+            one.reshape(-1)[1] = nanv
+            pats["one"] = one
+            pats["all"] = np.full(shape, nanv, dtype=s)
+            for ax in range(len(shape)):
+                v = _nvs_values(s, shape, 2, 0)
+                idx = [slice(None)] * len(shape)
+                idx[ax] = 0
+                v[tuple(idx)] = nanv
+                pats[f"slice{ax}"] = v
+            v = _nvs_values(s, shape, 2, 3)
+            v.reshape(-1)[2] = np.inf
+            pats["inf"] = v
+            if s == "complex128":
+                v = _nvs_values(s, shape, 2, 0)
+                v.reshape(-1)[0] = complex(1.0, np.nan)
+                pats["nanj"] = v
+            for pn, v in pats.items():
+                base = np.ascontiguousarray(v)
+                for axis in [None] + list(range(len(shape))):
+                    for ddof in (0, 1, 2):
+                        for fn in ("nanvar", "nanstd"):
+                            emit(fn, base, base, axis, False, ddof, None, "c_contiguous", f"N/{s}/{pn}")
+
+    # Section D: ddof at and past the non-NaN count, where the slices' counts differ.
+    for s in inexact:
+        v = _nvs_values(s, (4, 6), 3, 0)
+        nanv = complex(np.nan, 0) if s == "complex128" else np.nan
+        for r in range(4):
+            v[r, : r + 1] = nanv                     # row r has 5 - r non-NaN elements
+        base = np.ascontiguousarray(v)
+        for axis in (None, 0, 1):
+            for ddof in range(0, 7):
+                for fn in ("nanvar", "nanstd"):
+                    emit(fn, base, base, axis, False, ddof, None, "c_contiguous_2d", f"D/{s}")
+
+    # Section T: dtype= for every (input, loop) pair.
+    for s in [d for d in ("float16", "float32", "float64", "complex128", "int32", "bool") if d in dtypes]:
+        for shape, axes in (((7,), (None, 0)), ((3, 5), (None, 0, 1)), ((), (None,))):
+            base = np.ascontiguousarray(_nvs_values(s, shape, 4, 4))
+            for dt in NANVARSTD_LOOPS:
+                for axis in axes:
+                    for ddof in (0, 1):
+                        for fn in ("nanvar", "nanstd"):
+                            emit(fn, base, base, axis, False, ddof, dt, "c_contiguous", f"T/{s}->{dt}")
+
+    # Section S: special values in one element (0-d and 1-D) and over a length-1 axis.
+    specials = {
+        "float16": [np.nan, np.inf, -np.inf, -0.0],
+        "float32": [np.nan, np.inf, -np.inf, -0.0],
+        "float64": [np.nan, np.inf, -np.inf, -0.0],
+        "complex128": [complex(np.nan, 0.0), complex(0.0, np.nan), complex(0.0, np.inf), complex(-np.inf, 1.0),
+                       complex(-0.0, -0.0)],
+    }
+    for s, values in specials.items():
+        if s not in dtypes:
+            continue
+        for k, v in enumerate(values):
+            zero_d = np.array(v, dtype=s)
+            one = np.array([v], dtype=s)
+            col = np.array([[v], [1.5], [-2.0], [v]], dtype=s)          # (4, 1): axis 1 has length 1
+            for ddof in (0, 1):
+                for fn in ("nanvar", "nanstd"):
+                    emit(fn, zero_d, zero_d, None, False, ddof, None, "scalar_0d", f"S/{s}/{k}")
+                    emit(fn, one, one, None, False, ddof, None, "one_element_1d", f"S/{s}/{k}")
+                    emit(fn, one, one, 0, True, ddof, None, "one_element_1d", f"S/{s}/{k}")
+                    emit(fn, col, col, 1, False, ddof, None, "length1_axis_2d", f"S/{s}/{k}")
+                    emit(fn, col, col, 0, False, ddof, None, "length1_axis_2d", f"S/{s}/{k}")
+
+    # Section B: the buffered fills of a cast loop under a small np.setbufsize.
+    rng = np.random.default_rng(20261006)
+    casts = [("float64", "float32"), ("float32", "float16"), ("complex128", "float64"), ("float64", "complex128"),
+             ("float16", "float64"), ("float32", "float64")]
+    for src, dt in casts:
+        if src not in dtypes:
+            continue
+        vals = 1000.0 + rng.normal(0.0, 3.0, 200)
+        if src == "complex128":
+            vals = vals + 1j * (-40.0 + rng.normal(0.0, 2.0, 200))
+        if src == "float16":
+            vals = 8.0 + rng.normal(0.0, 1.5, 200)
+        vals[::9] = np.nan
+        base = np.asarray(vals).astype(src)
+        for ln, view in (("c_contiguous_1d", base), ("c_contiguous_2d", base.reshape(8, 25)),
+                         ("f_contiguous_2d", base.reshape(25, 8).T)):
+            for axis in ([None] if view.ndim == 1 else [None, 0, 1]):
+                # A pinned row of the K-order copy (the reduced axis innermost) longer than the buffer: NumPy splits it
+                # across fills, np.sum's cast-loop axis route sums it in one call. CARVED, pinned by
+                # OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills.
+                pinned = (ln == "c_contiguous_2d" and axis == 1) or (ln == "f_contiguous_2d" and axis == 0)
+                for bufsize in (16, 32):
+                    if pinned and view.shape[axis] > bufsize:
+                        continue
+                    for fn in ("nanvar", "nanstd"):
+                        emit(fn, base, view, axis, False, 0, dt, ln, f"B/{src}->{dt}", bufsize)
+
+    # Section M: order-sensitive values, where the pairwise schedule shows in the last bits.
+    for s in inexact:
+        for size in (129, 1031):
+            vals = 1000.0 + rng.normal(0.0, 3.0, size)
+            if s == "float16":
+                vals = 8.0 + rng.normal(0.0, 1.5, size)
+            if s == "complex128":
+                vals = vals + 1j * (-250.0 + rng.normal(0.0, 7.0, size))
+            vals[::7] = np.nan
+            base = np.asarray(vals).astype(s)
+            for ln, view in (("c_contiguous_1d", base), ("negstride_1d", base[::-1]), ("strided_step2_1d", base[::2])):
+                for axis in (None, 0):
+                    for fn in ("nanvar", "nanstd"):
+                        emit(fn, base, view, axis, False, 0, None, ln, f"M/{s}/{size}")
+        vals = 1000.0 + rng.normal(0.0, 3.0, 31 * 41)
+        if s == "float16":
+            vals = 8.0 + rng.normal(0.0, 1.5, 31 * 41)
+        if s == "complex128":
+            vals = vals + 1j * (-250.0 + rng.normal(0.0, 7.0, 31 * 41))
+        vals[::7] = np.nan
+        base = np.asarray(vals).astype(s)
+        for ln, view in (("c_contiguous_2d", base.reshape(31, 41)), ("f_contiguous_2d", base.reshape(41, 31).T),
+                         ("transposed_3d", base[: 30 * 41].reshape(5, 6, 41).transpose(2, 0, 1))):
+            for axis in [None] + list(range(view.ndim)):
+                for fn in ("nanvar", "nanstd"):
+                    emit(fn, base, view, axis, False, 0, None, ln, f"M/{s}/2d")
+
+    # Section E: empty inputs (cnt 0 everywhere: avg 0/0, dof <= 0, NaN of the input's dtype).
+    for s in [d for d in ("float16", "float32", "float64", "complex128", "int32") if d in dtypes]:
+        for shape, axes in (((0,), (None, 0)), ((0, 3), (None, 0, 1)), ((3, 0), (None, 0, 1))):
+            base = np.zeros(shape, dtype=s)
+            for axis in axes:
+                for kd in (False, True):
+                    for fn in ("nanvar", "nanstd"):
+                        emit(fn, base, base, axis, kd, 0, None, "empty", f"E/{s}")
+    return cases
+
+
 def char_tier(mode):
     """Relabelled Char cases to append into tier-file `mode` (woven coverage)."""
     L = list(LAYOUTS.keys())
@@ -6409,6 +6638,8 @@ def char_tier(mode):
         raw = gen_clip_ufunc([_C], extras=False)
     elif mode == "varstd":                                         # Char -> float64 like uint16 (an unsigned integer)
         raw = gen_varstd([_C])
+    elif mode == "nanvarstd":                                      # Char has no NaN: np.var's route, like uint16
+        raw = gen_nanvarstd([_C])
     return _relabel_dtype(raw, _C, "char")
 
 
@@ -16686,6 +16917,13 @@ def main():
         cases = gen_varstd()
         cases += char_tier("varstd")
         write_jsonl(os.path.join(corpus_dir, "varstd.jsonl"), cases)
+    elif mode == "nanvarstd":
+        # np.nanvar / np.nanstd as NumPy's nanvar / nanstd (plan docs/plans/api-parameter-parity.md A3): every layout,
+        # dtype, NaN pattern, ddof and dtype= pair, special values, np.setbufsize fills and order-sensitive sizes. Its
+        # own file.
+        cases = gen_nanvarstd()
+        cases += char_tier("nanvarstd")
+        write_jsonl(os.path.join(corpus_dir, "nanvarstd.jsonl"), cases)
     elif mode == "sum_identity":
         # np.sum's identity-seeded add reduction (+0.0 + -0.0 = +0.0) and its dtype= loop, with the
         # reductions built on it (mean / nansum / nanmean / average / ndarray.sum). No Char rows: the
@@ -16853,7 +17091,7 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "polyroots_parity.jsonl"), host)
         write_jsonl(os.path.join(corpus_dir, "polyroots_parity.host.jsonl"), [blas_identity()])
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd)")
         sys.exit(2)
 
 
