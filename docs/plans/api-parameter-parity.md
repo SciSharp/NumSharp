@@ -318,7 +318,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   or `count - ddof <= 0`) carries NaN instead of the masked 0, and some slices are finite where NumPy has +inf. They
   were hidden by the registry's unbounded "summation precision" blanket until A2 removed var/std from it (finding 7);
   `MisalignedRegistry.IsMaVarStd` keeps the blanket for the ma ids only and names this item. Widened to `np.ma.mean`
-  (var's mean) and `np.ma.anom` (`self - mean`). Done 2026-10-06 (this commit).
+  (var's mean) and `np.ma.anom` (`self - mean`). Done 2026-10-06 (`afcc343b`).
   - Proof (2026-10-05, at `f18bc09e`): with the ma ids' blankets removed, 254 of the 28,782 `ma_reduce` cases differed
     (masked slots holding NaN for NumPy's masked 0, unmasked infinities NumPy masks, other dtypes). A Python model of
     numpy.ma's statements (below) equalled NumPy 2.4.2 on 548,794 cases, so the port follows the statements, not the
@@ -773,9 +773,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 - **2026-10-06**: A6 done (np.ma.mean / var / std / anom are numpy.ma's statements; the `ma_meanvar` oracle tier with
   raw data and result forms, zero excuses; `ma_reduce` holds the four strict but a finding-5 branch; 14 planted bugs
-  killed); X11 widened (random masks, the dead same-dtype SIMD blend); X12–X15 and findings 16–20 recorded. This
-  commit.
-
+  killed); X11 widened (random masks, the dead same-dtype SIMD blend); X12–X15 and findings 16–20 recorded. Commit
+  `afcc343b`.
 - **2026-10-05**: A5 done (np.trapezoid raises NumPy's `IndexError: list assignment index out of range` for an axis
   outside y; 106 `err_axis_outside_y` cases in the `multioutput` tier; trapezoid out of the registry's K7 branch); finding
   15 recorded. Commit `f18bc09e`.
