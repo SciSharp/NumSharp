@@ -411,4 +411,7 @@ change that bug 1's work saw in the main working tree.)
     byte loop is about 2 cycles an element there; the old `np.take` route ran 0.48× on that shape.
 - **Not done.** NumSharp's general fancy index `a[:, idx]` still returns a C-ordered array that owns its data, where NumPy
   returns the same transposed MapIter view. That is a library-wide indexing gap; `np.FancyIndexAlongAxis` is a building
-  block for it.
+  block for it. `np.FancyIndexAlongAxis` also copies a non-C source to C first, so `permutation(x, axis > 0)` of a non-C
+  source of three or more dims has NumPy's view but not NumPy's strides (NumPy keeps the source's order for the other
+  axes). Both are pinned in `test/NumSharp.Tests/OpenBugs.FancyIndex.cs`, next to a wrong-values bug of the same family
+  found by the same probe: an F-ordered or transposed N-D index beside a slice is read in memory order.
