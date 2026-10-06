@@ -670,7 +670,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   plain call does too, its ufunc out= route calls the CRT `pow`: one ULP off on 116 of 200,000 float64 and 22 of
   200,000 float32 inputs for 2.0 (`757.7617475757002 ** 2` is `...03c1` in NumPy, `...03c2` through out=). Pinned by
   `OpenBugsUfuncOutTests.Power_Out_ScalarExponent_TakesNumPysFastPath`. Found by A6 (its `abs(danom) ** 2` uses the
-  plain call and copies). Done 2026-10-06 (this commit), with X19 and X20.
+  plain call and copies). Done 2026-10-06 (`4116b608`), with X19 and X20.
   - Proof (NumPy 2.4.2 vs `6f00ae14`):
     - A 34-call twin probe. The out= and where= routes called pow for a 0-d exponent (`-0.0 ** 0.5` gave +0.0, NumPy
       -0.0). `(1,) ** (1,)` and `0-d ** (1,)` took the fast path where NumPy's trivial loop calls pow, and
@@ -844,7 +844,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   (`TryGetMaskedCastKernel`, the per-pair masked cast with the dead same-dtype blend X11 found) served only np.copyto's
   masked path, which X16 replaced. Delete it, or route a future masked cast through it after a parity check.
 - [x] **X19 A one-element operand with more dimensions than the other loses its leading axes.** Found by X13's probe
-  (2026-10-06): `np.power(0-d, (1,))` returned a 0-d result, NumPy's is `(1,)`. Done 2026-10-06 (this commit).
+  (2026-10-06): `np.power(0-d, (1,))` returned a 0-d result, NumPy's is `(1,)`. Done 2026-10-06 (`4116b608`).
   - Proof: a 165-call probe (24 binary ufuncs, comparisons, logical ops, shifts and C# operators × `(7,) op (1,1)` →
     `(1,7)`, `(1,1) op (7,)`, `(3,7) op (1,1,1)` → `(1,3,7)`, `0-d op (1,)` → `(1,)`, `(1,) op (1,1)` → `(1,1)`): 100
     wrong shapes. The values were right.
@@ -856,7 +856,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   - Gate: `Backends/Kernels/OneElementOperandRankTests.cs` (2 tests: 165 shapes and the values; 100 shapes fail before
     the fix).
 - [x] **X20 np.power on float16 and np.float_power are not NumPy's loops.** Found by X13's probe. Done 2026-10-06
-  (this commit).
+  (`4116b608`).
   - Proof: NumPy's HALF_power is `PyUFunc_ee_e_As_ff_f` with powf and has NO fast path. NumSharp's float16 power took
     np.power's fast path (`-0.0 ** 0.5` gave -0.0, NumPy +0.0; `-inf ** 0.5` NaN, NumPy +inf; `sNaN ** 1` kept the NaN
     signalling) and otherwise bridged through double. Over every float16 base × 17 exponents, 7,161 of 1,114,112
@@ -1045,7 +1045,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   float16 power is HALF_power's powf; float_power never takes the fast path; a one-element operand with more
   dimensions keeps its leading axes in every binary ufunc, comparison and shift. The `power_fast` oracle tier (7,902
   cases, zero excuses; 13 planted bugs killed); `OpenBugs.UfuncOut.cs` removed (its pin is a unit test now). X21–X23
-  and findings 26–32 recorded; X23 (np.kaiser's 1–2 ULP) is next. Commit: this commit.
+  and findings 26–32 recorded; X23 (np.kaiser's 1–2 ULP) is next. Commit `4116b608`.
 - **2026-10-06**: X15 done with X4 (float16 add / subtract / multiply / divide on every broadcast and strided layout
   and through out=: the SIMD widen-compute-narrow kernels per inner run, a reversed walk for broadcast F sets; 13
   planted bugs); numpy.ma re-measured (4.80×); X18 and finding 25 recorded. Commit `1185f39c`.
