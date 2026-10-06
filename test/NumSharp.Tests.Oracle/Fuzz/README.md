@@ -291,6 +291,7 @@ python test/oracle/gen_oracle.py nanvarstd        # np.nanvar / np.nanstd as Num
 python test/oracle/gen_oracle.py mean_loops       # np.mean as NumPy's _mean: layouts, dtype= for every loop, empties, specials, fills
 python test/oracle/gen_oracle.py nanmean          # np.nanmean as NumPy's nanmean: NaN patterns, dtype= for every loop, fills, empties
 python test/oracle/gen_oracle.py clip_ufunc       # np.clip as a ufunc: broadcast bounds, out=, where=, overlap, the float loop
+python test/oracle/gen_oracle.py power_fast       # np.power's float loops: the stride-0 fast path on every route, float16 powf, float_power
 python test/oracle/gen_oracle.py reduce_kwargs    # reductions through their NumPy-shaped overload: out=, where=, axis forms, prologue errors
 python test/oracle/gen_oracle.py minmax_kwargs    # the max / min family with out= / initial= / where=: loops, casts, fills, run cuts, errors
 python test/oracle/gen_oracle.py precision        # truthful-vs-precise (adversarial accumulation; needs mpmath)
@@ -1205,6 +1206,42 @@ values for an overlapping masked copy (251 of 1,500 overlap cases), masks and so
 sources with leading unit axes refused, a read-only redundant self-copy refused, weak scalars wrapped instead of
 range-checked, and other errors, texts and orders. **Planted bugs:** see the plan item (each killed by the tier or
 by `Manipulation/np.copyto.NumPyPort.Test.cs`).
+
+### np.power's float loops (`power_fast` tier) — 2026-10-06
+
+`power_fast.jsonl` (`gen_oracle.py power_fast`, 7,902 cases, floor 7,500) gates np.power and np.float_power as NumPy
+2.4.2's float power loops (plan `docs/plans/api-parameter-parity.md` X13, X19, X20):
+- DOUBLE_power / FLOAT_power write `1/x`, `1`, `sqrt(x)`, `x` or `x*x` for an exponent of -1, 0, 0.5, 1 or 2 when the
+  exponent's STEP in the inner-loop call is 0, and call pow otherwise;
+- HALF_power is powf on the exactly widened halves, with no fast path;
+- np.float_power calls pow on every element.
+
+Which calls see step 0 is NumPy's trivial-loop and NpyIter decision, so the cases walk it. Each base holds values on
+which the fast path and pow differ (`757.7617475757002 ** 2`, `-0.0 ** 0.5`, `-inf ** 0.5`, `72.21291942905373 ** -1`,
+a signalling NaN). With an out, the case records the out's WHOLE base buffer, so a masked-off slot or a write outside
+the view is visible. `params.bufsize` sets `np.setbufsize` for the call.
+
+**Sections:** A (3,640: plain calls; every float base layout × 0-d, one-element, `(1,1)` and broadcast exponents × the
+fast values, 3, NaN and 0.50000001 — 0.5 in a float32 loop — as arrays, Python floats and Python ints), B (1,542:
+integer, bool and complex bases, the float loop through a cast and the integer loops; 76 errors), C (244: casts the
+trivial loop copies — 1-D, at most bufsize elements — or the iterator buffers, at `np.setbufsize(256)` and the
+default), D (388: varying exponents — columns, middle axes, rows, strided, extra leading axes — across NpyIter's
+buffering threshold, with out= and where=), E (1,536: out= and where= with single-valued exponents; C, F, strided,
+other-dtype, in-place and overlapping outs × four masks; 132 errors), F (180: dtype= picks the loop), G (216:
+float_power), I (129: two boundaries a mutation pass found unguarded — one-element operands of one shape with an out
+of another dtype, which NpyIter runs at step 0, and rows of exactly bufsize with every input cast, where the buffering
+setup stops the core), H (27: empties and power's errors in NumPy's order; 11 errors).
+
+**Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the `power_fast` op. The generator leaves out classes
+that are other items: a 0-d float32 / float16 base with a Python-scalar exponent (NumSharp reads every 0-d operand as a
+weak scalar: the documented NEP 50 0-d divergence), complex bases with non-integer exponents (F5, `npy_cpow`), unsigned
+bases with -1 (plan X21: NumPy's OverflowError) and an out= that does not broadcast (plan X22: the text).
+
+**What it replaced** (fixed 2026-10-06): 1,785 of the first 7,773 cases differ on the parent (`6f00ae14`). The out= and
+where= routes called pow for a 0-d exponent; a `(1,) ** (1,)` call took the fast path where NumPy's trivial loop calls
+pow; a column exponent never took it; float16 took the fast path or a double bridge; float_power took np.power's fast
+path. **Planted bugs:** 13 edits to the step decision, the exponent handling and the kernels. The tier kills all 13;
+before section I, two survived (plan finding 27).
 
 ### float16 selections (`half_minmax` tier + the selection contract) — 2026-10-03
 

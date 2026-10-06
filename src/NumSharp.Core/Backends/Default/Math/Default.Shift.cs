@@ -304,6 +304,10 @@ namespace NumSharp.Backends
             bool lhsArray = !(lhs.Shape.IsScalar || lhs.size <= 1);
             if (!rhsScalar || !lhsArray)
                 return null;
+            // The result takes the value's shape, so a one-element count with MORE dimensions (a (1,1) count against a
+            // (7,) value broadcasts to (1,7) in NumPy) goes to the broadcasting routes (plan api-parameter-parity X19).
+            if (rhs.ndim > lhs.ndim)
+                return null;
 
             // A bool value operand always promotes (int64 against a weak int count, int8 against
             // bool). Taking this path materializes the whole promoted array via astype and then

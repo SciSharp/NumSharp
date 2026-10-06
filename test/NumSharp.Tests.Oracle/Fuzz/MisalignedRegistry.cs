@@ -332,6 +332,12 @@ namespace NumSharp.Tests.Fuzz
             // order) is held to ZERO excuses, its error cases (valueclass "error") included — hence the op test.
             if (c.Op == "copyto_full")
                 return null;
+            // power_fast.jsonl (np.power's float loops as NumPy's DOUBLE_power / FLOAT_power — the zero-exponent-step fast
+            // path exactly where NumPy's calls take it — float16's powf, float_power's plain pow, power's errors; plan
+            // api-parameter-parity X13) is held to ZERO excuses, its error cases included: the "unary ~ULP" and power
+            // branches below would otherwise excuse the one-ULP x*x-vs-pow difference the tier exists to pin.
+            if (c.Op == "power_fast")
+                return null;
 
             // reduce_start.jsonl (valueclass "negzero": every operand all -0.0, every result a signed zero) is held to
             // ZERO excuses as well. Its cells exist to show how a reduction STARTS, which only the sign of a zero

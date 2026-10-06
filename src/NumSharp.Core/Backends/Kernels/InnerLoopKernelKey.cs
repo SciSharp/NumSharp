@@ -38,6 +38,12 @@ namespace NumSharp.Backends.Kernels
             /// nibble and NumPy's const fast path in bit 4.
             /// </summary>
             Clip = 6,
+            /// <summary>
+            /// np.power's float loop with NumPy's zero-exponent-step fast path (DOUBLE_power / FLOAT_power):
+            /// <c>npy_powz_{lhs}_{rhs}_{result}</c>. Its body differs from the plain power kernel's, so it is its own
+            /// identity; the result dtype is float32 or float64.
+            /// </summary>
+            PowerStrideZero = 7,
         }
 
         // Layout (low → high): t2:8 | t1:8 | t0:8 | (unused):8 | op:8 | family:8.
@@ -95,6 +101,18 @@ namespace NumSharp.Backends.Kernels
             => new(Pack(KernelFamily.Clip, (mode is null ? 3 : (int)mode.Value) | (constSelect ? 0x10 : 0), dtype, NPTypeCode.Empty, NPTypeCode.Empty));
 
         /// <summary>
+        /// Key of np.power's zero-exponent-step float kernel <c>npy_powz_{lhs}_{rhs}_{result}</c>
+        /// (<see cref="DirectILKernelGenerator.EmitPowerStrideZeroBody"/>): the operands keep their stored dtypes and
+        /// are converted to <paramref name="result"/> inside the body.
+        /// </summary>
+        /// <param name="lhs">The base's stored dtype.</param>
+        /// <param name="rhs">The exponent's stored dtype.</param>
+        /// <param name="result">The loop dtype (float32 or float64).</param>
+        /// <returns>The packed key.</returns>
+        public static InnerLoopKernelKey PowerStrideZero(NPTypeCode lhs, NPTypeCode rhs, NPTypeCode result)
+            => new(Pack(KernelFamily.PowerStrideZero, 0, lhs, rhs, result));
+
+        /// <summary>
         ///     The string key this kernel is registered under in the string-keyed inner-loop
         ///     cache — byte-identical to the interpolated key the route built before the packed
         ///     key existed. Only evaluated on a cache miss.
@@ -119,6 +137,8 @@ namespace NumSharp.Backends.Kernels
                     string modeName = mode == 3 ? "Identity" : ((DirectILKernelGenerator.ClipMode)mode).ToString();
                     return $"npy_clip_{modeName}_{((Op & 0x10) != 0 ? "const" : "general")}_{Type0}";
                 }
+                case KernelFamily.PowerStrideZero:
+                    return $"npy_powz_{Type0}_{Type1}_{Type2}";
                 default:
                     throw new InvalidOperationException($"Unknown inner-loop kernel family {(byte)Family}.");
             }

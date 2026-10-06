@@ -365,6 +365,11 @@ namespace NumSharp.Tests.Fuzz
                 case "copyto_full":
                     return ApplyCopytoFull(p, ops);
 
+                // np.power / np.float_power and NumPy's zero-exponent-step fast path (power_fast.jsonl): exponent kinds,
+                // out= / where= / dtype=, buffer sizes; an out case returns the out's whole buffer (OpRegistry.PowerFast.cs).
+                case "power_fast":
+                    return ApplyPowerFast(p, ops);
+
                 // Sorting / searching (T14).
                 case "argsort": return ApplyArgsort(ops[0], p["axis"].GetInt32());
                 case "sort": return np.sort(ops[0], p["axis"].GetInt32());          // Group A B2: value sort

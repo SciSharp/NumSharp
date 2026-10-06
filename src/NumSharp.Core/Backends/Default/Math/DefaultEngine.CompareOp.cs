@@ -144,7 +144,11 @@ namespace NumSharp.Backends
             Shape arrShape;   // operand whose shape+layout the result follows
             if (lhsScalarLike ^ rhsScalarLike)
             {
-                // Scalar-broadcast: the array operand drives the result.
+                // Scalar-broadcast: the array operand drives the result — only when the one-element operand adds no
+                // dimension (a (1,1) operand against a (7,) array is a (1,7) result in NumPy; plan api-parameter-parity
+                // X19). Otherwise the broadcasting route below computes the shape.
+                if (rhsScalarLike ? rs.NDim > ls.NDim : ls.NDim > rs.NDim)
+                    return null;
                 var array = rhsScalarLike ? lhs : rhs;
                 arrShape = array.Shape;
                 if (arrShape.IsBroadcasted)

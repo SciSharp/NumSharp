@@ -861,6 +861,20 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void CopytoFull() => RunCorpus("copyto_full.jsonl");
 
+        /// <summary>
+        ///     np.power's float loops as NumPy's DOUBLE_power / FLOAT_power (plan <c>docs/plans/api-parameter-parity.md</c>
+        ///     X13): the scalar-exponent fast path (1/x, 1, sqrt(x), x, x*x) exactly where NumPy's inner-loop calls see the
+        ///     exponent with step 0 — 0-d, one-element, (1,1) and stride-0 exponents, varying exponents on both sides of
+        ///     the buffering threshold, casts the trivial loop copies or the iterator buffers, every base layout, out= /
+        ///     where= / dtype= — plus float16's powf and float_power (no fast path), empty results and power's errors.
+        ///     Every float base holds values on which the fast path and pow differ, so each case shows which one ran; an
+        ///     out case compares the out's whole buffer.
+        /// </summary>
+        /// <remarks>Zero excuses: <see cref="MisalignedRegistry"/> never classifies a <c>power_fast</c> case.</remarks>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void PowerFast() => RunCorpus("power_fast.jsonl");
+
         // Seeded random fuzzer corpus (offline-generated; reproducible from its seed).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
@@ -1013,6 +1027,7 @@ namespace NumSharp.Tests.Fuzz
             ["conversion.jsonl"] = 862,
             ["copyto.jsonl"] = 91,
             ["copyto_full.jsonl"] = 12000,
+            ["power_fast.jsonl"] = 7500,
             ["decimal_astype.jsonl"] = 17,
             ["decimal_binary.jsonl"] = 78,
             ["decimal_manip.jsonl"] = 28,

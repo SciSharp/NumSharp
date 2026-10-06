@@ -395,8 +395,11 @@ namespace NumSharp.Backends
             // took the trivial bypass; this redirect sends the scalar-broadcast
             // layouts to SimdScalarLeft/Right and leaves strided on the same
             // EmitScalarOperation numerics as before (via SimdChunk).
+            // Power joins them (plan api-parameter-parity X13): HALF_power is powf on the halves widened bit for bit, and
+            // the same kernels run it with a vector widen / narrow around a per-lane powf.
             if (lhsType == NPTypeCode.Half && rhsType == NPTypeCode.Half && resultType == NPTypeCode.Half
-                && (op == BinaryOp.Add || op == BinaryOp.Subtract || op == BinaryOp.Multiply || op == BinaryOp.Divide))
+                && (op == BinaryOp.Add || op == BinaryOp.Subtract || op == BinaryOp.Multiply || op == BinaryOp.Divide
+                    || op == BinaryOp.Power))
                 return null;
 
             // NDIter's internal shape arithmetic is int-bounded; route only
@@ -617,6 +620,11 @@ namespace NumSharp.Backends
             bool rhsScalarLike = rs.IsScalar || rs.size == 1;
             if (lhsScalarLike ^ rhsScalarLike)
             {
+                // The result takes the array's shape only when the one-element operand adds no dimension: a (1,1)
+                // operand against a (7,) array broadcasts to (1,7) in NumPy, which this shortcut would return as (7,)
+                // (plan api-parameter-parity X19). Such a call takes the broadcasting routes below.
+                if (rhsScalarLike ? rs.NDim > ls.NDim : ls.NDim > rs.NDim)
+                    return null;
                 return TryScalarBroadcastBinaryOp(
                     lhs, rhs, op, resultType,
                     array: rhsScalarLike ? lhs : rhs,
@@ -836,12 +844,14 @@ namespace NumSharp.Backends
             return true;
         }
 
-        /// <summary>Whether <paramref name="op"/> is one of the four float16 ufuncs the SIMD widen-compute-narrow kernels
-        /// serve (<c>DirectILKernelGenerator.TryGetHalfArithKernel</c>): add, subtract, multiply, divide.</summary>
+        /// <summary>Whether <paramref name="op"/> is one of the float16 ufuncs the SIMD widen-compute-narrow kernels
+        /// serve (<c>DirectILKernelGenerator.TryGetHalfArithKernel</c>): add, subtract, multiply, divide and power (powf per
+        /// lane between the vector widen and narrow, plan api-parameter-parity X13).</summary>
         /// <param name="op">The binary op.</param>
-        /// <returns>True for add, subtract, multiply and divide.</returns>
+        /// <returns>True for add, subtract, multiply, divide and power.</returns>
         private static bool IsHalfArithOp(BinaryOp op)
-            => op == BinaryOp.Add || op == BinaryOp.Subtract || op == BinaryOp.Multiply || op == BinaryOp.Divide;
+            => op == BinaryOp.Add || op == BinaryOp.Subtract || op == BinaryOp.Multiply || op == BinaryOp.Divide
+               || op == BinaryOp.Power;
 
         /// <summary>
         ///     float16 add / subtract / multiply / divide into a C- or F-contiguous <paramref name="out"/> whose inputs

@@ -2230,6 +2230,16 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Power: NumPy's HALF_power is powf on the halves widened bit for bit (a signalling NaN stays signalling)
+            // and narrowed with npy_float_to_half — not the double bridge below, which quiets the NaN before pow
+            // (sNaN ** 0 became 1), loses a negative NaN's sign on integer exponents and rounds from double.
+            // Stack in: [Half a, Half b] -> [Half result].
+            if (op == BinaryOp.Power)
+            {
+                il.EmitCall(OpCodes.Call, GetHelper(nameof(PowerHalfNumPy)), null);
+                return;
+            }
+
             var halfToDouble = CachedMethods.HalfToDouble;
 
             // For all other operations, convert to double, perform operation, convert back

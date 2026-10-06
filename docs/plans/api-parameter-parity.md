@@ -665,12 +665,60 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   stride-0 axis and a 0-d broadcast in every loop found 510 of 5,382 cases differing (the flat ones are finding 10).
   Pinned by `OpenBugsReductionTests.Sum_BroadcastOperand_Axis_IsNumPysOrder`; carved from `ma_meanvar.jsonl`
   ("broadcast"). Found by A6. Belongs with B1.
-- [ ] **X13 `np.power(x, scalar, out=o)` misses NumPy's scalar-exponent fast paths.** NumPy's DOUBLE_power /
+- [x] **X13 `np.power(x, scalar, out=o)` misses NumPy's scalar-exponent fast paths.** NumPy's DOUBLE_power /
   FLOAT_power take `1/x`, 1, `sqrt(x)`, `x`, `x*x` for a stride-0 exponent of -1, 0, 0.5, 1, 2 on every route; NumSharp's
   plain call does too, its ufunc out= route calls the CRT `pow`: one ULP off on 116 of 200,000 float64 and 22 of
   200,000 float32 inputs for 2.0 (`757.7617475757002 ** 2` is `...03c1` in NumPy, `...03c2` through out=). Pinned by
   `OpenBugsUfuncOutTests.Power_Out_ScalarExponent_TakesNumPysFastPath`. Found by A6 (its `abs(danom) ** 2` uses the
-  plain call and copies).
+  plain call and copies). Done 2026-10-06 (this commit), with X19 and X20.
+  - Proof (NumPy 2.4.2 vs `6f00ae14`):
+    - A 34-call twin probe. The out= and where= routes called pow for a 0-d exponent (`-0.0 ** 0.5` gave +0.0, NumPy
+      -0.0). `(1,) ** (1,)` and `0-d ** (1,)` took the fast path where NumPy's trivial loop calls pow, and
+      `0-d ** (1,)` returned a 0-d result (X19). float16 took the fast path or the double bridge (X20).
+    - A special-value probe: 31 values × 31 exponents × float16 / float32 / float64, through full and 0-d exponents.
+      44 cells differed.
+    - The new `power_fast` tier: 1,785 of its first 7,773 cases differ on the parent.
+  - Cause: NumPy's float power loops test the exponent's STEP in each inner-loop call (`steps[1] == 0`), so the bits
+    depend on which calls the ufunc machinery makes. Three stages decide:
+    - `check_for_trivial_loop`: a cast or unaligned 0-d input, or a 1-D input of at most bufsize elements, is copied;
+      any other such input, and an out of another dtype or unaligned, refuses the trivial loop.
+    - `try_trivial_single_output_loop`: a 0-d input has step 0, a 1-D operand its own stride, an N-D operand the item
+      size.
+    - NpyIter: axis order, flips, COPY_IF_OVERLAP, coalescing and `npyiter_find_buffering_setup`'s cost model. A
+      column exponent reaches the loop unbuffered (step 0) only for rows longer than bufsize / 2.
+
+    NumSharp's plain call took the fast path for every one-element exponent; its ufunc out= / where= routes never did;
+    float16 took it too.
+  - Fix:
+    - The step decision is ported once (`DefaultEngine.UfuncInnerSteps.cs`, `NumPyUfuncInputSteps`). It is generalized
+      from np.clip's const-loop decision, which now calls it. np.power's float32 / float64 loops route on it
+      (`Default.Power.StrideZero.cs`, `PowerFloatLoop`).
+    - A single-valued exponent with a fast value runs the matching SIMD unary kernel (square / sqrt / reciprocal /
+      positive) or a fill with 1 into the result or the out. With where=, the values are computed first and copied
+      with the mask (np.copyto): 2.5–9× faster than one kernel call per mask run. A 0-d plain call skips the shape
+      prologue.
+    - A varying exponent that NumPy's calls see with step 0 (wide columns) runs one NDIter pass with NumPy's per-call
+      branch on each element (`EmitPowerStrideZeroBody`). When both inputs are the loop dtype, the kernel also has a
+      vector body (`PowerStrideZeroVector128/256/512`, generic over the two float loops): the broadcast loops hand it a
+      uniform exponent vector, so one compare selects one vector operation.
+    - Everything else is pow (`ExecuteBinaryOp`).
+  - Gates: the `power_fast` oracle tier (7,902 cases, zero excuses); unit `Math/np.power.StrideZero.Test.cs` (11 tests,
+    NumPy-probed bits); `Backends/Kernels/OneElementOperandRankTests.cs` (X19). Planted bugs: 13 — the trivial-loop
+    copy bound, the cast-out refusal, the buffering stop, the cost comparison, the buffered broadcast's step 0, the
+    trivial 1-D step, the float32 exponent comparison, the 0-d shortcut, where='s mask, the vector square, the scalar
+    reciprocal, float16's tail and its broadcast exponent. The tier and the unit tests kill all 13. Two survived the
+    first pass and showed missing cases (finding 27); they are the tier's section I now.
+  - Speed (NPY/NS, two pinned P-cores, best of rounds):
+    - 90 fast-path cells (float64 / float32 × 1K / 100K / 1M × -1, 0, 0.5, 1, 2 × plain / out= / where=): geomean
+      6.0–6.2× over two runs. 100K and 1M: 2.0–20×.
+    - The 1K plain float64 cells: 1.3–2.9× from run to run. They sit at the NDArray allocation floor: `np.empty(1000)`
+      alone costs 0.20 µs disposed and 0.42 µs left to the finalizer, against NumPy's 1.0–1.9 µs per call. With
+      disposed results: `x ** 0` 3.0×, `x ** -1` 1.9× (division-bound on both sides), `x ** 2` 6.2×. Power's own cost
+      over `np.ones` / `np.reciprocal` / `np.square` is 0.01–0.04 µs.
+    - The 24 pow cells (`x ** 3`, full-shape exponents): 0.92–1.15×. Both sides call the CRT pow per element.
+    - Varying column exponents: (2, 5000) 1.67×, (16, 8192) 4.4×, (100, 10000) 3.5×. The old route called pow there:
+      0.16–0.29×; the scalar body alone gave 0.85× at (2, 5000).
+  - Left open, found here: X21, X22, X23.
 - [ ] **X14 The engine's flat mean of a broadcast float16 / complex128 operand ignores `dtype=`.**
   `TensorEngine.Mean(b, null, float32)` of a broadcast float16 `(4,5)` is the float16 `0x3c33` where NumPy's
   `np.mean(b, dtype=np.float32)` is the float32 `0x3f866666`; a broadcast complex128 with `dtype=float64` stays complex
@@ -795,6 +843,57 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - [ ] **X17 The old masked cast kernels have no caller left.** `DirectILKernelGenerator.Cast.Masked.cs`
   (`TryGetMaskedCastKernel`, the per-pair masked cast with the dead same-dtype blend X11 found) served only np.copyto's
   masked path, which X16 replaced. Delete it, or route a future masked cast through it after a parity check.
+- [x] **X19 A one-element operand with more dimensions than the other loses its leading axes.** Found by X13's probe
+  (2026-10-06): `np.power(0-d, (1,))` returned a 0-d result, NumPy's is `(1,)`. Done 2026-10-06 (this commit).
+  - Proof: a 165-call probe (24 binary ufuncs, comparisons, logical ops, shifts and C# operators × `(7,) op (1,1)` →
+    `(1,7)`, `(1,1) op (7,)`, `(3,7) op (1,1,1)` → `(1,3,7)`, `0-d op (1,)` → `(1,)`, `(1,) op (1,1)` → `(1,1)`): 100
+    wrong shapes. The values were right.
+  - Cause: the scalar-broadcast shortcuts of the binary route (`TryTrivialContiguousBinaryOp`), the comparison route
+    (`TryTrivialContiguousComparisonOp`) and the shift route (`TrySimdScalarShift`) gave the result the array operand's
+    shape. np.power's old fast path did the same.
+  - Fix: the shortcuts decline when the one-element operand has more dimensions; the broadcasting routes compute
+    NumPy's shape.
+  - Gate: `Backends/Kernels/OneElementOperandRankTests.cs` (2 tests: 165 shapes and the values; 100 shapes fail before
+    the fix).
+- [x] **X20 np.power on float16 and np.float_power are not NumPy's loops.** Found by X13's probe. Done 2026-10-06
+  (this commit).
+  - Proof: NumPy's HALF_power is `PyUFunc_ee_e_As_ff_f` with powf and has NO fast path. NumSharp's float16 power took
+    np.power's fast path (`-0.0 ** 0.5` gave -0.0, NumPy +0.0; `-inf ** 0.5` NaN, NumPy +inf; `sNaN ** 1` kept the NaN
+    signalling) and otherwise bridged through double. Over every float16 base × 17 exponents, 7,161 of 1,114,112
+    results differed: `sNaN ** 0` gave 1, not NaN (the BCL widen quiets the NaN first), integer powers of a negative
+    NaN lost its sign, and one result rounded once from double instead of from powf's float. np.float_power
+    (`PyUFunc_dd_d` with pow) took np.power's fast path: `float_power(757.7617475757002, 2.0)` gave `x*x` (`...03c1`),
+    NumPy pow (`...03c2`).
+  - Fix: float16 power is NumPy's pipeline — the exact widen (`HalfToFloatScalarExact`: a signalling NaN stays
+    signalling), MathF.Pow (the CRT powf NumPy calls) and npy_float_to_half's narrow. The emitted scalar paths call
+    `PowerHalfNumPy`; whole arrays run the widen-compute-narrow kernels' new `HalfPower` (a vector widen, one block
+    loop of MathF.Pow, a vector narrow; every layout through the X15 routes). np.float_power runs the power kernel and
+    never the fast path.
+  - Gates: the `power_fast` tier (float16 in sections A and F, float_power in G); `Float16_IsPowfWithoutAFastPath`,
+    `FloatPower_NeverTakesTheFastPath`; a probe over every float16 base × 17 exponents through five routes (full,
+    0-d, reversed, odd slice, 0-d base): 0 differences.
+  - Speed: float16 power 1.52–1.56× at 1K / 100K / 1M. The old fast path was 2.6–5.8× for 2.0 and 0.5 but gave
+    other bits; the double bridge was 0.54× for 3.0. powf costs ~5 ns an element on both sides and NumPy's scalar half
+    conversions ~3.5 ns more, so the ceiling is ~1.7×. A per-8-lane form (extract each lane, powf, rebuild the vector)
+    reached only 1.32–1.41×. float_power: 0.96–1.06× (pow on both sides; the old 14–28× came from computing `x*x`,
+    which is not NumPy's value).
+- [ ] **X21 `np.power(unsigned, -1)` raises the wrong error.** NumPy packs the weak Python int into the unsigned loop
+  first: `np.power(np.uint8([2]), -1)` raises `OverflowError: Python integer -1 out of bounds for uint8` (uint32 and
+  uint64 the same). NumSharp reaches the integer loop's check and raises `ArgumentException: Integers to negative
+  integer powers are not allowed.` It is X2's NEP 50 packing class on np.power: `np.add(np.uint8([2]), -1)` gives `[1]`
+  in NumSharp and the same OverflowError in NumPy. The `power_fast` generator leaves these cases out. Found by X13.
+- [ ] **X22 A binary ufunc's out= broadcast error omits the out's shape.** `np.power(ones(3), ones(4), out=empty(3))`:
+  NumPy "operands could not be broadcast together with shapes (3,) (4,) (3,) " (every operand, the out included),
+  NumSharp "… with shapes (3,) (4,) " (`IncorrectShapeException`). The 0-d exponent form and the "non-broadcastable
+  output operand" text match. Text only. Found by X13; the `power_fast` generator leaves the case out.
+- [ ] **X23 np.evaluate's Power node misses NumPy's scalar-exponent fast path, and np.kaiser inherits it.**
+  `np.evaluate(NDExpr.Power(x, 2.0))` computes pow (`757.7617475757002 ** 2` = `...03c2`, `-0.0 ** 0.5` = +0.0) where
+  NumPy's unfused `x ** 2.0` takes DOUBLE_power's fast path (`x*x` `...03c1`, sqrt -0.0). np.kaiser evaluates NumPy's
+  `((n - alpha) / alpha) ** 2.0` through that node: 146 of 4,796 windows (M from 2 to 1,200 × beta 0, 5, 8.6, 14)
+  differ in at least one element, by 1–2 ULP (`np.kaiser(272, 5.0)[13]`: NumPy `0x3fb79bb596a301c3`, NumSharp
+  `...c5`; the windows tier has no such M). The fix: a Power node whose exponent is a constant or a hoisted 0-d
+  parameter emits NumPy's stride-0 branch (`PowerStrideZero<T>` and its vector forms) for the float32 / float64 loops.
+  Found by X13. Next item.
 
 ## 6. Findings
 
@@ -911,9 +1010,42 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 25. **Measure the route the consumer takes** (X15). Fixing float16's broadcast kernels on the plain call left
    numpy.ma's anom at 0.86×: it subtracts into an out= buffer, whose route (the iterator's scalar float16 body) the
    plain-call benchmark never ran. A speed item names its consumers' call forms (plain, out=, where=, in place).
+26. **A loop that tests its own steps makes the call schedule part of the answer** (X13). NumPy's float power loops
+   branch on `steps[1] == 0`, so whether `x ** 2` is `x*x` or pow depends on the calls the trivial loop and NpyIter
+   make: a cast out, the buffer size, an extent-1 axis or a column's row length change the bits. Porting the loop body
+   is not enough. The decision is ported once (`NumPyUfuncInputSteps`) and shared by the two loops that read their
+   steps (np.clip's const loop and power).
+27. **A mutation survivor is a missing case until it is proved equivalent** (X13). Two of 13 mutants of the step
+   decision survived the 7,773-case tier: no case had one-element operands with a cast out, and none had rows of
+   exactly bufsize with every input cast. NumPy's answer flips at both (probed), so they became section I.
+28. **A restored source must look newer than the mutant's build** (X13). The mutation script restored files with
+   `shutil.copy2`, which keeps the old modification time, so MSBuild's incremental check kept the last mutant compiled
+   in: the next "real" build failed 3 tier cases. Restore with a fresh modification time (copy, then `os.utime`) and
+   rebuild before trusting a result.
+29. **A float NaN constant is not a test input** (X13). RyuJIT folds float constants through double, so
+   `BitConverter.UInt32BitsToSingle(0x7F800001)` written as a constant can reach the code as a QUIET NaN, and
+   `MathF.Pow(constant sNaN, 0)` can fold to 1: a signalling-NaN test passed or failed with the JIT tier. Build such
+   inputs from integer arrays (`np.array(bits).view(np.float32)`) or read them from an array at run time.
+30. **C's float32 `1.0 / x` is a double division, and its double rounding is innocuous** (X13). FLOAT_power's
+   reciprocal divides in double and rounds to float on the store; 53 ≥ 2·24 + 2 bits, so a float32 division gives the
+   same bits. Verified over all 2^32 float32 patterns, scalar and vector, NaN payloads included (a planted difference
+   every 1,000,003 patterns was counted exactly).
+31. **A test can pass only because an earlier test compiled a kernel** (X13).
+   `InnerLoopKernelKeyTests.Production_Route_Registers_Kernel_Under_Both_Keys` read the inner-loop caches after an
+   int16 add into a contiguous out. Since 2026-10-04 that call takes the trivial out= loop and never compiles the
+   kernel, so the test passed only when it ran after another one. It now uses a strided out.
+32. **A workaround can outlive its bug** (A6 / X13). numpy.ma's port computes `abs(danom) ** 2` with the plain call
+   and copies the result into its layout buffer, because the out= route skipped the fast path (finding 17). X13 fixed
+   that route, so the copy can become a plain `out=` (not changed here; A6's tiers hold the values either way).
 
 ## 7. State log
 
+- **2026-10-06**: X13 done with X19 and X20. np.power's float loops take NumPy's stride-0 fast path exactly when
+  NumPy's calls see a zero exponent step: the trivial-loop / NpyIter decision is ported once and shared with np.clip.
+  float16 power is HALF_power's powf; float_power never takes the fast path; a one-element operand with more
+  dimensions keeps its leading axes in every binary ufunc, comparison and shift. The `power_fast` oracle tier (7,902
+  cases, zero excuses; 13 planted bugs killed); `OpenBugs.UfuncOut.cs` removed (its pin is a unit test now). X21–X23
+  and findings 26–32 recorded; X23 (np.kaiser's 1–2 ULP) is next. Commit: this commit.
 - **2026-10-06**: X15 done with X4 (float16 add / subtract / multiply / divide on every broadcast and strided layout
   and through out=: the SIMD widen-compute-narrow kernels per inner run, a reversed walk for broadcast F sets; 13
   planted bugs); numpy.ma re-measured (4.80×); X18 and finding 25 recorded. Commit `1185f39c`.

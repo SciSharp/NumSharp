@@ -5197,6 +5197,406 @@ def gen_copyto_full():
     return cases
 
 
+# ---- power_fast: np.power's float loops and NumPy's zero-exponent-step fast path (plan api-parameter-parity X13) --
+#
+# NumPy's DOUBLE_power / FLOAT_power take 1/x, 1, sqrt(x), x, x*x for an exponent of -1, 0, 0.5, 1, 2 when the
+# exponent's STEP in the inner-loop call is 0, and pow otherwise; HALF_power is powf with no fast path; float_power
+# is pow with no fast path. The step comes from the ufunc machinery (the trivial loop's fixed steps, NpyIter's axis
+# order, coalescing and buffering), so the tier walks it: 0-d / Python-scalar / one-element / (1,1) / stride-0
+# broadcast exponents, varying exponents (full, column, row, strided, leading axes), rows on both sides of the
+# buffering threshold (n > bufsize / 2, at the default 8192 and at np.setbufsize(256)), casts that the trivial loop
+# copies or the iterator buffers, every base layout, out= (same dtype, another dtype, F, strided, the base itself, an
+# overlapping view), where= masks, dtype=, float_power, and power's errors in NumPy's order. Every float base holds
+# values on which the fast path and pow DIFFER (x*x vs pow: 757.7617475757002; sqrt vs pow: -0.0, -inf,
+# 973.9663027747129; 1/x vs pow: 72.21291942905373; x vs pow and 1 vs pow: a signalling NaN), so every case shows which
+# one ran. Each case records the result, or the out's whole base buffer. Strict: valueclass "powerfast", which
+# MisalignedRegistry never excuses.
+
+PF_FLOAT_DTYPES = ["float64", "float32"]
+
+
+def _pf_specials(dt):
+    """The discriminating base values of a float dtype (NaN bit patterns built from their encodings)."""
+    dt = np.dtype(dt)
+    if dt == np.float64:
+        vals = np.array([757.7617475757002, -558.754862666835, -0.0, -np.inf, 973.9663027747129, 929.9078329483401,
+                         72.21291942905373, -410.61363584182595, 1.5, -2.0, np.inf, 0.0, 1e-310, 3.0])
+        nans = np.array([0x7FF0000000000001, 0xFFF8000000000123, 0x7FF8000000000000], np.uint64).view(np.float64)
+    elif dt == np.float32:
+        vals = np.array([-9.390324592590332, -901.92664, -0.0, -np.inf, 892.0480346679688, 155.91673278808594,
+                         1.5, -2.0, np.inf, 0.0, 1e-40, 3.0], np.float32)
+        nans = np.array([0x7F800001, 0xFFC00123, 0x7FC00000], np.uint32).view(np.float32)
+    elif dt == np.float16:
+        vals = np.array([-0.0, -np.inf, 4.0, 300.0, 1.5, -2.0, np.inf, 0.0, 3.0], np.float16)
+        nans = np.array([0x7A4E, 0x7C01, 0xFC89, 0xFE45, 0x0001], np.uint16).view(np.float16)
+    else:
+        raise ValueError(dt)
+    return np.concatenate([vals, nans])
+
+
+def _pf_fill(n, dt):
+    """A C-contiguous base of n elements: the discriminating values cycled (floats), small values (integers)."""
+    dt = np.dtype(dt)
+    if dt.kind == "f":
+        s = _pf_specials(dt)
+        return np.ascontiguousarray(np.resize(s, n))
+    if dt.kind == "c":
+        s = np.array([1 + 2j, complex(-0.0, 0.0), 3 - 1j, 0.5 + 0.5j, -2 + 0j, complex(np.inf, 0), 0j], np.complex128)
+        return np.ascontiguousarray(np.resize(s, n))
+    if dt.kind == "b":
+        return np.ascontiguousarray(np.resize(np.array([True, False, True]), n))
+    s = np.array([3, 0, 1, 7, 2, 9, 5, 4] if dt.kind == "u" else [3, -2, 0, 1, 7, -5, 2, 9], dt)
+    return np.ascontiguousarray(np.resize(s, n))
+
+
+def _pf_out_fill(n, dt):
+    """An out's prior contents: a pattern no power result produces in these cases, so an unwritten slot shows."""
+    dt = np.dtype(dt)
+    if dt.kind == "f":
+        return np.full(n, -12345.5, dt)
+    if dt.kind == "c":
+        return np.full(n, -12345.5 - 7j, dt)
+    return np.full(n, 77, dt)
+
+
+def gen_power_fast():
+    import warnings
+    rng = np.random.default_rng(20261006)
+    cases = []
+    n = 0
+    FAST = [2.0, 0.5, -1.0, 1.0, 0.0, -0.0, 3.0, float("nan"), 0.50000001]
+    MIXED = [2.0, 0.5, -1.0, 1.0, 0.0, 3.0, -0.0, 2.0, 0.5]
+
+    def emit(tag, x, e, out=None, where=None, dtype=None, bufsize=None, fn="power", layout="power"):
+        """Run fn(x, e, out=, where=, dtype=) and record the result (or out's base buffer after the call).
+        x: (base, view). e: ("py", value) | (base, view). out: None | (base, view) | ("view", view_of_x_base).
+        where: None | (base, view)."""
+        nonlocal n
+        xb, xv = x
+        operands = [describe(xb, xv)]
+        params = {"fn": fn}
+        if isinstance(e[0], str):                      # ("py", value): a Python scalar exponent
+            params["exp_scalar"] = _ct_scalar_param(e[1])
+            ev = e[1]
+        else:
+            operands.append(describe(e[0], e[1]))
+            ev = e[1]
+        kw = {}
+        ob = None
+        if out is not None:
+            if isinstance(out[0], str):
+                params["out_view"] = _viewspec(xb, out[1])
+                kw["out"] = out[1]
+                ob = xb
+            else:
+                operands.append(describe(out[0], out[1]))
+                params["out"] = "array"
+                kw["out"] = out[1]
+                ob = out[0]
+        if where is not None:
+            operands.append(describe(where[0], where[1]))
+            params["where"] = "array"
+            kw["where"] = where[1]
+        if dtype is not None:
+            params["dtype"] = dtype
+            kw["dtype"] = dtype
+        if bufsize is not None:
+            params["bufsize"] = int(bufsize)
+        f = np.power if fn == "power" else np.float_power
+        cid = f"power_fast/{tag}/{n}"
+        old = np.getbufsize()
+        try:
+            if bufsize is not None:
+                np.setbufsize(bufsize)
+            with np.errstate(all="ignore"), warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                r = f(xv, ev, **kw)
+        except Exception as ex:
+            cases.append(_error_case("power_fast", params, operands, ex, layout, cid=cid))
+            n += 1
+            return
+        finally:
+            np.setbufsize(old)
+        expected = _arr_expected(ob.ravel() if ob is not None else r)
+        cases.append(_case("power_fast", params, operands, expected, layout, "powerfast", cid=cid))
+        n += 1
+
+    def base(shape, dt, kind="c"):
+        return _ct_view(shape, dt, kind, _pf_fill)
+
+    def one_value(v, dt, shape):
+        b = np.full(shape, v, dtype=dt) if shape else np.array(v, dtype=dt)
+        return b, b
+
+    def exp_single(kind, v, dt, xshape):
+        """A single-valued exponent of `kind` with value v (an array of dtype dt), or None if the kind does not
+        apply to the base's rank."""
+        if kind == "0d":
+            return one_value(v, dt, ())
+        if kind == "one":
+            return one_value(v, dt, (1,))
+        if kind == "one2d":
+            return one_value(v, dt, (1, 1))
+        if kind == "bcast":                            # a read-only stride-0 broadcast of one element, base's shape
+            if not xshape:
+                return None
+            row = np.full((1,), v, dtype=dt)
+            return row, np.broadcast_to(row, xshape)
+        raise ValueError(kind)
+
+    def exp_multi(kind, dt, xshape):
+        """A varying exponent of `kind` (values cycled from MIXED), or None if it does not apply."""
+        def filled(shape):
+            b = np.ascontiguousarray(np.resize(np.array(MIXED, dtype=dt), int(np.prod(shape)) if shape else 1)
+                                     .reshape(shape))
+            return b, b
+        if kind == "full":
+            return filled(xshape)
+        if kind == "col":
+            if len(xshape) < 2:
+                return None
+            return filled(xshape[:-1] + (1,))
+        if kind == "row":
+            if len(xshape) < 2:
+                return None
+            return filled((1,) * (len(xshape) - 1) + (xshape[-1],))
+        if kind == "mid":                              # a stride-0 middle axis
+            if len(xshape) < 3:
+                return None
+            return filled(xshape[:1] + (1,) + xshape[2:])
+        if kind == "strided":
+            if not xshape:
+                return None
+            wide = xshape[:-1] + (xshape[-1] * 2,)
+            b = np.ascontiguousarray(np.resize(np.array(MIXED, dtype=dt), int(np.prod(wide))).reshape(wide))
+            return b, b[..., ::2]
+        if kind == "lead":                             # extra leading unit axis: the result gains a dimension
+            return filled((1,) + tuple(xshape))
+        raise ValueError(kind)
+
+    # ---- A: plain calls, single-valued exponents, every float base layout ----------------------------------------
+    for dt in PF_FLOAT_DTYPES + ["float16"]:
+        for shape in [(), (1,), (7,), (13,), (3, 5), (2, 3, 4)]:
+            for lk in ["c", "f", "strided", "negstride", "offset", "transposed"]:
+                x = base(shape, dt, lk)
+                if x is None:
+                    continue
+                # A 0-d base of float32 / float16 is a STRONG array in NumPy, but NumSharp reads every 0-d operand as a
+                # weak Python scalar (the documented NEP 50 0-d divergence): a Python-scalar exponent would change the
+                # loop dtype there, which is not this tier's question. Same-dtype array exponents stay.
+                py_ok = bool(shape) or dt == "float64"
+                for v in FAST:
+                    if py_ok:
+                        emit(f"a/{dt}/{'x'.join(map(str, shape))}/{lk}/py={v!r}", x, ("py", v), layout=f"x_{lk}")
+                    for ek in ["0d", "one", "one2d", "bcast"]:
+                        ex = exp_single(ek, v, dt, shape)
+                        if ex is None:
+                            continue
+                        emit(f"a/{dt}/{'x'.join(map(str, shape))}/{lk}/{ek}={v!r}", x, ex, layout=f"exp_{ek}")
+                for v in [2, -1, 0, 1, 3]:             # Python ints: weak, cast to the float loop
+                    if py_ok:
+                        emit(f"a/{dt}/{'x'.join(map(str, shape))}/{lk}/pyint={v}", x, ("py", v), layout="py_int")
+
+    # ---- B: integer, bool and complex bases (the float loop through a cast; the integer loops' shortcuts) --------
+    for dt in ["int8", "uint8", "int32", "int64", "uint64", "bool", "complex128"]:
+        for shape in [(), (1,), (7,), (3, 4)]:
+            for lk in ["c", "f", "strided"]:
+                x = base(shape, dt, lk)
+                if x is None:
+                    continue
+                for v in [2.0, 0.5, -1.0, 1.0, 0.0, 3.0]:
+                    if dt == "complex128" and v != int(v):
+                        continue                       # npy_cpow's cpow branch: the documented F5 class
+                    if shape:                          # a 0-d base: see section A
+                        emit(f"b/{dt}/{'x'.join(map(str, shape))}/{lk}/py={v!r}", x, ("py", v), layout="int_base")
+                    for ek in ["one", "one2d"]:
+                        emit(f"b/{dt}/{'x'.join(map(str, shape))}/{lk}/{ek}f64={v!r}", x,
+                             exp_single(ek, v, "float64", shape), layout="int_base")
+                for v in [2, 3, 0, 1, -1]:
+                    if shape and not (v < 0 and np.dtype(dt).kind == "u"):   # 0-d: section A; unsigned -1: plan X21
+                        emit(f"b/{dt}/{'x'.join(map(str, shape))}/{lk}/pyint={v}", x, ("py", v), layout="int_base")
+                    if dt not in ("bool", "complex128") and not (v < 0 and np.dtype(dt).kind == "u"):
+                        for ek in ["one", "one2d"]:
+                            emit(f"b/{dt}/{'x'.join(map(str, shape))}/{lk}/{ek}same={v}", x,
+                                 exp_single(ek, v, dt, shape), layout="int_base")
+
+    # ---- C: casts the trivial loop copies (1-D, <= bufsize) or the iterator buffers (longer, or N-D) ---------------
+    # The threshold is the buffer size, so it is walked at np.setbufsize(256) (rows of 256 / 257) and checked once at
+    # the default 8192 (8192 / 8193) — a long base costs the corpus 16 KB of hex per thousand float64 elements.
+    for dt in PF_FLOAT_DTYPES:
+        for nlen, bufsize in [(1, None), (7, None), (256, 256), (257, 256)]:
+            x = base((nlen,), dt, "c")
+            for edt in ["int64", "float16", "int8"] + (["float32"] if dt == "float64" else []):
+                for v in [2, 1, 0]:
+                    for ek in ["one", "bcast"]:
+                        ex = exp_single(ek, v, edt, (nlen,))
+                        emit(f"c/{dt}/{nlen}/{ek}{edt}={v}/buf={bufsize}", x, ex, bufsize=bufsize, layout=f"cast_{ek}")
+                    if not (dt == "float32" and edt == "int64"):   # a strong 0-d int64 promotes float32 (NEP 50 0-d)
+                        ex = exp_single("0d", v, edt, ())
+                        emit(f"c/{dt}/{nlen}/0d{edt}={v}/buf={bufsize}", x, ex, bufsize=bufsize, layout="cast_0d")
+        for nlen in [8192, 8193]:
+            x = base((nlen,), dt, "c")
+            emit(f"c/{dt}/{nlen}/bcastint64=2", x, exp_single("bcast", 2, "int64", (nlen,)), layout="cast_bcast")
+
+    # ---- D: varying exponents: the NpyIter buffering decision (columns, middle axes, rows, strides) ---------------
+    for dt in PF_FLOAT_DTYPES:
+        # The column threshold (n > bufsize / 2) is walked at np.setbufsize(256); the default 8192 is checked once
+        # below with (2, 4096) / (2, 4097) rows.
+        for shape, bufsize in [((3, 4), None), ((2, 3, 4), None), ((2, 100), 256), ((2, 128), 256),
+                               ((2, 129), 256), ((3, 300), 256), ((4, 2, 70), 256), ((2, 2, 129), 256),
+                               ((2, 2, 128), 256), ((5, 129), 256)]:
+            for lk in ["c", "f", "strided"]:
+                x = base(shape, dt, lk)
+                if x is None:
+                    continue
+                for ek in ["full", "col", "row", "mid", "strided", "lead"]:
+                    ex = exp_multi(ek, dt, shape)
+                    if ex is None:
+                        continue
+                    emit(f"d/{dt}/{'x'.join(map(str, shape))}/{lk}/{ek}/buf={bufsize}", x, ex, bufsize=bufsize,
+                         layout=f"vary_{ek}")
+                    if lk == "c" and ek in ("col", "mid"):
+                        ob = _pf_out_fill(int(np.prod(shape)), dt).reshape(shape)
+                        emit(f"d/{dt}/{'x'.join(map(str, shape))}/out/{ek}/buf={bufsize}", x, ex, out=(ob, ob),
+                             bufsize=bufsize, layout=f"vary_{ek}_out")
+                        m = np.ascontiguousarray((rng.random(int(np.prod(shape))) < 0.6).reshape(shape))
+                        oc = ob.copy()                 # one fresh out: base and view are the same buffer
+                        emit(f"d/{dt}/{'x'.join(map(str, shape))}/where/{ek}/buf={bufsize}", x, ex, out=(oc, oc),
+                             where=(m, m), bufsize=bufsize, layout=f"vary_{ek}_where")
+        for shape in [(2, 4096), (2, 4097)]:
+            x = base(shape, dt, "c")
+            ex = exp_multi("col", dt, shape)
+            emit(f"d/{dt}/{'x'.join(map(str, shape))}/c/col/buf=default", x, ex, layout="vary_col")
+            ob = _pf_out_fill(int(np.prod(shape)), dt).reshape(shape)
+            emit(f"d/{dt}/{'x'.join(map(str, shape))}/out/col/buf=default", x, ex, out=(ob, ob), layout="vary_col_out")
+
+    # ---- E: out= and where= with single-valued exponents ---------------------------------------------------------
+    for dt in PF_FLOAT_DTYPES:
+        odt_other = "float32" if dt == "float64" else "float64"
+        for shape in [(7,), (3, 4)]:
+            for v in [2.0, 0.5, -1.0, 1.0, 0.0, 3.0]:
+                for ek in ["py", "0d", "one", "one2d"]:
+                    ex = ("py", v) if ek == "py" else exp_single(ek, v, dt, shape)
+                    nel = int(np.prod(shape))
+                    outs = {
+                        "c": lambda: (lambda o: (o, o))(_pf_out_fill(nel, dt).reshape(shape)),
+                        "other": lambda: (lambda o: (o, o))(_pf_out_fill(nel, odt_other).reshape(shape)),
+                        "f": lambda: (lambda o: (o, o.T))(_pf_out_fill(nel, dt).reshape(tuple(reversed(shape))))
+                        if len(shape) == 2 else None,
+                        "strided": lambda: (lambda o: (o, o[..., ::2]))(
+                            _pf_out_fill(nel * 2, dt).reshape(shape[:-1] + (shape[-1] * 2,))),
+                    }
+                    for ok, mk_out in outs.items():
+                        o = mk_out()
+                        if o is None:
+                            continue
+                        x = base(shape, dt, "c")
+                        emit(f"e/{dt}/{'x'.join(map(str, shape))}/{ek}={v!r}/out={ok}", x, ex, out=o, layout=f"out_{ok}")
+                        for mk in ["rand", "row", "col", "zero_d_true"]:
+                            m = _ct_mask(shape, mk, rng)
+                            if m == "skip":
+                                continue
+                            x = base(shape, dt, "c")
+                            o = mk_out()
+                            emit(f"e/{dt}/{'x'.join(map(str, shape))}/{ek}={v!r}/out={ok}/where={mk}", x, ex, out=o,
+                                 where=m, layout=f"where_{mk}")
+                    # where= without out: only the mask-true slots are defined, so compare through an out of the
+                    # same dtype instead (NumPy leaves the rest uninitialized).
+                    # In place and overlapping outs: the base buffer itself.
+                    xb, xv = base(shape, dt, "c")
+                    emit(f"e/{dt}/{'x'.join(map(str, shape))}/{ek}={v!r}/out=self", (xb, xv), ex, out=("view", xv),
+                         layout="out_self")
+                    if len(shape) == 1:
+                        xb = _pf_fill(shape[0] + 1, dt)
+                        emit(f"e/{dt}/{'x'.join(map(str, shape))}/{ek}={v!r}/out=shift", (xb, xb[:-1]), ex,
+                             out=("view", xb[1:]), layout="out_overlap")
+
+    # ---- F: dtype= picks the loop (and so whether the fast path exists) ------------------------------------------
+    for xdt, dts in [("float64", ["float32", "float64"]), ("float32", ["float64", "float32"]),
+                     ("float16", ["float32", "float64", "float16"]), ("int32", ["float64", "float32"]),
+                     ("int8", ["float32"])]:
+        for dt in dts:
+            for v in [2.0, 0.5, -1.0, 1.0, 0.0, 3.0]:
+                x = base((9,), xdt, "c")
+                emit(f"f/{xdt}/dtype={dt}/py={v!r}", x, ("py", v), dtype=dt, layout="dtype")
+                ex = exp_single("one", v, "float64" if xdt.startswith("int") else xdt, (9,))
+                emit(f"f/{xdt}/dtype={dt}/one={v!r}", x, ex, dtype=dt, layout="dtype")
+                ob = _pf_out_fill(9, "float64")
+                emit(f"f/{xdt}/dtype={dt}/py={v!r}/out64", x, ("py", v), dtype=dt, out=(ob, ob), layout="dtype_out")
+
+    # ---- G: float_power — pow on every element, whatever the exponent's step ---------------------------------------
+    for dt in PF_FLOAT_DTYPES + ["int32", "float16"]:
+        for shape in [(), (7,), (3, 4)]:
+            x = base(shape, dt, "c")
+            for v in [2.0, 0.5, -1.0, 1.0, 0.0, 3.0]:
+                emit(f"g/{dt}/{'x'.join(map(str, shape))}/py={v!r}", x, ("py", v), fn="float_power", layout="float_power")
+                ex = exp_single("one", v, "float64", shape)
+                emit(f"g/{dt}/{'x'.join(map(str, shape))}/one={v!r}", x, ex, fn="float_power", layout="float_power")
+                ob = _pf_out_fill(int(np.prod(shape)) if shape else 1, "float64").reshape(shape)
+                emit(f"g/{dt}/{'x'.join(map(str, shape))}/py={v!r}/out", x, ("py", v), out=(ob, ob),
+                     fn="float_power", layout="float_power_out")
+
+    # ---- I: decision boundaries a mutation pass found unguarded (2026-10-06) ------------------------------------
+    # (1) One-element operands of ONE shape are the trivial loop's (1-D: the exponent's own stride; N-D: the item size,
+    #     so pow) — unless the out needs a cast: check_for_trivial_loop refuses the loop for an out of another dtype,
+    #     and NpyIter gives the extent-1 exponent step 0 (the fast path). A complex128 out keeps the one-ULP float64
+    #     difference of x*x and pow; a narrower out keeps the sign of sqrt(-0.0).
+    for dt in PF_FLOAT_DTYPES:
+        others = ["complex128", "float16"] + (["float32"] if dt == "float64" else ["float64"]) + [dt]
+        for shape in [(1,), (1, 1), (1, 1, 1)]:
+            for xv, v in [(757.7617475757002, 2.0), (-0.0, 0.5), (-np.inf, 0.5), (72.21291942905373, -1.0),
+                          (929.9078329483401, 0.5)]:
+                for odt in others:
+                    ob = np.full(shape, 7.0, dtype=odt)
+                    emit(f"i/{dt}/{'x'.join(map(str, shape))}/x={xv!r}/e={v!r}/out={odt}", one_value(xv, dt, shape),
+                         one_value(v, dt, shape), out=(ob, ob), layout="one_element_out_cast")
+    # (2) npyiter_find_buffering_setup stops growing the core once it holds bufsize elements and something is buffered
+    #     (`size >= maximum_size`): with every input cast, a column exponent against rows of EXACTLY bufsize elements
+    #     stays single-stride (step 0, the fast path), while rows of bufsize - 1 grow the core over the column (pow).
+    for xdt, edt, dtype in [("float32", "float32", "float64"), ("float16", "float16", "float32"),
+                            ("float16", "float32", "float64")]:
+        for ncol in [255, 256, 257]:
+            xb = np.full((2, ncol), 3.0, dtype=xdt)
+            xb[1, 0] = -0.0
+            xb[1, 1] = -np.inf
+            xb[0, 0] = 1.5
+            col = np.array([[2.0], [0.5]], dtype=edt)
+            emit(f"i/bufstop/{xdt}**{edt}/dtype={dtype}/2x{ncol}", (xb, xb), (col, col), dtype=dtype, bufsize=256,
+                 layout="buffer_stop")
+
+    # ---- H: empty results and power's errors in NumPy's order ----------------------------------------------------
+    for dt in PF_FLOAT_DTYPES:
+        for shape in [(0,), (2, 0)]:
+            x = base(shape, dt, "c")
+            for v in [2.0, 0.5]:
+                emit(f"h/{dt}/{'x'.join(map(str, shape))}/py={v!r}", x, ("py", v), layout="empty")
+                emit(f"h/{dt}/{'x'.join(map(str, shape))}/one={v!r}", x, exp_single("one", v, dt, shape), layout="empty")
+
+    def arr(shape, dt="float64", fill=_pf_fill):
+        b = fill(int(np.prod(shape)) if shape else 1, dt).reshape(shape)
+        return b, b
+
+    ro_out = _pf_out_fill(3, "float64")
+    ro_out.flags.writeable = False
+    int_mask = arr((3,), "int64", lambda k, d: np.ones(k, d))
+    error_jobs = [
+        ("ro_out", arr((3,)), ("py", 2.0), (ro_out, ro_out), None, None),
+        ("ro_out_badmask", arr((3,)), ("py", 2.0), (ro_out, ro_out), int_mask, None),
+        ("badmask", arr((3,)), ("py", 2.0), arr((3,), fill=_pf_out_fill), int_mask, None),
+        ("out_int32", arr((3,)), ("py", 2.0), arr((3,), "int32", _pf_out_fill), None, None),
+        ("out_int32_badmask", arr((3,)), ("py", 0.5), arr((3,), "int32", _pf_out_fill), int_mask, None),
+        ("out_shape", arr((3,)), ("py", 2.0), arr((4,), fill=_pf_out_fill), None, None),
+        ("out_shape_lead", arr((3,)), arr((1, 1)), arr((3,), fill=_pf_out_fill), None, None),
+        ("exp_shape", arr((3,)), arr((4,)), None, None, None),
+        ("mask_shape", arr((3,)), ("py", 2.0), arr((3,), fill=_pf_out_fill), arr((4,), "bool", lambda k, d: np.ones(k, d)), None),
+        ("dtype_int32", arr((3,)), ("py", 2.0), None, None, "int32"),
+        ("dtype_c128_f64", arr((3,), "complex128"), ("py", 2.0), None, None, "float64"),
+    ]
+    for (tag, x, e, out, where, dtype) in error_jobs:
+        emit(f"h/err/{tag}", x, e, out=out, where=where, dtype=dtype, layout="error")
+    return cases
+
+
 def _relabel_dtype(cases, frm, to):
     """Re-label a NumPy proxy dtype to a NumSharp-only dtype across a case's operand /
     expected / params descriptors (+ id). The RAW BYTES are untouched — this only rewrites
@@ -19194,6 +19594,9 @@ def main():
     elif mode == "copyto_full":
         # np.copyto as NumPy's array_copyto: where= masks, layouts, overlap, C# literal sources, errors (X16 + X11).
         write_jsonl(os.path.join(corpus_dir, "copyto_full.jsonl"), gen_copyto_full())
+    elif mode == "power_fast":
+        # np.power's float loops: NumPy's zero-exponent-step fast path on every route, float16's powf, float_power (X13).
+        write_jsonl(os.path.join(corpus_dir, "power_fast.jsonl"), gen_power_fast())
     elif mode == "errors":
         cases = gen_errors()
         write_jsonl(os.path.join(corpus_dir, "errors.jsonl"), cases)

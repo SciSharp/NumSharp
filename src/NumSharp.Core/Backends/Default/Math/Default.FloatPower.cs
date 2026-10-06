@@ -7,12 +7,14 @@ namespace NumSharp.Backends
         /// <summary>
         /// Element-wise power at a MINIMUM precision of float64 (np.float_power).
         ///
-        /// float_power is <see cref="Power"/> restricted to NumPy's two floating loops — float64
-        /// (<c>dd->d</c>) and complex128 (<c>DD->D</c>) — so it is implemented AS Power on a forced
-        /// float loop rather than as a new kernel: the arithmetic is bit-identical, so reusing the
-        /// already-bit-exact Power path (npy_cpow for complex, the float64 pow loop for reals) is
-        /// what guarantees parity. The two behaviours that make float_power DIFFERENT from Power are
-        /// both properties of loop SELECTION, handled here before delegating:
+        /// float_power is the power KERNEL restricted to NumPy's two floating loops — float64
+        /// (<c>dd->d</c>) and complex128 (<c>DD->D</c>) — so it runs that kernel on a forced float
+        /// loop rather than a new one: the arithmetic is bit-identical (npy_cpow for complex, the
+        /// CRT pow for reals). It does NOT go through <see cref="Power"/>, whose float loops take
+        /// NumPy's scalar-exponent fast path (x*x, sqrt, 1/x for a zero exponent step): NumPy's
+        /// float_power loop is a plain pow loop with no such branch. The two behaviours that make
+        /// float_power DIFFERENT from Power's integer loops are both properties of loop SELECTION,
+        /// handled here before computing:
         ///   1. Every real input (bool/int/float16/float32/decimal/char) promotes to float64 and a
         ///      complex operand to complex128 — never an integer loop. That is why float_power(2, -1)
         ///      is 0.5 and does NOT raise Power's "Integers to negative integer powers are not
@@ -23,8 +25,9 @@ namespace NumSharp.Backends
         /// Error taxonomy and ORDER are NumPy's (probed 2.4.2): read-only out → non-bool where →
         /// dtype-has-no-loop → input cannot cast to the loop (complex ->float64) → out cannot cast
         /// from the loop → shape. Each error is raised HERE with the 'float_power' ufunc name via the
-        /// shared validators; the delegated <see cref="Power"/> re-runs the identical checks (naming
-        /// 'power'), but since every one already passed it never raises, so the name never leaks.
+        /// shared validators; the kernel route (<see cref="ExecuteBinaryOp"/>) re-runs the identical
+        /// checks (naming 'power'), but since every one already passed it never raises, so the name never
+        /// leaks — except the broadcast check, whose text names no ufunc.
         /// </summary>
         /// <param name="lhs">The bases (any dtype; cast to the resolved float loop).</param>
         /// <param name="rhs">The exponents (any dtype; cast to the resolved float loop).</param>
@@ -71,17 +74,14 @@ namespace NumSharp.Backends
             if (@out is not null)
                 ValidateOutCast(loop, @out.typecode, "float_power");
 
-            // Compute via the bit-exact Power engine on the resolved loop. When both operands ALREADY
-            // carry the loop dtype (the common float64/complex128 case) delegate WITHOUT a dtype=
-            // override so Power's scalar-exponent fast paths engage — float_power(x, 2.0) becomes x*x
-            // and float_power(x, 0.5) becomes sqrt(x) instead of a per-element Math.Pow, and the
-            // natural result type already IS the loop, so the value is identical. Otherwise force the
-            // loop so int/float16/float32/bool/char/decimal and mixed operands compute (and, for the
-            // narrow-natural cases, promote) at float64/complex128 exactly as NumPy's float_power does.
-            bool operandsAlreadyLoop = lhs.GetTypeCode == loop && rhs.GetTypeCode == loop;
-            return operandsAlreadyLoop
-                ? Power(lhs, rhs, null, @out, where)
-                : Power(lhs, rhs, loop, @out, where);
+            // Compute with the power KERNEL on the resolved loop — pow (npy_cpow for complex) on every element, never
+            // np.power's scalar-exponent fast path: NumPy's float_power loop is PyUFunc_dd_d / PyUFunc_DD_D over pow
+            // (generate_umath.py: TD('dgDG', f='pow')), which has no stride-0 branch, so float_power(x, 2.0) is
+            // pow(x, 2.0) (757.7617475757002 ** 2 = ...03c2, where np.power's x*x is ...03c1), float_power(-0.0, 0.5)
+            // is +0.0 and float_power(sNaN, 1.0) is a quiet NaN (probed 2.4.2). Every check above already passed, and
+            // the kernel route repeats them under the 'power' name without raising. Forcing the loop makes
+            // int/float16/float32/bool/char/decimal and mixed operands compute at float64/complex128, as NumPy's does.
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.Power, @out, where, loop);
         }
     }
 }

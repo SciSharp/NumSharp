@@ -44,9 +44,16 @@ namespace NumSharp.Backends.Kernels
         /// Returns the static widen-compute-narrow kernel for a (Half,Half)→Half arithmetic
         /// key, or null when the (op, path) pair is not served (falls to emitted IL).
         /// </summary>
+        /// <remarks>
+        /// Power rides the same kernels (plan api-parameter-parity X13): NumPy's HALF_power is powf on the halves widened
+        /// bit for bit, narrowed with npy_float_to_half, with no scalar-exponent fast path and no operand-order NaN rule
+        /// (powf decides the NaN), so each contiguous kernel hands it to <see cref="HalfPower"/> at entry — vector widen
+        /// and narrow around a block loop of MathF.Pow — and the strided route reaches it through the same kernels.
+        /// </remarks>
         internal static unsafe MixedTypeKernel TryGetHalfArithKernel(BinaryOp op, ExecutionPath path)
         {
-            if (op != BinaryOp.Add && op != BinaryOp.Subtract && op != BinaryOp.Multiply && op != BinaryOp.Divide)
+            if (op != BinaryOp.Add && op != BinaryOp.Subtract && op != BinaryOp.Multiply && op != BinaryOp.Divide
+                && op != BinaryOp.Power)
                 return null;
             switch (path)
             {
@@ -98,6 +105,105 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
+        /// <summary>
+        /// The number of float16 elements <see cref="HalfPower"/> widens, raises and narrows at a time: two 1 KB float32
+        /// stack blocks, which stay in L1 next to the operands and the result.
+        /// </summary>
+        private const int HalfPowerBlock = 256;
+
+        /// <summary>
+        /// NumPy's HALF_power over <paramref name="n"/> elements (<c>PyUFunc_ee_e_As_ff_f</c> with <c>powf</c>): each
+        /// operand widened exactly (a signalling NaN stays signalling, so powf returns NaN for sNaN ** 0 as NumPy's does),
+        /// <c>powf</c> per element — the C runtime's, which MathF.Pow calls, as NumPy's npy_powf does; no vector powf
+        /// reproduces its bits — and NumPy's npy_float_to_half rounding. HALF_power has NO scalar-exponent fast path
+        /// (unlike FLOAT_power / DOUBLE_power), so <c>x ** 2</c> is powf(x, 2), never x*x.
+        /// </summary>
+        /// <param name="pa">The bases: contiguous when <paramref name="sa"/> is 1, one broadcast value when it is 0.</param>
+        /// <param name="sa">The bases' ELEMENT stride, 1 or 0 (the strided route gathers any other stride first).</param>
+        /// <param name="pb">The exponents: contiguous when <paramref name="sb"/> is 1, one broadcast value when it is 0.</param>
+        /// <param name="sb">The exponents' ELEMENT stride, 1 or 0.</param>
+        /// <param name="pr">The contiguous result; it never overlaps an operand (the direct route allocates it).</param>
+        /// <param name="n">The element count (0 or more).</param>
+        /// <remarks>
+        /// <para>
+        /// The work is done a block of <see cref="HalfPowerBlock"/> elements at a time: the vector widen of each operand
+        /// block, ONE tight scalar loop of MathF.Pow over the block, the vector narrow. A per-8-lane form (extract the
+        /// lanes of a widened vector, call powf on each, rebuild the vector) cost ~1.4 ns an element over the bare powf
+        /// (~5 ns on this host) in lane shuffles; the block form keeps the overhead to the widen / narrow, which are what
+        /// beat NumPy (its HALF loop converts each half with a scalar npy_half_to_float / npy_float_to_half,
+        /// ~3.5 ns an element). powf is the floor on both sides, so the ceiling is NumPy's ~8.6 ns / ~5 ns ≈ 1.7×.
+        /// </para>
+        /// <para>No operand-order NaN rule applies: powf decides the NaN (and pow(1, NaN) is 1, pow(NaN, 0) is 1).</para>
+        /// </remarks>
+        [SkipLocalsInit]
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void HalfPower(ushort* pa, long sa, ushort* pb, long sb, ushort* pr, long n)
+        {
+            if (!Avx2.IsSupported)
+            {
+                for (long i = 0; i < n; i++)
+                    pr[i] = HalfArithBits(pa[i * sa], pb[i * sb], BinaryOp.Power);
+                return;
+            }
+
+            // The widened blocks (never zeroed: each is written before it is read). A broadcast operand is widened once,
+            // outside the block loop, and its block stays unused.
+            float* fa = stackalloc float[HalfPowerBlock];
+            float* fb = stackalloc float[HalfPowerBlock];
+            float a0 = sa == 0 ? HalfToFloatScalarExact(*pa) : 0f;
+            float b0 = sb == 0 ? HalfToFloatScalarExact(*pb) : 0f;
+
+            for (long i = 0; i < n; i += HalfPowerBlock)
+            {
+                int m = (int)Math.Min(HalfPowerBlock, n - i);
+                if (sa != 0)
+                    HalfWidenBlock(pa + i, fa, m);
+                if (sb != 0)
+                    HalfWidenBlock(pb + i, fb, m);
+
+                // The powers, written over the base block (each element is read before its slot is overwritten). One
+                // loop per broadcast pattern so the hot loop reads one array, or two, and nothing else.
+                if (sb == 0)
+                {
+                    for (int k = 0; k < m; k++)
+                        fa[k] = MathF.Pow(fa[k], b0);
+                }
+                else if (sa == 0)
+                {
+                    for (int k = 0; k < m; k++)
+                        fa[k] = MathF.Pow(a0, fb[k]);
+                }
+                else
+                {
+                    for (int k = 0; k < m; k++)
+                        fa[k] = MathF.Pow(fa[k], fb[k]);
+                }
+
+                ushort* r = pr + i;
+                int j = 0;
+                for (; j + 8 <= m; j += 8)
+                    Sse2.Store(r + j, HalfNarrow8V(Vector256.Load(fa + j)));
+                for (; j < m; j++)
+                    r[j] = SingleToHalfBits(fa[j]);
+            }
+        }
+
+        /// <summary>Widens <paramref name="m"/> contiguous float16 patterns to exact float32 values (8 at a time).</summary>
+        /// <param name="src">The first float16 pattern.</param>
+        /// <param name="dst">The float32 block (at least <paramref name="m"/> slots).</param>
+        /// <param name="m">How many elements (at most <see cref="HalfPowerBlock"/>).</param>
+        /// <remarks>Exact, NaN payloads and signalling bits included (<see cref="HalfWiden8V"/> /
+        /// <see cref="HalfToFloatScalarExact"/>), as NumPy's npy_half_to_float. Requires AVX2.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void HalfWidenBlock(ushort* src, float* dst, int m)
+        {
+            int k = 0;
+            for (; k + 8 <= m; k += 8)
+                HalfWiden8V(Sse2.LoadVector128(src + k)).Store(dst + k);
+            for (; k < m; k++)
+                dst[k] = HalfToFloatScalarExact(src[k]);
+        }
+
         /// <summary>Narrow 8 f32 result lanes back to 8 f16 patterns (128-bit ushort vector).</summary>
         /// <remarks>Internal for the same reason as <see cref="HalfWiden8V"/>: the polynomial kernels round each
         ///     float32-lane result back onto the f16 grid through this exact narrow. Requires AVX2.</remarks>
@@ -142,6 +248,11 @@ namespace NumSharp.Backends.Kernels
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void HalfArithFull(ushort* pa, ushort* pb, ushort* pr, long n, BinaryOp op)
         {
+            if (op == BinaryOp.Power)
+            {
+                HalfPower(pa, 1, pb, 1, pr, n);
+                return;
+            }
             long i = 0;
             if (Avx2.IsSupported)
             {
@@ -166,6 +277,11 @@ namespace NumSharp.Backends.Kernels
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void HalfArithScalarRight(ushort* pa, ushort b, ushort* pr, long n, BinaryOp op)
         {
+            if (op == BinaryOp.Power)
+            {
+                HalfPower(pa, 1, &b, 0, pr, n);
+                return;
+            }
             long i = 0;
             if (Avx2.IsSupported)
             {
@@ -191,6 +307,11 @@ namespace NumSharp.Backends.Kernels
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void HalfArithScalarLeft(ushort a, ushort* pb, ushort* pr, long n, BinaryOp op)
         {
+            if (op == BinaryOp.Power)
+            {
+                HalfPower(&a, 0, pb, 1, pr, n);
+                return;
+            }
             long i = 0;
             if (Avx2.IsSupported)
             {
@@ -234,7 +355,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="shape">The coalesced result extents.</param>
         /// <param name="ndim">The number of coalesced axes (0 for a single element).</param>
         /// <param name="n">The number of result elements (the product of <paramref name="shape"/>).</param>
-        /// <param name="op">Add, Subtract, Multiply or Divide.</param>
+        /// <param name="op">Add, Subtract, Multiply, Divide or Power.</param>
         /// <remarks>
         /// Bit-identical to NumPy because every lane runs NumPy's scalar HALF loop (float32 compute + RTNE narrow + the
         /// operand-order NaN pin) — the SIMD kernels and <see cref="HalfArithBits"/> are the same pipeline — and the
@@ -303,7 +424,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="sb">The right ELEMENT stride along the run (any sign; 0 broadcasts).</param>
         /// <param name="r">The run's first result element (contiguous).</param>
         /// <param name="n">The run's length (at least 1).</param>
-        /// <param name="op">Add, Subtract, Multiply or Divide.</param>
+        /// <param name="op">Add, Subtract, Multiply, Divide or Power.</param>
         /// <param name="stageA">A scratch block of <see cref="HalfArithGatherBlock"/> elements for the left operand.</param>
         /// <param name="stageB">A scratch block of <see cref="HalfArithGatherBlock"/> elements for the right operand.</param>
         /// <remarks>
@@ -391,6 +512,9 @@ namespace NumSharp.Backends.Kernels
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static ushort HalfArithBits(ushort a, ushort b, BinaryOp op)
         {
+            // Power: NumPy's HALF_power, powf on the exactly widened halves (no NaN priority of its own).
+            if (op == BinaryOp.Power)
+                return SingleToHalfBits(MathF.Pow(HalfToFloatScalarExact(a), HalfToFloatScalarExact(b)));
             bool nA = (a & 0x7FFF) > 0x7C00, nB = (b & 0x7FFF) > 0x7C00;
             if (nA | nB)
             {
