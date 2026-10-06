@@ -551,10 +551,13 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     the fix) and `np_sum_flat_schedule_tests.Sum_AxisLeavingOneOutput_RunsTheFlatSchedule` (17 NumPy-probed cases).
   - Open (the rest of that residual): an axis reduction with SEVERAL outputs whose reduced runs exceed the buffer in
     a cast loop (`(2, 20000)` along 1 with `dtype=float32`): item X6.
-- [ ] X4 float16 `add` / `subtract` / `multiply` / `divide` with a broadcast, non-contiguous operand set run the
+- [x] X4 float16 `add` / `subtract` / `multiply` / `divide` with a broadcast, non-contiguous operand set run the
   direct route's scalar General loop: `(30,40,20) F * (30,1,20) F` takes 328 µs (NumPy 72 µs, 0.22×), and
   `(100,100,100)` 27 ms (NumPy 3.0 ms). The same before X3 (HEAD measured 320 µs while computing wrong values).
   Speed only; the values are NumPy's.
+  Done with X15 (2026-10-06, this commit): the set is walked with its axes reversed into an F result, and every inner
+  run takes the SIMD widen-compute-narrow kernels: `(30,40,20) F * (30,1,20) F` 38.6 µs (NumPy 76.9 µs, 1.99×; was
+  328 µs), `(100,100,100) F * (100,1,100) F` 0.91 ms (NumPy 3.30 ms, 3.62×; was 13.8 ms).
 - [ ] **X6 `np.sum(a, axis, dtype=…)`: a pinned row (the reduced axis innermost) longer than `np.getbufsize()` in a
   cast loop.** NumPy's buffered fills split the row (`out += pairwise(part)` per fill); NumSharp's cast-loop axis
   route sums it in one call. `np.sum(x (8,25), axis=1, dtype=np.float32)` under `np.setbufsize(16)` differs at 3 of 8
@@ -676,9 +679,45 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   overload yet (B3), so callers meet it through the engine. Pinned by
   `OpenBugsReductionTests.Mean_BroadcastOperand_Flat_HonorsDtype`. Found by A6: the mean_loops tier carves every flat
   broadcast float cell as finding 10, an order residual, which also hid this dtype bug (finding 18).
-- [ ] **X15 A float16 binary ufunc with a column-broadcast operand is slow.** `np.subtract(float16 (250,400),
+- [x] **X15 A float16 binary ufunc with a column-broadcast operand is slow.** `np.subtract(float16 (250,400),
   float16 (250,1))` takes 1,141 µs (11 ns per element) where NumPy takes 377 µs and the same-shape float16 subtract takes
   72 µs. Speed only. numpy.ma's anom of float16 along axis 1 meets it (0.86× NumPy). Found by A6's benchmark.
+  Done 2026-10-06 (this commit), with X4.
+  - Proof (NumPy 2.4.2 vs `72696ec1`, two pinned P-cores, 100K float16): add / subtract / multiply / divide with a
+    column, a row, an outer-product pair, a strided or a reversed operand 0.30–0.50× (~10 ns an element, every layout
+    the same), against 4.1× for same-shape operands and 5.6× for a 0-d one. The values were NumPy's.
+  - Cause: (Half, Half) → Half arithmetic declines the iterator (its scalar body bridges through double) and the direct
+    route served every broadcast / strided layout with `HalfArithStrided`: a per-element coordinate decomposition (a
+    div and a mod per axis per element) around the scalar widen-compute-narrow. The out= route went to the iterator,
+    whose float16 body is scalar (~5 ns an element): numpy.ma's anom subtracts a column mean into an out= buffer, so
+    fixing the plain call alone left it at 0.86×.
+  - Fix (`DirectILKernelGenerator.Binary.Arith.Half.cs`, `DefaultEngine.BinaryOp.cs`): `HalfArithStrided` walks the
+    outer axes with an incremental odometer and hands each inner run to `HalfArithRun`, which picks the SIMD kernel
+    for the run's strides — both contiguous, one broadcast (operand roles kept), both broadcast (one value), or a
+    strided operand gathered into a 256-element stack block first. A broadcast all-F set is walked with its axes
+    reversed into an F result (X4). The out= trivial route takes broadcast and strided float16 inputs into a C or F
+    out (`TryHalfArithBroadcastInto`; an input that is the out runs in place, any other overlap goes to the
+    iterator's copy).
+  - Tests: `Math/HalfArithKernelTests.cs` (+3: every layout against the contiguous kernel bit for bit, random bit
+    patterns with NaN payloads, runs across the gather block; the reversed F walk; out= against the iterator route in
+    C and F outs, in place, a column view and the transpose of the out); `TrivialBinaryOutTests` now expects the
+    trivial route for float16 F inputs into a C out. Planted bugs: 13 (roles swapped, gather stride, odometer rewind,
+    the reversed walk, the gather block, the double broadcast, the strided-left / broadcast-right pair, the right
+    offset, the out= alignment, alias and overlap checks, the F out's order); the unit tests kill 12, the oracle 7;
+    the 13th (the F result copied to F again) is equivalent: one extra copy.
+  - Speed (NPY/NS, two pinned P-cores): 24 plain cells (column, row, left column, divide, strided, reversed, F set,
+    outer product × 1K / 100K / 1M) geomean 3.91×, minimum 1.55× (1K row, run-to-run; 3.3× after a warm pass);
+    100K: 3.7–7.2×. 15 out= cells (column, row, strided, F into an F out, in place × 1K / 100K / 1M) 3.58–7.41×.
+    numpy.ma's 310 cells 4.60× → 4.80×, minimum 0.86× → 1.07× (the anom cell 0.86× → 5.97×; the five cells under 1.5×
+    are the memory-bound 1M nomask means).
+- [ ] **X18 A fresh elementwise result is laid out C (F only for an all-F set) and walked in C order; NumPy lays it out
+  with NpyIter's K order and walks memory order.** Found by X15's benchmark (2026-10-06). `np.add(x.transpose(1,0,2),
+  1.0)` over a float32 `(3,4,5)` gives NumPy strides `(20, 80, 4)` (the permutation kept) and NumSharp `(60, 20, 4)`
+  (C); values identical. An F operand with a `(1, n)` row, which is C- and F-contiguous at once, is computed in C order
+  with strided reads and then copied to F: `np.subtract(float32 (400,250) F, (1,250))` 66 µs, NumPy 14 µs (0.22×;
+  float64 runs into NumPy's slow allocation and shows 2×). The rule `ShouldProduceFContigOutput` approximates NumPy's
+  for two operands; NumPy's is `Shape.NpyIterOutputShape` (finding 16) plus a K-order walk. Layout and speed; every
+  elementwise ufunc.
 - [x] **X16 `np.copyto` is not NumPy's `array_copyto`: wrong values for an overlapping copy, NumPy's checks missing or
   in another order, weak scalars wrapped.** Found by X11's probe (2026-10-06). Done 2026-10-06 (`2dffb8d9`).
   - Proof (NumPy 2.4.2 vs NumSharp at `04e0e703`; `copyto_probe`, 86 calls; the house exception types mapped to
@@ -869,9 +908,15 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    element) cost a third of its time: 0.77 → 0.48 µs for 1,000 strided elements with pointers bumped by the stride and
    the loop unrolled four times (each element's store still before the next element's loads, so an overlapping run
    keeps NumPy's order).
+25. **Measure the route the consumer takes** (X15). Fixing float16's broadcast kernels on the plain call left
+   numpy.ma's anom at 0.86×: it subtracts into an out= buffer, whose route (the iterator's scalar float16 body) the
+   plain-call benchmark never ran. A speed item names its consumers' call forms (plain, out=, where=, in place).
 
 ## 7. State log
 
+- **2026-10-06**: X15 done with X4 (float16 add / subtract / multiply / divide on every broadcast and strided layout
+  and through out=: the SIMD widen-compute-narrow kernels per inner run, a reversed walk for broadcast F sets; 13
+  planted bugs); numpy.ma re-measured (4.80×); X18 and finding 25 recorded. This commit.
 - **2026-10-06**: X16 done with X11 (np.copyto is NumPy's `array_copyto`: the checks in NumPy's order, weak C#
   scalars, the overlap rule shared with NDIter.Copy and slice assignment, a new masked bit-copy kernel; the
   `copyto_full` oracle tier, zero excuses; 21 planted bugs killed); A6 re-measured (4.60×); X17 and findings 21–24

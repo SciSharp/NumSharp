@@ -257,9 +257,17 @@ namespace NumSharp.Backends
             // which always take this route). So an F result is allocated here only when every
             // non-scalar operand has the result's own dims; a broadcast all-F set computes in C
             // order and the post-kernel branch relabels it F, NumPy's layout for that set.
-            bool allStrictFContig = AreAllOperandsStrictFContig(lhs, rhs, cleanShape)
-                                    && !HasNonScalarBroadcastOperand(lhs, rhs, cleanShape);
-            Shape resultShape = allStrictFContig
+            //
+            // Such a broadcast all-F set is instead walked with its axes REVERSED: the kernel's C-coordinate order over
+            // the reversed dims is the F memory order of the original ones, so the linear write fills an F-allocated
+            // result correctly, every operand is read along its own contiguous (or stride-0) axis, and no C result is
+            // copied to F afterwards. Elementwise, so the visiting order changes no value; NumPy's iterator walks such a
+            // set in F order too (K order). This is the float16 add / subtract / multiply / divide route for every size
+            // (plan api-parameter-parity X4: a (30,40,20) F * (30,1,20) F product read 1,200-element strides along the
+            // C-order inner axis, then copied the result to F).
+            bool allStrictF = AreAllOperandsStrictFContig(lhs, rhs, cleanShape);
+            bool walkReversed = allStrictF && HasNonScalarBroadcastOperand(lhs, rhs, cleanShape);
+            Shape resultShape = allStrictF
                 ? Shape.Adopt((long[])cleanShape.dimensions.Clone(), 'F')
                 : cleanShape;
 
@@ -288,10 +296,13 @@ namespace NumSharp.Backends
             long* coalResStr = stackalloc long[origNdim > 0 ? origNdim : 1];
             for (int d = 0; d < origNdim; d++)
             {
-                coalShape[d] = resultShape.dimensions[d];
-                coalLhsStr[d] = leftShape.strides[d];
-                coalRhsStr[d] = rightShape.strides[d];
-                coalResStr[d] = resultShape.strides[d];
+                // A reversed walk reads axis (ndim - 1 - d) as the d-th: the F result's strides then descend, so the
+                // coalescing below sees a C-ordered result and merges the axes the F operands run along.
+                int s = walkReversed ? origNdim - 1 - d : d;
+                coalShape[d] = resultShape.dimensions[s];
+                coalLhsStr[d] = leftShape.strides[s];
+                coalRhsStr[d] = rightShape.strides[s];
+                coalResStr[d] = resultShape.strides[s];
             }
             int coalNdim = CoalesceTernaryDimensions(coalShape, coalLhsStr, coalRhsStr, coalResStr, origNdim);
 
@@ -319,8 +330,8 @@ namespace NumSharp.Backends
             // NumPy F-output preservation for the LOOSER case (at least one strict-F operand
             // but not all): result is currently C-contig (correct kernel output). Copy to F
             // to match NumPy. The strict-all-F case skipped this branch by allocating F up
-            // front and the equality below short-circuits.
-            if (!allStrictFContig && ShouldProduceFContigOutput(lhs, rhs, result.Shape))
+            // front (a broadcast all-F set too, through the reversed walk).
+            if (!allStrictF && ShouldProduceFContigOutput(lhs, rhs, result.Shape))
             {
                 scalarCastTemp?.Dispose();
                 // copy('F') mints a fresh F-contig array; the C-contig `result` the kernel wrote
@@ -789,6 +800,8 @@ namespace NumSharp.Backends
                 path = ExecutionPath.SimdScalarLeft;
             else if (lhsArray && rhsScalar)
                 path = ExecutionPath.SimdScalarRight;
+            else if (resultType == NPTypeCode.Half && IsHalfArithOp(op))
+                return TryHalfArithBroadcastInto(lhs, rhs, op, @out, outC);
             else
                 return false;   // two size-1 inputs filling a larger out, a broadcast array, a strided input: iterator
 
@@ -821,6 +834,138 @@ namespace NumSharp.Backends
             }
             TrivialBinaryOutRuns++;
             return true;
+        }
+
+        /// <summary>Whether <paramref name="op"/> is one of the four float16 ufuncs the SIMD widen-compute-narrow kernels
+        /// serve (<c>DirectILKernelGenerator.TryGetHalfArithKernel</c>): add, subtract, multiply, divide.</summary>
+        /// <param name="op">The binary op.</param>
+        /// <returns>True for add, subtract, multiply and divide.</returns>
+        private static bool IsHalfArithOp(BinaryOp op)
+            => op == BinaryOp.Add || op == BinaryOp.Subtract || op == BinaryOp.Multiply || op == BinaryOp.Divide;
+
+        /// <summary>
+        ///     float16 add / subtract / multiply / divide into a C- or F-contiguous <paramref name="out"/> whose inputs
+        ///     broadcast to it or are strided: the direct route's strided widen-compute-narrow kernel
+        ///     (<c>HalfArithStrided</c>) writes straight into <paramref name="out"/>, walked in its memory order. NumPy
+        ///     runs its iterator there, whose HALF loop is scalar; so did NumSharp, with a scalar float16 body of ~5 ns an
+        ///     element (plan api-parameter-parity X15: numpy.ma's anom subtracts a column mean into an <c>out=</c>
+        ///     buffer).
+        /// </summary>
+        /// <param name="lhs">The first float16 input.</param>
+        /// <param name="rhs">The second float16 input.</param>
+        /// <param name="op">Add, Subtract, Multiply or Divide.</param>
+        /// <param name="out">The float16 output: writeable, not broadcast, non-empty, C- or F-contiguous (checked by the
+        ///     caller).</param>
+        /// <param name="outC">True when <paramref name="out"/> is C-contiguous, false when it is strictly F-contiguous
+        ///     (then the axes are walked reversed, so the linear write follows its memory order).</param>
+        /// <returns>True when the result was written; false (nothing written) when an input does not broadcast to
+        ///     <paramref name="out"/>'s dimensions or may overlap it — the iterator route raises NumPy's broadcast error
+        ///     or resolves the overlap with its copy.</returns>
+        /// <remarks>
+        ///     Bit-identical to the iterator route: NumPy's float16 arithmetic is elementwise with a per-element NaN
+        ///     priority (no call-schedule rule), and the SIMD kernels are its HALF loop. An input may be <paramref name="out"/>
+        ///     itself (the same first element, dimensions and strides: each element is read before it is written at the
+        ///     same position); any other overlap goes to the iterator, as in <see cref="TrivialOverlapOk"/>.
+        /// </remarks>
+        private unsafe bool TryHalfArithBroadcastInto(NDArray lhs, NDArray rhs, BinaryOp op, NDArray @out, bool outC)
+        {
+            var os = @out.Shape;
+            int nd = os.NDim;
+            long* lStr = stackalloc long[nd > 0 ? nd : 1];
+            long* rStr = stackalloc long[nd > 0 ? nd : 1];
+            if (!HalfBroadcastStridesTo(lhs.Shape, os, lStr) || !HalfBroadcastStridesTo(rhs.Shape, os, rStr))
+                return false;
+
+            if (!HalfInputMayRun(lhs, @out) || !HalfInputMayRun(rhs, @out))
+                return false;
+
+            // Walk out's memory order: C as given, F with the axes reversed (its strides then descend).
+            long* shape = stackalloc long[nd > 0 ? nd : 1];
+            long* ls = stackalloc long[nd > 0 ? nd : 1];
+            long* rs = stackalloc long[nd > 0 ? nd : 1];
+            long* res = stackalloc long[nd > 0 ? nd : 1];
+            long[] dims = os.dimensions, outStrides = os.strides;
+            for (int d = 0; d < nd; d++)
+            {
+                int s = outC ? d : nd - 1 - d;
+                shape[d] = dims[s];
+                ls[d] = lStr[s];
+                rs[d] = rStr[s];
+                res[d] = outStrides[s];
+            }
+            int cnd = CoalesceTernaryDimensions(shape, ls, rs, res, nd);
+            ExecutionPath path = ClassifyPath(ls, rs, shape, cnd, NPTypeCode.Half);
+
+            MixedTypeKernel kernel;
+            try
+            {
+                kernel = DirectILKernelGenerator.GetMixedTypeKernel(
+                    new MixedTypeKernelKey(NPTypeCode.Half, NPTypeCode.Half, NPTypeCode.Half, op, path));
+            }
+            catch (NotSupportedException)
+            {
+                return false;
+            }
+            if (kernel == null)
+                return false;
+
+            byte* lhsAddr = (byte*)lhs.Address + lhs.Shape.offset * 2;
+            byte* rhsAddr = (byte*)rhs.Address + rhs.Shape.offset * 2;
+            byte* outAddr = (byte*)@out.Address + os.offset * 2;
+            kernel(lhsAddr, rhsAddr, outAddr, ls, rs, shape, cnd, os.size);
+            TrivialBinaryOutRuns++;
+            return true;
+        }
+
+        /// <summary>
+        ///     The ELEMENT strides an input walks <paramref name="target"/>'s dimensions with (right-aligned broadcasting:
+        ///     an extent-1 or missing axis reads stride 0), or false when it does not broadcast to them without stretching
+        ///     the target.
+        /// </summary>
+        /// <param name="input">The input's shape.</param>
+        /// <param name="target">The output's shape.</param>
+        /// <param name="strides">Receives one stride per output axis.</param>
+        /// <returns>True when the input broadcasts to the output's dimensions.</returns>
+        private static unsafe bool HalfBroadcastStridesTo(in Shape input, in Shape target, long* strides)
+        {
+            int nd = target.NDim, ind = input.NDim;
+            if (ind > nd)
+                return false;
+            long[] idims = input.dimensions, istr = input.strides, tdims = target.dimensions;
+            for (int d = 0; d < nd; d++)
+            {
+                int k = d - (nd - ind);
+                if (k < 0 || idims[k] == 1)
+                    strides[d] = 0;
+                else if (idims[k] == tdims[d])
+                    strides[d] = istr[k];
+                else
+                    return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        ///     Whether an input may be read alongside the output in one forward pass: it shares no memory with
+        ///     <paramref name="out"/> (NumPy's bounded solver, max_work 1), or it IS <paramref name="out"/> — the same first
+        ///     element, dimensions and strides.
+        /// </summary>
+        /// <param name="input">The input.</param>
+        /// <param name="out">The output.</param>
+        /// <returns>True when no overlap needs the iterator's copy.</returns>
+        private static unsafe bool HalfInputMayRun(NDArray input, NDArray @out)
+        {
+            if ((byte*)input.Address + input.Shape.offset * 2 == (byte*)@out.Address + @out.Shape.offset * 2
+                && SameDims(input.Shape, @out.Shape))
+            {
+                long[] a = input.Shape.strides, b = @out.Shape.strides;
+                bool same = true;
+                for (int d = 0; d < a.Length && same; d++)
+                    same = a[d] == b[d];
+                if (same)
+                    return true;
+            }
+            return NDMemOverlap.SolveMayShareMemory(input, @out, maxWork: 1) == MemOverlap.No;
         }
 
         /// <summary>

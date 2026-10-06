@@ -103,8 +103,11 @@ public class TrivialBinaryOutTests
                 var op = ops[k];
                 AssertRoutesAgree(o => op(a, b, o), () => np.zeros(new Shape(3, 5), dt), true, $"{dt} op{k} C");
                 AssertRoutesAgree(o => op(aF, bF, o), () => np.asfortranarray(np.zeros(new Shape(3, 5), dt)), true, $"{dt} op{k} F");
-                // A C out against F inputs is not one linear walk: the iterator route.
-                AssertRoutesAgree(o => op(aF, bF, o), () => np.zeros(new Shape(3, 5), dt), false, $"{dt} op{k} F inputs, C out");
+                // A C out against F inputs is not one linear walk: the iterator route — except float16 add / subtract /
+                // multiply (ops 0-2 here), whose strided widen-compute-narrow kernel reads any input layout into a C or F
+                // out (plan api-parameter-parity X15; the iterator's float16 body is scalar).
+                bool halfArith = dt == NPTypeCode.Half && k < 3;
+                AssertRoutesAgree(o => op(aF, bF, o), () => np.zeros(new Shape(3, 5), dt), halfArith, $"{dt} op{k} F inputs, C out");
             }
         }
     }

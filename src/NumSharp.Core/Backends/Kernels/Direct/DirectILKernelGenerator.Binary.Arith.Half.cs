@@ -213,36 +213,174 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Strided / broadcast (Half,Half)→Half arithmetic (SimdChunk / General paths):
-        /// a per-element coordinate odometer — EmitGeneralLoop's exact address model —
-        /// driving the bit-exact scalar widen-compute-narrow (<see cref="HalfArithBits"/>).
-        /// For each output element i (written C-contiguous, linearly), i is decomposed into
-        /// coordinates over <paramref name="shape"/> (C-order, last axis fastest) and each
-        /// operand is read at Σ coord_d·stride_d from its (offset-adjusted) base — so it is
-        /// correct for ANY layout: contiguous, broadcast (stride 0), negative stride, or
-        /// step (|stride| &gt; 1). Bit-identical to NumPy because HalfArithBits IS NumPy's
-        /// scalar HALF loop (float32 compute + RTNE narrow + the operand-order NaN pin);
-        /// only the addressing changes vs the contiguous kernels. Scalar by construction —
-        /// the contiguous SimdFull / SimdScalar paths keep the SIMD widen-compute-narrow.
+        /// The number of float16 elements a strided run is gathered in at a time (<see cref="HalfArithRun"/>): two
+        /// 512-byte stack blocks, small enough to stay in L1 next to the destination run.
         /// </summary>
+        private const int HalfArithGatherBlock = 256;
+
+        /// <summary>
+        /// Strided / broadcast (Half,Half)→Half arithmetic (SimdChunk / General paths): the result is written
+        /// C-contiguous, linearly, over <paramref name="shape"/> (C order, the last axis fastest). An odometer walks the
+        /// outer axes with incremental element offsets, and each inner run goes to <see cref="HalfArithRun"/>, which
+        /// picks the SIMD widen-compute-narrow kernel for the run's strides (both contiguous, one broadcast, or gathered
+        /// into a stack block first) — correct for ANY layout: contiguous, broadcast (stride 0), negative stride, or step
+        /// (|stride| &gt; 1), and for a double broadcast (kron's operands stretched on complementary axes).
+        /// </summary>
+        /// <param name="pa">The left operand's first element (offset-adjusted).</param>
+        /// <param name="pb">The right operand's first element (offset-adjusted).</param>
+        /// <param name="pr">The result's first element; <paramref name="n"/> elements are written linearly.</param>
+        /// <param name="lhsStrides">The left operand's ELEMENT strides per coalesced axis (0 broadcasts).</param>
+        /// <param name="rhsStrides">The right operand's ELEMENT strides per coalesced axis (0 broadcasts).</param>
+        /// <param name="shape">The coalesced result extents.</param>
+        /// <param name="ndim">The number of coalesced axes (0 for a single element).</param>
+        /// <param name="n">The number of result elements (the product of <paramref name="shape"/>).</param>
+        /// <param name="op">Add, Subtract, Multiply or Divide.</param>
+        /// <remarks>
+        /// Bit-identical to NumPy because every lane runs NumPy's scalar HALF loop (float32 compute + RTNE narrow + the
+        /// operand-order NaN pin) — the SIMD kernels and <see cref="HalfArithBits"/> are the same pipeline — and the
+        /// operand ROLES are kept on every route (a broadcast left operand takes <see cref="HalfArithScalarLeft"/>, never a
+        /// swapped call). It replaced a per-element coordinate decomposition (a div / mod per axis per element) that cost
+        /// ~10 ns an element, 0.22–0.48× NumPy (plan api-parameter-parity X4 / X15).
+        /// </remarks>
+        [SkipLocalsInit]
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void HalfArithStrided(
             ushort* pa, ushort* pb, ushort* pr,
             long* lhsStrides, long* rhsStrides, long* shape, int ndim, long n, BinaryOp op)
         {
-            for (long i = 0; i < n; i++)
+            if (n <= 0)
+                return;
+            if (ndim == 0)
             {
-                long idx = i, lhsOff = 0, rhsOff = 0;
-                for (int d = ndim - 1; d >= 0; d--)
-                {
-                    long dim = shape[d];
-                    long coord = idx % dim;
-                    idx /= dim;
-                    lhsOff += coord * lhsStrides[d];
-                    rhsOff += coord * rhsStrides[d];
-                }
-                pr[i] = HalfArithBits(pa[lhsOff], pb[rhsOff], op);
+                pr[0] = HalfArithBits(pa[0], pb[0], op);
+                return;
             }
+
+            // The gather blocks for strided runs (never zeroed: a block is written before the kernel reads it).
+            ushort* stageA = stackalloc ushort[HalfArithGatherBlock];
+            ushort* stageB = stackalloc ushort[HalfArithGatherBlock];
+
+            int inner = ndim - 1;
+            long len = shape[inner], sa = lhsStrides[inner], sb = rhsStrides[inner];
+            if (len <= 0)
+                return;
+
+            // The outer odometer: coordinates of the axes before the inner one, and the operands' running element
+            // offsets (incremental: a carry rewinds an axis by stride * extent instead of recomputing from coordinates).
+            long* coord = stackalloc long[inner + 1];
+            for (int d = 0; d <= inner; d++)
+                coord[d] = 0;
+            long offA = 0, offB = 0;
+
+            for (long done = 0; done < n; done += len)
+            {
+                HalfArithRun(pa + offA, sa, pb + offB, sb, pr + done, len, op, stageA, stageB);
+
+                for (int d = inner - 1; d >= 0; d--)
+                {
+                    coord[d]++;
+                    offA += lhsStrides[d];
+                    offB += rhsStrides[d];
+                    if (coord[d] < shape[d])
+                        break;
+                    coord[d] = 0;
+                    offA -= lhsStrides[d] * shape[d];
+                    offB -= rhsStrides[d] * shape[d];
+                }
+            }
+        }
+
+        /// <summary>
+        /// One inner run of <see cref="HalfArithStrided"/>: <c>r[i] = a[i * sa] OP b[i * sb]</c> for i in [0, n), the
+        /// result contiguous. Both operands contiguous → <see cref="HalfArithFull"/>; one broadcast (stride 0) and the
+        /// other contiguous → <see cref="HalfArithScalarRight"/> / <see cref="HalfArithScalarLeft"/>; both broadcast →
+        /// one value; any other stride → the strided operand(s) gathered into a stack block of
+        /// <see cref="HalfArithGatherBlock"/> elements, then the same kernels.
+        /// </summary>
+        /// <param name="a">The run's first left element.</param>
+        /// <param name="sa">The left ELEMENT stride along the run (any sign; 0 broadcasts).</param>
+        /// <param name="b">The run's first right element.</param>
+        /// <param name="sb">The right ELEMENT stride along the run (any sign; 0 broadcasts).</param>
+        /// <param name="r">The run's first result element (contiguous).</param>
+        /// <param name="n">The run's length (at least 1).</param>
+        /// <param name="op">Add, Subtract, Multiply or Divide.</param>
+        /// <param name="stageA">A scratch block of <see cref="HalfArithGatherBlock"/> elements for the left operand.</param>
+        /// <param name="stageB">A scratch block of <see cref="HalfArithGatherBlock"/> elements for the right operand.</param>
+        /// <remarks>
+        /// The result is a fresh array, never an operand (the direct route allocates it), so reading the operands
+        /// ahead of the stores — a vector at a time, or a gathered block — cannot observe a write.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void HalfArithRun(
+            ushort* a, long sa, ushort* b, long sb, ushort* r, long n, BinaryOp op, ushort* stageA, ushort* stageB)
+        {
+            if (sa == 1 && sb == 1)
+            {
+                HalfArithFull(a, b, r, n, op);
+                return;
+            }
+            if (sa == 1 && sb == 0)
+            {
+                HalfArithScalarRight(a, *b, r, n, op);
+                return;
+            }
+            if (sa == 0 && sb == 1)
+            {
+                HalfArithScalarLeft(*a, b, r, n, op);
+                return;
+            }
+            if (sa == 0 && sb == 0)
+            {
+                // Both operands broadcast along the run: one value, written n times.
+                ushort v = HalfArithBits(*a, *b, op);
+                new Span<ushort>(r, (int)Math.Min(n, int.MaxValue)).Fill(v);
+                for (long i = int.MaxValue; i < n; i++)
+                    r[i] = v;
+                return;
+            }
+
+            // A strided operand (|stride| > 1, or negative): gather a block of it, then run the contiguous kernel the
+            // block's operand pair calls for. A contiguous or broadcast operand is read in place.
+            for (long k = 0; k < n; k += HalfArithGatherBlock)
+            {
+                long m = Math.Min(HalfArithGatherBlock, n - k);
+                ushort* ra = a + k * sa, rb = b + k * sb;
+                ushort* ga = sa == 0 || sa == 1 ? ra : HalfArithGather(ra, sa, m, stageA);
+                ushort* gb = sb == 0 || sb == 1 ? rb : HalfArithGather(rb, sb, m, stageB);
+                if (sa == 0)
+                    HalfArithScalarLeft(*ga, gb, r + k, m, op);
+                else if (sb == 0)
+                    HalfArithScalarRight(ga, *gb, r + k, m, op);
+                else
+                    HalfArithFull(ga, gb, r + k, m, op);
+            }
+        }
+
+        /// <summary>Copies <paramref name="m"/> strided float16 elements into a contiguous block.</summary>
+        /// <param name="src">The first element.</param>
+        /// <param name="stride">The ELEMENT stride (any nonzero value).</param>
+        /// <param name="m">How many elements (at most <see cref="HalfArithGatherBlock"/>).</param>
+        /// <param name="block">The destination block.</param>
+        /// <returns><paramref name="block"/>.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe ushort* HalfArithGather(ushort* src, long stride, long m, ushort* block)
+        {
+            // Running pointer, four elements per pass: the loads are independent, so they overlap.
+            long j = 0;
+            for (; j + 4 <= m; j += 4)
+            {
+                block[j] = *src;
+                block[j + 1] = src[stride];
+                block[j + 2] = src[2 * stride];
+                block[j + 3] = src[3 * stride];
+                src += 4 * stride;
+            }
+            for (; j < m; j++)
+            {
+                block[j] = *src;
+                src += stride;
+            }
+            return block;
         }
 
         /// <summary>
