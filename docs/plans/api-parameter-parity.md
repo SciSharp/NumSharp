@@ -555,7 +555,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   direct route's scalar General loop: `(30,40,20) F * (30,1,20) F` takes 328 µs (NumPy 72 µs, 0.22×), and
   `(100,100,100)` 27 ms (NumPy 3.0 ms). The same before X3 (HEAD measured 320 µs while computing wrong values).
   Speed only; the values are NumPy's.
-  Done with X15 (2026-10-06, this commit): the set is walked with its axes reversed into an F result, and every inner
+  Done with X15 (2026-10-06, `1185f39c`): the set is walked with its axes reversed into an F result, and every inner
   run takes the SIMD widen-compute-narrow kernels: `(30,40,20) F * (30,1,20) F` 38.6 µs (NumPy 76.9 µs, 1.99×; was
   328 µs), `(100,100,100) F * (100,1,100) F` 0.91 ms (NumPy 3.30 ms, 3.62×; was 13.8 ms).
 - [ ] **X6 `np.sum(a, axis, dtype=…)`: a pinned row (the reduced axis innermost) longer than `np.getbufsize()` in a
@@ -682,7 +682,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - [x] **X15 A float16 binary ufunc with a column-broadcast operand is slow.** `np.subtract(float16 (250,400),
   float16 (250,1))` takes 1,141 µs (11 ns per element) where NumPy takes 377 µs and the same-shape float16 subtract takes
   72 µs. Speed only. numpy.ma's anom of float16 along axis 1 meets it (0.86× NumPy). Found by A6's benchmark.
-  Done 2026-10-06 (this commit), with X4.
+  Done 2026-10-06 (`1185f39c`), with X4.
   - Proof (NumPy 2.4.2 vs `72696ec1`, two pinned P-cores, 100K float16): add / subtract / multiply / divide with a
     column, a row, an outer-product pair, a strided or a reversed operand 0.30–0.50× (~10 ns an element, every layout
     the same), against 4.1× for same-shape operands and 5.6× for a 0-d one. The values were NumPy's.
@@ -916,7 +916,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 - **2026-10-06**: X15 done with X4 (float16 add / subtract / multiply / divide on every broadcast and strided layout
   and through out=: the SIMD widen-compute-narrow kernels per inner run, a reversed walk for broadcast F sets; 13
-  planted bugs); numpy.ma re-measured (4.80×); X18 and finding 25 recorded. This commit.
+  planted bugs); numpy.ma re-measured (4.80×); X18 and finding 25 recorded. Commit `1185f39c`.
 - **2026-10-06**: X16 done with X11 (np.copyto is NumPy's `array_copyto`: the checks in NumPy's order, weak C#
   scalars, the overlap rule shared with NDIter.Copy and slice assignment, a new masked bit-copy kernel; the
   `copyto_full` oracle tier, zero excuses; 21 planted bugs killed); A6 re-measured (4.60×); X17 and findings 21–24
