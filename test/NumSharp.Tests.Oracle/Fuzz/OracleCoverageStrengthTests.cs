@@ -166,6 +166,25 @@ namespace NumSharp.Tests.Fuzz
             // The array-object oracle's shape-argument vehicle: its axis is the C# FORM of one shape (Shape, long[],
             // int[], int, a view's Shape of every view layout), not the dtype.
             ["shapearg"] = "shape-form axis: float64 / int32 (the creators' dtype parameter) and int64 (the operand of the shape-taking methods) only carry the call",
+
+            // The surface tier (gen_surface_oracle.py): APIs whose inputs are not arrays, or whose dtype axis is NumPy's
+            // own narrow set. Their case axis is the param sweep named in each reason.
+            ["base_repr"] = "Python-int formatter: the axis is the (number, base, padding) PARAM sweep, no array operand",
+            ["binary_repr"] = "Python-int formatter: the axis is the (num, width) PARAM sweep, no array operand",
+            ["typename"] = "type-code string lookup: the axis is the type-code PARAM sweep",
+            ["datetime_data"] = "datetime descriptor accessor: the axis is the M8 / m8 unit PARAM sweep",
+            ["broadcast_shapes"] = "shape arithmetic: shape lists in, an int64 shape out — no operand dtype exists",
+            ["getbufsize"] = "thread-local config getter: the axis is the buffer-size PARAM sweep (int64 result)",
+            ["setbufsize"] = "thread-local config setter: the axis is the buffer-size PARAM sweep (int64 previous size)",
+            ["get_printoptions"] = "config getter: the axis is the (options, key) PARAM sweep, text results",
+            ["format_float_positional"] = "float-scalar formatter: NumPy's widths float16 / float32 / float64 are its whole dtype axis",
+            ["format_float_scientific"] = "float-scalar formatter: NumPy's widths float16 / float32 / float64 are its whole dtype axis",
+            // finfo exists for the inexact dtypes only; these attributes' float32 / float64 / complex128 values and
+            // every refusal are carved (gaps SU11-SU14, surface_gaps.jsonl), so the kept spread is narrower until fixed.
+            ["finfo.minexp"] = "finfo of an inexact dtype: float32 / float64 / complex128 carved as SU12 (off by one)",
+            ["finfo.resolution"] = "finfo of an inexact dtype: float16 / float32 carved as SU13 (not rounded to the dtype)",
+            ["finfo.smallest_normal"] = "finfo of an inexact dtype: float32 carved as SU14 (not exactly 2**-126)",
+            ["finfo.tiny"] = "finfo of an inexact dtype: float32 carved as SU14 (not exactly 2**-126)",
         };
 
         /// <summary>

@@ -346,6 +346,14 @@ namespace NumSharp.Tests.Fuzz
             // branches below would otherwise excuse the one-ULP x*x-vs-pow difference the tier exists to pin.
             if (c.Op == "power_fast")
                 return null;
+            // surface.jsonl (gen_surface_oracle.py: the APIs the coverage inventory listed as available but unproven —
+            // np.linalg's Array-API forms, the histogram family, the memory predicates, the text formatters, the ndarray
+            // members and the finfo / iinfo / dtype / flags / poly1d attributes) is held to ZERO excuses, its error cases
+            // included (every case carries valueclass "surface"). Its op keys are API names other tiers also use
+            // (histogram, linalg.trace, ...), so a blanket branch keyed on the op name would otherwise excuse them here;
+            // the cells NumSharp gets wrong are carved by the generator (_gap_of) and replayed under [OpenBugs].
+            if (c.Valueclass == "surface")
+                return null;
 
             // reduce_start.jsonl (valueclass "negzero": every operand all -0.0, every result a signed zero) is held to
             // ZERO excuses as well. Its cells exist to show how a reduction STARTS, which only the sign of a zero

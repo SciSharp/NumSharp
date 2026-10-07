@@ -35,11 +35,11 @@
     },
     "numpy.cumulative_prod": {
       "target": "NumSharp.np.cumprod",
-      "notes": "NumSharp exposes the established cumprod spelling."
+      "notes": "NumSharp has no cumulative_prod; np.cumprod computes the shared subset (surface.jsonl gates it)."
     },
     "numpy.cumulative_sum": {
       "target": "NumSharp.np.cumsum",
-      "notes": "NumSharp exposes the established cumsum spelling."
+      "notes": "NumSharp has no cumulative_sum; np.cumsum computes the shared subset (surface.jsonl gates it)."
     },
     "numpy.pow": {
       "target": "NumSharp.np.power",
@@ -61,7 +61,15 @@
   "support": {
     "numpy.ndarray.data": {
       "status": "partial",
-      "notes": "Data<T>() returns a typed NumSharp ArraySlice and is not NumPy's Python buffer object."
+      "notes": "Returns np.MemoryView, NumSharp's analog of the memoryview (tobytes, hex, shape, strides, format, readonly and the contiguity flags are gated by surface.jsonl); the Python buffer protocol itself (cast, release, slicing) has no C# counterpart."
+    },
+    "numpy.cumulative_sum": {
+      "status": "partial",
+      "notes": "Aliased to np.cumsum: no include_initial, and an N-D input without axis is flattened where cumulative_sum raises ValueError (surface gaps SU36 / SU37)."
+    },
+    "numpy.cumulative_prod": {
+      "status": "partial",
+      "notes": "Aliased to np.cumprod: no include_initial, and an N-D input without axis is flattened where cumulative_prod raises ValueError (surface gaps SU36 / SU37)."
     },
     "numpy.shape": {
       "status": "partial",

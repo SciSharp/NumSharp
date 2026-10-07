@@ -87,7 +87,9 @@ GAP_DIR = os.path.join(CORPUS, "gaps")
 
 # Files that are never sources: their own schemas (index_*, ma_*, decimal_*), stateful streams, backend pins, the
 # array-object tiers, and the corpora this generator writes.
-SKIP_PREFIXES = ("index_", "ma_", "decimal_", "random_", "generator_", "relayout")
+# "surface": gen_surface_oracle.py crosses its own APIs with the ndarray kinds already, and its params are vehicle
+# encodings (a function menu, view recipes, option dicts) that no plain NumPy call reproduces.
+SKIP_PREFIXES = ("index_", "ma_", "decimal_", "random_", "generator_", "relayout", "surface")
 SKIP_FILES = {"view_flags.jsonl", "out_flags.jsonl", "shape_args.jsonl", "matmul_parity.jsonl",
               "linalg_parity.jsonl", "polyalgebra_parity.jsonl", "polyroots_parity.jsonl", "evaluate.jsonl",
               "iter.jsonl", "random_smoke.jsonl"}
@@ -253,7 +255,7 @@ def survey():
     kinds = collections.defaultdict(lambda: collections.defaultdict(set))
     tags = collections.defaultdict(lambda: collections.defaultdict(set))
     for name in _corpus_files():
-        if name.startswith("relayout"):
+        if name.startswith(("relayout", "surface")):
             continue
         with open(os.path.join(CORPUS, name), encoding="utf-8") as f:
             for line in f:

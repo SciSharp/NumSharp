@@ -526,6 +526,15 @@ namespace NumSharp.Tests.Fuzz
                 ["ndarray.dot [relayout:strided_offset@1]"] = 1,
                 ["ndarray.dot [relayout:strided_neg@0]"] = 1,
                 ["ndarray.dot [relayout:strided_neg@1]"] = 1,
+                //
+                // FOUND BY THE SURFACE TIER (2026-10-08, gen_surface_oracle.py), recorded, NOT fixed:
+                //   * ndarray.data.tobytes() / .hex() of an array that is not contiguous in the requested order (F,
+                //     reversed, stepped or broadcast for order 'C'): np.MemoryView.tobytes materializes
+                //     `_arr.copy(order)` to read it and never disposes the copy: 1 per call. Every dtype.
+                ["ndarray.data"] = 1,
+                //   * np.array_equiv with an empty operand: its `a1 == a2` composition reaches the comparison
+                //     operators' empty-left early return (the relayout entries above): 1 per call.
+                ["array_equiv"] = 1,
             };
 
             public static bool Contains(string op) => CeilingByOp.ContainsKey(op);

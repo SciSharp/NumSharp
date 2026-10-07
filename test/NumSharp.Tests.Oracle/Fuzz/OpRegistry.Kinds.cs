@@ -169,8 +169,10 @@ namespace NumSharp.Tests.Fuzz
                         p.TryGetValue("axis", out var ax) && ax.ValueKind != JsonValueKind.Null
                             ? ax.GetInt32() : (int?)null));
 
+                // The surface tier (gen_surface_oracle.py, OpRegistry.Surface.cs) owns the remaining keys; it throws
+                // the same "not registered" NotSupportedException for a key it does not know either.
                 default:
-                    throw new NotSupportedException($"op '{op}' is not registered in OpRegistry");
+                    return ApplySurface(op, p, ops);
             }
         }
 
@@ -522,8 +524,9 @@ namespace NumSharp.Tests.Fuzz
                     return new[] { q, r };
                 }
 
+                // The surface tier's tuple keys (the histogram family); unknown keys still throw there.
                 default:
-                    throw new NotSupportedException($"tuple op '{op}' is not registered in OpRegistry");
+                    return ApplySurfaceTuple(op, p, ops);
             }
         }
 
@@ -551,8 +554,9 @@ namespace NumSharp.Tests.Fuzz
                     return np.dtype(p["dtype"].GetString()).typecode;
                 case "common_type":
                     return np.common_type_code(ops);
+                // The surface tier's dtype-valued attributes (ndarray.dtype, finfo.dtype, iinfo.dtype).
                 default:
-                    throw new NotSupportedException($"dtype op '{op}' is not registered in OpRegistry");
+                    return ApplySurfaceDtype(op, p, ops);
             }
         }
 
@@ -597,8 +601,9 @@ namespace NumSharp.Tests.Fuzz
                            bits.ToString("x16", CultureInfo.InvariantCulture) + "|" +
                            string.Join(",", state.Key.Select(x => x.ToString(CultureInfo.InvariantCulture)));
                 }
+                // The surface tier's text keys (formatters, tolist / tofile text, str-valued attributes).
                 default:
-                    throw new NotSupportedException($"text op '{op}' is not registered in OpRegistry");
+                    return ApplySurfaceText(op, p, ops);
             }
         }
 

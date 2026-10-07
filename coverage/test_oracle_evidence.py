@@ -367,8 +367,12 @@ class CommittedCorpusTests(unittest.TestCase):
         self.assertGreaterEqual(len(chebval.dtypes), 14)
         self.assertEqual({"polyeval.jsonl"}, chebval.files)
         self.assertIn("numpy.trace", self.result.evidence)
+        # The np.linalg Array-API forms have stricter contracts than their np.* namesakes (last-two-axes, 1-D only,
+        # 3-vectors), so the bare corpus keys trace / diagonal / outer / cross never credit them; since 2026-10-08
+        # surface.jsonl gates each form under its own linalg.<name> key, and only that key may.
         for strict in ("numpy.linalg.trace", "numpy.linalg.diagonal", "numpy.linalg.outer", "numpy.linalg.cross"):
-            self.assertNotIn(strict, self.result.evidence, f"{strict} has a stricter contract than np.{strict[13:]}")
+            self.assertEqual({"linalg." + strict[13:]}, self.evidence(strict).keys,
+                             f"{strict} has a stricter contract than np.{strict[13:]}: only its own key may credit it")
         for row_id in ("numpy.random.normal", "numpy.random.RandomState.normal"):
             normal = self.evidence(row_id)
             # The random-API oracle adds every overload of RandomState.normal (random_api_host.jsonl).

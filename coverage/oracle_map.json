@@ -17,7 +17,15 @@
       "laguerre": ["numpy.polynomial.laguerre.{rest}", "numsharp.polynomial.laguerre.{rest}"],
       "hermite": ["numpy.polynomial.hermite.{rest}", "numsharp.polynomial.hermite.{rest}"],
       "hermite_e": ["numpy.polynomial.hermite_e.{rest}", "numsharp.polynomial.hermite_e.{rest}"],
-      "polyutils": ["numpy.polynomial.polyutils.{rest}", "numsharp.polynomial.polyutils.{rest}"]
+      "polyutils": ["numpy.polynomial.polyutils.{rest}", "numsharp.polynomial.polyutils.{rest}"],
+      "linalg": ["numpy.linalg.{rest}"],
+      "finfo": ["numpy.finfo.{rest}"],
+      "iinfo": ["numpy.iinfo.{rest}"],
+      "dtype": ["numpy.dtype.{rest}"],
+      "poly1d": ["numpy.poly1d.{rest}"],
+      "broadcast": ["numpy.broadcast.{rest}"],
+      "flatiter": ["numpy.flatiter.{rest}"],
+      "nditer": ["numpy.nditer.{rest}"]
     },
     "files_without_op": {
       "note": "Corpus files whose schema predates the common op field. Their rows replay under the named key.",

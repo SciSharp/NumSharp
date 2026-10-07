@@ -164,8 +164,10 @@ namespace NumSharp.Tests.Fuzz
                     return owned;
                 }
 
+                // The ndarray members of the surface tier (shape, tofile, to_device, setfield, the flags attributes;
+                // OpRegistry.Surface.cs). An unknown name still throws "not registered" there.
                 default:
-                    throw new NotSupportedException($"instance op 'ndarray.{name}' is not registered in OpRegistry");
+                    return ApplySurface("ndarray." + name, p, ops);
             }
         }
 
@@ -208,8 +210,9 @@ namespace NumSharp.Tests.Fuzz
                     a.put(ops[1], ops[2], p["mode"].GetString());
                     return MutatedOperand(a);
 
+                // ndarray.base (the surface tier, OpRegistry.Surface.cs). An unknown name still throws there.
                 default:
-                    throw new NotSupportedException($"instance tuple op 'ndarray.{name}' is not registered in OpRegistry");
+                    return ApplySurfaceTuple("ndarray." + name, p, ops);
             }
         }
 

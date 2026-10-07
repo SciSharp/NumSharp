@@ -306,6 +306,7 @@ python test/oracle/gen_oracle.py polyvander       # np.polynomial.* Vandermonde 
 python test/oracle/gen_oracle.py polyroots        # np.polynomial.* companion / roots (+ the host-pinned polyroots_parity tier; needs OPENBLAS_NUM_THREADS=1)
 python test/oracle/gen_index_oracle.py            # the four index_* corpora (seed pinned 20240626)
 python test/oracle/gen_viewflags_oracle.py        # the array-object oracle: view_flags / out_flags / shape_args / array_args + corpus/gaps/ (carve: _gap_of)
+python test/oracle/gen_surface_oracle.py          # surface + corpus/gaps/surface_gaps.jsonl: the APIs the coverage inventory listed as available but unproven (carve: _gap_of)
 python test/oracle/gen_relayout_oracle.py         # relayout / relayout_host + corpus/gaps/relayout*_gaps.jsonl: every corpus cell's missing ndarray kinds (run LAST: it reads the other tiers)
 python test/oracle/gen_nan_oracle.py              # nan.jsonl — NaN parity grid (standalone; complex bit-exact)
 python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
@@ -671,6 +672,7 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | `gen_ma_oracle._mv_carved` (`ma_meanvar`), "broadcast" | 127 cells: the same functions over a broadcast operand reduced flat or along its stride-0 axis, without a mask or with an all-False one, unless order-free (plan finding 10 and X12). Replaying the tier uncarved (`gen_ma_oracle.py meanvar --uncarved <path>`), 64 of the 165 carved cells differ, every one of them float32 / float64 / complex128 on those layouts | `OpenBugsReductionTests.Sum_BroadcastOperand_Flat_IsNumPysCallSchedule`, `Sum_BroadcastOperand_Axis_IsNumPysOrder` |
 | `gen_viewflags_oracle._gap_of` (view_flags / out_flags / shape_args / array_args) | 717 cells under 47 gap ids, written to `corpus/gaps/<tier>_gaps.jsonl` instead of the gate: the returned object's flags / strides / view-copy-identity facet where NumSharp differs (the other VF ids, VS01, VO01, VA02, VA04), and silent WRONG VALUES from C-contiguous views at a non-zero offset (VA01 searchsorted, VA03 where, VA05 ldexp, VF22 a[:, idx] throws, VF30 nansum / nanprod, VF39 repeat, VF40 unique + the set routines). The carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests` `*_KnownGaps` (per-gap open counts), `OpenBugs.ViewFlags.cs` (18 public-call repros) |
 | `gen_relayout_oracle._gap_of` (relayout / relayout_host) | 179 cells under 7 gap ids, written to `corpus/gaps/relayout_gaps.jsonl`: the C-contiguous-offset misreads RL01 (searchsorted, digitize, complex / float16 isin), RL02 (where, float16 / complex nancumsum / nancumprod), RL03 (ldexp), RL04 (unique, unique_values, the set routines), RL05 (repeat of a 0-d offset view), and the empty-operand early returns RL06 (comparison operators) and RL07 (logaddexp / logaddexp2). Drawn by emulating each bug (the misread window, the early return), so the carve is exact; also DROPPED (not carved): ufunc / where variants whose answer depends on NEP50's weak 0-d promotion (the registry's NEP50 branches document that divergence in every other tier), and the flat np.mean of a broadcast float operand that is not order-free (the mean_loops tier owns that residual) | `FuzzCorpusTests.Relayout_KnownGaps` (both verdicts), `OpenBugs.Relayout.cs` (8 public-call repros) |
+| `gen_surface_oracle._gap_of` (surface) | 909 cells under 40 gap ids, written to `corpus/gaps/surface_gaps.jsonl`: error texts and refusals (SU1, SU2, SU4, SU8, SU10, SU11, SU15, SU16, SU22, SU28, SU29, SU32-SU35, SU40), silent wrong values (SU12-SU14 finfo, SU20 broadcast.iters, SU25 / SU31 nditer order, SU38 / SU39 cumsum / cumprod dtype=, SU6 / SU9 / SU18 / SU19 the float formatters), crashes (SU5 apply_along_axis over a stride-0 offset view, SU30 nditer.remove_axis), reporting (SU3, SU17, SU21, SU23, SU24, SU26, SU27), the double-only float formatters (SU7) and the cumulative_* aliases (SU36 / SU37). Drawn by modelling each bug where it is not a fixed set (the float formatters on the widened double with NumSharp's Dragon4 carry and trim rules; np.nditer's C walk for an F + broadcast set via NumPy with order='C'; the edgeitems=0 format from the last element), so the carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests.Surface_KnownGaps`, `OpenBugs.Surface.cs` (37 public-call repros) |
 | `gen_random_parity` carve list | `multivariate_normal` only: byte-identical only through a LAPACK backend's `gesdd` (the managed Jacobi SVD flips a singular vector's sign). The other seven samplers (gamma shape<1, f, pareto, standard_cauchy, binomial, negative_binomial, multinomial) were uncarved 2026-09-25 — legacy-distributions.c ports — and every sampler is also covered by the `random_api` tiers | `OpenBugsRandom.RandomParity_MultivariateNormal_Seed42_ShouldMatchNumPy` (the seven former pins are ordinary tests) |
 
 **FIXED on this branch or before it** (classifier branch/carve removed — the matrix now verifies
@@ -1394,6 +1396,82 @@ own schemas, which no plain call reproduces.
 gen_relayout_oracle.py --uncarved <dir>`, copy the two files over the build output's corpus, run `Relayout` and
 `RelayoutLayoutInvariance` with `NUMSHARP_ORACLE_FAILURE_DUMP=<file>`, and compare the dump with `_gap_of`. Then
 regenerate the carved files; `Relayout_KnownGaps` must report every carved case still open (no "now match").
+
+### The surface tier (`surface`) — 2026-10-08
+
+`test/oracle/gen_surface_oracle.py` writes contracts for the APIs that the coverage inventory
+(`coverage/generate_coverage.py` over `coverage/NumSharp.Tools.ApiInventory`) listed as available but unproven. Before
+the tier, 40 headline APIs had no contract. Most of them were "sibling-owned" because the operand corpus had no form
+for their inputs. The tier supplies the inputs through params:
+
+- A FUNCTION argument (apply_along_axis, apply_over_axes, frompyfunc) is a name from a fixed menu. Each side maps the
+  name to the same computation (`APPLY_FUNCS`, `OVER_FUNCS` and `FROMPY_FUNCS` in the generator, `AlongAxisFunc`,
+  `OverAxesFunc` and `FromPyFunc` in `OpRegistry.Surface*.cs`).
+- Two VIEWS of one buffer (shares_memory, may_share_memory, ndarray.base) are recipes that each side applies to the
+  same owner operand: `["s", "<slice>"]`, `["T"]`, `["r", [dims]]`, `["sw", a, b]` and `["rev"]`.
+- A shape list, a dtype string, a format option, an option dict or a Python int is a param.
+
+The op keys are the API names, so the coverage join credits the rows directly. The dotted heads `linalg`, `finfo`,
+`iinfo`, `dtype`, `poly1d`, `broadcast`, `flatiter` and `nditer` are prefix rules in `coverage/oracle_map.json`.
+
+| Section | APIs | Kinds and edges |
+|---|---|---|
+| linalg | np.linalg.cross / diagonal / outer / trace (the Array-API forms: last two axes, 1-D only, 3-vectors) | every dtype, 13 operand kinds, mixed dtypes, dtype=, every refusal |
+| histogram | histogram, histogram_bin_edges, histogram2d, histogramdd | 13 dtypes x int / estimator / edge bins, range, density, weights, the degenerate samples, every refusal |
+| memory | array_equiv, shares_memory, may_share_memory (10 view pairs x 5 max_work values x 5 dtypes), broadcast_shapes | |
+| apply | apply_along_axis, apply_over_axes (13 dtypes x the function menus), bmat (nested lists, strings with ldict / gdict) | operand kinds incl. a stride-0 view at an offset |
+| text | array2string (every option), format_float_positional / scientific (3 widths x 12 values x every option, and a rounding grid of carry / round-down / tie values x precision x trim), base_repr, binary_repr, typename, datetime_data | |
+| ndarray | tolist (Python repr), tofile (raw bytes and text), setfield, base, dtype, shape, device, to_device, data (the memoryview: 12 attributes) | 13 dtypes x 19 kinds incl. a 0-d view at an offset |
+| attrs | finfo / iinfo (names and spellings), dtype (21 attributes x 24 specs incl. byte orders and datetimes), ndarray.flags (14 x 6 dtypes x 21 kinds), poly1d (coeffs and aliases, order, deriv, integ, variable) | |
+| objects | np.broadcast (index, iters, reset after k steps), flatiter (index, coords after k steps, copy, base), np.nditer (23 members x 9 configs x 14 operand sets, after k steps; refusals; closed and delayed iterators), set_printoptions / printoptions / get_printoptions, setbufsize / getbufsize, dtype.type, frompyfunc | |
+| aliases | numpy.cumulative_sum / cumulative_prod (credited to np.cumsum / np.cumprod by the inventory), numpy.shape | the shared subset and the parameters the alias lacks |
+
+| File | Cases | Replayed by |
+|---|---|---|
+| `surface.jsonl` | 15,141 cases over 135 op keys (136 with nditer.close, carved whole) | `FuzzCorpusTests.Surface` (valueclass `surface`: zero registry excuses) |
+| `gaps/surface_gaps.jsonl` | 909 carved under 40 ids | `Surface_KnownGaps` (`[OpenBugs]`) |
+
+**What it found** (40 ids; the library defects reproduced through public calls in
+`NumSharp.Tests/OpenBugs.Surface.cs`, 37 tests with NumPy 2.4.2 literals):
+- *Silent wrong values*: np.cumsum / np.cumprod with dtype=complex128 over an integer input return the input's raw
+  bytes as complex values (SU38); np.cumsum(x, dtype=bool) stores counts 2, 3 in a bool result (SU39);
+  np.finfo(float32 / float64).minexp is one too high, float32 resolution is not rounded to float32, and float32 tiny is
+  not exactly 2**-126 (SU12-SU14); np.broadcast.iters restart at 0 where NumPy's share the cursor (SU20); np.nditer in K
+  order over an F operand and a broadcast operand walks C order (NumSharp sorts axes by the smallest stride; NumPy lets
+  the stride-0 operand abstain) (SU25), and remove_multi_index re-sorts the axes (SU31); the float formatters print
+  .NET's `Infinity.` / `NaN.` (SU6), keep the zeros a cutoff carries into (SU18), drop the point under trim='-' (SU19)
+  and ignore fractional=False (SU9).
+- *Crashes*: np.apply_along_axis over a one-element np.split child broadcast to 2-D (every stride 0 at Shape.offset k)
+  throws ArgumentOutOfRangeException (SU5); np.nditer.remove_axis under order='F' or over an F operand throws
+  IndexOutOfRangeException (SU30).
+- *Refusals and texts*: NumPy refuses and NumSharp computes for histogram of complex with an estimator (SU4), negative
+  formatter precision (SU8), an out-of-range Python int in ndarray.setfield (SU10), iinfo(bool) (SU15), np.nditer reads
+  past the end (SU28), a delayed buffer read before reset (SU32), remove_axis without multi_index (SU33),
+  enable_external_loop with a multi-index (SU34); NumSharp refuses where NumPy computes for set_printoptions(precision=-1)
+  over integers (SU22) and the dtype name 'cdouble' (SU35); error texts differ for linalg.cross (SU1, SU2), finfo /
+  iinfo (SU11, SU16), the closed np.nditer (SU29) and np.cumprod's axis (SU40).
+- *Reporting*: complex histogram edges (SU3), dtype.newbyteorder's repr (SU17), get_printoptions' missing formatter /
+  override_repr keys (SU21), edgeitems=0 summarization (SU23), the datetime dtype.type (SU24), np.nditer.shape's axis
+  order (SU26), and c_index / f_index blocking coalescing (SU27).
+- *API shape*: the float formatters take only a double, so float16 / float32 values print with float64 digits (SU7);
+  numpy.cumulative_sum / cumulative_prod do not exist and np.cumsum / np.cumprod lack include_initial and flatten N-D
+  input without axis (SU36, SU37; `coverage/overrides.json` now marks both rows partial).
+- *Leaks* (the scope sweep replays the tier): np.MemoryView.tobytes / hex of a non-contiguous array never dispose their
+  copy (1 pooled buffer per call, every dtype); np.array_equiv with an empty operand reaches the comparison operators'
+  empty-left leak. Recorded in `KnownEscapes`. The harness's own view recipes are disposed (an empty slice owns a buffer).
+- *Validated clean*: tolist (incl. 0-d views at an offset), tofile, shares_memory / may_share_memory, broadcast_shapes,
+  bmat, array2string, base_repr, binary_repr, typename, datetime_data, the ndarray.flags attributes, poly1d, np.linalg
+  diagonal / outer / trace, histogram2d / histogramdd, frompyfunc and getbufsize / setbufsize match NumPy on every case.
+
+**Platform pins avoided**: memoryview.format and dtype.char / dtype.num of int32 / uint32 / int64 / uint64 (their codes
+and type numbers follow the C long: int32 is 'l' / 7 on win-amd64 and 'i' / 5 on LP64, on NumPy's side and NumSharp's
+alike), the C-long dtype spellings ('l', 'L', 'long', 'ulong') and 'longdouble' are left out, so the tier is portable
+(replayed on Linux x64 through WSL).
+
+**Redraw the carve after a change** (it must stay exact): `python gen_surface_oracle.py --uncarved <dir>`, copy the
+file over the build output's corpus, run `Surface` with `NUMSHARP_ORACLE_FAILURE_DUMP=<file>`, compare the dump with
+`_gap_of`, then regenerate; `Surface_KnownGaps` must report every carved case still open. The relayout generator skips
+this tier (its vehicle params are no plain NumPy call).
 
 ### float16 selections (`half_minmax` tier + the selection contract) — 2026-10-03
 

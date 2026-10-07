@@ -50,70 +50,16 @@ namespace NumSharp.Tests.Fuzz
         // value bytes to compare in an operand/result corpus.
         private static readonly HashSet<string> SiblingOwned = new()
         {
-            "array2string",
-            // apply_along_axis / apply_over_axes take a CALLABLE (a C# Func) applied per 1-D slice /
-            // per axis — there is no NumPy-serializable operand form for an arbitrary delegate, so
-            // the differential corpus (which replays operand bytes) cannot express them (same reason
-            // as np.evaluate, which takes an NDExpr). Gated by the dedicated np.apply_along_axis.Test.cs
-            // / np.apply_over_axes.Test.cs suites, verified bit-exact against NumPy 2.4.2.
-            "apply_along_axis", "apply_over_axes",
-            // vectorize / frompyfunc wrap an arbitrary C# DELEGATE (returning a Func / a Vectorized
-            // object, not an array), exactly like apply_along_axis — there is no NumPy-serializable
-            // operand form for a user function, so the differential corpus (which replays operand
-            // bytes) cannot express them. Gated by the dedicated np.vectorize.Test.cs suite (both
-            // modes, multi-output, otypes, broadcasting, and the error parity), verified bit-exact
-            // against NumPy 2.4.2. The element-wise path additionally rides np.evaluate's fused
-            // NDExpr.Call machinery, already fuzzed via evaluate.jsonl.
-            "vectorize", "frompyfunc",
-            // broadcast_shapes takes SHAPES (tuples of ints), not array operands, so it has no entry
-            // in the (dtype,shape,strides,bytes)->result operand corpus. Gated by the dedicated
-            // np.broadcast_shapes.Test.cs suite (happy path across argument forms + verbatim error
-            // messages), verified against NumPy 2.4.2.
-            "broadcast_shapes",
-            // getbufsize/setbufsize configure the ufunc/NDIter default buffer size (NumPy's
-            // NPY_BUFSIZE, 8192). They are a thread-local config getter/setter with no array
-            // result and no deterministic value bytes — buffering only changes internal chunking,
-            // never a computed value — so there is nothing for an operand/result corpus to
-            // bit-compare (same rationale as get_printoptions/set_printoptions). Gated by the
-            // dedicated np.bufsize.Test.cs suite, verified against NumPy 2.4.2.
-            "getbufsize", "setbufsize",
-            // bmat is pure block-assembly (concatenation) over the already-fuzzed concatenate +
-            // asmatrix — its nested-block ([[A,B],[C,D]]) and string+dict inputs have no single-operand
-            // corpus representation (the same reason block needs a bespoke multi-operand oracle path);
-            // gated by the dedicated np.bmat.Tests.cs suite verified against NumPy 2.4.2.
-            "bmat",
-            // binary_repr / base_repr are SCALAR integer -> string formatters (NumPy takes a single
-            // Python int via operator.index / int(), not an array), so they have no operand form in the
-            // (dtype,shape,strides,bytes)->result corpus — the same reason format_float_positional /
-            // format_float_scientific are sibling-owned. Gated by the dedicated np.base_repr.Test.cs suite
-            // (both funcs), differentially verified against NumPy 2.4.2 across ±2^100 magnitudes, every
-            // width/base/padding and the ValueError/TypeError edges.
-            "binary_repr", "base_repr",
-            // typename is a type-CODE -> description dict lookup (NumPy's _namefromtype[char],
-            // numpy/lib/_type_check_impl.py): its input is a single array-protocol type-code STRING
-            // ('i', 'D', 'S1', ...), not an array, so it has no (dtype,shape,strides,bytes)->result
-            // operand form in the corpus — the same reason binary_repr/base_repr are sibling-owned.
-            // Gated by the dedicated np.typename.Test.cs suite (all 22 codes + case-sensitivity, the
-            // 'S1'/'S' split, the absent-'e' parity, and the KeyError message on every miss incl. null),
-            // verified against NumPy 2.4.2.
-            "typename",
-            // datetime_data reads the (unit, count) parameter off a datetime64/timedelta64 DESCRIPTOR — a dtype-level
-            // accessor with no array operand or result bytes (the datetime classes have no storage yet, Stage A of
-            // docs/plans/dtype-system.md). Gated by test/NumSharp.Tests/DTypes/*, probed against NumPy 2.4.2.
-            "datetime_data",
+            // vectorize wraps an arbitrary C# DELEGATE (returning a Func / a Vectorized object, not an array): there is
+            // no NumPy-serializable form for a user function, so the differential corpus cannot express it. Gated by the
+            // dedicated np.vectorize.Test.cs suite (both modes, multi-output, otypes, broadcasting, the error parity),
+            // verified against NumPy 2.4.2. Its sibling frompyfunc is a direct op of surface.jsonl (a fixed menu of
+            // functions both sides map to the same computation, gen_surface_oracle.FROMPY_FUNCS).
+            "vectorize",
             "finfo", "flat",
-            // The histogram family returns TUPLES over POLYMORPHIC bins (int count / estimator string /
-            // explicit edge array) and, for dd/2d, MULTI-array samples — none of which fit the single-operand
-            // (dtype,shape,strides,bytes)->result corpus model (the same reason bmat and block need bespoke
-            // paths). They are gated by the dedicated np.histogram.Test.cs suite plus a large live .npy
-            // round-trip differential (histogram 1-D value/edges bit-exact across 11 dtypes × int/estimator/
-            // edge bins × range/weights/density; histogramdd + histogram2d H bit-exact across 1-3D × bin modes),
-            // all verified against NumPy 2.4.2.
-            "histogram", "histogram_bin_edges", "histogramdd", "histogram2d",
-            "format_float_positional", "format_float_scientific",
-            "get_printoptions", "iinfo", "load", "load_npy", "load_npz",
-            "nditer_chunks", "printoptions", "save", "savez",
-            "savez_compressed", "set_printoptions",
+            "iinfo", "load", "load_npy", "load_npz",
+            "nditer_chunks", "save", "savez",
+            "savez_compressed",
             // isposinf/isneginf/nan_to_num: gated by the dedicated byte-exact suites
             // np.isposinf_isneginf.Test.cs / np.nan_to_num.Test.cs, differentially verified against
             // NumPy 2.4.2 (isposinf/isneginf byte-identical across float64/float32/float16 × C/
@@ -122,25 +68,11 @@ namespace NumSharp.Tests.Fuzz
             // predicates additionally ride the same fused predicate kernel already fuzzed for
             // isinf/isnan (complex rejected up front with NumPy's verbatim TypeError).
             "isposinf", "isneginf", "nan_to_num",
-            // may_share_memory / shares_memory are MEMORY-LAYOUT predicates: their answer depends on the
-            // two operands being views of ONE underlying buffer (or not). The differential corpus replays
-            // each operand from a serialized (dtype,shape,strides,offset,bytes) tuple and reconstructs them
-            // as INDEPENDENT arrays, so it has no way to express "b is a view of a" — the exact relationship
-            // these functions test — and every replayed pair would trivially not overlap. Same structural
-            // reason the iteration protocols (nditer/ndindex/ndenumerate) are absent. Gated by the dedicated
-            // np.shares_memory.Test.cs suite, verified against NumPy 2.4.2 across view/copy/interleaved/
-            // transposed layouts and the max_work / TooHardError / ValueError edges.
-            "may_share_memory", "shares_memory",
-            // array_equiv's VALUE path is identical to array_equal's — both reduce all(a == b) — and
-            // array_equal is already a direct corpus op (logic.jsonl via ALLCLOSE_OPS), so the elementwise
-            // comparison + all-reduction is fuzzed across every dtype/layout there. array_equiv's ONLY
-            // distinguishing behavior is the broadcast-shape gate (shape-consistent rather than exact),
-            // which the single-operand-per-slot differential corpus cannot express (it reconstructs each
-            // operand independently and can't stage a genuine (M,)-vs-(N,M) broadcast pair) — the same
-            // structural reason the set routines and broadcast predicates are sibling-owned. Gated by the
-            // dedicated np.array_equiv.Test.cs suite (broadcast-consistent / non-broadcastable / scalar +
-            // column broadcast / empty / NaN / mixed-dtype), verified against NumPy 2.4.2.
-            "array_equiv",
+            // 2026-10-08: array2string, apply_along_axis / apply_over_axes, frompyfunc, broadcast_shapes, getbufsize /
+            // setbufsize, bmat, binary_repr / base_repr, typename, datetime_data, the histogram family, the float
+            // formatters, get_printoptions / printoptions / set_printoptions, may_share_memory / shares_memory and
+            // array_equiv left this list: surface.jsonl (gen_surface_oracle.py) gates each directly, its function
+            // arguments as a fixed menu, its views of one buffer as recipes, its shapes and options as params.
         };
 
         // NumSharp compatibility/convenience APIs with no NumPy 2.4.2 callable of the same name.
@@ -395,16 +327,11 @@ namespace NumSharp.Tests.Fuzz
         // cannot express (IO, Python-protocol plumbing, device placement).
         private static readonly HashSet<string> NdarraySiblingOwned = new()
         {
-            // IO / host-object conversions: text bytes and nested CLR lists have their own
-            // byte-exact suites (PrintfFormatter/tofile; ToJaggedArray/tolist tests).
-            "tofile", "tolist",
             // flags mutation is gated by the dedicated flags oracle (#5, FlagsOracleTests).
             "setflags",
-            // setfield writes THROUGH a dtype window — gated with getfield by the
-            // NDArray.getfield/setfield suite (the read half IS corpus-gated: ndarray.getfield).
-            "setfield",
-            // Array-API device placement: no value bytes (np.device conformance suite).
-            "to_device",
+            // 2026-10-08: tofile, tolist, setfield and to_device left this list — surface.jsonl gates each directly
+            // (tofile's raw and text bytes, tolist's Python repr, setfield's window writes and refusals, to_device's
+            // identity and refusals).
             // Python protocol: indexing rides the advanced-indexing oracle (#2); iteration order
             // rides the iter tier (nditer/flatiter semantics); containment/hash are container
             // tests (NDArray.Container).
@@ -422,12 +349,9 @@ namespace NumSharp.Tests.Fuzz
         // keys, each with a sibling gate; NumSharp-only properties are compatibility surface.
         private static readonly HashSet<string> NdarrayPropSiblingOwned = new()
         {
-            "base",     // view lineage: layout-parity oracle (#6) + view/property validation suite
-            "data",     // memoryview bridge: NDArray.data/MemoryView suite
-            "device",   // Array-API conformance suite
-            "dtype",    // the DTypes suite + every corpus case's expected-dtype comparison
-            "flags",    // the flags oracle (#5)
-            "shape",    // asserted by EVERY corpus case's result-shape comparison
+            "flags",    // the flags oracle (#5); each flags attribute is a surface.jsonl key (ndarray.flags.<name>)
+            // 2026-10-08: base, data (the memoryview), device, dtype and shape left this list — surface.jsonl gates each
+            // as an ndarray.<name> key.
         };
 
         private static readonly HashSet<string> NdarrayPropCompatibilityOnly = new()

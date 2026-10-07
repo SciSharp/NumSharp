@@ -1122,6 +1122,9 @@ namespace NumSharp.Tests.Fuzz
             // corpus/gaps/relayout_gaps.jsonl):
             ["relayout.jsonl"] = 14000,    // 14,964 variants of the portable tiers, 19 kinds
             ["relayout_host.jsonl"] = 1600, // 1,728 variants of the host-libm tiers
+            // The surface tier (gen_surface_oracle.py, 2026-10-08): the APIs the coverage inventory listed as available
+            // but unproven. Delivered count (the 909 carved gaps live in corpus/gaps/surface_gaps.jsonl):
+            ["surface.jsonl"] = 14400,     // 15,141 cases over 135 op keys
         };
 
         // Corpus tiers authored against the win-amd64 CRT libm (ucrtbase) and NumSharp's host SIMD
