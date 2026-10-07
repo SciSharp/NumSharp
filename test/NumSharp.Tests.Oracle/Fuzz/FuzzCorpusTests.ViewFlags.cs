@@ -88,13 +88,19 @@ namespace NumSharp.Tests.Fuzz
         ///     diverge from NumPy and how many now match (a gap that may be fixed: drop its carve rule and regenerate).
         /// </summary>
         /// <param name="fileName">The gaps file name inside <c>Fuzz/corpus/gaps/</c>.</param>
+        /// <param name="extraVerdict">
+        ///     An optional second verdict per case (null: none): a non-null line keeps the case open even when the ordinary
+        ///     replay passes it. The relayout gaps pass the layout-invariance verdict here, because a carved layout bug can
+        ///     be excused by the ordinary replay's registry (the source tier's rules travel with a variant) and would
+        ///     otherwise read as "now matches" while NumSharp still misreads the layout.
+        /// </param>
         /// <exception cref="AssertFailedException">Any carved case still diverges (the gap is open), or the file names a
         ///     case without a gap id (a generator bug: a carved case must say which gap it pins).</exception>
         /// <remarks>
         ///     An empty gaps file passes: every carve rule has been retired. The per-gap summary is printed whether the test
         ///     passes or fails, so the size of each open gap stays visible.
         /// </remarks>
-        private static void RunGapCorpus(string fileName)
+        private static void RunGapCorpus(string fileName, Func<FuzzCorpus.Case, string> extraVerdict = null)
         {
             using var cases = FuzzCorpus.Open(System.IO.Path.Combine("gaps", fileName));
             var byGap = new SortedDictionary<string, (int total, int open, string sample)>(StringComparer.Ordinal);
@@ -108,6 +114,9 @@ namespace NumSharp.Tests.Fuzz
                 }
                 var failures = new List<string>();
                 ReplayOne(c, failures, new Dictionary<string, int>());
+                string extra = extraVerdict?.Invoke(c);
+                if (extra != null)
+                    failures.Add(extra);
                 var (total, open, sample) = byGap.TryGetValue(c.Gap, out var e) ? e : (0, 0, null);
                 byGap[c.Gap] = (total + 1, open + (failures.Count > 0 ? 1 : 0), sample ?? (failures.Count > 0 ? failures[0] : null));
             }

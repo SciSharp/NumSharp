@@ -1117,6 +1117,11 @@ namespace NumSharp.Tests.Fuzz
             ["out_flags.jsonl"] = 1000,    // 1,072: 149 out-capable fns x 6 out layouts
             ["shape_args.jsonl"] = 500,    // 537: 12 shape-taking fns x every C# shape form
             ["array_args.jsonl"] = 320,    // 335: 55 secondary-operand positions x up to 9 layouts
+            // The relayout tiers (gen_relayout_oracle.py, 2026-10-07): existing cases with one operand moved into an
+            // ndarray kind its (op, position, dtype class) cell lacked. Delivered counts (the 179 carved gaps live in
+            // corpus/gaps/relayout_gaps.jsonl):
+            ["relayout.jsonl"] = 14000,    // 14,964 variants of the portable tiers, 19 kinds
+            ["relayout_host.jsonl"] = 1600, // 1,728 variants of the host-libm tiers
         };
 
         // Corpus tiers authored against the win-amd64 CRT libm (ucrtbase) and NumSharp's host SIMD

@@ -306,6 +306,7 @@ python test/oracle/gen_oracle.py polyvander       # np.polynomial.* Vandermonde 
 python test/oracle/gen_oracle.py polyroots        # np.polynomial.* companion / roots (+ the host-pinned polyroots_parity tier; needs OPENBLAS_NUM_THREADS=1)
 python test/oracle/gen_index_oracle.py            # the four index_* corpora (seed pinned 20240626)
 python test/oracle/gen_viewflags_oracle.py        # the array-object oracle: view_flags / out_flags / shape_args / array_args + corpus/gaps/ (carve: _gap_of)
+python test/oracle/gen_relayout_oracle.py         # relayout / relayout_host + corpus/gaps/relayout*_gaps.jsonl: every corpus cell's missing ndarray kinds (run LAST: it reads the other tiers)
 python test/oracle/gen_nan_oracle.py              # nan.jsonl — NaN parity grid (standalone; complex bit-exact)
 python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
 dotnet run test/oracle/gen_decimal_oracle.cs      # Decimal tiers (independent C# System.Decimal oracle)
@@ -669,6 +670,7 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | `gen_ma_oracle._mv_carved` (`ma_meanvar`), "finding5" | 38 cells: ma.mean / var / std / anom along an axis of a 2-D view with a reversed axis, without a mask or with an all-False one (`filled(0)` is the view itself then), whose mean's sum is not order-free (`_mv_order_free`: the elements as multiples of their lowest set bit, every partial sum exact) | `OpenBugsReductionTests.Sum_ReversedViewAxis_WalksTheLogicalOrder` |
 | `gen_ma_oracle._mv_carved` (`ma_meanvar`), "broadcast" | 127 cells: the same functions over a broadcast operand reduced flat or along its stride-0 axis, without a mask or with an all-False one, unless order-free (plan finding 10 and X12). Replaying the tier uncarved (`gen_ma_oracle.py meanvar --uncarved <path>`), 64 of the 165 carved cells differ, every one of them float32 / float64 / complex128 on those layouts | `OpenBugsReductionTests.Sum_BroadcastOperand_Flat_IsNumPysCallSchedule`, `Sum_BroadcastOperand_Axis_IsNumPysOrder` |
 | `gen_viewflags_oracle._gap_of` (view_flags / out_flags / shape_args / array_args) | 717 cells under 47 gap ids, written to `corpus/gaps/<tier>_gaps.jsonl` instead of the gate: the returned object's flags / strides / view-copy-identity facet where NumSharp differs (the other VF ids, VS01, VO01, VA02, VA04), and silent WRONG VALUES from C-contiguous views at a non-zero offset (VA01 searchsorted, VA03 where, VA05 ldexp, VF22 a[:, idx] throws, VF30 nansum / nanprod, VF39 repeat, VF40 unique + the set routines). The carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests` `*_KnownGaps` (per-gap open counts), `OpenBugs.ViewFlags.cs` (18 public-call repros) |
+| `gen_relayout_oracle._gap_of` (relayout / relayout_host) | 179 cells under 7 gap ids, written to `corpus/gaps/relayout_gaps.jsonl`: the C-contiguous-offset misreads RL01 (searchsorted, digitize, complex / float16 isin), RL02 (where, float16 / complex nancumsum / nancumprod), RL03 (ldexp), RL04 (unique, unique_values, the set routines), RL05 (repeat of a 0-d offset view), and the empty-operand early returns RL06 (comparison operators) and RL07 (logaddexp / logaddexp2). Drawn by emulating each bug (the misread window, the early return), so the carve is exact; also DROPPED (not carved): ufunc / where variants whose answer depends on NEP50's weak 0-d promotion (the registry's NEP50 branches document that divergence in every other tier), and the flat np.mean of a broadcast float operand that is not order-free (the mean_loops tier owns that residual) | `FuzzCorpusTests.Relayout_KnownGaps` (both verdicts), `OpenBugs.Relayout.cs` (8 public-call repros) |
 | `gen_random_parity` carve list | `multivariate_normal` only: byte-identical only through a LAPACK backend's `gesdd` (the managed Jacobi SVD flips a singular vector's sign). The other seven samplers (gamma shape<1, f, pareto, standard_cauchy, binomial, negative_binomial, multinomial) were uncarved 2026-09-25 — legacy-distributions.c ports — and every sampler is also covered by the `random_api` tiers | `OpenBugsRandom.RandomParity_MultivariateNormal_Seed42_ShouldMatchNumPy` (the seven former pins are ordinary tests) |
 
 **FIXED on this branch or before it** (classifier branch/carve removed — the matrix now verifies
@@ -1314,6 +1316,84 @@ ULP from a midpoint). FFT lengths stay in {2, 3, 4, 6}, whose twiddles `fft.json
 `np.zeros_like` / `ones_like` / `full_like` take no `shape=`; `np.reshape` takes no `order=` / `copy=`; `np.squeeze`
 takes no tuple axis; `np.zeros` / `np.empty` take a dtype only beside a `Shape` (`np.ones` beside a `Shape` or an
 `int[]`); `np.sum` / `prod` / `mean` / `std` / `var` / `argmax` / `argmin` / `nansum` take no `out=`.
+
+### The relayout tiers (`relayout` / `relayout_host`) — 2026-10-07
+
+`test/oracle/gen_relayout_oracle.py` fills the ndarray-KIND gaps of the whole corpus. A survey classifies every
+operand descriptor into one of 19 kinds (C, F, permuted, stepped, each also at an extra offset; reversed;
+stepped-and-reversed; broadcast and one-element broadcast, also at an offset; 0-d owner; 0-d view at an offset;
+one-element 1-D; empty; empty view inside a real buffer) plus the tags read-only and high-rank, per
+(op key, operand position, dtype class: bool / signed / unsigned / float16 / float32-64 / complex). Before the tiers, of
+1,775 (op, position) pairs, 42 % had ever seen a C-contiguous view at an offset, 0.1 % a permuted view at an offset, 2 %
+a stepped-and-reversed view, 0 % a broadcast at an offset, 0.2 % an empty view.
+
+**How a variant is made.** A source case qualifies only when a plain NumPy call reproduces its recorded result byte
+for byte (the generator's self-validating dispatcher: the op key resolves to an np.* / np.linalg.* / np.fft.* /
+module-qualified callable or an `ndarray.` method, every param is one of its keywords, and the SPECIAL table adapts
+the corpus conventions that are not a plain call). For each operand position whose cell is empty, the operand is
+rebuilt in the missing kind with the SAME values (offset, F, permuted, stepped, reversed, read-only) or, for the
+elementwise and reduction families only (gen_oracle's own op tables), with derived values (a broadcast of the first row
+or element, a one-element 1-D array, a 0-d owner, axis 0 cut to length 0). NumPy computes the new answer (or its exact
+error). One variant fills a cell; an emptied operand fills two (one where the others still broadcast with it, one where
+NumPy raises "could not be broadcast"). The view buffers hold the sentinel 7 wherever the view does not reach, so a
+kernel that reads outside the view sees a value the operand never holds. Variants keep the source's op key, params and
+valueclass, so they replay through the same `OpRegistry` entry. Excluded: the random streams, the `index_*` / `ma_*` /
+`decimal_*` schemas, the backend-pinned and array-object tiers, np.evaluate and iterator traces, char / decimal
+operands, and np.frombuffer (its operand stands for Python `bytes`; the replay passes NumSharp a `byte[]`).
+
+| File | Cases | Replayed by |
+|---|---|---|
+| `relayout.jsonl` | 14,964 variants of 329 op keys from 47 portable tiers | `FuzzCorpusTests.Relayout` (the source tiers' rules) |
+| `relayout_host.jsonl` | 1,728 variants of the host-libm tiers | `FuzzCorpusTests.RelayoutHost` (`RunHostLibmCorpus`) |
+| both | 16,632 compared, 60 skipped | `FuzzCorpusTests.RelayoutLayoutInvariance` (no excuse table) |
+| `gaps/relayout_gaps.jsonl` | 179 carved under 7 ids | `Relayout_KnownGaps` (`[OpenBugs]`) |
+
+**Two validation holes closed.** (1) A variant inherits its source tier's excuses, and an unbounded excuse swallows a
+layout misread as readily as the divergence it was written for: the "[known bug]" `repeat` branch excused five 0-d
+offset misreads. `RelayoutLayoutInvariance` therefore holds a contract with no registry in between: where NumPy's
+outcome does not change once the moved operand is a fresh C-ordered copy (the generator marks the 60 variants where it
+does `layout_sensitive`: reductions over F / permuted layouts, a read-only operand an in-place op refuses), NumSharp's
+outcome on the variant must equal its own outcome on that copy. The copy comes from `FuzzCorpus.ReconstructCanonical`,
+which gathers the values by index arithmetic, so a copy kernel that shared the bug could not hide it. (2) The
+registry's two NEP50 0-d branches excuse ANY dtype or value difference of a multi-operand case with a 0-d operand;
+they hid `np.logaddexp` returning its empty int32 operand where NumPy returns float64. The relayout tiers are exempt
+from them (`MisalignedRegistry.IsRelayoutCase`); instead the generator drops every ufunc / np.where variant whose
+NumPy answer changes when its 0-d operands become Python scalars (the documented weak-promotion divergence), so a
+difference left there is real. It also drops the flat np.mean of a broadcast float operand that is not order-free
+(the mean_loops tier owns that residual and drops the same cells).
+
+**Harness change.** An empty operand descriptor that carries a buffer is rebuilt as an empty VIEW over it
+(`FuzzCorpus.Reconstruct`; it used to be a fresh empty array whatever the descriptor said). That made 176 existing
+empty operands with a buffer (`manip` ix_, `minmax_kwargs`) real views too; they still pass.
+
+**What it found** (7 ids, 179 carved cells, every one confirmed through a public call in
+`NumSharp.Tests/OpenBugs.Relayout.cs`, 8 tests with NumPy 2.4.2 literals):
+- *Silent wrong values from a C-contiguous view at an offset* (the class behind VA01 / VA03 / VA05 / VF39 / VF40,
+  reached through more ops, dtypes and positions): RL01 np.searchsorted (`v`, `sorter`), np.digitize (`x`), np.isin of
+  a complex128 / float16 element; RL02 np.where (condition, an `x` / `y` already of the result dtype, its all-0-d
+  route), np.nancumsum / np.nancumprod of float16 / complex128; RL03 np.ldexp's mantissa too; RL04 np.unique,
+  np.unique_values and both operands of the set routines; RL05 ndarray.repeat of a 0-d view at an offset (found only by
+  the invariance contract). A cast operand is copied first and read right, which is why the dtype decides. The carve
+  rules emulate the misread (`_misread_observable`: NumPy's answer for the window at offset 0), so a misread that cannot
+  change the answer is not carved.
+- *Empty operands*: RL06 the NDArray comparison operators return `np.empty(lhs.Shape, bool)` for an empty left
+  operand (no broadcast error, the left operand's shape, and a leaked wrapper); RL07 np.logaddexp / np.logaddexp2
+  return a clone of an empty operand (no broadcast error, no float promotion). Both carved by emulating the early return.
+- *Leaks* (the scope sweep replays these tiers): the comparison operators' empty-left early return (1 pooled buffer per
+  call, 12 families); with the OpenBLAS backend, np.inner / ndarray.dot with a stepped or reversed operand (the known
+  backend-copy leak, 16 families). Recorded in `KnownEscapes`.
+- *Validated clean*: F, permuted, stepped and broadcast views at an offset, one-element broadcasts at an offset, and
+  empty views inside a buffer showed no misread in any op; every misread is the C-contiguous offset fast path.
+
+After: the share of (op, position) pairs that have seen each kind rose to 55 % (C at an offset), 26 % (F at an
+offset), 16 % (permuted at an offset), 29 % (stepped at an offset), 25 % (stepped-and-reversed), 8 % (broadcast and
+one-element broadcast at an offset), 8 % (empty view), 49 % (read-only). The rest of the pairs belong to tiers with their
+own schemas, which no plain call reproduces.
+
+**Redraw the carve after a change** (it must stay exact: every carved case diverges, no kept case does): `python
+gen_relayout_oracle.py --uncarved <dir>`, copy the two files over the build output's corpus, run `Relayout` and
+`RelayoutLayoutInvariance` with `NUMSHARP_ORACLE_FAILURE_DUMP=<file>`, and compare the dump with `_gap_of`. Then
+regenerate the carved files; `Relayout_KnownGaps` must report every carved case still open (no "now match").
 
 ### float16 selections (`half_minmax` tier + the selection contract) — 2026-10-03
 

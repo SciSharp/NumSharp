@@ -47,11 +47,21 @@ namespace NumSharp.Tests.Fuzz
             public ErrorInfo Error { get; set; }
 
             /// <summary>
-            ///     The documented gap a CARVED case pins (an id of <c>gen_viewflags_oracle.GAPS</c>), present only on the
-            ///     cases of a <c>gaps/*_gaps.jsonl</c> file: NumSharp is known to differ from NumPy there, so the case is
-            ///     kept out of the gate and replayed by an <c>[OpenBugs]</c> test that names the gap. Null everywhere else.
+            ///     The documented gap a CARVED case pins (an id of <c>gen_viewflags_oracle.GAPS</c> or
+            ///     <c>gen_relayout_oracle.GAPS</c>), present only on the cases of a <c>gaps/*_gaps.jsonl</c> file: NumSharp
+            ///     is known to differ from NumPy there, so the case is kept out of the gate and replayed by an
+            ///     <c>[OpenBugs]</c> test that names the gap. Null everywhere else.
             /// </summary>
             public string Gap { get; set; }
+
+            /// <summary>
+            ///     Relayout tiers only (<c>gen_relayout_oracle.py</c>): true when NumPy's own outcome changes once the
+            ///     moved operand is a fresh C-ordered copy of the same values — a reduction whose summation order follows
+            ///     the memory order, a read-only operand an in-place op refuses. Such a variant is exempt from the
+            ///     layout-invariance contract (<c>FuzzCorpusTests.RelayoutLayoutInvariance</c>); it is still held to
+            ///     NumPy's recorded answer by the ordinary replay. False (absent) on every other row.
+            /// </summary>
+            public bool Layout_Sensitive { get; set; }
         }
 
         /// <summary>NumPy's exception: the Python class name and <c>str(e)</c>, verbatim.</summary>
@@ -338,15 +348,20 @@ namespace NumSharp.Tests.Fuzz
         ///     described layout; then the descriptor's read-only flag.
         /// </summary>
         /// <param name="o">The operand descriptor.</param>
-        /// <returns>The operand array (a fresh owning array for an empty shape).</returns>
+        /// <returns>The operand array (a fresh owning array for an empty shape without a buffer; an empty view over the
+        /// buffer for one with a buffer).</returns>
         /// <exception cref="NotSupportedException">The descriptor names a dtype NumSharp has no type code for.</exception>
         public static NDArray Reconstruct(Operand o)
         {
             var tc = DtypeToTC(o.Dtype);
 
-            // Empty operands: strides/offset are vacuous (0 elements). Build a plain empty array.
+            // Empty operands: with no buffer the strides/offset are vacuous (0 elements), so a plain empty array is the
+            // operand. With a buffer the descriptor is an empty VIEW cut from it (NumPy's a[3:3]: the view keeps the
+            // owner's memory and an offset that addresses no element), which the general path below rebuilds as such —
+            // a kernel that reads "element 0" of it then sees the owner's bytes, the trap the relayout empty_view kind
+            // exists to reach.
             for (int i = 0; i < o.Shape.Length; i++)
-                if (o.Shape[i] == 0)
+                if (o.Shape[i] == 0 && (o.BufferSize == 0 || string.IsNullOrEmpty(o.Buffer)))
                     return ApplyWriteable(new NDArray(tc, new Shape(o.Shape), false), o);
 
             var bytes = FromHex(o.Buffer);
@@ -364,6 +379,65 @@ namespace NumSharp.Tests.Fuzz
             var storage = new UnmanagedStorage(slice, baseShape);
             var viewShape = new Shape(o.Shape, o.Strides, o.Offset, o.BufferSize); // operand view (alias, no checks)
             return ApplyWriteable(new NDArray(storage, viewShape), o);
+        }
+
+        /// <summary>
+        ///     The operand's VALUES as a fresh C-ordered array that owns its data: the elements the descriptor addresses,
+        ///     gathered in logical C order by plain index arithmetic over the buffer bytes — no NumSharp kernel touches
+        ///     them, so the copy cannot share a layout bug with the code under test.
+        /// </summary>
+        /// <param name="o">The operand descriptor (any layout: offset, stepped, reversed, broadcast, 0-d, empty).</param>
+        /// <returns>
+        ///     A writeable, C-contiguous owner of the operand's dtype and shape holding the same logical values (a plain
+        ///     empty array for a zero-size shape).
+        /// </returns>
+        /// <exception cref="NotSupportedException">The descriptor names a dtype NumSharp has no type code for.</exception>
+        /// <remarks>
+        ///     The relayout layout-invariance contract compares NumSharp's answer on <see cref="Reconstruct"/> (the
+        ///     layout under test) with its answer on this copy, so the copy is built independently of
+        ///     <c>NDArray.copy</c> / <c>np.ascontiguousarray</c> — a copy kernel that forgot <c>Shape.offset</c> would
+        ///     otherwise misread both sides the same way and hide the bug it exists to expose.
+        /// </remarks>
+        public static NDArray ReconstructCanonical(Operand o)
+        {
+            var tc = DtypeToTC(o.Dtype);
+            int nd = o.Shape.Length;
+            long size = 1;
+            for (int d = 0; d < nd; d++)
+                size *= o.Shape[d];
+            if (size == 0)
+                return new NDArray(tc, new Shape(o.Shape), false);
+
+            var src = FromHex(o.Buffer);
+            int isz = tc.SizeOf();
+            var dst = new byte[checked((int)(size * isz))];
+            // C-order odometer over the logical indices; each element's buffer position is the descriptor's offset plus
+            // the strided sum (strides may be negative or zero — a reversed or broadcast view — never out of range,
+            // because the generator's describe() verified the whole addressed range lies inside the buffer).
+            var idx = new long[nd];
+            for (long k = 0; k < size; k++)
+            {
+                long at = o.Offset;
+                for (int d = 0; d < nd; d++)
+                    at += idx[d] * o.Strides[d];
+                System.Buffer.BlockCopy(src, checked((int)(at * isz)), dst, checked((int)(k * isz)), isz);
+                for (int d = nd - 1; d >= 0; d--)
+                {
+                    if (++idx[d] < o.Shape[d])
+                        break;
+                    idx[d] = 0;
+                }
+            }
+
+            // C strides in elements, offset 0, buffer exactly the values: an owner, as NumPy's np.array(view) is.
+            var strides = new long[nd];
+            long acc = 1;
+            for (int d = nd - 1; d >= 0; d--)
+            {
+                strides[d] = acc;
+                acc *= o.Shape[d];
+            }
+            return new NDArray(new UnmanagedStorage(SliceFromBytes(dst, tc), new Shape(o.Shape, strides, 0, size)));
         }
 
         /// <summary>

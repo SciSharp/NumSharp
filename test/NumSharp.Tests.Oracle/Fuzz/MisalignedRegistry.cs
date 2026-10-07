@@ -397,7 +397,13 @@ namespace NumSharp.Tests.Fuzz
             // (1) NEP50 weak-scalar promotion. Any multi-operand op with a 0-D operand: NumSharp
             //     promotes it weakly (the array operand's dtype drives the result), where NumPy makes
             //     0-D arrays full participants. Covers binary pp_scalar_* and np.where wh_bcast_xy.
-            if (kind == DivergenceKind.Dtype && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0))
+            //     NOT the relayout tiers: their generator drops every ufunc / np.where variant whose NumPy
+            //     answer changes when its 0-d operands are weak (gen_relayout_oracle._upstream_residual), so
+            //     a difference left in a relayout case with a 0-d operand is not this divergence. The blanket
+            //     matches ANY dtype difference of such a case, and it hid np.logaddexp returning its empty int32
+            //     operand where NumPy returns float64 (gap RL07).
+            if (kind == DivergenceKind.Dtype && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0)
+                && !IsRelayoutCase(c))
                 return "NEP50 weak-scalar: 0-D operand promoted weakly (NumPy promotes 0-D arrays fully)";
 
             // (2) Complex true-division is now BIT-EXACT vs NumPy (no excuse). ComplexDivideNumPy is a
@@ -1289,10 +1295,15 @@ namespace NumSharp.Tests.Fuzz
             // requires input that is at least one dimensional") — never a weak scalar a pairing could promote.
             // With the old axis error planted back, this branch excused the 12 err_axis_outside_y cases of a 0-D y
             // with an x, so a regression there passed; without it all 78 IndexError cases turn red.
+            //
+            // EXCLUDES the relayout tiers too, for the reason given at branch (1): their generator keeps only the
+            // 0-d variants whose NumPy outcome does not depend on weak promotion, so this branch would excuse real
+            // value and error-parity differences there, not the divergence it documents.
             if ((kind == DivergenceKind.Value || kind == DivergenceKind.ErrorText)
                 && (c.Op == null || !c.Op.StartsWith("out_"))
                 && c.Op != "clip_pyint" && c.Op != "clip_ufunc" && c.Op != "trapezoid"
-                && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0))
+                && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0)
+                && !IsRelayoutCase(c))
                 return "NEP50 weak-scalar (error path): a 0-D operand promotes weakly, so a pairing "
                      + "NumPy refuses succeeds instead";
 
@@ -1370,6 +1381,16 @@ namespace NumSharp.Tests.Fuzz
         private static bool IsSignedZeroPairSingle(BitDiff.Diff d) =>
             (d.Expected == "00000000" || d.Expected == "00000080")
             && (d.Actual == "00000000" || d.Actual == "00000080");
+
+        /// <summary>
+        ///     Whether case <paramref name="c"/> belongs to a relayout tier (<c>gen_relayout_oracle.py</c>: layout tag
+        ///     <c>relayout:&lt;kind&gt;@&lt;position&gt;</c>), whose generator already removed the variants the NEP50 0-d
+        ///     branches document, so those branches must not excuse anything there.
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>True for a relayout variant.</returns>
+        private static bool IsRelayoutCase(FuzzCorpus.Case c)
+            => c.Layout != null && c.Layout.StartsWith("relayout:", StringComparison.Ordinal);
 
         /// <summary>
         ///     Whether case <paramref name="c"/> reduces along an axis (an <c>axis</c> param that is not null) of an operand

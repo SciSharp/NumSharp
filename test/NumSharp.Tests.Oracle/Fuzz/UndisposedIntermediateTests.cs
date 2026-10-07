@@ -488,6 +488,44 @@ namespace NumSharp.Tests.Fuzz
                 ["inner [b=rev]"] = 1,
                 ["viewflags:inner"] = 2,
                 ["viewflags:ndarray.dot"] = 1,
+                //
+                // FOUND BY THE RELAYOUT TIERS (2026-10-07, gen_relayout_oracle.py), recorded, NOT fixed:
+                //   * the NDArray comparison operators (==, !=, <, >, <=, >=, which the registry replays the six
+                //     comparison op keys through) with an EMPTY left operand: `return np.empty(lhs.Shape, bool)
+                //     .MakeGeneric<bool>()` wraps the storage in a second NDArray and leaves the untyped wrapper to
+                //     the finalizer: 1 per call (np.equal & co. are clean). The same early return skips the broadcast
+                //     check: relayout gap RL06 carves the cases where NumPy's outcome differs.
+                ["equal [relayout:empty@0]"] = 1,
+                ["equal [relayout:empty_view@0]"] = 1,
+                ["not_equal [relayout:empty@0]"] = 1,
+                ["not_equal [relayout:empty_view@0]"] = 1,
+                ["less [relayout:empty@0]"] = 1,
+                ["less [relayout:empty_view@0]"] = 1,
+                ["greater [relayout:empty@0]"] = 1,
+                ["greater [relayout:empty_view@0]"] = 1,
+                ["less_equal [relayout:empty@0]"] = 1,
+                ["less_equal [relayout:empty_view@0]"] = 1,
+                ["greater_equal [relayout:empty@0]"] = 1,
+                ["greater_equal [relayout:empty_view@0]"] = 1,
+                //   * the backend sweep's np.inner / ndarray.dot copy leak above (an operand BLAS cannot read in place
+                //     leaves the backend's copy undisposed), reached through the relayout tier's stepped and reversed
+                //     operands at either position: 1 per call.
+                ["inner [relayout:reversed@0]"] = 1,
+                ["inner [relayout:reversed@1]"] = 1,
+                ["inner [relayout:strided@0]"] = 1,
+                ["inner [relayout:strided@1]"] = 1,
+                ["inner [relayout:strided_offset@0]"] = 1,
+                ["inner [relayout:strided_offset@1]"] = 1,
+                ["inner [relayout:strided_neg@0]"] = 1,
+                ["inner [relayout:strided_neg@1]"] = 1,
+                ["ndarray.dot [relayout:reversed@0]"] = 1,
+                ["ndarray.dot [relayout:reversed@1]"] = 1,
+                ["ndarray.dot [relayout:strided@0]"] = 1,
+                ["ndarray.dot [relayout:strided@1]"] = 1,
+                ["ndarray.dot [relayout:strided_offset@0]"] = 1,
+                ["ndarray.dot [relayout:strided_offset@1]"] = 1,
+                ["ndarray.dot [relayout:strided_neg@0]"] = 1,
+                ["ndarray.dot [relayout:strided_neg@1]"] = 1,
             };
 
             public static bool Contains(string op) => CeilingByOp.ContainsKey(op);
