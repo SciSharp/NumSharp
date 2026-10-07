@@ -6472,9 +6472,19 @@ namespace NumSharp
         /// <param name="a">Operand.</param><returns>The masked array, rank ≥ 3.</returns>
         public NDMaskedArray atleast_3d(object a) => MapFromNx(a, d => np.atleast_3d(d));
 
-        /// <summary>Join arrays along an existing axis (masks joined alike; all-unmasked ⇒ nomask).</summary>
-        /// <param name="arrays">Operands.</param><param name="axis">Join axis.</param><returns>The joined masked array.</returns>
-        public NDMaskedArray concatenate(object[] arrays, int axis = 0) => MapSeq(arrays, ds => np.concatenate(ds, axis), shrink: true);
+        /// <summary>Joins arrays along an existing axis (NumPy's <c>ma.concatenate</c>): the data joined, and the masks
+        /// joined alike when some operand has one, shrunk to nomask when nothing is masked.</summary>
+        /// <param name="arrays">Operands (masked arrays, arrays, scalars or array-likes).</param>
+        /// <param name="axis">Join axis, or null to join the flattened operands (NumPy's <c>axis=None</c>, which
+        ///     <c>ma.setxor1d</c> and <c>ma.union1d</c> use).</param>
+        /// <returns>The joined masked array: a NEW array (soft, no fill value), as NumPy's <c>d.view(rcls)</c>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arrays"/> or an operand is null.</exception>
+        /// <exception cref="ValueError">A 0-d operand with an axis (<c>zero-dimensional arrays cannot be
+        ///     concatenated</c>).</exception>
+        /// <exception cref="IncorrectShapeException">The operands' ranks or non-axis dimensions differ (NumPy's ValueError
+        ///     texts).</exception>
+        /// <exception cref="StringComputationNotSupportedException">Text joined with numbers that NumPy formats.</exception>
+        public NDMaskedArray concatenate(object[] arrays, int? axis = 0) => MapSeq(arrays, ds => np.concatenate(ds, axis), shrink: true);
 
         /// <summary>Stack arrays along a NEW axis (masks stacked alike).</summary>
         /// <param name="arrays">Operands.</param><param name="axis">New-axis position.</param><returns>The stacked masked array.</returns>
@@ -7454,55 +7464,6 @@ namespace NumSharp
             return np.polyfit(xd, yd, deg, rcond, full, wd, cov);
         }
 
-        /// <summary>Element-wise membership test (NumPy's <c>ma.isin</c>): True where <paramref name="element"/>'s
-        /// value is in <paramref name="test_elements"/>, carrying <paramref name="element"/>'s mask.</summary>
-        /// <param name="element">Values to test.</param><param name="test_elements">The set to test against.</param>
-        /// <param name="assume_unique">Speed hint that both inputs already hold unique elements (result unchanged).</param>
-        /// <param name="invert">Invert the membership test.</param>
-        /// <returns>A masked boolean array shaped like <paramref name="element"/>.</returns>
-        /// <exception cref="StringComputationNotSupportedException">A text operand with a non-empty
-        ///     <paramref name="element"/>: numpy.ma's in1d sorts and compares the strings.</exception>
-        /// <remarks>Scoped by hand: the plain membership array a masked <paramref name="element"/> overwrites, the
-        /// fill scalar and any array-like operand this method had to materialize are reclaimed.
-        /// <para>numpy.ma's <c>in1d</c> is NOT <c>np.isin</c>: it takes the masked uniques of both operands, concatenates
-        /// them, argsorts the concatenation (mergesort) and compares neighbours. With a TEXT operand that sorts and compares
-        /// strings — and formats a numeric operand into the concatenated text — so it is the next phase, except for an
-        /// empty <paramref name="element"/>, whose answer is the empty membership array (no mask) whatever the test
-        /// set.</para></remarks>
-        public NDMaskedArray isin(object element, object test_elements, bool assume_unique = false, bool invert = false)
-        {
-            using var scope = NDScope.Open();
-            var ed = AsData(element);
-            var td = AsData(test_elements);
-            if (ed.typecode == NPTypeCode.String || td.typecode == NPTypeCode.String)
-            {
-                if (ed.size != 0)
-                    throw NDStringUfuncs.NextPhase("isin", ed.typecode == NPTypeCode.String ? ed.dtype : td.dtype);
-                // `in1d(...).reshape(element.shape)` of an empty element: an empty bool array, nomask.
-                return Yield(scope, new NDMaskedArray(np.zeros(DimsOf(ed), np.@bool), null));
-            }
-            NDArray data = np.isin(ed, td, assume_unique, invert);
-            var em = (element as NDMaskedArray)?._mask;
-            // A masked element is not a valid value, so its membership answer is definite: `invert`
-            // (False normally, True for invert). NumPy's unique-based isin yields the same, unmasked.
-            if (em is not null)
-                data = np.where(em, NDArray.Scalar(invert), data);
-            return Yield(scope, new NDMaskedArray(data, null));
-        }
-
-        /// <summary>1-D membership test (NumPy's <c>ma.in1d</c>): the flattened <see cref="isin"/>.</summary>
-        /// <param name="element">Values to test.</param><param name="test_elements">The set to test against.</param>
-        /// <param name="assume_unique">Speed hint (result unchanged).</param>
-        /// <param name="invert">Invert the membership test.</param>
-        /// <returns>A 1-D masked boolean array.</returns>
-        /// <remarks>Scoped by hand: the raveled operand (a copy for a non-contiguous input) is reclaimed once
-        /// <see cref="isin"/> has read it — the membership result never aliases it.</remarks>
-        public NDMaskedArray in1d(object element, object test_elements, bool assume_unique = false, bool invert = false)
-        {
-            using var scope = NDScope.Open();
-            return Yield(scope, isin(ravel(element), test_elements, assume_unique, invert));
-        }
-
         /// <summary>Contiguous UNMASKED runs of a 1-D array as slices (NumPy's <c>clump_unmasked</c>).</summary>
         /// <param name="a">1-D operand.</param>
         /// <returns>One <see cref="Slice"/> per contiguous unmasked run.</returns>
@@ -8289,215 +8250,6 @@ namespace NumSharp
             // `if np.issubdtype(self.dtype, np.floating): fill_value = np.nan`.
             var tc = (a as NDMaskedArray)?._data.typecode ?? AsData(a).typecode;
             return tc is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double ? double.NaN : minimum_fill_value(a);
-        }
-
-        /// <summary>Sorted unique values over the UNMASKED elements, plus ONE trailing masked entry if any
-        /// element was masked (NumPy's <c>ma.unique</c>, values only).</summary>
-        /// <param name="ar">Operand.</param>
-        /// <returns>The masked array of unique values.</returns>
-        /// <exception cref="StringComputationNotSupportedException">A text operand with both masked and unmasked elements
-        ///     (NumPy's masked sort compares the strings with the fill value), or with two or more unmasked elements.</exception>
-        /// <remarks>
-        ///     NumPy's <c>np.unique</c> of the masked array: the operand is flattened; with no masked element the unique
-        ///     values carry no mask; otherwise the masked sort keys every masked element by the same fill value, so they
-        ///     sort together (last for numbers, whose key is the dtype maximum) and the ONE kept masked slot holds the data of
-        ///     the FIRST masked element in C order — what NumPy's sort leaves first among equal keys. For TEXT the key is the
-        ///     array's fill value (<c>minimum_fill_value</c> is None), so where the masked slot lands depends on how the
-        ///     strings compare with <c>'N/A'</c> — the next phase — unless every element is masked. Reading that fill
-        ///     materializes the text default, which the result (a view of the sorted copy) converts to its dtype
-        ///     (<c>'N/'</c> for <c>&lt;U2</c>). The result inherits the hard-mask flag and fill value.
-        ///     <para>Scoped by hand: the compressed values, the plain unique set a masked input extends, and the raveled
-        ///     stand-ins behind the trailing masked slot are reclaimed; only the result's data and mask leave.</para>
-        /// </remarks>
-        public NDMaskedArray unique(object ar)
-        {
-            using var scope = NDScope.Open();
-            var source = ar as NDMaskedArray;
-            var mask = source?._mask;
-            var data = AsData(ar);
-            bool anyMasked = mask is not null && np.any(mask);
-            bool text = data.typecode == NPTypeCode.String;
-            // A masked text element sorts by the fill value among the strings: where it lands is a string comparison.
-            if (text && anyMasked && !np.all(mask))
-                throw NDStringUfuncs.NextPhase("unique", data.dtype);
-            NDArray uvals = np.unique(compressed(ar));
-            NDMaskedArray result;
-            if (!anyMasked)
-                result = new NDMaskedArray(uvals, null);
-            else
-            {
-                // The one masked slot: the first masked element's data, C order (NumPy flattens before it sorts).
-                long first = np.argmax(np.ravel(mask));
-                var masked = np.ravel(data)[$"{first}:{first + 1}"];
-                var values = np.concatenate(new[] { uvals, masked }, 0);
-                var m = np.concatenate(new[] { np.zeros(DimsOf(uvals), np.@bool), np.ones(new Shape(1), np.@bool) }, 0);
-                result = new NDMaskedArray(values, m);
-            }
-            if (source is not null)
-            {
-                // `output.view(MaskedArray)` finalizes from the sorted copy: its fill value converted, its hardness.
-                result.FinalizeFrom(source);
-                // That copy's text default was MATERIALIZED by the masked sort's `filled(None)` read of `fill_value`.
-                if (text && anyMasked && source._fill_value is null)
-                    result._fill_value = StoreFill(default_fill_value(data.dtype), data.dtype);
-            }
-            return Yield(scope, result);
-        }
-
-        // ─────────────────────────────────────────────────────────────────────────────
-        //  Set operations (extras.py arraysetops) — masked values are all considered EQUAL
-        //  to one another (and unequal to every real value), so every masked element in the
-        //  inputs collapses to at most ONE masked entry that sorts to the very end of the
-        //  result. NumPy builds these by unique/concatenate/sort over the MaskedArray subclass;
-        //  NumSharp has no subclass dispatch, so each is reformulated as the identical-output
-        //  composition: run the plain np.* set op over the UNMASKED values, then decide from a
-        //  boolean masked-presence rule whether the single collapsed masked entry belongs in
-        //  the result. Both formulations are verified bit-identical to NumPy 2.4.2 (values,
-        //  mask, dtype) across masked/unmasked/all-masked/empty/promotion cases.
-        // ─────────────────────────────────────────────────────────────────────────────
-
-        /// <summary>
-        ///     True iff <paramref name="a"/> is a masked array with AT LEAST ONE element actually masked
-        ///     (a plain array, a <c>nomask</c> operand, or an all-False mask all count as "not masked").
-        ///     This is the predicate that decides whether a set operation carries the single collapsed
-        ///     masked value into its result — the whole masked/unmasked branch of the set ops turns on it.
-        /// </summary>
-        /// <param name="a">Any accepted operand.</param>
-        /// <returns>True when the operand contributes a masked value to the set.</returns>
-        private static bool HasMasked(object a)
-        {
-            // `is not null` — a `!= null` here would run NDArray's ELEMENTWISE `!=` (see the file-wide trap).
-            var m = (a as NDMaskedArray)?._mask;
-            return m is not null && np.any(m);
-        }
-
-        /// <summary>
-        ///     Assembles a set-operation result: the sorted unmasked-unique <paramref name="values"/> already
-        ///     in the promoted dtype, plus — when <paramref name="includeMasked"/> — ONE trailing masked slot
-        ///     (NumPy collapses every masked element to a single masked value that sorts last). Mirrors the
-        ///     append pattern <see cref="unique"/> uses and is the shared tail of all four set ops.
-        /// </summary>
-        /// <param name="values">The 1-D sorted unmasked-unique values, already cast to the result dtype.</param>
-        /// <param name="includeMasked">Append the single trailing masked entry when true.</param>
-        /// <returns>An unmasked (<c>nomask</c>) masked array when <paramref name="includeMasked"/> is false;
-        /// otherwise the values followed by one masked slot.</returns>
-        private static NDMaskedArray WithTrailingMasked(NDArray values, bool includeMasked)
-        {
-            if (!includeMasked)
-                return new NDMaskedArray(values, null);
-            // The datum at the masked slot is arbitrary — the mask hides it and NumPy's own raw value there is
-            // whatever its sort/concatenate left (not the fill). A zero of the result dtype keeps `.filled()`
-            // (the observable value) consistent with the dtype default, matching NumPy's contract.
-            var data = np.concatenate(new[] { values, np.zeros(new Shape(1), values.dtype) }, 0);
-            var m = np.concatenate(new[] { np.zeros(DimsOf(values), np.@bool), np.ones(new Shape(1), np.@bool) }, 0);
-            return new NDMaskedArray(data, m);
-        }
-
-        /// <summary>
-        ///     The promoted result dtype of a two-operand set op (NumPy's implicit
-        ///     <c>result_type</c> from its <c>concatenate</c>). Computed from the DATA dtypes so it is correct
-        ///     even when both operands compress to nothing — the plain <c>np.*</c> set op would otherwise fall
-        ///     to float64 for two empty inputs and lose the integer dtype NumPy keeps.
-        /// </summary>
-        /// <param name="a">First operand.</param><param name="b">Second operand.</param>
-        /// <returns>The dtype the result values must carry.</returns>
-        private static DType SetOpDtype(object a, object b) => np.result_type(AsData(a), AsData(b));
-
-        /// <summary>
-        ///     Sorted values common to BOTH inputs among their UNMASKED elements, plus a single masked entry
-        ///     iff BOTH inputs contained a masked element (NumPy's <c>ma.intersect1d</c>: masked values are
-        ///     equal only to one another, so a masked value is "shared" precisely when both sides carry one).
-        ///     The result is ALWAYS a masked array, even when neither input is masked.
-        /// </summary>
-        /// <param name="ar1">First operand (<see cref="NDMaskedArray"/>/<see cref="NDArray"/>/scalar/array-like).</param>
-        /// <param name="ar2">Second operand.</param>
-        /// <param name="assume_unique">Speed hint passed to the underlying set op that the inputs already hold
-        /// unique elements; when it is false but the inputs are not unique, the result is undefined (matching NumPy).</param>
-        /// <returns>The masked array of shared unique values (sorted; the promoted dtype is preserved even for an
-        /// empty/all-masked result).</returns>
-        /// <exception cref="ArgumentNullException">Either operand is null.</exception>
-        /// <remarks>Scoped by hand: the compressed operands, the plain set result and its dtype cast are
-        /// reclaimed (as is any operand this method had to materialize); only the result's data and mask leave.</remarks>
-        public NDMaskedArray intersect1d(object ar1, object ar2, bool assume_unique = false)
-        {
-            using var scope = NDScope.Open();
-            var dt = SetOpDtype(ar1, ar2);
-            // Compress to the unmasked values, run the plain set op, then FORCE the promoted dtype (astype is a
-            // no-op copy on the non-empty path since the set op already promoted; it only bites when both inputs
-            // compress to empty, where np.intersect1d would otherwise return float64).
-            var values = np.intersect1d(compressed(ar1), compressed(ar2), assume_unique).astype(dt, copy: false);
-            return Yield(scope, WithTrailingMasked(values, HasMasked(ar1) && HasMasked(ar2)));
-        }
-
-        /// <summary>
-        ///     Sorted union of the UNMASKED values of both inputs, plus a single masked entry iff EITHER input
-        ///     contained a masked element (NumPy's <c>ma.union1d</c>). Always returns a masked array.
-        /// </summary>
-        /// <param name="ar1">First operand.</param><param name="ar2">Second operand.</param>
-        /// <returns>The masked array of unique values from either input (sorted; promoted dtype preserved).</returns>
-        /// <exception cref="ArgumentNullException">Either operand is null.</exception>
-        /// <remarks>Scoped by hand, as <see cref="intersect1d"/>.</remarks>
-        public NDMaskedArray union1d(object ar1, object ar2)
-        {
-            using var scope = NDScope.Open();
-            var dt = SetOpDtype(ar1, ar2);
-            var values = np.union1d(compressed(ar1), compressed(ar2)).astype(dt, copy: false);
-            return Yield(scope, WithTrailingMasked(values, HasMasked(ar1) || HasMasked(ar2)));
-        }
-
-        /// <summary>
-        ///     Sorted values present in EXACTLY ONE of the inputs among their UNMASKED elements (the symmetric
-        ///     difference), plus a single masked entry iff exactly one input contained a masked element (NumPy's
-        ///     <c>ma.setxor1d</c> — a masked value is "in" an input iff that input has one, so it survives the
-        ///     xor precisely when the two sides disagree on having a masked element). Always returns a masked array.
-        /// </summary>
-        /// <param name="ar1">First operand.</param><param name="ar2">Second operand.</param>
-        /// <param name="assume_unique">Speed hint passed through; results are undefined (as in NumPy) if false but
-        /// the inputs are not unique.</param>
-        /// <returns>The masked array of the symmetric difference (sorted; promoted dtype preserved).</returns>
-        /// <exception cref="ArgumentNullException">Either operand is null.</exception>
-        /// <remarks>Scoped by hand, as <see cref="intersect1d"/>.</remarks>
-        public NDMaskedArray setxor1d(object ar1, object ar2, bool assume_unique = false)
-        {
-            using var scope = NDScope.Open();
-            var dt = SetOpDtype(ar1, ar2);
-            var values = np.setxor1d(compressed(ar1), compressed(ar2), assume_unique).astype(dt, copy: false);
-            // XOR of masked presence: the collapsed masked value is in exactly one side ⇒ survives the xor.
-            return Yield(scope, WithTrailingMasked(values, HasMasked(ar1) ^ HasMasked(ar2)));
-        }
-
-        /// <summary>
-        ///     Sorted UNMASKED values of <paramref name="ar1"/> that are NOT in <paramref name="ar2"/>, plus a
-        ///     single masked entry iff <paramref name="ar1"/> had a masked element and <paramref name="ar2"/> did
-        ///     NOT (NumPy's <c>ma.setdiff1d</c> — the collapsed masked value is removed by the diff exactly when
-        ///     the right side also carries one). Always returns a masked array.
-        /// </summary>
-        /// <param name="ar1">The operand to keep values from.</param>
-        /// <param name="ar2">The operand whose values are removed.</param>
-        /// <param name="assume_unique">Speed hint passed through; results are undefined (as in NumPy) if false but
-        /// the inputs are not unique.</param>
-        /// <returns>The masked array of <paramref name="ar1"/>-only unique values (sorted, in <paramref name="ar1"/>'s
-        /// dtype: NumPy's result is a selection of ar1, not of the promoted comparison).</returns>
-        /// <exception cref="ArgumentNullException">Either operand is null.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A text operand with a non-empty
-        ///     <paramref name="ar1"/> (the uniques and the membership test compare strings).</exception>
-        /// <remarks>Scoped by hand, as <see cref="intersect1d"/>.</remarks>
-        public NDMaskedArray setdiff1d(object ar1, object ar2, bool assume_unique = false)
-        {
-            using var scope = NDScope.Open();
-            // numpy.ma's setdiff1d is `ar1[in1d(unique(ar1), unique(ar2), invert=True)]`: with a TEXT operand the uniques
-            // sort strings and in1d compares them (formatting a numeric operand into text) — the next phase — unless ar1
-            // is empty, whose selection is empty whatever ar2 holds.
-            var d1 = AsData(ar1);
-            var d2 = AsData(ar2);
-            if ((d1.typecode == NPTypeCode.String || d2.typecode == NPTypeCode.String) && d1.size != 0)
-                throw NDStringUfuncs.NextPhase("setdiff1d", d1.typecode == NPTypeCode.String ? d1.dtype : d2.dtype);
-            // `return ar1[in1d(ar1, ar2, assume_unique=True, invert=True)]`: the result is a selection of ar1 (its unique
-            // values), so it keeps ar1's dtype — not the promoted dtype the membership test compares in.
-            var dt = d1.dtype;
-            var values = np.setdiff1d(compressed(ar1), compressed(ar2), assume_unique).astype(dt, copy: false);
-            // ar1's masked value survives the diff iff ar2 does not also carry one (masked == masked removes it).
-            return Yield(scope, WithTrailingMasked(values, HasMasked(ar1) && !HasMasked(ar2)));
         }
 
         // ── Mask hardness (NumPy's harden_mask/soften_mask): a HARD mask forbids UNmasking via a plain-value

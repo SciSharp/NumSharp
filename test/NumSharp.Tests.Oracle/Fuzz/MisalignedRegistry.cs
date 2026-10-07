@@ -327,6 +327,11 @@ namespace NumSharp.Tests.Fuzz
             // carved by the generator (gen_ma_oracle._mv_carved), each pinned.
             if (c.Valueclass == "mameanvar")
                 return null;
+            // ma_setops.jsonl (numpy.ma's arraysetops as NumPy's statements: unique / in1d / isin / intersect1d / setxor1d /
+            // union1d / setdiff1d, 2026-10-08) is held to ZERO excuses too; the cases that depend on NumPy's unstable
+            // quicksort tie order are dropped by the generator (gen_ma_oracle.gen_ma_setops), never excused.
+            if (c.Valueclass == "masetops")
+                return null;
             // copyto_full.jsonl (np.copyto as NumPy's array_copyto, plan api-parameter-parity X16 + X11: where= masks,
             // layouts, every dtype, casts, overlap, C# literal sources, 0-d / empty arrays, NumPy's errors and their
             // order) is held to ZERO excuses, its error cases (valueclass "error") included — hence the op test.

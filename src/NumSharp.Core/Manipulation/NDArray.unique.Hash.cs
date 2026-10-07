@@ -250,7 +250,20 @@ namespace NumSharp
             return c != 0 ? c : x.Imaginary.CompareTo(y.Imaginary);
         });
 
-        private unsafe (NDArray values, NDArray counts) UniqueHashSortedComplex(bool wantCounts)
+        /// <summary>
+        ///     NumPy's <c>_unique_hash</c> for complex128 (<c>unique.cpp</c>'s <c>unique_numeric</c> with
+        ///     <c>hash_complex</c> / <c>equal_complex</c>), then the sort of the distinct values: each equality class keeps
+        ///     its FIRST element in C order (bits included, so the first of <c>+0.0</c> / <c>-0.0</c>).
+        /// </summary>
+        /// <param name="wantCounts">Also count each class's elements.</param>
+        /// <param name="equalNan">NumPy's <c>equal_nan</c>: true makes every value with a NaN part ONE class (kept as the
+        ///     first such value in C order, sorted last); false keeps each NaN distinct, appended in C order.</param>
+        /// <returns>The sorted values and, when <paramref name="wantCounts"/>, the aligned int64 counts.</returns>
+        /// <remarks>
+        ///     With <paramref name="equalNan"/> the caller (np.unique's values-only path) keeps arrays above 2^28 elements on
+        ///     the sort path: this method's own large-array bail-out re-enters np.unique, which would come back here.
+        /// </remarks>
+        private unsafe (NDArray values, NDArray counts) UniqueHashSortedComplex(bool wantCounts, bool equalNan = false)
         {
             long n = size;
             if (n == 0)
@@ -267,6 +280,9 @@ namespace NumSharp
 
             var data = ExtractKeysOnly<Complex>(n);
             List<Complex> nans = null;
+            // equal_nan: NumPy's hash_complex sends every value with a NaN part to bucket 0 and equal_complex calls two such
+            // values equal, so the class keeps the first one inserted; its count is every NaN-part value.
+            long nanClassCount = 0;
 
             int cap = 1024;
             var table = new Complex[cap];
@@ -278,7 +294,14 @@ namespace NumSharp
             for (int i = 0; i < n; i++)
             {
                 Complex c = data[i];
-                if (double.IsNaN(c.Real) || double.IsNaN(c.Imaginary)) { (nans ??= new List<Complex>()).Add(c); continue; }  // any-NaN distinct
+                if (double.IsNaN(c.Real) || double.IsNaN(c.Imaginary))
+                {
+                    // equal_nan: one class, the first NaN-part value kept; otherwise each NaN is distinct.
+                    if (!equalNan || nans is null)
+                        (nans ??= new List<Complex>()).Add(c);
+                    nanClassCount++;
+                    continue;
+                }
                 Complex normed = NormalizeZeros(c);                        // -0.0 -> +0.0 per component, for HASHING only
 
                 if (uniqueCount >= (cap >> 1))
@@ -311,7 +334,11 @@ namespace NumSharp
             for (int s = 0; s < cap; s++) { if (!used[s]) continue; uv[j] = table[s]; if (wantCounts) uc[j] = cnt[s]; j++; }
             if (wantCounts) System.Array.Sort(uv, uc, ComplexLexComparer); else System.Array.Sort(uv, ComplexLexComparer);
 
-            return AppendNaNsAndBuild(uv, uc, uniqueCount, nans, nans?.Count ?? 0, wantCounts);
+            var (values, counts) = AppendNaNsAndBuild(uv, uc, uniqueCount, nans, nans?.Count ?? 0, wantCounts);
+            // The collapsed NaN class counts every value with a NaN part (AppendNaNsAndBuild counts each NaN as 1).
+            if (equalNan && wantCounts && nans is not null)
+                counts.SetInt64(nanClassCount, uniqueCount);
+            return (values, counts);
         }
 
         /// <summary>Builds the value array (sorted finite set + each distinct NaN appended, input order) and, when requested, aligned int64 counts (finite counts + 1 per NaN).</summary>

@@ -452,22 +452,61 @@ namespace NumSharp.Backends.Sorting
             double nan = NumPySortNaN64;
             for (long i = m; i < n; i++) *(double*)(line + i * s) = nan;
         }
+        /// <summary>
+        ///     Argsorts one float32 line: the non-NaN indices by a stable radix over <see cref="FArgKey32"/>, then the NaN
+        ///     indices in input order.
+        /// </summary>
+        /// <param name="inLine">The input line's first element (byte address).</param>
+        /// <param name="outLine">The int64 index line's first element (byte address).</param>
+        /// <param name="c">The line context: length, strides and the radix scratch buffers.</param>
+        /// <remarks>
+        ///     The order is NumPy's stable argsort (<c>kind='stable'</c>, timsort with <c>npy::float_tag::less</c>):
+        ///     equal values, <c>-0.0</c> and <c>+0.0</c> included, keep their input order, and every NaN comes last in
+        ///     input order. The radix key therefore folds <c>-0.0</c> onto <c>+0.0</c>; the raw bit key put every
+        ///     <c>-0.0</c> first (<c>np.argsort([0.0, -0.0])</c> was <c>[1, 0]</c>, NumPy <c>[0, 1]</c>), which
+        ///     <c>np.lexsort</c>'s tie order and the numpy.ma set operations inherited.
+        /// </remarks>
         private static void ArgLineF32(byte* inLine, byte* outLine, LineCtx* c)
         {
             long n = c->n; long si = c->inStride, so = c->outStride; long m = 0;
-            for (long i = 0; i < n; i++) { float v = *(float*)(inLine + i * si); if (!float.IsNaN(v)) { c->k32[m] = FKey32(v); c->idx[m] = i; m++; } }
+            for (long i = 0; i < n; i++) { float v = *(float*)(inLine + i * si); if (!float.IsNaN(v)) { c->k32[m] = FArgKey32(v); c->idx[m] = i; m++; } }
             long* r = RadixSort.ArgSortU32(c->k32, c->t32, c->idx, c->it, m, 4, c->count);
             for (long i = 0; i < m; i++) *(long*)(outLine + i * so) = r[i];
             long q = m; for (long i = 0; i < n; i++) if (float.IsNaN(*(float*)(inLine + i * si))) *(long*)(outLine + (q++) * so) = i;
         }
+
+        /// <summary>
+        ///     Argsorts one float64 line: the non-NaN indices by a stable radix over <see cref="FArgKey64"/>, then the NaN
+        ///     indices in input order (see <see cref="ArgLineF32"/> for the order this reproduces).
+        /// </summary>
+        /// <param name="inLine">The input line's first element (byte address).</param>
+        /// <param name="outLine">The int64 index line's first element (byte address).</param>
+        /// <param name="c">The line context: length, strides and the radix scratch buffers.</param>
         private static void ArgLineF64(byte* inLine, byte* outLine, LineCtx* c)
         {
             long n = c->n; long si = c->inStride, so = c->outStride; long m = 0;
-            for (long i = 0; i < n; i++) { double v = *(double*)(inLine + i * si); if (!double.IsNaN(v)) { c->k64[m] = FKey64(v); c->idx[m] = i; m++; } }
+            for (long i = 0; i < n; i++) { double v = *(double*)(inLine + i * si); if (!double.IsNaN(v)) { c->k64[m] = FArgKey64(v); c->idx[m] = i; m++; } }
             long* r = RadixSort.ArgSortU64(c->k64, c->t64, c->idx, c->it, m, c->count);
             for (long i = 0; i < m; i++) *(long*)(outLine + i * so) = r[i];
             long q = m; for (long i = 0; i < n; i++) if (double.IsNaN(*(double*)(inLine + i * si))) *(long*)(outLine + (q++) * so) = i;
         }
+
+        /// <summary>
+        ///     The argsort radix key of a non-NaN float32: <see cref="FKey32"/> of the value with <c>-0.0</c> folded onto
+        ///     <c>+0.0</c>, so the two zeros compare EQUAL (NumPy's <c>less</c>) and the stable radix keeps their input order.
+        /// </summary>
+        /// <param name="v">A non-NaN value.</param>
+        /// <returns>The monotonic unsigned key.</returns>
+        /// <remarks>Only for argsort: a value sort rebuilds the values from their keys (<see cref="FVal32"/>), so folding
+        /// there would turn every <c>-0.0</c> into <c>+0.0</c>.</remarks>
+        [MethodImpl(OptimizeAndInline)] private static uint FArgKey32(float v) => FKey32(v == 0f ? 0f : v);
+
+        /// <summary>
+        ///     The argsort radix key of a non-NaN float64, <c>-0.0</c> folded onto <c>+0.0</c> (see <see cref="FArgKey32"/>).
+        /// </summary>
+        /// <param name="v">A non-NaN value.</param>
+        /// <returns>The monotonic unsigned key.</returns>
+        [MethodImpl(OptimizeAndInline)] private static ulong FArgKey64(double v) => FKey64(v == 0d ? 0d : v);
 
         [MethodImpl(OptimizeAndInline)] private static uint FKey32(float v) { uint b = BitConverter.SingleToUInt32Bits(v); return b ^ ((uint)((int)b >> 31) | 0x80000000u); }
         [MethodImpl(OptimizeAndInline)] private static float FVal32(uint k) { uint b = k ^ (((k >> 31) - 1) | 0x80000000u); return BitConverter.UInt32BitsToSingle(b); }

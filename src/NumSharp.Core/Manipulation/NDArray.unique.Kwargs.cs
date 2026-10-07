@@ -241,8 +241,15 @@ namespace NumSharp
             long n = this.size;
             if (n == 0) return BuildEmptyResults<Complex>(return_index, return_inverse, return_counts);
 
+            // Values only, equal_nan: NumPy's _unique1d takes its C++ hash path for complex (unique.cpp), whose
+            // representative of each equality class is its FIRST element in C order — all values with a NaN part one class
+            // (np.unique([nan+0j, 1j, 1+nanj]) is [1j, nan+0j]), +0.0 and -0.0 one class. The sort path below kept a NaN
+            // from its unstable NaN partition instead. Above 2^28 elements the hash bails to this method, so those stay on
+            // the sort path.
             if (!return_index && !return_inverse && !return_counts)
-                return new[] { uniqueValuesOnlyComplex(n, equal_nan) };
+                return new[] { equal_nan && n <= (1L << 28)
+                    ? UniqueHashSortedComplex(wantCounts: false, equalNan: true).values
+                    : uniqueValuesOnlyComplex(n, equal_nan) };
 
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLongComplex(n, equal_nan, return_index, return_inverse, return_counts);

@@ -93,6 +93,21 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void MaSortSetops() => RunMaCorpus("ma_sortsetops.jsonl");
 
+        /// <summary>
+        ///     numpy.ma's arraysetops as NumPy's statements (ma_setops.jsonl, gen_ma_oracle.py <c>setops</c>): unique (with
+        ///     return_index / return_inverse), in1d, isin, intersect1d, setxor1d, union1d, setdiff1d over every dtype, value
+        ///     pool, mask class, hard masks, plain operands, layouts and mixed dtypes, NumPy's errors included. Held to ZERO
+        ///     excuses (valueclass <c>masetops</c>), with the result's form checked, and the raw flag data of in1d / isin.
+        /// </summary>
+        /// <remarks>
+        ///     The cases whose NumPy answer depends on its unstable quicksort's order among equal keys are dropped by the
+        ///     generator (it replays a stable copy of NumPy's statements, test/oracle/ma_setops_reference.py), never
+        ///     excused here.
+        /// </remarks>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void MaSetops() => RunMaCorpus("ma_setops.jsonl");
+
         // Extras: small exact products (dot/inner/outer) + trace/vander(->array) + triangular-mask
         // (mask_rows/cols/rowcols, compress_rows/cols) + predicates (is_masked/allclose/allequal->scalar)
         // + mask helpers (make_mask/make_mask_none/mask_or/flatten_mask->array, make_mask_descr->dtype).
@@ -121,6 +136,8 @@ namespace NumSharp.Tests.Fuzz
             // ~95% of the 24,021 kept cases of the numpy.ma surface tier (gen_ma_surface_oracle.py, 2026-10-08; its
             // 10,123 carved cases live in gaps/ma_surface_gaps.jsonl).
             ["ma_surface.jsonl"] = 22800,
+            // ~80% of the 6,976 committed cases (the arraysetops port, 2026-10-08).
+            ["ma_setops.jsonl"] = 5580,
         };
 
         /// <summary>
@@ -333,9 +350,9 @@ namespace NumSharp.Tests.Fuzz
             var empty = Array.Empty<BitDiff.Diff>();
             string at = slot == null ? "" : $" {slot}";
 
-            // ma_meanvar.jsonl and ma_surface.jsonl are held to ZERO excuses: MisalignedRegistry returns null for their
-            // valueclasses, and none of this file's own excuses below run for them either.
-            bool strict = sc.Valueclass is "mameanvar" or "masurface";
+            // ma_meanvar.jsonl, ma_surface.jsonl and ma_setops.jsonl are held to ZERO excuses: MisalignedRegistry returns
+            // null for their valueclasses, and none of this file's own excuses below run for them either.
+            bool strict = sc.Valueclass is "mameanvar" or "masurface" or "masetops";
 
             // FORM: the masked singleton, a scalar, an array with nomask or with a mask array. getmaskarray cannot tell
             // these apart (an all-False mask reads like nomask, the singleton like a masked 0-d array), so the object
@@ -605,10 +622,6 @@ namespace NumSharp.Tests.Fuzz
         /// </summary>
         private static string MaReductionMaskExcuse(FuzzCorpus.Case sc)
         {
-            // isin/in1d mask propagation is dtype-independent, so gate it before the float check.
-            if (sc.Op is "isin" or "in1d")
-                return "[known gap] ma.isin/in1d do not propagate the element operand's mask to the bool result";
-
             // Complex power: the result's finiteness at a pathological complex input differs (Complex.Pow
             // vs npy_cpow's host cpow — the F5 class the VALUE diffs are already excused under), which flips
             // the ~isfinite mask bit at that one slot. Scoped to power with a complex operand.
@@ -654,9 +667,6 @@ namespace NumSharp.Tests.Fuzz
             if (sc.Op == "median")
                 return "[known gap] ma.median value differs on a slice carrying non-finite (nan/inf) unmasked data " +
                        "(sort/interpolation of inf; NumSharp finite vs NumPy inf)";
-            if (sc.Op == "unique" && sc.Operands[0].Dtype == "complex128")
-                return "[known gap] ma.unique complex128 NaN element: the NaN's imaginary lane is non-contractual " +
-                       "(NumPy keeps the element's original imag, NumSharp canonicalizes)";
             if (sc.Op == "ptp" && sc.Operands[0].Dtype == "complex128")
                 return "[documented] complex ptp (max-min) NaN propagation: complex ordering with NaN is " +
                        "implementation-defined (NumPy NaN+NaNj vs NumSharp NaN+0j) — the complex-reduction NaN class";

@@ -134,7 +134,28 @@ representational ones):
 - `ma.dot` always carries a mask array (an empty contraction masks every slot); `ma.diff` broadcasts a 0-d prepend;
   `masked_where(copy=False)` masks the input in place.
 
-Open: `np.ma.isin` / `in1d`'s numeric algorithm (the `[known gap]` excuse); numeric fill values are not converted or
+**numpy.ma's arraysetops are NumPy's statements** (2026-10-08; `Ma/NDMaskedArray.SetOps.cs`; gates the zero-excuse
+oracle tier `ma_setops.jsonl` (7,030 cases: `gen_ma_oracle.py setops`) + `Ma/np.ma.setops.NumPyPort.Test.cs`):
+`unique` (now with NumPy's `return_index` / `return_inverse`, a `MaskedArrayModule.UniqueResult` tuple), `in1d`, `isin`,
+`intersect1d`, `setxor1d`, `union1d`, `setdiff1d` replay `numpy/ma/extras.py` over `_unique1d`, `ma.concatenate` (now
+with `axis=None`), the masked sort / argsort (masked slots keyed by NaN for a floating dtype, the dtype maximum
+otherwise) and the masked `==` / `!=` (two masked slots equal, a masked slot unequal to every value, every comparison
+that reads a masked slot masked). So a flag whose sorted neighbour is masked is masked (`ma.in1d([3, 5], ma.array([3,
+9], mask=[0, 1]))` is [True, --]), NaNs collapse only behind an UNMASKED last NaN, a masked bool slot sorts among the
+unmasked Trues, a hard mask ORs into `ma.unique`'s in-place sort, and setxor1d compares FILLED values (999999 equals a
+masked int slot). The old compositions (the plain set operation over the unmasked values plus one masked entry by a
+presence rule) never masked an in1d flag. **One inherent divergence:** NumPy's quicksort is unstable (x86-simd-sort
+networks for 32/64-bit dtypes, introsort past 16 elements), NumSharp's sort is stable, so the two differ only where an
+unstable sort meets equal keys that are not interchangeable (a masked key tied with an equal unmasked value, ±0, NaN
+payloads); the generator replays a stable copy of NumPy's statements (`test/oracle/ma_setops_reference.py`) and drops
+exactly those cases. Rode along: `np.argsort`'s float32/float64 radix keyed `-0.0` below `+0.0` (NumPy's stable sort
+keeps them in input order; `np.lexsort` inherited it), and `np.unique` of complex128 without flags kept a NaN from an
+unstable partition where NumPy's hash path keeps each class's FIRST element. Perf (NPY/NS, 1K / 100K / 1M, int64 and
+float64 with 10% masks, two pinned P-cores): geomean 3.3×, float64 3.6–8.7×, int64 1.5–2.6× (the 1M int64 cells
+1.5–1.7×; NumSharp's int64 masked argsort sorts the unmasked values alone when no unmasked value equals the fill key,
+and in1d's `order.argsort()` of a permutation is its inverse permutation, one scatter).
+
+Open: numeric fill values are not converted or
 materialized (a documented simplification: `astype(int64)` keeps a float fill); a 0-d result NumPy returns as a plain
 scalar stays a 0-d masked array; `ma.put` with a hard mask on an N-D array writes where NumPy raises its IndexError;
 `np.nditer` over strings; `argwhere` / `flatnonzero` / `unravel_index` result layout (views in NumPy,

@@ -482,7 +482,8 @@ oracle sections closed the gaps between "NumPy refuses" and "NumPy computes":
   - `ma.dot` always computes `~dot(~ma, ~mb)` (an empty contraction masks every slot; an array result carries a mask
     array; a masked 0-d result is a 0-d array with a True mask); `ma.diff` broadcasts a 0-d prepend / append and
     returns the operand itself for `n=0`; `masked_where(copy=False)` masks the input in place.
-* **Open.** `np.ma.isin` / `in1d`'s numeric algorithm (the `[known gap]` excuse); numeric fill values are neither
+* **Open.** (`np.ma.isin` / `in1d`'s numeric algorithm is NumPy's statements since 2026-10-08, with the other ma
+  arraysetops: `Ma/NDMaskedArray.SetOps.cs`, the zero-excuse `ma_setops.jsonl` tier.) Numeric fill values are neither
   converted nor materialized (a documented simplification); `ma.put` with a hard mask on an N-D array writes where NumPy
   raises its IndexError (it indexes the N-D mask with flat indices); `np.nditer` over strings; the result layout of
   `argwhere` / `flatnonzero` / `unravel_index` (views in NumPy; `OpenBugs.IndexSearchLayout.cs`, the oracle excuses only

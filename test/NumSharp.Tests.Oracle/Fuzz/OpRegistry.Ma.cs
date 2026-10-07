@@ -210,13 +210,17 @@ namespace NumSharp.Tests.Fuzz
                                                p.TryGetValue("endwith", out var ew) ? ew.GetBoolean() : true);
                 case "argsort": return np.ma.argsort(ops[0], p.TryGetValue("axis", out var aa) ? aa.GetInt32() : -1,
                                                      p.TryGetValue("endwith", out var aew) ? aew.GetBoolean() : true);
-                case "unique": return np.ma.unique(ops[0]);
-                case "intersect1d": return np.ma.intersect1d(ops[0], ops[1]);
-                case "union1d": return np.ma.union1d(ops[0], ops[1]);
-                case "setxor1d": return np.ma.setxor1d(ops[0], ops[1]);
-                case "setdiff1d": return np.ma.setdiff1d(ops[0], ops[1]);
-                case "isin": return np.ma.isin(ops[0], ops[1]);
-                case "in1d": return np.ma.in1d(ops[0], ops[1]);
+                // The arraysetops (ma_sortsetops.jsonl, ma_setops.jsonl): `plain` / `hard` params say which operands NumPy
+                // received as a plain ndarray or hardened (SetOpOperand), the rest are NumPy's keyword arguments.
+                case "unique": return np.ma.unique(SetOpOperand(p, ops, 0));
+                case "intersect1d": return np.ma.intersect1d(SetOpOperand(p, ops, 0), SetOpOperand(p, ops, 1), Flag(p, "assume_unique"));
+                case "union1d": return np.ma.union1d(SetOpOperand(p, ops, 0), SetOpOperand(p, ops, 1));
+                case "setxor1d": return np.ma.setxor1d(SetOpOperand(p, ops, 0), SetOpOperand(p, ops, 1), Flag(p, "assume_unique"));
+                case "setdiff1d": return np.ma.setdiff1d(SetOpOperand(p, ops, 0), SetOpOperand(p, ops, 1), Flag(p, "assume_unique"));
+                case "isin":
+                    return np.ma.isin(SetOpOperand(p, ops, 0), SetOpOperand(p, ops, 1), Flag(p, "assume_unique"), Flag(p, "invert"));
+                case "in1d":
+                    return np.ma.in1d(SetOpOperand(p, ops, 0), SetOpOperand(p, ops, 1), Flag(p, "assume_unique"), Flag(p, "invert"));
 
                 // ---- extras: products / triangular-mask / predicates / mask helpers --------------
                 case "dot": return np.ma.dot(ops[0], ops[1]);
@@ -280,10 +284,63 @@ namespace NumSharp.Tests.Fuzz
                     return p.TryGetValue("indices", out var hi)
                         ? np.ma.hsplit(ops[0], hi.EnumerateArray().Select(x => x.GetInt32()).ToArray())
                         : np.ma.hsplit(ops[0], p["sections"].GetInt32());
+                case "unique":
+                {
+                    // NumPy's (MaskedArray, ndarray[, ndarray]) tuple: the index arrays compare as nomask slots.
+                    var r = np.ma.unique(SetOpOperand(p, ops, 0), Flag(p, "return_index"), Flag(p, "return_inverse"));
+                    var slots = new NDMaskedArray[r.Length];
+                    slots[0] = r.values;
+                    int k = 1;
+                    if (r.indices is not null)
+                        slots[k++] = np.ma.masked_array(r.indices);
+                    if (r.inverse_indices is not null)
+                        slots[k] = np.ma.masked_array(r.inverse_indices);
+                    return slots;
+                }
                 default:
                     throw new NotSupportedException($"ma tuple op '{op}' not registered in OpRegistry.ApplyMaskedTuple");
             }
         }
+
+        /// <summary>
+        ///     A set operation's operand as NumPy received it: the plain data view when the case lists the operand in
+        ///     <c>plain</c> (NumPy took the ndarray, so <c>ma.unique</c> runs <c>np.unique</c> proper), else the masked array,
+        ///     HARDENED when listed in <c>hard</c> (NumPy's <c>m.harden_mask()</c>, which changes the in-place masked sort).
+        /// </summary>
+        /// <param name="p">The case params.</param>
+        /// <param name="ops">The reconstructed operands.</param>
+        /// <param name="i">The operand's position.</param>
+        /// <returns>An <see cref="NDArray"/> or an <see cref="NDMaskedArray"/>.</returns>
+        private static object SetOpOperand(IReadOnlyDictionary<string, JsonElement> p, NDMaskedArray[] ops, int i)
+        {
+            if (Listed(p, "plain", i))
+                return ops[i].data;
+            if (Listed(p, "hard", i))
+                ops[i].harden_mask();
+            return ops[i];
+        }
+
+        /// <summary>Whether the int-list param <paramref name="key"/> holds <paramref name="i"/>.</summary>
+        /// <param name="p">The case params.</param>
+        /// <param name="key">The list's name.</param>
+        /// <param name="i">The operand position.</param>
+        /// <returns>True when listed.</returns>
+        private static bool Listed(IReadOnlyDictionary<string, JsonElement> p, string key, int i)
+        {
+            if (!p.TryGetValue(key, out var list) || list.ValueKind != JsonValueKind.Array)
+                return false;
+            foreach (var e in list.EnumerateArray())
+                if (e.GetInt32() == i)
+                    return true;
+            return false;
+        }
+
+        /// <summary>A bool keyword param (NumPy's default False when absent).</summary>
+        /// <param name="p">The case params.</param>
+        /// <param name="key">The keyword.</param>
+        /// <returns>The value, false when absent.</returns>
+        private static bool Flag(IReadOnlyDictionary<string, JsonElement> p, string key)
+            => p.TryGetValue(key, out var v) && v.ValueKind == JsonValueKind.True;
 
         /// <summary>
         ///     The <c>dtype=</c> of ma.mean / ma.var / ma.std / ma.anom: a NumPy dtype name, or null when the case has none

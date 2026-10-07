@@ -962,7 +962,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   The cost is library-wide: `f32 + 0.1` at 1K is 0.62× NumPy for the same reason. Levers: a pooled per-thread 0-d
   operand for the operators, or a scalar overload set that disposes its temporary. Found by X24.
 - [x] **X27 Storing a C# literal wrapped where NumPy raises, at every store entry point: silent wrong values.** The
-  neighbour class of X24, found by its search. Done 2026-10-08 (this commit).
+  neighbour class of X24, found by its search. Done 2026-10-08 (commit 51abf1ad).
   - Proof (a 2,662-case probe: 11 dtypes × 11 literals × 22 store entry points against Linux NumPy 2.4.2, the LP64
     texts NumSharp pins): 873 differences. `a[0] = 1000` on int8 stored -24 (NumPy: `OverflowError: Python integer 1000
     out of bounds for int8`); `a[mask] = double.NaN` on int32 stored INT_MIN (`ValueError: cannot convert float NaN to
@@ -999,6 +999,26 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   NumPy's `b[j]` is a NumPy scalar, which a SIGNED integer destination range-checks on the `PyArray_Pack` routes
   (`int8[i] = int64_array[j]` with 1000 raises); NumSharp's `b[j]` is an unmarked 0-d view, which is cast (-24). Every
   in-range value agrees. Lever: mark the getter's full-integer-index result `WasNumPyScalar`. Found by X27.
+- [x] **X30 numpy.ma's arraysetops were rewritten compositions, not NumPy's statements: in1d / isin flags never masked,
+  ma.unique without `return_index` / `return_inverse`.** Done 2026-10-08 (this commit; the rundown's bug 2).
+  - Proof: removing the `[known gap] ma.isin/in1d` excuse turned all 8 corpus cases red (mask `[FFFFFF]` against
+    NumPy's `[FFTTFF]`); a 120,000-call differential against a stable copy of NumPy's statements then showed
+    `unique`, `intersect1d`, `setxor1d`, `union1d` and `setdiff1d` diverging too (NaN beside masked slots, masked keys
+    tied with equal values, setxor1d's filled comparison). NumPy: `ma.in1d([3, 5], ma.array([3, 9], mask=[0, 1]))` is
+    `[True, --]`; NumSharp gave `[True, False]` with no mask.
+  - Cause: each ran the plain set operation over the compressed values and appended one masked entry by a presence
+    rule. NumPy's answer comes from `_unique1d`, `ma.concatenate`, the masked sort / argsort (masked slots keyed by the
+    fill value) and the masked `==` / `!=` (two masked slots equal; every comparison that reads a masked slot masked).
+  - Fix: `Ma/NDMaskedArray.SetOps.cs` ports `numpy/ma/extras.py` statement by statement (unique with NumPy's
+    `return_index` / `return_inverse` and a `MaskedArrayModule.UniqueResult` tuple; `ma.concatenate` gains
+    `axis=None`). Neighbours found and fixed on the way: `np.argsort`'s float32/float64 radix put every `-0.0` before
+    `+0.0` (NumPy's stable order keeps them in input order; `np.lexsort` inherited it), and `np.unique` of complex128
+    without flags kept a NaN from an unstable partition (NumPy's hash path keeps each class's first element).
+  - Perf: geomean 3.3× NumPy (float64 3.6–8.7×, int64 1.5–2.6×) after two exact levers: a masked integer argsort sorts
+    the unmasked values alone when none equals the fill key, and in1d's `order.argsort()` of a permutation is its
+    inverse permutation (one scatter).
+  - Gates: `ma_setops.jsonl` (7,030 cases, zero excuses, 8 planted bugs killed), `Ma/np.ma.setops.NumPyPort.Test.cs`,
+    `Sorting/np.argsort.SignedZero.Test.cs`, `Manipulation/np.unique.ComplexHash.Test.cs`.
 
 ## 6. Findings
 
@@ -1158,13 +1178,27 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    empty-selection assignment stranded a buffer (the empty view's own) and that the oracle replay's mask leaked through
    a reshape VIEW that kept a counted reference on the disposed flat array — neither shows in a value. Dispose a
    reshape view as well as its source.
+36. **NumPy's quicksort tie order is host-dependent, so an oracle for sort-based code must classify ties** (X30). NumPy
+   2.4.2's `quicksort` argsort is unstable from 4 elements for 32/64-bit dtypes (x86-simd-sort AVX2; AVX-512 hosts run
+   other networks) and from 17 for the others (introsort). It decides a numpy.ma set operation only when an unstable
+   sort meets equal keys that are not interchangeable; replaying NumPy's statements with stable sorts and keeping a
+   case only when the answers agree (and asserting every dropped case was such a tie) separates the inherent cases from
+   the port's bugs, where a blanket excuse would hide both.
+37. **A warm-up of 250 ms does not reach tier-1 for the first cells of a benchmark** (X30). The first int64 cells of the
+   set-operation benchmark ran 1.3–2× slow (an identical `np.argsort` of the same permutation cost 19.1 µs in the first
+   block and 8.6 µs in the second); `DOTNET_TC_CallCountingDelayMs=0` plus a warm-up pass over every cell before
+   measuring removed it.
 
 ## 7. State log
+
+- **2026-10-08**: X30 done (numpy.ma's arraysetops as NumPy's statements; `np.argsort`'s ±0 order; `np.unique`'s
+  complex hash representative). The `ma_setops` tier (7,030 cases, zero excuses; 8 planted bugs killed); the
+  `ma_sortsetops` tier lost its isin / in1d and complex unique excuses. Findings 36–37 recorded. Commit: this commit.
 
 - **2026-10-08**: X27 done (storing a C# literal is NumPy's `PyArray_Pack` at every store entry point: the literal
   marks, the NumPy-scalar route split, np.full's unsafe copyto, np.put's order and empty-values no-op, np.pad's NumPy
   scalars; the empty-selection setter leak). Section S of the `weak_scalar` tier (15,301 store cases, zero excuses; 5
-  planted bugs killed). X28, X29 and findings 34–35 recorded. Commit: this commit.
+  planted bugs killed). X28, X29 and findings 34–35 recorded. Commit: 51abf1ad.
 
 - **2026-10-07**: X24 done with X2, X21 and X25. Every comparison packs a Python scalar into the array's precision
   (NEP 50); every binary ufunc range-checks a weak Python int against its loop and re-packs one past 2^53 into a

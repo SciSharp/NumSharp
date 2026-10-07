@@ -676,6 +676,7 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | `gen_relayout_oracle._gap_of` (relayout / relayout_host) | 179 cells under 7 gap ids, written to `corpus/gaps/relayout_gaps.jsonl`: the C-contiguous-offset misreads RL01 (searchsorted, digitize, complex / float16 isin), RL02 (where, float16 / complex nancumsum / nancumprod), RL03 (ldexp), RL04 (unique, unique_values, the set routines), RL05 (repeat of a 0-d offset view), and the empty-operand early returns RL06 (comparison operators) and RL07 (logaddexp / logaddexp2). Drawn by emulating each bug (the misread window, the early return), so the carve is exact; also DROPPED (not carved): ufunc / where variants whose answer depends on NEP50's weak 0-d promotion (the registry's NEP50 branches document that divergence in every other tier), and the flat np.mean of a broadcast float operand that is not order-free (the mean_loops tier owns that residual) | `FuzzCorpusTests.Relayout_KnownGaps` (both verdicts), `OpenBugs.Relayout.cs` (8 public-call repros) |
 | `gen_surface_oracle._gap_of` (surface) | 986 cells under 42 gap ids, written to `corpus/gaps/surface_gaps.jsonl`: error texts and refusals (SU1, SU2, SU4, SU8, SU10, SU11, SU15, SU16, SU22, SU28, SU29, SU32-SU35, SU40), silent wrong values (SU12-SU14 finfo, SU20 broadcast.iters, SU25 / SU31 nditer order, SU38 / SU39 cumsum / cumprod dtype=, SU6 / SU9 / SU18 / SU19 the float formatters), np.nditer's write-backs (SU41 an updateifcopy operand refused without buffering, SU42 the iteration protocol one element ahead: a buffered readwrite loop loses the last write of each buffer), crashes (SU5 apply_along_axis over a stride-0 offset view, SU30 nditer.remove_axis), reporting (SU3, SU17, SU21, SU23, SU24, SU26, SU27), the double-only float formatters (SU7) and the cumulative_* aliases (SU36 / SU37). Drawn by modelling each bug where it is not a fixed set (the float formatters on the widened double with NumSharp's Dragon4 carry and trim rules; np.nditer's C walk for an F + broadcast set via NumPy with order='C'; the edgeitems=0 format from the last element), so the carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests.Surface_KnownGaps`, `OpenBugs.Surface.cs` (41 public-call repros) |
 | `gen_ma_surface_oracle._gap_of` (ma_surface) | 10,123 cells under 37 gap ids, written to `corpus/gaps/ma_surface_gaps.jsonl`: the result FORM (MS1 an all-False result mask dropped to nomask, MS2 the _fromnxfunction wrappers' full mask, MS3 the *_like mask, MS4 a 0-d resize, MS5 apply_over_axes' plain ndarray, MS9 masked_object's kept all-False mask), silent wrong values (MS7 / MS12 / MS13 fill values never converted, MS11 / MS31 unsafe casts in putmask and the hard-masked setitem, MS14 the bool extremum fills, MS17 is_mask, MS34 corrcoef's masked-slot data, MS36 ids of a strided / reversed view, MS37 cov / corrcoef with a 1-D y under rowvar=False), crashes and refusals (MS15, MS22, MS26, MS33, MS35), NumPy's refusals and texts (MS6, MS8, MS21, MS23, MS24, MS25, MS27, MS28, MS30, MS32) and the API shape (MS10, MS16, MS18, MS19, MS20, MS29). Drawn by fixed predicates and two models (NumSharp's raw fill values for set_fill_value / common_fill_value; which ids views re-seat the storage address), so the carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests.MaSurface_KnownGaps`, `OpenBugs.MaSurface.cs` (30 public-call repros) |
+| `gen_ma_oracle.gen_ma_setops` (`ma_setops`), "tie order" | 221 cases (at generation): numpy.ma arraysetops whose NumPy answer depends on its unstable quicksort's order among equal keys that are not interchangeable (a masked slot tied with an unmasked value equal to the fill key — NaN, the dtype maximum, True for bool — or ±0 / NaN payloads among unmasked values). NumPy's own answer is host-dependent there (x86-simd-sort AVX2 vs AVX-512 networks); NumSharp's sort is stable | inherent, no pin (`ma_setops_reference.py` marks each case SENSITIVE; the generator stops on a drop that is not) |
 | `gen_random_parity` carve list | `multivariate_normal` only: byte-identical only through a LAPACK backend's `gesdd` (the managed Jacobi SVD flips a singular vector's sign). The other seven samplers (gamma shape<1, f, pareto, standard_cauchy, binomial, negative_binomial, multinomial) were uncarved 2026-09-25 — legacy-distributions.c ports — and every sampler is also covered by the `random_api` tiers | `OpenBugsRandom.RandomParity_MultivariateNormal_Seed42_ShouldMatchNumPy` (the seven former pins are ordinary tests) |
 
 **FIXED on this branch or before it** (classifier branch/carve removed — the matrix now verifies
@@ -1183,6 +1184,45 @@ mask), each killed by the tier (2 to 3,197 cases) and separately by `Ma/np.ma.me
 carried NaN instead of the masked 0, an unmasked inf stayed where NumPy masks it into 0.0, the variance kept the
 divide's mask, and the masked mean of a float32 stayed float32. `ma_reduce` hid it under the summation and dtype
 blankets (`IsMaVarStd` / `IsMaMean`, 254 cases).
+
+### numpy.ma's arraysetops (`ma_setops` tier) — 2026-10-08
+
+`ma_setops.jsonl` (`gen_ma_oracle.py setops`, 7,030 cases, floor 5,580) gates `np.ma.unique` (with `return_index` /
+`return_inverse`: a `masked_tuple` whose index slots are nomask), `in1d`, `isin` (both with `assume_unique` / `invert`),
+`intersect1d`, `setxor1d`, `union1d` and `setdiff1d` as numpy.ma's statements (`numpy/ma/extras.py` over `_unique1d`,
+`ma.concatenate`, the masked sort / argsort and the masked `==` / `!=`; `Ma/NDMaskedArray.SetOps.cs`). Cases record
+`form` (masked singleton / scalar / nomask / mask), and in1d / isin also `raw` (the flag data under a masked slot is
+`smask == omask`); the params `plain` and `hard` list the operands NumPy received as a plain ndarray (`ma.unique` then
+runs np.unique proper) or hardened (`ma.unique`'s in-place sort ORs a hard mask).
+
+**Sections:** H (NumPy's own `TestArraySetOps` inputs, incl. the 2x3x4 isin), R (every op variant × the 13 dtypes ×
+26 random draws: sizes 0–40, pools small / special — NaN, ±inf, ±0, the dtype extremes — / wide, mask classes nomask /
+all-False / some / all, 12 % plain and 15 % hard operands, the first operand contiguous / stepped / reversed / 2-D /
+transposed / 0-d), P (mixed dtypes, the concatenation promotes), B (4,500 / 600-element integer operands, past the
+4,096 from which NumSharp argsorts a masked integer array as "the unmasked values, then the masked slots", with and
+without the dtype maximum among the unmasked values). NumPy's errors are cases too (`CheckMaError`).
+
+**How cases are chosen.** NumPy's 'quicksort' (np.unique's argsort with `return_inverse`, `MaskedArray.sort`'s default
+kind) is not stable — 32/64-bit dtypes go through x86-simd-sort's AVX2 / AVX-512 networks, the others through introsort
+past 16 elements — so its order among EQUAL keys is host-dependent, and NumSharp's sort is stable. The generator replays
+a stable copy of NumPy's statements (`test/oracle/ma_setops_reference.py`) and keeps a case only when NumPy's observable
+answer (filled(0), mask, dtype, shape, form, raw) equals it. The reference marks a case SENSITIVE when an unstable sort
+meets a group of equal keys that are not interchangeable (a masked slot keyed by the fill value beside an unmasked value
+equal to it, two unmasked values that compare equal with different bits, or the NaN collapse's searchsorted reading the
+raw data of masked slots whose NaN-ness differs); every dropped case must be SENSITIVE, else the generator stops (a
+dropped case that is not would mean the reference is not NumPy's statements). 221 cases were dropped at generation.
+
+**Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the `masetops` valueclass and `CompareMasked` runs none
+of the ma harness's own excuses for it (`strict`). **Planted bugs:** 8 edits, each killed by the tier (15 to 2,275 red
+cases): the masked `==` / `!=` ignoring the masks, the NaN collapse behind a masked last slot, in1d without its inverse
+indexing, the argsort keying `-0.0` below `+0.0`, complex unique keeping the last NaN, the masked sort ignoring a hard
+mask, and the integer fast path putting the masked slots first or ignoring an unmasked dtype maximum (the last two only
+section B reaches). `Ma/np.ma.setops.NumPyPort.Test.cs` kills the first six too.
+
+**What it replaced.** The plain set operation over the compressed values plus one masked entry by a presence rule: an
+in1d / isin flag was never masked (the 8 `ma_sortsetops` cases failed once their `[known gap]` excuse was removed), NaN
+and masked slots never shared a sort, and `ma.unique` had no index outputs. `ma_sortsetops` is green with the port and
+lost its complex128 unique excuse (13 cases: `np.unique`'s complex path is NumPy's hash now).
 
 ### np.copyto as NumPy's `array_copyto` (`copyto_full` tier) — 2026-10-06
 

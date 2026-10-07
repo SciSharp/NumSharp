@@ -1286,6 +1286,314 @@ def gen_ma_meanvar(carve=True):
 
 
 # ---------------------------------------------------------------------------------------------
+# Tier `setops` (ma_setops.jsonl): numpy.ma's arraysetops as NumPy's statements — unique (with return_index /
+# return_inverse), in1d, isin, intersect1d, setxor1d, union1d, setdiff1d — over every dtype, value pool, mask class,
+# hard masks, plain operands, layouts and mixed dtypes. Held to ZERO excuses (valueclass "masetops").
+#
+# NumPy's 'quicksort' is unstable (host-dependent among equal keys) and NumSharp's sort is stable, so a case enters
+# the corpus only when NumPy's observable answer (filled(0) data, mask, dtype, shape, form) equals the stable
+# reference's (ma_setops_reference.py: NumPy's statements with stable sorts). Every dropped case must be one the
+# reference marked SENSITIVE (an unstable sort met a group of equal keys whose members are not interchangeable); a
+# dropped case that is not would mean the reference is not NumPy's statements, and the generator stops.
+# ---------------------------------------------------------------------------------------------
+SO_DTYPES = ["bool", "uint8", "int8", "int16", "uint16", "int32", "uint32", "int64", "uint64",
+             "float16", "float32", "float64", "complex128"]
+SO_PAIRS = [("int32", "float64"), ("bool", "int8"), ("uint8", "int8"), ("float16", "float64"),
+            ("int64", "complex128"), ("uint64", "int64"), ("float32", "int16"), ("int16", "uint16")]
+SO_SIZES = [0, 1, 2, 3, 5, 8, 13, 17, 24, 40]
+
+
+def _so_values(dt, n, rng, pool):
+    """N values of DT from POOL: 'small' (few distinct, many duplicates), 'special' (NaN / ±inf / ±0 / extremes),
+    'wide' (many distinct)."""
+    d = np.dtype(dt)
+    if d.kind == "b":
+        return rng.integers(0, 2, n).astype(bool)
+    if pool == "small":
+        vals = rng.integers(0, 4, n)
+        if d.kind == "c":
+            return (vals + 1j * rng.integers(0, 2, n)).astype(d)
+        return vals.astype(d)
+    if pool == "wide":
+        if d.kind in "ui":
+            info = np.iinfo(d)
+            lo, hi = max(int(info.min), -10 ** 6), min(int(info.max), 10 ** 6)
+            return rng.integers(lo, hi + 1, n).astype(d)
+        if d.kind == "c":
+            return (rng.integers(-50, 50, n) + 1j * rng.integers(-3, 3, n)).astype(d)
+        return rng.integers(-50, 50, n).astype(d)
+    # special
+    if d.kind in "ui":
+        info = np.iinfo(d)
+        pick = [0, 1, 2, int(info.max), int(info.min), int(info.max) - 1]
+        return np.array([pick[i] for i in rng.integers(0, len(pick), n)], dtype=d)
+    if d.kind == "f":
+        pick = [0.0, -0.0, 1.0, 2.0, -1.0, np.nan, np.inf, -np.inf]
+        return np.array([pick[i] for i in rng.integers(0, len(pick), n)], dtype=d)
+    pick = [0, 1, 1j, -0.0, complex(np.nan, 0), complex(0, np.nan), complex(np.inf, np.inf), complex(1, np.inf)]
+    return np.array([pick[i] for i in rng.integers(0, len(pick), n)], dtype=d)
+
+
+def _so_mask(shape, kind, rng):
+    """A mask of KIND for SHAPE: 'none' (nomask), 'false' (an all-False array), 'some' (random), 'all'."""
+    if kind == "none":
+        return None
+    if kind == "false":
+        return np.zeros(shape, dtype=bool)
+    if kind == "all":
+        return np.ones(shape, dtype=bool)
+    return rng.random(shape) < 0.35 if len(shape) else np.array(bool(rng.random() < 0.35))
+
+
+def _so_layout(vals, layout):
+    """(base, view) holding VALS in LAYOUT: c1d / strided / reversed / c2d / t2d / 0d."""
+    n = vals.shape[0]
+    if layout == "strided":
+        base = np.empty(2 * n, dtype=vals.dtype)
+        base[::2] = vals
+        base[1::2] = vals[::-1] if n else vals
+        return base, base[::2]
+    if layout == "reversed":
+        base = vals[::-1].copy()
+        return base, base[::-1]
+    if layout in ("c2d", "t2d"):
+        r = 2 if n % 2 == 0 else 1
+        if layout == "c2d":
+            base = vals.copy()
+            return base, base.reshape(r, n // r)
+        base = vals.reshape(n // r, r).T.copy().reshape(-1)
+        return base, base.reshape(r, n // r).T
+    if layout == "0d":
+        base = np.array(vals[0] if n else vals.dtype.type(0))
+        return base, base
+    base = vals.copy()
+    return base, base
+
+
+def _so_form(r):
+    """The result's object kind: masked (the singleton), scalar (0-d, no mask), nomask, or mask (a mask array)."""
+    if r is np.ma.masked:
+        return "masked"
+    if isinstance(r, np.ma.MaskedArray):
+        if r._mask is np.ma.nomask:
+            return "scalar" if r.ndim == 0 else "nomask"
+        return "mask"
+    return "scalar"
+
+
+def _so_expected(r, raw):
+    """The masked expectation plus the form; RAW adds the data at every slot (deterministic only for in1d / isin). A
+    plain ndarray (a tuple's index slot) records no form: the C# side carries it in a nomask masked array."""
+    e = _ma_expected(r)
+    if isinstance(r, np.ma.MaskedArray) or not isinstance(r, np.ndarray):
+        e["form"] = _so_form(r)
+    if raw:
+        d = np.asarray(r.data) if isinstance(r, np.ma.MaskedArray) else np.asarray(r)
+        e["raw"] = np.ascontiguousarray(d).tobytes().hex()
+    return e
+
+
+def _so_observe(r, raw):
+    """What the corpus compares of a result (a tuple slot by slot), for the NumPy-vs-reference agreement check: the raw
+    data too when the case records it (in1d / isin), since a tie order can move it while filled(0) and the mask agree."""
+    if isinstance(r, tuple):
+        return tuple(_so_observe(x, False) for x in r)
+    e = _so_expected(r, raw=raw)
+    return (e["dtype"], tuple(e["shape"]), e["buffer"], e["mask"], e.get("form"), e.get("raw"))
+
+
+def gen_ma_setops():
+    import ma_setops_reference as R
+
+    cases, n = [], _N()
+    ma = np.ma
+    stats = {"kept": 0, "tie_dropped": 0}
+    rng = np.random.default_rng(20261008)
+
+    # op key -> (NumPy callable, reference callable, params, raw?)
+    def op_table():
+        t = []
+        for ri, rx in [(False, False), (True, False), (False, True), (True, True)]:
+            p = {}
+            if ri:
+                p["return_index"] = True
+            if rx:
+                p["return_inverse"] = True
+            t.append(("unique", (lambda ri=ri, rx=rx: (lambda a, b: ma.unique(a, return_index=ri, return_inverse=rx)))(),
+                      (lambda ri=ri, rx=rx: (lambda a, b: R.unique(a, return_index=ri, return_inverse=rx)))(), p, False, 1))
+        for au in (False, True):
+            for inv in (False, True):
+                p = {}
+                if au:
+                    p["assume_unique"] = True
+                if inv:
+                    p["invert"] = True
+                t.append(("in1d", (lambda au=au, inv=inv: (lambda a, b: ma.in1d(a, b, assume_unique=au, invert=inv)))(),
+                          (lambda au=au, inv=inv: (lambda a, b: R.in1d(a, b, assume_unique=au, invert=inv)))(), p, True, 2))
+                t.append(("isin", (lambda au=au, inv=inv: (lambda a, b: ma.isin(a, b, assume_unique=au, invert=inv)))(),
+                          (lambda au=au, inv=inv: (lambda a, b: R.isin(a, b, assume_unique=au, invert=inv)))(), p, True, 2))
+        for au in (False, True):
+            p = {"assume_unique": True} if au else {}
+            t.append(("intersect1d", (lambda au=au: (lambda a, b: ma.intersect1d(a, b, assume_unique=au)))(),
+                      (lambda au=au: (lambda a, b: R.intersect1d(a, b, assume_unique=au)))(), p, False, 2))
+            t.append(("setxor1d", (lambda au=au: (lambda a, b: ma.setxor1d(a, b, assume_unique=au)))(),
+                      (lambda au=au: (lambda a, b: R.setxor1d(a, b, assume_unique=au)))(), p, False, 2))
+            t.append(("setdiff1d", (lambda au=au: (lambda a, b: ma.setdiff1d(a, b, assume_unique=au)))(),
+                      (lambda au=au: (lambda a, b: R.setdiff1d(a, b, assume_unique=au)))(), p, False, 2))
+        t.append(("union1d", lambda a, b: ma.union1d(a, b), lambda a, b: R.union1d(a, b), {}, False, 2))
+        return t
+
+    ops = op_table()
+
+    def build(base, view, mask, plain, hard):
+        """The NumPy operand: the plain view, or a masked array over it (hardened when asked)."""
+        if plain:
+            return view
+        m = np.ma.array(view, mask=(np.ma.nomask if mask is None else mask))
+        if hard:
+            m.harden_mask()
+        return m
+
+    def emit(opname, fnp, fref, params, raw, nops, operands_spec, tag):
+        """Runs NumPy and the reference on fresh operands; records the case when their observable answers agree."""
+        def fresh():
+            return [build(*spec) for spec in operands_spec]
+        a = fresh()
+        try:
+            want = fnp(a[0], a[1] if nops > 1 else None)
+            want_err = None
+        except Exception as e:  # noqa: BLE001 — NumPy's error is an expectation
+            want, want_err = None, e
+        a = fresh()
+        got, sensitive = R.run(fref, a[0], a[1] if nops > 1 else None)
+        if want_err is not None:
+            same = isinstance(got, Exception) and type(got) is type(want_err) and str(got) == str(want_err)
+        else:
+            same = not isinstance(got, Exception) and _so_observe(want, raw) == _so_observe(got, raw)
+        if not same:
+            if not sensitive:
+                raise AssertionError(f"setops: NumPy and the stable reference disagree without a sensitive tie: "
+                                     f"{opname} {params} {tag}\n  numpy: {want if want_err is None else want_err!r}"
+                                     f"\n  ref:   {got!r}")
+            stats["tie_dropped"] += 1
+            return
+        p = dict(params)
+        plain = [i for i, s in enumerate(operands_spec[:nops]) if s[3]]
+        hard = [i for i, s in enumerate(operands_spec[:nops]) if s[4]]
+        if plain:
+            p["plain"] = plain
+        if hard:
+            p["hard"] = hard
+        operands = [_ma_operand(s[0], s[1], None if s[3] else s[2]) for s in operands_spec[:nops]]
+        cid = f"ma.{opname}/{tag}/{n.next()}"
+        stats["kept"] += 1
+        if want_err is not None:
+            cases.append({"id": cid, "op": f"ma.{opname}", "params": p, "operands": operands, "expected": {},
+                          "expects_throw": True, "error": {"type": type(want_err).__name__, "text": str(want_err)},
+                          "layout": tag, "valueclass": "masetops"})
+            return
+        if isinstance(want, tuple):
+            expected = {"kind": "masked_tuple", "slots": [_so_expected(x, raw=False) for x in want]}
+        else:
+            expected = _so_expected(want, raw)
+        cases.append({"id": cid, "op": f"ma.{opname}", "params": p, "operands": operands, "expected": expected,
+                      "layout": tag, "valueclass": "masetops"})
+
+    def spec(vals, layout, mask_kind, plain=False, hard=False):
+        base, view = _so_layout(vals, layout)
+        mask = None if plain else _so_mask(view.shape, mask_kind, rng)
+        return (base, view, mask, plain, hard)
+
+    # Section H: NumPy's own TestArraySetOps inputs (numpy/ma/tests/test_extras.py).
+    def mk(data, mask=None, dt="int64"):
+        v = np.array(data, dtype=dt)
+        return (v, v, None if mask is None else np.array(mask, dtype=bool), mask is None, False)
+    hand = [
+        ("unique", [mk([1, 1, 1, 2, 2, 3], [0, 0, 1, 0, 1, 0])]),
+        ("unique", [mk([1, 1, 1], [1, 1, 1])]),
+        ("intersect1d", [mk([1, 3, 3, 3], [0, 0, 0, 1]), mk([3, 1, 1, 1], [0, 0, 0, 1])]),
+        ("setxor1d", [mk([1, 2, 5, 7, -1], [0, 0, 0, 0, 1]), mk([1, 2, 3, 4, 5, -1], [0, 0, 0, 0, 0, 1])]),
+        ("setxor1d", [mk([1, 2, 5, 7, -1], [0, 0, 0, 0, 1]), mk([1, 2, 3, 4, 5])]),
+        ("setxor1d", [mk([1, 8, 2, 3], [0, 1, 0, 0]), mk([6, 5, 4, 8], [0, 0, 0, 1])]),
+        ("in1d", [mk([1, 2, 5, 7, -1], [0, 0, 0, 0, 1]), mk([1, 2, 3, 4, 5, -1], [0, 0, 0, 0, 0, 1])]),
+        ("in1d", [mk([5, 5, 2, 1, -1], [0, 0, 0, 0, 1]), mk([1, 5, -1], [0, 0, 1])]),
+        ("in1d", [mk([3, 5], [0, 0]), mk([3, 9], [0, 1])]),
+        ("union1d", [mk([1, 2, 5, 7, 5, -1], [0, 0, 0, 0, 0, 1]), mk([1, 2, 3, 4, 5, -1], [0, 0, 0, 0, 0, 1])]),
+        ("setdiff1d", [mk([1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 1, 0, 0, 1]), mk([2, 4, 3, 3, 2, 1, 5], [0, 0, 0, 0, 1, 0, 0])]),
+    ]
+    for opname, specs in hand:
+        for (o, fnp, fref, params, raw, nops) in ops:
+            if o == opname and not params:
+                emit(o, fnp, fref, params, raw, nops, specs + [specs[0]] * (2 - len(specs)), "numpy_tests")
+    # isin over NumPy's 3-D test input (a 2x3x4 element with one masked slot).
+    a3 = np.arange(24, dtype=np.int64)
+    m3 = np.zeros(24, dtype=bool)
+    m3[1 * 12 + 2 * 4 + 0] = True
+    b9 = np.array([0, 10, 20, 30, 1, 3, 11, 22, 33], dtype=np.int64)
+    s3 = (a3, a3.reshape(2, 3, 4), m3.reshape(2, 3, 4), False, False)
+    s9 = (b9, b9, np.array([0, 1, 0, 1, 0, 1, 0, 1, 0], dtype=bool), False, False)
+    for (o, fnp, fref, params, raw, nops) in ops:
+        if o in ("isin", "in1d") and not params:
+            emit(o, fnp, fref, params, raw, nops, [s3, s9], "numpy_tests_3d")
+
+    # Section R: random operands, every dtype x op.
+    layouts0 = ["c1d", "c1d", "strided", "reversed", "c2d", "t2d", "0d"]
+    for dt in SO_DTYPES:
+        for (opname, fnp, fref, params, raw, nops) in ops:
+            for draw in range(26):
+                n1 = int(rng.choice(SO_SIZES))
+                n2 = int(rng.choice(SO_SIZES))
+                pool1 = str(rng.choice(["small", "small", "special", "wide"]))
+                pool2 = str(rng.choice(["small", "special", "wide"]))
+                lay = str(rng.choice(layouts0))
+                if lay == "0d":
+                    n1 = 1
+                v1 = _so_values(dt, n1, rng, pool1)
+                v2 = _so_values(dt, n2, rng, pool2)
+                m1 = str(rng.choice(["none", "false", "some", "some", "all"]))
+                m2 = str(rng.choice(["none", "false", "some", "all"]))
+                plain1 = bool(rng.random() < 0.12)
+                plain2 = bool(rng.random() < 0.25)
+                hard1 = bool(rng.random() < 0.15) and not plain1
+                hard2 = bool(rng.random() < 0.15) and not plain2
+                s1 = spec(v1, lay, m1, plain1, hard1)
+                s2 = spec(v2, str(rng.choice(["c1d", "c1d", "strided", "reversed"])), m2, plain2, hard2)
+                emit(opname, fnp, fref, params, raw, nops, [s1, s2], f"{dt}.{lay}.{pool1}.{m1}")
+
+    # Section P: mixed dtypes (the concatenation promotes).
+    for (d1, d2) in SO_PAIRS:
+        for (opname, fnp, fref, params, raw, nops) in ops:
+            if nops < 2:
+                continue
+            for draw in range(6):
+                n1 = int(rng.choice(SO_SIZES[1:]))
+                n2 = int(rng.choice(SO_SIZES[1:]))
+                v1 = _so_values(d1, n1, rng, "small")
+                v2 = _so_values(d2, n2, rng, str(rng.choice(["small", "special"])))
+                s1 = spec(v1, "c1d", str(rng.choice(["none", "some"])))
+                s2 = spec(v2, "c1d", str(rng.choice(["none", "some", "all"])))
+                emit(opname, fnp, fref, params, raw, nops, [s1, s2], f"{d1}+{d2}")
+
+    # Section B: large operands (4,500 / 600 elements) of the integer dtypes, past the size from which NumSharp argsorts a
+    # masked integer array as "the unmasked values, then the masked slots" (MaxKeyPartitionArgsort, 4,096 elements); the
+    # 'special' pool puts the dtype maximum among the unmasked values, which sends NumSharp back to the general path.
+    for dt in ["uint8", "int16", "uint16", "int32", "int64", "uint64"]:
+        for pool in ["wide", "special"]:
+            for (opname, fnp, fref, params, raw, nops) in ops:
+                if opname not in ("unique", "in1d", "intersect1d", "setxor1d", "union1d") or params.get("invert") \
+                        or params.get("assume_unique"):
+                    continue
+                v1 = _so_values(dt, 4500, rng, pool)
+                v2 = _so_values(dt, 600, rng, pool)
+                s1 = spec(v1, "c1d", "some")
+                s2 = spec(v2, "c1d", "some")
+                emit(opname, fnp, fref, params, raw, nops, [s1, s2], f"big.{dt}.{pool}")
+
+    print(f"  (ma_setops kept {stats['kept']}, dropped {stats['tie_dropped']} that depend on NumPy's quicksort tie order)")
+    return cases
+
+
+# ---------------------------------------------------------------------------------------------
 TIERS = {
     "unary": ("ma_unary.jsonl", gen_ma_unary),
     "binary": ("ma_binary.jsonl", gen_ma_binary),
@@ -1297,6 +1605,7 @@ TIERS = {
     "sortsetops": ("ma_sortsetops.jsonl", gen_ma_sortsetops),
     "extras": ("ma_extras.jsonl", gen_ma_extras),
     "meanvar": ("ma_meanvar.jsonl", gen_ma_meanvar),
+    "setops": ("ma_setops.jsonl", gen_ma_setops),
 }
 
 

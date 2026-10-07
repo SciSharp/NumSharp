@@ -91,6 +91,7 @@ matching the honest boundary in `MA_MODULE_AUDIT §5.6/§5.8`. Since 2026-10-06 
 | `ma_construct.jsonl` | `gen_ma_construct` | masked_where/masked_equal/masked_greater/…/masked_values/masked_inside/masked_outside/masked_invalid/fix_invalid/masked_all/masked_all_like + array/masked_array | masked | no |
 | `ma_select.jsonl` | `gen_ma_select` | take/choose/compress/clip/where/put/putmask(→mutated masked)/nonzero(→tuple) | masked, array | no |
 | `ma_sortsetops.jsonl` | `gen_ma_sortsetops` | sort/argsort(→array)/unique + intersect1d/union1d/setxor1d/setdiff1d/isin/in1d | masked, array | no |
+| `ma_setops.jsonl` | `gen_ma_setops` | unique (+ return_index / return_inverse → masked_tuple) / in1d / isin / intersect1d / setxor1d / union1d / setdiff1d (+ assume_unique / invert) over 13 dtypes, value pools, mask classes, hard masks, plain operands, layouts, mixed dtypes and 4,500-element integer operands, NumPy's errors (2026-10-08) | masked (+ `form`, in1d/isin `raw`), masked_tuple, errors | no; zero excuses |
 | `ma_extras.jsonl` | `gen_ma_extras` | dot/inner/outer(small, exact) + trace/vander(→array) + mask_rows/mask_cols/mask_rowcols + compress_rows/compress_cols(→array) + predicates is_mask/is_masked/isMaskedArray/allclose/allequal(→scalar) + make_mask/make_mask_none/mask_or/flatten_mask(→array) + make_mask_descr(→dtype) | masked, array, scalar, dtype | no |
 
 Deliberately EXCLUDED from the byte corpus (unit-test-only, same policy as the NDArray corpus):
@@ -156,14 +157,14 @@ gate is green AND every divergence is catalogued and printed at run time).
 |------|-----------|-------------|
 | `argsort` (ndim≥2) | NumSharp has no `axis=None` flatten; uses -1 (numpy's DOCUMENTED FUTURE default — numpy 2.4.2 emits a FutureWarning that its current `None` is deprecated) | generator restricts argsort to 1-D nomask |
 | `argsort` (masked / negstride float) | masked/tie INDEX ordering differs (fill-then-sort vs stable radix) | restricted to nomask non-negstride |
-| `unique` (masked) | numpy treats each MASKED element as a distinct value (ill-specified quirk); nomask is byte-exact | generator restricts unique to nomask |
-| `unique` (complex128 NaN) | the NaN element's imaginary lane is non-contractual | `[known gap]` excuse |
+| ~~`unique` (masked)~~ | FIXED 2026-10-08: numpy.ma's arraysetops are NumPy's statements (`Ma/NDMaskedArray.SetOps.cs`); a masked slot sorts by the fill key, so it can sit among unmasked values equal to that key (NumPy's "distinct masked value" quirk is this). `ma_setops.jsonl` covers masked unique; only the cases whose answer depends on NumPy's unstable quicksort tie order are dropped by its generator | — |
+| ~~`unique` (complex128 NaN)~~ | FIXED 2026-10-08: `np.unique`'s complex path is NumPy's hash (`unique.cpp`): each class keeps its first element, all NaN-part values one class | — |
 | `all`/`any`/`median` (axis=None, keepdims=True) | flat keepdims returns 0-d, numpy returns (1,)*ndim | generator skips that one combo |
 | `average` (was also `var`/`std`/`mean`/`anom`: FIXED 2026-10-06, Pass 3) | mask a NON-FINITE (nan/inf) reduction result where NumSharp leaves it unmasked (the masked-op composition differs) | `[known gap]` mask/value excuse (float/complex) |
 | `average`/`median` (was also `anom`: FIXED 2026-10-06) | return-dtype widens narrow-float → float64 where numpy keeps the width | `[known gap]` dtype excuse |
 | `median` (was also `anom`: FIXED 2026-10-06) | VALUE diverges on a non-contiguous 1-D input (its internal sort over a strided view) | `[known gap]` value excuse |
 | `sort` (NaN in unmasked) | masked-slot position vs NaN-ordering differs | `[known gap]` mask excuse |
-| `isin`/`in1d` | do NOT propagate the element operand's mask to the bool result | `[known gap]` mask excuse |
+| ~~`isin`/`in1d`~~ | FIXED 2026-10-08: NumPy's statements — a flag whose sorted neighbour is masked is masked (the old composition never masked a flag; all 8 cases failed once the excuse was removed) | — |
 | `arctanh`/complex-unary at nan/inf | inherited complex-unary special-value FINITENESS edge (msun vs System.Numerics) flips the `~isfinite` mask bit | `[documented]` complex-edge excuse (MisalignedRegistry branch 7 sibling) |
 | `divide`/`mod` domained → ±0 | signed-zero of a division-to-zero (IEEE non-contractual) | `[documented]` signed-zero excuse |
 | `power` complex | result FINITENESS at a pathological input differs (F5 class) | `[documented]` excuse |
