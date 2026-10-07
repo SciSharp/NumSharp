@@ -208,13 +208,13 @@ namespace NumSharp.Tests.Fuzz
                 case "notmasked_contiguous": return MaRepr(np.ma.notmasked_contiguous(ops[0], SurfNullableInt(p, "axis")));
                 case "notmasked_edges":
                 {
-                    // Polymorphic like NumPy's: a long[] {first, last} (NumPy's int64 array) or null for the flat case, an
+                    // Polymorphic like NumPy's: an int64 NDArray {first, last} (NumPy's array) or null for the flat case, an
                     // NDArray[][] {mins, maxs} (NumPy's list of two tuples of arrays) for an explicit axis of a >1-D array.
                     object r = np.ma.notmasked_edges(ops[0], SurfNullableInt(p, "axis"));
                     return r switch
                     {
                         null => "None",
-                        long[] e => MaEdgeArray(e),
+                        NDArray e => MaEdgeArray(e),
                         NDArray[][] pair => MaEdgePairs(pair),
                         _ => throw new NotSupportedException($"notmasked_edges returned {r.GetType().Name}"),
                     };
@@ -668,16 +668,18 @@ namespace NumSharp.Tests.Fuzz
             return text;
         }
 
-        /// <summary>The repr of an edge pair NumSharp returns as a <c>long[]</c> where NumPy returns an int64 ndarray (or
-        /// None): the array's <c>array([...])</c> repr, built over a temporary array this method disposes.</summary>
+        /// <summary>The repr of an edge pair, which NumSharp returns as NumPy does: an int64 ndarray (or None for no
+        /// unmasked element). The array is the replayed call's own result, so this method disposes it once its
+        /// <c>array([...])</c> repr is read.</summary>
         /// <param name="e">The {first, last} pair, or null.</param>
-        /// <returns>The text.</returns>
-        private static string MaEdgeArray(long[] e)
+        /// <returns>The text; <c>None</c> for a null pair.</returns>
+        private static string MaEdgeArray(NDArray e)
         {
             if (e is null)
                 return "None";
-            using var arr = np.array(e);
-            return arr.ToString(true);
+            string text = e.ToString(true);
+            e.Dispose();
+            return text;
         }
     }
 }

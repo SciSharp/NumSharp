@@ -225,6 +225,9 @@ namespace NumSharp.Tests.Strings
             // Section M (the rest of the surface: linalg, products, random, histograms, ...) lives in its own partial.
             if (TryInvokeSurface(c.Op, p, ops, out var surface))
                 return surface;
+            // Section N (numpy.ma over text) builds masked arguments from data / mask operand pairs in its own partial.
+            if (TryInvokeMa(c.Op, p, ops, out var masked))
+                return masked;
             throw new InvalidOperationException($"the string oracle has no op '{c.Op}'");
         }
 

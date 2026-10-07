@@ -290,7 +290,7 @@ namespace NumSharp.Tests
         {
             var e = np.ma.flatnotmasked_edges(np.ma.array(np.zeros(new Shape(0))));
 
-            e.Should().Equal(0L, -1L);
+            e.ToArray<long>().Should().Equal(0L, -1L);
         }
 
         /// <summary>

@@ -297,7 +297,10 @@ namespace NumSharp
                 var hashset = new Hashset<T>();
                 if (Shape.IsContiguous)
                 {
-                    var src = (T*)this.Address;
+                    // The logical start is the base address PLUS the shape's offset: a contiguous view may keep the base
+                    // address with a non-zero offset (np.ndarray over a buffer, a reconstructed view), and reading from
+                    // the base alone took the elements before the view and dropped its last ones.
+                    var src = (T*)this.Address + Shape.offset;
                     long len = this.size;
                     for (long i = 0; i < len; i++)
                         hashset.Add(src[i]);

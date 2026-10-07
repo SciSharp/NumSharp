@@ -105,7 +105,9 @@ namespace NumSharp.Backends
                     throw Strings.NDStringUfuncs.BinaryError("minimum", lhs, max, @out, typeCode);
                 if (max is null)
                     throw Strings.NDStringUfuncs.BinaryError("maximum", lhs, min, @out, typeCode);
-                throw Strings.NDStringUfuncs.NoLoop("clip", lhs.dtype, min.dtype, max.dtype);
+                // clip's legacy no-loop text names each operand's descriptor, a Python scalar's as its default one
+                // (np.clip(u, 0, 1) names dtype('int64'), np.clip(u, 0.5, 1.5) dtype('float64')).
+                throw Strings.NDStringUfuncs.NoLoop("clip", ClipOperandDescr(lhs), ClipOperandDescr(min), ClipOperandDescr(max));
             }
 
             // ---- _clip, block 2: route. No bound left → um.positive(a, out=out, **kwargs), a typed copy with
@@ -717,6 +719,29 @@ namespace NumSharp.Backends
                 };
             }
             return true;
+        }
+
+        /// <summary>
+        /// The descriptor clip's no-loop message shows for an operand: a 0-d operand is the module's Python scalar (see
+        /// <see cref="TryGetPyInt"/> and <see cref="ValidateClipInputCasts"/>) and is named by NumPy's default descriptor
+        /// for it — any integer kind (a C# integer literal, NumPy's Python int) as int64, a float32 / float64 (a Python
+        /// float) as float64, a complex as complex128; every other operand by its own descriptor (an array, and the
+        /// strong 0-d bool / float16 / decimal / string).
+        /// </summary>
+        /// <param name="operand">The array being clipped or a kept bound.</param>
+        /// <returns>The descriptor NumPy's message names.</returns>
+        private static DType ClipOperandDescr(NDArray operand)
+        {
+            if (operand.ndim != 0)
+                return operand.dtype;
+            var tc = operand.GetTypeCode;
+            if (NDExprTypeRules.IsIntegerKind(tc))
+                return DType.From(NPTypeCode.Int64);
+            if (tc == NPTypeCode.Single || tc == NPTypeCode.Double)
+                return DType.From(NPTypeCode.Double);
+            if (tc == NPTypeCode.Complex)
+                return DType.From(NPTypeCode.Complex);
+            return operand.dtype;
         }
 
         /// <summary>

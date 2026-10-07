@@ -25,20 +25,27 @@ namespace NumSharp
         /// float bit-parity notes (both share the same kernel).
         /// </remarks>
         /// <exception cref="ArgumentException">An unknown <paramref name="mode"/> (NumPy's two mode texts).</exception>
-        /// <exception cref="ValueError"><c>a cannot be empty</c> / <c>v cannot be empty</c> (on the operands after the
-        ///     length swap), <c>object too deep for desired array</c> for an operand of two or more dimensions, or — for a
+        /// <exception cref="ValueError"><c>a cannot be empty</c> / <c>v cannot be empty</c> (on the operands as given, before
+        ///     the length swap), <c>object too deep for desired array</c> for an operand of two or more dimensions, or — for a
         ///     fixed-width string operand, after every check above — <c>data type must provide an itemsize</c> (NumPy's
         ///     result allocation for the string type number).</exception>
         [NDScoped]
         public NDArray convolve(NDArray v, string mode = "full")
         {
-            // NumPy's np.convolve, statement for statement: `array(a, ndmin=1)` (a 0-d operand becomes one element),
-            // the swap by len() (the FIRST dimension), the two emptiness checks on the swapped operands, then
+            // NumPy's np.convolve (2.4.2), statement for statement: `array(a, ndmin=1)` (a 0-d operand becomes one
+            // element), the two emptiness checks on the operands AS GIVEN, the swap by len() (the FIRST dimension), then
             // multiarray.correlate(a, v[::-1], mode): the mode, the 1-D requirement of PyArray_FromAny(op, typec, 1, 1)
             // and the result allocation, which a string type number cannot size.
             NDArray a = this.ndim == 0 ? this.reshape(1) : this;
             if (v.ndim == 0)
                 v = v.reshape(1);
+
+            // Validate non-empty BEFORE the swap (NumPy convolve's own messages, distinct from correlate's), so an empty
+            // first operand reports `a` even when the second is longer: np.convolve([], [1]) is 'a cannot be empty'.
+            if (a.Shape.dimensions[0] == 0)
+                throw new ValueError("a cannot be empty");
+            if (v.Shape.dimensions[0] == 0)
+                throw new ValueError("v cannot be empty");
 
             // NumPy swaps if v is longer than a (convolve is commutative, so no output reversal).
             if (v.Shape.dimensions[0] > a.Shape.dimensions[0])
@@ -47,12 +54,6 @@ namespace NumSharp
                 a = v;
                 v = temp;
             }
-
-            // Validate non-empty (NumPy convolve's own messages, distinct from correlate's).
-            if (a.Shape.dimensions[0] == 0)
-                throw new ValueError("a cannot be empty");
-            if (v.Shape.dimensions[0] == 0)
-                throw new ValueError("v cannot be empty");
 
             var m = ParseSlidingMode(mode);
 

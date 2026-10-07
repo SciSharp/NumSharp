@@ -47,5 +47,19 @@ namespace NumSharp.Tests.Math
 
             Assert.IsTrue(Enumerable.SequenceEqual(series3.Data<double>(), expectedResult));
         }
+
+        /// <summary>
+        ///     NumPy 2.4.2's np.convolve checks emptiness on the operands AS GIVEN, before it swaps the shorter one to the
+        ///     second slot: <c>np.convolve([], [1, 1, 1])</c> is <c>a cannot be empty</c> (the swap-first order reported
+        ///     <c>v</c>), <c>np.convolve([1, 1, 1], [])</c> is <c>v cannot be empty</c>.
+        /// </summary>
+        [TestMethod]
+        public void Convolve_ChecksEmptinessBeforeTheLengthSwap()
+        {
+            System.Action emptyA = () => np.convolve(np.zeros(new Shape(0L)), np.ones(new Shape(3L)));
+            emptyA.Should().Throw<ValueError>().WithMessage("a cannot be empty");
+            System.Action emptyV = () => np.convolve(np.ones(new Shape(3L)), np.zeros(new Shape(0L)));
+            emptyV.Should().Throw<ValueError>().WithMessage("v cannot be empty");
+        }
     }
 }

@@ -474,10 +474,20 @@ namespace NumSharp.Backends.Printing
         /// </summary>
         /// <param name="a">The printed array.</param>
         /// <returns>The text after <c>dtype=</c>.</returns>
-        private static string DtypeShortRepr(NDArray a)
+        /// <remarks>Internal so <see cref="NDMaskedArray"/>'s repr prints the <c>dtype=</c> line exactly as the plain array
+        ///     repr does.</remarks>
+        internal static string DtypeShortRepr(NDArray a)
             => a.typecode == NPTypeCode.String ? "'" + a.dtype.str + "'" : a.typecode.AsNumpyDtypeName();
 
-        private static string ShapeTuple(long[] shape)
+        /// <summary>
+        ///     A shape as Python's <c>repr</c> of a tuple prints it: <c>()</c>, <c>(3,)</c>, <c>(2, 3)</c> (a space after each
+        ///     comma, a trailing comma for one element). NumPy's Python-level messages format shapes this way
+        ///     (<c>"... (got %s and %s)" % (cshape, ashape)</c>); the C-level ones use <see cref="Shape.ToPythonTuple"/>'s
+        ///     spaceless form.
+        /// </summary>
+        /// <param name="shape">The dimensions.</param>
+        /// <returns>The tuple text.</returns>
+        internal static string ShapeTuple(long[] shape)
         {
             if (shape.Length == 1)
                 return "(" + shape[0].ToString(CI) + ",)";

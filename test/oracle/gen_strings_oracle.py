@@ -148,8 +148,53 @@ def array_expect(r, operands):
     return d
 
 
+def _enc_fill(v):
+    """A masked array's fill value as its getter returns it: text, bytes, a number (complex as a pair), or an array (the
+    deprecated non-scalar fill)."""
+    if isinstance(v, np.ndarray):
+        return {"arr": array_expect(v, None)}
+    if isinstance(v, np.generic) and not isinstance(v, (np.str_, np.bytes_)):
+        v = v.item()
+    if isinstance(v, complex):
+        return {"complex": [v.real, v.imag]}
+    return enc(v)
+
+
+def masked_expect(r, uninit=False):
+    """A masked result: its data (descriptor, shape and C-order bytes, masked slots included), its mask (``None`` for
+    nomask, else the boolean bytes), the fill value its getter returns and the hard-mask flag. ``uninit`` marks data
+    NumPy left UNINITIALIZED (``np.empty_like`` / ``masked_all`` / ``masked_all_like``): an ``S`` buffer then holds
+    whatever the allocator recycled, so the buffer is recorded as ``None`` (not compared). A ``U`` buffer is still
+    recorded: its dtype carries ``NPY_NEEDS_INIT``, so NumPy's ``np.empty`` zero-fills it."""
+    data = np.asarray(r.data)
+    m = r._mask
+    buffer = None if uninit and data.dtype.kind == "S" else np.ascontiguousarray(data).tobytes().hex()
+    return {"kind": "masked", "dtype": data.dtype.str, "shape": [int(x) for x in data.shape],
+            "buffer": buffer,
+            "mask": None if m is np.ma.nomask else np.ascontiguousarray(np.asarray(m, dtype=bool)).tobytes().hex(),
+            "fill": _enc_fill(r.fill_value), "hard": bool(r._hardmask)}
+
+
+class _UninitData:
+    """A masked result whose data NumPy left uninitialized (see ``masked_expect``); ``expect_of`` unwraps it."""
+
+    def __init__(self, r):
+        self.r = r
+
+
 def expect_of(r, operands):
     """The expectation for any result NumPy returned."""
+    if isinstance(r, _UninitData):
+        return masked_expect(r.r, uninit=True) if isinstance(r.r, np.ma.MaskedArray) and r.r is not np.ma.masked \
+            else expect_of(r.r, operands)
+    if r is np.ma.masked:
+        return {"kind": "masked_constant"}
+    if isinstance(r, np.ma.MaskedArray):
+        return masked_expect(r)
+    if r is None:
+        return {"kind": "none"}
+    if isinstance(r, tuple) and any(isinstance(x, np.ma.MaskedArray) for x in r):
+        return {"kind": "seq", "items": [expect_of(x, operands) for x in r]}
     if isinstance(r, np.ndarray):
         return array_expect(r, operands)
     if isinstance(r, (tuple, list)) and r and all(isinstance(x, np.ndarray) for x in r):
@@ -212,10 +257,22 @@ def add(section, op, *, params=None, operands=(), call, phase=1, layout="", muta
 
 
 def _is_parse_error(e):
-    """NumPy's text-to-number conversion failing on a value (``could not convert string to float: np.str_('a')``,
-    ``invalid literal for int() with base 10``): an outcome of the computational phase, decided by the text."""
-    return isinstance(e, ValueError) and str(e).startswith(
-        ("could not convert string to", "invalid literal for int()", "complex() arg is a malformed string"))
+    """An error whose outcome the TEXT decides, so a call that raises it belongs to the computational phase:
+
+    * NumPy's text-to-number conversion failing on a value (``could not convert string to float: np.str_('a')``,
+      ``invalid literal for int() with base 10``), also when numpy.ma re-raises it as its own TypeError (``Cannot convert
+      fill_value [-- 'c' 'de'] to dtype float64`` is ``raise TypeError(...) from e`` around the parse error: the same text
+      parses for a fill like ``'1.5'``);
+    * the RecursionError of ``numpy.ma.flatten_mask`` over text: its ``_flatsequence`` recurses into every element that
+      has ``__iter__``, and a NON-EMPTY string's characters are strings again, so whether it recurses forever depends on
+      whether some element is empty (an all-empty array returns ``[]``) -- a truth test of the text.
+    """
+    if isinstance(e, RecursionError):
+        return True
+    if isinstance(e, ValueError) and str(e).startswith(
+            ("could not convert string to", "invalid literal for int()", "complex() arg is a malformed string")):
+        return True
+    return e.__cause__ is not None and _is_parse_error(e.__cause__)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -2390,6 +2447,303 @@ def _encode_bins(spec, ops):
 
 # ----------------------------------------------------------------------------------------------------------------------
 
+# ----------------------------------------------------------------------------------------------------------------------
+# N. numpy.ma over text
+# ----------------------------------------------------------------------------------------------------------------------
+
+class MArg:
+    """A masked-array argument of a ``strma`` case: data values (with an optional dtype), a mask (``None`` for nomask, a
+    Python bool for NumPy's ``mask=True`` / ``mask=False``, or nested values), a fill value and the hard-mask flag."""
+
+    def __init__(self, data, mask=None, spec=None, fill=None, hard=False):
+        self.data, self.mask, self.spec, self.fill, self.hard = data, mask, spec, fill, hard
+
+
+def _enc_value(v):
+    """A plain Python argument of a ``strma`` case (a scalar, None, text, bytes or a complex)."""
+    if isinstance(v, complex):
+        return {"complex": [v.real, v.imag]}
+    return enc(v)
+
+
+def _is_text_arg(a):
+    """Whether a ``strma`` argument (an ``MArg``, an array or a Python value) is text."""
+    if isinstance(a, MArg):
+        data = np.array(a.data, dtype=a.spec) if a.spec else np.array(a.data)
+        return data.dtype.kind in "SU"
+    if isinstance(a, np.ndarray):
+        return a.dtype.kind in "SU"
+    return isinstance(a, (str, bytes))
+
+
+def add_ma(op, *, args, params=None, call, phase="compute", layout=""):
+    """Record one numpy.ma call over masked arguments. Each ``MArg`` travels as a data operand plus (unless nomask or a
+    bool) a boolean mask operand; ``params["mops"]`` says how to rebuild every argument (``{"d": data, "m": mask}``, a
+    plain array ``{"a": i}`` or a value ``{"v": ...}``) and the replay builds the same masked arrays."""
+    operands, mops = [], []
+    for a in args:
+        if isinstance(a, MArg):
+            data = np.array(a.data, dtype=a.spec) if a.spec else np.array(a.data)
+            entry = {"d": len(operands), "m": -1}
+            # ``target``: an operand whose flags the replay reproduces (a 1-D string operand is its own base, a non-empty
+            # numeric one a view), since a function may return the very array it was given (getmask, filled).
+            operands.append(target(data))
+            if isinstance(a.mask, bool):
+                entry["mbool"] = a.mask
+            elif a.mask is not None:
+                # ``target`` like the data: numpy.ma ADOPTS the array passed as ``mask=`` (getmask returns it), so its
+                # flags must be ones the replay reproduces (a non-empty bool operand is a view on both sides).
+                entry["m"] = len(operands)
+                operands.append(target(np.array(a.mask, dtype=bool)))
+            if a.fill is not None:
+                entry["fill"] = _enc_value(a.fill)
+            if a.hard:
+                entry["hard"] = True
+            mops.append(entry)
+        elif isinstance(a, np.ndarray):
+            mops.append({"a": len(operands)})
+            operands.append(target(a))
+        else:
+            mops.append({"v": _enc_value(a)})
+    p = dict(params or {})
+    p["mops"] = mops
+    margs = [a for a in args]
+
+    def wrapped(*views):
+        objs = []
+        for e, a in zip(mops, margs):
+            if "d" in e:
+                mask = e["mbool"] if "mbool" in e else (views[e["m"]] if e["m"] >= 0 else np.ma.nomask)
+                objs.append(np.ma.array(views[e["d"]], mask=mask, fill_value=a.fill, hard_mask=a.hard))
+            elif "a" in e:
+                objs.append(views[e["a"]])
+            else:
+                objs.append(a)
+        return call(*objs)
+
+    add("strma", op, params=p, operands=operands, call=wrapped, phase=phase, layout=layout)
+
+
+def gen_strma():
+    ma = np.ma
+    MU = MArg(["ab", "c", "de"], [1, 0, 0])
+    MUn = MArg(["ab", "c", "de"])
+    MU2 = MArg([["ab", "c"], ["de", "f"]], [[1, 0], [0, 0]])
+    MUe = MArg(np.zeros(0, "<U1"), np.zeros(0, bool))
+    MUe2 = MArg(np.zeros((0, 3), "<U1"))
+    MS = MArg([b"ab", b"c", b"de"], [1, 0, 0])
+    MU0 = MArg(np.array("ab"))
+    MU0m = MArg(np.array("ab"), True)
+    MUall = MArg(["ab", "c", "de"], True)
+    MUf = MArg(["ab", "c", "de"], [1, 0, 0], fill="zz")
+    MUh = MArg(["ab", "c", "de"], [1, 0, 0], hard=True)
+    MF = MArg([1.5, 2.0, 3.0], [0, 1, 0])
+    unary_variants = [("MU", MU), ("MUn", MUn), ("MU2", MU2), ("MUe", MUe), ("MUe2", MUe2), ("MS", MS), ("MU0", MU0),
+                      ("MU0m", MU0m), ("MUall", MUall), ("MUf", MUf)]
+
+    # ---- one masked text argument: every function numpy.ma applies to an array alone ----
+    unary = {
+        # masked ufuncs
+        **{n: (lambda f: lambda x: f(x))(getattr(ma, n)) for n in (
+            "abs", "absolute", "negative", "fabs", "conjugate", "angle", "around", "floor", "ceil", "exp", "sin", "cos",
+            "sinh", "cosh", "tanh", "arctan", "arcsinh", "logical_not", "sqrt", "log", "log2", "log10", "tan", "arcsin",
+            "arccos", "arccosh", "arctanh")},
+        # reductions, scans, statistics
+        **{n: (lambda f: lambda x: f(x))(getattr(ma, n)) for n in (
+            "sum", "prod", "product", "min", "max", "amin", "amax", "ptp", "count", "mean", "var", "std", "anom",
+            "anomalies", "cumsum", "cumprod", "argmin", "argmax", "all", "any", "alltrue", "sometrue", "median")},
+        # masks, data, conversion, movement
+        **{n: (lambda f: lambda x: f(x))(getattr(ma, n)) for n in (
+            "getdata", "getmask", "getmaskarray", "is_mask", "is_masked", "copy", "ravel", "transpose",
+            "squeeze", "atleast_1d", "atleast_2d", "atleast_3d", "compressed", "count_masked", "diff", "ediff1d", "sort",
+            "argsort", "unique", "harden_mask", "soften_mask", "asarray", "asanyarray", "array",
+            "masked_array", "masked_all_like", "zeros_like", "ones_like", "empty_like", "fix_invalid", "masked_invalid",
+            "minimum_fill_value", "maximum_fill_value", "make_mask", "flatten_mask", "filled", "ndim", "size", "diag",
+            "diagflat", "trace", "nonzero", "round", "round_", "compress_nd", "compress_rowcols", "compress_rows",
+            "compress_cols", "mask_rowcols", "mask_rows", "mask_cols", "flatnotmasked_edges", "vander")},
+        "flatten": lambda x: x.flatten(),
+        "shrink_mask": lambda x: x.shrink_mask(),
+        "shape": lambda x: list(ma.shape(x)),
+        "default_fill_value": lambda x: ma.default_fill_value(x.dtype),
+        "fill_value": lambda x: x.fill_value,
+        "repr": lambda x: repr(x),
+        "str": lambda x: str(x),
+        "make_mask_noshrink": lambda x: ma.make_mask(x, shrink=False),
+        "astype_U1": lambda x: x.astype("U1"),
+        "astype_S2": lambda x: x.astype("S2"),
+        "astype_f8": lambda x: x.astype("f8"),
+        "set_fill_q": lambda x: (setattr(x, "fill_value", "qqq"), x)[1],
+        "set_fill_none": lambda x: (setattr(x, "fill_value", None), x)[1],
+        "set_fill_5": lambda x: (setattr(x, "fill_value", 5), x)[1],
+        "set_fill_value_q": lambda x: (ma.set_fill_value(x, "qqq"), x)[1],
+        "filled_q": lambda x: x.filled("q"),
+        "filled_5": lambda x: x.filled(5),
+        "filled_bytes": lambda x: x.filled(b"Q"),
+        "print_disabled": lambda x: _ma_str_disabled(x),
+        "masked_object_ab": lambda x: ma.masked_object(x, "ab"),
+        "masked_values_ab": lambda x: ma.masked_values(x, "ab"),
+        "masked_values_15": lambda x: ma.masked_values(x, 1.5),
+        "masked_values_1": lambda x: ma.masked_values(x, 1),
+        "masked_object_15": lambda x: ma.masked_object(x, 1.5),
+        "masked_object_true": lambda x: ma.masked_object(x, True),
+        "masked_equal_15": lambda x: ma.masked_equal(x, 1.5),
+        "masked_greater_1": lambda x: ma.masked_greater(x, 1),
+        "masked_less_15": lambda x: ma.masked_less(x, 1.5),
+        "masked_inside_12": lambda x: ma.masked_inside(x, 1.0, 2.0),
+        "masked_inside_21": lambda x: ma.masked_inside(x, 2, 1),
+        "masked_outside_12": lambda x: ma.masked_outside(x, 1.0, 2.0),
+        "masked_inside_ab": lambda x: ma.masked_inside(x, "a", "b"),
+        "masked_outside_ab": lambda x: ma.masked_outside(x, "b", "a"),
+        "masked_inside_mix": lambda x: ma.masked_inside(x, 1.0, "b"),
+        "masked_inside_bytes": lambda x: ma.masked_inside(x, b"a", b"b"),
+        "masked_inside_complex": lambda x: ma.masked_inside(x, 1j, 2j),
+        "putmask_text": lambda x: (ma.putmask(x, np.ones(x.shape, bool), "xyz"), x)[1],
+        "putmask_num": lambda x: (ma.putmask(x, np.ones(x.shape, bool), 5), x)[1],
+        "putmask_none": lambda x: (ma.putmask(x, np.zeros(x.shape, bool), 1.5), x)[1],
+        "putmask_textmask": lambda x: (ma.putmask(x, np.asarray(x.data), "q"), x)[1],
+        "putmask_intmask": lambda x: (ma.putmask(x, np.zeros(x.shape, np.int64), "q"), x)[1],
+        "putmask_masked": lambda x: (ma.putmask(x, np.ones(x.shape, bool), ma.array(np.full(x.shape, "y"), mask=True)), x)[1],
+        "average_textw": lambda x: ma.average(np.ones(x.shape), weights=x),
+        "average_numw": lambda x: ma.average(x, weights=np.ones(x.shape)),
+        "average_short": lambda x: ma.average(x, weights=np.ones(1)),
+        "average_ax0": lambda x: ma.average(x, axis=0, weights=np.ones(x.shape[0] if x.ndim else 1)),
+        "average_ax5": lambda x: ma.average(x, axis=5),
+        "masked_where_self": lambda x: ma.masked_where(x, np.zeros(x.shape)),
+        "masked_where_short": lambda x: ma.masked_where(np.array([True, False]), x),
+        "masked_where_0d": lambda x: ma.masked_where(np.array(True), x),
+        "masked_where_bool": lambda x: ma.masked_where(np.zeros(x.shape, bool), x),
+        "mask_or_bool": lambda x: ma.mask_or(x, np.zeros(x.shape, bool)),
+        "mask_or_self": lambda x: ma.mask_or(x, x),
+        "mask_or_false": lambda x: ma.mask_or(False, x),
+        "mask_or_nomask": lambda x: ma.mask_or(ma.nomask, x),
+        "compress_self": lambda x: ma.compress(x, np.arange(x.shape[0] if x.ndim else 1)),
+        "fix_invalid_textmask": lambda x: ma.fix_invalid(np.zeros(x.shape), mask=np.asarray(x.data)),
+        "fix_invalid_mask2": lambda x: ma.fix_invalid(x, mask=[True, False]),
+        "common_fill_self": lambda x: ma.common_fill_value(x, x),
+        "common_fill_float": lambda x: ma.common_fill_value(x, ma.array([1.0])),
+        "take_0": lambda x: ma.take(x, np.array([0])),
+        "repeat_2": lambda x: ma.repeat(x, 2),
+        "reshape_flat": lambda x: ma.reshape(x, (x.size,)),
+        "resize_4": lambda x: ma.resize(x, (4,)),
+        "expand_dims_0": lambda x: ma.expand_dims(x, 0),
+        "concatenate_self": lambda x: ma.concatenate([x, x]),
+        "stack_self": lambda x: ma.stack([x, x]),
+        "hstack_self": lambda x: ma.hstack([x, x]),
+        "vstack_self": lambda x: ma.vstack([x, x]),
+        "clip_ab": lambda x: ma.clip(x, "a", "b"),
+        "clip_num": lambda x: ma.clip(x, 0, 1),
+        "where_self": lambda x: ma.where(np.ones(x.shape, bool), x, x),
+        "where_textcond": lambda x: ma.where(x, 1, 2),
+        "sort_end_false": lambda x: ma.sort(x, endwith=False),
+        "count_ax0": lambda x: ma.count(x, axis=0),
+    }
+    # np.empty_like / masked_all_like leave the data uninitialized: an S buffer is whatever the allocator recycled.
+    unary["empty_like"] = lambda x: _UninitData(ma.empty_like(x))
+    unary["masked_all_like"] = lambda x: _UninitData(ma.masked_all_like(x))
+    for name, fn in unary.items():
+        for key, arg in unary_variants:
+            add_ma("ma1", params={"name": name}, args=[arg], layout=key, call=lambda x, f=fn: f(x))
+    for key, arg in (("MUh", MUh), ("MU2", MU2)):
+        add_ma("ma1", params={"name": "putmask_text"}, args=[arg], layout=key, call=lambda x: unary["putmask_text"](x))
+
+    # ---- two arguments: the binary ufuncs, products, set routines, mask combination ----
+    F = np.array([1.5, 2.0, 3.0])
+    Ue1 = np.zeros(0, "<U1")
+    binary = {n: (lambda f: lambda x, y: f(x, y))(getattr(ma, n)) for n in (
+        "add", "subtract", "multiply", "divide", "true_divide", "floor_divide", "mod", "remainder", "fmod", "power",
+        "hypot", "arctan2", "maximum", "minimum", "equal", "not_equal", "less", "less_equal", "greater", "greater_equal",
+        "logical_and", "logical_or", "logical_xor", "bitwise_and", "bitwise_or", "bitwise_xor", "left_shift",
+        "right_shift", "allequal", "allclose", "inner", "innerproduct", "outer", "outerproduct", "dot", "convolve",
+        "correlate", "append", "isin", "in1d", "intersect1d", "union1d", "setdiff1d", "setxor1d", "mask_or",
+        "common_fill_value", "masked_where", "masked_equal", "masked_not_equal", "masked_greater",
+        "masked_greater_equal", "masked_less", "masked_less_equal", "masked_values", "masked_object", "compress",
+        "filled")}
+    binary["average"] = lambda x, y: ma.average(x, weights=y)
+    # The bytes operand is a 0-d S array, not Python bytes: every function here reads its second argument as an
+    # array_like (np.asarray(b'ab') is that same 0-d S2 array), and C#'s spelling of it is an NDArray -- a C# byte[] in an
+    # array_like position is a uint8 ARRAY (the house map; byte[] is bytes only in VALUE positions: fills, compared
+    # values, bounds). mask_or alone sees the difference (Python bytes has no dtype: 'Incompatible dtypes |S2<>None').
+    pairs = [("MU,MU", MU, MU), ("MU,MUn", MU, MUn), ("MU,F", MU, F), ("F,MU", F, MU), ("MF,MU", MF, MU),
+             ("MUe,MUe", MUe, MUe), ("MUe,Ue", MUe, Ue1), ("MU,'ab'", MU, "ab"), ("MU,1.5", MU, 1.5), ("MU,1", MU, 1),
+             ("MU,True", MU, True), ("MS,MS", MS, MS), ("MU,MS", MU, MS), ("MS,b'ab'", MS, np.array(b"ab")),
+             ("MUe,1.5", MUe, 1.5), ("MU2,MU2", MU2, MU2)]
+    for name, fn in binary.items():
+        for key, x, y in pairs:
+            # ma.compress(condition, a): a TEXT condition selects the indices of its non-empty strings, so every outcome
+            # (an IndexError included) follows from the text -- the computational phase.
+            phase = 2 if name == "compress" and _is_text_arg(x) else "compute"
+            add_ma("ma2", params={"name": name}, args=[x, y], layout=key, phase=phase, call=lambda a, b, f=fn: f(a, b))
+
+    # ---- constructors: text masks, fill values, mask reconciliation ----
+    U3 = np.array(["ab", "c", "de"])
+    S3 = U3.astype("S2")
+    ctor = [
+        ("text_mask", lambda: ma.array(np.arange(3), mask=np.array(["a", "", "b"]))),
+        ("text_mask_empty", lambda: ma.array(np.zeros(0), mask=np.zeros(0, "<U1"))),
+        ("text_mask_size", lambda: ma.array(np.arange(3), mask=np.array(["a", ""]))),
+        ("text_mask_one", lambda: ma.array(np.arange(3), mask=np.array(["a"]))),
+        ("mask_size", lambda: ma.array(U3, mask=[True, False])),
+        ("mask_one", lambda: ma.array(U3, mask=[True])),
+        ("mask_reshape", lambda: ma.array(np.array([["ab", "c", "x"], ["de", "f", "y"]]), mask=np.zeros((3, 2), bool))),
+        ("mask_true", lambda: ma.array(U3, mask=True)),
+        ("mask_false", lambda: ma.array(U3, mask=False)),
+        ("keep_mask", lambda: ma.array(ma.array(U3, mask=[1, 0, 0]), mask=[0, 1, 0])),
+        ("keep_mask_false", lambda: ma.array(ma.array(U3, mask=[1, 0, 0]), mask=[0, 1, 0], keep_mask=False)),
+        ("fill_hello", lambda: ma.array(U3, fill_value="hello")),
+        ("fill_5", lambda: ma.array(U3, fill_value=5)),
+        ("fill_bytes_u", lambda: ma.array(U3, fill_value=b"xyz")),
+        ("fill_str_s", lambda: ma.array(S3, fill_value="xyz")),
+        ("fill_nonascii_s", lambda: ma.array(S3, fill_value="é")),
+        ("fill_nonascii_bytes_u", lambda: ma.array(U3, fill_value=b"\xe9")),
+        ("fill_str_float", lambda: ma.array(F, fill_value="abc")),
+        ("fill_str_int", lambda: ma.array(np.arange(3), fill_value="abc")),
+        ("fill_str_bool", lambda: ma.array(np.array([True]), fill_value="abc")),
+        ("fill_bytes_float", lambda: ma.array(F, fill_value=b"1.5")),
+        ("fill_array_u", lambda: ma.array(U3, fill_value=np.array(["xyz"]))),
+        ("fill_inherit", lambda: ma.array(ma.array(U3, fill_value="zz"))),
+        ("fill_inherit_dtype", lambda: ma.array(ma.array(U3, fill_value="zz"), dtype="U1")),
+        ("hard_inherit", lambda: ma.array(ma.array(U3, mask=[1, 0, 0], hard_mask=True))),
+        ("masked_all_u2", lambda: _UninitData(ma.masked_all((3,), dtype="U2"))),
+        ("masked_all_s2", lambda: _UninitData(ma.masked_all((2, 2), dtype="S2"))),
+        ("default_fill_u", lambda: ma.default_fill_value(np.dtype("U2"))),
+        ("default_fill_s", lambda: ma.default_fill_value(np.dtype("S2"))),
+        ("make_mask_text", lambda: ma.make_mask(np.array(["a", ""]))),
+        ("make_mask_text_empty", lambda: ma.make_mask(np.zeros(0, "<U1"), shrink=False)),
+        ("mask_or_text_bool", lambda: ma.mask_or(U3, np.zeros(3, bool))),
+        ("mask_or_bool_text", lambda: ma.mask_or(np.zeros(3, bool), U3)),
+        ("mask_or_u_s", lambda: ma.mask_or(U3, S3)),
+        ("mask_or_widths", lambda: ma.mask_or(U3, np.array(["a", "b", "c"]))),
+        ("mask_or_empty", lambda: ma.mask_or(np.zeros(0, "<U1"), np.zeros(0, "<U1"))),
+        ("mask_or_int_bool", lambda: ma.mask_or(np.array([1, 0, 1]), np.array([True, False, True]))),
+        ("mask_or_0d_text", lambda: ma.mask_or(np.array(False), U3)),
+        ("masked_where_short", lambda: ma.masked_where([True, False], U3)),
+        ("masked_where_col", lambda: ma.masked_where(np.array([[True], [False]]), np.zeros((2, 3)))),
+        ("masked_where_text", lambda: ma.masked_where(np.array(["a", "", "b"]), np.arange(3))),
+        ("masked_where_text_short", lambda: ma.masked_where(np.array(["a", ""]), np.arange(3))),
+        ("masked_where_empty", lambda: ma.masked_where(np.zeros(0, "<U1"), np.zeros(0))),
+        ("masked_where_allfalse", lambda: ma.masked_where([False, False, False], U3)),
+        ("putmask_plain", lambda: (ma.putmask(U3.copy(), [True, False, True], "zz"))),
+        ("compress_2d_text", lambda: ma.compress(np.array([["a"]]), U3)),
+        ("compress_rows_1d", lambda: ma.compress_rows(U3)),
+        ("compress_cols_1d", lambda: ma.compress_cols(U3)),
+        ("mask_rows_1d", lambda: ma.mask_rows(U3)),
+        ("mask_cols_1d", lambda: ma.mask_cols(U3)),
+        ("common_fill_u_s", lambda: ma.common_fill_value(ma.array(U3), ma.array(S3))),
+        ("common_fill_u_u1", lambda: ma.common_fill_value(ma.array(U3), ma.array(np.array(["a"])))),
+    ]
+    for name, fn in ctor:
+        add_ma("ma0", params={"name": name}, args=[], layout="", call=fn)
+
+
+def _ma_str_disabled(x):
+    """``str()`` of a masked array with ``masked_print_option`` disabled (masked slots print their fill value)."""
+    np.ma.masked_print_option.enable(False)
+    try:
+        return str(x)
+    finally:
+        np.ma.masked_print_option.enable(True)
+
+
 def main():
     gen_dtypes()
     gen_creation()
@@ -2405,6 +2759,7 @@ def main():
     gen_shape_decided()
     gen_validation_order()
     gen_surface()
+    gen_strma()
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with open(OUT, "wb") as f:
         for c in CASES:

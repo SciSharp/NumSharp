@@ -120,6 +120,14 @@ namespace NumSharp.Tests.Strings
         /// </summary>
         [TestMethod] public void TextSurface() => Run("strsurface");
 
+        /// <summary>
+        ///     <c>numpy.ma</c> over text: every module function over masked text arrays (1-D, 2-D, empty, 0-d, bytes, all
+        ///     masked, a fill value), the binary functions over text / number / bytes pairs, and the constructors' text masks
+        ///     and fill values — the fill machinery (<c>'N/A'</c> / <c>b'N/A'</c>, conversion to the data's width), the
+        ///     masks' forms, NumPy's refusals in its order, and its answers where dtypes and shapes decide them.
+        /// </summary>
+        [TestMethod] public void TextMaskedArrays() => Run("strma");
+
         /// <summary>The corpus is complete: every section has cases and every case belongs to a section above.</summary>
         [TestMethod]
         public void Corpus_EverySectionIsReplayed()
@@ -127,7 +135,7 @@ namespace NumSharp.Tests.Strings
             var sections = new HashSet<string>
             {
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
-                "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface",
+                "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)
@@ -262,6 +270,9 @@ namespace NumSharp.Tests.Strings
             ["UnicodeEncodeError"] = new[] { "UnicodeEncodeError" },
             ["UnicodeDecodeError"] = new[] { "UnicodeDecodeError" },
             ["SystemError"] = new[] { "SystemError" },
+            // numpy.ma's rank checks (compress_rowcols / mask_rowcols on a non-2-D array) raise NotImplementedError; the
+            // .NET class with that meaning is NotImplementedException (the message is matched verbatim).
+            ["NotImplementedError"] = new[] { "NotImplementedException" },
         };
 
         /// <summary>Compares NumSharp's exception with NumPy's: a corresponding class and the identical message.</summary>
@@ -329,6 +340,11 @@ namespace NumSharp.Tests.Strings
             // with a bool index array, the one non-text unravel case that returns arrays).
             if (c.Op == "unravel_ix")
                 return "unravel_index: NumPy returns column views of one interleaved index buffer (OpenBugs.IndexSearchLayout)";
+            // numpy.ma.compress_nd drops the masked columns of a 2-D array with `data[:, keep]`: a boolean index behind a
+            // slice, which NumPy returns as its transposed MapIter VIEW and NumSharp as a fresh C-ordered copy.
+            if (c.Op == "ma1" && c.Layout == "MU2" && c.Params is not null && c.Params.TryGetValue("name", out var maName)
+                && maName.GetString() is "compress_nd" or "compress_rowcols" or "compress_cols")
+                return "compress_nd's column selection is a fancy index behind a slice: NumPy's transposed MapIter view (OpenBugs.FancyIndex)";
             if (c.Op != "getitem" || c.Params is null || !c.Params.TryGetValue("index", out var index))
                 return null;
             bool basicSeen = false;
@@ -398,7 +414,12 @@ namespace NumSharp.Tests.Strings
                 case "bool":
                 {
                     bool want = exp.GetProperty("value").GetBoolean();
-                    bool? got = result switch { bool bo => bo, NDArray nd when nd.ndim == 0 => (bool)nd, _ => null };
+                    // A 0-d result of a masked reduction is an unmasked 0-d masked array (AsArray unwraps it to its data).
+                    bool? got = result switch
+                    {
+                        bool bo => bo,
+                        _ => AsArray(result) is NDArray nd && nd.ndim == 0 ? (bool)nd : null,
+                    };
                     if (got != want)
                         diffs.Add($"bool {Show(result)} != NumPy {want}");
                     break;
@@ -442,10 +463,127 @@ namespace NumSharp.Tests.Strings
                     Check("str()", d.ToString(), exp.GetProperty("strfmt").GetString());
                     break;
                 }
+                case "masked":
+                    CompareMasked(exp, result, diffs);
+                    break;
+                case "masked_constant":
+                    if (!ReferenceEquals(result, np.ma.masked))
+                        diffs.Add($"expected numpy.ma's masked constant, got {Describe(result)}");
+                    break;
+                case "none":
+                    if (result is not null)
+                        diffs.Add($"expected None, got {Describe(result)}");
+                    break;
+                case "seq":
+                {
+                    // A tuple holding masked arrays (np.ma.average(..., returned=True)): each item by its own kind.
+                    var want = exp.GetProperty("items").EnumerateArray().ToArray();
+                    var items = result is ITuple t
+                        ? Enumerable.Range(0, t.Length).Select(i => t[i]).ToArray()
+                        : result as object[] ?? Array.Empty<object>();
+                    if (items.Length != want.Length)
+                    {
+                        diffs.Add($"sequence of {items.Length}, NumPy {want.Length}");
+                        return;
+                    }
+                    for (int i = 0; i < items.Length; i++)
+                        Compare(want[i], items[i], null, diffs, compareLayout: false);
+                    break;
+                }
                 default:
                     diffs.Add($"unknown expectation kind '{kind}'");
                     break;
             }
+        }
+
+        /// <summary>
+        ///     Compares a masked result with NumPy's: the data's descriptor, shape and C-order bytes (masked slots included),
+        ///     the mask's FORM (<c>nomask</c> or an array) and bytes, the fill value its getter returns and the hard-mask flag.
+        /// </summary>
+        /// <param name="exp">The masked expectation.</param>
+        /// <param name="result">NumSharp's result.</param>
+        /// <param name="diffs">Receives the divergences.</param>
+        private static void CompareMasked(JsonElement exp, object result, List<string> diffs)
+        {
+            if (result is not NDMaskedArray m || ReferenceEquals(result, np.ma.masked))
+            {
+                diffs.Add($"expected a masked array, got {Describe(result)}");
+                return;
+            }
+            string wantDtype = exp.GetProperty("dtype").GetString();
+            if (m.data.dtype.str != wantDtype)
+            {
+                diffs.Add($"data dtype {m.data.dtype.str} != NumPy {wantDtype}");
+                return;
+            }
+            var wantShape = exp.GetProperty("shape").EnumerateArray().Select(e => e.GetInt64()).ToArray();
+            if (!m.data.Shape.dimensions.SequenceEqual(wantShape))
+            {
+                diffs.Add($"shape ({string.Join(",", m.data.Shape.dimensions)}) != NumPy ({string.Join(",", wantShape)})");
+                return;
+            }
+            // A null buffer is data NumPy left uninitialized (an S np.empty_like / masked_all): only its descriptor and
+            // shape are NumPy's.
+            var wantBuffer = exp.GetProperty("buffer");
+            var gotHex = Convert.ToHexString(StringOracleCorpus.CBytes(m.data)).ToLowerInvariant();
+            if (wantBuffer.ValueKind != JsonValueKind.Null && gotHex != wantBuffer.GetString())
+                diffs.Add($"data bytes {Shorten(gotHex)} != NumPy {Shorten(wantBuffer.GetString())} (as text: {Show(Text(m.data))})");
+            var wantMask = exp.GetProperty("mask");
+            bool gotNomask = ReferenceEquals(m.mask, np.ma.nomask);
+            if (wantMask.ValueKind == JsonValueKind.Null)
+            {
+                if (!gotNomask)
+                    diffs.Add($"mask is an array ({Show(m.mask.tolist())}), NumPy nomask");
+            }
+            else if (gotNomask)
+                diffs.Add("mask is nomask, NumPy an array");
+            else
+            {
+                var gotMask = Convert.ToHexString(StringOracleCorpus.CBytes(m.mask)).ToLowerInvariant();
+                if (gotMask != wantMask.GetString())
+                    diffs.Add($"mask bytes {Shorten(gotMask)} != NumPy {Shorten(wantMask.GetString())}");
+            }
+            CompareFill(exp.GetProperty("fill"), m.fill_value, diffs);
+            if (m.hardmask != exp.GetProperty("hard").GetBoolean())
+                diffs.Add($"hardmask {m.hardmask} != NumPy {exp.GetProperty("hard").GetBoolean()}");
+        }
+
+        /// <summary>
+        ///     Compares a fill value with NumPy's getter result: text ordinally, bytes by content, numbers by value (a
+        ///     Python int against any C# integer, a float against any C# float), a complex both parts, an array fill as an
+        ///     array.
+        /// </summary>
+        /// <param name="want">NumPy's encoded fill.</param>
+        /// <param name="got">NumSharp's fill value.</param>
+        /// <param name="diffs">Receives the divergences.</param>
+        private static void CompareFill(JsonElement want, object got, List<string> diffs)
+        {
+            if (want.ValueKind == JsonValueKind.Object && want.TryGetProperty("arr", out var arr))
+            {
+                CompareArray(arr, got as NDArray, null, diffs, "fill ", compareLayout: false);
+                return;
+            }
+            if (want.ValueKind == JsonValueKind.Object && want.TryGetProperty("complex", out var c))
+            {
+                var wc = new System.Numerics.Complex(c[0].GetDouble(), c[1].GetDouble());
+                if (got is not System.Numerics.Complex gc || !gc.Equals(wc))
+                    diffs.Add($"fill {Show(got)} != NumPy {wc}");
+                return;
+            }
+            var w = StringOracleCorpus.Decode(want);
+            bool same = (w, got) switch
+            {
+                (string ws, string gs) => string.Equals(ws, gs, StringComparison.Ordinal),
+                (byte[] wb, byte[] gb) => wb.AsSpan().SequenceEqual(gb),
+                (bool wb, bool gb) => wb == gb,
+                (long wl, char ch) => ch == wl,
+                (long wl, long or int or short or sbyte or byte or ushort or uint or ulong) => Convert.ToDecimal(got) == wl,
+                (double wd, Half h) => (double)h == wd || double.IsNaN((double)h) && double.IsNaN(wd),
+                (double wd, double or float) => Convert.ToDouble(got) == wd || double.IsNaN(Convert.ToDouble(got)) && double.IsNaN(wd),
+                _ => false,
+            };
+            if (!same)
+                diffs.Add($"fill {Show(got)} ({got?.GetType().Name}) != NumPy {Show(w)}");
         }
 
         /// <summary>Compares an array result with an array expectation.</summary>
@@ -524,6 +662,9 @@ namespace NumSharp.Tests.Strings
             int i => NDArray.Scalar((long)i),
             double d => NDArray.Scalar(d),
             np.UniqueResult u => u,
+            // numpy.ma returns a NumPy scalar for an unmasked 0-d result; NumSharp keeps a 0-d masked array (the module's
+            // type-consistency choice), whose data is that scalar.
+            NDMaskedArray m when !ReferenceEquals(m, np.ma.masked) && m.data.ndim == 0 && ReferenceEquals(m.mask, np.ma.nomask) => m.data,
             _ => null,
         };
 

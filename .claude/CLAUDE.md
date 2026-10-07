@@ -72,7 +72,7 @@ read-only `out=`, non-bool `where=`, the axis under one of three rules, the quan
 a computing loop's output cast and broadcast; `Backends/Strings/NDStringUfuncs{,.Precedence}.cs`). Every engine ufunc
 member resolves its `dtype=` through `UfuncLoopCode(dtype, "<numpy name>", x1, x2, out, where)` so an unsized string
 request (`'U'`, `'S'`) gets NumPy's per-ufunc answer. Gate: the string oracle (`test/oracle/gen_strings_oracle.py` →
-`NumSharp.Tests.Oracle/Strings`, 18,790 cases; a phase-2 case passes as "deferred" only while NumSharp throws
+`NumSharp.Tests.Oracle/Strings`, 21,552 cases; a phase-2 case passes as "deferred" only while NumSharp throws
 `StringComputationNotSupportedException`, so phase 2 is gated by the same corpus) + `Backends/Strings/StringCallOrderTests.cs`
 + `StringShapeDecidedTests.cs`. **Validation pass (2026-10-07)** — the deferral rule is now exact: defer ONLY where NumPy
 reads the text (compares, concatenates, parses, formats into a result); where dtypes, sizes or shapes decide NumPy's
@@ -94,8 +94,36 @@ counts and the caller's edges come back as the same object, histogramdd's per-di
 with `ind > ndim`, argsort of a 0-d, 1-D `unique(axis=0)` = the flat path, `concatenate(axis=None)` of 0-d operands,
 insert of a one-element sequence, delete of an N-D / int8 obj, digitize / trim_zeros / insert / delete error classes,
 `min_scalar_type(NDArray)` (returned null). Oracle sections `strshape` / `strvalid` / `strsurface` (1,674 / 173 / 2,768)
-pin all of it. Open: `np.ma` over text, `np.nditer` over strings, `argwhere` / `flatnonzero` / `unravel_index` result
-layout (views in NumPy, `OpenBugs.IndexSearchLayout.cs`), an empty matrix's QR / SVD without the OpenBLAS backend.
+pin all of it. **numpy.ma over text** (the same day; section `strma`, 2,762 cases over every layout; unit
+`Backends/Strings/StringMaskedArrayTests.cs`, `Ma/NDMaskedArrayNumPyStatementsTests.cs`) runs numpy.ma's statements in
+numpy.ma's order. Where the ufunc behind a member has no string loop, the member refuses with NumPy's text: the masked
+reductions, products, extrema, `clip`, `allclose`, `median`, `trace` and `masked_values` (`add.reduce`'s resolved-dtypes
+TypeError, the comparison no-loop texts that name `StrDType` / `Float64DType` classes, `isinf`'s safe-casting text, the
+str / `_PyFloatDType` DTypePromotionError, `data type must provide an itemsize`). Where the member reads the text (a
+number formatted into a filled slot, truth values, a sort with masked text), it defers. The text fill value is
+MATERIALIZED at its own width (`'N/A'`, `<U3` / `|S3`) when it is first read. A later assignment writes INTO that stored
+array (`'hello'` → `'hel'`), and only `__array_finalize__` converts it to a new dtype (`<U1` → `'N'`). The pass found
+numpy.ma bugs for every dtype, fixed to numpy.ma's statements:
+- fill / hard-mask inheritance: the `_arraymethod` views inherit, `take` does not, the `*_like` functions copy the mask,
+  `_fromnxfunction` results always carry a mask array, `concatenate` shrinks an all-False mask;
+- `ma.array` is soft by default, `masked_array` inherits the hardness, and a caller's bool mask is ADOPTED
+  (`getmask(x) is m`);
+- `getdata`, `filled`, `compressed` and `compress_nd` return views; `shrink_mask` works in place;
+- `argsort`'s default axis flattens from 2-D; `alltrue` / `sometrue` are logical reductions along axis 0; `count` without
+  a mask is a writeable full array; `flatnotmasked_edges` follows NumPy's three cases;
+- `trace` casts the diagonal first when there is a mask; `minimum` / `maximum` take two operands
+  (`where(less(a, b), a, b)`: a NaN does not propagate); `allclose` runs statement for statement; `average` raises the
+  0-d `AttributeError`; `setdiff1d` keeps the first operand's dtype; `unique` keeps the first masked element's data.
+
+It found np.* bugs too: `np.stack` of 0-d operands is `(n,)`, `np.convolve` checks emptiness before the length swap,
+`np.vander` over text, `np.clip`'s no-loop text names Python-scalar bounds `int64` / `float64`, and `np.unique` of a
+contiguous view with a non-zero `Shape.offset` read the elements before the view. Open: numpy.ma attribute inheritance
+outside the members above (ufunc and operator results, `clip`, `round`, `sort`, `diagonal`, `anom`, `copy` / `astype` /
+`view` hardness, `view(dtype)`'s fill reset, `real` / `imag` / `mT` keeping a fill NumPy resets; the comparison
+operators are NumPy's `_comparison`, with its own masked-slot data and bool fill); `np.ma.isin` / `in1d`'s numeric
+algorithm (the `[known gap]` excuse); numeric fill values are not converted or materialized (a documented
+simplification); `np.nditer` over strings; `argwhere` / `flatnonzero` / `unravel_index` result layout (views in NumPy,
+`OpenBugs.IndexSearchLayout.cs`); an empty matrix's QR / SVD without the OpenBLAS backend.
 **Trap:** NumPy's ufunc dispatch cache makes some answers depend on call HISTORY (`np.prod(int8, dtype='U')` names no
 loop in a fresh process but finds the string repeat loop after `np.multiply(u, int8, dtype='U')`); the corpus records
 the fresh-process answer. **Movement perf** (NPY/NS, two pinned P-cores, 100K / 1M `<U8`): copy 5.0 / 3.7×, strided /
@@ -3471,9 +3499,10 @@ dtype rather than always float64. And `np.dot`/`np.matmul`'s "not aligned" messa
 as `(2, 3)` where NumPy writes `(2,3)` — now `Shape.ToPythonTuple()` (`ToString()` is left alone; it
 renders for humans everywhere else).
 
-**Known adjacent bug, NOT fixed here:** `np.stack` runs its operands through `atleast_1d` first, so
-stacking three 0-d arrays gives `(3,1)` where NumPy gives `(3,)`. `linalg.cross` routes around it
-with `expand_dims`+`concatenate`.
+**Adjacent bug, fixed 2026-10-07 (strings validation):** `np.stack` ran its operands through
+`atleast_1d` first, so stacking three 0-d arrays gave `(3,1)` where NumPy gives `(3,)`; it now expands
+each operand as given (gate `Creation/np.stack.Test.cs`). `linalg.cross` still builds its result with
+`expand_dims`+`concatenate`, which gives the same answer.
 
 ### `np.einsum` — subscript language + contraction, the contraction routed through the matrix products
 

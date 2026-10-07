@@ -891,8 +891,9 @@ namespace NumSharp.Tests.Ma
         public void NotmaskedEdges_Contiguous_Ids()
         {
             var h = Ma(new double[] { 1, 2, 3, 4, 5 }, new[] { true, false, false, true, false });
-            // The flat/1-D forms return long[] / Slice[] boxed as object (NumPy's return is polymorphic).
-            Assert.IsTrue(((long[])np.ma.notmasked_edges(h)).SequenceEqual(new long[] { 1, 4 }));
+            // The flat/1-D forms return an int64 NDArray (NumPy's np.array([first, last])) / Slice[], boxed as object
+            // (NumPy's return is polymorphic).
+            Assert.IsTrue(((NDArray)np.ma.notmasked_edges(h)).ToArray<long>().SequenceEqual(new long[] { 1, 4 }));
             Assert.AreEqual(2, ((Slice[])np.ma.notmasked_contiguous(h)).Length);
 
             var (dp, mp) = np.ma.ids(h);
@@ -1157,8 +1158,8 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(e1[1][0].ToArray<long>().SequenceEqual(new long[] { 0, 1, 2 }));
             Assert.IsTrue(e1[1][1].ToArray<long>().SequenceEqual(new long[] { 2, 0, 0 }));
 
-            // The flat form still yields the plain [first, last] (boxed).
-            Assert.IsTrue(((long[])np.ma.notmasked_edges(am)).SequenceEqual(new long[] { 0, 6 }));
+            // The flat form still yields the plain [first, last] (an int64 NDArray, boxed).
+            Assert.IsTrue(((NDArray)np.ma.notmasked_edges(am)).ToArray<long>().SequenceEqual(new long[] { 0, 6 }));
         }
 
         /// <summary>notmasked_contiguous with an explicit axis on a 2-D array returns NumPy's list-of-lists — one

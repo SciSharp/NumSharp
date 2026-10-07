@@ -372,9 +372,9 @@ Things learned while landing it that the design above did not anticipate:
 * **`.npy`.** `|S5` / `<U3` / `>U3` files read and write byte for byte (mmap included). **Breaking:** a `<U1` file reads
   back as a `<U1` string array, not `Char`; `Char` is still written as `<U1`.
 * **Gate.** The string oracle (`test/oracle/gen_strings_oracle.py` → `NumSharp.Tests.Oracle/Strings/corpus/strings.jsonl`,
-  14,175 cases at landing — 18,790 after the validation pass below, 11,137 of them NumPy errors compared by type map +
-  verbatim text; 17 sections: dtype, creation, astype, views, movement, mutation, access, printing, ufuncs, reductions,
-  strdtype, strprec, straxis, strcov, strshape, strvalid, strsurface). A phase-2 case
+  14,175 cases at landing — 18,790 after the validation pass below, 21,552 after its numpy.ma pass, 12,569 of them NumPy
+  errors compared by type map + verbatim text; 18 sections: dtype, creation, astype, views, movement, mutation, access,
+  printing, ufuncs, reductions, strdtype, strprec, straxis, strcov, strshape, strvalid, strsurface, strma). A phase-2 case
   (NumPy returns, or raises a parse error) passes as "deferred" while NumSharp throws
   `StringComputationNotSupportedException` and is held to NumPy's answer the moment NumSharp computes it — the next
   phase is gated by the same corpus. Unit tests: `Backends/Strings/StringCallOrderTests.cs` (one per precedence rule),
@@ -428,9 +428,44 @@ oracle sections closed the gaps between "NumPy refuses" and "NumPy computes":
   a 0-d array, 1-D `unique(axis=0)` takes the flat path, `concatenate(axis=None)` of 0-d operands, insert of a
   one-element sequence obj, delete of an N-D / int8 obj, `min_scalar_type(NDArray)` (returned null), the digitize /
   trim_zeros / insert / delete / searchsorted / correlate error classes.
-* **Open.** `np.ma` over text (fill values, `masked_*` comparisons, `make_mask`), `np.nditer` over strings, the result
-  layout of `argwhere` / `flatnonzero` / `unravel_index` (views in NumPy; `OpenBugs.IndexSearchLayout.cs`, the oracle
-  excuses only their layout), an empty matrix's QR / SVD without the OpenBLAS backend (Core ships no QR / SVD).
+* **numpy.ma over text** (section `strma`, 2,762 cases: every numpy.ma function over masked U / S operands of every
+  layout — 0-d, empty, all-masked, a custom fill, a hard mask — recording data, mask, fill value and hardness; unit
+  `Backends/Strings/StringMaskedArrayTests.cs` + `Ma/NDMaskedArrayNumPyStatementsTests.cs`). numpy.ma's statements in its
+  order (`refs/numpy/numpy/ma/core.py`, `extras.py`):
+  - **Refusals.** A member whose ufunc has no string loop raises NumPy's text: the masked reductions / scans (`add.reduce`'s
+    resolved-dtypes TypeError, also for an empty or fully masked operand), products (`ma.inner` reshapes a 0-d operand
+    before np.inner's alignment check; `ma.outer` is the string multiply's 'out' text), the two-operand extrema
+    (`where(less(a, b), a, b)`: the comparison's class-form no-loop text), `clip` (a Python-scalar bound named by its
+    default descriptor, int64 / float64), `allclose` (`isinf`'s safe-casting text, or the str / `_PyFloatDType`
+    DTypePromotionError of `result_type(y, 1.)`), `median` (after its axis check), `trace` without a mask,
+    `masked_values` (`equal`'s no-loop text).
+  - **Deferrals.** A member that reads the text defers: a number formatted into a masked slot (`filled(5)`), truth values
+    (`alltrue`, `nonzero`, a text `compress` condition), a sort with masked and unmasked text (its key is the fill
+    value), `trace` with a mask (`astype(float64)` parses), `vander` with one column (writes the formatted `'1'`).
+  - **The text fill value.** NumPy's getter stores `_check_fill_value(None, dtype)` = `np.array('N/A')` at ITS OWN width
+    (`<U3` / `|S3`) the first time it is read; a later assignment writes INTO that stored array (`'hello'` → `'hel'`,
+    `None` after a `'zz'` on `<U2` → `'N/'`); `__array_finalize__` converts an inherited fill to a new dtype (`<U1` →
+    `'N'`), `_update_from` shares it unconverted; repr materializes it, str does not.
+  - **numpy.ma bugs it found for every dtype**, fixed: fill / hard-mask inheritance (`_arraymethod` views inherit, `take`
+    does not, `*_like` copy the mask, `_fromnxfunction` results always carry a mask array, `concatenate` shrinks an
+    all-False mask), `ma.array` soft by default vs `masked_array` inheriting, an adopted caller's bool mask
+    (`getmask(x) is m`, writes land in it), `getdata` / `filled` / `compressed` / `compress_nd` views, an in-place
+    `shrink_mask`, `argsort`'s default axis (flattened from 2-D), `alltrue` / `sometrue` as logical reductions along axis
+    0, `count` without a mask a writeable full array, `flatnotmasked_edges`' three cases, `trace` casting the diagonal
+    first with a mask (`[2**53, 1, 1]` sums to 2**53 in float64, 2**53 + 2 without a mask), `allclose` statement for
+    statement (a 0-d x against a masked y is NumPy's MaskError), `average`'s 0-d `AttributeError`, `setdiff1d` keeping
+    the first operand's dtype, `unique` keeping the first masked element's data.
+  - **np.* bugs it found:** `np.stack` of 0-d operands (`(n,)`, was `(n, 1)`), `np.convolve` checking emptiness before
+    the length swap, `np.vander` over text (the columns decide), `np.clip`'s no-loop text, `np.unique` of a contiguous
+    view whose shape carries a non-zero offset (the hash path and the key extraction read the elements BEFORE the view).
+* **Open.** numpy.ma attribute inheritance outside the members above: NumPy's ufunc wrappers `_update_from` their first
+  masked operand (fill RAW, hardness), and so do `clip` / `round` / `conjugate` / `sort` / `diagonal` / `anom` / `diff`;
+  `copy` / `astype` / `view` inherit the hardness; `view(dtype)` resets the fill; `real` / `imag` / `mT` are soft with the
+  default fill; the comparison OPERATORS are `_comparison` (no masked-slot fill-back, the fill cast to bool); NumSharp
+  propagates none of that yet. `np.ma.isin` / `in1d`'s numeric algorithm (the `[known gap]` excuse); numeric fill values
+  are neither converted nor materialized (a documented simplification); `np.nditer` over strings; the result layout of
+  `argwhere` / `flatnonzero` / `unravel_index` (views in NumPy; `OpenBugs.IndexSearchLayout.cs`, the oracle excuses only
+  their layout); an empty matrix's QR / SVD without the OpenBLAS backend (Core ships no QR / SVD).
 
 **Not yet:** datetime storage/kernels/NaT/ISO (C — `docs/plans/datetime64.md`); Stage D phase 2 (computing on text —
 comparisons, `np.strings`, sorting, `add`/`multiply` loops, text ↔ number casts, the gated corpus is ready) and NEP 55

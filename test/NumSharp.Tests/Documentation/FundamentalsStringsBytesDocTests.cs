@@ -184,6 +184,23 @@ namespace NumSharp.Tests.Documentation
             eq.ToString().Should().Be("[False False False]");
         }
 
+        /// <summary>The "Masked text arrays" snippets: the fill value stored at its own width, cut by
+        /// <c>filled()</c>; a masked reduction refuses; a number written into text is the next phase.</summary>
+        [TestMethod]
+        public void Computing_MaskedTextArrays()
+        {
+            var m = np.ma.array(np.array(new[] { "ab", "c", "de" }), mask: new[] { true, false, false });
+            ((string)m.fill_value).Should().Be("N/A");
+            NDArray.AsStringArray(m.filled()).Should().Equal("N/", "c", "de");
+            NDArray.AsStringArray(m.filled("zz")).Should().Equal("zz", "c", "de");
+            np.ma.count(m).GetInt64().Should().Be(2L);
+            Action sum = () => np.ma.sum(m);
+            sum.Should().Throw<TypeError>().WithMessage(
+                "the resolved dtypes are not compatible with add.reduce. Resolved (dtype('<U2'), dtype('<U2'), dtype('<U4'))");
+            Action formatted = () => m.filled(5);
+            formatted.Should().Throw<StringComputationNotSupportedException>();
+        }
+
         [TestMethod]
         public void Computing_ChecksInNumPysOrder()
         {

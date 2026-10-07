@@ -428,7 +428,8 @@ namespace NumSharp
 
             if (Shape.IsContiguous)
             {
-                T* src = (T*)this.Address;
+                // Base address PLUS the shape's offset: a contiguous view may keep the base with a non-zero offset.
+                T* src = (T*)this.Address + Shape.offset;
                 fixed (T* dst = keys)
                 {
                     long byteCount = n * System.Runtime.CompilerServices.Unsafe.SizeOf<T>();
@@ -455,7 +456,8 @@ namespace NumSharp
             var keys = new T[n];
             if (Shape.IsContiguous)
             {
-                T* src = (T*)this.Address;
+                // Base address PLUS the shape's offset: a contiguous view may keep the base with a non-zero offset.
+                T* src = (T*)this.Address + Shape.offset;
                 fixed (T* dst = keys)
                 {
                     long byteCount = n * System.Runtime.CompilerServices.Unsafe.SizeOf<T>();
@@ -1342,7 +1344,8 @@ namespace NumSharp
         {
             if (Shape.IsContiguous)
             {
-                T* src = (T*)this.Address;
+                // Base address PLUS the shape's offset: a contiguous view may keep the base with a non-zero offset.
+                T* src = (T*)this.Address + Shape.offset;
                 for (long i = 0; i < n; i++) { kp[i].Key = src[i]; kp[i].Perm = i; }
             }
             else

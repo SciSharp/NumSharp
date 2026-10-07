@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Text;
 using NumSharp.Backends;
 using NumSharp.Backends.Printing;
+using NumSharp.Backends.Strings;
 using NumSharp.Generic;
 
 namespace NumSharp
@@ -59,6 +60,16 @@ namespace NumSharp
         /// gives none; null means "use the dtype default" (<see cref="MaskedArrayModule.default_fill_value"/>).
         /// NOT readonly: NumPy's <c>MaskedArray.fill_value</c> is settable, so <see cref="fill_value"/> and
         /// <see cref="MaskedArrayModule.set_fill_value"/> mutate it in place on the SAME instance.</summary>
+        /// <remarks>
+        ///     <b>What is stored.</b> A TEXT array stores NumPy's own representation, a 0-d <c>U</c>/<c>S</c> array whose
+        ///     WIDTH is part of the state: a fill set by the caller is converted to the data's dtype (<c>'hello'</c> on
+        ///     <c>&lt;U2</c> data is stored as <c>'he'</c>), while the default the getter MATERIALIZES on first read is
+        ///     stored at its own width (<c>np.array('N/A')</c>, a <c>&lt;U3</c>), and later writes go INTO the stored array
+        ///     (<c>_fill_value[()] = target</c>), truncating to that width. A numeric fill is the caller's value, stored
+        ///     unconverted (the module's documented simplification). Derived arrays share this object
+        ///     (<see cref="UpdateFrom"/>, NumPy's <c>_update_from</c>) or convert it to their dtype
+        ///     (<see cref="FinalizeFrom"/>, NumPy's <c>__array_finalize__</c>).
+        /// </remarks>
         internal object _fill_value;
 
         /// <summary>Whether the mask is HARD (NumPy's <c>hardmask</c>): when true, a plain-value assignment
@@ -69,12 +80,14 @@ namespace NumSharp
         /// <remarks>Scope: the flag lives on the instance and gates the direct assignment paths. Every indexer
         /// result inherits it through <see cref="UpdateFrom"/>, as NumPy's <c>__getitem__</c> does with
         /// <c>_update_from(self)</c>: a basic-slice VIEW and a fancy/boolean COPY alike. That is what stops a write
-        /// through <c>x["0:3"]</c> from unmasking the parent's protected slots. The flag is NOT yet propagated through
-        /// the other members NumPy threads it through: ufunc/operator results, and
-        /// reshape/ravel/transpose/<see cref="T"/>/swapaxes/squeeze/diagonal/<see cref="view(DType)"/>/copy/flatten/
-        /// astype/repeat/compress/clip/round/conj/sort. Each of those starts soft, a documented simplification vs NumPy,
-        /// so a write through one of those VIEWS can still unmask the parent. NumPy itself returns
-        /// <see cref="real"/>/<see cref="imag"/>/<see cref="mT"/>/take/reductions soft, so those already match.</remarks>
+        /// through <c>x["0:3"]</c> from unmasking the parent's protected slots. NumPy's <c>_arraymethod</c> family
+        /// inherits it too — reshape / ravel / flatten / transpose / <see cref="T"/> / swapaxes / squeeze / expand_dims /
+        /// repeat / compress — as do the <c>*_like</c> functions, masked_where / masked_all_like, var / std and unique.
+        /// The flag is NOT yet propagated through the other members NumPy threads it through: ufunc/operator results,
+        /// diagonal / <see cref="view(DType)"/> / copy / astype / clip / round / conj / sort / anom. Each of those starts
+        /// soft, a documented simplification vs NumPy, so a write through a diagonal VIEW can still unmask the parent.
+        /// NumPy returns <see cref="real"/> / <see cref="imag"/> / <see cref="mT"/> / take / reductions soft; take and the
+        /// reductions match, while <see cref="mT"/> (built from swapaxes) inherits here.</remarks>
         internal bool _hardmask;
 
         /// <summary>
@@ -130,6 +143,36 @@ namespace NumSharp
             return this;
         }
 
+        /// <summary>
+        ///     NumPy's <c>MaskedArray.__array_finalize__(obj)</c> for a masked <paramref name="source"/>: the
+        ///     <see cref="UpdateFrom"/> copy followed by the fill check <c>_check_fill_value(self._fill_value,
+        ///     self.dtype)</c>, which converts an inherited TEXT fill to THIS array's dtype. Use it where NumPy builds the
+        ///     result as a new array or view OF a masked array (<c>np.array(a, copy=..., subok=True)</c> in
+        ///     <c>masked_where</c>, <c>a.view(MaskedArray)</c> at the end of <c>ma.unique</c>); use <see cref="UpdateFrom"/>
+        ///     where NumPy calls <c>_update_from</c> on a view of the plain data (the <c>_arraymethod</c> family: ravel,
+        ///     reshape, copy, ...), which shares the fill object unconverted.
+        /// </summary>
+        /// <param name="source">The masked array this one derives from.</param>
+        /// <returns>This array, so the call chains onto its <c>new</c> expression.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
+        /// <exception cref="TypeError">The inherited text fill cannot be encoded / decoded into this array's string class
+        ///     (see <see cref="MaskedArrayModule.CheckFillValue"/>).</exception>
+        /// <remarks>
+        ///     The two only differ for a fill whose width is not this array's: chiefly the default NumPy materializes at
+        ///     its own width (<c>'N/A'</c>), which this conversion truncates (<c>'N'</c> for <c>&lt;U1</c>). So
+        ///     <c>ma.masked_inside</c> of a <c>&lt;U1</c> array (whose <c>filled()</c> read the source's fill and so
+        ///     materialized it) comes back with the fill <c>'N'</c>, as NumPy's does. A numeric fill passes unconverted.
+        /// </remarks>
+        internal NDMaskedArray FinalizeFrom(NDMaskedArray source)
+        {
+            if (source is null)
+                throw new ArgumentNullException(nameof(source));
+            // `_update_from(obj)`, then `if self._fill_value is not None: self._fill_value = _check_fill_value(...)`.
+            _fill_value = source._fill_value is null ? null : MaskedArrayModule.StoreFill(source._fill_value, _data.dtype);
+            _hardmask = source._hardmask;
+            return this;
+        }
+
         /// <summary>The underlying data array (NumPy's <c>MaskedArray.data</c>). Masked positions are included
         /// with whatever value the producing op left; use <see cref="filled(object)"/> to substitute them.</summary>
         public NDArray data => _data;
@@ -172,31 +215,59 @@ namespace NumSharp
         public long[] strides => _data.strides;
 
         /// <summary>
-        ///     Returns a fresh data array with every masked element replaced by <paramref name="fill_value"/>
-        ///     (NumPy's <c>MaskedArray.filled</c>). This is the standard way to hand masked data to code that
-        ///     cannot see the mask — the mask is "baked in" as a sentinel value while the dtype is preserved.
+        ///     The data with every masked element replaced by <paramref name="fill_value"/> (NumPy's
+        ///     <c>MaskedArray.filled</c>): the standard way to hand masked data to code that cannot see the mask — the mask
+        ///     is "baked in" as a sentinel value while the dtype is preserved. When there is nothing to substitute (no mask,
+        ///     or no slot masked) the result is a VIEW of the data, as NumPy's <c>return self._data</c> is.
         /// </summary>
-        /// <param name="fill_value">The value written at masked positions; null uses this array's own
-        /// <see cref="_fill_value"/> if set, else the dtype default (see
-        /// <see cref="MaskedArrayModule.default_fill_value"/>). It is cast to the data dtype (unsafe cast, like NumPy).</param>
-        /// <returns>A new C-contiguous <see cref="NDArray"/> of the data dtype; when there is no mask it is a
-        /// copy of the data unchanged.</returns>
-        /// <remarks>Scoped (<c>[NDScoped]</c>): the 0-D fill scalar handed to <see cref="np.copyto"/> is reclaimed
-        /// on return; only the filled copy leaves. The result is ALWAYS a fresh array the caller owns (never the
-        /// data itself), so internal callers may dispose it freely.</remarks>
+        /// <param name="fill_value">The value written at masked positions; null uses this array's
+        /// <see cref="fill_value"/> (whose getter materializes a text default, as NumPy's does). An explicit value first
+        /// goes through NumPy's <c>_check_fill_value</c> (<see cref="MaskedArrayModule.CheckFillValue"/>), then is cast to
+        /// the data dtype (unsafe cast, like NumPy). A text fill is truncated to the data's width (<c>'N/A'</c> into
+        /// <c>&lt;U2</c> is <c>'N/'</c>).</param>
+        /// <returns>A K-order copy of the data with the masked slots filled; or, when no slot is masked, a new VIEW of the
+        ///     data (writes through it reach this array; disposing it releases only the view's own reference).</returns>
+        /// <exception cref="TypeError">A <see cref="string"/> <paramref name="fill_value"/> for a numeric array, or a text
+        ///     fill the data's class cannot encode or decode (see <see cref="MaskedArrayModule.CheckFillValue"/>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A masked slot of a text array must receive a number
+        ///     formatted as text, or a text fill must be parsed as a number for a numeric array: the next phase of the
+        ///     string support.</exception>
+        /// <remarks>
+        ///     NumPy's order: <c>if m is nomask: return self._data</c>; resolve the fill (<c>self.fill_value</c> or
+        ///     <c>_check_fill_value(fill_value, self.dtype)</c>); <c>elif not m.any(): return self._data</c>; else
+        ///     <c>result = self._data.copy('K'); np.copyto(result, fill_value, where=m)</c>. So an unmasked array never
+        ///     refuses (or converts) the argument, and a fill that NumPy refuses is refused even when no slot is masked —
+        ///     except a NUMBER for TEXT data: NumPy formats it (which cannot fail) and then returns the data untouched when
+        ///     nothing is masked, so that case answers here without the formatting the next phase owns.
+        ///     <para>Scoped (<c>[NDScoped]</c>): the 0-d fill scalar handed to <see cref="np.copyto(NDArray, NDArray, string, NDArray)"/> (and a converted array
+        ///     fill) is reclaimed on return; only the result leaves.</para>
+        /// </remarks>
         [NDScoped]
         public NDArray filled(object fill_value = null)
         {
-            var result = _data.copy();
-            // No mask ⇒ nothing to substitute; NumPy returns the data unchanged (we return a copy for safety).
-            // NOTE: `is null` (reference check) — `_mask == null` would invoke NDArray's ELEMENTWISE `==`.
+            // `if m is nomask: return self._data` — NumPy's `_data` property is a new VIEW each time (OWNDATA false, shares
+            // the memory). NOTE: `is null` (reference check) — `_mask == null` would invoke NDArray's ELEMENTWISE `==`.
             if (_mask is null)
-                return result;
+                return _data.view();
 
-            var fv = fill_value ?? _fill_value ?? np.ma.default_fill_value(_data.dtype);
-            // copyto broadcasts the scalar fill into every masked slot; unsafe cast because a generic fill
-            // value (e.g. 1e20 into an int array default) must land in the data dtype exactly as NumPy coerces it.
-            np.copyto(result, NDArray.Scalar(fv), casting: "unsafe", where: _mask);
+            // A number given for TEXT data is formatted by `_check_fill_value` before the mask is read; the formatting
+            // cannot fail, so with nothing masked the data is the answer and the next phase's formatting is never needed.
+            if (fill_value is not null && _data.typecode == NPTypeCode.String
+                                       && MaskedArrayModule.FormatsAsText(fill_value) && !np.any(_mask))
+                return _data.view();
+
+            // `fill_value = self.fill_value` when omitted, else `_check_fill_value(fill_value, self.dtype)`.
+            var fv = fill_value is null ? this.fill_value : MaskedArrayModule.CheckFillValue(fill_value, _data.dtype);
+
+            // `elif not m.any(): return self._data`.
+            if (!np.any(_mask))
+                return _data.view();
+
+            // `result = self._data.copy('K'); np.copyto(result, fill_value, where=m)`: copyto broadcasts the fill into every
+            // masked slot; unsafe cast because a generic fill value (e.g. 1e20 into an int array default) must land in the
+            // data dtype exactly as NumPy coerces it. An array fill (NumPy's deprecated non-scalar fill) is broadcast as is.
+            var result = _data.copy('K');
+            np.copyto(result, fv as NDArray ?? NDArray.Scalar(fv), casting: "unsafe", where: _mask);
             return result;
         }
 
@@ -255,8 +326,12 @@ namespace NumSharp
         /// <param name="prefix">Alignment prefix (length only) for line wrapping.</param>
         /// <param name="suffix">Trailing text (length only) reserved on the last line.</param>
         /// <param name="opts">The active print options.</param>
+        /// <param name="reprForm">True for the <c>repr</c> body (<c>np.array2string</c>), false for the <c>str</c> body
+        ///     (<c>str(array)</c>). It decides only a 0-d TEXT element: array2string prints its repr (<c>'ab'</c>,
+        ///     <c>b'ab'</c>) where str prints the text itself (<c>ab</c>) and the bytes scalar's repr
+        ///     (<c>np.bytes_(b'ab')</c>).</param>
         /// <returns>The rendered data body (no prefix/suffix text, just the bracketed array).</returns>
-        private string InsertMaskedPrintBody(string separator, string prefix, string suffix, PrintOptions opts)
+        private string InsertMaskedPrintBody(string separator, string prefix, string suffix, PrintOptions opts, bool reprForm = false)
         {
             var mpo = np.ma.masked_print_option;
             // nomask OR the print option disabled ⇒ a real numeric array (data, or the fill-substituted data)
@@ -266,7 +341,7 @@ namespace NumSharp
             {
                 var numeric = _mask is null ? _data : filled();
                 return numeric.ndim == 0
-                    ? ArrayFormatter.ScalarStr(numeric.GetAtIndex(0), numeric.typecode)
+                    ? ZeroDimElement(numeric.GetAtIndex(0), numeric.typecode, reprForm)
                     : ArrayFormatter.Array2String(numeric, opts, separator, prefix, suffix);
             }
             // masked + enabled ⇒ object-array layout with the display token at masked slots.
@@ -274,8 +349,23 @@ namespace NumSharp
             if (_data.ndim == 0)
                 return Convert.ToBoolean(_mask.GetAtIndex(0))
                     ? display
-                    : ArrayFormatter.ScalarStr(_data.GetAtIndex(0), _data.typecode);
+                    : ZeroDimElement(_data.GetAtIndex(0), _data.typecode, reprForm);
             return ArrayFormatter.MaskedObjectArray2String(_data, _mask, display, opts, separator, prefix, suffix);
+        }
+
+        /// <summary>
+        ///     The element of a 0-d masked array as NumPy prints it: <c>np.array2string</c> (the repr body) formats a text
+        ///     element by its repr, <c>str()</c> by the scalar's str; a numeric element prints the same in both.
+        /// </summary>
+        /// <param name="value">The boxed element.</param>
+        /// <param name="tc">The data's storage lane.</param>
+        /// <param name="reprForm">True for the repr body.</param>
+        /// <returns>The element's text.</returns>
+        private static string ZeroDimElement(object value, NPTypeCode tc, bool reprForm)
+        {
+            if (reprForm && tc == NPTypeCode.String)
+                return value is byte[] bytes ? PyRepr.Bytes(bytes) : PyRepr.Str((string)value);
+            return ArrayFormatter.ScalarStr(value, tc);
         }
 
         /// <summary>Builds the <c>masked_array(...)</c> repr — a line-for-line port of NumPy 2.4.2's
@@ -316,8 +406,8 @@ namespace NumSharp
                 lead = prefix + "\n";
             }
 
-            // data= : the object/numeric body, wrap-aligned under its own "…data=" prefix.
-            string dataRepr = InsertMaskedPrintBody(", ", dataIndent + "data=", ",", opts);
+            // data= : the object/numeric body, wrap-aligned under its own "…data=" prefix (np.array2string semantics).
+            string dataRepr = InsertMaskedPrintBody(", ", dataIndent + "data=", ",", opts, reprForm: true);
             // mask= : the boolean mask printed normally; a nomask array shows the bare scalar "False".
             string maskRepr = _mask is null
                 ? "False"
@@ -329,8 +419,9 @@ namespace NumSharp
             sb.Append(dataIndent).Append("data=").Append(dataRepr).Append(",\n");
             sb.Append(maskIndent).Append("mask=").Append(maskRepr).Append(",\n");
             sb.Append(fillIndent).Append("fill_value=").Append(fillRepr);
+            // dtype_short_repr: a builtin numeric dtype prints its name, a string dtype its quoted descriptor ('<U2').
             if (dtypeNeeded)
-                sb.Append(",\n").Append(dtypeIndent).Append("dtype=").Append(_data.typecode.AsNumpyDtypeName());
+                sb.Append(",\n").Append(dtypeIndent).Append("dtype=").Append(ArrayFormatter.DtypeShortRepr(_data));
             sb.Append(')');
             return sb.ToString();
         }
@@ -351,13 +442,31 @@ namespace NumSharp
         ///     (signed→int64, unsigned→uint64, float→float64, complex→complex128, bool→bool), which only differs
         ///     from the data dtype for a non-implied data dtype (int8/16/32, uint8/16/32, float16/32) — precisely
         ///     the arrays that also show a <c>dtype=</c> line. A caller-SET custom fill is rendered against the data
-        ///     dtype (the plain form), matching NumPy whenever the value fits that dtype.
+        ///     dtype (the plain form), matching NumPy whenever the value fits that dtype. A TEXT array prints Python's repr
+        ///     of its fill (<c>fill_value='N/A'</c>, <c>fill_value=b'N/A'</c>), NumPy's string branch.
         /// </summary>
         /// <returns>The fill-value display string.</returns>
+        /// <exception cref="ValueError">A text array whose fill value is an array of more or fewer than one element
+        ///     (NumPy's deprecated non-scalar fill): NumPy's repr calls <c>.item()</c> on it and raises <c>can only convert
+        ///     an array of size 1 to a Python scalar</c>.</exception>
         private string FillValueRepr()
         {
-            object fv = _fill_value ?? np.ma.default_fill_value(_data.dtype);
             NPTypeCode dtc = _data.typecode;
+            // `if self._fill_value is None: self.fill_value  # initialize fill_value` — NumPy's repr MATERIALIZES a text
+            // default through the getter (a numeric default is not materialized; see the fill_value getter).
+            object fv = dtc == NPTypeCode.String ? fill_value : _fill_value ?? np.ma.default_fill_value(_data.dtype);
+            if (dtc == NPTypeCode.String)
+            {
+                // `repr(self.fill_value.item())` when the fill's kind is the data's (S with S, U with U), which every text
+                // fill is after _check_fill_value: Python's repr of the str ('N/A', "q'") or of the bytes (b'N/A').
+                if (fv is NDArray arrayFill)
+                {
+                    if (arrayFill.size != 1)
+                        throw new ValueError("can only convert an array of size 1 to a Python scalar");
+                    fv = arrayFill.item();
+                }
+                return fv is byte[] bytes ? PyRepr.Bytes(bytes) : PyRepr.Str((string)fv);
+            }
             // Effective fill dtype: a default fill promotes by kind; a user-set fill is shown against the data dtype.
             NPTypeCode ftc = _fill_value is not null ? dtc : CanonicalFillTypecode(dtc);
             string valStr = ArrayFormatter.ScalarStr(fv, ftc);
@@ -466,7 +575,23 @@ namespace NumSharp
         /// <param name="dtype">Target element dtype.</param>
         /// <param name="copy">Copy the data even when the dtype already matches (NumPy default true).</param>
         /// <returns>A masked array of the new dtype with the same mask.</returns>
-        public NDMaskedArray astype(DType dtype, bool copy = true) => new NDMaskedArray(_data.astype(dtype, copy), _mask, _fill_value);
+        /// <exception cref="StringComputationNotSupportedException">The cast converts between text and numbers (the data or
+        ///     a text fill value): the next phase of the string support.</exception>
+        /// <remarks>
+        ///     NumPy's <c>__array_finalize__</c> re-checks a stored fill against the new dtype
+        ///     (<c>_check_fill_value(self._fill_value, self.dtype)</c>), so a text fill follows a width change: a
+        ///     <c>'qrs'</c> fill becomes <c>'q'</c> after <c>astype('U1')</c> and <c>b'qr'</c> after <c>astype('S2')</c>.
+        ///     The data is cast first, so its own refusal wins. A numeric fill of a numeric cast is kept as given (the
+        ///     module's unconverted numeric fills).
+        /// </remarks>
+        public NDMaskedArray astype(DType dtype, bool copy = true)
+        {
+            var data = _data.astype(dtype, copy);
+            var fill = _fill_value is not null && (data.typecode == NPTypeCode.String || _data.typecode == NPTypeCode.String)
+                ? MaskedArrayModule.StoreFill(_fill_value, data.dtype)
+                : _fill_value;
+            return new NDMaskedArray(data, _mask, fill);
+        }
 
         // ── Arithmetic operators — compose the np.ma.* binary ufuncs; masks propagate (OR). ──
         /// <summary>Masked element-wise sum (mask = OR of operands').</summary>
@@ -614,17 +739,76 @@ namespace NumSharp
         ///     The value <see cref="filled()"/> substitutes for masked elements (NumPy's settable
         ///     <c>MaskedArray.fill_value</c>). Reading it resolves the stored override, else the dtype default
         ///     (see <see cref="MaskedArrayModule.default_fill_value"/>) — so it is never null. Writing it stores
-        ///     the override on THIS instance in place (as NumPy mutates <c>a.fill_value = v</c>); a null clears
-        ///     the override back to the dtype default.
+        ///     the override on THIS instance in place (as NumPy mutates <c>a.fill_value = v</c>), after NumPy's
+        ///     <c>_check_fill_value</c> (<see cref="MaskedArrayModule.CheckFillValue"/>); a null restores the dtype default.
         /// </summary>
-        /// <remarks>NumPy's method forms <c>get_fill_value()</c>/<c>set_fill_value()</c> are NOT offered as
-        /// instance methods: a C# property named <c>fill_value</c> already reserves those exact accessor names,
-        /// so use the property (<c>a.fill_value</c> / <c>a.fill_value = v</c>) or the module-level
-        /// <see cref="MaskedArrayModule.set_fill_value(object,object)"/>.</remarks>
+        /// <exception cref="TypeError">Set: a <see cref="string"/> for a numeric array (<c>Cannot set fill value of string
+        ///     with array of dtype float64</c>), or text the array's class cannot encode or decode.</exception>
+        /// <exception cref="StringComputationNotSupportedException">Set: a number for a text array, or text for a numeric
+        ///     array that NumPy would parse (the next phase of the string support).</exception>
+        /// <remarks>
+        ///     NumPy's method forms <c>get_fill_value()</c>/<c>set_fill_value()</c> are NOT offered as
+        ///     instance methods: a C# property named <c>fill_value</c> already reserves those exact accessor names,
+        ///     so use the property (<c>a.fill_value</c> / <c>a.fill_value = v</c>) or the module-level
+        ///     <see cref="MaskedArrayModule.set_fill_value(object,object)"/>.
+        ///     <para>
+        ///     <b>Text fills keep NumPy's state.</b> The getter of a text array with no fill yet MATERIALIZES the default, as
+        ///     NumPy's <c>self._fill_value = _check_fill_value(None, self.dtype)</c> does: the stored default is
+        ///     <c>np.array('N/A')</c> at its own width (<c>&lt;U3</c>), so the getter still reads <c>'N/A'</c> for
+        ///     <c>&lt;U2</c> data, while an array later DERIVED by conversion reads it truncated (<c>'N/'</c>; see
+        ///     <see cref="FinalizeFrom"/>). A set fill is converted to the data dtype (<c>'he'</c> after setting
+        ///     <c>'hello'</c> on <c>&lt;U2</c> data) and written INTO a stored fill (<c>_fill_value[()] = target</c>), so it
+        ///     takes the stored width: setting <c>'hello'</c> on <c>&lt;U5</c> data whose default was materialized reads back
+        ///     <c>'hel'</c>. Setting null writes the default <c>'N/A'</c> into a stored fill at that fill's width
+        ///     (<c>'N/'</c> after a fill set on <c>&lt;U2</c> data, <c>'N/A'</c> over the materialized default).
+        ///     </para>
+        /// </remarks>
         public object fill_value
         {
-            get => _fill_value ?? np.ma.default_fill_value(_data.dtype);
-            set => _fill_value = value;
+            get
+            {
+                // `if self._fill_value is None: self._fill_value = _check_fill_value(None, self.dtype)` — for a text dtype
+                // that is `np.array('N/A')` / `np.array(b'N/A')` at the DEFAULT's own width, kept as the stored state. A
+                // numeric default is not materialized: the module stores numeric fills unconverted, so a stored default
+                // would change nothing NumSharp models.
+                if (_fill_value is null && _data.typecode == NPTypeCode.String)
+                    _fill_value = MaskedArrayModule.Own(NDArray.Scalar(np.ma.default_fill_value(_data.dtype)));
+                // `return self._fill_value[()]`: the element of a 0-d fill, an N-d (deprecated) fill as itself.
+                return MaskedArrayModule.FillScalar(_fill_value) ?? np.ma.default_fill_value(_data.dtype);
+            }
+            set => _fill_value = ResolveFillAssignment(value);
+        }
+
+        /// <summary>
+        ///     The value a <see cref="fill_value"/> assignment stores (NumPy's <c>fill_value.setter</c>):
+        ///     <c>target = _check_fill_value(value, self.dtype)</c>, then the target itself when no fill is stored, else the
+        ///     target written INTO the stored text fill (<c>_fill_value[()] = target</c>, at the stored width).
+        /// </summary>
+        /// <param name="value">The assigned fill, or null to restore the default.</param>
+        /// <returns>The object to store in <see cref="_fill_value"/>.</returns>
+        /// <exception cref="TypeError">See <see cref="MaskedArrayModule.CheckFillValue"/>.</exception>
+        /// <exception cref="StringComputationNotSupportedException">See <see cref="MaskedArrayModule.CheckFillValue"/>.</exception>
+        internal object ResolveFillAssignment(object value)
+        {
+            bool text = _data.typecode == NPTypeCode.String;
+            // A numeric array keeps the module's numeric model: a value is stored unconverted, null clears to the default.
+            if (!text)
+                return value is null ? null : MaskedArrayModule.StoreFill(value, _data.dtype);
+            // `target = _check_fill_value(value, self.dtype)`: a value converted to the data dtype; for null, the default at
+            // its OWN width (`np.array('N/A')`, not cut to the data's).
+            object target = value is null
+                ? MaskedArrayModule.Own(NDArray.Scalar(np.ma.default_fill_value(_data.dtype)))
+                : MaskedArrayModule.StoreFill(value, _data.dtype);
+            // `if _fill_value is None: self._fill_value = target` — also over a stored value that is not NumPy's array
+            // representation (a raw string an internal constructor passed).
+            if (_fill_value is not NDArray stored)
+                return target;
+            // `else: _fill_value[()] = target` — written into the stored array, so its width (not the data's) applies, and
+            // every array sharing that fill object sees the change, as NumPy's do. The target is ours (converted or
+            // created above); it only feeds the write.
+            using (var t = target as NDArray ?? NDArray.Scalar(target))
+                np.copyto(stored, t, casting: "unsafe");
+            return stored;
         }
 
         // ── Instance shape/manipulation/selection — wire through to the np.ma.* module funcs (which apply
@@ -724,12 +908,21 @@ namespace NumSharp
         /// <returns>The sorted masked array.</returns>
         public NDMaskedArray sort(int axis = -1, bool endwith = true, object fill_value = null) => np.ma.sort(this, axis, endwith, fill_value);
 
-        /// <summary>Indices that would sort the array with masked entries at the end (or front).</summary>
-        /// <param name="axis">Sort axis (default last).</param>
+        /// <summary>Indices that would sort the array with masked entries at the end (or front), with NumPy's DEFAULT axis
+        /// (<c>MaskedArray.argsort(axis=np._NoValue)</c>: the last axis of a 0-d / 1-D array, the FLATTENED array —
+        /// NumPy's deprecated default — from two dimensions on).</summary>
         /// <param name="endwith">True (default) sorts masked LAST; false sorts them FIRST.</param>
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default.</param>
         /// <returns>An int64 <see cref="NDArray"/> of sort indices.</returns>
-        public NDArray argsort(int axis = -1, bool endwith = true, object fill_value = null) => np.ma.argsort(this, axis, endwith, fill_value);
+        public NDArray argsort(bool endwith = true, object fill_value = null) => np.ma.argsort(this, endwith, fill_value);
+
+        /// <summary>Indices that would sort the array along <paramref name="axis"/> with masked entries at the end (or
+        /// front).</summary>
+        /// <param name="axis">Sort axis (negative counts from the end), or null for the flattened array.</param>
+        /// <param name="endwith">True (default) sorts masked LAST; false sorts them FIRST.</param>
+        /// <param name="fill_value">Override the masked sort key; null uses the endwith default.</param>
+        /// <returns>An int64 <see cref="NDArray"/> of sort indices.</returns>
+        public NDArray argsort(int? axis, bool endwith = true, object fill_value = null) => np.ma.argsort(this, axis, endwith, fill_value);
 
         /// <summary>Clamps each element into <c>[a_min, a_max]</c>, preserving the mask (NumPy's <c>clip</c>).</summary>
         /// <param name="a_min">Lower bound (array-like/scalar), or null for no lower clip.</param>
@@ -1049,9 +1242,17 @@ namespace NumSharp
         /// in NumPy, where each array keeps its own copy of the flag.</remarks>
         public NDMaskedArray soften_mask() { _hardmask = false; return this; }
 
-        /// <summary>Drops an all-False mask back to nomask (NumPy's <c>shrink_mask</c>); otherwise unchanged.</summary>
-        /// <returns>A masked array with a redundant all-False mask removed.</returns>
-        public NDMaskedArray shrink_mask() => np.ma.shrink_mask(this);
+        /// <summary>Drops an all-False mask back to nomask IN PLACE (NumPy's <c>MaskedArray.shrink_mask</c>:
+        /// <c>self._mask = _shrink_mask(self._mask); return self</c>); a mask with a masked slot is kept.</summary>
+        /// <returns>This array.</returns>
+        public NDMaskedArray shrink_mask()
+        {
+            // `is not null` (reference check) — `_mask != null` would run NDArray's ELEMENTWISE `!=`. The dropped mask is
+            // not disposed: like NumPy's, it may be shared with the array it was adopted from.
+            if (_mask is not null && !np.any(_mask))
+                _mask = null;
+            return this;
+        }
 
         // ── Conversion / export + the hard/shared-mask flag surface (NumPy's tolist/tobytes/tofile/view +
         //    hardmask/sharedmask/recordmask/baseclass/unshare_mask/ids/iscontiguous). tolist and tobytes are
@@ -1651,9 +1852,11 @@ namespace NumSharp
         ///     for any other array-like/scalar (NumPy's <c>getdata</c>). The mask, if any, is discarded.
         /// </summary>
         /// <param name="a">A <see cref="NDMaskedArray"/>, <see cref="NDArray"/>, C# scalar, or array-like.</param>
-        /// <returns>The data as an <see cref="NDArray"/> (aliased when possible, not copied).</returns>
+        /// <returns>The data as an <see cref="NDArray"/>, never copied: a new VIEW of a masked array's data (NumPy's
+        ///     <c>a._data</c> property — OWNDATA false, writes reach the masked array), a plain array itself, or a new array
+        ///     for a scalar / array-like.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
-        public NDArray getdata(object a) => AsData(a);
+        public NDArray getdata(object a) => a is NDMaskedArray m ? m._data.view() : AsData(a);
 
         /// <summary>
         ///     Returns the boolean mask of <paramref name="a"/>, or <see cref="nomask"/> when it has none
@@ -1711,23 +1914,54 @@ namespace NumSharp
             => a is NDMaskedArray m ? m.filled(fill_value) : AsData(a);
 
         /// <summary>
-        ///     Builds a masked array from data and an optional mask (NumPy's <c>ma.array</c>/<c>masked_array</c>).
-        ///     The data is taken via <see cref="getdata"/>; the mask, if given, is coerced to boolean.
+        ///     Builds a masked array from data and an optional mask (NumPy's <c>ma.array</c>/<c>masked_array</c>, the
+        ///     <c>MaskedArray.__new__</c> constructor). The data is taken via <see cref="getdata"/>; a given mask is
+        ///     converted to boolean and reconciled with the data's shape; a masked-array <paramref name="data"/> lends its
+        ///     mask, fill value and hardness.
         /// </summary>
-        /// <param name="data">Data array-like (a <see cref="NDMaskedArray"/>'s own mask is honored when no explicit mask is given).</param>
-        /// <param name="mask">Optional boolean mask array-like; null/omitted ⇒ inherit <paramref name="data"/>'s mask or none.</param>
-        /// <param name="fill_value">Optional default fill value for <see cref="NDMaskedArray.filled(object)"/>.</param>
-        /// <param name="copy">When true, copies the data (NumPy's <c>copy=</c>); default false aliases it.</param>
+        /// <param name="data">Data array-like (a <see cref="NDMaskedArray"/>'s own mask, fill value and hard-mask flag ride
+        ///     along).</param>
+        /// <param name="mask">Optional mask array-like; null/omitted (or <see cref="nomask"/>) ⇒ no explicit mask. A C#
+        ///     <c>true</c> / <c>false</c> is NumPy's <c>mask=True</c> / <c>mask=False</c>: a FULL array of that value.</param>
+        /// <param name="fill_value">Optional default fill value for <see cref="NDMaskedArray.filled(object)"/>; null
+        ///     inherits <paramref name="data"/>'s. Checked against the dtype (<see cref="CheckFillValue"/>).</param>
+        /// <param name="copy">When true, copies the data (NumPy's <c>copy=</c>), the inherited mask and a given mask array;
+        ///     default false aliases them — a given boolean mask array of the data's shape is ADOPTED (the masked array then
+        ///     writes into it, as NumPy's does, and <see cref="getmask"/> returns it), the data's own mask is shared through
+        ///     a view.</param>
         /// <param name="dtype">Optional dtype to cast the data to.</param>
-        /// <param name="hard_mask">When true, the result's mask is HARD (NumPy's <c>hard_mask=</c>): a later
-        /// plain-value assignment cannot unmask a slot (see <see cref="NDMaskedArray.harden_mask()"/>). Default false (soft).</param>
+        /// <param name="hard_mask">True/false makes the result's mask HARD/soft (NumPy's <c>hard_mask=</c>: a hard mask
+        ///     refuses a plain-value assignment's unmasking, see <see cref="NDMaskedArray.harden_mask()"/>); null inherits
+        ///     <paramref name="data"/>'s hardness. The default is false, NumPy's <c>ma.array</c> FUNCTION
+        ///     (<c>hard_mask=False</c>); <see cref="masked_array"/>, NumPy's class, defaults to null.</param>
+        /// <param name="keep_mask">With a given <paramref name="mask"/>, true (default) ORs it with
+        ///     <paramref name="data"/>'s own mask and false replaces that mask; without one, false erases the data's mask.</param>
+        /// <param name="shrink">With no <paramref name="mask"/> and <paramref name="keep_mask"/> false: true (default) leaves
+        ///     no mask (<see cref="nomask"/>), false a full all-False mask.</param>
         /// <returns>A new <see cref="NDMaskedArray"/>.</returns>
-        /// <remarks>Scoped by hand: a scalar/array-like <paramref name="data"/> or <paramref name="mask"/> is first
-        /// materialized, then (on a dtype cast / boolean coercion) replaced by the converted array — the
-        /// superseded materializations are reclaimed on return and only the arrays the result carries leave.</remarks>
-        public NDMaskedArray array(object data, object mask = null, object fill_value = null, bool copy = false, DType dtype = null, bool hard_mask = false)
+        /// <exception cref="MaskError">The mask is neither the data's shape, nor one element, nor the data's size
+        ///     (<c>Mask and data not compatible: data size is 3, mask size is 2.</c>).</exception>
+        /// <exception cref="TypeError">A <see cref="string"/> <paramref name="fill_value"/> for numeric data (see
+        ///     <see cref="CheckFillValue"/>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty text mask (NumPy reads the strings' truth
+        ///     values), or a fill value that must be formatted as text or parsed as a number.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     <b>The mask, as NumPy reconciles it.</b> A mask of the data's shape is used as is; a ONE-element mask is
+        ///     repeated over the data (<c>np.resize</c>); a mask of the data's SIZE in another shape is reshaped; anything
+        ///     else is the <see cref="MaskError"/>. The sizes are tested before the mask's values are read, so a text mask of
+        ///     the wrong size reports the MaskError even though its strings could not be converted yet (NumPy converts first,
+        ///     but that conversion cannot fail).
+        ///     </para>
+        ///     <para>Scoped by hand: a scalar/array-like <paramref name="data"/> or <paramref name="mask"/> is first
+        ///     materialized, then (on a dtype cast / boolean coercion) replaced by the converted array — the
+        ///     superseded materializations are reclaimed on return and only the arrays the result carries leave.</para>
+        /// </remarks>
+        public NDMaskedArray array(object data, object mask = null, object fill_value = null, bool copy = false, DType dtype = null,
+            bool? hard_mask = false, bool keep_mask = true, bool shrink = true)
         {
             using var scope = NDScope.Open();
+            var source = data as NDMaskedArray;
             var d = AsData(data);
             // dtype cast happens first (and subsumes the copy — astype makes a new buffer on a real cast, and
             // copy=true forces one even when the dtype already matches); mask stays boolean regardless of dtype.
@@ -1735,25 +1969,104 @@ namespace NumSharp
                 d = d.astype(dtype, copy);
             else if (copy)
                 d = d.copy();
-            // Explicit mask wins; otherwise inherit an incoming NDMaskedArray's mask (NumPy semantics).
-            NDArray m = mask != null ? AsData(mask).astype(np.@bool) : (data as NDMaskedArray)?._mask;
-            var result = new NDMaskedArray(d, m, fill_value);
-            // hard_mask=true bakes the hardness in at construction (NumPy's ctor flag), so the very first
-            // assignment already refuses to unmask — no separate harden_mask() call needed.
-            result._hardmask = hard_mask;
+            // np.array(masked, subok=True) keeps the data's mask: copied with the data (`_mask.copy()`), else a VIEW of it
+            // (`__array_finalize__` over the same data: `_mask = _mask.view()`) — shared memory, not the same object.
+            NDArray existing = source?._mask;
+            if (existing is not null)
+                existing = copy ? existing.copy() : existing.view();
+            NDArray m;
+            if (mask is null || ReferenceEquals(mask, nomask))
+            {
+                // Case 1, no mask in input: keep the data's mask, or erase it (nomask with shrink, a full False array without).
+                m = keep_mask ? existing : (shrink ? null : np.zeros(DimsOf(d), np.@bool));
+            }
+            else
+            {
+                // Case 2, a mask in input: OR it with the data's own mask (keep_mask), or let it replace that mask.
+                var given = MaskArgument(mask, d, copy);
+                m = existing is null || !keep_mask ? given : np.logical_or(given, existing);
+            }
+            // `if fill_value is None: fill_value = getattr(data, '_fill_value', None)`, then _check_fill_value.
+            var result = new NDMaskedArray(d, m, StoreFill(fill_value ?? source?._fill_value, d.dtype));
+            // hard_mask=None inherits the data's hardness (`getattr(data, '_hardmask', False)`); true bakes the hardness in at
+            // construction, so the very first assignment already refuses to unmask.
+            result._hardmask = hard_mask ?? source?._hardmask ?? false;
             return Yield(scope, result);
+        }
+
+        /// <summary>
+        ///     The <c>mask=</c> argument of <see cref="array"/> as NumPy's constructor reads it (its "Case 2"): the Python
+        ///     literals <c>True</c>/<c>False</c> become full arrays, anything else is converted to boolean
+        ///     (<c>np.array(mask, dtype=bool)</c>) and then fitted to the data's shape.
+        /// </summary>
+        /// <param name="mask">The mask argument (not null, not <see cref="nomask"/>).</param>
+        /// <param name="d">The (possibly cast) data the mask is for.</param>
+        /// <param name="copy">The constructor's <c>copy=</c>: false lets a boolean <see cref="NDArray"/> mask of the data's
+        ///     shape be used as is.</param>
+        /// <returns>A boolean mask with <paramref name="d"/>'s shape: the caller's own array when it already is one (and
+        ///     <paramref name="copy"/> is false), otherwise a fresh array.</returns>
+        /// <exception cref="MaskError">The mask's size is neither one nor the data's size, and its shape is not the data's.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty text mask (the strings' truth values).</exception>
+        /// <remarks>NumPy's <c>mask = np.array(mask, copy=copy, dtype=bool)</c> returns the caller's boolean array itself
+        /// when no conversion is needed, and <c>_data._mask = mask</c> then ADOPTS it: <c>x._mask is m</c>, a masked write
+        /// such as <c>x[1] = masked</c> lands in the caller's array, and a write to the caller's array shows through
+        /// <c>x</c> (probed on 2.4.2). A converted, resized or reshaped mask is a new array.</remarks>
+        private static NDArray MaskArgument(object mask, NDArray d, bool copy)
+        {
+            // `mask is True` / `mask is False`: a full mask of that value, whatever the data's shape.
+            if (mask is bool flag)
+                return flag ? np.ones(DimsOf(d), np.@bool) : np.zeros(DimsOf(d), np.@bool);
+            var raw = AsData(mask);
+            // The size test needs no element, so it runs before a text mask's truth values are read.
+            bool sameShape = CheckMaskFitsData(raw, d);
+            // `np.array(mask, copy=False, dtype=bool)` of a boolean ndarray is that array: adopted, not copied. (A C# bool[]
+            // is a fresh conversion either way; AsData built it, so it is ours.)
+            if (!copy && sameShape && mask is NDArray && raw.typecode == NPTypeCode.Boolean)
+                return raw;
+            // np.array(mask, dtype=bool): non-zero numbers and non-empty text are True (a fresh array).
+            var converted = raw.astype(np.@bool);
+            if (sameShape)
+                return converted;
+            // np.resize repeats the one element over the data; np.reshape lays a same-size mask out in the data's shape.
+            return raw.size == 1 ? np.resize(converted, DimsOf(d)) : np.reshape(converted, DimsOf(d));
+        }
+
+        /// <summary>
+        ///     The shape rule of NumPy's constructor for a given mask: the data's shape, one element (repeated), or the data's
+        ///     size (reshaped); anything else is the <see cref="MaskError"/>. Decided by shapes alone.
+        /// </summary>
+        /// <param name="raw">The mask argument as an array (not yet converted to boolean).</param>
+        /// <param name="d">The data.</param>
+        /// <returns>True when the mask already has the data's shape.</returns>
+        /// <exception cref="MaskError">The sizes are incompatible (<c>Mask and data not compatible: data size is 3, mask
+        ///     size is 2.</c>).</exception>
+        private static bool CheckMaskFitsData(NDArray raw, NDArray d)
+        {
+            if (raw.Shape.dimensions.AsSpan().SequenceEqual(d.Shape.dimensions))
+                return true;
+            long nd = d.size, nm = raw.size;
+            if (nm != 1 && nm != nd)
+                throw new MaskError($"Mask and data not compatible: data size is {nd}, mask size is {nm}.");
+            return false;
         }
 
         /// <summary>Alias of <see cref="array"/> matching NumPy's <c>ma.masked_array</c> name.</summary>
         /// <param name="data">Data array-like.</param>
-        /// <param name="mask">Optional boolean mask.</param>
+        /// <param name="mask">Optional mask (see <see cref="array"/>).</param>
         /// <param name="fill_value">Optional default fill value.</param>
         /// <param name="copy">Copy the data when true.</param>
         /// <param name="dtype">Optional dtype to cast the data to.</param>
-        /// <param name="hard_mask">When true, the result's mask is HARD (see <see cref="array"/>).</param>
+        /// <param name="hard_mask">Hard/soft mask, or null (the default — NumPy's <c>MaskedArray(hard_mask=None)</c>) to
+        ///     inherit <paramref name="data"/>'s hardness; <see cref="array"/>, NumPy's function, defaults to soft.</param>
+        /// <param name="keep_mask">OR a given mask with the data's own (see <see cref="array"/>).</param>
+        /// <param name="shrink">Shrink an erased mask to <see cref="nomask"/> (see <see cref="array"/>).</param>
         /// <returns>A new <see cref="NDMaskedArray"/>.</returns>
-        public NDMaskedArray masked_array(object data, object mask = null, object fill_value = null, bool copy = false, DType dtype = null, bool hard_mask = false)
-            => array(data, mask, fill_value, copy, dtype, hard_mask);
+        /// <exception cref="MaskError">See <see cref="array"/>.</exception>
+        /// <exception cref="TypeError">See <see cref="array"/>.</exception>
+        /// <exception cref="StringComputationNotSupportedException">See <see cref="array"/>.</exception>
+        public NDMaskedArray masked_array(object data, object mask = null, object fill_value = null, bool copy = false, DType dtype = null,
+            bool? hard_mask = null, bool keep_mask = true, bool shrink = true)
+            => array(data, mask, fill_value, copy, dtype, hard_mask, keep_mask, shrink);
 
         /// <summary>
         ///     Converts an array-like to a <see cref="NDMaskedArray"/> WITHOUT copying (NumPy's <c>ma.asarray</c>):
@@ -1764,32 +2077,43 @@ namespace NumSharp
         /// <param name="a">A <see cref="NDMaskedArray"/>, <see cref="NDArray"/>, or array-like/scalar.</param>
         /// <param name="dtype">Optional dtype to cast the data to (no copy when it already matches).</param>
         /// <returns>A masked array over <paramref name="a"/>'s data (aliased when possible).</returns>
-        /// <remarks>Scoped by hand: a scalar/array-like operand that is materialized and then CAST leaves its
-        /// pre-cast materialization behind, which is reclaimed on return.</remarks>
-        public NDMaskedArray asarray(object a, DType dtype = null)
-        {
-            using var scope = NDScope.Open();
-            var d = AsData(a);
-            if (dtype != null)
-                d = d.astype(dtype, copy: false);
-            return Yield(scope, new NDMaskedArray(d, (a as NDMaskedArray)?._mask));
-        }
+        /// <exception cref="TypeError">A masked operand's text fill cannot be converted into a text <paramref name="dtype"/>.</exception>
+        /// <exception cref="StringComputationNotSupportedException">The cast converts between text and numbers.</exception>
+        /// <remarks>NumPy's <c>masked_array(a, dtype=dtype, copy=False, keep_mask=True, subok=False)</c>: the class
+        /// constructor, so a masked operand also lends its fill value (converted to the dtype) and its hard-mask flag.
+        /// Scoped by hand: a scalar/array-like operand that is materialized and then CAST leaves its pre-cast
+        /// materialization behind, which is reclaimed on return.</remarks>
+        public NDMaskedArray asarray(object a, DType dtype = null) => masked_array(a, dtype: dtype);
 
-        /// <summary>Alias of <see cref="asarray"/> (NumPy's <c>ma.asanyarray</c> — NumSharp has no NDMaskedArray
-        /// subclasses to conserve, so it behaves identically).</summary>
+        /// <summary>NumPy's <c>ma.asanyarray</c>: a masked array whose dtype already matches is returned ITSELF (NumPy's
+        /// identity rule, gh-8666); anything else goes through <see cref="asarray"/>.</summary>
         /// <param name="a">Array-like.</param><param name="dtype">Optional dtype cast.</param>
-        /// <returns>A masked array over <paramref name="a"/>'s data.</returns>
-        public NDMaskedArray asanyarray(object a, DType dtype = null) => asarray(a, dtype);
+        /// <returns><paramref name="a"/> itself, or a masked array over its data.</returns>
+        /// <exception cref="TypeError">See <see cref="asarray"/>.</exception>
+        /// <exception cref="StringComputationNotSupportedException">See <see cref="asarray"/>.</exception>
+        public NDMaskedArray asanyarray(object a, DType dtype = null)
+            => a is NDMaskedArray m && (dtype is null || m.dtype.Equals(dtype)) ? m : asarray(a, dtype);
 
         /// <summary>
-        ///     The default fill value NumPy assigns per dtype kind (<c>default_fill_value</c>): <c>1e20</c> for
-        ///     float/complex, <c>999999</c> for integers, <c>True</c> for boolean, else <c>0</c>. Used by
-        ///     <see cref="NDMaskedArray.filled(object)"/> when the caller supplies none.
+        ///     The default fill value NumPy assigns per dtype kind (<c>default_fill_value</c>, its <c>default_filler</c>
+        ///     table): <c>True</c> for boolean, <c>999999</c> for integers, <c>1e20</c> for float, <c>(1e20+0j)</c> for
+        ///     complex, the text <c>'N/A'</c> for a <c>U</c> dtype and the bytes <c>b'N/A'</c> for an <c>S</c> dtype. Used by
+        ///     <see cref="NDMaskedArray.filled(object)"/> and the <see cref="NDMaskedArray.fill_value"/> getter when the
+        ///     array holds no fill of its own.
         /// </summary>
         /// <param name="dtype">The data dtype to pick a fill for.</param>
-        /// <returns>A boxed scalar of a type castable into <paramref name="dtype"/>.</returns>
-        /// <remarks>An INSTANCE method (like <see cref="minimum_fill_value"/>/<see cref="maximum_fill_value"/>),
-        /// so <c>np.ma.default_fill_value(dtype)</c> ports from NumPy verbatim.</remarks>
+        /// <returns>A boxed scalar of a type castable into <paramref name="dtype"/>: a <see cref="string"/> for a
+        ///     <c>U</c> dtype and a fresh <see cref="byte"/>[] for an <c>S</c> dtype.</returns>
+        /// <remarks>
+        ///     An INSTANCE method (like <see cref="minimum_fill_value"/>/<see cref="maximum_fill_value"/>), so
+        ///     <c>np.ma.default_fill_value(dtype)</c> ports from NumPy verbatim.
+        ///     <para>
+        ///     The text default is NOT sized to the dtype: NumPy stores <c>np.array('N/A')</c> (a <c>&lt;U3</c>), so the fill
+        ///     value of a <c>&lt;U1</c> array reads all three characters, and only <see cref="NDMaskedArray.filled(object)"/>
+        ///     truncates it, when it copies the fill into the data's width (<c>'N/'</c> into <c>&lt;U2</c>). The bytes default
+        ///     is a NEW array on every call, because a <see cref="byte"/>[] is mutable and the caller owns it.
+        ///     </para>
+        /// </remarks>
         public object default_fill_value(DType dtype)
         {
             switch (dtype.typecode)
@@ -1803,9 +2127,176 @@ namespace NumSharp
                 case NPTypeCode.Single:
                 case NPTypeCode.Double:
                 case NPTypeCode.Decimal: return 1e20d;
+                // default_filler['U'] = 'N/A', default_filler['S'] = b'N/A' (the dtype's kind picks the class).
+                case NPTypeCode.String: return dtype.kind == 'S' ? DefaultBytesFill() : "N/A";
                 default: return 999999L; // every integer kind (signed/unsigned/char)
             }
         }
+
+        /// <summary>
+        ///     NumPy's default fill value for an <c>S</c> dtype, the bytes <c>b'N/A'</c>, as a fresh array the caller owns.
+        /// </summary>
+        /// <returns>A new three-byte array <c>{ 'N', '/', 'A' }</c>.</returns>
+        private static byte[] DefaultBytesFill() => new[] { (byte)'N', (byte)'/', (byte)'A' };
+
+        /// <summary>
+        ///     NumPy's <c>_check_fill_value(fill_value, ndtype)</c>, the conversion every fill value goes through before a
+        ///     masked array stores or uses it (the constructor, the <see cref="NDMaskedArray.fill_value"/> setter,
+        ///     <see cref="set_fill_value"/>, an explicit <see cref="NDMaskedArray.filled(object)"/> argument), for the cases
+        ///     that involve TEXT. A numeric fill for a numeric dtype is returned as given.
+        /// </summary>
+        /// <param name="fill_value">The fill value as the caller gave it; null keeps the dtype default.</param>
+        /// <param name="ndtype">The data dtype the fill is for.</param>
+        /// <returns>
+        ///     Null for a null <paramref name="fill_value"/>; for a text dtype, the fill converted to the data dtype as a new
+        ///     array the caller owns (0-d for a scalar fill — NumPy's <c>np.array(fill)</c>, read through
+        ///     <see cref="FillScalar"/> — and the fill's own shape for NumPy's deprecated non-scalar fill); otherwise
+        ///     <paramref name="fill_value"/> itself.
+        /// </returns>
+        /// <exception cref="TypeError">A C# <see cref="string"/> fill for a dtype that is not text (NumPy's <c>Cannot set
+        ///     fill value of string with array of dtype float64</c>), or a text fill whose characters the target class
+        ///     cannot encode or decode (<c>Cannot convert fill_value é to dtype |S2</c>, NumPy's TypeError around the
+        ///     <c>UnicodeEncodeError</c>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">The conversion formats a number as text (a numeric fill
+        ///     for a text dtype, NumPy's <c>np.asarray(5, dtype='&lt;U2')</c> is <c>'5'</c>) or parses text as a number (a
+        ///     bytes or text-array fill for a numeric dtype): the computing phase of the string dtypes.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     <b>Order.</b> NumPy tests <c>isinstance(fill_value, str)</c> against the dtype's character before it converts
+        ///     anything, so a <see cref="string"/> fill for a numeric dtype is refused by its type alone, whatever its text.
+        ///     A bytes fill is not a <c>str</c>, so NumPy parses it (<c>b'1.5'</c> becomes <c>1.5</c> for float64).
+        ///     </para>
+        ///     <para>
+        ///     <b>Scope of the port.</b> NumPy converts EVERY fill to the data dtype (<c>fill_value=1.5</c> of an int64 array
+        ///     reads back <c>1</c>); NumSharp keeps a numeric fill of a numeric array as given, the module's documented
+        ///     simplification, so the existing numeric behavior (and <see cref="common_fill_value"/>'s comparison of raw
+        ///     fills) is unchanged. Only the text cases are converted.
+        ///     </para>
+        ///     <para>
+        ///     <b>Ownership.</b> A converted array fill is a fresh array; a caller that stores it into a masked array's field
+        ///     must detach it from the ambient scope (<see cref="Own"/>), as for a mask.
+        ///     </para>
+        /// </remarks>
+        internal static object CheckFillValue(object fill_value, DType ndtype)
+        {
+            if (fill_value is null)
+                return null;
+            bool textData = ndtype.typecode == NPTypeCode.String;
+            switch (fill_value)
+            {
+                case string s:
+                    // `isinstance(fill_value, str) and (ndtype.char not in 'OSTVU')`: refused by its type, before NumPy reads
+                    // a character (a str fill for an S dtype is accepted and encoded).
+                    if (!textData)
+                        throw new TypeError($"Cannot set fill value of string with array of dtype {ndtype}");
+                    using (var src = NDArray.Scalar(s))
+                        return TextFillToDType(src, ndtype, s);
+                case byte[] b:
+                    using (var src = NDArray.Scalar(b))
+                    {
+                        // np.asarray(b'1.5', dtype=float64) parses the bytes: the next phase of the string support.
+                        if (!textData)
+                            throw NDStringCasting.TextConversion(src.dtype, ndtype);
+                        return TextFillToDType(src, ndtype, PyRepr.Bytes(b));
+                    }
+                case NDMaskedArray m:
+                    // np.asarray(masked_array) reads its data (the mask plays no part in a fill value).
+                    return CheckFillValue(m._data, ndtype);
+                case NDArray nd:
+                    bool textFill = nd.typecode == NPTypeCode.String;
+                    if (textFill && textData)
+                        return TextFillToDType(nd, ndtype, nd.ToString());
+                    // Text into a number parses it, a number into text formats it: both compute on text.
+                    if (textFill || textData)
+                        throw NDStringCasting.TextConversion(nd.dtype, ndtype);
+                    return fill_value;
+                default:
+                    // A C# number, bool, char, Half, decimal or Complex: into a text dtype NumPy formats it as text. A
+                    // BigInteger (a Python int of any size) has no storage lane; the message names int64, NumPy's default
+                    // integer.
+                    if (textData)
+                        throw NDStringCasting.TextConversion(
+                            fill_value is BigInteger ? DType.From(NPTypeCode.Int64) : (DType)fill_value.GetType(), ndtype);
+                    return fill_value;
+            }
+        }
+
+        /// <summary>
+        ///     <see cref="CheckFillValue"/> for a fill a masked array STORES in its <see cref="NDMaskedArray._fill_value"/>
+        ///     field (the constructor, the <see cref="NDMaskedArray.fill_value"/> setter, <see cref="NDMaskedArray.astype"/>).
+        ///     A text conversion that produced an array (NumPy's deprecated non-scalar fill) is detached from every ambient
+        ///     scope, because the field outlives the method that converted it.
+        /// </summary>
+        /// <param name="fill_value">The fill as given, or null for the dtype default.</param>
+        /// <param name="ndtype">The data dtype of the array that stores the fill.</param>
+        /// <returns>The object to store.</returns>
+        /// <exception cref="TypeError">See <see cref="CheckFillValue"/>.</exception>
+        /// <exception cref="StringComputationNotSupportedException">See <see cref="CheckFillValue"/>.</exception>
+        internal static object StoreFill(object fill_value, DType ndtype)
+        {
+            var checkedFill = CheckFillValue(fill_value, ndtype);
+            // For a text dtype the result always comes from TextFillToDType's fresh astype (0-d for a scalar fill), so it
+            // is ours to detach.
+            // A numeric fill is the caller's own object, stored as given and left in the caller's scope (detaching a
+            // caller's array would change its lifetime).
+            if (checkedFill is NDArray converted && ndtype.typecode == NPTypeCode.String)
+                return Own(converted);
+            return checkedFill;
+        }
+
+        /// <summary>
+        ///     The string-to-string half of <see cref="CheckFillValue"/>: <c>np.asarray(fill, dtype=ndtype)</c> for a text
+        ///     fill and a text dtype (a width change truncates, <c>U → S</c> encodes ASCII, <c>S → U</c> decodes it).
+        /// </summary>
+        /// <param name="fill">The text fill as an array (a 0-d array for a scalar fill); never modified.</param>
+        /// <param name="ndtype">The text data dtype.</param>
+        /// <param name="display">The fill as NumPy's <c>%s</c> formats it, for the error text.</param>
+        /// <returns>A new array of <paramref name="ndtype"/> the caller owns: 0-d for a scalar fill (NumPy keeps
+        ///     <c>np.array(fill)</c>, whose width is part of the fill's state), the fill's shape otherwise.</returns>
+        /// <exception cref="TypeError">The target class cannot encode or decode a character (NumPy catches the
+        ///     <c>UnicodeError</c>, a <c>ValueError</c>, and raises <c>Cannot convert fill_value … to dtype …</c>).</exception>
+        private static object TextFillToDType(NDArray fill, DType ndtype, string display)
+        {
+            NDArray converted;
+            try
+            {
+                converted = fill.astype(ndtype);
+            }
+            catch (UnicodeError e)
+            {
+                throw new TypeError($"Cannot convert fill_value {display} to dtype {ndtype}", e);
+            }
+            // `return np.array(fill_value)`: the converted array itself, a 0-d one for a scalar fill. The getter reads its
+            // element (FillScalar); keeping the array keeps its width, which a later `_fill_value[()] = v` writes into.
+            return converted;
+        }
+
+        /// <summary>
+        ///     What NumPy's <c>fill_value</c> getter returns for a stored fill, <c>self._fill_value[()]</c>: the element of
+        ///     a 0-d array (a <see cref="string"/> for <c>U</c>, a <see cref="byte"/>[] for <c>S</c>, the number for a
+        ///     numeric array), an array with dimensions (NumPy's deprecated non-scalar fill) as itself, and any other stored
+        ///     value (an unconverted numeric fill) as is.
+        /// </summary>
+        /// <param name="stored">The <see cref="NDMaskedArray._fill_value"/> field, or null.</param>
+        /// <returns>The scalar the getter returns, or null when nothing is stored.</returns>
+        internal static object FillScalar(object stored)
+            => stored is NDArray nd && nd.ndim == 0 ? nd.item() : stored;
+
+        /// <summary>
+        ///     True when a fill given for a TEXT dtype would be FORMATTED as text by NumPy's <c>_check_fill_value</c> (a
+        ///     number, a bool, or an array of a non-string dtype): a conversion that cannot fail, but whose result is the
+        ///     next phase's business. A <see cref="string"/>, <see cref="byte"/>[] or text array is converted between the
+        ///     string classes instead.
+        /// </summary>
+        /// <param name="fill">The fill as the caller gave it (not null).</param>
+        /// <returns>True for a value NumPy formats into text.</returns>
+        internal static bool FormatsAsText(object fill) => fill switch
+        {
+            string or byte[] => false,
+            NDMaskedArray m => m._data.typecode != NPTypeCode.String,
+            NDArray nd => nd.typecode != NPTypeCode.String,
+            _ => true,
+        };
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Predicates, shape queries, copy, and the deprecated/aliased names
@@ -1875,15 +2366,87 @@ namespace NumSharp
         /// <returns>The masked minimum.</returns>
         public NDMaskedArray amin(object a, int? axis = null, object fill_value = null, bool keepdims = false) => min(a, axis, fill_value, keepdims);
 
-        /// <summary>Logical-AND reduction — alias of <see cref="all"/> (NumPy's DEPRECATED <c>alltrue</c>, still exported).</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param>
-        /// <returns>The masked all-reduction.</returns>
-        public NDMaskedArray alltrue(object a, int? axis = null, bool keepdims = false) => all(a, axis, keepdims);
+        /// <summary>
+        ///     Logical-AND reduction along an axis (NumPy's <c>ma.alltrue</c> — <c>_MaskedBinaryOperation(logical_and, 1,
+        ///     1).reduce</c>, NOT an alias of <see cref="all"/>): the masked slots are filled with 1 (True), the result is
+        ///     masked where its whole slice was masked, and the default axis is 0.
+        /// </summary>
+        /// <param name="target">Operand.</param>
+        /// <param name="axis">The reduced axis (default 0, as NumPy's), or null for the flattened array.</param>
+        /// <param name="dtype">NumPy's <c>dtype=</c> of the reduction (used only when <paramref name="target"/> has a mask;
+        ///     only bool has a <c>logical_and</c> loop).</param>
+        /// <returns>The <see cref="NDMasked"/> singleton for a masked 0-d result, an unmasked 0-d array for a scalar,
+        ///     otherwise a boolean masked array whose mask is an ARRAY when the operand had one (NumPy does not shrink it).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
+        /// <exception cref="TypeError">A masked operand with a non-bool <paramref name="dtype"/> (<c>No loop matching the
+        ///     specified signature and casting was found for ufunc logical_and</c>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty text operand (its truth values are read).</exception>
+        public NDMaskedArray alltrue(object target, int? axis = 0, DType dtype = null) => LogicalReduce(target, axis, dtype, and: true);
 
-        /// <summary>Logical-OR reduction — alias of <see cref="any"/> (NumPy's DEPRECATED <c>sometrue</c>).</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param>
-        /// <returns>The masked any-reduction.</returns>
-        public NDMaskedArray sometrue(object a, int? axis = null, bool keepdims = false) => any(a, axis, keepdims);
+        /// <summary>
+        ///     Logical-OR reduction along an axis (NumPy's <c>ma.sometrue</c> — <c>logical_or.reduce</c> of the masked
+        ///     <c>logical_or</c>, NOT an alias of <see cref="any"/>): the masked slots are filled with 0 (False), the result
+        ///     is masked where its whole slice was masked, and the default axis is 0.
+        /// </summary>
+        /// <param name="target">Operand.</param>
+        /// <param name="axis">The reduced axis (default 0, as NumPy's), or null for the flattened array.</param>
+        /// <param name="dtype">NumPy's <c>dtype=</c> of the reduction (used only when <paramref name="target"/> has a mask;
+        ///     only bool has a <c>logical_or</c> loop).</param>
+        /// <returns>See <see cref="alltrue"/>.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
+        /// <exception cref="TypeError">A masked operand with a non-bool <paramref name="dtype"/>.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty text operand (its truth values are read).</exception>
+        public NDMaskedArray sometrue(object target, int? axis = 0, DType dtype = null) => LogicalReduce(target, axis, dtype, and: false);
+
+        /// <summary>
+        ///     NumPy's <c>_MaskedBinaryOperation.reduce(target, axis, dtype)</c> for <c>logical_and</c> / <c>logical_or</c>:
+        ///     <c>t = filled(target, filly)</c> (1 for and, 0 for or); a 0-d operand and its mask are reshaped to <c>(1,)</c>;
+        ///     without a mask <c>tr = f.reduce(t, axis)</c> (the dtype is NOT passed), with one
+        ///     <c>tr = f.reduce(t, axis, dtype=dtype)</c> and <c>mr = logical_and.reduce(m, axis)</c>; a 0-d <c>tr</c> is
+        ///     <c>masked</c> when <c>mr</c> is set, else the scalar; otherwise <c>tr</c> viewed as a masked array with
+        ///     <c>mr</c> as its mask (the default fill — nothing is inherited).
+        /// </summary>
+        /// <param name="target">Operand.</param>
+        /// <param name="axis">The reduced axis, or null for the flattened array.</param>
+        /// <param name="dtype">The reduction's <c>dtype=</c>, honoured only with a mask.</param>
+        /// <param name="and">True for <c>logical_and</c> (alltrue), false for <c>logical_or</c> (sometrue).</param>
+        /// <returns>The masked reduction (see <see cref="alltrue"/>).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
+        /// <exception cref="TypeError">A masked operand with a non-bool <paramref name="dtype"/>.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty text operand.</exception>
+        /// <remarks>Scoped by hand: the filled copy, the reshaped views and the mask reduction are reclaimed; only the
+        /// result's data and mask leave.</remarks>
+        private NDMaskedArray LogicalReduce(object target, int? axis, DType dtype, bool and)
+        {
+            using var scope = NDScope.Open();
+            var m = (target as NDMaskedArray)?._mask;
+            // `t = filled(target, self.filly)` — over text the fill is formatted (see FilledForNumericOp); the reduction
+            // then reads the strings' truth values, so it defers unless the operand is empty.
+            Exception deferral = null;
+            var t = FilledForNumericOp(target, and ? 1 : 0, ref deferral);
+            // `if t.shape == (): t = t.reshape(1); m = make_mask(m, copy=True); m.shape = (1,)`.
+            if (t.ndim == 0)
+            {
+                t = np.reshape(t, new Shape(1L));
+                if (m is not null)
+                    m = np.reshape(m.copy(), new Shape(1L));
+            }
+            // `tr = self.f.reduce(t, axis, dtype=dtype)` only with a mask: logical_and / logical_or have bool loops only.
+            if (m is not null && dtype is not null && dtype.typecode != NPTypeCode.Boolean)
+                throw new TypeError($"No loop matching the specified signature and casting was found for ufunc {(and ? "logical_and" : "logical_or")}");
+            NDArray tr = axis is null
+                ? NDArray.Scalar(and ? np.all(t) : np.any(t))
+                : and ? np.all(t, axis.Value, null, false) : np.any(t, axis.Value, null, false);
+            if (deferral is not null)
+                throw deferral;
+            NDArray mr = m is null ? null
+                : axis is null ? NDArray.Scalar(np.all(m)) : np.all(m, axis.Value, null, false);
+            // `if not tr.shape: return masked if mr else tr`.
+            if (tr.ndim == 0)
+                return mr is not null && mr.GetBoolean() ? NDMasked : Yield(scope, new NDMaskedArray(tr, null));
+            // `masked_tr = tr.view(tclass); masked_tr._mask = mr` — not shrunk: an all-False mask stays an array.
+            return Yield(scope, new NDMaskedArray(tr, mr));
+        }
 
         /// <summary>Round to <paramref name="decimals"/> places — alias of <see cref="round"/> (NumPy's <c>round_</c>).</summary>
         /// <param name="a">Operand.</param><param name="decimals">Decimal places.</param>
@@ -1915,22 +2478,37 @@ namespace NumSharp
         // ─────────────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        ///     Coerces an array-like to a boolean mask (NumPy's <c>make_mask</c>): any non-zero element becomes
-        ///     True. With <paramref name="shrink"/> (default) an all-False result collapses to <see cref="nomask"/>
-        ///     — the standard "no mask needed" reduction — otherwise a full all-False array is returned.
+        ///     Coerces an array-like to a boolean mask (NumPy's <c>make_mask</c>: <c>np.array(filled(m, True),
+        ///     dtype=bool)</c>): any non-zero number and any non-empty string becomes True, and a masked array reads True
+        ///     at its masked slots. With <paramref name="shrink"/> (default) an all-False result collapses to
+        ///     <see cref="nomask"/> — the standard "no mask needed" reduction — otherwise a full all-False array is returned.
         /// </summary>
-        /// <param name="m">Array-like to coerce (numeric/boolean; non-zero ⇒ masked).</param>
+        /// <param name="m">Array-like to coerce; null or <see cref="nomask"/> is <see cref="nomask"/>.</param>
         /// <param name="shrink">Collapse an all-False mask to <see cref="nomask"/> (default true).</param>
         /// <returns>A boolean mask array, or <see cref="nomask"/> when it shrinks to empty.</returns>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty text operand: NumPy reads the strings'
+        ///     truth values (the next phase of the string support). An empty one converts (an empty boolean mask).</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>): the operand's materialization and a coerced mask that shrinks to
         /// <see cref="nomask"/> are reclaimed. The shared <see cref="nomask"/> sentinel must never be disposed by
-        /// the caller; a non-shrunk result is a fresh array the caller owns.</remarks>
+        /// the caller; a non-shrunk result is a fresh array the caller owns (NumPy's default <c>copy=False</c> would hand
+        /// back a boolean input itself; NumSharp copies it, so the caller may mutate the mask freely).</remarks>
         [NDScoped]
         public NDArray make_mask(object m, bool shrink = true)
         {
-            // NumPy coerces via `!= 0` (so floats/ints become bool by non-zero-ness), not a plain astype(bool).
-            var b = AsData(m);
-            var mask = b.typecode == NPTypeCode.Boolean ? b.copy() : np.not_equal(b, NDArray.Scalar(0));
+            // `if m is nomask: return nomask`; np.array(None, dtype=bool) is False, which shrinks to nomask as well.
+            if (m is null || ReferenceEquals(m, nomask))
+                return nomask;
+            // filled(m, True): a masked array's masked slots read True (for text data that formats True as text: the
+            // next phase, raised by the fill check).
+            var b = m is NDMaskedArray masked && masked._mask is not null ? masked.filled(true) : AsData(m);
+            // NumPy converts by truth value: numbers via `!= 0` (NaN is True), text by non-emptiness through the
+            // text-to-bool cast (refused unless empty), booleans copied.
+            var mask = b.typecode switch
+            {
+                NPTypeCode.Boolean => b.copy(),
+                NPTypeCode.String => b.astype(np.@bool),
+                _ => np.not_equal(b, NDArray.Scalar(0)),
+            };
             return (shrink && !np.any(mask)) ? nomask : mask;
         }
 
@@ -1941,50 +2519,90 @@ namespace NumSharp
         public NDArray make_mask_none(Shape newshape) => np.zeros(newshape, np.@bool);
 
         /// <summary>
-        ///     Combines two masks with logical-OR, honoring the <see cref="nomask"/> fast path (NumPy's
-        ///     <c>mask_or</c>): a null/nomask operand contributes nothing, and — with <paramref name="shrink"/>
-        ///     (default) — an all-False OR collapses back to <see cref="nomask"/>.
+        ///     Combines two masks with logical-OR (NumPy's <c>mask_or</c>): a <see cref="nomask"/> / <c>false</c> operand
+        ///     contributes nothing (the other is <see cref="make_mask"/>'d alone), two operands of DIFFERENT dtypes are
+        ///     refused, and — with <paramref name="shrink"/> (default) — an all-False OR collapses back to
+        ///     <see cref="nomask"/>.
         /// </summary>
-        /// <param name="m1">First mask, or null/nomask.</param>
-        /// <param name="m2">Second mask, or null/nomask.</param>
+        /// <param name="m1">First mask (any array-like), or null/<see cref="nomask"/>/<c>false</c>.</param>
+        /// <param name="m2">Second mask (any array-like), or null/<see cref="nomask"/>/<c>false</c>.</param>
         /// <param name="shrink">Collapse an all-False result to <see cref="nomask"/> (default true).</param>
         /// <returns>The OR of the present masks, or <see cref="nomask"/> when neither contributes (or it shrinks).</returns>
-        /// <remarks>Scoped (<c>[NDScoped]</c>): operands coerced to boolean and an OR that shrinks away are
-        /// reclaimed. When only ONE operand contributes, the result IS that operand's mask (NumPy returns it too),
-        /// so the caller must not dispose a result it did not create.</remarks>
+        /// <exception cref="ValueError">The two operands' dtypes differ (<c>Incompatible dtypes '&lt;U2'&lt;&gt;'bool'</c>;
+        ///     a C# scalar or an <c>object[]</c> list has no dtype and prints <c>'None'</c>), or they do not
+        ///     broadcast.</exception>
+        /// <exception cref="AttributeError">Both operands are dtype-less scalars/lists: NumPy then reads
+        ///     <c>None.names</c>.</exception>
+        /// <exception cref="StringComputationNotSupportedException">Two non-empty text operands of one dtype (NumPy reads
+        ///     their truth values), or one text operand beside a no-mask one (see <see cref="make_mask"/>).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy's statements, in order: <c>m1 is nomask or m1 is False</c> → <c>make_mask(m2)</c> (no dtype check: a
+        ///     text <paramref name="m2"/> is converted by its truth values), likewise for <paramref name="m2"/>; one
+        ///     boolean mask passed twice → itself; then <c>dtype1 != dtype2</c> → the ValueError; then
+        ///     <c>make_mask(logical_or(m1, m2))</c>. Only the Python literal <c>False</c> and the nomask object are "no
+        ///     mask": a 0-d False ARRAY is compared like any operand (<c>Incompatible dtypes 'bool'&lt;&gt;'&lt;U2'</c>). C# null
+        ///     stands for nomask (NumSharp's masked arrays hold a null mask for it).
+        ///     </para>
+        ///     <para>
+        ///     A <see cref="NDMaskedArray"/> operand is an ARRAY to NumPy, not a mask: its DATA joins the OR, and its masked
+        ///     slots read True (the ufunc's result is masked there, and <c>make_mask</c> fills masked slots with True).
+        ///     </para>
+        ///     <para>Scoped (<c>[NDScoped]</c>): operands coerced to boolean and an OR that shrinks away are reclaimed. When
+        ///     one boolean mask is passed twice the result IS that mask (NumPy returns it), so the caller must not dispose a
+        ///     result it did not create.</para>
+        /// </remarks>
         [NDScoped]
         public NDArray mask_or(object m1, object m2, bool shrink = true)
         {
-            // Treat a null OR the shared nomask sentinel (a 0-D False) as "no contribution".
-            var a = MaskOperand(m1);
-            var b = MaskOperand(m2);
-            var r = Or(a, b);
-            if (r is null)
-                return nomask;
-            if (shrink && !np.any(r))
-                return nomask;
-            return r;
+            // `(m1 is nomask) or (m1 is False)`: the other operand alone, through make_mask (its own copy and shrink).
+            if (IsNoMaskOperand(m1))
+                return make_mask(m2, shrink);
+            if (IsNoMaskOperand(m2))
+                return make_mask(m1, shrink);
+            // `m1 is m2 and is_mask(m1)`: one boolean mask OR'd with itself is itself.
+            if (ReferenceEquals(m1, m2) && m1 is NDArray same && same.typecode == NPTypeCode.Boolean)
+                return shrink && !np.any(same) ? nomask : same;
+            // `if dtype1 != dtype2: raise ValueError(...)`, decided by the dtypes alone — before a text operand's truth
+            // values are read.
+            DType d1 = MaskOperandDType(m1), d2 = MaskOperandDType(m2);
+            if (!Equals(d1, d2))
+                throw new ValueError($"Incompatible dtypes '{(object)d1 ?? "None"}'<>'{(object)d2 ?? "None"}'");
+            // `dtype1.names` of two dtype-less operands.
+            if (d1 is null)
+                throw new AttributeError("'NoneType' object has no attribute 'names'");
+            // make_mask(umath.logical_or(m1, m2)): text operands are refused here unless empty; a masked operand's slots
+            // are masked in the ufunc's result and make_mask reads them as True.
+            var r = np.logical_or(AsData(m1), AsData(m2));
+            var operandMasks = Or((m1 as NDMaskedArray)?._mask, (m2 as NDMaskedArray)?._mask);
+            if (operandMasks is not null)
+                r = np.logical_or(r, operandMasks);
+            return shrink && !np.any(r) ? nomask : r;
         }
 
-        /// <summary>Normalizes a <c>mask_or</c> operand to a real mask or null: unwraps a masked array's mask,
-        /// treats the <see cref="nomask"/> sentinel and any all-False 0-D as "no contribution", else coerces to bool.</summary>
-        private NDArray MaskOperand(object m)
+        /// <summary>
+        ///     Whether a <see cref="mask_or"/> operand is NumPy's "no mask" (<c>m is nomask or m is False</c>): C# null, the
+        ///     <see cref="nomask"/> sentinel itself, or the C# literal <c>false</c> (Python's <c>False</c>).
+        /// </summary>
+        /// <param name="m">The operand.</param>
+        /// <returns>True when the operand contributes nothing.</returns>
+        private bool IsNoMaskOperand(object m) => m is null || ReferenceEquals(m, nomask) || m is bool b && !b;
+
+        /// <summary>
+        ///     <c>getattr(m, 'dtype', None)</c> for a <see cref="mask_or"/> operand: an array's (a masked array's DATA)
+        ///     dtype; a C# scalar or an <c>object[]</c> (a Python list) has none. A typed C# array is an ndarray (the house
+        ///     NEP 50 map) and reports the dtype it converts to.
+        /// </summary>
+        /// <param name="m">The operand.</param>
+        /// <returns>The dtype, or null for a dtype-less operand.</returns>
+        private static DType MaskOperandDType(object m) => m switch
         {
-            switch (m)
-            {
-                case null: return null;
-                case NDMaskedArray ma_: return ma_._mask;
-                case NDArray nd:
-                    // The 0-D nomask sentinel (or any 0-D False) means "no mask".
-                    if (ReferenceEquals(nd, nomask)) return null;
-                    nd = NDMatrixBoundary.PlainOf(nd);   // a numpy.matrix mask is read as its plain view (AsData)
-                    if (nd.ndim == 0 && !np.any(nd)) return null;
-                    return nd.typecode == NPTypeCode.Boolean ? nd : np.not_equal(nd, NDArray.Scalar(0));
-                default:
-                    var b = AsData(m);
-                    return b.typecode == NPTypeCode.Boolean ? b : np.not_equal(b, NDArray.Scalar(0));
-            }
-        }
+            NDMaskedArray masked => masked.dtype,
+            NDArray nd => nd.dtype,
+            object[] => null,
+            Array => AsData(m).dtype,
+            _ => null,
+        };
 
         /// <summary>
         ///     Ravels a mask to a flat 1-D boolean array (NumPy's <c>flatten_mask</c>). In NumPy this collapses
@@ -2020,10 +2638,20 @@ namespace NumSharp
 
         /// <summary>
         ///     The single fill value shared by both inputs, or null when they differ (NumPy's
-        ///     <c>common_fill_value</c>). Each operand's fill is its stored override, else its dtype default.
+        ///     <c>common_fill_value</c>: <c>t1 == t2</c> on the two <c>get_fill_value</c> results). Each operand's fill is its
+        ///     stored override, else its dtype default.
         /// </summary>
         /// <param name="a">First operand.</param><param name="b">Second operand.</param>
-        /// <returns>The common fill value (boxed), or null when the two differ.</returns>
+        /// <returns>The common fill value (boxed; the FIRST operand's when they are equal), or null when the two differ.</returns>
+        /// <exception cref="ValueError">A fill value is an array (NumPy's deprecated non-scalar fill) and the elementwise
+        ///     comparison has more than one element: Python's truth test of the comparison raises.</exception>
+        /// <exception cref="StringComputationNotSupportedException">Two text ARRAY fills: NumPy compares their text (the
+        ///     next phase of the string support).</exception>
+        /// <remarks>
+        ///     The comparison is Python's <c>==</c> between the two scalars: text by content (a <c>str</c> never equals a
+        ///     <c>bytes</c>, so a <c>U</c> and an <c>S</c> array share no fill), numbers by value (<c>5.0 == 5</c>), and a
+        ///     number never equals text.
+        /// </remarks>
         public object common_fill_value(object a, object b)
         {
             // Scoped by hand (an object return): a scalar/array-like operand is materialized only to read its
@@ -2031,12 +2659,74 @@ namespace NumSharp
             using var scope = NDScope.Open();
             var fa = FillOf(a);
             var fb = FillOf(b);
-            return Equals(fa, fb) ? fa : null;
+            return FillValuesEqual(fa, fb) ? fa : null;
         }
 
-        /// <summary>The effective fill value of an operand — its stored override, else its dtype default.</summary>
+        /// <summary>The effective fill value of an operand (NumPy's <c>get_fill_value</c>): a masked array's
+        /// <see cref="NDMaskedArray.fill_value"/> getter — which materializes a text default, as NumPy's does — else the
+        /// default of the operand's dtype.</summary>
+        /// <param name="a">The operand.</param>
+        /// <returns>The fill value NumPy's <c>get_fill_value</c> returns for it.</returns>
         private object FillOf(object a)
-            => (a as NDMaskedArray)?._fill_value ?? default_fill_value(AsData(a).dtype);
+            => a is NDMaskedArray m ? m.fill_value : default_fill_value(AsData(a).dtype);
+
+        /// <summary>
+        ///     Python's <c>t1 == t2</c> between two fill values, as <see cref="common_fill_value"/> evaluates it: text by
+        ///     content and class, numbers by value across types, and an array fill through NumPy's elementwise comparison
+        ///     and the truth test of its result.
+        /// </summary>
+        /// <param name="fa">The first fill.</param>
+        /// <param name="fb">The second fill.</param>
+        /// <returns>True when Python would treat the two as equal.</returns>
+        /// <exception cref="ValueError">An array comparison with more than one element (Python's truth test).</exception>
+        private static bool FillValuesEqual(object fa, object fb)
+        {
+            if (fa is NDArray || fb is NDArray)
+            {
+                // `array == x` is NumPy's elementwise comparison; `if result:` then needs exactly one element. Only the
+                // 0-d wrappers made here are disposed: a stored array fill belongs to its masked array.
+                using var leftOwned = fa is NDArray ? null : NDArray.Scalar(fa);
+                using var rightOwned = fb is NDArray ? null : NDArray.Scalar(fb);
+                using var eq = np.equal(fa as NDArray ?? leftOwned, fb as NDArray ?? rightOwned);
+                if (eq.size != 1)
+                    throw new ValueError(eq.size == 0
+                        ? "The truth value of an empty array is ambiguous. Use `array.size > 0` to check that an array is not empty."
+                        : "The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()");
+                return Convert.ToBoolean(eq.GetAtIndex(0));
+            }
+            switch (fa)
+            {
+                case string sa:
+                    return fb is string sb && string.Equals(sa, sb, StringComparison.Ordinal);
+                case byte[] ba:
+                    return fb is byte[] bb && ba.AsSpan().SequenceEqual(bb);
+            }
+            if (fb is string || fb is byte[])
+                return false;
+            // Python compares numbers by value across types (np.float64(5.0) == np.int64(5)); a complex compares both parts.
+            if (fa is Complex || fb is Complex)
+                return ToComplex(fa) == ToComplex(fb);
+            if (IsIntegral(fa) && IsIntegral(fb))
+                return ToInt128(fa) == ToInt128(fb);
+            return ToDouble(fa) == ToDouble(fb);
+
+            static bool IsIntegral(object v) => v is bool or sbyte or byte or short or ushort or int or uint or long or ulong or char;
+            static Int128 ToInt128(object v) => v switch
+            {
+                bool bo => bo ? 1 : 0,
+                char c => c,
+                ulong u => u,
+                _ => Convert.ToInt64(v, System.Globalization.CultureInfo.InvariantCulture),
+            };
+            static Complex ToComplex(object v) => v is Complex c ? c : new Complex(ToDouble(v), 0);
+        }
+
+        /// <summary>A boxed real number (any C# numeric primitive, <see cref="bool"/>, <see cref="char"/> or
+        /// <see cref="Half"/>) as a <see cref="double"/>; <see cref="Half"/> is not <see cref="IConvertible"/>.</summary>
+        /// <param name="v">The boxed number.</param>
+        /// <returns>Its value.</returns>
+        private static double ToDouble(object v)
+            => v is Half h ? (double)h : Convert.ToDouble(v, System.Globalization.CultureInfo.InvariantCulture);
 
         /// <summary>
         ///     Sets the fill value of <paramref name="a"/> in place (NumPy's module-level <c>set_fill_value</c>).
@@ -2045,44 +2735,71 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">The masked array to mutate.</param>
         /// <param name="fill_value">The new fill value (null restores the dtype default).</param>
+        /// <exception cref="TypeError">See <see cref="NDMaskedArray.fill_value"/>: NumPy's method IS the property setter, so
+        ///     the same <c>_check_fill_value</c> runs.</exception>
+        /// <exception cref="StringComputationNotSupportedException">See <see cref="NDMaskedArray.fill_value"/>.</exception>
         public void set_fill_value(object a, object fill_value)
         {
             if (a is NDMaskedArray m)
-                m._fill_value = fill_value;
+                m.fill_value = fill_value;
         }
 
         /// <summary>
         ///     Masks the non-finite (NaN/±inf) elements of <paramref name="a"/> AND writes the fill value into
         ///     their data slots (NumPy's <c>fix_invalid</c>) — like <see cref="masked_invalid"/> but the hidden
-        ///     data becomes the fill rather than the original non-finite value. The result array's
-        ///     <c>fill_value</c> stays the dtype default; <paramref name="fill_value"/> only chooses what is
-        ///     WRITTEN into the masked slots (matching NumPy, whose param sets the data, not the attribute).
+        ///     data becomes the fill rather than the original non-finite value. The result keeps <paramref name="a"/>'s own
+        ///     <c>fill_value</c>; <paramref name="fill_value"/> only chooses what is WRITTEN into the masked slots
+        ///     (matching NumPy, whose param sets the data, not the attribute).
         /// </summary>
         /// <param name="a">Data array-like (an existing mask is preserved and OR'd with the invalid mask).</param>
-        /// <param name="mask">Optional extra boolean mask to OR in (NumPy's <c>mask=</c>); null = none.</param>
-        /// <param name="copy">Copy the data (default true) vs alias it.</param>
-        /// <param name="fill_value">Value written at the newly-masked (invalid) slots; null uses <paramref name="a"/>'s
-        /// own fill (dtype default).</param>
+        /// <param name="mask">Optional extra mask to OR in (NumPy's <c>mask=</c>, read as <see cref="array"/> reads it);
+        ///     null = none.</param>
+        /// <param name="copy">Copy the data (default true) vs alias it (then the fill is written into
+        ///     <paramref name="a"/>'s data, as NumPy does).</param>
+        /// <param name="fill_value">Value written at the newly-masked (invalid) slots; null uses the result's own
+        ///     fill value (<paramref name="a"/>'s, else the dtype default).</param>
         /// <returns>A masked array with non-finite slots masked and their data replaced by the fill.</returns>
-        /// <remarks>Scoped by hand: the partial masks (non-finite, extra, the intermediate ORs), the fill scalar and
-        /// any operand materializations are reclaimed; only the result's data and mask leave.</remarks>
+        /// <exception cref="MaskError">The mask's size is neither one nor the data's (NumPy's constructor check, raised
+        ///     before the data is examined).</exception>
+        /// <exception cref="TypeError">Text data: NumPy's <c>np.isfinite</c> has no loop for it, whatever the size.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty text mask for numeric data (its strings'
+        ///     truth values), or a text fill written into numbers.</exception>
+        /// <remarks>
+        ///     NumPy's statements: <c>a = masked_array(a, copy=copy, mask=mask, subok=True)</c>; <c>invalid =
+        ///     np.logical_not(np.isfinite(a._data))</c>; <c>if not invalid.any(): return a</c>; <c>a._mask |= invalid</c>;
+        ///     <c>a._data[invalid] = fill_value</c>. So the mask stage runs first (its MaskError wins), the mask is never
+        ///     shrunk (an explicit all-False mask stays an array), and only the newly caught non-finite slots are
+        ///     overwritten — pre-existing masked-but-finite data is left alone.
+        ///     <para>Scoped by hand: the partial masks, the fill scalar and any operand materializations are reclaimed; only
+        ///     the result's data and mask leave.</para>
+        /// </remarks>
         public NDMaskedArray fix_invalid(object a, object mask = null, bool copy = true, object fill_value = null)
         {
             using var scope = NDScope.Open();
-            var d = AsData(a);
-            // The invalid mask is ~isfinite for a float/complex dtype, else nothing (integers are all finite).
-            var invalid = NonFiniteMask(d) ?? np.zeros(DimsOf(d), np.@bool);
-            var existing = (a as NDMaskedArray)?._mask;
-            var extra = mask is null ? null : AsData(mask).astype(np.@bool);
-            // Full mask = existing | extra | invalid (nomask-aware).
-            var full = Or(Or(existing, extra), invalid);
-            var data = copy ? d.copy() : d;
-            var fv = fill_value ?? (a as NDMaskedArray)?._fill_value ?? default_fill_value(d.dtype);
-            // Write the fill into every INVALID slot (not the whole mask — NumPy only overwrites the newly
-            // caught non-finite data, leaving pre-existing masked-but-finite data alone).
-            if (np.any(invalid))
-                np.copyto(data, NDArray.Scalar(fv), casting: "unsafe", where: invalid);
-            return Yield(scope, new NDMaskedArray(data, (full is not null && np.any(full)) ? full : null));
+            var source = AsData(a);
+            if (source.typecode == NPTypeCode.String)
+            {
+                // Text data: NumPy's constructor converts a mask (its truth values, which cannot fail) after checking its
+                // size, and np.isfinite then refuses the text whatever the mask held. So the size check, then the TypeError.
+                if (mask is not null && !ReferenceEquals(mask, nomask) && mask is not bool)
+                    CheckMaskFitsData(AsData(mask), source);
+                throw NDStringUfuncs.NotSupportedForInputTypes("isfinite");
+            }
+            // masked_array(a, copy=copy, mask=mask): the given mask ORs with a's own (keep_mask) after NumPy's shape rules,
+            // and a's fill value and hardness ride along (the CLASS constructor: hard_mask=None inherits).
+            var result = masked_array(a, mask, copy: copy);
+            var d = result._data;
+            // np.isfinite raises its no-loop TypeError for text, whatever the size; NonFiniteMask skips the call for the
+            // exact dtypes, whose elements are all finite.
+            var invalid = d.typecode == NPTypeCode.String ? np.logical_not(np.isfinite(d)) : NonFiniteMask(d);
+            if (invalid is null || !np.any(invalid))
+                return Yield(scope, result);
+            // a._mask |= invalid (a new array: an aliased input mask is left untouched).
+            result._mask = Or(result._mask, invalid);
+            // a._data[invalid] = fill_value: only the newly caught non-finite slots are overwritten.
+            var fv = fill_value ?? result.fill_value;
+            np.copyto(d, fv as NDArray ?? NDArray.Scalar(fv), casting: "unsafe", where: invalid);
+            return Yield(scope, result);
         }
 
         /// <summary>The <c>~</c> operator's backing (NumPy has no <c>ma.invert</c> module function): bitwise-NOT
@@ -2364,6 +3081,16 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     A VALUE operand (a comparison value, a bound of <see cref="masked_inside"/>, a fill) as an array: like
+        ///     <see cref="AsData"/>, except that a C# <see cref="byte"/>[] is NumPy's <c>bytes</c> scalar (the house map) — a
+        ///     0-d <c>S</c> array — where <see cref="AsData"/> reads it as a <c>uint8</c> array of values.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The operand array (a new 0-d array for a scalar).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
+        private static NDArray AsValueOperand(object value) => value is byte[] bytes ? NDArray.Scalar(bytes) : AsData(value);
+
+        /// <summary>
         ///     The dtype numpy.ma gives a BARE scalar operand of a binary op — its STRONG default width (python
         ///     int→int64, python float→float64, bool→bool, complex→complex128). numpy.ma wraps a scalar as
         ///     <c>np.asarray(scalar)</c> (a STRONG array) rather than a weak NEP50 scalar, which is why
@@ -2402,12 +3129,25 @@ namespace NumSharp
         /// <param name="b">Right operand.</param>
         /// <param name="da">Left data array — widened in place when promotion applies.</param>
         /// <param name="db">Right data array — widened in place when promotion applies.</param>
+        /// <remarks>With a TEXT operand only the bare scalar is converted (to its strong width): text and numbers share no
+        /// numeric dtype, and NumPy's ufunc reports the pair itself (<c>ma.greater(u, 1)</c> names <c>Int64DType</c>).</remarks>
         private static void PromoteMaScalar(object a, object b, ref NDArray da, ref NDArray db)
         {
             var sa = BareScalarStrongDtype(a);
             var sb = BareScalarStrongDtype(b);
             if (sa is null && sb is null)
                 return; // array×array: nothing to widen — the underlying op promotes them itself.
+            // A text operand has no numeric promotion with the scalar: numpy.ma only makes the scalar its strong
+            // default-width array (getdata(1) is int64), and the ufunc then answers for the pair — no loop
+            // ((StrDType, Int64DType)) or, for two strings, the comparison of their text.
+            if (da.typecode == NPTypeCode.String || db.typecode == NPTypeCode.String)
+            {
+                if (sa is { } strongA)
+                    da = da.astype(strongA, copy: false);
+                if (sb is { } strongB)
+                    db = db.astype(strongB, copy: false);
+                return;
+            }
             NPTypeCode ea = sa ?? da.typecode;
             NPTypeCode eb = sb ?? db.typecode;
             var td = np.promote_types(ea, eb);
@@ -2796,10 +3536,13 @@ namespace NumSharp
         /// <summary>
         ///     The value NumPy fills masked elements with for a MINIMUM/argmin (the dtype's LARGEST value, so
         ///     a masked slot can never win a min): +inf for float/complex, MaxValue for integers/decimal/char,
-        ///     True for bool. NumPy's <c>minimum_fill_value</c>.
+        ///     the integer <c>1</c> for bool, and null for a text dtype. NumPy's <c>minimum_fill_value</c>.
         /// </summary>
         /// <param name="a">Array-like whose dtype selects the value.</param>
-        /// <returns>A boxed scalar castable into the dtype.</returns>
+        /// <returns>A boxed scalar castable into the dtype, or null for a text dtype.</returns>
+        /// <remarks>NumPy's <c>min_filler</c> table holds <c>None</c> for <c>str_</c>/<c>bytes_</c> (no largest text), and its
+        /// reductions then fill with the array's own fill value (<c>self.filled(None)</c>); the bool entry is the Python
+        /// int <c>1</c>, which is why the result is a <see cref="long"/> rather than <c>true</c>.</remarks>
         public object minimum_fill_value(object a)
         {
             // Scoped by hand (an object return): a scalar/array-like operand is materialized only to read its
@@ -2810,11 +3553,13 @@ namespace NumSharp
 
         /// <summary>
         ///     The value NumPy fills masked elements with for a MAXIMUM/argmax (the dtype's SMALLEST value):
-        ///     -inf for float/complex, MinValue for integers/decimal, False for bool. NumPy's
-        ///     <c>maximum_fill_value</c>.
+        ///     -inf for float/complex, MinValue for integers/decimal, the integer <c>0</c> for bool, and null for a text
+        ///     dtype. NumPy's <c>maximum_fill_value</c>.
         /// </summary>
         /// <param name="a">Array-like whose dtype selects the value.</param>
-        /// <returns>A boxed scalar castable into the dtype.</returns>
+        /// <returns>A boxed scalar castable into the dtype, or null for a text dtype.</returns>
+        /// <remarks>See <see cref="minimum_fill_value"/>: NumPy's <c>max_filler</c> holds <c>None</c> for text and the
+        /// Python int <c>0</c> for bool.</remarks>
         public object maximum_fill_value(object a)
         {
             // Scoped by hand (an object return): a scalar/array-like operand is materialized only to read its
@@ -2824,9 +3569,14 @@ namespace NumSharp
         }
 
         /// <summary>Per-dtype "largest" fill (for min/argmin) — see <see cref="minimum_fill_value"/>.</summary>
+        /// <param name="tc">The data's storage lane.</param>
+        /// <returns>The boxed fill, or null for the text lane.</returns>
         private static object MinFill(NPTypeCode tc) => tc switch
         {
-            NPTypeCode.Boolean => (object)true,
+            // _maxvals[np.bool_] = 1: NumPy's entry is the Python int, cast into the bool data as True.
+            NPTypeCode.Boolean => (object)1L,
+            // _maxvals[np.str_] / [np.bytes_] = None: no largest text; the reduction uses the array's own fill.
+            NPTypeCode.String => null,
             NPTypeCode.Byte => byte.MaxValue,
             NPTypeCode.SByte => sbyte.MaxValue,
             NPTypeCode.Int16 => short.MaxValue,
@@ -2845,9 +3595,14 @@ namespace NumSharp
         };
 
         /// <summary>Per-dtype "smallest" fill (for max/argmax) — see <see cref="maximum_fill_value"/>.</summary>
+        /// <param name="tc">The data's storage lane.</param>
+        /// <returns>The boxed fill, or null for the text lane.</returns>
         private static object MaxFill(NPTypeCode tc) => tc switch
         {
-            NPTypeCode.Boolean => (object)false,
+            // _minvals[np.bool_] = 0: the Python int, cast into the bool data as False.
+            NPTypeCode.Boolean => (object)0L,
+            // _minvals[np.str_] / [np.bytes_] = None, as for MinFill.
+            NPTypeCode.String => null,
             NPTypeCode.Byte => byte.MinValue,
             NPTypeCode.SByte => sbyte.MinValue,
             NPTypeCode.Int16 => short.MinValue,
@@ -2889,11 +3644,14 @@ namespace NumSharp
         /// <summary>Shared identity-fill reduction: fill masked with <paramref name="identity"/>, reduce via
         /// <paramref name="fn"/>, and mask result cells whose whole reduced slice was masked.</summary>
         /// <param name="a">Operand.</param>
-        /// <param name="identity">The op identity written at masked slots (0 sum, 1 prod, ±inf min/max, …).</param>
+        /// <param name="identity">The op identity written at masked slots (0 sum, 1 prod, ±inf min/max, …); null for a text
+        /// min/max, which fills with the operand's own fill value (NumPy's <c>filled(None)</c>).</param>
         /// <param name="fn">The underlying <c>np.*</c> reduction (data, axis, keepdims) → result.</param>
         /// <param name="axis">Reduction axis, or null to reduce the flattened array.</param>
         /// <param name="keepdims">Keep reduced axes as size-1 (NumPy keepdims).</param>
         /// <returns>The masked reduction result (or <see cref="NDMasked"/> for a fully-masked scalar).</returns>
+        /// <exception cref="StringComputationNotSupportedException">A text operand with a masked slot whose reduction would
+        ///     compute: NumPy formats the numeric identity into those slots first (the next phase).</exception>
         /// <remarks>Scoped by hand — the one scope sum/prod/min/max ride: the identity-filled copy of the data (and
         /// a materialized scalar operand) is reclaimed, as is the computed value when a fully-masked 0-D result
         /// collapses to the <see cref="NDMasked"/> singleton; only the reduction and its mask leave.</remarks>
@@ -2901,12 +3659,69 @@ namespace NumSharp
         {
             using var scope = NDScope.Open();
             var mask = (a as NDMaskedArray)?._mask;
-            var d = mask is null ? AsData(a) : FilledForReduction(((NDMaskedArray)a)._data, mask, identity);
+            // A null identity is NumPy's `self.filled(None)`: minimum_fill_value / maximum_fill_value are None for text, so
+            // min/max fill the masked slots with the array's own fill value ('N/A') before the reduction answers.
+            if (identity is null && mask is not null)
+                identity = ((NDMaskedArray)a).fill_value;
+            // `self.filled(0).sum(...)` of TEXT: NumPy formats the identity into the masked slots and the reduction then
+            // refuses the dtype (add.reduce / multiply over strings). FilledForNumericOp hands the reduction the unfilled
+            // data (same dtype and shape) and defers only if the reduction would compute.
+            Exception deferral = null;
+            var d = mask is null ? AsData(a) : FilledForNumericOp(a, identity, ref deferral, reduction: true);
             var result = fn(d, axis, keepdims);
+            if (deferral is not null)
+                throw deferral;
             if (mask is null)
                 return Yield(scope, new NDMaskedArray(result, null));
             return Yield(scope, Finalize(result, AllAlongAxis(mask, axis, keepdims)));
         }
+
+        /// <summary>
+        ///     numpy.ma's <c>filled(a, fill)</c> as a NUMERIC operation reads it (<c>self.filled(0).sum()</c>,
+        ///     <c>self.filled(1).cumprod()</c>, <c>np.dot(filled(a, 0), filled(b, 0))</c>, <c>np.inner(...)</c>), safe for
+        ///     TEXT data. NumPy formats the number into the masked text slots (<c>'0'</c>) — a step that cannot fail and
+        ///     keeps the dtype and the shape — so the operation then decides the call: over text it refuses by dtype or
+        ///     shape (no string loop, <c>data type must provide an itemsize</c>, a misaligned product, a rank error), or it
+        ///     computes on the text. Formatting numbers into text is the next phase, so for a text operand with a masked
+        ///     slot this returns the UNFILLED data and records the deferral: the caller runs its operation (whose refusal
+        ///     is then NumPy's, the dtype and shape being the same) and throws the deferral if the operation returns.
+        /// </summary>
+        /// <param name="a">The operand: a masked array, a plain array or an array-like.</param>
+        /// <param name="fill">The value numpy.ma fills the masked slots with.</param>
+        /// <param name="deferral">Receives the next-phase exception when <paramref name="a"/> is text with a masked slot
+        ///     and <paramref name="fill"/> is a number (left unchanged otherwise, so several operands share one).</param>
+        /// <param name="reduction">True for a reduction's fill (<see cref="FilledForReduction"/>: a K-order copy, reading
+        ///     the data's own memory order), false for the public <see cref="NDMaskedArray.filled(object)"/>.</param>
+        /// <returns>The filled data (or the data itself / a view of it when no slot is masked), or the unfilled text data
+        ///     when the deferral was recorded.</returns>
+        /// <exception cref="TypeError">A fill numpy.ma refuses (see <see cref="CheckFillValue"/>).</exception>
+        private static NDArray FilledForNumericOp(object a, object fill, ref Exception deferral, bool reduction = false)
+        {
+            if (a is not NDMaskedArray m || m._mask is null)
+                return AsData(a);
+            if (m._data.typecode == NPTypeCode.String && FormatsAsText(fill) && np.any(m._mask))
+            {
+                deferral ??= FormattingDeferral(fill, m._data.dtype);
+                return m._data;
+            }
+            return reduction ? FilledForReduction(m._data, m._mask, fill) : m.filled(fill);
+        }
+
+        /// <summary>
+        ///     The exception NumPy's <c>_check_fill_value</c> formatting a number into a text dtype stands for in NumSharp:
+        ///     the next phase of the string support (the cast <c>number → U/S</c>).
+        /// </summary>
+        /// <param name="fill">The number (or numeric array) NumPy would format.</param>
+        /// <param name="ndtype">The text dtype it would be formatted into.</param>
+        /// <returns>The <see cref="StringComputationNotSupportedException"/> to throw.</returns>
+        private static Exception FormattingDeferral(object fill, DType ndtype) => fill switch
+        {
+            NDMaskedArray m => NDStringCasting.TextConversion(m._data.dtype, ndtype),
+            NDArray nd => NDStringCasting.TextConversion(nd.dtype, ndtype),
+            // A BigInteger (a Python int of any size) has no storage lane; the message names int64, NumPy's default integer.
+            BigInteger => NDStringCasting.TextConversion(DType.From(NPTypeCode.Int64), ndtype),
+            _ => NDStringCasting.TextConversion((DType)fill.GetType(), ndtype),
+        };
 
         /// <summary>
         ///     NumPy's <c>MaskedArray.filled(fill)</c> as numpy.ma's reductions (<c>self.filled(0).sum(...)</c>, prod, min,
@@ -2985,12 +3800,39 @@ namespace NumSharp
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>An int64 <see cref="NDArray"/> (0-D for a flat count).</returns>
         /// <remarks>Scoped (<c>[NDScoped]</c>): the negated-mask (or all-True) indicator the count sums is reclaimed.</remarks>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand (a 0-d operand accepts 0 only).</exception>
         [NDScoped]
         public NDArray count(object a, int? axis = null, bool keepdims = false)
-            // DimsOf, not AsData(a).Shape: for a nomask NON-CONTIGUOUS operand the strided Shape made
-            // CountUnmasked size/iterate over the base buffer and undercount (a [::2] view of 8 counted 6).
-            // The count is over the logical DIMENSIONS. See DimsOf.
-            => CountUnmasked((a as NDMaskedArray)?._mask, DimsOf(AsData(a)), axis, keepdims);
+        {
+            var d = AsData(a);
+            var m = (a as NDMaskedArray)?._mask;
+            // DimsOf, not d.Shape: for a nomask NON-CONTIGUOUS operand the strided Shape made CountUnmasked size/iterate
+            // over the base buffer and undercount (a [::2] view of 8 counted 6). The count is over the logical DIMENSIONS.
+            if (m is not null)
+                return CountUnmasked(m, DimsOf(d), axis, keepdims);
+            // NumPy's nomask branch counts from the SHAPE, without a reduction: a 0-d operand is 1 (axis None or 0), no
+            // axis is the size, and an axis is `np.full(out_dims, items, dtype=np.intp)` — a fresh WRITEABLE array (a
+            // reduction's 0-d result is NumSharp's read-only stand-in for a scalar).
+            if (d.ndim == 0)
+            {
+                if (axis is not null && axis.Value != 0)
+                    throw new AxisError(axis.Value, 0);
+                return NDArray.Scalar(1L);
+            }
+            if (axis is null)
+                return keepdims
+                    ? np.full(Shape.Adopt(Enumerable.Repeat(1L, d.ndim).ToArray()), d.size, np.int64)
+                    : NDArray.Scalar(d.size);
+            int ax = axis.Value < 0 ? axis.Value + d.ndim : axis.Value;
+            if (ax < 0 || ax >= d.ndim)
+                throw new AxisError(axis.Value, d.ndim);
+            var dims = d.Shape.dimensions;
+            long items = dims[ax];
+            long[] outDims = keepdims
+                ? dims.Select((n, i) => i == ax ? 1L : n).ToArray()
+                : dims.Where((_, i) => i != ax).ToArray();
+            return np.full(Shape.Adopt(outDims), items, np.int64);
+        }
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  mean / var / std — NumPy's MaskedArray.mean / var / std, statement for statement
@@ -3893,7 +4735,11 @@ namespace NumSharp
                 // Masked iff NO unmasked pair contributed: ~(slide of the not-masks). Data from the 0-filled inputs.
                 var contributed = np.not_equal(f(np.logical_not(getmaskarray(a)).astype(np.int32), np.logical_not(getmaskarray(v)).astype(np.int32), mode), NDArray.Scalar(0));
                 mask = np.logical_not(contributed);
-                data = f(filled(a, 0), filled(v, 0), mode);
+                // `f(filled(a, 0), filled(v, 0), mode=mode)`: over text the 0 fill is formatted first (the next phase).
+                Exception deferral = null;
+                data = f(FilledForNumericOp(a, 0, ref deferral), FilledForNumericOp(v, 0, ref deferral), mode);
+                if (deferral is not null)
+                    throw deferral;
             }
             return Yield(scope, new NDMaskedArray(data, np.any(mask) ? mask : null));
         }
@@ -4157,14 +5003,26 @@ namespace NumSharp
 
         /// <summary>Shared scan (cumsum/cumprod): fill masked with the identity, scan, and carry the original
         /// per-position mask (raveled to match when axis is null).</summary>
+        /// <param name="a">Operand.</param>
+        /// <param name="identity">The scan identity written at masked slots (0 cumsum, 1 cumprod).</param>
+        /// <param name="fn">The underlying <c>np.*</c> scan (data, axis) → result.</param>
+        /// <param name="axis">Scan axis, or null to scan the flattened array.</param>
+        /// <returns>The masked scan.</returns>
+        /// <exception cref="StringComputationNotSupportedException">A text operand with a masked slot whose scan would
+        ///     compute (see <see cref="FilledForNumericOp"/>).</exception>
         /// <remarks>Scoped by hand — the one scope cumsum/cumprod ride: the identity-filled copy (and a
-        /// materialized scalar operand) is reclaimed; the scan and its (possibly raveled) mask leave.</remarks>
+        /// materialized scalar operand) is reclaimed; the scan and its (possibly raveled) mask leave. NumPy's
+        /// <c>self.filled(0).cumsum(...)</c> over TEXT formats the identity and then refuses the dtype
+        /// (<c>add.accumulate</c> / multiply over strings): the scan runs over the unfilled text to raise that refusal.</remarks>
         private NDMaskedArray Scan(object a, object identity, Func<NDArray, int?, NDArray> fn, int? axis)
         {
             using var scope = NDScope.Open();
             var mask = (a as NDMaskedArray)?._mask;
-            var d = mask is null ? AsData(a) : ((NDMaskedArray)a).filled(identity);
+            Exception deferral = null;
+            var d = FilledForNumericOp(a, identity, ref deferral);
             var result = fn(d, axis);
+            if (deferral is not null)
+                throw deferral;
             if (mask is null)
                 return Yield(scope, new NDMaskedArray(result, null));
             // axis=null flattens the result in C-order — ravel the mask to match.
@@ -4234,34 +5092,61 @@ namespace NumSharp
         /// <returns>An unmasked masked array of arbitrary contents.</returns>
         public NDMaskedArray empty(Shape shape, DType dtype = null) => new NDMaskedArray(np.empty(shape, dtype ?? np.float64), null);
 
-        /// <summary>Masked zeros shaped like <paramref name="a"/> (no element masked; the input mask is NOT carried).</summary>
+        /// <summary>Masked zeros shaped like <paramref name="a"/> (NumPy's <c>ma.zeros_like</c>, <c>np.zeros_like</c> of the
+        /// masked array): a masked prototype lends a COPY of its mask (its masked slots stay masked over the zeros), its fill
+        /// value (converted to the result dtype) and its hard-mask flag; a plain prototype gives an unmasked result.</summary>
         /// <param name="a">Prototype array-like.</param><param name="dtype">Override dtype (null ⇒ prototype's).</param>
-        /// <returns>An unmasked masked array of zeros.</returns>
+        /// <returns>A masked array of zeros.</returns>
+        /// <exception cref="TypeError">The prototype's text fill cannot be converted into a text <paramref name="dtype"/>.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A zero must be written into text, or a fill converted
+        ///     between text and numbers (the next phase).</exception>
         public NDMaskedArray zeros_like(object a, DType dtype = null)
         {
             // Scoped by hand: a scalar/array-like prototype is materialized only to read its shape/dtype.
             using var scope = NDScope.Open();
-            return Yield(scope, new NDMaskedArray(np.zeros_like(AsData(a), dtype), null));
+            return Yield(scope, LikePrototype(a, np.zeros_like(AsData(a), dtype)));
         }
 
-        /// <summary>Masked ones shaped like <paramref name="a"/> (no element masked).</summary>
+        /// <summary>Masked ones shaped like <paramref name="a"/> (NumPy's <c>ma.ones_like</c>): the prototype's mask (a
+        /// copy), fill value and hardness ride along, as in <see cref="zeros_like"/>.</summary>
         /// <param name="a">Prototype array-like.</param><param name="dtype">Override dtype.</param>
-        /// <returns>An unmasked masked array of ones.</returns>
+        /// <returns>A masked array of ones.</returns>
+        /// <exception cref="TypeError">See <see cref="zeros_like"/>.</exception>
+        /// <exception cref="StringComputationNotSupportedException">See <see cref="zeros_like"/>.</exception>
         public NDMaskedArray ones_like(object a, DType dtype = null)
         {
             // Scoped by hand: a scalar/array-like prototype is materialized only to read its shape/dtype.
             using var scope = NDScope.Open();
-            return Yield(scope, new NDMaskedArray(np.ones_like(AsData(a), dtype), null));
+            return Yield(scope, LikePrototype(a, np.ones_like(AsData(a), dtype)));
         }
 
-        /// <summary>Masked uninitialized array shaped like <paramref name="a"/> (no element masked).</summary>
+        /// <summary>Masked uninitialized array shaped like <paramref name="a"/> (NumPy's <c>ma.empty_like</c>): the
+        /// prototype's mask (a copy), fill value and hardness ride along, as in <see cref="zeros_like"/>.</summary>
         /// <param name="a">Prototype array-like.</param><param name="dtype">Override dtype.</param>
-        /// <returns>An unmasked masked array.</returns>
+        /// <returns>A masked array of arbitrary contents (a <c>U</c> result is zero-filled, as NumPy's is).</returns>
+        /// <exception cref="TypeError">See <see cref="zeros_like"/>.</exception>
         public NDMaskedArray empty_like(object a, DType dtype = null)
         {
             // Scoped by hand: a scalar/array-like prototype is materialized only to read its shape/dtype.
             using var scope = NDScope.Open();
-            return Yield(scope, new NDMaskedArray(np.empty_like(AsData(a), dtype), null));
+            return Yield(scope, LikePrototype(a, np.empty_like(AsData(a), dtype)));
+        }
+
+        /// <summary>
+        ///     The masked result of NumPy's <c>np.*_like(masked_prototype)</c>: <c>np.empty_like</c> makes a masked array
+        ///     whose <c>__array_finalize__</c> copies the prototype's mask (<c>_mask.astype(..., order)</c> — never the
+        ///     prototype's own buffer), takes its hard-mask flag and converts its fill value to the result dtype; the data is
+        ///     then filled (<c>np.copyto(res, 0)</c> touches the data only). A plain prototype gives an unmasked result.
+        /// </summary>
+        /// <param name="a">The prototype.</param>
+        /// <param name="data">The result's data (already filled).</param>
+        /// <returns>The masked result.</returns>
+        /// <exception cref="TypeError">The prototype's text fill cannot be converted into the result's text dtype.</exception>
+        private static NDMaskedArray LikePrototype(object a, NDArray data)
+        {
+            if (a is not NDMaskedArray source)
+                return new NDMaskedArray(data, null);
+            return new NDMaskedArray(data, source._mask?.copy()).FinalizeFrom(source);
         }
 
         /// <summary>Masked evenly-spaced values in [0, stop) (no element masked).</summary>
@@ -4308,176 +5193,548 @@ namespace NumSharp
 
         /// <summary>Masks <paramref name="a"/> wherever <paramref name="condition"/> is True, OR'ing onto any
         /// existing mask (NumPy's <c>masked_where</c> — the primitive the rest of this family builds on).</summary>
-        /// <param name="condition">Boolean array-like; True ⇒ mask that element.</param>
+        /// <param name="condition">Array-like of truth values (<see cref="make_mask"/>: non-zero numbers, non-empty
+        ///     strings; a masked condition reads True at its masked slots); True ⇒ mask that element. A 0-d condition
+        ///     applies to every element.</param>
         /// <param name="a">Data array-like.</param>
         /// <param name="copy">Copy the data (default true) vs alias it.</param>
-        /// <returns>A masked array of <paramref name="a"/>'s data with the new mask.</returns>
-        /// <remarks>Scoped by hand: the boolean-coerced condition copy (when an existing mask is OR'd onto it) and
-        /// any materialized operand are reclaimed; only the result's data and mask leave.</remarks>
+        /// <returns>A masked array of <paramref name="a"/>'s data with the new mask; it keeps a masked
+        ///     <paramref name="a"/>'s fill value and hardness.</returns>
+        /// <exception cref="IndexError">A condition with dimensions whose shape is not <paramref name="a"/>'s
+        ///     (<c>Inconsistent shape between the condition and the input (got (2,) and (3,))</c>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty text condition (its strings' truth values,
+        ///     the next phase of the string support).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy's statements: <c>cond = make_mask(condition, shrink=False)</c>, then <c>if cshape and cshape !=
+        ///     ashape</c> the IndexError (a condition is never broadcast, only a 0-d one fills the array), then
+        ///     <c>mask_or(cond, a._mask)</c> for a masked input and <c>result.mask = _shrink_mask(cond)</c>. The shape test
+        ///     runs first here: NumPy's conversion before it cannot fail, so the shapes decide the error even for a text
+        ///     condition.
+        ///     </para>
+        ///     <para>
+        ///     The mask's FORM follows NumPy's: an all-False condition over an input without a mask leaves no mask
+        ///     (<c>mask=False</c> in the repr), while an input that already had a mask array keeps an array (the setter
+        ///     writes the condition into it).
+        ///     </para>
+        ///     <para>Scoped by hand: the boolean-coerced condition copy (when an existing mask is OR'd onto it) and
+        ///     any materialized operand are reclaimed; only the result's data and mask leave.</para>
+        /// </remarks>
         public NDMaskedArray masked_where(object condition, object a, bool copy = true)
         {
             using var scope = NDScope.Open();
-            var cm = AsData(condition).astype(np.@bool);
             var d = AsData(a);
-            var existing = (a as NDMaskedArray)?._mask;
-            var m = existing is null ? cm : (existing | cm);
-            return Yield(scope, new NDMaskedArray(copy ? d.copy() : d, m));
+            // A masked condition keeps its masked-array form for make_mask (its masked slots read True); any other
+            // condition is materialized once.
+            object condOperand = condition is NDMaskedArray ? condition : AsData(condition);
+            var condShape = AsData(condOperand).Shape;
+            // `if cshape and cshape != ashape`: a 0-d condition (an empty tuple) is exempt; any other shape must match.
+            if (condShape.NDim != 0 && !condShape.dimensions.AsSpan().SequenceEqual(d.Shape.dimensions))
+                throw new IndexError("Inconsistent shape between the condition and the input " +
+                                     $"(got {ArrayFormatter.ShapeTuple(condShape.dimensions)} and {ArrayFormatter.ShapeTuple(d.Shape.dimensions)})");
+            // make_mask(condition, shrink=False): always an array, a fresh one (text: the next phase unless empty).
+            var cond = make_mask(condOperand, shrink: false);
+            var source = a as NDMaskedArray;
+            var existing = source?._mask;
+            NDArray m;
+            if (existing is not null)
+                // mask_or(cond, a._mask), written into the input's (copied) mask array: an array however few slots are set.
+                m = np.logical_or(cond, existing);
+            else if (!np.any(cond))
+                // _shrink_mask(cond) is nomask, and assigning nomask to an unmasked array leaves it unmasked.
+                m = null;
+            else
+                // `current_mask.flat = cond`: a 0-d condition fills every slot.
+                m = cond.ndim == 0 ? np.broadcast_to(cond, DimsOf(d)).copy() : cond;
+            var result = new NDMaskedArray(copy ? d.copy() : d, m);
+            // `a = np.array(a, copy=copy, subok=True)` finalizes FROM the masked input: its hard-mask flag and its fill value,
+            // converted to the dtype (a materialized 'N/A' default of a <U1 input becomes 'N').
+            if (source is not null)
+                result.FinalizeFrom(source);
+            return Yield(scope, result);
         }
 
-        /// <summary>Masks where <c>a == value</c> (NumPy's <c>masked_equal</c>).</summary>
-        /// <param name="a">Data.</param><param name="value">Value to mask.</param><param name="copy">Copy the data.</param>
-        /// <returns>The masked array.</returns>
+        /// <summary>Masks where <c>a == value</c> (NumPy's <c>masked_equal</c>), and makes <paramref name="value"/> the
+        /// result's fill value.</summary>
+        /// <param name="a">Data.</param><param name="value">Value to mask (a scalar or an array-like).</param>
+        /// <param name="copy">Copy the data.</param>
+        /// <returns>The masked array (fill_value = <paramref name="value"/>, checked against the dtype).</returns>
+        /// <exception cref="TypeError">NumPy's comparison has no loop for the operands (text against a number:
+        ///     <c>(&lt;class 'numpy.dtypes.StrDType'&gt;, &lt;class 'numpy.dtypes.Float64DType'&gt;)</c>), or the fill check
+        ///     refuses a <see cref="string"/> value for numeric data.</exception>
+        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text (the next phase of
+        ///     the string support).</exception>
+        /// <remarks>NumPy's statements: <c>output = masked_where(equal(x, value), x, copy=copy); output.fill_value =
+        /// value</c>, with numpy.ma's masked <c>equal</c>: a bare scalar becomes a STRONG default-width array
+        /// (<c>getdata(1.5)</c> is float64), so the comparison of float32 data runs in float64. Scoped by hand: the
+        /// comparison only feeds masked_where's condition.</remarks>
         public NDMaskedArray masked_equal(object a, object value, bool copy = true)
         {
-            // Scoped by hand: the comparison is only masked_where's condition operand (coerced into its own mask).
             using var scope = NDScope.Open();
-            return Yield(scope, masked_where(np.equal(AsData(a), NDArray.Scalar(value)), a, copy));
+            var output = masked_where(equal(a, BytesAsScalar(value)), a, copy);
+            // output.fill_value = value: NumPy's setter, so the value is checked against the data's dtype.
+            output.fill_value = value;
+            return Yield(scope, output);
         }
 
-        /// <summary>Masks where <c>a != value</c>.</summary>
+        /// <summary>Masks where <c>a != value</c> (NumPy's <c>masked_not_equal</c>).</summary>
         /// <param name="a">Data.</param><param name="value">Value kept unmasked.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
+        /// <exception cref="TypeError">NumPy's comparison has no loop for the operands (see <see cref="masked_equal"/>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text.</exception>
+        /// <remarks>NumPy's <c>masked_where(not_equal(x, value), x, copy=copy)</c> with numpy.ma's masked comparison.
+        /// Scoped by hand: the comparison only feeds masked_where's condition.</remarks>
         public NDMaskedArray masked_not_equal(object a, object value, bool copy = true)
         {
-            // Scoped by hand: the comparison is only masked_where's condition operand (coerced into its own mask).
             using var scope = NDScope.Open();
-            return Yield(scope, masked_where(np.not_equal(AsData(a), NDArray.Scalar(value)), a, copy));
+            return Yield(scope, masked_where(not_equal(a, BytesAsScalar(value)), a, copy));
         }
 
-        /// <summary>Masks where <c>a &gt; value</c>.</summary>
+        /// <summary>Masks where <c>a &gt; value</c> (NumPy's <c>masked_greater</c>).</summary>
         /// <param name="a">Data.</param><param name="value">Threshold.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
+        /// <exception cref="TypeError">NumPy's comparison has no loop for the operands (see <see cref="masked_equal"/>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text.</exception>
+        /// <remarks>NumPy's <c>masked_where(greater(x, value), x, copy=copy)</c> with numpy.ma's masked comparison.
+        /// Scoped by hand: the comparison only feeds masked_where's condition.</remarks>
         public NDMaskedArray masked_greater(object a, object value, bool copy = true)
         {
-            // Scoped by hand: the comparison is only masked_where's condition operand (coerced into its own mask).
             using var scope = NDScope.Open();
-            return Yield(scope, masked_where(np.greater(AsData(a), NDArray.Scalar(value)), a, copy));
+            return Yield(scope, masked_where(greater(a, BytesAsScalar(value)), a, copy));
         }
 
-        /// <summary>Masks where <c>a &gt;= value</c>.</summary>
+        /// <summary>Masks where <c>a &gt;= value</c> (NumPy's <c>masked_greater_equal</c>).</summary>
         /// <param name="a">Data.</param><param name="value">Threshold.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
+        /// <exception cref="TypeError">NumPy's comparison has no loop for the operands (see <see cref="masked_equal"/>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text.</exception>
+        /// <remarks>NumPy's <c>masked_where(greater_equal(x, value), x, copy=copy)</c> with numpy.ma's masked comparison.
+        /// Scoped by hand: the comparison only feeds masked_where's condition.</remarks>
         public NDMaskedArray masked_greater_equal(object a, object value, bool copy = true)
         {
-            // Scoped by hand: the comparison is only masked_where's condition operand (coerced into its own mask).
             using var scope = NDScope.Open();
-            return Yield(scope, masked_where(np.greater_equal(AsData(a), NDArray.Scalar(value)), a, copy));
+            return Yield(scope, masked_where(greater_equal(a, BytesAsScalar(value)), a, copy));
         }
 
-        /// <summary>Masks where <c>a &lt; value</c>. Computed as <c>value &gt; a</c> (scalar left) to route around
-        /// the <c>np.less</c> 0-D-scalar-RHS quirk while staying NaN-exact (both give False for NaN).</summary>
+        /// <summary>Masks where <c>a &lt; value</c> (NumPy's <c>masked_less</c>).</summary>
         /// <param name="a">Data.</param><param name="value">Threshold.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
+        /// <exception cref="TypeError">NumPy's comparison has no loop for the operands (see <see cref="masked_equal"/>;
+        ///     the text names <c>'less'</c>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text.</exception>
+        /// <remarks>NumPy's <c>masked_where(less(x, value), x, copy=copy)</c> with numpy.ma's masked comparison.
+        /// Scoped by hand: the comparison only feeds masked_where's condition.</remarks>
         public NDMaskedArray masked_less(object a, object value, bool copy = true)
         {
-            // Scoped by hand: the comparison is only masked_where's condition operand (coerced into its own mask).
             using var scope = NDScope.Open();
-            return Yield(scope, masked_where(np.greater(NDArray.Scalar(value), AsData(a)), a, copy));
+            return Yield(scope, masked_where(less(a, BytesAsScalar(value)), a, copy));
         }
 
-        /// <summary>Masks where <c>a &lt;= value</c>.</summary>
+        /// <summary>Masks where <c>a &lt;= value</c> (NumPy's <c>masked_less_equal</c>).</summary>
         /// <param name="a">Data.</param><param name="value">Threshold.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
+        /// <exception cref="TypeError">NumPy's comparison has no loop for the operands (see <see cref="masked_equal"/>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text.</exception>
+        /// <remarks>NumPy's <c>masked_where(less_equal(x, value), x, copy=copy)</c> with numpy.ma's masked comparison.
+        /// Scoped by hand: the comparison only feeds masked_where's condition.</remarks>
         public NDMaskedArray masked_less_equal(object a, object value, bool copy = true)
         {
-            // Scoped by hand: the comparison is only masked_where's condition operand (coerced into its own mask).
             using var scope = NDScope.Open();
-            return Yield(scope, masked_where(np.less_equal(AsData(a), NDArray.Scalar(value)), a, copy));
+            return Yield(scope, masked_where(less_equal(a, BytesAsScalar(value)), a, copy));
         }
 
-        /// <summary>Masks the CLOSED interval where <c>v1 &lt;= a &lt;= v2</c> (bounds swapped if v1&gt;v2), NumPy's
-        /// <c>masked_inside</c>.</summary>
-        /// <param name="a">Data.</param><param name="v1">One bound.</param><param name="v2">Other bound.</param><param name="copy">Copy the data.</param>
+        /// <summary>Masks the CLOSED interval where <c>v1 &lt;= a &lt;= v2</c> (bounds swapped if <c>v2 &lt; v1</c>),
+        /// NumPy's <c>masked_inside</c>.</summary>
+        /// <param name="a">Data.</param>
+        /// <param name="v1">One bound: a number, a <see cref="string"/> / <see cref="byte"/>[] for text data, or an
+        ///     array-like.</param>
+        /// <param name="v2">Other bound.</param>
+        /// <param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
-        /// <remarks>Scoped by hand: the two bound comparisons and their conjunction only feed masked_where.</remarks>
-        public NDMaskedArray masked_inside(object a, double v1, double v2, bool copy = true)
+        /// <exception cref="TypeError">Python cannot order the bounds (<c>'&lt;' not supported between instances of 'str' and
+        ///     'float'</c>), or NumPy's comparison has no loop for the data and a bound (text data against a C# number names
+        ///     the Python scalar's class: <c>(&lt;class 'numpy.dtypes.StrDType'&gt;, &lt;class
+        ///     'numpy.dtypes._PyFloatDType'&gt;)</c>, whatever the data's size).</exception>
+        /// <exception cref="ValueError">Array bounds whose comparison has more than one element (Python's truth test of
+        ///     <c>v2 &lt; v1</c>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text.</exception>
+        /// <remarks>
+        ///     NumPy's statements: <c>if v2 &lt; v1: (v1, v2) = (v2, v1)</c> (a Python comparison: a NaN bound never swaps),
+        ///     <c>xf = filled(x)</c>, <c>condition = (xf &gt;= v1) &amp; (xf &lt;= v2)</c> with the RAW bounds — a C# number is a
+        ///     weak Python scalar there, so float16/float32 data compare at their own width — then masked_where.
+        ///     <para>Scoped by hand: the two bound comparisons and their conjunction only feed masked_where.</para>
+        /// </remarks>
+        public NDMaskedArray masked_inside(object a, object v1, object v2, bool copy = true)
         {
             using var scope = NDScope.Open();
-            var lo = Math.Min(v1, v2); var hi = Math.Max(v1, v2);
-            var d = AsData(a);
-            var cond = np.greater_equal(d, NDArray.Scalar(lo)) & np.less_equal(d, NDArray.Scalar(hi));
-            return Yield(scope, masked_where(cond, a, copy));
+            if (PythonLess(v2, v1))
+                (v1, v2) = (v2, v1);
+            var xf = filled(a);
+            // Python evaluates the left comparison first, so its refusal is the one reported.
+            var lower = CompareWithPythonValue("greater_equal", xf, v1);
+            var upper = CompareWithPythonValue("less_equal", xf, v2);
+            return Yield(scope, masked_where(WithBoundMasks(np.logical_and(lower, upper), v1, v2), a, copy));
         }
 
-        /// <summary>Masks OUTSIDE the closed interval where <c>a &lt; v1 || a &gt; v2</c> (bounds swapped if v1&gt;v2),
-        /// NumPy's <c>masked_outside</c>.</summary>
-        /// <param name="a">Data.</param><param name="v1">One bound.</param><param name="v2">Other bound.</param><param name="copy">Copy the data.</param>
+        /// <summary>Masks OUTSIDE the closed interval, where <c>a &lt; v1 || a &gt; v2</c> (bounds swapped if
+        /// <c>v2 &lt; v1</c>), NumPy's <c>masked_outside</c>.</summary>
+        /// <param name="a">Data.</param>
+        /// <param name="v1">One bound (see <see cref="masked_inside"/>).</param>
+        /// <param name="v2">Other bound.</param>
+        /// <param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
-        /// <remarks>Scoped by hand: the two bound comparisons and their disjunction only feed masked_where.</remarks>
-        public NDMaskedArray masked_outside(object a, double v1, double v2, bool copy = true)
+        /// <exception cref="TypeError">See <see cref="masked_inside"/>; the comparison refusal names <c>'less'</c>, the
+        ///     first comparison NumPy evaluates here.</exception>
+        /// <exception cref="ValueError">See <see cref="masked_inside"/>.</exception>
+        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text.</exception>
+        /// <remarks>
+        ///     NumPy's statements: the same swap, <c>xf = filled(x)</c>, <c>condition = (xf &lt; v1) | (xf &gt; v2)</c>, then
+        ///     masked_where. A NaN bound is not swapped away: <c>masked_outside(x, nan, 2.0)</c> masks <c>x &gt; 2</c>.
+        ///     <para>Scoped by hand: the two bound comparisons and their disjunction only feed masked_where.</para>
+        /// </remarks>
+        public NDMaskedArray masked_outside(object a, object v1, object v2, bool copy = true)
         {
             using var scope = NDScope.Open();
-            var lo = Math.Min(v1, v2); var hi = Math.Max(v1, v2);
-            var d = AsData(a);
-            var cond = np.greater(NDArray.Scalar(lo), d) | np.greater(d, NDArray.Scalar(hi));
-            return Yield(scope, masked_where(cond, a, copy));
+            if (PythonLess(v2, v1))
+                (v1, v2) = (v2, v1);
+            var xf = filled(a);
+            var below = CompareWithPythonValue("less", xf, v1);
+            var above = CompareWithPythonValue("greater", xf, v2);
+            return Yield(scope, masked_where(WithBoundMasks(np.logical_or(below, above), v1, v2), a, copy));
         }
 
-        /// <summary>Masks non-finite elements (NaN/±inf) — NumPy's <c>masked_invalid</c>. For non-float dtypes
-        /// nothing is masked (every value is finite).</summary>
+        /// <summary>Masks non-finite elements (NaN/±inf) — NumPy's <c>masked_invalid</c>. For exact dtypes nothing is
+        /// masked (every value is finite), but the result always carries a mask ARRAY.</summary>
         /// <param name="a">Data.</param><param name="copy">Copy the data.</param>
-        /// <returns>The masked array.</returns>
-        /// <remarks>Scoped by hand: the non-finite predicate (or its all-False stand-in) only feeds masked_where.</remarks>
+        /// <returns>The masked array; its mask is an array even when nothing is masked (NumPy's gh-22842 rule).</returns>
+        /// <exception cref="TypeError">Text data: NumPy's <c>np.isfinite</c> has no loop for it (<c>ufunc 'isfinite' not
+        ///     supported for the input types, …</c>), whatever the size.</exception>
+        /// <remarks>NumPy's statements: <c>res = masked_where(~(np.isfinite(a)), a, copy=copy)</c>, then <c>if res._mask
+        /// is nomask: res._mask = make_mask_none(res.shape)</c>. Scoped by hand: the non-finite predicate (or its
+        /// all-False stand-in) only feeds masked_where.</remarks>
         public NDMaskedArray masked_invalid(object a, bool copy = true)
         {
             using var scope = NDScope.Open();
             var d = AsData(a);
-            var cond = NonFiniteMask(d) ?? np.zeros(DimsOf(d), np.@bool);
-            return Yield(scope, masked_where(cond, a, copy));
+            // np.isfinite raises its no-loop TypeError for text before anything is masked; NonFiniteMask skips the call for
+            // the exact dtypes, whose elements are all finite.
+            var cond = d.typecode == NPTypeCode.String
+                ? np.logical_not(np.isfinite(d))
+                : NonFiniteMask(d) ?? np.zeros(DimsOf(d), np.@bool);
+            var res = masked_where(cond, a, copy);
+            // masked_invalid never returns nomask (matplotlib relies on it): an unmasked result gets a full False mask.
+            if (res._mask is null)
+                res._mask = np.zeros(DimsOf(res._data), np.@bool);
+            return Yield(scope, res);
         }
 
-        /// <summary>Masks elements approximately equal to <paramref name="value"/> (NumPy's <c>masked_values</c>,
-        /// <c>isclose</c> with the given tolerances); the masked array's default fill becomes <paramref name="value"/>.</summary>
-        /// <param name="a">Data.</param><param name="value">Value to mask around.</param>
-        /// <param name="rtol">Relative tolerance.</param><param name="atol">Absolute tolerance.</param><param name="copy">Copy the data.</param>
-        /// <returns>The masked array (fill_value = <paramref name="value"/>).</returns>
-        /// <remarks>Scoped by hand: the fill-substituted copy (when a further copy is taken), the comparison
-        /// scalars and a mask that shrinks away are reclaimed; only the result's data and mask leave.</remarks>
-        public NDMaskedArray masked_values(object a, double value, double rtol = 1e-5, double atol = 1e-8, bool copy = true)
+        /// <summary>Masks elements approximately equal to <paramref name="value"/> (NumPy's <c>masked_values</c>:
+        /// <c>isclose</c> with the given tolerances for float data, exact equality otherwise); the result's fill value
+        /// becomes <paramref name="value"/>.</summary>
+        /// <param name="a">Data.</param>
+        /// <param name="value">Value to mask around: a number, a <see cref="string"/> / <see cref="byte"/>[] for text data,
+        ///     or an array-like.</param>
+        /// <param name="rtol">Relative tolerance.</param><param name="atol">Absolute tolerance.</param>
+        /// <param name="copy">Copy the data.</param>
+        /// <param name="shrink">Collapse an all-False mask to no mask (NumPy's <c>shrink=True</c>).</param>
+        /// <returns>The masked array (fill_value = <paramref name="value"/>, checked against the dtype).</returns>
+        /// <exception cref="TypeError">Text data with a C# number (NumPy's <c>equal</c> has no loop: the text names the
+        ///     Python scalar's class, <c>_PyFloatDType</c> / <c>_PyLongDType</c>), or a masked numeric array with a
+        ///     <see cref="string"/> value (the fill check).</exception>
+        /// <exception cref="DTypePromotionError">Float data with a text value (<c>np.isclose</c> cannot promote it).</exception>
+        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text, or a number must be
+        ///     formatted as text.</exception>
+        /// <remarks>
+        ///     NumPy's statements: <c>xnew = filled(x, value)</c>, the mask from <c>isclose</c> (float) or
+        ///     <c>umath.equal(xnew, value)</c>, <c>masked_array(xnew, mask=mask, copy=copy, fill_value=value)</c>, then
+        ///     <c>shrink_mask()</c>. For text data and a C# number NumPy formats the number into the masked slots first, which
+        ///     cannot fail and keeps the dtype, so the comparison's TypeError is its answer: it is raised up front.
+        ///     <para>Scoped by hand: the fill-substituted copy (when a further copy is taken), the comparison scalars and a
+        ///     mask that shrinks away are reclaimed; only the result's data and mask leave.</para>
+        /// </remarks>
+        public NDMaskedArray masked_values(object a, object value, double rtol = 1e-5, double atol = 1e-8, bool copy = true, bool shrink = true)
         {
             using var scope = NDScope.Open();
+            var data = AsData(a);
+            if (data.typecode == NPTypeCode.String && PythonScalarClass(value) is { } scalarClass)
+                throw ComparisonNoLoop("equal", data.dtype.Meta, scalarClass);
             // NumPy fills masked positions with `value` FIRST (xnew = filled(x, value)), THEN masks by
-            // approximate equality — so a pre-masked slot's data becomes `value` and is re-masked.
-            var xnew = filled(a, value);
+            // approximate equality — so a pre-masked slot's data becomes `value` and is re-masked. A numeric ARRAY value
+            // for text data is formatted into the masked slots (the next phase) and then refused by `equal` (no loop for
+            // text and numbers): the comparison runs over the unfilled text so that refusal is raised.
+            Exception deferral = null;
+            var xnew = FilledForNumericOp(a, value, ref deferral);
             bool isFloat = xnew.typecode is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double;
             var mask = isFloat
-                ? np.isclose(xnew, NDArray.Scalar(value), rtol, atol)
-                : np.equal(xnew, NDArray.Scalar(value));
-            // shrink an all-False mask to nomask (NumPy's shrink_mask default).
-            return Yield(scope, new NDMaskedArray(copy ? xnew.copy() : xnew, np.any(mask) ? mask : null, value));
+                ? np.isclose(xnew, value as NDArray ?? (value as NDMaskedArray)?._data ?? NDArray.Scalar(value), rtol, atol)
+                : CompareWithPythonValue("equal", xnew, value);
+            if (deferral is not null)
+                throw deferral;
+            var ret = array(xnew, mask, fill_value: value, copy: copy);
+            // ret.shrink_mask(): an all-False mask collapses to nomask.
+            if (shrink && ret._mask is not null && !np.any(ret._mask))
+                ret._mask = null;
+            return Yield(scope, ret);
         }
 
-        /// <summary>Masks elements exactly equal to <paramref name="value"/> (NumPy's <c>masked_object</c>).</summary>
-        /// <param name="a">Data.</param><param name="value">Value to mask.</param><param name="copy">Copy the data.</param>
-        /// <returns>The masked array.</returns>
-        public NDMaskedArray masked_object(object a, object value, bool copy = true) => masked_equal(a, value, copy);
+        /// <summary>Masks elements exactly equal to <paramref name="value"/> (NumPy's <c>masked_object</c>), and makes
+        /// <paramref name="value"/> the result's fill value.</summary>
+        /// <param name="a">Data.</param><param name="value">Value to mask (compared as a raw Python value).</param>
+        /// <param name="copy">Copy the data.</param>
+        /// <param name="shrink">Shrink the comparison's mask to no mask when nothing matched (NumPy's
+        ///     <c>shrink=True</c>).</param>
+        /// <returns>The masked array (fill_value = <paramref name="value"/>, checked against the dtype).</returns>
+        /// <exception cref="TypeError">NumPy's <c>equal</c> has no loop for the data and the value (text data with a C#
+        ///     number names the Python scalar's class, <c>_PyFloatDType</c> / <c>_PyLongDType</c>; a bool names
+        ///     <c>BoolDType</c>), or the fill check refuses a <see cref="string"/> value for numeric data.</exception>
+        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text.</exception>
+        /// <remarks>
+        ///     Unlike <see cref="masked_equal"/>, NumPy compares with <c>umath.equal(x._data, value)</c> — the RAW value, a
+        ///     weak Python scalar — so float16/float32 data compare at their own width (<c>masked_object(float32 [1.1],
+        ///     1.1)</c> masks the element, <c>masked_equal</c> does not). Then <c>mask_or(x._mask, make_mask(condition,
+        ///     shrink=shrink))</c> and <c>masked_array(x, mask=mask, copy=copy, fill_value=value)</c>.
+        ///     <para>Scoped by hand: the comparison and the combined mask only feed the constructor.</para>
+        /// </remarks>
+        public NDMaskedArray masked_object(object a, object value, bool copy = true, bool shrink = true)
+        {
+            using var scope = NDScope.Open();
+            var condition = WithBoundMasks(CompareWithPythonValue("equal", AsData(a), value), value, null);
+            var mask = mask_or((a as NDMaskedArray)?._mask, make_mask(condition, shrink));
+            // `masked_array(x, mask=mask, copy=copy, fill_value=value)`: the class constructor, so x's hardness rides along.
+            return Yield(scope, masked_array(a, mask, fill_value: value, copy: copy));
+        }
+
+        /// <summary>
+        ///     A value for numpy.ma's masked comparisons: a C# <see cref="byte"/>[] becomes NumPy's <c>bytes</c> scalar (a
+        ///     0-d <c>S</c> array, the house map); anything else passes through raw, so a bare C# number still reaches
+        ///     numpy.ma's strong-scalar promotion (<see cref="BareScalarStrongDtype"/>).
+        /// </summary>
+        /// <param name="value">The value as the caller gave it.</param>
+        /// <returns>The value to compare against.</returns>
+        private static object BytesAsScalar(object value) => value is byte[] bytes ? NDArray.Scalar(bytes) : value;
+
+        /// <summary>
+        ///     <c>umath.&lt;ufunc&gt;(x, value)</c> with <paramref name="value"/> as Python passes it: a C# number is a WEAK
+        ///     Python scalar (float16/float32 data compare at their own width, as NEP 50 casts the scalar to the array's
+        ///     float), text data against a Python number has no loop whatever its size, and any other value (text, bytes, an
+        ///     array-like) is an ordinary operand.
+        /// </summary>
+        /// <param name="ufunc">The comparison: <c>"equal"</c>, <c>"less"</c>, <c>"less_equal"</c>, <c>"greater"</c> or
+        ///     <c>"greater_equal"</c>.</param>
+        /// <param name="x">The data side.</param>
+        /// <param name="value">The value side, raw.</param>
+        /// <returns>The boolean comparison of the data (a masked-array <paramref name="value"/> compares by its data; its
+        ///     mask joins through <see cref="WithBoundMasks"/>).</returns>
+        /// <exception cref="TypeError">No loop for the pair (NumPy's class-naming UFuncTypeError).</exception>
+        /// <exception cref="StringComputationNotSupportedException">Two non-empty text operands: the next phase.</exception>
+        private static NDArray CompareWithPythonValue(string ufunc, NDArray x, object value)
+        {
+            if (PythonScalarClass(value) is { } scalarClass && x.typecode == NPTypeCode.String)
+                throw ComparisonNoLoop(ufunc, x.dtype.Meta, scalarClass);
+            NDArray operand;
+            if (IsWeakPythonNumber(value) && x.typecode is NPTypeCode.Half or NPTypeCode.Single)
+                // NEP 50: the Python number takes the array's float width, so the comparison runs at float16/float32.
+                operand = NDArray.Scalar(value).astype(x.dtype);
+            else
+                operand = value as NDArray ?? (value as NDMaskedArray)?._data ?? AsValueOperand(value);
+            return ufunc switch
+            {
+                "equal" => np.equal(x, operand),
+                "less" => np.less(x, operand),
+                "less_equal" => np.less_equal(x, operand),
+                "greater" => np.greater(x, operand),
+                "greater_equal" => np.greater_equal(x, operand),
+                _ => throw new ArgumentOutOfRangeException(nameof(ufunc), ufunc, "not a comparison ufunc"),
+            };
+        }
+
+        /// <summary>
+        ///     A condition computed against raw values, with the masks of masked-array values joined in: the raw ufunc's result
+        ///     on a masked operand is masked where that operand is (and the elementwise <c>&amp;</c> / <c>|</c> of two such
+        ///     results is masked where either is), and <see cref="make_mask"/> reads a masked slot as True. So every slot a
+        ///     value masks becomes True in the condition.
+        /// </summary>
+        /// <param name="condition">The data condition.</param>
+        /// <param name="v1">The first raw value, or null.</param>
+        /// <param name="v2">The second raw value, or null.</param>
+        /// <returns><paramref name="condition"/> itself when neither value is a masked array with a mask; else a new array.</returns>
+        private static NDArray WithBoundMasks(NDArray condition, object v1, object v2)
+        {
+            var masks = Or((v1 as NDMaskedArray)?._mask, (v2 as NDMaskedArray)?._mask);
+            return masks is null ? condition : np.logical_or(condition, masks);
+        }
+
+        /// <summary>
+        ///     The DType class NumPy names for a raw Python scalar operand in a no-loop comparison: <c>_PyLongDType</c> for an
+        ///     int (any C# integer type or <see cref="BigInteger"/>), <c>_PyFloatDType</c> for a float (<see cref="double"/>,
+        ///     <see cref="float"/>), <c>_PyComplexDType</c> for a <see cref="Complex"/>, and <c>BoolDType</c> for a bool (a
+        ///     Python bool is not weak: it is NumPy's own bool).
+        /// </summary>
+        /// <param name="value">The raw value.</param>
+        /// <returns>The DType class, or null when the value is not a Python number (text, bytes, arrays, NumPy scalars such
+        ///     as <see cref="Half"/>).</returns>
+        private static DTypeMeta PythonScalarClass(object value) => value switch
+        {
+            bool => DType.Boolean.Meta,
+            sbyte or byte or short or ushort or int or uint or long or ulong or BigInteger => DTypeRegistry.PyLong,
+            float or double => DTypeRegistry.PyFloat,
+            Complex => DTypeRegistry.PyComplex,
+            _ => null,
+        };
+
+        /// <summary>Whether a raw value is a weak Python int or float (NEP 50): it adopts an array operand's width.</summary>
+        /// <param name="value">The raw value.</param>
+        /// <returns>True for a C# integer type, <see cref="BigInteger"/>, <see cref="float"/> or <see cref="double"/>.</returns>
+        private static bool IsWeakPythonNumber(object value)
+            => value is sbyte or byte or short or ushort or int or uint or long or ulong or BigInteger or float or double;
+
+        /// <summary>
+        ///     NumPy's UFuncTypeError for a comparison with no loop for the operand classes: <c>ufunc 'equal' did not contain
+        ///     a loop with signature matching types (&lt;class 'numpy.dtypes.StrDType'&gt;, &lt;class
+        ///     'numpy.dtypes._PyFloatDType'&gt;) -&gt; None</c>.
+        /// </summary>
+        /// <param name="ufunc">The comparison's name.</param>
+        /// <param name="first">The first operand's class.</param>
+        /// <param name="second">The second operand's class.</param>
+        /// <returns>The exception (not thrown).</returns>
+        private static TypeError ComparisonNoLoop(string ufunc, DTypeMeta first, DTypeMeta second)
+            => new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types ({first}, {second}) -> None");
+
+        /// <summary>
+        ///     Python's <c>a &lt; b</c> between two bounds of <see cref="masked_inside"/>/<see cref="masked_outside"/>: numbers
+        ///     by value (a NaN never orders), text by code point, bytes by byte value, arrays through NumPy's elementwise
+        ///     <c>less</c> and the truth test of its result.
+        /// </summary>
+        /// <param name="a">The left bound.</param>
+        /// <param name="b">The right bound.</param>
+        /// <returns>True when Python's <c>a &lt; b</c> is truthy.</returns>
+        /// <exception cref="TypeError">Python cannot order the two (<c>'&lt;' not supported between instances of 'str' and
+        ///     'float'</c>, and always for a complex).</exception>
+        /// <exception cref="ValueError">An array comparison with other than one element (Python's truth test).</exception>
+        /// <exception cref="StringComputationNotSupportedException">Two text arrays: NumPy compares their text.</exception>
+        private static bool PythonLess(object a, object b)
+        {
+            if (a is NDArray or NDMaskedArray || b is NDArray or NDMaskedArray)
+            {
+                using var less = np.less(AsValueOperand(a), AsValueOperand(b));
+                if (less.size != 1)
+                    throw new ValueError(less.size == 0
+                        ? "The truth value of an empty array is ambiguous. Use `array.size > 0` to check that an array is not empty."
+                        : "The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()");
+                return Convert.ToBoolean(less.GetAtIndex(0));
+            }
+            switch (a, b)
+            {
+                case (string sa, string sb):
+                    return CompareCodePoints(sa, sb) < 0;
+                case (byte[] ba, byte[] bb):
+                    return ba.AsSpan().SequenceCompareTo(bb) < 0;
+            }
+            bool aReal = IsRealNumber(a), bReal = IsRealNumber(b);
+            if (!aReal || !bReal)
+                throw new TypeError($"'<' not supported between instances of '{PythonTypeName(a)}' and '{PythonTypeName(b)}'");
+            // Python compares an int and a float by their exact values; two ints exactly.
+            if (IsIntegerLike(a) && IsIntegerLike(b))
+                return ToBigInteger(a) < ToBigInteger(b);
+            return ToDouble(a) < ToDouble(b);
+
+            static bool IsIntegerLike(object v) => v is bool or sbyte or byte or short or ushort or int or uint or long or ulong or char or BigInteger;
+            static bool IsRealNumber(object v) => IsIntegerLike(v) || v is float or double or Half or decimal;
+            static BigInteger ToBigInteger(object v) => v switch
+            {
+                BigInteger big => big,
+                bool bo => bo ? BigInteger.One : BigInteger.Zero,
+                char c => c,
+                ulong u => u,
+                _ => Convert.ToInt64(v, System.Globalization.CultureInfo.InvariantCulture),
+            };
+        }
+
+        /// <summary>Python's ordering of two <c>str</c>: by Unicode code point (a C# ordinal comparison orders UTF-16 code
+        /// units, which differs once a supplementary character meets a BMP character above the surrogate range).</summary>
+        /// <param name="a">The left text.</param>
+        /// <param name="b">The right text.</param>
+        /// <returns>Negative, zero or positive, as <c>a</c> sorts before, equal to or after <c>b</c>.</returns>
+        private static int CompareCodePoints(string a, string b)
+        {
+            int i = 0, j = 0;
+            while (i < a.Length && j < b.Length)
+            {
+                int ca = CodePointAt(a, i, out int la), cb = CodePointAt(b, j, out int lb);
+                if (ca != cb)
+                    return ca < cb ? -1 : 1;
+                i += la;
+                j += lb;
+            }
+            return (a.Length - i).CompareTo(b.Length - j);
+
+            // A surrogate pair is one code point; a lone surrogate is its own code unit (Python keeps it as a code point).
+            static int CodePointAt(string s, int index, out int length)
+            {
+                if (char.IsHighSurrogate(s[index]) && index + 1 < s.Length && char.IsLowSurrogate(s[index + 1]))
+                {
+                    length = 2;
+                    return char.ConvertToUtf32(s[index], s[index + 1]);
+                }
+                length = 1;
+                return s[index];
+            }
+        }
+
+        /// <summary>The Python type name of a raw C# value, as Python's comparison error quotes it.</summary>
+        /// <param name="v">The value.</param>
+        /// <returns><c>str</c>, <c>bytes</c>, <c>bool</c>, <c>int</c>, <c>float</c>, <c>complex</c>, a NumPy scalar's
+        ///     qualified name, or the C# type name for anything else.</returns>
+        private static string PythonTypeName(object v) => v switch
+        {
+            string => "str",
+            byte[] => "bytes",
+            bool => "bool",
+            sbyte or byte or short or ushort or int or uint or long or ulong or BigInteger => "int",
+            float or double => "float",
+            Complex => "complex",
+            Half => "numpy.float16",
+            char => "numpy.uint16",
+            decimal => "decimal.Decimal",
+            null => "NoneType",
+            _ => v.GetType().Name,
+        };
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Extrema (element-wise), power, where, round
         // ─────────────────────────────────────────────────────────────────────────────
 
-        /// <summary>Element-wise maximum of two operands (mask = OR); with <paramref name="b"/> omitted it is the
-        /// maximum REDUCTION of <paramref name="a"/> — NumPy's dual-purpose <c>maximum</c>.</summary>
-        /// <param name="a">First operand (or the array to reduce).</param>
-        /// <param name="b">Second operand, or null to reduce <paramref name="a"/>.</param>
-        /// <returns>The element-wise or reduced masked maximum.</returns>
-        public NDMaskedArray maximum(object a, object b = null)
+        /// <summary>Element-wise maximum of two operands (mask = OR): NumPy's <c>ma.maximum(a, b)</c>, the
+        /// <c>_extrema_operation</c> call <c>where(greater(a, b), a, b)</c>.</summary>
+        /// <param name="a">First operand.</param>
+        /// <param name="b">Second operand (required, as in NumPy 2.x, whose <c>__call__(self, a, b)</c> has no default:
+        ///     the reduction is <see cref="max(object,int?,object,bool)"/>).</param>
+        /// <returns>The element-wise masked maximum.</returns>
+        /// <exception cref="TypeError">The operands have no comparison loop (text against numbers): NumPy's
+        ///     <c>ufunc 'greater' did not contain a loop ...</c>, raised by <c>greater(a, b)</c> in that operand order.</exception>
+        /// <exception cref="StringComputationNotSupportedException">Two text operands: the comparison reads the text.</exception>
+        public NDMaskedArray maximum(object a, object b)
         {
             // Scoped by hand: the masked comparison is only where's condition operand and is reclaimed.
             using var scope = NDScope.Open();
-            return Yield(scope, b is null ? max(a) : where(greater(a, b), a, b));
+            return Yield(scope, where(greater(a, b), a, b));
         }
 
-        /// <summary>Element-wise minimum of two operands (mask = OR); with <paramref name="b"/> omitted it is the
-        /// minimum REDUCTION of <paramref name="a"/>.</summary>
-        /// <param name="a">First operand (or the array to reduce).</param>
-        /// <param name="b">Second operand, or null to reduce <paramref name="a"/>.</param>
-        /// <returns>The element-wise or reduced masked minimum.</returns>
-        public NDMaskedArray minimum(object a, object b = null)
+        /// <summary>Element-wise minimum of two operands (mask = OR): NumPy's <c>ma.minimum(a, b)</c>, the
+        /// <c>_extrema_operation</c> call <c>where(less(a, b), a, b)</c>.</summary>
+        /// <param name="a">First operand.</param>
+        /// <param name="b">Second operand (required, as in NumPy 2.x; the reduction is
+        ///     <see cref="min(object,int?,object,bool)"/>).</param>
+        /// <returns>The element-wise masked minimum.</returns>
+        /// <exception cref="TypeError">The operands have no comparison loop: NumPy's <c>ufunc 'less' did not contain a
+        ///     loop ...</c>, naming the operands in call order.</exception>
+        /// <exception cref="StringComputationNotSupportedException">Two text operands: the comparison reads the text.</exception>
+        public NDMaskedArray minimum(object a, object b)
         {
-            // Scoped by hand: the masked comparison is only where's condition operand and is reclaimed.
+            // Scoped by hand: the masked comparison is only where's condition operand and is reclaimed. `less(a, b)`
+            // itself, not `greater(b, a)`: the two agree on every value, but a refusal names the operands in call order.
             using var scope = NDScope.Open();
-            return Yield(scope, b is null ? min(a) : where(greater(b, a), a, b)); // a<b ≡ b>a (routes around the np.less scalar quirk)
+            return Yield(scope, where(less(a, b), a, b));
         }
 
         /// <summary>Masked power (NumPy's <c>ma.power</c>): masked positions take the base's data; a non-finite
@@ -4571,31 +5828,65 @@ namespace NumSharp
 
         /// <summary>Applies a shape transform to both the data and (if present) the mask, keeping them aligned.</summary>
         /// <param name="a">Operand.</param><param name="f">The <c>np.*</c> transform to run on data and mask.</param>
+        /// <param name="inherit">True for the transforms NumPy runs through <c>_arraymethod</c> or a MaskedArray method
+        ///     (ravel, flatten, reshape, transpose, swapaxes, moveaxis, squeeze, expand_dims, repeat, diagonal): the result
+        ///     takes the operand's fill value and hard-mask flag (<c>result._update_from(self)</c>, see
+        ///     <see cref="NDMaskedArray.UpdateFrom"/>). False where NumPy views a plain result instead (take, a 1-D
+        ///     diag), which starts soft with the default fill.</param>
         /// <returns>The transformed masked array.</returns>
         /// <remarks>Scoped by hand — the one scope every shape transform (ravel/reshape/transpose/take/diag/…) rides:
         /// a materialized scalar/array-like operand and anything the transform builds besides its result are
-        /// reclaimed. When the transform hands back its OWN operand (<c>atleast_1d</c> of a 1-D array, a no-op
-        /// squeeze) the result aliases the caller's arrays, exactly as NumPy's does.</remarks>
-        private NDMaskedArray Map1(object a, Func<NDArray, NDArray> f)
+        /// reclaimed. When the transform hands back its OWN operand (a no-op squeeze) the result aliases the caller's
+        /// arrays, exactly as NumPy's does.</remarks>
+        private NDMaskedArray Map1(object a, Func<NDArray, NDArray> f, bool inherit = true)
         {
             using var scope = NDScope.Open();
             var m = (a as NDMaskedArray)?._mask;
-            return Yield(scope, new NDMaskedArray(f(AsData(a)), m is null ? null : f(m)));
+            var result = new NDMaskedArray(f(AsData(a)), m is null ? null : f(m));
+            if (inherit && a is NDMaskedArray source)
+                result.UpdateFrom(source);
+            return Yield(scope, result);
         }
 
-        /// <summary>Applies a joining transform to a sequence's data arrays and, when ANY input is masked, to
-        /// their full mask arrays (an all-unmasked sequence stays nomask).</summary>
+        /// <summary>
+        ///     numpy.ma.extras' <c>_fromnxfunction_single</c> / <c>_fromnxfunction_allargs</c> for one operand:
+        ///     <c>masked_array(func(np.asarray(x)), mask=func(getmaskarray(x)))</c>. The mask is ALWAYS an array (an
+        ///     unmasked operand gives an all-False one, never <c>nomask</c>), and the result is a NEW masked array over plain
+        ///     results: it inherits neither the fill value nor the hard-mask flag.
+        /// </summary>
+        /// <param name="a">Operand.</param>
+        /// <param name="f">The <c>np.*</c> function run on the data and on the full mask.</param>
+        /// <returns>The masked result.</returns>
+        /// <remarks>Scoped by hand: the full mask stand-in of an unmasked operand and a materialized array-like operand
+        /// are reclaimed; only the results leave.</remarks>
+        private NDMaskedArray MapFromNx(object a, Func<NDArray, NDArray> f)
+        {
+            using var scope = NDScope.Open();
+            return Yield(scope, new NDMaskedArray(f(AsData(a)), f(getmaskarray(a))));
+        }
+
+        /// <summary>Applies a joining transform to a sequence's data arrays and to their full mask arrays — numpy.ma's
+        /// two joining shapes: <c>ma.concatenate</c> (<paramref name="shrink"/>) keeps <c>nomask</c> when no operand has a
+        /// mask and SHRINKS an all-False joined mask to <c>nomask</c> (<c>_shrink_mask(dm)</c>); the
+        /// <c>_fromnxfunction_seq</c> joins (stack, vstack, hstack, dstack, column_stack) ALWAYS build the mask array
+        /// (<c>masked_array(func(datas), mask=func(getmaskarrays))</c>). Neither inherits a fill value or hardness.</summary>
         /// <param name="arrays">The operands.</param><param name="f">The <c>np.*</c> join over the arrays.</param>
+        /// <param name="shrink">True for concatenate's mask rule, false for the <c>_fromnxfunction_seq</c> joins.</param>
         /// <returns>The joined masked array.</returns>
         /// <remarks>Scoped by hand — the one scope every join (concatenate/stack/…) rides: materialized operands and
         /// the all-False stand-in masks of the unmasked operands only feed the joins and are reclaimed.</remarks>
-        private NDMaskedArray MapSeq(object[] arrays, Func<NDArray[], NDArray> f)
+        private NDMaskedArray MapSeq(object[] arrays, Func<NDArray[], NDArray> f, bool shrink = false)
         {
             using var scope = NDScope.Open();
             var rd = f(arrays.Select(AsData).ToArray());
-            if (!arrays.Any(x => (x as NDMaskedArray)?._mask is not null))
+            // concatenate: `for x in arrays: if getmask(x) is not nomask: break; else: return data`.
+            if (shrink && !arrays.Any(x => (x as NDMaskedArray)?._mask is not null))
                 return Yield(scope, new NDMaskedArray(rd, null));
-            return Yield(scope, new NDMaskedArray(rd, f(arrays.Select(getmaskarray).ToArray())));
+            var dm = f(arrays.Select(getmaskarray).ToArray());
+            // `data._mask = _shrink_mask(dm)` — an all-False joined mask (an empty one included) is nomask again.
+            if (shrink && !np.any(dm))
+                dm = null;
+            return Yield(scope, new NDMaskedArray(rd, dm));
         }
 
         /// <summary>Flattened VIEW in the given order (mask flattened alike). NumPy's <c>ravel</c>.</summary>
@@ -4652,32 +5943,36 @@ namespace NumSharp
         /// <param name="mode">Out-of-bounds policy: "raise" (default)/"wrap"/"clip".</param>
         /// <returns>The masked array.</returns>
         public NDMaskedArray take(object a, NDArray indices, int? axis = null, string mode = "raise")
-            => Map1(a, d => np.take(d, indices, axis, null, mode));
+            // NumPy's MaskedArray.take views the plain gather (`_data.take(...)[...].view(cls)`): no _update_from.
+            => Map1(a, d => np.take(d, indices, axis, null, mode), inherit: false);
 
         /// <summary>Diagonal: 1-D input CONSTRUCTS a matrix with the values (and mask) on the k-th diagonal;
         /// 2-D input EXTRACTS the k-th diagonal (and its mask). NumPy's <c>ma.diag</c>.</summary>
         /// <param name="v">Operand.</param><param name="k">Diagonal offset.</param><returns>The masked array.</returns>
-        public NDMaskedArray diag(object v, int k = 0) => Map1(v, d => np.diag(d, k));
+        public NDMaskedArray diag(object v, int k = 0)
+            // `np.diag(v, k).view(MaskedArray)`: a 1-D v builds a plain matrix (no inheritance), a 2-D v extracts through
+            // MaskedArray.diagonal, an _arraymethod that carries the fill value and hardness along.
+            => Map1(v, d => np.diag(d, k), inherit: v is NDMaskedArray mv && mv.ndim >= 2);
 
         /// <summary>Flatten the input and build a diagonal matrix from it (mask alike).</summary>
         /// <param name="v">Operand.</param><param name="k">Diagonal offset.</param><returns>The masked diagonal matrix.</returns>
-        public NDMaskedArray diagflat(object v, int k = 0) => Map1(v, d => np.diagflat(d, k));
+        public NDMaskedArray diagflat(object v, int k = 0) => MapFromNx(v, d => np.diagflat(d, k));
 
         /// <summary>At-least-1-D view (mask alike).</summary>
         /// <param name="a">Operand.</param><returns>The masked array, rank ≥ 1.</returns>
-        public NDMaskedArray atleast_1d(object a) => Map1(a, d => np.atleast_1d(d));
+        public NDMaskedArray atleast_1d(object a) => MapFromNx(a, d => np.atleast_1d(d));
 
         /// <summary>At-least-2-D view (mask alike).</summary>
         /// <param name="a">Operand.</param><returns>The masked array, rank ≥ 2.</returns>
-        public NDMaskedArray atleast_2d(object a) => Map1(a, d => np.atleast_2d(d));
+        public NDMaskedArray atleast_2d(object a) => MapFromNx(a, d => np.atleast_2d(d));
 
         /// <summary>At-least-3-D view (mask alike).</summary>
         /// <param name="a">Operand.</param><returns>The masked array, rank ≥ 3.</returns>
-        public NDMaskedArray atleast_3d(object a) => Map1(a, d => np.atleast_3d(d));
+        public NDMaskedArray atleast_3d(object a) => MapFromNx(a, d => np.atleast_3d(d));
 
         /// <summary>Join arrays along an existing axis (masks joined alike; all-unmasked ⇒ nomask).</summary>
         /// <param name="arrays">Operands.</param><param name="axis">Join axis.</param><returns>The joined masked array.</returns>
-        public NDMaskedArray concatenate(object[] arrays, int axis = 0) => MapSeq(arrays, ds => np.concatenate(ds, axis));
+        public NDMaskedArray concatenate(object[] arrays, int axis = 0) => MapSeq(arrays, ds => np.concatenate(ds, axis), shrink: true);
 
         /// <summary>Stack arrays along a NEW axis (masks stacked alike).</summary>
         /// <param name="arrays">Operands.</param><param name="axis">New-axis position.</param><returns>The stacked masked array.</returns>
@@ -4702,14 +5997,16 @@ namespace NumSharp
         /// <summary>The 1-D array of the UNMASKED values in C-order (NumPy's <c>compressed</c>) — a plain
         /// <see cref="NDArray"/>, since a compressed result has, by definition, no mask.</summary>
         /// <param name="a">Operand.</param><returns>A 1-D <see cref="NDArray"/> of the unmasked data.</returns>
-        /// <remarks>Scoped (<c>[NDScoped]</c>): the raveled data/mask and the negated selector are reclaimed; the
-        /// result is always a fresh array the caller owns.</remarks>
+        /// <remarks>NumPy's statements: <c>data = ndarray.ravel(self._data)</c>, then
+        /// <c>data.compress(~ravel(mask))</c> when there is a mask. So an UNMASKED operand's result is its raveled data — a
+        /// VIEW of contiguous data (writes reach the operand), a copy otherwise — and a masked one's a fresh selection.
+        /// Scoped (<c>[NDScoped]</c>): the raveled mask and the negated selector are reclaimed.</remarks>
         [NDScoped]
         public NDArray compressed(object a)
         {
             var flat = np.ravel(AsData(a));
             var m = (a as NDMaskedArray)?._mask;
-            return m is null ? flat.copy() : flat[np.logical_not(np.ravel(m))];
+            return m is null ? flat : flat[np.logical_not(np.ravel(m))];
         }
 
         // ─────────────────────────────────────────────────────────────────────────────
@@ -4761,19 +6058,33 @@ namespace NumSharp
             return Yield(scope, new NDMaskedArray(data, (outmask is not null && np.any(outmask)) ? outmask : null));
         }
 
-        /// <summary>Keeps only the elements where the boolean <paramref name="condition"/> is True (NumPy's
-        /// <c>ma.compress</c>); data AND mask are compressed alike so the survivors keep their masked-ness.</summary>
-        /// <param name="condition">Boolean array-like selector (over the flattened elements, or along <paramref name="axis"/>).</param>
+        /// <summary>Keeps only the elements where <paramref name="condition"/> is truthy (NumPy's <c>ma.compress</c>);
+        /// data AND mask are compressed alike so the survivors keep their masked-ness.</summary>
+        /// <param name="condition">1-D array-like selector, read by truth value (non-zero numbers, non-empty strings) over
+        ///     the flattened elements or along <paramref name="axis"/>.</param>
         /// <param name="a">Data.</param><param name="axis">Axis to compress along, or null to flatten first.</param>
-        /// <returns>The compressed masked array.</returns>
+        /// <returns>The compressed masked array; it keeps a masked <paramref name="a"/>'s fill value and hardness.</returns>
+        /// <exception cref="ArgumentException">The condition is not 1-D (NumPy's ValueError <c>condition must be a 1-d
+        ///     array</c>), checked before its values are read.</exception>
+        /// <exception cref="IndexError">A truthy condition entry past the axis length.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty text condition (its strings' truth
+        ///     values, the next phase of the string support).</exception>
+        /// <remarks>NumPy's <c>MaskedArray.compress</c>: <c>condition = np.asarray(condition)</c>, then
+        /// <c>_data.compress(condition, axis)</c> — whose 1-d check, nonzero and take run in NumPy's order inside
+        /// <see cref="np.compress"/> — and the same compress of the mask, with <c>_update_from(self)</c>.</remarks>
         public NDMaskedArray compress(object condition, object a, int? axis = null)
         {
-            // Scoped by hand: the boolean selector copy (and materialized operands) only feed the two compresses.
+            // Scoped by hand: the materialized operands only feed the two compresses.
             using var scope = NDScope.Open();
-            var cond = AsData(condition).astype(np.@bool);
-            var m = (a as NDMaskedArray)?._mask;
+            // np.asarray(condition): the condition is passed as it is, so np.compress checks its rank before it reads a value.
+            var cond = AsData(condition);
+            var source = a as NDMaskedArray;
+            var m = source?._mask;
             var data = np.compress(cond, AsData(a), axis);
-            return Yield(scope, new NDMaskedArray(data, m is null ? null : np.compress(cond, m, axis)));
+            var result = new NDMaskedArray(data, m is null ? null : np.compress(cond, m, axis));
+            if (source is not null)
+                result.UpdateFrom(source);
+            return Yield(scope, result);
         }
 
         /// <summary>Extracts the <paramref name="offset"/>-th diagonal of a 2-D (or stacked) array (NumPy's
@@ -4792,30 +6103,56 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Sum of the diagonal, treating masked slots as 0 (NumPy's <c>ma.trace</c>). Returns a PLAIN array,
-        ///     and — matching NumPy's <c>astype(None)</c> quirk — the result is float64 unless
+        ///     Sum of the diagonal, treating masked slots as 0 (NumPy's <c>ma.trace</c>, <c>MaskedArray.trace</c>). Returns a
+        ///     PLAIN array, and — matching NumPy's <c>astype(None)</c> quirk — the result is float64 unless
         ///     <paramref name="dtype"/> is given (so <c>ma.trace</c> of an int matrix is float64, not int).
         /// </summary>
         /// <param name="a">Data (rank ≥ 2).</param><param name="offset">Diagonal offset.</param>
         /// <param name="axis1">First plane axis.</param><param name="axis2">Second plane axis.</param>
         /// <param name="dtype">Result dtype; null ⇒ float64 (NumPy's default).</param>
         /// <returns>A plain <see cref="NDArray"/> trace.</returns>
-        /// <remarks>Scoped (<c>[NDScoped]</c>): the zero-filled copy and the pre-cast trace are reclaimed.</remarks>
+        /// <exception cref="ArgumentException">The operand has fewer than two dimensions (NumPy's ValueError <c>diag requires
+        ///     an array of at least two dimensions</c>), or the axes are invalid.</exception>
+        /// <exception cref="TypeError">A nomask text operand: the diagonal sum has no string loop.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A masked text operand: NumPy casts the diagonal to
+        ///     float64 first (<c>D.astype(None)</c>), which parses the text.</exception>
+        /// <remarks>
+        ///     NumPy's statements: with no mask, <c>super().trace(offset, axis1, axis2).astype(dtype)</c>; with a mask,
+        ///     <c>D = self.diagonal(offset, axis1, axis2); return D.astype(dtype).filled(0).sum(axis=-1)</c> — the cast comes
+        ///     BEFORE the fill, so the diagonal is summed in the result dtype (float64 by default), and a rank error is the
+        ///     diagonal's own. Scoped (<c>[NDScoped]</c>): the diagonal, its cast and the zero-filled copy are reclaimed.
+        /// </remarks>
         [NDScoped]
         public NDArray trace(object a, int offset = 0, int axis1 = 0, int axis2 = 1, DType dtype = null)
         {
-            // Filled0 zeroes masked diagonal contributions; np.trace sums the diagonal; astype(float64) reproduces
-            // NumPy's astype(None)→float64 default (which is why an integer trace comes back as a float).
-            return np.trace(Filled0(a), offset, axis1, axis2).astype(dtype ?? np.float64);
+            var dt = dtype ?? np.float64;
+            // `if m is nomask: return super().trace(...).astype(dtype)` — astype(None) is float64.
+            if ((a as NDMaskedArray)?._mask is null)
+                return np.trace(AsData(a), offset, axis1, axis2).astype(dt);
+            // `D = self.diagonal(...)` raises for a 1-D or 0-d operand before anything reads the data.
+            var D = diagonal(a, offset, axis1, axis2);
+            return np.sum(D.astype(dt).filled(0), -1);
         }
 
         /// <summary>Indices of the non-zero UNMASKED elements (NumPy's <c>ma.nonzero</c>): masked slots are filled
         /// with 0 so they never count as non-zero. One plain int64 index array per dimension.</summary>
         /// <param name="a">Data.</param>
         /// <returns>An array of int64 index arrays (the house tuple convention).</returns>
-        /// <remarks>Scoped (<c>[NDScoped]</c>): the zero-filled copy the indices are read from is reclaimed.</remarks>
+        /// <exception cref="ValueError">A 0-d operand (<c>Calling nonzero on 0d arrays is not allowed</c>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A text operand with elements (its truth values are
+        ///     read; a masked slot also receives the formatted <c>'0'</c>).</exception>
+        /// <remarks>NumPy's <c>np.asarray(self.filled(0)).nonzero()</c>; over text the fill is formatted first, so a 0-d
+        /// operand's rank refusal still wins (see <see cref="FilledForNumericOp"/>). Scoped (<c>[NDScoped]</c>): the
+        /// zero-filled copy the indices are read from is reclaimed.</remarks>
         [NDScoped]
-        public NDArray<long>[] nonzero(object a) => np.nonzero(Filled0(a));
+        public NDArray<long>[] nonzero(object a)
+        {
+            Exception deferral = null;
+            var result = np.nonzero(FilledForNumericOp(a, 0, ref deferral));
+            if (deferral is not null)
+                throw deferral;
+            return result;
+        }
 
         /// <summary>
         ///     The n-th discrete difference along an axis, preserving the mask (NumPy's <c>ma.diff</c>): an output
@@ -4895,9 +6232,6 @@ namespace NumSharp
         //  extras.py — masked-aware statistics, products, set/diff helpers, clump/edges
         // ─────────────────────────────────────────────────────────────────────────────
 
-        /// <summary>Data of <paramref name="a"/> with masked slots filled by 0 (for a product/reduction that
-        /// must treat masked as absent); a null-mask operand is returned unchanged.</summary>
-        private static NDArray Filled0(object a) => (a as NDMaskedArray)?._mask is null ? AsData(a) : ((NDMaskedArray)a).filled(0);
 
         /// <summary>Number of MASKED elements along the axis (NumPy's <c>count_masked</c>) — a plain int64 array.</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>
@@ -4917,15 +6251,21 @@ namespace NumSharp
         public NDMaskedArray masked_all(Shape shape, DType dtype = null)
             => new NDMaskedArray(np.empty(shape, dtype ?? np.float64), np.ones(shape, np.@bool));
 
-        /// <summary>A fully-masked array shaped and typed like <paramref name="a"/> (NumPy's <c>masked_all_like</c>).</summary>
+        /// <summary>A fully-masked array shaped and typed like <paramref name="a"/> (NumPy's <c>masked_all_like</c>,
+        /// <c>np.empty_like(arr).view(MaskedArray)</c> with an all-True mask): a masked prototype also lends its fill value
+        /// and hard-mask flag.</summary>
         /// <param name="a">Prototype array-like.</param>
-        /// <returns>A fully-masked array.</returns>
+        /// <returns>A fully-masked array (uninitialized data; a <c>U</c> one is zero-filled, as NumPy's is).</returns>
         public NDMaskedArray masked_all_like(object a)
         {
             // Scoped by hand: a scalar/array-like prototype is materialized only to read its shape/dtype.
             using var scope = NDScope.Open();
             var d = AsData(a);
-            return Yield(scope, new NDMaskedArray(np.empty_like(d), np.ones(DimsOf(d), np.@bool)));
+            var result = new NDMaskedArray(np.empty_like(d), np.ones(DimsOf(d), np.@bool));
+            // np.empty_like of a masked array runs __array_finalize__ from it: the fill value and the hardness ride along.
+            if (a is NDMaskedArray source)
+                result.FinalizeFrom(source);
+            return Yield(scope, result);
         }
 
         /// <summary>Weighted average over unmasked elements (NumPy's <c>average</c>): with no weights this is the
@@ -4965,35 +6305,107 @@ namespace NumSharp
 
         /// <summary>Shared core of <see cref="average"/>/<see cref="average_returned"/>: computes the masked
         /// average and the sum-of-weights so the two public entry points never drift apart.</summary>
-        /// <remarks>Unscoped on purpose: both callers open the scope and decide which halves of the pair leave, so
-        /// the core's intermediates (the casts, broadcast weights, weighted products) ride the caller's scope.</remarks>
+        /// <param name="a">Data.</param>
+        /// <param name="axis">Axis or null.</param>
+        /// <param name="weights">Weights, or null for the uniform (mean) form.</param>
+        /// <param name="keepdims">Keep the reduced axis.</param>
+        /// <returns>The masked average and the sum of weights (broadcast to the average's shape, NumPy's
+        ///     <c>returned=True</c> form).</returns>
+        /// <exception cref="AxisError">The axis is out of bounds (<c>axis: axis 5 is out of bounds for array of dimension
+        ///     1</c>, NumPy's <c>normalize_axis_tuple(..., argname="axis")</c>).</exception>
+        /// <exception cref="TypeError">Weights of another shape without an axis (<c>Axis must be specified when shapes of a
+        ///     and weights differ.</c>); text weights against a masked <paramref name="a"/> (<c>multiply</c> has no text ×
+        ///     bool loop); or a text operand, whose result dtype is a sized string the sum's <c>dtype=</c> refuses (NumPy's
+        ///     general-DType TypeError).</exception>
+        /// <exception cref="ValueError">Weights that are not 1-D of the axis's length (<c>Shape of weights must be consistent
+        ///     with shape of a along specified axis.</c>).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy's statements for weights: <c>result_dtype = np.result_type(a.dtype, wgt.dtype[, 'f8'])</c> (an integer or
+        ///     bool <paramref name="a"/> averages in at least float64; float32 stays float32, complex stays complex), the two
+        ///     shape checks, <c>wgt = wgt * (~a.mask); wgt.mask |= a.mask</c> when <paramref name="a"/> has a mask,
+        ///     <c>scl = wgt.sum(axis, dtype=result_dtype)</c> and <c>avg = np.multiply(a, wgt, dtype=result_dtype).sum(axis)
+        ///     / scl</c>. The division is numpy.ma's (a zero sum of weights is masked) except for a full reduction, whose sums
+        ///     are NumPy scalars: there <c>0/0</c> is a plain nan.
+        ///     </para>
+        ///     <para>Unscoped on purpose: both callers open the scope and decide which halves of the pair leave, so
+        ///     the core's intermediates (the casts, broadcast weights, weighted products) ride the caller's scope.</para>
+        /// </remarks>
         private (NDMaskedArray avg, NDArray sumOfWeights) AverageCore(object a, int? axis, object weights, bool keepdims)
         {
-            var mask = (a as NDMaskedArray)?._mask;
+            // a = asarray(a); m = getmask(a)
+            var am = asarray(a);
+            var mask = am._mask;
+            // axis = normalize_axis_tuple(axis, a.ndim, argname="axis"), before either form computes anything.
+            int? ax = null;
+            if (axis is { } requested)
+            {
+                int nd = am.ndim;
+                if (requested < -nd || requested >= nd)
+                    throw new AxisError($"axis: axis {requested} is out of bounds for array of dimension {nd}");
+                ax = requested < 0 ? requested + nd : requested;
+            }
             if (weights is null)
             {
-                // Uniform: the average is the plain masked mean, and the sum-of-weights is the unmasked COUNT.
-                var avgU = mean(a, axis, null, keepdims);
-                var scl = CountUnmasked(mask, AsData(a).Shape, axis, keepdims).astype(np.float64);
+                // Uniform: the average is the plain masked mean, and the sum-of-weights is the unmasked COUNT in the
+                // average's dtype (`avg.dtype.type(a.count(axis))`).
+                var avgU = mean(am, ax, null, keepdims);
+                var scl = CountUnmasked(mask, am.Shape, ax, keepdims).astype(avgU.dtype);
                 return (avgU, scl);
             }
-            var d = AsData(a).astype(np.float64);
-            var wgt = AsData(weights).astype(np.float64);
-            // 1-D weights along an axis broadcast to (1,…,len,…,1).
-            if (axis is not null && !wgt.Shape.Equals(d.Shape))
+            var wgt = asarray(weights);
+            // An integer or bool average is at least float64; anything else averages in the operands' common dtype.
+            DType resultDtype = am.dtype.kind is 'i' or 'u' or 'b'
+                ? np.result_type(am.dtype, wgt.dtype, np.float64)
+                : np.result_type(am.dtype, wgt.dtype);
+            if (!wgt.Shape.dimensions.AsSpan().SequenceEqual(am.Shape.dimensions))
             {
-                var shp = Enumerable.Repeat(1L, d.ndim).ToArray();
-                shp[axis.Value] = d.Shape.dimensions[axis.Value];
-                wgt = np.reshape(wgt, Shape.Adopt(shp));
+                if (ax is null)
+                    throw new TypeError("Axis must be specified when shapes of a and weights differ.");
+                if (wgt.ndim != 1 || wgt.Shape.dimensions[0] != am.Shape.dimensions[ax.Value])
+                    throw new ValueError("Shape of weights must be consistent with shape of a along specified axis.");
+                // wgt.transpose(np.argsort(axis)) is the identity for one axis; the reshape lays the weights along it.
+                var shp = Enumerable.Repeat(1L, am.ndim).ToArray();
+                shp[ax.Value] = am.Shape.dimensions[ax.Value];
+                wgt = new NDMaskedArray(np.reshape(wgt._data, Shape.Adopt(shp)),
+                    wgt._mask is null ? null : np.reshape(wgt._mask, Shape.Adopt((long[])shp.Clone())));
             }
-            var w = np.broadcast_to(wgt, d.Shape).copy();
             if (mask is not null)
-                w = np.where(mask, NDArray.Scalar(0.0), w); // masked ⇒ zero weight
-            var sclW = np.sum(w, axis, keepdims, np.float64);
-            var num = np.sum(np.multiply(d, w), axis, keepdims, np.float64);
-            var avg = np.divide(num, sclW);
-            var newmask = mask is null ? null : AllAlongAxis(mask, axis, keepdims);
-            return (Finalize(avg, newmask), sclW);
+            {
+                // wgt = wgt * (~a.mask): numpy.ma's multiply (text weights have no text × bool loop); wgt.mask |= a.mask.
+                var weighted = multiply(wgt, np.logical_not(mask));
+                // A 0-d product is a NumPy SCALAR in numpy.ma (`_MaskedBinaryOperation` returns the bare result), and
+                // `wgt.mask |= a.mask` then fails on it: NumPy's own AttributeError, naming the scalar's type.
+                if (!ReferenceEquals(weighted, NDMasked) && weighted._data.ndim == 0)
+                    throw new AttributeError($"'numpy.{weighted.dtype.name}' object has no attribute 'mask'");
+                weighted._mask = Or(weighted._mask, mask);
+                wgt = weighted;
+            }
+            // scl = wgt.sum(axis=axis, dtype=result_dtype): the ufunc's dtype check refuses a sized string dtype (a text
+            // operand). NumPy fills the masked slots with 0 first, which cannot fail, so the check is its answer.
+            DefaultEngine.UfuncLoopCode(resultDtype);
+            var sclMasked = sum(wgt, ax, resultDtype, keepdims);
+            // avg = np.multiply(a, wgt, dtype=result_dtype).sum(axis) / scl; the raw ufunc's result is masked where
+            // either operand is.
+            var product = np.multiply(am._data, wgt._data, dtype: resultDtype);
+            var productMask = Or(mask, wgt._mask);
+            if (productMask is not null && !productMask.Shape.dimensions.AsSpan().SequenceEqual(product.Shape.dimensions))
+                productMask = np.broadcast_to(productMask, product.Shape).copy();
+            var num = sum(new NDMaskedArray(product, productMask), ax, null, keepdims);
+            NDMaskedArray avg;
+            if (ax is null && !keepdims)
+                // A full reduction's sums are NumPy scalars (or `masked`): plain scalar division, so 0/0 is nan, unmasked.
+                avg = ReferenceEquals(num, NDMasked) || ReferenceEquals(sclMasked, NDMasked)
+                    ? NDMasked
+                    : new NDMaskedArray(np.true_divide(num._data, sclMasked._data), null);
+            else
+                avg = true_divide(num, sclMasked);
+            // `if scl.shape != avg.shape: scl = np.broadcast_to(scl, avg.shape).copy()`. An all-masked sum of weights is
+            // NumPy's `masked`; the plain-array result reports its zero instead (the singleton's data is shared).
+            var sumOfWeights = ReferenceEquals(sclMasked, NDMasked) ? NDArray.Scalar(0).astype(resultDtype) : sclMasked._data;
+            if (!sumOfWeights.Shape.dimensions.AsSpan().SequenceEqual(avg._data.Shape.dimensions))
+                sumOfWeights = np.broadcast_to(sumOfWeights, avg._data.Shape).copy();
+            return (avg, sumOfWeights);
         }
 
         /// <summary>Median over unmasked elements (NumPy's <c>median</c>). Supports the flat case, the
@@ -5003,6 +6415,9 @@ namespace NumSharp
         /// <param name="keepdims">Keep the reduced axes as size-1 (NumPy 2.0 <c>keepdims</c>).</param>
         /// <returns>The masked median (a slice with no unmasked element is <see cref="NDMasked"/>; an unmasked NaN in
         /// a slice makes that slice's median NaN, matching NumPy).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
+        /// <exception cref="TypeError">A text operand: NumPy's <c>_median</c> averages the middles with <c>mean</c>, whose
+        ///     <c>add.reduce</c> has no string loop (<c>the resolved dtypes are not compatible with add.reduce</c>).</exception>
         /// <remarks>Scoped by hand: the compressed copy, the masked sort, the middle-index arithmetic, the gathered
         /// middles and the NaN probe (see <see cref="MedianAxisMasked"/>) are all reclaimed here; only the median
         /// and its mask leave.</remarks>
@@ -5013,6 +6428,18 @@ namespace NumSharp
             var d = AsData(a);
             if (mask is null)
                 return Yield(scope, new NDMaskedArray(np.median(d, axis, null, false, keepdims), null));
+            // TEXT with a mask: NumPy's _median sorts the strings (a computation that cannot fail; its axis check comes
+            // first) and then takes ma.mean of the middle elements — of an empty slice too — whose add.reduce refuses the
+            // string dtype. So every text median is that refusal, whatever the strings and the mask: np.mean raises it
+            // with NumPy's text for the operand's dtype.
+            if (d.typecode == NPTypeCode.String)
+            {
+                if (axis is { } textAxis && (textAxis < -d.ndim || textAxis >= d.ndim))
+                    throw new AxisError(textAxis, d.ndim);
+                np.mean(d);
+                // np.mean never returns for a string dtype; this keeps the method total if that ever changes.
+                throw NDStringUfuncs.NextPhase("median", d.dtype);
+            }
             if (axis is null)
             {
                 var comp = compressed(a);
@@ -5194,21 +6621,80 @@ namespace NumSharp
         }
 
         /// <summary>True iff all corresponding elements are within tolerance, with masked positions treated as
-        /// equal when <paramref name="masked_equal"/> is true (NumPy's <c>allclose</c>).</summary>
+        /// equal when <paramref name="masked_equal"/> is true (NumPy's <c>ma.allclose</c>, statement for statement):
+        /// <c>|x - y| &lt;= atol + rtol * |y|</c> over the masked arithmetic, and infinities must sit at the same places
+        /// with the same signs.</summary>
         /// <param name="a">First operand.</param><param name="b">Second operand.</param>
         /// <param name="masked_equal">Treat masked positions as equal.</param>
         /// <param name="rtol">Relative tolerance.</param><param name="atol">Absolute tolerance.</param>
         /// <returns>A single bool.</returns>
-        /// <remarks>Scoped (<c>[NDScoped]</c>): the element-wise closeness and mask combinations are reclaimed.</remarks>
+        /// <exception cref="DTypePromotionError"><paramref name="b"/> is text: <c>np.result_type(y, 1.)</c> finds no common
+        ///     DType with a Python float — raised before any element is read.</exception>
+        /// <exception cref="TypeError"><paramref name="a"/> is text: <c>np.isinf</c> has no string loop.</exception>
+        /// <exception cref="MaskError">The combined mask does not fit <paramref name="a"/> (a 0-d <paramref name="a"/>
+        ///     against a masked array).</exception>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast (NumPy's ValueError text).</exception>
+        /// <remarks>
+        ///     NumPy's statements: <c>x = masked_array(a); y = masked_array(b)</c>; y is cast to
+        ///     <c>np.result_type(y, 1.)</c> (a bool or integer y becomes float64, so <c>abs(MIN_INT)</c> cannot wrap);
+        ///     <c>m = mask_or(getmask(x), getmask(y))</c>; <c>xinf = np.isinf(masked_array(x, mask=m)).filled(False)</c>;
+        ///     unequal infinity positions are False; with no infinity the closeness is
+        ///     <c>filled(less_equal(absolute(x - y), atol + rtol * absolute(y)), masked_equal)</c>; otherwise the infinities
+        ///     must be equal (<c>x[xinf] == y[xinf]</c>) and the rest close. A NaN is never close unless masked.
+        ///     <para>Scoped (<c>[NDScoped]</c>): every intermediate is reclaimed; only the verdict leaves.</para>
+        /// </remarks>
         [NDScoped]
         public bool allclose(object a, object b, bool masked_equal = true, double rtol = 1e-5, double atol = 1e-8)
         {
-            NDArray close = np.isclose(AsData(a), AsData(b), rtol, atol);
-            var mu = Or((a as NDMaskedArray)?._mask, (b as NDMaskedArray)?._mask);
-            if (mu is not null)
-                close = masked_equal ? (close | mu) : (close & np.logical_not(mu));
-            return np.all(close);
+            var x = masked_array(a);
+            var y = masked_array(b);
+            // `if y.dtype.kind != "m": dtype = np.result_type(y, 1.)` — NumSharp has no timedelta, so the guard always
+            // holds. The Python float is WEAK (NEP 50), hence the dtype form of result_type.
+            var ydt = np.result_type(y.dtype, 1.0);
+            if (!y.dtype.Equals(ydt))
+                y = masked_array(y, dtype: ydt);
+            var m = mask_or(getmask(x), getmask(y));
+            // `xinf = np.isinf(masked_array(x, copy=False, mask=m)).filled(False)`: the mask must fit x (MaskError), isinf
+            // has no string loop (TypeError), and a masked slot is not an infinity.
+            var xm = masked_array(x, mask: ReferenceEquals(m, nomask) ? null : m);
+            var xinf = IsInfFilledFalse(xm);
+            // `if not np.all(xinf == filled(np.isinf(y), False)): return False`.
+            if (!np.all(np.equal(xinf, IsInfFilledFalse(y))))
+                return false;
+            // `if not np.any(xinf)`: no infinity anywhere, one closeness test over everything.
+            if (!np.any(xinf))
+                return np.all(CloseFilled(x, y, rtol, atol, masked_equal));
+            // `if not np.all(filled(x[xinf] == y[xinf], masked_equal)): return False` — equal infinities (sign included).
+            var xi = (NDMaskedArray)x[xinf];
+            var yi = (NDMaskedArray)y[xinf];
+            if (!np.all(filled(equal(xi, yi), masked_equal)))
+                return false;
+            // `x = x[~xinf]; y = y[~xinf]` and the closeness test over the finite rest.
+            var finite = np.logical_not(xinf);
+            return np.all(CloseFilled((NDMaskedArray)x[finite], (NDMaskedArray)y[finite], rtol, atol, masked_equal));
         }
+
+        /// <summary><c>np.isinf(x).filled(False)</c> for a masked operand: true at the unmasked infinite elements.</summary>
+        /// <param name="x">The masked operand.</param>
+        /// <returns>A boolean array of <paramref name="x"/>'s shape.</returns>
+        /// <exception cref="TypeError"><paramref name="x"/> is text (isinf has no string loop).</exception>
+        private static NDArray IsInfFilledFalse(NDMaskedArray x)
+        {
+            var inf = np.isinf(x._data);
+            return x._mask is null ? inf : np.logical_and(inf, np.logical_not(x._mask));
+        }
+
+        /// <summary>
+        ///     <see cref="allclose"/>'s closeness test, <c>filled(less_equal(absolute(x - y), atol + rtol * absolute(y)),
+        ///     masked_equal)</c>, in the masked arithmetic (the tolerances are STRONG float64 0-d operands there, as
+        ///     numpy.ma's <c>getdata(rtol)</c> makes them).
+        /// </summary>
+        /// <param name="x">First operand.</param><param name="y">Second operand.</param>
+        /// <param name="rtol">Relative tolerance.</param><param name="atol">Absolute tolerance.</param>
+        /// <param name="masked_equal">The verdict at a masked position.</param>
+        /// <returns>The boolean closeness array, masked positions filled with <paramref name="masked_equal"/>.</returns>
+        private NDArray CloseFilled(NDMaskedArray x, NDMaskedArray y, double rtol, double atol, bool masked_equal)
+            => filled(less_equal(absolute(subtract(x, y)), add(atol, multiply(rtol, absolute(y)))), masked_equal);
 
         /// <summary>Dot product with masked slots treated as 0; a result element is masked only if NO valid
         /// (both-unmasked) term contributed to it (NumPy's <c>ma.dot</c>). With <paramref name="strict"/> the
@@ -5218,8 +6704,12 @@ namespace NumSharp
         /// <param name="strict">Propagate masks along the contracted axes before the product (default false =
         /// treat masked as 0).</param>
         /// <returns>The masked dot product.</returns>
+        /// <exception cref="StringComputationNotSupportedException">A text operand with a masked slot whose product would
+        ///     compute (NumPy formats the 0 fill into it; see <see cref="FilledForNumericOp"/>).</exception>
         /// <remarks>Scoped by hand: the propagated operands, the zero-filled copies, the validity indicators and
-        /// their product are reclaimed; only the product and its mask leave.</remarks>
+        /// their product are reclaimed; only the product and its mask leave. Over text NumPy's product refuses by dtype
+        /// (<c>data type must provide an itemsize</c>, or a scalar operand's multiply loop) after formatting the fill, and
+        /// that refusal is raised over the unfilled data.</remarks>
         public NDMaskedArray dot(object a, object b, bool strict = false)
         {
             using var scope = NDScope.Open();
@@ -5235,7 +6725,11 @@ namespace NumSharp
                     b = MaskPropagate(b, ndb == 1 ? ndb - 1 : ndb - 2);
                 }
             }
-            var product = np.dot(Filled0(a), Filled0(b));
+            // `d = np.dot(filled(a, 0), filled(b, 0))`.
+            Exception deferral = null;
+            var product = np.dot(FilledForNumericOp(a, 0, ref deferral), FilledForNumericOp(b, 0, ref deferral));
+            if (deferral is not null)
+                throw deferral;
             var ma_ = (a as NDMaskedArray)?._mask;
             var mb_ = (b as NDMaskedArray)?._mask;
             if (ma_ is null && mb_ is null)
@@ -5250,24 +6744,51 @@ namespace NumSharp
         /// <summary>Inner product with masked slots treated as 0 (NumPy's <c>ma.inner</c>).</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>The masked inner product (mask dropped — result treats masked as 0).</returns>
+        /// <exception cref="IncorrectShapeException">The last axes differ (<c>shapes (3,) and (1,) not aligned: ...</c>);
+        ///     a 0-d operand counts as one element.</exception>
+        /// <exception cref="ValueError">A text operand (<c>data type must provide an itemsize</c>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A text operand with a masked slot whose product would
+        ///     compute (see <see cref="FilledForNumericOp"/>).</exception>
+        /// <remarks>NumPy's statements: <c>fa = filled(a, 0); fb = filled(b, 0)</c>; a 0-d one is reshaped to <c>(1,)</c>
+        /// (so a scalar operand is a one-element vector, not np.inner's scalar product); then <c>np.inner(fa, fb)</c>
+        /// viewed as a masked array with no mask. Scoped by hand: the zero-filled operand copies only feed the
+        /// product.</remarks>
         public NDMaskedArray inner(object a, object b)
         {
-            // Scoped by hand: the zero-filled operand copies only feed the product.
             using var scope = NDScope.Open();
-            return Yield(scope, new NDMaskedArray(np.inner(Filled0(a), Filled0(b)), null));
+            Exception deferral = null;
+            var fa = FilledForNumericOp(a, 0, ref deferral);
+            var fb = FilledForNumericOp(b, 0, ref deferral);
+            // `if fa.ndim == 0: fa.shape = (1,)` — an in-place reshape of NumPy's own temporary; a view here.
+            if (fa.ndim == 0)
+                fa = np.reshape(fa, new Shape(1L));
+            if (fb.ndim == 0)
+                fb = np.reshape(fb, new Shape(1L));
+            var product = np.inner(fa, fb);
+            if (deferral is not null)
+                throw deferral;
+            return Yield(scope, new NDMaskedArray(product, null));
         }
 
         /// <summary>Outer product with masked slots treated as 0; result[i,j] is masked iff a[i] or b[j] was
         /// masked (NumPy's <c>ma.outer</c>).</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>The masked outer product.</returns>
+        /// <exception cref="StringComputationNotSupportedException">A text operand with a masked slot whose product would
+        ///     compute (see <see cref="FilledForNumericOp"/>).</exception>
         /// <remarks>Scoped by hand: the zero-filled operand copies, the stand-in all-False masks and the raveled /
-        /// reshaped mask views are reclaimed; only the product and its mask leave.</remarks>
+        /// reshaped mask views are reclaimed; only the product and its mask leave. Over text NumPy's
+        /// <c>np.outer(filled(a, 0).ravel(), ...)</c> refuses by dtype (the multiply loops) after formatting the
+        /// fill.</remarks>
         public NDMaskedArray outer(object a, object b)
         {
             using var scope = NDScope.Open();
             var da = AsData(a); var db = AsData(b);
-            var product = np.outer(Filled0(a), Filled0(b));
+            // `d = np.outer(filled(a, 0).ravel(), filled(b, 0).ravel())` (np.outer ravels its operands itself).
+            Exception deferral = null;
+            var product = np.outer(FilledForNumericOp(a, 0, ref deferral), FilledForNumericOp(b, 0, ref deferral));
+            if (deferral is not null)
+                throw deferral;
             var ma_ = (a as NDMaskedArray)?._mask;
             var mb_ = (b as NDMaskedArray)?._mask;
             if (ma_ is null && mb_ is null)
@@ -5291,7 +6812,9 @@ namespace NumSharp
             var d = AsData(x);
             var v = np.vander(d, n);
             var m = (x as NDMaskedArray)?._mask;
-            if (m is not null)
+            // `if m is not nomask: _vander[m] = 0` — a write that selects nothing (an empty result, or no masked row) has
+            // no effect, and for a TEXT result (np.vander returns one only when it is empty) it must not format the 0.
+            if (m is not null && v.size != 0 && np.any(m))
             {
                 var col = np.reshape(m, new Shape(d.size, 1));
                 np.copyto(v, NDArray.Scalar(0), casting: "unsafe", where: np.broadcast_to(col, v.Shape));
@@ -5379,12 +6902,28 @@ namespace NumSharp
         /// <param name="assume_unique">Speed hint that both inputs already hold unique elements (result unchanged).</param>
         /// <param name="invert">Invert the membership test.</param>
         /// <returns>A masked boolean array shaped like <paramref name="element"/>.</returns>
+        /// <exception cref="StringComputationNotSupportedException">A text operand with a non-empty
+        ///     <paramref name="element"/>: numpy.ma's in1d sorts and compares the strings.</exception>
         /// <remarks>Scoped by hand: the plain membership array a masked <paramref name="element"/> overwrites, the
-        /// fill scalar and any array-like operand this method had to materialize are reclaimed.</remarks>
+        /// fill scalar and any array-like operand this method had to materialize are reclaimed.
+        /// <para>numpy.ma's <c>in1d</c> is NOT <c>np.isin</c>: it takes the masked uniques of both operands, concatenates
+        /// them, argsorts the concatenation (mergesort) and compares neighbours. With a TEXT operand that sorts and compares
+        /// strings — and formats a numeric operand into the concatenated text — so it is the next phase, except for an
+        /// empty <paramref name="element"/>, whose answer is the empty membership array (no mask) whatever the test
+        /// set.</para></remarks>
         public NDMaskedArray isin(object element, object test_elements, bool assume_unique = false, bool invert = false)
         {
             using var scope = NDScope.Open();
-            NDArray data = np.isin(AsData(element), AsData(test_elements), assume_unique, invert);
+            var ed = AsData(element);
+            var td = AsData(test_elements);
+            if (ed.typecode == NPTypeCode.String || td.typecode == NPTypeCode.String)
+            {
+                if (ed.size != 0)
+                    throw NDStringUfuncs.NextPhase("isin", ed.typecode == NPTypeCode.String ? ed.dtype : td.dtype);
+                // `in1d(...).reshape(element.shape)` of an empty element: an empty bool array, nomask.
+                return Yield(scope, new NDMaskedArray(np.zeros(DimsOf(ed), np.@bool), null));
+            }
+            NDArray data = np.isin(ed, td, assume_unique, invert);
             var em = (element as NDMaskedArray)?._mask;
             // A masked element is not a valid value, so its membership answer is definite: `invert`
             // (False normally, True for invert). NumPy's unique-based isin yields the same, unmasked.
@@ -5449,21 +6988,24 @@ namespace NumSharp
         /// <summary>First and last UNMASKED flat indices (NumPy's <c>flatnotmasked_edges</c>), or null when every
         /// element is masked.</summary>
         /// <param name="a">Operand.</param>
-        /// <returns>A 2-element <c>[first, last]</c> int64 array, or null.</returns>
-        /// <remarks>Scoped by hand (the weaver does not wrap a <c>long[]</c> return): the inverted, raveled mask
-        /// and any operand this method had to materialize are reclaimed before the indices are returned.</remarks>
-        public long[] flatnotmasked_edges(object a)
+        /// <returns>NumPy's int64 array <c>[first, last]</c> — <c>[0, size - 1]</c> when nothing is masked (an EMPTY
+        ///     operand included: <c>[0, -1]</c>) — or null (NumPy's None) when every element is masked.</returns>
+        /// <remarks>NumPy's statements: <c>if m is nomask or not np.any(m): return np.array([0, a.size - 1])</c>;
+        /// <c>unmasked = np.flatnonzero(~m)</c>; <c>unmasked[[0, -1]]</c> when there is one, else None. Scoped by hand:
+        /// the inverted, raveled mask and any operand this method had to materialize are reclaimed; only the index
+        /// array leaves.</remarks>
+        public NDArray flatnotmasked_edges(object a)
         {
             using var scope = NDScope.Open();
             var d = AsData(a);
             var m = (a as NDMaskedArray)?._mask;
-            if (m is null)
-                return d.size == 0 ? null : new long[] { 0, d.size - 1 };
+            if (m is null || !np.any(m))
+                return scope.Returns(np.array(new long[] { 0, d.size - 1 }));
             var um = np.logical_not(np.ravel(m)).ToArray<bool>();
-            int first = -1, last = -1;
+            long first = -1, last = -1;
             for (int i = 0; i < um.Length; i++)
                 if (um[i]) { if (first < 0) first = i; last = i; }
-            return first < 0 ? null : new long[] { first, last };
+            return first < 0 ? null : scope.Returns(np.array(new long[] { first, last }));
         }
 
         /// <summary>Contiguous UNMASKED runs of the flattened array (NumPy's <c>flatnotmasked_contiguous</c>);
@@ -5481,49 +7023,51 @@ namespace NumSharp
         /// <summary>Drops the ROWS of a 2-D array that contain ANY masked element (NumPy's <c>compress_rows</c>) —
         /// a plain <see cref="NDArray"/>.</summary>
         /// <param name="a">2-D operand.</param>
-        /// <returns>The surviving rows.</returns>
-        /// <remarks>Scoped (<c>[NDScoped]</c>): the full mask, its row reduction and the keep-mask are reclaimed.</remarks>
+        /// <returns>The surviving rows: the data ITSELF when nothing is masked, an empty float64 array when everything
+        ///     is (NumPy's <c>compress_nd</c>).</returns>
+        /// <exception cref="NotImplementedException"><paramref name="a"/> is not 2-D (<c>compress_rows works for 2D arrays
+        ///     only.</c>).</exception>
+        /// <remarks>NumPy's statements: <c>a = asarray(a); if a.ndim != 2: raise NotImplementedError(...); return
+        /// compress_rowcols(a, 0)</c>. Scoped (<c>[NDScoped]</c>): an array-like operand the rank check had to materialize
+        /// is reclaimed.</remarks>
         [NDScoped]
         public NDArray compress_rows(object a)
         {
-            var keep = np.logical_not(np.any(getmaskarray(a), 1, null, false));
-            return np.compress(keep, AsData(a), 0);
+            if (AsData(a).ndim != 2)
+                throw new NotImplementedException("compress_rows works for 2D arrays only.");
+            return compress_rowcols(a, 0);
         }
 
         /// <summary>Drops the COLUMNS of a 2-D array that contain ANY masked element (NumPy's <c>compress_cols</c>).</summary>
         /// <param name="a">2-D operand.</param>
-        /// <returns>The surviving columns.</returns>
-        /// <remarks>Scoped (<c>[NDScoped]</c>): the full mask, its column reduction and the keep-mask are reclaimed.</remarks>
+        /// <returns>The surviving columns (see <see cref="compress_rows"/> for the unmasked and all-masked forms).</returns>
+        /// <exception cref="NotImplementedException"><paramref name="a"/> is not 2-D (<c>compress_cols works for 2D arrays
+        ///     only.</c>).</exception>
+        /// <remarks>NumPy's <c>compress_rowcols(a, 1)</c> after its own rank check. Scoped (<c>[NDScoped]</c>), as
+        /// <see cref="compress_rows"/>.</remarks>
         [NDScoped]
         public NDArray compress_cols(object a)
         {
-            var keep = np.logical_not(np.any(getmaskarray(a), 0, null, false));
-            return np.compress(keep, AsData(a), 1);
+            if (AsData(a).ndim != 2)
+                throw new NotImplementedException("compress_cols works for 2D arrays only.");
+            return compress_rowcols(a, 1);
         }
 
-        /// <summary>Masks the ENTIRE rows of a 2-D array that contain any masked element (NumPy's <c>mask_rows</c>).</summary>
+        /// <summary>Masks the ENTIRE rows of a 2-D array that contain any masked element (NumPy's <c>mask_rows</c>, which
+        /// is <c>mask_rowcols(a, 0)</c>).</summary>
         /// <param name="a">2-D operand.</param>
-        /// <returns>The row-masked array.</returns>
-        /// <remarks>Scoped by hand: the full mask, its row reduction and the broadcast condition view are
-        /// reclaimed — <see cref="masked_where"/> coerces the condition into its own bool COPY, so nothing in the
-        /// result aliases them.</remarks>
-        public NDMaskedArray mask_rows(object a)
-        {
-            using var scope = NDScope.Open();
-            var rows = np.any(getmaskarray(a), 1, null, true);
-            return Yield(scope, masked_where(np.broadcast_to(rows, AsData(a).Shape), a));
-        }
+        /// <returns>The row-masked array (over the operand's data, with a new mask).</returns>
+        /// <exception cref="NotImplementedException"><paramref name="a"/> is not 2-D: NumPy reports it from
+        ///     <c>mask_rowcols</c> (<c>mask_rowcols works for 2D arrays only.</c>).</exception>
+        public NDMaskedArray mask_rows(object a) => mask_rowcols(a, 0);
 
-        /// <summary>Masks the ENTIRE columns of a 2-D array that contain any masked element (NumPy's <c>mask_cols</c>).</summary>
+        /// <summary>Masks the ENTIRE columns of a 2-D array that contain any masked element (NumPy's <c>mask_cols</c>,
+        /// which is <c>mask_rowcols(a, 1)</c>).</summary>
         /// <param name="a">2-D operand.</param>
-        /// <returns>The column-masked array.</returns>
-        /// <remarks>Scoped by hand, as <see cref="mask_rows"/>: the full mask and its column reduction are reclaimed.</remarks>
-        public NDMaskedArray mask_cols(object a)
-        {
-            using var scope = NDScope.Open();
-            var cols = np.any(getmaskarray(a), 0, null, true);
-            return Yield(scope, masked_where(np.broadcast_to(cols, AsData(a).Shape), a));
-        }
+        /// <returns>The column-masked array (over the operand's data, with a new mask).</returns>
+        /// <exception cref="NotImplementedException"><paramref name="a"/> is not 2-D (<c>mask_rowcols works for 2D arrays
+        ///     only.</c>).</exception>
+        public NDMaskedArray mask_cols(object a) => mask_rowcols(a, 1);
 
         /// <summary>
         ///     Masks whole rows and/or columns of a 2-D array that contain any masked element (NumPy's
@@ -5555,7 +7099,8 @@ namespace NumSharp
                 newmask = np.logical_or(newmask, np.broadcast_to(np.any(m, 1, null, true), m.Shape));
             if (doCols)
                 newmask = np.logical_or(newmask, np.broadcast_to(np.any(m, 0, null, true), m.Shape));
-            return Yield(scope, new NDMaskedArray(ma_._data, newmask));
+            // NumPy returns `a` itself (`a[rows] = masked` only rewrites its mask), so the fill value and hardness stay.
+            return Yield(scope, new NDMaskedArray(ma_._data, newmask).UpdateFrom(ma_));
         }
 
         /// <summary>
@@ -5576,8 +7121,10 @@ namespace NumSharp
         {
             var data = AsData(x);
             var m = (x as NDMaskedArray)?._mask;
+            // `if m is nomask or not m.any(): return x._data` — a VIEW of the data (OWNDATA false), as NumPy's
+            // `asarray(x)._data` is, never the operand's own array object.
             if (m is null || !np.any(m))
-                return data;
+                return data.view();
             if (np.all(m))
                 return np.array(Array.Empty<double>());
             int nd = data.ndim;
@@ -5632,9 +7179,10 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Operand.</param>
         /// <param name="axis">null (flatten) or the axis along which to find the edges.</param>
-        /// <returns><c>long[]</c> (or <c>null</c>) for the flat/1-D case; <c>NDArray[][]</c> <c>{mins, maxs}</c> for
-        /// a &gt;1-D explicit axis. Returned as <see cref="object"/> because the shape depends on the runtime axis,
-        /// as it does in NumPy — cast at the call site.</returns>
+        /// <returns>NumPy's int64 <c>[first, last]</c> array (or <c>null</c>) for the flat/1-D case (see
+        /// <see cref="flatnotmasked_edges"/>); <c>NDArray[][]</c> <c>{mins, maxs}</c> for a &gt;1-D explicit axis. Returned
+        /// as <see cref="object"/> because the shape depends on the runtime axis, as it does in NumPy — cast at the call
+        /// site.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the operand's rank.</exception>
         /// <remarks>Scoped by hand (the weaver does not wrap an <see cref="object"/> return): the full mask, the
         /// coordinate grids, their per-axis reductions and the masked wrappers are reclaimed; every compressed
@@ -5643,8 +7191,10 @@ namespace NumSharp
         {
             using var scope = NDScope.Open();
             var d = AsData(a);
+            // The flat edges are re-tracked into the CALLER's scope: returned from inside this method's scope without it,
+            // they would be reclaimed when that scope closes.
             if (axis is null || d.ndim == 1)
-                return flatnotmasked_edges(a);
+                return scope.Returns(flatnotmasked_edges(a));
 
             int nd = d.ndim;
             int ax = axis.Value < 0 ? axis.Value + nd : axis.Value;
@@ -5820,22 +7370,37 @@ namespace NumSharp
         ///     <see cref="put"/>, alignment is by <see cref="np.copyto"/> broadcast (not cycling).
         /// </summary>
         /// <param name="a">The <see cref="NDMaskedArray"/> (or plain array) to mutate.</param>
-        /// <param name="mask">Boolean array-like selecting the write positions.</param>
-        /// <param name="values">Scalar/array/<see cref="NDMaskedArray"/> supplying the data (and, if masked, the mask).</param>
+        /// <param name="mask">Boolean array selecting the write positions (a C# <c>bool[]</c> converts to one; NumPy's
+        ///     <c>np.copyto(..., where=mask)</c> takes it, so a numeric or text array is refused).</param>
+        /// <param name="values">Scalar/array/<see cref="NDMaskedArray"/> supplying the data (and, if masked, the mask). A
+        ///     C# number is <c>getdata(values)</c>: a strong default-width array (an int is int64, a float float64).</param>
+        /// <exception cref="ArgumentException">A <paramref name="mask"/> that is not boolean: NumPy's TypeError <c>Cannot
+        ///     cast array data from dtype('int64') to dtype('bool') according to the rule 'safe'</c> (the house
+        ///     ArgumentException of <see cref="np.copyto(NDArray, NDArray, string, NDArray)"/>), raised whatever the size — an empty text mask included.</exception>
+        /// <exception cref="InvalidCastException"><paramref name="values"/> cannot reach the data's dtype by a same_kind cast
+        ///     (<c>Cannot cast scalar from dtype('float64') to dtype('int64') according to the rule 'same_kind'</c>; text
+        ///     values for numeric data whatever the mask holds).</exception>
+        /// <exception cref="StringComputationNotSupportedException">Numbers written into text data (NumPy formats them
+        ///     as text: the next phase of the string support).</exception>
         /// <remarks>
-        ///     Scoped by hand: the boolean write mask, the hard-mask working copy, the stand-in all-False value
-        ///     mask and any array-like operand this method had to materialize are reclaimed. A mask the call
-        ///     CREATES on a <c>nomask</c> target is a field store and is detached from every scope (it lives as
-        ///     long as the target); the hard-mask branch ORs into the existing mask IN PLACE — NumPy's
-        ///     <c>a.mask |= m</c> — rather than replacing the field, so no mask array is orphaned.
+        ///     NumPy's copies all use <c>np.copyto</c>'s default <c>same_kind</c> casting: a float written into int data is
+        ///     refused, an int64 written into int8 data wraps.
+        ///     <para>
+        ///     Scoped by hand: the hard-mask working copy, the stand-in all-False value mask and any array-like operand this
+        ///     method had to materialize are reclaimed. A mask the call CREATES on a <c>nomask</c> target is a field store
+        ///     and is detached from every scope (it lives as long as the target); the hard-mask branch ORs into the existing
+        ///     mask IN PLACE — NumPy's <c>a.mask |= m</c> — rather than replacing the field, so no mask array is orphaned.
+        ///     </para>
         /// </remarks>
         public void putmask(object a, object mask, object values)
         {
             using var scope = NDScope.Open();
             var ma_ = a as NDMaskedArray;
             var data = AsData(a);
-            var maskArr = AsData(mask).astype(np.@bool);
-            var valdata = AsData(values);
+            // `where=mask`: np.copyto converts the mask itself, refusing a non-bool array by the safe-cast rule.
+            var maskArr = AsData(mask);
+            // (valdata, valmask) = (getdata(values), getmask(values)).
+            var valdata = GetDataStrong(values);
             var valmask = (values as NDMaskedArray)?._mask;
             // NumPy's ma.putmask has three mask branches; the DATA is ALWAYS written at the end (even at masked
             // slots — putmask does NOT protect data, unlike put; the hard mask only freezes the MASK).
@@ -5846,7 +7411,7 @@ namespace NumSharp
                 if (valmask is not null && ma_ is not null)
                 {
                     ma_._mask = Own(np.zeros(DimsOf(data), np.@bool));
-                    np.copyto(ma_._mask, valmask, casting: "unsafe", where: maskArr);
+                    np.copyto(ma_._mask, valmask, where: maskArr);
                 }
             }
             else if (ma_._hardmask)
@@ -5857,7 +7422,7 @@ namespace NumSharp
                 if (valmask is not null)
                 {
                     var m = ma_._mask.copy();
-                    np.copyto(m, valmask, casting: "unsafe", where: maskArr);
+                    np.copyto(m, valmask, where: maskArr);
                     np.logical_or(ma_._mask, m, @out: ma_._mask);
                 }
             }
@@ -5865,9 +7430,23 @@ namespace NumSharp
             {
                 // SOFT: unmasked values (nomask) become all-False so the written slots unmask.
                 var vm = valmask ?? np.zeros(DimsOf(valdata), np.@bool);
-                np.copyto(ma_._mask, vm, casting: "unsafe", where: maskArr);
+                np.copyto(ma_._mask, vm, where: maskArr);
             }
-            np.copyto(data, valdata, casting: "unsafe", where: maskArr);
+            // np.copyto(a._data, valdata, where=mask): same_kind, so a float into int data or text into numbers is refused.
+            np.copyto(data, valdata, where: maskArr);
+        }
+
+        /// <summary>
+        ///     numpy.ma's <c>getdata(value)</c> for a value operand: a masked array's data, an array itself, and a bare C#
+        ///     scalar as <c>np.array(value)</c> — a STRONG array of its default width (an int is int64, a float float64; see
+        ///     <see cref="BareScalarStrongDtype"/>), so a cast check names NumPy's dtype (<c>dtype('int64')</c>).
+        /// </summary>
+        /// <param name="value">The value operand.</param>
+        /// <returns>The data array (the operand's own, or a new 0-d array).</returns>
+        private static NDArray GetDataStrong(object value)
+        {
+            var d = AsData(value);
+            return BareScalarStrongDtype(value) is { } strong && d.typecode != strong ? d.astype(strong) : d;
         }
 
         /// <summary>
@@ -6080,18 +7659,37 @@ namespace NumSharp
         ///     <paramref name="endwith"/> false, smallest) value — NumPy's <c>ma.argsort</c>. A PLAIN int64
         ///     index array (masked entries land at the end/front).
         /// </summary>
-        /// <param name="a">Operand.</param><param name="axis">Sort axis (default last).</param>
+        /// <param name="a">Operand.</param>
+        /// <param name="axis">Sort axis (negative counts from the end), or null for the flattened array (NumPy's
+        ///     <c>axis=None</c>). Omitting it is NumPy's default (see <see cref="argsort(object,bool,object)"/>).</param>
         /// <param name="endwith">True (default) sends masked entries to the END; false to the FRONT.</param>
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default.</param>
         /// <returns>An int64 <see cref="NDArray"/> of sort indices.</returns>
+        /// <exception cref="StringComputationNotSupportedException">A text operand with two or more elements to order.</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>): the filled sort keys (and an array-like operand this method had to
         /// materialize) are reclaimed; only the index array leaves.</remarks>
         [NDScoped]
-        public NDArray argsort(object a, int axis = -1, bool endwith = true, object fill_value = null)
+        public NDArray argsort(object a, int? axis, bool endwith = true, object fill_value = null)
         {
             var d = (a as NDMaskedArray)?._mask is null ? AsData(a) : ((NDMaskedArray)a).filled(fill_value ?? SortFill(a, endwith));
-            return np.argsort(d, axis);
+            // `filled.argsort(axis=None)` sorts the flattened array.
+            return axis is null ? np.argsort(np.ravel(d), -1) : np.argsort(d, axis.Value);
         }
+
+        /// <summary>
+        ///     <see cref="argsort(object,int?,bool,object)"/> with NumPy's DEFAULT axis (<c>ma.argsort(a,
+        ///     axis=np._NoValue)</c>): <c>_deprecate_argsort_axis</c> picks the last axis for a 0-d or 1-D operand and None
+        ///     (the FLATTENED array, with NumPy's FutureWarning) from two dimensions on.
+        /// </summary>
+        /// <param name="a">Operand.</param>
+        /// <param name="endwith">True (default) sends masked entries to the END; false to the FRONT.</param>
+        /// <param name="fill_value">Override the masked sort key; null uses the endwith default.</param>
+        /// <returns>An int64 <see cref="NDArray"/> of sort indices (1-D for an operand of two or more dimensions).</returns>
+        /// <exception cref="StringComputationNotSupportedException">A text operand with two or more elements to order.</exception>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): an array-like operand materialized to read its rank is reclaimed.</remarks>
+        [NDScoped]
+        public NDArray argsort(object a, bool endwith = true, object fill_value = null)
+            => argsort(a, AsData(a).ndim <= 1 ? -1 : (int?)null, endwith, fill_value);
 
         /// <summary>The masked-slot sort key for <see cref="sort"/>/<see cref="argsort"/>: the dtype's largest
         /// value for endwith (masked sorts last) or its smallest value otherwise (masked sorts first).</summary>
@@ -6101,19 +7699,53 @@ namespace NumSharp
         /// element was masked (NumPy's <c>ma.unique</c>, values only).</summary>
         /// <param name="ar">Operand.</param>
         /// <returns>The masked array of unique values.</returns>
-        /// <remarks>Scoped by hand: the compressed values, the plain unique set a masked input extends, and the
-        /// zero/one stand-ins behind the trailing masked slot are reclaimed; only the result's data and mask leave.</remarks>
+        /// <exception cref="StringComputationNotSupportedException">A text operand with both masked and unmasked elements
+        ///     (NumPy's masked sort compares the strings with the fill value), or with two or more unmasked elements.</exception>
+        /// <remarks>
+        ///     NumPy's <c>np.unique</c> of the masked array: the operand is flattened; with no masked element the unique
+        ///     values carry no mask; otherwise the masked sort keys every masked element by the same fill value, so they
+        ///     sort together (last for numbers, whose key is the dtype maximum) and the ONE kept masked slot holds the data of
+        ///     the FIRST masked element in C order — what NumPy's sort leaves first among equal keys. For TEXT the key is the
+        ///     array's fill value (<c>minimum_fill_value</c> is None), so where the masked slot lands depends on how the
+        ///     strings compare with <c>'N/A'</c> — the next phase — unless every element is masked. Reading that fill
+        ///     materializes the text default, which the result (a view of the sorted copy) converts to its dtype
+        ///     (<c>'N/'</c> for <c>&lt;U2</c>). The result inherits the hard-mask flag and fill value.
+        ///     <para>Scoped by hand: the compressed values, the plain unique set a masked input extends, and the raveled
+        ///     stand-ins behind the trailing masked slot are reclaimed; only the result's data and mask leave.</para>
+        /// </remarks>
         public NDMaskedArray unique(object ar)
         {
             using var scope = NDScope.Open();
+            var source = ar as NDMaskedArray;
+            var mask = source?._mask;
+            var data = AsData(ar);
+            bool anyMasked = mask is not null && np.any(mask);
+            bool text = data.typecode == NPTypeCode.String;
+            // A masked text element sorts by the fill value among the strings: where it lands is a string comparison.
+            if (text && anyMasked && !np.all(mask))
+                throw NDStringUfuncs.NextPhase("unique", data.dtype);
             NDArray uvals = np.unique(compressed(ar));
-            var mask = (ar as NDMaskedArray)?._mask;
-            if (mask is null || !np.any(mask))
-                return Yield(scope, new NDMaskedArray(uvals, null));
-            // Append a single masked slot (NumPy keeps one masked value in the unique set).
-            var data = np.concatenate(new[] { uvals, np.zeros(new Shape(1), uvals.dtype) }, 0);
-            var m = np.concatenate(new[] { np.zeros(DimsOf(uvals), np.@bool), np.ones(new Shape(1), np.@bool) }, 0);
-            return Yield(scope, new NDMaskedArray(data, m));
+            NDMaskedArray result;
+            if (!anyMasked)
+                result = new NDMaskedArray(uvals, null);
+            else
+            {
+                // The one masked slot: the first masked element's data, C order (NumPy flattens before it sorts).
+                long first = np.argmax(np.ravel(mask));
+                var masked = np.ravel(data)[$"{first}:{first + 1}"];
+                var values = np.concatenate(new[] { uvals, masked }, 0);
+                var m = np.concatenate(new[] { np.zeros(DimsOf(uvals), np.@bool), np.ones(new Shape(1), np.@bool) }, 0);
+                result = new NDMaskedArray(values, m);
+            }
+            if (source is not null)
+            {
+                // `output.view(MaskedArray)` finalizes from the sorted copy: its fill value converted, its hardness.
+                result.FinalizeFrom(source);
+                // That copy's text default was MATERIALIZED by the masked sort's `filled(None)` read of `fill_value`.
+                if (text && anyMasked && source._fill_value is null)
+                    result._fill_value = StoreFill(default_fill_value(data.dtype), data.dtype);
+            }
+            return Yield(scope, result);
         }
 
         // ─────────────────────────────────────────────────────────────────────────────
@@ -6248,14 +7880,25 @@ namespace NumSharp
         /// <param name="ar2">The operand whose values are removed.</param>
         /// <param name="assume_unique">Speed hint passed through; results are undefined (as in NumPy) if false but
         /// the inputs are not unique.</param>
-        /// <returns>The masked array of <paramref name="ar1"/>-only unique values (sorted; <paramref name="ar1"/>'s
-        /// promotion preserved).</returns>
+        /// <returns>The masked array of <paramref name="ar1"/>-only unique values (sorted, in <paramref name="ar1"/>'s
+        /// dtype: NumPy's result is a selection of ar1, not of the promoted comparison).</returns>
         /// <exception cref="ArgumentNullException">Either operand is null.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A text operand with a non-empty
+        ///     <paramref name="ar1"/> (the uniques and the membership test compare strings).</exception>
         /// <remarks>Scoped by hand, as <see cref="intersect1d"/>.</remarks>
         public NDMaskedArray setdiff1d(object ar1, object ar2, bool assume_unique = false)
         {
             using var scope = NDScope.Open();
-            var dt = SetOpDtype(ar1, ar2);
+            // numpy.ma's setdiff1d is `ar1[in1d(unique(ar1), unique(ar2), invert=True)]`: with a TEXT operand the uniques
+            // sort strings and in1d compares them (formatting a numeric operand into text) — the next phase — unless ar1
+            // is empty, whose selection is empty whatever ar2 holds.
+            var d1 = AsData(ar1);
+            var d2 = AsData(ar2);
+            if ((d1.typecode == NPTypeCode.String || d2.typecode == NPTypeCode.String) && d1.size != 0)
+                throw NDStringUfuncs.NextPhase("setdiff1d", d1.typecode == NPTypeCode.String ? d1.dtype : d2.dtype);
+            // `return ar1[in1d(ar1, ar2, assume_unique=True, invert=True)]`: the result is a selection of ar1 (its unique
+            // values), so it keeps ar1's dtype — not the promoted dtype the membership test compares in.
+            var dt = d1.dtype;
             var values = np.setdiff1d(compressed(ar1), compressed(ar2), assume_unique).astype(dt, copy: false);
             // ar1's masked value survives the diff iff ar2 does not also carry one (masked == masked removes it).
             return Yield(scope, WithTrailingMasked(values, HasMasked(ar1) && !HasMasked(ar2)));
@@ -6267,24 +7910,24 @@ namespace NumSharp
         //    returning the SAME masked array (NumPy's `np.ma.harden_mask(a)` is `a.harden_mask()`). ──
 
         /// <summary>Makes <paramref name="a"/>'s mask HARD in place (NumPy's <c>ma.harden_mask</c>): a later
-        /// plain-value assignment can no longer unmask a slot. A plain (unmasked) array is wrapped and returned
-        /// (hardening a nomask array is inert until it gains a mask).</summary>
+        /// plain-value assignment can no longer unmask a slot. A plain array is wrapped first (NumPy's
+        /// <c>asanyarray(a).harden_mask()</c>), so it comes back HARD too (inert until the array gains a mask).</summary>
         /// <param name="a">Operand (a <see cref="NDMaskedArray"/> is mutated in place).</param>
         /// <returns>The same masked array, now hard-masked.</returns>
-        public NDMaskedArray harden_mask(object a) => a is NDMaskedArray ma_ ? ma_.harden_mask() : array(a);
+        public NDMaskedArray harden_mask(object a) => asanyarray(a).harden_mask();
 
         /// <summary>Makes <paramref name="a"/>'s mask SOFT again in place (NumPy's <c>ma.soften_mask</c>, the
-        /// default): a plain-value assignment unmasks the assigned slots.</summary>
+        /// default): a plain-value assignment unmasks the assigned slots. A plain array is wrapped first
+        /// (<c>asanyarray(a).soften_mask()</c>).</summary>
         /// <param name="a">Operand (a <see cref="NDMaskedArray"/> is mutated in place).</param>
         /// <returns>The same masked array, now soft-masked.</returns>
-        public NDMaskedArray soften_mask(object a) => a is NDMaskedArray ma_ ? ma_.soften_mask() : array(a);
+        public NDMaskedArray soften_mask(object a) => asanyarray(a).soften_mask();
 
-        /// <summary>Drops an all-False mask back to nomask (NumPy's <c>shrink_mask</c>); otherwise unchanged.</summary>
-        /// <param name="a">Operand.</param><returns>The masked array, with a redundant all-False mask removed.</returns>
-        public NDMaskedArray shrink_mask(object a)
-        {
-            var m = (a as NDMaskedArray)?._mask;
-            return (m is not null && !np.any(m)) ? new NDMaskedArray(AsData(a), null) : array(a);
-        }
+        /// <summary>Drops an all-False mask back to nomask IN PLACE (the module form of NumPy's
+        /// <c>MaskedArray.shrink_mask</c>, as <c>_frommethod</c> builds them: <c>asanyarray(a).shrink_mask()</c>).</summary>
+        /// <param name="a">Operand (a <see cref="NDMaskedArray"/> is changed in place and returned; a plain array is wrapped,
+        ///     with no mask).</param>
+        /// <returns>The masked array, with a redundant all-False mask removed.</returns>
+        public NDMaskedArray shrink_mask(object a) => asanyarray(a).shrink_mask();
     }
 }

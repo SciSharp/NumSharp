@@ -195,6 +195,25 @@ np.place(a, mask, np.array(new[] { 1.9, 2.9 }));  // InvalidCastException (NumPy
                                                   // Cannot cast array data from dtype('float64') to dtype('int32') according to the rule 'safe'
 ```
 
+### Masked text arrays
+
+`np.ma` works on text arrays as numpy.ma does. The default fill value is `'N/A'`, stored at its own width (`<U3` or `|S3`). `filled()` cuts it to the width of the array:
+
+```csharp
+var m = np.ma.array(np.array(new[] { "ab", "c", "de" }), mask: new[] { true, false, false });
+m.fill_value;      // "N/A"
+m.filled();        // ['N/' 'c' 'de']
+m.filled("zz");    // ['zz' 'c' 'de']
+np.ma.count(m);    // 2
+```
+
+The rules for computing are the same as for plain arrays. A masked reduction refuses with NumPy's message. A call that must read or format text is the next phase:
+
+```csharp
+np.ma.sum(m);      // TypeError: the resolved dtypes are not compatible with add.reduce. Resolved (dtype('<U2'), dtype('<U2'), dtype('<U4'))
+m.filled(5);       // StringComputationNotSupportedException: NumPy writes 5 as the text '5'
+```
+
 Until the next phase, convert to .NET and compute there. For example, `NDArray.AsStringArray(names).Select(s => s.ToUpper())`.
 
 ---
