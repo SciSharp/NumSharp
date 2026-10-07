@@ -6,8 +6,8 @@ namespace NumSharp.Tests.Creation
     ///     <c>np.stack</c> as NumPy 2.4.2's statements (<c>numpy/_core/shape_base.py</c>): every shape is compared first,
     ///     then each array gets the new axis and the expanded arrays are concatenated. A 0-d operand expands to <c>(1,)</c>,
     ///     so <c>n</c> scalars stack to <c>(n,)</c>; the old implementation ran the operands through <c>atleast_1d</c> first
-    ///     and returned <c>(n, 1)</c>, and replaced the elements of the caller's array with expanded views. Expected values
-    ///     probed against NumPy 2.4.2.
+    ///     and returned <c>(n, 1)</c>. The expanded operands go into an array of their own, so the caller's array of
+    ///     operands is never written. Expected values probed against NumPy 2.4.2.
     /// </summary>
     [TestClass]
     public class NpStackTest
@@ -46,6 +46,9 @@ namespace NumSharp.Tests.Creation
             act.Should().Throw<InvalidOperationException>().WithMessage("all input arrays must have the same shape");
         }
 
+        /// <summary>The expanded operands are built in a separate array: writing them back into the caller's
+        /// <c>NDArray[]</c> (the old loop's pattern, safe only behind <c>atleast_1d</c>'s copy) would leave the caller
+        /// holding expanded views.</summary>
         [TestMethod]
         public void Stack_LeavesTheCallersArrayOfOperandsAlone()
         {

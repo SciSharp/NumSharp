@@ -458,12 +458,33 @@ oracle sections closed the gaps between "NumPy refuses" and "NumPy computes":
   - **np.* bugs it found:** `np.stack` of 0-d operands (`(n,)`, was `(n, 1)`), `np.convolve` checking emptiness before
     the length swap, `np.vander` over text (the columns decide), `np.clip`'s no-loop text, `np.unique` of a contiguous
     view whose shape carries a non-zero offset (the hash path and the key extraction read the elements BEFORE the view).
-* **Open.** numpy.ma attribute inheritance outside the members above: NumPy's ufunc wrappers `_update_from` their first
-  masked operand (fill RAW, hardness), and so do `clip` / `round` / `conjugate` / `sort` / `diagonal` / `anom` / `diff`;
-  `copy` / `astype` / `view` inherit the hardness; `view(dtype)` resets the fill; `real` / `imag` / `mT` are soft with the
-  default fill; the comparison OPERATORS are `_comparison` (no masked-slot fill-back, the fill cast to bool); NumSharp
-  propagates none of that yet. `np.ma.isin` / `in1d`'s numeric algorithm (the `[known gap]` excuse); numeric fill values
-  are neither converted nor materialized (a documented simplification); `np.nditer` over strings; the result layout of
+* **numpy.ma attributes and operators** (follow-up, same day; unit `Ma/NDMaskedArrayInheritanceTests.cs`). A probe of
+  every result kind against NumPy (116 attribute cases: fill value, hardness, mask form, data at every slot; 143
+  operator and mask-sharing cases: a masked write through the result, then the operand's mask read back) found 73
+  differences, all fixed but 4 representational ones (a NumPy scalar or plain-array return stands as a 0-d or
+  unmasked masked array; a numeric fill keeps its C# type):
+  - the masked ufunc wrappers end with `_update_from(a)` (else `b`): the fill value RAW (an int64 fill stays int64 on a
+    float result) and the hard mask; `ma.power` updates from its BASE only and fills invalid slots with that fill; the
+    shifts are plain functions (`masked_array(left_shift(filled(a, 0), n), mask=m)`: masked slots shifted from 0, the
+    operand's mask adopted, nothing inherited);
+  - MaskedArray defines `+ - * / // **` and the comparisons only: `-x`, `~x`, `%`, `&`, `|`, `^` run ndarray's PLAIN
+    ufunc with weak C# numbers and `__array_wrap__` (no fill-back; `mask_or` of the operands' full masks, shrunk; `%`'s
+    `_DomainSafeDivide` slots filled with 1; a unary operator shares the operand's mask object); `< > <= >=` run
+    `_comparison` (`compare(self.data, getdata(other))` with a STRONG C# number, no fill-back, a COPY of the mask shrunk
+    to nomask, the fill value cast to bool, `scalar < x` as x's reflected method);
+  - `copy`, `astype` (mask copied), `view` (mask shared; a dtype argument resets a stored fill; `fill_value=` replaces
+    only a stored one), `diagonal`, `clip` (mask copied), `round` (mask shared), `sort`, `anom` and `diff` inherit;
+    `real` / `imag` (mask copied) and `mT` (mask view) are soft with the default fill;
+  - a binary masked ufunc returned the operand's own mask object when only one operand had a mask, so masking the
+    result masked the operand: NumPy's `logical_or(ma, getmaskarray(b))` is a new array;
+  - `ma.sort` is NumPy's statements (a finalized copy, `a[...] = take_along_axis(a, argsort)`: a HARD mask keeps the old
+    masked slots' data and ORs the masks); a floating masked slot sorts by NaN, after +inf;
+  - `ma.dot` always computes `~dot(~ma, ~mb)` (an empty contraction masks every slot; an array result carries a mask
+    array; a masked 0-d result is a 0-d array with a True mask); `ma.diff` broadcasts a 0-d prepend / append and
+    returns the operand itself for `n=0`; `masked_where(copy=False)` masks the input in place.
+* **Open.** `np.ma.isin` / `in1d`'s numeric algorithm (the `[known gap]` excuse); numeric fill values are neither
+  converted nor materialized (a documented simplification); `ma.put` with a hard mask on an N-D array writes where NumPy
+  raises its IndexError (it indexes the N-D mask with flat indices); `np.nditer` over strings; the result layout of
   `argwhere` / `flatnonzero` / `unravel_index` (views in NumPy; `OpenBugs.IndexSearchLayout.cs`, the oracle excuses only
   their layout); an empty matrix's QR / SVD without the OpenBLAS backend (Core ships no QR / SVD).
 

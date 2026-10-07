@@ -117,12 +117,27 @@ numpy.ma bugs for every dtype, fixed to numpy.ma's statements:
 
 It found np.* bugs too: `np.stack` of 0-d operands is `(n,)`, `np.convolve` checks emptiness before the length swap,
 `np.vander` over text, `np.clip`'s no-loop text names Python-scalar bounds `int64` / `float64`, and `np.unique` of a
-contiguous view with a non-zero `Shape.offset` read the elements before the view. Open: numpy.ma attribute inheritance
-outside the members above (ufunc and operator results, `clip`, `round`, `sort`, `diagonal`, `anom`, `copy` / `astype` /
-`view` hardness, `view(dtype)`'s fill reset, `real` / `imag` / `mT` keeping a fill NumPy resets; the comparison
-operators are NumPy's `_comparison`, with its own masked-slot data and bool fill); `np.ma.isin` / `in1d`'s numeric
-algorithm (the `[known gap]` excuse); numeric fill values are not converted or materialized (a documented
-simplification); `np.nditer` over strings; `argwhere` / `flatnonzero` / `unravel_index` result layout (views in NumPy,
+contiguous view with a non-zero `Shape.offset` read the elements before the view.
+
+A follow-up the same day ported numpy.ma's attribute and operator semantics for every result kind
+(`Ma/NDMaskedArrayInheritanceTests.cs`; probed member by member against NumPy, 259 cases, all NumPy's but 4
+representational ones):
+- the masked ufuncs take the first masked operand's fill value (RAW) and hard mask; `ma.power` takes its base's only and
+  fills invalid slots with it; the shifts fill masked slots with 0 and inherit nothing;
+- `-x`, `~x`, `%`, `&`, `|` and `^` run ndarray's ufunc and `__array_wrap__` (no fill-back, `%`'s domain filled with 1,
+  a weak C# number); the ordering operators run `_comparison` (no fill-back, a shrunk COPY of the mask, the fill value
+  cast to bool, `getdata` making a C# number strong);
+- `copy`, `astype`, `view`, `diagonal`, `clip`, `round`, `sort`, `anom` and `diff` inherit; `real`, `imag` and `mT` reset;
+- masks are shared or copied as NumPy shares or copies them (a binary ufunc built its mask on the operand's own mask
+  object, so masking the result masked the operand);
+- `ma.sort` of a hard-masked array writes back through the hard `__setitem__`; a float masked slot sorts by NaN;
+- `ma.dot` always carries a mask array (an empty contraction masks every slot); `ma.diff` broadcasts a 0-d prepend;
+  `masked_where(copy=False)` masks the input in place.
+
+Open: `np.ma.isin` / `in1d`'s numeric algorithm (the `[known gap]` excuse); numeric fill values are not converted or
+materialized (a documented simplification: `astype(int64)` keeps a float fill); a 0-d result NumPy returns as a plain
+scalar stays a 0-d masked array; `ma.put` with a hard mask on an N-D array writes where NumPy raises its IndexError;
+`np.nditer` over strings; `argwhere` / `flatnonzero` / `unravel_index` result layout (views in NumPy,
 `OpenBugs.IndexSearchLayout.cs`); an empty matrix's QR / SVD without the OpenBLAS backend.
 **Trap:** NumPy's ufunc dispatch cache makes some answers depend on call HISTORY (`np.prod(int8, dtype='U')` names no
 loop in a fresh process but finds the string repeat loop after `np.multiply(u, int8, dtype='U')`); the corpus records
