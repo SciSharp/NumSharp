@@ -292,7 +292,7 @@ python test/oracle/gen_oracle.py mean_loops       # np.mean as NumPy's _mean: la
 python test/oracle/gen_oracle.py nanmean          # np.nanmean as NumPy's nanmean: NaN patterns, dtype= for every loop, fills, empties
 python test/oracle/gen_oracle.py clip_ufunc       # np.clip as a ufunc: broadcast bounds, out=, where=, overlap, the float loop
 python test/oracle/gen_oracle.py power_fast       # np.power's float loops: the stride-0 fast path on every route, float16 powf, float_power
-python test/oracle/gen_oracle.py weak_scalar      # NEP 50 Python scalars: comparisons + binary ufuncs, every route, long-array vector loops
+python test/oracle/gen_oracle.py weak_scalar      # NEP 50 Python scalars: comparisons + binary ufuncs, every route, long-array vector loops, stores
 python test/oracle/gen_oracle.py reduce_kwargs    # reductions through their NumPy-shaped overload: out=, where=, axis forms, prologue errors
 python test/oracle/gen_oracle.py minmax_kwargs    # the max / min family with out= / initial= / where=: loops, casts, fills, run cuts, errors
 python test/oracle/gen_oracle.py precision        # truthful-vs-precise (adversarial accumulation; needs mpmath)
@@ -1216,10 +1216,11 @@ sources with leading unit axes refused, a read-only redundant self-copy refused,
 range-checked, and other errors, texts and orders. **Planted bugs:** see the plan item (each killed by the tier or
 by `Manipulation/np.copyto.NumPyPort.Test.cs`).
 
-### NEP 50 weak Python scalars (`weak_scalar` tier) — 2026-10-07
+### NEP 50 weak Python scalars (`weak_scalar` tier) — 2026-10-07, stores 2026-10-08
 
-`weak_scalar.jsonl` (`gen_oracle.py weak_scalar`, 15,050 cases, floor 14,500) gates the six comparisons and the binary
-ufuncs with one operand a Python scalar (plan `docs/plans/api-parameter-parity.md` X24, X25, X2, X21). Every other
+`weak_scalar.jsonl` (`gen_oracle.py weak_scalar`, 30,351 cases, floor 29,500) gates the six comparisons and the binary
+ufuncs with one operand a Python scalar (plan `docs/plans/api-parameter-parity.md` X24, X25, X2, X21), and the stores
+of a Python scalar into an array (section S, plan X27). Every other
 tier passes its operands as ARRAYS, which NumPy treats as strong, so no other tier could see the rule.
 - NumPy 2.x promotes a Python int / float / complex WEAKLY: the ufunc runs at the array's precision, and the scalar is
   packed into the loop dtype (`PyArray_Pack`). An int goes through the correctly rounded double (two roundings past
@@ -1231,7 +1232,7 @@ tier passes its operands as ARRAYS, which NumPy treats as strong, so no other ti
 
 The scalar travels as the C# literal NumPy's Python scalar maps to (`params.scalar`: kind, exact value and the C# type
 `cs`, the house map of np.clip / np.copyto / `initial=`). bool, the integer primitives, float, double and `Complex` are
-weak Python scalars; `Half` is a strong `np.float16`.
+weak Python scalars; `Half` is a strong `np.float16` (and in section S, `char` a strong `np.uint16`).
 
 **Sections:** C (10,824: the six comparisons, array op scalar and scalar op array, through np.*, both C# operator
 overloads, out= and where=; every NumPy dtype against the scalars where the precision decides; the array holds the
@@ -1240,17 +1241,33 @@ transposed and broadcast float16 / float32 arrays), A (378: binary arithmetic an
 float32 arrays with int64 / uint64 literals past 2^53), O (1,612: a weak int into an integer loop, NumPy's
 OverflowError), W (1,344: arrays of 150 and 163 elements through the six comparisons, both sides; the
 scalar-broadcast kernels' 4×-unrolled packed-mask body, one-vector loop and tail at every lane width, which C's short
-arrays never reach), E (360: empty operands broadcast against others; NumPy's empty result or its broadcast error).
+arrays never reach), E (360: empty operands broadcast against others; NumPy's empty result or its broadcast error),
+S (15,301: the scalar STORED into an array at every store entry point — `params.fn` setitem_int / _neg / _slice /
+_empty / _ellipsis / _fancy / _mask, fill, full, full_like, put, putmask, place, put_along_axis, insert, fill_diagonal,
+pad, flat_index, flat_slice, asarray, copyto — every dtype against the range edges, the floats whose int() decides,
+complexes, bools, ints past 2^53 into float16 / float32, and the NumPy scalars Half / char; the 1-D and 2-D layouts,
+reversed and stepped views for the range-edge picks; the case records the array after the store, or the result).
+In section S a Python scalar is `PyArray_Pack`'ed on every route; a NumPy scalar is int()-converted into a SIGNED
+integer on the `PyArray_Pack` routes (integer index, slice views, fill, flat_index, pad) and CAST on the
+`PyArray_FromAny` routes (fancy, mask, put, putmask, place, put_along_axis, insert, full, asarray, flat_slice) — NumPy's
+own split, probed. The C# replay (`OpRegistry.WeakStore`) spells each store as C# source would bind it: an `NDArray`
+parameter gets the literal's implicit 0-d array (marked `WasPythonLiteral` / `WasNumPyScalar`), an `object` parameter
+the boxed literal, np.copyto its generic overload.
 
-**Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the `weak_scalar` op. The generator leaves out two
+**Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the `weak_scalar` op. The generator leaves out four
 classes: a where= comparison of an integer array with a Python int outside its dtype (NumPy 2.4.2 SEGFAULTS there,
-probed), and a bool array against a Python int past int64 (the C `long` text differs by platform; unit tests pin the
-LP64 text).
+probed), a bool array against a Python int past int64 and a store error naming the C `long` ("too large to convert",
+"too big to convert": the text differs by platform; unit tests pin the LP64 texts), and np.copyto's complex64 cast
+text (NumSharp has one complex width).
 
 **What it replaced** (fixed 2026-10-07): comparisons promoted a 0-d operand strongly, so a float32 / float16 array
 compared with a Python float at float64. Binary ufuncs wrapped an out-of-range weak int (`int8 + 1000` gave `[-23,
 -22]`) and cast an int past 2^53 into a float loop once instead of twice. **Planted bugs:** 8 edits to the pack and the
-dispatch, all killed (6–1,228 cases each); section W kills a wrong lane order in the packed mask store.
+dispatch, all killed (6–1,228 cases each); section W kills a wrong lane order in the packed mask store. Section S
+replaced silent wraps at every store (`a[0] = 1000` on int8 stored -24, `np.full(3, -1, dtype=np.uint8)` 255,
+`uint8.fill((Half)300)` raised where NumPy casts to 44); 5 planted store bugs (an unmarked literal, the NumPy-scalar
+route ignored, np.full casting its Python int, np.pad's ChangeType, flat_index's raw error) were killed with 54–2,030 red
+cases each.
 
 ### np.power's float loops (`power_fast` tier) — 2026-10-06
 

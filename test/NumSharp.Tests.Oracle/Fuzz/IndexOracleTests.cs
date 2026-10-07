@@ -161,7 +161,9 @@ namespace NumSharp.Tests.Fuzz
         /// <returns>A fresh array the caller owns.</returns>
         internal static NDArray BuildValue(JsonElement v)
         {
-            if (v[0].GetString() == "scalar") return (NDArray)v[1].GetInt64();
+            // The generator assigns np.int64(n), a NumPy SCALAR — strong, so it is NDArray.Scalar here, not the implicit
+            // conversion, which marks a Python literal (NDArray.WasPythonLiteral) that stores are range-check-packed.
+            if (v[0].GetString() == "scalar") return NDArray.Scalar(v[1].GetInt64());
             return np.array(v[1].EnumerateArray().Select(x => x.GetInt64()).ToArray())
                      .reshape(v[2].EnumerateArray().Select(x => (int)x.GetInt64()).ToArray());
         }
@@ -179,8 +181,10 @@ namespace NumSharp.Tests.Fuzz
         {
             switch (v[0].GetString())
             {
-                case "scalar":  return (NDArray)v[1].GetInt64();
-                case "fscalar": return (NDArray)v[1].GetDouble();
+                // np.int64 / np.float64 NumPy scalars (setter_val_to_np): strong 0-d arrays, cast on assignment (uint8 = -1
+                // wraps to 255), never the Python-literal pack the implicit conversion's mark would select.
+                case "scalar":  return NDArray.Scalar(v[1].GetInt64());
+                case "fscalar": return NDArray.Scalar(v[1].GetDouble());
                 case "farr":
                     return np.array(v[1].EnumerateArray().Select(x => x.GetDouble()).ToArray())
                              .reshape(v[2].EnumerateArray().Select(x => (int)x.GetInt64()).ToArray());

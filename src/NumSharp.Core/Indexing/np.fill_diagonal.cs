@@ -82,13 +82,10 @@ namespace NumSharp
             }
 
             if (end > a.size) end = a.size;
-            if (end <= 0 || step <= 0)
-                return;
 
-            long count = (end + step - 1) / step;
-            if (count <= 0)
-                return;
-
+            // NumPy's `a.flat[:end:step] = val` (iter_ass_subscript): the read-only check and the value's conversion come
+            // BEFORE anything is written, even when the slice selects nothing (an empty array still refuses a read-only
+            // target and an out-of-range Python int).
             if (!a.Shape.IsWriteable)
                 throw new ArgumentException("underlying array is read-only");
 
@@ -98,18 +95,29 @@ namespace NumSharp
                 // silently writing nan/zero would hide it.
                 throw new ArgumentNullException(nameof(val));
 
-            // The overwhelmingly common call is a SCALAR fill. Building it straight at the
-            // destination dtype skips asanyarray's dtype inference plus the ravel/astype pair,
-            // and a stride-0 broadcast view then supplies `count` copies for free — the copy
-            // machinery reads it just as happily as a materialised buffer.
-            //
-            // ONLY genuine scalars may take it: NDArray.Scalar goes through IConvertible, so a
-            // C# array / List (NumPy's list-valued `val`, which must tile) would throw. Those —
-            // along with Half and Complex, which are not IConvertible — take the general path.
+            // The overwhelmingly common call is a SCALAR fill. A C# number is a Python (or NumPy) scalar in the
+            // boundary map, and the flat setter converts it with PyArray_FromAny(val, dtype, FORCECAST): PyArray_Pack's
+            // rules — a Python int range-checked (fill_diagonal(int8, 1000) raises "Python integer 1000 out of bounds for
+            // int8"), a float truncated then range-checked, a complex refused by a real dtype. The packed 0-d is built
+            // straight at the destination dtype (no dtype inference, no ravel/astype pair), and a stride-0 broadcast view
+            // supplies the `count` copies for free. A C# literal's 0-d array (an NDArray passed as object) packs the same
+            // way; any other array, and a C# array / List (NumPy's list-valued `val`, which must tile), take the general
+            // path below.
+            NDArray scalarValue = null;
+            if (a.typecode != NPTypeCode.String && (NDArray.IsStoreScalar(val) || val is NDArray { WasPythonLiteral: true }))
+                scalarValue = NDArray.AsStoreValue(val, a.typecode);
+
+            if (end <= 0 || step <= 0)
+                return;
+
+            long count = (end + step - 1) / step;
+            if (count <= 0)
+                return;
+
             NDArray values;
-            if (val is IConvertible && !(val is string))
+            if (scalarValue is not null)
             {
-                values = np.broadcast_to(NDArray.Scalar(val, a.dtype), new Shape(count));
+                values = np.broadcast_to(scalarValue, new Shape(count));
             }
             else
             {

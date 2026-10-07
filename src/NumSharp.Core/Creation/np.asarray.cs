@@ -51,13 +51,22 @@ namespace NumSharp
         ///     Convert the input to an ndarray, matching NumPy 2.x semantics.
         ///     If <paramref name="a"/> already satisfies the requested dtype/layout, it is returned as-is — no copy.
         /// </summary>
-        /// <param name="a">Input ndarray.</param>
+        /// <param name="a">Input ndarray. A C# literal (<c>np.asarray(1000, np.int8)</c>, whose 0-d array is marked
+        ///     <see cref="NDArray.WasPythonLiteral"/>) is NumPy's Python scalar: with a <paramref name="dtype"/> it is packed
+        ///     with NumPy's range checks into a new array, not cast.</param>
         /// <param name="dtype">Requested dtype. <c>null</c> keeps the input dtype.</param>
         /// <param name="order">'C' (row-major), 'F' (column-major), 'A' (any contiguous), 'K' (keep — default). 'A'/'K' never force a copy on layout grounds.</param>
         /// <param name="copy">Tri-state: <c>null</c> = copy only if needed (default), <c>true</c> = always copy, <c>false</c> = never copy (raises if a copy would be required).</param>
         /// <param name="like">Reference array for array-function dispatch — accepted for NumPy parity but has no observable effect in NumSharp.</param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted.</param>
         /// <returns>NDArray with the requested dtype and memory layout. Returns <paramref name="a"/> when no copy is needed.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="ArgumentException">An unsupported <paramref name="device"/>, or <paramref name="copy"/> is
+        ///     <c>false</c> and a copy (or a C# literal's conversion) is required.</exception>
+        /// <exception cref="OverflowException">A C# literal out of <paramref name="dtype"/>'s integer range (NumPy's
+        ///     OverflowError texts).</exception>
+        /// <exception cref="ValueError">A float NaN literal into an integer <paramref name="dtype"/>.</exception>
+        /// <exception cref="TypeError">A complex literal into a real <paramref name="dtype"/>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
         public static NDArray asarray(
             NDArray a,
@@ -82,6 +91,31 @@ namespace NumSharp
             // `like` exists for NumPy's __array_function__ dispatch protocol. NumSharp has
             // no array-subclass dispatch, so the value is accepted but never read.
             _ = like;
+
+            // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar, which np.asarray(value, dtype=...) converts
+            // with PyArray_Pack into a NEW array: np.asarray(1000, dtype=np.int8) raises "Python integer 1000 out of bounds
+            // for int8" and np.asarray(1.5, dtype=np.int8) is 1 — where a 0-d ndarray would be cast. A fresh array can never
+            // satisfy copy=false (NumPy's "Unable to avoid copy" for any Python scalar).
+            if (a.WasPythonLiteral && dtype is not null && !Backends.Strings.NDStringStorage.IsString(dtype))
+            {
+                var packed = NDArray.PackForStore(a, dtype.GetTypeCode(), pyArrayPackRoute: false);
+                if (!ReferenceEquals(packed, a))
+                {
+                    if (copy == false)
+                    {
+                        packed.Dispose();
+                        throw new ArgumentException(
+                            "Unable to avoid copy while creating an array as requested.\n" +
+                            "If using `np.array(obj, copy=False)` replace it with `np.asarray(obj)` " +
+                            "to allow a copy when needed (no behavior change in NumPy 1.x).\n" +
+                            "For more details, see " +
+                            "https://numpy.org/devdocs/numpy_2_0_migration_guide.html#adapting-to-changes-in-the-copy-keyword.",
+                            nameof(copy));
+                    }
+
+                    return packed;
+                }
+            }
 
             // A string request is satisfied only by a string array of that class AND width (an unsized 'U' adapts to the
             // array first); the storage lane alone would let a <U4 array pass for 'S' or 'U2'.

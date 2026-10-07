@@ -62,7 +62,21 @@ namespace NumSharp
                         StringAdvancedSet(value, (u, v) => u[mask] = v, (p, v) => p[mask] = v);
                         return;
                     }
-                    this.TensorEngine.BooleanMaskSet(this, mask, value);
+
+                    // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar: the HAS_BOOL assignment converts it
+                    // with PyArray_FromAny into this dtype (PyArray_Pack's range checks: a[mask] = 1000 on int8 raises)
+                    // after the mask's shape was validated above and before anything is written.
+                    var packed = PackForStore(value, typecode, pyArrayPackRoute: false);
+                    try
+                    {
+                        this.TensorEngine.BooleanMaskSet(this, mask, packed);
+                    }
+                    finally
+                    {
+                        if (!ReferenceEquals(packed, value))
+                            packed.Dispose();
+                    }
+
                     return;
                 }
 

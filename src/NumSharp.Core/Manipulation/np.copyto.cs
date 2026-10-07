@@ -239,6 +239,102 @@ namespace NumSharp
             CopytoAssignRawScalar(dst, slot, descr, @where, casting);
         }
 
+        /// <summary>
+        ///     The one element <c>np.copyto(dst, value, casting='unsafe')</c> stores for a SCALAR <paramref name="value"/> —
+        ///     the second statement of NumPy's <c>np.full</c> (<c>a = empty(shape, dtype); copyto(a, fill_value,
+        ///     casting='unsafe')</c>) and <c>np.full_like</c>, which fill every element with it.
+        /// </summary>
+        /// <param name="value">The fill value: a boxed C# number, a C# literal's 0-d array (<see cref="NDArray.WasPythonLiteral"/>)
+        ///     or another 0-d array.</param>
+        /// <param name="dstType">The new array's dtype (numeric).</param>
+        /// <param name="element">Receives the element; at least <see cref="ReductionInitial.SlotBytes"/> bytes.</param>
+        /// <returns><c>false</c> when <paramref name="value"/> is not a scalar this rule covers (an array with dimensions, a
+        ///     list, text): the caller keeps its own conversion.</returns>
+        /// <exception cref="OverflowException">A Python int out of an integer dtype's range ("Python integer 1000 out of
+        ///     bounds for int8"; the LP64 texts past the C <c>long</c>), or past the double range into a float.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     <c>casting='unsafe'</c> lets every cast through, but a Python scalar is still PACKED first: its stored dtype
+        ///     is <c>npy_find_descr_for_scalar</c>'s (<see cref="CopytoFindDescrForScalar"/>), so a Python int into an
+        ///     integer array is range-checked in that array's own dtype (<c>np.full(3, 1000, dtype=np.int8)</c> raises),
+        ///     while a Python float into an integer array is stored as float64 and then CAST
+        ///     (<c>np.full(3, 1e300, dtype=np.int8)</c> is NumPy's unsafe float64 → int8 value, no error), and a Python
+        ///     complex into a real array keeps its real part. Probed against NumPy 2.4.2.
+        ///     </para>
+        ///     <para>
+        ///     A Python bool, a NumPy scalar (<see cref="Half"/>, <c>char</c>, <c>decimal</c>) and an unmarked 0-d array are
+        ///     strong: one unsafe cast from their own dtype.
+        ///     </para>
+        /// </remarks>
+        internal static unsafe bool TryCopytoUnsafeScalarElement(object value, NPTypeCode dstType, Span<byte> element)
+        {
+            if (element.Length < ReductionInitial.SlotBytes)
+                throw new ArgumentException($"The element slot needs {ReductionInitial.SlotBytes} bytes.", nameof(element));
+
+            // A C# literal's 0-d array stands for the Python scalar it was made from.
+            if (value is NDArray marked && marked.WasPythonLiteral)
+                value = marked.Storage.GetAtIndex(0);
+
+            PyScalarKind kind;
+            NPTypeCode strongType;
+            byte* strong = stackalloc byte[ReductionInitial.SlotBytes];
+            switch (value)
+            {
+                case sbyte or byte or short or ushort or int or uint or long or ulong or BigInteger:
+                    kind = PyScalarKind.Int;
+                    break;
+                case float or double:
+                    kind = PyScalarKind.Float;
+                    break;
+                case Complex:
+                    kind = PyScalarKind.Complex;
+                    break;
+                case bool b:
+                    *(bool*)strong = b;
+                    strongType = NPTypeCode.Boolean;
+                    goto Strong;
+                case Half h:
+                    *(Half*)strong = h;
+                    strongType = NPTypeCode.Half;
+                    goto Strong;
+                case char c:
+                    *(char*)strong = c;
+                    strongType = NPTypeCode.Char;
+                    goto Strong;
+                case decimal m:
+                    *(decimal*)strong = m;
+                    strongType = NPTypeCode.Decimal;
+                    goto Strong;
+                case NDArray nd when nd.ndim == 0 && nd.typecode != NPTypeCode.String:
+                    // A 0-d ndarray: PyArray_AssignArray of a 0-d source, one unsafe cast. Its one element sits at the
+                    // shape's offset (Address + offset · itemsize covers a contiguous slice and a strided view alike).
+                    fixed (byte* e = element)
+                        NDIterCasting.ConvertValue((byte*)nd.Address + nd.Shape.offset * nd.dtypesize, e, nd.typecode, dstType);
+                    return true;
+                default:
+                    return false;
+            }
+
+            // The weak scalar: stored in npy_find_descr_for_scalar's dtype with PyArray_Pack's checks, then cast.
+            NPTypeCode original = kind switch
+            {
+                PyScalarKind.Float => NPTypeCode.Double,
+                PyScalarKind.Complex => NPTypeCode.Complex,
+                _ => PyIntDefaultType(value),
+            };
+            NPTypeCode descr = CopytoFindDescrForScalar(original, kind, dstType);
+            byte* packed = stackalloc byte[ReductionInitial.SlotBytes];
+            ReductionInitial.TryPack(value, descr, new Span<byte>(packed, ReductionInitial.SlotBytes));
+            fixed (byte* e = element)
+                NDIterCasting.ConvertValue(packed, e, descr, dstType);
+            return true;
+
+        Strong:
+            fixed (byte* e = element)
+                NDIterCasting.ConvertValue(strong, e, strongType, dstType);
+            return true;
+        }
+
         /// <summary>The dtype <c>np.asarray</c> gives a Python int: int64, uint64 past int64, else none (an object array).</summary>
         /// <param name="value">The boxed integer.</param>
         /// <returns><see cref="NPTypeCode.Int64"/>, <see cref="NPTypeCode.UInt64"/>, or <see cref="NPTypeCode.Empty"/>

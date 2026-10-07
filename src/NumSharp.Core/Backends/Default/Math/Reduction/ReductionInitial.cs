@@ -15,6 +15,14 @@ namespace NumSharp.Backends
     /// </summary>
     /// <remarks>
     ///     <para>
+    ///     The same conversion is NumPy's element setter everywhere a value is STORED, so the store paths share it:
+    ///     <c>np.copyto</c> with a Python scalar, <c>ndarray.fill</c>, <c>np.full</c> / <c>np.full_like</c>,
+    ///     <c>np.insert</c>, <c>np.fill_diagonal</c>, the flat iterator's setters, and — through
+    ///     <see cref="NDArray.PackForStore"/> — the indexer setters, <c>np.put</c>, <c>np.putmask</c>, <c>np.place</c>,
+    ///     <c>np.put_along_axis</c> and <c>np.asarray</c> with a dtype, for a C# literal (an
+    ///     <see cref="NDArray.WasPythonLiteral"/> array is packed as the literal it was made from).
+    ///     </para>
+    ///     <para>
     ///     <c>PyArray_Pack</c> is the array's element setter (<c>arr[()] = initial</c>), so the value follows NumPy's
     ///     setitem rules, which differ by the KIND of value. The C# boundary map (the house rule of
     ///     <c>np.clip</c> and <c>numpy.polynomial</c>): <c>bool</c>, the integer primitives and <see cref="BigInteger"/>
@@ -82,6 +90,12 @@ namespace NumSharp.Backends
                 return false;
             if (slot.Length < SlotBytes)
                 throw new ArgumentException($"The initial slot needs {SlotBytes} bytes.", nameof(slot));
+
+            // A C# literal's 0-d array (NDArray.WasPythonLiteral, NumPy's NPY_ARRAY_WAS_PYTHON_LITERAL temporary) stands
+            // for the Python scalar it was made from: pack the literal's own value, not the array's cast. A Half / char
+            // value's array (NDArray.WasNumPyScalar) unwraps to the NumPy scalar, whose case below applies NumPy's rule.
+            if (initial is NDArray literal && (literal.WasPythonLiteral || literal.WasNumPyScalar))
+                initial = literal.Storage.GetAtIndex(0);
 
             slot.Clear();
             // A bool loop takes Python truthiness (BOOL_setitem's PyObject_IsTrue), whatever the value's kind, except a
@@ -174,6 +188,175 @@ namespace NumSharp.Backends
         /// <returns>The packed value.</returns>
         internal static T Read<T>(ReadOnlySpan<byte> slot) where T : unmanaged
             => Unsafe.ReadUnaligned<T>(ref Unsafe.AsRef(in slot[0]));
+
+        /// <summary>
+        ///     Reads the packed element of <paramref name="slot"/> boxed as <paramref name="loop"/>'s exact CLR type — the
+        ///     form the store paths that take a boxed fill value (<c>ndarray.fill</c>, <c>np.full</c>) consume.
+        /// </summary>
+        /// <param name="slot">A slot filled by <see cref="TryPack"/> (or another packer) for <paramref name="loop"/>.</param>
+        /// <param name="loop">The dtype the slot holds.</param>
+        /// <returns>The boxed element (<c>sbyte</c> for int8, <see cref="Half"/> for float16, …).</returns>
+        /// <exception cref="NotSupportedException"><paramref name="loop"/> is not a numeric storage dtype (string, empty).</exception>
+        /// <remarks>A representation switch like <c>UnmanagedStorage.GetAtIndex</c>'s, not a compute path: every dtype reads
+        ///     the same bytes.</remarks>
+        internal static object Box(ReadOnlySpan<byte> slot, NPTypeCode loop)
+        {
+            switch (loop)
+            {
+                case NPTypeCode.Boolean: return Read<byte>(slot) != 0;
+                case NPTypeCode.SByte: return Read<sbyte>(slot);
+                case NPTypeCode.Byte: return Read<byte>(slot);
+                case NPTypeCode.Int16: return Read<short>(slot);
+                case NPTypeCode.UInt16: return Read<ushort>(slot);
+                case NPTypeCode.Int32: return Read<int>(slot);
+                case NPTypeCode.UInt32: return Read<uint>(slot);
+                case NPTypeCode.Int64: return Read<long>(slot);
+                case NPTypeCode.UInt64: return Read<ulong>(slot);
+                case NPTypeCode.Char: return Read<char>(slot);
+                case NPTypeCode.Half: return Read<Half>(slot);
+                case NPTypeCode.Single: return Read<float>(slot);
+                case NPTypeCode.Double: return Read<double>(slot);
+                case NPTypeCode.Decimal: return Read<decimal>(slot);
+                case NPTypeCode.Complex: return Read<Complex>(slot);
+                default: throw new NotSupportedException($"ReductionInitial.Box: {loop} is not a numeric dtype.");
+            }
+        }
+
+        /// <summary>
+        ///     Packs a C# number standing for a NumPy SCALAR of its own dtype (an <c>np.int64</c>, <c>np.float64</c>, …)
+        ///     into one element of <paramref name="loop"/> — <c>PyArray_Pack</c>'s rule for a NumPy scalar, which differs
+        ///     from a Python scalar's: only a SIGNED integer DType knows every NumPy scalar as its own
+        ///     (<c>signed_integers_is_known_scalar_types</c>) and int()-converts it with the range check; every other
+        ///     DType CASTS it (<c>npy_cast_raw_scalar_item</c>, unsafe).
+        /// </summary>
+        /// <param name="value">A boxed number: an integer primitive, <c>bool</c>, <c>float</c>, <c>double</c>,
+        ///     <see cref="Half"/>, <c>char</c>, <c>decimal</c> or <see cref="Complex"/>; anything else (an array, a string)
+        ///     goes through <see cref="TryPack"/>.</param>
+        /// <param name="loop">The destination dtype.</param>
+        /// <param name="slot">Receives the element; at least <see cref="SlotBytes"/> bytes.</param>
+        /// <exception cref="OverflowException">A signed integer loop and a value whose int() does not fit it, or an
+        ///     infinity ("cannot convert float infinity to integer").</exception>
+        /// <exception cref="ValueError">A signed integer loop and a NaN ("cannot convert float NaN to integer").</exception>
+        /// <exception cref="ArgumentException"><paramref name="slot"/> is shorter than <see cref="SlotBytes"/>.</exception>
+        /// <exception cref="TypeError">A value that is not a number, refused by <see cref="TryPack"/>'s rules.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     This is how <c>np.pad</c> stores its constants: <c>_as_pairs</c> runs <c>np.array(constant_values)</c> and
+        ///     indexes it, so each constant reaches <c>padded[...] = value</c> as a NumPy scalar. Probed against NumPy
+        ///     2.4.2: <c>np.pad(int8, 1, constant_values=1000)</c> raises "Python integer 1000 out of bounds for int8"
+        ///     (int()), while <c>np.pad(uint8, 1, constant_values=1000)</c> pads with 232 (the cast); a complex constant
+        ///     into a signed integer keeps its real part (int() of a NumPy complex drops the imaginary part with a
+        ///     ComplexWarning), into an unsigned one it is cast.
+        ///     </para>
+        ///     <para>
+        ///     The C# boundary map gives each value its own C# type as the NumPy scalar's dtype (a C# <c>int</c> is an
+        ///     <c>np.int32</c>, NumSharp's house rule for a discovered C# int); the int() and the cast agree with NumPy's
+        ///     int64 for every value an <c>int</c> holds.
+        ///     </para>
+        /// </remarks>
+        internal static void PackNumPyScalar(object value, NPTypeCode loop, Span<byte> slot)
+        {
+            if (slot.Length < SlotBytes)
+                throw new ArgumentException($"The scalar slot needs {SlotBytes} bytes.", nameof(slot));
+
+            NPTypeCode own = value switch
+            {
+                bool => NPTypeCode.Boolean, sbyte => NPTypeCode.SByte, byte => NPTypeCode.Byte, short => NPTypeCode.Int16,
+                ushort => NPTypeCode.UInt16, int => NPTypeCode.Int32, uint => NPTypeCode.UInt32, long => NPTypeCode.Int64,
+                ulong => NPTypeCode.UInt64, char => NPTypeCode.Char, Half => NPTypeCode.Half, float => NPTypeCode.Single,
+                double => NPTypeCode.Double, decimal => NPTypeCode.Decimal, Complex => NPTypeCode.Complex,
+                _ => NPTypeCode.Empty,
+            };
+            if (own == NPTypeCode.Empty)
+            {
+                // Not a number: a Python object of another kind (an array, a list, a string) packs by its own rules.
+                TryPack(value, loop, slot);
+                return;
+            }
+
+            slot.Clear();
+            if (IsSignedIntegerLoop(loop))
+            {
+                // The signed integer setitem: PyNumber_Long(scalar) — truncation for a float (NaN / inf are int()'s
+                // errors), the real part for a complex (NumPy's complex __int__) — then @TYPE@_safe_pyint_setitem's range
+                // check with the LP64 texts.
+                switch (value)
+                {
+                    case Complex z:
+                        PackPyFloat(z.Real, loop, slot);
+                        return;
+                    case Half h:
+                        PackPyFloat((double)h, loop, slot);
+                        return;
+                    case float f:
+                        PackPyFloat(f, loop, slot);
+                        return;
+                    case double d:
+                        PackPyFloat(d, loop, slot);
+                        return;
+                    case decimal m:
+                        PackDecimal(m, loop, slot);
+                        return;
+                    case bool b:
+                        PackPyInt(b ? BigInteger.One : BigInteger.Zero, loop, slot);
+                        return;
+                    case ulong u:
+                        PackPyInt(u, loop, slot);
+                        return;
+                    case char c:
+                        PackPyInt(c, loop, slot);
+                        return;
+                    default:
+                        PackPyInt(Convert.ToInt64(value, CultureInfo.InvariantCulture), loop, slot);
+                        return;
+                }
+            }
+
+            // Every other DType casts the NumPy scalar from its own dtype (the house converters carry NumPy's MSVC-pinned
+            // unsafe conversions: 1000 into uint8 is 232, a NaN into an unsigned integer the cast loop's value).
+            CastScalarValue(value, loop, slot);
+        }
+
+        /// <summary>
+        ///     Casts a boxed C# number from its own dtype into one element of <paramref name="loop"/> — NumPy's unsafe cast
+        ///     of a NumPy scalar (<c>npy_cast_raw_scalar_item</c>), which <c>PyArray_FromAny</c> applies to a NumPy scalar
+        ///     like a 0-d array and <c>PyArray_Pack</c> applies wherever the DType does not know the scalar.
+        /// </summary>
+        /// <param name="value">A boxed number: an integer primitive, <c>bool</c>, <c>float</c>, <c>double</c>,
+        ///     <see cref="Half"/>, <c>char</c>, <c>decimal</c> or <see cref="Complex"/>.</param>
+        /// <param name="loop">The destination dtype.</param>
+        /// <param name="slot">Receives the element; at least <see cref="SlotBytes"/> bytes.</param>
+        /// <exception cref="ArgumentException"><paramref name="value"/> is not one of those numbers, or
+        ///     <paramref name="slot"/> is shorter than <see cref="SlotBytes"/>.</exception>
+        /// <remarks>The house converters carry NumPy's (MSVC-pinned) unsafe conversions: no error, 300 into uint8 is 44, a
+        ///     complex into a real dtype keeps its real part.</remarks>
+        internal static void CastScalarValue(object value, NPTypeCode loop, Span<byte> slot)
+        {
+            if (slot.Length < SlotBytes)
+                throw new ArgumentException($"The scalar slot needs {SlotBytes} bytes.", nameof(slot));
+            slot.Clear();
+            NPTypeCode own = value?.GetType().GetTypeCode() ?? NPTypeCode.Empty;
+            switch (value)
+            {
+                case bool b: CastScalar(b, own, loop, slot); return;
+                case sbyte v: CastScalar(v, own, loop, slot); return;
+                case byte v: CastScalar(v, own, loop, slot); return;
+                case short v: CastScalar(v, own, loop, slot); return;
+                case ushort v: CastScalar(v, own, loop, slot); return;
+                case int v: CastScalar(v, own, loop, slot); return;
+                case uint v: CastScalar(v, own, loop, slot); return;
+                case long v: CastScalar(v, own, loop, slot); return;
+                case ulong v: CastScalar(v, own, loop, slot); return;
+                case char v: CastScalar(v, own, loop, slot); return;
+                case Half v: CastScalar(v, own, loop, slot); return;
+                case float v: CastScalar(v, own, loop, slot); return;
+                case double v: CastScalar(v, own, loop, slot); return;
+                case decimal v: CastScalar(v, own, loop, slot); return;
+                case Complex v: CastScalar(v, own, loop, slot); return;
+                default:
+                    throw new ArgumentException($"CastScalarValue: a {value?.GetType().Name ?? "null"} is not a number.", nameof(value));
+            }
+        }
 
         /// <summary>
         ///     Python truthiness (<c>PyObject_IsTrue</c>) of a non-array initial value — the whole of NumPy's bool setitem.

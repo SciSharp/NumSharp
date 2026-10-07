@@ -4889,6 +4889,45 @@ non-structured subset would only re-expose `loadtxt`.
   coordinate callers must use `GetData`, not `nd[coordArray]`.
   The typed `NDArray<T>.this[int[]]` is unaffected — it returns a scalar `T` (inherently coordinate).
 
+**Storing a C# literal is NumPy's `PyArray_Pack` of a Python scalar, at every store entry point** (2026-10-08, plan
+`docs/plans/api-parameter-parity.md` X27; gates section S of the `weak_scalar` tier (15,301 store cases, zero excuses)
++ `Indexing/np.store.PythonLiteral.Test.cs`; probed against NumPy 2.4.2):
+- **The marks.** An `NDArray` parameter receives the literal `1000` and an explicit `np.array(1000)` as the same 0-d
+  array, and NumPy stores them differently (`a[0] = 1000` on int8 raises `OverflowError: Python integer 1000 out of
+  bounds for int8`; `a[0] = np.array(1000)` casts to -24). So the implicit conversion operators MARK the 0-d array
+  (`Backends/NDArray.PythonLiteral.cs`): an integer primitive / `float` / `double` / `Complex` is
+  `WasPythonLiteral` (NumPy's own `NPY_ARRAY_WAS_PYTHON_LITERAL` temporary flag), a `Half` / `char` is
+  `WasNumPyScalar` (`np.float16` / `np.uint16`); `bool` and `decimal` are unmarked. The mark belongs to that one object
+  (a view, copy, reshape or result is unmarked); `NDArray.Scalar(x)` / `np.array(x)` build an unmarked, strong 0-d.
+  ONLY the store paths read the marks; the ufuncs and comparisons keep reading every 0-d operand as weak (np.clip's
+  rule), because library code builds its scalar operands with `NDArray.Scalar`.
+- **The pack.** `NDArray.PackForStore(value, dtype, pyArrayPackRoute)` packs a marked value with
+  `ReductionInitial.TryPack` (the complete `PyArray_Pack` port: a Python int range-checked with the LP64 texts, a float
+  truncated then range-checked, NaN / inf / complex refused with Python's texts, an int past 2^53 rounded TWICE into
+  float16 / float32, a bool dtype takes the truth). A NumPy scalar follows NumPy's route split, probed: the
+  `PyArray_Pack` routes (an integer index, a slice / ellipsis view, `fill`, `flat[i]`, `np.pad`) int()-convert it with
+  the range check into a SIGNED integer (`a[0] = (Half)300` on int8 raises), the `PyArray_FromAny` routes (fancy, mask,
+  `np.put`, `putmask`, `place`, `put_along_axis`, `insert`, `full`, `asarray`, flat slices) CAST it (44).
+- **The entry points.** The indexer setters (`UnmanagedStorage.SetData` after an integer index's bounds check; the
+  fancy core after the too-many-indices check but BEFORE the index bounds, as NumPy; the mask setter after the mask's
+  shape check; an empty selection packs too), `fill` (`CoerceFillValue` is now one `TryPack`), `np.full` / `full_like`
+  (NumPy's `copyto(casting='unsafe')`: a Python int range-checked, a float / complex cast unsafely —
+  `np.TryCopytoUnsafeScalarElement`), `np.put` (NumPy's `PyArray_PutTo` order: the empty-target IndexError, then the
+  values' pack even with no indices, then an empty values array is a NO-OP — it raised ArgumentException), `putmask` /
+  `place` / `put_along_axis` / `insert` / `fill_diagonal` (packs before its early returns, so an empty array still
+  refuses) / the flat iterator (`flat[i]` reports any pack failure as NumPy's `ValueError: Error setting single item of
+  array.`) / `np.asarray(literal, dtype)`; `np.pad` stores each constant as a NumPy scalar
+  (`ReductionInitial.PackNumPyScalar`: `_as_pairs` runs `np.array(constant_values)`, so int8 refuses 1000 where uint8
+  pads with 232).
+- **Kept as casts:** `SetValue` / `itemset` (NumSharp's low-level typed setters; `itemset` is gone from NumPy 2.0),
+  an unmarked 0-d array everywhere, and a 0-d view from integer indexing (`a[i] = b[j]`: NumPy's `b[j]` is a NumPy
+  scalar, which a SIGNED integer destination would range-check — `[Misaligned]`). Text into a numeric store stays the
+  string phase's deferral (`StringComputationNotSupportedException`; `float64.fill("5.5")` parsed with `Convert` before).
+- **Found on the way:** a basic-index setter with an EMPTY selection (`a["4:"] = v`) stranded one pooled buffer per
+  call (the empty view's fresh zero-length buffer was never released; `AssignThroughView` wraps and disposes the view).
+  Open: `np.array(object[], dtype)` (a Python list with a dtype) is not supported at all (`ArgumentOutOfRangeException`;
+  `np.asanyarray(object[])` works).
+
 ---
 
 ## Core Source Files
@@ -5377,14 +5416,19 @@ test/NumSharp.Tests/IO/            .npy/.npz format gate (no Python)
   scan stat logic modf manip sort tail params aliasing copyto copyto_full power_fast weak_scalar errors groupa numpy_f32
   matmul_parity linalg_parity poly einsum specials precision products random_parity fft`; `precision` additionally
   needs `mpmath`) + the index/Decimal/NPY generators, then `dotnet build` to copy corpus assets.
-- **NEP 50 weak Python scalars** (`weak_scalar.jsonl`, 15,050 cases, 2026-10-07, `gen_oracle.py weak_scalar`): the six
+- **NEP 50 weak Python scalars** (`weak_scalar.jsonl`, 30,351 cases, 2026-10-07/08, `gen_oracle.py weak_scalar`): the six
   comparisons and the binary ufuncs with one operand the C# literal NumPy's Python int / float / complex / bool maps to
   (plan api-parameter-parity X24 / X25 / X2 / X21) — every dtype against the scalars where the precision decides, both
   sides, np.* and both operator overloads, out= / where=, the iterator layouts, ints past 2^53 into float16 / float32
   loops (two roundings), weak ints into integer loops (NumPy's OverflowError), long arrays through the
-  scalar-broadcast kernels' packed vector loops (section W), empty broadcasts. Every other tier passes arrays, which
-  NumPy treats as strong. Held to ZERO excuses. Generator drops: a where= comparison of an integer array with an
-  out-of-range Python int (NumPy 2.4.2 segfaults there), a bool array against an int past int64 (platform text).
+  scalar-broadcast kernels' packed vector loops (section W), empty broadcasts, and section S (15,301, plan X27): the
+  literal STORED at every store entry point (the seven indexer routes, fill, full, full_like, put, putmask, place,
+  put_along_axis, insert, fill_diagonal, pad, the flat iterator, asarray, copyto), Python scalars and the NumPy scalars
+  Half / char (whose route decides int() vs a cast). Every other tier passes arrays, which NumPy treats as strong. Held
+  to ZERO excuses; 5 of 5 planted store bugs killed. Generator drops: a where= comparison of an integer array with an
+  out-of-range Python int (NumPy 2.4.2 segfaults there), a bool array against an int past int64, a store error naming
+  the platform C long ("too large to convert", "too big to convert": the unit tests pin the LP64 texts), np.copyto's
+  complex64 cast text.
 - **np.power's float loops** (`power_fast.jsonl`, 7,902 cases, 2026-10-06, `gen_oracle.py power_fast`): np.power as
   NumPy's DOUBLE_power / FLOAT_power / HALF_power and np.float_power (plan api-parameter-parity X13 / X19 / X20) — every
   float base layout × 0-d / one-element / (1,1) / broadcast / Python-scalar exponents, integer / bool / complex bases,

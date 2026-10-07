@@ -871,8 +871,12 @@ namespace NumSharp.Tests.Fuzz
         ///     np.clip with int64 / uint64 literals past 2^53, a weak int packed into an integer loop (NumPy's OverflowError,
         ///     never a wrap), long arrays through the scalar-broadcast comparison kernels' vector loops (section W: the
         ///     4×-unrolled packed-mask body, the one-vector loop and the tail at every lane width), and empty operands
-        ///     broadcast through np.* and the operators (NumPy's empty result or its broadcast error). Every other tier
-        ///     passes arrays, which NumPy treats as strong.
+        ///     broadcast through np.* and the operators (NumPy's empty result or its broadcast error). Section S STORES the
+        ///     literal at every store entry point (the indexer routes, fill, full, full_like, put, putmask, place,
+        ///     put_along_axis, insert, fill_diagonal, pad, the flat iterator, asarray, copyto): a Python scalar is
+        ///     PyArray_Pack'ed (range-checked, never wrapped); a NumPy scalar (C# Half / char) is int()-converted into a
+        ///     signed integer on the PyArray_Pack routes and cast on the PyArray_FromAny routes. Every other tier passes
+        ///     arrays, which NumPy treats as strong.
         /// </summary>
         /// <remarks>Zero excuses: <see cref="MisalignedRegistry"/> never classifies a <c>weak_scalar</c> case.</remarks>
         [TestMethod]
@@ -1045,7 +1049,7 @@ namespace NumSharp.Tests.Fuzz
             ["conversion.jsonl"] = 862,
             ["copyto.jsonl"] = 91,
             ["copyto_full.jsonl"] = 12000,
-            ["weak_scalar.jsonl"] = 14500,   // NEP 50 weak scalars + the long-array vector loops (15,050 at delivery)
+            ["weak_scalar.jsonl"] = 29500,   // NEP 50 weak scalars, the long-array vector loops (15,050 at delivery) and the stores (section S: 30,351 with it)
             ["power_fast.jsonl"] = 7500,
             ["decimal_astype.jsonl"] = 17,
             ["decimal_binary.jsonl"] = 78,

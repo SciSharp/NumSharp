@@ -628,6 +628,11 @@ namespace NumSharp
         private static NDArray ScalarValueAsArray(object value, DType dtype)
         {
             if (value is NDArray nd) return nd; // the caller's array, built before the scope opened: never disposed
+            // A C# number is a Python (or NumPy) scalar in the boundary map: NumPy's array(values, dtype=arr.dtype) packs
+            // it with PyArray_Pack (a Python int range-checked, a float truncated then range-checked, a complex refused
+            // by a real dtype). The packed 0-d belongs to the caller's scope.
+            if (NDArray.IsStoreScalar(value) && !Backends.Strings.NDStringStorage.IsString(dtype))
+                return NDArray.AsStoreValue(value, dtype.GetTypeCode());
             var asArr = np.asanyarray(value);
             if (!Equals(asArr.dtype, dtype))
             {
@@ -663,11 +668,13 @@ namespace NumSharp
             NDArray arr, NDArray values, int axis, bool scalarObj)
         {
             // Cast dtype if needed — NumPy's array(values, dtype=arr.dtype): by ELEMENT type, so a string value of
-            // another width is truncated / NUL-padded to arr's (insert('QQQQQQ') into <U4 stores 'QQQQ').
-            NDArray v = values;
+            // another width is truncated / NUL-padded to arr's (insert('QQQQQQ') into <U4 stores 'QQQQ'). A C# literal
+            // (NDArray.WasPythonLiteral) is NumPy's Python scalar, which array(..., dtype=) packs with PyArray_Pack's range
+            // checks (np.insert(int8, 1, 1000) raises) after the index check; the packed 0-d is the scope's.
+            NDArray v = NDArray.PackForStore(values, arr.typecode, pyArrayPackRoute: false);
             if (!v.HasSameElementType(arr))
             {
-                v = values.astype(arr.dtype, copy: true);
+                v = v.astype(arr.dtype, copy: true);
             }
 
             // ndmin = arr.ndim: prepend 1s.
@@ -765,11 +772,13 @@ namespace NumSharp
         private static NDArray CoerceValuesForMultiIndex(
             NDArray arr, NDArray values, int axis, int numNew)
         {
-            // Cast dtype — by ELEMENT type (a string's class and width), NumPy's array(values, dtype=arr.dtype).
-            NDArray v = values;
+            // Cast dtype — by ELEMENT type (a string's class and width), NumPy's array(values, dtype=arr.dtype). A C#
+            // literal (NDArray.WasPythonLiteral) is NumPy's Python scalar: NumPy assigns it through new[tuple(slobj)] =
+            // values, whose fancy setitem packs it with PyArray_Pack's range checks; the packed 0-d is the scope's.
+            NDArray v = NDArray.PackForStore(values, arr.typecode, pyArrayPackRoute: false);
             if (!v.HasSameElementType(arr))
             {
-                v = values.astype(arr.dtype, copy: true);
+                v = v.astype(arr.dtype, copy: true);
             }
 
             // Build target shape: arr.shape with axis dim = numNew.

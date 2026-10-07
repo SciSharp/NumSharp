@@ -27,8 +27,12 @@ namespace NumSharp
         ///     complex source raises <c>TypeError</c>, exactly as NumPy's setitem runs <c>int()</c>/<c>float()</c>
         ///     on the value). Assigned to a float/complex dtype it casts, saturating to
         ///     ±inf on overflow (<c>float32.fill(1e300)</c> → inf). A 0-d <see cref="NDArray"/> is a STRONG
-        ///     scalar and WRAPS on cast (matching an <c>np.int64</c> scalar); a higher-rank array is a
-        ///     sequence and raises <c>ValueError("setting an array element with a sequence.")</c>.
+        ///     scalar and WRAPS on cast (matching NumPy's 0-d array) — except a C# literal's own 0-d array
+        ///     (<see cref="NDArray.WasPythonLiteral"/>), which packs as the literal; a higher-rank array is a
+        ///     sequence and raises <c>ValueError("setting an array element with a sequence.")</c>. A
+        ///     <see cref="Half"/> or <c>char</c> is a NumPy scalar: range-checked into a SIGNED integer dtype,
+        ///     cast into every other (<c>uint8.fill((Half)300)</c> is 44, as in NumPy). The whole conversion is
+        ///     NumPy's <c>PyArray_Pack</c> (<see cref="ReductionInitial.TryPack"/>), shared with every store path.
         ///     </para>
         ///
         ///     NumPy checks writeability FIRST, then packs the scalar (which may raise) BEFORE touching any
@@ -258,125 +262,64 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Coerce <paramref name="value"/> to this array's dtype with NumPy scalar-assignment semantics,
-        ///     returning it boxed as the dtype's EXACT C# type (required by the strongly-typed fill).
+        ///     Coerces <paramref name="value"/> to this array's dtype the way NumPy's <c>PyArray_FillWithScalar</c> does — one
+        ///     <c>PyArray_Pack</c> of the value (<see cref="ReductionInitial.TryPack"/>) — and returns it boxed as the
+        ///     dtype's EXACT C# type, the form the typed fill routes consume.
         /// </summary>
-        private object CoerceFillValue(object value)
+        /// <param name="value">The fill value.</param>
+        /// <returns>The element every slot receives.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null (house convention, see <see cref="fill"/>).</exception>
+        /// <exception cref="OverflowException">A Python int (any C# integer, or a C# literal's 0-d array) out of an integer
+        ///     dtype's range — "Python integer 300 out of bounds for int8", or past the C <c>long</c> the LP64 text "Python int
+        ///     too large to convert to C long" —; a float infinity into an integer ("cannot convert float infinity to
+        ///     integer"); a NumPy scalar (<see cref="Half"/>, <c>char</c>) whose int() does not fit a SIGNED integer dtype.</exception>
+        /// <exception cref="ValueError">A float NaN into an integer dtype ("cannot convert float NaN to integer"), or an array
+        ///     with dimensions ("setting an array element with a sequence.").</exception>
+        /// <exception cref="TypeError">A complex into a real dtype (Python's int() / float() texts), or a sequence into an
+        ///     integer or complex dtype.</exception>
+        /// <exception cref="StringComputationNotSupportedException">Text into a numeric array: NumPy parses it (int(str) /
+        ///     float(str)), the computational phase of the string support.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     The C# boundary map decides the kind of each value, so every rule is NumPy's for that kind: an integer
+        ///     primitive / <see cref="BigInteger"/> is a Python int (range-checked, never wrapped), <c>float</c> /
+        ///     <c>double</c> a Python float (truncated toward zero into an integer, then range-checked; rounded ONCE from the
+        ///     double into float16 / float32, so a <c>long</c> past 2^53 rounds twice into float32, as in NumPy), a
+        ///     <see cref="Complex"/> a Python complex, <see cref="Half"/> / <c>char</c> NumPy scalars (int()-converted with
+        ///     the range check into a SIGNED integer dtype, cast into every other: <c>uint8.fill((Half)300)</c> is 44), a
+        ///     bool dtype takes the value's truth, a 0-d <see cref="NDArray"/> is CAST (wrapping, like NumPy's 0-d array)
+        ///     unless it is a C# literal's (<see cref="NDArray.WasPythonLiteral"/>), which packs as the literal.
+        ///     </para>
+        ///     <para>
+        ///     A value of the dtype's own C# type is already the stored element (the hot <c>int32.fill(42)</c> /
+        ///     <c>float64.fill(3.5)</c>): it returns as is, with no packing and no allocation.
+        ///     </para>
+        /// </remarks>
+        private unsafe object CoerceFillValue(object value)
         {
             if (value is null)
                 // NumPy reaches its dtype converter (float → NaN, else TypeError); NumSharp treats a null
                 // scalar as a caller bug, matching np.fill_diagonal's deliberate divergence.
                 throw new ArgumentNullException(nameof(value), "fill() value must not be null.");
 
-            // A 0-d NDArray is a STRONG scalar (wraps on cast, like an np.int64 scalar); anything of higher
-            // rank is a sequence, which NumPy's PyArray_Pack rejects.
-            if (value is NDArray nd)
-            {
-                if (nd.ndim != 0)
-                    throw new ValueError("setting an array element with a sequence.");
-                return nd.astype(dtype).GetAtIndex(0);
-            }
-
-            // Fast path: a value already of the exact dtype IS the stored representation — it always fits
-            // and needs no coercion (the hot `int32.fill(42)` / `float64.fill(3.5)` case, no allocation).
-            if (value.GetType() == dtype)
+            // Fast path: a number already of the exact dtype IS the stored representation — it always fits
+            // and needs no coercion (the hot `int32.fill(42)` / `float64.fill(3.5)` case, no allocation). Only a
+            // number qualifies: an array or a list is not an element, whatever its element type.
+            if (IsStoreScalar(value) && value.GetType().GetTypeCode() == typecode)
                 return value;
 
+            // Text into a numeric array is NumPy's int(str) / float(str) parse — the computational phase of the string
+            // support, deferred like every text-to-number conversion (a string array took FillText before this).
+            if (value is string || value is byte[])
+            {
+                using var text = NDArray.Scalar(value);
+                throw Backends.Strings.NDStringCasting.TextConversion(text.dtype, dtype);
+            }
+
             NPTypeCode tc = typecode;
-
-            if (IsIntegerLikeTypeCode(tc))
-            {
-                // A bool target truthiness-tests and can never overflow; every other integer dtype
-                // range-checks the weak scalar (float sources truncate toward zero first).
-                if (tc != NPTypeCode.Boolean)
-                    CheckWeakScalarFitsInteger(value, tc);
-
-                // Dispose the two scratch arrays this astype-based cast builds (a 1-element source and
-                // its cast result): the coerced value is extracted as a boxed primitive, so both are
-                // pure internal temporaries that would otherwise leak their pooled buffers. This narrow
-                // allocating sub-path runs only for a type-mismatched scalar into a non-int32 integer /
-                // bool / char dtype — the exact-dtype and float/decimal/complex paths never reach here —
-                // so it is freed here rather than by an [NDScoped] scope taxing fill()'s alloc-free path.
-                using var src = new NDArray(value.GetType(), 1);
-                src.SetAtIndex(value, 0);
-                using var casted = src.astype(dtype);
-                return casted.GetAtIndex(0); // astype WRAPS — the bounds check above already gated overflow
-            }
-
-            if (tc == NPTypeCode.Complex)
-                return value is Complex c ? c : new Complex(Convert.ToDouble(value), 0);
-
-            // Target is now a REAL float family (Half/Single/Double/Decimal). A weak complex source is a
-            // TypeError — NumPy's setitem runs float() on the object, which refuses a complex regardless of
-            // a zero imaginary part (probed 2.4.2). The strong 0-d complex NDArray took the raw-cast path
-            // above, which drops the imaginary part instead — matching NumPy's 0-d-array raw cast.
-            if (value is Complex)
-                throw new TypeError("float() argument must be a string or a real number, not 'complex'");
-
-            if (tc == NPTypeCode.Half)
-                return (Half)Convert.ToDouble(value);
-
-            // float32 / float64 / decimal target: Convert saturates a float overflow to ±inf (matching
-            // NumPy) for the float targets. A Half source has no IConvertible, so widen it through double.
-            object v = value is Half hv ? (double)hv : value;
-            return Convert.ChangeType(v, dtype.type);
+            byte* slot = stackalloc byte[ReductionInitial.SlotBytes];
+            ReductionInitial.TryPack(value, tc, new Span<byte>(slot, ReductionInitial.SlotBytes));
+            return ReductionInitial.Box(new ReadOnlySpan<byte>(slot, ReductionInitial.SlotBytes), tc);
         }
-
-        private static bool IsIntegerLikeTypeCode(NPTypeCode tc)
-            => tc is NPTypeCode.Boolean or NPTypeCode.Byte or NPTypeCode.SByte
-                or NPTypeCode.Int16 or NPTypeCode.UInt16 or NPTypeCode.Int32 or NPTypeCode.UInt32
-                or NPTypeCode.Int64 or NPTypeCode.UInt64 or NPTypeCode.Char;
-
-        // NumPy's weak-scalar bounds check for a C# primitive assigned to a NON-bool integer dtype: an
-        // integer source must fit the target's inclusive range; a float source is truncated toward zero and
-        // the TRUNCATED value must fit (NaN/±inf raise). The shared NEP50 primitive
-        // (NDExprTypeRules.CheckIntLiteralFits) supplies the message "Python integer {n} out of bounds for {dtype}".
-        private static void CheckWeakScalarFitsInteger(object value, NPTypeCode target)
-        {
-            switch (value)
-            {
-                case bool:
-                    return;
-                case sbyte or byte or short or ushort or int or uint or long or char:
-                    NDExprTypeRules.CheckIntLiteralFits(Convert.ToInt64(value), target);
-                    return;
-                case ulong u:
-                    if (target == NPTypeCode.UInt64) return;                 // any ulong fits uint64
-                    if (u <= long.MaxValue) { NDExprTypeRules.CheckIntLiteralFits((long)u, target); return; }
-                    throw ScalarOutOfBounds(u.ToString(), target);           // >= 2^63 fits only uint64
-                case Half or float or double:
-                {
-                    double d = value is Half h ? (double)h : Convert.ToDouble(value);
-                    // NumPy's float->int setitem funnels through the same conversion Python's int() does, so
-                    // a NaN is a ValueError and a ±inf an OverflowError — both with a dtype-INDEPENDENT
-                    // message (probed against NumPy 2.4.2, identical across every int width and both signs).
-                    if (double.IsNaN(d))
-                        throw new ValueError("cannot convert float NaN to integer");
-                    if (double.IsInfinity(d))
-                        throw new OverflowException("cannot convert float infinity to integer");
-                    double t = Math.Truncate(d);
-                    if (t >= -9223372036854775808.0 && t < 9223372036854775808.0)
-                    {
-                        NDExprTypeRules.CheckIntLiteralFits((long)t, target);
-                        return;
-                    }
-                    if (target == NPTypeCode.UInt64 && t >= 0.0 && t <= 18446744073709551615.0)
-                        return;                                              // a large positive still fits uint64
-                    throw ScalarOutOfBounds(t.ToString("F0"), target);
-                }
-                case Complex:
-                    // A weak complex assigned to a NON-bool integer dtype is a TypeError — NumPy's setitem
-                    // runs int() on the object, which refuses a complex (probed 2.4.2). A bool target never
-                    // reaches here (it truthiness-tests earlier); the strong 0-d complex NDArray already took
-                    // the raw-cast path that drops the imaginary part.
-                    throw new TypeError(
-                        "int() argument must be a string, a bytes-like object or a real number, not 'complex'");
-                default:
-                    return; // Decimal source into an integer target: governed by astype below
-            }
-        }
-
-        private static OverflowException ScalarOutOfBounds(string shown, NPTypeCode target)
-            => new OverflowException($"Python integer {shown} out of bounds for {target.AsNumpyDtypeName()}");
     }
 }

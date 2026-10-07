@@ -961,6 +961,44 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   conversion, so every call leaves a finalizable object: allocation, finalization, and the pool's paced collections.
   The cost is library-wide: `f32 + 0.1` at 1K is 0.62× NumPy for the same reason. Levers: a pooled per-thread 0-d
   operand for the operators, or a scalar overload set that disposes its temporary. Found by X24.
+- [x] **X27 Storing a C# literal wrapped where NumPy raises, at every store entry point: silent wrong values.** The
+  neighbour class of X24, found by its search. Done 2026-10-08 (this commit).
+  - Proof (a 2,662-case probe: 11 dtypes × 11 literals × 22 store entry points against Linux NumPy 2.4.2, the LP64
+    texts NumSharp pins): 873 differences. `a[0] = 1000` on int8 stored -24 (NumPy: `OverflowError: Python integer 1000
+    out of bounds for int8`); `a[mask] = double.NaN` on int32 stored INT_MIN (`ValueError: cannot convert float NaN to
+    integer`); `a[0] = new Complex(3, 4)` on float64 stored 3 (`TypeError: float() argument must be ...`);
+    `np.full(3, -1, dtype=np.uint8)` filled 255; `float32.fill(2**60 + 2**36 + 1)` rounded once (NumPy twice, through
+    the double: 0x5d800000, not 0x5d800001); `uint8.fill((Half)300)` raised where NumPy casts to 44; `np.put(a, [0],
+    [])` raised ArgumentException where NumPy does nothing. After the fix: 179, all documented — np.copyto's house
+    exception type and complex64 text, the C-undefined float64 → uint64 cast (MSVC pinned), `np.append`'s C# int32,
+    np.where / np.select's complex64, and `np.array(object[], dtype)` (X28).
+  - Cause: an `NDArray` parameter received a literal as a strong 0-d array and cast it; the `object`-typed stores ran
+    their own partial weak-scalar checks (`CheckWeakScalarFitsInteger` in fill and the flat iterator: no LP64 texts,
+    one rounding, no NumPy-scalar rule) or plain `Converts.ChangeType`.
+  - Fix: the implicit conversion operators mark the 0-d array (`NDArray.WasPythonLiteral` = NumPy's
+    `NPY_ARRAY_WAS_PYTHON_LITERAL` for an integer / float / double / Complex; `WasNumPyScalar` for Half / char), and
+    the store paths pack a marked value with `ReductionInitial.TryPack` (the complete `PyArray_Pack` port) through
+    `NDArray.PackForStore`; object-typed stores use `TryPack` / `AsStoreValue` directly. A NumPy scalar follows NumPy's
+    route split (probed): int()-converted with the range check into a SIGNED integer on the `PyArray_Pack` routes
+    (integer index, slice views, fill, `flat[i]`, `np.pad`), CAST on the `PyArray_FromAny` routes (fancy, mask, put,
+    putmask, place, put_along_axis, insert, full, asarray, flat slices). np.full / np.full_like are NumPy's
+    `copyto(casting='unsafe')` (a Python int range-checked, a float cast). np.put follows `PyArray_PutTo`'s order (an
+    empty values array is a no-op). np.pad stores NumPy scalars (`ReductionInitial.PackNumPyScalar`). fill_diagonal packs
+    before its early returns. Only the stores read the marks: the ufuncs keep reading every 0-d operand as weak.
+  - Also fixed: a basic-index setter with an EMPTY selection (`a["4:"] = v`) stranded one pooled buffer per call (the
+    empty view's fresh zero-length buffer was never released; found by the zero-leak gate's new store cases).
+  - Gates: section S of `weak_scalar.jsonl` (15,301 cases, zero excuses; 5 of 5 planted bugs killed, 54–2,030 cases
+    each); `Indexing/np.store.PythonLiteral.Test.cs` (14). The index oracle's setter-dtype replay now builds its
+    np.int64 / np.float64 values as strong `NDArray.Scalar`s (the implicit conversion would mark them Python literals).
+- [ ] **X28 `np.array(object[], dtype)` is not supported.** A C# `object[]` is NumPy's Python list in the boundary map,
+  and `np.array([1000, 0], dtype=np.int8)` packs each element (OverflowError); NumSharp's `np.array(Array, DType)`
+  throws `ArgumentOutOfRangeException` for any `object[]` (and `NotSupportedException` without a dtype), while
+  `np.asanyarray(object[])` works. The coercion exists as numpy.polynomial's `PolySequence` (a port of
+  `array_coercion.c`). Found by X27.
+- [ ] **X29 A 0-d view from integer indexing stores like a 0-d array, not like NumPy's NumPy scalar.** `a[i] = b[j]`:
+  NumPy's `b[j]` is a NumPy scalar, which a SIGNED integer destination range-checks on the `PyArray_Pack` routes
+  (`int8[i] = int64_array[j]` with 1000 raises); NumSharp's `b[j]` is an unmarked 0-d view, which is cast (-24). Every
+  in-range value agrees. Lever: mark the getter's full-integer-index result `WasNumPyScalar`. Found by X27.
 
 ## 6. Findings
 
@@ -1110,8 +1148,23 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    loop should never have reached. Use sentinel slots past an `out=` view or past a directly called kernel's buffer,
    and the opt-in NUMSHARP_DEBUG_GUARD_PAGES pool: every buffer then ends against an inaccessible page, so a read
    or a write past it faults at once. Print each case before it runs; after a fault, the last line names it.
+34. **NumPy stores a NumPy scalar two ways, by route** (X27). `PyArray_Pack` lets a signed integer DType treat every
+   NumPy scalar as its own (`signed_integers_is_known_scalar_types`) and int()-converts it with the range check, so
+   `a[0] = np.float16(300)` on int8 raises; `PyArray_FromAny` converts a NumPy scalar like a 0-d array (a cast), so
+   `a[[0]] = np.float16(300)` stores 44. Which one a store uses follows its C code, not its spelling: an integer index,
+   a slice view (`PyArray_CopyObject`), `fill` and `flat[i]` pack; fancy, mask, put, putmask, place, insert, full,
+   asarray and flat slices convert. A Python scalar is packed on both.
+35. **A store test that reads only the destination misses the temporaries** (X27). The zero-leak gate found that an
+   empty-selection assignment stranded a buffer (the empty view's own) and that the oracle replay's mask leaked through
+   a reshape VIEW that kept a counted reference on the disposed flat array — neither shows in a value. Dispose a
+   reshape view as well as its source.
 
 ## 7. State log
+
+- **2026-10-08**: X27 done (storing a C# literal is NumPy's `PyArray_Pack` at every store entry point: the literal
+  marks, the NumPy-scalar route split, np.full's unsafe copyto, np.put's order and empty-values no-op, np.pad's NumPy
+  scalars; the empty-selection setter leak). Section S of the `weak_scalar` tier (15,301 store cases, zero excuses; 5
+  planted bugs killed). X28, X29 and findings 34–35 recorded. Commit: this commit.
 
 - **2026-10-07**: X24 done with X2, X21 and X25. Every comparison packs a Python scalar into the array's precision
   (NEP 50); every binary ufunc range-checks a weak Python int against its loop and re-packs one past 2^53 into a

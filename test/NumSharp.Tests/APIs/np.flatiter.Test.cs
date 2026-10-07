@@ -125,16 +125,20 @@ namespace NumSharp.Tests.APIs
             Assert.AreEqual(-3L, S(ai.flatiter[1]));
 
             // An OUT-OF-RANGE weak scalar (a C# primitive — NumSharp's NEP50 analog of a Python
-            // int/float) into an integer dtype RAISES, matching NumPy 2.4.2's a.flat[i]=v bounds
-            // check; it does NOT wrap to 44. NumSharp reuses its NEP50 OverflowException wording.
+            // int/float) into an integer dtype RAISES, matching NumPy 2.4.2's a.flat[i]=v; it does NOT
+            // wrap to 44. NumPy's iter_ass_subscript replaces PyArray_Pack's OverflowError with
+            // "ValueError: Error setting single item of array." for an integer index; the pack's own
+            // error is kept as the inner exception.
             var u8 = np.zeros(new Shape(1), NPTypeCode.Byte);
-            var ex = Assert.ThrowsException<OverflowException>(() => { u8.flatiter[0] = 300; });
-            StringAssert.Contains(ex.Message, "out of bounds for uint8");
+            var ex = Assert.ThrowsException<ValueError>(() => { u8.flatiter[0] = 300; });
+            Assert.AreEqual("Error setting single item of array.", ex.Message);
+            Assert.IsInstanceOfType(ex.InnerException, typeof(OverflowException));
+            StringAssert.Contains(ex.InnerException.Message, "Python integer 300 out of bounds for uint8");
 
             // A float whose TRUNCATED value is out of range also raises (128.0 -> 128, OOB for int8),
             // but an in-range boundary float truncates and stores (127.9 -> 127).
             var i1 = np.zeros(new Shape(1), NPTypeCode.SByte);
-            Assert.ThrowsException<OverflowException>(() => { i1.flatiter[0] = 128.0; });
+            Assert.ThrowsException<ValueError>(() => { i1.flatiter[0] = 128.0; });
             i1.flatiter[0] = 127.9;
             Assert.AreEqual(127L, S(i1.flatiter[0]));
 

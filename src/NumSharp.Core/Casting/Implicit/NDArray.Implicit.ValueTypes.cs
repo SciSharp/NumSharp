@@ -21,22 +21,59 @@ namespace NumSharp
     public partial class NDArray
     {
         // ===== scalar → NDArray: IMPLICIT (safe, creates 0-d array) =====
+        //
+        // The integer primitives, float, double and Complex are NumPy's Python int / float / complex (the C# boundary
+        // map), so their 0-d array is marked WasPythonLiteral (NumPy's NPY_ARRAY_WAS_PYTHON_LITERAL): a store packs it
+        // with NumPy's range checks (a[0] = 1000 on an int8 array raises) where an ndarray value is cast. bool is not
+        // marked (NumPy marks only an exact int / float / complex, and a bool stores like its cast). Half / char are NumPy
+        // scalars in the map: their 0-d array is marked WasNumPyScalar (range-checked into a SIGNED integer, cast into the
+        // rest). decimal (no NumPy analog) is a plain 0-d array.
 
+        /// <summary>A 0-d bool array (not a Python-literal mark: NumPy stores a bool like its cast).</summary>
+        /// <param name="d">The value.</param>
         public static implicit operator NDArray(bool d) => NDArray.Scalar<bool>(d);
-        public static implicit operator NDArray(sbyte d) => NDArray.Scalar<sbyte>(d);
-        public static implicit operator NDArray(byte d) => NDArray.Scalar<byte>(d);
-        public static implicit operator NDArray(short d) => NDArray.Scalar<short>(d);
-        public static implicit operator NDArray(ushort d) => NDArray.Scalar<ushort>(d);
-        public static implicit operator NDArray(int d) => NDArray.Scalar<int>(d);
-        public static implicit operator NDArray(uint d) => NDArray.Scalar<uint>(d);
-        public static implicit operator NDArray(long d) => NDArray.Scalar<long>(d);
-        public static implicit operator NDArray(ulong d) => NDArray.Scalar<ulong>(d);
-        public static implicit operator NDArray(char d) => NDArray.Scalar<char>(d);
-        public static implicit operator NDArray(Half d) => NDArray.Scalar<Half>(d);
-        public static implicit operator NDArray(float d) => NDArray.Scalar<float>(d);
-        public static implicit operator NDArray(double d) => NDArray.Scalar<double>(d);
+        /// <summary>A 0-d int8 array marked as a Python int literal (see <see cref="WasPythonLiteral"/>).</summary>
+        /// <param name="d">The value.</param>
+        public static implicit operator NDArray(sbyte d) => NDArray.PythonLiteral<sbyte>(d);
+        /// <summary>A 0-d uint8 array marked as a Python int literal (see <see cref="WasPythonLiteral"/>).</summary>
+        /// <param name="d">The value.</param>
+        public static implicit operator NDArray(byte d) => NDArray.PythonLiteral<byte>(d);
+        /// <summary>A 0-d int16 array marked as a Python int literal (see <see cref="WasPythonLiteral"/>).</summary>
+        /// <param name="d">The value.</param>
+        public static implicit operator NDArray(short d) => NDArray.PythonLiteral<short>(d);
+        /// <summary>A 0-d uint16 array marked as a Python int literal (see <see cref="WasPythonLiteral"/>).</summary>
+        /// <param name="d">The value.</param>
+        public static implicit operator NDArray(ushort d) => NDArray.PythonLiteral<ushort>(d);
+        /// <summary>A 0-d int32 array marked as a Python int literal (see <see cref="WasPythonLiteral"/>).</summary>
+        /// <param name="d">The value.</param>
+        public static implicit operator NDArray(int d) => NDArray.PythonLiteral<int>(d);
+        /// <summary>A 0-d uint32 array marked as a Python int literal (see <see cref="WasPythonLiteral"/>).</summary>
+        /// <param name="d">The value.</param>
+        public static implicit operator NDArray(uint d) => NDArray.PythonLiteral<uint>(d);
+        /// <summary>A 0-d int64 array marked as a Python int literal (see <see cref="WasPythonLiteral"/>).</summary>
+        /// <param name="d">The value.</param>
+        public static implicit operator NDArray(long d) => NDArray.PythonLiteral<long>(d);
+        /// <summary>A 0-d uint64 array marked as a Python int literal (see <see cref="WasPythonLiteral"/>).</summary>
+        /// <param name="d">The value.</param>
+        public static implicit operator NDArray(ulong d) => NDArray.PythonLiteral<ulong>(d);
+        /// <summary>A 0-d char array marked as a NumPy uint16 scalar (see <see cref="WasNumPyScalar"/>).</summary>
+        /// <param name="d">The value.</param>
+        public static implicit operator NDArray(char d) => NDArray.NumPyScalarLiteral<char>(d);
+        /// <summary>A 0-d float16 array marked as a NumPy float16 scalar (see <see cref="WasNumPyScalar"/>).</summary>
+        /// <param name="d">The value.</param>
+        public static implicit operator NDArray(Half d) => NDArray.NumPyScalarLiteral<Half>(d);
+        /// <summary>A 0-d float32 array marked as a Python float literal (see <see cref="WasPythonLiteral"/>).</summary>
+        /// <param name="d">The value.</param>
+        public static implicit operator NDArray(float d) => NDArray.PythonLiteral<float>(d);
+        /// <summary>A 0-d float64 array marked as a Python float literal (see <see cref="WasPythonLiteral"/>).</summary>
+        /// <param name="d">The value.</param>
+        public static implicit operator NDArray(double d) => NDArray.PythonLiteral<double>(d);
+        /// <summary>A 0-d decimal array (NumSharp-only, a NumPy-scalar-like value, not a Python-literal mark).</summary>
+        /// <param name="d">The value.</param>
         public static implicit operator NDArray(decimal d) => NDArray.Scalar<decimal>(d);
-        public static implicit operator NDArray(Complex d) => NDArray.Scalar<Complex>(d);
+        /// <summary>A 0-d complex128 array marked as a Python complex literal (see <see cref="WasPythonLiteral"/>).</summary>
+        /// <param name="d">The value.</param>
+        public static implicit operator NDArray(Complex d) => NDArray.PythonLiteral<Complex>(d);
 
         // ===== NDArray → scalar: EXPLICIT (requires 0-d, matches NumPy's int(arr)) =====
 

@@ -441,12 +441,17 @@ public class SelectionTests
         a.ToArray<int>().Should().Equal(10, 20, 30);
     }
 
+    /// <summary>
+    ///     An empty values array is a no-op in NumPy's <c>PyArray_PutTo</c> (<c>nv &lt;= 0</c> returns before the loop),
+    ///     even with indices: <c>np.put(np.zeros(3), [0], [])</c> leaves the array unchanged (probed 2.4.2). NumSharp
+    ///     raised an ArgumentException here before.
+    /// </summary>
     [TestMethod]
-    public void Put_EmptyValues_WithIndices_Throws()
+    public void Put_EmptyValues_WithIndices_IsNoOp()
     {
         var a = np.array(new int[] { 10, 20, 30 });
-        var act = () => np.put(a, np.array(new int[] { 0 }), np.array(new int[0]));
-        act.Should().Throw<ArgumentException>();
+        np.put(a, np.array(new int[] { 0 }), np.array(new int[0]));
+        a.ToArray<int>().Should().Equal(10, 20, 30);
     }
 
     [TestMethod]

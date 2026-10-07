@@ -32,7 +32,11 @@ namespace NumSharp
         public unsafe NDArray this[long* dims, int ndims]
         {
             get => new NDArray(Storage.GetData(dims, ndims));
-            set { ThrowIfNotWriteable(); Storage.GetData(dims, ndims).SetData(value, new int[0]); }
+            set
+            {
+                ThrowIfNotWriteable();
+                AssignThroughView(Storage.GetData(dims, ndims), value);
+            }
         }
 
         /// <summary>
@@ -70,7 +74,11 @@ namespace NumSharp
             {
                 return new NDArray(Storage.GetView(Slice.ParseSlices(slice)));
             }
-            set { ThrowIfNotWriteable(); Storage.GetView(Slice.ParseSlices(slice)).SetData(value, new int[0]); }
+            set
+            {
+                ThrowIfNotWriteable();
+                AssignThroughView(Storage.GetView(Slice.ParseSlices(slice)), value);
+            }
         }
 
 
@@ -85,7 +93,35 @@ namespace NumSharp
             {
                 return new NDArray(Storage.GetView(slice));
             }
-            set { ThrowIfNotWriteable(); Storage.GetView(slice).SetData(value, new int[0]); }
+            set
+            {
+                ThrowIfNotWriteable();
+                AssignThroughView(Storage.GetView(slice), value);
+            }
+        }
+
+        /// <summary>
+        ///     Assigns <paramref name="value"/> to every element of <paramref name="view"/> (a basic-index view of this
+        ///     array) and releases the view's own reference afterwards.
+        /// </summary>
+        /// <param name="view">The view storage the index selected: it shares this array's buffer, except an EMPTY
+        ///     selection (<c>a["4:"]</c> on 4 elements), which <see cref="UnmanagedStorage.GetView(Slice[])"/> backs with a
+        ///     fresh zero-length pooled buffer.</param>
+        /// <param name="value">The value (a C# literal is packed by NumPy's rules inside <c>SetData</c>, an empty
+        ///     selection included).</param>
+        /// <exception cref="ValueError">The value does not broadcast to the selection, or a sequence into one element.</exception>
+        /// <exception cref="OverflowException">A C# literal out of this dtype's range.</exception>
+        /// <exception cref="TypeError">A complex literal into a real dtype.</exception>
+        /// <remarks>
+        ///     The view is wrapped in an <see cref="NDArray"/> for the assignment and disposed after it, exceptions included:
+        ///     the wrapper takes one counted reference on the view's slice and gives it back. A bare view storage was never
+        ///     released, which stranded the empty selection's fresh buffer (one pooled buffer per <c>a[5:] = v</c>, found by
+        ///     the zero-leak gate's store cases); a non-empty view shares the parent's buffer and is unaffected.
+        /// </remarks>
+        private static void AssignThroughView(UnmanagedStorage view, NDArray value)
+        {
+            using var target = new NDArray(view);
+            target.Storage.SetData(value, new int[0]);
         }
 
         ///// <summary>

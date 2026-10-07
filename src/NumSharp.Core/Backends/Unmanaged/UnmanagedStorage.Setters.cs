@@ -334,8 +334,14 @@ namespace NumSharp.Backends
         /// <param name="indices">The </param>
         /// <remarks>
         ///     Does not change internal storage data type.<br></br>
-        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted:
+        ///     an array is CAST (NumPy's unsafe assignment cast), a C# literal (<see cref="NDArray.WasPythonLiteral"/>) is
+        ///     PACKED as the Python scalar it stands for (<see cref="NDArray.PackForStore"/>).
         /// </remarks>
+        /// <exception cref="OverflowException">A C# literal out of this dtype's range (NumPy's OverflowError texts).</exception>
+        /// <exception cref="ValueError">A float NaN literal into an integer dtype, a sequence into one element, or a value
+        ///     that does not broadcast to the selection.</exception>
+        /// <exception cref="TypeError">A complex literal into a real dtype.</exception>
         public void SetData(NDArray value, int[] indices)
         {
             ThrowIfNotWriteable();
@@ -349,6 +355,28 @@ namespace NumSharp.Backends
             // assigns the last element). InferNegativeCoordinates also raises NumPy's IndexError
             // for a genuinely out-of-range index.
             indices = Shape.InferNegativeCoordinates(_shape.dimensions, indices);
+
+            // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar: PyArray_Pack stores it with NumPy's range
+            // checks (a[0] = 1000 on int8 raises "Python integer 1000 out of bounds for int8"; a 0-d ARRAY of 1000 would be
+            // cast to -24). The pack runs after the index's bounds check above and before any write, an empty selection
+            // included (a[5:] = 1000 raises), as NumPy's integer-index and view assignments do. The packed 0-d is an
+            // ordinary value of this dtype from here on. An integer index and a view assignment reach the element through
+            // PyArray_Pack itself, so a C# Half / char value (a NumPy scalar) is int()-converted into a signed integer
+            // here too (a[0] = (Half)300 on int8 raises), where the fancy routes cast it.
+            var packed = NDArray.PackForStore(value, _typecode, pyArrayPackRoute: true);
+            if (!ReferenceEquals(packed, value))
+            {
+                try
+                {
+                    SetData(packed, indices);
+                }
+                finally
+                {
+                    packed.Dispose();
+                }
+
+                return;
+            }
 
             // Strings take their own assignment (NumPy's string setitem / copy rules); the numeric fast paths below
             // convert through Converts.ChangeType and raw CopyTo, which have no text semantics.

@@ -129,6 +129,8 @@ namespace NumSharp
         /// <exception cref="ValueError">rank mismatch, or <paramref name="values"/> not broadcastable to the result shape.</exception>
         /// <exception cref="ValueError"><paramref name="arr"/> is read-only — NumPy's "assignment destination is read-only".</exception>
         /// <exception cref="NotSupportedException">the IL kernels are unavailable (e.g. codegen disabled).</exception>
+        /// <exception cref="OverflowException">A C# literal out of <paramref name="arr"/>'s integer range.</exception>
+        /// <exception cref="TypeError">A complex literal into a real <paramref name="arr"/>.</exception>
         private static unsafe void PutAlongAxisCore(NDArray arr, NDArray indices, NDArray values, int ax)
         {
             // _make_along_axis_idx: dtype check BEFORE the ndim-match check.
@@ -141,6 +143,12 @@ namespace NumSharp
             // (probed 2.4.2: read-only reported ahead of a bad value shape, a non-axis conflict, and an
             // out-of-bounds index; only the dtype check precedes it).
             NumSharpException.ThrowIfNotWriteable(arr.Shape);
+
+            // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar: the fancy assignment converts the value
+            // with PyArray_FromAny(values, arr.dtype, FORCECAST), which packs it with PyArray_Pack's range checks
+            // (put_along_axis(int8, idx, 1000, 0) raises "Python integer 1000 out of bounds for int8") after the read-only
+            // check and BEFORE the index arrays are broadcast or bounds-checked. The packed 0-d is the caller's scope's.
+            values = NDArray.PackForStore(values, arr.typecode, pyArrayPackRoute: false);
 
             int ndim = arr.ndim;
             long[] arrShape = arr.Shape.dimensions;

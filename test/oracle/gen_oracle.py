@@ -5219,6 +5219,16 @@ def gen_copyto_full():
 #   W  long arrays (150 and 163 elements) through the six comparisons, both sides: the scalar-broadcast kernels'
 #      4x-unrolled packed-mask body, one-vector loop and scalar tail, which C's short arrays never reach. The two
 #      lengths reach all three parts at every lane width (1-byte lanes run 128-element bodies and 32-element vectors).
+#   S  STORES: the scalar stored into an array at every store entry point (params.fn: setitem_int / _neg / _slice /
+#      _empty / _ellipsis / _fancy / _mask, fill, full, full_like, put, putmask, place, put_along_axis, insert,
+#      fill_diagonal, pad, flat_index, flat_slice, asarray, copyto). A Python scalar is PyArray_Pack'ed (range-checked,
+#      never wrapped; an int past 2^53 rounds twice into float16 / float32) on every route; a NumPy scalar (cs Half /
+#      char: np.float16 / np.uint16) is int()-converted into a SIGNED integer on the PyArray_Pack routes (integer index,
+#      slice views, fill, flat_index, pad) and CAST on the PyArray_FromAny routes (fancy, mask, put, putmask, place,
+#      put_along_axis, insert, full, asarray, flat_slice). The case records the array after the store (or the result).
+#      Errors whose text depends on the platform's C long ("too large to convert", "too big to convert") are left out,
+#      as every platform text is (the unit tests pin the LP64 texts), and so is np.copyto's complex64 cast text (one
+#      complex width in NumSharp, the copyto tier's documented divergence).
 #   E  empty operands broadcast against others through np.* and the C# operators: NumPy broadcasts (an empty result)
 #      or raises its broadcast error; no element is compared.
 
@@ -5239,8 +5249,13 @@ def _ws_scalar(value, cs):
 
 
 def _ws_numpy_scalar(value, cs):
-    """The NumPy-side operand: the Python scalar itself, or np.float16(value) for the strong Half."""
-    return np.float16(value) if cs == "Half" else value
+    """The NumPy-side operand: the Python scalar itself, np.float16(value) for the strong Half, np.uint16(value) for
+    the strong C# char."""
+    if cs == "Half":
+        return np.float16(value)
+    if cs == "char":
+        return np.uint16(value)
+    return value
 
 
 def _ws_int_cs(v):
@@ -5325,6 +5340,114 @@ def _ws_array_values(dt, scalar):
                 d.type(real) if np.isfinite(real) else packed, d.type(0.0), d.type(-0.0), d.type(1.0), d.type(-1.0),
                 d.type(np.nan), d.type(np.inf), d.type(-np.inf), np.finfo(d).max, np.finfo(d).smallest_subnormal]
         return np.array(vals, dtype=d)
+
+
+WS_STORE_FNS = ["setitem_int", "setitem_neg", "setitem_slice", "setitem_empty", "setitem_ellipsis", "setitem_fancy",
+                "setitem_mask", "fill", "full", "full_like", "put", "putmask", "place", "put_along_axis", "insert",
+                "fill_diagonal", "pad", "flat_index", "flat_slice", "asarray", "copyto"]
+
+
+def _ws_store_scalars(dt):
+    """The (value, cs) scalars section S stores into a `dt` array: the range edges of an integer dtype, the floats and
+    complexes whose int() / float() / truth decide, ints past 2^53 into the narrow floats, and NumPy scalars (Half,
+    char) whose route decides between int() and a cast."""
+    nan, inf = float("nan"), float("inf")
+    d = np.dtype(dt)
+    out = []
+    if d.kind in "iu":
+        info = np.iinfo(d)
+        ints = {info.min - 1, info.min, info.max, info.max + 1, -1, 0, 1000, 127, 128, -129, 255, 256, 65535, 65536,
+                2**31 - 1, -2**31}
+        out += [(v, _ws_int_cs(v)) for v in sorted(ints) if -2**63 <= v < 2**64]
+        if d.itemsize == 8:
+            out += [(2**40 + 1, "long"), (2**63 - 1, "long"), (2**64 - 1, "ulong")]
+    else:
+        out += [(v, _ws_int_cs(v)) for v in (0, 1, -1, 1000, 2049, 65519, 65520, 70000, 16777217, -16777217,
+                                              2**53 + 1, 2**60 + 2**36 + 1, -(2**60 + 2**36 + 1), 2**63 - 1, 2**64 - 1)]
+    out += [(v, "double") for v in (0.5, 1.5, -1.5, 2.75, -2.75, 127.9, 128.0, -128.9, -129.0, 255.5, 256.0, 1e300,
+                                    -1e300, nan, inf, -inf, 0.1, -0.0, 65520.0, 70000.0, 1e39)]
+    out += [(float(np.float32(0.1)), "float"), (float(np.float32(300.5)), "float")]
+    out += [(complex(3, 4), "Complex"), (complex(0.5, 0.0), "Complex"), (complex(0.0, 0.0), "Complex"),
+            (complex(nan, 0.0), "Complex")]
+    out += [(True, "bool"), (False, "bool")]
+    out += [(300.0, "Half"), (1.5, "Half"), (-1.0, "Half"), (nan, "Half"), (65504.0, "Half"), (-0.0, "Half")]
+    out += [(300, "char"), (70, "char"), (65535, "char")]
+    return out
+
+
+def _ws_store_call(fn, a, v):
+    """Runs one NumPy store of scalar v on array a (mutated in place where the store is in place) and returns the
+    observable result: the array after an in-place store, the new array of a constructing one."""
+    if fn == "setitem_int":
+        a[0] = v
+        return a
+    if fn == "setitem_neg":
+        a[-1] = v
+        return a
+    if fn == "setitem_slice":
+        a[1:] = v
+        return a
+    if fn == "setitem_empty":
+        a[a.shape[0]:] = v
+        return a
+    if fn == "setitem_ellipsis":
+        a[...] = v
+        return a
+    if fn == "setitem_fancy":
+        a[[0, -1]] = v
+        return a
+    if fn == "setitem_mask":
+        a[_ws_store_mask(a)] = v
+        return a
+    if fn == "fill":
+        a.fill(v)
+        return a
+    if fn == "full":
+        return np.full(a.shape, v, dtype=a.dtype)
+    if fn == "full_like":
+        return np.full_like(a, v)
+    if fn == "put":
+        np.put(a, [0, -1], v)
+        return a
+    if fn == "putmask":
+        np.putmask(a, _ws_store_mask(a), v)
+        return a
+    if fn == "place":
+        np.place(a, _ws_store_mask(a), v)
+        return a
+    if fn == "put_along_axis":
+        np.put_along_axis(a, np.array([0]), v, 0)
+        return a
+    if fn == "insert":
+        return np.insert(a, 1, v)
+    if fn == "fill_diagonal":
+        np.fill_diagonal(a, v)
+        return a
+    if fn == "pad":
+        return np.pad(a, 1, constant_values=v)
+    if fn == "flat_index":
+        a.flat[0] = v
+        return a
+    if fn == "flat_slice":
+        a.flat[0:2] = v
+        return a
+    if fn == "asarray":
+        return np.asarray(v, dtype=a.dtype)
+    if fn == "copyto":
+        np.copyto(a, v)
+        return a
+    raise ValueError(fn)
+
+
+def _ws_store_mask(a):
+    """The mask section S's masked stores use: every other element in C order (the harness rebuilds it the same way)."""
+    return (np.arange(a.size) % 2 == 0).reshape(a.shape)
+
+
+def _ws_store_platform_text(exc):
+    """True for NumPy's C long / long long overflow texts, which differ between the Windows corpus host and LP64."""
+    t = str(exc)
+    return "too large to convert" in t or "too big to convert" in t
 
 
 def gen_weak_scalar():
@@ -5500,6 +5623,63 @@ def gen_weak_scalar():
                 for fn in WEAK_SCALAR_CMP:
                     for side in ("array_first", "scalar_first"):
                         emit("W", fn, "func", side, pair, scalar, cs, "c_contiguous_1d")
+
+    # ---- S: stores — the scalar stored at every store entry point ---------------------------------------------------
+    # Each store runs on a fresh copy of the destination (the harness rebuilds the operand per case, so its in-place
+    # store mutates its own copy too). put_along_axis takes the 1-D layouts, fill_diagonal the 2-D ones.
+    def store_layouts(dt):
+        d = np.dtype(dt)
+        base = (np.arange(8) % 2 == 1) if d.kind == "b" else np.arange(8).astype(d)
+        base2 = base[:6].reshape(2, 3)
+        return {
+            "c_contiguous_1d": (base[:4].copy(), None),
+            "reversed_1d": (base, "rev"),
+            "stepped_1d": (base, "step"),
+            "c_contiguous_2d": (base2.copy(), None),
+            "transposed_2d": (base2.copy(), "T"),
+        }
+
+    def store_view(base, how):
+        b = base.copy()
+        if how is None:
+            return b, b
+        if how == "rev":
+            return b, b[::-1]
+        if how == "step":
+            return b, b[::2]
+        return b, b.T
+
+    for dt in _WS_DTYPES:
+        layouts = store_layouts(dt)
+        for scalar, cs in _ws_store_scalars(dt):
+            s_np = _ws_numpy_scalar(scalar, cs)
+            for fn in WS_STORE_FNS:
+                # One primary layout per store for every scalar; the non-contiguous ones for the range-edge picks.
+                names = ["c_contiguous_2d" if fn == "fill_diagonal" else "c_contiguous_1d"]
+                if ((cs == "int" and scalar in (1000, -1)) or (cs == "Half" and scalar == 300.0))                         and fn not in ("full", "asarray"):
+                    names += ["transposed_2d"] if fn == "fill_diagonal" else ["reversed_1d", "stepped_1d"]
+                for lname in names:
+                    base0, how = layouts[lname]
+                    if fn == "put_along_axis" and lname.endswith("2d"):
+                        continue
+                    base, view = store_view(base0, how)
+                    params = {"section": "S", "fn": fn, "route": "store", "side": "array_first",
+                              "scalar": _ws_scalar(scalar, cs)}
+                    operands = [describe(base, view)]
+                    cid = f"weak_scalar/S/{fn}/{lname}/{view.dtype.name}/{n}"
+                    n += 1
+                    with _w.catch_warnings():
+                        _w.simplefilter("ignore")
+                        try:
+                            r = _ws_store_call(fn, view, s_np)
+                        except Exception as e:
+                            # Platform C long texts, and np.copyto naming complex64 (NumSharp's one complex width
+                            # reports complex128, the copyto tier's documented divergence) stay out.
+                            if _ws_store_platform_text(e) or "complex64" in str(e):
+                                continue
+                            cases.append(_error_case("weak_scalar", params, operands, e, lname, cid=cid))
+                            continue
+                    cases.append(_case("weak_scalar", params, operands, _arr_expected(r), lname, "weak_scalar", cid=cid))
 
     # ---- E: empty operands broadcast against others ---------------------------------------------------------------
     shapes = [((2, 1, 3), (0, 3)), ((0, 3), (2, 1, 3)), ((0,), (3,)), ((3,), (0,)), ((0,), (1,)), ((1,), (0,)),

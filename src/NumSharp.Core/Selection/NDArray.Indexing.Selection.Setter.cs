@@ -281,6 +281,14 @@ namespace NumSharp
             if (indicesLen != 1)
                 PrepareIndex(this.Shape, indicesObjects);
 
+            // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar, packed into this dtype with NumPy's range
+            // checks (PyArray_Pack) once, here: after prepare_index (its integer-bounds IndexError comes first, as
+            // get_view_from_index's does in NumPy) and before the Try* routes below derive views or broadcasts of the
+            // value, which would lose the mark. The packed 0-d belongs to this method's scope. A tuple with an advanced
+            // component is NumPy's PyArray_FromAny route (a NumPy scalar is cast); a basic-only tuple is a view
+            // assignment, PyArray_Pack's route.
+            values = PackForStore(values, typecode, pyArrayPackRoute: !HasAdvancedIndex(indicesObjects));
+
             // A 0-d boolean (np.array(True)/np.array(False)) mixed with basic indices: True
             // assigns through the size-1 newaxis view (which aliases this, value broadcasting
             // against the (1,...) selection); any-False selects nothing. Mirrors the getter's
@@ -593,6 +601,7 @@ namespace NumSharp
                 return;
             }
 
+
             // #region Compute
 		    // switch (src.typecode)
 		    // {
@@ -684,6 +693,14 @@ namespace NumSharp
             // strides past the end (OOB write / heap corruption). NumPy raises; so do we.
             if (ndsCount > source.ndim)
                 throw new IndexError($"too many indices for array: array is {source.ndim}-dimensional, but {ndsCount} were indexed");
+
+            // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar, packed into the destination's dtype with
+            // NumPy's range checks (PyArray_Pack). NumPy validates the index's structure first (prepare_index: the
+            // too-many-indices error above) and converts the value (PyArray_FromAny) BEFORE it checks the index values'
+            // bounds, so a[[5]] = 1000 on a 3-element int8 array is the OverflowError, not the IndexError. The packed 0-d
+            // is made under the [NDScoped] dispatcher's scope and released with it.
+            values = NDArray.PackForStore(values, InfoOf<T>.NPTypeCode, pyArrayPackRoute: false);
+
             bool isSubshaped = ndsCount != source.ndim;
             NDArray idxs;
             long[] indicesImpliedShape = null;

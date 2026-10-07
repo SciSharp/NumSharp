@@ -178,8 +178,10 @@ namespace NumSharp
         ///     The value conversion of <see cref="place(NDArray, NDArray, NDArray)"/> and
         ///     <see cref="putmask(NDArray, NDArray, NDArray)"/> — NumPy's <c>PyArray_FromAny(values, target.dtype, 0, 0,
         ///     NPY_ARRAY_CARRAY)</c>: an ARRAY of values must convert under the <c>'safe'</c> rule (a dtype check, made
-        ///     whatever the sizes); a 0-d value — NumSharp's stand-in for a Python scalar, which NumPy packs into the dtype —
-        ///     and a list (a C# array) are converted unconditionally; then every value is converted.
+        ///     whatever the sizes); a C# literal's 0-d array (<see cref="NDArray.WasPythonLiteral"/>, NumPy's Python scalar)
+        ///     is PACKED with PyArray_Pack's range checks; any other 0-d value — NumSharp's stand-in for a NumPy scalar,
+        ///     which NumPy also converts without the rule — and a list (a C# array) are converted unconditionally; then
+        ///     every value is converted.
         /// </summary>
         /// <param name="values">The caller's values.</param>
         /// <param name="target">The array written into (its dtype is the conversion's target).</param>
@@ -189,6 +191,9 @@ namespace NumSharp
         /// <returns>The converted values (C-contiguous, the target's dtype), or null when <paramref name="values"/> already
         ///     holds the target's element type (or when <paramref name="formatsText"/> is set).</returns>
         /// <exception cref="InvalidCastException">An array of values does not cast 'safely' (NumPy's TypeError text).</exception>
+        /// <exception cref="OverflowException">A C# literal out of the target's integer range (NumPy's OverflowError).</exception>
+        /// <exception cref="ValueError">A float NaN literal into an integer target.</exception>
+        /// <exception cref="TypeError">A complex literal into a real target.</exception>
         /// <exception cref="StringComputationNotSupportedException">A text scalar into a numeric target: NumPy parses it.</exception>
         /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> target.</exception>
         /// <exception cref="UnicodeDecodeError">Byte values that are not ASCII into a <c>U</c> target.</exception>
@@ -197,6 +202,16 @@ namespace NumSharp
         private static NDArray PlaceValuesLikeNumPy(NDArray values, NDArray target, bool sequence, out bool formatsText)
         {
             formatsText = false;
+            // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar: PyArray_FromAny(values, dtype, CARRAY)
+            // packs it with PyArray_Pack's range checks (np.putmask(int8, m, 1000) / np.place(int8, m, 1000) raise
+            // "Python integer 1000 out of bounds for int8") instead of applying an array's 'safe' rule or cast. A literal of
+            // the target's own dtype is exact and is used as is.
+            if (values.WasPythonLiteral && target.typecode != NPTypeCode.String)
+            {
+                var packed = NDArray.PackForStore(values, target.typecode, pyArrayPackRoute: false);
+                return ReferenceEquals(packed, values) ? null : packed;
+            }
+
             // PyArray_FromArray (an ndarray) checks the rule; a list is built in the target's dtype directly.
             if (!sequence && values.ndim != 0
                 && !DTypeCasting.CanCastTypeTo(values.dtype, target.dtype, NPY_CASTING.NPY_SAFE_CASTING))

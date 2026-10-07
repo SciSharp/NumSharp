@@ -17,16 +17,20 @@ namespace NumSharp
         ///     is into the C-order flattening of <paramref name="a"/>.
         /// </param>
         /// <param name="values">
-        ///     Values to write. Cast to <paramref name="a"/>'s dtype. Cycles
-        ///     modulo its size — shorter than <paramref name="indices"/> is fine.
+        ///     Values to write. Cast to <paramref name="a"/>'s dtype (NumPy's FORCECAST); a C# literal is packed as the
+        ///     Python scalar it stands for (range-checked, never wrapped). Cycles modulo its size — shorter than
+        ///     <paramref name="indices"/> is fine; an empty array writes nothing (NumPy's no-op).
         /// </param>
         /// <param name="mode">
         ///     Boundary mode: <c>"raise"</c> (default), <c>"wrap"</c>, or <c>"clip"</c>.
         /// </param>
         /// <exception cref="ArgumentNullException">An argument is null.</exception>
         /// <exception cref="ValueError"><paramref name="a"/> is read-only (checked first, as NumPy does).</exception>
-        /// <exception cref="ArgumentException"><paramref name="mode"/> is not a known mode, or
-        ///     <paramref name="values"/> is empty while <paramref name="indices"/> is not.</exception>
+        /// <exception cref="ArgumentException"><paramref name="mode"/> is not a known mode.</exception>
+        /// <exception cref="OverflowException">A C# literal value out of <paramref name="a"/>'s integer range (NumPy's
+        ///     OverflowError: "Python integer 1000 out of bounds for int8"), checked before any index is read.</exception>
+        /// <exception cref="ValueError">A float NaN literal into an integer array ("cannot convert float NaN to
+        ///     integer").</exception>
         /// <exception cref="IndexOutOfRangeException"><paramref name="a"/> is empty while <paramref name="indices"/>
         ///     is not, or an index is out of bounds under <c>mode="raise"</c>.</exception>
         /// <exception cref="TypeError">The index dtype cannot be cast to int64 under the <c>safe</c> rule
@@ -53,15 +57,18 @@ namespace NumSharp
 
             int modeInt = ParseMode(mode, nameof(mode));
 
+            // PyArray_PutTo's order: an empty target refuses a non-empty index list, THEN the values are converted
+            // (PyArray_FromAny(values, a.dtype, FORCECAST) — a C# literal, NDArray.WasPythonLiteral, is NumPy's Python
+            // scalar and is packed with PyArray_Pack's range checks even when nothing is written: np.put(int8, [], 1000)
+            // raises), THEN an empty values array returns without writing (`nv <= 0` is a no-op, never an error).
             long indicesCount = indices.size;
-            if (indicesCount == 0)
-                return;   // nothing to do
-
-            if (a.size == 0)
+            if (indicesCount > 0 && a.size == 0)
                 throw new IndexOutOfRangeException("cannot replace elements of an empty array");
 
-            if (values.size == 0)
-                throw new ArgumentException("put: values cannot be empty when indices is non-empty.", nameof(values));
+            values = NDArray.PackForStore(values, a.typecode, pyArrayPackRoute: false);
+
+            if (indicesCount == 0 || values.size == 0)
+                return;   // nothing to write
 
             // NumPy WRITEBACKIFCOPY semantics: when the target is non-contig (e.g. a
             // strided view), allocate a contig scratch with the view's content, run
@@ -86,14 +93,19 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Target array (modified in place).</param>
         /// <param name="index">The flat index into the C-order flattening of <paramref name="a"/>.</param>
-        /// <param name="value">The value to write, converted with <see cref="np.asanyarray(in object, DType, string)"/> and cast to
-        ///     <paramref name="a"/>'s dtype.</param>
+        /// <param name="value">The value to write. A C# number is packed into <paramref name="a"/>'s dtype by NumPy's
+        ///     <c>PyArray_Pack</c> rules for its kind (<see cref="NDArray.AsStoreValue"/>); anything else is converted with
+        ///     <see cref="np.asanyarray(in object, DType, string)"/> and cast.</param>
         /// <param name="mode">Boundary mode: <c>"raise"</c> (default), <c>"wrap"</c>, or <c>"clip"</c>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="value"/> is null.</exception>
         /// <exception cref="ValueError"><paramref name="a"/> is read-only.</exception>
         /// <exception cref="ArgumentException"><paramref name="mode"/> is not a known mode.</exception>
         /// <exception cref="IndexOutOfRangeException"><paramref name="a"/> is empty, or <paramref name="index"/> is
         ///     out of bounds under <c>mode="raise"</c>.</exception>
+        /// <exception cref="OverflowException">A C# integer out of <paramref name="a"/>'s range, or a float infinity into an
+        ///     integer array (NumPy's OverflowError texts).</exception>
+        /// <exception cref="ValueError">A float NaN into an integer array.</exception>
+        /// <exception cref="TypeError">A complex into a real array.</exception>
         /// <remarks>
         ///     Scoped by <c>[NDScoped]</c>: the 0-d index array and the conversion of <paramref name="value"/> are built
         ///     in THIS frame, before the array overload's scope opens, so this method needs a scope of its own to
@@ -104,7 +116,16 @@ namespace NumSharp
         public static void put(NDArray a, long index, object value, string mode = "raise")
         {
             using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            put(a, NDArray.Scalar(index), np.asanyarray(value), mode);
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            if (value is null) throw new ArgumentNullException(nameof(value));
+            // The array overload's checks that NumPy runs before it converts the values, so a C# number packed here
+            // (NDArray.AsStoreValue: PyArray_FromAny(values, a.dtype, FORCECAST) — a Python int range-checked, a float
+            // truncated then range-checked) still reports a read-only target, a bad mode or an empty target first.
+            NumSharpException.ThrowIfNotWriteable(a.Shape, "put: output array");
+            ParseMode(mode, nameof(mode));
+            if (a.size == 0)
+                throw new IndexOutOfRangeException("cannot replace elements of an empty array");
+            put(a, NDArray.Scalar(index), NDArray.AsStoreValue(value, a.typecode), mode);
         }
 
         /// <summary>

@@ -54,7 +54,9 @@ namespace NumSharp
             // dimension guard has to be explicit here — see np.full.
             AllocationGuard.CheckDimensions(shape.dimensions, typeCode);
 
-            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, Converts.ChangeType(fill_value, typeCode)), shape));
+            // NumPy's `res = empty_like(...); copyto(res, fill_value, casting='unsafe')`: a Python int is range-checked in
+            // the result's dtype (np.full_like(int8_array, 1000) raises), a Python float / complex cast unsafely.
+            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, FullFillElement(fill_value, typeCode)), shape));
         }
     }
 }

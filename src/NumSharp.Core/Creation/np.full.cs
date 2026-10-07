@@ -94,10 +94,37 @@ namespace NumSharp
             // product is the only way to see it.
             AllocationGuard.CheckDimensions(shape.dimensions, typeCode);
 
+            object fill = FullFillElement(fill_value, typeCode);
+
             // The wrapping constructor installs the shape as given, so the fresh-layout rule of the allocating funnel has
             // to be applied here: a view's Shape (np.full(x.Shape, v) for x = a[::4]) would otherwise address past the
             // `size`-element buffer, and a read-only source's Shape would make the new array read-only.
-            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, Converts.ChangeType(fill_value, typeCode)), shape.ForFreshAllocation()));
+            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, fill), shape.ForFreshAllocation()));
+        }
+
+        /// <summary>
+        ///     The element <c>np.full</c> / <c>np.full_like</c> fill with — NumPy's <c>copyto(a, fill_value,
+        ///     casting='unsafe')</c> of a scalar (<see cref="TryCopytoUnsafeScalarElement"/>), boxed as
+        ///     <paramref name="typeCode"/>'s exact CLR type.
+        /// </summary>
+        /// <param name="fill_value">The caller's fill value.</param>
+        /// <param name="typeCode">The new array's dtype.</param>
+        /// <returns>The boxed element; for a value that is not a scalar (a list, an array with dimensions), the house
+        ///     conversion <see cref="Converts.ChangeType(object, NPTypeCode)"/> of it.</returns>
+        /// <exception cref="OverflowException">A Python int out of the dtype's integer range (NumPy's OverflowError texts):
+        ///     the copy is unsafe, but the Python scalar is packed first.</exception>
+        /// <remarks>A value of the dtype's own C# type is already the stored element (<c>np.full(3, 0.5)</c>,
+        ///     <c>np.full(3, 7, dtype: np.int32)</c>): it returns as is, with no packing.</remarks>
+        internal static object FullFillElement(object fill_value, NPTypeCode typeCode)
+        {
+            // Only a number qualifies (Type.GetTypeCode unwraps an array type to its element type).
+            if (NDArray.IsStoreScalar(fill_value) && fill_value.GetType().GetTypeCode() == typeCode)
+                return fill_value;
+
+            Span<byte> element = stackalloc byte[ReductionInitial.SlotBytes];
+            if (TryCopytoUnsafeScalarElement(fill_value, typeCode, element))
+                return ReductionInitial.Box(element, typeCode);
+            return Converts.ChangeType(fill_value, typeCode);
         }
     }
 }

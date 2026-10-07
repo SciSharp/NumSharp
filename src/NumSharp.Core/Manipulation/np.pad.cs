@@ -1349,10 +1349,43 @@ namespace NumSharp
             }
         }
 
-        private static object CastBoxToDType(object value, NPTypeCode tc)
+        /// <summary>
+        ///     Converts one pad constant into the padded array's dtype the way NumPy stores it: <c>_as_pairs</c> runs
+        ///     <c>np.array(constant_values)</c> and indexes the result, so every constant reaches
+        ///     <c>padded[...] = value</c> as a NumPy SCALAR of its discovered dtype, which <c>PyArray_Pack</c> int()-converts
+        ///     with the range check into a SIGNED integer array and casts into every other
+        ///     (<see cref="ReductionInitial.PackNumPyScalar"/>).
+        /// </summary>
+        /// <param name="value">One constant: a C# number (a NumPy scalar of its own C# type), a one-element
+        ///     <see cref="NDArray"/> (its element), or <c>null</c> (NumPy's default 0).</param>
+        /// <param name="tc">The padded array's dtype.</param>
+        /// <returns>The constant boxed as <paramref name="tc"/>'s exact CLR type; an array of several elements or a value
+        ///     that is not a number returns through the house conversion (<see cref="Converts.ChangeType(object, NPTypeCode)"/>)
+        ///     or as is (an array), for the broadcast-assignment route.</returns>
+        /// <exception cref="OverflowException">A signed integer array and a constant whose int() does not fit it:
+        ///     <c>np.pad(int8, 1, constant_values=1000)</c> raises "Python integer 1000 out of bounds for int8", as in NumPy
+        ///     (an unsigned array casts instead: <c>np.pad(uint8, 1, constant_values=1000)</c> pads with 232); a float
+        ///     infinity into a signed integer.</exception>
+        /// <exception cref="ValueError">A float NaN constant into a signed integer array ("cannot convert float NaN to
+        ///     integer").</exception>
+        private static unsafe object CastBoxToDType(object value, NPTypeCode tc)
         {
             if (value is null) return BoxedZero(tc);
-            return NumSharp.Utilities.Converts.ChangeType(value, tc);
+            // A one-element array constant is the NumPy scalar np.array(...) indexes out of it; a larger one keeps the
+            // broadcast-assignment route.
+            if (value is NDArray nd)
+            {
+                if (nd.size != 1 || nd.typecode == NPTypeCode.String)
+                    return value;
+                value = nd.GetAtIndex(0);
+            }
+
+            if (!NDArray.IsStoreScalar(value) || tc == NPTypeCode.String)
+                return NumSharp.Utilities.Converts.ChangeType(value, tc);
+
+            byte* slot = stackalloc byte[ReductionInitial.SlotBytes];
+            ReductionInitial.PackNumPyScalar(value, tc, new Span<byte>(slot, ReductionInitial.SlotBytes));
+            return ReductionInitial.Box(new ReadOnlySpan<byte>(slot, ReductionInitial.SlotBytes), tc);
         }
 
         // ---------------------------- assignment glue ----------------------------

@@ -383,8 +383,10 @@ class CommittedCorpusTests(unittest.TestCase):
             self.assertGreater(normal.contracts - normal.portable, 0, "legacy normal's values are host-libm pinned")
             self.assertLessEqual(normal.portable, normal.errors, "only error contracts of normal are portable")
         # "ndarray" is the constructor np.ndarray(shape, dtype, buffer, offset, strides, order) (ndarray_ctor.jsonl);
-        # "viewflags:getitem" is the array-object oracle's a[key] (view_flags.jsonl), attached to the type as get is.
-        self.assertEqual({"get", "set", "ndarray.__len__", "ndarray", "viewflags:getitem"},
+        # "viewflags:getitem" is the array-object oracle's a[key] (view_flags.jsonl), attached to the type as get is. The
+        # weak_scalar tier's section S stores C# literals through ndarray.__setitem__'s routes (weak_scalar:setitem_*).
+        setitems = {f"weak_scalar:setitem_{r}" for r in ("int", "neg", "slice", "empty", "ellipsis", "fancy", "mask")}
+        self.assertEqual({"get", "set", "ndarray.__len__", "ndarray", "viewflags:getitem"} | setitems,
                          self.evidence("numpy.ndarray").keys)
         # "write_only" = Char arrays written as NumPy's '<U1' and compared byte for byte (they read back as strings).
         self.assertEqual({"npy:header", "npy:npy", "npy:write_only"}, self.evidence("numpy.save").keys)

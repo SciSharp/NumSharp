@@ -19,7 +19,8 @@ namespace NumSharp.Tests.Fuzz
         ///     the operator's <c>object</c> overload; <c>out</c> / <c>where</c>: <c>np.fn</c> with the next operand as out
         ///     and the one after as the mask); <c>side</c> (<c>array_first</c> / <c>scalar_first</c>); <c>scalar</c> (kind,
         ///     exact value, and <c>cs</c>, the C# type to spell it in); <c>bound</c> for clip (which bound the scalar is).
-        ///     A case without <c>scalar</c> (section E) compares its two array operands.</param>
+        ///     A case without <c>scalar</c> (section E) compares its two array operands. Route <c>store</c> (section S)
+        ///     stores the literal into operand 0 at the store entry point <c>fn</c> names (<see cref="WeakStore"/>).</param>
         /// <param name="ops">Operand 0 is the array; then the out array and the mask for those routes (section E: the two
         ///     arrays).</param>
         /// <returns>The result, or the out array itself for the out / where routes (its prior pattern shows at a
@@ -34,10 +35,14 @@ namespace NumSharp.Tests.Fuzz
                 return route == "op" ? WeakOperator(fn, ops[0], ops[1]) : WeakUfunc(fn, ops[0], ops[1], null, null);
 
             object literal = WeakLiteral(sc);
-            // The 0-d array a C# literal of that type converts to (NDArray's implicit conversions are NDArray.Scalar).
-            NDArray scalar = NDArray.Scalar(literal);
+            // The 0-d array a C# literal of that type converts to, through the implicit conversion itself (which marks a
+            // Python literal / NumPy scalar for the store paths).
+            NDArray scalar = LiteralArray(literal);
             bool scalarFirst = p["side"].GetString() == "scalar_first";
             NDArray x = ops[0];
+
+            if (route == "store")
+                return WeakStore(fn, x, literal, scalar);
 
             if (fn == "clip")
                 return p["bound"].GetString() == "min" ? np.clip(x, scalar, null) : np.clip(x, null, scalar);
@@ -96,6 +101,8 @@ namespace NumSharp.Tests.Fuzz
                         "sbyte" => (sbyte)v,
                         "uint" => (uint)v,
                         "ushort" => (ushort)v,
+                        // A C# char is NumPy's np.uint16 SCALAR (section S's NumPy-scalar picks).
+                        "char" => (char)(ushort)v,
                         _ => throw new NotSupportedException($"weak_scalar: int literal type {cs}"),
                     };
                 }
@@ -119,6 +126,144 @@ namespace NumSharp.Tests.Fuzz
                     return BitConverter.UInt16BitsToHalf((ushort)sc.GetProperty("bits").GetInt32());
                 default:
                     throw new NotSupportedException($"weak_scalar: unknown scalar kind {kind}");
+            }
+        }
+
+        /// <summary>
+        ///     The 0-d array a C# value of the literal's type becomes through NDArray's implicit conversion operator — what
+        ///     C# source passing that literal to an <see cref="NDArray"/> parameter gets: an integer / <c>float</c> /
+        ///     <c>double</c> / <see cref="Complex"/> marked as a Python literal, a <see cref="Half"/> / <c>char</c> as a
+        ///     NumPy scalar, a <c>bool</c> unmarked.
+        /// </summary>
+        /// <param name="literal">The boxed literal (<see cref="WeakLiteral"/>).</param>
+        /// <returns>A new 0-d array.</returns>
+        /// <exception cref="NotSupportedException">A type with no implicit conversion (a corpus bug).</exception>
+        private static NDArray LiteralArray(object literal) => literal switch
+        {
+            int v => v,
+            long v => v,
+            ulong v => v,
+            short v => v,
+            byte v => v,
+            sbyte v => v,
+            uint v => v,
+            ushort v => v,
+            char v => v,
+            double v => v,
+            float v => v,
+            Complex v => v,
+            bool v => v,
+            Half v => v,
+            _ => throw new NotSupportedException($"weak_scalar: no implicit conversion from {literal?.GetType().Name}"),
+        };
+
+        /// <summary>
+        ///     One section-S store (gen_oracle.py <c>_ws_store_call</c>): the literal stored into <paramref name="x"/> at
+        ///     the store entry point <paramref name="fn"/>, spelled the way C# source would call it — an <see cref="NDArray"/>
+        ///     parameter (the indexers, put, putmask, place, put_along_axis, insert, asarray, the flat slice) receives the
+        ///     literal's implicit 0-d array; an <c>object</c> parameter (fill, full, full_like, fill_diagonal, pad, the flat
+        ///     index) receives the boxed literal; np.copyto binds its generic scalar overload.
+        /// </summary>
+        /// <param name="fn">The store (<c>setitem_int</c>, …, <c>copyto</c>).</param>
+        /// <param name="x">The destination (the case's operand 0, a fresh copy of the generator's array).</param>
+        /// <param name="literal">The boxed C# literal.</param>
+        /// <param name="v">The literal's implicit 0-d array.</param>
+        /// <returns><paramref name="x"/> after an in-place store, or the new array of a constructing one.</returns>
+        /// <exception cref="NotSupportedException">An unknown store (a corpus bug).</exception>
+        private static NDArray WeakStore(string fn, NDArray x, object literal, NDArray v)
+        {
+            // The mask and index arrays are this replay's own temporaries: disposed here, so the zero-leak gate measures
+            // only what the store itself strands.
+            switch (fn)
+            {
+                case "setitem_int": x[0] = v; return x;
+                case "setitem_neg": x[-1] = v; return x;
+                case "setitem_slice": x["1:"] = v; return x;
+                case "setitem_empty": x[$"{x.shape[0]}:"] = v; return x;
+                case "setitem_ellipsis": x["..."] = v; return x;
+                case "setitem_fancy": x[new[] { 0, -1 }] = v; return x;
+                case "setitem_mask":
+                {
+                    using var m = StoreMask(x);
+                    x[m] = v;
+                    return x;
+                }
+                case "fill": x.fill(literal); return x;
+                case "full": return np.full(new Shape(x.shape), literal, x.dtype);
+                case "full_like": return np.full_like(x, literal);
+                case "put":
+                {
+                    using var idx = np.array(new long[] { 0, -1 });
+                    np.put(x, idx, v);
+                    return x;
+                }
+                case "putmask":
+                {
+                    using var m = StoreMask(x);
+                    np.putmask(x, m, v);
+                    return x;
+                }
+                case "place":
+                {
+                    using var m = StoreMask(x);
+                    np.place(x, m, v);
+                    return x;
+                }
+                case "put_along_axis":
+                {
+                    using var idx = np.array(new long[] { 0 });
+                    np.put_along_axis(x, idx, v, 0);
+                    return x;
+                }
+                case "insert": return np.insert(x, 1, v);
+                case "fill_diagonal": np.fill_diagonal(x, literal); return x;
+                case "pad": return np.pad(x, 1, constant_values: literal);
+                case "flat_index": x.flatiter[0] = literal; return x;
+                case "flat_slice": x.flatiter["0:2"] = v; return x;
+                case "asarray": return np.asarray(v, x.dtype);
+                case "copyto": CopytoLiteral(x, literal); return x;
+                default: throw new NotSupportedException($"weak_scalar: unknown store {fn}");
+            }
+        }
+
+        /// <summary>The mask section S's masked stores use: every other element in C order (<c>_ws_store_mask</c>).</summary>
+        /// <param name="x">The destination.</param>
+        /// <returns>A bool array of <paramref name="x"/>'s shape, true at the even C-order positions.</returns>
+        private static NDArray StoreMask(NDArray x)
+        {
+            var bits = new bool[x.size];
+            for (long i = 0; i < bits.Length; i += 2)
+                bits[i] = true;
+            // A fresh array of x's shape: one buffer the caller disposes. The flat array and its reshape VIEW are both
+            // released here (a view holds a counted reference on the flat buffer until it is disposed).
+            using var flat = np.array(bits);
+            using var view = flat.reshape(x.shape);
+            return view.copy();
+        }
+
+        /// <summary>np.copyto with the literal through the generic scalar overload its C# type binds.</summary>
+        /// <param name="x">The destination.</param>
+        /// <param name="literal">The boxed literal.</param>
+        /// <exception cref="NotSupportedException">A literal type with no overload (a corpus bug).</exception>
+        private static void CopytoLiteral(NDArray x, object literal)
+        {
+            switch (literal)
+            {
+                case int v: np.copyto(x, v); return;
+                case long v: np.copyto(x, v); return;
+                case ulong v: np.copyto(x, v); return;
+                case short v: np.copyto(x, v); return;
+                case byte v: np.copyto(x, v); return;
+                case sbyte v: np.copyto(x, v); return;
+                case uint v: np.copyto(x, v); return;
+                case ushort v: np.copyto(x, v); return;
+                case char v: np.copyto(x, v); return;
+                case double v: np.copyto(x, v); return;
+                case float v: np.copyto(x, v); return;
+                case Complex v: np.copyto(x, v); return;
+                case bool v: np.copyto(x, v); return;
+                case Half v: np.copyto(x, v); return;
+                default: throw new NotSupportedException($"weak_scalar: copyto of {literal?.GetType().Name}");
             }
         }
 
