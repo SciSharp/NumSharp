@@ -516,7 +516,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   NumPy (returned object, values, dtype, shape, errors). Each finding becomes an item here.
 - [x] X2 `np.maximum`, `np.minimum`, `np.add` (binary ufuncs): an out-of-range C# integer literal wraps
   (`np.maximum(int8, 1000)` gives -24); NumPy raises `OverflowError` (NEP 50 packing). Found by the `np.clip` work.
-  Done 2026-10-07 with X21 and X24 (this commit).
+  Done 2026-10-07 with X21 and X24 (`d0a6f4c8`).
   - Fix (`DefaultEngine.BinaryOp.cs`, `DefaultEngine.CompareOp.WeakScalar.cs`): `ExecuteBinaryOp` checks a 0-d
     Python-int operand against the FINAL loop dtype before any kernel runs (`CheckWeakPyIntOperand`, NumPy's
     `npy_update_operand_for_scalar` + `PyArray_Pack`: "Python integer 1000 out of bounds for int8", the LP64 texts
@@ -892,7 +892,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   uint64 the same). NumSharp reaches the integer loop's check and raises `ArgumentException: Integers to negative
   integer powers are not allowed.` It is X2's NEP 50 packing class on np.power: `np.add(np.uint8([2]), -1)` gives `[1]`
   in NumSharp and the same OverflowError in NumPy. The `power_fast` generator leaves these cases out. Found by X13.
-  Done 2026-10-07 with X2 (this commit): `Default.Power.cs` runs the read-only out check, the mask check and X2's pack
+  Done 2026-10-07 with X2 (`d0a6f4c8`): `Default.Power.cs` runs the read-only out check, the mask check and X2's pack
   check before the negative-power error, in NumPy's order. Gate: `BinaryUfuncWeakIntPackTests`.
 - [ ] **X22 A binary ufunc's out= broadcast error omits the out's shape.** `np.power(ones(3), ones(4), out=empty(3))`:
   NumPy "operands could not be broadcast together with shapes (3,) (4,) (3,) " (every operand, the out included),
@@ -907,7 +907,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   parameter emits NumPy's stride-0 branch (`PowerStrideZero<T>` and its vector forms) for the float32 / float64 loops.
   Found by X13. Next item.
 - [x] **X24 A comparison with a Python float compared at float64 against a float32 / float16 array: silent wrong
-  values.** Done 2026-10-07 with X2, X21 and X25 (this commit).
+  values.** Done 2026-10-07 with X2, X21 and X25 (`d0a6f4c8`).
   - Proof: `np.greater(np.array(new[] { 0.1f, 0.5f }), 0.1)` gave `[True, True]`; NumPy `[False, True]`. Under NEP 50
     the weak `0.1` is packed into float32 first, and `0.1f > 0.1f` is False. All six comparisons and the C# operators
     were affected: a literal that is not exact in the array's dtype (`0.1`, `1/3`), an int past 2^24 for float32 or
@@ -934,7 +934,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     0.49× / 0.09× / 0.56×). `f16 > 0.1` 15× (the same-dtype float16 kernel). `u8 > 128` 3.9× at 10M. At 100K NumPy's
     loop is the same packed form, so ~1.2× is its ceiling. The 1K cells of array op scalar (0.56–0.83×) are X26.
 - [x] **X25 The SIMD comparison and predicate kernels read one element past their inputs and wrote one bool past
-  their result.** Found by X24's kernel work. Done 2026-10-07 (this commit).
+  their result.** Found by X24's kernel work. Done 2026-10-07 (`d0a6f4c8`).
   - Proof: `np.greater(a[:7], b[:7], out=o[:7])` (float32) overwrote slot 7 of o's parent buffer. The 4×-unrolled
     and one-vector loops ran while `i <= n - step + 1`, so they ran one body too many when `n % step == step - 1`
     (float32: n = 7, 15, 31, 39, 63, 127, …; every SIMD dtype). The same-dtype array-against-array kernel
@@ -1118,7 +1118,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   float loop; numpy.ma stays strong. The `weak_scalar` oracle tier (15,050 cases, zero excuses). The SIMD comparison
   and predicate kernels no longer read or write one element past their arrays (a 72,630-case guard-page sweep found
   no other kernel that does). The scalar-broadcast comparison kernels are vectorized, and the masks are stored packed. X26 and
-  finding 33 recorded. Commit: this commit.
+  finding 33 recorded. Commit: `d0a6f4c8`.
 - **2026-10-06**: X13 done with X19 and X20. np.power's float loops take NumPy's stride-0 fast path exactly when
   NumPy's calls see a zero exponent step: the trivial-loop / NpyIter decision is ported once and shared with np.clip.
   float16 power is HALF_power's powf; float_power never takes the fast path; a one-element operand with more
