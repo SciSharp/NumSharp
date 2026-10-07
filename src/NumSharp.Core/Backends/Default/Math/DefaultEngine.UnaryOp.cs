@@ -34,6 +34,11 @@ namespace NumSharp.Backends
         internal unsafe NDArray ExecuteUnaryOp(NDArray nd, UnaryOp op, NPTypeCode? typeCode = null,
             NDArray @out = null, NDArray where = null)
         {
+            // No unary numeric ufunc has a string loop: NumPy refuses before it looks at the size, so an empty or 0-d
+            // string array raises too. The dtype= request is not known here (typeCode is the caller's resolved output
+            // dtype), so this is the generic text; members that take dtype= run the guard themselves first.
+            Strings.NDStringUfuncs.ThrowIfUnary(UfuncName(op), nd, null, @out, where);
+
             if (nd.size == 0 && @out is null && where is null)
             {
                 // For empty arrays, return empty array with correct output dtype

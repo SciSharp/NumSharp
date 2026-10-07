@@ -21,6 +21,8 @@ namespace NumSharp
             using var plain = NDMatrixBoundary.PlainFor(p, k);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (m < 0)
                 throw new ValueError("Order of integral must be positive (see polyder)");
+            // NumPy's integral divides the coefficients by the exponents: divide has no string loop.
+            if (Backends.Strings.NDStringUfuncs.IsString(p)) throw Backends.Strings.NDStringUfuncs.NotSupportedForInputTypes("divide");
 
             // Integration constants: default zeros(m); a length-1 k with m>1 is broadcast to m.
             NDArray kk;

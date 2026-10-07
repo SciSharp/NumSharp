@@ -37,7 +37,8 @@ namespace NumSharp
     ///     <para>
     ///     <b>NEP 55 reservations.</b> <see cref="HasReferences"/>, <see cref="GetClearLoop"/> and
     ///     <see cref="GetFillZeroLoop"/> are the slots a reference-holding dtype (<c>StringDType</c>) will override; the
-    ///     builtins report false / null.
+    ///     builtins report false / null. The fixed-width <c>S</c>/<c>U</c> classes (<see cref="StringDTypeMeta"/>) hold
+    ///     no references — their items are raw bytes — so they report false too.
     ///     </para>
     /// </remarks>
     public abstract class DTypeMeta
@@ -226,6 +227,55 @@ namespace NumSharp
 
         /// <summary><c>get_fill_zero_loop</c>: a loop that writes this dtype's zero; null when a zeroed buffer already is the zero.</summary>
         public virtual NDInnerLoopFunc GetFillZeroLoop(DType descr) => null;
+
+        /// <summary>
+        ///     NumPy's per-descriptor item flags (<c>dtype.flags</c>: <c>NPY_ITEM_REFCOUNT = 0x01</c>,
+        ///     <c>NPY_NEEDS_INIT = 0x08</c>, …): 63 for a reference-holding class, 0 for every numeric builtin. A class
+        ///     overrides it when NumPy sets other bits on its descriptors — <c>StrDType</c> reports
+        ///     <c>NPY_NEEDS_INIT</c> (8), because a fixed-width Unicode item is NUL-padded and must start zeroed.
+        /// </summary>
+        /// <value>The flag bits every descriptor of this class reports. The one storage decision they drive is
+        ///     <see cref="NeedsInitFlag"/>: a fresh buffer of such a class is zero-filled even when uninitialized memory
+        ///     was asked for (NumPy's <c>PyArray_NewFromDescr_int</c>).</value>
+        public virtual int ItemFlags => HasReferences ? 63 : 0;
+
+        /// <summary>
+        ///     NumPy's <c>NPY_NEEDS_INIT</c> item flag (0x08): every allocation of a descriptor reporting it starts zeroed,
+        ///     so <c>np.empty</c> of a <c>U</c> dtype holds empty strings rather than whatever the allocator returned.
+        /// </summary>
+        public const int NeedsInitFlag = 0x08;
+
+        // ---------------------------------------------------------------------------------------------
+        // Registry and descriptor-layout policy
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     Whether every descriptor of this class reports the byte order <c>'|'</c> ("not applicable"). True for the
+        ///     one-byte numeric classes and for <c>BytesDType</c> (an <c>S</c> item is a byte sequence at any width, so
+        ///     NumPy never swaps it: <c>np.dtype('&gt;S5').byteorder</c> is <c>'|'</c>); false for everything else,
+        ///     including the variable-width <c>StrDType</c>, whose code points ARE byte-order dependent.
+        /// </summary>
+        /// <value>True when <see cref="DType"/> must normalise any requested byte order to <c>'|'</c>.</value>
+        internal virtual bool ByteOrderNotApplicable => ItemSize == 1;
+
+        /// <summary>
+        ///     Whether <see cref="DTypeRegistry.FromTypeCode"/> maps this class's <see cref="TypeCode"/> back to it. True
+        ///     for every class but <c>BytesDType</c>: the two fixed-width string classes share the ONE
+        ///     <see cref="NPTypeCode.String"/> storage lane (their bytes are moved by the same unit-view kernels), and that
+        ///     lane's canonical class is <c>StrDType</c> — so <c>(DType)NPTypeCode.String</c> is <c>dtype('&lt;U')</c>, as
+        ///     the vestigial enum member always meant.
+        /// </summary>
+        /// <value>True when the registry should index this class by its storage code.</value>
+        internal virtual bool OwnsTypeCode => true;
+
+        /// <summary>
+        ///     Whether <see cref="DTypeRegistry.FromScalarType"/> maps this class's <see cref="ScalarType"/> back to it.
+        ///     False only for <c>BytesDType</c>: its C# element is <c>byte[]</c>, and a C# array type must keep resolving
+        ///     to its ELEMENT class (<c>np.array(new byte[]{…})</c> is <c>uint8</c>), so an <c>S</c> dtype is requested
+        ///     only by name (<c>"S5"</c>, <c>np.bytes_</c>) and never inferred from a <see cref="Type"/>.
+        /// </summary>
+        /// <value>True when the registry should index this class by its C# scalar type.</value>
+        internal virtual bool OwnsScalarType => true;
 
         // ---------------------------------------------------------------------------------------------
         // Casting implementations (NEP 43)

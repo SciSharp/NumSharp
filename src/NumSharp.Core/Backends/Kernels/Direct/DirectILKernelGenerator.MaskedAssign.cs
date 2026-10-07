@@ -17,7 +17,9 @@ using System.Runtime.Intrinsics.X86;
 //   caller has already broadcast, prepared (PyArray_PrepareThreeRawArrayIter's axis sort,
 //   negative-stride flip and coalescing) and — for a cross-dtype copy — cast into the
 //   destination's dtype. What is left is a BIT copy of one element width, so ONE kernel per
-//   width (1 / 2 / 4 / 8 / 16 bytes) serves all 15 dtypes: no per-dtype code.
+//   width (1 / 2 / 4 / 8 / 16 bytes) serves all 15 dtypes: no per-dtype code. A fixed-width
+//   string element has any width (S3 = 3 bytes, U3 = 12): MaskedAssignAnyWidth copies it as
+//   LANES of the largest kernel width dividing it, through one extra innermost axis.
 //
 // STRUCTURE (two stages, the house "IL kernel calls a tidy C# helper" pattern):
 //   * MaskedAssignKernel — an IL DynamicMethod per width: the outer walk. Axes arrive in C order
@@ -414,6 +416,92 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// The masked-assign walk for an element of ANY width — the entry point for callers whose element is not one of
+        /// the five kernel widths. A width of 1, 2, 4, 8 or 16 bytes runs as is
+        /// (<see cref="TryGetMaskedAssignKernel"/>, else <see cref="MaskedAssignFallback"/>); any other width — a
+        /// fixed-width string element: <c>S3</c> is 3 bytes, <c>U3</c> is 12, <c>U8</c> is 32 — is split into LANES of the
+        /// largest kernel width that divides it (<see cref="MaskedAssignLaneWidth"/>) by appending ONE innermost axis of
+        /// <c>elementSize / lane</c> lanes, with stride <c>lane</c> on the source and the destination and 0 on the mask.
+        /// </summary>
+        /// <param name="elementSize">The element width in bytes (at least 1).</param>
+        /// <param name="src">See <see cref="MaskedAssignKernel"/>.</param>
+        /// <param name="dst">See <see cref="MaskedAssignKernel"/>.</param>
+        /// <param name="mask">See <see cref="MaskedAssignKernel"/>.</param>
+        /// <param name="srcStrides">See <see cref="MaskedAssignKernel"/> (element-level byte strides).</param>
+        /// <param name="dstStrides">See <see cref="MaskedAssignKernel"/> (element-level byte strides).</param>
+        /// <param name="maskStrides">See <see cref="MaskedAssignKernel"/>.</param>
+        /// <param name="shape">See <see cref="MaskedAssignKernel"/>.</param>
+        /// <param name="ndim">See <see cref="MaskedAssignKernel"/>.</param>
+        /// <remarks>
+        /// The lane axis is innermost, so the walk still visits the ELEMENTS in the order the caller prepared (NumPy's raw
+        /// order, the 1-D backward rule included) and copies each selected element lane by lane, forward. That is NumPy's
+        /// element copy even for an overlapping run: two views of one buffer with the same element width overlap
+        /// element-aligned (an element either coincides with one of the other view's elements or misses all of them), so
+        /// the order of the lanes inside one element is not observable. With mask stride 0 on the lane axis the run stage
+        /// decides each element by one mask byte (its <c>maskStride == 0</c> branch).
+        /// </remarks>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="elementSize"/> is not positive.</exception>
+        internal static unsafe void MaskedAssignAnyWidth(
+            int elementSize, byte* src, byte* dst, byte* mask,
+            long* srcStrides, long* dstStrides, long* maskStrides, long* shape, int ndim)
+        {
+            int lane = MaskedAssignLaneWidth(elementSize);
+            if (lane == elementSize)
+            {
+                var direct = TryGetMaskedAssignKernel(elementSize);
+                if (direct != null)
+                    direct(src, dst, mask, srcStrides, dstStrides, maskStrides, shape, ndim);
+                else
+                    MaskedAssignFallback(elementSize, src, dst, mask, srcStrides, dstStrides, maskStrides, shape, ndim);
+                return;
+            }
+
+            // The caller's axes, then the lane axis (contiguous lanes of one element; the element's one mask byte).
+            int lanes = ndim + 1;
+            long* ls = stackalloc long[lanes];
+            long* ld = stackalloc long[lanes];
+            long* lm = stackalloc long[lanes];
+            long* lshape = stackalloc long[lanes];
+            for (int k = 0; k < ndim; k++)
+            {
+                ls[k] = srcStrides[k];
+                ld[k] = dstStrides[k];
+                lm[k] = maskStrides[k];
+                lshape[k] = shape[k];
+            }
+            ls[ndim] = lane;
+            ld[ndim] = lane;
+            lm[ndim] = 0;
+            lshape[ndim] = elementSize / lane;
+
+            var kernel = TryGetMaskedAssignKernel(lane);
+            if (kernel != null)
+                kernel(src, dst, mask, ls, ld, lm, lshape, lanes);
+            else
+                MaskedAssignFallback(lane, src, dst, mask, ls, ld, lm, lshape, lanes);
+        }
+
+        /// <summary>
+        /// The lane width <see cref="MaskedAssignAnyWidth"/> copies an element of <paramref name="elementSize"/> bytes in:
+        /// the largest of 16, 8, 4, 2 and 1 that divides it (the element itself when it is one of the kernel widths).
+        /// </summary>
+        /// <param name="elementSize">The element width in bytes (at least 1).</param>
+        /// <returns>The lane width: 16, 8, 4, 2 or 1.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="elementSize"/> is not positive.</exception>
+        internal static int MaskedAssignLaneWidth(int elementSize)
+        {
+            if (elementSize <= 0)
+                throw new ArgumentOutOfRangeException(nameof(elementSize), elementSize, "element width must be positive");
+            if (elementSize % 16 == 0)
+                return 16;
+            if (elementSize % 8 == 0)
+                return 8;
+            if (elementSize % 4 == 0)
+                return 4;
+            return elementSize % 2 == 0 ? 2 : 1;
+        }
+
+        /// <summary>
         /// NumPy's unmasked 1-D <c>raw_array_assign_array</c> for two operands that MAY overlap: the same-dtype copy
         /// <c>dst[i] = src[i]</c>, i in [0, n), in NumPy's element order. That order is observable when the runs overlap
         /// with different strides: NumPy flips a negative destination stride (both operands walked from their last
@@ -429,13 +517,14 @@ namespace NumSharp.Backends.Kernels
         /// <paramref name="dstStride"/> (the caller copies an opposite-direction overlapping source first, as NumPy
         /// does).</param>
         /// <param name="n">The number of elements.</param>
-        /// <param name="elementSize">The element width: 1, 2, 4, 8 or 16 bytes.</param>
+        /// <param name="elementSize">The element width in bytes: any positive width (a fixed-width string element of
+        /// 3 or 12 bytes runs lane by lane, <see cref="MaskedAssignAnyWidth"/>).</param>
         /// <remarks>
         /// Runs the masked-assign stages with a constant true mask, whose run stage copies a contiguous run with
         /// <see cref="Buffer.MemoryCopy(void*, void*, long, long)"/> (memmove: NumPy's contiguous copy is too) and any
         /// other run element by element in the order above.
         /// </remarks>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="elementSize"/> is not one of the five widths.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="elementSize"/> is not positive.</exception>
         internal static unsafe void AssignRaw1D(byte* dst, long dstStride, byte* src, long srcStride, long n, int elementSize)
         {
             if (n <= 0)
@@ -462,11 +551,7 @@ namespace NumSharp.Backends.Kernels
 
             byte trueByte = 1;
             long one = n, s = srcStride, d = dstStride, m = 0;
-            var kernel = TryGetMaskedAssignKernel(elementSize);
-            if (kernel != null)
-                kernel(src, dst, &trueByte, &s, &d, &m, &one, 1);
-            else
-                MaskedAssignFallback(elementSize, src, dst, &trueByte, &s, &d, &m, &one, 1);
+            MaskedAssignAnyWidth(elementSize, src, dst, &trueByte, &s, &d, &m, &one, 1);
         }
 
         // ---------------------------------------------------------------------------------------------------------

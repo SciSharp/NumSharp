@@ -43,7 +43,9 @@ namespace NumSharp
             if (x is null) throw new ArgumentNullException(nameof(x));
 
             // c = cov(x, y, rowvar, dtype=dtype). Delegating here also inherits cov's validation and
-            // its verbatim error taxonomy (e.g. ValueError "m has more than 2 dimensions").
+            // its verbatim error taxonomy (e.g. ValueError "m has more than 2 dimensions") — text included: cov
+            // follows NumPy's statements over text up to its first reduction, which refuses it (or returns the empty
+            // float64 (0, 0) result for no variables, which corrcoef then divides like NumPy).
             NDArray c = np.cov(x, y, rowvar, dtype: dtype);
 
             // d = diag(c). cov returns a 0-d SCALAR for a single variable, and np.diag raises on a 0-d

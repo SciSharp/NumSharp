@@ -132,13 +132,17 @@ to `complex128`, and two are .NET-specific extensions.
 | `Single` | `float` | `float32` | SIMD-capable on supported operations |
 | `Double` | `double` | `float64` | SIMD-capable on supported operations |
 | `Complex` | `System.Numerics.Complex` | `complex128` | No native `complex64` storage dtype |
-| `Char` | `char` | no general analogue | Treated as an unsigned 16-bit value; `.npy` maps it to `<U1` |
+| `Char` | `char` | no general analogue | Treated as an unsigned 16-bit value; `.npy` writes it as `<U1` |
 | `Decimal` | `decimal` | none | .NET extension; cannot be written as a NumPy `.npy` dtype |
 
 This table describes the dtype matrix used by numerical operations. It does not promise that every
 operation accepts all 15 dtypes; support is tested and documented per operation. `NPTypeCode.String`
-remains as a legacy compatibility code used by older string-conversion helpers, but it is outside
-that 15-dtype operation matrix and does not provide a NumPy string-array dtype.
+is the storage lane of NumPy's fixed-width string dtypes, `str_` (`U`) and `bytes_` (`S`), whose
+width lives in the descriptor (`np.dtype("U5")`). It is outside the 15-dtype numerical matrix:
+string arrays support storage, element access, conversion to and from C#, copies, casts between
+string dtypes, indexing and printing, byte-identical to NumPy 2.4.2; computing on text
+(comparison, concatenation, sorting, searching, text-number conversion) is the next phase and
+throws `StringComputationNotSupportedException`, while a call NumPy refuses raises NumPy's text.
 
 ### NumPy dtype families not represented natively
 
@@ -146,8 +150,8 @@ that 15-dtype operation matrix and does not provide a NumPy string-array dtype.
   to `System.Numerics.Complex`; writes use `c16`.
 - `datetime64` and `timedelta64`, including their unit metadata, are not implemented.
 - Object, structured, subarray, and void dtypes are not implemented.
-- Byte strings, fixed-width Unicode strings wider than `<U1`, and NumPy 2.x `StringDType` are not
-  implemented.
+- NumPy 2.x's variable-width `StringDType` is not implemented. The fixed-width `S` and `U` dtypes
+  are (computing on them is the next phase).
 - `float128`/`longdouble` and `complex256`/`clongdouble` have no corresponding .NET storage type.
 
 See [Dtypes](dtypes.md) for scalar conversion, promotion, special-value, and casting details.
@@ -433,11 +437,12 @@ bytes as NumPy's writer.
   `fortran_order: True` and loads as F-contiguous.
 - Little- and big-endian numeric files load. Big-endian data is converted to native byte order
   because NumSharp has no byte-swapped dtype metadata.
-- `bool`, all eight integer widths, `float16`, `float32`, `float64`, `complex128`, and `<U1`/`Char`
-  have round-trip mappings. `complex64` loads by widening to `complex128`.
+- `bool`, all eight integer widths, `float16`, `float32`, `float64`, `complex128`, and the
+  fixed-width string dtypes (`|S5`, `<U3`) have round-trip mappings. `complex64` loads by widening
+  to `complex128`. `Char` is written as `<U1`, which reads back as a `<U1` string array.
 - Decimal cannot be saved because NumPy has no decimal dtype. Object/pickle, structured, subarray,
-  datetime/timedelta, byte-string, void, and unsupported extended-precision descriptors are rejected
-  with a capability-specific error.
+  datetime/timedelta, void, zero-width string, and unsupported extended-precision descriptors are
+  rejected with a capability-specific error.
 - `np.load(..., mmap_mode: ...)` supports read-only, read-write, and copy-on-write mapping for a
   `.npy` file path. Streams and byte arrays cannot be memory-mapped.
 
@@ -527,7 +532,8 @@ back to Core for matrix products.
 
 The generated dashboard is the exhaustive API list. The important capability-level gaps are:
 
-- no native `complex64`, datetime/timedelta, object, structured, or general string dtype;
+- no native `complex64`, datetime/timedelta, object, structured, or variable-width string dtype, and no
+  computation on fixed-width text yet;
 - no GPU device or DLPack import (`np.from_dlpack` is missing);
 - missing floating-point handling APIs: error-state controls such as `geterr` and `seterr`, plus
   `nan_to_num`;

@@ -30,6 +30,10 @@ namespace NumSharp
             using var plain = NDMatrixBoundary.PlainFor(x, bins);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (x is null) throw new ArgumentNullException(nameof(x));
             if (bins is null) throw new ArgumentNullException(nameof(bins));
+            // NumPy checks the bins' monotonicity in float64 (a 'safe' cast text refuses, its verbatim TypeError); string x
+            // against numeric bins is searched as text (the next phase of the string support).
+            if (Backends.Strings.NDStringUfuncs.IsString(bins)) throw new InvalidCastException($"Cannot cast array data from {bins.dtype.ToString(true)} to dtype('float64') according to the rule 'safe'");
+            if (Backends.Strings.NDStringUfuncs.IsString(x)) throw Backends.Strings.NDStringUfuncs.NextPhase("digitize", x);
 
             // NumPy checks a complex `x` first, before any bins validation (TypeError).
             if (x.typecode == NPTypeCode.Complex)

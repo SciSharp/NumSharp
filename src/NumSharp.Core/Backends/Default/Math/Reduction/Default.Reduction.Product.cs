@@ -8,7 +8,10 @@ namespace NumSharp.Backends
     {
         public override NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            // Text, or a string dtype= request: NumPy's prod checks its arguments first (the axis, and the dtype= class where
+            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            Strings.NDStringUfuncs.ThrowIfReduce("prod", arr, axis_, dtype);
+            NPTypeCode? typeCode = UfuncLoopCode(dtype);
             var shape = arr.Shape;
 
             if (shape.IsEmpty)

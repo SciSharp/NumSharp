@@ -120,6 +120,14 @@ namespace NumSharp
             if (!isForward)
                 effNorm = SwapDirection(norm);
 
+            // NumPy's next statement is real_dtype = result_type(a.real.dtype, 1.0): text has no common DType with the weak
+            // float, so a string input raises DTypePromotionError with NumPy's text (thrown by the promotion itself).
+            if (Backends.Strings.NDStringUfuncs.IsString(a))
+            {
+                DTypePromotion.ResultType(a.dtype, 1.0);
+                throw Backends.Strings.NDStringUfuncs.NextPhase(name, a);
+            }
+
             // fct = reciprocal(sqrt/n) computed in the input's real_dtype (numpy's _raw_fft:
             // real_dtype = result_type(a.real.dtype, 1.0)). For a float32 input (or a complex64-precision
             // N-D intermediate — a complex operand under floatPrec) this is float32; for a float16 input

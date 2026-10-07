@@ -194,6 +194,9 @@ namespace NumSharp
             bool sorted = true)
         {
             using var plain = NDMatrixBoundary.PlainFor(ar);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            // NumPy computes this on text (sorting, searching, truth tests); string computation is
+            // the next phase of NumSharp's string support, so a string array is refused here.
+            if (Backends.Strings.NDStringUfuncs.IsString(ar)) throw Backends.Strings.NDStringUfuncs.NextPhase("unique", ar);
             // Boundary scope: the instance unique's sort/argsort/mask internals are reclaimed at
             // exit; the present outputs are yielded (the UniqueResult carries only those arrays).
             using var scope = NDScope.Open();

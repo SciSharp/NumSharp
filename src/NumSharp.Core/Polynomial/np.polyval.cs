@@ -31,9 +31,18 @@ namespace NumSharp
                 throw new TypeError("iteration over a 0-d array");
 
             long n = p.size;
-            // No coefficients — NumPy's loop never runs, so the result is zeros_like(x).
+            // No coefficients — NumPy's loop never runs, so the result is zeros_like(x) (a string x included).
             if (n == 0)
                 return np.zeros_like(x);
+
+            // NumPy's Horner loop starts with y = zeros_like(x) and y * x: text in x has no multiply loop. Text in p meets
+            // the first add, y * x + pv, whose left side keeps x's dtype; iterating a 1-D p yields NumPy SCALARS, whose
+            // descriptor is their own text length (np.str_('a') is <U1, '' too), while an N-D p yields rows of p's dtype.
+            if (Backends.Strings.NDStringUfuncs.IsString(x))
+                throw Backends.Strings.NDStringUfuncs.NoLoop("multiply", x.dtype, x.dtype);
+            if (Backends.Strings.NDStringUfuncs.IsString(p))
+                throw Backends.Strings.NDStringUfuncs.NoLoop("add", x.dtype,
+                    p.ndim == 1 ? Backends.Strings.NDStringArrays.ScalarDescr(p.Storage.GetAtIndex(0)) : p.dtype);
 
             // Horner accumulates `y = y*x + p[k]`. NumPy lets `y` (starting at zeros_like(x)) grow in
             // dtype as wider coefficients arrive; the fixed common dtype below is bit-identical because

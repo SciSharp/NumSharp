@@ -14,25 +14,25 @@ namespace NumSharp.Backends
         /// <summary>Element-wise maximum, NaN-propagating (np.maximum).</summary>
         public override NDArray Maximum(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            return ExecuteBinaryOp(lhs, rhs, BinaryOp.Maximum, @out, where, dtype?.GetTypeCode());
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.Maximum, @out, where, UfuncLoopCode(dtype, "maximum", lhs, rhs, @out, where));
         }
 
         /// <summary>Element-wise minimum, NaN-propagating (np.minimum).</summary>
         public override NDArray Minimum(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            return ExecuteBinaryOp(lhs, rhs, BinaryOp.Minimum, @out, where, dtype?.GetTypeCode());
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.Minimum, @out, where, UfuncLoopCode(dtype, "minimum", lhs, rhs, @out, where));
         }
 
         /// <summary>Element-wise maximum, NaN-ignoring (np.fmax).</summary>
         public override NDArray FMax(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            return ExecuteBinaryOp(lhs, rhs, BinaryOp.FMax, @out, where, dtype?.GetTypeCode());
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.FMax, @out, where, UfuncLoopCode(dtype, "fmax", lhs, rhs, @out, where));
         }
 
         /// <summary>Element-wise minimum, NaN-ignoring (np.fmin).</summary>
         public override NDArray FMin(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            return ExecuteBinaryOp(lhs, rhs, BinaryOp.FMin, @out, where, dtype?.GetTypeCode());
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.FMin, @out, where, UfuncLoopCode(dtype, "fmin", lhs, rhs, @out, where));
         }
     }
 }

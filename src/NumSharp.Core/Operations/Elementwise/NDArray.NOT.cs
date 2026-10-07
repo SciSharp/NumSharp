@@ -16,6 +16,8 @@ namespace NumSharp
         [NDScoped]
         public static unsafe NDArray<bool> operator !(NDArray self)
         {
+            // `!` is logical_not, which has no string loop (unlike logical_and/or/xor, it refuses text in NumPy).
+            Backends.Strings.NDStringUfuncs.ThrowIfUnary("logical_not", self);
             // The raw-buffer fast path below walks self.Address LINEARLY (from[i]), which matches the
             // logical C-order of the elements ONLY when self is C-contiguous with offset 0. For any
             // other layout — F-contiguous, transposed, strided, a sliced view with a non-zero offset,

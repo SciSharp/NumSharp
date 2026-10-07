@@ -104,6 +104,26 @@ namespace NumSharp
         }
 
         /// <summary>
+        /// Returns True if the descriptor is an instance of ANY of the given dtypes' classes — NumPy's tuple form
+        /// <c>np.isdtype(dtype, (np.str_, np.bytes_))</c>. Each entry is compared by class, like
+        /// <see cref="isdtype(DType, DType)"/>, so the string LENGTH or the byte order never matter.
+        /// </summary>
+        /// <param name="dtype">The descriptor to test.</param>
+        /// <param name="kinds">The dtypes whose classes count as a match.</param>
+        /// <returns>True when <paramref name="dtype"/>'s class is the class of any entry.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> or <paramref name="kinds"/> is null.</exception>
+        /// <exception cref="TypeError">An entry is null (NumPy: <c>kind argument must be comprised of NumPy dtypes or strings only</c>).</exception>
+        public static bool isdtype(DType dtype, params DType[] kinds)
+        {
+            if (dtype is null) throw new ArgumentNullException(nameof(dtype));
+            if (kinds is null) throw new ArgumentNullException(nameof(kinds));
+            bool result = false;
+            foreach (var kind in kinds)
+                result |= isdtype(dtype, kind); // every entry is validated, as NumPy processes the whole tuple first
+            return result;
+        }
+
+        /// <summary>
         /// <see cref="isdtype(DType, string)"/> for a dtype STRING (<c>np.isdtype("i4", "integral")</c>). Exists so that a
         /// string first argument binds the dtype grammar rather than NumSharp's string→<see cref="NDArray"/> conversion.
         /// </summary>

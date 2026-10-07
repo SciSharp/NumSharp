@@ -27,7 +27,10 @@ namespace NumSharp
         /// <returns>
         ///     The new array is formed from the data in the old array, repeated if necessary to
         ///     fill out the required number of elements. The data are repeated iterating over the
-        ///     array in C-order. Result is C-contiguous; dtype matches <paramref name="a"/>.
+        ///     array in C-order. Result is C-contiguous; dtype matches <paramref name="a"/>. Like NumPy's (a reshape of a
+        ///     slice of the concatenated copies) it is a VIEW of a fresh buffer — <c>flags.owndata</c> is false, so an
+        ///     in-place <c>ndarray.resize</c> of it is refused — except for an empty source or result, which is NumPy's
+        ///     owning <c>np.zeros_like(a, shape=new_shape)</c>.
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.resize.html</remarks>
         /// <exception cref="ArgumentNullException">If <paramref name="a"/> is null.</exception>
@@ -62,14 +65,14 @@ namespace NumSharp
             // First case must zero-fill (empty source has nothing to repeat); the second
             // would repeat zero times. NumPy: np.zeros_like(a, shape=new_shape).
             if (srcSize == 0 || newSize == 0)
-                return zeros(outShape, a.typecode);
+                return zeros(outShape, a.dtype); // the descriptor: a string result is NUL-filled at a's width
 
             // Allocate the exact-sized C-contiguous output and tile the source bytes into it.
             // This beats NumPy's concatenate((a,)*repeats)[:new_size] which over-allocates a
             // repeats*size buffer then slices — we allocate exactly new_size and fill by
             // doubling block copies (dtype-agnostic raw memory, O(new_size) bytes,
             // O(log(new_size/size)) memcpy calls).
-            var result = new NDArray(a.typecode, outShape, fillZeros: false);
+            var result = new NDArray(a.dtype, outShape, fillZeros: false);
 
             long itemsize = a.dtypesize;
             byte* src = flat.Storage.Address + (long)flat.Shape.offset * itemsize;
@@ -88,7 +91,11 @@ namespace NumSharp
                 filled += chunk;
             }
 
-            return result;
+            // NumPy returns reshape(concatenate(...)[:new_size], new_shape): a view, not the buffer's owner. The view
+            // takes its own reference on the buffer, so the owning wrapper is released at once.
+            var view = new NDArray(result.Storage.Alias(result.Shape)) { TensorEngine = a.TensorEngine };
+            result.Dispose();
+            return view;
         }
     }
 }

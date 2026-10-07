@@ -26,6 +26,16 @@ namespace NumSharp.Backends
             NDArray lhs, NDArray rhs, DType dtype = null,
             (NDArray Quotient, NDArray Remainder) @out = default, NDArray where = null)
         {
+            // NumPy parses BOTH outputs, then where=, before it resolves the loop: with text involved (a string operand or
+            // a string dtype= request) a read-only out of either slot or a non-bool mask is reported first.
+            UfuncLoopCode(dtype);
+            if (Strings.NDStringUfuncs.IsString(lhs) || Strings.NDStringUfuncs.IsString(rhs) || Strings.NDStringUfuncs.IsStringRequest(dtype))
+            {
+                Strings.NDStringUfuncs.ThrowIfOutWhereInvalid(@out.Quotient, null);
+                Strings.NDStringUfuncs.ThrowIfOutWhereInvalid(@out.Remainder, where);
+            }
+            // divmod has no string loop (the legacy resolver's text); a string request is the no-loop text.
+            Strings.NDStringUfuncs.ThrowIfBinary("divmod", lhs, rhs, @out.Quotient, UfuncLoopCode(dtype, "divmod", lhs, rhs), where);
             // Promotion mirrors ExecuteBinaryOp's Mod/FloorDivide path: result_type, then the
             // no-bool-loop bump (True divmod True -> int8). Complex is unsupported (NumPy TypeError).
             var resultType = np._FindCommonType(lhs, rhs);

@@ -16,7 +16,20 @@
 
         // Unary operators
         public static NDArray operator -(NDArray x) => x.TensorEngine.Negate(x);
-        public static NDArray operator +(NDArray x) => x.copy(); // NumPy returns a copy for +arr
+        /// <summary>
+        ///     NumPy's unary <c>+arr</c>, the <c>positive</c> ufunc: a fresh copy of <paramref name="x"/> in its own dtype.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>A copy of <paramref name="x"/> (never <paramref name="x"/> itself, as NumPy's ufunc allocates its
+        ///     output).</returns>
+        /// <exception cref="TypeError"><paramref name="x"/> holds text: <c>positive</c> has no string loop, and NumPy
+        ///     raises its no-loop text naming the string class.</exception>
+        public static NDArray operator +(NDArray x)
+        {
+            // NumPy's +arr is the positive ufunc, which has no string loop (its class-named UFuncTypeError).
+            Backends.Strings.NDStringUfuncs.ThrowIfUnary("positive", x);
+            return x.copy(); // NumPy returns a copy for +arr
+        }
 
         // Binary operators with object: accepts any scalar or array-like, converts via np.asanyarray
         // This matches NumPy's internal PyArray_FromAny behavior in ufuncs.

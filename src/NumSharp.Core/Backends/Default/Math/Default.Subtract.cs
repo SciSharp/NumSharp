@@ -11,7 +11,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Subtract(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "subtract", lhs, rhs, @out, where);
             // NumPy rejects boolean subtraction: there is no subtract ufunc loop
             // for the bool dtype, so `bool - bool` (both operands boolean) raises.
             // Mixed bool + numeric promotes to the numeric type and subtracts fine,

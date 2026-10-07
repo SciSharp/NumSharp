@@ -201,15 +201,15 @@ namespace NumSharp.Backends
         /// Read-only (broadcast) sources stay read-only.
         /// </para>
         /// </remarks>
-        /// <exception cref="InvalidOperationException">
-        /// If the last axis is not contiguous and type sizes differ (NumPy raises ValueError). NumSharp
-        /// stores strides/offset in ELEMENTS rather than bytes, so the rare misaligned strided+offset
-        /// view whose byte offset/stride is not a whole multiple of the new itemsize is also refused here
-        /// (NumPy, which carries a byte pointer, would allow it).
+        /// <exception cref="ValueError">
+        /// NumPy's errors with NumPy's texts (<see cref="ReinterpretShape"/>): a 0-d array whose itemsize changes, a
+        /// non-contiguous last axis, a smaller dtype that does not divide the old itemsize, a larger one that does not divide
+        /// the last axis' byte length.
         /// </exception>
-        /// <exception cref="ArgumentException">
-        /// If the array is 0-d, or the last axis's byte size is not divisible by the new itemsize
-        /// (NumPy raises ValueError with the same wording).
+        /// <exception cref="InvalidOperationException">
+        /// NumSharp stores strides/offset in ELEMENTS rather than bytes, so the rare strided+offset view whose byte
+        /// offset/stride is not a whole multiple of the new itemsize is refused (NumPy, which carries a byte pointer,
+        /// would allow it).
         /// </exception>
         public unsafe UnmanagedStorage AliasAs<T>() where T : unmanaged
         {
@@ -226,32 +226,70 @@ namespace NumSharp.Backends
             if (oldSize == newSize)
                 return WrapReinterpreted<T>(_shape, InternalArray.Count);
 
-            // Different itemsize — NumPy 2.x view(dtype) rules (numpy/_core/src/multiarray/getset.c
-            // array_descr_set): only the LAST axis has to be contiguous; every outer axis keeps its byte
-            // stride and the last axis is rescaled by the size ratio.
+            // Different itemsize — NumPy 2.x view(dtype) rules (ReinterpretShape); the alias spans the whole backing
+            // buffer in new-dtype units (floor: a trailing partial element is never addressed).
+            var newShape = ReinterpretShape(oldSize, newSize, out long newBufferCount);
+            return WrapReinterpreted<T>(newShape, newBufferCount);
+        }
+
+        /// <summary>
+        ///     The shape of this storage's memory read as elements of <paramref name="newSize"/> bytes instead of
+        ///     <paramref name="oldSize"/> — NumPy's <c>array_descr_set</c> (<c>numpy/_core/src/multiarray/getset.c</c>, the
+        ///     <c>ndarray.dtype</c> setter behind <c>ndarray.view(dtype)</c>) for a CHANGED itemsize, with its checks in its
+        ///     order: a 0-d array cannot change size; the LAST axis must be contiguous (an extent-1 or empty last axis always
+        ///     is); a smaller element must divide the old one (an unsized <c>U0</c>/<c>S0</c> target, size 0, never does) and
+        ///     multiplies the last axis by the ratio; a larger one must divide the last axis' byte length and divides it.
+        ///     Every outer axis keeps its byte stride; the last axis gets stride one element.
+        /// </summary>
+        /// <param name="oldSize">The current element size in bytes.</param>
+        /// <param name="newSize">The new element size in bytes (0 for an unsized string descriptor); not equal to
+        ///     <paramref name="oldSize"/>.</param>
+        /// <param name="newBufferCount">Receives the backing buffer's length in new elements (rounded down).</param>
+        /// <returns>The reinterpreted shape, its strides and offset in NEW elements.</returns>
+        /// <exception cref="ValueError">NumPy's texts: <c>Changing the dtype of a 0d array is only supported if the itemsize
+        ///     is unchanged</c>; <c>To change to a dtype of a different size, the last axis must be contiguous</c>;
+        ///     <c>When changing to a smaller dtype, its size must be a divisor of the size of original dtype</c>;
+        ///     <c>When changing to a larger dtype, its size must be a divisor of the total size in bytes of the last axis of the
+        ///     array.</c></exception>
+        /// <exception cref="InvalidOperationException">The view's byte offset or an outer byte stride is not a whole number
+        ///     of new elements. NumSharp stores strides and offsets in ELEMENTS, so such a view (an outer-strided view of
+        ///     odd-sized string elements, say) cannot be represented; NumPy, which keeps bytes, allows it.</exception>
+        internal Shape ReinterpretShape(int oldSize, int newSize, out long newBufferCount)
+        {
             var dims = _shape.dimensions;
             if (dims.Length == 0)
-                throw new ArgumentException("Changing the dtype of a 0d array is only supported if the itemsize is unchanged");
+                throw new ValueError("Changing the dtype of a 0d array is only supported if the itemsize is unchanged");
 
             var oldStrides = _shape.strides; // element strides in the OLD dtype
             int last = dims.Length - 1;
-            // The last axis is contiguous iff its byte-stride == old itemsize, i.e. its element stride is
-            // 1. A length-≤1 last axis is trivially contiguous (its stride is never stepped).
-            bool lastContiguous = dims[last] <= 1 || oldStrides[last] == 1;
-            if (!lastContiguous)
-                throw new InvalidOperationException("To change to a dtype of a different size, the last axis must be contiguous");
+            // "resize on last axis only": its byte stride must be the old itemsize (element stride 1), unless the
+            // stride is never stepped (an extent-1 last axis) or nothing is addressed at all (an empty array).
+            if (dims[last] != 1 && _shape.size != 0 && oldStrides[last] != 1)
+                throw new ValueError("To change to a dtype of a different size, the last axis must be contiguous");
 
-            long lastAxisBytes = dims[last] * oldSize;
-            if (lastAxisBytes % newSize != 0)
-                throw new ArgumentException("When changing to a larger dtype, its size must be a divisor of the total size in bytes of the last axis of the array.");
+            long newLast;
+            if (newSize < oldSize)
+            {
+                if (newSize == 0 || oldSize % newSize != 0)
+                    throw new ValueError("When changing to a smaller dtype, its size must be a divisor of the size of original dtype");
+                newLast = dims[last] * (oldSize / newSize);
+            }
+            else
+            {
+                long lastAxisBytes = dims[last] * oldSize;
+                if (lastAxisBytes % newSize != 0)
+                    throw new ValueError("When changing to a larger dtype, its size must be a divisor of the total size in bytes of the last axis of the array.");
+                newLast = lastAxisBytes / newSize;
+            }
 
             // Reinterpret the outer axes' byte strides and the base offset as new-dtype elements. NumSharp
             // stores these in ELEMENTS (NumPy in bytes), so a value that is not a whole multiple of the new
-            // itemsize cannot be represented — refuse it (extremely rare; offset 0 and the common strided
-            // cases always divide). This is strictly MORE permissive than before, never less.
+            // itemsize cannot be represented — refuse it (offset 0 and the common strided cases always divide).
             long byteOffset = _shape.offset * oldSize;
             if (byteOffset % newSize != 0)
-                throw new InvalidOperationException("To change to a dtype of a different size, the last axis must be contiguous");
+                throw new InvalidOperationException(
+                    $"This view starts {byteOffset} bytes into its buffer, which is not a whole number of {newSize}-byte elements: " +
+                    "NumSharp keeps offsets in elements, so it cannot reinterpret this view as the new dtype (copy it first).");
 
             var newDims = new long[dims.Length];
             var newStrides = new long[dims.Length];
@@ -260,18 +298,17 @@ namespace NumSharp.Backends
                 newDims[i] = dims[i];
                 long outerByteStride = oldStrides[i] * oldSize;
                 if (outerByteStride % newSize != 0)
-                    throw new InvalidOperationException("To change to a dtype of a different size, the last axis must be contiguous");
+                    throw new InvalidOperationException(
+                        $"Axis {i} of this view steps {outerByteStride} bytes, which is not a whole number of {newSize}-byte elements: " +
+                        "NumSharp keeps strides in elements, so it cannot reinterpret this view as the new dtype (copy it first).");
                 newStrides[i] = outerByteStride / newSize;
             }
-            newDims[last] = lastAxisBytes / newSize;
+            newDims[last] = newLast;
             newStrides[last] = 1;
             long newOffset = byteOffset / newSize;
 
-            // Span the whole backing buffer in new-dtype units (floor: a trailing partial element is never
-            // addressed, since each last-axis run is a whole number of new elements).
-            long newBufferCount = InternalArray.BytesLength / newSize;
-            var newShape = new Shape(newDims, newStrides, newOffset, newBufferCount);
-            return WrapReinterpreted<T>(newShape, newBufferCount);
+            newBufferCount = InternalArray.BytesLength / newSize;
+            return new Shape(newDims, newStrides, newOffset, newBufferCount);
         }
 
         /// <summary>
@@ -592,7 +629,7 @@ namespace NumSharp.Backends
             // (e.g. arr["1:,1:,1:1"].flatten()). NumPy's flatten / ravel / copy of an empty array
             // all yield an empty array.
             if (_shape.size == 0)
-                return ArraySlice.Allocate(_typecode, 0L, false);
+                return AllocateLike(0L, false); // a string lane keeps its descriptor (width) on the empty buffer
 
             // Contiguous shapes can copy directly from memory.
             // Must account for offset AND the size-vs-buffer mismatch — slice
@@ -605,7 +642,7 @@ namespace NumSharp.Backends
                 return InternalArray.Slice(_shape.offset, _shape.size).Clone();
             }
 
-            if (_shape.IsScalar)
+            if (_shape.IsScalar && _typecode != NPTypeCode.String)
                 return ArraySlice.Scalar(GetValue(0), _typecode);
 
             // Scalar-broadcast (all strides 0): every element is the SAME single source value, so
@@ -613,11 +650,12 @@ namespace NumSharp.Backends
             // UnmanagedMemoryBlock<T>.Fill) instead of the general per-element NDIter.Copy walk.
             // Proven 6-8x for the same-type broadcast clone (bcast u8->u8 4M: 0.83->5.69x).
             // Bit-identical (same value in every slot).
-            if (_shape.IsScalarBroadcast)
+            // (A string element is not re-encoded from its decoded value: the general path below copies its raw bytes.)
+            if (_shape.IsScalarBroadcast && _typecode != NPTypeCode.String)
                 return ArraySlice.Allocate(InternalArray.TypeCode, _shape.size, GetValue(0));
 
             //Linear copy of all the sliced items (non-contiguous: broadcast, stepped, transposed).
-            var ret = ArraySlice.Allocate(InternalArray.TypeCode, _shape.size, false);
+            var ret = AllocateLike(_shape.size, false);
             var dst = new UnmanagedStorage(ret, _shape.Clean());
             NDIter.Copy(dst, this);
 

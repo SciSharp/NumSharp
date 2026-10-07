@@ -33,6 +33,8 @@ namespace NumSharp.Backends.Sorting
         public static NDArray Partition(NDArray a, int[] kth, int? axis, string kind, string order)
         {
             ValidateKindOrder(kind, order);
+            // Text: NumPy checks the axis and the kth bounds, then partitions by comparison (the next phase).
+            if (Strings.NDStringUfuncs.IsString(a)) throw TextAnswer("partition", a, axis, () => WidenKth(kth));
             if (axis == null)
             {
                 var flat = a.ravel().copy('C');
@@ -55,6 +57,8 @@ namespace NumSharp.Backends.Sorting
         {
             ValidateKindOrder(kind, order);
             KthTooDeepCheck(kth);
+            // Text: the axis, then the kth dtype and bounds, then the comparison partition (the next phase).
+            if (Strings.NDStringUfuncs.IsString(a)) throw TextAnswer("partition", a, axis, () => ExtractKthValues(kth));
             if (axis == null)
             {
                 var flat = a.ravel().copy('C');
@@ -113,6 +117,8 @@ namespace NumSharp.Backends.Sorting
             ValidateKindOrder(kind, order);
             if (a.ndim == 0)
                 a = a.reshape(1);
+            // Text: the axis (a 0-d input ravelled above), then the kth bounds, then the comparison (the next phase).
+            if (Strings.NDStringUfuncs.IsString(a)) throw TextAnswer("argpartition", a, axis, () => WidenKth(kth));
             if (axis == null)
             {
                 var flat = a.Shape.IsContiguous ? a.reshape(a.size) : a.ravel().copy('C');
@@ -134,6 +140,8 @@ namespace NumSharp.Backends.Sorting
             KthTooDeepCheck(kth);
             if (a.ndim == 0)
                 a = a.reshape(1);
+            // Text: the axis, then the kth dtype and bounds, then the comparison partition (the next phase).
+            if (Strings.NDStringUfuncs.IsString(a)) throw TextAnswer("argpartition", a, axis, () => ExtractKthValues(kth));
             if (axis == null)
             {
                 var flat = a.Shape.IsContiguous ? a.reshape(a.size) : a.ravel().copy('C');
@@ -158,6 +166,29 @@ namespace NumSharp.Backends.Sorting
             // `order` exists for structured dtypes only, which NumSharp does not have.
             if (order is not null)
                 throw new ValueError("Cannot specify order when the array has no fields.");
+        }
+
+        /// <summary>
+        ///     The answer of <c>np.partition</c> / <c>np.argpartition</c> over text, after the checks NumPy makes before it
+        ///     compares anything: the axis (<c>axis=None</c> flattens), the kth values (an array kth's dtype checks run
+        ///     here, after the axis) and their bounds against the partitioned length. NumPy then partitions the text by
+        ///     comparison, the next phase of NumSharp's string support.
+        /// </summary>
+        /// <param name="op">The NumPy function name.</param>
+        /// <param name="a">The string array (a 0-d argpartition input already ravelled).</param>
+        /// <param name="axis">The axis, or null for the flattened array.</param>
+        /// <param name="kth">Produces the kth values (raising NumPy's kth dtype errors).</param>
+        /// <returns>The next-phase refusal (every NumPy refusal is thrown first).</returns>
+        /// <exception cref="AxisError">The axis is out of bounds.</exception>
+        /// <exception cref="ValueError">A kth is out of bounds, or a bool kth array.</exception>
+        /// <exception cref="TypeError">A non-integer kth array.</exception>
+        private static Exception TextAnswer(string op, NDArray a, int? axis, Func<long[]> kth)
+        {
+            // NumPy's AxisError (the numeric path's NormalizeAxis keeps its house ArgumentException).
+            Strings.NDStringUfuncs.ValidateReduceAxis(op, a.ndim, axis);
+            long n = axis is not { } ax ? a.size : a.Shape.dimensions[ax < 0 ? ax + a.ndim : ax];
+            PrepKth(kth(), n, a.size);
+            return Strings.NDStringUfuncs.NextPhase(op, a);
         }
 
         /// <summary>Widen an int[] kth to the long[] the cores take (NumPy's kth is intp).

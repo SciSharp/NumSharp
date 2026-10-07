@@ -10,7 +10,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Sin(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "sin", nd, null, @out, where);
             return ExecuteUnaryOp(nd, UnaryOp.Sin, ResolveUnaryFloatReturnType(nd, typeCode, "sin"), @out, where);
         }
     }

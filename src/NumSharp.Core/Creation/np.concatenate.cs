@@ -141,6 +141,15 @@ namespace NumSharp
                 axisSize += srcShape[effectiveAxis];
             }
 
+            // Fixed-width strings resolve a DESCRIPTOR (the result's width is the widest input's) and copy through the
+            // string route: np.concatenate.Strings.cs. The type-code fast paths below would treat a <U1 and a <U5 input as
+            // one dtype.
+            if (ConcatenateTouchesStrings(workArrays, @out, dtype))
+            {
+                firstShape[effectiveAxis] = axisSize;
+                return ConcatenateStrings(workArrays, effectiveAxis, ndim, firstShape, @out, dtype, casting);
+            }
+
             // Resolve result dtype: dtype= wins, then out=, then NEP50 promotion.
             NPTypeCode resultType;
             if (dtype is not null)

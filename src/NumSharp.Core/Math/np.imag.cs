@@ -34,7 +34,9 @@ namespace NumSharp
             // owndata=True, base=None, so clear WRITEABLE on the owned array itself rather than aliasing
             // a view, which would misreport owndata=False. setflags(write=True) on it then succeeds,
             // exactly as NumPy's _IsWriteable allows for an owner).
-            var zeros = np.zeros(Shape.Adopt(val.Shape.dimensions), val.typecode);
+            // The descriptor, not the storage lane: a string array's imaginary part is its own dtype filled with
+            // empty strings (all-zero bytes), which only the descriptor can allocate (probed: np.imag(U3) is <U3 '').
+            var zeros = np.zeros(Shape.Adopt(val.Shape.dimensions), val.dtype);
             zeros.Storage.SetShapeUnsafe(zeros.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
             return zeros;
         }

@@ -153,8 +153,11 @@ namespace NumSharp.Tests.DTypes
             np.promote_types(np.dtype("char"), np.dtype("f2")).Should().BeSameAs(DType.Single, "Char ranks as uint16");
             Action td = () => np.promote_types(np.dtype("m8[s]"), np.dtype("decimal"));
             td.Should().Throw<DTypePromotionError>().WithMessage("The DTypes <class 'numpy.dtypes.TimeDelta64DType'> and <class 'numsharp.dtypes.DecimalDType'> do not have a common DType.*");
-            Action str = () => np.promote_types(np.dtype("i4"), np.dtype("String"));
-            str.Should().Throw<DTypePromotionError>();
+            // Text absorbs every numeric class at the width of its longest text (probed 2.4.2).
+            np.promote_types(np.dtype("i4"), np.dtype("U")).ToString(true).Should().Be("dtype('<U11')");
+            np.promote_types(np.dtype("u1"), np.dtype("S")).ToString(true).Should().Be("dtype('S3')");
+            np.promote_types(np.dtype("U3"), np.dtype("S5")).ToString(true).Should().Be("dtype('<U5')");
+            np.promote_types(np.dtype("U3"), np.dtype("decimal")).ToString(true).Should().Be("dtype('<U32')", "text absorbs NumSharp's decimal like a float");
         }
 
         // ---- result_type: NEP 50 weak literals ------------------------------------------------------------------------
@@ -340,8 +343,10 @@ namespace NumSharp.Tests.DTypes
             DTypePromotion.CastDescrToDType(np.dtype("i4"), np.dtypes.TimeDelta64DType).str.Should().Be("<m8", "an integer lands on the generic unit");
             DTypePromotion.CastDescrToDType(np.dtype("M8[ns]"), np.dtypes.DateTime64DType).str.Should().Be("<M8[ns]");
             DTypePromotion.CastDescrToDType(np.dtype("i4"), np.dtypes.Float64DType).Should().BeSameAs(DType.Double, "a non-parametric target is always its default");
-            Action act = () => DTypePromotion.CastDescrToDType(np.dtype("i4"), DTypeRegistry.Str);
-            act.Should().Throw<TypeError>().WithMessage("cannot cast dtype int32 to <class 'numpy.dtypes.StrDType'>.");
+            // A number cast to the text class discovers the width of its longest text (int32: 11, float64: 32).
+            DTypePromotion.CastDescrToDType(np.dtype("i4"), DTypeRegistry.Str).str.Should().Be("<U11");
+            DTypePromotion.CastDescrToDType(np.dtype("f8"), DTypeRegistry.Bytes).str.Should().Be("|S32");
+            DTypePromotion.CastDescrToDType(np.dtype("S3"), DTypeRegistry.Str).str.Should().Be("<U3", "bytes to str keeps the character count");
             DTypePromotion.CastToDTypeAndPromoteDescriptors(new[] { np.dtype("m8[s]"), np.dtype("m8[ms]"), np.dtype("M8[us]") }, np.dtypes.DateTime64DType).str.Should().Be("<M8[us]");
         }
     }

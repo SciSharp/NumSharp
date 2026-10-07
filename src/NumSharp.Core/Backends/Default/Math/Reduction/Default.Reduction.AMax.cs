@@ -8,7 +8,10 @@ namespace NumSharp.Backends
     {
         public override NDArray ReduceAMax(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            // Text, or a string dtype= request: NumPy's max checks its arguments first (the axis, and the dtype= class where
+            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            Strings.NDStringUfuncs.ThrowIfReduce("max", arr, axis_, dtype);
+            NPTypeCode? typeCode = UfuncLoopCode(dtype);
             var shape = arr.Shape;
 
             // Handle empty arrays - need to check axis-specific behavior

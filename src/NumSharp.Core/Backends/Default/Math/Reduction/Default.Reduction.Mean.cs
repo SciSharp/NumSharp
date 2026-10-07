@@ -22,7 +22,10 @@ namespace NumSharp.Backends
         /// <exception cref="AxisError"><paramref name="axis_"/> is out of range (every axis is, for a 0-d input).</exception>
         public override NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            // Text, or a string dtype= request: NumPy's mean checks its arguments first (the axis, and the dtype= class where
+            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            Strings.NDStringUfuncs.ThrowIfReduce("mean", arr, axis_, dtype);
+            NPTypeCode? typeCode = UfuncLoopCode(dtype);
             var shape = arr.Shape;
             // np.mean's result dtype: dtype=, else float64 for bool / integers / char, the input's own otherwise (NumPy
             // computes a float16 mean through a float32 sum and returns float16).

@@ -11,8 +11,11 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Floor(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "floor", nd, null, @out, where);
             ValidateWhereMask(where);
+            // floor has no string loop: NumPy's legacy-resolver refusal (or the dtype= input-cast text), raised before the
+            // integer-identity shortcut below reads the input's type code.
+            Strings.NDStringUfuncs.ThrowIfUnary("floor", nd, typeCode);
 
             // NumPy registers IDENTITY loops for floor on every bool/
             // integer dtype ('?->?','b->b',...,'Q->Q'), so the loop dtype is

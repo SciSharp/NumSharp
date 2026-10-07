@@ -155,6 +155,8 @@ namespace NumSharp
 
         private static NDArray HistogramBinEdgesImpl(NDArray a, object bins, (double, double)? range, NDArray weights)
         {
+            // NumPy's automatic range starts with a.min(): minimum.reduce has no string loop.
+            if (Backends.Strings.NDStringUfuncs.IsString(a)) throw Backends.Strings.NDStringUfuncs.NoLoop("minimum", a.dtype, a.dtype);
             (NDArray raveled, NDArray w) = RavelAndCheckWeights(a, weights);
             return GetBinEdges(raveled, bins, range, w).Edges;
         }
@@ -245,6 +247,8 @@ namespace NumSharp
 
         private static HistogramResult HistogramImpl(NDArray a, object bins, (double, double)? range, bool density, NDArray weights)
         {
+            // NumPy's automatic range starts with a.min(): minimum.reduce has no string loop.
+            if (Backends.Strings.NDStringUfuncs.IsString(a)) throw Backends.Strings.NDStringUfuncs.NoLoop("minimum", a.dtype, a.dtype);
             (NDArray raveled, NDArray w) = RavelAndCheckWeights(a, weights);
             BinEdgesResult be = GetBinEdges(raveled, bins, range, w);
             NDArray binEdges = be.Edges;

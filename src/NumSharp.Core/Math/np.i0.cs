@@ -108,6 +108,9 @@ namespace NumSharp
         public static NDArray i0(NDArray x)
         {
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            // NumPy computes this on text (sorting, searching, truth tests); string computation is
+            // the next phase of NumSharp's string support, so a string array is refused here.
+            if (Backends.Strings.NDStringUfuncs.IsString(x)) throw Backends.Strings.NDStringUfuncs.NextPhase("i0", x);
             if (x is null) throw new ArgumentNullException(nameof(x));
 
             // Dispatch by PRECISION DOMAIN, not per-dtype: the cephes recurrence is bit-exact only

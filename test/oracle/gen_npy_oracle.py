@@ -61,8 +61,10 @@ OUT = os.path.join(
     "..", "NumSharp.Tests", "IO", "corpus", "npy_oracle.zip",
 )
 
-# NumPy dtype -> NPTypeCode. Char (UTF-16) and Decimal have no NumPy analog and are handled
-# specially: Char rides NumPy's 4-byte '<U1', Decimal cannot be written at all.
+# NumPy dtype -> NPTypeCode. The fixed-width strings ('S' / 'U') map to NumSharp's String lane with their
+# descriptor in "ns_descr". Char (UTF-16) and Decimal have no NumPy analog: Char is WRITTEN as NumPy's
+# 4-byte '<U1' (the "write_only" cases — a '<U1' file reads back as NumPy's U1 string array), and
+# Decimal cannot be written at all.
 NS_DTYPE = {
     "bool": "Boolean",
     "uint8": "Byte",
@@ -89,27 +91,33 @@ def _ns_bytes(arr):
     """The logical values as NumSharp holds them in memory: native-endian, C-order.
 
     This is what `read` compares against, so it must be independent of how the file stored
-    them (byte order / fortran_order / striding).
+    them (byte order / fortran_order / striding). A string array's bytes are its raw elements
+    (UCS-4 code points for 'U', NUL padding included), never its Python-level values: NumPy's
+    getitem strips trailing NULs, so an element holding U+0000 would read back as ''.
     """
-    if arr.dtype.kind == "U":
-        # NumSharp's Char is a 2-byte UTF-16 code unit; NumPy's '<U1' is 4-byte UCS-4.
-        #
-        # Deliberately NOT "".join(arr.tolist()): NumPy's '<U' dtype treats NUL as string padding,
-        # so an element holding U+0000 reads back as '' and joining silently drops it — the
-        # expectation would then be one element short of what the file actually holds. Read the raw
-        # code points instead.
-        buf = np.ascontiguousarray(arr.astype("<U1")).tobytes()
-        cps = struct.unpack(f"<{len(buf) // 4}I", buf)
-        return b"".join(struct.pack("<H", c) for c in cps).hex()
     native = arr.dtype.newbyteorder("=")
     if native == np.dtype("complex64"):
         native = np.dtype("complex128")  # NumSharp widens c8 -> System.Numerics.Complex
     return np.ascontiguousarray(arr.astype(native)).tobytes("C").hex()
 
 
+def _char_bytes(arr):
+    """A '<U1' array's code points as NumSharp's Char holds them: one 2-byte UTF-16 unit each (BMP only)."""
+    buf = np.ascontiguousarray(arr.astype("<U1")).tobytes()
+    cps = struct.unpack(f"<{len(buf) // 4}I", buf)
+    return b"".join(struct.pack("<H", c) for c in cps).hex()
+
+
+def _ns_descr_of(arr):
+    """The native descriptor a string array materializes as in NumSharp ('<U3', '|S5'), else None."""
+    if arr.dtype.kind in "SU":
+        return arr.dtype.newbyteorder("=").str
+    return None
+
+
 def _ns_dtype_of(arr):
-    if arr.dtype.kind == "U":
-        return "Char"
+    if arr.dtype.kind in "SU":
+        return "String"
     native = arr.dtype.newbyteorder("=")
     if native == np.dtype("complex64"):
         return "Complex"  # NumSharp has no 64-bit complex; c8 widens on read
@@ -134,12 +142,41 @@ def add_npy(name, arr, *, version=None, write_exact=True, note=""):
         "descr": fmt.dtype_to_descr(arr.dtype),
         "np_dtype": arr.dtype.name,
         "ns_dtype": _ns_dtype_of(arr),
+        "ns_descr": _ns_descr_of(arr),
         "shape": [int(d) for d in arr.shape],
         "fortran_order": bool(arr.flags.f_contiguous and not arr.flags.c_contiguous),
         "version": [raw[6], raw[7]],
         "data_offset": 8 + hlen_size + hlen,
         "ns_bytes": _ns_bytes(arr),
         "write_exact": write_exact,
+        "load_error": None,
+        "note": note,
+    })
+
+
+def add_char_write(name, arr, *, note=""):
+    """NumSharp's Char array written as NumPy's '<U1': the file must be byte-identical to np.save of `arr`.
+
+    Write-only: reading that file gives NumPy's U1 string array (the "u1_*" cases), not Char.
+    """
+    buf = io.BytesIO()
+    fmt.write_array(buf, arr)
+    raw = buf.getvalue()
+    CASES.append({
+        "name": name,
+        "file": f"cases/{name}.npy",
+        "kind": "write_only",
+        "bytes": raw,
+        "descr": fmt.dtype_to_descr(arr.dtype),
+        "np_dtype": arr.dtype.name,
+        "ns_dtype": "Char",
+        "ns_descr": None,
+        "shape": [int(d) for d in arr.shape],
+        "fortran_order": False,
+        "version": [raw[6], raw[7]],
+        "data_offset": None,
+        "ns_bytes": _char_bytes(arr),
+        "write_exact": True,
         "load_error": None,
         "note": note,
     })
@@ -183,7 +220,8 @@ def add_npz(name, arrays, *, compressed=False, note="", write_exact=False):
         "write_exact": write_exact,
         "load_error": None,
         "entries": {
-            k: {"ns_dtype": _ns_dtype_of(v), "shape": [int(d) for d in v.shape], "ns_bytes": _ns_bytes(v)}
+            k: {"ns_dtype": _ns_dtype_of(v), "ns_descr": _ns_descr_of(v), "shape": [int(d) for d in v.shape],
+                "ns_bytes": _ns_bytes(v)}
             for k, v in arrays.items()
         },
         "note": note,
@@ -235,11 +273,53 @@ for dt in NATIVE_DTYPES:
         arr = _values(dt, n).reshape(shape)
         add_npy(f"{dt}_{sname}", arr, note=f"{dt} {sname} C-order v1.0 — the default np.save path")
 
-# Char rides '<U1' (2-byte UTF-16 in NumSharp <-> 4-byte UCS-4 in NumPy)
+# NumPy's '<U1' reads and writes as NumSharp's U1 string array, byte for byte.
 for sname, shape in SHAPES.items():
     n = int(np.prod(shape)) if shape else 1
-    add_npy(f"char_{sname}", _values("<U1", n).reshape(shape),
-            note="NumSharp Char <-> NumPy '<U1' (2-byte UTF-16 widened to 4-byte UCS-4)")
+    add_npy(f"u1_{sname}", _values("<U1", n).reshape(shape),
+            note="NumPy '<U1' <-> NumSharp '<U1' string array (UCS-4 code points in both)")
+
+# NumSharp's Char (2-byte UTF-16) has no NumPy analog and is WRITTEN as '<U1' (each unit widened to a
+# 4-byte code point); the file it writes is np.save's of the same text.
+for sname, shape in SHAPES.items():
+    n = int(np.prod(shape)) if shape else 1
+    add_char_write(f"char_write_{sname}", _values("<U1", n).reshape(shape),
+                   note="NumSharp Char -> NumPy '<U1' (2-byte UTF-16 widened to 4-byte UCS-4); write-only")
+
+# ---------------------------------------------------------------------------------------------
+# 1b. Fixed-width strings: 'S' and 'U' of several widths x shapes, C and Fortran order, every
+#     format version, NUL bytes inside and at the end (kept in the bytes; NumPy's getitem strips
+#     only the trailing ones), the legacy '|S' / '<U' spellings NumPy writes.
+# ---------------------------------------------------------------------------------------------
+_S_POOL = [b"", b"a", b"bc", b"def", b"\x00x", b"y\x00", b"\xff\x80", b"it's", b'q"z', b"\\"]
+_U_POOL = ["", "a", "bc", "def", "\x00x", "y\x00", "é", "中文", "\U0001F600", "it's"]
+
+
+def _strings(dt, n):
+    d = np.dtype(dt)
+    pool = _S_POOL if d.kind == "S" else _U_POOL
+    return np.array([pool[i % len(pool)] for i in range(n)], dtype=d)
+
+
+for dt in ["|S1", "|S3", "|S7", "<U1", "<U2", "<U5"]:
+    tag = dt[1:].lower()
+    for sname, shape in SHAPES.items():
+        n = int(np.prod(shape)) if shape else 1
+        add_npy(f"str_{tag}_{sname}", _strings(dt, n).reshape(shape),
+                note=f"{dt} {sname} C-order v1.0: a fixed-width string array, raw element bytes")
+    add_npy(f"str_{tag}_fortran", np.asfortranarray(_strings(dt, 6).reshape(2, 3)),
+            note=f"F-contiguous {dt} (2,3) -> fortran_order: True")
+    add_npy(f"str_{tag}_strided", _strings(dt, 12).reshape(3, 4)[:, ::2],
+            note=f"column-strided {dt} view -> written as a C-order copy")
+for ver in [(2, 0), (3, 0)]:
+    add_npy(f"str_u3_v{ver[0]}_{ver[1]}", _strings("<U3", 6).reshape(2, 3), version=ver,
+            note=f"<U3 under explicit format version {ver}")
+    add_npy(f"str_s4_v{ver[0]}_{ver[1]}", _strings("|S4", 4), version=ver,
+            note=f"|S4 under explicit format version {ver}")
+add_npy("str_be_u3", _strings("<U3", 5).astype(">U3"), write_exact=False,
+        note="'>U3': each 4-byte code point swapped to native on read; NumSharp writes '<U3', so the bytes differ")
+add_npy("str_wide_u40", np.array(["x" * 40, "y", ""], dtype="<U40"),
+        note="a wide '<U40' element (160 bytes)")
 
 # ---------------------------------------------------------------------------------------------
 # 2. Fortran order — the layout the old implementation rejected outright
@@ -503,8 +583,6 @@ for name, arr, msg in [
     ("dtype_structured", np.zeros(2, dtype=[("x", "<i4"), ("y", "<f8")]), "Structured dtypes are not supported"),
     ("dtype_datetime64", np.array(["2020-01-01"], dtype="datetime64[D]"), "datetime64"),
     ("dtype_timedelta64", np.array([5], dtype="timedelta64[s]"), "timedelta64"),
-    ("dtype_bytestring", np.array([b"hello"], dtype="|S10"), "Byte-string dtypes"),
-    ("dtype_unicode_multi", np.array(["hello"], dtype="<U5"), "only '<U1' maps to NumSharp's Char"),
     ("dtype_void", np.zeros(2, dtype="|V16"), "Void dtypes"),
 ]:
     b = io.BytesIO()
@@ -589,26 +667,22 @@ add_npy("value_be_bool", np.array([True, False, True], dtype=">b1"), write_exact
 add_npy("value_be_i1", np.array([-128, 0, 127], dtype=">i1"), write_exact=False,
         note="'>i1' is 1 byte: no-op swap")
 add_npy("value_be_U1", np.array(["a", chr(0xFFFF), chr(0xE9), "Z"], dtype=">U1"), write_exact=False,
-        note="'>U1': 4-byte code points swapped, then narrowed to UTF-16")
+        note="'>U1': 4-byte code points swapped to native on read")
 
-# Char/UCS-4 seams. U+0000 is the interesting one: NumPy's '<U' treats NUL as string padding, so
-# NumPy itself reports this element as '' — the bytes are there, its Python-level view just hides it.
+# UCS-4 seams. U+0000 is the interesting one: NumPy's '<U' treats NUL as string padding, so NumPy
+# itself reports this element as '' — the bytes are there, its Python-level view just hides it.
 add_npy("value_U1_bmp_edges",
         np.array([chr(c) for c in [0x20, 0x00, 0x01, 0x7F, 0x80, 0xFF, 0x7FF, 0x800,
                                    0xD7FF, 0xE000, 0xFFFD, 0xFFFF]], dtype="<U1"),
         note="BMP seams: U+0000 (which NumPy's <U reports as ''), the latin-1/UTF-8 boundaries, "
              "U+D7FF/U+E000 either side of the surrogate block, and U+FFFF")
 
-# Non-BMP fits NumPy's 4-byte <U1 but needs a surrogate PAIR in UTF-16, so it cannot fit one Char.
-_astral = io.BytesIO()
-fmt.write_array(_astral, np.array([chr(0x1F600)], dtype="<U1"))
-add_raw("value_U1_astral_rejected", _astral.getvalue(), load_via="load_npy",
-        load_error="outside the Basic Multilingual Plane",
-        note="U+1F600 fits a 4-byte '<U1' but not a 2-byte Char — must be refused, never truncated")
-add_raw("value_U1_lone_surrogate_rejected",
-        _hdr("{'descr': '<U1', 'fortran_order': False, 'shape': (2,), }") + struct.pack("<2I", 0xD83D, 0x61),
-        load_via="load_npy", load_error="unpaired surrogate",
-        note="a lone surrogate is not a valid code point, even though the 4 bytes decode to one")
+# A '<U1' element holds one CODE POINT: a non-BMP character (one UCS-4 unit, a surrogate pair in UTF-16)
+# and a lone surrogate (a str may hold one) are ordinary elements, read and written as their units.
+add_npy("value_U1_astral", np.array([chr(0x1F600), "a"], dtype="<U1"),
+        note="U+1F600 is one '<U1' element: its 4 bytes read as they are (it never fit NumSharp's Char)")
+add_npy("value_U1_lone_surrogate", np.array(["\ud83d", "a"], dtype="<U1"),
+        note="a lone surrogate is an element a NumPy str array holds; its unit reads as it is")
 
 # ---------------------------------------------------------------------------------------------
 # 9c. Python-grammar traps in the header (the parser stands in for ast.literal_eval)
@@ -625,8 +699,8 @@ add_raw("header_shape_bool", _hdr("{'descr': '|i1', 'fortran_order': False, 'sha
 # Zero-width dtypes: real NumPy dtypes with itemsize 0 that NumSharp has no analog for. They must be
 # reported as unsupported, NOT as malformed descriptors.
 for _name, _d, _msg in [
-    ("dtype_U0_zero_width", "<U0", "only '<U1' maps to NumSharp's Char"),
-    ("dtype_S0_zero_width", "|S0", "Byte-string dtypes"),
+    ("dtype_U0_zero_width", "<U0", "Zero-width string dtype"),
+    ("dtype_S0_zero_width", "|S0", "Zero-width string dtype"),
     ("dtype_V0_zero_width", "|V0", "Void dtypes"),
 ]:
     add_raw(_name, _hdr("{'descr': '%s', 'fortran_order': False, 'shape': (0,), }" % _d),
@@ -789,7 +863,8 @@ CASES.append({
     "descr": None, "np_dtype": None, "ns_dtype": None, "shape": None,
     "fortran_order": None, "version": None, "data_offset": None, "ns_bytes": None,
     "write_exact": False, "load_error": None,
-    "entries": {"data": {"ns_dtype": "Int32", "shape": [3], "ns_bytes": np.arange(3, dtype=np.int32).tobytes().hex()}},
+    "entries": {"data": {"ns_dtype": "Int32", "ns_descr": None, "shape": [3],
+                         "ns_bytes": np.arange(3, dtype=np.int32).tobytes().hex()}},
     "raw_entries": {"readme.txt": b"not a numpy file".hex()},
     "note": "npz members that are not .npy are returned as raw bytes by NumPy",
 })
@@ -798,7 +873,8 @@ CASES.append({
 # 11. Multiple arrays appended to ONE .npy stream (np.save(f, a); np.save(f, b))
 # ---------------------------------------------------------------------------------------------
 _multi = io.BytesIO()
-_seq = [np.arange(3, dtype=np.int32), _values("float64", 4).reshape(2, 2), np.array(9, dtype=np.int8)]
+_seq = [np.arange(3, dtype=np.int32), _values("float64", 4).reshape(2, 2), np.array(9, dtype=np.int8),
+        np.array(["ab", "c"], dtype="<U2")]
 for a in _seq:
     fmt.write_array(_multi, a)
 CASES.append({
@@ -808,11 +884,12 @@ CASES.append({
     "fortran_order": None, "version": None, "data_offset": None, "ns_bytes": None,
     "write_exact": True, "load_error": None,
     "sequence": [
-        {"ns_dtype": _ns_dtype_of(a), "shape": [int(d) for d in a.shape], "ns_bytes": _ns_bytes(a)}
+        {"ns_dtype": _ns_dtype_of(a), "ns_descr": _ns_descr_of(a), "shape": [int(d) for d in a.shape],
+         "ns_bytes": _ns_bytes(a)}
         for a in _seq
     ],
-    "note": "three arrays appended to one stream; each np.load reads exactly one and leaves the "
-            "position at the next. A 4th load must raise EOFError.",
+    "note": "four arrays (a string array last) appended to one stream; each np.load reads exactly one and "
+            "leaves the position at the next. A 5th load must raise EOFError.",
 })
 
 

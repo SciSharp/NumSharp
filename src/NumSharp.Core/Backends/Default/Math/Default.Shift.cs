@@ -52,6 +52,9 @@ namespace NumSharp.Backends
         /// <returns>The shifted result, or <paramref name="@out"/> when provided.</returns>
         public override NDArray LeftShift(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            // The dtype= class check and NumPy's string answers (a string request's no-loop text; a string operand's
+            // out= / where= parse) come before the operand-type validation, as NumPy resolves the signature first.
+            UfuncLoopCode(dtype, "left_shift", lhs, rhs, @out, where);
             ValidateShiftType(lhs, "left_shift");
             ValidateShiftType(rhs, "left_shift");
             return ExecuteShift(lhs, rhs, isLeftShift: true, dtype, @out, where);
@@ -69,6 +72,9 @@ namespace NumSharp.Backends
         /// <returns>The shifted result, or <paramref name="@out"/> when provided.</returns>
         public override NDArray RightShift(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            // The dtype= class check and NumPy's string answers (a string request's no-loop text; a string operand's
+            // out= / where= parse) come before the operand-type validation, as NumPy resolves the signature first.
+            UfuncLoopCode(dtype, "right_shift", lhs, rhs, @out, where);
             ValidateShiftType(lhs, "right_shift");
             ValidateShiftType(rhs, "right_shift");
             return ExecuteShift(lhs, rhs, isLeftShift: false, dtype, @out, where);
@@ -117,7 +123,7 @@ namespace NumSharp.Backends
 
             // dtype= must select an integer/char shift loop. A float/complex/decimal request has no
             // loop to bind (shift loops are bb->b .. QQ->Q), so NumPy raises the no-loop TypeError.
-            NPTypeCode? dtc = dtype?.GetTypeCode();
+            NPTypeCode? dtc = UfuncLoopCode(dtype, opName, lhs, rhs, @out, where);
             if (dtc.HasValue && !(dtc.Value.IsInteger() || dtc.Value == NPTypeCode.Boolean || dtc.Value == NPTypeCode.Char))
                 throw new IncorrectTypeException(
                     $"No loop matching the specified signature and casting was found for ufunc {opName}");

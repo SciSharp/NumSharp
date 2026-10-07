@@ -42,6 +42,11 @@ namespace NumSharp
             if (dtype is null)
                 throw new ArgumentNullException(nameof(dtype));
 
+            // A fixed-width string on either side: the field's width is the descriptor's (not the lane's), and its item
+            // size need not divide the array's (S3 -> S1, int32 -> S2), so the descriptor route builds and checks the view.
+            if (Storage.IsString || Backends.Strings.NDStringStorage.IsString(dtype))
+                return new NDArray(Storage.GetFieldAliasDescr(dtype, offset)) { TensorEngine = TensorEngine };
+
             return new NDArray(Storage.GetFieldAlias(dtype.GetTypeCode(), offset)) { TensorEngine = TensorEngine };
         }
 
@@ -110,7 +115,9 @@ namespace NumSharp
             NDArray src = value as NDArray;
             if (src is null)
             {
-                src = (value is IConvertible && !(value is string))
+                // A byte[] into a string field is ONE bytes value (NumPy's b'X'), not a uint8 sequence: NDArray.Scalar
+                // builds the 0-d S array the string copy converts.
+                src = (value is IConvertible && !(value is string)) || (value is byte[] && view.Storage.IsString)
                     ? NDArray.Scalar(value)
                     : np.asanyarray(value);
             }

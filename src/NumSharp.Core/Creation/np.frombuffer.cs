@@ -26,6 +26,10 @@ namespace NumSharp
         /// </remarks>
         public static NDArray frombuffer(byte[] buffer, DType dtype = null, long count = -1, long offset = 0)
         {
+            // A fixed-width string dtype reads the bytes as elements of its width (S: one byte per character, U: one
+            // UCS-4 unit per character) — a view over the pinned buffer, like every other dtype.
+            if (Backends.Strings.NDStringStorage.IsString(dtype))
+                return StringFromBuffer(buffer, dtype, count, offset);
             // A non-native descriptor (np.dtype(">u4")) means "these bytes are big-endian": route through the
             // dtype-STRING path, which byte-swaps to native (a copy) exactly as NumPy's frombuffer + astype would.
             if (dtype != null && !dtype.isnative)
@@ -45,6 +49,10 @@ namespace NumSharp
         {
             if (buffer == null)
                 throw new ArgumentNullException(nameof(buffer));
+            // NPTypeCode.String names the string lane without a width: NumPy's unsized class (np.str_, np.bytes_), whose
+            // frombuffer is refused before the buffer is read. A width comes only with a descriptor (np.dtype("S3")).
+            if (dtype == NPTypeCode.String)
+                throw new ValueError(FromBufferUnsizedText);
 
             if (dtype == NPTypeCode.Empty)
                 dtype = NPTypeCode.Double;
@@ -163,6 +171,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.frombuffer.html</remarks>
         public static NDArray frombuffer(MemoryView buffer, DType dtype = null, long count = -1, long offset = 0)
         {
+            // A fixed-width string dtype reads the source's bytes as string elements (a view that keeps them alive).
+            if (Backends.Strings.NDStringStorage.IsString(dtype))
+                return StringFromMemoryView(buffer, dtype, count, offset);
             // A non-native descriptor (np.dtype(">u4")) means "these bytes are big-endian": route through the
             // dtype-STRING path, which byte-swaps to native (a copy), exactly like the byte[] overload.
             if (dtype != null && !dtype.isnative)
@@ -175,6 +186,10 @@ namespace NumSharp
         {
             if (buffer == null)
                 throw new ArgumentNullException(nameof(buffer));
+            // NPTypeCode.String names the string lane without a width: NumPy's unsized class (np.str_, np.bytes_), whose
+            // frombuffer is refused before the buffer is read. A width comes only with a descriptor (np.dtype("S3")).
+            if (dtype == NPTypeCode.String)
+                throw new ValueError(FromBufferUnsizedText);
 
             if (dtype == NPTypeCode.Empty)
                 dtype = NPTypeCode.Double;
@@ -268,6 +283,11 @@ namespace NumSharp
             if (buffer == null)
                 throw new ArgumentNullException(nameof(buffer));
 
+            // A string dtype ('S3', '<U2', 'c') goes to the descriptor route, which knows the width.
+            var stringDescr = StringDescrOrNull(dtype);
+            if (stringDescr != null)
+                return StringFromMemoryView(buffer, stringDescr, count, offset);
+
             var (typeCode, needsByteSwap) = ParseDtypeString(dtype);
             if (!needsByteSwap)
                 return frombuffer(buffer, typeCode, count, offset);
@@ -293,6 +313,12 @@ namespace NumSharp
         {
             if (buffer == null)
                 throw new ArgumentNullException(nameof(buffer));
+
+            // A string dtype ('S3', '<U2', 'c', 'a5') reads fixed-width string elements; its width is the descriptor's,
+            // which the code parser below cannot express.
+            var stringDescr = StringDescrOrNull(dtype);
+            if (stringDescr != null)
+                return StringFromBuffer(buffer, stringDescr, count, offset);
 
             // Parse dtype string
             var (typeCode, needsByteSwap) = ParseDtypeString(dtype);
@@ -399,6 +425,9 @@ namespace NumSharp
         /// </summary>
         public static NDArray frombuffer(ReadOnlySpan<byte> buffer, DType dtype = null, long count = -1, long offset = 0)
         {
+            // A fixed-width string dtype copies the selected bytes into string elements (a span cannot stay pinned).
+            if (Backends.Strings.NDStringStorage.IsString(dtype))
+                return StringFromSpan(buffer, dtype, count, offset);
             return frombuffer(buffer, dtype?.GetTypeCode() ?? NPTypeCode.Double, count, offset);
         }
 
@@ -408,6 +437,11 @@ namespace NumSharp
         /// </summary>
         public static NDArray frombuffer(ReadOnlySpan<byte> buffer, NPTypeCode dtype, long count = -1, long offset = 0)
         {
+            // NPTypeCode.String names the string lane without a width: NumPy's unsized class (np.str_, np.bytes_), whose
+            // frombuffer is refused before the buffer is read. A width comes only with a descriptor (np.dtype("S3")).
+            if (dtype == NPTypeCode.String)
+                throw new ValueError(FromBufferUnsizedText);
+
             if (dtype == NPTypeCode.Empty)
                 dtype = NPTypeCode.Double;
 
@@ -477,6 +511,11 @@ namespace NumSharp
             if (segment.Array == null)
                 throw new ArgumentException("ArraySegment has no underlying array", nameof(segment));
 
+            // A fixed-width string dtype: the segment IS the buffer (NumPy's frombuffer of a sliced memoryview), so its
+            // elements end at the segment's end, not at the end of the array behind it.
+            if (Backends.Strings.NDStringStorage.IsString(dtype))
+                return StringFromBufferObject(segment, segment.Count, dtype, count, 0);
+
             return frombuffer(segment.Array, dtype, count, segment.Offset);
         }
 
@@ -502,6 +541,9 @@ namespace NumSharp
         /// <returns>1-dimensional NDArray.</returns>
         public static NDArray frombuffer(Memory<byte> memory, DType dtype = null, long count = -1, long offset = 0)
         {
+            // A fixed-width string dtype: a view over the pinned memory (array-backed or not), bounded by its length.
+            if (Backends.Strings.NDStringStorage.IsString(dtype))
+                return StringFromBufferObject(memory, memory.Length, dtype, count, offset);
             return frombuffer(memory, dtype?.GetTypeCode() ?? NPTypeCode.Double, count, offset);
         }
 
@@ -544,6 +586,9 @@ namespace NumSharp
         /// </example>
         public static unsafe NDArray frombuffer(IntPtr address, long byteLength, DType dtype = null, long count = -1, long offset = 0, Action dispose = null)
         {
+            // A fixed-width string dtype reads the memory as string elements (its width is the descriptor's).
+            if (Backends.Strings.NDStringStorage.IsString(dtype))
+                return StringFromPointer((byte*)address, byteLength, dtype, count, offset, dispose);
             return frombuffer(address, byteLength, dtype?.GetTypeCode() ?? NPTypeCode.Double, count, offset, dispose);
         }
 
@@ -554,6 +599,10 @@ namespace NumSharp
         {
             if (address == IntPtr.Zero)
                 throw new ArgumentNullException(nameof(address));
+            // NPTypeCode.String names the string lane without a width: NumPy's unsized class (np.str_, np.bytes_), whose
+            // frombuffer is refused before the buffer is read. A width comes only with a descriptor (np.dtype("S3")).
+            if (dtype == NPTypeCode.String)
+                throw new ValueError(FromBufferUnsizedText);
 
             if (dtype == NPTypeCode.Empty)
                 dtype = NPTypeCode.Double;
@@ -637,6 +686,9 @@ namespace NumSharp
         public static NDArray frombuffer<TSource>(TSource[] array, DType dtype = null, long count = -1, long offset = 0)
             where TSource : unmanaged
         {
+            // A fixed-width string dtype reads the array's bytes as string elements (a view over the pinned array).
+            if (Backends.Strings.NDStringStorage.IsString(dtype))
+                return StringFromArray(array, dtype, count, offset);
             return frombuffer(array, dtype?.GetTypeCode() ?? InfoOf<TSource>.NPTypeCode, count, offset);
         }
 
@@ -648,6 +700,10 @@ namespace NumSharp
         {
             if (array == null)
                 throw new ArgumentNullException(nameof(array));
+            // NPTypeCode.String names the string lane without a width: NumPy's unsized class (np.str_, np.bytes_), whose
+            // frombuffer is refused before the buffer is read. A width comes only with a descriptor (np.dtype("S3")).
+            if (dtype == NPTypeCode.String)
+                throw new ValueError(FromBufferUnsizedText);
 
             if (dtype == NPTypeCode.Empty)
                 dtype = InfoOf<TSource>.NPTypeCode;
@@ -868,7 +924,8 @@ namespace NumSharp
                 "c8"  or "F" or "complex64"
                                    => throw new NotSupportedException($"NumPy dtype '{typeStr}' is not supported by NumSharp"),
                 "c16" or "D"       => NPTypeCode.Complex, // complex128
-                "c"   or "S1"      => NPTypeCode.Char,
+                // 'c' and 'S1' are NumPy's ONE-byte strings (np.dtype('c') is |S1); the string overloads route every string
+                // dtype to the descriptor route before this parser, which used to read them as the 2-byte Char.
                 _ => ParseDtypeName(typeStr, dtype)
             };
 

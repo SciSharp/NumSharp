@@ -412,7 +412,9 @@ namespace NumSharp
                     descr = null;
                     return;
                 case NDArray arr:
-                    descr = DType.From(arr.typecode);
+                    // The array's own descriptor: a fixed-width string's width lives there (its lane, NPTypeCode.String,
+                    // names no dtype); for the numeric lanes it is the class singleton.
+                    descr = arr.dtype;
                     meta = descr.Meta;
                     return;
                 case NPTypeCode tc:

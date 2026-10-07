@@ -10,7 +10,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Log(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "log", nd, null, @out, where);
             return ExecuteUnaryOp(nd, UnaryOp.Log, ResolveUnaryFloatReturnType(nd, typeCode, "log"), @out, where);
         }
     }

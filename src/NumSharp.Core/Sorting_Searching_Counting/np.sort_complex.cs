@@ -27,6 +27,9 @@ namespace NumSharp
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Plain(a, static s => sort_complex(s));
+            // NumPy computes this on text (sorting, searching, truth tests); string computation is
+            // the next phase of NumSharp's string support, so a string array is refused here.
+            if (Backends.Strings.NDStringUfuncs.IsString(a)) throw Backends.Strings.NDStringUfuncs.NextPhase("sort_complex", a);
             // np.sort == array(a, copy=True) + in-place sort along the default last axis; the sort
             // runs in the ORIGINAL dtype (an int64 past 2^53 must order by its exact value, not by
             // its double image), and only the sorted result is widened.

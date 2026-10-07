@@ -26,6 +26,9 @@ namespace NumSharp.Backends
         /// <remarks>Bit-identical to win-amd64 NumPy 2.4.2 (<see cref="Math.ScaleB(double,int)"/> IS <c>ldexp</c>).</remarks>
         public override NDArray Ldexp(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null)
         {
+            // ldexp has float x int loops only; text in either operand is refused with the legacy resolver's text, after
+            // NumPy's out= / where= parse (a read-only out, then a non-bool mask), which the guard reports first.
+            Strings.NDStringUfuncs.ThrowIfBinary("ldexp", x1, x2, @out, null, where);
             // NumPy validation order: where parse -> input coercion / loop resolution -> out cast -> shape.
             ValidateWhereMask(where);
             // ldexp has float×int loops only; a complex mantissa or a non-integer exponent coerces to no loop.

@@ -16,6 +16,20 @@ namespace NumSharp.Backends.Printing
     }
 
     /// <summary>Port of NumPy's <c>BoolFormat</c>.</summary>
+    /// <summary>
+    ///     NumPy's <c>'numpystr'</c> formatter (<c>arrayprint.repr_format</c>) for the fixed-width string dtypes: each
+    ///     element is Python's <c>repr()</c> of the <c>str</c> / <c>bytes</c> scalar — quoted and escaped
+    ///     (<see cref="PyRepr"/>), and NEVER padded, because NumPy does not align string columns (<c>['a' 'bbb']</c>).
+    /// </summary>
+    internal sealed class StringReprFormat : IElementFormatter
+    {
+        /// <summary>Formats one element as NumPy prints it inside an array.</summary>
+        /// <param name="value">The element as the string storage reads it: a <see cref="string"/> for <c>U</c>, a
+        ///     <see cref="T:byte[]"/> for <c>S</c> (trailing NULs already stripped, as NumPy's scalar strips them).</param>
+        /// <returns><c>'text'</c> for <c>U</c>, <c>b'bytes'</c> for <c>S</c>.</returns>
+        public string Format(object value) => value is byte[] bytes ? PyRepr.Bytes(bytes) : PyRepr.Str((string)value);
+    }
+
     internal sealed class BoolFormat : IElementFormatter
     {
         private readonly string _true;

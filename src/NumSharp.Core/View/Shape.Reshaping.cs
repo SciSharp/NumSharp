@@ -231,11 +231,9 @@ namespace NumSharp
             if (indexOfUnknown == -1)
                 return shape; // Nothing to infer; the caller's size check handles the rest.
 
-            if (this.IsBroadcasted)
-            {
-                throw new NotSupportedException("Reshaping a broadcasted array with a -1 (unknown) dimension is not supported.");
-            }
-
+            // A broadcast view infers like any other array: the unknown extent comes from the LOGICAL element count
+            // (np.broadcast_to(row, (3, 4)).reshape(-1) is (12,)), and the caller copies a layout no view can express,
+            // exactly as it does for an explicit (12,) — NumPy's view of a temporary copy (probed 2.4.2).
             if (product == 0 || size % product != 0)
                 throw ReshapeSizeMismatch(size, dims);
 

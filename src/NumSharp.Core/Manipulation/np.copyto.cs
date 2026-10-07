@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
+using NumSharp.Backends.Strings;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Backends.Unmanaged.Pooling;
 using NumSharp.Utilities;
@@ -126,6 +127,14 @@ namespace NumSharp
             NPY_CASTING rule = CopytoCastingConverter(casting);
             if (dst is null)
                 throw new ArgumentNullException(nameof(dst));
+
+            // A C# char into a fixed-width string array is one character of TEXT (setitem reads it the same way), not
+            // NumSharp's numeric Char dtype: NumPy's np.copyto(u, 'x').
+            if (typeof(T) == typeof(char) && dst.typecode == NPTypeCode.String)
+            {
+                copyto(dst, ((char)(object)src).ToString(), casting, @where);
+                return;
+            }
 
             if (typeof(T) == typeof(bool) || typeof(T) == typeof(Half) || typeof(T) == typeof(char) || typeof(T) == typeof(decimal))
             {
@@ -301,6 +310,14 @@ namespace NumSharp
         [SkipLocalsInit]
         private static unsafe void CopytoAssignArray(NDArray dst, NDArray src, NDArray @where, NPY_CASTING casting)
         {
+            // Fixed-width strings: the cast rules are per DESCRIPTOR (the width is part of the dtype) and the copy is the
+            // string route — the same checks in NumPy's order, in CopytoAssignStrings.
+            if (src.typecode == NPTypeCode.String || dst.typecode == NPTypeCode.String)
+            {
+                CopytoAssignStrings(dst, src, @where, casting);
+                return;
+            }
+
             // "Use array_assign_scalar if 'src' NDIM is 0"
             if (src.ndim == 0)
             {
@@ -418,6 +435,16 @@ namespace NumSharp
         private static unsafe void CopytoAssignRawScalar(NDArray dst, byte* srcData, NPTypeCode srcType, NDArray @where, NPY_CASTING casting)
         {
             NumSharpException.ThrowIfNotWriteable(dst.Shape);
+
+            // A number into a fixed-width string array: NumPy's descriptor rule decides first (int64 → <U5 is 'same_kind',
+            // so 'safe' raises its TypeError text); an allowed cast formats the number — the computational phase.
+            if (dst.typecode == NPTypeCode.String)
+            {
+                DType from = srcType;
+                if (!DTypeCasting.CanCastTypeTo(from, dst.dtype, casting))
+                    throw NDStringCasting.InvalidCast(from, dst.dtype, casting, scalar: true);
+                throw NDStringCasting.TextConversion(from, dst.dtype);
+            }
 
             if (!NDIterCasting.CanCast(srcType, dst.typecode, casting))
                 throw new InvalidCastException(
@@ -552,11 +579,8 @@ namespace NumSharp
                 km[k] = oc[p];
             }
 
-            var kernel = DirectILKernelGenerator.TryGetMaskedAssignKernel(itemsize);
-            if (kernel != null)
-                kernel(srcData, dstData, maskData, ks, kd, km, kShape, pnd);
-            else
-                DirectILKernelGenerator.MaskedAssignFallback(itemsize, srcData, dstData, maskData, ks, kd, km, kShape, pnd);
+            // Any element width: a fixed-width string element (S3, U3) runs as lanes of a kernel width.
+            DirectILKernelGenerator.MaskedAssignAnyWidth(itemsize, srcData, dstData, maskData, ks, kd, km, kShape, pnd);
         }
 
         /// <summary>
@@ -790,11 +814,7 @@ namespace NumSharp
                 }
 
                 byte trueByte = 1;
-                var walker = DirectILKernelGenerator.TryGetMaskedAssignKernel(itemsize);
-                if (walker != null)
-                    walker(srcData, buffer, &trueByte, sb, bb, mb, shape, m);
-                else
-                    DirectILKernelGenerator.MaskedAssignFallback(itemsize, srcData, buffer, &trueByte, sb, bb, mb, shape, m);
+                DirectILKernelGenerator.MaskedAssignAnyWidth(itemsize, srcData, buffer, &trueByte, sb, bb, mb, shape, m);
                 return;
             }
 

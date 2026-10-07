@@ -42,6 +42,9 @@ namespace NumSharp.Backends
         /// </remarks>
         internal static NDArray NanMeanNumPy(NDArray a, int? axis_, bool keepdims, DType dtype)
         {
+            // Text is not inexact, so _replace_nan leaves it alone and nanmean IS np.mean: the delegation below reaches
+            // ReduceMean's guard, which validates the axis (a 0-d input refuses every axis) and refuses with add.reduce's
+            // text — or, under a string dtype= request on an integer input, with the text of its REQUIRED_STR_LEN.
             var shape = a.Shape;
 
             // The uninitialized-shape sentinel (not a size-0 array) has nothing to reduce; it passes through as before.
@@ -66,7 +69,7 @@ namespace NumSharp.Backends
                 axis = NormalizeAxis(axis_.Value, shape.NDim);
             bool flat = axis is null;
 
-            NPTypeCode totT = dtype?.GetTypeCode() ?? inT;
+            NPTypeCode totT = UfuncLoopCode(dtype) ?? inT;
             // float16's np.evaluate arithmetic is scalar; a host without dynamic code has no fused kernels.
             bool eager = !DirectILKernelGenerator.Enabled || inT == NPTypeCode.Half;
             // A dense operand already lies in the K order, so a sum streamed over it walks NumPy's copy; a cast loop's

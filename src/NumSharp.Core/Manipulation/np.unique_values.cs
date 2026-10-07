@@ -223,6 +223,9 @@ namespace NumSharp
         public static NDArray unique_values(NDArray x)
         {
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            // NumPy computes this on text (sorting, searching, truth tests); string computation is
+            // the next phase of NumSharp's string support, so a string array is refused here.
+            if (Backends.Strings.NDStringUfuncs.IsString(x)) throw Backends.Strings.NDStringUfuncs.NextPhase("unique_values", x);
             return x.uniqueValuesFast();
         }
 
@@ -241,6 +244,9 @@ namespace NumSharp
         public static UniqueCountsResult unique_counts(NDArray x)
         {
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            // NumPy computes this on text (sorting, searching, truth tests); string computation is
+            // the next phase of NumSharp's string support, so a string array is refused here.
+            if (Backends.Strings.NDStringUfuncs.IsString(x)) throw Backends.Strings.NDStringUfuncs.NextPhase("unique_counts", x);
             var r = x.uniqueCountsFast();
             return new UniqueCountsResult(r[0], r[1]);
         }
@@ -264,6 +270,9 @@ namespace NumSharp
         public static UniqueInverseResult unique_inverse(NDArray x)
         {
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            // NumPy computes this on text (sorting, searching, truth tests); string computation is
+            // the next phase of NumSharp's string support, so a string array is refused here.
+            if (Backends.Strings.NDStringUfuncs.IsString(x)) throw Backends.Strings.NDStringUfuncs.NextPhase("unique_inverse", x);
             var r = x.unique(return_index: false, return_inverse: true, return_counts: false,
                              axis: null, equal_nan: false);
             return new UniqueInverseResult(r[0], ReshapeInverseToInput(r[1], x));
@@ -286,6 +295,9 @@ namespace NumSharp
         public static UniqueAllResult unique_all(NDArray x)
         {
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            // NumPy computes this on text (sorting, searching, truth tests); string computation is
+            // the next phase of NumSharp's string support, so a string array is refused here.
+            if (Backends.Strings.NDStringUfuncs.IsString(x)) throw Backends.Strings.NDStringUfuncs.NextPhase("unique_all", x);
             var r = x.unique(return_index: true, return_inverse: true, return_counts: true,
                              axis: null, equal_nan: false);
             return new UniqueAllResult(r[0], r[1], ReshapeInverseToInput(r[2], x), r[3]);

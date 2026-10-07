@@ -41,6 +41,13 @@ namespace NumSharp
             if (string.IsNullOrEmpty(sep))
                 throw new ValueError("The binary mode of fromstring is removed, use frombuffer instead");
 
+            // A fixed-width string dtype: PyArray_FromString refuses an unsized class first, then any dtype without a
+            // text element reader (the string classes have none).
+            if (Backends.Strings.NDStringStorage.IsString(dtype))
+                throw new ValueError(dtype.itemsize == 0
+                    ? "zero-valued itemsize"
+                    : "don't know how to read character strings with that array type");
+
             NPTypeCode tc = dtype?.GetTypeCode() ?? NPTypeCode.Double;
             string[] tokens = SplitTokens(@string, sep, out bool nonWhitespaceSep);
             string[] items = SelectTokens(tokens, count, nonWhitespaceSep);

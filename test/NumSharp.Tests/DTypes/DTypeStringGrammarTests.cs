@@ -156,11 +156,25 @@ namespace NumSharp.Tests.DTypes
         [TestMethod]
         public void UnsupportedNumPyTypes_StillRaise()
         {
-            foreach (var s in new[] { "S", "S10", "U", "U32", "V", "V16", "O", "a", "a5", "c", "c8", "complex64", "F", "object", "str", "bytes_", "i4,f8", "3f8", "(2,3)f8" })
+            // The fixed-width string spellings (S, S10, U, U32, a, a5, c, str, bytes_) parse since the string dtypes
+            // landed (see StringDTypeGrammar_ParsesNumPysSpellings); void, object, complex64 and structured stay refused.
+            foreach (var s in new[] { "V", "V16", "O", "c8", "complex64", "F", "object", "i4,f8", "3f8", "(2,3)f8" })
             {
                 Action act = () => np.dtype(s);
                 act.Should().Throw<NotSupportedException>(s);
             }
+        }
+
+        [TestMethod]
+        public void StringDTypeGrammar_ParsesNumPysSpellings()
+        {
+            // probed 2.4.2: np.dtype(spelling).str
+            foreach (var (spelling, str) in new[]
+                     {
+                         ("S", "|S0"), ("S10", "|S10"), ("U", "<U0"), ("U32", "<U32"), ("a", "|S0"), ("a5", "|S5"),
+                         ("c", "|S1"), ("str", "<U0"), ("bytes_", "|S0"), ("<U3", "<U3"), ("|S3", "|S3"), ("=U2", "<U2"),
+                     })
+                np.dtype(spelling).str.Should().Be(str, spelling);
         }
 
         [TestMethod]

@@ -40,8 +40,10 @@ namespace NumSharp
             // If n == 0 (empty axis), offset stays 0 — nothing to roll.
             long offset = n == 0 ? 0 : ((shift % n) + n) % n;
 
+            // NumPy still runs empty_like + the slice copies for a zero shift, so the result keeps a's memory order
+            // (order='K': a transposed / broadcast input stays transposed / F), which copy('K') reproduces.
             if (offset == 0)
-                return a.copy();
+                return a.copy('K');
 
             var result = np.empty_like(a);
 

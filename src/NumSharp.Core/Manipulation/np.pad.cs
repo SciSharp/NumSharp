@@ -234,6 +234,11 @@ namespace NumSharp
 
         private static NDArray PadConstant(NDArray array, long[,] padPairs, object constantValues)
         {
+            // Text takes NumPy's assignment of each constant into the string array (np.copyto, unsafe): a str / bytes
+            // constant is stored as text, a number would first be converted to its text.
+            if (array.typecode == NPTypeCode.String)
+                return PadConstantText(array, padPairs, constantValues);
+
             int ndim = array.ndim;
             // Normalize constant_values to a (ndim, 2) box-array. NumPy default is 0.
             object cv = constantValues ?? BoxedZero(array.GetTypeCode);
@@ -256,6 +261,55 @@ namespace NumSharp
                 object lv = CastBoxToDType(valuePairs[axis, 0], array.GetTypeCode);
                 object rv = CastBoxToDType(valuePairs[axis, 1], array.GetTypeCode);
                 _SetPadArea(roi, axis, (left, right), (lv, rv));
+                roi.Dispose();
+            }
+            return padded;
+        }
+
+        /// <summary>
+        ///     <c>np.pad(..., mode='constant')</c> of a fixed-width string array: NumPy's same steps — allocate, copy the
+        ///     original into the center, then assign each axis's before / after constant into its pad band, the bands of
+        ///     earlier axes covering the corners. Each constant is assigned as text: a <see cref="string"/> or <c>byte[]</c>
+        ///     is encoded once into a 0-d string array and broadcast by the string copy route, which cuts it to the array's
+        ///     width (<c>'zzzzz'</c> into <c>&lt;U3</c> is <c>'zzz'</c>) and converts <c>S ↔ U</c> with the ASCII checks.
+        /// </summary>
+        /// <param name="array">The string array to pad.</param>
+        /// <param name="padPairs">The normalized (before, after) widths per axis.</param>
+        /// <param name="constantValues">The constant(s) in any of np.pad's spellings, or null for NumPy's default 0.</param>
+        /// <returns>The padded array (the input's dtype, a fresh buffer).</returns>
+        /// <exception cref="StringComputationNotSupportedException">The default constant 0 or any number: NumPy pads with its text (<c>'0'</c>),
+        ///     and converting numbers to text is the next phase of the string support.</exception>
+        /// <exception cref="UnicodeEncodeError">A non-ASCII str constant into an <c>S</c> array.</exception>
+        /// <exception cref="UnicodeDecodeError">A non-ASCII bytes constant into a <c>U</c> array.</exception>
+        private static NDArray PadConstantText(NDArray array, long[,] padPairs, object constantValues)
+        {
+            int ndim = array.ndim;
+            // NumPy's default constant is the number 0, stored in a string array as the text '0'.
+            if (constantValues is null)
+                throw new StringComputationNotSupportedException(
+                    $"np.pad of a fixed-width string array ({array.dtype.ToString(true)}) in 'constant' mode needs text " +
+                    "constant_values (a string or byte[]): the default 0 is a number, which NumPy stores as the text '0', and " +
+                    "converting numbers to text is the next phase of NumSharp's string support.");
+
+            object[,] valuePairs = _AsPairsValues(constantValues, Math.Max(ndim, 1));
+
+            // Encode every constant up front, before any write, so a refused value leaves no half-built result behind
+            // (NumPy validates the values while converting them, before it allocates).
+            var encoded = new NDArray[Math.Max(ndim, 1), 2];
+            for (int axis = 0; axis < encoded.GetLength(0); axis++)
+                for (int side = 0; side < 2; side++)
+                {
+                    object v = valuePairs[axis, side];
+                    encoded[axis, side] = v is NDArray given ? given
+                        : v is string or byte[] or char ? Backends.Strings.NDStringArrays.FromScalar(v, null)
+                        : throw Backends.Strings.NDStringStorage.NumberToText(v?.GetType().Name ?? "None");
+                }
+
+            var (padded, originalSlice) = _PadSimple(array, padPairs, fillValue: null);
+            for (int axis = 0; axis < ndim; axis++)
+            {
+                var roi = _ViewRoi(padded, originalSlice, axis);
+                _SetPadArea(roi, axis, (padPairs[axis, 0], padPairs[axis, 1]), (encoded[axis, 0], encoded[axis, 1]));
                 roi.Dispose();
             }
             return padded;
@@ -681,6 +735,13 @@ namespace NumSharp
             int ndim = array.ndim;
             if (ndim == 0) return array.copy();
             object[,] endPairs = _AsPairsValues(endValues ?? 0, ndim);
+            // NumPy's ramps are np.linspace(edge, end_value, num=width): its result_type(edge, end, float(num)) has no
+            // common DType for text, and the promotion raises NumPy's DTypePromotionError itself (first axis, before side).
+            if (array.typecode == NPTypeCode.String)
+            {
+                DTypePromotion.ResultType(array.dtype, endPairs[0, 0] ?? 0, 1.0);
+                throw Backends.Strings.NDStringUfuncs.NextPhase("pad (linear_ramp)", array);
+            }
             var (padded, originalSlice) = _PadSimple(array, padPairs, fillValue: null);
 
             for (int axis = 0; axis < ndim; axis++)

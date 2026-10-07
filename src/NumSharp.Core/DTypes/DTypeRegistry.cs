@@ -15,10 +15,11 @@ namespace NumSharp
     ///     engines pick it up.
     /// </summary>
     /// <remarks>
-    ///     Static initialisation builds the 16 legacy classes (the 15 storage types plus the vestigial
-    ///     <see cref="NPTypeCode.String"/>), the two datetime classes, the three NEP 50 scalar classes, their singleton
-    ///     descriptors, and the casting implementations NumPy registers in <c>PyArray_InitializeNumericCasts</c> /
-    ///     <c>PyArray_InitializeDatetimeCasts</c>. It touches no <c>np</c> static state, so it cannot cycle with the
+    ///     Static initialisation builds the 15 numeric storage classes, the two fixed-width string classes
+    ///     (<see cref="Bytes"/> and <see cref="Str"/>, sharing the <see cref="NPTypeCode.String"/> lane), the two datetime
+    ///     classes, the three NEP 50 scalar classes, their singleton descriptors, and the casting implementations NumPy
+    ///     registers in <c>PyArray_InitializeNumericCasts</c> / <c>PyArray_InitializeDatetimeCasts</c> /
+    ///     <c>PyArray_InitializeStringCasts</c>. It touches no <c>np</c> static state, so it cannot cycle with the
     ///     <c>np</c> static constructor; the promotion TABLE (<see cref="np._nptypemap_arr_arr"/>) is consulted lazily at
     ///     call time.
     /// </remarks>
@@ -52,8 +53,17 @@ namespace NumSharp
         public static LegacyBuiltinDTypeMeta Decimal { get; }
         /// <summary>NumSharp-only: <see cref="System.Char"/> (type number 257, the user-defined range; promotes as uint16).</summary>
         public static LegacyBuiltinDTypeMeta Char { get; }
-        /// <summary>The vestigial <see cref="NPTypeCode.String"/> class (NumPy's <c>StrDType</c> slot, type number 19): reachable only through the <c>"string"</c>/<c>"String"</c> aliases, no storage kernels.</summary>
-        public static LegacyBuiltinDTypeMeta Str { get; }
+        /// <summary>
+        ///     <c>np.dtypes.StrDType</c> — fixed-width Unicode (<c>U</c>, type number 19, one UCS-4 code point per character).
+        ///     The canonical class of the <see cref="NPTypeCode.String"/> storage lane and of <see cref="string"/>.
+        /// </summary>
+        public static StringDTypeMeta Str { get; }
+        /// <summary>
+        ///     <c>np.dtypes.BytesDType</c> — fixed-width bytes (<c>S</c>, type number 18, one byte per character). Shares the
+        ///     <see cref="NPTypeCode.String"/> storage lane with <see cref="Str"/> but owns neither that code nor a C# type,
+        ///     so it is reached by name only (<c>"S5"</c>, <see cref="np.bytes_"/>).
+        /// </summary>
+        public static StringDTypeMeta Bytes { get; }
         /// <summary><c>np.dtypes.DateTime64DType</c>.</summary>
         public static DatetimeDTypeMeta DateTime64 { get; }
         /// <summary><c>np.dtypes.TimeDelta64DType</c>.</summary>
@@ -106,9 +116,16 @@ namespace NumSharp
             Half = Legacy("Float16DType", numpy, 23, NPTypeCode.Half, typeof(System.Half), "float16", 'f', 'e', 2, 2, builtin, null);
             Decimal = Legacy("DecimalDType", numsharp, 256, NPTypeCode.Decimal, typeof(decimal), "decimal", 'f', (char)NPY_TYPECHAR.NPY_LONGLONGLTR, 16, 8, builtin, null);
             Char = Legacy("CharDType", numsharp, 257, NPTypeCode.Char, typeof(char), "char", 'u', (char)NPY_TYPECHAR.NPY_CHARLTR, 2, 2, builtin, null);
-            // The vestigial string slot is NumPy's UNSIZED `U0`: itemsize 0, so it renders as `<U0` / dtype('<U') and never
-            // masquerades as a 1-byte type (NPTypeCode.String.SizeOf() still reports 1 for the old char-based code paths).
-            Str = Legacy("StrDType", numpy, 19, NPTypeCode.String, typeof(string), "str", 'U', 'U', 0, 1, DTypeFlags.Legacy | DTypeFlags.Parametric, null);
+
+            // The two fixed-width string classes. Their singletons are NumPy's UNSIZED builtins `S0` (byte order '|') and
+            // `U0` (native order): what np.dtype('S') / np.dtype('U') / np.dtype(str) return, isbuiltin == 1. An allocation
+            // never uses an unsized descriptor — it becomes the class default (S1 / U1) or a discovered length.
+            Bytes = new StringDTypeMeta(isUnicode: false);
+            Str = new StringDTypeMeta(isUnicode: true);
+            Add(Bytes);
+            Add(Str);
+            Bytes.Singleton = new DType(Bytes, DType.NotApplicableByteOrder, null, 0, Bytes.TypeChar);
+            Str.Singleton = new DType(Str, DType.NativeByteOrder, null, 0, Str.TypeChar);
 
             DateTime64 = new DatetimeDTypeMeta(isTimedelta: false);
             TimeDelta64 = new DatetimeDTypeMeta(isTimedelta: true);
@@ -129,6 +146,7 @@ namespace NumSharp
 
             InitializeNumericCasts();
             InitializeDatetimeCasts();
+            InitializeStringCasts();
         }
 
         private static LegacyBuiltinDTypeMeta Legacy(string name, string module, int typeNum, NPTypeCode code, Type scalar, string scalarName,
@@ -154,7 +172,9 @@ namespace NumSharp
             _byName[meta.Name] = meta;
             foreach (var alias in meta.Aliases)
                 _byName[alias] = meta;
-            if (meta.HasStorage)
+            // A storage lane maps back to ONE class. Two classes may share a lane (S and U share NPTypeCode.String), in
+            // which case only the lane's owner is indexed — the other is reached by name and through its descriptors.
+            if (meta.HasStorage && meta.OwnsTypeCode)
             {
                 int code = (int)meta.TypeCode;
                 if (code < 0 || code >= _byCode.Length)
@@ -163,7 +183,8 @@ namespace NumSharp
                     throw new InvalidOperationException($"NPTypeCode {meta.TypeCode} is already registered ({_byCode[code]}).");
                 _byCode[code] = meta;
             }
-            if (meta.ScalarType != null && !_byScalarType.ContainsKey(meta.ScalarType))
+            // Likewise a C# type maps back to one class; BytesDType opts out so byte[] keeps meaning "a uint8 array".
+            if (meta.ScalarType != null && meta.OwnsScalarType && !_byScalarType.ContainsKey(meta.ScalarType))
                 _byScalarType[meta.ScalarType] = meta;
             _all.Add(meta);
         }
@@ -218,6 +239,52 @@ namespace NumSharp
                 num.AddCastingImpl(new LegacyWrappingCastingImpl(num, TimeDelta64, toTimedeltaCasting));
                 TimeDelta64.AddCastingImpl(new LegacyWrappingCastingImpl(TimeDelta64, num, NPY_CASTING.NPY_UNSAFE_CASTING));
             }
+        }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_InitializeStringCasts</c> plus the string half of <c>PyArray_InitializeDatetimeCasts</c>:
+        ///     <list type="bullet">
+        ///       <item><description>every numeric storage class → <c>S</c>/<c>U</c>: <see cref="ToStringCastingImpl"/>
+        ///       (<c>same_kind</c>, <c>safe</c> when the destination is long enough);</description></item>
+        ///       <item><description><c>S</c>/<c>U</c> → every numeric storage class: <c>unsafe</c> legacy casts;</description></item>
+        ///       <item><description><c>S → U</c>: <see cref="ToStringCastingImpl"/> (<c>same_kind</c>); <c>U → S</c>: the same
+        ///       resolver with an <c>unsafe</c> class level;</description></item>
+        ///       <item><description><c>S → S</c>, <c>U → U</c>: <see cref="StringToStringCastingImpl"/>;</description></item>
+        ///       <item><description><c>datetime64</c>/<c>timedelta64</c> → <c>S</c>/<c>U</c>: <see cref="TimeToStringCastingImpl"/>;
+        ///       <c>S</c>/<c>U</c> → <c>datetime64</c>: <see cref="StringToDatetimeCastingImpl"/>; <c>S</c>/<c>U</c> →
+        ///       <c>timedelta64</c>: an <c>unsafe</c> legacy cast.</description></item>
+        ///     </list>
+        ///     NumPy's registration loop runs over the legacy type numbers and skips the datetime, void and object classes;
+        ///     NumSharp's Decimal and Char join it as the numeric storage classes they are.
+        /// </summary>
+        private static void InitializeStringCasts()
+        {
+            var numeric = new[] { Bool, Int8, UInt8, Int16, UInt16, Int32, UInt32, Int64, UInt64, Half, Single, Double, Complex128, Decimal, Char };
+            foreach (var str in new[] { Bytes, Str })
+            {
+                foreach (var num in numeric)
+                {
+                    /* Casting from string, is always a simple legacy-style cast */
+                    str.AddCastingImpl(new LegacyWrappingCastingImpl(str, num, NPY_CASTING.NPY_UNSAFE_CASTING));
+                    /* Casting to strings ... requires a custom resolver to define the correct string length. */
+                    num.AddCastingImpl(new ToStringCastingImpl(num, str));
+                }
+
+                /* string<->string and unicode<->unicode have their own specialized casts */
+                str.AddCastingImpl(new StringToStringCastingImpl(str));
+
+                /* Cast times to string and unicode */
+                DateTime64.AddCastingImpl(new TimeToStringCastingImpl(DateTime64, str));
+                TimeDelta64.AddCastingImpl(new TimeToStringCastingImpl(TimeDelta64, str));
+                /* Cast strings to timedelta are currently only legacy casts */
+                str.AddCastingImpl(new LegacyWrappingCastingImpl(str, TimeDelta64, NPY_CASTING.NPY_UNSAFE_CASTING));
+                /* Cast strings to datetime */
+                str.AddCastingImpl(new StringToDatetimeCastingImpl(str, DateTime64));
+            }
+
+            /* S -> U is same-kind (safe when long enough); U -> S is unsafe (a code point above 127 cannot be stored). */
+            Bytes.AddCastingImpl(new ToStringCastingImpl(Bytes, Str));
+            Str.AddCastingImpl(new ToStringCastingImpl(Str, Bytes));
         }
 
         // ---- lookups ----

@@ -42,19 +42,28 @@ namespace NumSharp.Backends
         /// </remarks>
         public override NDArray SignBit(NDArray a, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            // NumPy validation order (probed 2.4.2): where parse → loop resolution
-            // (complex-input / bad-dtype) → out cast → shape.
+            // NumPy validation order (probed 2.4.2): the dtype= class check, the out= / where= parse (a read-only out,
+            // then a non-bool mask), loop resolution (complex-input / bad-dtype) → out cast → shape. The class check and,
+            // for text, the parse and a string request's refusal run in the context-aware loop-code call.
+            NPTypeCode? loop = UfuncLoopCode(dtype, "signbit", a, null, @out, where);
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
             ValidateWhereMask(where);
 
-            // signbit has no complex loop: NumPy raises the generic "not supported for the
-            // input types" TypeError (its signbit ufunc simply has no c16 loop).
+            // signbit has no complex loop. A bare call reaches NumPy's legacy resolver ("not supported for the input
+            // types"); any dtype= request (bool included) is a signature, which the type-tuple resolver cannot match for
+            // a complex input (probed: signbit(c16, dtype='?') is the no-loop text).
             if (a.typecode == NPTypeCode.Complex)
-                throw new TypeError(
-                    "ufunc 'signbit' not supported for the input types, and the inputs " +
-                    "could not be safely coerced to any supported types according to the casting rule ''safe''");
+                throw dtype is null
+                    ? new TypeError(
+                        "ufunc 'signbit' not supported for the input types, and the inputs " +
+                        "could not be safely coerced to any supported types according to the casting rule ''safe''")
+                    : Strings.NDStringUfuncs.NoLoopForSignature("signbit");
 
             // dtype= is validate-only: bool loops only (dtype=bool no-op, else no-loop TypeError).
-            ValidateBoolLoopDtype(dtype?.GetTypeCode(), "signbit");
+            ValidateBoolLoopDtype(loop, "signbit");
+            // signbit has no string loop; under dtype=bool the input cast to the bool loop is what fails (probed).
+            Strings.NDStringUfuncs.ThrowIfUnary("signbit", a, loop);
 
             // Plain call: keep the typed NDArray<bool> instance (TensorEngine contract) via the cheap
             // AsGeneric wrap (NOT MakeGeneric — the engine result is a fresh array we own), exactly

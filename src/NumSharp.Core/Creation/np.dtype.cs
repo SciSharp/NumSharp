@@ -83,7 +83,8 @@ namespace NumSharp
         ///     single-character codes and NumSharp's own aliases. Built to match <c>numpy.dtype(str)</c> exactly, with
         ///     NumSharp-specific adaptations:
         ///     <list type="bullet">
-        ///       <item>NumPy types NumSharp doesn't implement (S/U/V/O/a) throw NotSupportedException.</item>
+        ///       <item>NumPy types NumSharp doesn't implement (V/O, structured) throw NotSupportedException; the fixed-width
+        ///             string names (<c>str</c>, <c>str_</c>, <c>unicode</c>) resolve to <c>U</c>, <c>bytes</c>/<c>bytes_</c>/<c>a</c> to <c>S</c>.</item>
         ///       <item>complex64 ('F'/'c8'/'complex64') throws NotSupportedException — NumSharp only has complex128.</item>
         ///       <item>'l'/'L'/'long'/'ulong' are platform-detected to match NumPy's C-long convention:
         ///             32-bit on Windows (MSVC), 64-bit on 64-bit Linux/Mac (gcc LP64).</item>
@@ -197,6 +198,13 @@ namespace NumSharp
             Add("char",    typeof(char));
             Add("decimal", typeof(decimal));
             Add("Decimal", typeof(decimal));
+
+            // ---- fixed-width Unicode (StrDType): NumPy's typeDict names resolve to the UNSIZED builtin U0 ----
+            // ("bytes"/"bytes_" and the bare "a" resolve in dtype(string) itself: BytesDType has no C# Type of its own.)
+            Add("str",     typeof(string));
+            Add("str_",    typeof(string));
+            Add("unicode", typeof(string));
+            // NumSharp-only spellings (NumPy 2.x rejects 'string'; kept as the long-standing C# aliases).
             Add("string",  typeof(string));
             Add("String",  typeof(string));
 
@@ -209,9 +217,9 @@ namespace NumSharp
         // Users should explicitly use 'complex128' / 'D' / 'c16' / 'complex'.
         private static readonly FrozenSet<string> _unsupported_numpy_codes = new HashSet<string>(StringComparer.Ordinal)
         {
-            "S", "U", "V", "O", "a", "c", // c = S1 (1-byte string), NOT complex
+            "V", "O",                     // void (structured) and object
             "F", "c8", "complex64",       // complex64 — NumSharp has no 32-bit complex
-            "object", "object_", "bytes_", "str_", "str", "void", "unicode", "bytes",
+            "object", "object_", "void",
         }.ToFrozenSet();
 
         // NumPy 2.0 removed these bit-suffixed aliases; the message is NumPy's verbatim.
@@ -239,7 +247,7 @@ namespace NumSharp
         /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
         /// <exception cref="NotSupportedException">
-        ///     A valid NumPy dtype NumSharp does not implement — bytes/str (S, U, a, c), void, object, complex64,
+        ///     A valid NumPy dtype NumSharp does not implement — void, object, complex64,
         ///     structured / sub-array / comma-string dtypes — or an invalid string, reported with NumPy's own
         ///     <c>data type 'X' not understood</c> / <c>Alias 'bool8' was removed in NumPy 2.0. …</c> texts.
         /// </exception>
@@ -298,6 +306,9 @@ namespace NumSharp
                 return ParseDatetimeTypestr(type).WithByteOrder(endian);
 
             Type resolved = null;
+            // A descriptor the grammar builds directly — the string classes, whose length is a descriptor parameter that
+            // no C# Type can carry (and BytesDType has no Type of its own at all).
+            DType flexible = null;
             /* A typecode like 'd' */
             if (type.Length == 1)
             {
@@ -307,8 +318,23 @@ namespace NumSharp
                     return DTypeRegistry.DateTime64.DefaultDescr().WithByteOrder(endian);
                 if (type[0] == 'm')
                     return DTypeRegistry.TimeDelta64.DefaultDescr().WithByteOrder(endian);
-                if (!_dtype_string_map.TryGetValue(type, out resolved))
-                    resolved = null;
+                switch (type[0])
+                {
+                    case 'S':
+                        flexible = DTypeRegistry.Bytes.Singleton; // the unsized builtin S0 (isbuiltin == 1)
+                        break;
+                    case 'U':
+                        flexible = DTypeRegistry.Str.Singleton;   // the unsized builtin U0 (isbuiltin == 1)
+                        break;
+                    case 'c':
+                        // NPY_CHARLTR: PyArray_DescrFromType(NPY_CHAR) is a FRESH S1 whose type character stays 'c'.
+                        flexible = new DType(DTypeRegistry.Bytes, DType.NotApplicableByteOrder, null, 1, (char)NPY_TYPECHAR.NPY_CHARLTR);
+                        break;
+                    default:
+                        if (!_dtype_string_map.TryGetValue(type, out resolved))
+                            resolved = null;
+                        break;
+                }
             }
             /* Possibly a kind + size like 'f8' but also could be 'bool' */
             else if (TryParseSizeSuffix(type, out int elsize))
@@ -317,8 +343,22 @@ namespace NumSharp
                 switch (kind)
                 {
                     case 'S':
-                    case 'a':
+                    case 'a': // NPY_DEPRECATED_STRINGLTR2: still S (NumPy also emits a DeprecationWarning, which NumSharp has no channel for)
+                        // An explicit 0 keeps NumPy's builtin unsized singleton ("S0" is dtype('S'), isbuiltin 1).
+                        flexible = elsize == 0 ? DTypeRegistry.Bytes.Singleton : DTypeRegistry.Bytes.Descr(elsize);
+                        break;
                     case 'U':
+                        /*
+                         * When specifying length of UNICODE
+                         * the number of characters is given to match
+                         * the STRING interface.  Each character can be
+                         * more than one byte and itemsize must be
+                         * the number of bytes.
+                         */
+                        if (elsize > DTypeRegistry.Str.MaxChars)
+                            throw NotUnderstood(dtype);
+                        flexible = elsize == 0 ? DTypeRegistry.Str.Singleton : DTypeRegistry.Str.Descr(elsize);
+                        break;
                     case 'V':
                         throw new NotSupportedException($"NumPy dtype '{type}' is not supported by NumSharp");
                     default:
@@ -332,12 +372,25 @@ namespace NumSharp
                 }
             }
 
-            if (resolved == null)
+            if (resolved == null && flexible == null)
             {
                 /* Now check to see if the object is registered in typeDict */
                 if (_unsupported_numpy_codes.Contains(type))
                     throw new NotSupportedException($"NumPy dtype '{type}' is not supported by NumSharp");
-                if (!_dtype_string_map.TryGetValue(type, out resolved))
+                // NumPy looks the WHOLE original string up in typeDict, so the deprecated bare alias 'a' resolves only
+                // unprefixed: np.dtype('a') is dtype('S') while np.dtype('|a') is "not understood" (and 'a5'/'|a5' parse
+                // above as kind+size).
+                if (type == "a")
+                {
+                    if (dtype != "a")
+                        throw NotUnderstood(dtype);
+                    flexible = DTypeRegistry.Bytes.Singleton;
+                }
+                else if (type == "bytes" || type == "bytes_")
+                {
+                    flexible = DTypeRegistry.Bytes.Singleton; // np.bytes_ — the class has no C# Type to resolve through
+                }
+                else if (!_dtype_string_map.TryGetValue(type, out resolved))
                 {
                     if (_removed_numpy_aliases.Contains(type))
                         throw new NotSupportedException($"Alias '{type}' was removed in NumPy 2.0. Use a name without a digit at the end.");
@@ -345,7 +398,9 @@ namespace NumSharp
                 }
             }
 
-            var descr = DType.From(resolved);
+            var descr = flexible ?? DType.From(resolved);
+            // NumPy only replaces the byte order when it is explicit, not the host's own, and applicable at all: an 'S'
+            // descriptor (byte order '|') ignores '<'/'>' ('>S5' is dtype('S5')), a 'U' descriptor keeps '>' ('>U5').
             if (endian != DType.NativeByteOrder && endian != DType.HostByteOrder && descr.byteorder != DType.NotApplicableByteOrder)
                 return descr.WithByteOrder(endian);
             return descr;
@@ -618,9 +673,9 @@ namespace NumSharp
         NPY_CLONGDOUBLE = 16,
         /// <summary>Python object array — <b>unsupported in NumSharp</b>.</summary>
         NPY_OBJECT = 17,
-        /// <summary>Fixed-width byte string (<c>|S</c>) — <b>unsupported in NumSharp</b> (Stage D).</summary>
+        /// <summary>Fixed-width byte string (<c>|S</c>, <c>np.bytes_</c>) — <see cref="DTypeRegistry.Bytes"/>, stored in the <see cref="NPTypeCode.String"/> lane.</summary>
         NPY_STRING = 18,
-        /// <summary>Fixed-width Unicode (<c>&lt;U</c>) — the vestigial <see cref="NPTypeCode.String"/> slot; no storage (Stage D).</summary>
+        /// <summary>Fixed-width Unicode (<c>&lt;U</c>, <c>np.str_</c>) — <see cref="DTypeRegistry.Str"/>, the canonical class of the <see cref="NPTypeCode.String"/> lane.</summary>
         NPY_UNICODE = 19,
         /// <summary>Structured / void (<c>V</c>) — <b>unsupported in NumSharp</b>.</summary>
         NPY_VOID = 20,

@@ -56,6 +56,8 @@ namespace NumSharp
         [NDScoped]
         private static NDArray[] IntersectCore(NDArray ar1, NDArray ar2, bool assume_unique, bool return_indices)
         {
+            // NumPy computes intersect1d on text (unique + sort): the next phase of the string support.
+            if (Backends.Strings.NDStringUfuncs.IsString(ar1) || Backends.Strings.NDStringUfuncs.IsString(ar2)) throw Backends.Strings.NDStringUfuncs.NextPhase("intersect1d", Backends.Strings.NDStringUfuncs.IsString(ar1) ? ar1 : ar2);
             // Boundary scope: the unique/ravel/concatenate/argsort/take temps and the adjacency
             // mask are reclaimed at exit; the returned tuple's arrays are yielded.
 

@@ -173,6 +173,12 @@ namespace NumSharp
             // yielded individually (a dropped scl on the returned:false paths is reclaimed).
             using var scope = NDScope.Open();
 
+            // Text: NumPy's average normalizes the axis tuple first (normalize_axis_tuple with argname "axis": "axis: axis 9
+            // is out of bounds ...", "repeated axis in `axis` argument"), then a.mean (add.reduce) refuses text — or, with
+            // weights, sums them with result_type(a, weights), a SIZED string descriptor ufuncs refuse by class.
+            if (Backends.Strings.NDStringUfuncs.IsString(a))
+                throw Backends.Strings.NDStringUfuncs.AverageAnswer(a, axis, weights);
+
             int ndim = a.ndim;
             int[] normalizedAxis = NormalizeAxisTuple(axis, ndim);
 

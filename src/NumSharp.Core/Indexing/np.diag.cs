@@ -111,7 +111,7 @@ namespace NumSharp
                 throw new ArgumentException(
                     $"array is too big; `arr.size * arr.itemsize` is larger than the maximum possible size (n={n}).");
 
-            var res = np.zeros(Shape.Matrix((int)n, (int)n), v1d.typecode);
+            var res = np.zeros(Shape.Matrix((int)n, (int)n), v1d.dtype); // descriptor: a string's zero is '' at v's width
             if (s == 0)
                 return res;
 

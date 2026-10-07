@@ -14,7 +14,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Conjugate(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "conjugate", nd, null, @out, where);
             // Conjugate has a loop at EVERY dtype (unlike negative, which rejects bool), so there is
             // no dtype rejection here. dtype= (when given) selects the loop and preserves that dtype.
             return ExecuteUnaryOp(nd, UnaryOp.Conjugate, typeCode, @out, where);

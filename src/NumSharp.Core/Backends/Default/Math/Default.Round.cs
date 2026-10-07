@@ -31,8 +31,10 @@ namespace NumSharp.Backends
         /// selects no rint loop.</exception>
         public override NDArray Round(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "rint", nd, null, @out, where);
             ValidateWhereMask(where);
+            // round with decimals == 0 is the rint ufunc, which has no string loop.
+            Strings.NDStringUfuncs.ThrowIfUnary("rint", nd, typeCode);
 
             var inputType = nd.GetTypeCode;
             if (typeCode.HasValue)
@@ -90,7 +92,13 @@ namespace NumSharp.Backends
         /// a <c>same_kind</c> cast (via <see cref="ValidateOutCast"/>).</exception>
         public override NDArray Round(NDArray nd, int decimals, DType dtype = null, NDArray @out = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "rint", nd, null, @out);
+            // NumPy's round: decimals == 0 is rint; a positive count first multiplies by 10**decimals (a float64 scalar,
+            // so multiply(<U3, float64) has no loop); a negative count divides by 10**-decimals (divide refuses text).
+            if (Strings.NDStringUfuncs.IsString(nd))
+                throw decimals == 0 ? Strings.NDStringUfuncs.UnaryError("rint", nd, typeCode)
+                    : decimals > 0 ? Strings.NDStringUfuncs.NoLoop("multiply", nd.dtype, np.float64)
+                    : Strings.NDStringUfuncs.NotSupportedForInputTypes("divide");
 
             // decimals==0 is the rint ufunc (round-half-to-even), a wholly separate dtype contract handled above.
             if (decimals == 0)

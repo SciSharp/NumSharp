@@ -209,8 +209,14 @@ namespace NumSharp.Tests.DTypes
             DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.DateTime64DType).Casting.Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
             DTypeCasting.GetCastingImpl(np.dtypes.DateTime64DType, np.dtypes.DateTime64DType).Should().BeOfType<TimeToTimeCastingImpl>();
             DTypeCasting.GetCastingImpl(np.dtypes.TimeDelta64DType, np.dtypes.DateTime64DType).Should().BeOfType<DatetimeTimedeltaCastingImpl>();
-            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, DTypeRegistry.Str).Should().BeNull("no cast is registered for the vestigial string slot");
-            np.can_cast(np.dtype("i4"), np.dtype("String")).Should().BeFalse("an unregistered cast is simply impossible");
+            // NumPy registers a legacy cast from every numeric class to text; int32's longest text is 11 characters, so the
+            // cast is 'safe' into a <U11 or wider and into the unsized class (probed 2.4.2), 'same_kind' into anything shorter.
+            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, DTypeRegistry.Str).Name.Should().Be("legacy_cast_to_string");
+            np.can_cast(np.dtype("i4"), np.dtype("U")).Should().BeTrue();
+            np.can_cast(np.dtype("i4"), np.dtype("U11")).Should().BeTrue();
+            np.can_cast(np.dtype("i4"), np.dtype("U10")).Should().BeFalse("int32 needs 11 characters");
+            np.can_cast(np.dtype("U3"), np.dtype("S3")).Should().BeFalse("str to bytes is never safe (the text may not be ASCII)");
+            np.can_cast(np.dtype("S3"), np.dtype("U3")).Should().BeTrue();
             var impl = DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Int64DType);
             impl.Name.Should().Be("numeric_cast");
             impl.NIn.Should().Be(1);
@@ -238,7 +244,10 @@ namespace NumSharp.Tests.DTypes
             DTypeCasting.GetCastInfo(np.dtype("M8"), np.dtype("M8[s]"), null, out view).Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
             DTypeCasting.GetCastInfo(np.dtype("M8[s]"), np.dtype("M8"), null, out view).Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
             DTypeCasting.GetCastInfo(np.dtype("i4"), null, np.dtypes.TimeDelta64DType, out view).Should().Be(NPY_CASTING.NPY_SAFE_CASTING, "a null 'to' asks about the class");
-            DTypeCasting.GetCastInfo(np.dtype("i4"), np.dtype("String"), null, out view).Should().BeNull();
+            // An unsized target descriptor holds no characters, so the resolved cast is not 'safe' (NumPy's
+            // cast_to_string_resolve_descriptors compares the given width); can_cast instead asks about the class.
+            DTypeCasting.GetCastInfo(np.dtype("i4"), np.dtype("U"), null, out view).Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
+            DTypeCasting.GetCastInfo(np.dtype("i4"), np.dtype("U11"), null, out view).Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
             DTypeCasting.EquivTypes(DType.Int32, new DType(typeof(int))).Should().BeTrue();
             DTypeCasting.EquivTypes(DType.Int32, np.dtype(">i4")).Should().BeFalse();
             DTypeCasting.EquivTypes(np.dtype("M8[1000ms]"), np.dtype("M8[s]")).Should().BeTrue();

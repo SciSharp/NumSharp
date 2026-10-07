@@ -353,8 +353,15 @@ namespace NumSharp
                 // inherit a strided view's strides/offset and mis-place the assigned slices).
                 long[] outDims = new long[N];
                 for (int d = 0; d < N; d++) outDims[d] = work.Shape.dimensions[d];
-                NDArray outp = np.empty(Shape.Adopt(outDims), otype);
                 bool uniform = ax_dx is double;
+                // Text has no arithmetic loop: NumPy's first statement on it is the interior difference f[2:] - f[:-2]
+                // (subtract of two string operands) or, for a non-uniform spacing, a * f[:-2] (float64 coefficients times
+                // text). The checks above (spacing, shape) still come first, as in NumPy.
+                if (Backends.Strings.NDStringUfuncs.IsString(work))
+                    throw uniform
+                        ? Backends.Strings.NDStringUfuncs.NoLoop("subtract", work.dtype, work.dtype)
+                        : Backends.Strings.NDStringUfuncs.NoLoop("multiply", np.float64, work.dtype);
+                NDArray outp = np.empty(Shape.Adopt(outDims), otype);
 
                 // ---- interior: 2nd-order central differences over [1 : M-1] ----
                 //   uniform     : out[1:-1] = (f[2:] - f[:-2]) / (2*dx)

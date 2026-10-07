@@ -39,9 +39,10 @@ namespace NumSharp
             if (NDMatrixBoundary.Sees(prototype))
                 return NDMatrixBoundary.Wrapped((prototype, dtype, shape, order, device), static s => empty_like(s.prototype, s.dtype, s.shape, s.order, s.device));
             ValidateDevice(device);
-            char physical = OrderResolver.Resolve(order, prototype.Shape);
             var dims = shape.IsEmpty ? (long[])prototype.Shape.dimensions.Clone() : (long[])shape;
-            var resolvedShape = Shape.Adopt(dims, physical);
+            // PyArray_NewLikeArrayWithShape's layout: order='K' keeps the prototype's axis permutation (C when shape=
+            // changes the rank), not merely C-or-F.
+            var resolvedShape = Shape.NewLikeLayout(prototype.Shape, order, dims);
             return new NDArray(dtype ?? prototype.dtype, resolvedShape, false);
         }
     }

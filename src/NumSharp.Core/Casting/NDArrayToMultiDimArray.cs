@@ -276,6 +276,11 @@ namespace NumSharp
         private unsafe T[] ToArrayConverted<T>() where T : unmanaged
         {
             var storage = Storage;
+            // A fixed-width string array has no numeric elements to convert: reading text as numbers parses it, which is
+            // the next phase of the string support (NumPy's astype from text). The cast kernels below have no text lane.
+            // (A T with no NumSharp dtype keeps the general frame's own "not a NumSharp dtype" refusal.)
+            if (storage.TypeCode == NPTypeCode.String && InfoOf<T>.NPTypeCode != NPTypeCode.Empty)
+                throw Backends.Strings.NDStringCasting.TextConversion(dtype, DType.From(InfoOf<T>.NPTypeCode));
             ref readonly Shape shape = ref storage.ShapeReference;
             long count = shape.size;
             NPTypeCode source = storage.TypeCode;
@@ -2408,6 +2413,9 @@ namespace NumSharp
             // astype semantics need a NumSharp dtype to cast into; Guid, nint, DateTime… have none.
             if (target == NPTypeCode.Empty)
                 throw new NotSupportedException($"Unable to convert to {typeof(T).Name}[]: {typeof(T).Name} is not a NumSharp dtype.");
+            // Text has no unmanaged element type: converting it to numbers parses it (the next phase of the string support).
+            if (typecode == NPTypeCode.String)
+                throw Backends.Strings.NDStringCasting.TextConversion(dtype, DType.From(target));
 
             var storage = Storage;
             ref readonly Shape shape = ref storage.ShapeReference;

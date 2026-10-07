@@ -20,7 +20,10 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, axis, @out, keepdims), static s => ptp(s.a, s.axis, s.@out, s.keepdims), @out);
+            // Text: NumPy's maximum.reduce validates the axis (a 0-d input accepts 0 and -1), then refuses text with its
+            // verbatim text; see NDStringUfuncs.ReduceError.
             if (a is null) throw new ArgumentNullException(nameof(a));
+            Backends.Strings.NDStringUfuncs.ThrowIfReduce("ptp", a, axis);
 
             var maxRes = np.amax(a, axis, keepdims);
             var minRes = np.amin(a, axis, keepdims);
@@ -36,7 +39,10 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, axis, @out, keepdims), static s => ptp(s.a, s.axis, s.@out, s.keepdims), @out);
+            // Text: NumPy's maximum.reduce checks the tuple (every axis, then "duplicate value in 'axis'"), then refuses
+            // text with its verbatim text; see NDStringUfuncs.ReduceError.
             if (a is null) throw new ArgumentNullException(nameof(a));
+            Backends.Strings.NDStringUfuncs.ThrowIfReduce("ptp", a, axis);
             if (axis is null) return ptp(a, (int?)null, @out, keepdims);
             if (axis.Length == 1) return ptp(a, (int?)axis[0], @out, keepdims);
 

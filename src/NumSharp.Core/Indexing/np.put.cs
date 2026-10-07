@@ -133,17 +133,19 @@ namespace NumSharp
             var idx64 = CastIndicesToInt64(indices, "safe", out _, out bool idx32);
 
             NDArray valsCast;
-            if (values.GetTypeCode == a.GetTypeCode && values.Shape.IsContiguous)
+            // Same element type (for strings: same class AND width) reads the values as they are; anything else is
+            // converted to a's dtype first (NumPy's FORCECAST: a string is truncated / NUL-padded, S <-> U checked).
+            if (values.HasSameElementType(a) && values.Shape.IsContiguous)
             {
                 valsCast = values;
             }
-            else if (values.GetTypeCode == a.GetTypeCode)
+            else if (values.HasSameElementType(a))
             {
                 valsCast = np.ascontiguousarray(values);
             }
             else
             {
-                valsCast = values.astype(a.GetTypeCode);
+                valsCast = values.astype(a.dtype);
             }
 
             int copyKind = DirectILKernelGenerator.CopyKindFor(a.dtypesize);

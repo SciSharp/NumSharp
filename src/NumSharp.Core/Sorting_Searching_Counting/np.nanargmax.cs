@@ -147,14 +147,31 @@ namespace NumSharp
         ///     Doing it here (rather than trusting the delegates) keeps the integer passthrough path from
         ///     inheriting the engine's silent negative-axis wrap-around.
         /// </summary>
+        /// <param name="a">The input (its dtype decides which NumPy statement reports a bad axis).</param>
+        /// <param name="axis">The axis, or null for the flattened array (always legal).</param>
+        /// <exception cref="AxisError">The axis is out of bounds: the message names the input's own rank for an inexact
+        ///     dtype and the ravelled rank (at least 1) otherwise, as NumPy's raising statement does.</exception>
         private static void ValidateNanArgAxis(NDArray a, int? axis)
         {
             if (axis is not int ax)
                 return;
+            // NumPy's argmax ravels a 0-d input first, so the bound is 1. The dimension the message names depends on who
+            // raises: for an inexact input NumPy's all-NaN guard runs np.all(mask, axis) on the array as it is, so a 0-d
+            // float reports dimension 0; any other input (integers, bool, text) reaches argmax directly, which reports the
+            // ravelled dimension 1 (probed: nanargmax(np.array(5.0), axis=1) vs nanargmax(np.array(5), axis=1)).
             int bound = Math.Max(a.ndim, 1);
             if (ax < -bound || ax >= bound)
-                throw new AxisError(ax, a.ndim);
+                throw new AxisError(ax, IsNanArgInexact(a.typecode) ? a.ndim : bound);
         }
+
+        /// <summary>
+        ///     Whether NumPy's <c>_replace_nan</c> builds a NaN mask for this dtype (the inexact family: float16, float32,
+        ///     float64, complex128), so that its all-NaN guard — not argmax — sees the axis first.
+        /// </summary>
+        /// <param name="code">The input's dtype.</param>
+        /// <returns>True for the inexact dtypes.</returns>
+        private static bool IsNanArgInexact(NPTypeCode code)
+            => code is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex;
 
         /// <summary>
         ///     Port of NumPy's <c>_replace_nan</c> + the all-NaN slice guard from

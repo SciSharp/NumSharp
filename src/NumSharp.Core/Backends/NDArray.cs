@@ -860,6 +860,11 @@ namespace NumSharp
         {
             if (dtype is null)
                 throw new ArgumentNullException(nameof(dtype));
+            // A fixed-width string carries its width on the DESCRIPTOR (<U5), which the type-code cast below cannot
+            // express: a string array or a string target takes NumPy's array_astype over descriptors (adapt an unsized
+            // 'U' / 'S' to the array, the copy=False view shortcut, the casting rule, then the string copy route).
+            if (typecode == NPTypeCode.String || dtype.Meta is StringDTypeMeta)
+                return Backends.Strings.NDStringCasting.AsType(this, dtype, copy, order, casting);
             var typeCode = dtype.GetTypeCode(); // a descriptor-only class raises its own descriptive "no storage yet"
             ValidateAstypeCasting(typeCode, casting);
             var casted = TensorEngine.Cast(this, dtype.type, copy);
@@ -939,7 +944,8 @@ namespace NumSharp
         /// <remarks>
         /// NumPy-compatible iteration behavior:
         /// - 0-D arrays (scalars): throws TypeError
-        /// - 1-D arrays: yields scalar elements
+        /// - 1-D arrays: yields scalar elements (a fixed-width string array yields <see cref="string"/> for <c>U</c> and
+        ///   <c>byte[]</c> for <c>S</c>, trailing NULs stripped — NumPy's <c>np.str_</c> / <c>np.bytes_</c> scalars)
         /// - N-D arrays (N > 1): yields (N-1)-D NDArray slices along first axis
         /// </remarks>
         public IEnumerator GetEnumerator()
@@ -978,6 +984,8 @@ namespace NumSharp
                 case NPTypeCode.Single: return _iter1D<float>().GetEnumerator();
                 case NPTypeCode.Decimal: return _iter1D<decimal>().GetEnumerator();
                 case NPTypeCode.Complex: return _iter1D<System.Numerics.Complex>().GetEnumerator();
+                // Text: each element decoded on demand in logical order (a string element has no unmanaged T to copy out).
+                case NPTypeCode.String: return _iterStrings().GetEnumerator();
                 default:
                     throw new NotSupportedException();
             }
@@ -985,6 +993,15 @@ namespace NumSharp
             IEnumerable _empty()
             {
                 yield break;
+            }
+
+            // A fixed-width string vector: Storage.GetAtIndex reads element i through the shape's strides and decodes it
+            // (string for U, byte[] for S), so strided / reversed / broadcast vectors iterate in logical order too.
+            IEnumerable _iterStrings()
+            {
+                long n = this.size;
+                for (long i = 0; i < n; i++)
+                    yield return Storage.GetAtIndex(i);
             }
 
             IEnumerable _iterSlices()
@@ -1013,11 +1030,25 @@ namespace NumSharp
         ///     Data-type descriptor of the returned view, e.g., float32 or int16. The default, None, results in the view having the same data-type as a.
         ///     This argument can also be specified as an ndarray sub-class, which then specifies the type of the returned object (this is equivalent to setting the type parameter).
         /// </param>
-        /// <returns></returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.view.html</remarks>
+        /// <returns>A view sharing this array's memory, its bytes read as <paramref name="dtype"/>.</returns>
+        /// <exception cref="ValueError">NumPy's itemsize errors: a 0-d array changing size, a non-contiguous last axis, a
+        ///     smaller dtype that does not divide the old itemsize (an unsized <c>'U'</c>/<c>'S'</c> never does), a larger one
+        ///     that does not divide the last axis' byte length.</exception>
+        /// <exception cref="NotSupportedException">A fixed-width string view in a non-native byte order, or a dtype without
+        ///     storage (<c>datetime64</c> before Stage C).</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.ndarray.view.html
+        ///     <para>A fixed-width string carries its width on the DESCRIPTOR, so a view from or to a string dtype reinterprets
+        ///     by descriptor (<see cref="UnmanagedStorage.AliasAsDescr"/>): <c>U3 → U1</c>, <c>U1 → uint32</c>,
+        ///     <c>uint8 → S2</c>.</para>
+        /// </remarks>
         public NDArray view(DType dtype = null)
         {
-            if (dtype is null || dtype.GetTypeCode() == Storage.TypeCode)
+            if (dtype is null)
+                return new NDArray(Storage.Alias()) { TensorEngine = TensorEngine };
+            if (typecode == NPTypeCode.String || dtype.Meta is StringDTypeMeta)
+                return new NDArray(Storage.AliasAsDescr(dtype)) { TensorEngine = TensorEngine };
+            if (dtype.GetTypeCode() == Storage.TypeCode)
             {
                 return new NDArray(Storage.Alias()) { TensorEngine = TensorEngine };
             }
@@ -1034,9 +1065,11 @@ namespace NumSharp
         /// </param>
         /// <typeparam name="T">The element type the bytes are read as (the view's dtype).</typeparam>
         /// <returns>The typed view (shares memory with this array; keeps its buffer alive while it lives).</returns>
-        /// <exception cref="ArgumentException">A 0-d array whose itemsize changes, or a larger dtype that does not divide the
-        ///     last axis' byte length.</exception>
-        /// <exception cref="InvalidOperationException">A dtype of a different size over a non-contiguous last axis.</exception>
+        /// <exception cref="ValueError">NumPy's itemsize errors: a 0-d array whose itemsize changes, a dtype of a different
+        ///     size over a non-contiguous last axis, a smaller dtype that does not divide the old itemsize, or a larger dtype
+        ///     that does not divide the last axis' byte length.</exception>
+        /// <exception cref="InvalidOperationException">A view whose byte offset or outer byte stride is not a whole number of
+        ///     new elements (NumSharp keeps strides in elements; NumPy, in bytes, allows it).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.ndarray.view.html
         ///     <para>
@@ -1046,7 +1079,10 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         public NDArray<T> view<T>() where T : unmanaged
-            => new NDArray<T>(Storage.AliasAs(InfoOf<T>.NPTypeCode)) { TensorEngine = TensorEngine };
+            => new NDArray<T>(typecode == NPTypeCode.String
+                // A string array's element width is its descriptor's, not a CLR type's: reinterpret by descriptor.
+                ? Storage.AliasAsDescr(InfoOf<T>.NPTypeCode)
+                : Storage.AliasAs(InfoOf<T>.NPTypeCode)) { TensorEngine = TensorEngine };
 
         #region Getters
 

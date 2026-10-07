@@ -75,6 +75,8 @@ namespace NumSharp
             RequireOrder(order);
             RequireCasting(casting);
             GufuncGuard.RejectAxisWithAxes(axes, axis);
+            // The dtype= class check and, for text, NumPy's loop refusal come before keepdims / axis semantics.
+            GufuncGuard.ThrowIfText("matmul", x1, x2, dtype, @out);
 
             if (keepdims.HasValue)
                 throw new TypeError(

@@ -219,7 +219,11 @@ namespace NumSharp
                 case NPTypeCode.Double: return 8;
                 case NPTypeCode.Single: return 4;
                 case NPTypeCode.Decimal: return 16;
-                case NPTypeCode.String: return 1; //because it is a char basically.
+                // A fixed-width string's element size is its DESCRIPTOR's (S5 = 5 bytes, U5 = 20): the lane has none.
+                // Any code that sizes a string array by its type code instead of `storage.DTypeSize` /
+                // `dtype.itemsize` is a path that has not been routed for strings — fail loudly, never read 1 byte.
+                case NPTypeCode.String:
+                    throw new NotSupportedException("NPTypeCode.String has no fixed element size: a fixed-width string array's item size is its descriptor's (dtype.itemsize).");
                 default:
                     throw new NotSupportedException();
             }

@@ -6,7 +6,7 @@ namespace NumSharp.Backends
     {
         public override NDArray FloorDivide(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "floor_divide", lhs, rhs, @out, where);
 
             // floor_divide has no complex loop, so ANY complex operand with no explicit dtype reaches
             // no loop: NumPy raises the generic ufunc TypeError (NOT the kernel's NotSupportedException)

@@ -67,6 +67,9 @@ namespace NumSharp
             // diagonal() validates ndim, axis values, and axis1!=axis2 and emits
             // a 1-D-extended view (the diagonal axis is the last dim of the result).
             var diag = np.diagonal(a, offset, axis1, axis2);
+            // NumPy's trace is the diagonal's add.reduce: the diagonal's own checks above come first, then the reduction
+            // refuses text, or a string dtype= request (a numeric input then reads as text of its REQUIRED_STR_LEN).
+            Backends.Strings.NDStringUfuncs.ThrowIfReduce("trace", a, (int?)null, dtype);
 
             // dtype rule: when not specified, the engine Sum's NEP50 promotion applies
             // (signed/bool -> int64, unsigned -> uint64, floats preserved) — the same

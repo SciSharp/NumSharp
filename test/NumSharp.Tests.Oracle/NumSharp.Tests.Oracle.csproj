@@ -62,6 +62,10 @@
     <None Update="Fuzz\corpus\**\*.jsonl">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- The NumPy string oracle (test/oracle/gen_strings_oracle.py), replayed by Strings/StringOracleTests.cs. -->
+    <None Update="Strings\corpus\*.jsonl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

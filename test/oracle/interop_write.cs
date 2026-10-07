@@ -27,7 +27,7 @@ void Npy(string name, NDArray arr, string expect)
     manifest.Add(new Dictionary<string, object>
     {
         ["file"] = name + ".npy", ["kind"] = "npy", ["expect"] = expect,
-        ["dtype"] = arr.typecode.ToString(), ["shape"] = arr.shape,
+        ["dtype"] = arr.typecode.ToString(), ["descr"] = arr.dtype.str, ["shape"] = arr.shape,
     });
 }
 
@@ -42,7 +42,7 @@ void Npz(string name, Dictionary<string, NDArray> arrays, bool compressed, strin
         ["file"] = name + ".npz", ["kind"] = "npz", ["expect"] = expect,
         ["entries"] = arrays.ToDictionary(kv => kv.Key, kv => (object)new Dictionary<string, object>
         {
-            ["dtype"] = kv.Value.typecode.ToString(), ["shape"] = kv.Value.shape,
+            ["dtype"] = kv.Value.typecode.ToString(), ["descr"] = kv.Value.dtype.str, ["shape"] = kv.Value.shape,
         }),
     });
 }
@@ -62,6 +62,12 @@ Npy("float32", np.array(new[] { 1.5f, float.NaN, float.NegativeInfinity }), "[1.
 Npy("float64", np.array(new[] { 1.5, -0.0, double.MaxValue }), "[1.5, -0.0, 1.7976931348623157e+308]");
 Npy("complex128", np.array(new[] { new Complex(1, 2), new Complex(-3, double.NaN) }), "[1+2j, -3+nanj]");
 Npy("char", np.array(new[] { 'a', 'Z', 'é' }), "['a', 'Z', 'é'] as <U1");
+
+// --- fixed-width strings (S / U): raw element bytes, NUL padding, non-BMP code points ---
+Npy("str_u", np.array(new[] { "ab", "", "dé", "😀x" }), "['ab', '', 'dé', '😀x'] as <U2");
+Npy("str_s", np.array(new[] { "ab", "c" }, dtype: "S3"), "[b'ab', b'c'] as |S3");
+Npy("str_u_fortran", np.array(new[,] { { "a", "bb" }, { "ccc", "d" } }).copy('F'), "F-order <U3");
+Npy("str_s_strided", np.array(new[] { "a", "b", "c", "d" }, dtype: "S1")["::2"], "strided |S1 -> C-order copy");
 
 // --- shapes ---
 Npy("scalar", np.array(42), "0-d, shape ()");
@@ -87,6 +93,8 @@ Npz("npz_multi", new()
     ["biases"] = np.array(new[] { 0.5, 1.5 }),
     ["flag"] = np.array(true),
     ["text"] = np.array(new[] { 'h', 'i' }),
+    ["words"] = np.array(new[] { "hello", "wörld" }),
+    ["blobs"] = np.array(new[] { "x", "yz" }, dtype: "S2"),
 }, false, "mixed dtypes");
 Npz("npz_compressed", new() { ["big"] = np.zeros(new Shape(50_000), NPTypeCode.Double) }, true, "deflated");
 Npz("npz_fortran", new() { ["f"] = np.arange(6).reshape(2, 3).copy('F') }, false, "F-order inside npz");

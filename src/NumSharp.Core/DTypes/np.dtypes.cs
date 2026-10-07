@@ -17,9 +17,10 @@ namespace NumSharp
         ///     <c>LongLongDType</c>/<c>ULongLongDType</c> for int64/uint64, and the platform-dependent <c>LongDType</c>/<c>ULongDType</c>
         ///     (C <c>long</c>: 32-bit on Windows and 32-bit hosts, 64-bit on LP64 Unix). <c>LongDoubleDType</c> and
         ///     <c>CLongDoubleDType</c> alias the 64-bit float / complex classes — NumSharp has no extended precision, exactly
-        ///     as NumPy's win-amd64 build. The classes NumPy has and NumSharp does not (<c>Complex64DType</c>, <c>StrDType</c>,
-        ///     <c>BytesDType</c>, <c>StringDType</c>, <c>ObjectDType</c>, <c>VoidDType</c>) are absent rather than stubbed;
-        ///     <c>DecimalDType</c> and <c>CharDType</c> are NumSharp-only.
+        ///     as NumPy's win-amd64 build. <c>StrDType</c> and <c>BytesDType</c> are the fixed-width string classes
+        ///     (<see cref="StringDTypeMeta"/>). The classes NumPy has and NumSharp does not (<c>Complex64DType</c>,
+        ///     <c>StringDType</c>, <c>ObjectDType</c>, <c>VoidDType</c>) are absent rather than stubbed; <c>DecimalDType</c> and
+        ///     <c>CharDType</c> are NumSharp-only.
         /// </remarks>
         [ModuleName("np.dtypes")]
         public static class dtypes
@@ -54,6 +55,16 @@ namespace NumSharp
             public static DatetimeDTypeMeta DateTime64DType => DTypeRegistry.DateTime64;
             /// <summary><c>numpy.dtypes.TimeDelta64DType</c> — parametric; descriptor-level in Stage A.</summary>
             public static DatetimeDTypeMeta TimeDelta64DType => DTypeRegistry.TimeDelta64;
+            /// <summary>
+            ///     <c>numpy.dtypes.StrDType</c> — fixed-width Unicode (<c>U</c>), parametric in the length:
+            ///     <c>StrDType.Instantiate(5)</c> is NumPy's <c>StrDType(5)</c> → <c>dtype('&lt;U5')</c>.
+            /// </summary>
+            public static StringDTypeMeta StrDType => DTypeRegistry.Str;
+            /// <summary>
+            ///     <c>numpy.dtypes.BytesDType</c> — fixed-width bytes (<c>S</c>), parametric in the length:
+            ///     <c>BytesDType.Instantiate(3)</c> is NumPy's <c>BytesDType(3)</c> → <c>dtype('S3')</c>.
+            /// </summary>
+            public static StringDTypeMeta BytesDType => DTypeRegistry.Bytes;
 
             // ---- C-name aliases (numpy.dtypes exports each builtin under its C name too) ----
 

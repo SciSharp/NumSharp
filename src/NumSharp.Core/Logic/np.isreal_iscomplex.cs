@@ -36,6 +36,11 @@ namespace NumSharp
             // all-True regardless of value — emit a fresh C-contiguous bool array from the DIMENSIONS
             // only (never `a.Shape`, whose strides/offset for a sliced/broadcast/strided view make
             // np.ones read past the logical window and return garbage bytes).
+            // Text: imag(x) is the empty string, and `'' == 0` has no comparison loop, so NumPy's == answers False
+            // everywhere (_failed_comparison_workaround) — a string array is never "real" (probed 2.4.2).
+            if (a.GetTypeCode == NPTypeCode.String)
+                return np.zeros(Shape.Adopt(a.Shape.dimensions), NPTypeCode.Boolean);
+
             if (a.GetTypeCode != NPTypeCode.Complex)
                 return np.ones(Shape.Adopt(a.Shape.dimensions), NPTypeCode.Boolean);
 
@@ -79,7 +84,16 @@ namespace NumSharp
             // Non-complex short-circuits to all-False from the DIMENSIONS only (not `a.Shape`, whose
             // view strides/offset would make np.zeros emit garbage bytes on a strided/broadcast input).
             if (a.GetTypeCode != NPTypeCode.Complex)
-                return np.zeros(Shape.Adopt(a.Shape.dimensions), NPTypeCode.Boolean);
+            {
+                // NumPy returns `res[()]` of `res = zeros(shape, bool)`: for an array that is a VIEW of the fresh buffer
+                // (flags.owndata false), for a 0-d input the scalar; the view takes its own reference on the buffer.
+                var res = np.zeros(Shape.Adopt((long[])a.Shape.dimensions.Clone()), NPTypeCode.Boolean);
+                if (res.ndim == 0)
+                    return res;
+                var view = new NDArray(res.Storage.Alias(res.Shape));
+                res.Dispose();
+                return view;
+            }
 
             // Complex: the imaginary lane (a strided float64 view via np.imag) compared to zero.
             // IEEE `!=` gives NumPy's semantics exactly: -0.0 != 0 is False, NaN/Inf != 0 is True.

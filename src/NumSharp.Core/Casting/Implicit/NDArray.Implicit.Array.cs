@@ -28,11 +28,15 @@ namespace NumSharp
     {
         /// <summary>
         ///     Converts a managed array (any rank, or jagged) into an <see cref="NDArray"/> copy of its data; a null array
-        ///     converts to a null <see cref="NDArray"/>.
+        ///     converts to a null <see cref="NDArray"/>. Text — a <see cref="string"/> array, or an <c>object</c> array holding
+        ///     strings / <c>byte[]</c> values — becomes NumPy's fixed-width string array (<c>np.array(['a', 'bb'])</c> is
+        ///     <c>&lt;U2</c>), so <c>NDArray x = new[] { "a", "bb" }</c> and every <c>NDArray</c> parameter fed a C# string
+        ///     array (C# prefers the <c>NDArray</c> overload to an <c>object</c> one) read the text as NumPy does.
         /// </summary>
         /// <param name="array">The array to convert, or null.</param>
         /// <returns>A new array holding a copy of the elements, or null when <paramref name="array"/> is null.</returns>
         /// <exception cref="NotSupportedException">The element type is not one of NumSharp's dtypes.</exception>
+        /// <exception cref="ValueError">A ragged jagged array of text (NumPy's inhomogeneous-shape text).</exception>
         /// <remarks>
         ///     C# runs a user-defined conversion even for a null source, so without the null pass-through an optional
         ///     <see cref="NDArray"/> parameter fed from a null <c>double[]</c> variable (a common way to spell NumPy's
@@ -42,6 +46,10 @@ namespace NumSharp
         {
             if (array is null)
                 return null;
+
+            // Text values build a fixed-width string array (the same discovery as np.array); everything else is numeric.
+            if (Backends.Strings.NDStringArrays.IsTextInput(array, null))
+                return Backends.Strings.NDStringArrays.FromManaged(array, null, 0, 'C');
 
             bool isJaggedArray = array.GetType().GetElementType().IsArray;
             var underlying = array.ResolveElementType();
@@ -132,6 +140,8 @@ namespace NumSharp
 	            case NPTypeCode.Single: return nd.ToMuliDimArray<float>();
 	            case NPTypeCode.Decimal: return nd.ToMuliDimArray<decimal>();
 	            case NPTypeCode.Complex: return nd.ToMuliDimArray<System.Numerics.Complex>();
+	            // Text: a C# array of the decoded elements (string for U, byte[] for S) in the array's own shape.
+	            case NPTypeCode.String: return Backends.Strings.NDStringArrays.ToManagedArray(nd);
 	            default:
 		            throw new NotSupportedException();
             }
@@ -188,9 +198,9 @@ namespace NumSharp
             }
             else
             {
-                // UTF8Encoding.UTF8.GetBytes(str)
-                var nd = new NDArray(str.ToArray());
-                return nd;
+                // Any other text is NumPy's np.array(str): a 0-d fixed-width Unicode array (it used to be a char vector;
+                // NDArray.FromString keeps that conversion). This is what makes `a[i] = "xy"` store text into an S/U array.
+                return Backends.Strings.NDStringArrays.FromScalar(str, null);
             }
         }
     }

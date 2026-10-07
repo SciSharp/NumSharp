@@ -31,6 +31,9 @@ namespace NumSharp
             bool assume_unique = false, bool invert = false, string kind = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(element, test_elements);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            // NumPy computes this on text (sorting, searching, truth tests); string computation is
+            // the next phase of NumSharp's string support, so a string array is refused here.
+            if (Backends.Strings.NDStringUfuncs.IsString(element) || Backends.Strings.NDStringUfuncs.IsString(test_elements)) throw Backends.Strings.NDStringUfuncs.NextPhase("isin", Backends.Strings.NDStringUfuncs.IsString(element) ? element : test_elements);
             if (kind != null && kind != "sort" && kind != "table")
                 throw new ValueError($"Invalid kind: '{kind}'. Please use None, 'sort' or 'table'.");
 

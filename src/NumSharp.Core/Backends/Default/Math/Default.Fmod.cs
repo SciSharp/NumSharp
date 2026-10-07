@@ -15,7 +15,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Fmod(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "fmod", lhs, rhs, @out, where);
 
             // fmod has no complex loop, so ANY complex operand with no explicit dtype reaches no
             // loop: NumPy raises the generic ufunc TypeError (NOT the kernel's

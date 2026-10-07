@@ -10,7 +10,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Cos(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "cos", nd, null, @out, where);
             return ExecuteUnaryOp(nd, UnaryOp.Cos, ResolveUnaryFloatReturnType(nd, typeCode, "cos"), @out, where);
         }
     }

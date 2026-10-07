@@ -11,7 +11,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Multiply(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "multiply", lhs, rhs, @out, where);
             return ExecuteBinaryOp(lhs, rhs, BinaryOp.Multiply, @out, where, typeCode);
         }
     }

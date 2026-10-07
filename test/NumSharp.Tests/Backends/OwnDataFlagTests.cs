@@ -524,6 +524,33 @@ namespace NumSharp.Tests.Backends
             src.GetInt64(0).Should().Be(0, "the boolean-mask copy is independent of the source");
         }
 
+        // ---- np.resize (the function): NumPy's reshape view of the tiled temp ----------------------
+
+        /// <summary>
+        ///     Guards that <c>np.resize(a, new_shape)</c> returns what NumPy's returns: <c>reshape</c> of the
+        ///     concatenated/truncated temp, so a NON-owning C-contiguous view (<c>flags.num</c> 1281,
+        ///     <c>owndata</c> false) that is still writeable and independent of the input.
+        /// </summary>
+        /// <remarks>
+        ///     NumSharp returned an OWNED array (num 1285) and listed it as an intended divergence until the
+        ///     string phase-1 work made the result an alias of the fresh buffer (so a string result reports
+        ///     the same flags as NumPy's). NumPy 2.4.2 live-probed 2026-10-07:
+        ///     <c>np.resize(np.arange(6), (3, 4)).flags.num == 1281</c>, <c>owndata False</c>.
+        /// </remarks>
+        [TestMethod]
+        public void ResizeFunction_IsNonOwningView_LikeNumPy()
+        {
+            var src = np.arange(6).astype(NPTypeCode.Int64);
+            var r = np.resize(src, new Shape(3, 4));
+            r.flags.num.Should().Be(1281, "NumPy 2.4.2: a C-contiguous non-owning view of the tiled temp");
+            r.flags.owndata.Should().BeFalse("NumPy returns reshape(...) of its temp, a view");
+            r.flags.writeable.Should().BeTrue("the temp is a fresh writeable buffer");
+
+            // The temp is a copy: writing the result never reaches the input.
+            r.SetAtIndex(777L, 0);
+            src.GetInt64(0).Should().Be(0L, "np.resize copies the input before it reshapes");
+        }
+
         // ---- the intended op-level ownership divergences, pinned as known [Misaligned] ----------
 
         [TestMethod]
@@ -531,7 +558,7 @@ namespace NumSharp.Tests.Backends
         public void OwnDataDivergences_NumpyInternalRepresentations_Documented()
         {
             // Each op below returns a clean OWNED copy where NumPy returns a non-owning view of an
-            // internal composition temp (flatnonzero/argwhere/resize, and the advanced-index
+            // internal composition temp (flatnonzero/argwhere, and the advanced-index
             // "transpose-back" family — any fancy/boolean advanced index that is NOT a single leading
             // block), or a fresh alias VIEW where NumPy returns SELF (a no-op np.squeeze; np.cov, which
             // ends in np.squeeze(c)). Values are identical; only the ownership/layout flag observable
@@ -546,7 +573,6 @@ namespace NumSharp.Tests.Backends
             {
                 ("flatnonzero",              () => np.flatnonzero(ZS()),                                                1287, 1283),
                 ("argwhere",                 () => np.argwhere(ZS()),                                                   1285, 1282),
-                ("resize(func)",             () => np.resize(np.arange(6).astype(NPTypeCode.Int64), new Shape(3, 4)),   1285, 1281),
                 ("squeeze no-op owner 2-D",  () => np.squeeze(np.zeros(new Shape(3, 4), NPTypeCode.Int64)),             1281, 1285),
                 ("squeeze no-op owner 1-D",  () => np.squeeze(np.arange(6).astype(NPTypeCode.Int64)),                   1283, 1287),
                 ("cov (inherits squeeze)",   () => np.cov(M().astype(NPTypeCode.Double)),                               1281, 1285),

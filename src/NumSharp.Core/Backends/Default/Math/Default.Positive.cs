@@ -13,7 +13,9 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Positive(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "positive", nd, null, @out, where);
+            // positive has no string loop; the identity copy below would otherwise hand a string array back.
+            Strings.NDStringUfuncs.ThrowIfUnary("positive", nd, typeCode);
             ValidatePositiveLoop(nd.GetTypeCode, typeCode);
 
             // out=/where=: iterator Into-path; the loop dtype is dtype ?? input

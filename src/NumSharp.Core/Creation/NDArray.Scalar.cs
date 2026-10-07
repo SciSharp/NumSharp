@@ -22,6 +22,9 @@ namespace NumSharp
         {
             if (dtype is null)
                 throw new ArgumentNullException(nameof(dtype));
+            // A string dtype holds text: the value is encoded (str / bytes), not converted through IConvertible.
+            if (dtype.Meta is StringDTypeMeta)
+                return Backends.Strings.NDStringArrays.FromScalar(value, dtype);
             return new NDArray(UnmanagedStorage.Scalar(value, dtype.GetTypeCode()));
         }
 
@@ -34,6 +37,9 @@ namespace NumSharp
         [MethodImpl(Inline)]
         public static NDArray Scalar(object value)
         {
+            // Text values are 0-d fixed-width strings: a string is U (np.array('ab')), a byte[] is S (np.array(b'ab')).
+            if (value is string || value is byte[])
+                return Backends.Strings.NDStringArrays.FromScalar(value, null);
             return new NDArray(UnmanagedStorage.Scalar(value));
         }
 

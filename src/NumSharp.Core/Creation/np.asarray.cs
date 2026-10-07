@@ -4,12 +4,14 @@ namespace NumSharp
 {
     public static partial class np
     {
-        public static NDArray asarray(string data)
-        {
-            var nd = new NDArray(typeof(string), Shape.Adopt(Array.Empty<long>()));
-            nd.ReplaceData(new string[] {data});
-            return nd;
-        }
+        /// <summary>
+        ///     NumPy's <c>np.asarray('abc')</c>: a 0-d fixed-width Unicode array holding <paramref name="data"/> (see
+        ///     <see cref="array(string)"/>).
+        /// </summary>
+        /// <param name="data">The text.</param>
+        /// <returns>A 0-d <c>U</c> array.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="data"/> is null.</exception>
+        public static NDArray asarray(string data) => array(data);
 
         /// <summary>
         ///     NumPy's <c>np.asarray(2)</c>: a new 0-d array holding one C# value. Like <c>np.array(2)</c>, the
@@ -28,12 +30,15 @@ namespace NumSharp
             return nd.MarkExplicitZeroDimArray();
         }
 
-        public static NDArray asarray(string[] data, int ndim = 1)
-        {
-            var nd = new NDArray(typeof(string), new Shape(data.Length));
-            nd.ReplaceData(data);
-            return nd;
-        }
+        /// <summary>
+        ///     NumPy's <c>np.asarray(['a', 'bb'])</c>: a 1-D fixed-width Unicode array (see <see cref="array(string[])"/>).
+        /// </summary>
+        /// <param name="data">The values.</param>
+        /// <param name="ndim">Kept for source compatibility; a string vector is always 1-D.</param>
+        /// <returns>The <c>U</c> array.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="data"/> is null.</exception>
+        /// <exception cref="NotSupportedException">An entry is null (an <c>object</c> array in NumPy).</exception>
+        public static NDArray asarray(string[] data, int ndim = 1) => array(data);
 
         public static NDArray asarray<T>(T[] data, int ndim = 1) where T : struct
         {
@@ -78,7 +83,9 @@ namespace NumSharp
             // no array-subclass dispatch, so the value is accepted but never read.
             _ = like;
 
-            bool typeMatches = dtype == null || a.typecode == dtype.GetTypeCode();
+            // A string request is satisfied only by a string array of that class AND width (an unsized 'U' adapts to the
+            // array first); the storage lane alone would let a <U4 array pass for 'S' or 'U2'.
+            bool typeMatches = dtype == null || Backends.Strings.NDStringArrays.SatisfiesRequest(a, dtype);
             bool layoutMatches = LayoutAlreadyOK(a.Shape, order);
             bool noCopyNeeded = typeMatches && layoutMatches;
 
@@ -86,10 +93,11 @@ namespace NumSharp
             // from np.asarray(np.array(2), dtype=float)); the mark is per object, so it is carried over by hand.
             bool explicitZeroDim = a.IsExplicitZeroDimArray;
 
+            // The copies keep NumPy's order code as given: astype / copy resolve 'K' to the source's own axis order
+            // (a transposed or broadcast source keeps its layout), which resolving to C-or-F first would lose.
             if (copy == true)
             {
-                char physical = OrderResolver.Resolve(order, a.Shape);
-                NDArray copied = !typeMatches ? a.astype(dtype, copy: true, order: physical) : a.copy(physical);
+                NDArray copied = !typeMatches ? a.astype(dtype, copy: true, order: order) : a.copy(order);
                 return explicitZeroDim ? copied.MarkExplicitZeroDimArray() : copied;
             }
 
@@ -102,12 +110,17 @@ namespace NumSharp
                     "https://numpy.org/devdocs/numpy_2_0_migration_guide.html#adapting-to-changes-in-the-copy-keyword.",
                     nameof(copy));
 
+            // NumPy (_array_fromobject_generic) returns the array itself when no dtype was given or the requested descriptor
+            // IS the array's — a builtin singleton, or an unsized string class, which adapts to the array's own descriptor;
+            // an EQUAL descriptor that is another object (every sized string descriptor is a fresh object) gets a view of
+            // the array with that descriptor: np.asarray(u, dtype='<U2') shares u's memory but is not u (owndata false).
             if (noCopyNeeded)
-                return a;
+                return dtype is null || ReferenceEquals(dtype, a.dtype) || dtype.itemsize == 0
+                    ? a
+                    : new NDArray(a.Storage.Alias(a.Shape)) { TensorEngine = a.TensorEngine };
 
             // copy == null && !noCopyNeeded: copy / cast as required.
-            char physical2 = OrderResolver.Resolve(order, a.Shape);
-            NDArray converted = !typeMatches ? a.astype(dtype, copy: true, order: physical2) : a.copy(physical2);
+            NDArray converted = !typeMatches ? a.astype(dtype, copy: true, order: order) : a.copy(order);
             return explicitZeroDim ? converted.MarkExplicitZeroDimArray() : converted;
         }
 

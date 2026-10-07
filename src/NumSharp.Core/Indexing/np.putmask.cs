@@ -116,17 +116,19 @@ namespace NumSharp
             }
 
             NDArray valsCast;
-            if (values.GetTypeCode == a.GetTypeCode && values.Shape.IsContiguous)
+            // Same element type (for strings: same class AND width) is read as is; anything else is converted to a's
+            // dtype (a string truncated / NUL-padded, S <-> U ASCII-checked).
+            if (values.HasSameElementType(a) && values.Shape.IsContiguous)
             {
                 valsCast = values;
             }
-            else if (values.GetTypeCode == a.GetTypeCode)
+            else if (values.HasSameElementType(a))
             {
                 valsCast = np.ascontiguousarray(values);
             }
             else
             {
-                valsCast = values.astype(a.GetTypeCode);
+                valsCast = values.astype(a.dtype);
             }
 
             ExecutePutMask(a, maskCast, valsCast);

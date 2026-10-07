@@ -178,6 +178,7 @@ namespace NumSharp
             var mats = new NDArray[n];
             bool anyStrong = false;
             bool anyBeyondInt64 = false;
+            bool anyString = false; // a fixed-width string choice: the common dtype is resolved by DESCRIPTOR below
             int weakRank = 0; // 0 none, 1 int, 2 float, 3 complex
             NPTypeCode strong = NPTypeCode.Empty;
 
@@ -193,7 +194,10 @@ namespace NumSharp
 
                     case NDArray arr:
                         mat = arr;
-                        strong = anyStrong ? NDExprTypeRules.PromoteStrong(strong, arr.GetTypeCode) : arr.GetTypeCode;
+                        if (arr.typecode == NPTypeCode.String)
+                            anyString = true;
+                        else if (!anyString)
+                            strong = anyStrong ? NDExprTypeRules.PromoteStrong(strong, arr.GetTypeCode) : arr.GetTypeCode;
                         anyStrong = true;
                         break;
 
@@ -220,7 +224,10 @@ namespace NumSharp
                         // Strong by NumPy's rule `type(x) in (int,float,complex) else asarray(x)`:
                         // bool, char, Half, decimal, C# arrays and collections take the asarray branch.
                         mat = asanyarray(item);
-                        strong = anyStrong ? NDExprTypeRules.PromoteStrong(strong, mat.GetTypeCode) : mat.GetTypeCode;
+                        if (mat.typecode == NPTypeCode.String)
+                            anyString = true;
+                        else if (!anyString)
+                            strong = anyStrong ? NDExprTypeRules.PromoteStrong(strong, mat.GetTypeCode) : mat.GetTypeCode;
                         anyStrong = true;
                         break;
                 }
@@ -228,13 +235,37 @@ namespace NumSharp
                 mats[i] = mat;
             }
 
-            NPTypeCode dtype = ResolveChooseDtype(anyStrong, strong, weakRank, anyBeyondInt64);
-            int elemBytes = InfoOf.GetSize(dtype);
+            // Fixed-width strings: NumPy's ConvertToCommonType over DESCRIPTORS — the widest choice's width, S + U
+            // giving U; a Python number next to a string has no common dtype (TypeError), a numeric array formats to text
+            // (refused: the computational phase). The gather kernels copy elemBytes bytes, any width.
+            DType stringDescr = null;
+            if (anyString)
+            {
+                var operands = new object[n];
+                for (int i = 0; i < n; i++)
+                    operands[i] = choices[i] is NDArray ? (object)mats[i] : choices[i] is sbyte or byte or short or ushort or int or uint or long or ulong or float or double or Complex ? choices[i] : mats[i];
+                stringDescr = DTypePromotion.ResultType(operands);
+                foreach (var m in mats)
+                {
+                    if (m.typecode != NPTypeCode.String)
+                        throw Backends.Strings.NDStringCasting.TextConversion(m.dtype, stringDescr);
+                }
+            }
+
+            NPTypeCode dtype = anyString ? NPTypeCode.String : ResolveChooseDtype(anyStrong, strong, weakRank, anyBeyondInt64);
+            int elemBytes = anyString ? (int)stringDescr.itemsize : InfoOf.GetSize(dtype);
 
             // ── 2) cast each choice to the common dtype (copy only when needed) ───────────
             var castChoices = new NDArray[n];
             for (int i = 0; i < n; i++)
-                castChoices[i] = mats[i].GetTypeCode == dtype ? mats[i] : mats[i].astype(dtype, copy: false);
+            {
+                if (anyString)
+                    castChoices[i] = mats[i].dtype.Meta == stringDescr.Meta && mats[i].dtype.itemsize == stringDescr.itemsize
+                        ? mats[i]
+                        : mats[i].astype(stringDescr, copy: false);
+                else
+                    castChoices[i] = mats[i].GetTypeCode == dtype ? mats[i] : mats[i].astype(dtype, copy: false);
+            }
 
             // ── 3) index → int64 under the 'safe' rule ────────────────────────────────────
             // idx64 is EITHER `a` itself (already int64 — the caller's, built before any scope opened, so never
@@ -260,7 +291,7 @@ namespace NumSharp
             }
 
             // ── 6) allocate the fresh C-contiguous result (common dtype) ──────────────────
-            var result = new NDArray(dtype, Shape.Adopt((long[])resultDims.Clone()), false);
+            var result = new NDArray(stringDescr ?? (DType)dtype, Shape.Adopt((long[])resultDims.Clone()), false);
             long totalSize = result.size;
 
             if (totalSize == 0)
@@ -413,6 +444,10 @@ namespace NumSharp
             if (tc == NPTypeCode.Int64)
                 return a;
 
+            // Text never reaches int64 under 'safe'; the descriptor names its width.
+            if (tc == NPTypeCode.String)
+                throw new TypeError(
+                    $"Cannot cast array data from {a.dtype.ToString(true)} to dtype('int64') according to the rule 'safe'");
             if (!np.can_cast(tc, NPTypeCode.Int64, "safe"))
                 throw new TypeError(
                     $"Cannot cast array data from dtype('{tc.AsNumpyDtypeName()}') to dtype('int64') according to the rule 'safe'");

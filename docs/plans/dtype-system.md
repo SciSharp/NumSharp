@@ -337,4 +337,57 @@ Things learned while landing it that the design above did not anticipate:
   `a.dtype.type.Name` (C#); `np.X` where a `Type` is required by signature → `np.X.type`; reflection over
   `np.array(Array, Type, …)` → `typeof(DType)`; `np.isdtype(x, "floating")` raises.
 
-**Not yet** (unchanged from §3): datetime storage/kernels/NaT/ISO (C — `docs/plans/datetime64.md`), strings (D).
+**Stage D phase 1 landed (2026-10-07, branch `strings`) — fixed-width `S` / `U` storage, byte-perfect with NumPy 2.4.2.**
+
+* **Metas.** `StringDTypeMeta` (`DTypes/StringDTypeMeta.cs`) is NumPy's `BytesDType` (`'S'`, num 18, one byte per character)
+  and `StrDType` (`'U'`, num 19, one UCS-4 code point per character), PARAMETRIC: the length lives on the descriptor
+  (`S5` → itemsize 5, `U5` → 20), `CommonInstance` takes the longer one, `S + U → U`, and a number promotes to text of its
+  `REQUIRED_STR_LEN` (bool 5, unsigned {1:3, 2:5, 4:10, 8:20}, signed +1, float 32, complex 64). `StringCastingImpls.cs`
+  ports `string_to_string_resolve_descriptors` (longer = safe, shorter = same_kind, equal = no / a `U` byte swap = equiv)
+  and the numeric → string length casts. The unsized descriptors (`np.dtype("U")`, `'S'`, itemsize 0) parse, print and
+  promote, and adapt to the operand (`PyArray_AdaptDescriptorToArray`) wherever NumPy sizes them.
+* **Storage.** One storage lane, `NPTypeCode.String`, holds every width of both classes: `StringArraySlice` is an element
+  view over an ordinary `ArraySlice<byte>` (so pooling, ARC lifetime and views are the numeric lanes'), and the
+  descriptor (`UnmanagedStorage.Descr`) carries the class and width. `NPTypeCode.String` alone therefore names NO dtype —
+  every allocation of a string result takes a descriptor. The codec (`Backends/Strings/NDStringCodec.cs`) is NumPy's
+  `STRING_/UNICODE_ getitem/setitem`: NUL padding, trailing NULs stripped on read, embedded NULs kept, a C# `string` is
+  `str`, a `byte[]` is `bytes`, supplementary-plane text is one UCS-4 unit.
+* **Movement.** `NDStringCopy` runs every string copy (`NDIter.Copy`, `copyto`, `astype`, slice assignment,
+  concatenate, take/put/place/putmask, where, pad …) on the numeric kernels through UNIT VIEWS: a string array of shape
+  `D` is copied as a `uint8` / `uint32` array of shape `D + (chars,)`, so broadcasting, every layout, the overlap guard
+  and the SIMD copy kernels are the numeric ones; `S ↔ U` is NumPy's legacy ASCII cast with Python's
+  `UnicodeEncodeError` / `UnicodeDecodeError` texts.
+* **Printing.** `Backends/Printing/PyRepr.cs` is CPython's `unicode_repr` / `PyBytes_Repr` / `str.isprintable` / `len`,
+  so `str` / `repr` / `array2string` of a string array are NumPy's bytes.
+* **Computing on text is the next phase.** Where NumPy REFUSES a call (no string loop: `np.sum`, `np.sqrt`, gufuncs),
+  NumSharp raises NumPy's exception and text; where NumPy COMPUTES (comparisons, concatenation, truth tests, sorting,
+  searching, text ↔ number parsing), it throws `StringComputationNotSupportedException` (a `NotSupportedException`).
+  Both come after NumPy's earlier checks, in NumPy's order (`Backends/Strings/NDStringUfuncs{,.Precedence}.cs`):
+  the `dtype=` class check, a read-only `out=`, a non-bool `where=`, the axis (three rules — `ufunc.reduce`, the counting
+  statistics, the ravelling arg / scan / sort family), the quantile family's q / axis / method / empty-axis order, the
+  output cast and the broadcast of a computing loop. An unsized string `dtype=` request gets NumPy's per-ufunc answer
+  (`No loop matching …`, the class-form `UFuncTypeError`, the string `add` formatting numbers as text, the string
+  `multiply` 'out' text). The add family ignores a NUMERIC request over text (the string add loop resolves from the
+  operands: `np.sum(u, dtype='f8')` is the add.reduce refusal), every other reduction parses (next phase).
+* **`.npy`.** `|S5` / `<U3` / `>U3` files read and write byte for byte (mmap included). **Breaking:** a `<U1` file reads
+  back as a `<U1` string array, not `Char`; `Char` is still written as `<U1`.
+* **Gate.** The string oracle (`test/oracle/gen_strings_oracle.py` → `NumSharp.Tests.Oracle/Strings/corpus/strings.jsonl`,
+  14,175 cases, 8,281 of them NumPy errors compared by type map + verbatim text; 14 sections: dtype, creation, astype,
+  views, movement, mutation, access, printing, ufuncs, reductions, strdtype, strprec, straxis, strcov). A phase-2 case
+  (NumPy returns, or raises a parse error) passes as "deferred" while NumSharp throws
+  `StringComputationNotSupportedException` and is held to NumPy's answer the moment NumSharp computes it — the next
+  phase is gated by the same corpus. Unit tests: `Backends/Strings/StringCallOrderTests.cs` (one per precedence rule),
+  `Documentation/FundamentalsStringsBytesDocTests.cs`, the frombuffer / getfield / file I/O string tests.
+* **Traps found.**
+  - NumPy's ufunc DISPATCH CACHE makes an answer depend on call history: after
+    `np.multiply(u, int8, dtype='U')` (whose promoter casts int8 → int64 and is cached per DType tuple),
+    `np.prod(int8_array, dtype='U')` finds the string repeat loop ('out' kwarg text), where a fresh process names no
+    loop. The generator runs the reductions before the binary ufuncs, so the corpus records the fresh answer.
+  - A test corpus of "string" cases must not include numeric-only calls: they test numeric behavior (reduction 0-d
+    results are read-only reduction scalars in NumSharp, NumPy's generator sees a writeable 0-d array).
+  - `GetString` / `SetString` (the `Char` vector API) used to `Debug.Assert` the dtype, so a Release build read a `U`
+    array's UCS-4 bytes as UTF-16; they refuse a non-`Char` array now.
+
+**Not yet:** datetime storage/kernels/NaT/ISO (C — `docs/plans/datetime64.md`); Stage D phase 2 (computing on text —
+comparisons, `np.strings`, sorting, `add`/`multiply` loops, text ↔ number casts, the gated corpus is ready) and NEP 55
+`StringDType` (phase 3).

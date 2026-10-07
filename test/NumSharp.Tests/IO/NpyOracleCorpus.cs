@@ -59,8 +59,22 @@ namespace NumSharp.Tests.IO
         ///     F-contiguous array with the same logical values — which is what a fortran_order case needs.
         /// </remarks>
         public static unsafe NDArray Build(NPTypeCode typeCode, long[] shape, byte[] data, bool fortranOrder)
+            => Build(typeCode, null, shape, data, fortranOrder);
+
+        /// <summary>
+        ///     <see cref="Build(NPTypeCode, long[], byte[], bool)"/> for any dtype the manifest names: a fixed-width string
+        ///     case carries its descriptor in <paramref name="descr"/> (<c>'&lt;U3'</c>, <c>'|S5'</c>), because the
+        ///     <see cref="NPTypeCode.String"/> lane alone has no width.
+        /// </summary>
+        /// <param name="typeCode">The storage lane.</param>
+        /// <param name="descr">The string descriptor, or null for every other dtype.</param>
+        /// <param name="shape">The dimensions.</param>
+        /// <param name="data">The raw C-order element bytes.</param>
+        /// <param name="fortranOrder">Return an F-contiguous copy.</param>
+        /// <returns>The array.</returns>
+        public static unsafe NDArray Build(NPTypeCode typeCode, string descr, long[] shape, byte[] data, bool fortranOrder)
         {
-            var arr = new NDArray(typeCode, new Shape(shape));
+            var arr = descr != null ? new NDArray(np.dtype(descr), new Shape(shape)) : new NDArray(typeCode, new Shape(shape));
             if (data.Length > 0)
                 Marshal.Copy(data, 0, (IntPtr)arr.Storage.Address, data.Length);
             return fortranOrder ? arr.copy('F') : arr;
@@ -90,6 +104,10 @@ namespace NumSharp.Tests.IO
         public byte[] Bytes { get; private init; }
 
         public NPTypeCode? NsDtype { get; private init; }
+
+        /// <summary>The native descriptor a fixed-width string case materializes as (<c>'&lt;U3'</c>), else null.</summary>
+        public string NsDescr { get; private init; }
+
         public long[] Shape { get; private init; }
         public bool FortranOrder { get; private init; }
         public string Descr { get; private init; }
@@ -153,6 +171,7 @@ namespace NumSharp.Tests.IO
                 Note = Str(e, "note"),
                 Bytes = ReadEntry(e.GetProperty("file").GetString()),
                 NsDtype = Str(e, "ns_dtype") is { } d ? Enum.Parse<NPTypeCode>(d) : null,
+                NsDescr = Str(e, "ns_descr"),
                 Shape = Longs(e, "shape"),
                 FortranOrder = Bool(e, "fortran_order") ?? false,
                 Descr = Str(e, "descr"),
@@ -224,12 +243,17 @@ namespace NumSharp.Tests.IO
     internal sealed class NpyMember
     {
         public NPTypeCode NsDtype { get; private init; }
+
+        /// <summary>The native descriptor of a fixed-width string member (<c>'&lt;U2'</c>), else null.</summary>
+        public string NsDescr { get; private init; }
+
         public long[] Shape { get; private init; }
         public byte[] NsBytes { get; private init; }
 
         public static NpyMember Parse(JsonElement e) => new()
         {
             NsDtype = Enum.Parse<NPTypeCode>(e.GetProperty("ns_dtype").GetString()!),
+            NsDescr = e.TryGetProperty("ns_descr", out JsonElement nd) && nd.ValueKind == JsonValueKind.String ? nd.GetString() : null,
             Shape = e.GetProperty("shape").EnumerateArray().Select(x => x.GetInt64()).ToArray(),
             NsBytes = NpyCase.Hex(e.GetProperty("ns_bytes").GetString()),
         };

@@ -41,6 +41,9 @@ namespace NumSharp.Backends
         ///     from the loop dtype; or the operand shapes do not broadcast together.</exception>
         public override NDArray FloatPower(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            // float_power has float64/complex128 loops only: text is refused with NumPy's text before the float promotion
+            // below would cast it (or name the inner power loop).
+            Strings.NDStringUfuncs.ThrowIfBinary("float_power", lhs, rhs, @out, UfuncLoopCode(dtype, "float_power", lhs, rhs, @out, where), where);
             // (1) A read-only out is rejected first — NumPy reports "output array is read-only" ahead
             // of every where/dtype/cast/shape error (probed 2.4.2), and the kernel writes @out
             // directly, so this must precede any path that could compute into it.

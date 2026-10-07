@@ -94,6 +94,8 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html
         public NDArray unique(int? axis = null, bool equal_nan = true, bool sorted = true)
         {
+            // NumPy's unique sorts text: the next phase of NumSharp's string support.
+            if (Backends.Strings.NDStringUfuncs.IsString(this)) throw Backends.Strings.NDStringUfuncs.NextPhase("unique", this);
             // Delegate to the tuple path with all return flags false, then take the values. The
             // kwargs path uses the optimized sort+mask algorithm (NaN-partition for floats, plain
             // Array.Sort for integers, IL-vectorizable mask scan) and carries the axis handling —

@@ -27,6 +27,8 @@ namespace NumSharp
         [NDScoped]
         public NDArray convolve(NDArray v, string mode = "full")
         {
+            // convolve's dot-function lookup needs a fixed item size, which text does not have (0-d operands included).
+            if (Backends.Strings.NDStringUfuncs.IsString(this) || Backends.Strings.NDStringUfuncs.IsString(v)) throw Backends.Strings.NDStringUfuncs.NoItemsize();
             NDArray a = this;
 
             // Validate inputs are 1D

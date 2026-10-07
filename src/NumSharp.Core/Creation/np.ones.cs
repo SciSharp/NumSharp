@@ -71,11 +71,29 @@ namespace NumSharp
         ///     implicitly. Default (null) is <see cref="float64"/> / <see cref="double"/>.
         /// </param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
+        /// <exception cref="StringComputationNotSupportedException">A string dtype: NumPy fills it with the text of the number
+        ///     one (<c>'1'</c>), and converting numbers to text is the computational phase of the string support.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones(Shape shape, DType dtype, string device = null)
         {
             ValidateDevice(device);
+            ThrowIfOnesOfText(dtype);
             return OnesCore(shape, dtype?.GetTypeCode() ?? NPTypeCode.Double);
+        }
+
+        /// <summary>
+        ///     The refusal of <c>np.ones</c> for a string dtype: NumPy's <c>np.ones(2, dtype='U')</c> is <c>['1', '1']</c> — the
+        ///     number one converted to text, which is the computational phase of NumSharp's string support (the storage
+        ///     lane alone has no "one" to fill with).
+        /// </summary>
+        /// <param name="dtype">The requested dtype (null is float64).</param>
+        /// <exception cref="StringComputationNotSupportedException">A string dtype.</exception>
+        private static void ThrowIfOnesOfText(DType dtype)
+        {
+            if (Backends.Strings.NDStringStorage.IsString(dtype))
+                throw new StringComputationNotSupportedException(
+                    $"np.ones with dtype {dtype.ToString(true)} fills the array with the text '1' (NumPy converts the number one " +
+                    "to text), and converting numbers to text is the next phase of NumSharp's string support.");
         }
 
 
@@ -152,6 +170,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones(Shape shape, char order, DType dtype = null)
         {
+            ThrowIfOnesOfText(dtype);
             char physical = OrderResolver.Resolve(order);
             var orderedShape = Shape.Adopt(shape.dimensions, physical);
             return OnesCore(orderedShape, dtype?.GetTypeCode() ?? NPTypeCode.Double);

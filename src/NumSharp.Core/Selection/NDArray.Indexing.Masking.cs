@@ -30,6 +30,10 @@ namespace NumSharp
                 // special-cased — NumSharp represents true 0-D arrays as ndim 0.
                 if (mask.ndim <= this.ndim && IsPartialShapeMatch(mask))
                 {
+                    // A string element has no element kernel: gather on the unit view (the mask covers the same leading
+                    // axes there; the trailing character axis rides along).
+                    if (typecode == NPTypeCode.String)
+                        return StringAdvancedGet(u => u[mask], p => p[mask]);
                     return this.TensorEngine.BooleanMask(this, mask);
                 }
 
@@ -41,6 +45,10 @@ namespace NumSharp
             set
             {
                 NumSharpException.ThrowIfNotWriteable(Shape);
+                // NumPy's single boolean subscript of this array's EXACT shape (mapping.c HAS_BOOL ->
+                // array_assign_boolean_subscript) takes a 0-d or 1-D value, and a 1-D value of more than one element
+                // supplies exactly one value per True — checked before anything is written, with NumPy's texts.
+                ThrowIfBooleanSubscriptAssignMismatch(mask, value);
 
                 // Prefix-match (full / axis-0 / partial / 0-D), symmetric with the getter.
                 // The unified NDIter scatter streams value into the selected slots; value
@@ -49,6 +57,11 @@ namespace NumSharp
                 // mask; a 0-D mask (arr[True]=v / arr[False]=v) assigns all / nothing.
                 if (mask.ndim <= this.ndim && IsPartialShapeMatch(mask))
                 {
+                    if (typecode == NPTypeCode.String)
+                    {
+                        StringAdvancedSet(value, (u, v) => u[mask] = v, (p, v) => p[mask] = v);
+                        return;
+                    }
                     this.TensorEngine.BooleanMaskSet(this, mask, value);
                     return;
                 }
@@ -56,6 +69,39 @@ namespace NumSharp
                 throw new IndexOutOfRangeException(
                     $"boolean index did not match indexed array along axis 0; " +
                     $"size of axis is {this.Shape.dimensions[0]} but size of boolean index is {mask.Shape.dimensions[0]}");
+            }
+        }
+
+        /// <summary>
+        ///     NumPy's checks for <c>a[mask] = value</c> when <paramref name="mask"/> has exactly this array's shape (a
+        ///     partial mask goes through the fancy-index route and its broadcast rule instead): a value of more than one
+        ///     dimension is refused, and a 1-D value whose length is not 1 must hold one value per True element.
+        /// </summary>
+        /// <param name="mask">The boolean mask.</param>
+        /// <param name="value">The value being assigned (null is left to the caller's own check).</param>
+        /// <exception cref="TypeError"><c>NumPy boolean array indexing assignment requires a 0 or 1-dimensional input, input
+        ///     has {n} dimensions</c>.</exception>
+        /// <exception cref="ValueError"><c>NumPy boolean array indexing assignment cannot assign {k} input values to the {t}
+        ///     output values where the mask is true</c>.</exception>
+        internal void ThrowIfBooleanSubscriptAssignMismatch(NDArray mask, NDArray value)
+        {
+            if (value is null || mask.ndim != ndim)
+                return;
+            var maskDims = mask.Shape.dimensions;
+            var dims = Shape.dimensions;
+            for (int i = 0; i < dims.Length; i++)
+                if (maskDims[i] != dims[i])
+                    return;
+            if (value.ndim > 1)
+                throw new TypeError(
+                    $"NumPy boolean array indexing assignment requires a 0 or 1-dimensional input, input has {value.ndim} dimensions");
+            if (value.ndim == 1 && value.Shape.dimensions[0] != 1)
+            {
+                long trues = np.count_nonzero(mask);
+                long given = value.Shape.dimensions[0];
+                if (trues != given)
+                    throw new ValueError(
+                        $"NumPy boolean array indexing assignment cannot assign {given} input values to the {trues} output values where the mask is true");
             }
         }
 

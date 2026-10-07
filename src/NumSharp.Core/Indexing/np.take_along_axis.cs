@@ -102,7 +102,7 @@ namespace NumSharp
                 else throw new IndexError(BuildBroadcastMismatchMessage(arrShape, idxShape, ax));
             }
 
-            var result = new NDArray(arr.typecode, Shape.Adopt(resultDims), false);
+            var result = new NDArray(arr.dtype, Shape.Adopt(resultDims), false); // descriptor: a string's width
 
             long totalSize = result.size;
             if (totalSize == 0)

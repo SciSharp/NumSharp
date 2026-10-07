@@ -44,19 +44,24 @@ namespace NumSharp
             : delete(arr, (long)obj, axis);
 
         /// <summary>
-        ///     NumPy's <c>delete</c>/<c>insert</c> allocate their output in the SOURCE's memory order —
-        ///     <c>arrorder = 'F' if arr.flags.fnc else 'C'</c> (<c>_function_base_impl.py</c>), so an
-        ///     F-ordered input yields an F-contiguous owned result (probed: num 1286). The composition
-        ///     kernels here build C-contiguous results, so relabel to F when the source was F-and-not-C.
-        ///     IDEMPOTENT (an already-F result passes through), so nested overload delegation is safe.
+        ///     NumPy's <c>delete</c>/<c>insert</c> allocate their output in ONE of two layouts —
+        ///     <c>arrorder = 'F' if arr.flags.fnc else 'C'</c> (<c>_function_base_impl.py</c>): F-contiguous for a
+        ///     strictly F-contiguous source (probed: num 1286), C-contiguous for every other source, a transposed or
+        ///     broadcast one included. The composition kernels here may build another layout (concatenate keeps its
+        ///     inputs' axis order), so the result is copied into the NumPy layout when it is not already in it.
+        ///     IDEMPOTENT (a result already in the layout passes through), so nested overload delegation is safe.
         /// </summary>
+        /// <param name="arr">The source array (its flags decide the layout).</param>
+        /// <param name="result">The composed result.</param>
+        /// <returns><paramref name="result"/>, or a C / F copy of it.</returns>
         internal static NDArray WithSourceOrder(NDArray arr, NDArray result)
         {
-            if (result.ndim > 1
-                && arr.Shape.IsFContiguous && !arr.Shape.IsContiguous
-                && result.Shape.IsContiguous && !result.Shape.IsFContiguous)
-                return asfortranarray(result);
-            return result;
+            if (result.ndim <= 1)
+                return result;
+            bool wantF = arr.Shape.IsFContiguous && !arr.Shape.IsContiguous;
+            if (wantF)
+                return result.Shape.IsFContiguous ? result : asfortranarray(result);
+            return result.Shape.IsContiguous ? result : ascontiguousarray(result);
         }
 
         /// <summary>
@@ -554,7 +559,7 @@ namespace NumSharp
                 var emptyDims = new long[arr.ndim];
                 for (int d = 0; d < arr.ndim; d++) emptyDims[d] = arr.Shape.dimensions[d];
                 emptyDims[axis] = 0;
-                return new NDArray(arr.GetTypeCode, Shape.Adopt(emptyDims), false);
+                return new NDArray(arr.dtype, Shape.Adopt(emptyDims), false);
             }
 
             return np.concatenate(chunks.ToArray(), axis);

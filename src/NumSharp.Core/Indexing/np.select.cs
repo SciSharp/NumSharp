@@ -83,6 +83,7 @@ namespace NumSharp
             var mats = new NDArray[n + 1];
             bool anyStrong = false;
             bool anyBeyondInt64 = false;
+            bool anyString = false; // a fixed-width string choice or default: the dtype is resolved by DESCRIPTOR below
             int weakRank = 0; // 0 none, 1 int, 2 float, 3 complex (ordered by NEP50 dominance)
             NPTypeCode strong = NPTypeCode.Empty;
 
@@ -104,7 +105,10 @@ namespace NumSharp
 
                     case NDArray a:
                         mat = a;
-                        strong = anyStrong ? NDExprTypeRules.PromoteStrong(strong, a.GetTypeCode) : a.GetTypeCode;
+                        if (a.typecode == NPTypeCode.String)
+                            anyString = true;
+                        else if (!anyString)
+                            strong = anyStrong ? NDExprTypeRules.PromoteStrong(strong, a.GetTypeCode) : a.GetTypeCode;
                         anyStrong = true;
                         break;
 
@@ -132,7 +136,10 @@ namespace NumSharp
                         // bool, char, Half, decimal, C# arrays and collections all take the asarray
                         // branch and contribute their concrete dtype.
                         mat = asanyarray(item);
-                        strong = anyStrong ? NDExprTypeRules.PromoteStrong(strong, mat.GetTypeCode) : mat.GetTypeCode;
+                        if (mat.typecode == NPTypeCode.String)
+                            anyString = true;
+                        else if (!anyString)
+                            strong = anyStrong ? NDExprTypeRules.PromoteStrong(strong, mat.GetTypeCode) : mat.GetTypeCode;
                         anyStrong = true;
                         break;
                 }
@@ -140,7 +147,12 @@ namespace NumSharp
                 mats[i] = mat;
             }
 
-            NPTypeCode dtype = ResolveSelectDtype(anyStrong, strong, weakRank, anyBeyondInt64);
+            // Fixed-width strings: NumPy's two result_type calls over DESCRIPTORS (the widest choice's width; S + U → U),
+            // each refusal wrapped in select's own TypeError text. A Python number default next to strings has no common
+            // dtype — select(…, default=0) over string choices raises, as in NumPy.
+            DType stringDescr = anyString ? ResolveSelectStringDescr(choicelist, @default, mats, n) : null;
+
+            NPTypeCode dtype = anyString ? NPTypeCode.String : ResolveSelectDtype(anyStrong, strong, weakRank, anyBeyondInt64);
 
             // The conditions and the choices are broadcast in two SEPARATE groups (NumPy makes two
             // independent broadcast_arrays calls). We only need each GROUP'S shape here — to size the
@@ -168,10 +180,10 @@ namespace NumSharp
             // whole result buffer). One IL kernel reads each condition and choice once and writes the
             // result once. Every other shape (broadcast / strided / cast / scalar-choice) declines the
             // gate and takes the composition below, which already outruns NumPy on those.
-            if (TrySelectFused(condlist, mats, n, dtype, resultDims, out var fused))
+            if (!anyString && TrySelectFused(condlist, mats, n, dtype, resultDims, out var fused))
                 return fused;
 
-            var result = new NDArray(dtype, Shape.Adopt((long[])resultDims.Clone()), false);
+            var result = new NDArray(stringDescr ?? (DType)dtype, Shape.Adopt((long[])resultDims.Clone()), false);
 
             // Composition fallback (NumPy's own structure): burn the default across the whole result
             // (unsafe cast, matching np.full's copyto), then overlay each choice where its condition is
@@ -184,6 +196,47 @@ namespace NumSharp
                 copyto(result, mats[i], casting: "same_kind", @where: condlist[i]);
 
             return result;
+        }
+
+        /// <summary>
+        ///     <c>np.select</c>'s result dtype when a string is involved — NumPy's
+        ///     <c>intermediate = result_type(*choicelist)</c> then <c>dtype = result_type(intermediate, asarray(default))</c>,
+        ///     over descriptors, with C# integer / float / complex literals (and the null default, NumPy's <c>0</c>) taking
+        ///     part as NEP 50 weak Python scalars.
+        /// </summary>
+        /// <param name="choicelist">The caller's choices.</param>
+        /// <param name="default">The caller's default (null means NumPy's <c>0</c>).</param>
+        /// <param name="mats">The materialised choices and default (slot <paramref name="n"/>).</param>
+        /// <param name="n">The number of choices.</param>
+        /// <returns>The result descriptor.</returns>
+        /// <exception cref="TypeError"><c>Choicelist elements do not have a common dtype: …</c> or <c>Choicelist and default
+        ///     value do not have a common dtype: …</c> — NumPy's texts around the promotion error.</exception>
+        private static DType ResolveSelectStringDescr(object[] choicelist, object @default, NDArray[] mats, int n)
+        {
+            static object Operand(object item, NDArray mat)
+                => item is sbyte or byte or short or ushort or int or uint or long or ulong or float or double or Complex ? item : mat;
+
+            DType intermediate;
+            try
+            {
+                var operands = new object[n];
+                for (int i = 0; i < n; i++)
+                    operands[i] = Operand(choicelist[i], mats[i]);
+                intermediate = DTypePromotion.ResultType(operands);
+            }
+            catch (DTypePromotionError e)
+            {
+                throw new TypeError($"Choicelist elements do not have a common dtype: {e.Message}");
+            }
+
+            try
+            {
+                return DTypePromotion.ResultType(intermediate, @default is null ? 0 : Operand(@default, mats[n]));
+            }
+            catch (DTypePromotionError e)
+            {
+                throw new TypeError($"Choicelist and default value do not have a common dtype: {e.Message}");
+            }
         }
 
         /// <summary>

@@ -501,11 +501,15 @@ namespace NumSharp.Tests.Creation
         }
 
         [TestMethod]
-        public void UnsupportedType_ThrowsNotSupportedException()
+        public void StringList_CreatesUnicodeArray()
         {
-            // String collections are not supported (string is not primitive/decimal)
+            // NumPy 2.4.2: np.asanyarray(['a', 'b', 'c']) -> array(['a', 'b', 'c'], dtype='<U1').
+            // (String collections were refused before the fixed-width string dtypes.)
             var stringList = new List<string> { "a", "b", "c" };
-            Assert.ThrowsException<NotSupportedException>(() => np.asanyarray(stringList));
+            var result = np.asanyarray(stringList);
+            result.dtype.str.Should().Be("<U1");
+            result.Should().BeShaped(3);
+            NDArray.AsStringArray(result).Should().Equal("a", "b", "c");
         }
 
         [TestMethod]
@@ -520,12 +524,14 @@ namespace NumSharp.Tests.Creation
         #region String special case
 
         [TestMethod]
-        public void String_CreatesCharArray()
+        public void String_CreatesUnicodeScalar()
         {
+            // NumPy 2.4.2: np.asanyarray("hello") -> array('hello', dtype='<U5')
             var result = np.asanyarray("hello");
 
-            result.Should().BeShaped(5);
-            result.dtype.Should().Be(typeof(char));
+            result.ndim.Should().Be(0);
+            result.dtype.str.Should().Be("<U5");
+            result.GetValue().Should().Be("hello");
         }
 
         #endregion
@@ -587,22 +593,18 @@ namespace NumSharp.Tests.Creation
         #region NumPy Parity - Misaligned Behaviors
 
         /// <summary>
-        /// NumPy treats strings as scalar Unicode values, NumSharp treats as char arrays.
-        /// NumPy: np.asanyarray("hello") -> dtype=&lt;U5, shape=(), ndim=0 (SCALAR)
-        /// NumSharp: dtype=Char, shape=(5), ndim=1 (ARRAY)
+        ///     A string is a scalar Unicode value, as in NumPy: np.asanyarray("hello") -> dtype=&lt;U5, shape=(), ndim=0.
+        ///     (Before the fixed-width string dtypes, NumSharp made it a 1-D char vector, which NDArray.FromString still does.)
         /// </summary>
         [TestMethod]
-        [Misaligned]
-        public void String_IsCharArray_NotScalar()
+        public void String_IsUnicodeScalar_LikeNumPy()
         {
             var result = np.asanyarray("hello");
 
-            // NumSharp behavior: char array
-            result.ndim.Should().Be(1);
-            result.shape.Should().BeEquivalentTo(new[] { 5 });
-            result.dtype.Should().Be(typeof(char));
-
-            // NumPy would be: ndim=0, shape=(), dtype=<U5 (scalar)
+            result.ndim.Should().Be(0);
+            result.shape.Should().BeEmpty();
+            result.dtype.str.Should().Be("<U5");
+            NDArray.FromString("hello").Should().BeOfType<char>().And.BeShaped(5);
         }
 
         /// <summary>

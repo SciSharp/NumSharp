@@ -77,6 +77,15 @@ namespace NumSharp
             // Boundary scope: reclaims the broadcast_arrays wrappers, the bool/dtype astype
             // conversions and the scalar-promotion temps at exit; only `result` is yielded.
 
+            // Fixed-width strings: the result dtype is a DESCRIPTOR (result_type(x, y): the wider width) and the
+            // selection runs on unit views (NDStringArrays.Where). The broadcast is validated first, as NumPy's iterator
+            // does, and NumPy's result layout comes from the broadcast operands.
+            if (x.typecode == NPTypeCode.String || y.typecode == NPTypeCode.String)
+            {
+                var operands = broadcast_arrays(condition, x, y);
+                return Backends.Strings.NDStringArrays.Where(condition, x, y, (long[])operands[0].Shape.dimensions.Clone());
+            }
+
             // Detect "originally scalar" on the user-supplied operands BEFORE broadcasting
             // expands them into stride-0 views. The scalar fast path below dispatches
             // specialised IL kernels that hoist the scalar into Vector.Create<T>(value) once

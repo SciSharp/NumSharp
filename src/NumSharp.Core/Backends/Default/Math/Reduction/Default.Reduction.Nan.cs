@@ -20,6 +20,9 @@ namespace NumSharp.Backends
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         public override NDArray NanSum(NDArray a, int? axis = null, bool keepdims = false)
         {
+            // Text, or a string dtype= request: NumPy's nansum checks its arguments first (the axis, and the dtype= class where
+            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            Strings.NDStringUfuncs.ThrowIfReduce("nansum", a, axis);
             var arr = a;
             var shape = arr.Shape;
             var tc = arr.GetTypeCode;
@@ -77,6 +80,9 @@ namespace NumSharp.Backends
         /// </remarks>
         public override NDArray NanProd(NDArray a, int? axis = null, bool keepdims = false)
         {
+            // Text, or a string dtype= request: NumPy's nanprod checks its arguments first (the axis, and the dtype= class where
+            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            Strings.NDStringUfuncs.ThrowIfReduce("nanprod", a, axis);
             var arr = a;
             var shape = arr.Shape;
 
@@ -177,6 +183,8 @@ namespace NumSharp.Backends
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         private NDArray NanMinMax(NDArray a, int? axis, bool keepdims, MinMaxOp op)
         {
+            // nanmax / nanmin are fmax.reduce / fmin.reduce in NumPy: a string array gets the fmax / fmin no-loop text.
+            Strings.NDStringUfuncs.ThrowIfReduce(op == MinMaxOp.FMax ? "nanmax" : "nanmin", a, axis);
             var arr = a;
             var shape = arr.Shape;
             var tc = arr.GetTypeCode;

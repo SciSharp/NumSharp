@@ -29,7 +29,13 @@ namespace NumSharp
             long m = x.size;
             int n = N ?? checked((int)m);
 
-            // NumPy: dtype = promote_types(x.dtype, int) — `int` is intp (int64 on 64-bit).
+            // NumPy: dtype = promote_types(x.dtype, int) — `int` is intp (int64 on 64-bit). Text absorbs int64 as a
+            // 21-character string, and the powers come from multiply.accumulate, which has no string loop.
+            if (Backends.Strings.NDStringUfuncs.IsString(x))
+            {
+                var text = DTypePromotion.PromoteTypes(x.dtype, np.int64);
+                throw Backends.Strings.NDStringUfuncs.NoLoop("multiply", text, text);
+            }
             NPTypeCode dt = np.promote_types(x.typecode, NPTypeCode.Int64);
 
             // NumPy allocates `empty((len(x), N))`; a negative N surfaces the allocator's own error.

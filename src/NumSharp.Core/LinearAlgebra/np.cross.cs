@@ -68,6 +68,13 @@ namespace NumSharp
 
             // recast both operands to the promoted dtype, exactly as NumPy does, so every
             // intermediate product/difference runs in that dtype (integer inputs stay integer, etc.).
+            // NumPy casts both operands to their promoted dtype and multiplies components into the result: with text
+            // the multiply has no loop, named with the promoted descriptor on both sides.
+            if (Backends.Strings.NDStringUfuncs.IsString(a) || Backends.Strings.NDStringUfuncs.IsString(b))
+            {
+                var promoted = DTypePromotion.PromoteTypes(a.dtype, b.dtype);
+                throw Backends.Strings.NDStringUfuncs.NoLoop("multiply", promoted, promoted);
+            }
             NPTypeCode dtype = promote_types(a.typecode, b.typecode);
             a = a.astype(dtype);
             b = b.astype(dtype);

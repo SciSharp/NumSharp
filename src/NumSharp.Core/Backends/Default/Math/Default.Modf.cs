@@ -45,6 +45,16 @@ namespace NumSharp.Backends
             NDArray nd, DType dtype = null,
             NDArray outFrac = null, NDArray outIntegral = null, NDArray where = null)
         {
+            // NumPy parses both outputs, then where=, before it resolves the loop: with text involved a read-only out or a
+            // non-bool mask is reported first; a string dtype= request is then the no-loop text.
+            if (Strings.NDStringUfuncs.IsString(nd) || Strings.NDStringUfuncs.IsStringRequest(dtype))
+            {
+                UfuncLoopCode(dtype);
+                Strings.NDStringUfuncs.ThrowIfOutWhereInvalid(outFrac, null);
+                Strings.NDStringUfuncs.ThrowIfOutWhereInvalid(outIntegral, where);
+            }
+            // modf has float loops only; text is refused before the float promotion below would try to cast it.
+            Strings.NDStringUfuncs.ThrowIfUnary("modf", nd, UfuncLoopCode(dtype, "modf", nd));
             // Loop dtype: promote the input (int/bool/char → float64, floats preserved) or honour a valid
             // dtype= override; a complex input or a non-float dtype= raises here, before any allocation.
             NPTypeCode loopType = ResolveModfLoopType(nd.typecode, dtype);

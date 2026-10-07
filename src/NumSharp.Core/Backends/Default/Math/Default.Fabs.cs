@@ -59,7 +59,7 @@ namespace NumSharp.Backends
         /// </remarks>
         public override NDArray Fabs(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "fabs", nd, null, @out, where);
             var inputType = nd.GetTypeCode;
 
             // NumPy validation order (probed 2.4.2): the where-bool check is argument parsing and

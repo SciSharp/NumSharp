@@ -42,7 +42,9 @@ namespace NumSharp.Backends
         /// the broadcast result.</exception>
         public override NDArray Power(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "power", lhs, rhs, @out, where);
+            // power has no string loop; refused before the exponent checks read the operands' values.
+            Strings.NDStringUfuncs.ThrowIfBinary("power", lhs, rhs, @out, typeCode, where);
             // NumPy rule: signed integer exponents cannot be negative when the LOOP is an
             // integer loop. The check is on the exponent, regardless of base value (NumPy throws
             // even for base=1 or base=-1 where the answer would be exact). An explicit dtype=

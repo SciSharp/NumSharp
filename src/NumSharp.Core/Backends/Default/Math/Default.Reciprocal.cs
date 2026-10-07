@@ -14,8 +14,11 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Reciprocal(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "reciprocal", nd, null, @out, where);
             ValidateWhereMask(where);
+            // reciprocal has no string loop: NumPy's legacy-resolver refusal (or the dtype= input-cast text), raised before the
+            // integer-identity shortcut below reads the input's type code.
+            Strings.NDStringUfuncs.ThrowIfUnary("reciprocal", nd, typeCode);
 
             // dtype= selects the loop; the input must reach it same_kind
             // (probed: reciprocal(f8, dtype=i4) raises the input cast error;

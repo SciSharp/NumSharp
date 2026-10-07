@@ -8,6 +8,9 @@ namespace NumSharp.Backends
     {
         public override NDArray ReduceArgMin(NDArray arr, int? axis_, bool keepdims = false)
         {
+            // Text, or a string dtype= request: NumPy's argmin checks its arguments first (the axis, and the dtype= class where
+            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            Strings.NDStringUfuncs.ThrowIfReduce("argmin", arr, axis_);
             //in order to iterate an axis:
             //consider arange shaped (1,2,3,4) when we want to summarize axis 1 (2nd dimension which its value is 2)
             //the size of the array is [1, 2, n, m] all shapes after 2nd multiplied gives size

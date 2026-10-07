@@ -20,6 +20,10 @@ namespace NumSharp
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
             ValidateQuantile(q);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
+            // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
+            // text itself (NDStringUfuncs.QuantileAnswer).
+            if (Backends.Strings.NDStringUfuncs.IsString(a))
+                throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanquantile", a, method, axisArr, true);
             return QuantileEngine.Compute(a, new[] { q }, axisArr, @out, overwrite_input,
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: true,
                 emptyReturnsNaN: true, ignoreNaN: true);
@@ -35,6 +39,10 @@ namespace NumSharp
             if (q is null) throw new ArgumentNullException(nameof(q));
             for (int i = 0; i < q.Length; i++) ValidateQuantile(q[i]);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
+            // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
+            // text itself (NDStringUfuncs.QuantileAnswer).
+            if (Backends.Strings.NDStringUfuncs.IsString(a))
+                throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanquantile", a, method, axisArr, false);
             return QuantileEngine.Compute(a, q, axisArr, @out, overwrite_input,
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: false,
                 emptyReturnsNaN: true, ignoreNaN: true);
@@ -45,6 +53,10 @@ namespace NumSharp
             string method = "linear", bool keepdims = false)
         {
             ValidateQuantile(q);
+            // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
+            // text itself (NDStringUfuncs.QuantileAnswer).
+            if (Backends.Strings.NDStringUfuncs.IsString(a))
+                throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanquantile", a, method, axis, true);
             return QuantileEngine.Compute(a, new[] { q }, axis, @out, overwrite_input,
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: true,
                 emptyReturnsNaN: true, ignoreNaN: true);
@@ -56,6 +68,10 @@ namespace NumSharp
         {
             if (q is null) throw new ArgumentNullException(nameof(q));
             for (int i = 0; i < q.Length; i++) ValidateQuantile(q[i]);
+            // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
+            // text itself (NDStringUfuncs.QuantileAnswer).
+            if (Backends.Strings.NDStringUfuncs.IsString(a))
+                throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanquantile", a, method, axis, false);
             return QuantileEngine.Compute(a, q, axis, @out, overwrite_input,
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: false,
                 emptyReturnsNaN: true, ignoreNaN: true);
@@ -78,6 +94,10 @@ namespace NumSharp
             double[] qArr = QArrayFromNDArray(q);
             for (int i = 0; i < qArr.Length; i++) ValidateQuantile(qArr[i]);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
+            // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
+            // text itself (NDStringUfuncs.QuantileAnswer).
+            if (Backends.Strings.NDStringUfuncs.IsString(a))
+                throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanquantile", a, method, axisArr, qIsScalar);
             return QuantileEngine.Compute(a, qArr, axisArr, @out, overwrite_input,
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar,
                 emptyReturnsNaN: true, ignoreNaN: true);

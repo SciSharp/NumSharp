@@ -126,7 +126,11 @@ namespace NumSharp.Backends
                 // (NumPy: owndata=False, base set — there are no elements, so the fresh zero-length
                 // buffer shares nothing, but the base chain carries owndata and the setflags(write=True)
                 // base-writeability answer).
-                var emptySlice = ArraySlice.Allocate(_typecode, 0, false);
+                // A string lane has no width of its own (the descriptor carries it), so its empty view keeps the
+                // parent's descriptor through a zero-length string slice.
+                var emptySlice = _typecode == NPTypeCode.String
+                    ? StringArraySlice.Allocate(StringSlice.Descr, 0, false)
+                    : ArraySlice.Allocate(_typecode, 0, false);
                 var emptyStorage = new UnmanagedStorage();
                 emptyStorage._Allocate(slicedShape, emptySlice);
                 emptyStorage._baseStorage = _baseStorage ?? this;

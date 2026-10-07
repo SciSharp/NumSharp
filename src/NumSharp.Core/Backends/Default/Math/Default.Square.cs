@@ -11,7 +11,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Square(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "square", nd, null, @out, where);
             // dtype= runs the loop in that dtype: the input must reach it via
             // a same_kind cast (square(f64, dtype=i32) raises, probed 2.4.2).
             if (typeCode.HasValue)

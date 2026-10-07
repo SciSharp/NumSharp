@@ -25,14 +25,17 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">The input dtype is not integer/bool/char and cannot be coerced to a supported loop.</exception>
         public override NDArray BitwiseCount(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            // NumPy validation order (probed 2.4.2): where parse -> loop resolution (dtype) -> input cast.
+            // NumPy validation order (probed 2.4.2): the dtype= class check (and, for text, the out= / where= parse and a
+            // string request's no-loop text) -> where parse -> loop resolution (dtype) -> input cast.
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "bitwise_count", nd, null, @out, where);
             ValidateWhereMask(where);
+            // bitwise_count has integer loops only; text is refused with the legacy resolver's text.
+            Strings.NDStringUfuncs.ThrowIfUnary("bitwise_count", nd);
 
             // dtype= for bitwise_count selects the OUTPUT loop, and every loop outputs uint8 — so uint8 is
             // the only accepted request (independent of input width; the input keeps its own loop). Any
             // other dtype has no matching loop. Probed: bitwise_count(i4, dtype=i4) and (f8, dtype=i4) both
             // raise the no-loop TypeError, and it is reported BEFORE the input-cast check below.
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
             if (typeCode.HasValue && typeCode.Value != NPTypeCode.Byte)
                 throw new IncorrectTypeException(
                     "No loop matching the specified signature and casting was found for ufunc bitwise_count");

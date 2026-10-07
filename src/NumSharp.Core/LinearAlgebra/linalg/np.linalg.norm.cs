@@ -48,6 +48,10 @@ namespace NumSharp
                 // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
                 if (NDMatrixBoundary.Sees(x))
                     return NDMatrixBoundary.Plain((x, ord, axis, keepdims), static s => norm(s.x, s.ord, s.axis, s.keepdims));
+                // NumPy's norm converts the input with astype(float), parsing the text as numbers: the next phase of the
+                // string support.
+                if (Backends.Strings.NDStringUfuncs.IsString(x))
+                    throw Backends.Strings.NDStringUfuncs.NextPhase("linalg.norm", x);
                 var a = ToFloating(x);
                 int nd = a.ndim;
 

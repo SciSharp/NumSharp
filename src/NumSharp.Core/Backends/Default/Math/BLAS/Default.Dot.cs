@@ -14,6 +14,9 @@ namespace NumSharp.Backends
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.dot.html</remarks>
         public override NDArray Dot(NDArray left, NDArray right)
         {
+            // A string operand: a 0-d one makes dot a multiply (its string loops answer), any other fails NumPy's
+            // dot-function lookup ("data type must provide an itemsize"). Before the BLAS hook, which never takes text.
+            Strings.NDStringUfuncs.ThrowIfProduct(left, right);
             //Dot product of two arrays.Specifically,
             //If both a and b are 1 - D arrays, it is inner product of vectors(without complex conjugation).
             //If both a and b are 2 - D arrays, it is matrix multiplication, but using matmul or a @ b is preferred.

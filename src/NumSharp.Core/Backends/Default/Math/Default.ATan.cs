@@ -10,7 +10,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray ATan(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "arctan", nd, null, @out, where);
             // NumPy validation order: the where bool check is argument
             // parsing -- it precedes loop resolution (the dtype= no-loop
             // raise inside ResolveUnaryFloatReturnType).

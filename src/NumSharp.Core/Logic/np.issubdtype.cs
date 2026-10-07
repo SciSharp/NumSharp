@@ -32,6 +32,10 @@ namespace NumSharp
         /// </example>
         public static bool issubdtype(NPTypeCode arg1, string arg2)
         {
+            // The String lane holds two classes (S and U); its canonical one is StrDType, so the code means `U` here and the
+            // descriptor overload answers (it knows the class-level spellings: "str_", "U", "S5").
+            if (arg1 == NPTypeCode.String)
+                return issubdtype(DType.From(arg1), arg2);
             return NPTypeHierarchy.IsSubType(arg1, arg2);
         }
 
@@ -69,19 +73,43 @@ namespace NumSharp
         /// <summary>
         /// Returns True if the descriptor's scalar type is under the abstract category <paramref name="arg2"/>
         /// (<c>"generic"</c>, <c>"number"</c>, <c>"integer"</c>, <c>"signedinteger"</c>, <c>"unsignedinteger"</c>,
-        /// <c>"inexact"</c>, <c>"floating"</c>, <c>"complexfloating"</c>, <c>"bool"</c>) — NumPy's scalar hierarchy, in
-        /// which <c>datetime64</c> sits directly under <c>generic</c> ("Datetime doesn't fit in any category") and
-        /// <c>timedelta64</c> under <c>signedinteger</c> ("Timedelta is an integer with an associated unit").
+        /// <c>"inexact"</c>, <c>"floating"</c>, <c>"complexfloating"</c>, <c>"bool"</c>, <c>"flexible"</c>,
+        /// <c>"character"</c>) — NumPy's scalar hierarchy, in which <c>datetime64</c> sits directly under <c>generic</c>
+        /// ("Datetime doesn't fit in any category"), <c>timedelta64</c> under <c>signedinteger</c> ("Timedelta is an
+        /// integer with an associated unit"), and <c>bytes_</c> / <c>str_</c> under <c>character</c> under <c>flexible</c>.
+        /// Any other string is a dtype spelling and compares the CLASSES, as NumPy's <c>issubdtype</c> does through
+        /// <c>dtype(arg2).type</c>: <c>issubdtype(U5, "U")</c>, <c>issubdtype(U5, "U3")</c> and <c>issubdtype(U5, "str")</c>
+        /// are True, <c>issubdtype(U5, "S")</c> is False. A string that is neither is False (NumSharp's long-standing answer;
+        /// NumPy raises <c>TypeError</c> there).
         /// </summary>
+        /// <param name="arg1">The descriptor to test.</param>
+        /// <param name="arg2">A category name or a dtype string.</param>
+        /// <returns>True when <paramref name="arg1"/> is under the category, or of the same class as the dtype string.</returns>
+        /// <exception cref="ArgumentNullException">Either argument is null.</exception>
         public static bool issubdtype(DType arg1, string arg2)
         {
             if (arg1 is null) throw new ArgumentNullException(nameof(arg1));
             if (arg2 is null) throw new ArgumentNullException(nameof(arg2));
 
+            // Not a category: NumPy's `arg2 = dtype(arg2).type` — compare the scalar classes (the length of a string
+            // dtype, a datetime unit, a byte order never matter). Unparseable strings keep NumSharp's False.
+            if (!NPTypeHierarchy.TryParseKind(arg2, out _))
+            {
+                DType other;
+                try
+                {
+                    other = dtype(arg2);
+                }
+                catch (Exception e) when (e is NotSupportedException || e is TypeError || e is ValueError)
+                {
+                    return false;
+                }
+                return ReferenceEquals(arg1.Meta, other.Meta);
+            }
+
             if (arg1.Meta is DatetimeDTypeMeta dt)
             {
-                if (!NPTypeHierarchy.TryParseKind(arg2, out var category))
-                    return false;
+                NPTypeHierarchy.TryParseKind(arg2, out var category);
                 if (category == NPTypeKind.Generic)
                     return true;
                 /* SINGLE_INHERIT(Timedelta, SignedInteger); SINGLE_INHERIT(Datetime, Generic) */

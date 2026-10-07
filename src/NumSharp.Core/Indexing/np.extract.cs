@@ -121,7 +121,7 @@ namespace NumSharp
             long count = countKernel(maskPtr, effectiveScan);
 
             // Allocate result: shape (count,) with arr's dtype, C-contig.
-            result = new NDArray(arr.typecode, new Shape(count), false);
+            result = new NDArray(arr.dtype, new Shape(count), false); // descriptor: a string's width
 
             if (count == 0)
                 return true;

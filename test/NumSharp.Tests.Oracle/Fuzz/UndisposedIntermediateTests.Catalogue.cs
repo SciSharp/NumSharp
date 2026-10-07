@@ -268,7 +268,9 @@ namespace NumSharp.Tests.Fuzz
             {
                 if (o is not NDArray nd || keep.Contains(nd))
                     continue;
-                long bytes = nd.size * nd.typecode.SizeOf();
+                // The element size from the array itself: a fixed-width string's width is its descriptor's (the
+                // String lane has no fixed size), and for every other dtype it equals the lane's size.
+                long bytes = nd.size * nd.dtypesize;
                 if (bytes <= ScalarSlotBytes)
                     continue;
                 ulong a = Addr(nd);

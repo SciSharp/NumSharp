@@ -10,7 +10,9 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Negate(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "negative", nd, null, @out, where);
+            // negative has no string loop: the class-named UFuncTypeError, or the input-cast text under dtype=.
+            Strings.NDStringUfuncs.ThrowIfUnary("negative", nd, typeCode);
             // NumPy rejects boolean negative (unary `-` / np.negative) at LOOP
             // resolution: there is no negative ufunc loop for the bool dtype.
             // An explicit dtype= picks the loop, so negative(bool, dtype=f64)

@@ -67,6 +67,8 @@ namespace NumSharp.Backends
         /// </remarks>
         internal static NDArray NanVarStdNumPy(NDArray a, int? axis_, bool keepdims, int ddof, DType dtype, bool takeSqrt)
         {
+            // Text is not inexact, so _replace_nan leaves it alone and nanvar / nanstd ARE np.var / np.std: the delegation
+            // below reaches VarStdNumPy's guard (the axis, then add.reduce's text, the same for both).
             var shape = a.Shape;
 
             // The uninitialized-shape sentinel (not a size-0 array) has nothing to reduce; it passes through as before.
@@ -100,9 +102,9 @@ namespace NumSharp.Backends
 
             // NumPy's dtypes: arr is the input's T; avg = np.sum(arr, dtype) is the loop L (T without dtype=); sqr is T,
             // or float64 for a complex input (.real of the complex product); var = np.sum(sqr, dtype) is L, or sqr's.
-            NPTypeCode avgT = dtype?.GetTypeCode() ?? inT;
+            NPTypeCode avgT = UfuncLoopCode(dtype) ?? inT;
             NPTypeCode sqT = inT == NPTypeCode.Complex ? NPTypeCode.Double : inT;
-            NPTypeCode varT = dtype?.GetTypeCode() ?? sqT;
+            NPTypeCode varT = UfuncLoopCode(dtype) ?? sqT;
 
             // float16 runs np.evaluate's scalar half arithmetic (~8 ns an element) where the eager SIMD half kernels run the
             // same HALF loops; a host without dynamic code has no fused kernels at all.

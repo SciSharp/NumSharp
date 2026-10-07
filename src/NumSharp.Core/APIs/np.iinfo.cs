@@ -61,6 +61,10 @@ namespace NumSharp
             if (dtype is null)
                 throw new ArgumentNullException(nameof(dtype));
 
+            // Text is not an integer type: NumPy names the kind character (Invalid integer data type 'U'.).
+            if (dtype.Meta is StringDTypeMeta)
+                throw new ArgumentException($"Invalid integer data type '{dtype.kind}'.", nameof(dtype));
+
             NPTypeCode typeCode = dtype.GetTypeCode();
             if (!IsIntegerType(typeCode))
                 throw new ArgumentException($"Invalid integer data type '{typeCode.AsNumpyDtypeName()}'", nameof(dtype));
@@ -172,7 +176,8 @@ namespace NumSharp
         {
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
-            return new iinfo(arr.GetTypeCode);
+            // The descriptor, so a string array reports its text kind rather than failing on the storage lane.
+            return new iinfo(arr.dtype);
         }
 
         /// <summary>

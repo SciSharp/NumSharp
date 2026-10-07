@@ -43,7 +43,10 @@ namespace NumSharp.Backends
         /// </remarks>
         public override NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            // Text, or a string dtype= request: NumPy's sum checks its arguments first (the axis, and the dtype= class where
+            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            Strings.NDStringUfuncs.ThrowIfReduce("sum", arr, axis_, dtype);
+            NPTypeCode? typeCode = UfuncLoopCode(dtype);
             var shape = arr.Shape;
             var inputType = arr.GetTypeCode;
             var accumulatorType = inputType.GetAccumulatingType();

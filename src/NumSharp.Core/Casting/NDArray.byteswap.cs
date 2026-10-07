@@ -28,6 +28,11 @@ namespace NumSharp
         //   NumSharp-only dtypes have no NumPy analog, so they take the consistent
         //   raw-itemsize rule: Char (2 bytes) swaps in 2s, Decimal (16 bytes) in 16s.
         //
+        //   Fixed-width strings swap per CHARACTER, as NumPy's UNICODE/STRING copyswapn
+        //   do: a 'U' element is N four-byte code points, each reversed on its own
+        //   (the result holds code points NumPy itself cannot decode); an 'S' element
+        //   is N single bytes, so it is a value no-op (still a copy unless inplace).
+        //
         //   inplace=False (default): return a fresh COPY (never shares memory) in
         //     NumPy's PyArray_NewCopy(ANYORDER) layout — F iff the source is
         //     F-contiguous-and-not-C, else C — then swap it. Even a 1-byte dtype
@@ -72,8 +77,11 @@ namespace NumSharp
         public NDArray byteswap(bool inplace = false)
         {
             int itemsize = this.itemsize;
-            // Complex swaps each component (real/imag) independently — half the itemsize per unit.
-            int unit = typecode == NPTypeCode.Complex ? itemsize / 2 : itemsize;
+            // Complex swaps each component (real/imag) independently — half the itemsize per unit; a string swaps
+            // each character (4 bytes for 'U', 1 for 'S').
+            int unit = typecode == NPTypeCode.Complex ? itemsize / 2
+                : typecode == NPTypeCode.String ? ((StringDTypeMeta)dtype.Meta).UnitSize
+                : itemsize;
 
             if (inplace)
             {
@@ -93,7 +101,8 @@ namespace NumSharp
             // A 1-byte dtype has no bytes to swap, so it is a straight contiguous copy.
             if (Shape.IsContiguous && size > 0)
             {
-                var result = new NDArray(typecode, Shape.Adopt(this.Shape.dimensions), fillZeros: false);
+                // The descriptor allocates: a string's width lives on it, not on the storage lane.
+                var result = new NDArray(dtype, Shape.Adopt(this.Shape.dimensions), fillZeros: false);
                 unsafe
                 {
                     byte* src = (byte*)Storage.Address + Shape.offset * (long)itemsize;

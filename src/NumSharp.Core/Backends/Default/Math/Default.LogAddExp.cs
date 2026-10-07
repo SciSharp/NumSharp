@@ -24,22 +24,22 @@ namespace NumSharp.Backends
         // =====================================================================
 
         public override NDArray LogAddExp(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null)
-            => ExecuteFloatTierBinary(x1, x2, BinaryOp.LogAddExp, dtype?.GetTypeCode(), @out, where);
+            => ExecuteFloatTierBinary(x1, x2, BinaryOp.LogAddExp, UfuncLoopCode(dtype, "logaddexp", x1, x2, @out, where), @out, where);
 
         public override NDArray LogAddExp2(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null)
-            => ExecuteFloatTierBinary(x1, x2, BinaryOp.LogAddExp2, dtype?.GetTypeCode(), @out, where);
+            => ExecuteFloatTierBinary(x1, x2, BinaryOp.LogAddExp2, UfuncLoopCode(dtype, "logaddexp2", x1, x2, @out, where), @out, where);
 
         public override NDArray NextAfter(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null)
-            => ExecuteFloatTierBinary(x1, x2, BinaryOp.NextAfter, dtype?.GetTypeCode(), @out, where);
+            => ExecuteFloatTierBinary(x1, x2, BinaryOp.NextAfter, UfuncLoopCode(dtype, "nextafter", x1, x2, @out, where), @out, where);
 
         public override NDArray CopySign(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null)
-            => ExecuteFloatTierBinary(x1, x2, BinaryOp.CopySign, dtype?.GetTypeCode(), @out, where);
+            => ExecuteFloatTierBinary(x1, x2, BinaryOp.CopySign, UfuncLoopCode(dtype, "copysign", x1, x2, @out, where), @out, where);
 
         public override NDArray Hypot(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null)
-            => ExecuteFloatTierBinary(x1, x2, BinaryOp.Hypot, dtype?.GetTypeCode(), @out, where);
+            => ExecuteFloatTierBinary(x1, x2, BinaryOp.Hypot, UfuncLoopCode(dtype, "hypot", x1, x2, @out, where), @out, where);
 
         public override NDArray Heaviside(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null)
-            => ExecuteFloatTierBinary(x1, x2, BinaryOp.Heaviside, dtype?.GetTypeCode(), @out, where);
+            => ExecuteFloatTierBinary(x1, x2, BinaryOp.Heaviside, UfuncLoopCode(dtype, "heaviside", x1, x2, @out, where), @out, where);
 
         // Valid loop dtypes for these ufuncs: the float family (NumPy ee/ff/dd + NumSharp's decimal
         // extension standing in for gg). Everything else -> NumPy's "No loop matching" TypeError.
@@ -51,6 +51,16 @@ namespace NumSharp.Backends
         {
             // NumPy validation order: where parse -> input coercion -> loop resolution -> out.
             ValidateWhereMask(where);
+
+            // Text has no loop either; a float dtype= request reports the input cast instead (the no-loop check for a
+            // non-float request below stays first, as in NumPy).
+            if (Strings.NDStringUfuncs.IsString(x1) || Strings.NDStringUfuncs.IsString(x2))
+            {
+                if (typeCode.HasValue && !IsFloatTierDtype(typeCode.Value))
+                    throw new IncorrectTypeException(
+                        $"No loop matching the specified signature and casting was found for ufunc {UfuncName(op)}");
+                throw Strings.NDStringUfuncs.BinaryError(UfuncName(op), x1, x2, @out, typeCode, where);
+            }
 
             // Complex has no loop (float-only ufuncs). NumPy: TypeError "ufunc '<name>' not supported
             // for the input types ... casting rule ''safe''" (probed 2.4.2).

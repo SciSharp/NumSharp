@@ -57,6 +57,8 @@ namespace NumSharp.Backends
                 case NPTypeCode.Single: return *((float*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Decimal: return *((decimal*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Complex: return *((System.Numerics.Complex*)Address + _shape.GetOffset(indices));
+                // A fixed-width string element decodes to its C# value (string for U, byte[] for S).
+                case NPTypeCode.String: return StringSlice.GetIndex(_shape.GetOffset(indices));
                 default:
                     throw new NotSupportedException();
             }
@@ -86,6 +88,8 @@ namespace NumSharp.Backends
                 case NPTypeCode.Single: return *((float*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Decimal: return *((decimal*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Complex: return *((System.Numerics.Complex*)Address + _shape.GetOffset(indices));
+                // A fixed-width string element decodes to its C# value (string for U, byte[] for S).
+                case NPTypeCode.String: return StringSlice.GetIndex(_shape.GetOffset(indices));
                 default:
                     throw new NotSupportedException();
             }
@@ -118,6 +122,7 @@ namespace NumSharp.Backends
                 case NPTypeCode.Single: return *((float*)Address + _shape.TransformOffset(index));
                 case NPTypeCode.Decimal: return *((decimal*)Address + _shape.TransformOffset(index));
                 case NPTypeCode.Complex: return *((System.Numerics.Complex*)Address + _shape.TransformOffset(index));
+                case NPTypeCode.String: return StringSlice.GetIndex(_shape.TransformOffset(index));
                 default:
                     throw new NotSupportedException();
             }
@@ -179,6 +184,10 @@ namespace NumSharp.Backends
                     : shape.size;
                 // Create shape with offset=0 since InternalArray.Slice already accounts for the offset
                 var adjustedShape = new Shape(shape.dimensions, shape.strides, 0, sliceSize);
+                // A sub-array of a read-only array is read-only (NumPy views inherit WRITEABLE): row 2 of a broadcast row
+                // keeps no stride-0 axis, so its fresh flags would otherwise call it writeable.
+                if (!this_shape.IsWriteable)
+                    adjustedShape = adjustedShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
@@ -234,6 +243,10 @@ namespace NumSharp.Backends
                     : shape.size;
                 // Create shape with offset=0 since InternalArray.Slice already accounts for the offset
                 var adjustedShape = new Shape(shape.dimensions, shape.strides, 0, sliceSize);
+                // A sub-array of a read-only array is read-only (NumPy views inherit WRITEABLE): row 2 of a broadcast row
+                // keeps no stride-0 axis, so its fresh flags would otherwise call it writeable.
+                if (!this_shape.IsWriteable)
+                    adjustedShape = adjustedShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
@@ -314,6 +327,10 @@ namespace NumSharp.Backends
                     : shape.size;
                 // Create shape with offset=0 since InternalArray.Slice already accounts for the offset
                 var adjustedShape = new Shape(shape.dimensions, shape.strides, 0, sliceSize);
+                // A sub-array of a read-only array is read-only (NumPy views inherit WRITEABLE): row 2 of a broadcast row
+                // keeps no stride-0 axis, so its fresh flags would otherwise call it writeable.
+                if (!this_shape.IsWriteable)
+                    adjustedShape = adjustedShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
@@ -370,6 +387,10 @@ namespace NumSharp.Backends
                     : shape.size;
                 // Create shape with offset=0 since InternalArray.Slice already accounts for the offset
                 var adjustedShape = new Shape(shape.dimensions, shape.strides, 0, sliceSize);
+                // A sub-array of a read-only array is read-only (NumPy views inherit WRITEABLE): row 2 of a broadcast row
+                // keeps no stride-0 axis, so its fresh flags would otherwise call it writeable.
+                if (!this_shape.IsWriteable)
+                    adjustedShape = adjustedShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)

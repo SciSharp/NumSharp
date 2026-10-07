@@ -26,6 +26,9 @@ namespace NumSharp.Backends
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.matmul.html</remarks>
         public override NDArray Matmul(NDArray lhs, NDArray rhs)
         {
+            // The matmul gufunc has no string loop; its loop search runs before the core-dimension checks (probed).
+            if (Strings.NDStringUfuncs.IsString(lhs) || Strings.NDStringUfuncs.IsString(rhs))
+                throw Strings.NDStringUfuncs.NoLoop("matmul", lhs.dtype, rhs.dtype);
             if (lhs.ndim == 0 || rhs.ndim == 0)
                 throw new InvalidOperationException(
                     "matmul: Input operand does not have enough dimensions (a 0-D / scalar operand " +

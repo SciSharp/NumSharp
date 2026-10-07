@@ -26,8 +26,13 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.degrees.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray degrees(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => degrees(s.x, s.@out, s.where, s.dtype), @out)
-            : rad2deg(x, @out, where, dtype);
+        {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(x))
+                return NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => degrees(s.x, s.@out, s.where, s.dtype), @out);
+            // degrees is its own NumPy ufunc (not an alias object of rad2deg), so a refusal names it.
+            Backends.Strings.NDStringUfuncs.ThrowIfUnary("degrees", x, Backends.DefaultEngine.UfuncLoopCode(dtype, "degrees", x, null, @out, where), @out, where);
+            return rad2deg(x, @out, where, dtype);
+        }
     }
 }

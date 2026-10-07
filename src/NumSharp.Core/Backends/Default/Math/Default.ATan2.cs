@@ -16,7 +16,7 @@ namespace NumSharp.Backends
         /// <returns>Array of angles in radians, range [-pi, pi]</returns>
         public override NDArray ATan2(NDArray y, NDArray x, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "arctan2", y, x, @out, where);
             // NumPy validation order: where parse -> loop resolution -> out
             // cast -> shape (probed 2.4.2).
             ValidateWhereMask(where);
@@ -27,6 +27,9 @@ namespace NumSharp.Backends
             if (typeCode.HasValue && typeCode.Value < NPTypeCode.Single)
                 throw new IncorrectTypeException(
                     "No loop matching the specified signature and casting was found for ufunc arctan2");
+
+            // Text has no arctan2 loop (the legacy resolver's text, or the input-cast text under a float dtype=).
+            Strings.NDStringUfuncs.ThrowIfBinary("arctan2", y, x, @out, typeCode, where);
 
             // Complex has NO arctan2 loop (float-only ufunc). This guard is LOAD-BEARING, not cosmetic:
             // without it a complex128 input falls through to ExecuteATan2Kernel, whose mixed-type kernel

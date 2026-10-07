@@ -25,6 +25,12 @@ namespace NumSharp
             double? left = null, double? right = null, double? period = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(x, xp, fp);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            // NumPy's compiled interp casts x, xp and fp to float64 under 'safe', in that order: text refuses with the
+            // first string operand's descriptor (its verbatim TypeError).
+            foreach (var operand in new[] { x, xp, fp })
+                if (Backends.Strings.NDStringUfuncs.IsString(operand))
+                    throw new InvalidCastException(
+                        $"Cannot cast array data from {operand.dtype.ToString(true)} to dtype('float64') according to the rule 'safe'");
             bool isComplex = fp.typecode == NPTypeCode.Complex;
             Complex? cleft = left.HasValue ? new Complex(left.Value, 0) : (Complex?)null;
             Complex? cright = right.HasValue ? new Complex(right.Value, 0) : (Complex?)null;

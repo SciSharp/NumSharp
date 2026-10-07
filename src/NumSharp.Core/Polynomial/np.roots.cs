@@ -16,6 +16,8 @@ namespace NumSharp
         public static NDArray roots(NDArray p)
         {
             using var plain = NDMatrixBoundary.PlainFor(p);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            // NumPy converts the coefficients to a float array, parsing the text as numbers: the next phase of the string support.
+            if (Backends.Strings.NDStringUfuncs.IsString(p)) throw Backends.Strings.NDStringUfuncs.NextPhase("roots", p);
             p = np.atleast_1d(p);
             if (p.ndim != 1)
                 throw new ValueError("Input must be a rank-1 array.");

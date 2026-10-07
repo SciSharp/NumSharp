@@ -62,8 +62,9 @@ namespace NumSharp
         ///     the buffer.</exception>
         /// <exception cref="BufferError">A <see cref="MemoryView"/> buffer over a non-contiguous array.</exception>
         /// <exception cref="NotSupportedException">A stride that addresses elements is not a multiple of the element
-        ///     size (NumSharp stores strides in whole elements), or <paramref name="dtype"/> has no storage yet
-        ///     (datetime64).</exception>
+        ///     size (NumSharp stores strides in whole elements), <paramref name="dtype"/> has no storage yet
+        ///     (datetime64), or <paramref name="dtype"/> is an UNSIZED string (<c>'S'</c>, <c>'U'</c>, <c>np.str_</c>):
+        ///     NumPy builds a zero-width <c>S0</c>/<c>U0</c> array here, which NumSharp's string buffers cannot hold.</exception>
         /// <remarks>
         ///     <para>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html. The checks run in NumPy's order
@@ -85,10 +86,20 @@ namespace NumSharp
         ///     a large managed array for a long time fragments the managed heap, so dispose the result when done.
         ///     </para>
         ///     <para>
-        ///     <b>Divergences</b> (pinned by <c>[Misaligned]</c> tests): a non-native dtype (<c>'&gt;i4'</c>) with a buffer
-        ///     DECODES the bytes into a new native array instead of viewing them (NumSharp has no big-endian storage);
-        ///     <c>complex64</c> does not exist; a multi-character order string cannot be expressed; a view of an unaligned
-        ///     result reports <c>ALIGNED</c> again.
+        ///     <b>Divergences</b> (pinned by <c>[Misaligned]</c> tests): a non-native dtype (<c>'&gt;i4'</c>, <c>'&gt;U2'</c>)
+        ///     with a buffer DECODES the bytes into a new native array instead of viewing them, and without a buffer
+        ///     allocates the native dtype (NumSharp has no big-endian storage); <c>complex64</c> does not exist; a
+        ///     multi-character order string cannot be expressed; a view of an unaligned result reports <c>ALIGNED</c>
+        ///     again; an unsized string dtype is refused (NumPy builds a zero-width <c>S0</c>/<c>U0</c> array, and for the
+        ///     shape <c>(-1,)</c> over a buffer it divides by the zero item size and crashes the process).
+        ///     </para>
+        ///     <para>
+        ///     <b>Strings.</b> A sized <c>S</c>/<c>U</c> dtype reads the bytes as fixed-width elements, exactly as NumPy
+        ///     does: <c>np.ndarray((4,), 'S3', buffer=b'abcdefghijkl')</c> is <c>[b'abc', b'def', b'ghi', b'jkl']</c>, and a
+        ///     <c>U</c> dtype reads native UCS-4 code points (a code point above <c>U+10FFFF</c> is stored, and NumPy's
+        ///     <c>SystemError</c> is raised only when that element is read). A string array buffer viewed with another
+        ///     string width or class (<c>'&lt;U1'</c> over a <c>'&lt;U2'</c> array) is an alias of its bytes, never its
+        ///     elements.
         ///     </para>
         /// </remarks>
         public static NDArray ndarray(Shape shape, DType dtype = null, object buffer = null, long offset = 0, long[] strides = null, char order = 'C')
@@ -100,6 +111,15 @@ namespace NumSharp
             // NPY_DEFAULT_TYPE. A descriptor without storage fails here, before a buffer is pinned.
             dtype ??= DType.Double;
             NPTypeCode typeCode = dtype.GetTypeCode();
+
+            // An unsized string class: NumPy's array_new passes _NPY_ARRAY_ALLOW_EMPTY_STRING, so it builds an S0/U0 array
+            // (every element '' and every stride 0) - and over a buffer with the shape (-1,) it divides by the zero item size.
+            // A NumSharp string buffer holds at least one character per element, so the request is refused here, before a
+            // managed buffer is pinned, rather than silently widened to S1/U1 (np.empty's rule, which np.ndarray skips).
+            if (typeCode == NPTypeCode.String && dtype.itemsize == 0)
+                throw new NotSupportedException(
+                    $"np.ndarray with the unsized string dtype {dtype.ToString(true)}: NumPy builds a zero-width (itemsize 0) " +
+                    "array here, which NumSharp's fixed-width string buffers cannot hold. Give a width: 'S1', '<U5'.");
 
             // PyArray_BufferConverter: the buffer is resolved (and a managed buffer pinned) before the order is parsed.
             NDBuffer buf = NDBuffer.Acquire(buffer);
@@ -197,7 +217,12 @@ namespace NumSharp
             if (!layout.IsWriteable)
                 layout = layout.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
 
-            var storage = new UnmanagedStorage(ArraySlice.Allocate(typeCode, size, false), layout);
+            // A string array allocates its descriptor's bytes (the lane alone has no width); a non-native string descriptor
+            // is allocated native, as np.empty allocates it.
+            IArraySlice slice = typeCode == NPTypeCode.String
+                ? StringArraySlice.Allocate(Backends.Strings.NDStringStorage.AllocationDescr(dtype), size, false)
+                : ArraySlice.Allocate(typeCode, size, false);
+            var storage = new UnmanagedStorage(slice, layout);
             return new NDArray(storage);
         }
 
@@ -288,12 +313,26 @@ namespace NumSharp
             // NumPy: offset + (char *)buffer.ptr. For an empty array this may point outside the buffer; nothing is read.
             byte* data = unchecked(buf.Start + offset);
 
-            UnmanagedStorage root = buf.TakeRoot(typeCode, itemSize, out IArraySlice arcOwner);
+            // A string dtype's elements are its descriptor's width, which the lane does not carry: a buffer pinned here is
+            // rooted as plain bytes (the base is a uint8 array over the whole buffer, NumPy's non-array base object), and
+            // the result is a string slice over its occupied span. Its descriptor is the native one (a non-native request
+            // is decoded by the caller after this view is built).
+            bool isString = typeCode == NPTypeCode.String;
+            DType stringDescr = isString ? Backends.Strings.NDStringStorage.AllocationDescr(dtype) : null;
+            IArraySlice arcOwner;
+            UnmanagedStorage root = isString
+                ? buf.TakeRoot(NPTypeCode.Byte, 1, out arcOwner)
+                : buf.TakeRoot(typeCode, itemSize, out arcOwner);
 
             IArraySlice slice;
             long first;
             byte* ownerStart = (byte*)arcOwner.Address;
-            if (spanBytes > 0 && arcOwner.TypeCode == typeCode && data >= ownerStart && (data - ownerStart) % itemSize == 0)
+            // The buffer array's own slice is shared only when it holds the SAME elements: for strings that is the same
+            // descriptor (class and width) - the lane is shared by every width, and an S4 view of a U1 array, or a U1 view
+            // of a U2 array, must read the bytes, not the owner's elements.
+            bool sameElements = arcOwner.TypeCode == typeCode
+                                && (!isString || ((StringArraySlice)arcOwner).Descr == stringDescr);
+            if (spanBytes > 0 && sameElements && data >= ownerStart && (data - ownerStart) % itemSize == 0)
             {
                 // The buffer array's own element type and grid: share its slice, as an ordinary view does (its reference
                 // counting is the owner's already). The exact bounds check put every element inside it.
@@ -304,7 +343,11 @@ namespace NumSharp
             {
                 // Another dtype, an offset off the grid, or an empty array: an alias of exactly the occupied span, whose
                 // reference counting forwards to the buffer's owner, so the buffer lives while any array over it does.
-                slice = ArraySlice.WrapShared(typeCode, data + lowerBytes, spanBytes / itemSize, arcOwner);
+                // A string alias is the span's bytes read as elements of the descriptor (spanBytes is a whole number of
+                // elements: it runs from the lowest element's first byte to one past the highest element's last).
+                slice = isString
+                    ? new StringArraySlice(ArraySlice.WrapShared<byte>(data + lowerBytes, spanBytes, arcOwner), stringDescr)
+                    : ArraySlice.WrapShared(typeCode, data + lowerBytes, spanBytes / itemSize, arcOwner);
                 first = -lowerBytes / itemSize;
             }
 

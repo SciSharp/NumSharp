@@ -153,6 +153,11 @@ namespace NumSharp.Backends.Iteration
                     return i;
             }
 
+            // A fused expression computes on its leaves' values, and text has no numeric value: a string leaf is
+            // refused when it is first bound (the next phase of the string support computes on text).
+            if (Strings.NDStringUfuncs.IsString(array))
+                throw Strings.NDStringUfuncs.NextPhase("np.evaluate", array);
+
             Operands.Add(array);
             return Operands.Count - 1;
         }

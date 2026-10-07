@@ -1094,7 +1094,8 @@ namespace NumSharp.Tests.Fuzz
             foreach (var op in operands)
                 if (ReferenceEquals(op, nd))
                     return 0;
-            long bytes = nd.size * nd.typecode.SizeOf();
+            // The element size from the array itself (a fixed-width string's width is its descriptor's).
+            long bytes = nd.size * nd.dtypesize;
             if (bytes <= ScalarSlotBytes)
                 return 0;
             ulong a = Addr(nd);

@@ -13,7 +13,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Invert(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "invert", nd, null, @out, where);
             // NumPy validation order (probed 2.4.2): where parse -> loop
             // resolution -> input cast -> out cast -> shape.
             ValidateWhereMask(where);

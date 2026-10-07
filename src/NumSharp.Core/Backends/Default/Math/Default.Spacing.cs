@@ -31,7 +31,7 @@ namespace NumSharp.Backends
         /// </exception>
         public override NDArray Spacing(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "spacing", nd, null, @out, where);
 
             // NumPy validation order: the where bool check is argument parsing — it precedes loop
             // resolution (matching arcsinh/ExecuteFloatTierBinary).

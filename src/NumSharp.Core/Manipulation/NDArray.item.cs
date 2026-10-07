@@ -54,10 +54,15 @@ namespace NumSharp
         public object item(long index)
         {
             var arraySize = size;
+            long original = index;
             if (index < 0)
                 index = arraySize + index;
+            // NumPy's texts (probed 2.4.2): a 1-D array reports axis 0, any other rank only the flat size; both keep the
+            // index as given (a negative one included).
             if (index < 0 || index >= arraySize)
-                throw new IndexOutOfRangeException($"Index {index} is out of bounds for array with size {arraySize}.");
+                throw new IndexOutOfRangeException(ndim == 1
+                    ? $"index {original} is out of bounds for axis 0 with size {arraySize}"
+                    : $"index {original} is out of bounds for size {arraySize}");
             return Storage.GetAtIndex(index);
         }
 

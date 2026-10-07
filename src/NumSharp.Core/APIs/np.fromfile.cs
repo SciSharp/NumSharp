@@ -41,6 +41,10 @@ namespace NumSharp
         public static NDArray fromfile(Stream stream, DType dtype = null, int count = -1, string sep = "", long offset = 0)
         {
             if (stream is null) throw new ArgumentNullException(nameof(stream));
+            // A fixed-width string dtype: its width is the descriptor's (the lane carries none), and NumPy reads text
+            // files only for the dtypes with a scanner, which the string classes lack.
+            if (Backends.Strings.NDStringStorage.IsString(dtype))
+                return StringFromFile(stream, dtype, count, sep, offset);
             NPTypeCode tc = dtype?.GetTypeCode() ?? NPTypeCode.Double;
 
             if (string.IsNullOrEmpty(sep))
@@ -56,11 +60,23 @@ namespace NumSharp
         // ---- binary ------------------------------------------------------------------
 
         private static NDArray FromFileBinary(Stream stream, NPTypeCode tc, int count, long offset)
+            => BytesToArray(ReadFileItemBytes(stream, tc.SizeOf(), count, offset), tc);
+
+        /// <summary>
+        ///     The binary read of <c>np.fromfile</c>: skips <paramref name="offset"/> bytes, then reads
+        ///     <paramref name="count"/> items of <paramref name="itemsize"/> bytes (every whole item to the end for a
+        ///     negative count; never past EOF, as NumPy reads what is there) into one exact buffer.
+        /// </summary>
+        /// <param name="stream">The stream, read from its current position.</param>
+        /// <param name="itemsize">Bytes per item (positive).</param>
+        /// <param name="count">Items to read; negative means all.</param>
+        /// <param name="offset">Bytes to skip first.</param>
+        /// <returns>The bytes of the whole items read (a trailing partial item is dropped).</returns>
+        private static byte[] ReadFileItemBytes(Stream stream, int itemsize, int count, long offset)
         {
             if (offset != 0)
                 SkipBytes(stream, offset);
 
-            int itemsize = tc.SizeOf();
             // count<0 => whole remainder; else count items, but never past EOF (NumPy reads what's there).
             long want = count < 0 ? long.MaxValue : (long)count * itemsize;
 
@@ -83,7 +99,57 @@ namespace NumSharp
                 if (usable != bytes.Length)
                     Array.Resize(ref bytes, usable);
             }
-            return BytesToArray(bytes, tc);
+            return bytes;
+        }
+
+        /// <summary>
+        ///     <c>np.fromfile</c> with a fixed-width string dtype — NumPy's <c>PyArray_FromFile</c>: the binary bytes read
+        ///     as whole string elements (a new array that owns them); a text file is refused, because the string
+        ///     classes have no element scanner.
+        /// </summary>
+        /// <param name="stream">The stream, read from its current position.</param>
+        /// <param name="dtype">A string descriptor.</param>
+        /// <param name="count">Elements to read; negative means all.</param>
+        /// <param name="sep">The separator: empty reads binary.</param>
+        /// <param name="offset">Bytes to skip first (binary only).</param>
+        /// <returns>The 1-D string array; a non-native <c>U</c> request is decoded into host byte order.</returns>
+        /// <exception cref="TypeError">An offset with a separator (the Python wrapper's check, which runs first).</exception>
+        /// <exception cref="ValueError">An unsized class with a negative count (NumPy builds a <c>(-1,)</c> array:
+        ///     <c>negative dimensions are not allowed</c>), or a separator (<c>Unable to read character files of that
+        ///     array type</c>).</exception>
+        /// <exception cref="NotSupportedException">An unsized class with a count of 0 or more: NumPy builds a zero-width
+        ///     <c>S0</c>/<c>U0</c> array of that many elements, which NumSharp's string buffers cannot hold.</exception>
+        private static NDArray StringFromFile(Stream stream, DType dtype, int count, string sep, long offset)
+        {
+            bool binary = string.IsNullOrEmpty(sep);
+            if (!binary && offset != 0)
+                throw new TypeError("'offset' argument only permitted for binary files");
+
+            // PyArray_FromFile: an item size of 0 reads nothing and builds `count` zero-width elements.
+            if (dtype.itemsize == 0)
+            {
+                if (count < 0)
+                    throw new ValueError("negative dimensions are not allowed");
+                throw new NotSupportedException(
+                    $"np.fromfile with the unsized string dtype {dtype.ToString(true)}: NumPy builds a zero-width (itemsize 0) " +
+                    "array here, which NumSharp's fixed-width string buffers cannot hold. Give a width: 'S1', '<U5'.");
+            }
+
+            if (!binary)
+                throw new ValueError("Unable to read character files of that array type");
+
+            byte[] bytes = ReadFileItemBytes(stream, dtype.itemsize, count, offset);
+            var native = Backends.Strings.NDStringStorage.AllocationDescr(dtype);
+            long elements = bytes.Length / dtype.itemsize;
+            if (elements == 0)
+                return new NDArray(native, Shape.Vector(0), false);
+
+            // The bytes become the elements without a copy (the array pins and owns the buffer, as BytesToArray does).
+            var slice = new StringArraySlice(new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromBuffer(bytes, false)), native);
+            var result = new NDArray(new UnmanagedStorage(slice, Shape.Vector(elements)));
+            if (!dtype.isnative)
+                result.byteswap(inplace: true); // big-endian code points into host order, per unit
+            return result;
         }
 
         private static void ReadExact(Stream s, byte[] buf, int count)

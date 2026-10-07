@@ -109,7 +109,7 @@ namespace NumSharp
             NDArray values;
             if (val is IConvertible && !(val is string))
             {
-                values = np.broadcast_to(NDArray.Scalar(val, a.typecode), new Shape(count));
+                values = np.broadcast_to(NDArray.Scalar(val, a.dtype), new Shape(count));
             }
             else
             {
@@ -118,8 +118,10 @@ namespace NumSharp
                     return; // NumPy: assigning an empty sequence leaves the diagonal untouched.
 
                 var flat = source.ravel();
-                if (flat.typecode != a.typecode)
-                    flat = flat.astype(a.typecode);
+                // Convert unless the element type already matches (for strings: class AND width — a <U1 'Z' into a <U2
+                // array is padded first, never copied as two-unit elements).
+                if (!flat.HasSameElementType(a))
+                    flat = flat.astype(a.dtype);
 
                 // Ravel + cyclic tile/truncate to exactly `count` values (np.resize's rule).
                 values = flat.size == 1

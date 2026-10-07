@@ -10,6 +10,9 @@ namespace NumSharp.Backends
     {
         public override unsafe NDArray ReduceCumMul(NDArray arr, int? axis_, DType dtype = null)
         {
+            // Text, or a string dtype= request: NumPy's cumprod checks its arguments first (the axis, and the dtype= class where
+            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            Strings.NDStringUfuncs.ThrowIfReduce("cumprod", arr, axis_, dtype);
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy: cumprod on boolean arrays treats True as 1 and False as 0, returning int64
             // Convert boolean input to int64 to match NumPy behavior

@@ -90,6 +90,15 @@ namespace NumSharp
             if (array == null)
                 throw new ArgumentNullException(nameof(array));
 
+            // Text values (string elements, an object array holding text, or a string dtype over object / byte[][] data)
+            // build a fixed-width S/U array: NumPy's discovery of the class and the longest value, then setitem per element.
+            if (Backends.Strings.NDStringArrays.IsTextInput(array, dtype))
+                return Backends.Strings.NDStringArrays.FromManaged(array, dtype, ndmin, order);
+            // A string dtype over NUMBERS is NumPy's number->text conversion (np.array([1, 22], dtype='U') is ['1', '22']),
+            // which is not part of the storage phase; refuse it instead of reinterpreting the numbers' bytes.
+            if (Backends.Strings.NDStringStorage.IsString(dtype))
+                throw Backends.Strings.NDStringStorage.NumberToText(array.GetType().GetElementType()?.Name ?? "value");
+
             var arrType = array.ResolveElementType();
 
             //handle dim expansion and extract shape
@@ -219,31 +228,41 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Create a vector <see cref="NDArray"/> of dtype <see cref="char"/>.
+        ///     Creates a 0-d fixed-width Unicode array holding <paramref name="value"/> — NumPy's <c>np.array('abc')</c>,
+        ///     <c>array('abc', dtype='&lt;U3')</c> with shape <c>()</c>. The width is the value's length in code points (a surrogate
+        ///     pair counts once); an empty value is <c>&lt;U1</c>, NumPy's minimum.
         /// </summary>
-        /// <param name="chars"></param>
-        /// <returns></returns>
+        /// <param name="value">The text.</param>
+        /// <returns>A 0-d <c>U</c> array.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
+        /// <remarks>
+        ///     <b>Breaking (NumPy parity):</b> this overload used to build a 1-D <see cref="char"/> vector of the characters.
+        ///     That conversion remains available as <see cref="NDArray.FromString(string)"/> and
+        ///     <c>np.array(value.ToCharArray())</c>.
+        /// </remarks>
         [MethodImpl(Inline)]
-        public static NDArray array(string chars)
+        public static NDArray array(string value)
         {
-            if (chars == null)
-                throw new ArgumentNullException(nameof(chars));
-            if (chars.Length == 0)
-                return new NDArray(NPTypeCode.Char, 0);
+            if (value == null)
+                throw new ArgumentNullException(nameof(value));
+            return Backends.Strings.NDStringArrays.FromScalar(value, null);
+        }
 
-            unsafe
-            {
-                var ret = new ArraySlice<char>(new UnmanagedMemoryBlock<char>(chars.Length));
-                fixed (char* strChars = chars)
-                {
-                    var src = strChars;
-                    var dst = ret.Address;
-                    var len = sizeof(char) * chars.Length;
-                    Buffer.MemoryCopy(src, dst, len, len);
-                }
-
-                return new NDArray(ret);
-            }
+        /// <summary>
+        ///     Creates a 0-d fixed-width string array holding <paramref name="value"/> with the given string dtype —
+        ///     NumPy's <c>np.array('abc', dtype='U5')</c> / <c>dtype='S'</c>.
+        /// </summary>
+        /// <param name="value">The text.</param>
+        /// <param name="dtype">A string dtype (<c>"U"</c>, <c>"U5"</c>, <c>"S"</c>, <c>np.str_</c>, <c>np.bytes_</c>) or null to discover.</param>
+        /// <returns>A 0-d <c>S</c>/<c>U</c> array.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
+        /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
+        /// <exception cref="NotSupportedException">A numeric dtype (text to number parsing is the computational phase).</exception>
+        public static NDArray array(string value, DType dtype)
+        {
+            if (value == null)
+                throw new ArgumentNullException(nameof(value));
+            return Backends.Strings.NDStringArrays.FromScalar(value, dtype);
         }
 
         /// <summary>

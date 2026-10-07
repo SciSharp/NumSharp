@@ -66,6 +66,8 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(x1, x2))
                 return NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => logical_and(s.x1, s.x2, s.@out, s.where, s.dtype), @out);
+            // logical_* read a string's truth value (non-empty is True) in NumPy: the next phase of the string support.
+            Backends.Strings.NDStringUfuncs.ThrowIfBinary("logical_and", x1, x2, @out, Backends.DefaultEngine.UfuncLoopCode(dtype, "logical_and", x1, x2, @out, where), where);
             ValidateLogicalDtype(dtype, "logical_and");
             // Reduce both operands to bool truth values, then AND them through the bitwise engine's
             // out=/where= path (bool & bool == logical and; the masked write + same_kind out cast are
@@ -94,6 +96,8 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(x1, x2))
                 return NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => logical_or(s.x1, s.x2, s.@out, s.where, s.dtype), @out);
+            // logical_* read a string's truth value (non-empty is True) in NumPy: the next phase of the string support.
+            Backends.Strings.NDStringUfuncs.ThrowIfBinary("logical_or", x1, x2, @out, Backends.DefaultEngine.UfuncLoopCode(dtype, "logical_or", x1, x2, @out, where), where);
             ValidateLogicalDtype(dtype, "logical_or");
             var b1 = AsTruthOperand(x1);
             var b2 = AsTruthOperand(x2);
@@ -119,6 +123,8 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(x1, x2))
                 return NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => logical_xor(s.x1, s.x2, s.@out, s.where, s.dtype), @out);
+            // logical_* read a string's truth value (non-empty is True) in NumPy: the next phase of the string support.
+            Backends.Strings.NDStringUfuncs.ThrowIfBinary("logical_xor", x1, x2, @out, Backends.DefaultEngine.UfuncLoopCode(dtype, "logical_xor", x1, x2, @out, where), where);
             ValidateLogicalDtype(dtype, "logical_xor");
             var b1 = AsTruthOperand(x1);
             var b2 = AsTruthOperand(x2);
@@ -144,6 +150,10 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(x))
                 return NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => logical_not(s.x, s.@out, s.where, s.dtype), @out);
+            // The dtype= class check, then for text the out= / where= parse and a string request's no-loop text; logical_not
+            // has no string loop in NumPy (unlike logical_and/or/xor).
+            Backends.DefaultEngine.UfuncLoopCode(dtype, "logical_not", x, null, @out, where);
+            Backends.Strings.NDStringUfuncs.ThrowIfUnary("logical_not", x);
             ValidateLogicalDtype(dtype, "logical_not");
             // A bool input's logical NOT is exactly its bitwise invert (~True == False); route through the
             // invert ufunc so the bool→bool loop is used (np.negative(bool) is a TypeError, so Invert, not

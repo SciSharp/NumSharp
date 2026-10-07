@@ -44,6 +44,9 @@ namespace NumSharp
         /// </remarks>
         public virtual NDArray Inner(NDArray a, NDArray b)
         {
+            // inner of a 0-d operand is a multiply (its string loops answer); otherwise NumPy's dot-function lookup needs a
+            // fixed item size. Before the BLAS hook, which never takes text.
+            Backends.Strings.NDStringUfuncs.ThrowIfProduct(a, b);
             var blas = Blas;
             if (blas != null && blas.TryInner(a, b, out var accelerated))
                 return accelerated;
@@ -60,6 +63,8 @@ namespace NumSharp
         public virtual NDArray Vdot(NDArray a, NDArray b)
         {
             using var plain = NDMatrixBoundary.PlainFor(a, b);   // an engine method computes plain: np.ravel / np.reshape below must not apply its matrix rule
+            // vdot flattens both operands first, so even a 0-d string fails NumPy's dot-function lookup.
+            if (Backends.Strings.NDStringUfuncs.IsString(a) || Backends.Strings.NDStringUfuncs.IsString(b)) throw Backends.Strings.NDStringUfuncs.NoItemsize();
             var blas = Blas;
             if (blas != null && blas.TryVdot(a, b, out var accelerated))
                 return accelerated;

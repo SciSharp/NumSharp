@@ -143,6 +143,54 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     The layout NumPy's <c>*_like</c> functions allocate in — <c>PyArray_NewLikeArrayWithShape</c>
+        ///     (<c>numpy/_core/src/multiarray/ctors.c</c>) behind <c>np.empty_like</c> / <c>zeros_like</c> /
+        ///     <c>ones_like</c> / <c>full_like</c>: <c>'C'</c> and <c>'F'</c> as given; <c>'A'</c> is F when the prototype
+        ///     is F-contiguous and not C-contiguous, else C; <c>'K'</c> (the default) is C for a C-contiguous prototype
+        ///     or a result of another rank, F for an F-contiguous one, and otherwise the prototype's own axis order
+        ///     (<c>PyArray_CreateSortedStridePerm</c>), so a transposed prototype gives a transposed result and a
+        ///     broadcast one (its stride-0 axes sort innermost) gives an F result.
+        /// </summary>
+        /// <param name="prototype">The array whose layout is kept.</param>
+        /// <param name="order">NumPy's order code (<c>C</c>, <c>F</c>, <c>A</c>, <c>K</c>, either case).</param>
+        /// <param name="dims">The result's dimensions (the prototype's, or the <c>shape=</c> argument). The returned shape
+        ///     ADOPTS this array — pass a fresh one.</param>
+        /// <returns>A fresh, offset-0, dense shape of <paramref name="dims"/>.</returns>
+        /// <exception cref="ArgumentException">An order code other than C, F, A or K (<see cref="OrderResolver"/>'s text).</exception>
+        /// <remarks>
+        ///     Resolving <c>'K'</c> to C-or-F alone (<see cref="OrderResolver.Resolve"/>) is wrong for a permuted or
+        ///     broadcast prototype: NumPy keeps the permutation, so <c>np.zeros_like(a.transpose(1, 2, 0))</c> is laid out
+        ///     like the transpose and <c>np.zeros_like(np.broadcast_to(row, (3, 4)))</c> is F-contiguous (probed 2.4.2).
+        /// </remarks>
+        internal static Shape NewLikeLayout(in Shape prototype, char order, long[] dims)
+        {
+            switch (order)
+            {
+                case 'C':
+                case 'c':
+                    return Shape.Adopt(dims);
+                case 'F':
+                case 'f':
+                    return Shape.Adopt(dims, 'F');
+                case 'A':
+                case 'a':
+                    return Shape.Adopt(dims, prototype.IsFContiguous && !prototype.IsContiguous ? 'F' : 'C');
+                case 'K':
+                case 'k':
+                    // NumPy's "simple KEEPORDER" cases first; only a neither-contiguous prototype of the same rank sorts.
+                    if (prototype.IsContiguous || dims.Length != prototype.NDim)
+                        return Shape.Adopt(dims);
+                    if (prototype.IsFContiguous)
+                        return Shape.Adopt(dims, 'F');
+                    return Shape.Adopt(dims, StridesForPerm(dims, SortedStridePerm(prototype.strides)));
+                default:
+                    // The house error for an unknown order code.
+                    OrderResolver.Resolve(order, prototype);
+                    throw new ArgumentException($"order must be one of 'C', 'F', 'A', or 'K' (got '{order}')", nameof(order));
+            }
+        }
+
+        /// <summary>
         ///     The output shape <c>PyArray_ConcatenateArrays</c> allocates: dims =
         ///     <paramref name="outDims"/>, strides built along the multi-operand KEEPORDER vote
         ///     over <paramref name="inputs"/>. All-C inputs yield C; all-F (not also C) yield F;

@@ -310,10 +310,14 @@ namespace NumSharp.Tests.Selection
             a.Should().BeOfValues(3, 1, 3, 3, 3, 5, 3, 7, 3, 9, 3, 11);
         }
 
+        /// <summary>
+        ///     Guards NumPy's <c>array_assign_boolean_subscript</c> count check: a 1-D value whose length is neither 1
+        ///     nor the number of True mask elements raises NumPy's ValueError, verbatim.
+        /// </summary>
         [TestMethod]
         public void Set_Full_IncompatibleValue_Throws()
         {
-            // np: a(3,4)[a%2==0] (6 trues) = [1,2,3] -> ValueError
+            // np: a(3,4)[a%2==0] (6 trues) = [1,2,3] -> ValueError (NumPy 2.4.2 text, probed 2026-10-07)
             var a = Iota2(3, 4);
             Action act = () => a[(a % 2) == 0] = np.array(new long[] { 1, 2, 3 });
             // A mask of the array's own shape is NumPy's array_assign_boolean_subscript, with its own text.
@@ -321,6 +325,9 @@ namespace NumSharp.Tests.Selection
                 "NumPy boolean array indexing assignment cannot assign 3 input values to the 6 output values where the mask is true");
         }
 
+        /// <summary>
+        ///     Guards the same count check for a value LONGER than the selection: NumPy refuses rather than truncating.
+        /// </summary>
         [TestMethod]
         public void Set_Full_ValueTooLong_Throws()
         {

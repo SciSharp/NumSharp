@@ -43,6 +43,9 @@ namespace NumSharp.Backends
         /// </summary>
         public override unsafe NDArray<long> FlatNonZero(NDArray nd)
         {
+            // NumPy resolves the reduction loop from the descriptor alone: a string array gets flatnonzero's refusal (or the
+            // next-phase refusal where NumPy computes on text) whatever the axis, size or dtype= request.
+            Strings.NDStringUfuncs.ThrowIfReduce("flatnonzero", nd);
             // 0-d: NumPy 2.4 raises ValueError, but its own error message suggests
             // `np.atleast_1d(scalar).nonzero()`, which is what our NonZero already
             // does. Preserve symmetry with NonZero — recurse via atleast_1d.

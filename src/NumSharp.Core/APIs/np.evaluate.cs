@@ -100,6 +100,12 @@ namespace NumSharp
         {
             if (@out is not null)
                 NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
+            // Positional operands are refused like embedded leaves: a fused expression computes on values, and text
+            // computation is the next phase of the string support.
+            if (operands != null)
+                foreach (var operand in operands)
+                    if (Backends.Strings.NDStringUfuncs.IsString(operand))
+                        throw Backends.Strings.NDStringUfuncs.NextPhase("np.evaluate", operand);
             var options = BuildEvaluateOptions(dtype, casting, order, @out is not null, where);
             return ResolveEngine(expr, operands).Evaluate(expr, operands, @out, options);
         }

@@ -20,6 +20,10 @@ namespace NumSharp
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => nanpercentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
             ValidatePercentile(q);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
+            // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
+            // text itself (NDStringUfuncs.QuantileAnswer).
+            if (Backends.Strings.NDStringUfuncs.IsString(a))
+                throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanpercentile", a, method, axisArr, true);
             return QuantileEngine.Compute(a, new[] { q / 100.0 }, axisArr, @out, overwrite_input,
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: true,
                 emptyReturnsNaN: true, ignoreNaN: true);
@@ -40,6 +44,10 @@ namespace NumSharp
                 qFracs[i] = q[i] / 100.0;
             }
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
+            // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
+            // text itself (NDStringUfuncs.QuantileAnswer).
+            if (Backends.Strings.NDStringUfuncs.IsString(a))
+                throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanpercentile", a, method, axisArr, false);
             return QuantileEngine.Compute(a, qFracs, axisArr, @out, overwrite_input,
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: false,
                 emptyReturnsNaN: true, ignoreNaN: true);
@@ -50,6 +58,10 @@ namespace NumSharp
             string method = "linear", bool keepdims = false)
         {
             ValidatePercentile(q);
+            // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
+            // text itself (NDStringUfuncs.QuantileAnswer).
+            if (Backends.Strings.NDStringUfuncs.IsString(a))
+                throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanpercentile", a, method, axis, true);
             return QuantileEngine.Compute(a, new[] { q / 100.0 }, axis, @out, overwrite_input,
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: true,
                 emptyReturnsNaN: true, ignoreNaN: true);
@@ -66,6 +78,10 @@ namespace NumSharp
                 ValidatePercentile(q[i]);
                 qFracs[i] = q[i] / 100.0;
             }
+            // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
+            // text itself (NDStringUfuncs.QuantileAnswer).
+            if (Backends.Strings.NDStringUfuncs.IsString(a))
+                throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanpercentile", a, method, axis, false);
             return QuantileEngine.Compute(a, qFracs, axis, @out, overwrite_input,
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: false,
                 emptyReturnsNaN: true, ignoreNaN: true);
@@ -99,6 +115,10 @@ namespace NumSharp
                 }
             }
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
+            // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
+            // text itself (NDStringUfuncs.QuantileAnswer).
+            if (Backends.Strings.NDStringUfuncs.IsString(a))
+                throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanpercentile", a, method, axisArr, qIsScalar);
             return QuantileEngine.Compute(a, qArr, axisArr, @out, overwrite_input,
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar,
                 emptyReturnsNaN: true, ignoreNaN: true);

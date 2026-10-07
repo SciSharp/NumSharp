@@ -53,6 +53,17 @@ namespace NumSharp
             if (lhs.Shape.IsEmpty || lhs.size == 0)
                 return np.empty(lhs.Shape, NPTypeCode.Boolean).MakeGeneric<bool>();
 
+            // A string operand: two strings of one class compare their text (the next phase of the string support). For
+            // any other pair the equal ufunc has no loop, and NumPy's `==` operator answers
+            // False everywhere instead of raising (_failed_comparison_workaround): a constant of the broadcast shape.
+            if (lhs.typecode == NPTypeCode.String || rhs.typecode == NPTypeCode.String)
+            {
+                var constant = Backends.Strings.NDStringUfuncs.FailedComparison(lhs, rhs, notEqual: false);
+                if (constant is null)
+                    throw Backends.Strings.NDStringUfuncs.NextPhase("equal", lhs);
+                return constant;
+            }
+
             return lhs.TensorEngine.Compare(lhs, rhs).AsGeneric<bool>();
         }
 

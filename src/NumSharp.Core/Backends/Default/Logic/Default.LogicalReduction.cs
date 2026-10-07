@@ -26,6 +26,9 @@ namespace NumSharp.Backends
         {
             if (nd is null)
                 throw new ArgumentNullException(nameof(nd));
+            // Text: NumPy's logical_and / logical_or.reduce validates the axis (a 0-d input accepts 0 and -1), then reads
+            // the strings' truth values — the next phase. No string reaches the bool kernels below.
+            Strings.NDStringUfuncs.ThrowIfReduce(reduceAll ? "all" : "any", nd, (int?)axis);
 
             if (nd.ndim == 0)
             {
@@ -105,6 +108,9 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(nd));
             if (axis is null)
                 throw new ArgumentNullException(nameof(axis));
+            // Text: the tuple is checked item by item, then for repeats ("duplicate value in 'axis'"), before NumPy reads
+            // the strings' truth values (the next phase) — an empty tuple included, which still casts text to bool.
+            Strings.NDStringUfuncs.ThrowIfReduce(reduceAll ? "all" : "any", nd, axis);
 
             // Empty tuple: NumPy returns input cast to bool (no reduction).
             if (axis.Length == 0)

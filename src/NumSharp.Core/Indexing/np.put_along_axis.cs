@@ -170,7 +170,8 @@ namespace NumSharp
             // Cast values to arr's dtype (assignment cast — floats truncate toward zero; over/underflow
             // wraps modularly, matching NumPy's ndarray-value path and the put/place/putmask siblings).
             // A same-dtype source is used AS-IS: any layout / broadcast dims are read through strides.
-            NDArray valArr = values.typecode == arr.typecode ? values : values.astype(arr.typecode);
+            // Convert unless the element type already matches (for strings: class AND width).
+            NDArray valArr = values.HasSameElementType(arr) ? values : values.astype(arr.dtype);
 
             // COPY_IF_OVERLAP: if the values source may share memory with `arr`, snapshot it so the
             // scatter reads the ORIGINAL values rather than progressively-overwritten ones (probed

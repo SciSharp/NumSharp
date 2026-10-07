@@ -417,12 +417,26 @@ namespace NumSharp.Tests.IO
 
         // ---- dtypes that cannot be zero-copy mapped ---------------------------------
 
+        /// <summary>
+        ///     Guards a fixed-width string file under mmap: a native <c>'&lt;U1'</c> file (here NumSharp's Char array,
+        ///     written as NumPy's <c>'&lt;U1'</c>) maps zero-copy as NumPy's U1 string array, and <c>r+</c> writes
+        ///     reach the file. (It was refused while <c>'&lt;U1'</c> read as Char, whose width differs from the file's.)
+        /// </summary>
         [TestMethod]
-        public void Mmap_Char_Rejected()
+        public void Mmap_StringFile_MapsAsAStringArray()
         {
             string p = Write("c.npy", np.array(new[] { 'A', 'B', 'C' }));
-            var e = Assert.ThrowsException<NotSupportedException>(() => np.load(p, mmap_mode: "r"));
-            StringAssert.Contains(e.Message, "cannot be memory-mapped");
+            using (var mapped = (NDArray)np.load(p, mmap_mode: "r"))
+            {
+                mapped.ToString(true).Should().Be("array(['A', 'B', 'C'], dtype='<U1')");
+                mapped.flags.owndata.Should().BeFalse();
+                mapped.flags.writeable.Should().BeFalse();
+            }
+
+            string q = Write("s.npy", np.array(new[] { "ab", "cde" }, dtype: "S3"));
+            using (var rw = (NDArray)np.load(q, mmap_mode: "r+"))
+                rw[0] = "zz";
+            np.load_npy(q).ToString(true).Should().Be("array([b'zz', b'cde'], dtype='|S3')");
         }
 
         [TestMethod]

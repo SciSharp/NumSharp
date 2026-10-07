@@ -46,6 +46,9 @@ namespace NumSharp.Backends
         /// </summary>
         public override unsafe NDArray Argwhere(NDArray nd)
         {
+            // NumPy resolves the reduction loop from the descriptor alone: a string array gets argwhere's refusal (or the
+            // next-phase refusal where NumPy computes on text) whatever the axis, size or dtype= request.
+            Strings.NDStringUfuncs.ThrowIfReduce("argwhere", nd);
             // 0-d: NumPy promotes via atleast_1d then strips the dim with [:, :0].
             // Net result is (1, 0) for truthy, (0, 0) for falsy. Route the truthiness
             // check through NonZero so we don't add yet another dtype dispatch here.

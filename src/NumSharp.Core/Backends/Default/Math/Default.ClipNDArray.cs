@@ -69,7 +69,7 @@ namespace NumSharp.Backends
         [NDScoped]
         public override unsafe NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype);
 
             // ---- @out writeability FIRST: NumPy's out converter refuses a read-only out before any
             //      operand is converted, so it wins even over the Python-int OverflowError below (probed
@@ -87,6 +87,26 @@ namespace NumSharp.Backends
             //      does not fit. That gap is the old silent wrap: clip(uint8, 0, 256) packed 256 as 0 and
             //      returned all zeros, where NumPy returns the array unchanged.
             DropUnclippingPyIntBounds(lhs.GetTypeCode, ref min, ref max);
+
+            // ---- A string dtype= request: the routed ufunc (positive / minimum / maximum / clip, chosen by the bounds
+            //      left after the drop rule) has no loop for it, and its promoter names the operand classes and the
+            //      requested class. The string lane has no element size, so this must refuse before any routing.
+            if (Strings.NDStringUfuncs.IsStringRequest(dtype))
+                throw Strings.NDStringUfuncs.ClipDTypeLoopError(dtype, lhs, min, max);
+
+            // ---- Text: the routed ufunc has no string loop. The drop rule above only touches integer arrays with
+            //      Python-int bounds, so it never moved a string operand; each route reports its own NumPy text
+            //      (clip names all three operand descriptors).
+            if (Strings.NDStringUfuncs.IsString(lhs) || Strings.NDStringUfuncs.IsString(min) || Strings.NDStringUfuncs.IsString(max))
+            {
+                if (min is null && max is null)
+                    throw Strings.NDStringUfuncs.UnaryError("positive", lhs, typeCode);
+                if (min is null)
+                    throw Strings.NDStringUfuncs.BinaryError("minimum", lhs, max, @out, typeCode);
+                if (max is null)
+                    throw Strings.NDStringUfuncs.BinaryError("maximum", lhs, min, @out, typeCode);
+                throw Strings.NDStringUfuncs.NoLoop("clip", lhs.dtype, min.dtype, max.dtype);
+            }
 
             // ---- _clip, block 2: route. No bound left → um.positive(a, out=out, **kwargs), a typed copy with
             //      positive's own rules (no bool loop, 'positive' in every cast error).

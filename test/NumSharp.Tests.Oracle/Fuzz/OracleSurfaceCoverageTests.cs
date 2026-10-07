@@ -573,16 +573,18 @@ namespace NumSharp.Tests.Fuzz
 
         // ================= np.dtypes (coverage plan §A2) =======================================
 
-        // The 29 DType-class accessor properties, all gated by the DTypes suites
+        // The 31 DType-class accessor properties, all gated by the DTypes suites
         // (test/NumSharp.Tests/DTypes/*) and the dtype_text tier's np.dtype(string) coverage —
         // they return the registry's class singletons, not array values, so the operand corpus
         // has nothing to bit-compare. A NEW property must be added here (with its gate) or fail.
+        // BytesDType / StrDType (the fixed-width string classes) are gated by NpDtypesModuleTests and
+        // the string oracle's dtype section (Strings/corpus/strings.jsonl: descriptors, promotion, casts).
         private static readonly HashSet<string> DtypesKnownProperties = new()
         {
-            "BoolDType", "ByteDType", "CLongDoubleDType", "CharDType", "Complex128DType",
+            "BoolDType", "ByteDType", "BytesDType", "CLongDoubleDType", "CharDType", "Complex128DType",
             "DateTime64DType", "DecimalDType", "Float16DType", "Float32DType", "Float64DType",
             "Int16DType", "Int32DType", "Int64DType", "Int8DType", "IntDType", "LongDType",
-            "LongDoubleDType", "LongLongDType", "ShortDType", "TimeDelta64DType", "UByteDType",
+            "LongDoubleDType", "LongLongDType", "ShortDType", "StrDType", "TimeDelta64DType", "UByteDType",
             "UInt16DType", "UInt32DType", "UInt64DType", "UInt8DType", "UIntDType", "ULongDType",
             "ULongLongDType", "UShortDType",
         };

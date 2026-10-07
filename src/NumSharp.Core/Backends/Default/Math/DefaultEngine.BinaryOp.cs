@@ -63,6 +63,11 @@ namespace NumSharp.Backends
         internal unsafe NDArray ExecuteBinaryOp(NDArray lhs, NDArray rhs, BinaryOp op,
             NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
         {
+            // A string operand never reaches the numeric promotion table or a kernel: NumPy resolves the ufunc loop
+            // before anything else, and with a string operand it either refuses (its text) or computes on text (the next
+            // phase of the string support). Two typecode reads when no operand is a string.
+            Strings.NDStringUfuncs.ThrowIfBinary(UfuncName(op), lhs, rhs, @out, dtype, where);
+
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
 

@@ -15,6 +15,9 @@ namespace NumSharp.Backends
         /// <returns>True if all elements are non-zero</returns>
         public override bool All(NDArray nd)
         {
+            // Text, or a string dtype= request: NumPy's all checks its arguments first (the axis, and the dtype= class where
+            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            Strings.NDStringUfuncs.ThrowIfReduce("all", nd);
             return nd.GetTypeCode switch
             {
                 NPTypeCode.Boolean => AllImpl<bool>(nd),
@@ -108,6 +111,9 @@ namespace NumSharp.Backends
         /// <returns>Array of bools with the axis dimension removed</returns>
         public override NDArray<bool> All(NDArray nd, int axis)
         {
+            // Text, or a string dtype= request: NumPy's all checks its arguments first (the axis, and the dtype= class where
+            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            Strings.NDStringUfuncs.ThrowIfReduce("all", nd, (int?)axis);
             return All(nd, axis, keepdims: false);
         }
     }

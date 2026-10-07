@@ -41,10 +41,10 @@ namespace NumSharp
             // When comparing incompatible types (e.g., int array with string),
             // NumPy returns False for each element.
 
-            // NumSharp's asanyarray("hello") creates char[5], not a scalar like NumPy.
-            // For string comparisons against non-char arrays, NumPy returns False
-            // (type mismatch), not a broadcasting error.
-            if (value is string && typecode != NPTypeCode.Char)
+            // A string searched in a numeric array: NumPy's == has no loop for text against numbers and answers False
+            // everywhere (its failed-comparison workaround), so the answer is False without building anything. (A fixed-
+            // width string array compares text, which is the next phase of the string support: the == below refuses.)
+            if (value is string && typecode != NPTypeCode.Char && typecode != NPTypeCode.String)
                 return false;
 
             // Convert value to NDArray for comparison
@@ -53,7 +53,10 @@ namespace NumSharp
             // (matches NumPy behavior: ValueError for shape mismatch)
             // `scalar` is NOT `using`-bound — np.asanyarray may return `value` itself
             // when it was already an NDArray (would dispose caller's array, Rule 1).
-            var scalar = np.asanyarray(value);
+            // NumSharp's Char arrays are character vectors: a string is searched as its characters (the legacy semantics
+            // these NumSharp-only arrays keep), not as NumPy's 0-d text array (np.asanyarray("abc") is <U3), which a char
+            // array has no comparison with.
+            var scalar = value is string text && typecode == NPTypeCode.Char ? NDArray.FromString(text) : np.asanyarray(value);
 
             // `comparison` IS using-bound: operator== always allocates a fresh bool
             // NDArray sized broadcast(this, scalar); after np.any reads it, the buffer

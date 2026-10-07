@@ -87,7 +87,15 @@ namespace NumSharp
                     $"output array does not match result of ndarray.take: expected shape {result.Shape}, got {@out.Shape}",
                     nameof(@out));
 
-            if (@out.GetTypeCode != a.GetTypeCode &&
+            if (a.typecode == NPTypeCode.String || @out.typecode == NPTypeCode.String)
+            {
+                // A string's width is part of its dtype: the rule is checked between DESCRIPTORS (a <U2 out of a <U4
+                // take is fine — <U2 → <U4 is safe — and the unsafe write-back truncates, as NumPy's does).
+                if (!@out.HasSameElementType(a) && !DTypeCasting.CanCastTypeTo(@out.dtype, a.dtype, NumSharp.Backends.Iteration.NPY_CASTING.NPY_SAFE_CASTING))
+                    throw new TypeError(
+                        $"Cannot cast array data from {@out.dtype.ToString(true)} to {a.dtype.ToString(true)} according to the rule 'safe'");
+            }
+            else if (@out.GetTypeCode != a.GetTypeCode &&
                 !np.can_cast(@out.GetTypeCode, a.GetTypeCode, "safe"))
             {
                 throw new TypeError(
@@ -149,9 +157,9 @@ namespace NumSharp
             // Cast indices to contig int64 (a contig int32 array is read in place).
             var idx64 = CastIndicesToInt64(indices, "same_kind", out _, out bool idx32);
 
-            // Output shape = indices.shape, dtype = a.dtype, C-contig allocated.
+            // Output shape = indices.shape, dtype = a.dtype (the DESCRIPTOR: a string's width), C-contig allocated.
             var outShape = Shape.Adopt((long[])indices.Shape.dimensions.Clone());
-            var result = new NDArray(a.typecode, outShape, false);
+            var result = new NDArray(a.dtype, outShape, false);
 
             long indicesCount = indices.size;
             long maxItem = a.size;
@@ -160,8 +168,9 @@ namespace NumSharp
             if (indicesCount == 0)
                 return result;
 
+            // NumPy's PyArray_TakeFrom text, verbatim ("axes" included; probed 2.4.2).
             if (maxItem == 0)
-                throw new ArgumentException("cannot do a non-empty take from an empty array.", nameof(a));
+                throw new ArgumentException("cannot do a non-empty take from an empty axes.", nameof(a));
 
             ExecuteTakeKernel(source, idx64, result,
                 outerSize: 1, indicesCount: indicesCount,
@@ -216,14 +225,15 @@ namespace NumSharp
             for (int d = 0; d < indices.ndim; d++) outDims[outIdx++] = indices.Shape.dimensions[d];
             for (int d = axis + 1; d < a.ndim; d++) outDims[outIdx++] = a.Shape.dimensions[d];
 
-            var result = new NDArray(a.typecode, Shape.Adopt(outDims), false);
+            var result = new NDArray(a.dtype, Shape.Adopt(outDims), false); // descriptor: a string's width
 
             long indicesCount = indices.size;
             if (indicesCount == 0 || outerSize == 0)
                 return result;
 
+            // NumPy's PyArray_TakeFrom text, verbatim ("axes" included; probed 2.4.2).
             if (maxItem == 0)
-                throw new ArgumentException("cannot do a non-empty take from an empty axis.", nameof(a));
+                throw new ArgumentException("cannot do a non-empty take from an empty axes.", nameof(a));
 
             ExecuteTakeKernel(source, idx64, result,
                 outerSize: outerSize, indicesCount: indicesCount,
@@ -311,15 +321,12 @@ namespace NumSharp
                 long failPair = status;
                 long badJ = failPair % indicesCount;
                 long badVal = idx32 ? ((int*)idxPtr)[badJ] : idxPtr[badJ];
-                // NumPy's two IndexError spellings, verbatim (probed 2.4.2, gated by errors_full):
-                // an axis take says "for axis {n} with size", the flat (axis=None) form drops the
-                // axis clause entirely ("for size {n}") — the old single wording ("for axis with
-                // size") matched neither.
+                // NumPy's IndexError text, verbatim (probed 2.4.2): the flat (axis=None) take runs on the raveled
+                // array, so it names axis 0 too ("index 7 is out of bounds for axis 0 with size 5"). The
+                // axis-less "for size {n}" spelling belongs to a.flat[i], not to take.
                 throw new ArgumentOutOfRangeException(
                     nameof(idx64),
-                    axis.HasValue
-                        ? $"index {badVal} is out of bounds for axis {axis.Value} with size {maxItem}"
-                        : $"index {badVal} is out of bounds for size {maxItem}");
+                    $"index {badVal} is out of bounds for axis {axis ?? 0} with size {maxItem}");
             }
         }
 
@@ -372,6 +379,11 @@ namespace NumSharp
                 return c;
             }
 
+            // Text never reaches int64 under take's same_kind or put's safe rule; the descriptor names its width (the
+            // storage lane alone cannot answer a cast question).
+            if (tc == NPTypeCode.String)
+                throw new TypeError(
+                    $"Cannot cast array data from {indices.dtype.ToString(true)} to dtype('int64') according to the rule '{castingRule}'");
             if (!np.can_cast(tc, NPTypeCode.Int64, castingRule))
                 throw new TypeError(
                     $"Cannot cast array data from dtype('{tc.AsNumpyDtypeName()}') to dtype('int64') according to the rule '{castingRule}'");

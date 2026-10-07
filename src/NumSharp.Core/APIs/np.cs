@@ -127,6 +127,21 @@ namespace NumSharp
         /// <summary>NumSharp-only: the <see cref="System.Decimal"/> descriptor (no NumPy counterpart).</summary>
         public static readonly DType @decimal = typeof(decimal);
 
+        /// <summary>
+        ///     NumPy's <c>np.str_</c> as a dtype spelling: the UNSIZED fixed-width Unicode descriptor <c>dtype('&lt;U')</c>
+        ///     (the same object <c>np.dtype("U")</c> and <c>np.dtype(typeof(string))</c> return). As a <c>dtype=</c> argument
+        ///     it means "Unicode, length chosen from the data" — <c>np.array(new[] {"ab", "c"}, np.str_)</c> is
+        ///     <c>&lt;U2</c>, and an allocation with no data to measure (<c>np.zeros(3, np.str_)</c>) is <c>&lt;U1</c>.
+        /// </summary>
+        public static readonly DType str_ = typeof(string);
+
+        /// <summary>
+        ///     NumPy's <c>np.bytes_</c> as a dtype spelling: the UNSIZED fixed-width bytes descriptor <c>dtype('S')</c>. It has
+        ///     no C# <see cref="Type"/> spelling — <c>typeof(byte[])</c> is a <c>uint8</c> array, as for every C# array type — so
+        ///     this field, <c>"S"</c>/<c>"S5"</c> or <see cref="dtypes.BytesDType"/> are the ways to request it.
+        /// </summary>
+        public static readonly DType bytes_ = DTypeRegistry.Bytes.Singleton;
+
         public static DType chars => throw new NotSupportedException("Please use char with extra dimension.");
 
         public static NumPyRandom random { get; } = new NumPyRandom();

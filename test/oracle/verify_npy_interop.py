@@ -46,7 +46,8 @@ def check(cond, case, msg):
 
 
 def verify_array(name, arr, meta):
-    want = EXPECT_DTYPE[meta["dtype"]]
+    # A fixed-width string array names its own descriptor ('<U3', '|S5'); every other dtype its lane.
+    want = np.dtype(meta["descr"]) if meta["dtype"] == "String" else EXPECT_DTYPE[meta["dtype"]]
     check(arr.dtype == want, name, f"dtype {arr.dtype} != {want}")
     check(list(arr.shape) == meta["shape"], name, f"shape {list(arr.shape)} != {meta['shape']}")
 
@@ -99,6 +100,15 @@ def main():
                 check(arr[0] == 1 + 2j and arr[1].real == -3 and np.isnan(arr[1].imag), name, f"values {arr}")
             elif name == "char.npy":
                 check(list(arr) == ["a", "Z", "é"], name, f"values {list(arr)} — NumSharp Char must widen to UCS-4")
+            elif name == "str_u.npy":
+                check(list(arr) == ["ab", "", "dé", "😀x"], name, f"values {list(arr)}")
+            elif name == "str_s.npy":
+                check(list(arr) == [b"ab", b"c"], name, f"values {list(arr)}")
+            elif name == "str_u_fortran.npy":
+                check(arr.flags.f_contiguous and not arr.flags.c_contiguous, name, "expected F-contiguous")
+                check(arr.tolist() == [["a", "bb"], ["ccc", "d"]], name, f"values {arr.tolist()}")
+            elif name == "str_s_strided.npy":
+                check(list(arr) == [b"a", b"c"], name, f"values {list(arr)}")
             elif name == "scalar.npy":
                 check(arr.shape == () and arr[()] == 42, name, f"0-d scalar, got {arr!r}")
             elif name == "fortran.npy":
@@ -136,6 +146,8 @@ def main():
                     check(list(z["biases"]) == [0.5, 1.5], name, "biases differ")
                     check(bool(z["flag"]) is True, name, "flag differs")
                     check(list(z["text"]) == ["h", "i"], name, "text differs")
+                    check(list(z["words"]) == ["hello", "wörld"], name, "words differ")
+                    check(list(z["blobs"]) == [b"x", b"yz"], name, "blobs differ")
                 elif name == "npz_fortran.npz":
                     f = z["f"]
                     check(f.flags.f_contiguous and not f.flags.c_contiguous, name,

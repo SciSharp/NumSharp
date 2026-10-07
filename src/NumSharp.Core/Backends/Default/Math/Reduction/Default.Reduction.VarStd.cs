@@ -73,6 +73,9 @@ namespace NumSharp.Backends
         internal NDArray VarStdNumPy(NDArray arr, int? axis_, bool keepdims, int ddof, DType dtype, bool takeSqrt,
             DType outDtype = null, bool sumOnly = false)
         {
+            // NumPy computes var/std as _var: _count_reduce_items normalizes the axis first, then its add.reduce reads
+            // dtype= and refuses text (same text for both).
+            Strings.NDStringUfuncs.ThrowIfReduce(takeSqrt ? "std" : "var", arr, axis_, dtype);
             var shape = arr.Shape;
 
             // The uninitialized-shape sentinel (not a size-0 array) has nothing to reduce; it passes through as before.

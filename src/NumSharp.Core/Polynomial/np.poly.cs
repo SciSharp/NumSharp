@@ -19,6 +19,8 @@ namespace NumSharp
         public static NDArray poly(NDArray seq_of_zeros)
         {
             using var plain = NDMatrixBoundary.PlainFor(seq_of_zeros);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            // NumPy converts the roots to a float array, parsing the text as numbers: the next phase of the string support.
+            if (Backends.Strings.NDStringUfuncs.IsString(seq_of_zeros)) throw Backends.Strings.NDStringUfuncs.NextPhase("poly", seq_of_zeros);
             seq_of_zeros = np.atleast_1d(seq_of_zeros);
             int nd = seq_of_zeros.ndim;
 

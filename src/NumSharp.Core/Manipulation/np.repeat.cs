@@ -71,7 +71,7 @@ namespace NumSharp
 
             // NumPy parity: repeats must be safely castable to int64 — reject float/complex/uint64.
             if (!IsSafeToInt64(repeats.GetTypeCode))
-                throw new TypeError($"Cannot cast array data from dtype('{repeats.GetTypeCode.AsNumpyDtypeName()}') to dtype('int64') according to the rule 'safe'");
+                throw new TypeError($"Cannot cast array data from {repeats.dtype.ToString(true)} to dtype('int64') according to the rule 'safe'");
 
             if (axis is null)
                 return RepeatPerElementFlat(a, repeats);
@@ -116,17 +116,17 @@ namespace NumSharp
         private static unsafe NDArray RepeatScalarFlat(NDArray a, long repeats)
         {
             if (a.size == 0 || repeats == 0)
-                return new NDArray(a.GetTypeCode, Shape.Vector(0));
+                return new NDArray(a.dtype, Shape.Vector(0));
 
             // ravel() returns a C-contig view (no copy when already contig) or a fresh contig copy.
             NDArray src = a.ravel();
             long total = src.size * repeats;
-            var ret = new NDArray(a.GetTypeCode, Shape.Vector(total));
+            var ret = new NDArray(a.dtype, Shape.Vector(total));
 
             // Degenerate 3-loop: n_outer=1, n=size, chunk=elsize.
             var kernel = DirectILKernelGenerator.GetRepeatBroadcastKernel(a.dtypesize);
             kernel(
-                src: (byte*)src.Address,
+                src: RepeatData(src),
                 dst: (byte*)ret.Address,
                 n_outer: 1,
                 n: src.size,
@@ -147,22 +147,22 @@ namespace NumSharp
                     $"operands could not be broadcast together with shape ({src.size},) ({repFlat.size},)");
 
             if (src.size == 0)
-                return new NDArray(a.GetTypeCode, Shape.Vector(0));
+                return new NDArray(a.dtype, Shape.Vector(0));
 
             long[] counts;
             long broadcastVal;
             long total = ComputeCounts(repFlat, broadcast, src.size, out counts, out broadcastVal);
 
             if (total == 0)
-                return new NDArray(a.GetTypeCode, Shape.Vector(0));
+                return new NDArray(a.dtype, Shape.Vector(0));
 
-            var ret = new NDArray(a.GetTypeCode, Shape.Vector(total));
+            var ret = new NDArray(a.dtype, Shape.Vector(total));
 
             if (broadcast)
             {
                 var kernel = DirectILKernelGenerator.GetRepeatBroadcastKernel(a.dtypesize);
                 kernel(
-                    src: (byte*)src.Address,
+                    src: RepeatData(src),
                     dst: (byte*)ret.Address,
                     n_outer: 1,
                     n: src.size,
@@ -174,7 +174,7 @@ namespace NumSharp
                 fixed (long* pCounts = counts)
                 {
                     kernel(
-                        src: (byte*)src.Address,
+                        src: RepeatData(src),
                         dst: (byte*)ret.Address,
                         n_outer: 1,
                         n: src.size,
@@ -212,7 +212,7 @@ namespace NumSharp
 
             long[] outDims = (long[])inDims.Clone();
             outDims[normalizedAxis] = total;
-            var ret = new NDArray(a.GetTypeCode, Shape.Adopt(outDims));
+            var ret = new NDArray(a.dtype, Shape.Adopt(outDims));
 
             if (src.size == 0 || total == 0)
                 return ret;
@@ -222,7 +222,7 @@ namespace NumSharp
 
             var kernel = DirectILKernelGenerator.GetRepeatBroadcastKernel(chunkBytes);
             kernel(
-                src: (byte*)src.Address,
+                src: RepeatData(src),
                 dst: (byte*)ret.Address,
                 n_outer: n_outer,
                 n: n,
@@ -263,7 +263,7 @@ namespace NumSharp
 
             long[] outDims = (long[])inDims.Clone();
             outDims[normalizedAxis] = total;
-            var ret = new NDArray(a.GetTypeCode, Shape.Adopt(outDims));
+            var ret = new NDArray(a.dtype, Shape.Adopt(outDims));
 
             if (src.size == 0 || total == 0)
                 return ret;
@@ -275,7 +275,7 @@ namespace NumSharp
             {
                 var kernel = DirectILKernelGenerator.GetRepeatBroadcastKernel(chunkBytes);
                 kernel(
-                    src: (byte*)src.Address,
+                    src: RepeatData(src),
                     dst: (byte*)ret.Address,
                     n_outer: n_outer,
                     n: n,
@@ -287,7 +287,7 @@ namespace NumSharp
                 fixed (long* pCounts = counts)
                 {
                     kernel(
-                        src: (byte*)src.Address,
+                        src: RepeatData(src),
                         dst: (byte*)ret.Address,
                         n_outer: n_outer,
                         n: n,
@@ -299,6 +299,15 @@ namespace NumSharp
         }
 
         // ============== helpers ==============
+
+        /// <summary>
+        ///     The address of <paramref name="x"/>'s first element: the storage base plus the view's offset. The kernels'
+        ///     source is a C-contiguous array, but a contiguous VIEW can still start past its storage base (a row of a
+        ///     strided parent, a 0-d view <c>a[3, ...]</c>), so the storage base alone would read the wrong elements.
+        /// </summary>
+        /// <param name="x">A C-contiguous source array.</param>
+        /// <returns>The byte address of its element 0.</returns>
+        private static unsafe byte* RepeatData(NDArray x) => (byte*)x.Storage.Address + x.Shape.offset * x.dtypesize;
 
         private static int NormalizeAxis(int axis, int ndim)
         {

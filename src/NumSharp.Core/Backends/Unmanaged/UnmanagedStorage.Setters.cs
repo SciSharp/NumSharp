@@ -109,6 +109,10 @@ namespace NumSharp.Backends
                 case NPTypeCode.Complex:
                     *((System.Numerics.Complex*)Address + _shape.TransformOffset(index)) = (System.Numerics.Complex)value;
                     return;
+                case NPTypeCode.String:
+                    // NumPy's STRING_setitem / UNICODE_setitem: encode, truncate to the width, NUL-pad.
+                    StringSlice.SetIndex(_shape.TransformOffset(index), value);
+                    return;
                 default:
                     throw new NotSupportedException();
             }
@@ -215,6 +219,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Complex:
                     *((System.Numerics.Complex*)Address + _shape.GetOffset(indices)) = (System.Numerics.Complex)value;
                     return;
+                case NPTypeCode.String:
+                    StringSlice.SetIndex(_shape.GetOffset(indices), value);
+                    return;
                 default:
                     throw new NotSupportedException();
             }
@@ -279,6 +286,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Complex:
                     *((System.Numerics.Complex*)Address + _shape.GetOffset(indices)) = (System.Numerics.Complex)value;
                     return;
+                case NPTypeCode.String:
+                    StringSlice.SetIndex(_shape.GetOffset(indices), value);
+                    return;
                 default:
                     throw new NotSupportedException();
             }
@@ -296,6 +306,9 @@ namespace NumSharp.Backends
         public void SetData(object value, int[] indices)
         {
             ThrowIfNotWriteable();
+            // A text scalar into a string storage is NumPy's setitem of a str / bytes / None: encode, truncate, broadcast.
+            if (_typecode == NPTypeCode.String && TrySetTextScalar(value, indices))
+                return;
             switch (value)
             {
                 case NDArray nd:
@@ -336,6 +349,14 @@ namespace NumSharp.Backends
             // assigns the last element). InferNegativeCoordinates also raises NumPy's IndexError
             // for a genuinely out-of-range index.
             indices = Shape.InferNegativeCoordinates(_shape.dimensions, indices);
+
+            // Strings take their own assignment (NumPy's string setitem / copy rules); the numeric fast paths below
+            // convert through Converts.ChangeType and raw CopyTo, which have no text semantics.
+            if (_typecode == NPTypeCode.String || value.typecode == NPTypeCode.String)
+            {
+                SetDataString(value, indices);
+                return;
+            }
 
             var valueshape = value.Shape;
             bool valueIsScalary = valueshape.IsScalar || valueshape.NDim == 1 && valueshape.size == 1;
@@ -541,6 +562,14 @@ namespace NumSharp.Backends
         public void SetData(object value, params long[] indices)
         {
             ThrowIfNotWriteable();
+            if (_typecode == NPTypeCode.String)
+            {
+                var intIndices = new int[indices.Length];
+                for (int i = 0; i < indices.Length; i++)
+                    intIndices[i] = checked((int)indices[i]);
+                if (TrySetTextScalar(value, intIndices))
+                    return;
+            }
             switch (value)
             {
                 case NDArray nd:

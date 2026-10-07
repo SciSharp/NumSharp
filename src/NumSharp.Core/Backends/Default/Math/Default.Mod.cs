@@ -11,7 +11,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Mod(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "remainder", lhs, rhs, @out, where);
 
             // mod (NumPy ufunc name 'remainder') has no complex loop, so ANY complex operand with no
             // explicit dtype reaches no loop: NumPy raises the generic ufunc TypeError (NOT the kernel's

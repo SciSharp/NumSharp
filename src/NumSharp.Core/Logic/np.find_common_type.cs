@@ -868,14 +868,62 @@ namespace NumSharp
 
         #endregion
 
+        /// <summary>
+        ///     Reads NumSharp's frozen array-array promotion table, refusing the string lane by name. The table has no row
+        ///     for <see cref="NPTypeCode.String"/>: a string operand that reaches it came through a numeric path without a
+        ///     string guard, and the dictionary's own <see cref="KeyNotFoundException"/> would name no operation.
+        /// </summary>
+        /// <param name="key">The two type codes, in table order.</param>
+        /// <returns>The promoted type code.</returns>
+        /// <exception cref="NotSupportedException">Either code is the string lane.</exception>
+        /// <exception cref="KeyNotFoundException">Any other pair the table lacks (unchanged behavior).</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static NPTypeCode PromoteArrArr((NPTypeCode, NPTypeCode) key)
+        {
+            if (_nptypemap_arr_arr.TryGetValue(key, out var promoted))
+                return promoted;
+            throw PromotionTableMiss(key);
+        }
+
+        /// <summary>
+        ///     Reads NumSharp's frozen array-scalar promotion table; the string lane is refused as in
+        ///     <see cref="PromoteArrArr"/>.
+        /// </summary>
+        /// <param name="key">The array and scalar type codes.</param>
+        /// <returns>The promoted type code.</returns>
+        /// <exception cref="NotSupportedException">Either code is the string lane.</exception>
+        /// <exception cref="KeyNotFoundException">Any other pair the table lacks (unchanged behavior).</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static NPTypeCode PromoteArrScalar((NPTypeCode, NPTypeCode) key)
+        {
+            if (_nptypemap_arr_scalar.TryGetValue(key, out var promoted))
+                return promoted;
+            throw PromotionTableMiss(key);
+        }
+
+        /// <summary>
+        ///     The exception for a pair missing from a promotion table: a clear refusal when a string array reached a
+        ///     numeric operation, else the dictionary's own exception (the pre-existing behavior for any other miss).
+        /// </summary>
+        /// <param name="key">The missing pair.</param>
+        /// <returns>The exception (not thrown).</returns>
+        private static Exception PromotionTableMiss((NPTypeCode, NPTypeCode) key)
+            => key.Item1 == NPTypeCode.String || key.Item2 == NPTypeCode.String
+                ? new NotSupportedException(
+                    "This operation is not supported for fixed-width string arrays: it promotes its operands with NumPy's " +
+                    "numeric type rules, and text has no numeric type. NumSharp's string support covers storage, element " +
+                    "access, conversion to and from C#, copying, casts between string dtypes, indexing and printing; string " +
+                    "computation is the next phase.")
+                : new KeyNotFoundException($"The given key '({key.Item1}, {key.Item2})' was not present in the dictionary.");
+
         internal static NPTypeCode _FindCommonArrayType(Type dtype_left, Type dtype_right)
         {
-            return _nptypemap_arr_arr[(dtype_left.GetTypeCode(), dtype_right.GetTypeCode())];
+            return PromoteArrArr((dtype_left.GetTypeCode(), dtype_right.GetTypeCode()));
         }
 
         internal static NPTypeCode _FindCommonArrayType(NPTypeCode dtype_left, NPTypeCode dtype_right)
         {
-            return _nptypemap_arr_arr[(dtype_left, dtype_right)];
+            return PromoteArrArr((dtype_left, dtype_right));
         }
 
         internal static NPTypeCode _FindCommonScalarType(Type dtype_left, Type dtype_right)
@@ -890,12 +938,12 @@ namespace NumSharp
 
         internal static NPTypeCode _FindCommonArrayScalarType(NPTypeCode dtypeArray, NPTypeCode dtypeScalar)
         {
-            return _nptypemap_arr_scalar[(dtypeArray, dtypeScalar)];
+            return PromoteArrScalar((dtypeArray, dtypeScalar));
         }
 
         internal static NPTypeCode _FindCommonArrayScalarType(Type dtypeArray, Type dtypeScalar)
         {
-            return _nptypemap_arr_scalar[(dtypeArray.GetTypeCode(), dtypeScalar.GetTypeCode())];
+            return PromoteArrScalar((dtypeArray.GetTypeCode(), dtypeScalar.GetTypeCode()));
         }
 
         /// <summary>
@@ -927,7 +975,7 @@ namespace NumSharp
             }
 
             if (index_sc > index_a)
-                return _nptypemap_arr_scalar[(maxa, maxsc)];
+                return PromoteArrScalar((maxa, maxsc));
             else
                 return maxa;
         }
@@ -1051,13 +1099,13 @@ namespace NumSharp
             NPTypeCode ret = default;
             while (N >= 2)
             {
-                ret = _nptypemap_arr_arr[(dtypelist[N - 1], dtypelist[N - 2])];
+                ret = PromoteArrArr((dtypelist[N - 1], dtypelist[N - 2]));
                 N -= 2;
             }
 
             if (N == 1)
             {
-                ret = _nptypemap_arr_arr[(ret, dtypelist[0])];
+                ret = PromoteArrArr((ret, dtypelist[0]));
             }
 
             return ret;
@@ -1076,13 +1124,13 @@ namespace NumSharp
 
             while (N >= 2)
             {
-                ret = _nptypemap_arr_arr[(dtypelist[N - 1], dtypelist[N - 2])];
+                ret = PromoteArrArr((dtypelist[N - 1], dtypelist[N - 2]));
                 N -= 2;
             }
 
             if (N == 1)
             {
-                ret = _nptypemap_arr_arr[(ret, dtypelist[0])];
+                ret = PromoteArrArr((ret, dtypelist[0]));
             }
 
             return ret;
@@ -1108,13 +1156,13 @@ namespace NumSharp
             NPTypeCode ret = default;
             while (N >= 2)
             {
-                ret = _nptypemap_arr_arr[(dtypelist[N - 1], dtypelist[N - 2])];
+                ret = PromoteArrArr((dtypelist[N - 1], dtypelist[N - 2]));
                 N -= 2;
             }
 
             if (N == 1)
             {
-                ret = _nptypemap_arr_arr[(ret, dtypelist[0])];
+                ret = PromoteArrArr((ret, dtypelist[0]));
             }
 
             return ret;
@@ -1142,13 +1190,13 @@ namespace NumSharp
 
             while (N >= 2)
             {
-                ret = _nptypemap_arr_arr[(dtypelist[N - 1], dtypelist[N - 2])];
+                ret = PromoteArrArr((dtypelist[N - 1], dtypelist[N - 2]));
                 N -= 2;
             }
 
             if (N == 1)
             {
-                ret = _nptypemap_arr_arr[(ret, dtypelist[0])];
+                ret = PromoteArrArr((ret, dtypelist[0]));
             }
 
             return ret;

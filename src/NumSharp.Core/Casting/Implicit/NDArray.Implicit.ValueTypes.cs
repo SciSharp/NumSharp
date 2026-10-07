@@ -54,6 +54,10 @@ namespace NumSharp
                 throw new IncorrectShapeException("only 0-d arrays can be converted to scalar");
             if (!targetIsComplex && nd.typecode == NPTypeCode.Complex)
                 throw new TypeError($"can't convert complex to {targetType}");
+            // NumPy's int(arr) / float(arr) parse a 0-d string array's text and bool(arr) tests it for emptiness: text
+            // computation, the next phase of the string support. (The explicit string conversion prints the text.)
+            if (nd.typecode == NPTypeCode.String)
+                throw Backends.Strings.NDStringUfuncs.NextPhase($"Converting to {targetType}", nd);
         }
 
         public static explicit operator bool(NDArray nd)

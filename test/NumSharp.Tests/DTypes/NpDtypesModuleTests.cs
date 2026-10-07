@@ -89,8 +89,11 @@ namespace NumSharp.Tests.DTypes
             np.dtypes.CharDType.TypeChar.Should().Be('c');
             DTypeRegistry.Str.Name.Should().Be("StrDType");
             DTypeRegistry.Str.TypeNum.Should().Be(19);
-            DTypeRegistry.Str.HasStorage.Should().BeTrue("the vestigial NPTypeCode.String is its code");
-            typeof(np.dtypes).GetProperty("StrDType").Should().BeNull("the vestigial string slot is not exported on np.dtypes");
+            DTypeRegistry.Str.HasStorage.Should().BeTrue("NPTypeCode.String is the lane both string classes store in");
+            // Both string classes are NumPy dtypes and are exported like the numeric ones (np.dtypes.StrDType / BytesDType).
+            np.dtypes.StrDType.Should().BeSameAs(DTypeRegistry.Str);
+            np.dtypes.BytesDType.Should().BeSameAs(DTypeRegistry.Bytes);
+            DTypeRegistry.Bytes.TypeNum.Should().Be(18);
         }
 
         [TestMethod]

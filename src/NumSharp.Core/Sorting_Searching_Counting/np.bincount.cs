@@ -75,7 +75,7 @@ namespace NumSharp
             NPTypeCode xtc = x.typecode;
             if (!(xtc.IsInteger() || xtc == NPTypeCode.Boolean || xtc == NPTypeCode.Char))
                 throw new InvalidCastException(
-                    $"Cannot cast array data from dtype('{xtc.AsNumpyDtypeName()}') " +
+                    $"Cannot cast array data from {x.dtype.ToString(true)} " +
                     $"to dtype('int64') according to the rule 'safe'");
 
             if (minlength < 0)
@@ -116,7 +116,7 @@ namespace NumSharp
             NPTypeCode wtc = weights.typecode;
             if (wtc == NPTypeCode.Complex || wtc == NPTypeCode.String)
                 throw new InvalidCastException(
-                    $"Cannot cast array data from dtype('{wtc.AsNumpyDtypeName()}') " +
+                    $"Cannot cast array data from {weights.dtype.ToString(true)} " +
                     $"to dtype('float64') according to the rule 'safe'");
 
             NDArray w64 = wtc == NPTypeCode.Double ? weights : weights.astype(NPTypeCode.Double);

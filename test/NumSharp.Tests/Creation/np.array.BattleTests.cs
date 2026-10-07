@@ -389,13 +389,15 @@ public class np_array_BattleTests
     }
 
     [TestMethod]
-    public void Array_String_CreatesCharArray()
+    public void Array_String_CreatesUnicodeScalar()
     {
-        // NumSharp-specific: string creates char array
+        // NumPy 2.4.2: np.array("hello") -> array('hello', dtype='<U5'), a 0-d fixed-width Unicode array.
+        // (NumSharp's character vector of the text is NDArray.FromString("hello").)
         var arr = np.array("hello");
-        arr.ndim.Should().Be(1);
-        arr.shape.Should().BeEquivalentTo(new[] { 5 });
-        arr.dtype.Should().Be(typeof(char));
+        arr.ndim.Should().Be(0);
+        arr.shape.Should().BeEmpty();
+        arr.dtype.str.Should().Be("<U5");
+        arr.GetValue().Should().Be("hello");
     }
 
     #endregion

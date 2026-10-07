@@ -18,7 +18,7 @@ namespace NumSharp.Unmanaged.Memory
     public class StackedMemoryPool : IDisposable
     {
         //TODO! Instead of allocating n buffer, allocate one block and split it.
-        private static readonly int DefaultSingleSize = Enum.GetValues(typeof(NPTypeCode)).Cast<NPTypeCode>().Where(v => v != 0).Max(n => n.SizeOf());
+        private static readonly int DefaultSingleSize = Enum.GetValues(typeof(NPTypeCode)).Cast<NPTypeCode>().Where(v => v != 0 && v != NPTypeCode.String).Max(n => n.SizeOf());
 
         private long _originalTotals;
         private long _originalTotalsThreshold;

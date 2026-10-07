@@ -20,6 +20,9 @@ namespace NumSharp
                     "The numpy boolean negative, the `-` operator, is not supported, " +
                     "use the `~` operator or the logical_not function instead.");
 
+            // negative has no string loop (NumPy's class-named UFuncTypeError).
+            Backends.Strings.NDStringUfuncs.ThrowIfUnary("negative", this);
+
             if (this.size == 0)
                 return this.Clone();
 

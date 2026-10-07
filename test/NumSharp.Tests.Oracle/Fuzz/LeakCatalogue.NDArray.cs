@@ -64,12 +64,17 @@ namespace NumSharp.Tests.Fuzz
             T(l, "ndarray.GetHashCode", "unhashable by design (NumPy: mutable ndarray)", f => Box(f.M.GetHashCode()));
             T(l, "ndarray.__hash__", "unhashable by design (NumPy: mutable ndarray)", f => Box(f.M.__hash__()));
             E(l, "ndarray.FromMultiDimArray", "copy", f => NDArray.FromMultiDimArray<double>(new double[,] { { 1, 2 }, { 3, 4 } }));
-            E(l, "ndarray.FromString", "parse", f => NDArray.FromString("[1, 2, 3]"));
+            E(l, "ndarray.FromString", "char vector", f => NDArray.FromString("[1, 2, 3]"));
             E(l, "ndarray.Scalar", "object", f => NDArray.Scalar(2.5));
             E(l, "ndarray.Scalar", "object + dtype", f => NDArray.Scalar(3, np.float32));
             E(l, "ndarray.Scalar", "typed", f => NDArray.Scalar<long>(7L));
             E(l, "ndarray.AsString", "char array", f => NDArray.AsString(f.Chars));
-            T(l, "ndarray.AsStringArray", "broken: parses a legacy ToString layout the NumPy-parity printer no longer emits", f => NDArray.AsStringArray(f.Chars));
+            E(l, "ndarray.AsStringArray", "U array", f =>
+            {
+                using var u = np.array(new[] { "ab", "c" });
+                return NDArray.AsStringArray(u);
+            });
+            T(l, "ndarray.AsStringArray", "by design: a char array is not a U array", f => NDArray.AsStringArray(f.Chars));
             E(l, "ndarray.GetString", "char row", f => f.Chars.GetString());
             T(l, "ndarray.GetStringAt", "broken: passes ndim coordinates where GetString requires ndim-1", f => f.Chars.GetStringAt(0));
             E(l, "ndarray.SetString", "same text", f =>
@@ -296,7 +301,7 @@ namespace NumSharp.Tests.Fuzz
             // ---- NDArray conversions ----
             E(l, "ndarray.op_Implicit", "scalar -> 0-d", f => { NDArray x = 5.5; return x; });
             E(l, "ndarray.op_Implicit", "managed array -> NDArray", f => { NDArray x = new[] { 1.0, 2.0, 3.0 }; return x; });
-            E(l, "ndarray.op_Implicit", "string -> char array", f => { NDArray x = "abc"; return x; });
+            E(l, "ndarray.op_Implicit", "string -> 0-d <U3", f => { NDArray x = "abc"; return x; });
             E(l, "ndarray.op_Explicit", "0-d -> scalar", f => Box((double)f.M["0, 0"]));
             E(l, "ndarray.op_Explicit", "NDArray -> managed array", f => (Array)f.MT);
 

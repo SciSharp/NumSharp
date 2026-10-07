@@ -205,12 +205,13 @@ namespace NumSharp.Tests.View
         public void View_LastAxisNonContiguousDifferentSize_Throws()
         {
             // The last axis is NOT contiguous (reversed / transposed), so a different-size view is
-            // rejected — matching NumPy's ValueError "the last axis must be contiguous".
+            // rejected with NumPy's ValueError and text (probed 2.4.2).
+            const string text = "To change to a dtype of a different size, the last axis must be contiguous";
             Action reversed = () => np.arange(5).astype(np.int32)["::-1"].view<short>();
-            reversed.Should().Throw<InvalidOperationException>();
+            reversed.Should().Throw<ValueError>().WithMessage(text);
 
             Action transposed = () => np.arange(6).astype(np.int32).reshape(2, 3).T.view<short>();
-            transposed.Should().Throw<InvalidOperationException>();
+            transposed.Should().Throw<ValueError>().WithMessage(text);
         }
 
         [TestMethod]

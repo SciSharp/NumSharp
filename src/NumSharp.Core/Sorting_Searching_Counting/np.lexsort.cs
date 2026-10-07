@@ -90,6 +90,9 @@ namespace NumSharp
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(keys))
                 return NDMatrixBoundary.Plain((keys, axis), static s => lexsort(s.keys, s.axis));
+            // NumPy computes this on text (sorting, searching, truth tests); string computation is
+            // the next phase of NumSharp's string support, so a string array is refused here.
+            if (Backends.Strings.NDStringUfuncs.IsString(keys)) throw Backends.Strings.NDStringUfuncs.NextPhase("lexsort", keys);
             if (keys is null)
                 throw new ArgumentNullException(nameof(keys));
             // a 0-d array is not a sequence; an empty first axis is a zero-length key sequence

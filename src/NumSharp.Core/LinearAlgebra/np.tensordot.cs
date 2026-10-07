@@ -21,6 +21,8 @@ namespace NumSharp
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(a, b))
                 return NDMatrixBoundary.Plain((a, b, axes), static s => tensordot(s.a, s.b, s.axes));
+            // tensordot ends in dot, whose dot-function lookup needs a fixed item size.
+            if (Backends.Strings.NDStringUfuncs.IsString(a) || Backends.Strings.NDStringUfuncs.IsString(b)) throw Backends.Strings.NDStringUfuncs.NoItemsize();
             var axesA = new List<int>();
             var axesB = new List<int>();
             for (int k = -axes; k < 0; k++)
@@ -62,6 +64,8 @@ namespace NumSharp
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(a, b))
                 return NDMatrixBoundary.Plain((a, b, axesA, axesB), static s => tensordot(s.a, s.b, s.axesA, s.axesB));
+            // tensordot ends in dot, whose dot-function lookup needs a fixed item size.
+            if (Backends.Strings.NDStringUfuncs.IsString(a) || Backends.Strings.NDStringUfuncs.IsString(b)) throw Backends.Strings.NDStringUfuncs.NoItemsize();
             // Port of numpy/_core/numeric.py :: tensordot.
             var shapeA = a.Shape.dimensions;
             var shapeB = b.Shape.dimensions;

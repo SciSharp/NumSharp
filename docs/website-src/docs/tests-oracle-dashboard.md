@@ -579,6 +579,7 @@ html[data-bs-theme="dark"] .ns-bench-dashboard {
       <article class="story-card"><h3>Flags test cases</h3><strong class="metric-good">${number(oracle.flagsOracleRows)}</strong><p>Serialized ndarray flag expectations outside the common operation schema.</p></article>
       <article class="story-card"><h3>Layout test cases</h3><strong class="metric-good">${number(oracle.layoutOracleRows)}</strong><p>Dedicated layout-parity cases outside the common operation schema.</p></article>
       <article class="story-card"><h3>NPY/NPZ test cases</h3><strong class="metric-good">${number(oracle.npyOracleCases)}</strong><p>Byte and file-format test cases from the committed archive manifest.</p></article>
+      <article class="story-card"><h3>String dtype test cases</h3><strong class="metric-good">${number(oracle.stringOracleCases ?? 0)}</strong><p>Fixed-width S/U storage, casts, printing and refusals; ${number(oracle.stringOraclePhase2Cases ?? 0)} computing cases wait for the next phase.</p></article>
       <article class="story-card"><h3>Host-pin metadata</h3><strong class="metric-good">${number(oracle.hostPinRecords)}</strong><p>BLAS/platform provenance records; explicitly not counted as replay cases.</p></article>`;
 
     const explorer = {

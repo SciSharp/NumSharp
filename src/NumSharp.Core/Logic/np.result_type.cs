@@ -103,6 +103,11 @@ namespace NumSharp
             if (arrays == null || arrays.Length == 0)
                 throw new ArgumentException("At least one array must be provided", nameof(arrays));
 
+            // A fixed-width string array promotes by DESCRIPTOR (np.result_type(U3, S5) is <U5): its width is not in
+            // the lane, so the type-code round trip below would lose it.
+            if (arrays.Any(a => a?.typecode == NPTypeCode.String))
+                return arrays.Length == 1 ? arrays[0].dtype : DTypePromotion.ResultType(arrays.Cast<object>().ToArray());
+
             if (arrays.Length == 1)
                 return arrays[0].GetTypeCode;
 
@@ -148,6 +153,9 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(arr1));
             if (arr2 is null)
                 throw new ArgumentNullException(nameof(arr2));
+            // Strings promote by descriptor (the width); see result_type(params NDArray[]).
+            if (arr1.typecode == NPTypeCode.String || arr2.typecode == NPTypeCode.String)
+                return DTypePromotion.ResultType(arr1, arr2);
             return result_type(arr1.GetTypeCode, arr2.GetTypeCode);
         }
     }

@@ -50,6 +50,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(filt))
                 return NDMatrixBoundary.Wrapped((filt, trim, axis), static s => trim_zeros(s.filt, s.trim, s.axis));
+            // NumPy computes this on text (sorting, searching, truth tests); string computation is
+            // the next phase of NumSharp's string support, so a string array is refused here.
+            if (Backends.Strings.NDStringUfuncs.IsString(filt)) throw Backends.Strings.NDStringUfuncs.NextPhase("trim_zeros", filt);
             // NumPy lower-cases and validates the trim spec against the four accepted spellings.
             trim = (trim ?? string.Empty).ToLowerInvariant();
             if (trim != "fb" && trim != "bf" && trim != "f" && trim != "b")

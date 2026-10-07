@@ -31,14 +31,18 @@ namespace NumSharp
         public static NDArray count_nonzero(NDArray a, int axis, bool keepdims = false)
         {
             using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            // Text: NumPy compares every element with '' (the next phase) and then sums with the axis, so an empty or
+            // non-empty string array reports a bad axis first (AxisError, probed).
+            Backends.Strings.NDStringUfuncs.ThrowIfReduce("count_nonzero", a, axis);
             if (a.size == 0)
             {
-                // Handle empty arrays - return zeros with reduced shape
+                // Handle empty arrays - return zeros with reduced shape. The axis is validated as NumPy's sum validates
+                // it: an AxisError naming the axis as given (a wrapping loop used to turn -3 on a 1-D array into axis 0).
                 var shape = a.Shape;
-                while (axis < 0)
-                    axis = a.ndim + axis;
-                if (axis >= a.ndim)
-                    throw new ArgumentOutOfRangeException(nameof(axis));
+                if (axis < -a.ndim || axis >= a.ndim)
+                    throw new AxisError(axis, a.ndim);
+                if (axis < 0)
+                    axis += a.ndim;
 
                 var resultShape = Shape.GetAxis(shape, axis);
                 var result = np.zeros(Shape.Adopt(resultShape), NPTypeCode.Int64);

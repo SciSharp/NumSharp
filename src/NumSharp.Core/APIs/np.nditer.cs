@@ -156,6 +156,16 @@ namespace NumSharp
                 if (op == null || op.Length == 0)
                     throw new ArgumentException("Must provide at least one operand");
 
+                // The iterator's engine sizes elements by storage lane, and a fixed-width string's width lives on its
+                // descriptor: iterating text (NumPy yields 0-d string views) is refused with a clear message until the
+                // iterator carries descriptors.
+                foreach (var operand in op)
+                    if (Backends.Strings.NDStringUfuncs.IsString(operand))
+                        throw new NotSupportedException(
+                            $"np.nditer is not supported for fixed-width string arrays yet ({operand.dtype.ToString(true)}): " +
+                            "the iterator sizes elements by numeric storage lane. Read the elements through the array's " +
+                            "indexer, ToArray, flatiter or np.ndenumerate instead.");
+
                 int nop = op.Length;
 
                 // NumPy's op_dtypes is a sequence of dtype descriptors; the engine below works in

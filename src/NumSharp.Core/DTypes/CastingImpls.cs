@@ -226,9 +226,10 @@ namespace NumSharp
 
     /// <summary>
     ///     A cast whose safety is fixed per class pair with the plain descriptor resolution — NumPy's
-    ///     <c>PyArray_AddLegacyWrapping_CastingImpl</c>, used for the numeric ↔ datetime/timedelta casts: every cast
-    ///     to or from <c>datetime64</c> is <c>unsafe</c>; an integer or bool casts <c>safe</c>ly to <c>timedelta64</c>
-    ///     (a 64-bit unsigned one only <c>same_kind</c>), a float or complex only <c>unsafe</c>ly.
+    ///     <c>PyArray_AddLegacyWrapping_CastingImpl</c>, used for the numeric ↔ datetime/timedelta casts (every cast
+    ///     to or from <c>datetime64</c> is <c>unsafe</c>; an integer or bool casts <c>safe</c>ly to <c>timedelta64</c>,
+    ///     a 64-bit unsigned one only <c>same_kind</c>, a float or complex only <c>unsafe</c>ly) and for the casts OUT of
+    ///     a string class into a numeric class or <c>timedelta64</c> (always <c>unsafe</c>: text parses into a number).
     /// </summary>
     public sealed class LegacyWrappingCastingImpl : CastingImpl
     {

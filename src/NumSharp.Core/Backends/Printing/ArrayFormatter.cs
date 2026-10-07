@@ -48,7 +48,7 @@ namespace NumSharp.Backends.Printing
             if (shapeShown)
                 extras.Add("shape=" + ShapeTuple(a.Shape.dimensions));
             if (!DtypeIsImplied(a.typecode) || a.size == 0)
-                extras.Add("dtype=" + DtypeShortRepr(a.typecode));
+                extras.Add("dtype=" + DtypeShortRepr(a));
 
             if (extras.Count == 0)
                 return prefix + lst + ")";
@@ -57,7 +57,8 @@ namespace NumSharp.Backends.Printing
             string extraStr = string.Join(", ", extras) + ")";
 
             int lastNewline = arrStr.LastIndexOf('\n');
-            int lastLineLen = arrStr.Length - (lastNewline + 1);
+            // Python's len() of the last line: code points, so an astral character in a printed string counts once.
+            int lastLineLen = PyRepr.CodePointLength(arrStr.Substring(lastNewline + 1));
             string spacer = " ";
             if (lastLineLen + extraStr.Length + 1 > opts.linewidth)
                 spacer = "\n" + new string(' ', prefix.Length);
@@ -226,8 +227,11 @@ namespace NumSharp.Backends.Printing
         private static string ExtendLine(StringBuilder s, string line, string word, int lineWidth,
             string nextLinePrefix, long legacy)
         {
-            bool needsWrap = line.Length + word.Length > lineWidth;
-            if (legacy > 113 && line.Length <= nextLinePrefix.Length)
+            // NumPy measures with Python's len(), which counts code points: a printed string holding astral characters
+            // (emoji) is shorter there than its UTF-16 length. Numeric words are ASCII, where both lengths agree.
+            int lineLen = PyRepr.CodePointLength(line);
+            bool needsWrap = lineLen + PyRepr.CodePointLength(word) > lineWidth;
+            if (legacy > 113 && lineLen <= nextLinePrefix.Length)
                 needsWrap = false;
 
             if (needsWrap)
@@ -280,6 +284,9 @@ namespace NumSharp.Backends.Printing
                     return new FloatingFormat(reduced, FloatKind.Double, 15, opts, opts.sign);
                 case NPTypeCode.Complex:
                     return new ComplexFloatingFormat(reduced, opts, opts.sign);
+                // NumPy's 'numpystr' formatter: repr() of each str / bytes scalar, never padded.
+                case NPTypeCode.String:
+                    return new StringReprFormat();
                 default:
                     throw new NotSupportedException($"Cannot format dtype {tc}.");
             }
@@ -339,10 +346,14 @@ namespace NumSharp.Backends.Printing
             /// <summary>Captures the data typecode so each element is stringified with the right scalar rules.</summary>
             /// <param name="tc">The data array's element typecode.</param>
             public ObjectReprFormat(NPTypeCode tc) => _tc = tc;
-            /// <summary>The Python-scalar repr of one element (int decimal, shortest-round-trip float, complex "(a+bj)", etc.).</summary>
+            /// <summary>The Python-scalar repr of one element (int decimal, shortest-round-trip float, complex "(a+bj)", etc.).
+            /// A string element of an object array prints as Python's repr of the str / bytes (quoted), which differs from
+            /// the unquoted str() a 0-d string array prints.</summary>
             /// <param name="value">The boxed element value.</param>
             /// <returns>The element's object-array string form.</returns>
-            public string Format(object value) => ScalarStr(value, _tc);
+            public string Format(object value) => _tc == NPTypeCode.String
+                ? (value is byte[] bytes ? PyRepr.Bytes(bytes) : PyRepr.Str((string)value))
+                : ScalarStr(value, _tc);
         }
 
         // str() of a 0d array element (Python scalar str semantics).
@@ -372,6 +383,10 @@ namespace NumSharp.Backends.Printing
                     return PythonFloatRepr((double)(decimal)value, FloatKind.Double);
                 case NPTypeCode.Complex:
                     return PythonComplexRepr((Complex)value);
+                // str() of NumPy's string scalars: np.str_ prints its text raw (no quotes, no escapes); np.bytes_ has no
+                // str of its own, so NumPy's _guarded_repr_or_str prints its repr, np.bytes_(b'...').
+                case NPTypeCode.String:
+                    return value is byte[] bytes ? "np.bytes_(" + PyRepr.Bytes(bytes) + ")" : (string)value;
                 default:
                     return value?.ToString() ?? "";
             }
@@ -452,7 +467,15 @@ namespace NumSharp.Backends.Printing
             return s;
         }
 
-        private static string DtypeShortRepr(NPTypeCode tc) => tc.AsNumpyDtypeName();
+        /// <summary>
+        ///     NumPy's <c>dtype_short_repr</c>: a builtin numeric dtype prints its name (<c>dtype=int32</c>); a flexible
+        ///     dtype prints its quoted descriptor string (<c>dtype='&lt;U2'</c>, <c>dtype='|S3'</c>), because its name
+        ///     alone ("str96") would not name the width.
+        /// </summary>
+        /// <param name="a">The printed array.</param>
+        /// <returns>The text after <c>dtype=</c>.</returns>
+        private static string DtypeShortRepr(NDArray a)
+            => a.typecode == NPTypeCode.String ? "'" + a.dtype.str + "'" : a.typecode.AsNumpyDtypeName();
 
         private static string ShapeTuple(long[] shape)
         {

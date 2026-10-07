@@ -1,79 +1,208 @@
 # Working with arrays of strings and bytes
 
-NumPy has a family of text and byte dtypes - fixed-width `str_` (`U`), `bytes_` (`S`), raw `void` (`V`), and the variable-width `StringDType` added in NumPy 2.0. **NumSharp implements none of them.** It has one character-adjacent dtype, `Char`, and for everything else the answer is: use .NET's own `string`, `string[]`, and `byte[]` directly, and cross the boundary with `np.frombuffer` when you need bytes as an array.
+NumSharp has NumPy's two fixed-width text dtypes: `str_` (`U`, Unicode) and `bytes_` (`S`, bytes). It stores, reads, writes, converts, copies, casts and prints them byte for byte like NumPy 2.4.2.
 
-This page explains what NumSharp offers, why the NumPy string dtypes are deliberately absent, and how to port code that used them.
+Computing on text is the next phase. That covers comparison, concatenation, sorting, searching, and conversion between text and numbers. Such a call throws `StringComputationNotSupportedException` until then. Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
+
+NumPy's raw `void` (`V`), `object` (`O`) and variable-width `StringDType` dtypes stay unsupported.
 
 <!-- Tests: NumSharp.Tests.Documentation.FundamentalsStringsBytesDocTests - every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/FundamentalsStringsBytesDocTests.cs. Section → method(s):
+     The two string dtypes → TwoStringDtypes_WidthAndItemSize, TwoStringDtypes_RawBytes
+     Creating string arrays → Creating_FromCSharpValues, Creating_BytesNeedObjectArray
+     Reading and writing elements → Elements_ReadAndWrite, CharVectorApi_RefusesStringArrays
+     Dtype integration → Dtypes_PromotionAndCasting
+     Moving data → Moving_ViewsCopiesAndCasts, Moving_NonAsciiToBytes_Throws
+     Printing → Printing_StrAndRepr
+     Computing on text → Computing_NumPyRefusals, Computing_NextPhase, Computing_NeverEqualToNumbers, Computing_ChecksInNumPysOrder
+     .npy files → Npy_RoundTrip, Npy_CharWritesAsU1
      The Char dtype → Char_IsTwoByteUtf16CodeUnit
-     NumPy string/bytes dtypes throw → UnsupportedStringDtypes_Throw
-     Text stays .NET (string[] + LINQ) → Text_StaysDotNet_LengthsViaLinq
      Byte streams via np.frombuffer → Bytes_ViaFrombuffer -->
+
+---
+
+## The two string dtypes
+
+| NumPy dtype | Descriptor | Bytes per character | Example | `itemsize` |
+|-------------|------------|---------------------|---------|------------|
+| `str_` | `U`, `<U5` | 4 (one UCS-4 code point, native byte order) | `np.dtype("U5")` | 20 |
+| `bytes_` | `S`, `\|S5` | 1 | `np.dtype("S5")` | 5 |
+
+The width is part of the dtype. Every element of a `<U5` array holds up to five characters:
+
+- A shorter value is padded with NUL characters.
+- Reading an element removes the trailing NULs. NULs inside the value stay.
+- A value that is too long is cut to the width when you write it, as NumPy does.
+
+```csharp
+var names = np.array(new[] { "cat", "dog", "bird" });
+names.dtype;             // dtype('<U4') - the longest value sets the width
+names.dtype.itemsize;    // 16 - 4 characters x 4 bytes
+np.dtype("S5").str;      // "|S5"
+np.dtype("U5").name;     // "str160" - NumPy's name counts bits
+```
+
+The data buffer holds the characters directly, as in NumPy. A `U` character is a 4-byte code point. An `S` character is one byte:
+
+```csharp
+np.array(new[] { "ab" }).tobytes();               // 61 00 00 00 62 00 00 00
+np.array(new[] { "ab" }).astype("S3").tobytes();  // 61 62 00
+```
+
+A character outside the Basic Multilingual Plane (an emoji) is ONE `U` code point. C# stores it as two UTF-16 chars, but `np.array(new[] { "😀" })` is `<U1`.
+
+---
+
+## Creating string arrays
+
+```csharp
+np.array(new[] { "cat", "dog" });                    // ['cat', 'dog'], <U3
+np.array(new[] { "cat", "dog" }, np.dtype("S5"));    // [b'cat', b'dog'], |S5
+np.zeros(new Shape(2), np.dtype("U3"));              // ['', ''], <U3
+np.full(new Shape(2), "ab");                         // ['ab', 'ab'], <U2
+NDArray.Scalar("abc");                               // 'abc', a 0-d <U3 array
+np.frombuffer(Encoding.ASCII.GetBytes("abcdef"), "S3");   // [b'abc', b'def'], no copy
+```
+
+A C# `string` is NumPy's `str`, and a `byte[]` is NumPy's `bytes`. Build an `S` array from byte values with an `object[]`:
+
+```csharp
+np.array(new object[] { Encoding.ASCII.GetBytes("ab"), Encoding.ASCII.GetBytes("cde") });   // [b'ab', b'cde'], |S3
+```
+
+> **Footgun:** `np.array(new[] { bytes1, bytes2 })` with a `byte[][]` is a jagged NUMERIC array in C#. It becomes a 2-D `uint8` array, not an `S` array.
+
+---
+
+## Reading and writing elements
+
+```csharp
+names.item(1);                     // "dog" - a C# string
+names.astype("S4").item(1);        // byte[] { 100, 111, 103 } - b'dog'
+NDArray.AsStringArray(names);      // { "cat", "dog", "bird" }
+names[1];                          // array('dog', dtype='<U4') - a 0-d view
+names[1] = "zebras";               // the array is now ['cat', 'zebr', 'bird']: cut to 4 characters
+```
+
+`GetString`, `SetString`, `GetStringAt` and `SetStringAt` belong to the `Char` dtype: they read a vector of UTF-16 chars as one string. They refuse a `U` or `S` array with an `InvalidOperationException`.
+
+---
+
+## Dtype integration
+
+String descriptors take part in promotion and in the casting rules exactly as in NumPy:
+
+```csharp
+np.promote_types(np.dtype("S3"), np.dtype("U2"));           // dtype('<U3')
+np.result_type(new[] { "U3", "S7" });                        // dtype('<U7')
+np.can_cast(np.dtype("S3"), np.dtype("U3"), "safe");         // true - ASCII bytes fit in Unicode
+np.can_cast(np.dtype("U3"), np.dtype("S3"), "same_kind");    // false
+np.can_cast(np.dtype("U5"), np.dtype("U3"), "safe");         // false - the cast would cut values
+```
+
+---
+
+## Moving data
+
+Views, copies and element movement work on string arrays as on numeric ones: slicing, transposes, reshapes, `copy`, `concatenate`, `take`, boolean masks, `where`, `pad`, `copyto`, `put` and the other indexing routines.
+
+Casts between string dtypes follow NumPy:
+
+- A narrower width cuts values.
+- `U` to `S` encodes ASCII.
+- `S` to `U` decodes ASCII.
+
+```csharp
+np.concatenate(new[] { np.array(new[] { "a" }), np.array(new[] { "long" }) });   // ['a', 'long'], <U4
+names.astype("U2");                        // ['ca', 'do', 'bi']
+np.array(new[] { "é" }).astype("S1");      // UnicodeEncodeError
+```
+
+The last call raises `UnicodeEncodeError` with Python's message: `'ascii' codec can't encode character '\xe9' in position 0: ordinal not in range(128)`.
+
+---
+
+## Printing
+
+`ToString()` is NumPy's `str()`, and `ToString(true)` is NumPy's `repr()`, including Python's quoting rules:
+
+```csharp
+names.ToString();                                     // ['cat' 'dog' 'bird']
+names.ToString(true);                                 // array(['cat', 'dog', 'bird'], dtype='<U4')
+np.array2string(np.array(new[] { "a'b", "c\"d" }));   // ["a'b" 'c"d']
+```
+
+---
+
+## Computing on text (the next phase)
+
+NumPy answers a call that involves text in one of two ways, and NumSharp follows it.
+
+**NumPy refuses the call.** NumSharp raises the same exception with the same message:
+
+```csharp
+np.sum(names);    // TypeError: the resolved dtypes are not compatible with add.reduce. Resolved (dtype('<U4'), dtype('<U4'), dtype('<U8'))
+np.sqrt(names);   // TypeError: ufunc 'sqrt' not supported for the input types, ...
+```
+
+**NumPy computes on the text.** NumSharp throws `StringComputationNotSupportedException`, a `NotSupportedException`:
+
+```csharp
+_ = names == names;       // comparison
+np.add(names, names);     // concatenation
+np.sort(names);           // sorting
+```
+
+A comparison of text with numbers is "never equal" in NumPy, and in NumSharp: `names == np.array(new[] { 1, 2, 3 })` is `[False False False]`.
+
+NumSharp also reports the problems of a call in NumPy's order, before it answers:
+
+1. The `dtype=` request.
+2. A read-only `out=`, then a non-bool `where=`.
+3. The axis.
+4. The refusal, or the next-phase exception.
+
+```csharp
+np.sum(names, 9);   // AxisError: axis 9 is out of bounds for array of dimension 1
+```
+
+An unsized string `dtype=` request (`"U"`, `"S"`) gets NumPy's answer too. `np.sqrt(x, dtype: "U")` names no loop. `np.add(x, x, dtype: "U")` is the next phase, because NumPy formats the numbers as text and concatenates them.
+
+Until the next phase, convert to .NET and compute there. For example, `NDArray.AsStringArray(names).Select(s => s.ToUpper())`.
+
+---
+
+## .npy files
+
+`np.save` and `np.load` read and write `U` and `S` arrays byte for byte, as NumPy writes them. A big-endian `>U3` file is byte-swapped when it is read.
+
+> **Breaking change:** a `<U1` file now loads as a `<U1` string array, not as `Char`. A `Char` array is still written as `<U1`, because NumPy has no 2-byte character dtype.
+
+```csharp
+var stream = new MemoryStream();
+np.save(stream, names);
+stream.Position = 0;
+np.load_npy(stream);    // array(['cat', 'dog', 'bird'], dtype='<U4')
+```
 
 ---
 
 ## The `Char` dtype
 
-`NPTypeCode.Char` wraps .NET's `System.Char` - a **2-byte UTF-16 code unit**. It exists so an array of individual characters can carry "these are characters, not `ushort`s" in the type system:
+`NPTypeCode.Char` wraps .NET's `System.Char`, a **2-byte UTF-16 code unit**. It stores characters as numbers, not text:
 
 ```csharp
-var letters = np.array(['a', 'b', 'c']);
+var letters = np.array(new[] { 'a', 'b', 'c' });
 letters.typecode;        // NPTypeCode.Char
 InfoOf<char>.Size;       // 2  (actual memory footprint)
 ```
 
-**`Char` is not NumPy's `'c'` / `S1`.** NumPy's `S1` is a *one-byte* bytestring; NumSharp's `Char` is a *two-byte* UTF-16 unit. Different size, different encoding, different semantics - porting NumPy bytestring code onto `Char` will almost always be wrong. Its `kind` is reported as `'S'` for NumPy round-trip ergonomics, and it maps to `<U1` when written to `.npy`, but it behaves like a 2-byte integer for arithmetic. Full details and the itemsize quirk are in [Data types → Char](../dtypes.md#numsharp-specific-types-decimal-and-char).
+**`Char` is not NumPy's `<U1` or `S1`.** NumPy's `<U1` is a 4-byte code point, and `S1` is one byte. NumSharp's `Char` is a 2-byte UTF-16 unit that behaves like a 2-byte integer in arithmetic. For text, use a `U` array. The full details and the itemsize quirk are in [Data types → Char](../dtypes.md#numsharp-specific-types-decimal-and-char).
 
 ---
 
-## NumPy string/bytes dtypes are not supported
+## Byte streams → `byte[]` + `np.frombuffer`
 
-Every NumPy text or byte dtype raises `NotSupportedException` when you try to construct or parse it:
-
-| NumPy dtype | Character code | NumSharp |
-|-------------|----------------|----------|
-| `str_` (Unicode, UCS-4 fixed width) | `U`, `<U10` | **throws** |
-| `bytes_` (null-terminated bytestring) | `S`, `a`, `\|S5` | **throws** |
-| `void` (raw byte block) | `V`, `\|V7` | **throws** |
-| `object` (boxed Python objects) | `O` | **throws** |
-| `StringDType` (variable-width UTF-8, NumPy 2.0) | - | **throws** |
-
-```csharp
-np.dtype("U5");     // throws NotSupportedException
-np.dtype("S10");    // throws
-np.dtype("V7");     // throws
-```
-
-The throw is deliberate - see [Data types → why throw instead of silent approximation](../dtypes.md#why-throw-instead-of-silent-approximation). Silently mapping `S10` to `string` or `U` to `Char` would produce a differently-sized, differently-encoded array than the caller asked for, and corrupt any binary round-trip.
-
-### Why these are absent
-
-NumPy's string dtypes are *fixed-width, in-buffer* text: an `<U10` array reserves 10 UCS-4 code points per element inside the array's data buffer, and `StringDType` stores UTF-8 out-of-band with in-buffer pointers. Neither maps cleanly onto .NET, where:
-
-- `string` is a heap object (UTF-16, variable length), not a fixed-width buffer slot;
-- `byte[]` is the natural home for raw bytes;
-- there is no zero-cost way to store variable-length text inside NumSharp's unmanaged element buffer.
-
-So rather than build a half-fidelity port, NumSharp leaves text to .NET's excellent native types and keeps `NDArray` numeric.
-
----
-
-## What to use instead
-
-### Text data → `string` / `string[]`
-
-Keep text in ordinary .NET collections. There is no `NDArray` of strings; index and process them with LINQ or plain loops:
-
-```csharp
-string[] labels = { "cat", "dog", "bird" };
-var lengths = np.array(labels.Select(s => s.Length).ToArray());   // NDArray<int> of lengths
-```
-
-If you need per-character arrays, `Char` works for a single fixed-width column, but a jagged set of words is a `string[]`, not an array dtype.
-
-### Byte streams → `byte[]` + `np.frombuffer`
-
-For raw bytes, use `byte[]` and reinterpret with `np.frombuffer` when you want to view them as numbers:
+For raw bytes, use `byte[]` and reinterpret it with `np.frombuffer` when you want to view the bytes as numbers:
 
 ```csharp
 byte[] raw = File.ReadAllBytes("data.bin");
@@ -81,11 +210,7 @@ var asBytes  = np.frombuffer(raw, np.uint8);     // NDArray<byte>, zero-copy vie
 var asFloats = np.frombuffer(raw, np.float32);   // reinterpret the same bytes as float32
 ```
 
-This is the NumSharp analog of NumPy's `np.frombuffer` on a bytestring, and the general interop bridge - see [Any library via np.frombuffer](../interop/np-frombuffer.md).
-
-### Fixed-width byte records → parse yourself
-
-NumPy code that used `S`/`V` to read a fixed-width binary field should read the `byte[]` and slice it with .NET (`Encoding.ASCII.GetString`, `BinaryReader`, `Span<byte>`), then build numeric `NDArray`s from the parsed values.
+This is NumPy's `np.frombuffer` on a bytestring, and the general interop bridge. See [Any library via np.frombuffer](../interop/np-frombuffer.md).
 
 ---
 
@@ -93,25 +218,33 @@ NumPy code that used `S`/`V` to read a fixed-width binary field should read the 
 
 | NumPy | NumSharp |
 |-------|----------|
-| `np.array(["hello", "world"])` (→ `<U5`) | `string[] { "hello", "world" }` (plain .NET) |
-| `np.array([b"hi"], dtype="S2")` | `byte[]` / `np.frombuffer(bytes, np.uint8)` |
-| `arr.astype("U10")` | not supported - keep text as `string` |
-| `np.char.upper(arr)` | `labels.Select(s => s.ToUpper())` (LINQ on `string[]`) |
-| `StringDType()` array | `string[]` / `List<string>` |
-| `np.array(['a','b','c'])` (single chars) | `np.array(['a', 'b', 'c'])` → `Char` |
+| `np.array(["hello", "world"])` (→ `<U5`) | `np.array(new[] { "hello", "world" })` (→ `<U5`) |
+| `np.array([b"hi"], dtype="S2")` | `np.array(new object[] { Encoding.ASCII.GetBytes("hi") }, np.dtype("S2"))` |
+| `arr.astype("U10")` | `arr.astype("U10")` |
+| `arr[0]` (a `numpy.str_`) | `arr.item(0)` (a C# `string`) |
+| `arr.tolist()` | `arr.tolist()` or `NDArray.AsStringArray(arr)` |
+| `np.char.upper(arr)` / `np.strings.upper(arr)` | next phase: `NDArray.AsStringArray(arr).Select(s => s.ToUpper())` |
+| `StringDType()` array | not supported: `string[]` / `List<string>` |
+| `np.array(['a','b','c'])` (single characters, `<U1`) | `np.array(new[] { "a", "b", "c" })` (`<U1`); `np.array(new[] { 'a', 'b', 'c' })` is `Char` |
 
 ---
 
 ## Troubleshooting
 
-### "`np.dtype("U5")` / `"S10"` threw NotSupportedException"
-That's expected - NumSharp has no string/bytes dtypes. Keep the data in `string`/`string[]`/`byte[]`; the exception message names the alternative.
+### "`StringComputationNotSupportedException`: ... is the next phase"
+NumPy computes this call on text, and NumSharp does not compute on text yet. Convert the values to .NET (`NDArray.AsStringArray`, `item`) and use LINQ, or keep the computation in NumPy.
 
-### "I mapped a NumPy `S1` array to `Char` and the bytes are wrong"
-`Char` is 2-byte UTF-16, not NumPy's 1-byte `S1`. Use `byte` (`np.uint8`) for bytestring data.
+### "My `byte[][]` became a `uint8` matrix"
+A jagged `byte[][]` is numeric data in C#. Pass an `object[]` of `byte[]` values to get an `S` array.
 
-### "`arr.astype(np.float64)` failed on my Char array"
-`Char` is treated as a 2-byte integer for numeric conversions; make sure the values are what you expect (code points), not text you meant to keep as `string`.
+### "My value was cut"
+A string array has a fixed width. Writing a longer value cuts it, as NumPy does. Use a wider dtype: `arr.astype("U10")`.
+
+### "`UnicodeEncodeError` when I cast to `S`"
+A `U` to `S` cast encodes ASCII only, as NumPy does. Keep non-ASCII text in a `U` array.
+
+### "`GetString` threw `InvalidOperationException`"
+`GetString` reads `Char` vectors. Read a string element with `item(i)` or `NDArray.AsStringArray`.
 
 ---
 
@@ -119,16 +252,25 @@ That's expected - NumSharp has no string/bytes dtypes. Keep the data in `string`
 
 | Item | Behavior |
 |------|----------|
-| `NPTypeCode.Char` / `np.dtype('a'..'z' as chars)` | 2-byte UTF-16 code unit dtype; `kind == 'S'`; `<U1` on `.npy` |
-| `np.dtype("U…")` / `"S…"` / `"V…"` / `"O"` | `NotSupportedException` |
-| `np.frombuffer(byte[], dtype)` | reinterpret raw bytes as a numeric array |
-| `InfoOf<char>.Size` | `2` (true footprint; note `DType.itemsize` reports `1`) |
+| `np.dtype("U5")` / `np.dtype("S5")` | The fixed-width descriptors: `itemsize` 20 / 5, `kind` `'U'` / `'S'` |
+| `np.array(string[])` | A `U` array as wide as the longest value |
+| `np.array(object[] of byte[])` | An `S` array as wide as the longest value |
+| `NDArray.Scalar(string)` / `NDArray.Scalar(byte[])` | A 0-d `U` / `S` array |
+| `arr.item(i)` | A C# `string` (`U`) or `byte[]` (`S`), trailing NULs removed |
+| `NDArray.AsStringArray(arr)` | Every element of a `U` array as a `string[]`, in C order |
+| `arr[i] = "text"` | Writes one element, cut to the width |
+| `arr.astype("S3")` / `arr.astype("U8")` | Casts between string dtypes, as NumPy does |
+| Computing calls (`==`, `np.add`, `np.sort`, ...) | `StringComputationNotSupportedException` (the next phase) |
+| NumPy's refusals (`np.sum`, `np.sqrt`, ...) | NumPy's exception and message |
+| `np.dtype("V7")` / `"O"` / `StringDType` | `NotSupportedException` |
+| `NPTypeCode.Char` | A 2-byte UTF-16 code unit dtype, written to `.npy` as `<U1` |
+| `np.frombuffer(byte[], dtype)` | Reinterprets raw bytes as an array, string dtypes included |
 
 ---
 
 ## Related reading
 
-- [Data types](../dtypes.md) - the full dtype set, the `Char` quirks, and why unsupported dtypes throw.
-- [Structured arrays](structured-arrays.md) - the other NumPy dtype family NumSharp does not implement.
+- [Data types](../dtypes.md) - the full dtype set and the `Char` quirks.
+- [Structured arrays](structured-arrays.md) - a NumPy dtype family NumSharp does not implement.
 - [Any library via np.frombuffer](../interop/np-frombuffer.md) - the byte-buffer bridge.
 - [NumPy strings-and-bytes guide](https://numpy.org/doc/stable/user/basics.strings.html) - the upstream article.

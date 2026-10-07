@@ -212,15 +212,17 @@ namespace NumSharp.Tests.Creation
         // NumPy types NumSharp doesn't implement → NotSupportedException
         // ---------------------------------------------------------------------
 
-        [TestMethod] public void Unsupported_S()    => ExpectThrow("S");
-        [TestMethod] public void Unsupported_S10()  => ExpectThrow("S10");
-        [TestMethod] public void Unsupported_S1000() => ExpectThrow("S1000");
-        [TestMethod] public void Unsupported_U()    => ExpectThrow("U");
-        [TestMethod] public void Unsupported_U32()  => ExpectThrow("U32");
+        // The fixed-width string dtypes parse (probed 2.4.2: np.dtype(spelling).str); the unsized forms are the class
+        // singletons S0 / U0, which an allocation turns into one character.
+        [TestMethod] public void String_S()     => np.dtype("S").str.Should().Be("|S0");
+        [TestMethod] public void String_S10()   => np.dtype("S10").str.Should().Be("|S10");
+        [TestMethod] public void String_S1000() => np.dtype("S1000").str.Should().Be("|S1000");
+        [TestMethod] public void String_U()     => np.dtype("U").str.Should().Be("<U0");
+        [TestMethod] public void String_U32()   => np.dtype("U32").str.Should().Be("<U32");
         [TestMethod] public void Unsupported_V()    => ExpectThrow("V");
         [TestMethod] public void Unsupported_V16()  => ExpectThrow("V16");
         [TestMethod] public void Unsupported_O()    => ExpectThrow("O");
-        [TestMethod] public void Unsupported_a()    => ExpectThrow("a");
+        [TestMethod] public void String_a_IsDeprecatedBytesAlias() => np.dtype("a").str.Should().Be("|S0");
         // NumPy's PyArray_DescrFromType maps the bare datetime LETTERS to the generic descriptors: np.dtype('M') is
         // dtype('<M8') and np.dtype('m') is dtype('<m8') (probed 2.4.2).
         [TestMethod] public void SingleChar_M_GenericDatetime()  => np.dtype("M").Should().Be(np.dtype("M8"));
@@ -266,11 +268,11 @@ namespace NumSharp.Tests.Creation
             np.dtype("datetime64[ns]").Should().Be(np.dtype("M8[ns]"));
             np.dtype("timedelta64[ms]").str.Should().Be("<m8[ms]");
         }
-        [TestMethod] public void Unsupported_a5()   => ExpectThrow("a5");
-        [TestMethod] public void Unsupported_c_IsS1_NotComplex() => ExpectThrow("c");
-        [TestMethod] public void Unsupported_str()  => ExpectThrow("str");
-        [TestMethod] public void Unsupported_str_() => ExpectThrow("str_");
-        [TestMethod] public void Unsupported_bytes_() => ExpectThrow("bytes_");
+        [TestMethod] public void String_a5()       => np.dtype("a5").str.Should().Be("|S5");
+        [TestMethod] public void String_c_IsS1_NotComplex() => np.dtype("c").str.Should().Be("|S1");
+        [TestMethod] public void String_str()      => np.dtype("str").str.Should().Be("<U0");
+        [TestMethod] public void String_str_()     => np.dtype("str_").str.Should().Be("<U0");
+        [TestMethod] public void String_bytes_()   => np.dtype("bytes_").str.Should().Be("|S0");
         [TestMethod] public void Unsupported_object() => ExpectThrow("object");
         [TestMethod] public void Unsupported_object_() => ExpectThrow("object_");
         // datetime64 / timedelta64 parse into generic-unit descriptors since dtype-system Stage A (see Datetime_* below).

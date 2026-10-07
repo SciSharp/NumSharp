@@ -163,6 +163,17 @@ namespace NumSharp
                     : NDMatrixBoundary.Reduced((y, x, dx, axis), static s => trapezoid(s.y, s.x, s.dx, s.axis), axis, false, null);
             if (y is null) throw new ArgumentNullException(nameof(y));
 
+            // NumPy: d = diff(x) when x is given (text: subtract has no loop), else the Python float dx; then
+            // d * (y[1:] + y[:-1]) / 2 — the string add concatenates (doubling the width) and the multiply refuses text.
+            if (Backends.Strings.NDStringUfuncs.IsString(x))
+                throw Backends.Strings.NDStringUfuncs.NoLoop("subtract", x.dtype, x.dtype);
+            if (Backends.Strings.NDStringUfuncs.IsString(y))
+            {
+                var meta = (StringDTypeMeta)y.dtype.Meta;
+                var concatenated = meta.Descr(2L * (y.dtype.itemsize / meta.UnitSize));
+                throw Backends.Strings.NDStringUfuncs.NoLoop("multiply", x is null ? np.float64 : x.dtype, concatenated);
+            }
+
             int nd = y.ndim;
             var ops = new TrapezoidOperands();
             NDArray dd = null, d = null;

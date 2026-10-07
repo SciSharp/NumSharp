@@ -11,7 +11,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Add(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "add", lhs, rhs, @out, where);
             return ExecuteBinaryOp(lhs, rhs, BinaryOp.Add, @out, where, typeCode);
         }
     }

@@ -46,12 +46,24 @@ namespace NumSharp
         ///     value is assigned to an integer dtype (NumPy's <c>ValueError</c>).</exception>
         /// <exception cref="TypeError">A complex <paramref name="value"/> is assigned to a real (non-bool integer
         ///     or float) dtype — NumPy funnels it through <c>int()</c>/<c>float()</c>, which reject a complex.</exception>
+        /// <exception cref="UnicodeEncodeError">Non-ASCII text into a bytes (<c>S</c>) array.</exception>
+        /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into a str (<c>U</c>) array.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A number into a string array (NumPy stores its text,
+        ///     the computational phase of the string support).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.fill.html</remarks>
         public void fill(object value)
         {
             // NumPy (convert.c :: PyArray_FillWithScalar): writeability is checked FIRST, through the same
             // guard every other write path uses.
             NumSharpException.ThrowIfNotWriteable(Shape);
+            // A fixed-width string array packs the value into ITS OWN descriptor (encoded, truncated to the element width;
+            // the ASCII checks raise here, before any element is written and even when the array is empty) and copies that
+            // one element everywhere.
+            if (typecode == NPTypeCode.String)
+            {
+                FillText(value);
+                return;
+            }
 
             // Coerce the scalar to this array's dtype with NumPy scalar-coercion. This may raise
             // (OverflowException / ValueError) and — matching NumPy's PyArray_Pack — runs regardless of
@@ -72,6 +84,36 @@ namespace NumSharp
                 FillContiguousWindow(scalar);
             else if (!TryFillInnerContiguousRuns(scalar))
                 NDIter.Copy(this, NDArray.Scalar(scalar));
+        }
+
+        /// <summary>
+        ///     <see cref="fill"/> for a fixed-width string array: NumPy's <c>PyArray_Pack</c> of the value into this array's
+        ///     descriptor, then the broadcast copy of that one element into every position (any layout).
+        /// </summary>
+        /// <param name="value">A <see cref="string"/>, a <c>byte[]</c>, a <see cref="char"/>, or a 0-d array.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null (the house convention of
+        ///     <see cref="fill"/>).</exception>
+        /// <exception cref="ValueError">A multi-element array (<c>setting an array element with a sequence.</c>).</exception>
+        /// <exception cref="UnicodeEncodeError">Non-ASCII text into a bytes (<c>S</c>) array.</exception>
+        /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into a str (<c>U</c>) array.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A number (NumPy stores its text).</exception>
+        private void FillText(object value)
+        {
+            if (value is null)
+                throw new ArgumentNullException(nameof(value));
+            if (value is NDArray nd)
+            {
+                if (nd.ndim != 0)
+                    throw new ValueError("setting an array element with a sequence.");
+                // The string copy route converts the 0-d value (S <-> U with the ASCII checks, truncation) or refuses a
+                // numeric one; it runs only when there is an element to write.
+                if (size > 0)
+                    NDIter.Copy(Storage, nd.Storage);
+                return;
+            }
+            using var scalar = Backends.Strings.NDStringArrays.FromScalar(value, dtype);
+            if (size > 0)
+                NDIter.Copy(Storage, scalar.Storage);
         }
 
         /// <summary>

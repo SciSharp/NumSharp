@@ -21,6 +21,9 @@ namespace NumSharp.Backends
         /// </remarks>
         public override NDArray IsPosInf(NDArray a, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            // NumPy computes isposinf/isneginf through isinf (NumPy's functions take no dtype=), so a string input
+            // reports isinf's plain refusal.
+            Strings.NDStringUfuncs.ThrowIfUnary("isinf", a);
             if (@out is null && where is null)
             {
                 using var result = ExecuteUnaryOp(a, UnaryOp.IsPosInf, NPTypeCode.Boolean);
@@ -43,6 +46,9 @@ namespace NumSharp.Backends
         /// </remarks>
         public override NDArray IsNegInf(NDArray a, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            // NumPy computes isposinf/isneginf through isinf (NumPy's functions take no dtype=), so a string input
+            // reports isinf's plain refusal.
+            Strings.NDStringUfuncs.ThrowIfUnary("isinf", a);
             if (@out is null && where is null)
             {
                 using var result = ExecuteUnaryOp(a, UnaryOp.IsNegInf, NPTypeCode.Boolean);

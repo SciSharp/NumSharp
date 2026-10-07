@@ -14,6 +14,42 @@ namespace NumSharp
     internal static class GufuncGuard
     {
         /// <summary>
+        ///     The part of a gufunc call NumPy settles while it parses the arguments and resolves the loop, before any
+        ///     core-dimension, <c>axes</c> / <c>axis</c> / <c>keepdims</c> semantics or shape check: the <c>dtype=</c> class
+        ///     check, then — with text involved (a string operand or a string <c>dtype=</c> request) — a read-only
+        ///     <c>out=</c>, then the loop refusal.
+        /// </summary>
+        /// <param name="name">NumPy's gufunc name (<c>matmul</c>, <c>vecdot</c>, <c>matvec</c>, <c>vecmat</c>).</param>
+        /// <param name="x1">The first operand.</param>
+        /// <param name="x2">The second operand.</param>
+        /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
+        /// <param name="out">The <c>out=</c> operand, or null.</param>
+        /// <exception cref="TypeError">A <paramref name="dtype"/> with details beyond its class (<c>'U3'</c>,
+        ///     <c>'&gt;f8'</c>), or NumPy's no-loop text: the operand CLASSES and the requested class under a string request
+        ///     (<c>(&lt;class 'numpy.dtypes.Float64DType'&gt;, …) -&gt; &lt;class 'numpy.dtypes.StrDType'&gt;</c>), the operand
+        ///     DESCRIPTORS for a string operand (<c>(dtype('&lt;U2'), dtype('float64')) -&gt; None</c>).</exception>
+        /// <exception cref="ValueError">Text with a read-only <paramref name="out"/>.</exception>
+        /// <remarks>
+        ///     No gufunc has a string loop, so text never reaches <see cref="ToLoop"/> (the string lane has no element
+        ///     size); a numeric request still passes only its class check here (probed: <c>vecdot(f, f, dtype='U3')</c>
+        ///     is the class-only TypeError, and NumPy resolves the loop before <c>axis</c> / <c>keepdims</c> semantics:
+        ///     <c>matvec(u2, u, axis=0)</c> names the missing loop).
+        /// </remarks>
+        internal static void ThrowIfText(string name, NDArray x1, NDArray x2, DType dtype, NDArray @out)
+        {
+            if (dtype is not null)
+                DefaultEngine.ThrowIfNotGeneralDType(dtype);
+            bool request = Backends.Strings.NDStringUfuncs.IsStringRequest(dtype);
+            if (!request && !Backends.Strings.NDStringUfuncs.IsString(x1) && !Backends.Strings.NDStringUfuncs.IsString(x2))
+                return;
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
+            throw request
+                ? Backends.Strings.NDStringUfuncs.GufuncDTypeLoopError(name, dtype, x1, x2)
+                : Backends.Strings.NDStringUfuncs.NoLoop(name, x1.dtype, x2.dtype);
+        }
+
+        /// <summary>
         ///     "<c>{name}: Input operand {i} does not have enough dimensions (has {n}, gufunc core
         ///     with signature {sig} requires {k})</c>"
         /// </summary>

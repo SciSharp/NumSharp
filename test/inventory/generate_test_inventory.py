@@ -27,7 +27,7 @@ TOOL = HERE / "NumSharp.Tools.TestInventory" / "NumSharp.Tools.TestInventory.csp
 TOOL_DLL = HERE / "NumSharp.Tools.TestInventory" / "bin" / "Release" / "net8.0" / "NumSharp.Tools.TestInventory.dll"
 CORPUS = ROOT / "test" / "NumSharp.Tests.Oracle" / "Fuzz" / "corpus"
 SCHEMA_VERSION = 2
-GENERATOR_VERSION = "1.2.0"
+GENERATOR_VERSION = "1.3.0"
 OUTPUT_FILES = ("tests-oracle-report.json", "tests-oracle-report.csv", "summary.md", "tests-oracle-manifest.json")
 
 PROJECT_ROOTS = {
@@ -353,8 +353,19 @@ def scan_oracle() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str,
     with zipfile.ZipFile(npy_path) as archive:
         npy_manifest = json.loads(archive.read("manifest.json"))
     npy_cases = len(npy_manifest.get("cases", []))
+    # The fixed-width string oracle (Stage D): its own schema (section-prefixed ids, a phase per case), replayed by
+    # NumSharp.Tests.Oracle/Strings. Phase-2 cases are NumPy computations on text, gated as "deferred" until NumSharp
+    # computes them; they are real replay contracts and count as cases.
+    strings_path = ROOT / "test" / "NumSharp.Tests.Oracle" / "Strings" / "corpus" / "strings.jsonl"
+    string_cases = string_phase2 = 0
+    with strings_path.open(encoding="utf-8") as stream:
+        for line in stream:
+            if not line.strip():
+                continue
+            string_cases += 1
+            string_phase2 += json.loads(line).get("phase") == 2
 
-    specialized_cases = flags_rows + layout_rows + npy_cases
+    specialized_cases = flags_rows + layout_rows + npy_cases + string_cases
     op_mapped_contract_rows = sum(row["cases"] for row in ops_rendered)
     summary = {
         "corpusFiles": len(files),
@@ -378,6 +389,8 @@ def scan_oracle() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str,
         "flagsOracleRows": flags_rows,
         "layoutOracleRows": layout_rows,
         "npyOracleCases": npy_cases,
+        "stringOracleCases": string_cases,
+        "stringOraclePhase2Cases": string_phase2,
         "specializedOracleCases": specialized_cases,
         "totalSerializedContracts": contract_rows + specialized_cases,
         "thinOpLabels": sum(row["strength"]["thinContracts"] for row in ops_rendered),
@@ -506,7 +519,9 @@ def summary_text(report: dict[str, Any]) -> str:
         f"| Oracle test classes | {tests['oracleTestClasses']:,} |",
         f"| FuzzMatrix methods | {tests['fuzzMatrixMethods']:,} |",
         f"| Corpus Oracle test cases | {oracle['corpusRows']:,} |",
-        f"| Specialized flags/layout/NPY test cases | {oracle['specializedOracleCases']:,} |",
+        f"| Specialized flags/layout/NPY/string test cases | {oracle['specializedOracleCases']:,} |",
+        f"| String dtype test cases (phase 2, deferred) | {oracle['stringOracleCases']:,} "
+        f"({oracle['stringOraclePhase2Cases']:,}) |",
         f"| Total Oracle test cases | {oracle['totalSerializedContracts']:,} |",
         f"| Oracle operation keys | {oracle['opKeys']:,} |",
         f"| Host-pin metadata records (not cases) | {oracle['hostPinRecords']:,} |", "",

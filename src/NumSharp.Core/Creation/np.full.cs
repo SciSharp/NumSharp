@@ -63,6 +63,11 @@ namespace NumSharp
         public static NDArray full(Shape shape, object fill_value, DType dtype = null, string device = null)
         {
             ValidateDevice(device);
+            // Fixed-width strings: NumPy's `a = empty(shape, dtype); copyto(a, fill_value, casting='unsafe')` — the dtype is
+            // the fill value's own (np.full(2, 'abc') is <U3) or the requested one, an unsized request is ONE character
+            // (np.full(2, 'abc', dtype='S') is [b'a', b'a']), and the value is truncated / converted by the copy.
+            if (Backends.Strings.NDStringStorage.IsString(dtype) || (dtype == null && (fill_value is string || fill_value is byte[])))
+                return Backends.Strings.NDStringArrays.Full(shape, fill_value, dtype);
             // When dtype is explicitly provided, use it; when null, infer from fill_value.
             var typeCode = dtype != null ? dtype.GetTypeCode() : fill_value.GetType().GetTypeCode();
             return FullCore(shape, fill_value, typeCode);

@@ -11,12 +11,15 @@ namespace NumSharp.Tests.Backends.Unmanaged
         [TestMethod]
         public void StringArrayConverting()
         {
+            // NumPy 2.4.2: np.array(["Hello,", " SciSharp Team!"]) -> shape (2,), dtype '<U15' (the longest text).
+            // (It used to be NumSharp's "2 6 15:..." char-vector encoding.)
             var nd = np.array(strArray);
-            nd.Should().BeOfType<char>()
-                .And.BeShaped(28)
-                .And.BeOfValues(50, 32, 54, 32, 49, 53, 58, 72, 101, 108, 108, 111, 44, 32, 83, 99, 105, 83, 104, 97, 114, 112, 32, 84, 101, 97, 109, 33);
+            nd.typecode.Should().Be(NPTypeCode.String);
+            nd.dtype.str.Should().Be("<U15");
+            nd.Should().BeShaped(2);
+            nd.ToString().Should().Be("['Hello,' ' SciSharp Team!']");
 
-            NDArray.AsStringArray(nd).SequenceEqual(strArray);
+            NDArray.AsStringArray(nd).Should().Equal(strArray);
         }
     }
 }

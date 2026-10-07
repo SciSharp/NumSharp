@@ -55,6 +55,8 @@ namespace NumSharp
             if (NDMatrixBoundary.Sees(x1, x2))
                 return NDMatrixBoundary.Wrapped((x1, x2, @out, axes, axis, keepdims, dtype), static s => matvec(s.x1, s.x2, s.@out, s.axes, s.axis, s.keepdims, s.dtype), @out);
             GufuncGuard.RejectAxisWithAxes(axes, axis);
+            // The dtype= class check and, for text, NumPy's loop refusal come before axis / keepdims semantics.
+            GufuncGuard.ThrowIfText("matvec", x1, x2, dtype, @out);
             GufuncGuard.RejectAxisAndKeepdims("matvec", MatvecSignature, axis, keepdims, 1);
 
             GufuncGuard.RequireRank("matvec", MatvecSignature, 0, x1, 2);

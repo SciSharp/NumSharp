@@ -34,8 +34,10 @@ namespace NumSharp.Backends
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is not boolean, an input cannot be same_kind-cast to an explicit <paramref name="dtype"/>, or <paramref name="out"/> cannot hold the result / does not broadcast.</exception>
         public override NDArray Gcd(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "gcd", lhs, rhs, @out, where);
             ValidateWhereMask(where);                                    // ① where must be bool
+            // gcd has integer loops only: text names the descriptors (NumPy's promoter text).
+            Strings.NDStringUfuncs.ThrowIfBinary("gcd", lhs, rhs, @out, typeCode, where);
             ValidateGcdLcmLoop(lhs, rhs, typeCode, "gcd");              // ② integer-only loop resolution
             return ExecuteBinaryOp(lhs, rhs, BinaryOp.Gcd, @out, where, typeCode);
         }
@@ -54,8 +56,10 @@ namespace NumSharp.Backends
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is not boolean, an input cannot be same_kind-cast to an explicit <paramref name="dtype"/>, or <paramref name="out"/> cannot hold the result / does not broadcast.</exception>
         public override NDArray Lcm(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "lcm", lhs, rhs, @out, where);
             ValidateWhereMask(where);
+            // lcm has integer loops only: text names the descriptors (NumPy's promoter text).
+            Strings.NDStringUfuncs.ThrowIfBinary("lcm", lhs, rhs, @out, typeCode, where);
             ValidateGcdLcmLoop(lhs, rhs, typeCode, "lcm");
             return ExecuteBinaryOp(lhs, rhs, BinaryOp.Lcm, @out, where, typeCode);
         }

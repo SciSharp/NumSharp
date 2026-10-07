@@ -23,6 +23,9 @@ namespace NumSharp {
         public static bool array_equal(NDArray a, NDArray b, bool equal_nan = false)
         {
             using var plain = NDMatrixBoundary.PlainFor(a, b);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            // NumPy computes this on text (sorting, searching, truth tests); string computation is
+            // the next phase of NumSharp's string support, so a string array is refused here.
+            if (Backends.Strings.NDStringUfuncs.IsString(a) || Backends.Strings.NDStringUfuncs.IsString(b)) throw Backends.Strings.NDStringUfuncs.NextPhase("array_equal", Backends.Strings.NDStringUfuncs.IsString(a) ? a : b);
             // A null "array" cannot equal a real one; two nulls are trivially equal (mirrors the
             // NDArray == null convention). Guarding here also keeps a.array_equal(...) from throwing.
             if (a is null)

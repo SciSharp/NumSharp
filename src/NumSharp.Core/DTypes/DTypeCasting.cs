@@ -128,13 +128,28 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>PyArray_CanCastTypeTo</c> — the engine behind <c>np.can_cast(from, to, casting)</c> for two
-        ///     descriptors. An impossible cast is False, never an error.
+        ///     descriptors. An impossible cast is False, never an error. An UNSIZED string target (<c>S0</c>/<c>U0</c>, i.e.
+        ///     <c>np.dtype('U')</c>) stands for its CLASS — "cast to whatever length you need" — so
+        ///     <c>can_cast('i4', 'U', 'safe')</c> is True although <c>can_cast('i4', 'U10', 'safe')</c> is False, and
+        ///     <c>can_cast('U5', 'U', 'no')</c> is True.
         /// </summary>
+        /// <param name="from">The source descriptor.</param>
+        /// <param name="to">The target descriptor (an unsized string descriptor means its class).</param>
+        /// <param name="casting">The rule the cast must satisfy.</param>
+        /// <returns>True when the cast satisfies <paramref name="casting"/>.</returns>
+        /// <exception cref="ArgumentNullException">Either descriptor is null.</exception>
         public static bool CanCastTypeTo(DType from, DType to, NPY_CASTING casting)
         {
             if (from == null) throw new ArgumentNullException(nameof(from));
             if (to == null) throw new ArgumentNullException(nameof(to));
-            return CheckCastSafety(casting, from, to, to.Meta);
+            var toMeta = to.Meta;
+            /*
+             * The `to = NULL` branch, which considers "S0" to be "flexible"
+             * should probably be deprecated.
+             */
+            if (to.itemsize == 0 && toMeta is StringDTypeMeta)
+                to = null; /* consider mainly S0 and U0 as S and U */
+            return CheckCastSafety(casting, from, to, toMeta);
         }
 
         /// <summary>

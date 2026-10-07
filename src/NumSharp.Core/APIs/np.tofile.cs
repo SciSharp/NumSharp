@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Text;
 using NumSharp.Backends.Printing;
@@ -109,15 +110,27 @@ namespace NumSharp
             bool widenToDouble = tc == NPTypeCode.Half || tc == NPTypeCode.Single;
             NPTypeCode renderTc = widenToDouble ? NPTypeCode.Double : tc;
 
+            // NumPy writes each element's text through PyUnicode_AsASCIIString, so a text that is not ASCII cannot be
+            // written: CPython raises UnicodeEncodeError there (NumPy 2.4.2 does not check the NULL it gets back and
+            // crashes the process). Only a string element or a non-ASCII format can produce such text; numbers never do.
+            bool text = tc == NPTypeCode.String;
+            bool checkAscii = text || (format != null && format.AsSpan().IndexOfAnyExceptInRange('\0', '\x7F') >= 0);
+
             var sb = new StringBuilder(1 << 16);
             for (long i = 0; i < n; i++)
             {
                 object v = GetAtIndex(i);
                 if (widenToDouble)
                     v = tc == NPTypeCode.Half ? (double)(System.Half)v : (double)(float)v;
-                sb.Append(useScalarStr
-                    ? Backends.Printing.ArrayFormatter.ScalarStr(v, renderTc)
-                    : PrintfFormatter.Format(format, v, renderTc));
+                // getitem of a string element is the Python str / bytes object: str() of a bytes value is its b'...'
+                // repr (NOT the np.bytes_(...) a 0-d array prints), of a str value the text itself.
+                string item = useScalarStr
+                    ? (text ? (v is byte[] bytes ? Backends.Printing.PyRepr.Bytes(bytes) : (string)v)
+                            : Backends.Printing.ArrayFormatter.ScalarStr(v, renderTc))
+                    : PrintfFormatter.Format(format, v, renderTc);
+                if (checkAscii)
+                    Backends.Strings.NDStringCodec.ThrowIfNotAscii(item.AsSpan());
+                sb.Append(item);
 
                 if (i != n - 1)
                     sb.Append(sep);

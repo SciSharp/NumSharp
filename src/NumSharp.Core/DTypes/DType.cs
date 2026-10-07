@@ -77,10 +77,11 @@ namespace NumSharp
     /// </para>
     /// <para>
     ///     <b>Deliberately narrowed to NumSharp's capability</b> (the same narrowing as <see cref="np.dtype(string)"/>):
-    ///     only NumSharp's <b>15 element types</b> can back an array. Three consequences differ from NumPy and are
-    ///     intentional — (1) <b>complex64</b> (<c>'F'</c>, <c>"c8"</c>, <c>"complex64"</c>) is rejected with
-    ///     <see cref="NotSupportedException"/> (NumSharp has only complex128), as are structured / void / object /
-    ///     (byte)string dtypes; (2) NumSharp additionally accepts a <b>superset</b> of NumPy's
+    ///     only NumSharp's <b>15 element types</b> and the two fixed-width string classes (<c>S</c> bytes, <c>U</c>
+    ///     Unicode — one <see cref="NPTypeCode.String"/> storage lane, see <see cref="StringDTypeMeta"/>) can back an array.
+    ///     Three consequences differ from NumPy and are intentional — (1) <b>complex64</b> (<c>'F'</c>, <c>"c8"</c>,
+    ///     <c>"complex64"</c>) is rejected with <see cref="NotSupportedException"/> (NumSharp has only complex128), as are
+    ///     structured / void / object dtypes; (2) NumSharp additionally accepts a <b>superset</b> of NumPy's
     ///     casing — the C# / <see cref="NPTypeCode"/> PascalCase names (<c>"Int32"</c>, <c>"Single"</c>,
     ///     <c>"Boolean"</c>, <c>"SByte"</c>, <c>"Decimal"</c>, <c>"Char"</c>) that NumPy 2.4.2 rejects — as a
     ///     convenience for C# callers; (3) <c>datetime64</c>/<c>timedelta64</c> descriptors exist (parse, format,
@@ -178,8 +179,41 @@ namespace NumSharp
         {
         }
 
-        /// <summary>The descriptor constructor proper: a class, a byte order and the class's instance parameters.</summary>
+        /// <summary>
+        ///     The descriptor constructor for a FIXED-SIZE class: a class, a byte order and the class's instance parameters.
+        ///     The item size and type character are the class's own (<see cref="DTypeMeta.ItemSize"/>,
+        ///     <see cref="DTypeMeta.TypeChar"/>).
+        /// </summary>
+        /// <param name="meta">The DType class this descriptor instantiates.</param>
+        /// <param name="byteorder">The requested byte order (normalised: see <see cref="NormalizeByteOrder"/>).</param>
+        /// <param name="datetime">The unit of a <c>datetime64</c>/<c>timedelta64</c> descriptor; null for every other class.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="meta"/> is null.</exception>
+        /// <exception cref="TypeError"><paramref name="meta"/> is abstract (the NEP 50 literal classes have no instances).</exception>
+        /// <exception cref="ArgumentException">The datetime metadata does not match the class, or the class is flexible
+        /// (a string class needs the item-size overload).</exception>
         internal DType(DTypeMeta meta, char byteorder, DatetimeMetaData? datetime)
+            : this(meta, byteorder, datetime, ClassItemSize(meta), meta?.TypeChar ?? '\0')
+        {
+        }
+
+        /// <summary>
+        ///     The descriptor constructor proper: a class, a byte order, the class's instance parameters, and — for a
+        ///     FLEXIBLE class (<c>S</c> / <c>U</c>) — the instance's own item size and type character. NumPy stores
+        ///     <c>elsize</c> and <c>type</c> on every descriptor; for the fixed-size classes they always equal the class's,
+        ///     for the string classes they are the length (<c>S5</c> → 5 bytes, <c>U5</c> → 20 bytes) and the spelling
+        ///     (<c>np.dtype('c')</c> is an <c>S1</c> whose <c>char</c> is <c>'c'</c>).
+        /// </summary>
+        /// <param name="meta">The DType class this descriptor instantiates.</param>
+        /// <param name="byteorder">The requested byte order (normalised: see <see cref="NormalizeByteOrder"/>).</param>
+        /// <param name="datetime">The unit of a <c>datetime64</c>/<c>timedelta64</c> descriptor; null for every other class.</param>
+        /// <param name="itemsize">Bytes per element. Must equal <paramref name="meta"/>'s size for a fixed-size class; for a
+        /// string class any non-negative size (a multiple of 4 for <c>U</c>), where 0 is NumPy's unsized <c>S0</c>/<c>U0</c>.</param>
+        /// <param name="typeChar">NumPy's <c>dtype.char</c>; the class's own character, or <c>'c'</c> for a one-byte <c>S</c>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="meta"/> is null.</exception>
+        /// <exception cref="TypeError"><paramref name="meta"/> is abstract.</exception>
+        /// <exception cref="ArgumentException">The datetime metadata does not match the class, or the item size / type
+        /// character is not one this class can have.</exception>
+        internal DType(DTypeMeta meta, char byteorder, DatetimeMetaData? datetime, int itemsize, char typeChar)
         {
             Meta = meta ?? throw new ArgumentNullException(nameof(meta));
             if (meta.IsAbstract)
@@ -187,14 +221,47 @@ namespace NumSharp
             if (meta is DatetimeDTypeMeta != datetime.HasValue)
                 throw new ArgumentException($"{meta} {(datetime.HasValue ? "takes no" : "requires")} datetime metadata.", nameof(datetime));
 
+            // Only a flexible class varies its element size per instance. Every other class has ONE layout, and
+            // accepting a different size there would let a descriptor disagree with the storage lane it selects.
+            if (meta is StringDTypeMeta str)
+            {
+                if (itemsize < 0 || itemsize % str.UnitSize != 0)
+                    throw new ArgumentException($"{meta} cannot have an item size of {itemsize} bytes (a non-negative multiple of {str.UnitSize} is required).", nameof(itemsize));
+                // 'c' is NumPy's legacy one-character S1 spelling (NPY_CHARLTR): it renders and compares as S1, but
+                // keeps its own dtype.char.
+                bool charSpelling = !str.IsUnicode && typeChar == (char)NPY_TYPECHAR.NPY_CHARLTR && itemsize == 1;
+                if (typeChar != meta.TypeChar && !charSpelling)
+                    throw new ArgumentException($"{meta} descriptors cannot use the type character '{typeChar}'.", nameof(typeChar));
+            }
+            else if (itemsize != meta.ItemSize || typeChar != meta.TypeChar)
+            {
+                throw new ArgumentException($"{meta} has a fixed layout ({meta.ItemSize} bytes, char '{meta.TypeChar}'); got {itemsize} bytes, char '{typeChar}'.");
+            }
+
             _datetime = datetime;
+            _typeChar = typeChar;
             this.type = meta.ScalarType;
             this.typecode = meta.TypeCode;
-            this.itemsize = meta.ItemSize;
+            this.itemsize = itemsize;
             this.kind = meta.Kind;
             this.byteorder = NormalizeByteOrder(meta, byteorder);
-            this.TYPECHAR = (NPY_TYPECHAR)meta.TypeChar;
+            this.TYPECHAR = (NPY_TYPECHAR)typeChar;
             this.name = ComputeName();
+        }
+
+        /// <summary>
+        ///     The item size the fixed-size constructor fills in — the class's own. A flexible (string) class has no single
+        ///     size, so building one of its descriptors without a size is a programming error, reported here rather than
+        ///     silently producing an unsized descriptor.
+        /// </summary>
+        /// <param name="meta">The class being instantiated (null is reported by the main constructor).</param>
+        /// <returns>The class's item size (0 for a null class, which the main constructor then rejects).</returns>
+        /// <exception cref="ArgumentException"><paramref name="meta"/> is a string class.</exception>
+        private static int ClassItemSize(DTypeMeta meta)
+        {
+            if (meta is StringDTypeMeta)
+                throw new ArgumentException($"{meta} is flexible: its descriptors need an explicit item size.", nameof(meta));
+            return meta?.ItemSize ?? 0;
         }
 
         private static DTypeMeta MetaOf(Type type)
@@ -216,12 +283,17 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's byte-order normalisation: single-byte types are always <c>'|'</c>; the host's own order (or
-        ///     <c>'|'</c>, or <c>'='</c>) is <c>'='</c>; only the OTHER order survives as an explicit character.
+        ///     NumPy's byte-order normalisation: single-byte types and byte strings (<c>S</c>, any width) are always
+        ///     <c>'|'</c>; the host's own order (or <c>'|'</c>, or <c>'='</c>) is <c>'='</c>; only the OTHER order survives
+        ///     as an explicit character.
         /// </summary>
+        /// <param name="meta">The class whose policy applies (<see cref="DTypeMeta.ByteOrderNotApplicable"/>).</param>
+        /// <param name="byteorder">The requested byte-order character.</param>
+        /// <returns>The normalised character: <c>'|'</c>, <c>'='</c>, or the non-host <c>'&lt;'</c>/<c>'&gt;'</c>.</returns>
+        /// <exception cref="ArgumentException"><paramref name="byteorder"/> is not one of <c>= | &lt; &gt;</c>.</exception>
         private static char NormalizeByteOrder(DTypeMeta meta, char byteorder)
         {
-            if (meta.ItemSize == 1)
+            if (meta.ByteOrderNotApplicable)
                 return NotApplicableByteOrder;
             switch (byteorder)
             {
@@ -238,9 +310,12 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>_name_get</c>: <c>"bool"</c>; kind-stem plus bit count for the numeric builtins (<c>"int32"</c>,
-        ///     <c>"float64"</c>, <c>"complex128"</c>); the scalar-type name for a user-range class (<c>"decimal"</c>,
-        ///     <c>"char"</c>); the class name plus unit for datetimes (<c>"datetime64[ns]"</c>).
+        ///     <c>"float64"</c>, <c>"complex128"</c>) and for a SIZED string (<c>"str160"</c> for <c>U5</c>, <c>"bytes40"</c> for
+        ///     <c>S5</c>); the bare stem for an unsized string (<c>"str"</c>, <c>"bytes"</c>); the scalar-type name for a
+        ///     user-range class (<c>"decimal"</c>, <c>"char"</c>); the class name plus unit for datetimes (<c>"datetime64[ns]"</c>).
         /// </summary>
+        /// <returns>The <see cref="name"/> string.</returns>
+        /// <exception cref="RuntimeError">An unknown kind (an internal inconsistency).</exception>
         private string ComputeName()
         {
             if (Meta.TypeNum >= 256)
@@ -250,7 +325,10 @@ namespace NumSharp
             switch (kind)
             {
                 case 'b': return "bool"; // implied
-                case 'U': return "str";  // the vestigial unsized flexible class: no bit suffix
+                // _name_includes_bit_suffix: an UNSIZED flexible dtype has no suffix. The bit count is computed in 64 bits
+                // because Python's int does not overflow: 'S2147483647' is named 'bytes17179869176'.
+                case 'U': return itemsize == 0 ? "str" : "str" + (long)itemsize * 8;
+                case 'S': return itemsize == 0 ? "bytes" : "bytes" + (long)itemsize * 8;
                 case 'u': return "uint" + itemsize * 8;
                 case 'i': return "int" + itemsize * 8;
                 case 'c': return "complex" + itemsize * 8;
@@ -271,7 +349,10 @@ namespace NumSharp
         /// </summary>
         public readonly char byteorder;
 
-        /// <summary>The size of the dtype in bytes (<c>itemsize</c>).</summary>
+        /// <summary>
+        ///     The size of the dtype in bytes (<c>itemsize</c>). Per instance for the string classes (<c>S5</c> → 5,
+        ///     <c>U5</c> → 20, the unsized <c>S0</c>/<c>U0</c> → 0); the class's fixed size for every other class.
+        /// </summary>
         public readonly int itemsize;
 
         /// <summary>
@@ -282,7 +363,11 @@ namespace NumSharp
         /// </summary>
         public readonly string name;
 
-        /// <summary>The C# scalar type of one element (NumPy's <c>dtype.type</c>); null for a class with no C# scalar yet (datetime64 in Stage A).</summary>
+        /// <summary>
+        ///     The C# scalar type of one element (NumPy's <c>dtype.type</c>): <see cref="string"/> for <c>U</c> (NumPy's
+        ///     <c>np.str_</c>), <c>byte[]</c> for <c>S</c> (NumPy's <c>np.bytes_</c>); null for a class with no C# scalar yet
+        ///     (datetime64 in Stage A).
+        /// </summary>
         public readonly Type type;
 
         /// <summary>The NumSharp storage discriminator; <see cref="NPTypeCode.Empty"/> for a class without storage (datetime64 in Stage A).</summary>
@@ -299,8 +384,15 @@ namespace NumSharp
         /// </summary>
         public readonly char kind;
 
-        /// <summary>A unique character code for each of the built-in types (<c>'?' 'b' 'B' 'h' 'H' 'i' 'I' 'l' 'L' 'e' 'f' 'd' 'D' 'M' 'm'</c>).</summary>
-        public char @char => Meta.TypeChar;
+        /// <summary>
+        ///     A unique character code for each of the built-in types (<c>'?' 'b' 'B' 'h' 'H' 'i' 'I' 'l' 'L' 'e' 'f' 'd' 'D'
+        ///     'M' 'm' 'S' 'U'</c>). Stored per descriptor, as in NumPy: the legacy spelling <c>np.dtype('c')</c> is an
+        ///     <c>S1</c> whose <c>char</c> is <c>'c'</c> while <c>np.dtype('S1').char</c> is <c>'S'</c> (the two still compare equal).
+        /// </summary>
+        public char @char => _typeChar;
+
+        /// <summary>The per-descriptor <c>dtype.char</c> (see <see cref="char"/>).</summary>
+        private readonly char _typeChar;
 
         /// <summary>NumPy's unique type number (<c>dtype.num</c>) as a raw <see cref="int"/> — exactly what NumPy's Python surface returns.</summary>
         public int num => Meta.TypeNum;
@@ -324,7 +416,8 @@ namespace NumSharp
 
         /// <summary>
         ///     The array-interface typestring (<c>dtype.str</c>): explicit byte order, kind and size — <c>"&lt;i4"</c>,
-        ///     <c>"|b1"</c>, <c>"&gt;f8"</c>, <c>"&lt;M8[ns]"</c>, <c>"&lt;m8"</c>.
+        ///     <c>"|b1"</c>, <c>"&gt;f8"</c>, <c>"&lt;M8[ns]"</c>, <c>"&lt;m8"</c>, and for strings the CHARACTER count
+        ///     (<c>"|S5"</c> is 5 bytes, <c>"&lt;U5"</c> is 5 code points = 20 bytes; the unsized forms are <c>"|S0"</c>/<c>"&lt;U0"</c>).
         /// </summary>
         public string str
         {
@@ -354,8 +447,11 @@ namespace NumSharp
         /// <summary><c>dtype.hasobject</c>: whether items hold references that need clearing (false for every current class).</summary>
         public bool hasobject => Meta.HasReferences;
 
-        /// <summary><c>dtype.flags</c>: the item flags (NumPy's <c>NPY_ITEM_REFCOUNT | NPY_NEEDS_INIT | …</c> = 63 for a reference-holding dtype, 0 otherwise).</summary>
-        public int flags => Meta.HasReferences ? 63 : 0;
+        /// <summary>
+        ///     <c>dtype.flags</c>: the item flags (NumPy's <c>NPY_ITEM_REFCOUNT | NPY_NEEDS_INIT | …</c>) — 63 for a
+        ///     reference-holding dtype, 8 (<c>NPY_NEEDS_INIT</c>) for <c>U</c>, 0 otherwise (<see cref="DTypeMeta.ItemFlags"/>).
+        /// </summary>
+        public int flags => Meta.ItemFlags;
 
         /// <summary><c>dtype.metadata</c>: user metadata (never set in NumSharp — always null).</summary>
         public object metadata => null;
@@ -388,8 +484,30 @@ namespace NumSharp
             return MetaOf(type).Singleton;
         }
 
-        /// <summary>The descriptor of an <see cref="NPTypeCode"/> — the class's canonical instance.</summary>
-        public static DType From(NPTypeCode typecode) => MetaOf(typecode).Singleton;
+        /// <summary>
+        ///     The descriptor of an <see cref="NPTypeCode"/> — the class's canonical instance. Every NumSharp API that takes a
+        ///     <see cref="DType"/> also takes an <see cref="NPTypeCode"/> through this conversion.
+        /// </summary>
+        /// <param name="typecode">A storage lane with a fixed element type.</param>
+        /// <returns>The lane's descriptor.</returns>
+        /// <exception cref="ArgumentException"><paramref name="typecode"/> is <see cref="NPTypeCode.Empty"/>.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="typecode"/> is <see cref="NPTypeCode.String"/>: the
+        ///     fixed-width string lane names no dtype (it holds <c>S</c> and <c>U</c> arrays of every width), so code that
+        ///     allocates "an array like <c>a</c>" by <c>a.typecode</c> would silently get a one-character <c>&lt;U1</c> and
+        ///     write <c>a</c>'s wider elements past its end. Refusing here turns every such allocation — an operation that
+        ///     does not support strings yet — into an error; a string-aware operation passes <c>a.dtype</c>.</exception>
+        public static DType From(NPTypeCode typecode)
+        {
+            if (typecode == NPTypeCode.String)
+                throw new NotSupportedException(StringLaneHasNoDType);
+            return MetaOf(typecode).Singleton;
+        }
+
+        /// <summary>The refusal of <see cref="From(NPTypeCode)"/> for the string lane (shared with the storage allocator).</summary>
+        internal const string StringLaneHasNoDType =
+            "This operation does not support fixed-width string arrays: it asked for a dtype by storage lane " +
+            "(NPTypeCode.String), which carries neither the string class (bytes 'S' / str 'U') nor the width. " +
+            "Use the array's own dtype (a.dtype), a dtype string such as 'U5' or 'S3', or typeof(string) / np.str_ for NumPy's default '<U1'.";
 
         /// <summary>Builds a descriptor from a NumPy dtype <b>string</b> (NumPy's case-sensitive grammar). Same as <see cref="np.dtype(string)"/>.</summary>
         public static DType From(string dtype) => np.dtype(dtype);
@@ -432,7 +550,7 @@ namespace NumSharp
             if (meta == null)
                 throw new NotSupportedException(
                     $"NumPy type number {(int)type_num} (NPY_TYPES.{type_num}) has no NumSharp dtype class: " +
-                    "NumSharp has no complex64/object/void/extended-precision types, a single complex width, and no bytes/void storage.");
+                    "NumSharp has no complex64/object/void/extended-precision types, a single complex width, and no void storage.");
             return meta.Singleton;
         }
 
@@ -553,9 +671,15 @@ namespace NumSharp
 
         // ---- equality: structural (class + byte order + parameters), null-safe; coercing for foreign operands ----
 
-        /// <summary>Structural equality: the same class, byte order and instance parameters (<c>M8[ns] != M8[s]</c>, <c>&gt;i4 != i4</c>).</summary>
+        /// <summary>
+        ///     Structural equality: the same class, byte order, item size and instance parameters (<c>M8[ns] != M8[s]</c>,
+        ///     <c>&gt;i4 != i4</c>, <c>U5 != U3</c>). The type character is NOT compared, as in NumPy: <c>np.dtype('c') == np.dtype('S1')</c>.
+        /// </summary>
+        /// <param name="other">The descriptor to compare with (null is unequal).</param>
+        /// <returns>True when both describe the same element layout and parameters.</returns>
         public bool Equals(DType other)
-            => other is not null && ReferenceEquals(Meta, other.Meta) && byteorder == other.byteorder && Nullable.Equals(_datetime, other._datetime);
+            => other is not null && ReferenceEquals(Meta, other.Meta) && byteorder == other.byteorder && itemsize == other.itemsize
+               && Nullable.Equals(_datetime, other._datetime);
 
         /// <summary>
         ///     NumPy's coercing <c>dtype.__eq__</c>: the operand is converted to a descriptor first, so a
@@ -603,8 +727,14 @@ namespace NumSharp
         /// <summary>Coercing equality with an <see cref="NPTypeCode"/>; <see cref="NPTypeCode.Empty"/> is unequal.</summary>
         public bool Equals(NPTypeCode typecode) => Equals((object)typecode);
 
-        /// <summary>Consistent with <see cref="Equals(DType)"/>: the class and byte order, not the parameters (NumPy: <c>hash(M8[ns]) == hash(M8[s])</c>).</summary>
-        public override int GetHashCode() => HashCode.Combine(Meta.TypeNum, byteorder);
+        /// <summary>
+        ///     Consistent with <see cref="Equals(DType)"/>: the class and byte order, plus the item size for the flexible
+        ///     string classes (NumPy: <c>hash(U5) != hash(U10)</c>), but not the datetime unit (NumPy:
+        ///     <c>hash(M8[ns]) == hash(M8[s])</c>). Fixed-size classes keep the two-field hash they always had.
+        /// </summary>
+        /// <returns>The hash code.</returns>
+        public override int GetHashCode()
+            => Meta is StringDTypeMeta ? HashCode.Combine(Meta.TypeNum, byteorder, itemsize) : HashCode.Combine(Meta.TypeNum, byteorder);
 
         // NOTE: there are deliberately NO `==(DType, string)` operators. A `null` literal would bind them (`descr == null`
         // silently became "false" for a null descriptor inside the engine), so the coercing string comparison lives on
@@ -655,7 +785,13 @@ namespace NumSharp
         /// </summary>
         public string ToString(bool repr) => repr ? "dtype(" + ConstructionRepr() + ")" : ToString();
 
-        /// <summary>NumPy's <c>_construction_repr</c> / <c>_scalar_str</c>.</summary>
+        /// <summary>
+        ///     NumPy's <c>_construction_repr</c> / <c>_scalar_str</c>: <c>'bool'</c>; <c>'S'</c> / <c>'S5'</c> for byte
+        ///     strings (no byte-order character — it is never applicable); <c>'&lt;U'</c> / <c>'&lt;U5'</c> for Unicode (the
+        ///     byte order is explicit); the typestring for datetimes and non-native numerics; the bare scalar name for the
+        ///     user-range classes (<c>decimal</c>); otherwise the quoted <see cref="name"/>.
+        /// </summary>
+        /// <returns>The text between the parentheses of <c>dtype(…)</c>.</returns>
         private string ConstructionRepr()
         {
             if (kind == 'b')
@@ -664,17 +800,25 @@ namespace NumSharp
                 return "'" + str + "'";
             if (Meta.TypeNum >= 256)
                 return Meta.ScalarName;
+            if (kind == 'S')
+                return itemsize == 0 ? "'S'" : "'S" + itemsize + "'"; // _scalar_str: "'S%d'" % dtype.itemsize, no byte order
             if (kind == 'U' && itemsize == 0)
                 return "'" + (byteorder == NativeByteOrder ? HostByteOrder : byteorder) + "U'"; // NumPy's unsized `dtype('<U')`
-            if (kind == 'U' || kind == 'S' || kind == 'V' || !isnative)
+            if (kind == 'U' || kind == 'V' || !isnative)
                 return "'" + str + "'";
             return "'" + name + "'";
         }
 
         // ---- byte order ----
 
-        /// <summary>A copy of this descriptor carrying <paramref name="newByteOrder"/> (normalised; single-byte classes stay <c>'|'</c>).</summary>
-        internal DType WithByteOrder(char newByteOrder) => new DType(Meta, newByteOrder, _datetime);
+        /// <summary>
+        ///     A copy of this descriptor carrying <paramref name="newByteOrder"/> (normalised; single-byte classes and byte
+        ///     strings stay <c>'|'</c>). The item size and type character are kept, so <c>U5.newbyteorder()</c> is
+        ///     <c>&gt;U5</c> and <c>np.dtype('c').newbyteorder()</c> still reports <c>char == 'c'</c>.
+        /// </summary>
+        /// <param name="newByteOrder">The requested byte-order character (<c>= | &lt; &gt;</c>).</param>
+        /// <returns>A fresh descriptor (never the singleton).</returns>
+        internal DType WithByteOrder(char newByteOrder) => new DType(Meta, newByteOrder, _datetime, itemsize, _typeChar);
 
         /// <summary>
         ///     Return a new dtype with a different byte order (NumPy's <c>dtype.newbyteorder</c>).

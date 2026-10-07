@@ -126,9 +126,11 @@ namespace NumSharp
             ///     NumPy's int32 dtype is <c>NPY_LONG</c> on Windows and <c>NPY_INT</c> elsewhere. The two
             ///     NumSharp-only dtypes that have NO NumPy analog carry a documented NumSharp-specific
             ///     code: <see cref="NPTypeCode.Char"/> (2-byte UTF-16) → <c>"u"</c>,
-            ///     <see cref="NPTypeCode.Decimal"/> (opaque 16-byte item) → <c>"16s"</c>.
+            ///     <see cref="NPTypeCode.Decimal"/> (opaque 16-byte item) → <c>"16s"</c>. A fixed-width string array
+            ///     reports NumPy's character-count codes: <c>"3w"</c> for <c>&lt;U3</c> (three UCS-4 code points) and
+            ///     <c>"2s"</c> for <c>|S2</c> (two bytes) — the struct codes NumPy's <c>buffer.c</c> emits.
             /// </summary>
-            public string format => FormatCode(_arr.typecode);
+            public string format => _arr.typecode == NPTypeCode.String ? StringFormatCode(_arr.dtype) : FormatCode(_arr.typecode);
 
             /// <summary><c>true</c> if the array is C-contiguous (NumPy's <c>memoryview.c_contiguous</c>).</summary>
             public bool c_contiguous => _arr.Shape.IsContiguous;
@@ -311,6 +313,19 @@ namespace NumSharp
                     case NPTypeCode.Decimal: return "16s"; // NumSharp-only: opaque 16-byte item (no NumPy dtype)
                     default: throw new NotSupportedException($"No memoryview format code for {tc}.");
                 }
+            }
+
+            /// <summary>
+            ///     NumPy's buffer format of a fixed-width string descriptor (<c>_buffer_format_string</c>): the character count
+            ///     followed by <c>w</c> for <c>U</c> (4-byte code points) or <c>s</c> for <c>S</c> (bytes). The width is part of
+            ///     the code because a struct format names one whole item.
+            /// </summary>
+            /// <param name="descr">A string descriptor.</param>
+            /// <returns>The format code, e.g. <c>"3w"</c>.</returns>
+            private static string StringFormatCode(DType descr)
+            {
+                var meta = (StringDTypeMeta)descr.Meta;
+                return (descr.itemsize / meta.UnitSize).ToString(System.Globalization.CultureInfo.InvariantCulture) + (meta.IsUnicode ? "w" : "s");
             }
 
             /// <summary>An informative debug string (NumPy's <c>memoryview</c> repr is the opaque <c>&lt;memory at 0x…&gt;</c>).</summary>

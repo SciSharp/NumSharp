@@ -11,8 +11,11 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Ceil(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "ceil", nd, null, @out, where);
             ValidateWhereMask(where);
+            // ceil has no string loop: NumPy's legacy-resolver refusal (or the dtype= input-cast text), raised before the
+            // integer-identity shortcut below reads the input's type code.
+            Strings.NDStringUfuncs.ThrowIfUnary("ceil", nd, typeCode);
 
             // NumPy registers IDENTITY loops for ceil on every bool/
             // integer dtype ('?->?','b->b',...,'Q->Q'), so the loop dtype is

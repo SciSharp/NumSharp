@@ -87,7 +87,7 @@ namespace NumSharp
             // Literal NumPy composition — the mask's diagonal differs by one between the
             // two directions, and the operand order is what flips which half survives.
             var mask = np.tri(checked((int)rows), checked((int)cols), lower ? k : k - 1, NPTypeCode.Boolean);
-            var zero = np.zeros(new Shape(1), m.typecode);
+            var zero = np.zeros(new Shape(1), m.dtype); // the descriptor: a string's zero is '' at m's width
             return lower ? np.where(mask, m, zero) : np.where(mask, zero, m);
         }
 
@@ -115,17 +115,17 @@ namespace NumSharp
 
             long size = m.size;
             if (size == 0 || cols == 0)
-                return np.zeros(Shape.Adopt((long[])m.Shape.dimensions.Clone()), m.typecode);
+                return np.zeros(Shape.Adopt((long[])m.Shape.dimensions.Clone()), m.dtype);
 
-            int elemSize = m.typecode.SizeOf();
+            int elemSize = m.dtypesize; // the descriptor's itemsize (a string's width), not the lane's
             bool writeOnce = PrefersWriteOnce(size * elemSize);
 
             // Below the threshold the buffer comes back dirty, so allocate uninitialised and
             // write every byte of every row exactly once (zeros, retained run, zeros). Above it
             // np.zeros rides free OS zero-pages and only the retained run is worth touching.
             var res = writeOnce
-                ? new NDArray(m.typecode, Shape.Adopt((long[])m.Shape.dimensions.Clone()), false)
-                : np.zeros(Shape.Adopt((long[])m.Shape.dimensions.Clone()), m.typecode);
+                ? new NDArray(m.dtype, Shape.Adopt((long[])m.Shape.dimensions.Clone()), false)
+                : np.zeros(Shape.Adopt((long[])m.Shape.dimensions.Clone()), m.dtype);
             byte* src = m.Storage.Address;
             byte* dst = res.Storage.Address + res.Shape.Offset * elemSize;
 

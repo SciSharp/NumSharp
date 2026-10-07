@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using NumSharp.Backends.Iteration;
+using NumSharp.Backends.Strings;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
@@ -294,6 +295,9 @@ namespace NumSharp.Backends
                 var descr = _descr;
                 if (descr is null)
                 {
+                    // A string lane's descriptor is sized; the class singleton (unsized U0) would describe no element.
+                    if (InternalArray is StringArraySlice strings)
+                        return _descr = strings.Descr;
                     var meta = DTypeRegistry.FromTypeCode(_typecode);
                     if (meta is null)
                         return null;
@@ -319,10 +323,9 @@ namespace NumSharp.Backends
         {
             get
             {
+                // A string element's width is a property of the DESCRIPTOR (S5 is 5 bytes, U5 is 20), not of the lane.
                 if (_typecode == NPTypeCode.String)
-                {
-                    return IntPtr.Size;
-                }
+                    return StringSlice?.ItemSize ?? Descr.itemsize;
 
                 return _typecode.SizeOf();
             }
@@ -521,8 +524,12 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(descr));
 
             _typecode = descr.GetTypeCode(); // throws the descriptive "no storage yet" for a descriptor-only class
-            _dtype = descr.type;
-            _descr = descr.isnative ? descr : descr.Meta.EnsureCanonical(descr);
+            // The lane's CLR type (System.String for both string classes, whose descriptor type is string / byte[]) —
+            // `_dtype.GetTypeCode()` must give back the lane, and byte[] would read as uint8.
+            _dtype = _typecode.AsType();
+            _descr = descr.Meta is StringDTypeMeta
+                ? NDStringStorage.AllocationDescr(descr)
+                : descr.isnative ? descr : descr.Meta.EnsureCanonical(descr);
         }
 
         private UnmanagedStorage(object value)
@@ -1203,6 +1210,20 @@ namespace NumSharp.Backends
                     break;
                 }
 
+                case NPTypeCode.String:
+                {
+                    // The fixed-width string lane: the element slice carries its bytes AND its descriptor, so the
+                    // descriptor is (re)installed from it — a storage rebuilt from a string slice by any generic path
+                    // (contiguous slicing, Clone, GetData) is a string storage of the same width without knowing it.
+                    var strings = (StringArraySlice)array;
+                    InternalArray = strings;
+                    _slices.Byte = strings.Bytes; // the byte lane keeps the block reachable through the union too
+                    Address = strings.Address;
+                    Count = strings.Count;
+                    _descr = strings.Descr;
+                    break;
+                }
+
                 default:
                     throw new NotSupportedException();
             }
@@ -1294,6 +1315,13 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(shape));
 
             var resolved = dtype ?? DType;
+            // The string lane has no width of its own: allocate this storage's own string descriptor, or NumPy's class
+            // default (U1) for a bare `typeof(string)` request.
+            if (resolved.GetTypeCode() == NPTypeCode.String)
+            {
+                Allocate(shape, StringRequest(dtype), true);
+                return;
+            }
             AllocationGuard.CheckDimensions(shape.dimensions, resolved.GetTypeCode());
 
             _Allocate(shape.ForFreshAllocation(), ArraySlice.Allocate(resolved, shape.size, true));
@@ -1315,6 +1343,11 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(shape));
 
             var resolved = dtype ?? DType;
+            if (resolved.GetTypeCode() == NPTypeCode.String)
+            {
+                Allocate(shape, StringRequest(dtype), fillZeros);
+                return;
+            }
             AllocationGuard.CheckDimensions(shape.dimensions, resolved.GetTypeCode());
 
             _Allocate(shape.ForFreshAllocation(), ArraySlice.Allocate(resolved, shape.size, fillZeros));
@@ -1329,6 +1362,8 @@ namespace NumSharp.Backends
         /// <param name="dtype">The storage lane to allocate.</param>
         /// <param name="fillZeros">Zero the fresh buffer, else leave the allocation noise (the caller writes every element).</param>
         /// <exception cref="ArgumentNullException"><paramref name="shape"/> is uninitialized, or <paramref name="dtype"/> is <see cref="NPTypeCode.Empty"/>.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/> is <see cref="NPTypeCode.String"/> and this storage
+        ///     has no string descriptor to keep (the lane alone names no width; see <see cref="DType.From(NPTypeCode)"/>).</exception>
         /// <exception cref="ValueError">A dimension is negative, or the byte count overflows (<see cref="AllocationGuard"/>).</exception>
         public void Allocate(Shape shape, NPTypeCode dtype, bool fillZeros)
         {
@@ -1337,6 +1372,16 @@ namespace NumSharp.Backends
 
             if (dtype == NPTypeCode.Empty)
                 throw new ArgumentNullException(nameof(dtype));
+
+            if (dtype == NPTypeCode.String)
+            {
+                // The lane alone has no width: only a re-allocation of a string storage (which keeps its own descriptor)
+                // is meaningful. Anything else would be a silent <U1 written with wider elements — refuse it.
+                if (!(_descr?.Meta is StringDTypeMeta))
+                    throw new NotSupportedException(NumSharp.DType.StringLaneHasNoDType);
+                Allocate(shape, StringRequest(null), fillZeros);
+                return;
+            }
 
             AllocationGuard.CheckDimensions(shape.dimensions, dtype);
 
@@ -1365,6 +1410,20 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(dtype));
 
             var typeCode = dtype.GetTypeCode(); // throws the descriptive "no storage yet" for a descriptor-only class
+            if (dtype.Meta is StringDTypeMeta)
+            {
+                // The element width comes from the descriptor (an unsized request becomes one character), and the
+                // overflow guard counts BYTES of that width; the slice installs the descriptor on this storage.
+                var stringDescr = NDStringStorage.AllocationDescr(dtype);
+                AllocationGuard.CheckDimensions(shape.dimensions, stringDescr.itemsize);
+                var fresh = shape.ForFreshAllocation();
+                // NumPy zero-fills EVERY allocation of a dtype flagged NPY_NEEDS_INIT (PyArray_NewFromDescr_int), so
+                // np.empty(3, 'U3') is three empty strings: a U element's NUL padding is part of its value, and a reused
+                // buffer could hold units no code point maps to. S carries no such flag; its leftover bytes are still text.
+                bool zero = fillZeros || (stringDescr.Meta.ItemFlags & DTypeMeta.NeedsInitFlag) != 0;
+                _Allocate(fresh, StringArraySlice.Allocate(stringDescr, fresh.size, zero));
+                return;
+            }
             AllocationGuard.CheckDimensions(shape.dimensions, typeCode);
 
             _Allocate(shape.ForFreshAllocation(), ArraySlice.Allocate(typeCode, shape.size, fillZeros));

@@ -56,6 +56,29 @@ Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Char, Half, S
 
 All operations must handle all 15 types via type switch pattern.
 
+**Fixed-width strings (`NPTypeCode.String`, Stage D phase 1 — branch `strings`, 2026-10-07).** NumPy's `str_` (`U`,
+one native UCS-4 code point per character) and `bytes_` (`S`, one byte) live in ONE storage lane whose descriptor
+(`UnmanagedStorage.Descr`) carries class and width (`<U5` itemsize 20, `|S5` 5) — so `NPTypeCode.String` alone names no
+dtype and every string allocation takes a DType. Phase 1 = storage, element access (`item` → `string` / `byte[]`,
+`NDArray.AsStringArray`, indexer writes cut to the width), C# conversion (`np.array(string[])`, `np.array(object[] of
+byte[])` — a `byte[][]` is a NUMERIC jagged array), dtype integration (`StringDTypeMeta`, promotion, casting rules),
+movement (every copy runs the numeric kernels through UNIT VIEWS `D + (chars,)`, `NDStringCopy`), string↔string
+`astype` (ASCII `S ↔ U` with Python's Unicode error texts), `.npy` (byte for byte, mmap too; **breaking:** a `<U1` file
+reads as a `<U1` string array, `Char` still WRITES `<U1`) and printing (CPython's `repr`, `PyRepr`) — all byte-identical
+to NumPy 2.4.2. Computing on text is phase 2: where NumPy REFUSES (no string loop) NumSharp raises NumPy's type + text;
+where NumPy COMPUTES (comparison, concatenation, truth tests, sort/search, text ↔ number parse) it throws
+`StringComputationNotSupportedException` — both AFTER NumPy's earlier checks in NumPy's order (`dtype=` class check,
+read-only `out=`, non-bool `where=`, the axis under one of three rules, the quantile q/axis/method/empty-axis order,
+a computing loop's output cast and broadcast; `Backends/Strings/NDStringUfuncs{,.Precedence}.cs`). Every engine ufunc
+member resolves its `dtype=` through `UfuncLoopCode(dtype, "<numpy name>", x1, x2, out, where)` so an unsized string
+request (`'U'`, `'S'`) gets NumPy's per-ufunc answer. Gate: the string oracle (`test/oracle/gen_strings_oracle.py` →
+`NumSharp.Tests.Oracle/Strings`, 14,175 cases; a phase-2 case passes as "deferred" only while NumSharp throws
+`StringComputationNotSupportedException`, so phase 2 is gated by the same corpus) + `Backends/Strings/StringCallOrderTests.cs`.
+**Trap:** NumPy's ufunc dispatch cache makes some answers depend on call HISTORY (`np.prod(int8, dtype='U')` names no
+loop in a fresh process but finds the string repeat loop after `np.multiply(u, int8, dtype='U')`); the corpus records
+the fresh-process answer. Design + status: `docs/plans/dtype-system.md` §5 "Stage D phase 1"; user docs
+`docs/website-src/docs/fundamentals/strings-and-bytes.md`.
+
 **Perf notes:**
 - SByte / Byte / Int*/UInt* / Single / Double — full SIMD via the mixed-type kernel's `SimdFull` execution path (V128/V256/V512 detected at startup).
 - Half — **no vector f16 arithmetic or F16C in the BCL** (`Vector<Half>` throws), yet most of the f16 ufunc surface BEATS NumPy 2–60× bit-exactly via three techniques picked by "does the op need real float math?": bit-level AVX2 on raw ushort lanes (sign/negate/abs, min/max/ptp/nanmin/nanmax on every layout flat and per axis — NumPy's sequential HALF loops bit for bit, first NaN / first ±0 in NumPy's visiting order, see "Math — Reductions" —, maximum/minimum/fmax/fmin, the six comparisons, clip, floor/ceil/trunc/rint — all on the proven sign-magnitude order map `key = bits ^ (0x8000 | asr(bits,15))`, NaN keys strictly outside the finite band), SIMD widen-compute-narrow for add/sub/mul/div (Giesen f16→f32 → one f32 vector op → RTNE narrow — bit-exact incl. the MSVC operand-order NaN-payload host pin, 2.2–3.6×; on every layout since 2026-10-06: row / column broadcasts, strided and reversed views gathered in 256-element blocks, broadcast F sets walked in F order, and out= — 4–7× NumPy, where a per-element coordinate decomposition ran 0.22–0.5×, plan api-parameter-parity X4 / X15), and scalar-F16C widen-unary (`EmitUnaryHalfViaFloat`: `(Half)MathF.X((float)h)`, NumPy's npy_half model) for 16 transcendentals — conversion-bound ≈ parity, the physical ceiling. `np.power` is NumPy's HALF_power since 2026-10-06 (plan api-parameter-parity X20): the exact widen (a signalling NaN stays signalling), the CRT powf, npy_float_to_half, NO scalar-exponent fast path — `HalfPower` runs a vector widen and narrow around one MathF.Pow loop per 256-element block, 1.52–1.56× NumPy (powf is ~5 ns an element on both sides; the old double bridge differed on 7,161 of 1,114,112 base × exponent pairs). Full design, semantics contract (NaN-guarded npy_half comparators, first-NaN/first-zero folds, sNaN quieting), dispatch map and traps (portable Vector256 ushort ops don't lower — 30×; RyuJIT re-swaps commutative intrinsic operands — NaN priority must be an explicit blend; AVX2 lacks 16-bit variable shifts): **`docs/FLOAT16_DESIGN.md`**.
@@ -2350,7 +2373,8 @@ reverse); `DType.Equals` stays structural and the NumPy relation is `DTypeCastin
 `result_type(f4, 1j)` is `complex128` (NumPy `complex64`) — the single-complex-width collapse (`[Misaligned]`). (6) The
 legacy `DType._kind_list_map` (`'?'` for bool, `'S'` for char) is what `np._FindCommonType` orders kinds through and must
 not move; the descriptor's own `kind` is `'b'`/`'u'`. Stage C (datetime storage, NaT, ISO-8601, arithmetic loops
-registered as `ArrayMethod`s — `docs/plans/datetime64.md`) and D (strings) are next.
+registered as `ArrayMethod`s — `docs/plans/datetime64.md`) is next; Stage D phase 1 (fixed-width `S` / `U` storage) landed
+on the `strings` branch (see "Supported Types" above), phase 2 (computing on text) and NEP 55 `StringDType` follow.
 
 **Stage B landed (2026-09-09): `DType` is the ONE dtype spelling, end to end.** **`NDArray.dtype` returns `DType`**
 (`Storage.Descr` — NumPy's `PyArrayObject.descr`: the class singleton for a builtin lane, so `a.dtype == b.dtype` /

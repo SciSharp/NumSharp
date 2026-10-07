@@ -51,6 +51,8 @@ namespace NumSharp
             if (NDMatrixBoundary.Sees(x1, x2))
                 return NDMatrixBoundary.Wrapped((x1, x2, @out, axes, axis, keepdims, dtype), static s => vecmat(s.x1, s.x2, s.@out, s.axes, s.axis, s.keepdims, s.dtype), @out);
             GufuncGuard.RejectAxisWithAxes(axes, axis);
+            // The dtype= class check and, for text, NumPy's loop refusal come before axis / keepdims semantics.
+            GufuncGuard.ThrowIfText("vecmat", x1, x2, dtype, @out);
             GufuncGuard.RejectAxisAndKeepdims("vecmat", VecmatSignature, axis, keepdims, 2);
 
             GufuncGuard.RequireRank("vecmat", VecmatSignature, 0, x1, 1);

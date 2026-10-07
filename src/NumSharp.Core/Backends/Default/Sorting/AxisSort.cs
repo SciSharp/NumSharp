@@ -45,6 +45,9 @@ namespace NumSharp.Backends.Sorting
         [NDScoped]
         public static NDArray Sort(NDArray a, int? axis)
         {
+            // NumPy sorts text by code points (the next phase of NumSharp's string support), after the axis check of its
+            // in-place sort (a 0-d copy refuses every axis; axis=None flattens first).
+            Strings.NDStringUfuncs.ThrowIfReduce("sort", a, axis);
             if (axis == null)
             {
                 var flat = a.ravel().copy('C');
@@ -60,6 +63,14 @@ namespace NumSharp.Backends.Sorting
         [NDScoped]
         public static void SortInPlace(NDArray a, int? axis)
         {
+            // NumPy's PyArray_Sort checks the axis, then writeability, then sorts text by code points (the next phase).
+            if (Strings.NDStringUfuncs.IsString(a))
+            {
+                Strings.NDStringUfuncs.ValidateReduceAxis("sort", a.ndim, axis);
+                if (!a.Shape.IsWriteable)
+                    throw new ValueError("sort array is read-only");
+                throw Strings.NDStringUfuncs.NextPhase("sort", a);
+            }
             if (!a.Shape.IsWriteable)
                 throw new ValueError("sort array is read-only"); // NumPy 2.4.2 verbatim (probed)
             if (axis == null)
@@ -76,6 +87,8 @@ namespace NumSharp.Backends.Sorting
         [NDScoped]
         public static NDArray ArgSort(NDArray a, int? axis)
         {
+            // NumPy sorts text by code points (the next phase), after argsort's axis check (a 0-d input ravels first).
+            Strings.NDStringUfuncs.ThrowIfReduce("argsort", a, axis);
             if (axis == null)
             {
                 var flat = a.Shape.IsContiguous ? a.reshape(a.size) : a.ravel().copy('C');

@@ -237,8 +237,10 @@ namespace NumSharp
                     catch (PrintfArgumentException ex)
                     {
                         // NumPy catches the TypeError from `format % tuple(row)` and re-raises this.
+                        // str(X.dtype): the type name for a numeric array, the descriptor ('<U2', '|S3') for a string one.
+                        string dtypeText = tc == NPTypeCode.String ? X.dtype.ToString() : tc.AsNumpyDtypeName();
                         throw new TypeError(
-                            $"Mismatch between array dtype ('{tc.AsNumpyDtypeName()}') and format specifier ('{format}')", ex);
+                            $"Mismatch between array dtype ('{dtypeText}') and format specifier ('{format}')", ex);
                     }
 
                     chunk.Append(newline);

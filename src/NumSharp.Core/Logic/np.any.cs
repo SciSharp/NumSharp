@@ -169,6 +169,9 @@ namespace NumSharp
             // not raise itself, so the plain call skips it.
             if (@out is not null || @where is not null)
                 ReductionArguments.Validate(a, axis, keepdims, @out, @where, "logical_or");
+            // Text: after NumPy's reduce prologue its logical_or.reduce reads the strings' truth values (the next
+            // phase); the mask route below would otherwise compare text with 0.
+            Backends.Strings.NDStringUfuncs.ThrowIfReduce("any", a, axis);
 
             NDArray<bool> reduced = ReduceAnyWithWhere(a, axis, keepdims, @where);
             // A fresh 0-d result is a numpy SCALAR (np.bool_) at the boundary: read-only
@@ -213,6 +216,9 @@ namespace NumSharp
             // NumPy's reduce prologue for a tuple axis (see the int-axis overload).
             if (@out is not null || @where is not null)
                 ReductionArguments.Validate(a, axis, keepdims, @out, @where, "logical_or");
+            // Text: after NumPy's reduce prologue its logical_or.reduce reads the strings' truth values (the next
+            // phase); the mask route below would otherwise compare text with 0.
+            Backends.Strings.NDStringUfuncs.ThrowIfReduce("any", a, axis);
 
             NDArray effective = @where is null ? a : ApplyWhereForAny(a, @where);
             NDArray<bool> reduced = any(effective, axis, keepdims);

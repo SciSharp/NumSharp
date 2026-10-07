@@ -172,13 +172,21 @@ namespace NumSharp
             byte* maskPtr = (byte*)condition.Storage.Address + condition.Shape.offset;
 
             // OOB-True detection: cond longer than axisSize and any True past
-            // axisSize would index OOB on `a` → mirror IndexError.
+            // axisSize would index OOB on `a` → mirror NumPy's take(nonzero(cond), axis) IndexError: the
+            // FIRST out-of-bounds index is the first True at or past the axis end, named with its axis
+            // (axis 0 for the raveled axis=None / 0-d forms); an empty axis is take's "empty axes" text.
             if (maskSize > axisSize)
             {
-                long tailTrues = countKernel(maskPtr + axisSize, maskSize - axisSize);
-                if (tailTrues > 0)
+                var tail = new ReadOnlySpan<byte>(maskPtr + axisSize, checked((int)(maskSize - axisSize)));
+                int firstTrue = tail.IndexOfAnyExcept((byte)0);
+                if (firstTrue >= 0)
+                {
+                    if (axisSize == 0)
+                        throw new IndexOutOfRangeException("cannot do a non-empty take from an empty axes.");
+                    int axisNumber = a.ndim == 0 || axis is null ? 0 : (axis.Value < 0 ? axis.Value + a.ndim : axis.Value);
                     throw new IndexOutOfRangeException(
-                        $"index {axisSize} is out of bounds for axis with size {axisSize}");
+                        $"index {axisSize + firstTrue} is out of bounds for axis {axisNumber} with size {axisSize}");
+                }
             }
 
             // Pass 1: popcount mask over the effective scan range.
@@ -193,7 +201,7 @@ namespace NumSharp
                 outDims[ax] = count;
             }
 
-            result = new NDArray(a.typecode, Shape.Adopt(outDims), false);
+            result = new NDArray(a.dtype, Shape.Adopt(outDims), false); // descriptor: a string's width
 
             if (count == 0 || outerSize == 0 || innerCount == 0)
                 return true;

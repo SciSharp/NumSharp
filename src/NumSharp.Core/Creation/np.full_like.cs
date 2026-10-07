@@ -41,8 +41,14 @@ namespace NumSharp
             // NumPy's *_like contract preserves a.dtype unless dtype= is explicitly supplied.
             // fill_value is CAST into that dtype; its CLR type never selects the result dtype.
             var typeCode = dtype != null ? dtype.GetTypeCode() : a.typecode;
-            char physical = OrderResolver.Resolve(order, a.Shape);
-            var shape = Shape.Adopt((long[])a.Shape.dimensions.Clone(), physical);
+            // PyArray_NewLikeArray's layout: order='K' keeps a's axis permutation, not merely C-or-F.
+            var shape = Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());
+
+            // A string result (a's dtype, or a requested one — unsized means one character, NumPy's empty_like) is
+            // `res = empty_like(...); copyto(res, fill_value, casting='unsafe')`: the copy truncates / converts the value.
+            var resultDescr = dtype ?? a.dtype;
+            if (Backends.Strings.NDStringStorage.IsString(resultDescr))
+                return Backends.Strings.NDStringArrays.Full(shape, fill_value, resultDescr);
 
             // Allocates from shape.size directly (not via UnmanagedStorage.Allocate), so the
             // dimension guard has to be explicit here — see np.full.

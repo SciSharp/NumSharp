@@ -87,6 +87,11 @@ namespace NumSharp
                 return view;
             }
 
+            // Text (an operand, or a string dtype= request) has no sum-of-products: after the parse and the view path above
+            // (which hands text back as a view, as NumPy does), NumPy's operand casts, its bool-zero output fill and its
+            // loop lookup refuse it, in that order.
+            Backends.Strings.NDStringUfuncs.ThrowIfEinsum(operands, dtype, casting);
+
             // einsum accumulates in the operands' promoted dtype (NEP50 result_type), NOT np.sum's
             // widened accumulator: einsum('ij->i', int32) is int32, where np.sum would give int64.
             // A dtype= override forces it. EVERY operand must reach the loop dtype under the casting

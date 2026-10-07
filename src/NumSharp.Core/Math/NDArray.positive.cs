@@ -20,6 +20,8 @@ namespace NumSharp
                 throw new TypeError(
                     "ufunc 'positive' did not contain a loop with signature matching types " +
                     "<class 'numpy.dtypes.BoolDType'> -> None");
+            // No string loop either: the class-named text with StrDType / BytesDType.
+            Backends.Strings.NDStringUfuncs.ThrowIfUnary("positive", this);
 
             // np.positive is the identity function: +x == x
             // It returns a copy of the array, preserving all values as-is

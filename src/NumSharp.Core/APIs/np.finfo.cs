@@ -91,6 +91,10 @@ namespace NumSharp
             if (dtype is null)
                 throw new ArgumentNullException(nameof(dtype));
 
+            // Text is not inexact: NumPy names the scalar type (data type <class 'numpy.str_'> not inexact).
+            if (dtype.Meta is StringDTypeMeta text)
+                throw new ArgumentException($"data type <class 'numpy.{text.ScalarName}'> not inexact", nameof(dtype));
+
             NPTypeCode typeCode = dtype.GetTypeCode();
             if (!IsFloatType(typeCode))
                 throw new ArgumentException($"data type '{typeCode.AsNumpyDtypeName()}' not inexact", nameof(dtype));
@@ -255,7 +259,8 @@ namespace NumSharp
         {
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
-            return new finfo(arr.GetTypeCode);
+            // The descriptor, so a string array reports its text class rather than failing on the storage lane.
+            return new finfo(arr.dtype);
         }
 
         /// <summary>

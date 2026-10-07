@@ -42,6 +42,14 @@ namespace NumSharp
                     if (NDMatrixBoundary.Sees(nd))
                         return NDMatrixBoundary.Wrapped((nd, dtype, order), static s => asarray(s.nd, s.dtype, s.order));
                     return asarray(nd, dtype, order);
+                case Array textArr when Backends.Strings.NDStringArrays.IsTextInput(textArr, dtype):
+                    // Text (string[], an object[] holding str/bytes, or any array under a string dtype): NumPy's
+                    // np.asanyarray of a list of str — a fixed-width string array.
+                    ret = Backends.Strings.NDStringArrays.FromManaged(textArr, dtype, 0, 'C');
+                    break;
+                case IEnumerable<string> texts:
+                    ret = Backends.Strings.NDStringArrays.FromManaged(texts.ToArray(), dtype, 0, 'C');
+                    break;
                 case object[] objArr:
                     // object[] has no fixed dtype — route through type-promotion path.
                     // new NDArray(object[]) throws NotSupportedException since object isn't a
@@ -118,7 +126,7 @@ namespace NumSharp
                     throw new NotSupportedException($"Unable to resolve asanyarray for type {type.Name}");
             }
 
-            if (dtype != null && ret.typecode != dtype.GetTypeCode())
+            if (dtype != null && !Backends.Strings.NDStringArrays.SatisfiesRequest(ret, dtype))
                 ret = ret.astype(dtype, true);
 
             // Apply requested order (no-op for scalars / 1-D / already-matching layouts).

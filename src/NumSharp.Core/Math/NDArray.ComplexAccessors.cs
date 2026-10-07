@@ -98,6 +98,10 @@ namespace NumSharp
                 return np.conjugate(this, @out);
             }
 
+            // PyArray_Conjugate accepts numbers only: text is "non-numeric" (NumPy's TypeError, verbatim).
+            if (typecode == NPTypeCode.String)
+                throw new TypeError("cannot conjugate non-numeric dtype");
+
             // Non-complex: PyArray_Conjugate returns `self` (out==NULL) or copies self into `out` under
             // NPY_DEFAULT_ASSIGN_CASTING (same_kind) — preserving the dtype (bool stays bool), NOT the
             // ufunc's bool→int8 promotion.

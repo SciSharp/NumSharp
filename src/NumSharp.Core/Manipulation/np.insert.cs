@@ -573,11 +573,12 @@ namespace NumSharp
         private static NDArray CoerceValuesForSingleIndex(
             NDArray arr, NDArray values, int axis, bool scalarObj)
         {
-            // Cast dtype if needed.
+            // Cast dtype if needed — NumPy's array(values, dtype=arr.dtype): by ELEMENT type, so a string value of
+            // another width is truncated / NUL-padded to arr's (insert('QQQQQQ') into <U4 stores 'QQQQ').
             NDArray v = values;
-            if (v.GetTypeCode != arr.GetTypeCode)
+            if (!v.HasSameElementType(arr))
             {
-                v = values.astype(arr.GetTypeCode, copy: true);
+                v = values.astype(arr.dtype, copy: true);
             }
 
             // ndmin = arr.ndim: prepend 1s.
@@ -675,11 +676,11 @@ namespace NumSharp
         private static NDArray CoerceValuesForMultiIndex(
             NDArray arr, NDArray values, int axis, int numNew)
         {
-            // Cast dtype.
+            // Cast dtype — by ELEMENT type (a string's class and width), NumPy's array(values, dtype=arr.dtype).
             NDArray v = values;
-            if (v.GetTypeCode != arr.GetTypeCode)
+            if (!v.HasSameElementType(arr))
             {
-                v = values.astype(arr.GetTypeCode, copy: true);
+                v = values.astype(arr.dtype, copy: true);
             }
 
             // Build target shape: arr.shape with axis dim = numNew.

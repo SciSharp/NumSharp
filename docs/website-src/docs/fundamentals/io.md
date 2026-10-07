@@ -56,7 +56,7 @@ var big = (NDArray)np.load("huge.npy", mmap_mode: "r");   // read-only view
 var rw  = (NDArray)np.load("huge.npy", mmap_mode: "r+");  // read-write, flushes to disk
 ```
 
-Modes match what NumPy does through `np.load`: `"r"`/`"readonly"`, `"r+"` (read-write), `"c"` (copy-on-write). mmap needs a real file **path** (a stream/`byte[]` cannot be mapped), and NumSharp refuses to map files it would otherwise transform on read (big-endian, `<U1`/`<c8`) with a clear `NotSupportedException`.
+Modes match what NumPy does through `np.load`: `"r"`/`"readonly"`, `"r+"` (read-write), `"c"` (copy-on-write). mmap needs a real file **path** (a stream/`byte[]` cannot be mapped), and NumSharp refuses to map files it would otherwise transform on read (big-endian, `<c8`) with a clear `NotSupportedException`. Fixed-width string files (`|S5`, `<U3`) map like numeric ones.
 
 ### The dtype map
 
@@ -65,10 +65,11 @@ Modes match what NumPy does through `np.load`: `"r"`/`"readonly"`, `"r+"` (read-
 | `\|b1`, `\|i1`, `\|u1` | Boolean, SByte, Byte | single-byte types use the `\|` prefix |
 | `<i2`…`<u8`, `<f2`, `<f4`, `<f8` | Int16…UInt64, Half, Single, Double | direct |
 | `<c16` | Complex | `<c8` (complex64) widens to Complex on read |
-| `<U1` | Char | 2-byte UTF-16 ↔ 4-byte UCS-4; non-BMP rejected |
+| `\|S5`, `<U3`, `>U3` | fixed-width strings (`S`, `U`) | byte for byte; a `>U3` file is byte-swapped per code point |
+| `<U1` (written) | Char | a `Char` array is written as `<U1` (2-byte UTF-16 → 4-byte UCS-4; non-BMP rejected) |
 | - | Decimal | **`NotSupportedException`** - no NumPy dtype |
 
-Big-endian files are byte-swapped to native on read. Object arrays, structured/subarray dtypes, `datetime64`/`timedelta64`, `S`/`U`(n>1)/`V`, `<f16`/`<c32` parse and then raise a precise message.
+Big-endian files are byte-swapped to native on read. A `<U1` file reads back as a `<U1` string array, not as `Char` (**breaking**: it read as `Char` before the string dtypes existed). Object arrays, structured/subarray dtypes, `datetime64`/`timedelta64`, `V`, zero-width `S0`/`U0`, `<f16`/`<c32` parse and then raise a precise message.
 
 ---
 

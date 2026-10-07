@@ -190,6 +190,8 @@ namespace NumSharp
         private static NDArray UnwrapImpl(NDArray p, double? discont, int axis, double period,
                                           bool periodIsInteger, long periodInt)
         {
+            // NumPy's first ufunc call is dd = diff(p, axis): subtract has no string loop.
+            if (Backends.Strings.NDStringUfuncs.IsString(p)) throw Backends.Strings.NDStringUfuncs.NoLoop("subtract", p.dtype, p.dtype);
             if (p is null) throw new ArgumentNullException(nameof(p));
 
             int nd = p.ndim;

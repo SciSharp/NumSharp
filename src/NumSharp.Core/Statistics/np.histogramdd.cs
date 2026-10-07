@@ -190,6 +190,9 @@ namespace NumSharp
         /// <exception cref="ValueError">A dimension mismatch, a non-positive integer bin, or non-monotonic edges.</exception>
         private static HistogramddResult HistogramddImpl(NDArray[] cols, object bins, (double, double)?[] range, bool density, NDArray weights)
         {
+            // NumPy's automatic range starts with each column's min(): minimum.reduce has no string loop (first column first).
+            foreach (var col in cols)
+                if (Backends.Strings.NDStringUfuncs.IsString(col)) throw Backends.Strings.NDStringUfuncs.NoLoop("minimum", col.dtype, col.dtype);
             // NumPy builds the internal sample via `atleast_2d(sample).T`, which STACKS the D coordinate
             // columns into ONE array and thereby promotes every column to their common dtype. An (N, D)
             // array (or any single-dtype sequence) is already uniform, so this is a no-op there; a sequence

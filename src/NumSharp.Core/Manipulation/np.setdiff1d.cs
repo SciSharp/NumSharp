@@ -17,6 +17,9 @@ namespace NumSharp
         public static NDArray setdiff1d(NDArray ar1, NDArray ar2, bool assume_unique = false)
         {
             using var plain = NDMatrixBoundary.PlainFor(ar1, ar2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            // NumPy computes this on text (sorting, searching, truth tests); string computation is
+            // the next phase of NumSharp's string support, so a string array is refused here.
+            if (Backends.Strings.NDStringUfuncs.IsString(ar1) || Backends.Strings.NDStringUfuncs.IsString(ar2)) throw Backends.Strings.NDStringUfuncs.NextPhase("setdiff1d", Backends.Strings.NDStringUfuncs.IsString(ar1) ? ar1 : ar2);
             // Boundary scope: the unique/ravel temps and the isin membership mask are reclaimed
             // at exit; only the selected-values array is yielded.
 

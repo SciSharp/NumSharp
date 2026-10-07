@@ -53,6 +53,8 @@ namespace NumSharp.Backends
         [NDScoped]
         public override unsafe NDArray<long>[] NonZero(NDArray nd)
         {
+            // Text: NumPy's nonzero reads the strings' truth values (the next phase).
+            Strings.NDStringUfuncs.ThrowIfReduce("nonzero", nd, (int?)null);
             // Boundary scope: the yielded tuple is the column VIEWS; the shared multi-index base
             // matrix (and the 0-d promotion view) are reclaimed at exit — ARC keeps the buffer
             // alive through the yielded views until the caller releases them.
@@ -204,6 +206,8 @@ namespace NumSharp.Backends
         [NDScoped]
         public override long CountNonZero(NDArray nd)
         {
+            // Text: NumPy's count_nonzero reads the strings' truth values (the next phase).
+            Strings.NDStringUfuncs.ThrowIfReduce("count_nonzero", nd, (int?)null);
             if (nd.size == 0)
                 return 0;
 
@@ -218,6 +222,9 @@ namespace NumSharp.Backends
         [NDScoped]
         public override NDArray CountNonZero(NDArray nd, int axis, bool keepdims = false)
         {
+            // Text: NumPy's count_nonzero is astype(bool).sum(axis) — the strings' truth values (the next phase), after the
+            // sum's axis check (a 0-d input accepts 0 and -1).
+            Strings.NDStringUfuncs.ThrowIfReduce("count_nonzero", nd, (int?)axis);
             // Boundary scope: reclaims the per-dispatch MakeGeneric alias; the result is yielded.
 
             var shape = nd.Shape;

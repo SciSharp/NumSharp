@@ -52,7 +52,7 @@ namespace NumSharp
             bool unpack = false, int ndmin = 0, string encoding = null, int? max_rows = null, string quotechar = null)
         {
             if (fname is null) throw new ArgumentNullException(nameof(fname));
-            var cfg = BuildLoadTxtConfig(dtype?.GetTypeCode() ?? NPTypeCode.Double, comments, delimiter, converters, usecols, ndmin, max_rows, quotechar, skiprows);
+            var cfg = BuildLoadTxtConfig(dtype, comments, delimiter, converters, usecols, ndmin, max_rows, quotechar, skiprows);
             using var lines = OpenTextFileLines(fname, encoding).GetEnumerator();
             return LoadTxtCore(lines, cfg, unpack);
         }
@@ -64,7 +64,7 @@ namespace NumSharp
             bool unpack = false, int ndmin = 0, string encoding = null, int? max_rows = null, string quotechar = null)
         {
             if (stream is null) throw new ArgumentNullException(nameof(stream));
-            var cfg = BuildLoadTxtConfig(dtype?.GetTypeCode() ?? NPTypeCode.Double, comments, delimiter, converters, usecols, ndmin, max_rows, quotechar, skiprows);
+            var cfg = BuildLoadTxtConfig(dtype, comments, delimiter, converters, usecols, ndmin, max_rows, quotechar, skiprows);
             using var reader = new StreamReader(stream, ResolveSaveTxtEncoding(encoding), true, 1 << 16, leaveOpen: true);
             using var lines = ReadLines(reader).GetEnumerator();
             return LoadTxtCore(lines, cfg, unpack);
@@ -77,7 +77,7 @@ namespace NumSharp
             bool unpack = false, int ndmin = 0, int? max_rows = null, string quotechar = null)
         {
             if (reader is null) throw new ArgumentNullException(nameof(reader));
-            var cfg = BuildLoadTxtConfig(dtype?.GetTypeCode() ?? NPTypeCode.Double, comments, delimiter, converters, usecols, ndmin, max_rows, quotechar, skiprows);
+            var cfg = BuildLoadTxtConfig(dtype, comments, delimiter, converters, usecols, ndmin, max_rows, quotechar, skiprows);
             using var lines = ReadLines(reader).GetEnumerator();
             return LoadTxtCore(lines, cfg, unpack);
         }
@@ -89,7 +89,7 @@ namespace NumSharp
             bool unpack = false, int ndmin = 0, int? max_rows = null, string quotechar = null)
         {
             if (lines is null) throw new ArgumentNullException(nameof(lines));
-            var cfg = BuildLoadTxtConfig(dtype?.GetTypeCode() ?? NPTypeCode.Double, comments, delimiter, converters, usecols, ndmin, max_rows, quotechar, skiprows);
+            var cfg = BuildLoadTxtConfig(dtype, comments, delimiter, converters, usecols, ndmin, max_rows, quotechar, skiprows);
             using var it = FlattenLines(lines).GetEnumerator();
             return LoadTxtCore(it, cfg, unpack);
         }
@@ -101,6 +101,8 @@ namespace NumSharp
         private struct LoadTxtConfig
         {
             public NPTypeCode Tc;
+            /// <summary>The requested descriptor (float64 by default): a string dtype's width lives here, not on <see cref="Tc"/>.</summary>
+            public DType Descr;
             public int ElemSize;
             public char? Delimiter;      // null = whitespace mode
             public bool Whitespace;
@@ -116,9 +118,26 @@ namespace NumSharp
             public bool HasConverters => AllConverter != null || DictConverter != null;
         }
 
-        private static LoadTxtConfig BuildLoadTxtConfig(NPTypeCode dtype, string comments, string delimiter,
+        /// <summary>
+        ///     Validates loadtxt's arguments (NumPy's texts and order) and resolves them into the reader's configuration.
+        /// </summary>
+        /// <param name="descr">The requested dtype, or null for float64 (NumPy's default).</param>
+        /// <param name="comments">The comment marker, or null for none.</param>
+        /// <param name="delimiter">The single-character delimiter, or null for whitespace.</param>
+        /// <param name="converters">A converter for every column, a per-column dictionary, or null.</param>
+        /// <param name="usecols">The selected columns, or null for all.</param>
+        /// <param name="ndmin">The minimum result rank (0, 1 or 2).</param>
+        /// <param name="max_rows">The maximum number of data rows, or null for all.</param>
+        /// <param name="quotechar">The quote character, or null for none.</param>
+        /// <param name="skiprows">Leading lines to skip.</param>
+        /// <returns>The configuration.</returns>
+        /// <exception cref="ValueError">An invalid ndmin, a negative skiprows / max_rows, or an invalid comment setup.</exception>
+        /// <exception cref="TypeError">A control character that is not one character, or a converter of another kind.</exception>
+        private static LoadTxtConfig BuildLoadTxtConfig(DType descr, string comments, string delimiter,
             object converters, int[] usecols, int ndmin, int? max_rows, string quotechar, int skiprows)
         {
+            descr ??= DType.Double;
+            NPTypeCode dtype = descr.GetTypeCode();
             if (ndmin != 0 && ndmin != 1 && ndmin != 2)
                 throw new ValueError($"Illegal value of ndmin keyword: {ndmin}");
             if (skiprows < 0) throw new ValueError("argument must be nonnegative");
@@ -127,7 +146,9 @@ namespace NumSharp
             var cfg = new LoadTxtConfig
             {
                 Tc = dtype,
-                ElemSize = dtype.SizeOf(),
+                Descr = descr,
+                // A string element's size is its descriptor's (0 for an unsized class, whose width the data decides).
+                ElemSize = dtype == NPTypeCode.String ? descr.itemsize : dtype.SizeOf(),
                 SkipRows = skiprows,
                 MaxRows = max_rows ?? -1,
                 UseCols = usecols,
@@ -234,6 +255,11 @@ namespace NumSharp
 
         private static NDArray LoadTxtCore(IEnumerator<string> lines, LoadTxtConfig cfg, bool unpack)
         {
+            // A fixed-width string dtype stores each field's TEXT (NumPy's to_unicode / to_string conversions), which
+            // the fixed-size binary packing below cannot express (an unsized class takes its width from the data).
+            if (cfg.Tc == NPTypeCode.String)
+                return LoadTxtStrings(lines, cfg, unpack);
+
             for (int i = 0; i < cfg.SkipRows && lines.MoveNext(); i++) { }
 
             int elsize = cfg.ElemSize;
@@ -317,6 +343,111 @@ namespace NumSharp
             {
                 Array.Resize(ref data, checked((int)(nrows * rowBytes)));
                 arr = BytesToArray(data, cfg.Tc).reshape((int)nrows, nsel);
+            }
+
+            arr = EnsureNdmin(arr, cfg.Ndmin);
+            if (unpack) arr = arr.T;
+            return arr;
+        }
+
+        /// <summary>
+        ///     The string-dtype reader of <c>np.loadtxt</c> — NumPy's text reader with the <c>U</c> / <c>S</c> field
+        ///     conversions: every field's text is stored as one element (converters first), truncated to a sized dtype's
+        ///     width; an unsized class (<c>'U'</c>, <c>'S'</c>) takes the longest field's width. A <c>U</c> field keeps
+        ///     its characters; an <c>S</c> field is encoded as Latin-1 (NumPy's <c>to_string</c>), so a character past
+        ///     <c>U+00FF</c> cannot be stored.
+        /// </summary>
+        /// <param name="lines">The lines.</param>
+        /// <param name="cfg">The reader configuration (<see cref="LoadTxtConfig.Descr"/> is a string dtype).</param>
+        /// <param name="unpack">Transpose the result.</param>
+        /// <returns>The string array, with NumPy's <c>ndmin</c> squeeze / expansion.</returns>
+        /// <exception cref="ValueError">NumPy's texts: the number of columns changed, an invalid column index, or an
+        ///     <c>S</c> field that Latin-1 cannot encode (<c>could not convert string '中' to |S2 at row 0, column
+        ///     1.</c>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A converter returned a number (number to text is
+        ///     the computational phase).</exception>
+        private static NDArray LoadTxtStrings(IEnumerator<string> lines, LoadTxtConfig cfg, bool unpack)
+        {
+            for (int i = 0; i < cfg.SkipRows && lines.MoveNext(); i++) { }
+
+            bool bytesClass = !((StringDTypeMeta)cfg.Descr.Meta).IsUnicode;
+            var values = new List<object>(256);
+            long nrows = 0;
+            int ncols = -1, nsel = -1;
+            int[] sel = null;
+            Func<string, object>[] conv = null;
+            var fStart = new List<int>(16);
+            var fLen = new List<int>(16);
+            var qbuf = cfg.Quote.HasValue ? new StringBuilder(64) : null;
+
+            while ((cfg.MaxRows < 0 || nrows < cfg.MaxRows) && lines.MoveNext())
+            {
+                string line = lines.Current;
+                if (cfg.CommentMulti != null)
+                {
+                    int c = line.IndexOf(cfg.CommentMulti, StringComparison.Ordinal);
+                    if (c >= 0) line = line.Substring(0, c);
+                }
+
+                string source = TokenizeLine(line, in cfg, fStart, fLen, qbuf);
+                int current = fStart.Count;
+                if (current == 0)
+                    continue; // blank / comment-only line - not counted toward max_rows
+
+                if (ncols == -1)
+                {
+                    ncols = current;
+                    sel = cfg.UseCols;
+                    nsel = sel == null ? ncols : sel.Length;
+                    conv = ResolveConverters(in cfg, sel, ncols);
+                }
+                else if (sel == null && current != ncols)
+                {
+                    throw new ValueError(
+                        $"the number of columns changed from {ncols} to {current} at row {nrows + 1}; " +
+                        "use `usecols` to select a subset and avoid this error");
+                }
+
+                for (int j = 0; j < nsel; j++)
+                {
+                    int origCol = sel == null ? j : sel[j];
+                    if (origCol < 0) origCol += current;
+                    if (origCol < 0 || origCol >= current)
+                        throw new ValueError($"invalid column index {sel[j]} at row {nrows + 1} with {current} columns");
+
+                    string field = source.Substring(fStart[origCol], fLen[origCol]);
+                    object value = conv != null && conv[j] != null ? conv[j](field) : field;
+                    // NumPy's to_string encodes an S field as Latin-1: one byte per character up to U+00FF, else the
+                    // field cannot be converted (its usual "could not convert" text, row 0-based, column 1-based).
+                    if (bytesClass && value is string text)
+                    {
+                        if (text.AsSpan().IndexOfAnyExceptInRange('\0', '\u00FF') >= 0)
+                            throw new ValueError(
+                                $"could not convert string '{field}' to {cfg.Descr} at row {nrows}, column {origCol + 1}.");
+                        value = Encoding.Latin1.GetBytes(text);
+                    }
+                    values.Add(value);
+                }
+
+                nrows++;
+            }
+
+            NDArray arr;
+            if (nrows == 0)
+            {
+                // NumPy's empty result: shape (0,) before ndmin, in the allocated dtype (an unsized class is one character).
+                arr = new NDArray(Backends.Strings.NDStringStorage.AllocationDescr(cfg.Descr), Shape.Vector(0), false);
+            }
+            else
+            {
+                // The values are encoded once by the string array builder, which discovers an unsized width (the longest
+                // field) and truncates to a sized one; a byte[] is one S value stored as it is.
+                var grid = new object[nrows, nsel];
+                int k = 0;
+                for (long r = 0; r < nrows; r++)
+                    for (int c = 0; c < nsel; c++)
+                        grid[r, c] = values[k++];
+                arr = Backends.Strings.NDStringArrays.FromManaged(grid, cfg.Descr, 0, 'C');
             }
 
             arr = EnsureNdmin(arr, cfg.Ndmin);

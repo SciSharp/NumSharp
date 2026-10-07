@@ -4352,7 +4352,9 @@ namespace NumSharp.Backends.Iteration
         ///     cross-dtype conversion — is absorbed by the NDIter copy core, so a single call covers
         ///     <c>ndarray.copy()</c>, <c>astype()</c>, and <c>Clone()</c> alike.
         /// </summary>
-        /// <param name="dstType">dtype of the result (equal to <paramref name="src"/>'s dtype for a plain copy/retype).</param>
+        /// <param name="dstType">dtype DESCRIPTOR of the result (equal to <paramref name="src"/>'s for a plain copy/retype). A
+        ///     descriptor, not a type code, because a fixed-width string's width lives on it (<c>&lt;U5</c>); an
+        ///     <see cref="NPTypeCode"/> converts implicitly for the numeric lanes.</param>
         /// <param name="src">source array of any layout (contiguous, sliced, strided, broadcast, transposed, scalar, empty).</param>
         /// <param name="order">
         ///     'C' (row-major), 'F' (column-major), 'A' ('F' iff src is F-contiguous and not C), or
@@ -4361,7 +4363,7 @@ namespace NumSharp.Backends.Iteration
         /// <param name="engine">tensor engine assigned to the result; defaults to <paramref name="src"/>'s engine.</param>
         /// <returns>A freshly allocated, owning array of <paramref name="dstType"/> holding src's values.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="src"/> is null.</exception>
-        public static NDArray CopyAs(NPTypeCode dstType, NDArray src, char order = 'K', TensorEngine engine = null)
+        public static NDArray CopyAs(DType dstType, NDArray src, char order = 'K', TensorEngine engine = null)
         {
             if (src is null) throw new ArgumentNullException(nameof(src));
 
@@ -4399,6 +4401,15 @@ namespace NumSharp.Backends.Iteration
         {
             if (dst is null) throw new ArgumentNullException(nameof(dst));
             if (src is null) throw new ArgumentNullException(nameof(src));
+
+            // Fixed-width strings have no element kernel: the string route copies their bytes through uint8 / uint32
+            // UNIT VIEWS (one extra trailing axis of characters) by calling back into this method, so broadcasting,
+            // layouts, the overlap guard and the SIMD kernels below are the numeric ones.
+            if (dst.TypeCode == NPTypeCode.String || src.TypeCode == NPTypeCode.String)
+            {
+                NumSharp.Backends.Strings.NDStringCopy.Copy(dst, src);
+                return;
+            }
 
             // OVERLAP GUARD — NumPy PyArray_AssignArray (array_assign_array.c:371-399).
             // A forward element/row copy reads source lanes after destination writes have

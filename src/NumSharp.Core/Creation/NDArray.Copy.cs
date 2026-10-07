@@ -24,7 +24,8 @@ namespace NumSharp
             // Unified allocate-and-fill copy core: resolves order (C/F/A/K), allocates, and fills via
             // the NDIter copy primitive. Absorbs every layout — scalar, (1,), strided, broadcast,
             // transposed — so copy() and astype() share one path.
-            return NDIter.CopyAs(this.typecode, this, order, TensorEngine);
+            // The descriptor (not the type code) so a fixed-width string copy keeps its width (<U5 stays <U5).
+            return NDIter.CopyAs(this.dtype, this, order, TensorEngine);
         }
     }
 }

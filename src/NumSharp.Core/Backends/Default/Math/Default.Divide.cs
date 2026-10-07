@@ -11,7 +11,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Divide(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "divide", lhs, rhs, @out, where);
             // NumPy true_divide has float/complex loops ONLY: an integer/bool
             // dtype= request has no loop to select (probed 2.4.2:
             // divide(i32,i32,dtype=i32) and divide(f64,f64,dtype=bool) raise

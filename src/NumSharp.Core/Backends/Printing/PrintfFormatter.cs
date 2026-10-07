@@ -100,7 +100,11 @@ namespace NumSharp.Backends.Printing
 
                 char conv = format[i];
                 i++;
-                sb.Append(Apply(conv, left, plus, space, zero, alt, width, precision, value, tc));
+                // A fixed-width string element is the Python object getitem returns (str / bytes): ndarray.tofile's
+                // `format % item`. Its conversions are str.__mod__'s for text, not the numeric ones.
+                sb.Append(tc == NPTypeCode.String
+                    ? ApplyText(conv, left, width, precision, value, numpyScalar: false)
+                    : Apply(conv, left, plus, space, zero, alt, width, precision, value, tc));
             }
 
             return sb.ToString();
@@ -210,6 +214,14 @@ namespace NumSharp.Backends.Printing
                 object value = args[argIdx];
                 NPTypeCode tc = tcs[argIdx];
                 argIdx++;
+
+                // A fixed-width string element: savetxt formats tuple(row), whose items are NumPy scalars (np.str_ /
+                // np.bytes_), so %r prints their NumPy repr and a numeric conversion's TypeError names numpy.str_.
+                if (tc == NPTypeCode.String)
+                {
+                    sb.Append(ApplyText(conv, left, width, precision, value, numpyScalar: true));
+                    continue;
+                }
 
                 // Integer/char conversions validate their operand exactly as CPython's `%` operator does on
                 // a NumPy scalar — this is where savetxt on the wrong dtype raises. A TypeError is caught by
@@ -344,6 +356,119 @@ namespace NumSharp.Backends.Printing
                     // Unknown conversion: emit the '%' + conv verbatim (lenient).
                     return "%" + conv;
             }
+        }
+
+        // ---- text values (fixed-width string elements) --------------------------------
+
+        /// <summary>
+        ///     CPython's <c>str.__mod__</c> conversion of ONE text value — a <c>U</c> element (a C# <see cref="string"/>)
+        ///     or an <c>S</c> element (a <c>byte[]</c>): <c>%s</c> is <c>str(value)</c> (the text; a bytes value prints as
+        ///     its <c>b'...'</c> repr), <c>%r</c> is <c>repr(value)</c>, <c>%a</c> is <c>ascii(value)</c>; a precision
+        ///     truncates and a width pads with spaces, both in code points (the <c>-</c> flag left-aligns, the numeric
+        ///     flags do nothing); <c>%c</c> takes a one-character <c>str</c>; every numeric conversion raises CPython's
+        ///     <c>TypeError</c>.
+        /// </summary>
+        /// <param name="conv">The conversion character.</param>
+        /// <param name="left">The <c>-</c> flag.</param>
+        /// <param name="width">The minimum width in code points (0 for none).</param>
+        /// <param name="precision">The precision (-1 for none): the maximum number of code points kept.</param>
+        /// <param name="value">The element: a <see cref="string"/> or a <c>byte[]</c>.</param>
+        /// <param name="numpyScalar">True when the value stands for a NumPy scalar (<c>np.str_</c> / <c>np.bytes_</c>:
+        ///     <c>np.savetxt</c> formats <c>tuple(row)</c>), false for the Python object <c>getitem</c> returns
+        ///     (<c>str</c> / <c>bytes</c>: <c>ndarray.tofile</c>). The two differ in <c>repr</c>
+        ///     (<c>np.str_('ab')</c> vs <c>'ab'</c>) and in the type name a <c>TypeError</c> reports.</param>
+        /// <returns>The formatted text.</returns>
+        /// <exception cref="PrintfArgumentException">CPython's <c>TypeError</c> for a numeric conversion of text
+        ///     (<c>%d format: a real number is required, not str</c>, <c>%x format: an integer is required, not
+        ///     bytes</c>, <c>must be real number, not numpy.str_</c>) or <c>%c</c> of anything but one character
+        ///     (<c>%c requires int or char</c>).</exception>
+        private static string ApplyText(char conv, bool left, int width, int precision, object value, bool numpyScalar)
+        {
+            bool isBytes = value is byte[];
+            string typeName = isBytes ? (numpyScalar ? "numpy.bytes_" : "bytes") : (numpyScalar ? "numpy.str_" : "str");
+            string body;
+            switch (conv)
+            {
+                case 's':
+                    // str(bytes) is its repr; str(np.bytes_) too. str(np.str_) / str(str) is the text itself.
+                    body = isBytes ? PyRepr.Bytes((byte[])value) : (string)value;
+                    break;
+                case 'r':
+                    body = TextRepr(value, numpyScalar);
+                    break;
+                case 'a':
+                    body = PyRepr.Ascii(TextRepr(value, numpyScalar));
+                    break;
+                case 'c':
+                    // A str of exactly one code point is its own %c; CPython refuses every other value with one text.
+                    if (!isBytes && PyRepr.CodePointLength((string)value) == 1)
+                        return PadCodePoints((string)value, width, left);
+                    throw new PrintfArgumentException("%c requires int or char");
+                case 'd':
+                case 'i':
+                case 'u':
+                    throw new PrintfArgumentException($"%{conv} format: a real number is required, not {typeName}");
+                case 'x':
+                case 'X':
+                case 'o':
+                    throw new PrintfArgumentException($"%{conv} format: an integer is required, not {typeName}");
+                case 'e':
+                case 'E':
+                case 'f':
+                case 'F':
+                case 'g':
+                case 'G':
+                    throw new PrintfArgumentException($"must be real number, not {typeName}");
+                default:
+                    // Unknown conversion: emit the '%' + conv verbatim (lenient, as the numeric path).
+                    return "%" + conv;
+            }
+
+            if (precision >= 0)
+                body = TruncateCodePoints(body, precision);
+            return PadCodePoints(body, width, left);
+        }
+
+        /// <summary>
+        ///     Python's <c>repr()</c> of a text element: the plain <c>'ab'</c> / <c>b'ab'</c> of the Python object
+        ///     (<c>tofile</c>'s <c>getitem</c>), or <c>np.str_('ab')</c> / <c>np.bytes_(b'ab')</c> of a NumPy scalar.
+        /// </summary>
+        /// <param name="value">A <see cref="string"/> or a <c>byte[]</c>.</param>
+        /// <param name="numpyScalar">Whether the value stands for a NumPy scalar.</param>
+        /// <returns>The representation.</returns>
+        private static string TextRepr(object value, bool numpyScalar)
+        {
+            string repr = value is byte[] bytes ? PyRepr.Bytes(bytes) : PyRepr.Str((string)value);
+            if (!numpyScalar)
+                return repr;
+            return (value is byte[] ? "np.bytes_(" : "np.str_(") + repr + ")";
+        }
+
+        /// <summary>The first <paramref name="count"/> code points of <paramref name="s"/> (Python's <c>s[:count]</c>;
+        ///     a surrogate pair is one code point and is never split).</summary>
+        /// <param name="s">The text.</param>
+        /// <param name="count">The number of code points to keep.</param>
+        /// <returns>The truncated text (the text itself when it is not longer).</returns>
+        private static string TruncateCodePoints(string s, int count)
+        {
+            int units = 0;
+            for (int kept = 0; kept < count && units < s.Length; kept++)
+                units += char.IsHighSurrogate(s[units]) && units + 1 < s.Length && char.IsLowSurrogate(s[units + 1]) ? 2 : 1;
+            return units >= s.Length ? s : s.Substring(0, units);
+        }
+
+        /// <summary>Pads <paramref name="body"/> with spaces to <paramref name="width"/> CODE POINTS (Python's width
+        ///     counts characters, not UTF-16 units), on the right when <paramref name="left"/>.</summary>
+        /// <param name="body">The text.</param>
+        /// <param name="width">The minimum width.</param>
+        /// <param name="left">Left-align (pad on the right).</param>
+        /// <returns>The padded text.</returns>
+        private static string PadCodePoints(string body, int width, bool left)
+        {
+            int deficit = width - PyRepr.CodePointLength(body);
+            if (deficit <= 0)
+                return body;
+            return left ? body + new string(' ', deficit) : new string(' ', deficit) + body;
         }
 
         // ---- numeric helpers ---------------------------------------------------------

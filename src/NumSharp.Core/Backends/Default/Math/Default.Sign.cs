@@ -12,8 +12,10 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Sign(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "sign", nd, null, @out, where);
             ValidateWhereMask(where);
+            // sign has no string loop: the class-named UFuncTypeError, or the input-cast text under dtype=.
+            Strings.NDStringUfuncs.ThrowIfUnary("sign", nd, typeCode);
 
             // np.sign preserves input dtype (unlike trigonometric functions);
             // dtype= selects the loop instead and the input must reach it via

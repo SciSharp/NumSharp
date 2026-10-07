@@ -83,10 +83,20 @@ namespace NumSharp
                 outSize *= outShape[i];
             }
 
-            // Empty result: any rep==0 or any aShape[i]==0 → return zero-element array of the
-            // correct shape and dtype. NumPy: tile([], 3) → array([], shape=(0,), dtype=float64).
+            // Empty result: any rep==0 or any aShape[i]==0 → a zero-element array of the correct shape and dtype.
+            // NumPy ends tile with `c.reshape(shape_out)`: for an EMPTY input c is A itself (or its ndmin view), so the
+            // result is a view of A; for a zero repetition of a non-empty input c is the fresh repeat, so the result is a
+            // view of a fresh buffer — owndata false either way.
             if (outSize == 0)
-                return zeros(Shape.Adopt(outShape), A.dtype);
+            {
+                if (A.size == 0)
+                {
+                    var c = aDim == outDim ? A : A.reshape(Shape.Adopt(aShape));
+                    return c.reshape(Shape.Adopt(outShape));
+                }
+                var fresh = zeros(Shape.Adopt(outShape), A.dtype);
+                return new NDArray(fresh.Storage.Alias(fresh.Shape)) { TensorEngine = A.TensorEngine };
+            }
 
             // Trivial case: all reps are 1 → return a keep-order copy preserving the
             // (possibly promoted) shape. Matches NumPy's array(A, copy=True, ndmin=d)

@@ -15,6 +15,9 @@ namespace NumSharp.Backends
         /// <returns>True if any element is non-zero</returns>
         public override bool Any(NDArray nd)
         {
+            // Text, or a string dtype= request: NumPy's any checks its arguments first (the axis, and the dtype= class where
+            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            Strings.NDStringUfuncs.ThrowIfReduce("any", nd);
             return nd.GetTypeCode switch
             {
                 NPTypeCode.Boolean => AnyImpl<bool>(nd),
@@ -105,6 +108,9 @@ namespace NumSharp.Backends
         /// <returns>Array of bools with the axis dimension removed</returns>
         public override NDArray<bool> Any(NDArray nd, int axis)
         {
+            // Text, or a string dtype= request: NumPy's any checks its arguments first (the axis, and the dtype= class where
+            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            Strings.NDStringUfuncs.ThrowIfReduce("any", nd, (int?)axis);
             return Any(nd, axis, keepdims: false);
         }
     }
