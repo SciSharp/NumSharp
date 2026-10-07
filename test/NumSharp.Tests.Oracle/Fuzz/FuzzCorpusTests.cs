@@ -1111,6 +1111,12 @@ namespace NumSharp.Tests.Fuzz
             ["unary_extra.jsonl"] = 6052,
             ["where.jsonl"] = 75,
             ["windows.jsonl"] = 200,
+            // The array-object oracle (gen_viewflags_oracle.py, 2026-10-07): the returned object, its flags and its
+            // view / copy / identity facet. Delivered counts (gate files; the carved gaps live in corpus/gaps/):
+            ["view_flags.jsonl"] = 7000,   // 7,282: 194 fns, sections V1-V10 + K1-K3 over 21 source layouts
+            ["out_flags.jsonl"] = 1000,    // 1,072: 149 out-capable fns x 6 out layouts
+            ["shape_args.jsonl"] = 500,    // 537: 12 shape-taking fns x every C# shape form
+            ["array_args.jsonl"] = 320,    // 335: 55 secondary-operand positions x up to 9 layouts
         };
 
         // Corpus tiers authored against the win-amd64 CRT libm (ucrtbase) and NumSharp's host SIMD
@@ -1151,70 +1157,102 @@ namespace NumSharp.Tests.Fuzz
 
             var failures = new List<string>();
             var documented = new Dictionary<string, int>();   // intended divergence reason -> count
-            var empty = System.Array.Empty<BitDiff.Diff>();
 
             foreach (var c in cases)
-            {
-                try
-                {
-                    var operands = new NumSharp.NDArray[c.Operands.Length];
-                    for (int i = 0; i < operands.Length; i++)
-                        operands[i] = FuzzCorpus.Reconstruct(c.Operands[i]);
-
-                    // W11 input aliasing: pass the single stored operand as BOTH binary arguments
-                    // through the SAME reference (true a-op-a aliasing, not two equal copies).
-                    if (c.Alias && operands.Length == 1)
-                        operands = new[] { operands[0], operands[0] };
-
-                    // W14 error parity: NumPy raised here; NumSharp must throw too (not silently
-                    // produce a result). Legacy cases carry no recorded exception and pass on a
-                    // throw of ANY kind; cases carrying NumPy's message are held to that message.
-                    // See CheckError in FuzzCorpusTests.Kinds.cs.
-                    if (c.Expects_Throw)
-                    {
-                        CheckError(c, operands, failures, documented);
-                        continue;
-                    }
-
-                    // Result-kind dispatch. "array" is the original single-NDArray contract; the
-                    // other kinds gate ops whose result is not one array (see FuzzCorpus.Expected).
-                    switch (c.Expected.KindOrArray)
-                    {
-                        case "array":
-                        case "scalar":
-                            CompareArray(c, DispatchApply(c.Op, c.Params, operands),
-                                         c.Expected, null, failures, documented);
-                            break;
-                        case "tuple":
-                            CompareTuple(c, operands, failures, documented);
-                            break;
-                        case "dtype":
-                            CompareDtypeResult(c, operands, failures, documented);
-                            break;
-                        case "text":
-                            CompareTextResult(c, operands, failures, documented);
-                            break;
-                        default:
-                            failures.Add($"{c.Id}: unknown expected.kind '{c.Expected.Kind}'");
-                            break;
-                    }
-                }
-                catch (Exception e)
-                {
-                    var reason = MisalignedRegistry.Classify(c, DivergenceKind.Threw, null, null, default, empty);
-                    if (reason != null) Bump(documented, reason);
-                    else failures.Add($"{c.Id} [{c.Layout}]: THREW {e.GetType().Name}: {e.Message}");
-                }
-            }
+                ReplayOne(c, failures, documented);
 
             // Never silent: surface documented (intended) divergences even when the test passes.
             if (documented.Count > 0)
                 Console.WriteLine($"[{file}] documented Misaligned divergences excused: " +
                                   string.Join("; ", documented.Select(kv => $"{kv.Value}x {kv.Key}")));
 
+            DumpFailures(file, failures);
             if (failures.Count > 0)
                 Assert.Fail($"{failures.Count}/{cases.Count} cases diverged from NumPy (unexpected):\n  " +
                             string.Join("\n  ", failures.Take(60)));
+        }
+
+        /// <summary>
+        ///     Appends every failure line of a tier to the file named by <c>NUMSHARP_ORACLE_FAILURE_DUMP</c>, when that
+        ///     environment variable is set — the assertion message keeps only the first 60, and classifying a new tier's
+        ///     divergences (drawing carve rules) needs all of them.
+        /// </summary>
+        /// <param name="file">The corpus file the failures belong to (written as each line's prefix).</param>
+        /// <param name="failures">The tier's failure lines.</param>
+        /// <remarks>Diagnostic only: unset (the default, and CI), nothing is written.</remarks>
+        private static void DumpFailures(string file, List<string> failures)
+        {
+            string path = Environment.GetEnvironmentVariable("NUMSHARP_ORACLE_FAILURE_DUMP");
+            if (string.IsNullOrEmpty(path) || failures.Count == 0)
+                return;
+            lock (MinCases)
+                System.IO.File.AppendAllLines(path, failures.Select(f => file + "\t" + f.Replace("\n", " ")));
+        }
+
+        /// <summary>
+        ///     Replays ONE ordinary corpus case and files its verdict: nothing on a match, a documented reason when a
+        ///     <see cref="MisalignedRegistry"/> branch excuses the divergence, a failure line otherwise.
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <param name="failures">Receives one line per unexcused divergence of this case.</param>
+        /// <param name="documented">Counts the excused divergences by reason.</param>
+        /// <remarks>
+        ///     Shared by <see cref="RunCorpus"/> and the per-gap replay of the carved view-flags cases
+        ///     (<c>RunGapCorpus</c>), which needs each case's own verdict to group it under its gap id.
+        /// </remarks>
+        private static void ReplayOne(FuzzCorpus.Case c, List<string> failures, Dictionary<string, int> documented)
+        {
+            var empty = System.Array.Empty<BitDiff.Diff>();
+            try
+            {
+                var operands = new NumSharp.NDArray[c.Operands.Length];
+                for (int i = 0; i < operands.Length; i++)
+                    operands[i] = FuzzCorpus.Reconstruct(c.Operands[i]);
+
+                // W11 input aliasing: pass the single stored operand as BOTH binary arguments
+                // through the SAME reference (true a-op-a aliasing, not two equal copies).
+                if (c.Alias && operands.Length == 1)
+                    operands = new[] { operands[0], operands[0] };
+
+                // W14 error parity: NumPy raised here; NumSharp must throw too (not silently
+                // produce a result). Legacy cases carry no recorded exception and pass on a
+                // throw of ANY kind; cases carrying NumPy's message are held to that message.
+                // See CheckError in FuzzCorpusTests.Kinds.cs.
+                if (c.Expects_Throw)
+                {
+                    CheckError(c, operands, failures, documented);
+                    return;
+                }
+
+                // Result-kind dispatch. "array" is the original single-NDArray contract; the
+                // other kinds gate ops whose result is not one array (see FuzzCorpus.Expected).
+                switch (c.Expected.KindOrArray)
+                {
+                    case "array":
+                    case "scalar":
+                        CompareArray(c, DispatchApply(c.Op, c.Params, operands),
+                                     c.Expected, null, failures, documented, operands);
+                        break;
+                    case "tuple":
+                        CompareTuple(c, operands, failures, documented);
+                        break;
+                    case "dtype":
+                        CompareDtypeResult(c, operands, failures, documented);
+                        break;
+                    case "text":
+                        CompareTextResult(c, operands, failures, documented);
+                        break;
+                    default:
+                        failures.Add($"{c.Id}: unknown expected.kind '{c.Expected.Kind}'");
+                        break;
+                }
+            }
+            catch (Exception e)
+            {
+                var reason = MisalignedRegistry.Classify(c, DivergenceKind.Threw, null, null, default, empty);
+                if (reason != null) Bump(documented, reason);
+                else failures.Add($"{c.Id} [{c.Layout}]: THREW {e.GetType().Name}: {e.Message}");
+            }
         }
 
         // Routes the "grnd" PCG64 Generator stream op to its dedicated handler (OpRegistry.Generator.cs)

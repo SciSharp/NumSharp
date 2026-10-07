@@ -214,11 +214,22 @@ namespace NumSharp.Tests.Fuzz
         /// <summary>
         ///     The original (dtype, shape, bytes) comparison, factored out so tuple slots reuse it
         ///     verbatim. <paramref name="slot"/> labels which tuple slot is being compared (null
-        ///     for a plain result) so a failure names it.
+        ///     for a plain result) so a failure names it. When the expectation carries a memory facet
+        ///     (<see cref="FuzzCorpus.Expected.Mem"/>, the view-flags tiers) it is compared too, against
+        ///     <paramref name="operands"/>, once dtype and shape agree.
         /// </summary>
+        /// <param name="c">The corpus case.</param>
+        /// <param name="result">NumSharp's result (one array, or one tuple slot).</param>
+        /// <param name="exp">NumPy's expectation for it.</param>
+        /// <param name="slot">The tuple-slot label, or null for a plain result.</param>
+        /// <param name="failures">Receives one line per unexcused divergence.</param>
+        /// <param name="documented">Counts the registry-excused divergences by reason.</param>
+        /// <param name="operands">The case's reconstructed operands, for the facet's shares / same relations; null
+        ///     when the caller has none (the facet is then skipped — only the view-flags tiers record one, and their
+        ///     replay always passes the operands).</param>
         private static void CompareArray(
             FuzzCorpus.Case c, NDArray result, FuzzCorpus.Expected exp, string slot,
-            List<string> failures, Dictionary<string, int> documented)
+            List<string> failures, Dictionary<string, int> documented, NDArray[] operands = null)
         {
             var empty = Array.Empty<BitDiff.Diff>();
             string at = slot == null ? "" : $" {slot}";
@@ -281,6 +292,16 @@ namespace NumSharp.Tests.Fuzz
                 else failures.Add($"{c.Id} [{c.Layout}]{at}: result shape [{string.Join(",", result.Shape.dimensions)}] " +
                                   $"!= NumPy [{string.Join(",", exp.Shape)}]");
                 return;
+            }
+
+            // The memory facet (view-flags tiers): checked once dtype and shape agree, reported on its own line so a
+            // value divergence of the same case stays visible beside it. No registry branch excuses a facet: the
+            // tiers that record one are held to zero excuses.
+            if (exp.Mem != null && operands != null)
+            {
+                string mem = CompareMem(result, exp.Mem, operands);
+                if (mem != null)
+                    failures.Add($"{c.Id} [{c.Layout}]{at}: memory facet: {mem}");
             }
 
             var actual = FuzzCorpus.ResultBytes(result);
@@ -442,7 +463,116 @@ namespace NumSharp.Tests.Fuzz
             }
 
             for (int i = 0; i < want.Length; i++)
-                CompareArray(c, got[i], want[i], $"slot[{i}]", failures, documented);
+                CompareArray(c, got[i], want[i], $"slot[{i}]", failures, documented, operands);
+
+            // The view-flags tiers also record which slots share memory and which are one object (np.nonzero's columns
+            // of one buffer, np.diag_indices' repeated slot, np.meshgrid's views): NumSharp's slots must pair the same way.
+            if (c.Expected.Xshare != null || c.Expected.Xsame != null)
+            {
+                string cross = CompareCrossSlots(got, c.Expected.Xshare, c.Expected.Xsame);
+                if (cross != null)
+                    failures.Add($"{c.Id} [{c.Layout}]: tuple slots: {cross}");
+            }
+        }
+
+        // ---- the memory facet (view-flags tiers) -------------------------------------------------
+
+        /// <summary>The flag names in <see cref="FuzzCorpus.MemFacet.Flags"/> order, for failure lines.</summary>
+        private static readonly string[] MemFlagNames = { "C_CONTIGUOUS", "F_CONTIGUOUS", "OWNDATA", "WRITEABLE", "ALIGNED" };
+
+        /// <summary>
+        ///     Compares NumSharp's result against NumPy's memory facet: the five flags, the normalized byte strides, and
+        ///     per operand whether the result shares its memory and whether it IS the operand.
+        /// </summary>
+        /// <param name="result">NumSharp's result array.</param>
+        /// <param name="want">NumPy's facet.</param>
+        /// <param name="operands">The case's operands, in descriptor order (the facet's per-operand lists follow it).</param>
+        /// <returns>Null when every part agrees; otherwise one line naming each part that differs.</returns>
+        /// <remarks>
+        ///     Strides are normalized on NumSharp's side exactly as the generator normalized NumPy's: an axis of extent
+        ///     0 or 1, and every axis of an empty array, reads 0. <c>np.shares_memory</c> is NumSharp's own exact solver
+        ///     (<c>max_work = -1</c>), NumPy's answer being exact too; an empty array shares memory with nothing on either
+        ///     side. Identity is <see cref="object.ReferenceEquals"/>, NumPy's <c>is</c>.
+        /// </remarks>
+        private static string CompareMem(NDArray result, FuzzCorpus.MemFacet want, NDArray[] operands)
+        {
+            var parts = new List<string>();
+            var f = result.flags;
+            bool[] got = { f.c_contiguous, f.f_contiguous, f.owndata, f.writeable, f.aligned };
+            if (want.Flags != null)
+                for (int i = 0; i < Math.Min(got.Length, want.Flags.Length); i++)
+                    if (got[i] != want.Flags[i])
+                        parts.Add($"{MemFlagNames[i]} {got[i]} (NumPy {want.Flags[i]})");
+
+            if (want.Strides != null)
+            {
+                long[] dims = result.Shape.dimensions;
+                long[] bytes = result.strides;
+                bool empty = result.size == 0;
+                var norm = new long[dims.Length];
+                for (int i = 0; i < dims.Length; i++)
+                    norm[i] = empty || dims[i] <= 1 ? 0 : bytes[i];
+                if (!norm.SequenceEqual(want.Strides))
+                    parts.Add($"strides ({string.Join(",", norm)}) (NumPy ({string.Join(",", want.Strides)}))");
+            }
+
+            int n = Math.Min(operands.Length, Math.Max(want.Shares?.Length ?? 0, want.Same?.Length ?? 0));
+            for (int i = 0; i < n; i++)
+            {
+                var op = operands[i];
+                if (want.Same != null && i < want.Same.Length)
+                {
+                    bool same = ReferenceEquals(result, op);
+                    if (same != want.Same[i])
+                        parts.Add(want.Same[i]
+                            ? $"returned a new object, NumPy returns operand {i} itself"
+                            : $"returned operand {i} itself, NumPy returns a new object");
+                }
+                if (want.Shares != null && i < want.Shares.Length && op is not null)
+                {
+                    bool shares = np.shares_memory(result, op);
+                    if (shares != want.Shares[i])
+                        parts.Add(want.Shares[i]
+                            ? $"a COPY of operand {i}, NumPy returns a VIEW of it"
+                            : $"a VIEW of operand {i}, NumPy returns memory of its own");
+                }
+            }
+            return parts.Count == 0 ? null : string.Join("; ", parts);
+        }
+
+        /// <summary>
+        ///     Compares which slots of a tuple result share memory and which are one object, against NumPy's pairs.
+        /// </summary>
+        /// <param name="slots">NumSharp's tuple slots.</param>
+        /// <param name="wantShare">NumPy's sharing pairs (null when not recorded).</param>
+        /// <param name="wantSame">NumPy's identity pairs (null when not recorded).</param>
+        /// <returns>Null when both pair sets agree; otherwise a line naming the differing pairs.</returns>
+        private static string CompareCrossSlots(NDArray[] slots, int[][] wantShare, int[][] wantSame)
+        {
+            var gotShare = new HashSet<(int, int)>();
+            var gotSame = new HashSet<(int, int)>();
+            for (int i = 0; i < slots.Length; i++)
+                for (int j = i + 1; j < slots.Length; j++)
+                {
+                    if (ReferenceEquals(slots[i], slots[j]))
+                        gotSame.Add((i, j));
+                    if (slots[i] is not null && slots[j] is not null && np.shares_memory(slots[i], slots[j]))
+                        gotShare.Add((i, j));
+                }
+
+            var parts = new List<string>();
+            void Diff(string what, HashSet<(int, int)> got, int[][] want)
+            {
+                if (want == null)
+                    return;
+                var w = new HashSet<(int, int)>(want.Select(p => (p[0], p[1])));
+                if (!got.SetEquals(w))
+                    parts.Add($"{what} pairs {{{string.Join(" ", got.OrderBy(x => x).Select(x => $"{x.Item1}-{x.Item2}"))}}} " +
+                              $"(NumPy {{{string.Join(" ", w.OrderBy(x => x).Select(x => $"{x.Item1}-{x.Item2}"))}}})");
+            }
+            Diff("shared-memory", gotShare, wantShare);
+            Diff("same-object", gotSame, wantSame);
+            return parts.Count == 0 ? null : string.Join("; ", parts);
         }
 
         /// <summary>

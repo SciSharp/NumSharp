@@ -115,7 +115,7 @@ namespace NumSharp.Tests.Fuzz
             {
                 string line = $"{kv.Value.count}x {kv.Key.op} [{kv.Key.layout}] escaped={kv.Key.escaped}" +
                               $"  e.g. {kv.Value.file}/{kv.Value.sampleId}";
-                string reason = KnownEscapes.Classify(kv.Key.op, kv.Key.escaped);
+                string reason = KnownEscapes.Classify(kv.Key.op, kv.Key.layout, kv.Key.escaped);
                 if (reason != null)
                 {
                     documentedCases += kv.Value.count;
@@ -453,18 +453,61 @@ namespace NumSharp.Tests.Fuzz
                 //   * get_state — the harness discards a warm-up random_sample(draws); now disposed in
                 //     OpRegistry.
                 //
-                // The registry is now EMPTY: every op is gated at zero by Corpus_AllOps
-                // (KnownEscapes.Classify returns null for all, so any surviving escape fails as an
-                // undocumented NEW leak).
+                // The registry was then EMPTY: every op was gated at zero by Corpus_AllOps.
+                //
+                // FOUND BY THE ARRAY-OBJECT ORACLE (2026-10-07, gen_viewflags_oracle.py): its tiers call APIs in
+                // layouts and parameter combinations no earlier tier reached, and the sweep found these
+                // undisposed intermediates in them. They are recorded, NOT fixed (the change that added the tiers
+                // only adds coverage). The vehicle keys' families are labelled op:fn (FamilyOp), so each entry
+                // names one API; "op [layout]" entries name one family. Probed through public calls
+                // (escaped = pooled buffers left out of the pool after the result is disposed):
+                //   * ndarray.astype(dtype, copy, order) with an order that differs from the input's layout (a C
+                //     input with order='F', an F / transposed input with order='C', a permuted input with 'C' or
+                //     'F'), and the 0-d / broadcast inputs: 1 per call.
+                ["viewflags:ndarray.astype"] = 1,
+                //   * np.ascontiguousarray(x, dtype) / np.asfortranarray(x, dtype) when the dtype changes AND the
+                //     layout must too (an F / transposed / permuted input to C, a C input to F; a 0-d input): 1.
+                ["viewflags:ascontiguousarray"] = 1,
+                ["viewflags:asfortranarray"] = 1,
+                //   * np.eye(N, M, k, order='F'): 1 (order='C' is clean).
+                ["viewflags:eye"] = 1,
+                //   * np.nan_to_num(x, copy=False) of a non-C-contiguous input (F, transposed, permuted, stepped,
+                //     reversed) or of a C-contiguous view at a non-zero offset: 3.
+                ["viewflags:nan_to_num"] = 3,
+                //   * np.argpartition / ndarray.argpartition of a non-C-contiguous input (F, transposed, permuted,
+                //     stepped, reversed, broadcast): 1.
+                ["viewflags:argpartition"] = 1,
+                ["viewflags:ndarray.argpartition"] = 1,
+                //   * np.pad of an empty (0, 3) array: 1. np.roll of it along axis 1: 2.
+                ["viewflags:pad [own_empty_2d]"] = 1,
+                ["viewflags:roll [own_empty_2d]"] = 2,
+                //   * With NumSharp.Interop.OpenBLAS installed (the backend sweep): np.inner / ndarray.dot with an
+                //     operand BLAS cannot read in place (stepped, reversed, broadcast) leave the backend's copy of
+                //     it undisposed — 1 per copy, so 2 when both operands need one. The managed path is clean.
+                ["inner [b=step]"] = 1,
+                ["inner [b=rev]"] = 1,
+                ["viewflags:inner"] = 2,
+                ["viewflags:ndarray.dot"] = 1,
             };
 
             public static bool Contains(string op) => CeilingByOp.ContainsKey(op);
 
-            public static string Classify(string op, long escaped)
-                => CeilingByOp.TryGetValue(op, out var ceiling) && escaped > 0 && escaped <= ceiling
-                    ? $"pre-existing leak at gate landing (2026-08-26), ceiling {ceiling}/call — " +
-                      "still in the KnownEscapes registry (fix and remove its entry)"
+            /// <summary>
+            ///     Classifies one escape family against the registry: an entry for <c>"op [layout]"</c> (one family) wins
+            ///     over an entry for <c>op</c> (every family of the op).
+            /// </summary>
+            /// <param name="op">The family's op label (<c>op:fn</c> for the array-object oracle's vehicle keys).</param>
+            /// <param name="layout">The family's layout label (an error-path family ends in <c>" [error path]"</c>).</param>
+            /// <param name="escaped">Buffers escaped per call.</param>
+            /// <returns>The documented reason, or null when the family is undocumented or leaks above its ceiling.</returns>
+            public static string Classify(string op, string layout, long escaped)
+            {
+                if (!CeilingByOp.TryGetValue($"{op} [{layout}]", out var ceiling) && !CeilingByOp.TryGetValue(op, out ceiling))
+                    return null;
+                return escaped > 0 && escaped <= ceiling
+                    ? $"known leak, ceiling {ceiling}/call — still in the KnownEscapes registry (fix and remove its entry)"
                     : null;
+            }
         }
 
         // ---------------------------------------------------------------------------------
@@ -655,9 +698,16 @@ namespace NumSharp.Tests.Fuzz
             /// <param name="errorPath">True when the case is an error path (NumPy raised).</param>
             /// <param name="sampleId">The case id, kept for the first member of each family.</param>
             /// <param name="file">The corpus file, kept with the sample id.</param>
+            /// <param name="family">The escape / bypass family label when it must be finer than <paramref name="op"/>:
+            ///     the array-object oracle's vehicle keys (<c>viewflags</c> / <c>outflags</c> / <c>shapearg</c>)
+            ///     multiplex every API they gate through one op key, so their families are labelled
+            ///     <c>op:fn</c> (<see cref="FamilyOp"/>) — a leak is then pinned to ONE API, and a
+            ///     <see cref="KnownEscapes"/> entry cannot excuse a future leak in another. Null keeps
+            ///     <paramref name="op"/>; the coverage tallies always use <paramref name="op"/>.</param>
             public void Record(string op, string coverageKey, string layout, ScopeAudit.Traffic traffic,
-                               long freshBytes, bool errorPath, string sampleId, string file)
+                               long freshBytes, bool errorPath, string sampleId, string file, string family = null)
             {
+                string familyOp = family ?? op;
                 if (errorPath)
                 {
                     ErrorPaths++;
@@ -680,7 +730,7 @@ namespace NumSharp.Tests.Fuzz
                 long escaped = traffic.Escaped;
                 if (escaped != 0)
                 {
-                    var key = (op, layout, escaped);
+                    var key = (familyOp, layout, escaped);
                     Groups[key] = Groups.TryGetValue(key, out var g)
                         ? (g.count + 1, g.sampleId, g.file)
                         : (1, sampleId, file);
@@ -692,7 +742,7 @@ namespace NumSharp.Tests.Fuzz
                     // ZERO traffic — the buffer was allocated AND freed outside it, paying a
                     // cold NativeMemory alloc + first-touch faults on every call with no
                     // warm reuse (the allocator tax the pool exists to remove).
-                    var key = (op, layout);
+                    var key = (familyOp, layout);
                     Bypasses[key] = Bypasses.TryGetValue(key, out var b)
                         ? (b.count + 1, b.sampleId, b.file, b.sampleBytes)
                         : (1, sampleId, file, freshBytes);
@@ -754,6 +804,21 @@ namespace NumSharp.Tests.Fuzz
                 return "random_api:" + member.GetString();
             return null;
         }
+
+        /// <summary>
+        ///     The escape-family label of an ordinary case: <c>op:fn</c> for the array-object oracle's vehicle keys
+        ///     (<c>viewflags</c>, <c>outflags</c>, <c>shapearg</c> — one op key for every API they gate, the API in
+        ///     <c>params.fn</c>), the op key itself for every other op.
+        /// </summary>
+        /// <param name="c">The corpus case.</param>
+        /// <returns>The family label the sweep groups escapes and bypasses by.</returns>
+        /// <remarks>Without it a leak in <c>np.eye</c> and one in <c>np.ascontiguousarray</c> would share the family
+        ///     <c>viewflags</c>, and a <see cref="KnownEscapes"/> entry for one would excuse the other.</remarks>
+        private static string FamilyOp(FuzzCorpus.Case c)
+            => c.Op is "viewflags" or "outflags" or "shapearg"
+               && c.Params != null && c.Params.TryGetValue("fn", out var fn)
+                ? c.Op + ":" + fn.GetString()
+                : c.Op;
 
         /// <summary>
         ///     Replays one ORDINARY op tier (the <see cref="FuzzCorpus.Case"/> schema through
@@ -836,7 +901,8 @@ namespace NumSharp.Tests.Fuzz
                             acc.Inconclusive(c.Op, errorPath: true);
                             continue;
                         }
-                        acc.Record(c.Op, null, c.Layout ?? "?", errTraffic.Value, 0, errorPath: true, c.Id, file);
+                        acc.Record(c.Op, null, c.Layout ?? "?", errTraffic.Value, 0, errorPath: true, c.Id, file,
+                                   FamilyOp(c));
                         continue;
                     }
 
@@ -881,7 +947,8 @@ namespace NumSharp.Tests.Fuzz
                     }
 
                     acc.Ordinary++;
-                    acc.Record(c.Op, CoverageKey(c), c.Layout ?? "?", traffic.Value, freshBytes, errorPath: false, c.Id, file);
+                    acc.Record(c.Op, CoverageKey(c), c.Layout ?? "?", traffic.Value, freshBytes, errorPath: false, c.Id, file,
+                               FamilyOp(c));
                 }
                 finally
                 {

@@ -45,6 +45,13 @@ namespace NumSharp.Tests.Fuzz
             ///     something" assertion; cases that carry one are held to NumPy's actual message.
             /// </summary>
             public ErrorInfo Error { get; set; }
+
+            /// <summary>
+            ///     The documented gap a CARVED case pins (an id of <c>gen_viewflags_oracle.GAPS</c>), present only on the
+            ///     cases of a <c>gaps/*_gaps.jsonl</c> file: NumSharp is known to differ from NumPy there, so the case is
+            ///     kept out of the gate and replayed by an <c>[OpenBugs]</c> test that names the gap. Null everywhere else.
+            /// </summary>
+            public string Gap { get; set; }
         }
 
         /// <summary>NumPy's exception: the Python class name and <c>str(e)</c>, verbatim.</summary>
@@ -81,6 +88,44 @@ namespace NumSharp.Tests.Fuzz
             ///     means writeable — every pre-flag corpus row deserializes exactly as before.
             /// </summary>
             public bool? Writeable { get; set; }
+
+            /// <summary>
+            ///     True when NumPy's operand OWNED its buffer (<c>base is None</c>), emitted by
+            ///     <c>gen_viewflags_oracle._desc</c> only. <see cref="Buffer"/> is then the owner's MEMORY-order bytes and
+            ///     (<see cref="Strides"/>, <see cref="Offset"/>) its physical layout, so <see cref="Reconstruct"/> builds an
+            ///     owning array over them (OWNDATA set, no base) instead of a view of a 1-D base. Without this an identity
+            ///     result (<c>np.asarray(a) is a</c>) reported OWNDATA false where NumPy reports true — a harness artifact,
+            ///     not NumSharp's. Absent (null) or false means a view, which is how every older corpus row deserializes.
+            /// </summary>
+            public bool? Own { get; set; }
+        }
+
+        /// <summary>
+        ///     The memory facet of one result (<c>gen_viewflags_oracle._mem</c>): how the returned array relates to the
+        ///     operands and what its flags say — the part of a result its values cannot show.
+        /// </summary>
+        /// <remarks>
+        ///     <see cref="Strides"/> holds BYTE strides with every extent-1 axis and every axis of an empty result written
+        ///     as 0, on both sides of the comparison: NumPy assigns those per allocation path and no flag reads them. A
+        ///     NumPy SCALAR result (<see cref="Scalar"/>) carries the scalar's flags (read-only, owning) and no strides;
+        ///     NumSharp answers with a 0-d array, compared against those flags.
+        /// </remarks>
+        public sealed class MemFacet
+        {
+            /// <summary>[C_CONTIGUOUS, F_CONTIGUOUS, OWNDATA, WRITEABLE, ALIGNED], NumPy's <c>result.flags</c>.</summary>
+            public bool[] Flags { get; set; }
+
+            /// <summary>The result's byte strides, extent-1 axes and empty results zeroed (see the type remarks).</summary>
+            public long[] Strides { get; set; }
+
+            /// <summary>Per operand (descriptor order): <c>np.shares_memory(result, operand)</c>.</summary>
+            public bool[] Shares { get; set; }
+
+            /// <summary>Per operand (descriptor order): <c>result is operand</c> — NumPy returned the operand object itself.</summary>
+            public bool[] Same { get; set; }
+
+            /// <summary>True when NumPy returned a NumPy scalar (<c>np.generic</c>) rather than an ndarray.</summary>
+            public bool Scalar { get; set; }
         }
 
         /// <summary>
@@ -152,6 +197,26 @@ namespace NumSharp.Tests.Fuzz
 
             /// <summary>Per-slot results for kind=tuple / masked_tuple, in NumPy's tuple order.</summary>
             public Expected[] Slots { get; set; }
+
+            /// <summary>
+            ///     The result's memory facet (view / copy / identity against each operand, flags, strides), carried by the
+            ///     view-flags tiers (<c>gen_viewflags_oracle.py</c>) and compared by <c>FuzzCorpusTests.CompareMem</c>. Null
+            ///     on every other tier, which then compares values only.
+            /// </summary>
+            public MemFacet Mem { get; set; }
+
+            /// <summary>
+            ///     Tuple results of the view-flags tiers: the slot pairs <c>[i, j]</c> (i &lt; j) whose arrays share
+            ///     memory (<c>np.shares_memory</c>) — <c>np.nonzero</c>'s columns of ONE buffer, <c>np.meshgrid</c>'s
+            ///     views. Null when the tier does not record it.
+            /// </summary>
+            public int[][] Xshare { get; set; }
+
+            /// <summary>
+            ///     Tuple results of the view-flags tiers: the slot pairs <c>[i, j]</c> (i &lt; j) that are ONE object
+            ///     (<c>slot_i is slot_j</c>). Null when the tier does not record it.
+            /// </summary>
+            public int[][] Xsame { get; set; }
 
             /// <summary>
             ///     RANDOM-API corpus only (kind=random_api): NumPy's canonical observation of the call's result — a JSON
@@ -267,7 +332,14 @@ namespace NumSharp.Tests.Fuzz
             _ => throw new NotSupportedException($"NPTypeCode {tc} unsupported in SliceFromBytes")
         };
 
-        /// <summary>Reconstruct the exact operand NDArray the corpus case describes.</summary>
+        /// <summary>
+        ///     Reconstruct the exact operand NDArray the corpus case describes: a view of a 1-D base built from the
+        ///     buffer bytes, or — when <see cref="Operand.Own"/> is set — an owning array over those bytes with the
+        ///     described layout; then the descriptor's read-only flag.
+        /// </summary>
+        /// <param name="o">The operand descriptor.</param>
+        /// <returns>The operand array (a fresh owning array for an empty shape).</returns>
+        /// <exception cref="NotSupportedException">The descriptor names a dtype NumSharp has no type code for.</exception>
         public static NDArray Reconstruct(Operand o)
         {
             var tc = DtypeToTC(o.Dtype);
@@ -279,6 +351,15 @@ namespace NumSharp.Tests.Fuzz
 
             var bytes = FromHex(o.Buffer);
             var slice = SliceFromBytes(bytes, tc);                       // Count == bufferSize
+            if (o.Own == true)
+            {
+                // NumPy's operand OWNED its buffer: the bytes are its memory and (strides, offset) its physical layout,
+                // so the storage is built over the slice WITH that layout (UnmanagedStorage trusts it, NumPy's C-API
+                // contract) and the array gets no base — OWNDATA is set, exactly as for the NumPy operand. An owner is
+                // C- or F-contiguous at offset 0 by construction of the generator (_desc refuses anything else).
+                var ownShape = new Shape(o.Shape, o.Strides, o.Offset, o.BufferSize);
+                return ApplyWriteable(new NDArray(new UnmanagedStorage(slice, ownShape)), o);
+            }
             var baseShape = new Shape(new[] { o.BufferSize });          // 1-D contiguous, size == Count
             var storage = new UnmanagedStorage(slice, baseShape);
             var viewShape = new Shape(o.Shape, o.Strides, o.Offset, o.BufferSize); // operand view (alias, no checks)

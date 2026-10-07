@@ -378,13 +378,21 @@ class CommittedCorpusTests(unittest.TestCase):
             # tier. So the row is partly pinned, like np.fft.fft, and not "pinned" as a whole.
             self.assertGreater(normal.contracts - normal.portable, 0, "legacy normal's values are host-libm pinned")
             self.assertLessEqual(normal.portable, normal.errors, "only error contracts of normal are portable")
-        # "ndarray" is the constructor np.ndarray(shape, dtype, buffer, offset, strides, order) (ndarray_ctor.jsonl).
-        self.assertEqual({"get", "set", "ndarray.__len__", "ndarray"}, self.evidence("numpy.ndarray").keys)
+        # "ndarray" is the constructor np.ndarray(shape, dtype, buffer, offset, strides, order) (ndarray_ctor.jsonl);
+        # "viewflags:getitem" is the array-object oracle's a[key] (view_flags.jsonl), attached to the type as get is.
+        self.assertEqual({"get", "set", "ndarray.__len__", "ndarray", "viewflags:getitem"},
+                         self.evidence("numpy.ndarray").keys)
         self.assertEqual({"npy:header", "npy:npy"}, self.evidence("numpy.save").keys)
         self.assertEqual({"npy:npz:compressed"}, self.evidence("numpy.savez_compressed").keys)
         self.assertEqual({"flags:setflags"}, self.evidence("numpy.ndarray.setflags").keys)
         self.assertEqual({"evaluate"}, self.evidence("numsharp.np.evaluate").keys)
-        self.assertEqual("numpy.abs", self.evidence("numpy.absolute").via["id"])
+        # np.absolute borrowed np.abs's contracts through a reviewed alias until the array-object oracle
+        # (view_flags.jsonl / out_flags.jsonl) gated the spelling itself; a reviewed alias still lends evidence.
+        absolute = self.evidence("numpy.absolute")
+        self.assertIsNone(absolute.via, "numpy.absolute has direct contracts")
+        self.assertIn("viewflags:absolute", absolute.keys)
+        self.assertIn("outflags:absolute", absolute.keys)
+        self.assertEqual("numpy.vstack", self.evidence("numpy.row_stack").via["id"])
         # np.amax / np.amin were aliases of np.max / np.min until the minmax_kwargs tier (plan api-parameter-parity A4)
         # gated them directly through their own NumPy-shaped overloads.
         for row_id, fn in (("numpy.amax", "amax"), ("numpy.amin", "amin")):
@@ -413,7 +421,9 @@ class CommittedCorpusTests(unittest.TestCase):
                 self.assertIn(aliases[row_id]["via"], self.labels[canonical],
                               f"{row_id} must borrow from the row '{canonical}' resolves to")
                 checked += 1
-        self.assertGreater(checked, 30)
+        # A non-vacuity floor, not a target: an alias row the corpus gates directly is skipped above, so the count
+        # falls as tiers gate alias spellings themselves (the array-object oracle took it to 29 on 2026-10-07).
+        self.assertGreater(checked, 20)
 
 
 def _strings(value):

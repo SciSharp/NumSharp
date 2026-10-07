@@ -74,22 +74,27 @@ namespace NumSharp.Tests.Fuzz.RandomApi
                     // What a 0-d view at element 3 of a 20-element buffer looks like (internal constructor, no public route).
                     return new Shape(Array.Empty<long>(), Array.Empty<long>(), 3, 20);
                 case "stepped" when k >= 1:
-                    shape = ViewShape(() => np.zeros(new Shape(dims.Select(d => 2 * d).ToArray()))[Every("::2")]);
+                    shape = ViewShape(() => np.zeros(new Shape(dims.Select(d => 2 * d).ToArray())), b => b[Every("::2")]);
                     break;
                 case "offset stepped" when k >= 1:
-                    shape = ViewShape(() => np.zeros(new Shape(dims.Select(d => 2 * d + 1).ToArray()))[Every("1::2")]);
+                    shape = ViewShape(() => np.zeros(new Shape(dims.Select(d => 2 * d + 1).ToArray())), b => b[Every("1::2")]);
                     break;
                 case "reversed" when k >= 1:
-                    shape = ViewShape(() => np.zeros(new Shape(dims))[Every("::-1")]);
+                    shape = ViewShape(() => np.zeros(new Shape(dims)), b => b[Every("::-1")]);
                     break;
                 case "broadcast" when k >= 1:
-                    shape = ViewShape(() => np.broadcast_to(np.zeros(new Shape(1L)), new Shape(dims)));
+                    shape = ViewShape(() => np.zeros(new Shape(1L)), b => np.broadcast_to(b, new Shape(dims)));
                     break;
                 case "contiguous slice" when k >= 1:
-                    shape = ViewShape(() => np.zeros(new Shape(size + 3))[$":{size}"].reshape(dims));
+                    shape = ViewShape(() => np.zeros(new Shape(size + 3)), b =>
+                    {
+                        // The slice is an intermediate view: the reshape takes its own reference on the storage.
+                        using var slice = b[$":{size}"];
+                        return slice.reshape(dims);
+                    });
                     break;
                 case "transposed" when k >= 2:
-                    shape = ViewShape(() => np.zeros(new Shape(Enumerable.Reverse(dims).ToArray())).T);
+                    shape = ViewShape(() => np.zeros(new Shape(Enumerable.Reverse(dims).ToArray())), b => b.T);
                     break;
                 case "permuted" when k >= 3:
                 {
@@ -97,7 +102,7 @@ namespace NumSharp.Tests.Fuzz.RandomApi
                     (swapped[0], swapped[1]) = (swapped[1], swapped[0]);
                     var perm = Enumerable.Range(0, k).ToArray();
                     (perm[0], perm[1]) = (perm[1], perm[0]);
-                    shape = ViewShape(() => np.transpose(np.zeros(new Shape(swapped)), perm));
+                    shape = ViewShape(() => np.zeros(new Shape(swapped)), b => np.transpose(b, perm));
                     break;
                 }
                 default:
@@ -110,12 +115,23 @@ namespace NumSharp.Tests.Fuzz.RandomApi
             return shape;
         }
 
-        /// <summary>The shape of a view built by <paramref name="make"/>, the view disposed.</summary>
-        /// <param name="make">Builds the view.</param>
+        /// <summary>
+        ///     The shape of a view of a fresh source array, both disposed before returning: a <see cref="Shape"/> holds no
+        ///     storage, so neither array has to outlive the call.
+        /// </summary>
+        /// <param name="makeSource">Allocates the source array the view is taken of.</param>
+        /// <param name="makeView">Builds the view of the source (it must dispose any intermediate view it creates).</param>
         /// <returns>The view's shape.</returns>
-        private static Shape ViewShape(Func<NDArray> make)
+        /// <remarks>
+        ///     The source is disposed too, not only the view: the array-object oracle's leak sweep
+        ///     (UndisposedIntermediateTests) replays every <c>shapearg</c> case with a <c>view:&lt;layout&gt;</c> form, and
+        ///     an undisposed source held one pooled buffer out of the pool until the finalizer ran — counted against the
+        ///     API under test although the harness leaked it.
+        /// </remarks>
+        private static Shape ViewShape(Func<NDArray> makeSource, Func<NDArray, NDArray> makeView)
         {
-            using var view = make();
+            using var source = makeSource();
+            using var view = makeView(source);
             return view.Shape;
         }
 

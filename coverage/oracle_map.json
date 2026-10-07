@@ -90,24 +90,16 @@
       "round_": {"ids": ["numpy.round"], "note": "np.round(a, decimals); NumPy 2 removed np.round_, NumSharp keeps the spelling."},
       "std_ddof": {"ids": ["numpy.std"], "note": "np.std with ddof."},
       "var_ddof": {"ids": ["numpy.var"], "note": "np.var with ddof."},
-      "unravel_index_all": {"ids": ["numpy.unravel_index"], "note": "Every output array of np.unravel_index."}
+      "unravel_index_all": {"ids": ["numpy.unravel_index"], "note": "Every output array of np.unravel_index."},
+      "viewflags": {"param": "fn", "ids": ["numpy.{value}"], "values": {"getitem": ["numpy.ndarray"], "where1": ["numpy.where"], "where3": ["numpy.where"]}, "note": "The array-object oracle (gen_viewflags_oracle.py, view_flags.jsonl): the object each API returns (params.fn) -- a view, a copy, the operand itself, or a fresh array -- and its memory facet (C / F / OWNDATA / WRITEABLE / ALIGNED flags, byte strides, shares-memory and identity per operand; for a tuple which slots share memory or are one object) over 21 source layouts. getitem is ndarray.__getitem__ (attached to the ndarray type, as for the index oracle's get); where1 / where3 are np.where's one- and three-argument forms."},
+      "outflags": {"param": "fn", "ids": ["numpy.{value}"], "values": {"fft": ["numpy.fft.fft"], "ifft": ["numpy.fft.ifft"], "rfft": ["numpy.fft.rfft"], "irfft": ["numpy.fft.irfft"], "hfft": ["numpy.fft.hfft"], "ihfft": ["numpy.fft.ihfft"], "fft2": ["numpy.fft.fft2"], "ifft2": ["numpy.fft.ifft2"], "fftn": ["numpy.fft.fftn"], "ifftn": ["numpy.fft.ifftn"], "multi_dot": ["numpy.linalg.multi_dot"]}, "note": "The out= object oracle (gen_viewflags_oracle.py, out_flags.jsonl): f(..., out=o) over every out-capable API (params.fn: every ufunc, the reductions and scans, the products, the FFT family, the ndarray methods) with out arrays of six layouts (C / F owners, an offset view, a stepped view, a transposed view, a reversed view): the returned object must BE o (identity), the slots of o's whole base buffer the call did not write keep their prior contents, and a refused out is NumPy's verbatim error. The FFT names map to np.fft (the bare fft would hit the module row)."},
+      "shapearg": {"param": "fn", "ids": ["numpy.{value}"], "values": {"indices_sparse": ["numpy.indices"]}, "note": "The shape-argument oracle (gen_viewflags_oracle.py, shape_args.jsonl): every shape-taking API (params.fn) called with the same dims in each C# form (Shape, long[], int[], int, and a view's Shape of every view layout -- the class of the view-Shape allocation overrun), recording the result's values and memory facet and NumPy's refusals of invalid dims; indices_sparse is np.indices(sparse=True)."}
     }
   },
   "aliases": {
     "note": "Rows with no direct contracts whose NumSharp member is a reviewed pure delegation of a row that has them. Mirrors test/NumSharp.Tests.Oracle/Fuzz/OracleSurfaceCoverageTests.cs (EquivalentAliases, NdarrayAliases, MaAliases) plus the np.linalg Array-API forms that delegate verbatim in BOTH NumPy (numpy/linalg/_linalg.py) and NumSharp (LinearAlgebra/linalg/np.linalg.arrayapi.cs). np.linalg.trace/diagonal/outer/cross are NOT here: their contracts differ from the np.* forms (last-two axes, 1-D and 3-vector validation).",
-    "numpy.absolute": {"via": "numpy.abs", "reason": "np.absolute is np.abs in NumPy; NumSharp's absolute delegates to abs."},
-    "numpy.around": {"via": "numpy.round", "reason": "np.around delegates to np.round."},
-    "numpy.bitwise_not": {"via": "numpy.invert", "reason": "np.bitwise_not is np.invert in NumPy."},
-    "numpy.concat": {"via": "numpy.concatenate", "reason": "np.concat is the Array-API alias of np.concatenate."},
-    "numpy.degrees": {"via": "numpy.rad2deg", "reason": "np.degrees computes rad2deg."},
-    "numpy.radians": {"via": "numpy.deg2rad", "reason": "np.radians computes deg2rad."},
-    "numpy.fix": {"via": "numpy.trunc", "reason": "np.fix delegates verbatim to np.trunc (numpy/lib/_ufunclike_impl.py)."},
     "numpy.row_stack": {"via": "numpy.vstack", "reason": "NumPy 2.x row_stack is vstack plus a DeprecationWarning; NumSharp credits it to np.vstack."},
-    "numpy.remainder": {"via": "numpy.mod", "reason": "np.remainder is np.mod in NumPy."},
-    "numpy.true_divide": {"via": "numpy.divide", "reason": "np.true_divide is np.divide in NumPy."},
     "numsharp.np.common_type_code": {"via": "numpy.common_type", "reason": "NumSharp-only NPTypeCode twin of np.common_type."},
-    "numpy.ndarray.conjugate": {"via": "numpy.ndarray.conj", "reason": "ndarray.conjugate and ndarray.conj are the same method."},
-    "numpy.ndarray.argpartition": {"via": "numpy.argpartition", "reason": "The instance spelling delegates to np.argpartition; the corpus pins the derived kth-values."},
     "numpy.ndarray.partition": {"via": "numpy.partition", "reason": "The instance spelling delegates to np.partition."},
     "numsharp.ndarray.amax": {"via": "numpy.ndarray.max", "reason": "NumSharp-only instance alias of ndarray.max."},
     "numsharp.ndarray.amin": {"via": "numpy.ndarray.min", "reason": "NumSharp-only instance alias of ndarray.min."},

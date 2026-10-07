@@ -37,6 +37,13 @@ namespace NumSharp.Tests.Fuzz
                 case "evaluate":
                     return EvaluateFromCorpus(p, ops);
 
+                // The array-OBJECT oracle (gen_viewflags_oracle.py, OpRegistry.ViewFlags.cs): the API params.fn names,
+                // its result returned untouched so its memory facet (flags, strides, view / copy / identity) is NumSharp's.
+                case "viewflags":
+                    return ApplyViewFlags(p, ops);
+                case "shapearg":
+                    return ApplyShapeArg(p, ops);
+
                 // Binary arithmetic (NEP50 promotion). NumPy is the oracle for the result dtype.
                 // add / multiply also honour params.dtype, NumPy's dtype= keyword: it selects the LOOP,
                 // so both inputs are cast into it. The nan_order tier uses it to gate which NaN that

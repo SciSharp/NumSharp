@@ -197,6 +197,15 @@ namespace NumSharp.Tests.Fuzz
                 case "evaluate":
                     return EvaluateOutFromCorpus(p, ops);
 
+                // The array-OBJECT oracle's tuple results (OpRegistry.ViewFlags.cs): a view-flags API returning a
+                // tuple, an out= call ([returned, whole out base buffer]), and np.indices(sparse=True) by shape form.
+                case "viewflags":
+                    return ApplyViewFlagsTuple(p, ops);
+                case "outflags":
+                    return ApplyOutFlags(p, ops);
+                case "shapearg":
+                    return ApplyShapeArgTuple(p, ops);
+
                 // np.clip as a ufunc call: [returned] or [returned, whole out base buffer] (OpRegistry.ClipUfunc.cs).
                 case "clip_ufunc":
                     return ClipUfuncFromCorpus(p, ops);

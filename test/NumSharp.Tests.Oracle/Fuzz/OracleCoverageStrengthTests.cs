@@ -162,6 +162,10 @@ namespace NumSharp.Tests.Fuzz
             ["nditer_values"] = "iteration-ORDER protocol: the value stream's ORDER is dtype-independent",
             ["ndarray.getfield"] = "dtype-window accessor: complex128->float64 offsets are the canonical NumPy use (same-size reinterprets ride ndarray.view)",
             ["unique_values"] = "float lanes only: int/complex unique_values is NumPy-hash-order divergent [Misaligned]; the sorted twins gate those",
+
+            // The array-object oracle's shape-argument vehicle: its axis is the C# FORM of one shape (Shape, long[],
+            // int[], int, a view's Shape of every view layout), not the dtype.
+            ["shapearg"] = "shape-form axis: float64 / int32 (the creators' dtype parameter) and int64 (the operand of the shape-taking methods) only carry the call",
         };
 
         /// <summary>

@@ -332,6 +332,14 @@ namespace NumSharp.Tests.Fuzz
             // order) is held to ZERO excuses, its error cases (valueclass "error") included — hence the op test.
             if (c.Op == "copyto_full")
                 return null;
+            // The array-OBJECT oracle (gen_viewflags_oracle.py: view_flags / out_flags / shape_args / array_args) is held
+            // to ZERO excuses: its values are small integers every dtype holds exactly, so no rounding or summation-order
+            // branch below has anything legitimate to excuse there, and a blanket branch keyed on op names (the "unary
+            // ~ULP" one fires for any single-operand case) would otherwise hide a wrong element read through a view.
+            // Its error cases are NumPy refusals of a shape form or an out= layout and are held verbatim too. The cells
+            // NumSharp gets wrong are carved by the generator (_gap_of) and replayed under [OpenBugs].
+            if (c.Op is "viewflags" or "outflags" or "shapearg" || c.Valueclass == "arrayarg")
+                return null;
             // power_fast.jsonl (np.power's float loops as NumPy's DOUBLE_power / FLOAT_power — the zero-exponent-step fast
             // path exactly where NumPy's calls take it — float16's powf, float_power's plain pow, power's errors; plan
             // api-parameter-parity X13) is held to ZERO excuses, its error cases included: the "unary ~ULP" and power

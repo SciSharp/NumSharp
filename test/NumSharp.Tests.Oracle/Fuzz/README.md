@@ -305,6 +305,7 @@ python test/oracle/gen_oracle.py polyalgebra      # np.polynomial.* series algeb
 python test/oracle/gen_oracle.py polyvander       # np.polynomial.* Vandermonde family ({p}vander / {p}vander2d / {p}vander3d)
 python test/oracle/gen_oracle.py polyroots        # np.polynomial.* companion / roots (+ the host-pinned polyroots_parity tier; needs OPENBLAS_NUM_THREADS=1)
 python test/oracle/gen_index_oracle.py            # the four index_* corpora (seed pinned 20240626)
+python test/oracle/gen_viewflags_oracle.py        # the array-object oracle: view_flags / out_flags / shape_args / array_args + corpus/gaps/ (carve: _gap_of)
 python test/oracle/gen_nan_oracle.py              # nan.jsonl — NaN parity grid (standalone; complex bit-exact)
 python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
 dotnet run test/oracle/gen_decimal_oracle.cs      # Decimal tiers (independent C# System.Decimal oracle)
@@ -667,6 +668,7 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | `gen_nanmean` section B, "pinned row longer than the buffer" | 5 cells: an inexact nanmean with `dtype=` (a cast loop) along the axis innermost in memory under `np.setbufsize(16 / 32)`, rows longer than the buffer (np.sum's X6 residual over the K-order copy) | `OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills` |
 | `gen_ma_oracle._mv_carved` (`ma_meanvar`), "finding5" | 38 cells: ma.mean / var / std / anom along an axis of a 2-D view with a reversed axis, without a mask or with an all-False one (`filled(0)` is the view itself then), whose mean's sum is not order-free (`_mv_order_free`: the elements as multiples of their lowest set bit, every partial sum exact) | `OpenBugsReductionTests.Sum_ReversedViewAxis_WalksTheLogicalOrder` |
 | `gen_ma_oracle._mv_carved` (`ma_meanvar`), "broadcast" | 127 cells: the same functions over a broadcast operand reduced flat or along its stride-0 axis, without a mask or with an all-False one, unless order-free (plan finding 10 and X12). Replaying the tier uncarved (`gen_ma_oracle.py meanvar --uncarved <path>`), 64 of the 165 carved cells differ, every one of them float32 / float64 / complex128 on those layouts | `OpenBugsReductionTests.Sum_BroadcastOperand_Flat_IsNumPysCallSchedule`, `Sum_BroadcastOperand_Axis_IsNumPysOrder` |
+| `gen_viewflags_oracle._gap_of` (view_flags / out_flags / shape_args / array_args) | 717 cells under 47 gap ids, written to `corpus/gaps/<tier>_gaps.jsonl` instead of the gate: the returned object's flags / strides / view-copy-identity facet where NumSharp differs (the other VF ids, VS01, VO01, VA02, VA04), and silent WRONG VALUES from C-contiguous views at a non-zero offset (VA01 searchsorted, VA03 where, VA05 ldexp, VF22 a[:, idx] throws, VF30 nansum / nanprod, VF39 repeat, VF40 unique + the set routines). The carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests` `*_KnownGaps` (per-gap open counts), `OpenBugs.ViewFlags.cs` (18 public-call repros) |
 | `gen_random_parity` carve list | `multivariate_normal` only: byte-identical only through a LAPACK backend's `gesdd` (the managed Jacobi SVD flips a singular vector's sign). The other seven samplers (gamma shape<1, f, pareto, standard_cauchy, binomial, negative_binomial, multinomial) were uncarved 2026-09-25 — legacy-distributions.c ports — and every sampler is also covered by the `random_api` tiers | `OpenBugsRandom.RandomParity_MultivariateNormal_Seed42_ShouldMatchNumPy` (the seven former pins are ordinary tests) |
 
 **FIXED on this branch or before it** (classifier branch/carve removed — the matrix now verifies
@@ -1242,6 +1244,76 @@ where= routes called pow for a 0-d exponent; a `(1,) ** (1,)` call took the fast
 pow; a column exponent never took it; float16 took the fast path or a double bridge; float_power took np.power's fast
 path. **Planted bugs:** 13 edits to the step decision, the exponent handling and the kernels. The tier kills all 13;
 before section I, two survived (plan finding 27).
+
+### The array-object oracle (`view_flags` / `out_flags` / `shape_args` / `array_args` tiers) — 2026-10-07
+
+`test/oracle/gen_viewflags_oracle.py` gates the OBJECT an API returns, not only its values: is it a view of an
+operand, a copy, or the operand itself; what are its C / F / OWNDATA / WRITEABLE / ALIGNED flags and byte strides;
+for `out=`, is the returned array the out itself, and which slots of the out's buffer did the call write; and does a
+shape argument mean the same in every C# spelling. Replayed by `FuzzCorpusTests.ViewFlags.cs` (the four gates) through
+`OpRegistry.ViewFlags.cs`, which calls each API directly and returns its result object untouched (the ordinary registry
+composes calls, and a composed result carries the harness's flags).
+
+**Schema additions** (all optional, so older rows read unchanged): an operand's `own: true` rebuilds it as an OWNER
+(OWNDATA set; without it every reconstructed operand is a view of its buffer) and `writeable: false` as read-only; the
+expected record's `mem` holds `flags` (the five above), `strides` (bytes; an axis of extent 0 or 1, and every axis of
+an empty array, read 0 on both sides — NumPy assigns those per loop path), `shares[i]` (`np.shares_memory` with operand
+`i`), `same[i]` (the result IS operand `i`) and `scalar` (NumPy returned a NumPy scalar); a tuple's `xshare` / `xsame`
+list the slot pairs that share memory or are one object (`np.diag_indices` returns one array in every slot). Compared by
+`FuzzCorpusTests.CompareMem` / `CompareCrossSlots`. Values are the small integers -1..3 in every dtype, so a value
+difference can only mean a wrong element was read.
+
+| File | Op key | Gate + carved | Coverage |
+|---|---|---|---|
+| `view_flags.jsonl` | `viewflags` (`params.fn`: 194 APIs) | 7,282 + 622 | V1 reshape / transpose / flip / diagonal views over 21 source layouts (C and F owners, transposed, permuted, stepped, reversed, a C-contiguous view at an offset, read-only owner and view, broadcast, same-shape broadcast, 0-d owner and offset view, 1×1, a unit axis, empty); V2 complex parts; V3 conversions (`asarray` / `array` / `copy` / `require` / `astype` / `view` / `getfield` …, every order and copy flag); V4 a 13-dtype sweep; V5 indexing (basic, integer, fancy, mask); V6 tuple results (`split`, `unstack`, `nonzero`, `meshgrid`, `broadcast_arrays`, `unravel_index`); V7 creators; V8 einsum's view path; V9 the copy family; V10 `tril` / `triu` / `diagflat`, partitions, the nan-reductions, `count_nonzero`, the FFT family, `eye` / `identity` / `tri` / `mgrid` / `ogrid`, the index-tuple generators, ndarray methods; K1–K3 the layout of ufunc and reduction results |
+| `out_flags.jsonl` | `outflags` (149 APIs) | 1,072 + 4 | `f(..., out=o)` for every ufunc, reduction, scan, product, FFT transform and ndarray method that takes `out=`, with `o` in six layouts (C and F owners, an offset view, a stepped view, a transposed view, a reversed view): slot 0 is the returned object (its `same` flag says it IS `o`), slot 1 the whole base buffer behind `o` after the call (prefilled with markers, so a write outside the view or a missed slot shows); NumPy's refusals are error cases |
+| `shape_args.jsonl` | `shapearg` (12 APIs) | 537 + 54 | the same dims in each C# shape form: `Shape`, `long[]`, `int[]`, `int`, and `view:<layout>` (a view's Shape of the same dims, built by `RandomApi/ViewSizeLayouts.cs`) — `zeros` / `ones` / `empty` / `full` / `reshape` / `ndarray.reshape` / `broadcast_to` / `resize` / `tile` / `indices` / `indices_sparse` / `empty_like`, NumPy's refusals included |
+| `array_args.jsonl` | existing op keys (`valueclass` `arrayarg`) | 335 + 37 | 55 SECONDARY operand positions (indices, condition, `v`, `sorter`, bins, weights, `xp` / `fp`, `b`, `x2`, values, `a_max`, `x` / `y`, the choice lists, `ar2`, `y` of cov …) in up to nine layouts: C, F, transposed, stepped, reversed, offset, read-only, broadcast, 0-d |
+
+**The carve.** `_gap_of` files every case NumSharp is known to answer differently into `corpus/gaps/<tier>_gaps.jsonl`
+under a gap id (the `GAPS` table in the generator describes each); the gates hold the rest with zero excuses
+(`MisalignedRegistry` returns null for the three vehicle keys and for `valueclass` `arrayarg`). The `*_KnownGaps` tests
+(`[TestCategory("OpenBugs")]`, excluded from CI) replay the gap files, fail while any carved case still diverges, and
+print, per id, how many still diverge and how many now match NumPy — a fixed gap shows as matching. The carve was drawn from a replay of the uncarved
+matrix and is exact: every carved case diverges, no kept case does. To redraw it after a change:
+`python gen_viewflags_oracle.py all --uncarved <dir>`, copy the files over the build output's corpus, run the four
+gates with `NUMSHARP_ORACLE_FAILURE_DUMP=<file>`, and compare the dump with `_gap_of`'s rules.
+
+**What it found** (47 ids; 717 carved cells):
+- *Silent wrong values* — a C-contiguous view at a non-zero offset (an `np.split` / `np.unstack` / `np.array_split`
+  child) is read from its parent's start by `np.searchsorted` (`v`, `sorter`, the method too: VA01), `np.where`
+  (condition, `x`, `y`: VA03), `np.ldexp` (`x2`: VA05), `np.nansum` / `np.nanprod` with `axis=None` (VF30),
+  `np.repeat` / `ndarray.repeat` (VF39), `np.unique` and the set routines that call it (VF40); `a[:, idx]` on such a
+  view throws (VF22). The offset view's owner holds the sentinel 7 outside the window, so an order-free result (a sum,
+  a unique set) shows a misread too.
+- *Read-only*: copies of a read-only array stay read-only (VF14), a basic index of a read-only broadcast through the
+  `object[]` indexer is writeable (VF23), `np.broadcast_arrays` hands a read-only broadcast back writeable (VF17),
+  `np.median` / `np.nanmedian` of a 0-d with keepdims is read-only (VF29).
+- *View, copy or the operand itself*: VF04, VF13, VF15, VF16, VF18, VF26, VF27, VF28, VF35, VF37, VA04; NumPy scalars
+  that come back as writeable 0-d arrays (VF01, VF02, VF03 — NumSharp has no scalar type).
+- *Result layout* (C where NumPy keeps the input's K order, or the reverse): VF05–VF12, VF19–VF21, VF31–VF34, VF36,
+  VF38, VA02, VS01 (`np.zeros(view.Shape)` keeps the view's F layout).
+- *Errors*: `np.reshape(-1)` of a broadcast view throws (VF24); `np.linalg.multi_dot` accepts an out= `np.dot` refuses
+  (VO01); `np.stack` of 0-d arrays has an extra axis (VF25).
+- *Leaks* (the scope gate replays these tiers too): `ndarray.astype` with an order the input lacks,
+  `np.ascontiguousarray` / `np.asfortranarray` with a dtype change, `np.eye(order='F')`, `np.nan_to_num(copy=False)` of a
+  non-C input, `np.argpartition` of a non-C input, `np.pad` / `np.roll` of an empty array, and — with the OpenBLAS
+  backend — `np.inner` / `ndarray.dot` with an operand BLAS cannot read in place. Recorded in the sweep's
+  `KnownEscapes` with per-family ceilings (the vehicle keys' families are labelled `op:fn`).
+
+`NumSharp.Tests/OpenBugs.ViewFlags.cs` reproduces the value, read-only and order findings through public calls (18
+tests, NumPy 2.4.2 literals).
+
+**Portability.** Every cell must hold on Windows, Linux and macOS. The out= rows of the libm-backed loops take an
+all-zero input: on -1..3, win-amd64 NumPy's `arccosh(2)`, `expm1(1)`, `cbrt(2)` and `logaddexp(-1, 0)` are not
+correctly rounded and `log2(3)` lies 0.02 ULP from a midpoint, so another libm would round them otherwise (the
+-1..3 cells of `exp`, `power` and `arctan2` in the view tier are correctly rounded and at least 0.17, 0.17 and 0.06
+ULP from a midpoint). FFT lengths stay in {2, 3, 4, 6}, whose twiddles `fft.jsonl` already proves on every host.
+
+**Not expressible as a case** (API surface, found by the same audit): no `NDArray`-as-shape overloads;
+`np.zeros_like` / `ones_like` / `full_like` take no `shape=`; `np.reshape` takes no `order=` / `copy=`; `np.squeeze`
+takes no tuple axis; `np.zeros` / `np.empty` take a dtype only beside a `Shape` (`np.ones` beside a `Shape` or an
+`int[]`); `np.sum` / `prod` / `mean` / `std` / `var` / `argmax` / `argmin` / `nansum` take no `out=`.
 
 ### float16 selections (`half_minmax` tier + the selection contract) — 2026-10-03
 
