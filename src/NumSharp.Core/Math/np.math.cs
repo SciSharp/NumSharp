@@ -116,12 +116,8 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static NDArray convolve(NDArray a, NDArray v, string mode = "full")
-        {
-            // convolve's dot-function lookup needs a fixed item size (0-d operands included), as in correlate.
-            if (Backends.Strings.NDStringUfuncs.IsString(a) || Backends.Strings.NDStringUfuncs.IsString(v))
-                throw Backends.Strings.NDStringUfuncs.NoItemsize();
-            return a.convolve(v, mode);
-        }
+            // NDArray.convolve runs NumPy's checks in NumPy's order (lengths, mode, depth) and only then refuses text.
+            => a.convolve(v, mode);
 
         /// <summary>
         ///     Return the product of array elements over a given axis.

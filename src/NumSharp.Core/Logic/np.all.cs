@@ -117,13 +117,18 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(nd));
 
             bool scalar = all(nd);
-            if (!keepdims || nd.ndim == 0)
-                return NDArray.Scalar(scalar).MakeGeneric<bool>();
-
-            var dims = new long[nd.ndim];
-            for (int i = 0; i < dims.Length; i++) dims[i] = 1;
-            var result = NDArray.Scalar(scalar).MakeGeneric<bool>();
-            result.Storage.Reshape(Shape.Adopt(dims));
+            Shape shape = Shape.Scalar;
+            if (keepdims && nd.ndim > 0)
+            {
+                var dims = new long[nd.ndim];
+                for (int i = 0; i < dims.Length; i++) dims[i] = 1;
+                shape = Shape.Adopt(dims);
+            }
+            // A typed array allocated directly owns its buffer, as NumPy's result does (a MakeGeneric wrapper over a
+            // temporary 0-d array reported OWNDATA False).
+            var result = new NDArray<bool>(shape, fillZeros: !scalar);
+            if (scalar)
+                result.Storage.InternalArray.Fill(true);
             return result;
         }
 
@@ -151,6 +156,9 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not
         ///     broadcast against <paramref name="a"/>.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty string array: NumPy reads the strings' truth
+        ///     values (the next phase of NumSharp's string support). An empty one is answered from its shape (the reduction's
+        ///     identity).</exception>
         /// <remarks>
         ///     A bare <c>null</c> axis binds this overload (NumPy's <c>axis=None</c>): the <c>int[]</c>-axis overloads
         ///     carry a lower <c>OverloadResolutionPriority</c> for exactly that literal.
@@ -172,8 +180,14 @@ namespace NumSharp
             if (@out is not null || @where is not null)
                 ReductionArguments.Validate(a, axis, keepdims, @out, @where, "logical_and");
             // Text: after NumPy's reduce prologue its logical_and.reduce reads the strings' truth values (the next
-            // phase); the mask route below would otherwise compare text with 0.
-            Backends.Strings.NDStringUfuncs.ThrowIfReduce("all", a, axis);
+            // phase; the mask route below would otherwise compare text with 0) — except over an EMPTY input, which reads
+            // none: the call then runs on a bool stand-in of the same shape, whose numeric path gives NumPy's identity
+            // result, keepdims shape, out= write and where= handling.
+            if (Backends.Strings.NDStringUfuncs.ReduceStandIn("all", a, axis) is { } standIn)
+            {
+                using (standIn)
+                    return all(standIn, axis, @out, keepdims, @where);
+            }
 
             NDArray<bool> reduced = ReduceAllWithWhere(a, axis, keepdims, @where);
             // A fresh 0-d result is a numpy SCALAR (np.bool_) at the boundary: read-only
@@ -202,6 +216,9 @@ namespace NumSharp
         /// <exception cref="AxisError">An axis is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not
         ///     broadcast against <paramref name="a"/>.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty string array: NumPy reads the strings' truth
+        ///     values (the next phase of NumSharp's string support). An empty one is answered from its shape (the reduction's
+        ///     identity).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html</remarks>
         // A bare null axis fits int? and int[] equally well (CS0121 for np.all(a, null, null, false, w)); the
         // lower priority hands that literal to the int? overload (NumPy's axis=None). An int[] argument fits only
@@ -219,8 +236,14 @@ namespace NumSharp
             if (@out is not null || @where is not null)
                 ReductionArguments.Validate(a, axis, keepdims, @out, @where, "logical_and");
             // Text: after NumPy's reduce prologue its logical_and.reduce reads the strings' truth values (the next
-            // phase); the mask route below would otherwise compare text with 0.
-            Backends.Strings.NDStringUfuncs.ThrowIfReduce("all", a, axis);
+            // phase; the mask route below would otherwise compare text with 0) — except over an EMPTY input, which reads
+            // none: the call then runs on a bool stand-in of the same shape, whose numeric path gives NumPy's identity
+            // result, keepdims shape, out= write and where= handling.
+            if (Backends.Strings.NDStringUfuncs.ReduceStandIn("all", a, axis) is { } standIn)
+            {
+                using (standIn)
+                    return all(standIn, axis, @out, keepdims, @where);
+            }
 
             NDArray effective = @where is null ? a : ApplyWhereForAll(a, @where);
             NDArray<bool> reduced = all(effective, axis, keepdims);

@@ -33,6 +33,8 @@ namespace NumSharp
                     return NDMatrixBoundary.Wrapped((a, upper), static s => cholesky(s.a, s.upper));
                 AssertStackedSquare(a);
                 var common = CommonType(a);
+                // NumPy calls _umath_linalg.cholesky_lo / cholesky_up: its input cast refuses text.
+                ThrowIfTextGufunc(upper ? "cholesky_up" : "cholesky_lo", a);
                 return a.TensorEngine.Cholesky(ToCommon(a, common), upper);
             }
         }

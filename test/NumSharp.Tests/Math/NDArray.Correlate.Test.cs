@@ -216,8 +216,9 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void Correlate_TwoDimensional_Throws()
         {
+            // NumPy 2.4.2: ValueError "object too deep for desired array" (PyArray_FromAny's depth check, 1..1).
             Action act = () => np.correlate(np.arange(6).reshape(2, 3).astype(NPTypeCode.Double), np.array(new double[] { 1 }));
-            act.Should().Throw<IncorrectShapeException>();
+            act.Should().Throw<ValueError>().WithMessage("object too deep for desired array");
         }
     }
 }

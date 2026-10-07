@@ -11,16 +11,21 @@ namespace NumSharp
         /// </summary>
         /// <param name="p">Rank-1 array of polynomial coefficients.</param>
         /// <returns>The roots — the eigenvalues of the companion matrix.</returns>
+        /// <exception cref="ValueError"><paramref name="p"/> is not rank 1 after <c>atleast_1d</c> (<c>Input must be a rank-1
+        ///     array.</c>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">Text coefficients: NumPy finds the non-empty ones and parses
+        ///     them as numbers.</exception>
+        /// <exception cref="NotSupportedException">Two or more non-zero coefficients and no LAPACK backend installed.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.roots.html</remarks>
         [NDScoped] // reclaims the ravel/nonzero/strip/astype chain and the companion-matrix + eigvals intermediates
         public static NDArray roots(NDArray p)
         {
             using var plain = NDMatrixBoundary.PlainFor(p);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy converts the coefficients to a float array, parsing the text as numbers: the next phase of the string support.
-            if (Backends.Strings.NDStringUfuncs.IsString(p)) throw Backends.Strings.NDStringUfuncs.NextPhase("roots", p);
             p = np.atleast_1d(p);
             if (p.ndim != 1)
                 throw new ValueError("Input must be a rank-1 array.");
+            // NumPy then finds the non-zero (non-empty) text and casts it to float, parsing it: the next phase.
+            if (Backends.Strings.NDStringUfuncs.IsString(p)) throw Backends.Strings.NDStringUfuncs.NextPhase("roots", p);
 
             // Indices of the non-zero coefficients (over the flattened array).
             NDArray nonZero = np.nonzero(np.ravel(p))[0];

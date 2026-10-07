@@ -15,7 +15,8 @@ Each case records what NumPy 2.4.2 returns for one call:
   whether the result shares memory with each operand), ``value`` (a Python value: str / bytes / nested list), ``text``
   (a printed string), ``bool``, ``dtype`` (a descriptor's str and repr), ``props`` (descriptor attributes),
   ``tuple`` (a list of array expectations) or ``mutated`` (an in-place call: the target view and its whole base buffer
-  afterwards).
+  afterwards). A numeric NumPy SCALAR result is an ``array`` with ``"scalar": true`` and no writeable / owndata flags
+  (a scalar is immutable and owns nothing; NumSharp answers with a read-only 0-d array).
 * ``error`` -- when NumPy raises: the exception's first well-known class on its MRO and ``str(e)`` verbatim.
 * ``phase`` -- 1 for the calls NumSharp's string support covers now (storage, element access, conversion, copying,
   string-to-string casts, indexing, printing, and every refusal NumPy itself raises); 2 for the calls NumPy answers by
@@ -64,8 +65,10 @@ def enc(v):
     raise TypeError(f"cannot encode {type(v)}")
 
 
-KNOWN_ERRORS = ["UnicodeEncodeError", "UnicodeDecodeError", "DTypePromotionError", "AxisError", "ValueError",
-                "TypeError", "IndexError", "OverflowError", "SystemError", "KeyError", "ZeroDivisionError",
+# LinAlgError (a ValueError subclass in NumPy and NumSharp alike) is recorded under its own name, so the replay checks
+# that NumSharp raises the linear-algebra class itself, not just any ValueError.
+KNOWN_ERRORS = ["UnicodeEncodeError", "UnicodeDecodeError", "DTypePromotionError", "AxisError", "LinAlgError",
+                "ValueError", "TypeError", "IndexError", "OverflowError", "SystemError", "KeyError", "ZeroDivisionError",
                 "NotImplementedError", "RuntimeError", "MemoryError"]
 
 
@@ -107,6 +110,25 @@ def plain(arr):
     return base, base.reshape(arr.shape)
 
 
+def own(arr):
+    """An operand that owns its data where the replay can tell: a 1-D array is its own base. ``plain`` makes a reshaped
+    VIEW of the base (OWNDATA False), and a 1-D view with the base's own shape, strides and offset is rebuilt as the base
+    itself — so an in-place target or an out= array, whose flags are compared, is given as the base."""
+    arr = np.asarray(arr)
+    base = np.ascontiguousarray(arr).reshape(-1).copy()
+    return base, (base if arr.ndim == 1 else base.reshape(arr.shape))
+
+
+def target(arr):
+    """An in-place target or out= operand whose OWNDATA the replay reproduces: a 1-D string array, or an empty 1-D numeric
+    one, is its own base (``own``: the replay rebuilds those as the base); a non-empty numeric operand stays a view
+    (``plain``: the general corpus' reconstruction builds a view over the buffer)."""
+    arr = np.asarray(arr)
+    if arr.ndim == 1 and (arr.dtype.kind in "SU" or arr.size == 0):
+        return own(arr)
+    return plain(arr)
+
+
 def array_expect(r, operands):
     """An array result: dtype, shape, C-order bytes, element strides, flags and memory sharing with each operand."""
     r = np.asarray(r)
@@ -141,9 +163,16 @@ def expect_of(r, operands):
         return {"kind": "text", "u": r.encode("utf-32-le", "surrogatepass").hex()}
     if isinstance(r, (np.str_, np.bytes_, bytes, list)):
         return {"kind": "value", "value": enc(r)}
-    if isinstance(r, np.generic):
-        # A numeric NumPy scalar (an index, a count): compared as a 0-d array.
-        return array_expect(np.asarray(r), None)
+    if isinstance(r, np.generic) or (isinstance(r, int) and not isinstance(r, bool)):
+        # A numeric NumPy scalar (an index, a count): compared as a 0-d array. A scalar is immutable and owns nothing,
+        # so the writeable / owndata flags np.asarray would invent are left out (NumSharp's 0-d reduction results are
+        # read-only, its stand-in for the scalar). A plain Python int (np.linalg.matrix_rank of a 1-D operand returns
+        # int(...)) is the int64 NumSharp's 0-d count holds.
+        d = array_expect(np.asarray(r) if isinstance(r, np.generic) else np.asarray(r, dtype=np.int64), None)
+        d.pop("writeable", None)
+        d.pop("owndata", None)
+        d["scalar"] = True
+        return d
     raise TypeError(f"unexpected result type {type(r)}")
 
 
@@ -1363,6 +1392,1002 @@ def gen_text_precedence():
         call=lambda a: a.sort(axis=-1))
 
 
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Section K: the answers the SHAPE decides. NumPy computes these calls on text, but over an empty input, a line of one
+# element or a pair the operators cannot compare, its loops read nothing (or nothing that changes the answer) — so
+# NumSharp's string support answers them now (phase 1), and defers the rest (phase "compute").
+# ----------------------------------------------------------------------------------------------------------------------
+
+_ARG_LIKE = ("argmax", "argmin", "nanargmax", "nanargmin", "sort", "argsort", "partition", "argpartition")
+
+
+def _reduced_line(a, axis):
+    """The length of the line an arg-reduction / sort reads, or None for an out-of-range axis."""
+    if axis is None or a.ndim == 0:
+        return a.size
+    if not -a.ndim <= axis < a.ndim:
+        return None
+    return a.shape[axis % a.ndim]
+
+
+def _shape_decides(name, a, axis):
+    """Mirrors NDStringUfuncs.ShapeDecides: an empty input, or (sorts / arg-reductions) a line of at most one element."""
+    if a.size == 0:
+        return True
+    if name in _ARG_LIKE:
+        line = _reduced_line(a, axis)
+        return line is not None and line <= 1
+    return False
+
+
+def _unique_shape_decides(a, axis):
+    """Mirrors NDArray.UniqueShapeDecides: at most one element / slab to order, or slabs of zero width."""
+    if axis is None:
+        return a.size <= 1
+    if not -a.ndim <= axis < a.ndim:
+        return True  # the AxisError is decided by the shape
+    return a.size == 0 or a.shape[axis % a.ndim] <= 1
+
+
+def gen_shape_decided():
+    e1, e2, e3 = plain(np.zeros(0, "<U2")), plain(np.zeros((0, 3), "<U2")), plain(np.zeros((3, 0), "<U2"))
+    e3v = operand("<U3", "e3")              # a (2, 0) view at an offset of a 6-element base
+    es = plain(np.zeros(0, "S2"))
+    u0 = plain(np.array("ab"))
+    z0 = operand("<U3", "z0")               # a 0-d view of a 1-D base
+    one = plain(np.array(["b"]))
+    onev = operand("<U3", "one")            # a one-element view at an offset
+    col = plain(np.array([["b"], ["a"]]))   # (2, 1): lines of one element along axis 1
+    row = plain(np.array([["a", "b", "a"]]))  # (1, 3): one slab along axis 0
+    # Its own base: diff(n=0) and trim_zeros(axis=()) return the input itself, so its OWNDATA is compared.
+    u3 = own(np.array(["ab", "c", "de"]))
+    s1, s2 = plain(np.array([b"q"])), plain(np.array([b"x", b"y"]))
+    sx = plain(np.array([b"\xff", b"a"]))
+    f2, ef = num_operand(np.array([1.5, 2.0])), num_operand(np.zeros(0))
+    i3, i20 = num_operand(np.arange(3)), num_operand(np.arange(20))
+    named = {"e1": e1, "e2": e2, "e3": e3, "e3v": e3v, "es": es, "u0": u0, "z0": z0, "one": one, "onev": onev,
+             "col": col, "row": row, "u3": u3, "s1": s1}
+
+    # Truth tests, counts and arg-reductions, every axis and keepdims.
+    reducers = {
+        "any": lambda a, ax, kd: np.any(a, axis=ax, keepdims=kd),
+        "all": lambda a, ax, kd: np.all(a, axis=ax, keepdims=kd),
+        "count_nonzero": lambda a, ax, kd: np.count_nonzero(a, axis=ax, keepdims=kd),
+        "argmax": lambda a, ax, kd: np.argmax(a, axis=ax, keepdims=kd),
+        "argmin": lambda a, ax, kd: np.argmin(a, axis=ax, keepdims=kd),
+        "nanargmax": lambda a, ax, kd: np.nanargmax(a, axis=ax, keepdims=kd),
+        "nanargmin": lambda a, ax, kd: np.nanargmin(a, axis=ax, keepdims=kd),
+    }
+    for name, fn in reducers.items():
+        for key, op in named.items():
+            v = op[1]
+            for ax in (None, 0, 1, -1, 2):
+                for kd in (False, True):
+                    if name in ("count_nonzero", "argmax", "argmin") and ax is None and kd:
+                        continue  # NumSharp has no axis=None + keepdims form of these (an API gap, not a text one)
+                    add("strshape", "shape_reduce", params={"name": name, "axis": ax, "keepdims": kd}, operands=[op],
+                        layout=key, phase=1 if _shape_decides(name, v, ax) else "compute",
+                        call=lambda a, f=fn, x=ax, k=kd: f(a, x, k))
+    # out= / where= on an empty input (any / all): the identity lands in out.
+    for name in ("any", "all"):
+        fn = getattr(np, name)
+        for key, op, ax, oshape in (("e2", e2, 0, (3,)), ("e2", e2, 1, (0,)), ("e3", e3, 1, (3,))):
+            add("strshape", "truth_out", params={"name": name, "axis": ax}, operands=[op, target(np.ones(oshape, bool))],
+                layout=key, phase=1, mutate=1, call=lambda a, o, f=fn, x=ax: f(a, axis=x, out=o))
+            add("strshape", "truth_where", params={"name": name, "axis": ax},
+                operands=[op, plain(np.ones(op[1].shape, bool))], layout=key, phase=1,
+                call=lambda a, w, f=fn, x=ax: f(a, axis=x, where=w))
+
+    # Sorts and partitions.
+    for name in ("sort", "argsort", "partition", "argpartition"):
+        for key, op in named.items():
+            v = op[1]
+            for ax in (None, 0, 1, -1):
+                kths = (0, 1) if name in ("partition", "argpartition") else (None,)
+                for kth in kths:
+                    if kth is None:
+                        call = (lambda a, x=ax, n=name: getattr(np, n)(a, axis=x))
+                    else:
+                        call = (lambda a, x=ax, n=name, k=kth: getattr(np, n)(a, k, axis=x))
+                    add("strshape", "shape_sort", params={"name": name, "axis": ax, "kth": kth}, operands=[op],
+                        layout=key, phase=1 if _shape_decides(name, v, ax) else "compute", call=call)
+
+    # The index searches.
+    for name in ("nonzero", "flatnonzero", "argwhere", "where1"):
+        fn = (lambda a: np.where(a)) if name == "where1" else getattr(np, name)
+        for key, op in named.items():
+            v = op[1]
+            decided = v.size == 0 or (name in ("nonzero", "where1") and v.ndim == 0)
+            add("strshape", "index_search", params={"name": name}, operands=[op], layout=key,
+                phase=1 if decided else "compute", call=lambda a, f=fn: f(a))
+
+    # np.unique and the Array-API family.
+    for key, op in named.items():
+        v = op[1]
+        for ax in (None, 0, 1):
+            for flags in ((False, False, False), (True, True, True), (False, True, False)):
+                ri, rv, rc = flags
+                add("strshape", "unique", params={"ri": ri, "rv": rv, "rc": rc, "axis": ax}, operands=[op], layout=key,
+                    phase=1 if _unique_shape_decides(v, ax) else "compute",
+                    call=lambda a, x=ax, i=ri, n=rv, c=rc: np.unique(a, return_index=i, return_inverse=n,
+                                                                     return_counts=c, axis=x))
+        for name in ("unique_values", "unique_counts", "unique_inverse", "unique_all"):
+            fn = getattr(np, name)
+            add("strshape", "unique_api", params={"name": name}, operands=[op], layout=key,
+                phase=1 if v.size <= 1 else "compute", call=lambda a, f=fn: f(a))
+
+    # isin: decided by the sizes and dtypes where NumPy reads no text (or compares a pair equal has no loop for).
+    pairs = [("e1", e1, "u3", u3), ("e2", e2, "u3", u3), ("u3", u3, "e1", e1), ("u3", u3, "f2", f2), ("f2", f2, "u3", u3),
+             ("u3", u3, "s2", s2), ("u3", u3, "i3", i3), ("u3", u3, "i20", i20), ("u3", u3, "u3", u3),
+             ("es", es, "u3", u3), ("ef", ef, "u3", u3), ("e1", e1, "s2", s2), ("one", one, "s1", s1),
+             ("u0", u0, "f2", f2)]
+    for k1, x, k2, y in pairs:
+        n1, n2 = x[1].size, y[1].size
+        same = x[1].dtype.kind in "US" and y[1].dtype.kind == x[1].dtype.kind
+        decided = n1 == 0 or (n2 < 10 * n1 ** 0.145 and (n2 == 0 or not same))
+        for invert in (False, True):
+            for au in (False, True):
+                add("strshape", "isin", params={"invert": invert, "assume_unique": au, "kind": None},
+                    operands=[x, y], layout=f"{k1}-{k2}", phase=1 if decided else "compute",
+                    call=lambda a, b, i=invert, u=au: np.isin(a, b, invert=i, assume_unique=u))
+    for kind in ("table", "bad", "sort"):
+        add("strshape", "isin", params={"invert": False, "assume_unique": False, "kind": kind}, operands=[u3, u3],
+            layout=f"kind-{kind}", phase="compute", call=lambda a, b, k=kind: np.isin(a, b, kind=k))
+    # A decode of non-ASCII bytes NumPy reaches after sorting the bytes: deferred (its error names the first failing
+    # element of the sorted text).
+    add("strshape", "isin", params={"invert": False, "assume_unique": False, "kind": None}, operands=[e1, sx],
+        layout="e1-sx", phase=2, call=lambda a, b: np.isin(a, b))
+
+    # The set routines: (pair, phase per routine).
+    set_cases = [
+        ("e1-e1", e1, e1, {"union1d": 1, "intersect1d": 1, "setxor1d": 1, "setdiff1d": 1}),
+        ("e1-one", e1, one, {"union1d": 1, "intersect1d": 1, "setxor1d": 1, "setdiff1d": 1}),
+        ("u0-e1", u0, e1, {"union1d": 1, "intersect1d": 1, "setxor1d": 1, "setdiff1d": 1}),
+        ("e1-ef", e1, ef, {"union1d": 1, "intersect1d": 1, "setxor1d": 1, "setdiff1d": 1}),
+        ("e1-u3", e1, u3, {"union1d": "compute", "intersect1d": 1, "setxor1d": "compute", "setdiff1d": 1}),
+        ("u3-ef", u3, ef, {"union1d": "compute", "intersect1d": 1, "setxor1d": "compute", "setdiff1d": "compute"}),
+        ("e2-s2", e2, s2, {"union1d": "compute", "intersect1d": 1, "setxor1d": "compute", "setdiff1d": 1}),
+        ("one-one", one, one, {"union1d": "compute", "intersect1d": "compute", "setxor1d": "compute",
+                               "setdiff1d": "compute"}),
+        ("one-f2", one, f2, {"union1d": "compute", "intersect1d": "compute", "setxor1d": "compute", "setdiff1d": 1}),
+        ("i3-u3", i3, u3, {"union1d": "compute", "intersect1d": "compute", "setxor1d": "compute", "setdiff1d": 1}),
+        ("u3-e1", u3, e1, {"union1d": "compute", "intersect1d": 1, "setxor1d": "compute", "setdiff1d": "compute"}),
+        # union1d decodes in C order before any sort (NumSharp's concatenation raises the same error); the others sort
+        # the bytes first, so the failing element NumPy names depends on the text (deferred).
+        ("e1-sx", e1, sx, {"union1d": 1, "intersect1d": 2, "setxor1d": 2, "setdiff1d": 2}),
+    ]
+    for key, x, y, phases in set_cases:
+        for name, ph in phases.items():
+            fn = getattr(np, name)
+            variants = [{}]
+            if name in ("intersect1d", "setxor1d", "setdiff1d"):
+                variants.append({"assume_unique": True})
+            if name == "intersect1d":
+                variants.append({"return_indices": True})
+            for kw in variants:
+                add("strshape", "setop", params={"name": name, **kw}, operands=[x, y], layout=key, phase=ph,
+                    call=lambda a, b, f=fn, k=kw: f(a, b, **k))
+
+    # Equality: shape and dtype decide unless two non-empty strings of one class are compared.
+    # Two DIFFERENT objects with equal contents (array_equal's `a1 is a2` shortcut has its own case below).
+    eq_cases = [("e1-e1", e1, plain(np.zeros(0, "<U2"))), ("e1-es", e1, es), ("u3-f3", u3, num_operand(np.zeros(3))),
+                ("u3-u3", u3, plain(np.array(["ab", "c", "de"]))),
+                ("u3-one", u3, one), ("e2-e1", e2, e1), ("u3-s3", u3, plain(np.array([b"ab", b"c", b"de"])))]
+    for key, x, y in eq_cases:
+        same = x[1].dtype.kind == y[1].dtype.kind
+        for equal_nan in (False, True):
+            if equal_nan:
+                decided = True  # a shape mismatch, or isnan's TypeError
+            else:
+                decided = not (same and x[1].shape == y[1].shape and x[1].size)
+            add("strshape", "equality", params={"name": "array_equal", "equal_nan": equal_nan, "same": False},
+                operands=[x, y], layout=key, phase=1 if decided else "compute",
+                call=lambda a, b, e=equal_nan: np.array_equal(a, b, equal_nan=e))
+        try:
+            bshape = np.broadcast_shapes(x[1].shape, y[1].shape)
+            empty = int(np.prod(bshape)) == 0
+            decided = empty or not same
+        except ValueError:
+            decided = True
+        add("strshape", "equality", params={"name": "array_equiv", "equal_nan": False, "same": False},
+            operands=[x, y], layout=key, phase=1 if decided else "compute", call=lambda a, b: np.array_equiv(a, b))
+    # The same object: array_equal(a, a, equal_nan=True) is True without reading it (a1 is a2).
+    add("strshape", "equality", params={"name": "array_equal", "equal_nan": True, "same": True}, operands=[u3],
+        layout="u3-same", phase=1, call=lambda a: np.array_equal(a, a, equal_nan=True))
+
+    # lexsort, sort_complex, trim_zeros, diff.
+    for key, keys, ax, ph in (("col", [col], -1, 1), ("u3", [u3], -1, "compute"), ("i3-u3", [i3, u3], -1, "compute"),
+                              ("col-col", [col, col], 0, "compute"), ("e1", [e1], -1, 1), ("one", [one], -1, 1),
+                              ("e2", [e2], 0, 1)):
+        add("strshape", "lexsort", params={"axis": ax}, operands=keys, layout=key, phase=ph,
+            call=lambda *ks, x=ax: np.lexsort(list(ks), axis=x))
+    for key, op in (("e1", e1), ("e2", e2), ("u0", u0), ("one", one), ("u3", u3)):
+        add("strshape", "sort_complex", operands=[op], layout=key,
+            phase=1 if op[1].size == 0 or op[1].ndim == 0 else "compute", call=lambda a: np.sort_complex(a))
+    for key, op, trim, ax in (("e1", e1, "fb", None), ("e2", e2, "fb", None), ("e2", e2, "fb", 1), ("e2", e2, "f", [0]),
+                              ("u0", u0, "fb", None), ("u3", u3, "fb", None), ("u3", u3, "x", None),
+                              ("u3", u3, "fb", []), ("e3", e3, "b", None)):
+        decided = op[1].size == 0 or op[1].ndim == 0 or ax == [] or trim == "x"
+        add("strshape", "trim_zeros", params={"trim": trim, "axis": ax}, operands=[op], layout=key,
+            phase=1 if decided else "compute", call=lambda a, t=trim, x=ax: np.trim_zeros(a, trim=t, axis=x))
+    for key, ops, n, ax, pre in (("e1", [e1], 1, -1, False), ("u3", [u3], 1, -1, False), ("u3", [u3], 0, -1, False),
+                                 ("e2", [e2], 1, 0, False), ("e2", [e2], 2, 1, False), ("e1-ef", [e1, ef], 1, -1, True),
+                                 ("u0", [u0], 1, -1, False), ("u3", [u3], -1, -1, False)):
+        add("strshape", "diff", params={"n": n, "axis": ax, "prepend": pre}, operands=ops, layout=key, phase=1,
+            call=lambda a, *rest, nn=n, x=ax: np.diff(a, n=nn, axis=x, prepend=rest[0]) if rest else
+            np.diff(a, n=nn, axis=x))
+
+    # The binary loops over an empty broadcast compute nothing: NumPy returns the empty result (or out=).
+    for name in ("equal", "not_equal", "less", "greater_equal", "add", "logical_and", "logical_or", "logical_xor"):
+        fn = getattr(np, name)
+        for key, x, y in (("e1-e1", e1, e1), ("e2-u3", e2, u3), ("e2-e1x", e2, plain(np.zeros((0, 1), "<U4"))),
+                          ("e1-es", e1, es), ("e1-ef", e1, ef), ("u3-e1", u3, e1)):
+            add("strshape", "ufunc", params={"name": name}, operands=[x, y], layout=key, phase="compute",
+                call=lambda a, b, f=fn: f(a, b))
+    for name, odt in (("equal", bool), ("add", "<U6"), ("logical_or", bool)):
+        fn = getattr(np, name)
+        add("strshape", "ufunc_kw", params={"name": name, "dtype": None, "nin": 2, "out": 2},
+            operands=[e1, plain(np.zeros(0, "<U4")), target(np.zeros(0, odt))], layout="out", phase="compute",
+            call=lambda a, b, o, f=fn: f(a, b, out=o))
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Section L: the order of the checks NumPy makes before it converts or compares text — the validation of
+# interp / digitize / repeat, empty conversions (astype, copyto, setitem, where, concatenate, choose), place / putmask
+# with ndarray values, insert / delete with array obj, searchsorted.
+# ----------------------------------------------------------------------------------------------------------------------
+
+def gen_validation_order():
+    F = num_operand(np.array([1.0, 2.0, 3.0]))
+    U = plain(np.array(["ab", "c", "de"]))
+    C3 = num_operand(np.array([1j, 2j, 3j]))
+    Ue = plain(np.array([], "<U2"))
+    Ue1 = plain(np.array([], "<U1"))
+    u0 = plain(np.array("ab"))
+    c0 = num_operand(np.array(1j))
+    E = num_operand(np.zeros(0))
+
+    # interp: fp's dtype picks the loop; then fp, xp and x each meet the depth check and the 'safe' cast to float64.
+    interp_cases = [
+        ("u0-F-F", [u0, F, F], {}), ("c0-F-F", [c0, F, F], {}), ("C-F-F", [num_operand(np.array([1j])), F, F], {}),
+        ("F-C-F", [F, C3, F], {}), ("F-C2d-F", [F, num_operand(np.array([[1j, 2j, 3j]])), F], {}),
+        ("F-F-C", [F, F, C3], {}), ("Ue-F-F-p", [Ue, F, F], {"period": 2.0}),
+        ("F-Ue-Ue-p", [F, Ue1, Ue1], {"period": 2.0}), ("F-Ue-F-p", [F, Ue1, F], {"period": 2.0}),
+        ("Ue-F-F", [Ue, F, F], {}), ("F-F-U-p0", [F, F, U], {"period": 0.0}),
+        ("C-F-F-p", [num_operand(np.array([1j])), F, F], {"period": 2.0}),
+        ("F-F-F-left-c", [F, F, F], {"left": 1 + 0j}), ("F-F-U-left-c", [F, F, U], {"left": 1 + 0j}),
+        ("F-E-E-left-c", [F, E, E], {"left": 1 + 0j}),
+    ]
+    for key, ops, kw in interp_cases:
+        params = {k: (v if not isinstance(v, complex) else [v.real, v.imag]) for k, v in kw.items()}
+        params["complex_left"] = isinstance(kw.get("left"), complex)
+        add("strvalid", "interp", params=params, operands=ops, layout=key, phase="compute",
+            call=lambda x, xp, fp, k=kw: np.interp(x, xp, fp, **k))
+
+    # digitize: complex x first, then the bins' depth, 'safe' cast and monotonicity, then the search.
+    dig_cases = [("Ue-F", [Ue, F], False), ("Ue2-Frev", [plain(np.zeros((0, 3), "<U2")), num_operand(np.array([3.0, 2.0, 1.0]))], False),
+                 ("U-empty", [plain(np.array(["a"])), E], False), ("U2d-empty", [plain(np.array([["a", "b"]])), E], False),
+                 ("U-nonmono", [plain(np.array(["a"])), num_operand(np.array([3.0, 1.0, 2.0]))], False),
+                 ("U-dec", [plain(np.array(["a"])), num_operand(np.array([3.0, 2.0, 1.0]))], False),
+                 ("U0-F", [plain(np.array("a")), F], False), ("c0-F", [c0, F], False),
+                 ("F-C", [F, num_operand(np.array([1j, 2j]))], False), ("U-Bempty", [plain(np.array(["a"])), num_operand(np.array([], bool))], False),
+                 ("U-B", [plain(np.array(["a"])), num_operand(np.array([False, True]))], False),
+                 ("B-U", [num_operand(np.array([True])), U], False), ("U-U", [U, U], False),
+                 ("F-F2d", [F, num_operand(np.array([[1.0, 2.0]]))], False), ("F-F0", [F, num_operand(np.array(5.0))], False),
+                 ("Ue-F-right", [Ue, F], True)]
+    for key, ops, right in dig_cases:
+        add("strvalid", "digitize", params={"right": right}, operands=ops, layout=key, phase="compute",
+            call=lambda x, b, r=right: np.digitize(x, b, right=r))
+
+    # repeat with array repeats of every kind: the depth check, then the 'safe' cast to intp, then the axis.
+    rep_cases = [("U-I2d", [U, num_operand(np.array([[1]]))], None), ("U-F0", [U, num_operand(np.array(2.0))], None),
+                 ("U-U0", [U, plain(np.array("a"))], None), ("Ue-Ue", [Ue, Ue1], None),
+                 ("F-I2d", [F, num_operand(np.array([[1, 1, 1]]))], None),
+                 ("F-u64", [F, num_operand(np.array([1, 1, 1], np.uint64))], None),
+                 ("F-b", [F, num_operand(np.array([True, False, True]))], None),
+                 ("F-I2d-ax9", [F, num_operand(np.array([[1]]))], 9), ("F-U-ax9", [F, U], 9),
+                 ("F-F-ax9", [F, num_operand(np.array([1.0]))], 9), ("F-I-ax9", [F, num_operand(np.array([1]))], 9),
+                 ("U-I", [U, num_operand(np.array([1, 0, 2]))], None), ("U-I-ax0", [U, num_operand(np.array([2]))], 0)]
+    for key, ops, ax in rep_cases:
+        add("strvalid", "repeat_arr", params={"axis": ax}, operands=ops, layout=key, phase="compute",
+            call=lambda a, r, x=ax: np.repeat(a, r, axis=x))
+
+    # Conversions of nothing: astype / copyto / setitem / where / concatenate / choose over empty selections.
+    for key, op, dt, order, casting in (("U0-f8", Ue, "f8", "K", "unsafe"), ("U0x3-f8-F", plain(np.zeros((0, 3), "<U2")), "f8", "F", "unsafe"),
+                                        ("f80-U", E, "U", "K", "unsafe"), ("f80-S5", E, "S5", "K", "unsafe"),
+                                        ("f80-U5-safe", E, "U5", "K", "safe"), ("U0-f8-safe", Ue, "f8", "K", "safe"),
+                                        ("U0-b", Ue, "?", "K", "unsafe"), ("U0-c16", Ue, "c16", "C", "unsafe")):
+        add("strvalid", "astype", params={"dtype": dt, "copy": True, "order": order, "casting": casting}, operands=[op],
+            layout=key, phase="compute", call=lambda a, d=dt, o=order, c=casting: a.astype(d, order=o, casting=c))
+
+    copyto_cases = [
+        ("F0-U", target(np.zeros(0)), plain(np.array(["x"])), "unsafe", None),
+        ("F3-U2", target(np.zeros(3)), plain(np.array(["x", "y"])), "unsafe", None),
+        ("F3-U-maskF", target(np.zeros(3)), plain(np.array(["x"])), "unsafe", [False, False, False]),
+        ("F3-U-mask0F", target(np.zeros(3)), plain(np.array(["x"])), "unsafe", False),
+        ("F3-U0-mask0F", target(np.zeros(3)), plain(np.array("x")), "unsafe", False),
+        ("F1-U0-maskF", target(np.zeros(1)), plain(np.array("x")), "unsafe", [False]),
+        ("F0-U0", target(np.zeros(0)), plain(np.array("x")), "unsafe", None),
+        ("F0-U0-badmask", target(np.zeros(0)), plain(np.array("x")), "unsafe", [False, False]),
+        ("U3-F-maskF", target(np.zeros(3, "<U5")), num_operand(np.array([1.5])), "same_kind", [False, False, False]),
+        ("U3-F-safe", target(np.zeros(3, "<U5")), num_operand(np.array([1.5])), "safe", None),
+        ("U3-F-badshape", target(np.zeros(3, "<U5")), num_operand(np.array([1.5, 2.5])), "same_kind", None),
+        ("U3-F", target(np.zeros(3, "<U5")), num_operand(np.array([1.5])), "same_kind", None),
+    ]
+    for key, dst, src, casting, where in copyto_cases:
+        add("strvalid", "copyto", params={"casting": casting, "where": where}, operands=[dst, src], layout=key,
+            mutate=0, phase="compute",
+            call=lambda d, s, c=casting, w=where: np.copyto(d, s, casting=c, where=True if w is None else np.array(w)))
+
+    def setit(a, idx, v):
+        a[idx] = v
+
+    set_cases = [
+        ("S0-ell-Ue", target(np.zeros(0, "S1")), [{"ellipsis": True}], plain(np.array(["é"]))),
+        ("S3-fancy0-Ue", target(np.zeros(3, "S1")), [{"arr": []}], plain(np.array(["é"]))),
+        ("S3-boolF-Ue", target(np.zeros(3, "S1")), [{"mask": [False, False, False]}], plain(np.array(["é"]))),
+        ("U0-ell-F", target(np.zeros(0, "U1")), [{"ellipsis": True}], num_operand(np.array([1.5]))),
+        ("U3-boolF-F", target(np.zeros(3, "U3")), [{"mask": [False, False, False]}], num_operand(np.array([1.5]))),
+        ("U3-fancy0-F", target(np.zeros(3, "U3")), [{"arr": []}], num_operand(np.array([1.5]))),
+        ("U0-ell-Fbad", target(np.zeros(0, "U1")), [{"ellipsis": True}], num_operand(np.array([1.5, 2.5]))),
+        ("F0-ell-U", target(np.zeros(0)), [{"ellipsis": True}], plain(np.array(["x"]))),
+        ("F3-boolF-U", target(np.zeros(3)), [{"mask": [False, False, False]}], plain(np.array(["x"]))),
+        ("F3-fancy0-U", target(np.zeros(3)), [{"arr": []}], plain(np.array(["x"]))),
+        ("F0-ell-Ubad", target(np.zeros(0)), [{"ellipsis": True}], plain(np.array(["x", "y"]))),
+        ("F3-int-U0", target(np.zeros(3)), [{"int": 0}], plain(np.array("x"))),
+    ]
+    for key, a, idx, v in set_cases:
+        k = tuple(_py_index(e) for e in idx)
+        add("strvalid", "setitem_array", params={"index": idx}, operands=[a, v], layout=key, mutate=0,
+            phase="compute", call=lambda arr, val, kk=k: setit(arr, kk, val))
+
+    where_cases = [("empty-F-U", [num_operand(np.zeros(0, bool)), E, Ue]),
+                   ("Ucond-empty-F-F", [Ue1, E, E]), ("Ucond-F-F", [plain(np.array(["a", ""])), num_operand(np.zeros(2)), num_operand(np.ones(2))]),
+                   ("Ucond-empty-U-U", [Ue1, Ue, plain(np.zeros(0, "<U3"))]),
+                   ("F-cond-F-U", [num_operand(np.array([True])), num_operand(np.array([1.5])), plain(np.array(["a"]))])]
+    for key, ops in where_cases:
+        add("strvalid", "where3", operands=ops, layout=key, phase="compute", call=lambda c, x, y: np.where(c, x, y))
+
+    concat_cases = [
+        ("F0-U0", [E, Ue], {}), ("F0-U1", [E, plain(np.array(["ab"]))], {}),
+        ("F1-U1", [num_operand(np.ones(1)), plain(np.array(["ab"]))], {}),
+        ("F0-U1-f8", [E, plain(np.array(["ab"]))], {"dtype": "f8", "casting": "unsafe"}),
+        ("F1-U0-f8", [num_operand(np.ones(1)), Ue], {"dtype": "f8", "casting": "unsafe"}),
+        ("Sx-U5-U3-safe", [plain(np.array([b"\xff"])), plain(np.array(["abcde"]))], {"dtype": "U3", "casting": "safe"}),
+        ("Ue-F-S3", [plain(np.array(["é"])), num_operand(np.array([1]))], {"dtype": "S3", "casting": "unsafe"}),
+        ("F-Ue-S3", [num_operand(np.array([1])), plain(np.array(["é"]))], {"dtype": "S3", "casting": "unsafe"}),
+    ]
+    for key, ops, kw in concat_cases:
+        add("strvalid", "concat_kw", params={"dtype": kw.get("dtype"), "casting": kw.get("casting", "same_kind"),
+                                             "out": None}, operands=ops, layout=key, phase="compute",
+            call=lambda *xs, k=kw: np.concatenate(list(xs), **k))
+    for key, ops, out_shape, out_dt in (("U-U-outbad", [plain(np.array(["a"])), plain(np.array(["b"]))], (3,), "S1"),
+                                        ("U-U-outdim", [plain(np.array(["a"])), plain(np.array(["b"]))], (2, 1), "<U1"),
+                                        ("U-U-out", [plain(np.array(["a"])), plain(np.array(["bc"]))], (2,), "<U1")):
+        add("strvalid", "concat_kw", params={"dtype": None, "casting": "same_kind", "out": len(ops)},
+            operands=ops + [target(np.zeros(out_shape, out_dt))], layout=key, phase="compute",
+            call=lambda *xs: np.concatenate(list(xs[:-1]), out=xs[-1], casting="same_kind"))
+
+    choose_cases = [("F-U-empty", [0] * 0, "raise", [E, Ue]), ("F-U", [0], "raise", [num_operand(np.zeros(1)), plain(np.array(["ab"]))]),
+                    ("F-U-sel1", [1], "raise", [num_operand(np.zeros(1)), plain(np.array(["ab"]))]),
+                    ("F-U-bad", [5], "raise", [num_operand(np.zeros(1)), plain(np.array(["ab"]))]),
+                    ("F-U-wrap", [3], "wrap", [num_operand(np.zeros(1)), plain(np.array(["ab"]))]),
+                    ("F-U-clip", [3], "clip", [num_operand(np.zeros(1)), plain(np.array(["ab"]))]),
+                    ("F-U-clip0", [-3], "clip", [num_operand(np.zeros(1)), plain(np.array(["ab"]))]),
+                    ("U-U", [1, 0], "raise", [plain(np.array(["a", "b"])), plain(np.array(["cc", "dd"]))])]
+    for key, idx, mode, choices in choose_cases:
+        add("strvalid", "choose_mode", params={"index": idx, "mode": mode}, operands=choices, layout=key,
+            phase="compute", call=lambda *cs, i=idx, m=mode: np.choose(np.array(i, dtype=np.intp), list(cs), mode=m))
+
+    # place / putmask with ndarray values: PyArray_FromAny without FORCECAST (the 'safe' rule), before the mask is read.
+    for name in ("place", "putmask"):
+        fn = getattr(np, name)
+        for key, arr, mask, vals in (
+                ("i-f8", target(np.arange(5, dtype=np.int32)), [True] * 5, num_operand(np.array([1.9, 2.9]))),
+                ("b-i", target(np.zeros(4, bool)), [True] * 4, num_operand(np.array([0, 5, 0, 9], np.int32))),
+                ("U3-U4", target(np.array(["a", "b", "c"])), [True, False, True], plain(np.array(["wxyz"]))),
+                ("U3-S2", target(np.array(["a", "b", "c"], "<U3")), [True, False, True], plain(np.array([b"xy"]))),
+                ("S2-U", target(np.array([b"a", b"b"])), [True, True], plain(np.array(["x"]))),
+                ("F-U", target(np.zeros(3)), [False, False, False], plain(np.array(["x"]))),
+                ("U-F-maskF", target(np.zeros(3, "<U32")), [False, False, False], num_operand(np.array([1.5]))),
+                ("U-I-maskT", target(np.zeros(3, "<U32")), [True, True, True], num_operand(np.array([1]))),
+                ("F-Uempty", target(np.zeros(3)), [True, False, True], plain(np.zeros(0, "<U1"))),
+                ("Fe-F", target(np.zeros(0, np.int64)), [], num_operand(np.array([1.5]))),
+                ("U-Umask", target(np.zeros(3)), None, num_operand(np.array([7.0])))):
+            if mask is None:
+                mask_op = plain(np.array(["a", "", "b"]))
+                add("strvalid", f"{name}_arr", params={"mask": None}, operands=[arr, vals, mask_op], layout=key,
+                    mutate=0, phase="compute", call=lambda a, v, m, f=fn: f(a, m, v))
+            else:
+                add("strvalid", f"{name}_arr", params={"mask": mask}, operands=[arr, vals], layout=key, mutate=0,
+                    phase="compute", call=lambda a, v, m=mask, f=fn: f(a, np.array(m, dtype=bool), v))
+
+    # insert / delete with an array obj, and searchsorted's argument checks.
+    Fi = num_operand(np.array([1.5, 2.0, 3.0]))
+    for key, obj, values in (("U3", U, num_operand(np.array(9.0))), ("U1", plain(np.array(["a"])), num_operand(np.array(9.0))),
+                             ("S1", plain(np.array([b"a"])), num_operand(np.array(9.0))),
+                             ("S3", plain(np.array([b"a", b"b", b"c"])), num_operand(np.array(9.0))),
+                             ("U0d", plain(np.array("a")), num_operand(np.array(9.0))),
+                             ("Uempty", plain(np.zeros(0, "<U1")), num_operand(np.array(9.0))),
+                             ("F3", num_operand(np.array([0.5, 1.0, 2.0])), num_operand(np.array(9.0))),
+                             ("F1in", num_operand(np.array([1.5])), num_operand(np.array(9.0))),
+                             ("F1out", num_operand(np.array([5.5])), num_operand(np.array(9.0))),
+                             ("Fempty", num_operand(np.zeros(0)), num_operand(np.array(9.0))),
+                             ("C3", num_operand(np.array([1j, 2j, 0j])), num_operand(np.array(9.0))),
+                             ("U2d", plain(np.array([["a"]])), num_operand(np.array(9.0))),
+                             ("F1in-Uvals", num_operand(np.array([1.5])), U),
+                             ("I0-Uvals", num_operand(np.array([0])), U)):
+        add("strvalid", "insert_obj", params={"axis": None}, operands=[Fi, obj, values], layout=key, phase="compute",
+            call=lambda a, o, v: np.insert(a, o, v))
+    add("strvalid", "insert_obj", params={"axis": 9}, operands=[Fi, U, num_operand(np.array(9.0))], layout="U3-ax9",
+        phase="compute", call=lambda a, o, v: np.insert(a, o, v, axis=9))
+    for key, obj in (("U3", U), ("Uempty", plain(np.zeros(0, "<U1"))), ("U1", plain(np.array(["a"]))),
+                     ("U0d", plain(np.array("a"))), ("F1", num_operand(np.array([1.5]))),
+                     ("F3", num_operand(np.array([1.5, 0.5, 2.0]))), ("Fempty", num_operand(np.zeros(0))),
+                     ("b-short", num_operand(np.array([True]))), ("U2d", plain(np.array([["a"]]))),
+                     ("I2d", num_operand(np.array([[0]]))), ("C", num_operand(np.array([1j]))),
+                     ("i8", num_operand(np.array([1], np.int8))), ("I2d-2", num_operand(np.array([[0, 2]])))):
+        add("strvalid", "delete_obj", params={"axis": None}, operands=[Fi, obj], layout=key, phase="compute",
+            call=lambda a, o: np.delete(a, o))
+    add("strvalid", "delete_obj", params={"axis": 9}, operands=[Fi, U], layout="U3-ax9", phase="compute",
+        call=lambda a, o: np.delete(a, o, axis=9))
+
+    a3 = num_operand(np.array([1, 2, 3]))
+    for key, a, v, side, sorter in (
+            ("side-L", a3, num_operand(np.array(2)), "L", None), ("side-x", a3, num_operand(np.array(2)), "x", None),
+            ("side-empty", a3, num_operand(np.array(2)), "", None), ("side-Right", a3, num_operand(np.array(2)), "Right", None),
+            ("a0d", num_operand(np.array(5)), num_operand(np.array(2)), "left", None),
+            ("sorter2d", a3, num_operand(np.array(2)), "left", num_operand(np.array([[0, 1, 2]]))),
+            ("sorterF", a3, num_operand(np.array(2)), "left", num_operand(np.array([0.0, 1.0, 2.0]))),
+            ("sorterB", a3, num_operand(np.array(2)), "left", num_operand(np.array([True, False, True]))),
+            ("sorterU64", a3, num_operand(np.array(2)), "left", num_operand(np.array([0, 1, 2], np.uint64))),
+            ("sorter0d", a3, num_operand(np.array(2)), "left", num_operand(np.array(0))),
+            ("sorterSize", a3, num_operand(np.array(2)), "left", num_operand(np.array([0, 1]))),
+            ("U-Fempty", U, E, "left", None), ("Uempty-U", Ue1, plain(np.array(["a", "b"])), "left", None),
+            ("Uempty-U0", Ue1, plain(np.array("a")), "left", None), ("Fempty-U", E, plain(np.array(["a"])), "left", None),
+            ("U2d-U", plain(np.array([["ab"], ["c"], ["de"]])), plain(np.array(["a"])), "left", None),
+            ("U-Sx", U, plain(np.array([b"\xff"])), "left", None),
+            ("U-U-sorterU", U, plain(np.array(["a"])), "left", U),
+            ("F-U-sorterU", num_operand(np.array([1.0, 2.0])), num_operand(np.array(1.5)), "left", plain(np.array(["a", "b"]))),
+            ("Uempty-I", Ue1, num_operand(np.array(3)), "left", None), ("U-I", U, num_operand(np.array(3)), "left", None),
+            ("U-U", U, plain(np.array(["b"])), "left", None)):
+        ops = [a, v] + ([sorter] if sorter is not None else [])
+        add("strvalid", "searchsorted_kw", params={"side": side, "sorter": sorter is not None}, operands=ops,
+            layout=key, phase="compute",
+            call=lambda aa, vv, *s, sd=side: np.searchsorted(aa, vv, side=sd, sorter=s[0] if s else None))
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# M. The rest of the text surface: np.linalg, the products, random seeding and bounds, the histogram family, quantile q,
+#    reductions and arg-reductions with out=, polynomials, emath, index conversions, dtype predicates, ediff1d, where=
+#    masks, 0-d conversions to C# scalars and fill with a sequence. Every call is recorded with phase "compute": NumPy's
+#    own refusals and early answers are final, a computation on the text is the next phase. A few numeric calls ride
+#    along where the text work found a general divergence (histogramdd's bin specs, norm of an empty matrix).
+# ----------------------------------------------------------------------------------------------------------------------
+
+# name -> the np.linalg call over one operand (the C# replay spells each the way a ported NumPy line does).
+LINALG1 = [
+    ("cholesky", lambda a: np.linalg.cholesky(a)), ("cholesky_up", lambda a: np.linalg.cholesky(a, upper=True)),
+    ("det", np.linalg.det), ("slogdet", np.linalg.slogdet), ("inv", np.linalg.inv), ("pinv", np.linalg.pinv),
+    ("pinv_h", lambda a: np.linalg.pinv(a, hermitian=True)), ("eig", np.linalg.eig), ("eigvals", np.linalg.eigvals),
+    ("eigh", np.linalg.eigh), ("eigh_U", lambda a: np.linalg.eigh(a, "U")), ("eigvalsh", np.linalg.eigvalsh),
+    ("eigvalsh_U", lambda a: np.linalg.eigvalsh(a, "U")), ("svd", np.linalg.svd),
+    ("svd_nuv", lambda a: np.linalg.svd(a, compute_uv=False)), ("svd_s", lambda a: np.linalg.svd(a, full_matrices=False)),
+    ("svd_h", lambda a: np.linalg.svd(a, hermitian=True)), ("svdvals", np.linalg.svdvals),
+    ("matrix_rank", np.linalg.matrix_rank), ("matrix_rank_tol", lambda a: np.linalg.matrix_rank(a, tol=0.5)),
+    ("matrix_rank_h", lambda a: np.linalg.matrix_rank(a, hermitian=True)), ("cond", np.linalg.cond),
+    ("cond_fro", lambda a: np.linalg.cond(a, "fro")), ("cond_1", lambda a: np.linalg.cond(a, 1)),
+    ("cond_2", lambda a: np.linalg.cond(a, 2)), ("qr", np.linalg.qr), ("qr_r", lambda a: np.linalg.qr(a, mode="r")),
+    ("qr_bad", lambda a: np.linalg.qr(a, mode="x")), ("norm", np.linalg.norm),
+    ("norm_fro", lambda a: np.linalg.norm(a, "fro")), ("norm_nuc", lambda a: np.linalg.norm(a, "nuc")),
+    ("norm_2", lambda a: np.linalg.norm(a, 2)), ("norm_inf", lambda a: np.linalg.norm(a, np.inf)),
+    ("norm_1", lambda a: np.linalg.norm(a, 1)), ("norm_ax", lambda a: np.linalg.norm(a, axis=0)),
+    ("norm_bad", lambda a: np.linalg.norm(a, "x")), ("matrix_norm", np.linalg.matrix_norm),
+    ("matrix_norm_2", lambda a: np.linalg.matrix_norm(a, ord=2)), ("vector_norm", np.linalg.vector_norm),
+    ("matrix_power0", lambda a: np.linalg.matrix_power(a, 0)), ("matrix_power1", lambda a: np.linalg.matrix_power(a, 1)),
+    ("matrix_power2", lambda a: np.linalg.matrix_power(a, 2)), ("matrix_power3", lambda a: np.linalg.matrix_power(a, 3)),
+    ("matrix_powerm1", lambda a: np.linalg.matrix_power(a, -1)),
+    ("matrix_powerm2", lambda a: np.linalg.matrix_power(a, -2)),
+    ("tensorinv1", lambda a: np.linalg.tensorinv(a, 1)), ("tensorinv2", lambda a: np.linalg.tensorinv(a, 2)),
+    ("tensorinv0", lambda a: np.linalg.tensorinv(a, 0)), ("trace", np.linalg.trace), ("diagonal", np.linalg.diagonal),
+    ("matrix_transpose", np.linalg.matrix_transpose),
+]
+
+# name -> the np.linalg call over two operands.
+LINALG2 = [
+    ("solve", np.linalg.solve), ("lstsq", np.linalg.lstsq), ("tensorsolve", np.linalg.tensorsolve),
+    ("multi_dot", lambda a, b: np.linalg.multi_dot([a, b])), ("matmul", np.linalg.matmul), ("outer", np.linalg.outer),
+    ("tensordot", np.linalg.tensordot), ("vecdot", np.linalg.vecdot), ("cross", np.linalg.cross),
+]
+
+# name -> the top-level product or sliding-window call over two operands.
+PRODUCTS = [
+    ("dot", np.dot), ("inner", np.inner), ("vdot", np.vdot), ("outer", np.outer),
+    ("tensordot", lambda a, b: np.tensordot(a, b, 1)), ("kron", np.kron), ("matmul", np.matmul), ("cross", np.cross),
+    ("convolve", np.convolve), ("correlate", np.correlate),
+]
+
+
+def _text(values, spec=None):
+    """A C-contiguous text operand (its own base when 1-D, see ``own``)."""
+    return own(np.array(values, dtype=spec) if spec else np.array(values))
+
+
+def _view_operand(base, build):
+    """A (base, view) pair whose view is ``build(base)`` over a 1-D base."""
+    return base, build(base)
+
+
+def gen_surface():
+    U1 = plain(np.array(["ab", "c", "de"]))
+    U2 = plain(np.array([["ab", "c"], ["de", "f"]]))
+    U23 = plain(np.array([["ab", "c", "x"], ["de", "f", "y"]]))
+    U3 = plain(np.zeros((2, 2, 2), "<U1"))
+    S2 = plain(np.array([["ab", "c"], ["de", "f"]]).astype("S2"))
+    U0 = plain(np.array("ab"))
+    Ue = plain(np.zeros((0, 0), "<U1"))
+    F2 = num_operand(np.eye(2))
+    F1 = num_operand(np.ones(2))
+    F3 = num_operand(np.array([1.5, 2.0, 3.0]))
+    Ux2 = plain(np.array(["a", "b"]))
+
+    # ---- np.linalg over one text operand, then over two operands ----
+    for name, fn in LINALG1:
+        for key, a in (("U1", U1), ("U2", U2), ("U23", U23), ("U3", U3), ("S2", S2), ("U0", U0), ("Ue", Ue)):
+            # An EMPTY text matrix converts to an empty float64 one, whose QR / SVD NumPy computes through LAPACK; NumSharp
+            # Core ships no QR / SVD and answers those through the optional OpenBLAS backend only (none in this replay),
+            # so the five SVD / QR calls over Ue are left to the host-pinned linalg tier.
+            if key == "Ue" and name in ("qr", "qr_r", "norm_nuc", "norm_2", "matrix_norm_2"):
+                continue
+            add("strsurface", "linalg1", params={"name": name}, operands=[a], layout=key, phase="compute",
+                call=lambda x, f=fn: f(x))
+    for name, fn in LINALG2:
+        for key, a, b in (("U2,F2", U2, F2), ("F2,U2", F2, U2), ("U2,F1", U2, F1), ("F2,Ux2", F2, Ux2),
+                          ("U2,U2", U2, U2), ("U1,U1", U1, U1), ("U1,F3", U1, num_operand(np.ones(3))), ("U23,F2", U23, F2)):
+            add("strsurface", "linalg2", params={"name": name}, operands=[a, b], layout=key, phase="compute",
+                call=lambda x, y, f=fn: f(x, y))
+
+    # ---- the products and sliding windows: 0-d operands, alignment, empties, the two classes, depth ----
+    S1 = plain(np.array([b"ab", b"c", b"de"]))
+    Ue1 = plain(np.zeros(0, "<U1"))
+    pairs = [("U1,F3", U1, F3), ("F3,U1", F3, U1), ("U0,F3", U0, F3), ("F3,U0", F3, U0), ("U0,U0", U0, U0),
+             ("U2,F22", U2, num_operand(np.ones((2, 2)))), ("U2,F3", U2, F3), ("U23,U23", U23, U23),
+             ("Ue1,Ue1", Ue1, Ue1), ("Ue1,Fe1", Ue1, num_operand(np.zeros(0))), ("U1,Ux2", U1, Ux2),
+             ("S1,S1", S1, S1), ("U1,S1", U1, S1), ("U2,F32", U2, num_operand(np.ones((3, 2)))), ("U3,U2", U3, U2),
+             ("U1,I3", U1, num_operand(np.array([1, 2, 3])))]
+    for name, fn in PRODUCTS:
+        for key, a, b in pairs:
+            add("strsurface", "product", params={"name": name}, operands=[a, b], layout=key, phase="compute",
+                call=lambda x, y, f=fn: f(x, y))
+    for mode in ("full", "same", "valid", "x"):
+        for name in ("convolve", "correlate"):
+            add("strsurface", "sliding_mode", params={"name": name, "mode": mode}, operands=[U1, F3],
+                layout=f"U1,F3,{mode}", phase="compute", call=lambda x, y, n=name, m=mode: getattr(np, n)(x, y, mode=m))
+    # np.dot with out=: the out check runs after the 0-d / alignment checks and before the itemsize refusal.
+    for key, a, b, out in (("U2,F22,F3", U2, num_operand(np.ones((2, 2))), target(np.zeros(3))),
+                           ("U2,F22,F22", U2, num_operand(np.ones((2, 2))), target(np.zeros((2, 2)))),
+                           ("U2,F22,I22", U2, num_operand(np.ones((2, 2))), target(np.zeros((2, 2), np.int64))),
+                           ("U2,F22,U22", U2, num_operand(np.ones((2, 2))), target(np.zeros((2, 2), "<U3"))),
+                           ("U2,F3,F22", U2, F3, target(np.zeros((2, 2)))),
+                           ("U0,F3,F3", U0, F3, target(np.zeros(3))),
+                           ("F22,F22,U22", num_operand(np.ones((2, 2))), num_operand(np.ones((2, 2))),
+                            target(np.zeros((2, 2), "<U32")))):
+        add("strsurface", "dot_out", operands=[a, b, out], layout=key, phase="compute", mutate=2,
+            call=lambda x, y, o: np.dot(x, y, out=o))
+
+    # ---- random: SeedSequence over text arrays (pool + generate_state), spawn keys, default_rng, Philox counters ----
+    def u_base(values):
+        return np.array(values)
+
+    seed_cases = [
+        ("U-12-0x10", _text(["12", "0x10"])), ("U-2d", plain(np.array([["1", "2"], ["3", "4"]]))),
+        ("U-2dF", _view_operand(u_base(["1", "3", "2", "4"]), lambda b: b.reshape(2, 2, order="F"))),
+        ("U-2dT", _view_operand(u_base(["1", "2", "3", "4"]), lambda b: b.reshape(2, 2).T)),
+        ("U-rev", _view_operand(u_base(["1", "2", "3"]), lambda b: b[::-1])),
+        ("U-step", _view_operand(u_base(["1", "2", "3", "4"]), lambda b: b[::2])),
+        ("U-bcast", _view_operand(u_base(["7"]), lambda b: np.broadcast_to(b, (3,)))),
+        ("U-empty-str", _text([""])), ("U-lead-sp", _text(["  5"])), ("U-trail-sp", _text(["5 "])),
+        ("U-neg", _text(["-5"])), ("U-plus", _text(["+5"])), ("U-0x", _text(["0x"])), ("U-1a", _text(["1a"])),
+        ("U-quote", _text(["1it's"])), ("U-long", _text(["1" + "z" * 300])), ("U-longhex", _text(["0x" + "z" * 300])),
+        ("U-0X10", _text(["0X10"])), ("U-under", _text(["1_000"])), ("U-big", _text(["99999999999999999999999"])),
+        ("U-0", _text(["0"])), ("U-0d", plain(np.array("12"))), ("U-none", _text([], "<U3")),
+        ("U-2x0", plain(np.zeros((2, 0), "<U3"))), ("U-tab", _text(["1\t"])), ("U-nl", _text(["1\n2"])),
+        ("U-arabic", _text(["٣"])), ("U-fullwidth", _text(["１２"])),
+        ("S-ab-c", _text([b"ab", b"c"])), ("S-empty-str", _text([b""])), ("S-nul", _text([b"a\x00b"])),
+        ("S-ff", _text([b"\xff"])), ("S-2d", plain(np.array([[b"ab", b"c"], [b"d", b""]]))),
+        ("S-0d", plain(np.array(b"12"))), ("S-none", _text([], "S3")), ("S-trailnul", _text([b"a\x00\x00", b"bc"])),
+    ]
+    for key, x in seed_cases:
+        add("strsurface", "seed_seq", operands=[x], layout=key, phase="compute",
+            call=lambda v: (lambda ss: np.concatenate([ss.pool, ss.generate_state(4)]))(np.random.SeedSequence(v)))
+    for key, x in (("U", _text(["1", "2"])), ("S", _text([b"ab"])), ("U0", plain(np.array("1"))),
+                   ("U-1a", _text(["1a"]))):
+        add("strsurface", "seed_spawn", params={"list": False}, operands=[x], layout=key, phase="compute",
+            call=lambda v: np.random.SeedSequence(5, spawn_key=v).generate_state(4))
+    add("strsurface", "seed_spawn", params={"list": True}, operands=[_text(["3"])], layout="list-U", phase="compute",
+        call=lambda v: np.random.SeedSequence(5, spawn_key=[v]).generate_state(4))
+    for key, x in (("U", _text(["12"])), ("U-1a", _text(["1a"])), ("S", _text([b"12"]))):
+        add("strsurface", "default_rng", operands=[x], layout=key, phase="compute",
+            call=lambda v: np.random.default_rng(v).random(3))
+    for key, x in (("U0-12", plain(np.array("12"))), ("U0-1a", plain(np.array("1a"))), ("U0-sp", plain(np.array(" 7 "))),
+                   ("U0-0x10", plain(np.array("0x10"))), ("U0-under", plain(np.array("1_0"))),
+                   ("U0-neg", plain(np.array("-1"))), ("U0-empty", plain(np.array(""))),
+                   ("U0-arabic", plain(np.array("1٢"))), ("S0-12", plain(np.array(b"12"))),
+                   ("S0-1a", plain(np.array(b"1a"))), ("S0-sp", plain(np.array(b" 7 ")))):
+        add("strsurface", "philox_counter", operands=[x], layout=key, phase="compute",
+            call=lambda v: np.random.Philox(1, counter=v).state["state"]["counter"])
+
+    # ---- random: integer bounds that are text (small dtypes through the comparison checks, 64-bit through int()) ----
+    small = ["int8", "int16", "int32", "uint8", "uint16", "uint32", "bool"]
+    small_bounds = [("U,H", _text(["1", "5"]), num_operand(np.array([9, 10]))),
+                    ("I,U", num_operand(np.array([0, 1])), _text(["1", "5"])),
+                    ("S,H", _text([b"1", b"5"]), num_operand(np.array([9, 10]))),
+                    ("I,S", num_operand(np.array([0, 1])), _text([b"1", b"5"])),
+                    ("U,U", _text(["1", "5"]), _text(["1", "5"])),
+                    ("U0,H", plain(np.array("3")), num_operand(np.array([9, 10]))),
+                    ("Ue,He", _text([], "<U1"), num_operand(np.array([], dtype=np.int64)))]
+    apis = {
+        "legacy": lambda lo, hi, dt: np.random.RandomState(1).randint(lo, hi, dtype=dt),
+        "legacy_size0": lambda lo, hi, dt: np.random.RandomState(1).randint(lo, hi, size=0, dtype=dt),
+        "gen": lambda lo, hi, dt: np.random.default_rng(1).integers(lo, hi, dtype=dt),
+        "gen_closed": lambda lo, hi, dt: np.random.default_rng(1).integers(lo, hi, dtype=dt, endpoint=True),
+    }
+    for dt in small:
+        for key, lo, hi in small_bounds:
+            for api, fn in apis.items():
+                add("strsurface", "randint", params={"api": api, "dtype": dt}, operands=[lo, hi], layout=f"{dt}:{key}",
+                    phase="compute", call=lambda l, h, f=fn, d=dt: f(l, h, d))
+    H = num_operand(np.array([9, 10]))
+    wide_bounds = [
+        ("0d U 5,9", plain(np.array("5")), plain(np.array("9"))), ("0d U 1a,9", plain(np.array("1a")), plain(np.array("9"))),
+        ("0d U 5,1a", plain(np.array("5")), plain(np.array("1a"))), ("0d S 5,9", plain(np.array(b"5")), plain(np.array(b"9"))),
+        ("0d S 1a,9", plain(np.array(b"1a")), plain(np.array(b"9"))),
+        ("0d U sp7sp,9", plain(np.array(" 7 ")), plain(np.array("9"))),
+        ("0d U arabic,99", plain(np.array("1٢")), plain(np.array("99"))),
+        ("0d U 0x10,99", plain(np.array("0x10")), plain(np.array("99"))),
+        ("0d U 9,5", plain(np.array("9")), plain(np.array("5"))), ("0d U empty,9", plain(np.array("")), plain(np.array("9"))),
+        ("0d U 5,i9", plain(np.array("5")), num_operand(np.array(9))),
+        ("1d U 1-5,H", _text(["1", "5"]), H), ("1d U 1a-5,H", _text(["1a", "5"]), H),
+        ("1d S 1-5,H", _text([b"1", b"5"]), H), ("1d S 1a-5,H", _text([b"1a", b"5"]), H),
+        ("1d I,U 9-10", num_operand(np.array([0, 1])), _text(["9", "10"])),
+        ("1d I,U 9-1a", num_operand(np.array([0, 1])), _text(["9", "1a"])),
+        ("1d I,U 0-10", num_operand(np.array([0, 1])), _text(["0", "10"])),
+        ("1d U huge", _text(["99999999999999999999"]), H), ("1d U neg", _text(["-1", "0"]), H),
+        ("1d U 5-9,H5-10", _text(["5", "9"]), num_operand(np.array([5, 10]))),
+        ("2d U F", _view_operand(u_base(["1", "3", "2", "4"]), lambda b: b.reshape(2, 2, order="F")),
+         num_operand(np.array([[9, 9], [9, 9]]))),
+        ("1d U bcast", _view_operand(u_base(["3"]), lambda b: np.broadcast_to(b, (2,))), H),
+        ("1d U empty", _text([], "<U1"), num_operand(np.array([], dtype=np.int64))),
+    ]
+    for dt in ("int64", "uint64", "int32", "uint8"):
+        for key, lo, hi in wide_bounds:
+            for api in ("legacy", "gen", "gen_closed"):
+                fn = apis[api]
+                add("strsurface", "randint", params={"api": api, "dtype": dt}, operands=[lo, hi], layout=f"{dt}:{key}",
+                    phase="compute", call=lambda l, h, f=fn, d=dt: f(l, h, d))
+    for key, lo, dt in (("U int64", _text(["5", "9"]), "int64"), ("U0 int64", plain(np.array("5")), "int64"),
+                        ("U0 int32", plain(np.array("5")), "int32"), ("U0 uint8", plain(np.array("5")), "uint8")):
+        add("strsurface", "randint_onearg", params={"dtype": dt}, operands=[lo], layout=key, phase="compute",
+            call=lambda l, d=dt: np.random.RandomState(1).randint(l, dtype=d))
+
+    # ---- random: choice's p meets the 'safe' cast to float64 before its ndim / size checks ----
+    for key, p in (("U3", _text(["0.2", "0.3", "0.5"])), ("S3", _text([b"0.2", b"0.3", b"0.5"])),
+                   ("U0", plain(np.array("1"))), ("Ue", _text([], "<U1")), ("U2d", plain(np.array([["0.5", "0.5"]]))),
+                   ("C3", num_operand(np.array([0.2 + 0j, 0.3 + 0j, 0.5 + 0j])))):
+        for api in ("gen", "legacy"):
+            add("strsurface", "choice_p", params={"api": api}, operands=[p], layout=f"{api}:{key}", phase="compute",
+                call=lambda pp, a=api: (np.random.default_rng(1) if a == "gen" else np.random.RandomState(1)).choice(3, p=pp))
+
+    # ---- the histogram family over text data, bins, weights and ranges (the probe matrix) ----
+    hist_a = {"U": lambda: _text(["ab", "c", "de"]), "S": lambda: _text([b"ab", b"c", b"de"]),
+              "Ue": lambda: _text([], "<U2"), "U2d": lambda: plain(np.array([["ab", "c"], ["de", "f"]])),
+              "U1": lambda: _text(["ab"]), "F": lambda: num_operand(np.array([1.5, 2.0, 3.0]))}
+    hist_bins = {"10": 10, "0": 0, "auto": "auto", "bogus": "bogus", "Fbins": np.array([0.5, 1.0]),
+                 "Fdec": np.array([1.0, 0.5]), "Ubins": np.array(["a", "b"]), "Udec": np.array(["b", "a"]),
+                 "U1bins": np.array(["a"]), "Uebins": np.zeros(0, "<U1"), "F2d": np.array([[0.5, 1.0]]),
+                 "U2dbins": np.array([["a", "b"]]), "I0d": np.array(3), "U0d": np.array("3")}
+    hist_range = {"none": None, "01": (0.0, 1.0), "10r": (1.0, 0.0), "inf": (0.0, float("inf"))}
+
+    def weights_for(kind, a):
+        return {"ones": lambda: np.ones(a.shape), "bad": lambda: np.ones(7),
+                "U": lambda: np.full(a.shape, "w")}[kind]()
+
+    def bins_operand(b):
+        # ``target``: the replay rebuilds a 1-D string (or empty) operand as its own base and any other as a view, so
+        # NumPy must get the same kind of object for the edges it returns as-is to report the same flags.
+        return target(b)
+
+    for fn in ("histogram_bin_edges", "histogram"):
+        for ak, mk in hist_a.items():
+            for bk, bins in hist_bins.items():
+                for rk, rng in hist_range.items():
+                    for wk in ("none", "ones", "bad", "U"):
+                        for dens in ((False,) if fn == "histogram_bin_edges" else (False, True)):
+                            if (rk != "none" and wk != "none") or (dens and (wk != "none" or rk != "none")):
+                                continue
+                            a = mk()
+                            ops = [a]
+                            params = {"fn": fn, "range": _json_floats(rng) if rng else None, "density": dens}
+                            if isinstance(bins, np.ndarray):
+                                params["bins_op"] = len(ops)
+                                ops.append(bins_operand(bins))
+                            else:
+                                params["bins"] = bins
+                            if wk != "none":
+                                params["weights_op"] = len(ops)
+                                ops.append(num_operand(weights_for(wk, a[1])) if wk != "U" else plain(weights_for(wk, a[1])))
+
+                            # The call reads the REAL range (rr): params carry inf as the string "inf" for JSON.
+                            def call(*views, p=params, rr=rng):
+                                x = views[0]
+                                b = views[p["bins_op"]] if "bins_op" in p else p["bins"]
+                                w = views[p["weights_op"]] if "weights_op" in p else None
+                                if p["fn"] == "histogram_bin_edges":
+                                    return np.histogram_bin_edges(x, b, rr, w)
+                                return np.histogram(x, b, rr, p["density"], w)
+                            add("strsurface", "hist", params=params, operands=ops,
+                                layout=f"{fn}:a={ak}:bins={bk}:range={rk}:w={wk}:d={dens}",
+                                phase=_bins_phase(bins), call=call)
+    for fn in ("histogram2d", "histogramdd"):
+        for ak in ("U", "S", "Ue", "F"):
+            for bk in ("10", "Fbins", "Ubins", "U1bins", "I0d", "U0d"):
+                for rk in ("none", "01"):
+                    a = hist_a[ak]()
+                    y = num_operand(np.array([1.0, 2.0, 3.0]) if a[1].size == 3 else np.zeros(a[1].shape))
+                    bins = hist_bins[bk]
+                    ops = [a, y]
+                    params = {"fn": fn, "range": _json_floats(hist_range[rk]) if hist_range[rk] else None}
+                    if isinstance(bins, np.ndarray):
+                        params["bins_op"] = len(ops)
+                        ops.append(bins_operand(bins))
+                    else:
+                        params["bins"] = bins
+
+                    def call2(*views, p=params, r=hist_range[rk]):
+                        x, yy = views[0], views[1]
+                        b = views[p["bins_op"]] if "bins_op" in p else p["bins"]
+                        if p["fn"] == "histogram2d":
+                            return np.histogram2d(x, yy, b, (r, r) if r else None)
+                        bb = [b, b] if isinstance(b, np.ndarray) and b.ndim == 1 else b
+                        H, edges = np.histogramdd([x, yy], bb, (r, r) if r else None)
+                        return (H,) + tuple(edges)
+                    add("strsurface", "hist", params=params, operands=ops, layout=f"{fn}:a={ak}:bins={bk}:range={rk}",
+                        phase=_bins_phase(bins), call=call2)
+
+    # ---- histogramdd's bin specifications (mostly numeric; the per-dimension scalar checks the text work ported) ----
+    # "dd": np.histogramdd([x, y], bins) with an int or a list spec; "2d": np.histogram2d(x, y, bins) with an ARRAY spec,
+    # which NumPy hands to histogramdd unchanged when it has 2 entries (and as both dimensions' edges otherwise). A 0-d
+    # array spec of histogramdd is D copies of it (NumPy's `bins = D*[bins]` after len() fails), spelled so in C#.
+    hx = num_operand(np.array([1.0, 2.0, 3.0, 2.5]))
+    hy = num_operand(np.array([1.0, 2.0, 3.0, 0.5]))
+    hdd_cases = [
+        ("dd", "int 2", 2), ("dd", "ints 2-3", [2, 3]), ("dd", "0d 3", np.array(3)),
+        ("dd", "edges list", [np.array([0., 1, 2, 3]), np.array([0., 2, 4])]), ("dd", "mixed", [2, np.array([0., 2, 4])]),
+        ("dd", "py float", [2.5, 3]), ("dd", "py bool", [True, 3]), ("dd", "0d bool", [np.array(True), 3]),
+        ("dd", "zero", [0, 3]), ("dd", "None", [None, 3]), ("dd", "str", ["a", 3]), ("dd", "py complex", [1 + 0j, 3]),
+        ("dd", "decreasing", [np.array([1., 0]), 2]), ("dd", "0d text", [np.array("2"), 3]),
+        ("dd", "0d bytes", [np.array(b"2"), 3]), ("dd", "0d text edges", [np.array(["2"]), 3]),
+        ("dd", "text edges", [np.array(["1", "2"]), 3]),
+        ("2d", "1d ints", np.array([2, 3])), ("2d", "1d floats", np.array([2.0, 3.0])),
+        ("2d", "1d uint8", np.array([2, 3], np.uint8)), ("2d", "1d complex", np.array([2 + 0j, 3])),
+        ("2d", "2 rows", np.array([[0., 1, 2, 3], [0, 2, 4, 6]])), ("2d", "shared", np.array([0., 1, 2, 3])),
+        ("2d", "0d", np.array(3)), ("2d", "1 elem", np.array([3])), ("2d", "1d text", np.array(["2", "3"])),
+        ("2d", "1d bytes", np.array([b"2", b"3"])), ("2d", "1d bool", np.array([True, True])),
+    ]
+    for fn, key, spec in hdd_cases:
+        ops = [hx, hy]
+        enc_spec = _encode_bins(spec, ops)
+        if fn == "dd":
+            # NumPy gets the spec rebuilt over the recorded operand VIEWS (the objects the C# replay passes), so an
+            # edges array it returns is the same object in both.
+            call = (lambda x, yy, *rest, e=enc_spec: (lambda r: (r[0],) + tuple(r[1]))(
+                np.histogramdd([x, yy], _decode_bins(e, (x, yy) + rest))))
+        else:
+            call = lambda x, yy, b: np.histogram2d(x, yy, b)
+        add("strsurface", "hdd_bins", params={"fn": fn, "bins": enc_spec}, operands=ops, layout=f"{fn} {key}",
+            phase=_bins_phase(spec), call=call)
+
+    # ---- quantile q / percentile q over text, and text data with numeric q ----
+    F = num_operand(np.array([1.5, 2.0, 3.0]))
+    for name in ("percentile", "nanpercentile", "quantile", "nanquantile"):
+        for key, a, q in (("F,U", F, _text(["ab", "c", "de"])), ("F,S", F, _text([b"ab", b"c", b"de"])),
+                          ("F,U2d", F, plain(np.array([["ab", "c"], ["de", "f"]]))), ("F,U0", F, plain(np.array("ab"))),
+                          ("F,U12", F, _text(["a"] * 12)), ("F,Ue", F, _text([], "<U1")),
+                          ("U,U", _text(["ab", "c", "de"]), _text(["ab", "c", "de"])),
+                          ("Ue,Ue", _text([], "<U1"), _text([], "<U1")), ("Ue,F", _text([], "<U1"), num_operand(np.array([0.5])))):
+            add("strsurface", "quantile_q", params={"name": name}, operands=[a, q], layout=key, phase="compute",
+                call=lambda x, qq, n=name: getattr(np, n)(x, qq))
+
+    # ---- reductions and scans with out=: the loop resolved on (out, input) names both descriptors ----
+    for name in ("max", "min", "amax", "amin", "nanmax", "nanmin", "ptp", "median", "nanmedian", "cumsum", "cumprod",
+                 "nancumsum", "nancumprod"):
+        scan = name.startswith(("cum", "nancum"))
+        oshape = (3,) if scan else ()
+        for key, a, out in (("U,F", _text(["ab", "c", "de"]), target(np.zeros(oshape))),
+                            ("U,U4", _text(["ab", "c", "de"]), target(np.zeros(oshape, "<U4"))),
+                            ("F,U4", F, target(np.zeros(oshape, "<U4"))),
+                            ("U,I", _text(["ab", "c", "de"]), target(np.zeros(oshape, np.int64))),
+                            ("S,S4", _text([b"ab", b"c", b"de"]), target(np.zeros(oshape, "S4")))):
+            add("strsurface", "reduce_out", params={"name": name}, operands=[a, out], layout=key, phase="compute",
+                mutate=1, call=lambda x, o, n=name: getattr(np, n)(x, out=o))
+
+    # ---- arg-reductions with out=: the out shape, then the out's safe cast to intp, before the computation ----
+    U = _text(["ab", "c", "de"])
+    U2_ = plain(np.array([["ab", "c", "x"], ["de", "f", "y"]]))
+    for key, name, a, axis, out in (("nanargmax,U,o3", "nanargmax", U, None, target(np.zeros(3, np.int64))),
+                                    ("nanargmax,U,o0", "nanargmax", U, None, target(np.zeros((), np.int64))),
+                                    ("nanargmax,U,of", "nanargmax", U, None, target(np.zeros((), np.float64))),
+                                    ("nanargmin,U2,ax0,o3", "nanargmin", U2_, 0, target(np.zeros(4, np.int64))),
+                                    ("nanargmax,Ue,o0", "nanargmax", _text([], "<U1"), None, target(np.zeros((), np.int64))),
+                                    ("nanargmin,U1,o0", "nanargmin", _text(["ab"]), None, target(np.zeros((), np.int64)))):
+        add("strsurface", "argreduce_out", params={"name": name, "axis": axis}, operands=[a, out], layout=key,
+            phase="compute", mutate=1, call=lambda x, o, n=name, ax=axis: getattr(np, n)(x, axis=ax, out=o))
+    for name in ("nanargmax", "nanargmin"):
+        add("strsurface", "argreduce_out", params={"name": name, "axis": 5}, operands=[U], layout=f"{name},U,ax5",
+            phase="compute", call=lambda x, n=name: getattr(np, n)(x, axis=5))
+
+    # ---- polynomials over text ----
+    for key, name, ops in (("poly,U2d", "poly", [plain(np.array([["ab", "c"], ["de", "f"]]))]), ("poly,U", "poly", [U]),
+                           ("poly,U3d", "poly", [plain(np.zeros((2, 2, 2), "<U1"))]),
+                           ("poly,U2x3", "poly", [plain(np.zeros((2, 3), "<U1"))]),
+                           ("roots,U2d", "roots", [plain(np.array([["ab", "c"], ["de", "f"]]))]), ("roots,U", "roots", [U]),
+                           ("polymul,U,U", "polymul", [U, U]), ("polymul,U,F", "polymul", [U, F]),
+                           ("polymul,F,U", "polymul", [F, U]), ("polymul,Ue,F", "polymul", [_text([], "<U1"), F]),
+                           ("polymul,U2d,F", "polymul", [plain(np.array([["ab", "c"], ["de", "f"]])), F]),
+                           ("polyadd,U,U", "polyadd", [U, U]), ("polyval,U,F", "polyval", [U, F]),
+                           ("polyval,F,U", "polyval", [F, U]), ("polyder,U", "polyder", [U]), ("polyint,U", "polyint", [U]),
+                           ("polydiv,U,F", "polydiv", [U, F])):
+        add("strsurface", "poly", params={"name": name}, operands=ops, layout=key, phase="compute",
+            call=lambda *xs, n=name: getattr(np, n)(*xs))
+
+    # ---- emath (the complex-result wrappers): the domain checks meet the text first ----
+    for name in ("sqrt", "log", "log2", "log10", "arccos", "arcsin", "arctanh"):
+        for key, x in (("U", U), ("U0", plain(np.array("ab"))), ("Ue", _text([], "<U1")), ("S", _text([b"ab"]))):
+            add("strsurface", "emath", params={"name": name}, operands=[x], layout=key, phase="compute",
+                call=lambda v, n=name: getattr(np.emath, n)(v))
+    for key, a, b in (("U,F", U, F), ("F,U", F, U)):
+        for name in ("logn", "power"):
+            add("strsurface", "emath", params={"name": name}, operands=[a, b], layout=key, phase="compute",
+                call=lambda x, y, n=name: getattr(np.emath, n)(x, y))
+
+    # ---- index conversions: only integer (or bool) index arrays ----
+    for key, x, shape in (("U", U, [3]), ("F", F, [3]), ("U-neg-shape", U, [-1]), ("B", num_operand(np.array([True, False])), [3]),
+                          ("Ue", _text([], "<U1"), [3]), ("S", _text([b"1"]), [3])):
+        add("strsurface", "unravel_ix", params={"shape": shape}, operands=[x], layout=key, phase="compute",
+            call=lambda v, s=shape: np.unravel_index(v, tuple(s)))
+    for key, xs, dims in (("U", [U], [3]), ("F", [F], [3]), ("U,U-len", [U, U], [3]), ("Ue", [_text([], "<U1")], [3])):
+        add("strsurface", "ravel_mi", params={"dims": dims}, operands=xs, layout=key, phase="compute",
+            call=lambda *v, d=dims: np.ravel_multi_index(tuple(v), tuple(d)))
+
+    # ---- dtype predicates over arrays ----
+    B = num_operand(np.array([True]))
+    I = num_operand(np.array([1, 2, 3]))
+    for key, ops in (("U", [U]), ("S", [_text([b"ab"])]), ("B", [B]), ("F,U", [F, U]), ("I", [I]), ("F", [F]),
+                     ("I,F32", [I, num_operand(np.array([1.0], np.float32))])):
+        add("strsurface", "common_type", operands=ops, layout=key, phase="compute",
+            call=lambda *xs: np.dtype(np.common_type(*xs)))
+    for key, x in (("U", U), ("S", _text([b"ab"])), ("U0", plain(np.array("ab"))), ("Ue", _text([], "<U3"))):
+        add("strsurface", "min_scalar_type", operands=[x], layout=key, phase="compute", call=lambda v: np.min_scalar_type(v))
+    for key, x, to, casting in (("U-U1-safe", U, "<U1", "safe"), ("U-U2-safe", U, "<U2", "safe"),
+                                ("U-S2-same", U, "S2", "same_kind"), ("U-f8-unsafe", U, "f8", "unsafe"),
+                                ("U-f8-safe", U, "f8", "safe"), ("S-U2-safe", _text([b"ab"]), "<U2", "safe"),
+                                ("F-U32-safe", F, "<U32", "safe"), ("F-U31-safe", F, "<U31", "safe"),
+                                ("I-U21-safe", I, "<U21", "safe"), ("B-U5-safe", B, "<U5", "safe"),
+                                ("U0-U2-equiv", plain(np.array("ab")), "<U2", "equiv")):
+        add("strsurface", "can_cast_arr", params={"to": to, "casting": casting}, operands=[x], layout=key,
+            phase="compute", call=lambda v, t=to, c=casting: np.can_cast(v, t, c))
+
+    # ---- ediff1d: to_begin / to_end meet the same_kind check before the subtraction ----
+    for key, ary, to_end, to_begin in (("U", U, None, None), ("Ue", _text([], "<U1"), None, None),
+                                       ("F,end=U", F, U, None), ("F,begin=U", F, None, U),
+                                       ("U,end=F", U, F, None), ("U,end=U", U, _text(["x"]), None),
+                                       ("U0", plain(np.array("ab")), None, None)):
+        ops = [ary] + [x for x in (to_end, to_begin) if x is not None]
+        params = {"end": 1 if to_end is not None else None,
+                  "begin": (2 if to_end is not None else 1) if to_begin is not None else None}
+        add("strsurface", "ediff1d", params=params, operands=ops, layout=key, phase="compute",
+            call=lambda *v, p=params: np.ediff1d(v[0], to_end=v[p["end"]] if p["end"] else None,
+                                                 to_begin=v[p["begin"]] if p["begin"] else None))
+
+    # ---- where= masks that are text: the mask's 'safe' cast to bool fails before anything is read ----
+    Fd = num_operand(np.array([1.0, 2.0, 3.0]))
+    for mkey, mask in (("U", _text(["a", "", "b"])), ("S", _text([b"a", b"", b"b"])), ("U0", plain(np.array("a")))):
+        for name in ("add", "subtract", "sqrt", "less", "logical_and", "max", "copyto"):
+            ops = [target(np.array([1.0, 2.0, 3.0])), Fd, mask] if name == "copyto" else [Fd, Fd, mask]
+            add("strsurface", "where_mask", params={"name": name}, operands=ops, layout=f"{name}:{mkey}", phase="compute",
+                mutate=0 if name == "copyto" else None, call=lambda x, y, m, n=name: _where_call(n, x, y, m))
+
+    # ---- 0-d conversions to Python scalars (the C# explicit conversions) ----
+    for key, x, to in (("U0-ab-complex", plain(np.array("ab")), "complex"), ("U0-1-complex", plain(np.array("1")), "complex"),
+                       ("S0-1-complex", plain(np.array(b"1")), "complex"), ("U0-ab-float", plain(np.array("ab")), "float"),
+                       ("U0-1.5-float", plain(np.array("1.5")), "float"), ("U0-12-int", plain(np.array("12")), "int"),
+                       ("U0-ab-int", plain(np.array("ab")), "int")):
+        add("strsurface", "to_scalar", params={"to": to}, operands=[x], layout=key, phase="compute",
+            call=lambda v, t=to: {"complex": lambda: np.complex128(complex(v)), "float": lambda: np.float64(float(v)),
+                                  "int": lambda: np.int64(int(v))}[t]())
+
+    # ---- fill with a sequence: the string target's text has no trailing period ----
+    for key, a, v in (("U3,U2", target(np.array(["a", "b", "c"])), _text(["x", "y"])),
+                      ("S3,S2", target(np.array([b"a", b"b", b"c"])), _text([b"x", b"y"])),
+                      ("U3,F2", target(np.array(["a", "b", "c"])), num_operand(np.array([1.0, 2.0]))),
+                      ("F3,F2", target(np.array([1.0, 2.0, 3.0])), num_operand(np.array([1.0, 2.0]))),
+                      ("U3,U1", target(np.array(["a", "b", "c"])), _text(["x"]))):
+        add("strsurface", "fill_seq", operands=[a, v], layout=key, phase="compute", mutate=0,
+            call=lambda t, val: t.fill(val))
+
+
+def _json_floats(values):
+    """Floats as JSON: a finite value as a number, inf / -inf / nan as the strings "inf" / "-inf" / "nan" (JSON has
+    no literal for them; the replay reads either form)."""
+    return [float(v) if np.isfinite(v) else repr(float(v)) for v in values]
+
+
+def _where_call(name, x, y, mask):
+    """One where= call of section M: a binary / unary / comparison / logical ufunc, np.max with an initial, or copyto."""
+    if name == "sqrt":
+        return np.sqrt(x, where=mask)
+    if name == "max":
+        return np.max(x, initial=0, where=mask)
+    if name == "copyto":
+        return np.copyto(x, y, where=mask)
+    return getattr(np, name)(x, y, where=mask)
+
+
+def _bins_phase(spec):
+    """The phase of a histogram call whose bins are ``spec``: 2 when a bins array is TEXT of two or more elements —
+    NumPy's monotonicity check compares those elements, so which error (or answer) follows depends on the text; else
+    "compute" (NumPy's error is final, its answer the next phase)."""
+    items = spec if isinstance(spec, list) else [spec]
+    for item in items:
+        if isinstance(item, np.ndarray) and item.dtype.kind in "SU" and item.ndim == 1 and item.size >= 2:
+            return 2
+    return "compute"
+
+
+def _decode_bins(enc_spec, views):
+    """The inverse of ``_encode_bins`` over the recorded operand views: a 0-d array spec becomes its two copies (NumPy's
+    own ``D*[bins]``, which the C# replay spells as an object[] of the two)."""
+    if isinstance(enc_spec, dict):
+        if "op" in enc_spec:
+            v = views[enc_spec["op"]]
+            return [v, v]
+        return enc_spec["int"]
+    out = []
+    for e in enc_spec:
+        if "op" in e:
+            out.append(views[e["op"]])
+        elif "int" in e:
+            out.append(e["int"])
+        elif "float" in e:
+            out.append(e["float"])
+        elif "bool" in e:
+            out.append(e["bool"])
+        elif "none" in e:
+            out.append(None)
+        elif "complex" in e:
+            out.append(complex(*e["complex"]))
+        elif "u" in e:
+            out.append(bytes.fromhex(e["u"]).decode("utf-32-le", "surrogatepass"))
+        else:
+            raise ValueError(f"unknown bins entry {e}")
+    return out
+
+
+def _encode_bins(spec, ops):
+    """A histogramdd bin specification as JSON: Python scalars by kind, arrays as appended operands ({"op": index})."""
+    if isinstance(spec, np.ndarray):
+        ops.append(target(spec))
+        return {"op": len(ops) - 1}
+    if isinstance(spec, list):
+        return [_encode_bins(s, ops) for s in spec]
+    if isinstance(spec, np.str_):
+        return {"npstr": enc(str(spec))}
+    if isinstance(spec, complex):
+        return {"complex": [spec.real, spec.imag]}
+    return enc(spec)
+
+
 # ----------------------------------------------------------------------------------------------------------------------
 
 def main():
@@ -1377,10 +2402,15 @@ def main():
     gen_refusals()
     gen_string_requests()
     gen_text_precedence()
+    gen_shape_decided()
+    gen_validation_order()
+    gen_surface()
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with open(OUT, "wb") as f:
         for c in CASES:
-            f.write(json.dumps(c, ensure_ascii=True, separators=(",", ":")).encode("ascii") + b"\n")
+            # allow_nan=False: a NaN / infinity in the params would be written as invalid JSON (Infinity); such a value
+            # travels as a string instead (_json_floats).
+            f.write(json.dumps(c, ensure_ascii=True, separators=(",", ":"), allow_nan=False).encode("ascii") + b"\n")
     by_section = {}
     for c in CASES:
         sec = c["id"].split("/")[0]

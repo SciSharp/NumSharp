@@ -16,7 +16,8 @@ namespace NumSharp
         /// </param>
         /// <param name="axis">
         ///     The axis along which the arrays will be joined. If
-        ///     <c>null</c>, arrays are flattened before use. Default is 0.
+        ///     <c>null</c>, arrays are flattened before use — a 0-d array included, which joins as one element (an axis
+        ///     refuses it: "zero-dimensional arrays cannot be concatenated"). Default is 0.
         ///     Negative axes are normalized against the input ndim.
         /// </param>
         /// <param name="out">
@@ -33,7 +34,19 @@ namespace NumSharp
         ///     <c>"no"</c>, <c>"equiv"</c>, <c>"safe"</c>, <c>"same_kind"</c>
         ///     (default), or <c>"unsafe"</c>.
         /// </param>
-        /// <returns>The concatenated array.</returns>
+        /// <returns>The concatenated array (<paramref name="out"/> itself when given).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arrays"/> or one of its elements is null.</exception>
+        /// <exception cref="ArgumentException">No arrays; an unknown <paramref name="casting"/> name; both
+        ///     <paramref name="out"/> and <paramref name="dtype"/>.</exception>
+        /// <exception cref="ValueError">A 0-d array with an axis (<c>zero-dimensional arrays cannot be concatenated</c>; NumPy's
+        ///     ValueError — <c>axis=None</c> ravels it into one element instead).</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is out of bounds.</exception>
+        /// <exception cref="IncorrectShapeException">The inputs' ranks or non-axis dimensions differ, or
+        ///     <paramref name="out"/> has the wrong rank or shape (NumPy's ValueError texts).</exception>
+        /// <exception cref="InvalidCastException">An input does not cast to the result dtype under
+        ///     <paramref name="casting"/> (NumPy's TypeError text).</exception>
+        /// <exception cref="StringComputationNotSupportedException">Text joined with numbers that NumPy formats or parses
+        ///     (see the string route, <c>np.concatenate.Strings.cs</c>).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.concatenate.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray concatenate(
@@ -73,13 +86,15 @@ namespace NumSharp
                 throw new ArgumentException(
                     "concatenate() only takes `out` or `dtype` as an argument, but both were provided.");
 
-            // 0-D arrays cannot be concatenated (NumPy: "zero-dimensional arrays cannot be concatenated").
+            // 0-D arrays cannot be concatenated along an axis (NumPy: "zero-dimensional arrays cannot be concatenated");
+            // axis=None ravels every input first (PyArray_ConcatenateFlattenedArrays), so a 0-d input is one element there
+            // (np.concatenate((np.array(1), np.array(2)), axis=None) is [1, 2]).
             for (int k = 0; k < arrays.Length; k++)
             {
                 if (arrays[k] is null)
                     throw new ArgumentNullException($"{nameof(arrays)}[{k}]");
-                if (arrays[k].ndim == 0)
-                    throw new ArgumentException(
+                if (arrays[k].ndim == 0 && axis is not null)
+                    throw new ValueError(
                         "zero-dimensional arrays cannot be concatenated");
             }
 
@@ -183,13 +198,12 @@ namespace NumSharp
             {
                 if (@out.ndim != ndim)
                     throw new IncorrectShapeException(
-                        $"Output array has wrong dimensionality: expected {ndim}, got {@out.ndim}");
+                        "Output array has wrong dimensionality");
                 for (int j = 0; j < ndim; j++)
                 {
                     if (@out.Shape.dimensions[j] != firstShape[j])
                         throw new IncorrectShapeException(
-                            $"Output array has wrong shape: expected " +
-                            $"({string.Join(", ", firstShape)}), got ({string.Join(", ", @out.Shape.dimensions)})");
+                            "Output array is the wrong shape");
                 }
                 dst = @out;
             }

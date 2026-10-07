@@ -103,15 +103,63 @@ namespace NumSharp
             /// <param name="arrays">The operands to check (any dtype, any layout).</param>
             /// <exception cref="LinAlgError"><c>Array must not contain infs or NaNs</c> — an operand holds ±inf or a NaN
             ///     (a complex one in either component).</exception>
+            /// <exception cref="TypeError">An operand holds fixed-width strings: NumPy's <c>isfinite</c> has no string loop
+            ///     (<c>ufunc 'isfinite' not supported for the input types, ...</c>), raised whatever the operand's size.</exception>
             internal static void AssertFinite(params NDArray[] arrays)
             {
                 foreach (var a in arrays)
                 {
+                    // NumPy's isfinite(a) resolves its loop before it reads an element: a string operand (even an empty
+                    // one) is refused by the legacy type resolver.
+                    if (Backends.Strings.NDStringUfuncs.IsString(a))
+                        throw Backends.Strings.NDStringUfuncs.NotSupportedForInputTypes("isfinite");
                     bool floaty = a.typecode is NPTypeCode.Half or NPTypeCode.Single
                         or NPTypeCode.Double or NPTypeCode.Complex;
                     if (floaty && !Backends.Kernels.FiniteScan.IsAllFinite(a))
                         throw new LinAlgError("Array must not contain infs or NaNs");
                 }
+            }
+
+            /// <summary>
+            ///     The refusal NumPy's <c>_umath_linalg</c> gufunc raises when one of its operands holds fixed-width
+            ///     strings: <c>_commonType</c> puts a string operand in its <c>rt = double</c> branch, so the gufunc runs
+            ///     with a <c>d-&gt;d</c> (or, beside a complex operand, <c>D-&gt;D</c>) signature, and its input-cast check
+            ///     refuses the text before LAPACK sees anything — an EMPTY string operand included.
+            /// </summary>
+            /// <param name="gufunc">The <c>_umath_linalg</c> gufunc NumPy calls (<c>"inv"</c>, <c>"cholesky_lo"</c>,
+            ///     <c>"svd_f"</c>, <c>"solve1"</c>, ...).</param>
+            /// <param name="operands">The gufunc's inputs, in its order; nothing happens when none holds strings.</param>
+            /// <exception cref="ArgumentException">The first string operand: <c>Cannot cast ufunc 'inv' input from
+            ///     dtype('&lt;U2') to dtype('float64') with casting rule 'same_kind'</c> (a multi-input gufunc names the
+            ///     input: <c>input 1</c>). NumPy raises a UFuncTypeError; the house type of a ufunc input-cast refusal is
+            ///     <see cref="ArgumentException"/>.</exception>
+            /// <remarks>
+            ///     Call it right after <see cref="CommonType"/> (whose "unsupported in linalg" refusal of float16 / decimal /
+            ///     char comes first, as NumPy's <c>_commonType</c> runs before the gufunc) and before any core-dimension
+            ///     check, which NumPy's gufunc makes after it resolves the loop.
+            /// </remarks>
+            internal static void ThrowIfTextGufunc(string gufunc, params NDArray[] operands)
+            {
+                int first = -1;
+                bool complex = false;
+                for (int i = 0; i < operands.Length; i++)
+                {
+                    var op = operands[i];
+                    if (op is null)
+                        continue;
+                    if (first < 0 && Backends.Strings.NDStringUfuncs.IsString(op))
+                        first = i;
+                    if (op.typecode == NPTypeCode.Complex)
+                        complex = true;
+                }
+                if (first < 0)
+                    return;
+                // _commonType: any complex operand makes the loop complex128, a string or any other operand float64.
+                string target = complex ? "complex128" : "float64";
+                string input = operands.Length > 1 ? $"input {first}" : "input";
+                throw new ArgumentException(
+                    $"Cannot cast ufunc '{gufunc}' {input} from {operands[first].dtype.ToString(true)} to dtype('{target}') " +
+                    "with casting rule 'same_kind'");
             }
 
             /// <summary>
@@ -147,7 +195,9 @@ namespace NumSharp
                         case NPTypeCode.Char:
                             throw new TypeError($"array type {NumpyName(a.typecode)} is unsupported in linalg");
                         default:
-                            // bool and every integer width: NumPy's `result_type = double` branch.
+                            // bool, every integer width and the string classes: NumPy's `rt = double` branch for any
+                            // non-inexact type (a string operand is then refused by the gufunc's input cast,
+                            // ThrowIfTextGufunc).
                             wideningToDouble = true;
                             break;
                     }

@@ -268,11 +268,16 @@ namespace NumSharp
         ///     <c>np.any(x &lt; 0)</c> — a NaN never triggers (<c>nan &lt; 0</c> is false) and <c>-0.0</c>
         ///     never triggers, both matching NumPy's element-wise <c>x &lt; 0</c>.
         /// </returns>
+        /// <exception cref="TypeError">Text (<see cref="LessThanZeroTextError"/>).</exception>
         [NDScoped]
         private static NDArray FixRealLtZero(NDArray x)
         {
             if (x.typecode == NPTypeCode.Complex)
                 return x; // complex in -> complex ufunc out; the scan/_tocomplex would be a value-identical no-op
+            // Text: NumPy's `x < 0` has no loop for text and a Python int, whatever the size (an empty array included,
+            // which the fast scan below would skip).
+            if (Backends.Strings.NDStringUfuncs.IsString(x))
+                throw LessThanZeroTextError(x);
             // Fused early-exit scan for the hot contiguous float32/float64 case (no abs/bool temp, one pass);
             // null => not the fast path, so use the composition, whose `x < 0` boolean is layout- and
             // promotion-invariant (an element is negative or it is not) and equals `any(isreal(x) & (x<0))`
@@ -293,11 +298,16 @@ namespace NumSharp
         ///     <c>|x| == 1</c> stays real; a <c>nan</c> never triggers (<c>|nan| &gt; 1</c> is false) while
         ///     an infinity does (<c>|inf| &gt; 1</c> is true) — all matching NumPy's <c>abs(x) &gt; 1</c>.
         /// </returns>
+        /// <exception cref="TypeError">Text: NumPy's <c>abs(x)</c> has no text loop (<c>ufunc 'absolute' did not contain a
+        ///     loop with signature matching types &lt;class 'numpy.dtypes.StrDType'&gt; -&gt; None</c>), even for an empty
+        ///     array.</exception>
         [NDScoped]
         private static NDArray FixRealAbsGt1(NDArray x)
         {
             if (x.typecode == NPTypeCode.Complex)
                 return x;
+            if (Backends.Strings.NDStringUfuncs.IsString(x))
+                throw new TypeError($"ufunc 'absolute' did not contain a loop with signature matching types {x.dtype.Meta} -> None");
             bool big = Backends.Kernels.EmathDomainScan.AnyAbsGreaterThanOne(x) ?? np.any(np.abs(x) > (NDArray)1);
             return big ? x.astype(np.complex128) : x;
         }
@@ -316,13 +326,27 @@ namespace NumSharp
         ///     values, <c>-0.0</c>/<c>±inf</c>/<c>nan</c> preserved). NOT a cast to complex — only the base
         ///     promotes to complex.
         /// </returns>
+        /// <exception cref="TypeError">Text (<see cref="LessThanZeroTextError"/>).</exception>
         [NDScoped]
         private static NDArray FixIntLtZero(NDArray p)
         {
             if (p.typecode == NPTypeCode.Complex)
                 return p;
+            if (Backends.Strings.NDStringUfuncs.IsString(p))
+                throw LessThanZeroTextError(p);
             bool neg = Backends.Kernels.EmathDomainScan.AnyNegative(p) ?? np.any(p < (NDArray)0);
             return neg ? p * 1.0 : p;
         }
+
+        /// <summary>
+        ///     NumPy's refusal of the domain scans' <c>x &lt; 0</c> for text: the comparison promoter names the text class and
+        ///     the Python int's abstract class, <c>ufunc 'less' did not contain a loop with signature matching types
+        ///     (&lt;class 'numpy.dtypes.StrDType'&gt;, &lt;class 'numpy.dtypes._PyLongDType'&gt;) -&gt; None</c> (C#'s own
+        ///     <c>(NDArray)0</c> is a strong int32 array and would name <c>Int32DType</c>).
+        /// </summary>
+        /// <param name="x">The text array.</param>
+        /// <returns>The exception (not thrown).</returns>
+        private static TypeError LessThanZeroTextError(NDArray x)
+            => new TypeError($"ufunc 'less' did not contain a loop with signature matching types ({x.dtype.Meta}, {DTypeRegistry.PyLong}) -> None");
     }
 }

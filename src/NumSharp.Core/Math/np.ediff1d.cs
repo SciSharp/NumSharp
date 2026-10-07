@@ -48,6 +48,10 @@ namespace NumSharp
         ///     cast to <paramref name="ary"/>'s dtype under <c>same_kind</c>.</exception>
         /// <exception cref="NotSupportedException"><paramref name="ary"/> is boolean (NumPy forbids boolean
         ///     subtraction).</exception>
+        /// <exception cref="TypeError"><paramref name="ary"/> holds fixed-width strings: NumPy's subtract has no string
+        ///     loop (<c>ufunc 'subtract' did not contain a loop with signature matching types (dtype('&lt;U2'),
+        ///     dtype('&lt;U2')) -&gt; None</c>), raised after the <paramref name="to_begin"/> / <paramref name="to_end"/>
+        ///     checks, as NumPy raises it.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.ediff1d.html
         ///     <para>Scoped by <c>[NDScoped]</c>: the ravel, the prepared <paramref name="to_begin"/> /
@@ -68,9 +72,18 @@ namespace NumSharp
 
             NDArray begin = null, end = null, middle = null;
 
-            // NumPy validates/casts to_begin and to_end before differencing.
-            begin = EdiffPrepareEnd(to_begin, dt, "to_begin");
-            end = EdiffPrepareEnd(to_end, dt, "to_end");
+            // NumPy validates/casts to_begin and to_end before differencing. The check compares DESCRIPTORS
+            // (NumPy's can_cast(to_begin, ary.dtype, "same_kind")), so a text operand on either side gets NumPy's
+            // answer rather than a storage-lane refusal: a number reaches text under same_kind (float64 -> <U2),
+            // text never reaches a number.
+            begin = EdiffPrepareEnd(to_begin, flat.dtype, "to_begin");
+            end = EdiffPrepareEnd(to_end, flat.dtype, "to_end");
+
+            // A text input: NumPy's `ary[1:] - ary[:-1]` (or the subtract into its result buffer) has no string loop.
+            // Every earlier step (the casting checks, copying the brackets into the result) cannot fail for text, so
+            // the subtract refusal is the answer whatever the brackets hold — raised here without converting them.
+            if (dt == NPTypeCode.String)
+                throw Backends.Strings.NDStringUfuncs.BinaryError("subtract", flat, flat, null, null);
 
             // ediff1d differences with subtract for ALL dtypes; NumPy forbids
             // boolean subtraction (np.diff special-cases bool, ediff1d does not).
@@ -119,26 +132,34 @@ namespace NumSharp
         ///     <c>null</c> when <paramref name="value"/> is <c>null</c>.
         /// </summary>
         /// <param name="value">The <c>to_begin</c>/<c>to_end</c> operand: null, a scalar, a collection or an NDArray.</param>
-        /// <param name="dt">The dtype of the flattened input.</param>
+        /// <param name="dt">The dtype (descriptor) of the flattened input.</param>
         /// <param name="name">The parameter name quoted in the casting error.</param>
-        /// <returns>A fresh 1-D array of dtype <paramref name="dt"/>, or <c>null</c>.</returns>
+        /// <returns>A fresh 1-D array of dtype <paramref name="dt"/>; <c>null</c> when <paramref name="value"/> is
+        ///     <c>null</c> or <paramref name="dt"/> is a string dtype (the caller refuses text before it would use the
+        ///     operand, so converting it would only cost a number-to-text conversion NumSharp does not do yet).</returns>
         /// <exception cref="ArgumentException"><paramref name="value"/>'s dtype cannot be cast to
-        ///     <paramref name="dt"/> under <c>same_kind</c>.</exception>
+        ///     <paramref name="dt"/> under <c>same_kind</c> (NumPy's TypeError text; the house type for this check).</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only caller is the <c>[NDScoped]</c>
         ///     <see cref="ediff1d"/>, so the conversion of a non-array <paramref name="value"/> and its ravel are
         ///     released by that scope, exceptions included. An <see cref="NDArray"/> <paramref name="value"/> is the
         ///     caller's and is never disposed.</remarks>
         [NDScopedCovered]
-        private static NDArray EdiffPrepareEnd(object value, NPTypeCode dt, string name)
+        private static NDArray EdiffPrepareEnd(object value, DType dt, string name)
         {
             if (value is null) return null;
 
             NDArray src = value is NDArray nd ? nd : np.asanyarray(value);
 
-            if (!np.can_cast(src.GetTypeCode, dt, "same_kind"))
+            // NumPy's np.can_cast(to_begin, dtype_req, casting="same_kind") on the two DESCRIPTORS: a string operand or
+            // a string input is judged by its class and width (float64 -> <U2 is same_kind, <U2 -> float64 is not).
+            if (!np.can_cast(src.dtype, dt, "same_kind"))
                 throw new ArgumentException(
                     $"dtype of `{name}` must be compatible with input `ary` " +
                     "under the `same_kind` rule.", name);
+
+            // A string input is refused by the caller right after both checks: the operand is never used.
+            if (dt.Meta is StringDTypeMeta)
+                return null;
 
             var flat = np.ravel(src);
             return flat.astype(dt, copy: true);

@@ -72,8 +72,30 @@ read-only `out=`, non-bool `where=`, the axis under one of three rules, the quan
 a computing loop's output cast and broadcast; `Backends/Strings/NDStringUfuncs{,.Precedence}.cs`). Every engine ufunc
 member resolves its `dtype=` through `UfuncLoopCode(dtype, "<numpy name>", x1, x2, out, where)` so an unsized string
 request (`'U'`, `'S'`) gets NumPy's per-ufunc answer. Gate: the string oracle (`test/oracle/gen_strings_oracle.py` →
-`NumSharp.Tests.Oracle/Strings`, 14,175 cases; a phase-2 case passes as "deferred" only while NumSharp throws
-`StringComputationNotSupportedException`, so phase 2 is gated by the same corpus) + `Backends/Strings/StringCallOrderTests.cs`.
+`NumSharp.Tests.Oracle/Strings`, 18,790 cases; a phase-2 case passes as "deferred" only while NumSharp throws
+`StringComputationNotSupportedException`, so phase 2 is gated by the same corpus) + `Backends/Strings/StringCallOrderTests.cs`
++ `StringShapeDecidedTests.cs`. **Validation pass (2026-10-07)** — the deferral rule is now exact: defer ONLY where NumPy
+reads the text (compares, concatenates, parses, formats into a result); where dtypes, sizes or shapes decide NumPy's
+answer, give that answer. So (1) an empty array, lines of one element, or a pair the comparison operators cannot compare
+are answered from the shape — truth tests, counts, the nonzero family, arg-reductions, sort / partition, `np.unique` and
+its Array-API forms, `isin`, the set routines, `array_equal` / `array_equiv`, `lexsort`, `sort_complex`, `trim_zeros`
+(`NDStringUfuncs.ShapeDecided.cs`: the numeric path runs on a bool STAND-IN of the operand's shape, values restored from
+the input) and binary ufuncs over an empty broadcast (`BinaryGuard`); (2) NumPy's checks before a conversion run in its
+order (interp / digitize / repeat depth then 'safe' cast, conversions of nothing, place / putmask: an ndarray value meets
+the 'safe' rule while a C# array is a Python list converted directly — new `Array` overloads, insert / delete obj,
+searchsorted, choose, concatenate's out texts); (3) the rest of the surface refuses with NumPy's text: the linalg
+gufuncs' input casts, the products' order (0-d → alignment → out → itemsize), convolve / correlate depth, SeedSequence
+and random integer bounds over text arrays (CPython `int()` ported in `PythonInt`), the histogram family, quantile `q`,
+reductions / scans with `out=`, nanargmax's out, polynomials, emath, unravel / ravel (`only int indices permitted`),
+`common_type` / `min_scalar_type` / `can_cast` of arrays, `ediff1d`, text `where=` masks, `complex(U0)`. Numeric fixes it
+found, all NumPy 2.4.2: `norm` of an empty operand (inf / 1 / 2 reduce with `initial=0`), `matrix_power(a, 1) is a`,
+`np.cross` broadcasts its leading axes before the dtype (np.broadcast's text), `histogramdd`'s H is a VIEW of the padded
+counts and the caller's edges come back as the same object, histogramdd's per-dimension scalar bin checks, `tensorinv`
+with `ind > ndim`, argsort of a 0-d, 1-D `unique(axis=0)` = the flat path, `concatenate(axis=None)` of 0-d operands,
+insert of a one-element sequence, delete of an N-D / int8 obj, digitize / trim_zeros / insert / delete error classes,
+`min_scalar_type(NDArray)` (returned null). Oracle sections `strshape` / `strvalid` / `strsurface` (1,674 / 173 / 2,768)
+pin all of it. Open: `np.ma` over text, `np.nditer` over strings, `argwhere` / `flatnonzero` / `unravel_index` result
+layout (views in NumPy, `OpenBugs.IndexSearchLayout.cs`), an empty matrix's QR / SVD without the OpenBLAS backend.
 **Trap:** NumPy's ufunc dispatch cache makes some answers depend on call HISTORY (`np.prod(int8, dtype='U')` names no
 loop in a fresh process but finds the string repeat loop after `np.multiply(u, int8, dtype='U')`); the corpus records
 the fresh-process answer. **Movement perf** (NPY/NS, two pinned P-cores, 100K / 1M `<U8`): copy 5.0 / 3.7×, strided /

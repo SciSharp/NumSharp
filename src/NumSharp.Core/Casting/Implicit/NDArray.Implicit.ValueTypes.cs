@@ -46,18 +46,36 @@ namespace NumSharp
         ///       <item><c>ndim == 0</c> (only 0-d arrays can be converted to Python scalars, per NumPy 2.x).</item>
         ///       <item>If target is non-complex, source must not be complex (TypeError, per Python's
         ///             <c>int(complex)</c>/<c>float(complex)</c> semantics).</item>
+        ///       <item>A string source: complex is NumPy's cast refusal, every other target parses or tests the text
+        ///             (the next phase of the string support).</item>
         ///     </list>
         /// </summary>
+        /// <param name="nd">The array being converted.</param>
+        /// <param name="targetType">The C# target type's name, quoted in the messages.</param>
+        /// <param name="targetIsComplex">True for the <see cref="Complex"/> conversion.</param>
+        /// <exception cref="IncorrectShapeException"><paramref name="nd"/> is not 0-d.</exception>
+        /// <exception cref="TypeError">A complex source to a non-complex target, or a string source to complex (NumPy's
+        ///     <c>Unable to convert dtype('&lt;U2') to complex</c>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A string source to any other target: NumPy parses the
+        ///     text (int, float) or tests it for emptiness (bool).</exception>
         private static void EnsureCastableToScalar(NDArray nd, string targetType, bool targetIsComplex)
         {
             if (nd.ndim != 0)
                 throw new IncorrectShapeException("only 0-d arrays can be converted to scalar");
             if (!targetIsComplex && nd.typecode == NPTypeCode.Complex)
                 throw new TypeError($"can't convert complex to {targetType}");
-            // NumPy's int(arr) / float(arr) parse a 0-d string array's text and bool(arr) tests it for emptiness: text
-            // computation, the next phase of the string support. (The explicit string conversion prints the text.)
             if (nd.typecode == NPTypeCode.String)
+            {
+                // complex(arr) never reads the text: NumPy's array_complex first asks whether the descriptor casts to
+                // complex128 under same_kind, and a string does not (TypeError "Unable to convert dtype('<U2') to
+                // complex"), before any parsing.
+                if (targetIsComplex)
+                    throw new TypeError($"Unable to convert {nd.dtype.ToString(true)} to complex");
+                // NumPy's int(arr) / float(arr) parse a 0-d string array's text and bool(arr) tests it for emptiness:
+                // text computation, the next phase of the string support. (The explicit string conversion prints the
+                // text.)
                 throw Backends.Strings.NDStringUfuncs.NextPhase($"Converting to {targetType}", nd);
+            }
         }
 
         public static explicit operator bool(NDArray nd)

@@ -13,6 +13,11 @@ namespace NumSharp
         /// <param name="filt">Input array.</param>
         /// <param name="trim">'f' trims from the front, 'b' from the back; "fb" (default) trims both. Case-insensitive.</param>
         /// <param name="axis">The single dimension to trim; <c>null</c> trims the whole-array bounding box.</param>
+        /// <returns>A view of <paramref name="filt"/> (see the <c>int[]</c> overload).</returns>
+        /// <exception cref="ValueError"><paramref name="trim"/> contains unexpected characters.</exception>
+        /// <exception cref="AxisOutOfRangeException"><paramref name="axis"/> is out of bounds for <paramref name="filt"/>.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty string array with an axis to trim: NumPy reads
+        ///     the strings' truth values (the next phase of NumSharp's string support).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray trim_zeros(NDArray filt, string trim = "fb", int? axis = null)
@@ -40,8 +45,12 @@ namespace NumSharp
         ///     A view of <paramref name="filt"/> with leading/trailing all-zero hyperplanes removed. The number
         ///     of dimensions and the input dtype are preserved.
         /// </returns>
-        /// <exception cref="ArgumentException">If <paramref name="trim"/> contains unexpected characters, or an axis is repeated.</exception>
+        /// <exception cref="ValueError">If <paramref name="trim"/> contains unexpected characters, or an axis is repeated
+        ///     (NumPy's ValueError texts).</exception>
         /// <exception cref="AxisOutOfRangeException">If an axis is out of bounds for <paramref name="filt"/>.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty string array with an axis to trim: NumPy reads
+        ///     the strings' truth values (the next phase of NumSharp's string support). An empty one collapses every trimmed
+        ///     axis to length 0, and a 0-d one (or an empty axis list) is returned as it is.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
@@ -50,13 +59,10 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(filt))
                 return NDMatrixBoundary.Wrapped((filt, trim, axis), static s => trim_zeros(s.filt, s.trim, s.axis));
-            // NumPy computes this on text (sorting, searching, truth tests); string computation is
-            // the next phase of NumSharp's string support, so a string array is refused here.
-            if (Backends.Strings.NDStringUfuncs.IsString(filt)) throw Backends.Strings.NDStringUfuncs.NextPhase("trim_zeros", filt);
             // NumPy lower-cases and validates the trim spec against the four accepted spellings.
             trim = (trim ?? string.Empty).ToLowerInvariant();
             if (trim != "fb" && trim != "bf" && trim != "f" && trim != "b")
-                throw new ArgumentException($"unexpected character(s) in `trim`: '{trim}'");
+                throw new ValueError($"unexpected character(s) in `trim`: '{trim}'");
 
             int ndim = filt.ndim;
 
@@ -77,7 +83,7 @@ namespace NumSharp
                 {
                     int a = DefaultEngine.check_and_adjust_axis(ndim, ax);
                     if (trimAxis[a])
-                        throw new ArgumentException("repeated axis in `axis` argument");
+                        throw new ValueError("repeated axis in `axis` argument");
                     trimAxis[a] = true;
                 }
             }
@@ -85,6 +91,12 @@ namespace NumSharp
             // No trimming requested (axis == () or a 0-d input) -> return the input unmodified, like NumPy.
             if (!anyAxis)
                 return filt;
+
+            // Text: NumPy's argwhere reads the strings' truth values (the next phase of NumSharp's string support) —
+            // after the trim and axis checks and the no-axis return above. An empty input reads none: every trimmed axis
+            // collapses to [0:0], which the path below computes (the empty-input nonzero / any answer from the shape).
+            if (Backends.Strings.NDStringUfuncs.IsString(filt) && filt.size != 0)
+                throw Backends.Strings.NDStringUfuncs.NextPhase("trim_zeros", filt);
 
             bool trimFront = trim.IndexOf('f') >= 0;
             bool trimBack = trim.IndexOf('b') >= 0;

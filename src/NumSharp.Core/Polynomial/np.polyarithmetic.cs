@@ -43,11 +43,25 @@ namespace NumSharp
         ///     Find the product of two polynomials — the (full-mode) convolution of their coefficients.
         ///     Leading zeros of each input are dropped first (NumPy wraps each in <c>poly1d</c>).
         /// </summary>
+        /// <param name="a1">The first polynomial's coefficients, highest degree first.</param>
+        /// <param name="a2">The second polynomial's coefficients.</param>
+        /// <returns>The product's coefficients.</returns>
+        /// <exception cref="ValueError">An input of rank above 1 (<c>Polynomial must be 1d only.</c>, the first input's
+        ///     first); with a text input otherwise, <c>data type must provide an itemsize</c>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polymul.html</remarks>
         [NDScoped]
         public static NDArray polymul(NDArray a1, NDArray a2)
         {
             using var plain = NDMatrixBoundary.PlainFor(a1, a2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            // Text: NumPy's poly1d trims leading "zeros" of text (empty strings; the trim cannot fail and an all-empty input
+            // becomes the text '0') and convolve then refuses any text operand for want of an item size — so after each
+            // input's rank check the answer is that refusal, whatever the text holds.
+            if (Backends.Strings.NDStringUfuncs.IsString(a1) || Backends.Strings.NDStringUfuncs.IsString(a2))
+            {
+                if (np.atleast_1d(a1).ndim > 1 || np.atleast_1d(a2).ndim > 1)
+                    throw new ValueError("Polynomial must be 1d only.");
+                throw Backends.Strings.NDStringUfuncs.NoItemsize();
+            }
             // poly1d normalisation trims leading zeros (and maps an all-zero input to [0]). The polynomials
             // own their coefficient arrays (field egress — no ambient scope reclaims them), so they are
             // disposed here; the convolution is a fresh array, yielded by the [NDScoped] weaver.

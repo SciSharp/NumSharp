@@ -182,30 +182,53 @@ namespace NumSharp
         ///     with <c>bincount</c>, reshape, strip the per-dimension outlier bins, and optionally normalize.
         /// </summary>
         /// <param name="cols">The D coordinate columns (each 1-D, length N).</param>
-        /// <param name="bins">The bin spec (int, int[], NDArray[], or object[]).</param>
+        /// <param name="bins">The bin spec (int, int[], NDArray, NDArray[], or object[]).</param>
         /// <param name="range">Optional per-dimension outer edges.</param>
         /// <param name="density">When true, normalize to a probability density.</param>
         /// <param name="weights">Optional per-point weights.</param>
-        /// <returns>The histogram and its per-dimension edges.</returns>
-        /// <exception cref="ValueError">A dimension mismatch, a non-positive integer bin, or non-monotonic edges.</exception>
+        /// <returns>The histogram and its per-dimension edges. Without density, H is NumPy's VIEW of the padded counts
+        ///     (strides of the padded shape, not C-contiguous, OWNDATA False); a 1-D edges array the caller passed is
+        ///     returned as that same array.</returns>
+        /// <exception cref="ValueError">A dimension mismatch, a non-positive scalar bin, edges that are not a scalar or 1-D,
+        ///     or non-monotonic edges.</exception>
+        /// <exception cref="TypeError">A scalar bin that is not an integer (<c>`bins[i]` must be an integer, when a scalar</c>)
+        ///     or that does not compare with 1 (text: <see cref="DdScalarBinBelowOne"/>). Text samples: the column's
+        ///     <c>min()</c> (<c>minimum</c> has no text loop, named with the STACKED dtype) when the dimension has a scalar bin
+        ///     spec and no range; text edges: their widths' <c>subtract</c> refusal; text weights with points: bincount's
+        ///     safe cast to float64.</exception>
+        /// <exception cref="StringComputationNotSupportedException">Text edges of two or more elements (NumPy compares them),
+        ///     or a text sample with points to bin (NumPy searches the edges, comparing text).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy stacks the columns into ONE array (<c>np.atleast_2d(sample).T</c>), so a text column makes the whole
+        ///     sample text: <c>U2</c> beside float64 is <c>&lt;U32</c>, beside int64 <c>&lt;U21</c>, beside bool
+        ///     <c>&lt;U5</c> (NumPy formats the numbers; the answers below never need the formatted text, only its dtype).
+        ///     </para>
+        ///     <para>
+        ///     The per-dimension statements run in NumPy's order — the scalar bin's <c>bins[i] &lt; 1</c>, the outer edges,
+        ///     <c>operator.index</c>, the edges, their widths — one dimension at a time, so an error of dimension 0 wins
+        ///     over every error of dimension 1. An EMPTY text sample bins nothing: NumPy's searches and comparisons on it
+        ///     change no count, so its histogram is the all-zero one of an empty numeric sample.
+        ///     </para>
+        /// </remarks>
         private static HistogramddResult HistogramddImpl(NDArray[] cols, object bins, (double, double)?[] range, bool density, NDArray weights)
         {
-            // NumPy's automatic range starts with each column's min(): minimum.reduce has no string loop (first column first).
-            foreach (var col in cols)
-                if (Backends.Strings.NDStringUfuncs.IsString(col)) throw Backends.Strings.NDStringUfuncs.NoLoop("minimum", col.dtype, col.dtype);
             // NumPy builds the internal sample via `atleast_2d(sample).T`, which STACKS the D coordinate
             // columns into ONE array and thereby promotes every column to their common dtype. An (N, D)
             // array (or any single-dtype sequence) is already uniform, so this is a no-op there; a sequence
             // of DIFFERENTLY-typed columns — e.g. histogram2d(float32_x, float64_y) — must be promoted so its
             // per-dimension edges AND the binning comparison run in the one common dtype, matching NumPy
             // (whose stacked sample makes both edges float64). Done first, before any edge/bin computation
-            // reads cols[i].typecode.
-            cols = PromoteColumnsToCommon(cols);
+            // reads cols[i].typecode. A text sample keeps its columns: only the stacked DTYPE is needed.
+            DType stacked = StackedSampleDescr(cols);
+            bool textSample = stacked?.Meta is StringDTypeMeta;
+            if (!textSample)
+                cols = PromoteColumnsToCommon(cols);
 
             int D = cols.Length;
             long N = D == 0 ? 0 : cols[0].size;
 
-            object[] binSpec = NormalizeDdBins(bins, D);
+            object[] binSpec = DdBinSpecs(bins, D);
 
             // Normalize the range argument to one (nullable) entry per dimension.
             if (range != null && range.Length != D)
@@ -223,7 +246,13 @@ namespace NumSharp
                 if (spec is NDArray earr && earr.ndim == 1)
                 {
                     edges[i] = earr;
-                    if (AnyDecreasing(edges[i]))
+                    // Fewer than two text edges have nothing to compare; two or more are compared (string computation).
+                    if (Backends.Strings.NDStringUfuncs.IsString(earr))
+                    {
+                        if (earr.size > 1)
+                            throw Backends.Strings.NDStringUfuncs.NextPhase("greater", earr);
+                    }
+                    else if (AnyDecreasing(edges[i]))
                         throw new ValueError($"`bins[{i}]` must be monotonically increasing, when an array");
                 }
                 else if (spec is NDArray earr0 && earr0.ndim > 1)
@@ -232,11 +261,14 @@ namespace NumSharp
                 }
                 else
                 {
-                    // Scalar bin count (int or 0-d integer array).
-                    int nb = AsBinCount(spec);
-                    if (nb < 1)
+                    // `np.ndim(bins[i]) == 0`: `if bins[i] < 1: raise`, the outer edges, then `operator.index(bins[i])`.
+                    if (DdScalarBinBelowOne(spec))
                         throw new ValueError($"`bins[{i}]` must be positive, when an integer");
+                    // A text sample's column is the STACKED text column: its min() names that dtype (<U32 beside float64).
+                    if (textSample && !ri.HasValue && N > 0)
+                        throw Backends.Strings.NDStringUfuncs.NoLoop("minimum", stacked, stacked);
                     (double smin, double smax) = GetOuterEdges(cols[i], ri);
+                    int nb = DdOperatorIndex(spec, i);
                     // histogramdd calls `np.linspace(smin, smax, n+1)` WITHOUT a dtype, so the edges take
                     // result_type(smin, smax, n+1) — which, unlike np.histogram, has NO array to keep it strong.
                     // The column's own float width survives ONLY when the endpoints are strong array scalars
@@ -250,7 +282,21 @@ namespace NumSharp
                 }
 
                 nbin[i] = (int)edges[i].size + 1; // +1 for an outlier bin on each end (shared low+high span)
+                // `dedges[i] = np.diff(edges[i])`: text edges have no subtract loop (any length — even an empty diff resolves it).
+                if (Backends.Strings.NDStringUfuncs.IsString(edges[i]))
+                    throw Backends.Strings.NDStringUfuncs.NoLoop("subtract", edges[i].dtype, edges[i].dtype);
                 dedges[i] = np.diff(edges[i]);
+            }
+
+            if (textSample)
+            {
+                // NumPy now searches every edge array for the text points (string computation). With no points the searches,
+                // the rightmost-edge comparisons and the bincount see nothing, so the counts are the empty numeric sample's.
+                if (N > 0)
+                    throw Backends.Strings.NDStringUfuncs.NextPhase("searchsorted", stacked);
+                cols = new NDArray[D];
+                for (int i = 0; i < D; i++)
+                    cols[i] = np.zeros(Shape.Vector(0), NPTypeCode.Double);
             }
 
             // Per-dimension bin number for every point: searchsorted(edges, x, 'right'), then pull points that
@@ -286,13 +332,24 @@ namespace NumSharp
             foreach (int nb in nbin) minlen *= nb;
 
             NDArray w1d = weights is null ? null : np.ravel(weights);
+            if (Backends.Strings.NDStringUfuncs.IsString(w1d))
+            {
+                // np.bincount converts the weights with a SAFE cast to float64 — after its empty-input early return, which
+                // never reads them (so no points means the plain zero counts).
+                if (xy.size > 0)
+                    throw new TypeError($"Cannot cast array data from {w1d.dtype.ToString(true)} to dtype('float64') according to the rule 'safe'");
+                w1d = null;
+            }
             NDArray flat = bincount(xy, w1d, minlength: (int)minlen);
             NDArray hist = flat.reshape(Shape.Adopt(ToLongShape(nbin)));
             hist = hist.astype(NPTypeCode.Double); // NumPy: hist.astype(float, casting='safe') — H is always float64
 
-            // Strip the leading/trailing outlier bin on every dimension: hist[1:-1, 1:-1, ...].
+            // Strip the leading/trailing outlier bin on every dimension: hist[1:-1, 1:-1, ...]. NumPy returns that slice as a
+            // VIEW of the padded counts (non-contiguous, OWNDATA False — the padded buffer stays alive behind it), and so
+            // does NumSharp: the view takes its own reference on the buffer, so the scope reclaiming the padded array
+            // releases only its reference. The density branch below divides into fresh arrays, as NumPy's does.
             string core = string.Join(", ", System.Linq.Enumerable.Repeat("1:-1", D));
-            hist = D == 0 ? hist : hist[core].copy();
+            hist = D == 0 ? hist : hist[core];
 
             if (density)
             {
@@ -375,18 +432,29 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Normalize the polymorphic <c>bins</c> argument to exactly D per-dimension specs, each an
-        ///     <see cref="int"/> count or an <see cref="NDArray"/> edge array. Mirrors NumPy's
-        ///     "int broadcasts to all dims; a sequence must match D".
+        ///     NumPy's <c>bins[i]</c> for each dimension: <c>try: M = len(bins) … except TypeError: bins = D * [bins]</c>. A
+        ///     scalar (or a 0-d array, which has no <c>len</c>) is repeated for every dimension; a sequence must have D entries
+        ///     and each entry is kept AS GIVEN — an <see cref="int"/> or other C# scalar (a Python scalar), an
+        ///     <see cref="NDArray"/> of any rank (a 1-D one is that dimension's edges), or, for the entries of one
+        ///     <see cref="NDArray"/> <paramref name="bins"/>, what indexing it gives: a NumPy scalar (<see cref="DdScalarItem"/>)
+        ///     from a 1-D array, a row view from a deeper one.
         /// </summary>
-        private static object[] NormalizeDdBins(object bins, int D)
+        /// <param name="bins">The bin spec as received.</param>
+        /// <param name="D">The sample's dimension count.</param>
+        /// <returns>One raw spec per dimension; <see cref="HistogramddImpl"/> checks each in NumPy's order.</returns>
+        /// <exception cref="ValueError">A sequence whose length is not D (<c>The dimension of bins must be equal to the
+        ///     dimension of the sample x.</c>), or an entry of an unsupported C# type.</exception>
+        /// <remarks>
+        ///     Nothing is converted here: NumPy compares each scalar with 1, reads the outer edges and only then converts the
+        ///     scalar with <c>operator.index</c> — dimension by dimension — so a float entry like <c>2.0</c> is NumPy's
+        ///     <c>`bins[0]` must be an integer, when a scalar</c> (it used to be rounded to a count), and a text entry is the
+        ///     comparison's TypeError (it used to reach <c>Convert.ToInt64</c>, a <see cref="FormatException"/>).
+        /// </remarks>
+        private static object[] DdBinSpecs(object bins, int D)
         {
             var result = new object[D];
             switch (bins)
             {
-                case int n:
-                    for (int i = 0; i < D; i++) result[i] = n;
-                    return result;
                 case int[] arr:
                     RequireDdLength(arr.Length, D);
                     for (int i = 0; i < D; i++) result[i] = arr[i];
@@ -400,30 +468,161 @@ namespace NumSharp
                     for (int i = 0; i < D; i++) result[i] = NormalizeDdEntry(oarr[i]);
                     return result;
                 case NDArray nd0 when nd0.ndim == 0:
-                    // A 0-d scalar count broadcasts to every dimension (operator.index).
-                    for (int i = 0; i < D; i++) result[i] = AsBinCount(nd0);
+                    // len() of a 0-d array is a TypeError: the array itself is every dimension's scalar spec.
+                    for (int i = 0; i < D; i++) result[i] = nd0;
                     return result;
-                case NDArray nd1:
-                    // A bare 1-D array is NumPy's `len(bins)==D` per-dimension form: EACH element is a scalar
-                    // bin count (NOT shared edges — histogram2d pre-expands shared edges into an NDArray[]).
-                    RequireDdLength((int)nd1.size, D);
-                    for (int i = 0; i < D; i++) result[i] = (int)Convert.ToInt64(nd1.GetAtIndex(i));
+                case NDArray nd:
+                    // len(bins) is the FIRST dimension, and bins[i] indexes it: a NumPy scalar of a 1-D array, a row of a
+                    // deeper one (a 2-D (D, k) array is one edge row per dimension).
+                    RequireDdLength(checked((int)nd.Shape.dimensions[0]), D);
+                    for (int i = 0; i < D; i++)
+                        result[i] = nd.ndim == 1 ? new DdScalarItem(nd.GetAtIndex(i), nd.dtype) : nd[i];
                     return result;
                 default:
-                    throw new ValueError("`bins` must be an int, a sequence of ints, or a sequence of edge arrays");
+                    // A C# int (or any other scalar NumPy would take as a Python scalar): no len(), so D copies.
+                    for (int i = 0; i < D; i++) result[i] = NormalizeDdEntry(bins);
+                    return result;
             }
         }
 
-        /// <summary>Coerce one entry of an <c>object[]</c> bin spec to an int count or an NDArray edge array.</summary>
+        /// <summary>
+        ///     One entry of an <c>object[]</c> bin spec as NumPy sees it: C# scalars are Python scalars (kept for the
+        ///     per-dimension checks), C# number arrays become 1-D edge arrays, NDArrays are kept.
+        /// </summary>
+        /// <param name="entry">The entry.</param>
+        /// <returns>The entry, or the <see cref="NDArray"/> of a C# number array.</returns>
+        /// <exception cref="ValueError">An entry of a C# type NumPy has no counterpart for.</exception>
         private static object NormalizeDdEntry(object entry) => entry switch
         {
-            int n => n,
+            null => null,
             NDArray nd => nd,
-            double[] d => (object)np.array(d),
-            long[] l => (object)np.array(l),
-            int[] ii => (object)np.array(ii),
+            double[] d => np.array(d),
+            long[] l => np.array(l),
+            int[] ii => np.array(ii),
+            bool or sbyte or byte or short or ushort or int or uint or long or ulong => entry,
+            double or float or Half or decimal or System.Numerics.Complex or string or byte[] => entry,
             _ => throw new ValueError("each `bins` entry must be an int or a 1-D edge array")
         };
+
+        /// <summary>
+        ///     A NumPy scalar taken out of a 1-D <see cref="NDArray"/> bin spec (<c>bins[i]</c>): its value as
+        ///     <see cref="NDArray.GetAtIndex(long)"/> gives it and the array's dtype — distinct from a 0-d array, whose
+        ///     comparison with 1 is a ufunc call with a different error text.
+        /// </summary>
+        private sealed class DdScalarItem
+        {
+            /// <summary>Wraps one element.</summary>
+            /// <param name="value">The element's C# value (a <see cref="string"/> / <c>byte[]</c> for text).</param>
+            /// <param name="descr">The array's dtype.</param>
+            internal DdScalarItem(object value, DType descr)
+            {
+                Value = value;
+                Descr = descr;
+            }
+
+            /// <summary>The element's C# value.</summary>
+            internal object Value { get; }
+
+            /// <summary>The dtype of the array it came from.</summary>
+            internal DType Descr { get; }
+        }
+
+        /// <summary>
+        ///     NumPy's <c>if bins[i] &lt; 1</c> for a scalar per-dimension spec: a numeric value compares numerically (complex
+        ///     lexicographically, NaN never below), anything else raises the comparison's TypeError.
+        /// </summary>
+        /// <param name="spec">A C# scalar (Python scalar), a <see cref="DdScalarItem"/> (NumPy scalar) or a 0-d
+        ///     <see cref="NDArray"/>.</param>
+        /// <returns>True when the spec is below 1 (NumPy's <c>`bins[i]` must be positive, when an integer</c>).</returns>
+        /// <exception cref="TypeError">Text, a Python complex or <c>None</c>: Python's <c>'&lt;' not supported between instances
+        ///     of 'numpy.str_' and 'int'</c> (<c>numpy.bytes_</c>, <c>str</c>, <c>bytes</c>, <c>complex</c>, <c>NoneType</c>); a
+        ///     0-d text array: the ufunc's <c>ufunc 'less' did not contain a loop with signature matching types (&lt;class
+        ///     'numpy.dtypes.StrDType'&gt;, &lt;class 'numpy.dtypes._PyLongDType'&gt;) -&gt; None</c>.</exception>
+        private static bool DdScalarBinBelowOne(object spec)
+        {
+            switch (spec)
+            {
+                case DdScalarItem item:
+                    return item.Value switch
+                    {
+                        string => throw new TypeError("'<' not supported between instances of 'numpy.str_' and 'int'"),
+                        byte[] => throw new TypeError("'<' not supported between instances of 'numpy.bytes_' and 'int'"),
+                        _ => NumericBelowOne(item.Value),
+                    };
+                case NDArray nd:
+                    if (Backends.Strings.NDStringUfuncs.IsString(nd))
+                        throw new TypeError(
+                            $"ufunc 'less' did not contain a loop with signature matching types ({nd.dtype.Meta}, {DTypeRegistry.PyLong}) -> None");
+                    return NumericBelowOne(nd.GetAtIndex(0));
+                case null:
+                    throw new TypeError("'<' not supported between instances of 'NoneType' and 'int'");
+                case string:
+                    throw new TypeError("'<' not supported between instances of 'str' and 'int'");
+                case byte[]:
+                    throw new TypeError("'<' not supported between instances of 'bytes' and 'int'");
+                case System.Numerics.Complex:
+                    // A Python complex has no ordering (NumPy's complex scalars do: see NumericBelowOne).
+                    throw new TypeError("'<' not supported between instances of 'complex' and 'int'");
+                default:
+                    return NumericBelowOne(spec);
+            }
+        }
+
+        /// <summary><c>v &lt; 1</c> for a numeric C# value: NaN is never below; a NumPy complex orders lexicographically.</summary>
+        /// <param name="v">The value (bool, integer, char, float, decimal or <see cref="System.Numerics.Complex"/>).</param>
+        /// <returns>Whether it is below 1.</returns>
+        private static bool NumericBelowOne(object v) => v switch
+        {
+            bool b => !b,
+            System.Numerics.Complex z => z.Real < 1 || (z.Real == 1 && z.Imaginary < 0),
+            Half h => (double)h < 1,
+            decimal m => m < 1,
+            double d => d < 1,
+            float f => f < 1,
+            ulong u => u < 1,
+            _ => Convert.ToInt64(v, System.Globalization.CultureInfo.InvariantCulture) < 1,
+        };
+
+        /// <summary>
+        ///     NumPy's <c>operator.index(bins[i])</c> for a scalar per-dimension spec: a Python int (any C# integer type or
+        ///     bool — a Python bool IS an int), or an INTEGER NumPy scalar / 0-d array (NumPy's bool is not an index).
+        /// </summary>
+        /// <param name="spec">The scalar spec (already compared with 1).</param>
+        /// <param name="i">The dimension, for the message.</param>
+        /// <returns>The bin count.</returns>
+        /// <exception cref="TypeError">Anything else: <c>`bins[i]` must be an integer, when a scalar</c>.</exception>
+        private static int DdOperatorIndex(object spec, int i)
+        {
+            switch (spec)
+            {
+                case bool b:
+                    return b ? 1 : 0;
+                case sbyte or byte or short or ushort or int or uint or long or ulong:
+                    return checked((int)Convert.ToInt64(spec, System.Globalization.CultureInfo.InvariantCulture));
+                case DdScalarItem item when item.Descr.typecode.IsInteger():
+                    return checked((int)Convert.ToInt64(item.Value, System.Globalization.CultureInfo.InvariantCulture));
+                case NDArray nd when nd.ndim == 0 && nd.typecode.IsInteger():
+                    return checked((int)Convert.ToInt64(nd.GetAtIndex(0), System.Globalization.CultureInfo.InvariantCulture));
+                default:
+                    throw new TypeError($"`bins[{i}]` must be an integer, when a scalar");
+            }
+        }
+
+        /// <summary>
+        ///     The dtype of NumPy's stacked sample (<c>np.atleast_2d(sample).T</c>): the common dtype of all columns, through
+        ///     the descriptor promotion that keeps string widths (<c>&lt;U2</c> + float64 is <c>&lt;U32</c>).
+        /// </summary>
+        /// <param name="cols">The columns.</param>
+        /// <returns>The common descriptor, or null for no columns.</returns>
+        private static DType StackedSampleDescr(NDArray[] cols)
+        {
+            if (cols.Length == 0)
+                return null;
+            DType common = cols[0].dtype;
+            for (int i = 1; i < cols.Length; i++)
+                common = DTypePromotion.PromoteTypes(common, cols[i].dtype);
+            return common;
+        }
 
         /// <summary>Raise NumPy's dimension-mismatch error when a bin sequence length differs from the sample rank.</summary>
         private static void RequireDdLength(int have, int D)

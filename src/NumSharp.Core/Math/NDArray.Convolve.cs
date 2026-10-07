@@ -24,34 +24,45 @@ namespace NumSharp
         /// "swap if v longer" below needs no output reversal. See <c>np.correlate.cs</c> for the
         /// float bit-parity notes (both share the same kernel).
         /// </remarks>
+        /// <exception cref="ArgumentException">An unknown <paramref name="mode"/> (NumPy's two mode texts).</exception>
+        /// <exception cref="ValueError"><c>a cannot be empty</c> / <c>v cannot be empty</c> (on the operands after the
+        ///     length swap), <c>object too deep for desired array</c> for an operand of two or more dimensions, or — for a
+        ///     fixed-width string operand, after every check above — <c>data type must provide an itemsize</c> (NumPy's
+        ///     result allocation for the string type number).</exception>
         [NDScoped]
         public NDArray convolve(NDArray v, string mode = "full")
         {
-            // convolve's dot-function lookup needs a fixed item size, which text does not have (0-d operands included).
-            if (Backends.Strings.NDStringUfuncs.IsString(this) || Backends.Strings.NDStringUfuncs.IsString(v)) throw Backends.Strings.NDStringUfuncs.NoItemsize();
-            NDArray a = this;
-
-            // Validate inputs are 1D
-            if (a.ndim != 1)
-                throw new IncorrectShapeException("First argument must be a 1-dimensional array.");
-            if (v.ndim != 1)
-                throw new IncorrectShapeException("Second argument must be a 1-dimensional array.");
-
-            // Validate non-empty (NumPy convolve's own messages, distinct from correlate's).
-            if (a.size == 0)
-                throw new ArgumentException("a cannot be empty", nameof(a));
-            if (v.size == 0)
-                throw new ArgumentException("v cannot be empty", nameof(v));
-
-            var m = ParseSlidingMode(mode);
+            // NumPy's np.convolve, statement for statement: `array(a, ndmin=1)` (a 0-d operand becomes one element),
+            // the swap by len() (the FIRST dimension), the two emptiness checks on the swapped operands, then
+            // multiarray.correlate(a, v[::-1], mode): the mode, the 1-D requirement of PyArray_FromAny(op, typec, 1, 1)
+            // and the result allocation, which a string type number cannot size.
+            NDArray a = this.ndim == 0 ? this.reshape(1) : this;
+            if (v.ndim == 0)
+                v = v.reshape(1);
 
             // NumPy swaps if v is longer than a (convolve is commutative, so no output reversal).
-            if (v.size > a.size)
+            if (v.Shape.dimensions[0] > a.Shape.dimensions[0])
             {
                 var temp = a;
                 a = v;
                 v = temp;
             }
+
+            // Validate non-empty (NumPy convolve's own messages, distinct from correlate's).
+            if (a.Shape.dimensions[0] == 0)
+                throw new ValueError("a cannot be empty");
+            if (v.Shape.dimensions[0] == 0)
+                throw new ValueError("v cannot be empty");
+
+            var m = ParseSlidingMode(mode);
+
+            // PyArray_FromAny(op, typec, 1, 1): an operand of two or more dimensions is too deep.
+            if (a.ndim != 1 || v.ndim != 1)
+                throw new ValueError("object too deep for desired array");
+
+            // The result allocation needs a fixed item size, which a string type number does not have.
+            if (Backends.Strings.NDStringUfuncs.IsString(a) || Backends.Strings.NDStringUfuncs.IsString(v))
+                throw Backends.Strings.NDStringUfuncs.NoItemsize();
 
             // Determine output type using NumPy's type promotion rules.
             var retType = np._FindCommonType(a, v);

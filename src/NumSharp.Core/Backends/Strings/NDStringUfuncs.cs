@@ -112,6 +112,84 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
+        ///     The guard of a binary ufunc whose loop can COMPUTE on text (the comparisons, the logical ufuncs, <c>add</c>):
+        ///     like <see cref="ThrowIfBinary"/>, but it RETURNS NumPy's result where that result is decided by the shapes alone
+        ///     — a computing call whose broadcast result is EMPTY compares / concatenates nothing, so NumPy returns an empty
+        ///     array of the loop's dtype (<c>np.equal(np.zeros(0, 'U2'), np.zeros(0, 'U2'))</c> is an empty bool array,
+        ///     <c>np.add</c> of two empty <c>&lt;U2</c> arrays an empty <c>&lt;U4</c> one), or <c>out=</c> itself, untouched.
+        /// </summary>
+        /// <param name="ufunc">NumPy's ufunc name.</param>
+        /// <param name="x1">The first operand.</param>
+        /// <param name="x2">The second operand.</param>
+        /// <param name="out">The <c>out=</c> operand, or null.</param>
+        /// <param name="loop">The <c>dtype=</c> loop request, or null.</param>
+        /// <param name="where">The <c>where=</c> mask, or null.</param>
+        /// <returns>Null when neither operand is text (the numeric path continues); the empty result (or
+        ///     <paramref name="out"/>) when NumPy computes on text but the broadcast result is empty.</returns>
+        /// <exception cref="Exception">Every exception <see cref="ThrowIfBinary"/> documents, for a call that is not an empty
+        ///     computation.</exception>
+        /// <remarks>Every caller must use the returned array: a non-null return means "this is the result", and the numeric
+        ///     kernels behind the guard have no text lane.</remarks>
+        internal static NDArray BinaryGuard(string ufunc, NDArray x1, NDArray x2, NDArray @out = null, NPTypeCode? loop = null,
+            NDArray where = null)
+        {
+            if (!IsString(x1) && !IsString(x2))
+                return null;
+            var error = BinaryAnswer(ufunc, x1, x2, @out, loop, where, out DType computed);
+            // ComputeAnswer's refusal means every check passed and the loop would compute: an empty result computes nothing.
+            if (error is StringComputationNotSupportedException && computed is not null)
+            {
+                var dims = BroadcastDims(x1, x2, @out, where);
+                if (ShapeSize(dims) == 0)
+                    return @out ?? new NDArray(computed, dims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(dims), true);
+            }
+            throw error;
+        }
+
+        /// <summary>
+        ///     The broadcast dimensions of a ufunc's operands (inputs, <c>out=</c>, <c>where=</c>; right-aligned, 1 stretches),
+        ///     for operands <see cref="BroadcastError"/> already accepted.
+        /// </summary>
+        /// <param name="x1">The first input.</param>
+        /// <param name="x2">The second input, or null.</param>
+        /// <param name="out">The <c>out=</c> operand, or null.</param>
+        /// <param name="where">The <c>where=</c> mask, or null.</param>
+        /// <returns>The broadcast dimensions.</returns>
+        internal static long[] BroadcastDims(NDArray x1, NDArray x2, NDArray @out, NDArray where)
+        {
+            var operands = new[] { x1, x2, @out, where };
+            int nd = 0;
+            foreach (var op in operands)
+                if (op is not null)
+                    nd = Math.Max(nd, op.ndim);
+            var full = new long[nd];
+            for (int i = 0; i < nd; i++)
+                full[i] = 1;
+            foreach (var op in operands)
+            {
+                if (op is null)
+                    continue;
+                var dims = op.Shape.dimensions ?? Array.Empty<long>();
+                int lead = nd - dims.Length;
+                for (int i = 0; i < dims.Length; i++)
+                    if (dims[i] != 1)
+                        full[lead + i] = dims[i];
+            }
+            return full;
+        }
+
+        /// <summary>The element count of a shape's dimensions (1 for none).</summary>
+        /// <param name="dims">The dimensions.</param>
+        /// <returns>Their product.</returns>
+        private static long ShapeSize(long[] dims)
+        {
+            long n = 1;
+            foreach (var d in dims)
+                n *= d;
+            return n;
+        }
+
+        /// <summary>
         ///     NumPy's answer for a binary ufunc with at least one string operand, in NumPy's resolution order: a numeric
         ///     <c>dtype=</c> loop first checks each input's same_kind cast (inputs in order), then the ufunc's string loops
         ///     decide between computing (the next phase) and its no-loop text.
@@ -132,7 +210,25 @@ namespace NumSharp.Backends.Strings
         /// </remarks>
         internal static Exception BinaryError(string ufunc, NDArray x1, NDArray x2, NDArray @out, NPTypeCode? loop,
             NDArray where = null)
+            => BinaryAnswer(ufunc, x1, x2, @out, loop, where, out _);
+
+        /// <summary>
+        ///     <see cref="BinaryError"/>, also reporting the descriptor of the loop NumPy would compute (the comparisons and the
+        ///     logical ufuncs: bool; a concatenation: its <see cref="Concatenation"/>; a repeat: <c>out=</c>'s), so
+        ///     <see cref="BinaryGuard"/> can build an empty result.
+        /// </summary>
+        /// <param name="ufunc">NumPy's ufunc name.</param>
+        /// <param name="x1">The first operand.</param>
+        /// <param name="x2">The second operand.</param>
+        /// <param name="out">The <c>out=</c> operand, or null.</param>
+        /// <param name="loop">The <c>dtype=</c> loop request, or null.</param>
+        /// <param name="where">The <c>where=</c> mask, or null.</param>
+        /// <param name="computed">The computing loop's output descriptor; null when the answer is not a computation.</param>
+        /// <returns>The exception to throw (never null).</returns>
+        private static Exception BinaryAnswer(string ufunc, NDArray x1, NDArray x2, NDArray @out, NPTypeCode? loop,
+            NDArray where, out DType computed)
         {
+            computed = null;
             var parse = OutWhereError(@out, where);
             if (parse is not null)
                 return parse;
@@ -151,10 +247,16 @@ namespace NumSharp.Backends.Strings
                     return new IncorrectTypeException($"No loop matching the specified signature and casting was found for ufunc {ufunc}");
                 // logical_and/or/xor read the truth value of every operand, strings included, for any operand mix.
                 if (s_logical.Contains(ufunc))
+                {
+                    computed = DType.Boolean;
                     return ComputeAnswer(ufunc, x1, x2, @out, where, DType.Boolean);
+                }
                 // Two strings of one class compare their text.
                 if (sameClassText)
+                {
+                    computed = DType.Boolean;
                     return ComputeAnswer(ufunc, x1, x2, @out, where, DType.Boolean);
+                }
                 // dtype=bool fixes the loop at bool, and the string input's cast to it fails (probed: less(u, i, dtype=bool)).
                 if (numeric is not null)
                     return InputCastError(ufunc, 0, d1, NPTypeCode.Boolean) ?? InputCastError(ufunc, 1, d2, NPTypeCode.Boolean);
@@ -163,7 +265,10 @@ namespace NumSharp.Backends.Strings
 
             // NumPy's string add promoter wins over a dtype= request: add(U3, U3, dtype='f8') still concatenates (probed).
             if (ufunc == "add" && sameClassText)
-                return ComputeAnswer(ufunc, x1, x2, @out, where, Concatenation(d1, d2));
+            {
+                computed = Concatenation(d1, d2);
+                return ComputeAnswer(ufunc, x1, x2, @out, where, computed);
+            }
 
             // dtype= with a numeric loop: the signature fixes the loop, and NumPy checks every input's cast to it in input
             // order. Text never reaches a number by a same_kind cast, so a string input always fails here.
@@ -182,8 +287,12 @@ namespace NumSharp.Backends.Strings
             // NumPy's string multiply promoter takes any integer type number (PyTypeNum_ISINTEGER: the eight widths, not
             // bool) as the repeat count and converts it to int64.
             if (ufunc == "multiply" && (s1 && d2.typecode.IsInteger() || s2 && d1.typecode.IsInteger()))
-                // NumPy's legacy string multiply loop needs a preallocated result (its verbatim refusal without one).
+            {
+                // NumPy's legacy string multiply loop needs a preallocated result (its verbatim refusal without one); with
+                // one, an empty broadcast writes nothing into it.
+                computed = @out?.dtype;
                 return MultiplyRepeatAnswer(x1, x2, @out, where);
+            }
 
             if (s_descriptorNoLoop.Contains(ufunc))
                 return NoLoop(ufunc, d1, d2);
@@ -325,6 +434,95 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
+        ///     The ufunc NumPy's <paramref name="op"/> reduces or accumulates with, or null when its text answer does not
+        ///     come from one binary loop on (<c>out</c>, input).
+        /// </summary>
+        /// <param name="op">The NumPy function name.</param>
+        /// <param name="accumulate">Whether the op is an accumulation (<c>ufunc.accumulate</c>) rather than a reduction.</param>
+        /// <returns><c>add</c>, <c>multiply</c>, <c>maximum</c>, <c>minimum</c>, <c>fmax</c>, <c>fmin</c>, or null.</returns>
+        internal static string ReduceUfuncOf(string op, out bool accumulate)
+        {
+            accumulate = op is "cumsum" or "nancumsum" or "cumulative_sum" or "cumprod" or "nancumprod" or "cumulative_prod";
+            return op switch
+            {
+                "sum" or "mean" or "var" or "std" or "nansum" or "nanmean" or "nanvar" or "nanstd" or "median" or "average"
+                    or "trace" or "cumsum" or "nancumsum" or "cumulative_sum" => "add",
+                "prod" or "nanprod" or "cumprod" or "nancumprod" or "cumulative_prod" => "multiply",
+                "max" or "amax" or "ptp" => "maximum",
+                "min" or "amin" => "minimum",
+                "nanmax" => "fmax",
+                "nanmin" => "fmin",
+                _ => null,
+            };
+        }
+
+        /// <summary>
+        ///     NumPy's loop resolution for a reduction or accumulation given an <c>out=</c> array, when the input or the out
+        ///     holds text: the out acts as the loop's FIRST operand, so NumPy resolves the binary ufunc on
+        ///     <c>(out.dtype, input.dtype)</c> and refuses before it reads an element or checks the out's shape.
+        /// </summary>
+        /// <param name="ufunc">The ufunc (<see cref="ReduceUfuncOf"/>).</param>
+        /// <param name="a">The input.</param>
+        /// <param name="out">The out array (any dtype).</param>
+        /// <param name="accumulate">Whether this is <c>ufunc.accumulate</c>.</param>
+        /// <returns>The exception to throw (never null).</returns>
+        /// <remarks>
+        ///     <para>
+        ///     add: two texts of one class resolve the concatenation loop (output = the two lengths added) and are then
+        ///     refused (<c>the resolved dtypes are not compatible with add.reduce. Resolved (dtype('&lt;U4'), dtype('&lt;U2'),
+        ///     dtype('&lt;U6'))</c>); texts of both classes are the add promoter's <c>cannot use operands with types</c>.
+        ///     multiply: an INTEGER out and a text input resolve the string repeat (the count as int64, the result the out's
+        ///     dtype cast to the text class: <c>int8</c> reads as <c>&lt;U4</c>) and are refused the same way; a text out and an
+        ///     integer input refuse an accumulation and REPEAT the out's text in a reduction (NumPy computes:
+        ///     <c>np.prod([1, 2, 3], out=np.zeros((), 'U4'))</c> is <c>'1111'</c>). Every other combination names both
+        ///     descriptors: <c>ufunc 'maximum' did not contain a loop with signature matching types (dtype('float64'),
+        ///     dtype('&lt;U2')) -&gt; None</c> (probed against 2.4.2).
+        ///     </para>
+        /// </remarks>
+        internal static Exception ReduceOutError(string ufunc, NDArray a, NDArray @out, bool accumulate)
+        {
+            DType d = a.dtype, o = @out.dtype;
+            bool textD = d.Meta is StringDTypeMeta, textO = o.Meta is StringDTypeMeta;
+            string method = accumulate ? "accumulate" : "reduce";
+            switch (ufunc)
+            {
+                case "add":
+                    if (textD && textO)
+                    {
+                        if (o.Meta != d.Meta)
+                            return new TypeError($"ufunc 'add' cannot use operands with types {o.ToString(true)} and {d.ToString(true)}");
+                        return new TypeError(
+                            $"the resolved dtypes are not compatible with add.{method}. Resolved ({o.ToString(true)}, " +
+                            $"{d.ToString(true)}, {Concatenation(o, d).ToString(true)})");
+                    }
+                    return NoLoop("add", o, d);
+                case "multiply":
+                    if (textD && IsRepeatCount(o))
+                        return new TypeError(
+                            $"the resolved dtypes are not compatible with multiply.{method}. Resolved (dtype('int64'), " +
+                            $"{d.ToString(true)}, {DTypePromotion.CastDescrToDType(o, d.Meta).ToString(true)})");
+                    if (textO && IsRepeatCount(d))
+                        return accumulate
+                            ? new TypeError(
+                                "the resolved dtypes are not compatible with multiply.accumulate. Resolved " +
+                                $"({o.ToString(true)}, dtype('int64'), {o.ToString(true)})")
+                            : NextPhase("multiply", @out);
+                    return NoLoop("multiply", o, d);
+                default:
+                    return NoLoop(ufunc, o, d);
+            }
+        }
+
+        /// <summary>
+        ///     Whether a descriptor is one NumPy's string repeat promoter takes as the repeat count: the eight integer widths
+        ///     (<c>PyTypeNum_ISINTEGER</c>) — not bool, and not NumSharp's char (no NumPy dtype).
+        /// </summary>
+        /// <param name="d">The descriptor.</param>
+        /// <returns>True for an integer count.</returns>
+        private static bool IsRepeatCount(DType d) => d.typecode is NPTypeCode.SByte or NPTypeCode.Byte or NPTypeCode.Int16
+            or NPTypeCode.UInt16 or NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64;
+
+        /// <summary>
         ///     The guard of <c>np.isclose</c> / <c>np.allclose</c> (NumPy's <c>allclose</c> is <c>all(isclose(...))</c>).
         ///     NumPy's <c>isclose</c> first promotes <c>y</c> with a weak Python float (<c>result_type(y, 1.)</c>), which a
         ///     string <c>y</c> fails with <see cref="DTypePromotionError"/>; a string <c>x</c> then meets
@@ -354,20 +552,62 @@ namespace NumSharp.Backends.Strings
         internal static ValueError NoItemsize() => new ValueError("data type must provide an itemsize");
 
         /// <summary>
-        ///     The guard of <c>np.dot</c> / <c>np.inner</c> once their shape checks passed: a 0-d operand makes NumPy compute
-        ///     a plain <c>multiply</c> (its string loops decide), any other string operand fails the item-size lookup.
+        ///     The guard of <c>np.dot</c> / <c>np.inner</c> for a string operand, in NumPy's <c>PyArray_MatrixProduct2</c>
+        ///     order: a 0-d operand makes NumPy compute a plain <c>multiply</c> (its string loops decide); otherwise the
+        ///     contracted lengths must align, then <c>new_array_for_sum</c> either refuses the caller's <c>out=</c> or, with
+        ///     none, fails to allocate a result for the string type number (it carries no item size). Does nothing for two
+        ///     numeric operands.
         /// </summary>
         /// <param name="a">The first operand.</param>
-        /// <param name="b">The second operand.</param>
+        /// <param name="b">The second operand (for <c>np.inner</c>: already transposed, as NumPy passes it).</param>
+        /// <param name="out">The <c>out=</c> array of <c>np.dot</c>, or null.</param>
         /// <exception cref="TypeError">A 0-d operand: <c>multiply</c>'s answer for the operand classes.</exception>
-        /// <exception cref="ValueError">Otherwise: <c>data type must provide an itemsize</c>.</exception>
-        internal static void ThrowIfProduct(NDArray a, NDArray b)
+        /// <exception cref="IncorrectShapeException">The contracted lengths differ: <c>shapes (3,) and (4,) not aligned: 3
+        ///     (dim 0) != 4 (dim 0)</c> (NumPy's ValueError text; the house type of the alignment error).</exception>
+        /// <exception cref="ValueError">With <paramref name="out"/>: <c>output array is not acceptable (must have the right
+        ///     datatype, number of dimensions, and be a C-Array)</c>, <c>output array has wrong dimensions</c>, or — for an
+        ///     acceptable out — <c>dot not available for this type</c>; without: <c>data type must provide an
+        ///     itemsize</c>.</exception>
+        internal static void ThrowIfProduct(NDArray a, NDArray b, NDArray @out = null)
         {
             if (!IsString(a) && !IsString(b))
                 return;
             if (a.ndim == 0 || b.ndim == 0)
                 throw ScalarProductError(a, b);
-            throw NoItemsize();
+
+            // dot_alignment_error: a's last axis against b's second-to-last (its only axis when 1-D).
+            long l = a.Shape.dimensions[a.ndim - 1];
+            int matchDim = b.ndim > 1 ? b.ndim - 2 : 0;
+            if (b.Shape.dimensions[matchDim] != l)
+                throw new IncorrectShapeException(
+                    $"shapes {a.Shape.ToPythonTuple()} and {b.Shape.ToPythonTuple()} not aligned: {l} (dim {a.ndim - 1}) " +
+                    $"!= {b.Shape.dimensions[matchDim]} (dim {matchDim})");
+
+            if (@out is null)
+                throw NoItemsize();
+
+            // new_array_for_sum: out must have the result's rank, the result's TYPE NUMBER (any width of the promoted
+            // string class: str when either operand is str, else bytes) and be a C-array (C-contiguous, writeable).
+            int nd = a.ndim + b.ndim - 2;
+            bool unicode = a.dtype.Meta is StringDTypeMeta { IsUnicode: true } || b.dtype.Meta is StringDTypeMeta { IsUnicode: true };
+            bool sameClass = @out.dtype.Meta is StringDTypeMeta outMeta && outMeta.IsUnicode == unicode;
+            if (@out.ndim != nd || !sameClass || !@out.Shape.IsContiguous || !@out.Shape.IsWriteable)
+                throw new ValueError(
+                    "output array is not acceptable (must have the right datatype, number of dimensions, and be a C-Array)");
+
+            // The result's dimensions: a's leading axes, b's axes but its contracted one.
+            int d = 0;
+            for (int i = 0; i < a.ndim - 1; i++, d++)
+                if (@out.Shape.dimensions[d] != a.Shape.dimensions[i])
+                    throw new ValueError("output array has wrong dimensions");
+            for (int i = 0; i < b.ndim - 2; i++, d++)
+                if (@out.Shape.dimensions[d] != b.Shape.dimensions[i])
+                    throw new ValueError("output array has wrong dimensions");
+            if (b.ndim > 1 && @out.Shape.dimensions[d] != b.Shape.dimensions[b.ndim - 1])
+                throw new ValueError("output array has wrong dimensions");
+
+            // The string descriptor has no dot function.
+            throw new ValueError("dot not available for this type");
         }
 
         /// <summary>

@@ -201,6 +201,7 @@ namespace NumSharp.Tests.Strings
                 case "equal": return np.equal(x, y, @out, where, dt);
                 case "less": return np.less(x, y, @out, where, dt);
                 case "logical_and": return np.logical_and(x, y, @out, where, dt);
+                case "logical_or": return np.logical_or(x, y, @out, where, dt);
                 case "sqrt": return np.sqrt(x, @out, where, dt);
                 case "negative": return np.negative(x, @out, where, dt);
                 case "logical_not": return np.logical_not(x, @out, where, dt);

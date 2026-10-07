@@ -37,8 +37,15 @@ namespace NumSharp
                 if (NDMatrixBoundary.Sees(a))
                     return NDMatrixBoundary.WrappedTriple((a, full_matrices, compute_uv, hermitian),
                         static s => svd(s.a, s.full_matrices, s.compute_uv, s.hermitian), wrap0: true, wrap1: false, wrap2: true);
-                AssertStacked2d(a);
+                // NumPy's hermitian=True route is eigh / eigvalsh: their square check, then their gufunc; otherwise
+                // _assert_stacked_2d and one of the three svd gufuncs.
+                if (hermitian)
+                    AssertStackedSquare(a);
+                else
+                    AssertStacked2d(a);
                 var common = CommonType(a);
+                ThrowIfTextGufunc(hermitian ? (compute_uv ? "eigh_lo" : "eigvalsh_lo")
+                                            : compute_uv ? (full_matrices ? "svd_f" : "svd_s") : "svd", a);
                 return a.TensorEngine.Svd(ToCommon(a, common), full_matrices, compute_uv);
             }
 
@@ -54,6 +61,8 @@ namespace NumSharp
                 using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 AssertStacked2d(x);
                 var common = CommonType(x);
+                // NumPy's svd(x, compute_uv=False) calls _umath_linalg.svd: its input cast refuses text.
+                ThrowIfTextGufunc("svd", x);
                 return x.TensorEngine.Svd(ToCommon(x, common), fullMatrices: false, computeUv: false).S;
             }
 
@@ -80,9 +89,19 @@ namespace NumSharp
                 // unless every element is zero, so matrix_rank([1,2,3]) is 1 and not 3. An empty
                 // operand is rank 0, because all([]) is true.
                 if (A.ndim < 2)
+                {
+                    // Text: NumPy's `A == 0` has no string loop, so ndarray.__eq__ answers all-False (a 0-d operand:
+                    // Python's False) without reading the text — rank 1, or 0 for an empty operand (all([]) is True).
+                    if (Backends.Strings.NDStringUfuncs.IsString(A))
+                        return NDArray.Scalar(A.size == 0 ? 0L : 1L);
                     return NDArray.Scalar(A.TensorEngine.CountNonZero(A) == 0 ? 0L : 1L);
+                }
 
+                // NumPy's svd(A, compute_uv=False, hermitian=hermitian): the eigvalsh route checks squareness first.
+                if (hermitian)
+                    AssertStackedSquare(A);
                 var common = CommonType(A);
+                ThrowIfTextGufunc(hermitian ? "eigvalsh_lo" : "svd", A);
                 var s = A.TensorEngine.Svd(ToCommon(A, common), fullMatrices: false, computeUv: false).S;
 
                 int nd = A.ndim;
@@ -152,6 +171,8 @@ namespace NumSharp
                 {
                     AssertStackedSquare(x);
                     var common = CommonType(x);
+                    // NumPy calls _umath_linalg.inv(x, signature=...) next: its input cast refuses text.
+                    ThrowIfTextGufunc("inv", x);
                     var realT = common == NPTypeCode.Complex ? NPTypeCode.Double : common;
 
                     // NumPy's own composition, verbatim — and the reason a bad order is reported by

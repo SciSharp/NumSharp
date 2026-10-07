@@ -33,12 +33,18 @@ namespace NumSharp
         /// <param name="legacyByteOrder">True for <c>RandomState.randint</c> (a non-native byte order draws the native twin).</param>
         /// <returns>The draws, of the resolved native dtype.</returns>
         /// <exception cref="TypeError">The dtype is not one of the nine integer/bool dtypes; a bound is <c>None</c> or a 0-d
-        ///     complex (Python's <c>int()</c> refuses both).</exception>
+        ///     complex (Python's <c>int()</c> refuses both); a text (<c>U</c> / <c>S</c>) bound that is not 0-d with an
+        ///     8/16/32-bit dtype or bool (the range check's comparison has no loop for text and a number:
+        ///     <c>ufunc 'less' did not contain a loop with signature matching types (&lt;class 'numpy.dtypes.StrDType'&gt;,
+        ///     &lt;class 'numpy.dtypes.Int32DType'&gt;) -&gt; None</c>, or <c>'greater'</c> / <c>'greater_equal'</c> with the
+        ///     unsigned check type for the high bound).</exception>
         /// <exception cref="ValueError">A non-native dtype (Generator); a bound outside the dtype (<c>low/high is out of
         ///     bounds for &lt;dtype&gt;</c>); an empty interval anywhere (<c>low &gt;= high</c>, or <c>high &lt;= 0</c> when
-        ///     every low is 0); a NaN reaching Python's <c>int()</c> (<c>cannot convert float NaN to integer</c>); bounds
-        ///     that do not broadcast (the comparison ufunc's <c>operands could not be broadcast together with shapes …</c>)
-        ///     or a size they do not broadcast with (<c>shape mismatch: … arg 0 … arg 2 …</c>); a negative size.</exception>
+        ///     every low is 0); a NaN reaching Python's <c>int()</c> (<c>cannot convert float NaN to integer</c>); text
+        ///     reaching Python's <c>int()</c> (0-d bounds, or the 64-bit dtypes' element conversion) that is not a base-10
+        ///     literal (<c>invalid literal for int() with base 10: …</c>); bounds that do not broadcast (the comparison
+        ///     ufunc's <c>operands could not be broadcast together with shapes …</c>) or a size they do not broadcast with
+        ///     (<c>shape mismatch: … arg 0 … arg 2 …</c>); a negative size.</exception>
         /// <exception cref="OverflowException">An infinity reaching Python's <c>int()</c> (NumPy's
         ///     <c>OverflowError: cannot convert float infinity to integer</c>).</exception>
         /// <remarks>
@@ -118,6 +124,9 @@ namespace NumSharp
             if (!np.can_cast(lo.dtype, otype))
             {
                 using var lbArr = ScalarOf(lb, tc);
+                // Text never casts safely to a number, so a text bound always reaches np.less, which has no loop for text
+                // and a number: NumPy's UFuncTypeError naming both classes (StrDType, Int32DType), whatever the bound's size.
+                Backends.Strings.NDStringUfuncs.ThrowIfBinary("less", lo, lbArr);
                 if (RandomBroadcast.AnyCompare(NDExpr.Less, lo, lbArr))
                     throw new ValueError($"low is out of bounds for {name}");
             }
@@ -125,8 +134,11 @@ namespace NumSharp
                 throw new TypeError($"'{(closed ? ">=" : ">")}' not supported between instances of 'NoneType' and 'int'");
             if (!np.can_cast(hi.dtype, otype))
             {
-                // The EXCLUSIVE bound as the next larger type (np.int64(0x80000000) for int32, np.uint8(2) for bool).
-                using var ubArr = ScalarOf(ub + 1, up);
+                // The EXCLUSIVE bound as NumPy's nptype_up, the next larger UNSIGNED type (np.uint64(0x80000000) for int32,
+                // np.uint16(0x80) for int8, np.uint8(2) for bool). Only a text bound's error shows the class: the value
+                // comparison is the same against any type that holds the bound.
+                using var ubArr = ScalarOf(ub + 1, HighCheckType(tc));
+                Backends.Strings.NDStringUfuncs.ThrowIfBinary(closed ? "greater_equal" : "greater", hi, ubArr);
                 if (RandomBroadcast.AnyCompare(closed ? NDExpr.GreaterEqual : NDExpr.Greater, hi, ubArr))
                     throw new ValueError($"high is out of bounds for {name}");
             }
@@ -399,7 +411,23 @@ namespace NumSharp
             return (Int128)v;
         }
 
-        /// <summary>The next larger type <c>_rand_&lt;dtype&gt;_broadcast</c> checks and reads the bounds in.</summary>
+        /// <summary>
+        ///     NumPy's <c>nptype_up</c> of <c>_rand_&lt;dtype&gt;_broadcast</c>: the type of the strong scalar the HIGH bound is
+        ///     compared with (<c>np.uint16(0x80)</c> for int8) — always unsigned, unlike <see cref="UpType"/>, the type the
+        ///     bounds are cast to for drawing.
+        /// </summary>
+        /// <param name="tc">The 8/16/32-bit output dtype or bool.</param>
+        /// <returns>uint8 for bool, uint16 for the 8-bit types, uint32 for the 16-bit types, uint64 for the 32-bit types.</returns>
+        /// <remarks>Observable only through a text bound's no-loop error, which names this class.</remarks>
+        private static NPTypeCode HighCheckType(NPTypeCode tc) => tc switch
+        {
+            NPTypeCode.Boolean => NPTypeCode.Byte,
+            NPTypeCode.Byte or NPTypeCode.SByte => NPTypeCode.UInt16,
+            NPTypeCode.UInt16 or NPTypeCode.Int16 => NPTypeCode.UInt32,
+            _ => NPTypeCode.UInt64,
+        };
+
+        /// <summary>The next larger type <c>_rand_&lt;dtype&gt;_broadcast</c> reads the bounds in (NumPy's <c>npctype</c>).</summary>
         /// <param name="tc">The 8/16/32-bit output dtype or bool.</param>
         /// <returns>uint8 for bool, 16-bit for 8-bit, 32-bit for 16-bit, 64-bit for 32-bit (same signedness).</returns>
         private static NPTypeCode UpType(NPTypeCode tc) => tc switch
@@ -452,6 +480,8 @@ namespace NumSharp
         /// <exception cref="ValueError">A value fails <paramref name="check"/>, or is NaN.</exception>
         /// <exception cref="OverflowException">A value is infinite.</exception>
         /// <exception cref="TypeError">A value <c>int()</c> refuses.</exception>
+        /// <exception cref="ValueError">A text element that is not an integer literal (<c>invalid literal for int() with base
+        ///     10: np.str_('1a')</c> for a <c>U</c> element, <c>b'1a'</c> for an <c>S</c> one).</exception>
         /// <remarks>
         ///     The elements are read in C order (<c>flat</c>) but written to MEMORY index <c>i</c> of an <c>empty_like</c>
         ///     that keeps the source's layout (NumPy's K order: C for C-contiguous or 1-D sources, F for F-contiguous ones,
@@ -466,7 +496,15 @@ namespace NumSharp
             var values = new ulong[n];
             for (long i = 0; i < n; i++)
             {
-                Int128 v = PyIntOfElement(x.GetAtIndex(i));
+                // `int(flat[i])`: flat hands out NumPy scalars, so a U element is an np.str_ (its repr in the error) and an S
+                // element an np.bytes_ (int() of bytes quotes a plain b'...').
+                object element = x.GetAtIndex(i);
+                Int128 v = element switch
+                {
+                    string text => ClampToInt128(PythonInt.Parse(text, 10, numpyStr: true)),
+                    byte[] bytes => ClampToInt128(PythonInt.ParseBytes(bytes, 10)),
+                    _ => PyIntOfElement(element),
+                };
                 string err = check(v);
                 if (err is not null)
                     throw new ValueError(err);
@@ -552,13 +590,15 @@ namespace NumSharp
 
         /// <summary>
         ///     Python's <c>int()</c> of a 0-d bound (NumPy's scalar path: <c>int(np.asarray(low))</c>): an integer as is, a
-        ///     bool as 0/1, a float truncated toward zero.
+        ///     bool as 0/1, a float truncated toward zero, text parsed as a base-10 literal.
         /// </summary>
         /// <param name="x">The 0-d bound, or null for Python's <c>None</c>.</param>
         /// <returns>The value (clamped to <c>±2**100</c> past every dtype's range — see <see cref="PyIntOfFloat"/>).</returns>
         /// <exception cref="TypeError"><paramref name="x"/> is null (<c>… not 'NoneType'</c>) or complex (<c>int()</c> of a
         ///     0-d complex ARRAY refuses it, unlike a complex scalar element).</exception>
-        /// <exception cref="ValueError">A NaN.</exception>
+        /// <exception cref="ValueError">A NaN, or text that is not a base-10 literal (<c>invalid literal for int() with base 10:
+        ///     '1a'</c>; a 0-d array converts through a plain Python str / bytes, so the repr is <c>'1a'</c> / <c>b'1a'</c>,
+        ///     never <c>np.str_('1a')</c>).</exception>
         /// <exception cref="OverflowException">An infinity.</exception>
         private static Int128 PyInt(NDArray x)
         {
@@ -566,6 +606,10 @@ namespace NumSharp
                 throw new TypeError("int() argument must be a string, a bytes-like object or a real number, not 'NoneType'");
             if (x.typecode == NPTypeCode.Complex)
                 throw new TypeError("int() argument must be a string, a bytes-like object or a real number, not 'complex'");
+            // A 0-d text bound: Python's int() of a str (Unicode digits, underscores and surrounding whitespace allowed) or
+            // of bytes, exactly; PythonInt.From reads the element's C# value (string for U, byte[] for S).
+            if (x.typecode == NPTypeCode.String)
+                return ClampToInt128(PythonInt.From(x.GetAtIndex(0)));
             return PyIntOfElement(x.GetAtIndex(0));
         }
 

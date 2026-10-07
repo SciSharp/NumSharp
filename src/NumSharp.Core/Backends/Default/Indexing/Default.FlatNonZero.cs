@@ -41,11 +41,19 @@ namespace NumSharp.Backends
         ///     of equal size (modulo the non-contig materialization if needed).
         ///     </para>
         /// </summary>
+        /// <param name="nd">The array.</param>
+        /// <returns>The indices (int64).</returns>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty string array: NumPy reads the strings' truth
+        ///     values (the next phase of NumSharp's string support); an empty one gives an empty int64 result.</exception>
         public override unsafe NDArray<long> FlatNonZero(NDArray nd)
         {
-            // NumPy resolves the reduction loop from the descriptor alone: a string array gets flatnonzero's refusal (or the
-            // next-phase refusal where NumPy computes on text) whatever the axis, size or dtype= request.
-            Strings.NDStringUfuncs.ThrowIfReduce("flatnonzero", nd);
+            // Text: NumPy's flatnonzero is nonzero(ravel(a))[0], the strings' truth values (the next phase). An empty input
+            // reads none: the bool stand-in gives the empty int64 result.
+            if (Strings.NDStringUfuncs.ReduceStandIn("flatnonzero", nd) is { } standIn)
+            {
+                using (standIn)
+                    return FlatNonZero(standIn);
+            }
             // 0-d: NumPy 2.4 raises ValueError, but its own error message suggests
             // `np.atleast_1d(scalar).nonzero()`, which is what our NonZero already
             // does. Preserve symmetry with NonZero — recurse via atleast_1d.

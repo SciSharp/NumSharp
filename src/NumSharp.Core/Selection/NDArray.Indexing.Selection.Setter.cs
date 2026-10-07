@@ -18,13 +18,23 @@ namespace NumSharp
         ///     Used to perform set a selection based on indices, equivalent to nd[NDArray[]] = values.
         /// </summary>
         /// <param name="values">The values to set via .</param>
+        /// <param name="indices">The index arrays, one per leading axis.</param>
         /// <remarks>https://numpy.org/doc/stable/user/basics.indexing.html</remarks>
-        /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
+        /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits, or an index array is not
+        ///     of an integer type.</exception>
         /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
         /// <exception cref="ValueError">If this array is not writeable (e.g., broadcast array) — NumPy's "assignment destination is read-only".</exception>
+        /// <exception cref="IndexError">A string array indexed by more index arrays than it has axes.</exception>
         public void SetIndices(NDArray values, NDArray[] indices)
         {
             NumSharpException.ThrowIfNotWriteable(Shape);
+            // A fixed-width string array has no element kernel: the scatter runs the string indexing route (whole
+            // elements through the unit view, as `this[NDArray[]] = values` does).
+            if (typecode == NPTypeCode.String)
+            {
+                StringSetIndices(indices, values);
+                return;
+            }
             SetIndices(this, indices, values);
         }
 
@@ -544,12 +554,45 @@ namespace NumSharp
             //return ret;
         }
 
+        /// <summary>
+        ///     A fancy assignment of TEXT into a numeric array, up to the point where NumPy parses: a scalar text value — a C#
+        ///     literal, NumPy's Python <c>str</c> — is parsed before the index is resolved (<c>PyArray_FromAny(value, descr,
+        ///     FORCECAST)</c>); an array value is parsed element by element as the selection is written, after the index and
+        ///     broadcast checks and not at all when the selection is empty (<c>a[[]] = np.array(['x'])</c> succeeds). The index
+        ///     and broadcast checks run on byte proxies of the same shapes, so they raise NumPy's errors.
+        /// </summary>
+        /// <param name="src">The numeric destination.</param>
+        /// <param name="indices">The index arrays (cloned before the proxy assignment, which normalizes them in place).</param>
+        /// <param name="values">The text value.</param>
+        /// <exception cref="StringComputationNotSupportedException">NumPy parses an element: a scalar value, or an array value
+        ///     with a non-empty selection.</exception>
+        /// <exception cref="Exception">The index / broadcast error NumPy raises first (IndexError, ValueError, …).</exception>
+        /// <remarks>Returns normally when the selection is empty: nothing is written, as in NumPy.</remarks>
+        private static void ThrowIfTextSelectionParses(NDArray src, NDArray[] indices, NDArray values)
+        {
+            if (values.ndim == 0)
+                throw Backends.Strings.NDStringCasting.TextConversion(values.dtype, src.dtype);
+            using var proxy = np.zeros(new Shape((long[])src.Shape.dimensions.Clone()), NPTypeCode.Byte);
+            using var valueProxy = np.ones(new Shape((long[])values.Shape.dimensions.Clone()), NPTypeCode.Byte);
+            SetIndices(proxy, (NDArray[])indices.Clone(), valueProxy);
+            if (np.any(proxy))
+                throw Backends.Strings.NDStringCasting.TextConversion(values.dtype, src.dtype);
+        }
+
         // NDScoped (void method — nothing escapes): reclaims the per-dispatch MakeGeneric alias,
         // the computed-offsets buffer, and the broadcast/materialized value temps inside
         // SetIndices<T>. src/values were made outside: never touched.
         [NDScoped]
         protected static void SetIndices(NDArray src, NDArray[] indices, NDArray values)
         {
+            // Text into a numeric array (a string array takes the string route): parsing is the computational phase, but
+            // NumPy reaches it only where it converts an element — see ThrowIfTextSelectionParses.
+            if (values is not null && values.typecode == NPTypeCode.String && src.typecode != NPTypeCode.String)
+            {
+                ThrowIfTextSelectionParses(src, indices, values);
+                return;
+            }
+
             // #region Compute
 		    // switch (src.typecode)
 		    // {

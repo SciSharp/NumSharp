@@ -44,11 +44,20 @@ namespace NumSharp.Backends
         ///     </list>
         ///     </para>
         /// </summary>
+        /// <param name="nd">The array.</param>
+        /// <returns>The indices (int64).</returns>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty string array: NumPy reads the strings' truth
+        ///     values (the next phase of NumSharp's string support); an empty one gives the (0, ndim) int64 result.</exception>
         public override unsafe NDArray Argwhere(NDArray nd)
         {
-            // NumPy resolves the reduction loop from the descriptor alone: a string array gets argwhere's refusal (or the
-            // next-phase refusal where NumPy computes on text) whatever the axis, size or dtype= request.
-            Strings.NDStringUfuncs.ThrowIfReduce("argwhere", nd);
+            // Text: NumPy's argwhere reads the strings' truth values (the next phase; a 0-d input is atleast_1d'd first,
+            // so its result shape depends on the value too). An empty input reads none: the bool stand-in gives the
+            // (0, ndim) int64 result.
+            if (Strings.NDStringUfuncs.ReduceStandIn("argwhere", nd) is { } standIn)
+            {
+                using (standIn)
+                    return Argwhere(standIn);
+            }
             // 0-d: NumPy promotes via atleast_1d then strips the dim with [:, :0].
             // Net result is (1, 0) for truthy, (0, 0) for falsy. Route the truthiness
             // check through NonZero so we don't add yet another dtype dispatch here.

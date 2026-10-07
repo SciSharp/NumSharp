@@ -163,11 +163,12 @@ namespace NumSharp.Tests.Strings
                 case "put":
                     np.put(a, np.array(Longs(p["indices"])), ToOperand(ManagedArray(StringOracleCorpus.Decode(p["values"]))), Str(p, "mode"));
                     return a;
+                // NumPy got a Python LIST of values: a C# array binds the list overloads (converted straight into a's dtype).
                 case "place":
-                    np.place(a, RawArray(p["mask"]), ToOperand(ManagedArray(StringOracleCorpus.Decode(p["values"]))));
+                    np.place(a, RawArray(p["mask"]), ManagedArray(StringOracleCorpus.Decode(p["values"])));
                     return a;
                 case "putmask":
-                    np.putmask(a, RawArray(p["mask"]), ToOperand(ManagedArray(StringOracleCorpus.Decode(p["values"]))));
+                    np.putmask(a, RawArray(p["mask"]), ManagedArray(StringOracleCorpus.Decode(p["values"])));
                     return a;
                 case "copyto":
                     np.copyto(a, b, Str(p, "casting"), p["where"].ValueKind == JsonValueKind.Null ? null : RawArray(p["where"]));
@@ -218,6 +219,12 @@ namespace NumSharp.Tests.Strings
             // Section J (string dtype= requests and the order of a text call's problems) lives in its own partial.
             if (TryInvokePrecedence(c.Op, p, ops, out var precedence))
                 return precedence;
+            // Sections K and L (answers the shape decides, the checks before a conversion) live in their own partial.
+            if (TryInvokeShape(c.Op, p, ops, out var shaped))
+                return shaped;
+            // Section M (the rest of the surface: linalg, products, random, histograms, ...) lives in its own partial.
+            if (TryInvokeSurface(c.Op, p, ops, out var surface))
+                return surface;
             throw new InvalidOperationException($"the string oracle has no op '{c.Op}'");
         }
 

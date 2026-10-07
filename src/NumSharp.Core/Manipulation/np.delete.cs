@@ -195,10 +195,17 @@ namespace NumSharp
         /// <returns>A fresh array without the selected sub-arrays (F-ordered when <paramref name="arr"/> is).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null.</exception>
         /// <exception cref="ArgumentException">A boolean <paramref name="obj"/> is not 1-D or its length differs
-        ///     from the axis length, or <paramref name="obj"/>'s dtype is neither boolean nor integer.</exception>
+        ///     from the axis length.</exception>
+        /// <exception cref="IndexError"><paramref name="obj"/>'s dtype is neither boolean nor integer — text, a float,
+        ///     complex, decimal — whatever its size (NumPy's <c>keep[obj,] = False</c>: <c>arrays used as indices must be of
+        ///     integer (or boolean) type</c>).</exception>
         /// <exception cref="IndexOutOfRangeException">An index is outside <c>[-N, N)</c>.</exception>
-        /// <remarks>Scoped by <c>[NDScoped]</c>: the ravel work array, the keep mask, the helpers' chunk views and
-        ///     the C-order result that an F-ordered relabel supersedes are released on return.</remarks>
+        /// <remarks>
+        ///     An integer <paramref name="obj"/> of any rank is accepted, as NumPy's fancy <c>keep[obj,]</c> accepts it (its
+        ///     elements are the indices; one element takes the single-index path).
+        ///     <para>Scoped by <c>[NDScoped]</c>: the ravel work array, the keep mask, the helpers' chunk views and
+        ///     the C-order result that an F-ordered relabel supersedes are released on return.</para>
+        /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray delete(NDArray arr, NDArray obj, int? axis = null)
@@ -229,15 +236,22 @@ namespace NumSharp
                 return WithSourceOrder(arr, np.compress(keepArr, ctx.work, ctx.axis));
             }
 
+            // Not an integer index array: NumPy's `keep[obj,] = False` refuses it, whatever its size (text, floats, complex).
+            if (!IsIntegerIndexDtype(obj.typecode))
+                throw new IndexError("arrays used as indices must be of integer (or boolean) type");
+
+            // Integer obj of any rank: its elements in C order (NumPy's fancy keep[obj,] reads every one).
+            var flatObj = obj.ndim > 1 ? np.ravel(obj) : obj;
+
             // Integer obj. Size-1 ⇒ collapse to scalar path (NumPy parity).
-            if (obj.size == 1)
+            if (flatObj.size == 1)
             {
-                long idx = ToInt64Scalar(obj, "delete");
+                long idx = ToInt64Scalar(flatObj, "delete");
                 return WithSourceOrder(arr, DeleteSingleIndex(ctx.work, idx, ctx.axis));
             }
 
             // Materialise indices into a managed long[] for the multi-index path.
-            long[] indices = ToInt64Vector(obj, "delete");
+            long[] indices = ToInt64Vector(flatObj, "delete");
             return WithSourceOrder(arr, DeleteIndexArray(ctx.work, indices, ctx.axis));
         }
 
@@ -250,6 +264,10 @@ namespace NumSharp
         ///     (which the caller can treat as owning since insert/delete always
         ///     produces a new array).
         /// </summary>
+        /// <param name="arr">The input of insert / delete.</param>
+        /// <param name="axis">The caller's axis, or null for the flattened array.</param>
+        /// <returns>The array to work on and the non-negative axis.</returns>
+        /// <exception cref="AxisError">The axis is out of bounds (NumPy's <c>normalize_axis_index</c> text).</exception>
         private static (NDArray work, int axis) PrepareAxisContext(NDArray arr, int? axis)
         {
             if (axis is null)
@@ -260,9 +278,9 @@ namespace NumSharp
 
             int ax = axis.Value;
             if (ax < 0) ax += arr.ndim;
+            // NumPy's normalize_axis_index raises AxisError (a subclass of the ArgumentOutOfRangeException this used to be).
             if (ax < 0 || ax >= arr.ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis),
-                    $"axis {axis.Value} is out of bounds for array of dimension {arr.ndim}");
+                throw new AxisError(axis.Value, arr.ndim);
             return (arr, ax);
         }
 
@@ -277,6 +295,8 @@ namespace NumSharp
             switch (obj.GetTypeCode)
             {
                 case NPTypeCode.Byte:   return obj.GetByte(0);
+                case NPTypeCode.SByte:  return obj.GetSByte(0);
+                case NPTypeCode.Char:   return obj.GetChar(0);
                 case NPTypeCode.Int16:  return obj.GetInt16(0);
                 case NPTypeCode.UInt16: return obj.GetUInt16(0);
                 case NPTypeCode.Int32:  return obj.GetInt32(0);
@@ -309,6 +329,12 @@ namespace NumSharp
             {
                 case NPTypeCode.Byte:
                     for (long i = 0; i < n; i++) result[i] = obj.GetByte((int)i);
+                    break;
+                case NPTypeCode.SByte:
+                    for (long i = 0; i < n; i++) result[i] = obj.GetSByte((int)i);
+                    break;
+                case NPTypeCode.Char:
+                    for (long i = 0; i < n; i++) result[i] = obj.GetChar((int)i);
                     break;
                 case NPTypeCode.Int16:
                     for (long i = 0; i < n; i++) result[i] = obj.GetInt16((int)i);

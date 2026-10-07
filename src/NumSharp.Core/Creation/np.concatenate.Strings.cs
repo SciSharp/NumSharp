@@ -48,7 +48,17 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> has the wrong rank or shape.</exception>
         /// <exception cref="UnicodeEncodeError">A <c>U</c> input is not ASCII and the result is <c>S</c>.</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S</c> input is not ASCII and the result is <c>U</c>.</exception>
-        /// <exception cref="NotSupportedException">The cast is allowed but converts between text and numbers.</exception>
+        /// <exception cref="StringComputationNotSupportedException">The cast is allowed but converts between text and numbers for
+        ///     an input with elements: a text input parsed into a numeric result (at that input), or a numeric input formatted
+        ///     into a text result (reported once every other input passed — formatting cannot fail). An EMPTY input converts
+        ///     nothing.</exception>
+        /// <remarks>
+        ///     <b>Order (NumPy's <c>PyArray_ConcatenateArrays</c>).</b> The <paramref name="out"/> shape first; then each input
+        ///     in turn through <c>PyArray_AssignArray</c> — its casting rule, then its conversion — so the FIRST input's rule or
+        ///     conversion error wins over a later input's (a non-ASCII <c>S</c> input before a <c>U5</c> input that fails
+        ///     <c>'safe'</c> into <c>&lt;U3</c> reports the UnicodeDecodeError). Formatting a number cannot fail and is
+        ///     unobservable once the call fails, so a numeric input defers only when every input passed.
+        /// </remarks>
         private static NDArray ConcatenateStrings(NDArray[] arrays, int axis, int ndim, long[] resultDims, NDArray @out, DType dtype, string casting)
         {
             var rule = DTypeCasting.ParseCasting((casting ?? string.Empty).ToLowerInvariant());
@@ -60,30 +70,18 @@ namespace NumSharp
                 result = @out.dtype;
             else
                 result = DTypePromotion.ResultType(arrays.Cast<object>().ToArray());
-
-            // PyArray_AssignArray's rule check for every input, before anything is written.
-            foreach (var a in arrays)
-            {
-                if (!DTypeCasting.CanCastTypeTo(a.dtype, result, rule))
-                    throw NDStringCasting.InvalidCast(a.dtype, result, rule, scalar: false);
-            }
-            // Formatting numbers as text (or parsing text as numbers) is the computational phase.
-            foreach (var a in arrays)
-            {
-                if ((a.typecode == NPTypeCode.String) != (result.Meta is StringDTypeMeta))
-                    throw NDStringCasting.TextConversion(a.dtype, result);
-            }
+            bool resultIsText = result.Meta is StringDTypeMeta;
 
             NDArray dst;
             if (@out is not null)
             {
                 if (@out.ndim != ndim)
-                    throw new IncorrectShapeException($"Output array has wrong dimensionality: expected {ndim}, got {@out.ndim}");
+                    throw new IncorrectShapeException("Output array has wrong dimensionality");
                 for (int j = 0; j < ndim; j++)
                 {
                     if (@out.Shape.dimensions[j] != resultDims[j])
                         throw new IncorrectShapeException(
-                            $"Output array has wrong shape: expected ({string.Join(", ", resultDims)}), got ({string.Join(", ", @out.Shape.dimensions)})");
+                            "Output array is the wrong shape");
                 }
                 dst = @out;
             }
@@ -93,28 +91,57 @@ namespace NumSharp
                 var inputShapes = new Shape[arrays.Length];
                 for (int k = 0; k < arrays.Length; k++)
                     inputShapes[k] = arrays[k].Shape;
-                // The pieces cover the result exactly, so a U result skips the NEEDS_INIT zero fill.
+                // The pieces cover the result exactly, so a U result skips the NEEDS_INIT zero fill. (A deferred numeric
+                // input leaves its slab unwritten, but then the result is discarded below.)
                 dst = NDArray.ForOverwrite(result, Shape.ConcatOutputShape(resultDims, inputShapes));
             }
 
-            var accessor = new Slice[ndim];
-            for (int i = 0; i < ndim; i++)
-                accessor[i] = Slice.All;
-
-            long position = 0;
-            foreach (var src in arrays)
+            try
             {
-                long len = src.Shape.dimensions[axis];
-                if (len == 0)
-                    continue;
-                accessor[axis] = new Slice(position, position + len);
-                // The slab view is a fresh wrapper over dst's storage: release it each iteration.
-                using var slab = dst[accessor];
-                NDIter.Copy(slab.Storage, src.Storage);
-                position += len;
-            }
+                var accessor = new Slice[ndim];
+                for (int i = 0; i < ndim; i++)
+                    accessor[i] = Slice.All;
 
-            return dst;
+                long position = 0;
+                DType pendingFormat = null;
+                foreach (var src in arrays)
+                {
+                    // PyArray_AssignArray, input by input: the casting rule (a dtype check, so it runs for an empty input
+                    // too), then the conversion.
+                    if (!DTypeCasting.CanCastTypeTo(src.dtype, result, rule))
+                        throw NDStringCasting.InvalidCast(src.dtype, result, rule, scalar: false);
+
+                    long len = src.Shape.dimensions[axis];
+                    if ((src.typecode == NPTypeCode.String) != resultIsText && src.size != 0)
+                    {
+                        // Parsing text into numbers can fail, so it is reported at this input; formatting numbers cannot,
+                        // so a later input's error still wins and the refusal waits for the end.
+                        if (!resultIsText)
+                            throw NDStringCasting.TextConversion(src.dtype, result);
+                        pendingFormat ??= src.dtype;
+                        position += len;
+                        continue;
+                    }
+                    if (len == 0)
+                        continue;
+                    accessor[axis] = new Slice(position, position + len);
+                    // The slab view is a fresh wrapper over dst's storage: release it each iteration.
+                    using var slab = dst[accessor];
+                    NDIter.Copy(slab.Storage, src.Storage);
+                    position += len;
+                }
+
+                if (pendingFormat is not null)
+                    throw NDStringCasting.TextConversion(pendingFormat, result);
+                return dst;
+            }
+            catch
+            {
+                // A failing input discards the result NumSharp allocated (a caller's out keeps what was written, as in NumPy).
+                if (@out is null)
+                    dst.Dispose();
+                throw;
+            }
         }
 
         /// <summary>

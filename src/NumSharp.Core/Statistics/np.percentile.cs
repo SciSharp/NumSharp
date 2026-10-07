@@ -82,6 +82,25 @@ namespace NumSharp
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: false);
         }
 
+        /// <summary>
+        ///     The q-th percentiles (q in [0, 100]) of the data, q given as a 0-d or 1-d array — NumPy's
+        ///     <c>np.percentile(a, q_array)</c>.
+        /// </summary>
+        /// <param name="a">The data.</param>
+        /// <param name="q">A 0-d or 1-d array of percentiles in [0, 100].</param>
+        /// <param name="axis">The axis to reduce, or null for the flattened data.</param>
+        /// <param name="out">An optional output array.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
+        /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's names).</param>
+        /// <param name="keepdims">Whether the reduced axis is kept with length one.</param>
+        /// <returns>The percentiles: one per element of q (a scalar result for a 0-d q), with the axis reduced.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="q"/> is null.</exception>
+        /// <exception cref="TypeError">A text <paramref name="q"/>: NumPy divides it by 100 first, and <c>divide</c> has no
+        ///     text loop (<c>ufunc 'divide' not supported for the input types, …</c>).</exception>
+        /// <exception cref="ArgumentException">A q of rank above 1, or a percentile outside [0, 100] (NumPy's ValueError
+        ///     texts).</exception>
+        /// <exception cref="StringComputationNotSupportedException">Text data that NumPy partitions (see
+        ///     <see cref="Backends.Strings.NDStringUfuncs.QuantileAnswer"/> for the errors it raises first).</exception>
         public static NDArray percentile(NDArray a, NDArray q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
@@ -90,6 +109,10 @@ namespace NumSharp
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
             if (q is null) throw new ArgumentNullException(nameof(q));
+            // Text q: NumPy's answer comes from its first statement on q (divide by 100, or the [0, 1] check), before the
+            // data or q's rank is looked at.
+            if (Backends.Strings.NDStringUfuncs.IsString(q))
+                throw Backends.Strings.NDStringUfuncs.QuantileTextQAnswer("percentile", a, q, method, axis.HasValue ? new[] { axis.Value } : null);
             if (q.ndim > 1) throw new ArgumentException("q must be a scalar or 1d");
             bool qIsScalar = q.ndim == 0;
             double[] qArr;

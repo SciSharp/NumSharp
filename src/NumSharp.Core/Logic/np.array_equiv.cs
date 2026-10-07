@@ -20,12 +20,12 @@ namespace NumSharp {
         ///     <c>bool((a1 == a2).all())</c>.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.array_equiv.html
         /// </remarks>
+        /// <exception cref="StringComputationNotSupportedException">Two strings of one class with a non-empty broadcast: NumPy
+        ///     compares the text (the next phase of NumSharp's string support). Other string pairs are answered from shape and
+        ///     dtype.</exception>
         public static bool array_equiv(NDArray a1, NDArray a2)
         {
             using var plain = NDMatrixBoundary.PlainFor(a1, a2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy computes this on text (sorting, searching, truth tests); string computation is
-            // the next phase of NumSharp's string support, so a string array is refused here.
-            if (Backends.Strings.NDStringUfuncs.IsString(a1) || Backends.Strings.NDStringUfuncs.IsString(a2)) throw Backends.Strings.NDStringUfuncs.NextPhase("array_equiv", Backends.Strings.NDStringUfuncs.IsString(a1) ? a1 : a2);
             // A null "array" cannot broadcast against or equal a real one; two nulls are trivially
             // equivalent (mirrors the NDArray == null convention).
             if (a1 is null || a2 is null)
@@ -35,6 +35,17 @@ namespace NumSharp {
             // Non-broadcastable shapes short-circuit to False before any element comparison.
             if (!np.are_broadcastable(a1, a2))
                 return false;
+
+            // Text: (a1 == a2).all() — a pair equal has no loop for gets the operator's all-False array, so only an empty
+            // broadcast is equivalent; two strings of one class compare their text (the next phase), unless the
+            // broadcast is empty.
+            if (Backends.Strings.NDStringUfuncs.IsString(a1) || Backends.Strings.NDStringUfuncs.IsString(a2))
+            {
+                bool empty = Shape.ResolveReturnShape(a1.Shape, a2.Shape).size == 0;
+                if (empty || !Backends.Strings.NDStringUfuncs.ComparesText(a1.dtype, a2.dtype))
+                    return empty;
+                throw Backends.Strings.NDStringUfuncs.NextPhase("array_equiv", Backends.Strings.NDStringUfuncs.IsString(a1) ? a1 : a2);
+            }
 
             // Equal-shape fast path: when the two operands are already the same shape (no broadcast
             // needed), same dtype and dense-contiguous, one early-exiting SIMD pass (EqualityScan)

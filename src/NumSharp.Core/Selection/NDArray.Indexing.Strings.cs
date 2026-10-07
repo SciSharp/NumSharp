@@ -174,31 +174,49 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     An advanced SET on this string array through its unit view. The value is first converted to THIS array's
-        ///     dtype the way NumPy's setitem converts it (<c>FORCECAST</c>: truncated / NUL-padded, <c>S ↔ U</c> ASCII-checked;
-        ///     numbers are refused — formatting them is the computational phase), then its unit view is assigned to the
-        ///     selection of this array's unit view.
+        ///     An advanced SET on this string array through its unit view. The value is converted to THIS array's dtype the
+        ///     way NumPy's setitem converts it (truncated / NUL-padded, <c>S ↔ U</c> ASCII-checked; numbers are refused —
+        ///     formatting them is the computational phase), then its unit view is assigned to the selection of this array's
+        ///     unit view.
         /// </summary>
-        /// <param name="value">The value (a string array, any shape broadcastable to the selection).</param>
+        /// <param name="value">The value (a string array, any shape broadcastable to the selection; or numbers).</param>
         /// <param name="onUnits">The assignment, applied to (unit array, unit value).</param>
         /// <param name="onProxy">The same assignment applied to numeric arrays of this array's and the value's shapes;
-        ///     replayed only when the unit route raises.</param>
+        ///     replayed when the unit route raises, and run FIRST for a value converted while the selection is written.</param>
         /// <exception cref="ValueError">This array is read-only, or the value does not broadcast to the selection.</exception>
         /// <exception cref="UnicodeEncodeError">A <c>U</c> value is not ASCII and this array is <c>S</c>.</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S</c> value is not ASCII and this array is <c>U</c>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">The value is numeric.</exception>
+        /// <exception cref="StringComputationNotSupportedException">The value is numeric and the selection holds an element.</exception>
+        /// <remarks>
+        ///     <b>When the value is converted (NumPy's <c>array_assign_subscript</c>).</b> A SCALAR text value — a C# literal,
+        ///     NumPy's Python <c>str</c> — is converted before the index is resolved (<c>PyArray_FromAny(value, descr,
+        ///     FORCECAST)</c>), so its conversion error wins even over an out-of-range index. An ARRAY value is converted element
+        ///     by element as the selection is written (the map iterator's cast, the boolean assignment's transfer function) —
+        ///     after the index and broadcast checks, and not at all when the selection is empty (<c>a[[]] = np.array(['é'])</c>
+        ///     into an <c>S</c> array succeeds). A number formats without fail, so a numeric value (scalar or array) is refused
+        ///     only when the selection holds an element.
+        /// </remarks>
         private void StringAdvancedSet(NDArray value, Action<NDArray, NDArray> onUnits, Action<NDArray, NDArray> onProxy)
         {
             ThrowIfNotWriteable();
             if (value is null)
                 throw new ArgumentNullException(nameof(value));
-            if (!value.Storage.IsString)
-                throw new StringComputationNotSupportedException(
-                    $"Cannot assign {value.dtype.ToString(true)} values to a {dtype.ToString(true)} array: converting numbers to text " +
-                    "is not part of NumSharp's fixed-width string storage phase yet.");
 
-            // setitem converts the value to the destination's dtype first (NumPy: PyArray_FromAny(value, descr, FORCECAST)).
-            bool same = value.dtype.Meta == dtype.Meta && value.dtype.itemsize == dtype.itemsize;
+            bool text = value.Storage.IsString;
+            bool same = text && value.dtype.Meta == dtype.Meta && value.dtype.itemsize == dtype.itemsize;
+            if (!same && !(text && value.ndim == 0))
+            {
+                // Converted while the selection is written: NumPy's index and broadcast checks come first (the proxy raises
+                // them for this array's and the value's shapes), and an empty selection converts nothing.
+                if (!ProxySelectionWrites(value, onProxy))
+                    return;
+                if (!text)
+                    throw new StringComputationNotSupportedException(
+                        $"Cannot assign {value.dtype.ToString(true)} values to a {dtype.ToString(true)} array: converting numbers to text " +
+                        "is not part of NumSharp's fixed-width string storage phase yet.");
+            }
+
+            // The value in this array's dtype (a scalar's conversion runs before the index is resolved, as in NumPy).
             var converted = same ? value : value.astype(dtype, true, 'K', "unsafe");
             try
             {
@@ -221,6 +239,26 @@ namespace NumSharp
                 if (!ReferenceEquals(converted, value))
                     converted.Dispose();
             }
+        }
+
+        /// <summary>
+        ///     Runs an advanced assignment on numeric PROXIES — a zeroed <c>uint8</c> array of this array's shape and a
+        ///     <c>uint8</c> array of ones of the value's shape — and reports whether it wrote any element. The assignment
+        ///     raises NumPy's index and broadcast errors exactly as the real one would (the same index, the same shapes),
+        ///     before any value is converted.
+        /// </summary>
+        /// <param name="value">The value whose shape the proxy value takes.</param>
+        /// <param name="onProxy">The assignment, applied to (proxy, value proxy).</param>
+        /// <returns>True when the selection holds at least one element.</returns>
+        /// <exception cref="Exception">The index / broadcast error the assignment raises (IndexError, ValueError, …).</exception>
+        /// <remarks>An extra pass over a byte copy of this array's shape, taken only by a value converted while the
+        ///     selection is written (another string class or width, or numbers) — never by the same-dtype route.</remarks>
+        private bool ProxySelectionWrites(NDArray value, Action<NDArray, NDArray> onProxy)
+        {
+            using var proxy = np.zeros(new Shape((long[])Shape.dimensions.Clone()), NPTypeCode.Byte);
+            using var valueProxy = np.ones(new Shape((long[])value.Shape.dimensions.Clone()), NPTypeCode.Byte);
+            onProxy(proxy, valueProxy);
+            return np.any(proxy);
         }
 
         /// <summary>

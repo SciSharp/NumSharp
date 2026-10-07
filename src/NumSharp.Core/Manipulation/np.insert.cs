@@ -161,11 +161,23 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     int[]-obj overload. Always routes through the multi-index branch
-        ///     (NumPy parity: <c>np.insert(arr, [1], v) != np.insert(arr, 1, v)</c>
-        ///     when v has multiple axes, even though both have one insertion point).
+        ///     int[]-obj overload — NumPy's sequence obj (<c>np.insert(arr, [1, 3], v)</c>).
         /// </summary>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <param name="arr">Input array.</param>
+        /// <param name="obj">The insertion positions (each before the original element at that index).</param>
+        /// <param name="values">The values to insert, cast to <paramref name="arr"/>'s dtype.</param>
+        /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
+        /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
+        /// <exception cref="ArgumentNullException">An argument is null.</exception>
+        /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
+        /// <remarks>
+        ///     A ONE-element sequence takes NumPy's <c>indices.size == 1</c> branch (every value inserted at that one
+        ///     position: <c>np.insert(a, [0], [7, 8, 9])</c> inserts three), without the scalar-obj <c>moveaxis</c> — so
+        ///     <c>np.insert(arr, [1], v) != np.insert(arr, 1, v)</c> when v has several axes. Longer sequences take the
+        ///     multi-index branch. (A one-element sequence used to take the multi-index branch, which demands one value per
+        ///     index and so raised a broadcast error for several values.)
+        /// </remarks>
         [NDScoped] // same transient set as the long-obj overload
         public static NDArray insert(NDArray arr, int[] obj, NDArray values, int? axis = null)
         {
@@ -180,6 +192,8 @@ namespace NumSharp
             for (int i = 0; i < obj.Length; i++) longs[i] = obj[i];
 
             var ctx = PrepareAxisContext(arr, axis);
+            if (longs.Length == 1)
+                return WithSourceOrder(arr, InsertSingleIndex(ctx.work, longs[0], values, ctx.axis, scalarObj: false));
             return WithSourceOrder(arr, InsertMultiIndex(ctx.work, longs, values, ctx.axis));
         }
 
@@ -215,9 +229,17 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     long[]-obj overload.
+        ///     long[]-obj overload — see <see cref="insert(NDArray, int[], NDArray, int?)"/> (a one-element sequence takes
+        ///     NumPy's single-index branch, without the scalar-obj <c>moveaxis</c>).
         /// </summary>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <param name="arr">Input array.</param>
+        /// <param name="obj">The insertion positions (each before the original element at that index).</param>
+        /// <param name="values">The values to insert, cast to <paramref name="arr"/>'s dtype.</param>
+        /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
+        /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
+        /// <exception cref="ArgumentNullException">An argument is null.</exception>
+        /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
         [NDScoped] // same transient set as the long-obj overload
         public static NDArray insert(NDArray arr, long[] obj, NDArray values, int? axis = null)
         {
@@ -229,6 +251,8 @@ namespace NumSharp
             if (values is null) throw new ArgumentNullException(nameof(values));
 
             var ctx = PrepareAxisContext(arr, axis);
+            if (obj.Length == 1)
+                return WithSourceOrder(arr, InsertSingleIndex(ctx.work, obj[0], values, ctx.axis, scalarObj: false));
             return WithSourceOrder(arr, InsertMultiIndex(ctx.work, (long[])obj.Clone(), values, ctx.axis));
         }
 
@@ -274,8 +298,9 @@ namespace NumSharp
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the value(s) inserted (F-ordered when <paramref name="arr"/> is).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="arr"/>, <paramref name="obj"/> or <paramref name="value"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="obj"/> is a boolean mask that is not 1-D, or an index
-        ///     array of more than one dimension.</exception>
+        /// <exception cref="ValueError">See <see cref="insert(NDArray, NDArray, NDArray, int?)"/>.</exception>
+        /// <exception cref="TypeError">See <see cref="insert(NDArray, NDArray, NDArray, int?)"/>.</exception>
+        /// <exception cref="IndexError">See <see cref="insert(NDArray, NDArray, NDArray, int?)"/>.</exception>
         /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
         /// <remarks>
         ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="value"/> is built in THIS frame,
@@ -313,9 +338,15 @@ namespace NumSharp
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
         /// <exception cref="ArgumentNullException">An argument is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="obj"/> is a boolean mask that is not 1-D, or an index
-        ///     array of more than one dimension.</exception>
+        /// <exception cref="ValueError"><paramref name="obj"/> is a boolean mask that is not 1-D, or an index array of more
+        ///     than one dimension (NumPy's two texts).</exception>
         /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
+        /// <exception cref="TypeError">A one-element text or complex <paramref name="obj"/> (<c>'&lt;' not supported between
+        ///     instances of 'str' and 'int'</c>), a text <paramref name="obj"/> of any other size (<c>ufunc 'less' did not
+        ///     contain a loop …</c>), or a one-element float within bounds (<c>slice indices must be integers …</c>).</exception>
+        /// <exception cref="IndexError">A float / complex <paramref name="obj"/> of any size but one (<c>arrays used as indices
+        ///     must be of integer (or boolean) type</c>), or a one-element float out of bounds.</exception>
+        /// <exception cref="StringComputationNotSupportedException">The values are converted between text and numbers.</exception>
         /// <remarks>Scoped by <c>[NDScoped]</c>: the same transient set as the long-obj overload, plus the
         ///     bool-mask flatnonzero temp, is released on return.</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
@@ -334,9 +365,7 @@ namespace NumSharp
             if (obj.GetTypeCode == NPTypeCode.Boolean)
             {
                 if (obj.ndim != 1)
-                    throw new ArgumentException(
-                        "boolean array argument obj to insert must be one dimensional",
-                        nameof(obj));
+                    throw new ValueError("boolean array argument obj to insert must be one dimensional");
                 // nzIdx is released by this method's scope (exceptions included).
                 var nzIdx = np.flatnonzero(obj);
                 long[] indices = ToInt64Vector(nzIdx, "insert");
@@ -344,9 +373,11 @@ namespace NumSharp
             }
 
             if (obj.ndim > 1)
-                throw new ArgumentException(
-                    "index array argument obj to insert must be one dimensional or scalar",
-                    nameof(obj));
+                throw new ValueError("index array argument obj to insert must be one dimensional or scalar");
+
+            // An index array that is not integer: NumPy compares it with 0 before it indexes with it.
+            if (!IsIntegerIndexDtype(obj.typecode))
+                throw InsertNonIntegerObj(ctx.work, obj, values, ctx.axis);
 
             // 0-D integer ⇒ scalar path (true scalar semantics).
             if (obj.ndim == 0)
@@ -519,6 +550,64 @@ namespace NumSharp
         }
 
         // ---------------------------- helpers ----------------------------
+
+        /// <summary>
+        ///     Whether NumPy indexes with an array of this dtype as integers (dtype kind <c>'u'</c> or <c>'i'</c>; NumSharp's
+        ///     <c>char</c> rides the integer route, as everywhere in the library).
+        /// </summary>
+        /// <param name="typeCode">The index array's type code.</param>
+        /// <returns>True for the eight integer types and <c>char</c>.</returns>
+        private static bool IsIntegerIndexDtype(NPTypeCode typeCode)
+            => typeCode is NPTypeCode.Byte or NPTypeCode.SByte or NPTypeCode.Int16 or NPTypeCode.UInt16
+                or NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64 or NPTypeCode.Char;
+
+        /// <summary>
+        ///     NumPy's <c>np.insert</c> with an index array that is neither boolean nor integer — text, a float, complex
+        ///     (and NumSharp's decimal, read as a float) — up to the error NumPy reaches:
+        ///     <list type="bullet">
+        ///       <item><b>One element</b>: <c>index = indices.item()</c> is a Python <c>str</c> / <c>bytes</c> / <c>complex</c>
+        ///             (<c>'&lt;' not supported between instances of 'str' and 'int'</c>) or a float, which is bounds-checked
+        ///             (<c>index [5.5] is out of bounds for axis 0 with size 3</c>, the obj printed as NumPy's <c>str</c>), then
+        ///             the values are converted to the array's dtype, and the slice it builds refuses the float (<c>slice indices
+        ///             must be integers or None or have an __index__ method</c>).</item>
+        ///       <item><b>Several or no elements</b>: <c>indices[indices &lt; 0] += N</c> has no loop for text and a Python int
+        ///             (<c>ufunc 'less' did not contain a loop …</c>); a number passes, and the keep-mask indexing refuses it
+        ///             (<c>arrays used as indices must be of integer (or boolean) type</c>).</item>
+        ///     </list>
+        /// </summary>
+        /// <param name="arr">The working array (the input, or its ravel for <c>axis=None</c>).</param>
+        /// <param name="obj">The non-integer, non-boolean index array (at most 1-D).</param>
+        /// <param name="values">The values to insert (converted, as NumPy does, before the slice error).</param>
+        /// <param name="axis">The normalized axis.</param>
+        /// <returns>The exception to throw.</returns>
+        /// <exception cref="StringComputationNotSupportedException">Thrown (not returned) when converting the values parses
+        ///     text into numbers — NumPy's step before its slice error.</exception>
+        /// <exception cref="UnicodeError">Thrown (not returned) when the values do not convert between the string classes.</exception>
+        private static Exception InsertNonIntegerObj(NDArray arr, NDArray obj, NDArray values, int axis)
+        {
+            bool text = obj.typecode == NPTypeCode.String;
+            if (obj.size == 1)
+            {
+                if (text)
+                    return new TypeError($"'<' not supported between instances of '{(obj.Storage.StringSlice.IsUnicode ? "str" : "bytes")}' and 'int'");
+                if (obj.typecode == NPTypeCode.Complex)
+                    return new TypeError("'<' not supported between instances of 'complex' and 'int'");
+
+                // A Python float: NaN fails both comparisons and so passes the bounds check, as in NumPy.
+                double index = Convert.ToDouble(obj.GetAtIndex(0));
+                long N = arr.Shape.dimensions[axis];
+                if (index < -N || index > N)
+                    return new IndexError($"index {obj} is out of bounds for axis {axis} with size {N}");
+                // values = array(values, ndmin=arr.ndim, dtype=arr.dtype) runs before the slice is built.
+                CoerceValuesForSingleIndex(arr, values, axis, scalarObj: obj.ndim == 0);
+                return new TypeError("slice indices must be integers or None or have an __index__ method");
+            }
+
+            // `indices < 0`: text has no loop with a Python int (NumPy's weak int class), even for no element.
+            if (text)
+                return new TypeError($"ufunc 'less' did not contain a loop with signature matching types ({obj.dtype.Meta}, {DTypeRegistry.PyLong}) -> None");
+            return new IndexError("arrays used as indices must be of integer (or boolean) type");
+        }
 
         /// <summary>
         ///     Wraps a scalar value as an NDArray of <paramref name="dtype"/>.

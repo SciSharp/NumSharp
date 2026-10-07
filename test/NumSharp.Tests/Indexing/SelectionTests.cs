@@ -1470,9 +1470,16 @@ public class SelectionTests
     [TestMethod]
     public void PutMask_FloatValues_IntoIntArray_Truncate()
     {
+        // NumPy 2.4.2: PyArray_PutMask converts the values with PyArray_FromAny(values, a.dtype) — no FORCECAST — so an
+        // ARRAY of float64 into int32 is the 'safe' cast TypeError, while a Python scalar (NumSharp: a C# literal, a 0-d
+        // array) is converted and truncates: np.putmask(a, a >= 0, 1.9) gives [1, 1, 1, 1, 1].
         var a = np.arange(5, np.int32);
-        np.putmask(a, a >= 0, np.array(new[] { 1.9, 2.9 }));   // cast to int32, truncates
-        a.ToArray<int>().Should().Equal(1, 2, 1, 2, 1);
+        Action array = () => np.putmask(a, a >= 0, np.array(new[] { 1.9, 2.9 }));
+        array.Should().Throw<InvalidCastException>()
+            .WithMessage("Cannot cast array data from dtype('float64') to dtype('int32') according to the rule 'safe'");
+        a.ToArray<int>().Should().Equal(0, 1, 2, 3, 4); // refused before any write
+        np.putmask(a, a >= 0, 1.9);
+        a.ToArray<int>().Should().Equal(1, 1, 1, 1, 1);
     }
 
     [TestMethod]
@@ -1505,9 +1512,16 @@ public class SelectionTests
     [TestMethod]
     public void PutMask_BoolArray_IntValues()
     {
+        // NumPy 2.4.2: an int32 ARRAY does not cast 'safe'ly to bool (TypeError); a bool array, or an int scalar (converted
+        // as a Python int: nonzero is True), is written.
         var a = np.zeros(4, np.@bool);
-        np.putmask(a, np.ones(4, np.@bool), np.array(new[] { 0, 5, 0, 9 }));
+        Action ints = () => np.putmask(a, np.ones(4, np.@bool), np.array(new[] { 0, 5, 0, 9 }));
+        ints.Should().Throw<InvalidCastException>()
+            .WithMessage("Cannot cast array data from dtype('int32') to dtype('bool') according to the rule 'safe'");
+        np.putmask(a, np.ones(4, np.@bool), np.array(new[] { false, true, false, true }));
         a.ToArray<bool>().Should().Equal(false, true, false, true);
+        np.putmask(a, np.ones(4, np.@bool), 5);
+        a.ToArray<bool>().Should().Equal(true, true, true, true);
     }
 
     [TestMethod]

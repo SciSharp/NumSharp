@@ -96,6 +96,30 @@ namespace NumSharp.Tests.Strings
         /// </summary>
         [TestMethod] public void TextCovariance() => Run("strcov");
 
+        /// <summary>
+        ///     The text calls whose answer the SHAPE decides — truth tests, counts, index searches, sorts, arg-reductions,
+        ///     <c>np.unique</c>, the set routines and the equality tests over empty inputs, lines of one element, or a pair the
+        ///     comparison operators cannot compare — answered now (phase 1); the same calls over text NumPy compares stay
+        ///     deferred.
+        /// </summary>
+        [TestMethod] public void ShapeDecidedAnswers() => Run("strshape");
+
+        /// <summary>
+        ///     The checks NumPy makes before it converts or compares text, in its order: <c>np.interp</c>, <c>np.digitize</c>,
+        ///     <c>np.repeat</c> with array repeats, conversions of nothing (astype / copyto / setitem / where / concatenate /
+        ///     choose), place / putmask with ndarray values, insert / delete with an array obj, searchsorted's arguments.
+        /// </summary>
+        [TestMethod] public void TextValidationOrder() => Run("strvalid");
+
+        /// <summary>
+        ///     The rest of NumPy's surface over text operands: <c>np.linalg</c>, the products and sliding windows, random
+        ///     seeding (<c>SeedSequence</c>, <c>default_rng</c>, Philox counters) and integer bounds, the histogram family,
+        ///     quantile <c>q</c>, reductions and arg-reductions with <c>out=</c>, polynomials, <c>np.emath</c>, index
+        ///     conversions, dtype predicates, <c>np.ediff1d</c>, text <c>where=</c> masks, 0-d conversions to C# scalars and
+        ///     <c>fill</c> with a sequence — NumPy's refusals in its order, its answers where dtypes and shapes decide them.
+        /// </summary>
+        [TestMethod] public void TextSurface() => Run("strsurface");
+
         /// <summary>The corpus is complete: every section has cases and every case belongs to a section above.</summary>
         [TestMethod]
         public void Corpus_EverySectionIsReplayed()
@@ -103,7 +127,7 @@ namespace NumSharp.Tests.Strings
             var sections = new HashSet<string>
             {
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
-                "strdtype", "strprec", "straxis", "strcov",
+                "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)
@@ -279,15 +303,32 @@ namespace NumSharp.Tests.Strings
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> ExcusedLayouts = new();
 
         /// <summary>
-        ///     The known layout divergences. One today: an integer-array or boolean index BEHIND a slice / newaxis /
-        ///     ellipsis (<c>a[:, [3, 1]]</c>) — NumPy returns its MapIter buffer as a transposed VIEW, NumSharp a fresh
-        ///     C-ordered copy, for every dtype (pinned in <c>OpenBugs.FancyIndex.cs</c>; plan
-        ///     <c>docs/plans/view-shape-open-bugs.md</c>).
+        ///     The known layout divergences, all numeric-path behavior every dtype shares:
+        ///     <list type="bullet">
+        ///       <item><description>an integer-array or boolean index BEHIND a slice / newaxis / ellipsis
+        ///       (<c>a[:, [3, 1]]</c>) — NumPy returns its MapIter buffer as a transposed VIEW, NumSharp a fresh C-ordered
+        ///       copy (pinned in <c>OpenBugs.FancyIndex.cs</c>; plan <c>docs/plans/view-shape-open-bugs.md</c>);</description></item>
+        ///       <item><description><c>np.argwhere</c> / <c>np.flatnonzero</c> — NumPy returns views of nonzero's index buffer
+        ///       (argwhere transposed), NumSharp fresh C arrays; reached here by an empty string array, whose index searches
+        ///       run the numeric path on a bool stand-in (pinned in <c>OpenBugs.IndexSearchLayout.cs</c>).</description></item>
+        ///       <item><description><c>np.unravel_index</c> — NumPy returns column views of one interleaved
+        ///       <c>indices.shape + (len(dims),)</c> buffer, NumSharp one fresh C array per coordinate (pinned in
+        ///       <c>OpenBugs.IndexSearchLayout.cs</c>).</description></item>
+        ///     </list>
         /// </summary>
         /// <param name="c">The case.</param>
         /// <returns>The reason, or null when the layout must match.</returns>
         private static string LayoutExcuse(StringOracleCorpus.Case c)
         {
+            // An empty string array's argwhere / flatnonzero run the numeric path on a bool stand-in, whose results are
+            // fresh C arrays where NumPy's are views of nonzero's index buffer (argwhere transposed).
+            if (c.Op == "index_search" && c.Params is not null && c.Params.TryGetValue("name", out var search)
+                && search.GetString() is "argwhere" or "flatnonzero")
+                return "argwhere / flatnonzero: NumPy returns views of nonzero's index buffer (OpenBugs.IndexSearchLayout)";
+            // np.unravel_index's coordinates are NumPy's column views of one interleaved index buffer (section M reaches it
+            // with a bool index array, the one non-text unravel case that returns arrays).
+            if (c.Op == "unravel_ix")
+                return "unravel_index: NumPy returns column views of one interleaved index buffer (OpenBugs.IndexSearchLayout)";
             if (c.Op != "getitem" || c.Params is null || !c.Params.TryGetValue("index", out var index))
                 return null;
             bool basicSeen = false;
@@ -324,8 +365,9 @@ namespace NumSharp.Tests.Strings
                         diffs.Add($"tuple of {items.Length}, NumPy {want.Length}");
                         return;
                     }
+                    // A layout excuse covers every item of a tuple result (np.unravel_index's coordinates).
                     for (int i = 0; i < items.Length; i++)
-                        CompareArray(want[i], items[i], ops, diffs, $"[{i}] ");
+                        CompareArray(want[i], items[i], ops, diffs, $"[{i}] ", compareLayout);
                     break;
                 }
                 case "mutated":

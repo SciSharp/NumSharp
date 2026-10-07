@@ -26,6 +26,8 @@ namespace NumSharp
                 using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 AssertStackedSquare(a);
                 var common = CommonType(a);
+                // NumPy calls _umath_linalg.det: its input cast refuses text, an empty operand included.
+                ThrowIfTextGufunc("det", a);
                 return a.TensorEngine.Det(ToCommon(a, common));
             }
 
@@ -48,6 +50,8 @@ namespace NumSharp
                 using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 AssertStackedSquare(a);
                 var common = CommonType(a);
+                // NumPy calls _umath_linalg.slogdet: its input cast refuses text, an empty operand included.
+                ThrowIfTextGufunc("slogdet", a);
                 return a.TensorEngine.Slogdet(ToCommon(a, common));
             }
         }

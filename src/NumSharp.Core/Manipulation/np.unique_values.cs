@@ -218,14 +218,19 @@ namespace NumSharp
         ///     order that is not portable (both contain the same set); float dtypes are sorted on both sides.
         ///     The Array API leaves the order unspecified.
         /// </remarks>
+        /// <exception cref="StringComputationNotSupportedException">A string array of two or more elements: NumPy sorts the
+        ///     text (the next phase of NumSharp's string support). An empty or one-element string array is answered from its
+        ///     shape.</exception>
         // NDScoped: the hash/sort internals' temps are reclaimed; the values are yielded.
         [NDScoped]
         public static NDArray unique_values(NDArray x)
         {
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy computes this on text (sorting, searching, truth tests); string computation is
-            // the next phase of NumSharp's string support, so a string array is refused here.
-            if (Backends.Strings.NDStringUfuncs.IsString(x)) throw Backends.Strings.NDStringUfuncs.NextPhase("unique_values", x);
+            // NumPy sorts (or hashes) text; string computation is the next phase of NumSharp's string support, so a
+            // string array is refused here unless at most one element is ordered (the instance unique answers that).
+            NDArray.ThrowIfTextUnique(x, null, "unique_values");
+            if (Backends.Strings.NDStringUfuncs.IsString(x))
+                return x.unique(return_index: false, return_inverse: false, return_counts: false, axis: null, equal_nan: false)[0];
             return x.uniqueValuesFast();
         }
 
@@ -238,16 +243,21 @@ namespace NumSharp
         /// <param name="x">Input array. Flattened if it is not already 1-D.</param>
         /// <returns>A <see cref="UniqueCountsResult"/>: (values, counts).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique_counts.html</remarks>
+        /// <exception cref="StringComputationNotSupportedException">A string array of two or more elements: NumPy sorts the
+        ///     text (the next phase of NumSharp's string support). An empty or one-element string array is answered from its
+        ///     shape.</exception>
         // NDScoped: the hash/sort internals are reclaimed; the weaver yields both result-struct
         // members (values, counts) by decomposing the returned UniqueCountsResult's fields.
         [NDScoped]
         public static UniqueCountsResult unique_counts(NDArray x)
         {
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy computes this on text (sorting, searching, truth tests); string computation is
-            // the next phase of NumSharp's string support, so a string array is refused here.
-            if (Backends.Strings.NDStringUfuncs.IsString(x)) throw Backends.Strings.NDStringUfuncs.NextPhase("unique_counts", x);
-            var r = x.uniqueCountsFast();
+            // NumPy sorts text (the next phase of NumSharp's string support); at most one element orders nothing, and the
+            // instance unique answers it.
+            NDArray.ThrowIfTextUnique(x, null, "unique_counts");
+            var r = Backends.Strings.NDStringUfuncs.IsString(x)
+                ? x.unique(return_index: false, return_inverse: false, return_counts: true, axis: null, equal_nan: false)
+                : x.uniqueCountsFast();
             return new UniqueCountsResult(r[0], r[1]);
         }
 
@@ -262,6 +272,9 @@ namespace NumSharp
         ///     has the same shape as <paramref name="x"/>, so <c>np.take(values, inverse_indices)</c>
         ///     reconstructs the input.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique_inverse.html</remarks>
+        /// <exception cref="StringComputationNotSupportedException">A string array of two or more elements: NumPy sorts the
+        ///     text (the next phase of NumSharp's string support). An empty or one-element string array is answered from its
+        ///     shape.</exception>
         // NDScoped: internals reclaimed; the weaver yields the values and the (possibly reshaped)
         // inverse — the two UniqueInverseResult fields. ReshapeInverseToInput returns a view of r[1]
         // (or r[1] itself for 0-d); the un-yielded r[1] base is reclaimed, its buffer kept alive by
@@ -270,9 +283,9 @@ namespace NumSharp
         public static UniqueInverseResult unique_inverse(NDArray x)
         {
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy computes this on text (sorting, searching, truth tests); string computation is
-            // the next phase of NumSharp's string support, so a string array is refused here.
-            if (Backends.Strings.NDStringUfuncs.IsString(x)) throw Backends.Strings.NDStringUfuncs.NextPhase("unique_inverse", x);
+            // NumPy sorts text (the next phase of NumSharp's string support); at most one element orders nothing, and the
+            // instance unique below answers it.
+            NDArray.ThrowIfTextUnique(x, null, "unique_inverse");
             var r = x.unique(return_index: false, return_inverse: true, return_counts: false,
                              axis: null, equal_nan: false);
             return new UniqueInverseResult(r[0], ReshapeInverseToInput(r[1], x));
@@ -289,15 +302,18 @@ namespace NumSharp
         /// <param name="x">Input array. Flattened if it is not already 1-D.</param>
         /// <returns>A <see cref="UniqueAllResult"/>: (values, indices, inverse_indices, counts).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique_all.html</remarks>
+        /// <exception cref="StringComputationNotSupportedException">A string array of two or more elements: NumPy sorts the
+        ///     text (the next phase of NumSharp's string support). An empty or one-element string array is answered from its
+        ///     shape.</exception>
         // NDScoped: internals reclaimed; the weaver yields all four UniqueAllResult members (values,
         // indices, inverse_indices, counts) by decomposing the struct's fields.
         [NDScoped]
         public static UniqueAllResult unique_all(NDArray x)
         {
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy computes this on text (sorting, searching, truth tests); string computation is
-            // the next phase of NumSharp's string support, so a string array is refused here.
-            if (Backends.Strings.NDStringUfuncs.IsString(x)) throw Backends.Strings.NDStringUfuncs.NextPhase("unique_all", x);
+            // NumPy sorts text (the next phase of NumSharp's string support); at most one element orders nothing, and the
+            // instance unique below answers it.
+            NDArray.ThrowIfTextUnique(x, null, "unique_all");
             var r = x.unique(return_index: true, return_inverse: true, return_counts: true,
                              axis: null, equal_nan: false);
             return new UniqueAllResult(r[0], r[1], ReshapeInverseToInput(r[2], x), r[3]);

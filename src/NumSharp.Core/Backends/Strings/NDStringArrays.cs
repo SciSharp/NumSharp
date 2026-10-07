@@ -276,26 +276,35 @@ namespace NumSharp.Backends.Strings
         /// <param name="y">Values elsewhere.</param>
         /// <param name="dims">The broadcast dimensions of the three (the caller validated the broadcast); adopted.</param>
         /// <returns>The new string array.</returns>
-        /// <exception cref="StringComputationNotSupportedException">The condition is a string array (text truthiness), or one
-        ///     of <paramref name="x"/> / <paramref name="y"/> is numeric (number ↔ text is the computational phase).</exception>
+        /// <exception cref="StringComputationNotSupportedException">The result has elements and the condition is a string array
+        ///     (text truthiness), or one of <paramref name="x"/> / <paramref name="y"/> is numeric (number ↔ text is the
+        ///     computational phase).</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S</c> value NumPy converts to the <c>U</c> result is not ASCII — the
         ///     element NumPy's loop converts first (see <see cref="ThrowIfWhereDecodeFails"/>).</exception>
+        /// <remarks>
+        ///     NumPy's iterator casts the condition to bool and the values to the result dtype buffer by buffer
+        ///     (<c>NPY_ITER_ZEROSIZE_OK</c>), so an EMPTY result converts nothing: it is an empty array of the result dtype
+        ///     whatever the condition and the values hold (<c>np.where(np.zeros(0, bool), np.zeros(0), np.zeros(0, 'U2'))</c> is
+        ///     an empty <c>&lt;U32</c> array).
+        /// </remarks>
         public static NDArray Where(NDArray condition, NDArray x, NDArray y, long[] dims)
         {
-            if (condition.typecode == NPTypeCode.String)
-                throw new StringComputationNotSupportedException(
-                    $"np.where with a {condition.dtype.ToString(true)} condition tests text for truth, which NumSharp's fixed-width string storage does not do yet.");
-
             var descr = DTypePromotion.ResultType(x, y);
-            if (x.typecode != NPTypeCode.String)
-                throw NDStringCasting.TextConversion(x.dtype, descr);
-            if (y.typecode != NPTypeCode.String)
-                throw NDStringCasting.TextConversion(y.dtype, descr);
 
             // NumPy's iterator allocates the result in the order of its operands (cond, x, y): stride-0 / extent-1 axes
             // abstain, C wins a tie — a transposed or F operand set gives a transposed or F result.
             var operandShapes = new[] { condition.Shape, x.Shape, y.Shape };
             var layout = Shape.NpyIterOutputShape((long[])dims.Clone(), operandShapes);
+            if (layout.size == 0)
+                return new NDArray(descr, layout, true);
+
+            if (condition.typecode == NPTypeCode.String)
+                throw new StringComputationNotSupportedException(
+                    $"np.where with a {condition.dtype.ToString(true)} condition tests text for truth, which NumSharp's fixed-width string storage does not do yet.");
+            if (x.typecode != NPTypeCode.String)
+                throw NDStringCasting.TextConversion(x.dtype, descr);
+            if (y.typecode != NPTypeCode.String)
+                throw NDStringCasting.TextConversion(y.dtype, descr);
 
             using var cond = condition.typecode == NPTypeCode.Boolean ? condition.view() : condition.astype(NPTypeCode.Boolean);
             // S -> U decoding is the only conversion of a string where that can fail; NumPy's loop decides which element
@@ -453,10 +462,14 @@ namespace NumSharp.Backends.Strings
                 throw DecodeErrorAt(ByteAt(condInLayout, first) != 0 ? x : y, dims, layout, first);
         }
 
-        /// <summary>Whether every unit of a bytes array is below 0x80 (one max reduction over its unit view).</summary>
+        /// <summary>
+        ///     Whether every unit of a bytes array is below 0x80 (one max reduction over its unit view): no element can fail
+        ///     NumPy's ASCII decode into <c>U</c>. Used by <c>np.where</c>'s decode check and by the set routines, whose
+        ///     answers over empty operands do not depend on the bytes unless the decode can fail.
+        /// </summary>
         /// <param name="a">A non-empty <c>S</c> array.</param>
         /// <returns>True when no element can fail an ASCII decode.</returns>
-        private static bool AllAscii(NDArray a)
+        internal static bool AllAscii(NDArray a)
         {
             using var units = UnitArray(a);
             using var max = np.amax(units);

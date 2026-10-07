@@ -163,7 +163,7 @@ public class NpSearchsortedSideSorterTests
     }
 
     [TestMethod]
-    [ExpectedException(typeof(ArgumentException))]
+    [ExpectedException(typeof(ValueError))]
     public void Sorter_WrongSize_Throws()
     {
         // NumPy: ValueError "sorter.size must equal a.size"
@@ -173,18 +173,20 @@ public class NpSearchsortedSideSorterTests
     }
 
     [TestMethod]
-    [ExpectedException(typeof(ArgumentException))]
+    [ExpectedException(typeof(ValueError))]
     public void Sorter_EmptyForNonEmptyA_Throws()
     {
+        // NumPy: ValueError "sorter.size must equal a.size"
         var a = np.array(new[] { 1, 2, 3 });
         var sorter = np.array(Array.Empty<long>());
         np.searchsorted(a, 2, sorter: sorter);
     }
 
     [TestMethod]
-    [ExpectedException(typeof(ArgumentException))]
+    [ExpectedException(typeof(TypeError))]
     public void Sorter_MultidimSorter_Throws()
     {
+        // NumPy: TypeError "could not parse sorter argument" (the sorter's depth check, before its size)
         var a = np.array(new[] { 1, 2, 3, 4 });
         var sorter = np.array(new long[,] { { 0, 1 }, { 2, 3 } });
         np.searchsorted(a, 2, sorter: sorter);
@@ -195,7 +197,7 @@ public class NpSearchsortedSideSorterTests
     #region Multidim 'a' validation
 
     [TestMethod]
-    [ExpectedException(typeof(ArgumentException))]
+    [ExpectedException(typeof(ValueError))]
     public void Multidim_A_2D_Throws()
     {
         // NumPy: ValueError "object too deep for desired array"
@@ -204,17 +206,19 @@ public class NpSearchsortedSideSorterTests
     }
 
     [TestMethod]
-    [ExpectedException(typeof(ArgumentException))]
+    [ExpectedException(typeof(ValueError))]
     public void Multidim_A_3D_Throws()
     {
+        // NumPy: ValueError "object too deep for desired array"
         var a = np.arange(24).reshape(2, 3, 4);
         np.searchsorted(a, 5);
     }
 
     [TestMethod]
-    [ExpectedException(typeof(ArgumentException))]
+    [ExpectedException(typeof(ValueError))]
     public void Multidim_A_2D_WithNDArrayV_Throws()
     {
+        // NumPy: ValueError "object too deep for desired array"
         var a = np.arange(20).reshape(4, 5);
         var v = np.array(new[] { 5, 10 });
         np.searchsorted(a, v);

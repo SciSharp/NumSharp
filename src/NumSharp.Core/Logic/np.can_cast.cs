@@ -280,9 +280,17 @@ namespace NumSharp
         /// <param name="to">Data type to cast to.</param>
         /// <param name="casting">Controls what kind of data casting may occur.</param>
         /// <returns>True if the array can be cast to the target type.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="from"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="casting"/> is not one of NumPy's five casting names.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="to"/> is <see cref="NPTypeCode.String"/>: a storage
+        ///     lane names neither the string class nor its width (pass a <see cref="DType"/> such as <c>np.dtype("U5")</c>).</exception>
         public static bool can_cast(NDArray from, NPTypeCode to, string casting = "safe")
         {
-            // Arrays use type-based casting, not value-based
+            if (from is null) throw new ArgumentNullException(nameof(from));
+            // Arrays use type-based casting, not value-based. A string array is judged by its DESCRIPTOR (class and
+            // width): its storage lane alone cannot say whether <U2 reaches float64 or <U9.
+            if (from.typecode == NPTypeCode.String)
+                return can_cast(from.dtype, DType.From(to), casting);
             return can_cast(from.GetTypeCode, to, casting);
         }
 
@@ -290,10 +298,17 @@ namespace NumSharp
         /// Returns True if cast from the array's dtype can occur according to the casting rule (NumPy's array form of
         /// <c>can_cast</c>; arrays are never inspected by value under NEP 50).
         /// </summary>
+        /// <param name="from">Array to cast from; its own descriptor is used (for a string array: class and width).</param>
+        /// <param name="to">Data type to cast to.</param>
+        /// <param name="casting">Controls what kind of data casting may occur.</param>
+        /// <returns>True if the array's dtype can be cast to <paramref name="to"/> under <paramref name="casting"/>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="from"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="casting"/> is not one of NumPy's five casting names.</exception>
         public static bool can_cast(NDArray from, DType to, string casting = "safe")
         {
             if (from is null) throw new ArgumentNullException(nameof(from));
-            return can_cast(DType.From(from.GetTypeCode), to, casting);
+            // The array's own descriptor, never DType.From(typecode): the String lane carries no width.
+            return can_cast(from.dtype, to, casting);
         }
 
         /// <summary>

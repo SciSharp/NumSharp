@@ -66,7 +66,9 @@ namespace NumSharp.Backends
             // A string operand never reaches the numeric promotion table or a kernel: NumPy resolves the ufunc loop
             // before anything else, and with a string operand it either refuses (its text) or computes on text (the next
             // phase of the string support). Two typecode reads when no operand is a string.
-            Strings.NDStringUfuncs.ThrowIfBinary(UfuncName(op), lhs, rhs, @out, dtype, where);
+            // (An empty broadcast of a computing string loop is decided by the shapes: BinaryGuard returns that result.)
+            if (Strings.NDStringUfuncs.BinaryGuard(UfuncName(op), lhs, rhs, @out, dtype, where) is { } textResult)
+                return textResult;
 
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;

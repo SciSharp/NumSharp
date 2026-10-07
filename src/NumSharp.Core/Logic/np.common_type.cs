@@ -74,7 +74,9 @@ namespace NumSharp
                 switch (t)
                 {
                     case NPTypeCode.Boolean:
-                        // NumPy parity: np.common_type rejects bool as "non-numeric".
+                    case NPTypeCode.String:
+                        // NumPy parity: np.common_type rejects bool and text as "non-numeric" (neither is an np.integer
+                        // nor in its array_precision table). Text used to fall through to the integer case: float64.
                         throw new TypeError("can't get common type for non-numeric array");
                     case NPTypeCode.Complex:
                         hasComplex = true;

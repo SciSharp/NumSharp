@@ -10,6 +10,9 @@ namespace NumSharp
         /// <param name="ar2">Input array (flattened if not already 1-D).</param>
         /// <returns>Sorted 1-D array of common, unique elements.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.intersect1d.html</remarks>
+        /// <exception cref="StringComputationNotSupportedException">Two non-empty operands with a string among them (NumPy sorts
+        ///     and compares the text), or an empty <c>U</c> operand against <c>S</c> text holding a non-ASCII byte. An empty
+        ///     operand otherwise intersects nothing: the empty answer in the concatenation's dtype.</exception>
         public static NDArray intersect1d(NDArray ar1, NDArray ar2)
         {
             using var plain = NDMatrixBoundary.PlainFor(ar1, ar2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
@@ -26,6 +29,9 @@ namespace NumSharp
         ///     the calculation. Default is False.</param>
         /// <returns>Sorted 1-D array of common, unique elements.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.intersect1d.html</remarks>
+        /// <exception cref="StringComputationNotSupportedException">Two non-empty operands with a string among them (NumPy sorts
+        ///     and compares the text), or an empty <c>U</c> operand against <c>S</c> text holding a non-ASCII byte. An empty
+        ///     operand otherwise intersects nothing: the empty answer in the concatenation's dtype.</exception>
         public static NDArray intersect1d(NDArray ar1, NDArray ar2, bool assume_unique)
         {
             using var plain = NDMatrixBoundary.PlainFor(ar1, ar2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
@@ -47,6 +53,9 @@ namespace NumSharp
         /// <returns><c>[values]</c> when <paramref name="return_indices"/> is False, otherwise
         ///     <c>[values, comm1, comm2]</c>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.intersect1d.html</remarks>
+        /// <exception cref="StringComputationNotSupportedException">Two non-empty operands with a string among them (NumPy sorts
+        ///     and compares the text), or an empty <c>U</c> operand against <c>S</c> text holding a non-ASCII byte. An empty
+        ///     operand otherwise intersects nothing: the empty answer in the concatenation's dtype.</exception>
         public static NDArray[] intersect1d(NDArray ar1, NDArray ar2, bool assume_unique = false, bool return_indices = false)
         {
             using var plain = NDMatrixBoundary.PlainFor(ar1, ar2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
@@ -56,8 +65,21 @@ namespace NumSharp
         [NDScoped]
         private static NDArray[] IntersectCore(NDArray ar1, NDArray ar2, bool assume_unique, bool return_indices)
         {
-            // NumPy computes intersect1d on text (unique + sort): the next phase of the string support.
-            if (Backends.Strings.NDStringUfuncs.IsString(ar1) || Backends.Strings.NDStringUfuncs.IsString(ar2)) throw Backends.Strings.NDStringUfuncs.NextPhase("intersect1d", Backends.Strings.NDStringUfuncs.IsString(ar1) ? ar1 : ar2);
+            // Text: NumPy unique()s both inputs, concatenates and sorts the values and keeps the ones that appear twice in a
+            // row — text computation (the next phase of NumSharp's string support). An empty input intersects nothing, so
+            // the answer is empty in the concatenation's dtype whatever the text holds (none of those steps can fail),
+            // except where the concatenation decodes bytes into str (a non-ASCII byte fails there).
+            if (Backends.Strings.NDStringUfuncs.IsString(ar1) || Backends.Strings.NDStringUfuncs.IsString(ar2))
+            {
+                var text = Backends.Strings.NDStringUfuncs.IsString(ar1) ? ar1 : ar2;
+                if ((ar1.size != 0 && ar2.size != 0) || Backends.Strings.NDStringUfuncs.ConcatMayFailDecoding(ar1, ar2))
+                    throw Backends.Strings.NDStringUfuncs.NextPhase("intersect1d", text);
+                // Two empty views of the flattened inputs: concatenate's own promotion, nothing formatted or decoded.
+                NDArray values = np.concatenate((np.ravel(ar1)[":0"], np.ravel(ar2)[":0"]), 0);
+                return return_indices
+                    ? new[] { values, np.empty(Shape.Vector(0), NPTypeCode.Int64), np.empty(Shape.Vector(0), NPTypeCode.Int64) }
+                    : new[] { values };
+            }
             // Boundary scope: the unique/ravel/concatenate/argsort/take temps and the adjacency
             // mask are reclaimed at exit; the returned tuple's arrays are yielded.
 

@@ -546,6 +546,75 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
+        ///     <see cref="ThrowIfReduce(string, NDArray, int?, DType)"/> for a function called with <c>out=</c>: when the
+        ///     input or the out holds text (and <c>dtype=</c> is not a string request), NumPy's checks run in its order and the
+        ///     answer is the loop resolution on <c>(out, input)</c> (<see cref="NDStringUfuncs.ReduceOutError"/>).
+        /// </summary>
+        /// <param name="op">The NumPy function name.</param>
+        /// <param name="a">The input.</param>
+        /// <param name="axis">The <c>axis</c> argument, or null.</param>
+        /// <param name="out">The out array, or null (then this is <see cref="ThrowIfReduce(string, NDArray, int?, DType)"/>).</param>
+        /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
+        /// <exception cref="ValueError">A read-only out (<c>output array is read-only</c>).</exception>
+        /// <exception cref="AxisError">The axis is out of bounds.</exception>
+        /// <exception cref="TypeError">NumPy's loop refusal.</exception>
+        /// <exception cref="StringComputationNotSupportedException">NumPy computes the call on text.</exception>
+        /// <remarks>
+        ///     A direct <c>ufunc.reduce</c> (<c>np.max</c>, <c>np.ptp</c>, …) parses <c>out=</c> — the read-only check — before
+        ///     the axis; the accumulations and <c>np.median</c> check the axis first and meet <c>out=</c> in their final
+        ///     ufunc call. The out's SHAPE is checked only after the loop resolved, so it never decides a text answer.
+        /// </remarks>
+        internal static void ThrowIfReduce(string op, NDArray a, int? axis, NDArray @out, DType dtype = null)
+        {
+            string ufunc = ReduceUfuncOf(op, out bool accumulate);
+            if (@out is null || ufunc is null || IsStringRequest(dtype) || (!IsString(a) && !IsString(@out)))
+            {
+                ThrowIfReduce(op, a, axis, dtype);
+                return;
+            }
+            bool parsesOutFirst = AxisRuleOf(op) == ReduceAxisRule.UfuncReduce;
+            if (parsesOutFirst && !@out.Shape.IsWriteable)
+                throw new ValueError("output array is read-only");
+            PreReduceDTypeCheck(op, dtype);
+            ValidateReduceAxis(op, a.ndim, axis);
+            PostReduceDTypeCheck(op, dtype);
+            if (!parsesOutFirst && !@out.Shape.IsWriteable)
+                throw new ValueError("output array is read-only");
+            throw ReduceOutError(ufunc, a, @out, accumulate);
+        }
+
+        /// <summary>
+        ///     <see cref="ThrowIfReduce(string, NDArray, int?, NDArray, DType)"/> for a tuple <c>axis</c>.
+        /// </summary>
+        /// <param name="op">The NumPy function name.</param>
+        /// <param name="a">The input.</param>
+        /// <param name="axes">The axes, or null.</param>
+        /// <param name="out">The out array, or null (then this is <see cref="ThrowIfReduce(string, NDArray, int[], DType)"/>).</param>
+        /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
+        /// <exception cref="ValueError">A read-only out, or an axis that appears twice.</exception>
+        /// <exception cref="AxisError">An axis is out of bounds.</exception>
+        /// <exception cref="TypeError">NumPy's loop refusal.</exception>
+        /// <exception cref="StringComputationNotSupportedException">NumPy computes the call on text.</exception>
+        internal static void ThrowIfReduce(string op, NDArray a, int[] axes, NDArray @out, DType dtype = null)
+        {
+            string ufunc = ReduceUfuncOf(op, out bool accumulate);
+            if (@out is null || ufunc is null || IsStringRequest(dtype) || (!IsString(a) && !IsString(@out)))
+            {
+                ThrowIfReduce(op, a, axes, dtype);
+                return;
+            }
+            bool parsesOutFirst = AxisRuleOf(op) == ReduceAxisRule.UfuncReduce;
+            if (parsesOutFirst && !@out.Shape.IsWriteable)
+                throw new ValueError("output array is read-only");
+            PreReduceDTypeCheck(op, dtype);
+            ValidateReduceAxes(op, a.ndim, axes);
+            PostReduceDTypeCheck(op, dtype);
+            if (!parsesOutFirst && !@out.Shape.IsWriteable)
+                throw new ValueError("output array is read-only");
+            throw ReduceOutError(ufunc, a, @out, accumulate);
+        }
+
+        /// <summary>
         ///     The answer of a reduction-style function once its checks passed: a string <c>dtype=</c> request is
         ///     <see cref="ReduceDTypeLoopError"/>; a text input is <see cref="ReduceError"/> — except that a NUMERIC request
         ///     over text makes a multiply / maximum / minimum reduction cast the text to that number type first
@@ -714,6 +783,64 @@ namespace NumSharp.Backends.Strings
                 return NextPhase(op, a);
             int remaining = axes is null ? 0 : a.ndim - axes.Length;
             return QuantileError(op, a, method, scalarResult: qIsScalar && remaining == 0);
+        }
+
+        /// <summary>
+        ///     NumPy's answer for the percentile / quantile family when <c>q</c> is text — checked before the data, in
+        ///     NumPy's statement order.
+        /// </summary>
+        /// <param name="op"><c>percentile</c>, <c>nanpercentile</c>, <c>quantile</c> or <c>nanquantile</c>.</param>
+        /// <param name="a">The data (any dtype).</param>
+        /// <param name="q">The text q.</param>
+        /// <param name="method">The method name.</param>
+        /// <param name="axes">The axes, or null.</param>
+        /// <returns>The exception to throw, or null when NumPy returns <c>np.nanmean(a, axis)</c> (nanquantile of EMPTY
+        ///     numeric data with an empty q) — the caller computes that.</returns>
+        /// <exception cref="AxisError">An empty q reaches the reduction's axis check (thrown).</exception>
+        /// <exception cref="ArgumentException">An empty q reaches the method lookup with an unknown method (thrown,
+        ///     NumPy's ValueError text).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     <c>percentile</c> / <c>nanpercentile</c> begin with <c>q = np.true_divide(q, 100)</c>: <c>divide</c> has no
+        ///     text loop. <c>quantile</c> / <c>nanquantile</c> validate q with <c>_quantile_is_valid</c>: a 1-D q of fewer
+        ///     than 10 elements compares each with <c>0.0 &lt;=</c> (Python's refusal for <c>np.str_</c> / <c>np.bytes_</c>),
+        ///     any other q takes <c>q.min()</c> (<c>minimum</c> has no text loop).
+        ///     </para>
+        ///     <para>
+        ///     An EMPTY 1-D q passes that check. <c>quantile</c> then checks the axes and the method and computes the virtual
+        ///     indexes <c>(n - 1) * q</c> — an integer times text, NumPy's string repeat, which refuses without
+        ///     <c>out=</c>. <c>nanquantile</c> first sends empty data to <c>np.nanmean</c> (the add.reduce refusal for text
+        ///     data), then tests text data for NaN (<c>isnan</c> has no text loop), then reaches the same repeat. One residual:
+        ///     when every reduced slice of numeric data is all NaN, NumPy returns an empty result where this reports the
+        ///     repeat's refusal.
+        ///     </para>
+        /// </remarks>
+        internal static Exception QuantileTextQAnswer(string op, NDArray a, NDArray q, string method, int[] axes)
+        {
+            if (op is "percentile" or "nanpercentile")
+                return NotSupportedForInputTypes("divide");
+
+            if (q.ndim != 1 || q.size >= 10)
+                return NoLoop("minimum", q.dtype, q.dtype);
+            if (q.size > 0)
+                return new TypeError($"'<=' not supported between instances of 'float' and 'numpy.{q.dtype.Meta.ScalarName}'");
+
+            // An empty q: NumPy reaches the reduction.
+            if (op == "nanquantile")
+            {
+                if (a.size == 0)
+                    return IsString(a) ? AddNotCompatible(a.dtype, "reduce") : null;
+                ValidateReduceAxes(op, a.ndim, axes);
+                if (IsString(a))
+                    return NotSupportedForInputTypes("isnan");
+            }
+            else
+            {
+                ValidateReduceAxes(op, a.ndim, axes);
+            }
+            NumSharp.Statistics.QuantileEngine.ParseMethod(method);
+            // `(n - 1) * quantiles` without out=: the string repeat's refusal.
+            return MultiplyRepeatAnswer(q, q, null, null);
         }
 
         /// <summary>

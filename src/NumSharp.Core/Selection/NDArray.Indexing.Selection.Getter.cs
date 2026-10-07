@@ -17,12 +17,32 @@ namespace NumSharp
         /// <summary>
         ///     Used to perform selection based on indices, equivalent to nd[NDArray[]].
         /// </summary>
-        /// <param name="@out">Alternative output array in which to place the result. It must have the same shape as the expected output and be of dtype <see cref="Int32"/>.</param>
-        /// <remarks>https://numpy.org/doc/stable/user/basics.indexing.html</remarks>
-        /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
+        /// <param name="out">Alternative output array in which to place the result. It must have the same shape as the expected output (and, for a numeric array, be of dtype <see cref="Int32"/>).</param>
+        /// <param name="indices">The index arrays, one per leading axis.</param>
+        /// <returns>The gathered array (<paramref name="out"/> when one is given).</returns>
+        /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits, or an index array is not
+        ///     of an integer type.</exception>
         /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
+        /// <exception cref="IndexError">A string array indexed by more index arrays than it has axes.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/user/basics.indexing.html
+        ///     <para>A fixed-width string array has no element kernel: the gather runs the string indexing route (whole
+        ///     elements through the unit view, as <c>this[NDArray[]]</c> does), and a given <paramref name="out"/> then
+        ///     receives the result through the string copy route.</para>
+        /// </remarks>
         public NDArray GetIndices(NDArray @out, NDArray[] indices)
         {
+            if (typecode == NPTypeCode.String)
+            {
+                var picked = StringFetchIndices(indices);
+                if (@out is null)
+                    return picked;
+                // The caller's output takes the selected elements (same class: a plain copy; S <-> U: the checked
+                // conversion); the temporary goes back to the pool.
+                using (picked)
+                    np.copyto(@out, picked);
+                return @out;
+            }
             return FetchIndices(this, indices, @out, true);
         }
 

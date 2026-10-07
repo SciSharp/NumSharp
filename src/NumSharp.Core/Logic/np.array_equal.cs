@@ -4,6 +4,42 @@ namespace NumSharp {
     public static partial class np
     {
         /// <summary>
+        ///     NumPy's <c>array_equal</c> when an operand holds strings, statement by statement: a shape mismatch is False;
+        ///     without <c>equal_nan</c>, <c>(a1 == a2).all()</c> — the <c>==</c> operator answers all-False for a pair
+        ///     <c>equal</c> has no loop for (so the result is True only for empty arrays), and two strings of one class compare
+        ///     their text (an empty pair compares nothing: True); with <c>equal_nan</c>, the same object is True
+        ///     (<c>a1 is a2</c>), and otherwise <c>isnan</c> meets the text and refuses it.
+        /// </summary>
+        /// <param name="a">The first array (not null).</param>
+        /// <param name="b">The second array (not null).</param>
+        /// <param name="equal_nan">NumPy's <c>equal_nan</c>.</param>
+        /// <returns>NumPy's answer.</returns>
+        /// <exception cref="TypeError"><paramref name="equal_nan"/> with two different arrays of one shape (<c>isnan</c> has
+        ///     no string loop).</exception>
+        /// <exception cref="StringComputationNotSupportedException">Two non-empty strings of one class (NumPy compares the
+        ///     text: the next phase of NumSharp's string support).</exception>
+        private static bool ArrayEqualText(NDArray a, NDArray b, bool equal_nan)
+        {
+            var da = a.Shape.dimensions;
+            var db = b.Shape.dimensions;
+            if (da.Length != db.Length)
+                return false;
+            for (int d = 0; d < da.Length; d++)
+                if (da[d] != db[d])
+                    return false;
+            if (!equal_nan)
+            {
+                if (!Backends.Strings.NDStringUfuncs.ComparesText(a.dtype, b.dtype) || a.size == 0)
+                    return a.size == 0;
+                throw Backends.Strings.NDStringUfuncs.NextPhase("array_equal", a);
+            }
+            if (ReferenceEquals(a, b))
+                return true;
+            // _dtype_cannot_hold_nan is False for a string dtype, so NumPy calls isnan(a1), isnan(a2): the text one refuses.
+            throw Backends.Strings.NDStringUfuncs.NotSupportedForInputTypes("isnan");
+        }
+
+        /// <summary>
         ///     True if two arrays have the same shape and all elements are equal, False otherwise.
         /// </summary>
         /// <param name="a">First input array.</param>
@@ -20,16 +56,21 @@ namespace NumSharp {
         ///     NO broadcasting. Mirrors <c>numpy.array_equal(a1, a2, equal_nan=False)</c> (NumPy 2.4.2).
         ///     https://numpy.org/doc/stable/reference/generated/numpy.array_equal.html
         /// </remarks>
+        /// <exception cref="TypeError">A string operand with <paramref name="equal_nan"/> and two different arrays of one shape
+        ///     (NumPy's <c>isnan</c> has no string loop).</exception>
+        /// <exception cref="StringComputationNotSupportedException">Two non-empty strings of one class and one shape: NumPy
+        ///     compares the text (the next phase of NumSharp's string support). Other string pairs are answered from shape and
+        ///     dtype (a shape mismatch, or no <c>equal</c> loop, is False; empty arrays are True).</exception>
         public static bool array_equal(NDArray a, NDArray b, bool equal_nan = false)
         {
             using var plain = NDMatrixBoundary.PlainFor(a, b);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy computes this on text (sorting, searching, truth tests); string computation is
-            // the next phase of NumSharp's string support, so a string array is refused here.
-            if (Backends.Strings.NDStringUfuncs.IsString(a) || Backends.Strings.NDStringUfuncs.IsString(b)) throw Backends.Strings.NDStringUfuncs.NextPhase("array_equal", Backends.Strings.NDStringUfuncs.IsString(a) ? a : b);
             // A null "array" cannot equal a real one; two nulls are trivially equal (mirrors the
             // NDArray == null convention). Guarding here also keeps a.array_equal(...) from throwing.
             if (a is null)
                 return b is null;
+            // Text: NumPy's statements decide by shape and dtype until (a1 == a2).all() compares text (the next phase).
+            if (b is not null && (Backends.Strings.NDStringUfuncs.IsString(a) || Backends.Strings.NDStringUfuncs.IsString(b)))
+                return ArrayEqualText(a, b, equal_nan);
 
             // Fused fast path for the common default (equal_nan=false): when both operands are the same
             // shape, same dtype and dense-contiguous in the same order, ONE early-exiting SIMD pass

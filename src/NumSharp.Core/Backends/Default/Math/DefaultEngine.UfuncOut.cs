@@ -172,8 +172,13 @@ namespace NumSharp.Backends
         {
             if (where is null || where.typecode == NPTypeCode.Boolean)
                 return;
+            // A string mask is named by its descriptor (dtype('<U2'), dtype('S2')), as NumPy names it; its storage lane
+            // has no NumPy name. Every other dtype keeps the lane name the numeric texts have always used.
+            string from = where.typecode == NPTypeCode.String
+                ? where.dtype.ToString(true)
+                : $"dtype('{where.typecode.AsNumpyDtypeName()}')";
             throw new ArgumentException(
-                $"Cannot cast {(where.ndim == 0 ? "scalar" : "array data")} from dtype('{where.typecode.AsNumpyDtypeName()}') " +
+                $"Cannot cast {(where.ndim == 0 ? "scalar" : "array data")} from {from} " +
                 "to dtype('bool') according to the rule 'safe'");
         }
 

@@ -50,11 +50,23 @@ namespace NumSharp.Backends
         ///     </list>
         ///     </para>
         /// </summary>
+        /// <param name="nd">The array.</param>
+        /// <returns>One int64 index array per dimension.</returns>
+        /// <exception cref="ValueError">A 0-d string array (NumPy's <c>Calling nonzero on 0d arrays is not allowed</c>, raised
+        ///     before the element is read).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty string array of at least one dimension: NumPy
+        ///     reads the strings' truth values (the next phase); an empty one gives empty index arrays.</exception>
         [NDScoped]
         public override unsafe NDArray<long>[] NonZero(NDArray nd)
         {
-            // Text: NumPy's nonzero reads the strings' truth values (the next phase).
-            Strings.NDStringUfuncs.ThrowIfReduce("nonzero", nd, (int?)null);
+            // Text: NumPy's nonzero refuses a 0-d array before it reads the element (its ValueError, which NumSharp's
+            // numeric 0-d promotion below deliberately keeps from the numeric dtypes), then reads the strings' truth values
+            // (the next phase); an empty input reads none, and the bool stand-in gives the tuple of empty index arrays.
+            if (Strings.NDStringUfuncs.ReduceStandIn("nonzero", nd) is { } standIn)
+            {
+                using (standIn)
+                    return NonZero(standIn);
+            }
             // Boundary scope: the yielded tuple is the column VIEWS; the shared multi-index base
             // matrix (and the 0-d promotion view) are reclaimed at exit — ARC keeps the buffer
             // alive through the yielded views until the caller releases them.
@@ -200,14 +212,22 @@ namespace NumSharp.Backends
         /// <summary>
         /// Count the number of non-zero elements in the array.
         /// </summary>
+        /// <param name="nd">The array.</param>
+        /// <returns>The number of elements whose truth value is True.</returns>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty string array: NumPy reads the strings' truth
+        ///     values (the next phase of NumSharp's string support); an empty one counts 0.</exception>
         /// <remarks>
         /// NumPy-aligned: np.count_nonzero([0, 1, 0, 2]) = 2
         /// </remarks>
         [NDScoped]
         public override long CountNonZero(NDArray nd)
         {
-            // Text: NumPy's count_nonzero reads the strings' truth values (the next phase).
-            Strings.NDStringUfuncs.ThrowIfReduce("count_nonzero", nd, (int?)null);
+            // Text: NumPy's count_nonzero reads the strings' truth values (the next phase); an empty input reads none (0).
+            if (Strings.NDStringUfuncs.ReduceStandIn("count_nonzero", nd) is { } standIn)
+            {
+                using (standIn)
+                    return CountNonZero(standIn);
+            }
             if (nd.size == 0)
                 return 0;
 
@@ -219,12 +239,27 @@ namespace NumSharp.Backends
         /// <summary>
         /// Count non-zero elements along a specific axis.
         /// </summary>
+        /// <param name="nd">The array.</param>
+        /// <param name="axis">The reduced axis.</param>
+        /// <param name="keepdims">Whether the reduced axis stays with length one.</param>
+        /// <returns>The int64 counts.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is out of bounds (a numeric array).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds (a string array; a 0-d one accepts 0 and
+        ///     -1).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty string array: NumPy compares every element with
+        ///     <c>''</c> (the next phase of NumSharp's string support); an empty one gives the zeros of the reduced
+        ///     shape.</exception>
         [NDScoped]
         public override NDArray CountNonZero(NDArray nd, int axis, bool keepdims = false)
         {
-            // Text: NumPy's count_nonzero is astype(bool).sum(axis) — the strings' truth values (the next phase), after the
-            // sum's axis check (a 0-d input accepts 0 and -1).
-            Strings.NDStringUfuncs.ThrowIfReduce("count_nonzero", nd, (int?)axis);
+            // Text: NumPy's count_nonzero is (a != '').sum(axis) — the strings' truth values (the next phase), after the
+            // sum's axis check (a 0-d input accepts 0 and -1). An empty input compares nothing: the bool stand-in of the same
+            // shape gives the zeros of the reduced shape.
+            if (Strings.NDStringUfuncs.ReduceStandIn("count_nonzero", nd, (int?)axis) is { } standIn)
+            {
+                using (standIn)
+                    return CountNonZero(standIn, axis, keepdims);
+            }
             // Boundary scope: reclaims the per-dispatch MakeGeneric alias; the result is yielded.
 
             var shape = nd.Shape;

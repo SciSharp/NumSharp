@@ -17,6 +17,14 @@ namespace NumSharp
             /// </param>
             /// <param name="axis">The axis to reduce. <c>null</c> flattens.</param>
             /// <param name="keepdims">Leave the reduced axes in the result with length 1.</param>
+            /// <returns>The norm: a 0-d array for a whole-array norm, else the reduced array. An EMPTY operand's
+            ///     inf-, 1- and 2-norms are 0.0 (NumPy 2.x reduces those with <c>initial=0</c>).</returns>
+            /// <exception cref="ValueError">An order that is invalid for the number of reduced axes, duplicate axes, more
+            ///     than two reduced axes, or a min order (-1, -inf, -2) of an empty operand.</exception>
+            /// <exception cref="StringComputationNotSupportedException">A non-empty text array: NumPy parses its text as
+            ///     numbers (<c>x.astype(float)</c>); an empty one converts to an empty float64 array.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">A matrix order 2, -2 or <c>"nuc"</c> with no matrix
+            ///     backend installed.</exception>
             /// <remarks>
             ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.norm.html
             ///     <para>
@@ -49,9 +57,14 @@ namespace NumSharp
                 if (NDMatrixBoundary.Sees(x))
                     return NDMatrixBoundary.Plain((x, ord, axis, keepdims), static s => norm(s.x, s.ord, s.axis, s.keepdims));
                 // NumPy's norm converts the input with astype(float), parsing the text as numbers: the next phase of the
-                // string support.
+                // string support. An EMPTY text array has nothing to parse — its astype(float) is an empty float64 array,
+                // and the norm (and its order / axis checks) runs on that.
                 if (Backends.Strings.NDStringUfuncs.IsString(x))
-                    throw Backends.Strings.NDStringUfuncs.NextPhase("linalg.norm", x);
+                {
+                    if (x.size != 0)
+                        throw Backends.Strings.NDStringUfuncs.NextPhase("linalg.norm", x);
+                    x = np.zeros(Shape.Adopt((long[])x.Shape.dimensions.Clone()), NPTypeCode.Double);
+                }
                 var a = ToFloating(x);
                 int nd = a.ndim;
 
@@ -130,6 +143,17 @@ namespace NumSharp
 
             #region internals
 
+            /// <summary>
+            ///     NumPy's one-axis branch of <c>norm</c>: the vector order <paramref name="ord"/> over <paramref name="axis"/>.
+            ///     The inf order reduces with <c>initial=0</c>, so an empty vector's inf-norm is 0.0 where -inf still raises.
+            /// </summary>
+            /// <param name="a">The floating operand.</param>
+            /// <param name="ord">The order: null / 2, a number, or +-inf (text orders are refused).</param>
+            /// <param name="axis">The normalized axis.</param>
+            /// <param name="keepdims">Keep the axis as length 1.</param>
+            /// <returns>The reduced norm.</returns>
+            /// <exception cref="ValueError">A text order (<c>Invalid norm order '...' for vectors</c>), or -inf of an empty
+            ///     axis (NumPy's empty-min error).</exception>
             [NDScopedCovered] // always dispatched from the [NDScoped] norm overloads; rides their scope
             private static NDArray VectorNorm(NDArray a, object ord, int axis, bool keepdims)
             {
@@ -141,8 +165,11 @@ namespace NumSharp
 
                 double order = AsNumber(ord);
 
+                // NumPy 2.x reduces with initial=0 (`abs(x).max(axis=axis, keepdims=keepdims, initial=0)`): an EMPTY
+                // vector's inf-norm is 0.0, not the empty-max ValueError. Every |x| is >= 0, so a non-empty answer is
+                // unchanged (a NaN still propagates).
                 if (double.IsPositiveInfinity(order))
-                    return np.amax(np.abs(a), axis, keepdims: keepdims);
+                    return np.amax(np.abs(a), axis, keepdims: keepdims, initial: 0);
                 if (double.IsNegativeInfinity(order))
                     return np.amin(np.abs(a), axis, keepdims: keepdims);
                 if (order == 0d)
@@ -161,6 +188,20 @@ namespace NumSharp
                 return np.power(reduced, NDArray.Scalar(1d / order));
             }
 
+            /// <summary>
+            ///     NumPy's two-axis branch of <c>norm</c>: the matrix order <paramref name="ord"/> over the axis pair. The 1
+            ///     and inf orders reduce with <c>initial=0</c> (an empty matrix gives 0.0); -1 and -inf keep the empty-min
+            ///     error; 2, -2 and "nuc" go through the singular values.
+            /// </summary>
+            /// <param name="a">The floating operand.</param>
+            /// <param name="ord">The order: null / "fro" / "f", "nuc", or a number among 1, -1, 2, -2, +-inf.</param>
+            /// <param name="axes">The (row, column) axes as given.</param>
+            /// <param name="nd">The operand's rank.</param>
+            /// <param name="keepdims">Put both reduced axes back as length 1.</param>
+            /// <returns>The reduced norm.</returns>
+            /// <exception cref="ValueError">Duplicate axes, an invalid matrix order, or a min order of an empty
+            ///     matrix.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">An order 2, -2 or "nuc" with no matrix backend.</exception>
             [NDScopedCovered] // always dispatched from the [NDScoped] norm overloads; rides their scope
             private static NDArray MatrixNorm(NDArray a, object ord, int[] axes, int nd, bool keepdims)
             {
@@ -195,15 +236,18 @@ namespace NumSharp
                     double order = AsNumber(ord);
 
                     // NumPy reduces one axis FIRST and then shifts the surviving axis index down if
-                    // the reduced one sat before it — so these pairs are not interchangeable.
+                    // the reduced one sat before it — so these pairs are not interchangeable. The two
+                    // max forms reduce with initial=0 like NumPy 2.x (`.max(axis=..., initial=0)`): an
+                    // EMPTY matrix's 1-norm and inf-norm are 0.0; the min forms keep NumPy's empty-min
+                    // error.
                     if (order == 2d || order == -2d)
                         result = SingularValueNorm(a, rowAxis, colAxis, order == 2d ? "2" : "-2");
                     else if (order == 1d)
-                        result = np.amax(np.sum(np.abs(a), rowAxis), Shift(colAxis, rowAxis));
+                        result = np.amax(np.sum(np.abs(a), rowAxis), Shift(colAxis, rowAxis), initial: 0);
                     else if (order == -1d)
                         result = np.amin(np.sum(np.abs(a), rowAxis), Shift(colAxis, rowAxis));
                     else if (double.IsPositiveInfinity(order))
-                        result = np.amax(np.sum(np.abs(a), colAxis), Shift(rowAxis, colAxis));
+                        result = np.amax(np.sum(np.abs(a), colAxis), Shift(rowAxis, colAxis), initial: 0);
                     else if (double.IsNegativeInfinity(order))
                         result = np.amin(np.sum(np.abs(a), colAxis), Shift(rowAxis, colAxis));
                     else
@@ -231,16 +275,30 @@ namespace NumSharp
             /// <summary>An axis index after a LOWER-numbered axis has been reduced away.</summary>
             private static int Shift(int axis, int removed) => axis > removed ? axis - 1 : axis;
 
+            /// <summary>
+            ///     NumPy's <c>_multi_svd_norm</c>: the singular values over the axis pair, reduced by the largest (2, with
+            ///     <c>initial=0</c>), the smallest (-2) or their sum ("nuc").
+            /// </summary>
+            /// <param name="a">The floating operand.</param>
+            /// <param name="rowAxis">The normalized row axis.</param>
+            /// <param name="colAxis">The normalized column axis.</param>
+            /// <param name="which">"2", "-2" or "nuc".</param>
+            /// <returns>The reduced norm.</returns>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend computes the singular values.</exception>
+            /// <exception cref="ValueError">"-2" of an empty matrix (the empty-min error).</exception>
             [NDScopedCovered] // only reached via MatrixNorm, itself under the [NDScoped] norm scope
             private static NDArray SingularValueNorm(NDArray a, int rowAxis, int colAxis, string which)
             {
                 // NumPy's _multi_svd_norm: move the two matrix axes to the end, take the singular values
                 // over them, then reduce — 2 → largest, -2 → smallest, 'nuc' → sum of the singulars.
+                // NumPy calls `_multi_svd_norm(x, row, col, amax, 0)`: the largest singular value of an
+                // EMPTY matrix is 0.0 (singular values are >= 0, so a non-empty answer is unchanged).
+                // 'nuc' passes initial=0 to the sum, which the add identity already is.
                 var y = np.moveaxis(a, new[] {rowAxis, colAxis}, new[] {-2, -1});
                 var s = svdvals(y);
                 return which switch
                 {
-                    "2" => np.amax(s, -1),
+                    "2" => np.amax(s, -1, initial: 0),
                     "-2" => np.amin(s, -1),
                     _ => np.sum(s, -1), // "nuc"
                 };

@@ -32,6 +32,8 @@ namespace NumSharp
                     return NDMatrixBoundary.Wrapped(a, static s => inv(s));
                 AssertStackedSquare(a);
                 var common = CommonType(a);
+                // NumPy calls _umath_linalg.inv: its input cast refuses text, an empty operand included.
+                ThrowIfTextGufunc("inv", a);
                 return a.TensorEngine.Inv(ToCommon(a, common));
             }
 
@@ -61,26 +63,37 @@ namespace NumSharp
                 if (rcond is not null && rtol is not null)
                     throw new ValueError("`rtol` and `rcond` can't be both set.");
 
-                AssertStacked2d(a);
-
                 // C# cannot tell NumPy's rtol=_NoValue (default → 1e-15) apart from rtol=None
                 // (Array-API default → max(M,N)*eps), so an explicit rcond or rtol is honoured and with
                 // neither set NumPy's 1e-15 default applies.
                 double rc = rcond ?? rtol ?? 1e-15;
 
                 int nd = a.ndim;
-                long m = a.Shape.dimensions[nd - 2];
-                long n = a.Shape.dimensions[nd - 1];
 
-                // Empty matrix: NumPy returns an uninitialised (…, N, M) WITHOUT decomposing, keeping the
-                // ORIGINAL dtype (unlike the SVD path, which is always floating).
-                if (m == 0 || n == 0)
+                // NumPy's _is_empty_2d(a) comes before anything reads the matrix: an empty operand returns an
+                // uninitialised (…, N, M) WITHOUT decomposing, keeping the ORIGINAL dtype (a string operand too —
+                // unlike the SVD path, which is always floating). A 1-D empty operand fails NumPy's
+                // `m, n = a.shape[-2:]` unpack.
+                if (IsEmpty2d(a))
                 {
+                    if (nd < 2)
+                        throw new ValueError($"not enough values to unpack (expected 2, got {nd})");
                     var emptyDims = (long[]) a.Shape.dimensions.Clone();
-                    emptyDims[nd - 2] = n;
-                    emptyDims[nd - 1] = m;
-                    return np.zeros(Shape.Adopt(emptyDims), a.typecode);
+                    long m0 = emptyDims[nd - 2];
+                    emptyDims[nd - 2] = emptyDims[nd - 1];
+                    emptyDims[nd - 1] = m0;
+                    return np.zeros(Shape.Adopt(emptyDims), a.dtype);
                 }
+
+                // NumPy's `a = a.conjugate()` is next: ndarray.conjugate refuses a non-numeric dtype before svd
+                // checks the rank, so text never reaches the rank check below.
+                if (Backends.Strings.NDStringUfuncs.IsString(a))
+                    throw new TypeError("cannot conjugate non-numeric dtype");
+
+                // svd's _assert_stacked_2d, and with hermitian=True its eigh route's square check.
+                AssertStacked2d(a);
+                if (hermitian)
+                    AssertStackedSquare(a);
 
                 var common = CommonType(a);
                 var aConj = np.conjugate(ToCommon(a, common));
@@ -111,21 +124,26 @@ namespace NumSharp
                 if (ind <= 0)
                     throw new ValueError("Invalid ind argument.");
 
+                // NumPy's statements verbatim: invshape = oldshape[ind:] + oldshape[:ind] and prod = the product of
+                // oldshape[ind:] — Python slices clamp, so an `ind` past the rank leaves prod 1 and invshape the old
+                // shape (a 0-d or 1-D operand still reaches inv, which reports its own error).
                 var dims = a.Shape.dimensions;
-                long leading = 1;
-                for (int i = 0; i < ind && i < a.ndim; i++)
-                    leading *= dims[i];
-                long trailing = 1;
-                for (int i = ind; i < a.ndim; i++)
-                    trailing *= dims[i];
+                int nd = a.ndim;
+                int split = Math.Min(ind, nd);
+                long prod = 1;
+                var invertedShape = new long[nd];
+                int j = 0;
+                for (int i = split; i < nd; i++)
+                {
+                    invertedShape[j++] = dims[i];
+                    prod *= dims[i];
+                }
+                for (int i = 0; i < split; i++)
+                    invertedShape[j++] = dims[i];
 
-                var invertedShape = new long[a.ndim - ind + ind];
-                for (int i = ind, j = 0; i < a.ndim; i++, j++)
-                    invertedShape[j] = dims[i];
-                for (int i = 0, j = a.ndim - ind; i < ind; i++, j++)
-                    invertedShape[j] = dims[i];
-
-                var square = np.reshape(a, new[] {leading, trailing});
+                // a.reshape(prod, -1): an empty operand with prod 0 is NumPy's own reshape refusal
+                // ("cannot reshape array of size 0 into shape (0,newaxis)").
+                var square = np.reshape(a, new[] {prod, -1L});
                 return np.reshape(inv(square), invertedShape);
             }
         }

@@ -37,6 +37,10 @@ namespace NumSharp
                 AssertStackedSquare(a);
 
                 bool oneDimensional = b.ndim == 1;
+                // NumPy's _commonType(a, b) runs before the gufunc, and the gufunc resolves its loop (where its input
+                // casts refuse text) before it checks the core dimensions.
+                var common = CommonType(a, b);
+                ThrowIfTextGufunc(oneDimensional ? "solve1" : "solve", a, b);
                 if (oneDimensional)
                 {
                     GufuncGuard.RequireCoreSize("solve1", "(m,m),(m)->(m)", 1, 0,
@@ -49,7 +53,6 @@ namespace NumSharp
                         b.Shape.dimensions[b.ndim - 2], a.Shape.dimensions[a.ndim - 1]);
                 }
 
-                var common = CommonType(a, b);
                 return a.TensorEngine.Solve(ToCommon(a, common), ToCommon(b, common), oneDimensional);
             }
 

@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 
 namespace NumSharp
@@ -18,23 +19,86 @@ namespace NumSharp
         ///     element counts match.
         /// </param>
         /// <param name="vals">
-        ///     Values to write. Cast to <paramref name="arr"/>'s dtype and cycled
-        ///     to fill the True positions. Must be non-empty when at least one
-        ///     mask entry is True (NumPy parity).
+        ///     Values to write, converted to <paramref name="arr"/>'s dtype and cycled to fill the True positions. An
+        ///     ARRAY of values must convert under NumPy's <c>'safe'</c> rule (a 0-d value — NumSharp's stand-in for a
+        ///     Python scalar — is converted unconditionally). Must be non-empty when at least one mask entry is True.
         /// </param>
         /// <exception cref="ArgumentNullException">An argument is null.</exception>
-        /// <exception cref="ValueError"><paramref name="arr"/> is read-only (checked first, as NumPy does).</exception>
-        /// <exception cref="ArgumentException"><paramref name="mask"/>'s size differs from <paramref name="arr"/>'s,
-        /// or <paramref name="vals"/> is empty while some mask entry is True.</exception>
+        /// <exception cref="ValueError"><paramref name="arr"/> is read-only (checked first, as NumPy does), or
+        ///     <paramref name="mask"/>'s size differs from <paramref name="arr"/>'s (<c>place: mask and data must be the
+        ///     same size</c>), or <paramref name="vals"/> is empty while some mask entry is True (<c>Cannot insert from an
+        ///     empty array!</c>).</exception>
+        /// <exception cref="InvalidCastException">An array <paramref name="vals"/> does not cast 'safely' to
+        ///     <paramref name="arr"/>'s dtype (NumPy's TypeError: <c>Cannot cast array data from dtype('float64') to
+        ///     dtype('int64') according to the rule 'safe'</c>) — even when <paramref name="arr"/> is empty.</exception>
+        /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
+        /// <exception cref="UnicodeDecodeError">Byte values that are not ASCII into a <c>U</c> array.</exception>
+        /// <exception cref="StringComputationNotSupportedException">NumPy computes on text here: a text scalar parsed into a
+        ///     number, a text mask tested for truth, or numbers formatted into a text array where the mask selects an
+        ///     element (the computational phase of the string dtypes).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.place.html
+        ///     <para><b>Order (NumPy's <c>arr_place</c>).</b> The target's writeability; the mask's conversion to bool and its
+        ///     size; the values' conversion (<c>PyArray_FromAny(vals, arr.dtype, CARRAY)</c>: the 'safe' rule for an array,
+        ///     every value converted — so a non-ASCII byte value raises even under an all-false mask); then the empty-values
+        ///     check and the loop. A NUMBER formatted into a text array cannot fail, so it is refused only where it is
+        ///     written; a TEXT mask is refused where its truth is read (the empty-values check, or the loop).</para>
         ///     <para>Scoped by <c>[NDScoped]</c>: the contiguous scratch of a non-contiguous target and the
         ///     bool/dtype-converted copies of <paramref name="mask"/> and <paramref name="vals"/> are released on
         ///     return, exceptions included. A mask or values array used as-is is the caller's (built before the scope
         ///     opened), so the scope never disposes it.</para>
         /// </remarks>
-        [NDScoped]
         public static void place(NDArray arr, NDArray mask, NDArray vals)
+            => PlaceCore(arr, mask, vals, sequence: false);
+
+        /// <summary>
+        ///     <see cref="place(NDArray, NDArray, NDArray)"/> with the values given as a C# array — NumPy's Python LIST of
+        ///     values: <c>np.place(a, mask, ['P', 'QQ', 'RRRR'])</c> is <c>np.place(a, mask, new[] { "P", "QQ", "RRRR" })</c>.
+        /// </summary>
+        /// <param name="arr">Target array (modified in place).</param>
+        /// <param name="mask">Boolean mask of <paramref name="arr"/>'s size.</param>
+        /// <param name="vals">
+        ///     The values, cycled over the True positions. NumPy converts a list STRAIGHT INTO <paramref name="arr"/>'s dtype
+        ///     (<c>PyArray_FromAny(list, arr.dtype)</c>, as <c>np.array(vals, dtype=arr.dtype)</c> does), so there is no
+        ///     <c>'safe'</c> rule: <c>'RRRR'</c> into a <c>&lt;U3</c> array truncates to <c>'RRR'</c>, <c>1.9</c> into an int
+        ///     array truncates to 1 — where an ndarray of the same values raises the cast TypeError.
+        /// </param>
+        /// <exception cref="ArgumentNullException">An argument is null.</exception>
+        /// <exception cref="ValueError">The checks of <see cref="place(NDArray, NDArray, NDArray)"/>.</exception>
+        /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
+        /// <exception cref="UnicodeDecodeError">Byte values that are not ASCII into a <c>U</c> array.</exception>
+        /// <exception cref="StringComputationNotSupportedException">Text parsed into a numeric array, or numbers formatted
+        ///     into a text array where the mask selects an element (the computational phase of the string dtypes).</exception>
+        /// <remarks>
+        ///     C# binds a typed array argument (<c>double[]</c>, <c>string[]</c>) here rather than to the
+        ///     <see cref="NDArray"/> overload: an identity/reference conversion beats NumSharp's implicit
+        ///     <c>Array → NDArray</c> conversion. Pass <c>np.array(...)</c> to get NumPy's ndarray semantics.
+        /// </remarks>
+        [NDScoped]
+        public static void place(NDArray arr, NDArray mask, Array vals)
+        {
+            if (vals is null) throw new ArgumentNullException(nameof(vals));
+            // The list's own dtype is discovered first (np.array), then converted into arr's dtype by PlaceCore after the
+            // size check, as NumPy's conversion follows its mask checks. The discovered array is released with the scope.
+            PlaceCore(arr, mask, np.array(vals), sequence: true);
+        }
+
+        /// <summary>
+        ///     The body of both <c>np.place</c> forms (NumPy's <c>arr_place</c>, in its order).
+        /// </summary>
+        /// <param name="arr">Target array (modified in place).</param>
+        /// <param name="mask">Boolean mask of <paramref name="arr"/>'s size.</param>
+        /// <param name="vals">The values (an ndarray, or the array discovered from a list).</param>
+        /// <param name="sequence">True when <paramref name="vals"/> came from a list: NumPy converts it into the target's
+        ///     dtype without the <c>'safe'</c> rule.</param>
+        /// <exception cref="ArgumentNullException">An argument is null.</exception>
+        /// <exception cref="ValueError">See <see cref="place(NDArray, NDArray, NDArray)"/>.</exception>
+        /// <exception cref="InvalidCastException">An ndarray of values that does not cast 'safely'.</exception>
+        /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
+        /// <exception cref="UnicodeDecodeError">Byte values that are not ASCII into a <c>U</c> array.</exception>
+        /// <exception cref="StringComputationNotSupportedException">See <see cref="place(NDArray, NDArray, NDArray)"/>.</exception>
+        [NDScoped]
+        private static void PlaceCore(NDArray arr, NDArray mask, NDArray vals, bool sequence)
         {
             using var plain = NDMatrixBoundary.PlainFor(arr, mask, vals);   // in place: the helpers below see a matrix as a plain array
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -48,9 +112,11 @@ namespace NumSharp
             NumSharpException.ThrowIfNotWriteable(arr.Shape, "WRITEBACKIFCOPY base");
 
             if (mask.size != arr.size)
-                throw new ArgumentException(
-                    $"place: mask and data must be the same size (mask.size={mask.size}, arr.size={arr.size}).",
-                    nameof(mask));
+                throw new ValueError("place: mask and data must be the same size");
+
+            // NumPy converts the values before it looks at the mask's contents — the casting rule (a dtype check, so an
+            // empty target raises too) and every value's conversion.
+            NDArray converted = PlaceValuesLikeNumPy(vals, arr, sequence, out bool formatsText);
 
             // Empty arr ⇒ empty mask ⇒ no-op.
             if (arr.size == 0)
@@ -62,12 +128,18 @@ namespace NumSharp
             // changes back through the view's strides to the parent storage.
             if (!arr.Shape.IsContiguous)
             {
-                // The recursive call opens its own nested scope; the scratch itself is released by this one.
+                // The recursive call opens its own nested scope; the scratch itself is released by this one. It re-runs
+                // the checks on the already converted values (the same dtype: nothing left to fail but the mask's).
                 var scratch = np.ascontiguousarray(arr);
-                place(scratch, mask, vals);
+                PlaceCore(scratch, mask, converted ?? vals, sequence);
                 np.copyto(arr, scratch, casting: "unsafe");
                 return;
             }
+
+            // A text mask is tested for truth (the computational phase) where NumPy reads it: below, by the empty-values
+            // check or the loop.
+            if (mask.typecode == NPTypeCode.String)
+                throw Backends.Strings.NDStringUfuncs.NextPhase("place", mask);
 
             // Cast mask to contig bool; cast vals to contig arr.dtype. A converted copy is built inside the
             // scope and released with it; an operand used as-is is the caller's and is never disposed.
@@ -83,29 +155,67 @@ namespace NumSharp
                     : mask.astype(NPTypeCode.Boolean);
             }
 
-            NDArray valsCast;
-            // Same element type (for strings: same class AND width) is read as is; anything else is converted to arr's
-            // dtype (a string truncated / NUL-padded, S <-> U ASCII-checked).
-            if (vals.HasSameElementType(arr) && vals.Shape.IsContiguous)
-            {
-                valsCast = vals;
-            }
-            else if (vals.HasSameElementType(arr))
-            {
-                valsCast = np.ascontiguousarray(vals);
-            }
-            else
-            {
-                valsCast = vals.astype(arr.dtype);
-            }
+            if (vals.size == 0 && AnyTrueMask(maskCast))
+                throw new ValueError("Cannot insert from an empty array!");
 
-            if (valsCast.size == 0 && AnyTrueMask(maskCast))
-                throw new ArgumentException("Cannot insert from an empty array!", nameof(vals));
-
-            if (valsCast.size == 0)
+            if (vals.size == 0)
                 return;   // mask all-false and empty vals — NumPy treats as no-op
 
+            // Numbers formatted into a text array: unobservable unless written, and the loop writes only where the mask is
+            // true.
+            if (formatsText)
+            {
+                if (AnyTrueMask(maskCast))
+                    throw Backends.Strings.NDStringCasting.TextConversion(vals.dtype, arr.dtype);
+                return;
+            }
+
+            NDArray valsCast = converted ?? (vals.Shape.IsContiguous ? vals : np.ascontiguousarray(vals));
             ExecutePlace(arr, maskCast, valsCast);
+        }
+
+        /// <summary>
+        ///     The value conversion of <see cref="place(NDArray, NDArray, NDArray)"/> and
+        ///     <see cref="putmask(NDArray, NDArray, NDArray)"/> — NumPy's <c>PyArray_FromAny(values, target.dtype, 0, 0,
+        ///     NPY_ARRAY_CARRAY)</c>: an ARRAY of values must convert under the <c>'safe'</c> rule (a dtype check, made
+        ///     whatever the sizes); a 0-d value — NumSharp's stand-in for a Python scalar, which NumPy packs into the dtype —
+        ///     and a list (a C# array) are converted unconditionally; then every value is converted.
+        /// </summary>
+        /// <param name="values">The caller's values.</param>
+        /// <param name="target">The array written into (its dtype is the conversion's target).</param>
+        /// <param name="sequence">True when <paramref name="values"/> was discovered from a list: no <c>'safe'</c> rule.</param>
+        /// <param name="formatsText">Set when numbers would be formatted into the text target (cannot fail; the caller
+        ///     refuses only where one is written). The values are then NOT converted.</param>
+        /// <returns>The converted values (C-contiguous, the target's dtype), or null when <paramref name="values"/> already
+        ///     holds the target's element type (or when <paramref name="formatsText"/> is set).</returns>
+        /// <exception cref="InvalidCastException">An array of values does not cast 'safely' (NumPy's TypeError text).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A text scalar into a numeric target: NumPy parses it.</exception>
+        /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> target.</exception>
+        /// <exception cref="UnicodeDecodeError">Byte values that are not ASCII into a <c>U</c> target.</exception>
+        /// <remarks>An ARRAY of text values never casts safely to a number, and numbers cast safely to text only when the
+        ///     text is wide enough to hold any of them (<c>int64 → &lt;U21</c>): both come from the rule check.</remarks>
+        private static NDArray PlaceValuesLikeNumPy(NDArray values, NDArray target, bool sequence, out bool formatsText)
+        {
+            formatsText = false;
+            // PyArray_FromArray (an ndarray) checks the rule; a list is built in the target's dtype directly.
+            if (!sequence && values.ndim != 0
+                && !DTypeCasting.CanCastTypeTo(values.dtype, target.dtype, NPY_CASTING.NPY_SAFE_CASTING))
+                throw Backends.Strings.NDStringCasting.InvalidCast(values.dtype, target.dtype, NPY_CASTING.NPY_SAFE_CASTING, scalar: false);
+
+            if (values.HasSameElementType(target))
+                return null;
+
+            bool textValues = values.typecode == NPTypeCode.String, textTarget = target.typecode == NPTypeCode.String;
+            if (textValues && !textTarget)
+                throw Backends.Strings.NDStringCasting.TextConversion(values.dtype, target.dtype);   // a scalar parsed
+            if (!textValues && textTarget)
+            {
+                formatsText = true;
+                return null;
+            }
+            // Number to number (unsafe for a scalar, the rule already checked for an array), or text to text (truncated /
+            // NUL-padded, S <-> U ASCII-checked): every value converted now, as NumPy does before reading the mask.
+            return values.astype(target.dtype);
         }
 
         private static unsafe bool AnyTrueMask(NDArray maskBool)

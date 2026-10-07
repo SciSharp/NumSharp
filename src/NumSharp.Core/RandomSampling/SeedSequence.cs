@@ -305,13 +305,16 @@ namespace NumSharp
 
         /// <summary>
         ///     The <see cref="NDArray"/> branch of the coercion: a uint32 array passes through with its shape; any other
-        ///     array takes the sequence path, which starts with <c>len(x)</c> and then iterates its elements.
+        ///     array takes the sequence path, which starts with <c>len(x)</c> and then iterates its elements — an integer
+        ///     element is its limbs, a <c>U</c> element parses as a seed string, an <c>S</c> element gives its bytes
+        ///     (<see cref="AppendTextElement"/>).
         /// </summary>
         /// <param name="nd">The entropy array.</param>
         /// <returns>The uint32 piece.</returns>
         /// <exception cref="TypeError">0-d (<c>len() of unsized object</c>), non-empty bool (<c>object of type 'numpy.bool' has
         /// no len()</c>), or non-empty non-integer (<c>seed must be integer</c>).</exception>
-        /// <exception cref="ValueError">A negative element.</exception>
+        /// <exception cref="ValueError">A negative element, or a <c>U</c> element that is not a seed literal
+        ///     (<c>unrecognized seed string</c>, or <c>invalid literal for int() with base 10: np.str_('1a')</c>).</exception>
         private static EntropyPiece CoerceNDArray(NDArray nd)
         {
             NPTypeCode tc = nd.typecode;
@@ -345,6 +348,18 @@ namespace NumSharp
                     for (long i = 0; i < nd.size; i++)
                         all.AddRange(IntToUint32Array(ToBigInteger(nd.GetAtIndex(i))));
                     return new EntropyPiece(all.ToArray());
+                case NPTypeCode.String:
+                {
+                    // The same C-order walk; each element is a string scalar whose words come from its text (U) or its
+                    // bytes (S). Every piece is 1-D, so the concatenation is the flat word list.
+                    var values = new List<BigInteger>();
+                    for (long i = 0; i < nd.size; i++)
+                        AppendTextElement(nd.GetAtIndex(i), values);
+                    var textWords = new List<uint>(values.Count);
+                    foreach (BigInteger v in values)
+                        textWords.AddRange(IntToUint32Array(v));
+                    return new EntropyPiece(textWords.ToArray());
+                }
                 default:
                     throw new TypeError("seed must be integer");
             }
@@ -448,24 +463,54 @@ namespace NumSharp
         ///     <c>int(x)</c> in base 10; anything else is <c>unrecognized seed string</c>.
         /// </summary>
         /// <param name="s">The seed string.</param>
+        /// <param name="numpyStr">True for an element of a <c>U</c> array (an <c>np.str_</c> scalar in NumPy): only the
+        ///     invalid-literal text differs, quoting <c>np.str_('…')</c> where a plain string quotes <c>'…'</c>.</param>
         /// <returns>Its integer value (never negative: a sign is not a digit, so <c>"-5"</c> is unrecognized).</returns>
         /// <exception cref="ValueError">Not a seed literal: <c>unrecognized seed string</c> when it neither starts with <c>0x</c>
-        ///     nor with a digit (<c>"a"</c>, <c>""</c>, <c>" 12"</c>, <c>"-5"</c>); Python's <c>invalid literal for int() with
-        ///     base 10/16: …</c> when it does but the rest is not a literal (<c>"0b11"</c>, <c>"12a"</c>, <c>"0x"</c>).</exception>
+        ///     nor with an ASCII digit (<c>"a"</c>, <c>""</c>, <c>" 12"</c>, <c>"-5"</c>, <c>"٣"</c>); Python's <c>invalid
+        ///     literal for int() with base 10/16: …</c> when it does but the rest is not a literal (<c>"0b11"</c>,
+        ///     <c>"12a"</c>, <c>"0x"</c>); Python's digit-limit error for more than 4300 decimal digits.</exception>
         /// <remarks>
         ///     There is NO octal branch: <c>"012"</c> is decimal 12, because <c>int("012")</c> reads base 10 (a leading zero
         ///     is legal there). NumSharp used to read a leading-<c>0</c> string as octal, so <c>"012"</c> seeded from 10 and
         ///     every stream built on it differed from NumPy's. The prefix test is case-sensitive (<c>"0X10"</c> reaches the
-        ///     base-10 parse and fails, as in NumPy), and the base-10 parse accepts Python's underscores and trailing
-        ///     whitespace (<c>"1_000 "</c> is 1000) through <see cref="PythonInt.Parse"/>.
+        ///     base-10 parse and fails, as in NumPy), and the parse is Python's <c>int()</c> (<see cref="PythonInt.Parse"/>):
+        ///     underscores and trailing whitespace (<c>"1_000 "</c> is 1000) and, after the leading ASCII digit the regex
+        ///     demands, decimal digits of any script (<c>"1٢"</c> is 12).
         /// </remarks>
-        private static BigInteger ParseSeedString(string s)
+        private static BigInteger ParseSeedString(string s, bool numpyStr = false)
         {
             if (s.StartsWith("0x", StringComparison.Ordinal))
-                return PythonInt.Parse(s, 16);
+                return PythonInt.Parse(s, 16, numpyStr);
+            // DECIMAL_RE is [0-9]+ matched at the start: an ASCII digit only, whatever the rest holds.
             if (s.Length > 0 && s[0] >= '0' && s[0] <= '9')
-                return PythonInt.Parse(s, 10);
+                return PythonInt.Parse(s, 10, numpyStr);
             throw new ValueError("unrecognized seed string");
+        }
+
+        /// <summary>
+        ///     The words one element of a fixed-width string array contributes to NumPy's coercion: a <c>U</c> element is
+        ///     an <c>np.str_</c> scalar, so it parses as a seed string; an <c>S</c> element is an <c>np.bytes_</c> scalar,
+        ///     which is neither a str nor a number, so the coercion takes its length and iterates it — every BYTE is an
+        ///     integer word (<c>b'ab'</c> is <c>[97, 98]</c>, an empty element contributes nothing).
+        /// </summary>
+        /// <param name="element">The element as <see cref="NDArray.GetAtIndex(long)"/> returns it: a <see cref="string"/> for
+        ///     <c>U</c>, a <c>byte[]</c> for <c>S</c>, trailing NULs removed (NumPy's scalar).</param>
+        /// <param name="words">The flat key or word list being built (appended to).</param>
+        /// <exception cref="ValueError">A <c>U</c> element that is not a seed literal (<see cref="ParseSeedString"/>).</exception>
+        /// <remarks>
+        ///     The trailing-NUL removal is NumPy's: <c>b'a\x00\x00'</c> contributes only <c>[97]</c>, while an EMBEDDED NUL
+        ///     stays a word (<c>b'a\x00b'</c> is <c>[97, 0, 98]</c>).
+        /// </remarks>
+        private static void AppendTextElement(object element, List<BigInteger> words)
+        {
+            if (element is string text)
+            {
+                words.Add(ParseSeedString(text, numpyStr: true));
+                return;
+            }
+            foreach (byte b in (byte[])element)
+                words.Add(b);
         }
 
         /// <summary>
@@ -568,13 +613,15 @@ namespace NumSharp
 
         /// <summary>
         ///     The values an array contributes to a spawn key — NumPy's ndarray coercion, read as values: the elements in C
-        ///     order for any integer dtype.
+        ///     order for any integer dtype; a <c>U</c> element's parsed seed string and an <c>S</c> element's bytes
+        ///     (<see cref="AppendTextElement"/>).
         /// </summary>
         /// <param name="nd">The array.</param>
         /// <param name="key">The flat key being built (appended to).</param>
         /// <exception cref="TypeError">A 0-d non-uint32 array (<c>len() of unsized object</c>), a non-empty bool array
         ///     (<c>object of type 'numpy.bool' has no len()</c>: <c>np.bool_</c> is not an integer type), or a non-empty
         ///     float/complex/decimal one (<c>seed must be integer</c>).</exception>
+        /// <exception cref="ValueError">A <c>U</c> element that is not a seed literal.</exception>
         /// <remarks>
         ///     The same rules as <see cref="CoerceNDArray"/>, which produces the entropy WORDS; this keeps the element values
         ///     so a large element stays one key entry (its words are identical either way).
@@ -605,6 +652,12 @@ namespace NumSharp
                     // GetAtIndex reads the logical C-order index through any layout (strided, transposed, broadcast).
                     for (long i = 0; i < nd.size; i++)
                         key.Add(ToBigInteger(nd.GetAtIndex(i)));
+                    return;
+                case NPTypeCode.String:
+                    // NumPy keeps the string scalars in the key and coerces them each time; their words are the parsed
+                    // value (U) or the bytes (S), so the flat key stores exactly those.
+                    for (long i = 0; i < nd.size; i++)
+                        AppendTextElement(nd.GetAtIndex(i), key);
                     return;
                 default:
                     throw new TypeError("seed must be integer");

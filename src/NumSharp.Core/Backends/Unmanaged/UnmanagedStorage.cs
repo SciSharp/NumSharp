@@ -1593,9 +1593,21 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Copies the entire contents of this storage to given address.
         /// </summary>
-        /// <param name="address">The address to copy to.</param>
+        /// <param name="address">The address to copy to; it must hold <c>Count * DTypeSize</c> bytes.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="address"/> is null.</exception>
+        /// <remarks>
+        ///     A fixed-width string storage copies its raw element bytes (<see cref="DTypeSize"/> each: NUL-padded ASCII
+        ///     for <c>S</c>, UCS-4 code units for <c>U</c>) in C order — the bytes <c>tobytes()</c> returns.
+        /// </remarks>
         public unsafe void CopyTo(void* address)
         {
+            // Strings have no unmanaged CLR element type for CopyTo<T>: copy whole elements as bytes.
+            if (_typecode == NPTypeCode.String)
+            {
+                CopyStringBytesTo(address);
+                return;
+            }
+
             // #region Compute
 
 		    // switch (TypeCode)

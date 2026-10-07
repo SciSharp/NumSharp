@@ -47,6 +47,36 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     The string half of <see cref="CopyTo(void*)"/>: every element's raw bytes (NUL-padded ASCII for <c>S</c>,
+        ///     UCS-4 code units for <c>U</c>) written to <paramref name="address"/> in C order — <c>tobytes()</c>'s layout.
+        ///     A C-contiguous view is one block move from its first element; any other layout is first copied into a fresh
+        ///     C-contiguous buffer by the string copy route (whole elements, no conversion: the class and width stay).
+        /// </summary>
+        /// <param name="address">The destination; it must hold <c>Count * DTypeSize</c> bytes.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="address"/> is null.</exception>
+        internal unsafe void CopyStringBytesTo(void* address)
+        {
+            if (address == null)
+                throw new ArgumentNullException(nameof(address));
+            long bytes = Count * (long)DTypeSize;
+            if (bytes == 0)
+                return;
+            if (Shape.IsContiguous)
+            {
+                // A contiguous view starts at its offset (a slice re-seats Address and keeps offset 0, a strided parent
+                // keeps the base address with a non-zero offset: Address + offset * itemsize covers both).
+                Buffer.MemoryCopy(Address + Shape.offset * (long)DTypeSize, address, bytes, bytes);
+                return;
+            }
+            // Any other layout: a C-ordered copy of the same descriptor (the copy route's whole-element kernels), then
+            // one block move. The wrapper takes its own reference on this storage (released with it) and the temporary
+            // goes back to the pool here.
+            using var view = new NDArray(this);
+            using var compact = view.copy('C');
+            Buffer.MemoryCopy(compact.Storage.Address, address, bytes, bytes);
+        }
+
+        /// <summary>
         ///     Assignment into a string storage (or of a string value), <c>this[indices] = value</c> — NumPy's
         ///     <c>array_assign_subscript</c> for the string dtypes: a coordinate that names ONE element accepts only a 0-d
         ///     value (<c>setting an array element with a sequence</c>, without the numeric message's trailing period —
@@ -94,13 +124,19 @@ namespace NumSharp.Backends
                 throw new ValueError($"could not broadcast input array from shape {Tuple(valueShape.dimensions)} into shape {Tuple(targetShape.dimensions)}");
             if (targetShape.size == 0)
             {
-                // NumPy converts the VALUE to this array's dtype before assigning (PyArray_FromAny with FORCECAST), so a value
-                // that cannot convert raises even when the target selects nothing (a[...] = 'é' into an empty S array). The
-                // conversion is run and discarded on this rare path only; a numeric value is the computational phase.
-                if (!value.Storage.IsString)
-                    throw NDStringCopy.MixedKinds(value.Storage, this);
-                if (value.dtype.Meta != Descr.Meta && value.size > 0)
-                    value.astype(Descr, true, 'K', "unsafe").Dispose();
+                // Nothing is written. NumPy assigns an ARRAY value with PyArray_AssignArray, which converts nothing for an
+                // empty target (np.zeros(0, 'S1')[...] = np.array(['é']) succeeds). A SCALAR value — a C# literal, NumPy's
+                // Python str — is first packed into this array's dtype (PyArray_Pack), so a text that cannot convert raises
+                // even when the target selects nothing (a[...] = 'é' into an empty S array): that conversion is run and
+                // discarded here. Parsing a text scalar into a number is the computational phase; formatting a number as
+                // text cannot fail, so a numeric value leaves nothing to report.
+                if (valueShape.IsScalar && value.Storage.IsString)
+                {
+                    if (!IsString)
+                        throw NDStringCopy.MixedKinds(value.Storage, this);
+                    if (value.dtype.Meta != Descr.Meta)
+                        value.astype(Descr, true, 'K', "unsafe").Dispose();
+                }
                 return;
             }
             Iteration.NDIter.Copy(target, source);

@@ -22,8 +22,9 @@ namespace NumSharp
         /// <exception cref="InvalidCastException">The cast from <c>&lt;U{len}</c> to the destination's dtype is not allowed:
         ///     <c>Cannot cast scalar from dtype('&lt;U6') to dtype('S3') according to the rule 'same_kind'</c>.</exception>
         /// <exception cref="UnicodeEncodeError">The text is not ASCII and the destination is <c>S</c>.</exception>
-        /// <exception cref="NotSupportedException">The destination is numeric and the rule allows the cast (parsing text
-        ///     into numbers is the computational phase of the string dtypes).</exception>
+        /// <exception cref="StringComputationNotSupportedException">The destination is numeric, the rule allows the cast and
+        ///     NumPy parses the text (a destination of more than one element, or one element the mask selects): parsing text
+        ///     into numbers is the computational phase of the string dtypes.</exception>
         /// <exception cref="ValueError">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</exception>
         /// <exception cref="TypeError">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</exception>
         /// <exception cref="ArgumentException">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</exception>
@@ -59,7 +60,9 @@ namespace NumSharp
         /// <exception cref="UnicodeEncodeError">A selected <c>U</c> element is not ASCII and the destination is <c>S</c>.</exception>
         /// <exception cref="UnicodeDecodeError">A selected <c>S</c> element is not ASCII and the destination is <c>U</c>.</exception>
         /// <exception cref="SystemError">A selected <c>U</c> element holds a unit above <c>U+10FFFF</c> and the destination is <c>S</c>.</exception>
-        /// <exception cref="NotSupportedException">An allowed cast between text and numbers (the computational phase).</exception>
+        /// <exception cref="StringComputationNotSupportedException">An allowed cast between text and numbers that NumPy would
+        ///     run on an element (the computational phase) — see <see cref="CopytoTextNumber"/>; an empty destination or a mask
+        ///     that selects nothing returns.</exception>
         /// <remarks>
         ///     <para><b>Which elements are converted.</b> NumPy's masked cast converts only the elements the mask selects, so a
         ///     non-ASCII element under a false mask is never encoded (no error); its unmasked cast — and the temporary copy of
@@ -85,9 +88,13 @@ namespace NumSharp
 
             if (!DTypeCasting.CanCastTypeTo(from, to, casting))
                 throw NDStringCasting.InvalidCast(from, to, casting, scalar);
-            // A cast the rule allows between text and numbers formats / parses values: the computational phase.
+            // A cast the rule allows between text and numbers formats / parses values: the computational phase — reached
+            // only after NumPy's shape checks, and only for elements NumPy converts.
             if (!src.Storage.IsString || !dst.Storage.IsString)
-                throw NDStringCasting.TextConversion(from, to);
+            {
+                CopytoTextNumber(dst, src, @where, from, to);
+                return;
+            }
 
             if (scalar)
             {
@@ -144,6 +151,73 @@ namespace NumSharp
 
             using var stage = CopytoStageStrings(dst, source, srcStrides);
             CopytoMaskedRaw(dst, CopytoData(stage), srcStrides, CopytoData(@where), maskStrides);
+        }
+
+        /// <summary>
+        ///     <c>PyArray_AssignArray</c> / <c>PyArray_AssignRawScalar</c> between text and numbers once the destination's
+        ///     writeability and the cast rule passed: NumPy's remaining checks run in its order, and the assignment is refused
+        ///     (the computational phase) only where NumPy's conversion has an observable effect — a PARSE of text into a
+        ///     number it runs (which can fail), or a WRITE of formatted text (formatting a number cannot fail, so an unwritten
+        ///     one is unobservable). An empty destination, or a mask that selects nothing, therefore returns, as in NumPy.
+        /// </summary>
+        /// <param name="dst">The destination (writeable).</param>
+        /// <param name="src">The source (string or numeric; the other kind than <paramref name="dst"/>).</param>
+        /// <param name="where">The validated bool mask, or <c>null</c>.</param>
+        /// <param name="from">The source descriptor.</param>
+        /// <param name="to">The destination descriptor.</param>
+        /// <exception cref="ValueError">The source or the mask does not broadcast to <paramref name="dst"/>
+        ///     (<c>could not broadcast input array from shape (2,) into shape (3,)</c>, <c>… where mask …</c>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">NumPy parses a text element — a 0-d text source into a
+        ///     destination of more than one element (parsed once, before the mask is read), an overlapping text source NumPy
+        ///     copies first — or writes a converted element the mask selects.</exception>
+        /// <remarks>
+        ///     NumPy's masked transfer converts only the selected runs (<c>_strided_masked_wrapper_transfer_function</c>), so a
+        ///     mask with no true element converts nothing; a mask that broadcasts to a non-empty destination maps every one of
+        ///     its elements to at least one destination element, so <c>any(where)</c> decides.
+        /// </remarks>
+        private static unsafe void CopytoTextNumber(NDArray dst, NDArray src, NDArray @where, DType from, DType to)
+        {
+            // Text into numbers parses (can fail, so every parse NumPy runs is the computational phase); numbers into text
+            // format (cannot fail, so only a write matters).
+            bool parses = src.Storage.IsString;
+            if (src.ndim == 0)
+            {
+                // AssignRawScalar: a destination of more than one element gets the scalar converted ONCE, before the mask.
+                if (dst.size > 1 && parses)
+                    throw NDStringCasting.TextConversion(from, to);
+                if (@where is not null)
+                    CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
+                        "where mask", stripLeadingUnitAxes: false);
+                // Nothing written (or, for one element, nothing converted inside the masked loop) when nothing is selected.
+                if (dst.size == 0 || (@where is not null && !np.any(@where)))
+                    return;
+                throw NDStringCasting.TextConversion(from, to);
+            }
+
+            // An overlapping source (two views of one buffer read as text and as numbers) is copied first by an UNMASKED
+            // conversion of every element — after its own broadcast check, so the broadcast error still comes first.
+            int dnd = dst.ndim;
+            bool overlapNeedsCopy =
+                ((dnd == 1 && dst.Shape.strides[0] * src.Shape.strides[src.ndim - 1] < 0) || dnd > 1)
+                && NDMemOverlap.SolveMayShareMemory(src, dst, 0) != MemOverlap.No;
+            CopytoBroadcastStrides(dst.Shape.dimensions, src.Shape.dimensions, src.Shape.strides, "input array",
+                stripLeadingUnitAxes: true);
+            if (overlapNeedsCopy && dst.size > 0 && parses)
+                throw NDStringCasting.TextConversion(from, to);
+
+            // "optimization: scalar boolean mask"
+            if (@where is not null && @where.ndim == 0)
+            {
+                if (!*(bool*)CopytoData(@where))
+                    return;
+                @where = null;
+            }
+            if (@where is not null)
+                CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides, "where mask",
+                    stripLeadingUnitAxes: false);
+            if (dst.size == 0 || (@where is not null && !np.any(@where)))
+                return;
+            throw NDStringCasting.TextConversion(from, to);
         }
 
         /// <summary>

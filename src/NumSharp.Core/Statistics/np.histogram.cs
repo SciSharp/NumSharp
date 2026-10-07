@@ -153,10 +153,21 @@ namespace NumSharp
             return HistogramBinEdgesImpl(a, (NDArray)np.array(bins), range, weights);
         }
 
+        /// <summary>
+        ///     <c>histogram_bin_edges</c>: NumPy's <c>_ravel_and_check_weights</c> then <c>_get_bin_edges</c>. Text data or text
+        ///     edges are answered inside those two steps, at the statement where NumPy's code first touches them (see
+        ///     <see cref="GetBinEdges"/>): explicit edges never read the data, so a text <paramref name="a"/> with numeric
+        ///     edges returns the edges.
+        /// </summary>
+        /// <param name="a">The data.</param>
+        /// <param name="bins">An <see cref="int"/>, an estimator name, or an <see cref="NDArray"/> (0-d count or 1-D edges).</param>
+        /// <param name="range">The optional outer edges.</param>
+        /// <param name="weights">The optional weights (shape-checked only).</param>
+        /// <returns>The bin edges.</returns>
+        /// <exception cref="ValueError">See <see cref="GetBinEdges"/>; a weights shape that differs from <paramref name="a"/>'s.</exception>
+        /// <exception cref="TypeError">See <see cref="GetBinEdges"/>.</exception>
         private static NDArray HistogramBinEdgesImpl(NDArray a, object bins, (double, double)? range, NDArray weights)
         {
-            // NumPy's automatic range starts with a.min(): minimum.reduce has no string loop.
-            if (Backends.Strings.NDStringUfuncs.IsString(a)) throw Backends.Strings.NDStringUfuncs.NoLoop("minimum", a.dtype, a.dtype);
             (NDArray raveled, NDArray w) = RavelAndCheckWeights(a, weights);
             return GetBinEdges(raveled, bins, range, w).Edges;
         }
@@ -245,13 +256,30 @@ namespace NumSharp
             return HistogramImpl(a, (NDArray)np.array(bins), range, density, weights);
         }
 
+        /// <summary>
+        ///     <c>histogram</c>: the edges as <see cref="HistogramBinEdgesImpl"/> finds them, then NumPy's equal-width
+        ///     (bincount) path or its cumulative (sort + searchsorted) path, then the optional density.
+        /// </summary>
+        /// <param name="a">The data.</param>
+        /// <param name="bins">An <see cref="int"/>, an estimator name, or an <see cref="NDArray"/> (0-d count or 1-D edges).</param>
+        /// <param name="range">The optional outer edges.</param>
+        /// <param name="density">Whether to normalize to a density.</param>
+        /// <param name="weights">The optional weights.</param>
+        /// <returns>The counts (or summed weights, or density) and the edges.</returns>
+        /// <exception cref="ValueError">See <see cref="GetBinEdges"/>; a weights shape that differs from <paramref name="a"/>'s.</exception>
+        /// <exception cref="TypeError">See <see cref="GetBinEdges"/> and <see cref="HistogramTextAnswer"/>.</exception>
+        /// <exception cref="StringComputationNotSupportedException">NumPy sorts or searches text to count (<see cref="HistogramTextAnswer"/>).</exception>
         private static HistogramResult HistogramImpl(NDArray a, object bins, (double, double)? range, bool density, NDArray weights)
         {
-            // NumPy's automatic range starts with a.min(): minimum.reduce has no string loop.
-            if (Backends.Strings.NDStringUfuncs.IsString(a)) throw Backends.Strings.NDStringUfuncs.NoLoop("minimum", a.dtype, a.dtype);
             (NDArray raveled, NDArray w) = RavelAndCheckWeights(a, weights);
             BinEdgesResult be = GetBinEdges(raveled, bins, range, w);
             NDArray binEdges = be.Edges;
+
+            // Text data, edges or weights only ever reach NumPy's cumulative path (text data never gets equal-width edges,
+            // text weights are never "simple"); its answers are decided by sizes and dtypes alone, or need text computation.
+            if (Backends.Strings.NDStringUfuncs.IsString(raveled) || Backends.Strings.NDStringUfuncs.IsString(binEdges)
+                || Backends.Strings.NDStringUfuncs.IsString(w))
+                return HistogramTextAnswer(raveled, w, binEdges, density);
 
             // ntype: int64 counts when unweighted, else the weights' dtype (NumPy: hist.dtype == weights.dtype).
             NPTypeCode ntype = w is null ? NPTypeCode.Int64 : w.typecode;
@@ -279,6 +307,67 @@ namespace NumSharp
                 return new HistogramResult(dens, binEdges);
             }
 
+            return new HistogramResult(n, binEdges);
+        }
+
+        /// <summary>
+        ///     NumPy's cumulative histogram path when the data, the edges or the weights are text — the only path text
+        ///     reaches. Every answer it can give without comparing text is given; the rest needs NumSharp's string
+        ///     computation.
+        /// </summary>
+        /// <param name="raveled">The raveled data.</param>
+        /// <param name="w">The raveled weights, or null.</param>
+        /// <param name="binEdges">The edges <see cref="GetBinEdges"/> returned (text ones have at most one element: two or more
+        ///     were compared there).</param>
+        /// <param name="density">Whether to normalize to a density.</param>
+        /// <returns>The counts (empty when there are at most one edge; zeros when there is no data) and the edges.</returns>
+        /// <exception cref="TypeError">Text weights: <c>ufunc 'subtract' did not contain a loop …</c> when there is no data
+        ///     (NumPy's <c>np.diff</c> of its text-typed running total), else NumPy's add.accumulate refusal (the weights'
+        ///     <c>cumsum</c>); text edges with <paramref name="density"/>: the bin widths' <c>subtract</c> refusal.</exception>
+        /// <exception cref="StringComputationNotSupportedException">There is data and at least two edges, with text data:
+        ///     NumPy sorts the data and searches it for every edge, comparing text.</exception>
+        /// <remarks>
+        ///     NumPy's loop runs once per 65536-element block of the data: with no data it never runs, so the running total
+        ///     stays <c>np.zeros(edges.shape, ntype)</c>. With at most one edge the counts are <c>np.diff</c> of at most one
+        ///     element, empty whatever the comparisons found — so those answers need no text computation. The sort and
+        ///     searches cannot raise; the first statement that can is the weights' <c>cumsum</c>, then the density's
+        ///     <c>np.diff(bin_edges)</c>.
+        /// </remarks>
+        private static HistogramResult HistogramTextAnswer(NDArray raveled, NDArray w, NDArray binEdges, bool density)
+        {
+            long nb = System.Math.Max(binEdges.size - 1, 0);
+            NDArray n;
+            if (w is null)
+            {
+                if (raveled.size > 0 && binEdges.size > 1)
+                    throw Backends.Strings.NDStringUfuncs.NextPhase("histogram", raveled);
+                n = np.zeros(Shape.Vector(nb), NPTypeCode.Int64);
+            }
+            else if (raveled.size == 0)
+            {
+                // cum_n = np.zeros(bin_edges.shape, weights.dtype); n = np.diff(cum_n): subtract has no text loop.
+                if (Backends.Strings.NDStringUfuncs.IsString(w))
+                    throw Backends.Strings.NDStringUfuncs.NoLoop("subtract", w.dtype, w.dtype);
+                n = np.zeros(Shape.Vector(nb), w.dtype);
+            }
+            else
+            {
+                // np.argsort / np.sort of the block cannot fail; `sw.cumsum()` is the first statement that can.
+                if (Backends.Strings.NDStringUfuncs.IsString(w))
+                    throw Backends.Strings.NDStringUfuncs.AddNotCompatible(w.dtype, "accumulate");
+                if (binEdges.size > 1)
+                    throw Backends.Strings.NDStringUfuncs.NextPhase("histogram", raveled);
+                n = np.zeros(Shape.Vector(nb), w.dtype);
+            }
+
+            if (density)
+            {
+                // db = np.array(np.diff(bin_edges), float): text edges have no subtract loop.
+                if (Backends.Strings.NDStringUfuncs.IsString(binEdges))
+                    throw Backends.Strings.NDStringUfuncs.NoLoop("subtract", binEdges.dtype, binEdges.dtype);
+                NDArray db = np.diff(binEdges).astype(NPTypeCode.Double);
+                return new HistogramResult(n / db / np.sum(n), binEdges);
+            }
             return new HistogramResult(n, binEdges);
         }
 
@@ -435,11 +524,34 @@ namespace NumSharp
         //  _get_bin_edges  (port of numpy/lib/_histograms_impl.py)
         // ---------------------------------------------------------------------
 
+        /// <summary>
+        ///     NumPy's <c>_get_bin_edges</c>: the edges (and, for equal-width bins, the outer edges and count) for an
+        ///     estimator name, a bin count, or explicit 1-D edges — in NumPy's statement order, which decides every error.
+        /// </summary>
+        /// <param name="a">The raveled data.</param>
+        /// <param name="bins">An estimator name, an <see cref="int"/>, or an <see cref="NDArray"/> (0-d count, 1-D edges).</param>
+        /// <param name="range">The optional outer edges.</param>
+        /// <param name="weights">The raveled weights, or null (an estimator refuses them).</param>
+        /// <returns>The edges, plus the equal-width parameters when computed.</returns>
+        /// <exception cref="ValueError">An unknown estimator; a count below 1; edges that are not 1-D or decrease; an invalid
+        ///     range; too many bins for the range.</exception>
+        /// <exception cref="TypeError">Weights with an estimator; a non-integer scalar <paramref name="bins"/>. Text data:
+        ///     its <c>a.min()</c> (<c>minimum</c> has no text loop) when no range is given and there is data; with a range and an
+        ///     estimator, the in-range mask's <c>greater_equal</c> against the Python float edge; otherwise the edges' dtype,
+        ///     <c>np.result_type(first_edge, last_edge, a)</c>, which has no common DType for text and Python numbers
+        ///     (<see cref="DTypePromotionError"/>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">Text edges of two or more elements: NumPy's monotonicity
+        ///     check compares them.</exception>
+        /// <remarks>
+        ///     Explicit edges never read the data, so text data with explicit edges gets its edges back here; the histogram's
+        ///     counting step decides the rest (<see cref="HistogramTextAnswer"/>).
+        /// </remarks>
         private static BinEdgesResult GetBinEdges(NDArray a, object bins, (double, double)? range, NDArray weights)
         {
             int? nEqualBins = null;
             NDArray binEdges = null;
             double first = 0, last = 0;
+            bool textData = Backends.Strings.NDStringUfuncs.IsString(a);
 
             if (bins is string binName)
             {
@@ -454,6 +566,11 @@ namespace NumSharp
                 NDArray x = a;
                 if (range.HasValue)
                 {
+                    // `keep = (a >= first_edge)` compares the data with a Python float: no loop for text, even with no data.
+                    if (textData)
+                        throw new TypeError(
+                            $"ufunc 'greater_equal' did not contain a loop with signature matching types ({a.dtype.Meta}, " +
+                            $"{DTypeRegistry.PyFloat}) -> None");
                     NDArray keep = (a >= NDArray.Scalar(first)) & (a <= NDArray.Scalar(last));
                     if (!AllTrue(keep))
                         x = a[keep];
@@ -482,7 +599,14 @@ namespace NumSharp
                 if (nd.ndim != 1)
                     throw new ValueError("`bins` must be 1d, when an array");
                 binEdges = nd;
-                if (AnyDecreasing(binEdges))
+                // `np.any(bin_edges[:-1] > bin_edges[1:])`: with fewer than two edges there is nothing to compare, so text
+                // edges pass as they are; two or more text edges are compared (string computation).
+                if (Backends.Strings.NDStringUfuncs.IsString(binEdges))
+                {
+                    if (binEdges.size > 1)
+                        throw Backends.Strings.NDStringUfuncs.NextPhase("greater", binEdges);
+                }
+                else if (AnyDecreasing(binEdges))
                     throw new ValueError("`bins` must increase monotonically, when an array");
             }
             else
@@ -497,6 +621,11 @@ namespace NumSharp
 
             if (nEqualBins.HasValue)
             {
+                // `bin_type = np.result_type(first_edge, last_edge, a)`: text data has no common DType with the weak
+                // Python edges (ints 0 / 1 for empty data, floats from a range), so NumPy's promotion error is the answer.
+                if (textData)
+                    ThrowTextEdgeType(a, range.HasValue);
+
                 // The edges' RESULT dtype (gh-10322): float16 for float16 input, float32 for float32, float64 for
                 // everything else — because the input array is in NumPy's result_type(first, last, a), so a weak
                 // endpoint never widens a strong float array. This is also the dtype the uniform fast-path kernel
@@ -523,6 +652,13 @@ namespace NumSharp
         ///     NumPy's <c>_get_outer_edges</c>: resolve the outer bin edges from <paramref name="range"/> or from
         ///     the data's min/max, expanding a degenerate zero-width range by ±0.5 and rejecting non-finite bounds.
         /// </summary>
+        /// <param name="a">The data (text data reaches only the range checks or the empty default without an error).</param>
+        /// <param name="range">The optional outer edges.</param>
+        /// <returns>The outer edges.</returns>
+        /// <exception cref="ValueError">A range whose lower edge exceeds its upper one, or a non-finite range or data range.</exception>
+        /// <exception cref="TypeError">Text data with no range and at least one element: <c>a.min()</c> has no text loop
+        ///     (<c>ufunc 'minimum' did not contain a loop with signature matching types (dtype('&lt;U2'), dtype('&lt;U2')) -&gt;
+        ///     None</c>).</exception>
         private static (double first, double last) GetOuterEdges(NDArray a, (double, double)? range)
         {
             double first, last;
@@ -537,6 +673,11 @@ namespace NumSharp
             else if (a.size == 0)
             {
                 first = 0; last = 1; // can't infer a range from no data
+            }
+            else if (Backends.Strings.NDStringUfuncs.IsString(a))
+            {
+                // `a.min()` is minimum.reduce, which has no text loop.
+                throw Backends.Strings.NDStringUfuncs.NoLoop("minimum", a.dtype, a.dtype);
             }
             else
             {
@@ -781,17 +922,39 @@ namespace NumSharp
             return (typed.Shape.IsContiguous && typed.Shape.offset == 0) ? typed : typed.copy();
         }
 
-        /// <summary>Interpret a scalar <c>bins</c> value (C# int or a 0-d integer array) as a bin count.</summary>
+        /// <summary>
+        ///     NumPy's <c>operator.index(bins)</c> for a scalar <c>bins</c>: a C# int, or a 0-d INTEGER array (a bool, float,
+        ///     complex or text 0-d array is not an index — NumPy 2 refuses <c>operator.index(np.array(True))</c> too).
+        /// </summary>
+        /// <param name="bins">The scalar bin spec.</param>
+        /// <returns>The bin count.</returns>
+        /// <exception cref="TypeError">Not an integer: <c>`bins` must be an integer, a string, or an array</c>.</exception>
         private static int AsBinCount(object bins)
         {
             if (bins is int i) return i;
-            if (bins is NDArray nd && nd.ndim == 0)
-            {
-                if (!nd.typecode.IsInteger() && nd.typecode != NPTypeCode.Boolean)
-                    throw new TypeError("`bins` must be an integer, a string, or an array");
+            if (bins is NDArray nd && nd.ndim == 0 && nd.typecode.IsInteger())
                 return (int)Convert.ToInt64(nd.GetAtIndex(0));
-            }
             throw new TypeError("`bins` must be an integer, a string, or an array");
+        }
+
+        /// <summary>
+        ///     NumPy's <c>np.result_type(first_edge, last_edge, a)</c> for text data: the outer edges are weak Python numbers
+        ///     (the ints <c>0</c> / <c>1</c> NumPy defaults to for empty data, or the floats of a range), and no common DType
+        ///     exists between them and text, so this always raises NumPy's promotion error.
+        /// </summary>
+        /// <param name="a">The text data.</param>
+        /// <param name="fromRange">True when the edges came from a range (Python floats), false for the empty-data defaults.</param>
+        /// <exception cref="DTypePromotionError">Always: <c>The DType &lt;class 'numpy.dtypes.StrDType'&gt; could not be promoted
+        ///     by &lt;class 'numpy.dtypes._PyLongDType'&gt;. …</c> (or <c>_PyFloatDType</c>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">Defensive: a promotion that succeeded (none does today).</exception>
+        private static void ThrowTextEdgeType(NDArray a, bool fromRange)
+        {
+            // Boxed C# integer / double literals are the weak Python ints / floats of DTypePromotion.ResultType.
+            if (fromRange)
+                DTypePromotion.ResultType(0.0, 1.0, a.dtype);
+            else
+                DTypePromotion.ResultType(0L, 1L, a.dtype);
+            throw Backends.Strings.NDStringUfuncs.NextPhase("histogram", a);
         }
 
         /// <summary>True when every element of the boolean mask is true (NumPy's <c>logical_and.reduce</c>).</summary>

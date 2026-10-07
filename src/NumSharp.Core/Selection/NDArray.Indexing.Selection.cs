@@ -65,12 +65,14 @@ namespace NumSharp
         /// <summary>
         ///     Normalizes an index array for fancy indexing.
         ///     NumPy accepts all integer types (int8/16/32/64, uint8/16/32/64) for indexing.
-        ///     Non-integer types (float, decimal, char, bool) raise IndexError.
+        ///     Non-integer types (float, decimal, char, bool, the string classes) raise IndexError.
         ///     We keep Int32/Int64 as-is; other integer types are converted to Int64.
         /// </summary>
         /// <param name="indices">The index array to normalize.</param>
         /// <returns>The normalized index array (Int32 or Int64).</returns>
-        /// <exception cref="IndexOutOfRangeException">When the index array is not an integer type.</exception>
+        /// <exception cref="IndexOutOfRangeException">When the index array is not an integer type, with NumPy's IndexError
+        ///     text (<c>arrays used as indices must be of integer (or boolean) type</c>); the type stays this legacy
+        ///     path's documented one.</exception>
         [MethodImpl(Inline)]
         protected static NDArray NormalizeIndexArray(NDArray indices)
         {
@@ -88,9 +90,9 @@ namespace NumSharp
                 tc == NPTypeCode.UInt32 || tc == NPTypeCode.UInt64)
                 return indices.astype(NPTypeCode.Int64, copy: true);
 
-            // Non-integer types are not valid for indexing (matches NumPy behavior)
-            throw new IndexOutOfRangeException(
-                $"arrays used as indices must be of integer type, got {indices.dtype.type.Name}");
+            // Non-integer types are not valid for indexing (matches NumPy behavior and NumPy's text; a string index
+            // array's dtype has no CLR element type to name, and NumPy names none).
+            throw new IndexOutOfRangeException("arrays used as indices must be of integer (or boolean) type");
         }
 
         /// <summary>

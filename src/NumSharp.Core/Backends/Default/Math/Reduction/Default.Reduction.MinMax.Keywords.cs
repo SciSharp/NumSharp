@@ -1468,7 +1468,13 @@ namespace NumSharp.Backends
 
             string funcname = NumPyMinMaxReduce.UfuncName(op);
             // 1. The reduce prologue, NumPy's order and texts (read-only out, mask dtype, axis, out rank, iterator shapes).
-            bool[] flags = ReductionArguments.Validate(a, axis, keepdims, @out, @where, funcname);
+            // Text in the input or the out: NumPy resolves the loop on (out, a) between the axis and the iterator's shape
+            // checks — maximum / minimum / fmax / fmin have no text loop, so that resolution is the answer.
+            ReductionArguments.ValidateParsedArguments(@out, @where);
+            bool[] flags = ReductionArguments.AxisFlags(a.ndim, axis);
+            if (Strings.NDStringUfuncs.IsString(a) || Strings.NDStringUfuncs.IsString(@out))
+                throw Strings.NDStringUfuncs.NoLoop(funcname, (@out ?? a).dtype, a.dtype);
+            ReductionArguments.ValidateOperands(a, flags, keepdims, @out, @where, funcname);
 
             // Python's where=True is no mask at all (the reduction skips the masked loop), while np.True_ is a mask — one
             // that needs initial=. C# spells both as a 0-d bool array (a `true` literal converts to one), so a 0-d true mask

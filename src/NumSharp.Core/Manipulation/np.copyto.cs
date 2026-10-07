@@ -432,17 +432,26 @@ namespace NumSharp
         /// <param name="casting">The casting level.</param>
         /// <exception cref="ValueError">A read-only destination, or a mask that does not broadcast.</exception>
         /// <exception cref="InvalidCastException">The cast is not allowed ("Cannot cast scalar from …").</exception>
+        /// <exception cref="StringComputationNotSupportedException">A string destination with an element the mask selects:
+        ///     formatting the number as text is the computational phase of the string dtypes.</exception>
         private static unsafe void CopytoAssignRawScalar(NDArray dst, byte* srcData, NPTypeCode srcType, NDArray @where, NPY_CASTING casting)
         {
             NumSharpException.ThrowIfNotWriteable(dst.Shape);
 
             // A number into a fixed-width string array: NumPy's descriptor rule decides first (int64 → <U5 is 'same_kind',
-            // so 'safe' raises its TypeError text); an allowed cast formats the number — the computational phase.
+            // so 'safe' raises its TypeError text); an allowed cast formats the number — the computational phase, observable
+            // only once an element is WRITTEN (formatting cannot fail): the mask's broadcast check still runs, and an empty
+            // destination or a mask that selects nothing returns, as in NumPy.
             if (dst.typecode == NPTypeCode.String)
             {
                 DType from = srcType;
                 if (!DTypeCasting.CanCastTypeTo(from, dst.dtype, casting))
                     throw NDStringCasting.InvalidCast(from, dst.dtype, casting, scalar: true);
+                if (@where is not null)
+                    CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
+                        "where mask", stripLeadingUnitAxes: false);
+                if (dst.size == 0 || (@where is not null && !np.any(@where)))
+                    return;
                 throw NDStringCasting.TextConversion(from, dst.dtype);
             }
 

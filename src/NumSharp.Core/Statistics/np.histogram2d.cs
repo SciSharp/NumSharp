@@ -164,9 +164,16 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>try: N = len(bins) except TypeError: N = 1</c> — a scalar bin count reports length 1;
-        ///     any sequence (or edge array) reports its element count.
+        ///     NumPy's <c>try: N = len(bins) except TypeError: N = 1</c> — a scalar bin count (or a 0-d array, which has no
+        ///     <c>len</c>) reports length 1; a sequence reports its element count and an array its FIRST dimension.
         /// </summary>
+        /// <param name="bins">The bin spec.</param>
+        /// <returns>NumPy's <c>N</c>.</returns>
+        /// <exception cref="ValueError">A bin spec of an unsupported C# type.</exception>
+        /// <remarks>
+        ///     <c>len</c> of a 2-D array is its row count, not its size: a <c>(2, k)</c> array is one edge row per dimension
+        ///     (histogramdd indexes it), where reading its size made it a shared edge array and failed.
+        /// </remarks>
         private static int BinsSeqLength(object bins) => bins switch
         {
             int => 1,
@@ -175,7 +182,7 @@ namespace NumSharp
             double[] a => a.Length,
             NDArray[] a => a.Length,
             object[] a => a.Length,
-            NDArray nd => nd.ndim == 0 ? 1 : (int)nd.size,
+            NDArray nd => nd.ndim == 0 ? 1 : checked((int)nd.Shape.dimensions[0]),
             _ => throw new ValueError("`bins` must be an int or a sequence")
         };
 

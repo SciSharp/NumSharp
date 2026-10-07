@@ -20,6 +20,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(arr))
                 return NDMatrixBoundary.Wrapped((arr, axis, typeCode, @out), static s => cumprod(s.arr, s.axis, s.typeCode, s.@out), @out);
+            // Text (input or out=): multiply.accumulate's loop on (out, arr) answers after the axis (ReduceOutError); without
+            // out= the engine's guard answers (ReduceError).
+            Backends.Strings.NDStringUfuncs.ThrowIfReduce("cumprod", arr, axis, @out, typeCode);
             NDArray result = arr.TensorEngine.ReduceCumMul(arr, axis, typeCode);
             return WriteScanToOut(result, @out);
         }

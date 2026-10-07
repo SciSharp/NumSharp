@@ -167,6 +167,34 @@ np.sum(names, 9);   // AxisError: axis 9 is out of bounds for array of dimension
 
 An unsized string `dtype=` request (`"U"`, `"S"`) gets NumPy's answer too. `np.sqrt(x, dtype: "U")` names no loop. `np.add(x, x, dtype: "U")` is the next phase, because NumPy formats the numbers as text and concatenates them.
 
+### When the shape decides the answer
+
+Some calls that compute on text in NumPy never read a character, because the shape or the dtypes decide the result. NumSharp gives those answers now:
+
+- **An empty array.** Truth tests, counts, index searches, sorts, `np.unique`, `np.isin`, the set routines and the binary ufuncs return NumPy's empty or identity result.
+- **Lines of one element.** A sort, a partition or an arg-reduction over lines of one element compares nothing.
+- **A pair with no comparison loop.** Text against numbers is never equal, so `np.isin` and `np.array_equal` return `False`.
+
+```csharp
+var empty = np.zeros(new Shape(0L, 3L), "U2");
+np.any(empty);                                  // False
+np.argmax(np.array(new[,] { { "b" }, { "a" } }), 1);   // [0 0]
+np.isin(names, np.array(new[] { 1.5, 2.0 }));   // [False False False]
+np.array_equal(names, np.zeros(new Shape(3L))); // False
+```
+
+The same calls over text that NumPy compares stay in the next phase.
+
+`np.place` and `np.putmask` follow NumPy's two value forms. A C# array is a Python list: NumSharp converts it straight into the target's dtype. An `NDArray` must cast to the target's dtype under the `'safe'` rule, as in NumPy:
+
+```csharp
+var a = np.arange(5).astype(np.int32);
+var mask = np.ones(new Shape(5L), np.@bool);
+np.place(a, mask, new[] { 1.9, 2.9 });            // a list: [1 2 1 2 1]
+np.place(a, mask, np.array(new[] { 1.9, 2.9 }));  // InvalidCastException (NumPy's TypeError):
+                                                  // Cannot cast array data from dtype('float64') to dtype('int32') according to the rule 'safe'
+```
+
 Until the next phase, convert to .NET and compute there. For example, `NDArray.AsStringArray(names).Select(s => s.ToUpper())`.
 
 ---

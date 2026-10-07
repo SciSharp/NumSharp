@@ -56,7 +56,22 @@ namespace NumSharp
         /// <param name="repeats">Repeat counts. Either a 0-d/size-1 array (broadcast) or a 1-D array of length equal to <c>a.size</c> (axis=None) or <c>a.shape[axis]</c>.</param>
         /// <param name="axis">Axis along which to repeat. <c>null</c> flattens the input.</param>
         /// <returns>A new array with elements repeated according to <paramref name="repeats"/>.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="repeats"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="repeats"/> has more than one dimension (<c>object too deep for desired
+        ///     array</c>, checked first).</exception>
+        /// <exception cref="TypeError"><paramref name="repeats"/> does not cast 'safely' to int64 — uint64, a float, complex,
+        ///     decimal or text (<c>Cannot cast array data from dtype('float64') to dtype('int64') according to the rule
+        ///     'safe'</c>; <c>Cannot cast scalar …</c> for a 0-d repeats).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="ArgumentException">The repeats' length does not match, or a count is negative.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
+        ///     <para>
+        ///     NumPy converts the repeats with <c>PyArray_ContiguousFromAny(repeats, NPY_INTP, 0, 1)</c> before it reads the axis:
+        ///     the rank (at most 1) first, then the 'safe' cast — so a 2-D repeats is the rank's ValueError whatever its dtype,
+        ///     and both precede an out-of-range axis. (A 2-D repeats used to be flattened.)
+        ///     </para>
+        /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // calculating overload: reclaims the ravel temps
         public static NDArray repeat(NDArray a, NDArray repeats, int? axis = null)
@@ -69,9 +84,14 @@ namespace NumSharp
             if (repeats is null)
                 throw new ArgumentNullException(nameof(repeats));
 
-            // NumPy parity: repeats must be safely castable to int64 — reject float/complex/uint64.
+            // NumPy parity: the repeats' rank is checked before its dtype (PyArray_FromAny's depth check, then the cast).
+            if (repeats.ndim > 1)
+                throw new ValueError("object too deep for desired array");
+            // ...and must cast safely to int64 — reject float/complex/uint64/decimal/text (a 0-d repeats is a "scalar").
             if (!IsSafeToInt64(repeats.GetTypeCode))
-                throw new TypeError($"Cannot cast array data from {repeats.dtype.ToString(true)} to dtype('int64') according to the rule 'safe'");
+                throw new TypeError(
+                    $"Cannot cast {(repeats.ndim == 0 ? "scalar" : "array data")} from {repeats.dtype.ToString(true)} to " +
+                    "dtype('int64') according to the rule 'safe'");
 
             if (axis is null)
                 return RepeatPerElementFlat(a, repeats);

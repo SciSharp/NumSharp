@@ -23,26 +23,50 @@ namespace NumSharp
         /// <param name="bins">1-D monotonic (increasing or decreasing) array of bin edges.</param>
         /// <param name="right">Whether the intervals include the right or the left bin edge. Default is left-closed (false).</param>
         /// <returns>Array of int64 indices, of the same shape as <paramref name="x"/>.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.digitize.html</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> or <paramref name="bins"/> is null.</exception>
+        /// <exception cref="IncorrectTypeException"><paramref name="x"/> is complex (<c>x may not be complex</c>, checked first).</exception>
+        /// <exception cref="ValueError"><paramref name="bins"/> is not 1-D (<c>object too deep for desired array</c> /
+        ///     <c>object of too small depth for desired array</c>), or, after the cast below, not monotonic (<c>bins must be
+        ///     monotonically increasing or decreasing</c>).</exception>
+        /// <exception cref="InvalidCastException"><paramref name="bins"/> does not cast 'safely' to float64 (text or complex;
+        ///     NumPy's TypeError text).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A text <paramref name="x"/> with elements to search among
+        ///     non-empty bins: NumPy compares the keys as text against the bins converted to text (the computational
+        ///     phase).</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.digitize.html
+        ///     <para>
+        ///     <b>Check order (NumPy's).</b> A complex x first; then <c>_monotonicity(bins)</c>, whose
+        ///     <c>PyArray_FROMANY(bins, NPY_DOUBLE, 1, 1)</c> checks the bins' rank before their 'safe' cast to float64; then the
+        ///     monotonicity; then <c>searchsorted</c>. So a text x is only reached once the (numeric) bins passed — and when x has
+        ///     no elements, or the bins are empty, NumPy's answer needs no comparison: an empty int64 array, or all zeros.
+        ///     </para>
+        /// </remarks>
         [NDScoped]
         public static NDArray digitize(NDArray x, NDArray bins, bool right = false)
         {
             using var plain = NDMatrixBoundary.PlainFor(x, bins);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (x is null) throw new ArgumentNullException(nameof(x));
             if (bins is null) throw new ArgumentNullException(nameof(bins));
-            // NumPy checks the bins' monotonicity in float64 (a 'safe' cast text refuses, its verbatim TypeError); string x
-            // against numeric bins is searched as text (the next phase of the string support).
-            if (Backends.Strings.NDStringUfuncs.IsString(bins)) throw new InvalidCastException($"Cannot cast array data from {bins.dtype.ToString(true)} to dtype('float64') according to the rule 'safe'");
-            if (Backends.Strings.NDStringUfuncs.IsString(x)) throw Backends.Strings.NDStringUfuncs.NextPhase("digitize", x);
 
             // NumPy checks a complex `x` first, before any bins validation (TypeError).
             if (x.typecode == NPTypeCode.Complex)
                 throw new IncorrectTypeException("x may not be complex");
 
-            // NumPy: mono = _monotonicity(bins); raise if not monotonic.
+            // NumPy: mono = _monotonicity(bins) — rank, then the 'safe' float64 cast, then the check; raise if not monotonic.
             int mono = BinsMonotonicity(bins);
             if (mono == 0)
-                throw new ArgumentException("bins must be monotonically increasing or decreasing");
+                throw new ValueError("bins must be monotonically increasing or decreasing");
+
+            // A text x is searched as text (searchsorted promotes the numeric bins to a string dtype). With no key, or no bin
+            // edge, nothing is compared: NumPy returns int64 indices of x's shape — all zero for empty bins (every key's
+            // insertion point), none for an empty x (a decreasing-bins `len(bins) - result` keeps both).
+            if (Backends.Strings.NDStringUfuncs.IsString(x))
+            {
+                if (x.size == 0 || bins.size == 0)
+                    return np.zeros(Shape.Adopt((long[])x.Shape.dimensions.Clone()), NPTypeCode.Int64);
+                throw Backends.Strings.NDStringUfuncs.NextPhase("digitize", x);
+            }
 
             // The side is reversed relative to `right` because searchsorted's operands are swapped
             // (numpy.digitize: side = 'left' if right else 'right').
@@ -77,13 +101,23 @@ namespace NumSharp
         ///     rest with strict &lt;/&gt; — so a NaN pair (all comparisons false) never registers a violation,
         ///     exactly matching NumPy (e.g. <c>[1,2,nan,3]</c> is reported increasing).
         /// </summary>
+        /// <param name="bins">The bin edges.</param>
+        /// <returns>+1 (increasing / all equal / empty), -1 (decreasing) or 0 (not monotonic).</returns>
+        /// <exception cref="ValueError">The bins are not 1-D (checked before the dtype, as <c>PyArray_FromAny</c> does).</exception>
+        /// <exception cref="InvalidCastException">The bins are text or complex: NumPy's 'safe' cast to float64 refuses them
+        ///     (<c>Cannot cast array data from dtype('&lt;U2') to dtype('float64') according to the rule 'safe'</c>). A complex
+        ///     bins array used to lose its imaginary part silently.</exception>
         private static unsafe int BinsMonotonicity(NDArray bins)
         {
             // PyArray_FROMANY(..., 1, 1) rejects 0-D and >1-D with these verbatim messages.
             if (bins.ndim == 0)
-                throw new ArgumentException("object of too small depth for desired array");
+                throw new ValueError("object of too small depth for desired array");
             if (bins.ndim > 1)
-                throw new ArgumentException("object too deep for desired array");
+                throw new ValueError("object too deep for desired array");
+            // ...and then casts under 'safe' (no FORCECAST in NPY_ARRAY_CARRAY_RO): text and complex refuse.
+            if (Backends.Strings.NDStringUfuncs.IsString(bins) || bins.typecode == NPTypeCode.Complex)
+                throw new InvalidCastException(
+                    $"Cannot cast array data from {bins.dtype.ToString(true)} to dtype('float64') according to the rule 'safe'");
 
             // Forced to a contiguous, offset-0, C-order double buffer (as NumPy does for the check).
             NDArray d = bins.typecode == NPTypeCode.Double ? bins : bins.astype(NPTypeCode.Double);

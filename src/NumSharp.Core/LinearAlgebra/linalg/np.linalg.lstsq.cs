@@ -52,6 +52,8 @@ namespace NumSharp
                     throw new LinAlgError("Incompatible dimensions");
 
                 var common = CommonType(a, b2);
+                // NumPy calls _umath_linalg.lstsq(a, b, rcond): its input casts refuse text (input 0, then input 1).
+                ThrowIfTextGufunc("lstsq", a, b2);
                 // The condition number and singular values are always real (NumPy's result_real_t).
                 var realCommon = common == NPTypeCode.Complex ? NPTypeCode.Double : common;
 

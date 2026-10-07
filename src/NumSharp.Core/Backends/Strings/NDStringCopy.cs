@@ -55,12 +55,11 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="UnicodeEncodeError">A <c>U → S</c> copy meets a code point at or above 128.</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S → U</c> copy meets a byte at or above <c>0x80</c>.</exception>
         /// <exception cref="SystemError">A <c>U → S</c> copy meets a unit above <c>U+10FFFF</c>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">One operand is numeric (number ↔ text conversion is not part of this phase).</exception>
+        /// <exception cref="StringComputationNotSupportedException">One operand is numeric and the destination has elements
+        ///     (number ↔ text conversion is not part of this phase). An EMPTY destination converts nothing, so it returns
+        ///     after the writeability and broadcast checks, as NumPy's raw assignment does.</exception>
         public static void Copy(UnmanagedStorage dst, UnmanagedStorage src)
         {
-            if (!dst.IsString || !src.IsString)
-                throw MixedKinds(src, dst);
-
             NumSharpException.ThrowIfNotWriteable(dst.Shape);
             // Validate the broadcast at the STRING level so a mismatch reports the arrays' own shapes, not the unit
             // views' (which carry one extra axis).
@@ -68,6 +67,10 @@ namespace NumSharp.Backends.Strings
                 np.broadcast_to(src.Shape, dst.Shape);
             if (dst.Shape.size == 0)
                 return;
+            // Numbers <-> text: NumPy reaches the per-element conversion only now (after the shape checks, with an element
+            // to convert) — formatting / parsing values is the computational phase.
+            if (!dst.IsString || !src.IsString)
+                throw MixedKinds(src, dst);
 
             var dSlice = dst.StringSlice;
             var sSlice = src.StringSlice;

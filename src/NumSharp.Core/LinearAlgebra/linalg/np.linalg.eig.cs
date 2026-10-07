@@ -153,6 +153,8 @@ namespace NumSharp
                 char uplo = RequireUplo(UPLO);
                 AssertStackedSquare(a);
                 var common = CommonType(a);
+                // NumPy calls _umath_linalg.eigh_lo / eigh_up: its input cast refuses text.
+                ThrowIfTextGufunc(uplo == 'U' ? "eigh_up" : "eigh_lo", a);
                 return a.TensorEngine.Eigh(ToCommon(a, common), uplo, computeVectors: true);
             }
 
@@ -167,6 +169,8 @@ namespace NumSharp
                 char uplo = RequireUplo(UPLO);
                 AssertStackedSquare(a);
                 var common = CommonType(a);
+                // NumPy calls _umath_linalg.eigvalsh_lo / eigvalsh_up: its input cast refuses text.
+                ThrowIfTextGufunc(uplo == 'U' ? "eigvalsh_up" : "eigvalsh_lo", a);
                 return a.TensorEngine.Eigh(ToCommon(a, common), uplo, computeVectors: false).eigenvalues;
             }
 

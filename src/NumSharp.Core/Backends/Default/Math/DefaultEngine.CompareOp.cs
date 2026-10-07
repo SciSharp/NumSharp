@@ -25,9 +25,11 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal unsafe NDArray<bool> ExecuteComparisonOp(NDArray lhs, NDArray rhs, ComparisonOp op)
         {
-            // Two strings of one class compare their text (the next phase of the string support); any other pair with a
-            // string operand has no comparison loop (NumPy's class-named UFuncTypeError).
-            Strings.NDStringUfuncs.ThrowIfBinary(UfuncName(op), lhs, rhs);
+            // Two strings of one class compare their text (the next phase of the string support, except an empty result,
+            // which compares nothing and is returned); any other pair with a string operand has no comparison loop (NumPy's
+            // class-named UFuncTypeError).
+            if (Strings.NDStringUfuncs.BinaryGuard(UfuncName(op), lhs, rhs) is { } textResult)
+                return textResult.AsGeneric<bool>();
 
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
@@ -370,7 +372,8 @@ namespace NumSharp.Backends
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "equal", lhs, rhs, @out, where);
             ValidateBoolLoopDtype(typeCode, "equal");
             // Two strings of one class compare their text (the next phase); any other pair with a string has no loop.
-            Strings.NDStringUfuncs.ThrowIfBinary("equal", lhs, rhs, @out, typeCode, where);
+            if (Strings.NDStringUfuncs.BinaryGuard("equal", lhs, rhs, @out, typeCode, where) is { } textResult)
+                return textResult;
             if (@out is null && where is null)
                 return ExecuteComparisonOp(lhs, rhs, ComparisonOp.Equal);
             return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.Equal, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
@@ -381,7 +384,8 @@ namespace NumSharp.Backends
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "not_equal", lhs, rhs, @out, where);
             ValidateBoolLoopDtype(typeCode, "not_equal");
             // Two strings of one class compare their text (the next phase); any other pair with a string has no loop.
-            Strings.NDStringUfuncs.ThrowIfBinary("not_equal", lhs, rhs, @out, typeCode, where);
+            if (Strings.NDStringUfuncs.BinaryGuard("not_equal", lhs, rhs, @out, typeCode, where) is { } textResult)
+                return textResult;
             if (@out is null && where is null)
                 return ExecuteComparisonOp(lhs, rhs, ComparisonOp.NotEqual);
             return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.NotEqual, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
@@ -392,7 +396,8 @@ namespace NumSharp.Backends
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "less", lhs, rhs, @out, where);
             ValidateBoolLoopDtype(typeCode, "less");
             // Two strings of one class compare their text (the next phase); any other pair with a string has no loop.
-            Strings.NDStringUfuncs.ThrowIfBinary("less", lhs, rhs, @out, typeCode, where);
+            if (Strings.NDStringUfuncs.BinaryGuard("less", lhs, rhs, @out, typeCode, where) is { } textResult)
+                return textResult;
             if (@out is null && where is null)
                 return ExecuteComparisonOp(lhs, rhs, ComparisonOp.Less);
             return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.Less, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
@@ -403,7 +408,8 @@ namespace NumSharp.Backends
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "less_equal", lhs, rhs, @out, where);
             ValidateBoolLoopDtype(typeCode, "less_equal");
             // Two strings of one class compare their text (the next phase); any other pair with a string has no loop.
-            Strings.NDStringUfuncs.ThrowIfBinary("less_equal", lhs, rhs, @out, typeCode, where);
+            if (Strings.NDStringUfuncs.BinaryGuard("less_equal", lhs, rhs, @out, typeCode, where) is { } textResult)
+                return textResult;
             if (@out is null && where is null)
                 return ExecuteComparisonOp(lhs, rhs, ComparisonOp.LessEqual);
             return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.LessEqual, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
@@ -414,7 +420,8 @@ namespace NumSharp.Backends
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "greater", lhs, rhs, @out, where);
             ValidateBoolLoopDtype(typeCode, "greater");
             // Two strings of one class compare their text (the next phase); any other pair with a string has no loop.
-            Strings.NDStringUfuncs.ThrowIfBinary("greater", lhs, rhs, @out, typeCode, where);
+            if (Strings.NDStringUfuncs.BinaryGuard("greater", lhs, rhs, @out, typeCode, where) is { } textResult)
+                return textResult;
             if (@out is null && where is null)
                 return ExecuteComparisonOp(lhs, rhs, ComparisonOp.Greater);
             return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.Greater, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
@@ -425,7 +432,8 @@ namespace NumSharp.Backends
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "greater_equal", lhs, rhs, @out, where);
             ValidateBoolLoopDtype(typeCode, "greater_equal");
             // Two strings of one class compare their text (the next phase); any other pair with a string has no loop.
-            Strings.NDStringUfuncs.ThrowIfBinary("greater_equal", lhs, rhs, @out, typeCode, where);
+            if (Strings.NDStringUfuncs.BinaryGuard("greater_equal", lhs, rhs, @out, typeCode, where) is { } textResult)
+                return textResult;
             if (@out is null && where is null)
                 return ExecuteComparisonOp(lhs, rhs, ComparisonOp.GreaterEqual);
             return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.GreaterEqual, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);

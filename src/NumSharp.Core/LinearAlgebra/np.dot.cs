@@ -34,6 +34,9 @@
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a, b))
                 return NDMatrixBoundary.Wrapped((a, b, @out), static s => dot(s.a, s.b, s.@out), @out);
+            // Text: NumPy's alignment, out= and item-size answers, in its order (the engine call would report the item
+            // size before looking at out=).
+            Backends.Strings.NDStringUfuncs.ThrowIfProduct(a, b, @out);
             var result = a.TensorEngine.Dot(a, b);
             if (@out is null)
                 return result;

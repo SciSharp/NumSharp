@@ -24,10 +24,11 @@ namespace NumSharp
         ///     shape as <paramref name="indices"/>. Element dtype is always
         ///     <see cref="NPTypeCode.Int64"/>.
         /// </returns>
-        /// <exception cref="ArgumentException">
-        ///     <paramref name="shape"/> is empty, has non-positive dims, or the dims'
-        ///     product overflows int64.
-        /// </exception>
+        /// <exception cref="ArgumentException"><paramref name="shape"/> is empty, or <paramref name="order"/> is invalid.</exception>
+        /// <exception cref="ValueError">The dims' product overflows int64 or is exactly -1 (NumPy's <c>dimensions are too
+        ///     large; …</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="indices"/> is neither integer nor bool (<c>only int indices
+        ///     permitted</c>; floats are refused, never truncated, and text is refused, never parsed).</exception>
         /// <exception cref="ArgumentOutOfRangeException">
         ///     Any index in <paramref name="indices"/> is &lt; 0 or
         ///     &gt;= product of <paramref name="shape"/>.
@@ -44,6 +45,7 @@ namespace NumSharp
             using var plain = NDMatrixBoundary.PlainFor(indices);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             ValidateOrder(order, nameof(order));
             ValidateShapeForUnravel(shape, out long unravelSize);
+            ThrowIfNotIntIndices(indices);
 
             int ndim = shape.Length;
 
@@ -167,6 +169,15 @@ namespace NumSharp
                 throw new ArgumentException($"only 'C' or 'F' order is permitted, got '{order}'", paramName);
         }
 
+        /// <summary>
+        ///     The shape checks of NumPy's <c>unravel_index</c>: at least one dimension (a NumSharp restriction), then the
+        ///     product of the dimensions as <c>PyArray_OverflowMultiplyList</c> computes it.
+        /// </summary>
+        /// <param name="shape">The shape.</param>
+        /// <param name="unravelSize">The product (0 as soon as a dimension is 0; negative dimensions multiply in).</param>
+        /// <exception cref="ArgumentException"><paramref name="shape"/> is null or empty.</exception>
+        /// <exception cref="ValueError">The product overflows int64, or is exactly -1 — NumPy's overflow sentinel, so shape
+        ///     <c>(-1,)</c> is refused too (<c>dimensions are too large; …</c>).</exception>
         private static void ValidateShapeForUnravel(int[] shape, out long unravelSize)
         {
             if (shape == null || shape.Length == 0)
@@ -179,22 +190,50 @@ namespace NumSharp
             // shape with zero or negative entries, unravelSize ≤ 0, so every
             // non-negative index trips the check and we throw the same message
             // NumPy does: "index N is out of bounds for array with size M".
+            // NumPy's PyArray_OverflowMultiplyList: a zero dimension ends the product at 0 (later dimensions are not even
+            // multiplied); an overflow returns -1 — and so does a product that IS -1 (shape (-1,)), which NumPy cannot tell
+            // apart and refuses with the same text.
             long s = 1L;
+            bool overflow = false;
             for (int d = 0; d < shape.Length; d++)
             {
                 long dim = shape[d];
-
-                // Overflow check on accumulated size — only meaningful for positive
-                // dims (with mixed signs the int64 math is well-defined and the OOB
-                // check downstream catches any inconsistency).
+                if (dim == 0)
+                {
+                    s = 0;
+                    break;
+                }
                 long next = unchecked(s * dim);
-                if (dim != 0 && s != 0 && next / dim != s)
-                    throw new ArgumentException(
-                        "invalid shape: array size defined by shape is larger than the maximum possible size.",
-                        nameof(shape));
+                if (next / dim != s)
+                {
+                    overflow = true;
+                    break;
+                }
                 s = next;
             }
+            if (overflow || s == -1)
+                throw new ValueError(
+                    "dimensions are too large; arrays and shapes with a total size greater than 'intp' are not supported.");
             unravelSize = s;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>astype_anyint</c>: index arrays must hold integers or bools — a float, complex, decimal or text array
+        ///     is refused rather than truncated or parsed.
+        /// </summary>
+        /// <param name="indices">The index (or coordinate) array.</param>
+        /// <exception cref="TypeError">Not integer or bool: <c>only int indices permitted</c>.</exception>
+        /// <remarks>
+        ///     NumSharp used to cast any dtype to int64 (<c>unravel_index(np.array(new[] { 1.7 }), …)</c> read index 1) and to
+        ///     defer text to the next phase; NumPy refuses both before reading an element. NumSharp's char counts as an
+        ///     integer (its uint16 storage).
+        /// </remarks>
+        internal static void ThrowIfNotIntIndices(NDArray indices)
+        {
+            NPTypeCode t = indices.typecode;
+            if (t == NPTypeCode.Boolean || t == NPTypeCode.Char || t.IsInteger())
+                return;
+            throw new TypeError("only int indices permitted");
         }
     }
 }

@@ -93,7 +93,9 @@ namespace NumSharp
         /// <param name="value">A <see cref="string"/>, a <c>byte[]</c>, a <see cref="char"/>, or a 0-d array.</param>
         /// <exception cref="ArgumentNullException"><paramref name="value"/> is null (the house convention of
         ///     <see cref="fill"/>).</exception>
-        /// <exception cref="ValueError">A multi-element array (<c>setting an array element with a sequence.</c>).</exception>
+        /// <exception cref="ValueError">An array of one or more dimensions, of any size and dtype (<c>setting an array
+        ///     element with a sequence</c> — WITHOUT the period NumPy's numeric targets put there: its string pack path
+        ///     words it differently, probed 2.4.2).</exception>
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into a bytes (<c>S</c>) array.</exception>
         /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into a str (<c>U</c>) array.</exception>
         /// <exception cref="StringComputationNotSupportedException">A number (NumPy stores its text).</exception>
@@ -103,8 +105,9 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(value));
             if (value is NDArray nd)
             {
+                // A one-element 1-D array is a sequence too: PyArray_Pack takes only a 0-d value.
                 if (nd.ndim != 0)
-                    throw new ValueError("setting an array element with a sequence.");
+                    throw new ValueError("setting an array element with a sequence");
                 // The string copy route converts the 0-d value (S <-> U with the ASCII checks, truncation) or refuses a
                 // numeric one; it runs only when there is an element to write.
                 if (size > 0)

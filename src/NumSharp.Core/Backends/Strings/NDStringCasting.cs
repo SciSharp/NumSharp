@@ -43,7 +43,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="UnicodeDecodeError"><c>S → U</c> meets a byte at or above <c>0x80</c>.</exception>
         /// <exception cref="SystemError"><c>U → S</c> meets a unit above <c>U+10FFFF</c>.</exception>
         /// <exception cref="StringComputationNotSupportedException">The cast is allowed but converts between text and numbers / dates
-        ///     (the computational phase).</exception>
+        ///     (the computational phase) and the array has elements; an empty array converts to an empty result.</exception>
         public static NDArray AsType(NDArray src, DType dtype, bool copy, char order, string casting)
         {
             // npy_parse_arguments: the casting and order converters run before the dtype is adapted. astype's converter
@@ -74,7 +74,10 @@ namespace NumSharp.Backends.Strings
             if (!DTypeCasting.CanCastTypeTo(from, to, rule))
                 throw InvalidCast(from, to, rule, src.ndim == 0);
 
-            if (!(from.Meta is StringDTypeMeta) || !(to.Meta is StringDTypeMeta))
+            // Formatting numbers as text or parsing text as numbers is the computational phase — unless the array has no
+            // element: NumPy then allocates the result and converts nothing (np.zeros(0, 'U2').astype(np.float64) is an
+            // empty float64 array), which the copy route below does for an empty array of any dtype.
+            if ((!(from.Meta is StringDTypeMeta) || !(to.Meta is StringDTypeMeta)) && src.size != 0)
                 throw TextConversion(from, to);
 
             return NDIter.CopyAs(to, src, order);

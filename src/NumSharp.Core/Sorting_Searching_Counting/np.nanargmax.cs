@@ -38,6 +38,9 @@ namespace NumSharp
         /// <returns>Array of int64 indices (or a 0-d scalar for the flattened form); <paramref name="out"/> when given.</returns>
         /// <exception cref="ValueError">All-NaN slice encountered.</exception>
         /// <exception cref="AxisError">Axis out of bounds (reports the original axis, like NumPy).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A string array whose lines hold two or more elements: it is
+        ///     <c>np.argmax</c> / <c>np.argmin</c> of the text, which NumPy compares (the next phase of NumSharp's string
+        ///     support). An empty result or lines of one element give their zero indices (<paramref name="out"/> included).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanargmax.html</remarks>
         [NDScoped]
         public static NDArray nanargmax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
@@ -48,6 +51,16 @@ namespace NumSharp
             // Boundary scope: reclaims the NaN mask, the all-NaN-guard reductions and the replaced
             // copy; the result (or the caller's @out — untracked, a Returns no-op) is yielded.
             ValidateNanArgAxis(a, axis);
+            // Text: no NaN mask (not inexact), so NumPy's argmax runs its checks — the empty length, then out= — before it
+            // compares the text. Where it compares nothing (an empty result, lines of one element) the bool stand-in of the
+            // same shape computes the zeros, out= included.
+            if (Backends.Strings.NDStringUfuncs.IsString(a))
+            {
+                if (NanArgTextAnswer(a, axis, @out, keepdims, "argmax") is { } refusal)
+                    throw refusal;
+                using var standIn = Backends.Strings.NDStringUfuncs.BoolStandIn(a);
+                return nanargmax(standIn, axis, @out, keepdims);
+            }
             var prepared = NanArgReplace(a, double.NegativeInfinity, axis);
             var res = prepared.TensorEngine.ReduceArgMax(prepared, axis, keepdims);
             return NanArgWriteOut(res, @out, "argmax");
@@ -84,6 +97,9 @@ namespace NumSharp
         /// <returns>Array of int64 indices (or a 0-d scalar for the flattened form); <paramref name="out"/> when given.</returns>
         /// <exception cref="ValueError">All-NaN slice encountered.</exception>
         /// <exception cref="AxisError">Axis out of bounds (reports the original axis, like NumPy).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A string array whose lines hold two or more elements: it is
+        ///     <c>np.argmax</c> / <c>np.argmin</c> of the text, which NumPy compares (the next phase of NumSharp's string
+        ///     support). An empty result or lines of one element give their zero indices (<paramref name="out"/> included).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanargmin.html</remarks>
         [NDScoped]
         public static NDArray nanargmin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
@@ -93,6 +109,15 @@ namespace NumSharp
                 return NDMatrixBoundary.Reduced((a, axis, @out, keepdims), static s => nanargmin(s.a, s.axis, s.@out, s.keepdims), axis, keepdims, null);
             // Boundary scope (see nanargmax(NDArray, int?, NDArray, bool)).
             ValidateNanArgAxis(a, axis);
+            // Text: NumPy's argmin checks the empty length and out= before it compares (see nanargmax); a shape that
+            // compares nothing runs on the bool stand-in.
+            if (Backends.Strings.NDStringUfuncs.IsString(a))
+            {
+                if (NanArgTextAnswer(a, axis, @out, keepdims, "argmin") is { } refusal)
+                    throw refusal;
+                using var standIn = Backends.Strings.NDStringUfuncs.BoolStandIn(a);
+                return nanargmin(standIn, axis, @out, keepdims);
+            }
             var prepared = NanArgReplace(a, double.PositiveInfinity, axis);
             var res = prepared.TensorEngine.ReduceArgMin(prepared, axis, keepdims);
             return NanArgWriteOut(res, @out, "argmin");
@@ -113,6 +138,34 @@ namespace NumSharp
             if (@out is null)
                 return result;
 
+            ValidateNanArgOut(@out, result.Shape.dimensions, name);
+            np.copyto(@out, result, casting: "unsafe");
+            return @out;
+        }
+
+        /// <summary>
+        ///     <c>PyArray_ArgMaxWithKeepdims</c>'s two <c>out=</c> checks, in its order: the out must have the result's
+        ///     shape exactly (<c>output array does not match result of np.argmax.</c>), then it must reach intp by a SAFE cast
+        ///     — bool through uint32 (and NumSharp's char) do; uint64, floats, complex and text do not (NumPy's cast TypeError,
+        ///     which words a 0-d out as a <c>scalar</c>).
+        /// </summary>
+        /// <param name="out">The out array.</param>
+        /// <param name="dims">The result's dimensions.</param>
+        /// <param name="name"><c>argmax</c> or <c>argmin</c> (the nan forms leak the plain name, as NumPy does).</param>
+        /// <exception cref="ValueError">The shape differs from the result's.</exception>
+        /// <exception cref="TypeError">The out's dtype does not cast safely to int64.</exception>
+        /// <remarks>
+        ///     The shape is checked FIRST: NumPy compares the out's dimensions before it converts the out to intp (an out of
+        ///     the wrong shape AND the wrong dtype reports the shape). The numeric path used to check the dtype first.
+        /// </remarks>
+        private static void ValidateNanArgOut(NDArray @out, long[] dims, string name)
+        {
+            if (@out.ndim != dims.Length)
+                throw new ValueError($"output array does not match result of np.{name}.");
+            for (int d = 0; d < dims.Length; d++)
+                if (@out.Shape.dimensions[d] != dims[d])
+                    throw new ValueError($"output array does not match result of np.{name}.");
+
             switch (@out.typecode)
             {
                 case NPTypeCode.Boolean:
@@ -124,20 +177,69 @@ namespace NumSharp
                 case NPTypeCode.Int32:
                 case NPTypeCode.UInt32:
                 case NPTypeCode.Int64:
-                    break;
+                    return;
                 default:
                     throw new TypeError(
-                        $"Cannot cast array data from dtype('{@out.typecode.AsNumpyDtypeName()}') to dtype('int64') according to the rule 'safe'");
+                        $"Cannot cast {(@out.ndim == 0 ? "scalar" : "array data")} from {@out.dtype.ToString(true)} to " +
+                        "dtype('int64') according to the rule 'safe'");
             }
+        }
 
-            if (@out.ndim != result.ndim)
-                throw new ValueError($"output array does not match result of np.{name}.");
-            for (int d = 0; d < result.ndim; d++)
-                if (@out.Shape.dimensions[d] != result.Shape.dimensions[d])
-                    throw new ValueError($"output array does not match result of np.{name}.");
-
-            np.copyto(@out, result, casting: "unsafe");
-            return @out;
+        /// <summary>
+        ///     NumPy's <c>np.argmax</c> / <c>np.argmin</c> of text (what <c>nanargmax</c> / <c>nanargmin</c> are for text: its
+        ///     <c>_replace_nan</c> leaves a non-inexact array alone), once the axis passed: an empty reduced length refuses,
+        ///     then <c>out=</c> is checked (<see cref="ValidateNanArgOut"/>), and only then the text is compared.
+        /// </summary>
+        /// <param name="a">The text array.</param>
+        /// <param name="axis">The validated axis, or null for the flattened array.</param>
+        /// <param name="out">The out array, or null.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one (decides the expected out shape).</param>
+        /// <param name="name"><c>argmax</c> or <c>argmin</c>.</param>
+        /// <returns>The exception to throw, or null when NumPy compares nothing: an empty result (the reduced length is not
+        ///     0) or lines of at most one element, whose indices are all 0 (the caller computes them on a bool stand-in).</returns>
+        /// <exception cref="ValueError">An out of the wrong shape (thrown).</exception>
+        /// <exception cref="TypeError">An out that does not cast safely to int64 (thrown).</exception>
+        private static Exception NanArgTextAnswer(NDArray a, int? axis, NDArray @out, bool keepdims, string name)
+        {
+            int nd = a.ndim;
+            long[] dims;
+            long reduced;
+            if (axis is not int ax)
+            {
+                // The flattened array: a 0-d input ravels to one element.
+                reduced = nd == 0 ? 1 : a.size;
+                dims = new long[keepdims ? nd : 0];
+                Array.Fill(dims, 1L);
+            }
+            else if (nd == 0)
+            {
+                reduced = 1;
+                dims = Array.Empty<long>();
+            }
+            else
+            {
+                int norm = ax < 0 ? ax + nd : ax;
+                reduced = a.Shape.dimensions[norm];
+                dims = new long[keepdims ? nd : nd - 1];
+                for (int d = 0, k = 0; d < nd; d++)
+                {
+                    if (d == norm)
+                    {
+                        if (keepdims)
+                            dims[k++] = 1;
+                        continue;
+                    }
+                    dims[k++] = a.Shape.dimensions[d];
+                }
+            }
+            if (reduced == 0)
+                return new ValueError($"attempt to get {name} of an empty sequence");
+            if (@out is not null)
+                ValidateNanArgOut(@out, dims, name);
+            // The arg loop returns before its first comparison for an empty input or a line of one element.
+            if (a.size == 0 || reduced == 1)
+                return null;
+            return Backends.Strings.NDStringUfuncs.NextPhase(name, a);
         }
 
         /// <summary>

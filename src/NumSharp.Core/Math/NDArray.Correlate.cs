@@ -22,29 +22,35 @@ namespace NumSharp
         /// (<c>_pyarray_revert</c>). The engine reads the kernel forward. Float bit-parity notes are
         /// in <c>np.correlate.cs</c>.
         /// </remarks>
+        /// <exception cref="ArgumentException">An unknown <paramref name="mode"/> (NumPy's two mode texts).</exception>
+        /// <exception cref="ValueError"><c>object of too small depth for desired array</c> (a 0-d operand) or <c>object too
+        ///     deep for desired array</c> (two or more dimensions), <c>first array argument cannot be empty</c> /
+        ///     <c>second array argument cannot be empty</c>, or — for a fixed-width string operand, after every check
+        ///     above — <c>data type must provide an itemsize</c>.</exception>
         [NDScoped]
         public NDArray correlate(NDArray v, string mode = "valid")
         {
-            // correlate's dot-function lookup needs a fixed item size, which text does not have (0-d operands included).
-            if (Backends.Strings.NDStringUfuncs.IsString(this) || Backends.Strings.NDStringUfuncs.IsString(v)) throw Backends.Strings.NDStringUfuncs.NoItemsize();
             NDArray a = this;
 
             // NumPy parses the mode during argument parsing, before touching the arrays.
             var m = ParseSlidingMode(mode);
 
             // NumPy's PyArray_FromAny(op, typec, 1, 1, ...) requires exactly 1-D operands (a 0-d
-            // scalar or a 2-D array is rejected — correlate, unlike convolve, does not promote 0-d).
-            if (a.ndim != 1)
-                throw new IncorrectShapeException("First argument must be a 1-dimensional array.");
-            if (v.ndim != 1)
-                throw new IncorrectShapeException("Second argument must be a 1-dimensional array.");
+            // scalar or a 2-D array is rejected — correlate, unlike convolve, does not promote 0-d),
+            // with its own two texts, a then v.
+            ThrowIfNotOneDimensional(a);
+            ThrowIfNotOneDimensional(v);
 
             // Empty check (inside _pyarray_correlate, on the pre-swap operands, so "first"/"second"
             // always refer to a/v regardless of the later swap).
             if (a.size == 0)
-                throw new ArgumentException("first array argument cannot be empty", nameof(a));
+                throw new ValueError("first array argument cannot be empty");
             if (v.size == 0)
-                throw new ArgumentException("second array argument cannot be empty", nameof(v));
+                throw new ValueError("second array argument cannot be empty");
+
+            // _pyarray_correlate then allocates its result for the type number, which a string type cannot size.
+            if (Backends.Strings.NDStringUfuncs.IsString(a) || Backends.Strings.NDStringUfuncs.IsString(v))
+                throw Backends.Strings.NDStringUfuncs.NoItemsize();
 
             var retType = np._FindCommonType(a, v);
 
@@ -80,6 +86,20 @@ namespace NumSharp
                 result = result["::-1"].copy();
 
             return result;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_FromAny(op, typec, 1, 1, ...)</c> depth check: an operand of correlate must be exactly 1-D.
+        /// </summary>
+        /// <param name="operand">The operand to check.</param>
+        /// <exception cref="ValueError"><c>object of too small depth for desired array</c> for a 0-d operand, <c>object too
+        ///     deep for desired array</c> for two or more dimensions.</exception>
+        private static void ThrowIfNotOneDimensional(NDArray operand)
+        {
+            if (operand.ndim == 0)
+                throw new ValueError("object of too small depth for desired array");
+            if (operand.ndim > 1)
+                throw new ValueError("object too deep for desired array");
         }
     }
 }

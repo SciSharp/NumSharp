@@ -184,6 +184,10 @@ namespace NumSharp
         ///   platform-specific and not reproducible in C# — spec-compliant, the Array API leaves it
         ///   unspecified). See <see cref="unique_values"/>.</param>
         /// <returns>A <see cref="UniqueResult"/> carrying <c>values</c> and the requested outputs.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A fixed-width string array whose answer depends on the
+        ///     text (NumPy sorts it: the next phase of NumSharp's string support); at most one element to order, or slabs of
+        ///     zero width, are answered from the shape.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html</remarks>
         public static UniqueResult unique(NDArray ar,
             bool return_index = false,
@@ -194,9 +198,10 @@ namespace NumSharp
             bool sorted = true)
         {
             using var plain = NDMatrixBoundary.PlainFor(ar);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy computes this on text (sorting, searching, truth tests); string computation is
-            // the next phase of NumSharp's string support, so a string array is refused here.
-            if (Backends.Strings.NDStringUfuncs.IsString(ar)) throw Backends.Strings.NDStringUfuncs.NextPhase("unique", ar);
+            // NumPy sorts text; string computation is the next phase of NumSharp's string support, so a string array
+            // whose answer depends on the text is refused here — after NumPy's one earlier check, the axis range. A shape
+            // that orders nothing (one element, zero-width slabs) continues: the instance unique answers it.
+            NDArray.ThrowIfTextUnique(ar, axis);
             // Boundary scope: the instance unique's sort/argsort/mask internals are reclaimed at
             // exit; the present outputs are yielded (the UniqueResult carries only those arrays).
             using var scope = NDScope.Open();

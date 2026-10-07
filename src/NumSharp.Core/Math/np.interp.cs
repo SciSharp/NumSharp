@@ -19,59 +19,119 @@ namespace NumSharp
         /// <param name="right">Value returned for <c>x &gt; xp[-1]</c>; default is <c>fp[-1]</c>. Ignored when <paramref name="period"/> is given.</param>
         /// <param name="period">A period for the x-coordinates, allowing proper interpolation of angular x-coordinates. Must be non-zero.</param>
         /// <returns>The interpolated values, same shape as x (float64, or complex128 when fp is complex). A scalar (0-d) if x is a scalar.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.interp.html</remarks>
+        /// <exception cref="ValueError"><paramref name="fp"/> or <paramref name="xp"/> is not 1-D (<c>object too deep for desired
+        ///     array</c> / <c>object of too small depth for desired array</c>), xp is empty, the lengths differ, or
+        ///     <paramref name="period"/> is zero (and, with a period, <c>Data points must be 1-D sequences</c>).</exception>
+        /// <exception cref="InvalidCastException">Without a period, an operand does not cast 'safely' to the loop's dtype
+        ///     (text, or a complex x / xp — NumPy's TypeError <c>Cannot cast array data from dtype('&lt;U2') to dtype('float64')
+        ///     according to the rule 'safe'</c>, <c>Cannot cast scalar …</c> for a 0-d x).</exception>
+        /// <exception cref="StringComputationNotSupportedException">With a period, a non-empty text operand: NumPy parses the
+        ///     text to float64 (the computational phase of the string dtypes).</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.interp.html
+        ///     <para>
+        ///     <b>Check order.</b> NumPy picks the loop from <paramref name="fp"/> alone (<c>np.iscomplexobj(fp)</c>). Without a
+        ///     period, the compiled loop converts fp, then xp, then x (<c>PyArray_ContiguousFromAny</c>), each by checking the
+        ///     operand's rank FIRST (fp and xp must be 1-D; x may have any rank) and then its 'safe' cast — so a 2-D text xp is
+        ///     the rank's ValueError, not the cast's TypeError, and fp's error wins over xp's. With a period, NumPy instead
+        ///     converts x, xp and fp with <c>np.asarray(…, dtype=…)</c>, which PARSES text (an empty text array converts to an
+        ///     empty float array without parsing).
+        ///     </para>
+        /// </remarks>
         [NDScoped]
         public static NDArray interp(NDArray x, NDArray xp, NDArray fp,
             double? left = null, double? right = null, double? period = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(x, xp, fp);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy's compiled interp casts x, xp and fp to float64 under 'safe', in that order: text refuses with the
-            // first string operand's descriptor (its verbatim TypeError).
-            foreach (var operand in new[] { x, xp, fp })
-                if (Backends.Strings.NDStringUfuncs.IsString(operand))
-                    throw new InvalidCastException(
-                        $"Cannot cast array data from {operand.dtype.ToString(true)} to dtype('float64') according to the rule 'safe'");
+            // NumPy dispatches on fp's dtype alone; the operand checks run inside each loop in NumPy's order (fp, xp, x).
             bool isComplex = fp.typecode == NPTypeCode.Complex;
             Complex? cleft = left.HasValue ? new Complex(left.Value, 0) : (Complex?)null;
             Complex? cright = right.HasValue ? new Complex(right.Value, 0) : (Complex?)null;
             return isComplex
                 ? InterpComplex(x, xp, fp, cleft, cright, period)
-                : InterpReal(x, xp, fp, left, right, period);
+                : InterpReal(x, xp, fp, left, right, period, complexFill: false);
         }
 
         /// <summary>
-        ///     Complex-fp overload of <see cref="interp(NDArray,NDArray,NDArray,double?,double?,double?)"/>
-        ///     accepting complex <paramref name="left"/> / <paramref name="right"/> fill values.
+        ///     Complex-fill overload of <see cref="interp(NDArray,NDArray,NDArray,double?,double?,double?)"/>: complex
+        ///     <paramref name="left"/> / <paramref name="right"/> fill values for a complex <paramref name="fp"/>.
         /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.interp.html</remarks>
+        /// <param name="x">The x-coordinates at which to evaluate the interpolated values.</param>
+        /// <param name="xp">The x-coordinates of the data points (1-D).</param>
+        /// <param name="fp">The y-coordinates of the data points (1-D, same length as xp).</param>
+        /// <param name="left">Value returned for <c>x &lt; xp[0]</c>; null means <c>fp[0]</c>.</param>
+        /// <param name="right">Value returned for <c>x &gt; xp[-1]</c>; null means <c>fp[-1]</c>.</param>
+        /// <param name="period">A period for the x-coordinates; when given, <paramref name="left"/> and <paramref name="right"/>
+        ///     are ignored.</param>
+        /// <returns>The interpolated values, same shape as x: complex128 for a complex fp, else float64.</returns>
+        /// <exception cref="ValueError">As <see cref="interp(NDArray,NDArray,NDArray,double?,double?,double?)"/>.</exception>
+        /// <exception cref="InvalidCastException">As <see cref="interp(NDArray,NDArray,NDArray,double?,double?,double?)"/>.</exception>
+        /// <exception cref="StringComputationNotSupportedException">As
+        ///     <see cref="interp(NDArray,NDArray,NDArray,double?,double?,double?)"/>.</exception>
+        /// <exception cref="TypeError"><paramref name="fp"/> is not complex, no period is given, and <paramref name="left"/> or
+        ///     <paramref name="right"/> is given: <c>must be real number, not complex</c>.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.interp.html
+        ///     <para>
+        ///     NumPy picks the loop from <paramref name="fp"/> only. A real fp runs the real loop, which converts the fill values
+        ///     with <c>PyFloat_AsDouble</c> AFTER its operand and length checks — and that refuses a Python complex even with a
+        ///     zero imaginary part. (This overload used to compute in complex for a real fp, and so returned complex128 where
+        ///     NumPy raises or returns float64.)
+        ///     </para>
+        /// </remarks>
         [NDScoped]
         public static NDArray interp(NDArray x, NDArray xp, NDArray fp,
             Complex? left, Complex? right = null, double? period = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(x, xp, fp);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return InterpComplex(x, xp, fp, left, right, period);
+            if (fp.typecode == NPTypeCode.Complex)
+                return InterpComplex(x, xp, fp, left, right, period);
+            // The real loop: a period discards the fill values before the loop reads them (NumPy sets them to None).
+            return InterpReal(x, xp, fp, null, null, period,
+                complexFill: !period.HasValue && (left.HasValue || right.HasValue));
         }
 
         // =====================================================================
         // Real (float64) path
         // =====================================================================
 
+        /// <summary>
+        ///     NumPy's <c>arr_interp</c> (the float64 loop), after the optional period preprocessing.
+        /// </summary>
+        /// <param name="x">The query points (any rank).</param>
+        /// <param name="xp">The sample points (must be 1-D).</param>
+        /// <param name="fp">The sample values (must be 1-D, real).</param>
+        /// <param name="left">The fill below <c>xp[0]</c>, or null for <c>fp[0]</c>.</param>
+        /// <param name="right">The fill above <c>xp[-1]</c>, or null for <c>fp[-1]</c>.</param>
+        /// <param name="period">The period, or null.</param>
+        /// <param name="complexFill">True when the caller passed a complex fill value without a period: NumPy's
+        ///     <c>PyFloat_AsDouble</c> refuses it once the operand and length checks have passed.</param>
+        /// <returns>The float64 result, x's shape.</returns>
+        /// <exception cref="ValueError">A rank, emptiness, length or period error (see the public overload).</exception>
+        /// <exception cref="InvalidCastException">An operand that does not cast 'safely' to float64.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A period with a non-empty text operand.</exception>
+        /// <exception cref="TypeError"><paramref name="complexFill"/> is true.</exception>
         private static unsafe NDArray InterpReal(NDArray x, NDArray xp, NDArray fp,
-            double? left, double? right, double? period)
+            double? left, double? right, double? period, bool complexFill)
         {
             if (period.HasValue)
                 (x, xp, fp, left, right) = ApplyPeriodReal(x, xp, fp, period.Value);
 
-            // afp/axp are 1-D float64; ax is float64 of any shape, read in C-order.
+            // afp/axp are 1-D float64; ax is float64 of any shape, read in C-order. NumPy converts fp, then xp, then x —
+            // each one's rank before its cast — so the first failing operand in that order reports.
             var afp = ToContiguous1DDouble(fp, "fp");
             var axp = ToContiguous1DDouble(xp, "xp");
+            ThrowIfNotSafeInterpCast(x, NPTypeCode.Double);
             var xc = x.astype(NPTypeCode.Double, copy: true, order: 'C');
 
             long lenxp = axp.size;
             if (lenxp == 0)
-                throw new ArgumentException("array of sample points is empty");
+                throw new ValueError("array of sample points is empty");
             if (afp.size != lenxp)
-                throw new ArgumentException("fp and xp are not of the same length.");
+                throw new ValueError("fp and xp are not of the same length.");
+            // PyFloat_AsDouble(left/right) runs after the length checks; a Python complex fill is refused there.
+            if (complexFill)
+                throw new TypeError("must be real number, not complex");
 
             var result = new NDArray(NPTypeCode.Double, Shape.Adopt(x.Shape.dimensions), fillZeros: false);
             long lenx = xc.size;
@@ -142,21 +202,36 @@ namespace NumSharp
         // Complex (complex128) path — as arr_interp but fp/lval/rval are complex.
         // =====================================================================
 
+        /// <summary>
+        ///     NumPy's <c>arr_interp_complex</c> (the complex128 loop for a complex fp), after the optional period preprocessing.
+        /// </summary>
+        /// <param name="x">The query points (any rank).</param>
+        /// <param name="xp">The sample points (must be 1-D).</param>
+        /// <param name="fp">The complex sample values (must be 1-D).</param>
+        /// <param name="left">The fill below <c>xp[0]</c>, or null for <c>fp[0]</c>.</param>
+        /// <param name="right">The fill above <c>xp[-1]</c>, or null for <c>fp[-1]</c>.</param>
+        /// <param name="period">The period, or null.</param>
+        /// <returns>The complex128 result, x's shape.</returns>
+        /// <exception cref="ValueError">A rank, emptiness, length or period error (see the public overload).</exception>
+        /// <exception cref="InvalidCastException">xp or x does not cast 'safely' to float64.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A period with a non-empty text x or xp.</exception>
         private static unsafe NDArray InterpComplex(NDArray x, NDArray xp, NDArray fp,
             Complex? left, Complex? right, double? period)
         {
             if (period.HasValue)
                 (x, xp, fp) = ApplyPeriodComplex(x, xp, fp, period.Value);
 
+            // NumPy's order: fp, xp, x — each one's rank before its cast.
             var afp = ToContiguous1DComplex(fp);
             var axp = ToContiguous1DDouble(xp, "xp");
+            ThrowIfNotSafeInterpCast(x, NPTypeCode.Double);
             var xc = x.astype(NPTypeCode.Double, copy: true, order: 'C');
 
             long lenxp = axp.size;
             if (lenxp == 0)
-                throw new ArgumentException("array of sample points is empty");
+                throw new ValueError("array of sample points is empty");
             if (afp.size != lenxp)
-                throw new ArgumentException("fp and xp are not of the same length.");
+                throw new ValueError("fp and xp are not of the same length.");
 
             var result = new NDArray(NPTypeCode.Complex, Shape.Adopt(x.Shape.dimensions), fillZeros: false);
             long lenx = xc.size;
@@ -303,22 +378,60 @@ namespace NumSharp
         // helpers
         // =====================================================================
 
+        /// <summary>
+        ///     NumPy's <c>PyArray_ContiguousFromAny(a, NPY_DOUBLE, 1, 1)</c>: a contiguous 1-D float64 copy of a sample array.
+        /// </summary>
+        /// <param name="a">xp or fp.</param>
+        /// <param name="name">The operand's name (kept for call-site readability; NumPy's messages do not name it).</param>
+        /// <returns>The 1-D float64 copy.</returns>
+        /// <exception cref="ValueError">The array is not 1-D (<c>object too deep for desired array</c> above, <c>object of too
+        ///     small depth for desired array</c> for 0-d).</exception>
+        /// <exception cref="InvalidCastException">The dtype does not cast 'safely' to float64 (text, complex).</exception>
+        /// <remarks>The rank is checked before the dtype, as <c>PyArray_FromAny</c> does.</remarks>
         private static NDArray ToContiguous1DDouble(NDArray a, string name)
         {
             if (a.ndim > 1)
-                throw new ArgumentException("object too deep for desired array");
+                throw new ValueError("object too deep for desired array");
             if (a.ndim < 1)
-                throw new ArgumentException("object of too small depth for desired array");
+                throw new ValueError("object of too small depth for desired array");
+            ThrowIfNotSafeInterpCast(a, NPTypeCode.Double);
             return a.astype(NPTypeCode.Double, copy: true, order: 'C');
         }
 
+        /// <summary>
+        ///     NumPy's <c>PyArray_ContiguousFromAny(fp, NPY_CDOUBLE, 1, 1)</c> for the complex loop: a contiguous 1-D complex128
+        ///     copy of fp.
+        /// </summary>
+        /// <param name="a">The complex fp.</param>
+        /// <returns>The 1-D complex128 copy.</returns>
+        /// <exception cref="ValueError">The array is not 1-D.</exception>
         private static NDArray ToContiguous1DComplex(NDArray a)
         {
             if (a.ndim > 1)
-                throw new ArgumentException("object too deep for desired array");
+                throw new ValueError("object too deep for desired array");
             if (a.ndim < 1)
-                throw new ArgumentException("object of too small depth for desired array");
+                throw new ValueError("object of too small depth for desired array");
             return a.astype(NPTypeCode.Complex, copy: true, order: 'C');
+        }
+
+        /// <summary>
+        ///     The 'safe' cast check of NumPy's interp operand conversion (<c>PyArray_FromArray</c> without FORCECAST): text
+        ///     never casts safely to a number, and complex never casts safely to float64. NumSharp's other dtypes (bool, the
+        ///     integers, the floats and decimal) convert as they always have.
+        /// </summary>
+        /// <param name="a">The operand.</param>
+        /// <param name="target">The loop dtype the operand is converted to (float64 or complex128).</param>
+        /// <exception cref="InvalidCastException">NumPy's TypeError text: <c>Cannot cast array data from dtype('&lt;U2') to
+        ///     dtype('float64') according to the rule 'safe'</c>, or <c>Cannot cast scalar from …</c> for a 0-d operand (its
+        ///     <c>npy_set_invalid_cast_error</c> wording).</exception>
+        private static void ThrowIfNotSafeInterpCast(NDArray a, NPTypeCode target)
+        {
+            bool refused = Backends.Strings.NDStringUfuncs.IsString(a)
+                           || (target == NPTypeCode.Double && a.typecode == NPTypeCode.Complex);
+            if (refused)
+                throw new InvalidCastException(
+                    $"Cannot cast {(a.ndim == 0 ? "scalar" : "array data")} from {a.dtype.ToString(true)} to " +
+                    $"dtype('{target.AsNumpyDtypeName()}') according to the rule 'safe'");
         }
 
         // period preprocessing (numpy _function_base_impl.py): normalize periodic boundaries,
@@ -334,21 +447,36 @@ namespace NumSharp
             ApplyPeriodComplex(NDArray x, NDArray xp, NDArray fp, double period)
             => PreparePeriodic(x, xp, fp, period, NPTypeCode.Complex);
 
+        /// <summary>
+        ///     NumPy's period preprocessing (<c>_function_base_impl.py</c>): x and xp wrapped into <c>[0, period)</c>, the
+        ///     samples sorted by xp and extended by one wrapped sample at each end.
+        /// </summary>
+        /// <param name="x">The query points.</param>
+        /// <param name="xp">The sample points.</param>
+        /// <param name="fp">The sample values.</param>
+        /// <param name="period">The period (non-zero; its absolute value is used).</param>
+        /// <param name="fpType">The loop dtype of fp (float64 or complex128).</param>
+        /// <returns>The prepared x, xp and fp.</returns>
+        /// <exception cref="ValueError">A zero period (checked first), a sample array that is not 1-D, or lengths that differ.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty text operand: <c>np.asarray(…, dtype=…)</c> parses
+        ///     text into numbers (the computational phase). An EMPTY text operand converts without parsing, as in NumPy.</exception>
         private static (NDArray x, NDArray xp, NDArray fp) PreparePeriodic(
             NDArray x, NDArray xp, NDArray fp, double period, NPTypeCode fpType)
         {
             if (period == 0)
-                throw new ArgumentException("period must be a non-zero value");
+                throw new ValueError("period must be a non-zero value");
             period = Math.Abs(period);
 
+            // np.asarray(x / xp / fp, dtype=…) in that order: a FORCED (unsafe) conversion, so a complex x drops its imaginary
+            // part (NumPy warns) and text is parsed — astype refuses a non-empty text parse as the computational phase.
             var xd = x.astype(NPTypeCode.Double, copy: true, order: 'C');
             var xpd = xp.astype(NPTypeCode.Double, copy: true, order: 'C');
             var fpd = fp.astype(fpType, copy: true, order: 'C');
 
             if (xpd.ndim != 1 || fpd.ndim != 1)
-                throw new ArgumentException("Data points must be 1-D sequences");
+                throw new ValueError("Data points must be 1-D sequences");
             if (xpd.Shape.dimensions[0] != fpd.Shape.dimensions[0])
-                throw new ArgumentException("fp and xp are not of the same length");
+                throw new ValueError("fp and xp are not of the same length");
 
             // normalize periodic boundaries: x %= period; xp %= period
             xd = np.mod(xd, (NDArray)period);

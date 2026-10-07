@@ -62,6 +62,8 @@ namespace NumSharp
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.diff.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="TypeError">A string array (or a string prepend/append) with <paramref name="n"/> above 0:
+        ///     NumPy's <c>subtract</c> has no string loop, so its first <c>a[1:] - a[:-1]</c> refuses whatever the size.</exception>
         [NDScoped]
         public static NDArray diff(NDArray a, int n = 1, int axis = -1,
                                    object prepend = null, object append = null)
@@ -89,6 +91,7 @@ namespace NumSharp
             if (n == 1 && prepend is null && append is null
                 && ax == nd - 1
                 && a.GetTypeCode != NPTypeCode.Boolean
+                && a.GetTypeCode != NPTypeCode.String
                 && a.Shape.IsContiguous && !a.Shape.IsBroadcasted
                 && a.Shape.dimensions[ax] >= 2)
             {
@@ -127,6 +130,15 @@ namespace NumSharp
             // POST-concatenation dtype (a bool array with an int prepend promotes
             // to int and therefore subtracts).
             bool useNotEqual = work.GetTypeCode == NPTypeCode.Boolean;
+            // Text: subtract has no string loop, so NumPy's first op(a[1:], a[:-1]) refuses whatever the size, an empty
+            // array included (both slices carry the post-concatenation dtype).
+            if (work.GetTypeCode == NPTypeCode.String)
+            {
+                var refusal = Backends.Strings.NDStringUfuncs.BinaryError("subtract", work, work, null, null);
+                if (workOwned)
+                    work.Dispose();
+                throw refusal;
+            }
 
             NDArray current = work;
             bool currentOwned = workOwned;

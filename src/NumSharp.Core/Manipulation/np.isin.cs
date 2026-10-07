@@ -23,6 +23,14 @@ namespace NumSharp
         ///     affect the result, only speed/memory. <c>"table"</c> is only valid for boolean/integer arrays.</param>
         /// <returns>A boolean array with the same shape as <paramref name="element"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isin.html</remarks>
+        /// <exception cref="ValueError">An unknown <paramref name="kind"/> (<c>Invalid kind: 'x'. Please use None, 'sort' or
+        ///     'table'.</c>), or <c>kind='table'</c> for a non-integer array.</exception>
+        /// <exception cref="InvalidOperationException"><c>kind='table'</c> with a range wider than the dtype's maximum
+        ///     (NumPy's RuntimeError text).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A string operand whose answer depends on the text (NumPy
+        ///     compares it). Answered from sizes and dtypes: an empty <paramref name="element"/>, an empty
+        ///     <paramref name="test_elements"/>, and a pair of different classes on NumPy's loop path (no <c>equal</c> loop, so
+        ///     nothing matches) — see <c>IsinText</c>.</exception>
         // The woven boundary scope reclaims every intermediate this call tree creates — the ravels,
         // the promoted casts, the sort/table/hash machinery inside the helpers below — and the
         // yielded reshape view is the only survivor. The helpers stay scope-free on purpose.
@@ -31,11 +39,12 @@ namespace NumSharp
             bool assume_unique = false, bool invert = false, string kind = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(element, test_elements);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy computes this on text (sorting, searching, truth tests); string computation is
-            // the next phase of NumSharp's string support, so a string array is refused here.
-            if (Backends.Strings.NDStringUfuncs.IsString(element) || Backends.Strings.NDStringUfuncs.IsString(test_elements)) throw Backends.Strings.NDStringUfuncs.NextPhase("isin", Backends.Strings.NDStringUfuncs.IsString(element) ? element : test_elements);
             if (kind != null && kind != "sort" && kind != "table")
                 throw new ValueError($"Invalid kind: '{kind}'. Please use None, 'sort' or 'table'.");
+            // Text: NumPy's _isin compares text (the next phase of NumSharp's string support) unless the sizes and dtypes
+            // decide the answer — see IsinText.
+            if (Backends.Strings.NDStringUfuncs.IsString(element) || Backends.Strings.NDStringUfuncs.IsString(test_elements))
+                return IsinText(element, test_elements, invert, kind);
 
             // Result is shaped like element in C-order. Build the shape from the DIMENSIONS (a fresh
             // C-contiguous shape) — reusing element.Shape would carry a view's strides and scramble the
@@ -70,6 +79,65 @@ namespace NumSharp
             NDArray member = ComputeMembership(ar1, ar2);
             NDArray result = invert ? np.logical_not(member) : member;
             return result.reshape(outShape);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_isin</c> when an operand holds strings (the <c>kind</c> name already validated), statement by
+        ///     statement down to its first comparison of text: NumSharp answers where the sizes and dtypes decide, and defers
+        ///     where NumPy compares the text.
+        /// </summary>
+        /// <param name="element">The tested values (the result has its shape).</param>
+        /// <param name="test_elements">The set (flattened).</param>
+        /// <param name="invert">Whether the answer is <c>not in</c>.</param>
+        /// <param name="kind">The validated <c>kind</c>: <c>"table"</c> refuses every string array.</param>
+        /// <returns>A bool array of <paramref name="element"/>'s shape: a view of a fresh 1-D answer, as NumPy's reshape
+        ///     returns it.</returns>
+        /// <exception cref="ValueError"><c>kind='table'</c> (the method needs boolean or integer arrays).</exception>
+        /// <exception cref="StringComputationNotSupportedException">NumPy compares the text, or decodes bytes holding a
+        ///     non-ASCII byte into str (its error names the first failing element in the order of the sorted text).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy's statements, with <c>ar1</c> / <c>ar2</c> the two flattened arrays:
+        ///     <list type="bullet">
+        ///       <item><description>an empty <c>ar1</c> takes the sort path, where nothing is left to compare: an empty
+        ///       result (its <c>concatenate((ar1, ar2))</c> decodes <c>S</c> text into a <c>U</c> result first, which fails on
+        ///       a non-ASCII byte);</description></item>
+        ///       <item><description>otherwise <c>len(ar2) &lt; 10 * len(ar1) ** 0.145</c> takes the loop path,
+        ///       <c>mask |= (ar1 == a)</c> for each <c>a</c> in <c>ar2</c> (<c>&amp;= (ar1 != a)</c> under invert): no
+        ///       <c>a</c> leaves the starting mask (zeros, or ones), and so does a pair <c>equal</c> has no loop for — the
+        ///       operator answers all-False / all-True (<c>np.isin(['a', 'b'], [1, 2])</c> is <c>[False, False]</c>,
+        ///       probed); two strings of one class compare their text;</description></item>
+        ///       <item><description>the sort path compares (and, with numbers, formats) every value.</description></item>
+        ///     </list>
+        ///     </para>
+        /// </remarks>
+        private static NDArray IsinText(NDArray element, NDArray test_elements, bool invert, string kind)
+        {
+            // The table method exists only for boolean / integer arrays; NumPy checks before it reads a value.
+            if (kind == "table")
+                throw new ValueError("The 'table' method is only supported for boolean or integer arrays. "
+                    + "Please select 'sort' or None for kind.");
+            var text = Backends.Strings.NDStringUfuncs.IsString(element) ? element : test_elements;
+            long n1 = element.size, n2 = test_elements.size;
+            var dims = (long[])element.Shape.dimensions.Clone();
+            Shape shape = dims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(dims);
+            NDArray flat;
+            if (n1 == 0)
+            {
+                if (Backends.Strings.NDStringUfuncs.ConcatMayFailDecoding(element, test_elements))
+                    throw Backends.Strings.NDStringUfuncs.NextPhase("isin", text);
+                flat = np.zeros(Shape.Vector(0), NPTypeCode.Boolean);
+            }
+            // Python evaluates 10 * len(ar1) ** 0.145 in double precision, as Math.Pow does.
+            else if (n2 < 10.0 * Math.Pow(n1, 0.145)
+                     && (n2 == 0 || !Backends.Strings.NDStringUfuncs.ComparesText(element.dtype, test_elements.dtype)))
+                flat = np.full(Shape.Vector(n1), invert, NPTypeCode.Boolean);
+            else
+                throw Backends.Strings.NDStringUfuncs.NextPhase("isin", text);
+            // NumPy reshapes _isin's 1-D answer to element's shape: the result is a view of it (flags.owndata False). The
+            // view holds its own reference to the flat buffer.
+            using (flat)
+                return flat.reshape(shape);
         }
 
         /// <summary>

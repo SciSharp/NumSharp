@@ -42,12 +42,21 @@ namespace NumSharp.Backends.Sorting
         /// keeps its exact stride order, and strided/negative-stride inputs come back C (probed
         /// 2.4.2). The line driver walks the copy's own strides, so the in-place pass is
         /// layout-agnostic.</summary>
+        /// <param name="a">The array.</param>
+        /// <param name="axis">The axis, or null for the flattened array.</param>
+        /// <returns>The sorted copy.</returns>
+        /// <exception cref="ArgumentException">The axis is out of bounds (a numeric array).</exception>
+        /// <exception cref="AxisError">The axis is out of bounds (a string array; a 0-d one refuses every axis).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A string array whose lines hold two or more elements:
+        ///     NumPy compares the text (the next phase of NumSharp's string support). Lines of at most one element come back
+        ///     as copies.</exception>
         [NDScoped]
         public static NDArray Sort(NDArray a, int? axis)
         {
             // NumPy sorts text by code points (the next phase of NumSharp's string support), after the axis check of its
-            // in-place sort (a 0-d copy refuses every axis; axis=None flattens first).
-            Strings.NDStringUfuncs.ThrowIfReduce("sort", a, axis);
+            // in-place sort (a 0-d copy refuses every axis; axis=None flattens first). A line of at most one element (or
+            // no line) compares nothing: the copy below moves the strings and the line kernel returns before it reads one.
+            Strings.NDStringUfuncs.ThrowIfComputes("sort", a, axis);
             if (axis == null)
             {
                 var flat = a.ravel().copy('C');
@@ -60,15 +69,24 @@ namespace NumSharp.Backends.Sorting
         }
 
         /// <summary>ndarray.sort: sorts <paramref name="a"/> in place along the axis.</summary>
+        /// <param name="a">The array, sorted in place.</param>
+        /// <param name="axis">The axis, or null (NumSharp's flatten-in-place extension).</param>
+        /// <exception cref="ValueError">The array is read-only (<c>sort array is read-only</c>).</exception>
+        /// <exception cref="AxisError">A string array with an out-of-bounds axis.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A string array whose lines hold two or more elements
+        ///     (NumPy compares the text: the next phase). Lines of at most one element are left as they are.</exception>
         [NDScoped]
         public static void SortInPlace(NDArray a, int? axis)
         {
-            // NumPy's PyArray_Sort checks the axis, then writeability, then sorts text by code points (the next phase).
+            // NumPy's PyArray_Sort checks the axis, then writeability, then sorts text by code points (the next phase) —
+            // except lines of at most one element (or none), which _new_sortlike leaves as they are.
             if (Strings.NDStringUfuncs.IsString(a))
             {
                 Strings.NDStringUfuncs.ValidateReduceAxis("sort", a.ndim, axis);
                 if (!a.Shape.IsWriteable)
                     throw new ValueError("sort array is read-only");
+                if (Strings.NDStringUfuncs.ShapeDecides("sort", a, axis))
+                    return;
                 throw Strings.NDStringUfuncs.NextPhase("sort", a);
             }
             if (!a.Shape.IsWriteable)
@@ -83,12 +101,33 @@ namespace NumSharp.Backends.Sorting
             SortInPlace(a, NormalizeAxis(axis.Value, a.ndim));
         }
 
-        /// <summary>np.argsort: returns int64 indices (same shape; axis=null flattens).</summary>
+        /// <summary>
+        ///     np.argsort: int64 indices that sort <paramref name="a"/> along <paramref name="axis"/> (same shape;
+        ///     <c>null</c> flattens). A 0-d input ravels to one dimension first, as NumPy's <c>PyArray_ArgSort</c> does through
+        ///     <c>PyArray_CheckAxis</c>: <c>np.argsort(np.array(5))</c> is <c>[0]</c>, and an axis other than 0 / -1 reports
+        ///     dimension 1.
+        /// </summary>
+        /// <param name="a">The array.</param>
+        /// <param name="axis">The axis, or null for the flattened array.</param>
+        /// <returns>A fresh int64 array of indices.</returns>
+        /// <exception cref="ArgumentException">The axis is out of bounds (the numeric path's house type).</exception>
+        /// <exception cref="AxisError">The axis is out of bounds for a string array (NumPy's type).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A string array whose lines hold two or more elements:
+        ///     NumPy compares the text (the next phase).</exception>
         [NDScoped]
         public static NDArray ArgSort(NDArray a, int? axis)
         {
-            // NumPy sorts text by code points (the next phase), after argsort's axis check (a 0-d input ravels first).
-            Strings.NDStringUfuncs.ThrowIfReduce("argsort", a, axis);
+            // PyArray_CheckAxis ravels a 0-d input before the axis is checked (the reshape is a view; the scope reclaims it).
+            if (a.ndim == 0)
+                a = a.reshape(1);
+            // NumPy sorts text by code points (the next phase), after argsort's axis check. A line of at most one element
+            // (or no line) compares nothing: _new_argsortlike zero-fills the indices, which the bool stand-in of the same
+            // shape computes through the numeric path.
+            if (Strings.NDStringUfuncs.ReduceStandIn("argsort", a, axis) is { } standIn)
+            {
+                using (standIn)
+                    return ArgSort(standIn, axis);
+            }
             if (axis == null)
             {
                 var flat = a.Shape.IsContiguous ? a.reshape(a.size) : a.ravel().copy('C');

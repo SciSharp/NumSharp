@@ -39,7 +39,13 @@ namespace NumSharp
         /// <exception cref="ValueError">
         ///     When either input has zero dimensions, or a vector's length is neither 2 nor 3.
         /// </exception>
-        /// <exception cref="AxisError">When an axis is out of bounds for its operand.</exception>
+        /// <exception cref="IncorrectShapeException">The leading axes do not broadcast: NumPy's <c>np.broadcast</c> text
+        ///     (<c>shape mismatch: objects cannot be broadcast to a single shape.  Mismatch is between arg 0 with shape (2,)
+        ///     and arg 1 with shape (3,).</c>), raised before the dtype promotion.</exception>
+        /// <exception cref="AxisError">When an axis is out of bounds for its operand (<c>axisc</c> against the result's
+        ///     rank, checked right after the broadcast).</exception>
+        /// <exception cref="TypeError">A text operand: NumPy multiplies the components in the promoted dtype, which has no
+        ///     string loop (checked after the shape checks).</exception>
         [NDScoped]
         public static NDArray cross(NDArray a, NDArray b, int axisa = -1, int axisb = -1, int axisc = -1,
             int? axis = null)
@@ -65,6 +71,14 @@ namespace NumSharp
                 throw new ValueError(
                     "incompatible dimensions for cross product\n(dimension must be 2 or 3)");
             // NumPy warns on 2-vectors (deprecated 2.0); NumSharp does not model warnings.
+
+            // NumPy creates the output before it touches a value: `shape = broadcast(a[..., 0], b[..., 0]).shape`, so
+            // leading axes that do not broadcast raise np.broadcast's own "shape mismatch: objects cannot be broadcast to
+            // a single shape. ..." ValueError, and for a 3-vector result `axisc` is checked against that shape plus the
+            // vector axis — both before the dtype promotion and the multiplies (a text operand meets them first too).
+            Shape leading = broadcast_shapes(LeadingShape(a), LeadingShape(b));
+            if (aLen == 3 || bLen == 3)
+                NormalizeCrossAxis(axisc, leading.NDim + 1, "axisc");
 
             // recast both operands to the promoted dtype, exactly as NumPy does, so every
             // intermediate product/difference runs in that dtype (integer inputs stay integer, etc.).
@@ -141,6 +155,22 @@ namespace NumSharp
                 expand_dims(cp2, -1)
             }, -1);
             return moveaxis(stacked, -1, normC);
+        }
+
+        /// <summary>
+        ///     The shape of <c>x[..., 0]</c>: every axis but the (moved-to-last) vector axis — the operand NumPy's
+        ///     <c>broadcast(a[..., 0], b[..., 0])</c> reads, without building the view.
+        /// </summary>
+        /// <param name="x">An operand whose vector axis is already last (at least 1-D).</param>
+        /// <returns>The leading shape (a scalar shape for a 1-D operand).</returns>
+        private static Shape LeadingShape(NDArray x)
+        {
+            var dims = x.Shape.dimensions;
+            if (dims.Length == 1)
+                return Shape.NewScalar();
+            var leading = new long[dims.Length - 1];
+            System.Array.Copy(dims, leading, leading.Length);
+            return Shape.Adopt(leading);
         }
 
         /// <summary>

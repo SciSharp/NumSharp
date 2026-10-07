@@ -11,6 +11,12 @@ namespace NumSharp
         /// </summary>
         /// <param name="seq_of_zeros">A 1-D sequence of roots, or a square 2-D array.</param>
         /// <returns>1-D coefficients highest degree first, <c>c[0] == 1</c>.</returns>
+        /// <exception cref="ValueError">An input that is neither 1-D nor a non-empty square 2-D array (<c>input must be 1d or
+        ///     non-empty square 2d array.</c>).</exception>
+        /// <exception cref="TypeError">A square text matrix: its eigenvalues' finiteness check (<c>isfinite</c> has no text
+        ///     loop).</exception>
+        /// <exception cref="StringComputationNotSupportedException">1-D text roots: NumPy parses them as numbers.</exception>
+        /// <exception cref="NotSupportedException">A square matrix and no LAPACK backend installed (the eigenvalues).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.poly.html
         ///     <para>An empty input returns the 0-d scalar <c>1.0</c> (NumPy's Python float <c>1.0</c>).</para>
@@ -19,19 +25,22 @@ namespace NumSharp
         public static NDArray poly(NDArray seq_of_zeros)
         {
             using var plain = NDMatrixBoundary.PlainFor(seq_of_zeros);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy converts the roots to a float array, parsing the text as numbers: the next phase of the string support.
-            if (Backends.Strings.NDStringUfuncs.IsString(seq_of_zeros)) throw Backends.Strings.NDStringUfuncs.NextPhase("poly", seq_of_zeros);
             seq_of_zeros = np.atleast_1d(seq_of_zeros);
+            bool text = Backends.Strings.NDStringUfuncs.IsString(seq_of_zeros);
             int nd = seq_of_zeros.ndim;
 
             NDArray seq;
             if (nd == 2 && seq_of_zeros.Shape.dimensions[0] == seq_of_zeros.Shape.dimensions[1] && seq_of_zeros.Shape.dimensions[0] != 0)
             {
-                // Characteristic polynomial: build from the matrix's eigenvalues.
+                // Characteristic polynomial: build from the matrix's eigenvalues (a text matrix fails their finiteness
+                // check, NumPy's isfinite TypeError).
                 seq = np.linalg.eigvals(seq_of_zeros);
             }
             else if (nd == 1)
             {
+                // NumPy casts the roots to their mintypecode float, which PARSES text as numbers: the next phase.
+                if (text)
+                    throw Backends.Strings.NDStringUfuncs.NextPhase("poly", seq_of_zeros);
                 // A real (non-object) sequence is cast to its mintypecode float — float32 stays float32,
                 // everything else (int/bool/float16/float64) becomes float64; complex stays complex.
                 seq = seq_of_zeros.astype(PolyMinType(seq_of_zeros.typecode));

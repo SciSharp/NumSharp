@@ -7,11 +7,30 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
+        /// <summary>
+        ///     NumPy's <c>np.argmax</c>: the int64 index of the largest element along
+        ///     <paramref name="axis_"/> (first occurrence), or of the flattened array.
+        /// </summary>
+        /// <param name="arr">The array.</param>
+        /// <param name="axis_">The reduced axis, or null for the flattened array (a 0-d input ravels first).</param>
+        /// <param name="keepdims">Whether the reduced axis stays with length one.</param>
+        /// <returns>The int64 indices (0-d for the flattened form).</returns>
+        /// <exception cref="ArgumentException">An empty line (<c>attempt to get argmax of an empty sequence</c>; NumPy's
+        ///     ValueError, which a string array raises as <see cref="ValueError"/>).</exception>
+        /// <exception cref="AxisError">A string array with an out-of-bounds axis.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A string array whose lines hold two or more elements:
+        ///     NumPy compares the text (the next phase of NumSharp's string support). An empty result or lines of one
+        ///     element give their zero indices.</exception>
         public override NDArray ReduceArgMax(NDArray arr, int? axis_, bool keepdims = false)
         {
-            // Text, or a string dtype= request: NumPy's argmax checks its arguments first (the axis, and the dtype= class where
-            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
-            Strings.NDStringUfuncs.ThrowIfReduce("argmax", arr, axis_);
+            // Text: NumPy's argmax checks the axis (a 0-d input ravels first) and refuses an empty line, then compares the
+            // text (the next phase) — except where no comparison happens: an empty result, or lines of one element, whose
+            // indices are all 0. The bool stand-in of the same shape computes those through the numeric path.
+            if (Strings.NDStringUfuncs.ReduceStandIn("argmax", arr, axis_) is { } standIn)
+            {
+                using (standIn)
+                    return ReduceArgMax(standIn, axis_, keepdims);
+            }
             //in order to iterate an axis:
             //consider arange shaped (1,2,3,4) when we want to summarize axis 1 (2nd dimension which its value is 2)
             //the size of the array is [1, 2, n, m] all shapes after 2nd multiplied gives size
@@ -108,12 +127,12 @@ namespace NumSharp.Backends
                     // Keep the axis but reduce to size 1 (it's already 1)
                     return np.zeros(Shape.Adopt(shape.dimensions), NPTypeCode.Int64);
                 }
-                // 1-D input whose only axis has size 1 squeezes to a fresh 0-d — a numpy
-                // SCALAR (read-only) at the boundary.
-                var zerosBase = np.zeros(Shape.Adopt(shape.dimensions), NPTypeCode.Int64);
-                var squeezed = np.squeeze_fast(zerosBase, axis);
-                zerosBase.Dispose(); // the squeeze view holds its own counted ref on the buffer
-                return squeezed.MarkReductionScalar();
+                // The reduced shape is allocated directly, so the result owns its data as NumPy's does (a squeeze view
+                // of a full-shape zeros array reported OWNDATA False). A 1-D input whose only axis has size 1 reduces to
+                // a fresh 0-d — a numpy SCALAR (read-only) at the boundary.
+                var reducedDims = Shape.GetAxis(shape, axis);
+                var reduced = np.zeros(reducedDims.Length == 0 ? Shape.Scalar : Shape.Adopt(reducedDims), NPTypeCode.Int64);
+                return reduced.MarkReductionScalar();
             }
 
             //handle keepdims - prepare output shape

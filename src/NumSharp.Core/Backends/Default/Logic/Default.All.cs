@@ -13,11 +13,18 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="nd">Input array</param>
         /// <returns>True if all elements are non-zero</returns>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty string array: NumPy reads the strings' truth
+        ///     values (the next phase of NumSharp's string support). An empty one is answered from its shape (the reduction's
+        ///     identity).</exception>
         public override bool All(NDArray nd)
         {
-            // Text, or a string dtype= request: NumPy's all checks its arguments first (the axis, and the dtype= class where
-            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
-            Strings.NDStringUfuncs.ThrowIfReduce("all", nd);
+            // Text: NumPy's all reads the strings' truth values (the next phase), except over an empty input, whose
+            // answer is the reduction's identity: the bool stand-in of the same shape computes it.
+            if (Strings.NDStringUfuncs.ReduceStandIn("all", nd) is { } standIn)
+            {
+                using (standIn)
+                    return All(standIn);
+            }
             return nd.GetTypeCode switch
             {
                 NPTypeCode.Boolean => AllImpl<bool>(nd),
@@ -109,11 +116,20 @@ namespace NumSharp.Backends
         /// <param name="nd">Input array</param>
         /// <param name="axis">Axis along which to reduce</param>
         /// <returns>Array of bools with the axis dimension removed</returns>
+        /// <exception cref="AxisError">A string array with an out-of-bounds <paramref name="axis"/> (a 0-d one accepts 0 and
+        ///     -1).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A non-empty string array: NumPy reads the strings' truth
+        ///     values (the next phase of NumSharp's string support). An empty one is answered from its shape (the reduction's
+        ///     identity).</exception>
         public override NDArray<bool> All(NDArray nd, int axis)
         {
-            // Text, or a string dtype= request: NumPy's all checks its arguments first (the axis, and the dtype= class where
-            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
-            Strings.NDStringUfuncs.ThrowIfReduce("all", nd, (int?)axis);
+            // Text: NumPy's all checks the axis (a 0-d input accepts 0 and -1), then reads the strings' truth values (the
+            // next phase) — except over an empty input, whose identity-filled result the bool stand-in computes.
+            if (Strings.NDStringUfuncs.ReduceStandIn("all", nd, (int?)axis) is { } standIn)
+            {
+                using (standIn)
+                    return All(standIn, axis, keepdims: false);
+            }
             return All(nd, axis, keepdims: false);
         }
     }

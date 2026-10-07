@@ -9,9 +9,23 @@ namespace NumSharp
             /// <summary>
             ///     Raises a square matrix to the (integer) power <paramref name="n"/>.
             /// </summary>
+            /// <param name="a">The square matrix, or a stack of them (the last two axes).</param>
             /// <param name="n">
             ///     Any integer. <c>0</c> gives the identity, a NEGATIVE power inverts first.
             /// </param>
+            /// <returns>
+            ///     The power. <b>Footgun (NumPy's own):</b> <c>n == 1</c> returns <paramref name="a"/> ITSELF, not a copy
+            ///     (<c>np.linalg.matrix_power(a, 1) is a</c>), so writing to the result writes to <paramref name="a"/>;
+            ///     <c>n == -1</c> returns the fresh inverse.
+            /// </returns>
+            /// <exception cref="LinAlgError"><paramref name="a"/> is not at least 2-D, or its last two axes are not square;
+            ///     a negative power of a singular matrix.</exception>
+            /// <exception cref="TypeError">A text matrix with <c>n</c> of 2 or more (matmul has no string loop) or a negative
+            ///     <c>n</c> (inv's input cast).</exception>
+            /// <exception cref="StringComputationNotSupportedException">A non-empty text matrix with <c>n == 0</c>: NumPy writes
+            ///     the identity's numbers into the text dtype as text.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">A negative power of a matrix the managed LU cannot take
+            ///     with no backend installed.</exception>
             /// <remarks>
             ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.matrix_power.html
             ///     <para>
@@ -46,8 +60,10 @@ namespace NumSharp
 
                 if (n == 0)
                     return Identity(work);
+                // NumPy's short-cut `if n == 1: return a` hands back the operand itself (or, for n == -1, the fresh
+                // inverse) — the same object, so `matrix_power(a, 1) is a` and the result shares a's memory and flags.
                 if (n == 1)
-                    return work.copy();
+                    return work;
                 if (n == 2)
                     return np.matmul(work, work);
                 if (n == 3)

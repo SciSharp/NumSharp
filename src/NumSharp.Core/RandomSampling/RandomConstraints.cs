@@ -110,8 +110,9 @@ namespace NumSharp
         /// <param name="a">The array parameter as the caller passed it.</param>
         /// <param name="to">The dtype NumPy converts the parameter to (<c>int64</c> for counts, <c>float64</c> for
         ///     probabilities and concentrations).</param>
-        /// <exception cref="TypeError">The cast is not safe — a float or uint64 count, a complex probability. The text is
-        ///     NumPy's, including its <c>scalar</c> wording for a 0-d array:
+        /// <exception cref="TypeError">The cast is not safe — a float or uint64 count, a complex probability, any
+        ///     fixed-width string (named by its descriptor, <c>dtype('&lt;U2')</c>). The text is NumPy's, including its
+        ///     <c>scalar</c> wording for a 0-d array:
         ///     <c>Cannot cast array data from dtype('float64') to dtype('int64') according to the rule 'safe'</c>.</exception>
         /// <remarks>
         ///     Decimal (no NumPy dtype) is let through to <c>float64</c> as a NumSharp extension: its <c>can_cast</c> row says
@@ -121,6 +122,11 @@ namespace NumSharp
         internal static void CheckSafeCast(NDArray a, NPTypeCode to)
         {
             var from = a.typecode;
+            // A fixed-width string never reaches a number under 'safe' (text -> number is an unsafe, parsing cast). NumPy
+            // names the descriptor (dtype('<U2'), dtype('S3')); the storage lane has no NumPy name to print.
+            if (from == NPTypeCode.String)
+                throw new TypeError($"Cannot cast {(a.ndim == 0 ? "scalar" : "array data")} from {a.dtype.ToString(true)} "
+                                    + $"to dtype('{to.AsNumpyDtypeName()}') according to the rule 'safe'");
             if (from == to || np.can_cast(from, to, "safe") || (from == NPTypeCode.Decimal && to == NPTypeCode.Double))
                 return;
             throw new TypeError($"Cannot cast {(a.ndim == 0 ? "scalar" : "array data")} from dtype('{from.AsNumpyDtypeName()}') "

@@ -372,8 +372,9 @@ Things learned while landing it that the design above did not anticipate:
 * **`.npy`.** `|S5` / `<U3` / `>U3` files read and write byte for byte (mmap included). **Breaking:** a `<U1` file reads
   back as a `<U1` string array, not `Char`; `Char` is still written as `<U1`.
 * **Gate.** The string oracle (`test/oracle/gen_strings_oracle.py` → `NumSharp.Tests.Oracle/Strings/corpus/strings.jsonl`,
-  14,175 cases, 8,281 of them NumPy errors compared by type map + verbatim text; 14 sections: dtype, creation, astype,
-  views, movement, mutation, access, printing, ufuncs, reductions, strdtype, strprec, straxis, strcov). A phase-2 case
+  14,175 cases at landing — 18,790 after the validation pass below, 11,137 of them NumPy errors compared by type map +
+  verbatim text; 17 sections: dtype, creation, astype, views, movement, mutation, access, printing, ufuncs, reductions,
+  strdtype, strprec, straxis, strcov, strshape, strvalid, strsurface). A phase-2 case
   (NumPy returns, or raises a parse error) passes as "deferred" while NumSharp throws
   `StringComputationNotSupportedException` and is held to NumPy's answer the moment NumSharp computes it — the next
   phase is gated by the same corpus. Unit tests: `Backends/Strings/StringCallOrderTests.cs` (one per precedence rule),
@@ -394,6 +395,42 @@ Things learned while landing it that the design above did not anticipate:
     results are read-only reduction scalars in NumSharp, NumPy's generator sees a writeable 0-d array).
   - `GetString` / `SetString` (the `Char` vector API) used to `Debug.Assert` the dtype, so a Release build read a `U`
     array's UCS-4 bytes as UTF-16; they refuse a non-`Char` array now.
+
+**Stage D phase 1 validation (2026-10-07, branch `strings`).** A whole-surface sweep (every public `np.*`, `np.linalg`,
+`np.random`, `np.fft`, `np.ma` and `NDArray` member called with string operands, compared with NumPy 2.4.2) and three new
+oracle sections closed the gaps between "NumPy refuses" and "NumPy computes":
+
+* **The deferral rule, made exact.** Defer (`StringComputationNotSupportedException`) only where NumPy reads the text:
+  compares it, concatenates it, parses it, or formats numbers into a text result. Where dtypes, sizes or shapes alone
+  decide NumPy's answer — also after a computation that cannot fail — give that answer.
+* **Shape-decided answers** (section `strshape`, 1,674 cases; `Backends/Strings/NDStringUfuncs.ShapeDecided.cs`). NumPy's
+  loops read no element of an empty input and compare nothing in a line of one element, and a pair with no comparison
+  loop takes the `==` operator's all-False fallback. So truth tests, `count_nonzero`, the nonzero family, the
+  arg-reductions, sort / argsort / partition, `np.unique` (all forms), `isin`, the set routines, `array_equal` /
+  `array_equiv`, `lexsort`, `sort_complex` and `trim_zeros` answer from the shape: the numeric path runs on a BOOL
+  STAND-IN of the operand's shape (results, errors, `out=` / `where=` / keepdims all NumPy's), and the values a result
+  carries are restored from the input. Binary ufuncs over an empty broadcast return their empty result (`BinaryGuard`).
+* **Check order before a conversion** (section `strvalid`, 173 cases): interp / digitize / repeat (depth, then the 'safe'
+  cast), conversions of nothing (astype / copyto / setitem / where / concatenate / choose), place / putmask (an ndarray
+  value meets `PyArray_FromAny`'s 'safe' rule; a C# array is a Python LIST, converted directly — new `Array` overloads),
+  insert / delete with an array obj, searchsorted's side / sorter checks, choose's modes.
+* **The rest of the surface** (section `strsurface`, 2,768 cases): the linalg gufuncs' input-cast refusals (with NumPy's
+  gufunc names), `pinv` / `tensorinv` / `norm` order, the products (`dot` / `inner` / `vdot` / `tensordot` / `cross`:
+  0-d, alignment, out, itemsize), convolve / correlate depth and empties, `SeedSequence` / spawn keys / Philox counters
+  over text arrays and random integer bounds (CPython's `int()` ported in `RandomSampling/PythonInt.cs`), the histogram
+  family (text data, bins, weights, ranges), quantile `q`, reductions and scans with `out=` (the loop resolved on
+  `(out, input)`), nanargmax's out checks, polynomials, emath, unravel / ravel (`only int indices permitted`), dtype
+  predicates over arrays, `ediff1d`, text `where=` masks, `complex()` of a 0-d text array, `fill` with a sequence.
+* **Numeric fixes found on the way** (all NumPy 2.4.2, unit-tested): `norm` of an empty operand (the inf / 1 / 2 orders
+  reduce with `initial=0`), `matrix_power(a, 1) is a`, `np.cross` broadcasts its leading axes (np.broadcast's text) and
+  checks `axisc` before the dtype, `histogramdd`'s H is a view of the padded counts and an edges array the caller passed
+  comes back as the same object, histogramdd's per-dimension scalar bin checks, `tensorinv` with `ind > ndim`, argsort of
+  a 0-d array, 1-D `unique(axis=0)` takes the flat path, `concatenate(axis=None)` of 0-d operands, insert of a
+  one-element sequence obj, delete of an N-D / int8 obj, `min_scalar_type(NDArray)` (returned null), the digitize /
+  trim_zeros / insert / delete / searchsorted / correlate error classes.
+* **Open.** `np.ma` over text (fill values, `masked_*` comparisons, `make_mask`), `np.nditer` over strings, the result
+  layout of `argwhere` / `flatnonzero` / `unravel_index` (views in NumPy; `OpenBugs.IndexSearchLayout.cs`, the oracle
+  excuses only their layout), an empty matrix's QR / SVD without the OpenBLAS backend (Core ships no QR / SVD).
 
 **Not yet:** datetime storage/kernels/NaT/ISO (C — `docs/plans/datetime64.md`); Stage D phase 2 (computing on text —
 comparisons, `np.strings`, sorting, `add`/`multiply` loops, text ↔ number casts, the gated corpus is ready) and NEP 55

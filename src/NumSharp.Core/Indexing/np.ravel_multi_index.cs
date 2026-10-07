@@ -25,6 +25,13 @@ namespace NumSharp
         ///     stride ordering used to fold coordinates into a flat index.
         /// </param>
         /// <returns>1-D (or shape-preserving) <see cref="NDArray{T}"/> of <see cref="long"/>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="multi_index"/> or <paramref name="dims"/> is null.</exception>
+        /// <exception cref="ValueError">The coordinate count differs from <paramref name="dims"/>' length (<c>parameter
+        ///     multi_index must be a sequence of length N</c>).</exception>
+        /// <exception cref="TypeError">A coordinate array that is neither integer nor bool (<c>only int indices
+        ///     permitted</c>).</exception>
+        /// <exception cref="ArgumentException">An invalid mode or order, coordinates that do not broadcast, or (mode
+        ///     <c>raise</c>) a coordinate out of range.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ravel_multi_index.html</remarks>
         public static NDArray<long> ravel_multi_index(NDArray[] multi_index, int[] dims, string mode = "raise", char order = 'C')
         {
@@ -41,6 +48,17 @@ namespace NumSharp
         ///     Per-axis mode overload. <paramref name="modes"/> length must match
         ///     <paramref name="dims"/> length.
         /// </summary>
+        /// <param name="multi_index">Tuple of integer arrays, one per dimension.</param>
+        /// <param name="dims">Shape of the array the indices are unravelling into.</param>
+        /// <param name="modes">One boundary mode per dimension.</param>
+        /// <param name="order"><c>'C'</c> (default) or <c>'F'</c>.</param>
+        /// <returns>The flat indices.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="multi_index"/> or <paramref name="dims"/> is null.</exception>
+        /// <exception cref="ValueError">The coordinate count differs from <paramref name="dims"/>' length.</exception>
+        /// <exception cref="TypeError">A coordinate array that is neither integer nor bool (<c>only int indices
+        ///     permitted</c>).</exception>
+        /// <exception cref="ArgumentException">A mode count that differs from the dimensions, an invalid mode or order,
+        ///     coordinates that do not broadcast, or (mode <c>raise</c>) a coordinate out of range.</exception>
         public static NDArray<long> ravel_multi_index(NDArray[] multi_index, int[] dims, string[] modes, char order = 'C')
         {
             using var plain = NDMatrixBoundary.PlainFor(multi_index);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
@@ -88,9 +106,24 @@ namespace NumSharp
             return raveled;
         }
 
+        /// <summary>
+        ///     The shared core of <c>ravel_multi_index</c>: NumPy's per-array integer check (<c>astype_anyint</c>), the broadcast
+        ///     of the coordinate arrays, the int64 casts and the folding kernel.
+        /// </summary>
+        /// <param name="multi_index">The coordinate arrays (one per dimension; the count is already checked).</param>
+        /// <param name="dims">The shape being indexed.</param>
+        /// <param name="modes">The parsed per-axis modes.</param>
+        /// <param name="order"><c>'C'</c> or <c>'F'</c>.</param>
+        /// <returns>The flat indices, in the coordinates' broadcast shape.</returns>
+        /// <exception cref="TypeError">A coordinate array that is neither integer nor bool (<c>only int indices permitted</c>:
+        ///     a float, complex, decimal or text array — NumPy never truncates or parses coordinates).</exception>
+        /// <exception cref="ArgumentException">An invalid order, coordinates that do not broadcast, or (mode <c>raise</c>) a
+        ///     coordinate out of range.</exception>
         private static unsafe NDArray<long> RavelMultiIndexImpl(NDArray[] multi_index, int[] dims, int[] modes, char order)
         {
             ValidateOrder(order, nameof(order));
+            foreach (var coords in multi_index)
+                ThrowIfNotIntIndices(coords);
 
             int ndim = multi_index.Length;
 
@@ -230,14 +263,21 @@ namespace NumSharp
             }
         }
 
+        /// <summary>The argument checks <c>ravel_multi_index</c> makes before the modes: both present, one array per dimension.</summary>
+        /// <param name="multi_index">The coordinate arrays.</param>
+        /// <param name="dims">The shape.</param>
+        /// <returns>The number of dimensions.</returns>
+        /// <exception cref="ArgumentNullException">Either argument is null.</exception>
+        /// <exception cref="ValueError">The counts differ (NumPy's <c>parameter multi_index must be a sequence of length
+        ///     N</c>).</exception>
+        /// <exception cref="ArgumentException"><paramref name="dims"/> is empty.</exception>
         private static int ValidateRavelInputs(NDArray[] multi_index, int[] dims)
         {
             if (multi_index == null) throw new ArgumentNullException(nameof(multi_index));
             if (dims == null) throw new ArgumentNullException(nameof(dims));
+            // NumPy's int_sequence_to_arrays: a ValueError naming the expected length.
             if (multi_index.Length != dims.Length)
-                throw new ArgumentException(
-                    $"multi_index length ({multi_index.Length}) must match dims length ({dims.Length}).",
-                    nameof(multi_index));
+                throw new ValueError($"parameter multi_index must be a sequence of length {dims.Length}");
             if (dims.Length == 0)
                 throw new ArgumentException("dims must contain at least one dimension.", nameof(dims));
             return dims.Length;

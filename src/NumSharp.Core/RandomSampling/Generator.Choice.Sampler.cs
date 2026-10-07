@@ -191,7 +191,10 @@ namespace NumSharp
         /// <param name="legacyMessages">True for the legacy RandomState wording (<c>'p' must be 1-dimensional</c>,
         /// <c>'a' and 'p' must have same size</c>, lower-case <c>probabilities …</c>, no docstring pointer).</param>
         /// <returns>The probabilities converted to float64 (a private copy the weighted paths may modify).</returns>
-        /// <exception cref="TypeError"><paramref name="p"/> is 0-d (<c>len() of unsized object</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="p"/> is 0-d (<c>len() of unsized object</c>), or its dtype does not
+        ///     cast to float64 under <c>'safe'</c> (complex, a string class: <c>Cannot cast array data from dtype('&lt;U2') to
+        ///     dtype('float64') according to the rule 'safe'</c>) — checked before the rank and the size, as NumPy's
+        ///     <c>PyArray_FROM_OTF</c> converts first.</exception>
         /// <exception cref="ValueError">Not 1-D, wrong size, NaN sum, a negative entry, or a sum farther than the tolerance from 1.</exception>
         /// <remarks>
         ///     The tolerance is <c>sqrt(finfo(float64).eps)</c>, widened to <c>sqrt(finfo(p.dtype).eps)</c> for a
@@ -212,6 +215,10 @@ namespace NumSharp
                 case NPTypeCode.Single: atol = Math.Max(atol, (double)MathF.Sqrt(1.1920929E-07f)); break;
                 case NPTypeCode.Half: atol = Math.Max(atol, (double)Half.Sqrt((Half)0.0009765625)); break;
             }
+
+            // PyArray_FROM_OTF(p, NPY_DOUBLE, ...) comes next, before the rank and size checks: without FORCECAST it
+            // requires a 'safe' cast, so a complex or a string p is refused here (TypeError naming p's dtype).
+            RandomConstraints.CheckSafeCast(p, NPTypeCode.Double);
 
             if (p.ndim != 1)
                 throw new ValueError(legacyMessages ? "'p' must be 1-dimensional" : "p must be 1-dimensional");

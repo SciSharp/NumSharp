@@ -119,6 +119,15 @@ namespace NumSharp
                         "Both input arrays must be (arrays of) 3-dimensional vectors, but they are " +
                         $"{x1.Shape.dimensions[a1]} and {x2.Shape.dimensions[a2]} dimensional instead.");
 
+                // NumPy then calls np.cross, which casts both operands to their promoted dtype and multiplies components
+                // into the result: with text the multiply has no loop, named with the promoted descriptor on both sides
+                // (<U2 beside float64 promotes to <U32).
+                if (Backends.Strings.NDStringUfuncs.IsString(x1) || Backends.Strings.NDStringUfuncs.IsString(x2))
+                {
+                    var promoted = DTypePromotion.PromoteTypes(x1.dtype, x2.dtype);
+                    throw Backends.Strings.NDStringUfuncs.NoLoop("multiply", promoted, promoted);
+                }
+
                 // Work with the component axis FIRST, so each of the three components is a plain
                 // leading-axis index that drops the axis; taking them from the last axis instead
                 // needs an ellipsis, and that leaves a length-1 axis behind on a bare 3-vector.
