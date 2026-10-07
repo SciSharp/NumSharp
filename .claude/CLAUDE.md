@@ -76,7 +76,16 @@ request (`'U'`, `'S'`) gets NumPy's per-ufunc answer. Gate: the string oracle (`
 `StringComputationNotSupportedException`, so phase 2 is gated by the same corpus) + `Backends/Strings/StringCallOrderTests.cs`.
 **Trap:** NumPy's ufunc dispatch cache makes some answers depend on call HISTORY (`np.prod(int8, dtype='U')` names no
 loop in a fresh process but finds the string repeat loop after `np.multiply(u, int8, dtype='U')`); the corpus records
-the fresh-process answer. Design + status: `docs/plans/dtype-system.md` §5 "Stage D phase 1"; user docs
+the fresh-process answer. **Movement perf** (NPY/NS, two pinned P-cores, 100K / 1M `<U8`): copy 5.0 / 3.7×, strided /
+reversed / transposed copies 2.5–4.4×, `astype` width changes 2.7–4.2× and `S ↔ U` 44–86×, concatenate 3.3–3.6×, take /
+fancy / mask 1.7–3.1×, `np.where` 3.7–5.8×, `np.array(string[])` 2.2×. The routes: a same-layout pair is one block move
+(`NDStringCopy.TryCopyDenseBlock`), a non-overlapping pair over ≤ 2 effective axes runs `GetElementCopyKernel` (one
+constant-size cpblk/initblk per element — the unit view's narrow rows cost 4–8 ns an element), `np.where` selects
+whole elements (`GetWhereBytesKernel`), a lone index array / prefix mask gathers whole rows on the fancy-index kernel
+route (an explicit trailing `:` on the unit view forced the general index path, 28× slower), a contiguous fill doubles
+block moves, and every fully-overwritten `U` result skips NumPy's NEEDS_INIT zero fill (`NDArray.ForOverwrite`).
+Floors: 1K calls ~1.0–1.3× (the per-call NDArray floor), `copyto` / set-slice / fill ~1.0–1.4× (both sides move the same
+bytes at memory speed), `NDArray.AsStringArray` at 1M 0.7× (.NET's GC of 1M live strings). Design + status: `docs/plans/dtype-system.md` §5 "Stage D phase 1"; user docs
 `docs/website-src/docs/fundamentals/strings-and-bytes.md`.
 
 **Perf notes:**

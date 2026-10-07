@@ -97,6 +97,20 @@ namespace NumSharp
             if (!(arr.Storage.StringSlice is { IsUnicode: true }))
                 throw new InvalidCastException($"AsStringArray reads a fixed-width Unicode (U) array, not {arr.dtype.ToString(true)}.");
             var result = new string[arr.size];
+            if (arr.Shape.IsContiguous)
+            {
+                // A C-contiguous array is one run of elements: decode each straight from its units (the per-element
+                // GetAtIndex path re-derives the element's offset and dispatches on the dtype every time).
+                unsafe
+                {
+                    var slice = arr.Storage.StringSlice;
+                    int chars = slice.Chars;
+                    uint* units = (uint*)(arr.Storage.Address + arr.Shape.offset * (long)slice.ItemSize);
+                    for (long i = 0; i < result.LongLength; i++)
+                        result[i] = Backends.Strings.NDStringCodec.ReadUcs4(units + i * chars, chars);
+                }
+                return result;
+            }
             for (long i = 0; i < result.LongLength; i++)
                 result[i] = (string)arr.Storage.GetAtIndex(i);
             return result;

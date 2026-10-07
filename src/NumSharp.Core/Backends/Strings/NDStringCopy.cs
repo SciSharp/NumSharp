@@ -74,8 +74,14 @@ namespace NumSharp.Backends.Strings
 
             if (dSlice.IsUnicode == sSlice.IsUnicode)
             {
+                // The same class and width over the same dense layout is one block move.
+                if (dSlice.ItemSize == sSlice.ItemSize && TryCopyDenseBlock(dst, src))
+                    return;
                 // NumPy's raw 1-D order for an overlapping same-width copy (reads its own writes, like NumPy).
                 if (dSlice.ItemSize == sSlice.ItemSize && TryAssignRaw1D(dst, src))
+                    return;
+                // A non-overlapping copy over at most two effective axes moves whole elements (any widths of the class).
+                if (TryCopyElementGrid(dst, src))
                     return;
                 CopyUnits(dst.StringUnitView(), dSlice.Chars, src.StringUnitView(), sSlice.Chars);
                 return;
@@ -296,6 +302,111 @@ namespace NumSharp.Backends.Strings
             if (!shape.IsWriteable && narrowed.IsWriteable)
                 narrowed = narrowed.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
             return units.Alias(narrowed);
+        }
+
+        /// <summary>
+        ///     The copy between two string storages of the SAME class and width that lay their elements out identically:
+        ///     equal dimensions (no broadcast) and both C-contiguous, or both F-contiguous. Their element grids then coincide
+        ///     byte for byte, so the whole copy is one block move — no unit views, no iterator.
+        /// </summary>
+        /// <param name="dst">The destination string storage (writeable; same descriptor as <paramref name="src"/>).</param>
+        /// <param name="src">The source string storage.</param>
+        /// <returns>True when the copy was performed here; false (nothing done) for any other layout pair.</returns>
+        /// <remarks>
+        ///     <see cref="Buffer.MemoryCopy(void*, void*, long, long)"/> has memmove semantics, which is exactly NumPy's answer for an OVERLAPPING pair
+        ///     of the same layout: a multi-dimensional copy is copied first (<c>raw_array_assign_array</c> sees the overlap),
+        ///     and a 1-D one walks away from the overlap — either way every element reads its value from before the copy.
+        /// </remarks>
+        private static bool TryCopyDenseBlock(UnmanagedStorage dst, UnmanagedStorage src)
+        {
+            var dShape = dst.Shape;
+            var sShape = src.Shape;
+            if (!ShapesMatch(sShape, dShape))
+                return false; // a broadcast source
+            bool sameLayout = (dShape.IsContiguous && sShape.IsContiguous) || (dShape.IsFContiguous && sShape.IsFContiguous);
+            if (!sameLayout)
+                return false;
+
+            long itemsize = dst.StringSlice.ItemSize;
+            long bytes = dShape.size * itemsize;
+            byte* d = dst.Address + dShape.offset * itemsize;
+            byte* s = src.Address + sShape.offset * itemsize;
+            if (d != s)
+                Buffer.MemoryCopy(s, d, bytes, bytes);
+            return true;
+        }
+
+        /// <summary>
+        ///     The same-class copy (<c>S → S</c>, <c>U → U</c>, any widths) of two storages that do not share memory, when the
+        ///     destination's axes of extent above 1 reduce to at most TWO after merging the axes both operands continue
+        ///     contiguously: one <see cref="DirectILKernelGenerator.GetElementCopyKernel"/> call moves whole elements
+        ///     (truncating or NUL-padding to the destination width) over that 2-D byte-strided grid — a 1-D strided or reversed
+        ///     view, a transposed matrix, a contiguous array of another width, a broadcast source (stride 0).
+        /// </summary>
+        /// <param name="dst">The destination string storage (writeable; the broadcast already validated).</param>
+        /// <param name="src">The source string storage of the same class, broadcastable to <paramref name="dst"/>.</param>
+        /// <returns>True when the copy was performed here; false (nothing done) when the operands may overlap, the grid has
+        ///     more than two effective axes, or IL generation is unavailable — the unit route then runs.</returns>
+        /// <remarks>
+        ///     The unit route (a <c>uint8</c> / <c>uint32</c> view with one extra character axis) runs each element as a short
+        ///     inner row of the numeric iterator; for narrow strided rows that per-row cost dominated (a stepped <c>&lt;U8</c>
+        ///     copy, a <c>U8 → U4</c> cast at 0.6x NumPy). Overlapping operands keep NumPy's order through
+        ///     <see cref="TryAssignRaw1D"/> or the unit route's overlap guard.
+        /// </remarks>
+        private static bool TryCopyElementGrid(UnmanagedStorage dst, UnmanagedStorage src)
+        {
+            var dShape = dst.Shape;
+            var sShape = src.Shape;
+            int nd = dShape.NDim;
+            int lead = nd - sShape.NDim; // the source's axes align to the destination's trailing axes
+            if (lead < 0 || NDMemOverlap.StoragesMayShareMemory(src, dst))
+                return false;
+
+            // The destination's axes of extent > 1, outermost first, with the source's stride on each (0 where the source
+            // broadcasts); an axis both operands continue contiguously from the previous one merges into it.
+            Span<long> dims = stackalloc long[2];
+            Span<long> dStrides = stackalloc long[2];
+            Span<long> sStrides = stackalloc long[2];
+            int k = 0;
+            for (int axis = 0; axis < nd; axis++)
+            {
+                long extent = dShape.dimensions[axis];
+                if (extent == 1)
+                    continue;
+                int sAxis = axis - lead;
+                long sStride = sAxis < 0 || sShape.dimensions[sAxis] == 1 ? 0 : sShape.strides[sAxis];
+                long dStride = dShape.strides[axis];
+                if (k > 0 && dStrides[k - 1] == dStride * extent && sStrides[k - 1] == sStride * extent)
+                {
+                    dims[k - 1] *= extent;
+                    dStrides[k - 1] = dStride;
+                    sStrides[k - 1] = sStride;
+                    continue;
+                }
+                if (k == 2)
+                    return false; // three independent axes: the unit route
+                dims[k] = extent;
+                dStrides[k] = dStride;
+                sStrides[k] = sStride;
+                k++;
+            }
+
+            long dW = dst.StringSlice.ItemSize;
+            long sW = src.StringSlice.ItemSize;
+            int copy = (int)Math.Min(dW, sW);
+            int zero = (int)Math.Max(0, dW - sW);
+            var kernel = DirectILKernelGenerator.GetElementCopyKernel(copy, zero);
+            if (kernel is null)
+                return false;
+
+            long rows = k == 2 ? dims[0] : 1;
+            long cols = k == 0 ? 1 : dims[k - 1];
+            long dRow = k == 2 ? dStrides[0] * dW : 0;
+            long sRow = k == 2 ? sStrides[0] * sW : 0;
+            long dCol = k == 0 ? 0 : dStrides[k - 1] * dW;
+            long sCol = k == 0 ? 0 : sStrides[k - 1] * sW;
+            kernel(dst.Address + dShape.offset * dW, src.Address + sShape.offset * sW, rows, cols, dRow, dCol, sRow, sCol);
+            return true;
         }
 
         /// <summary>

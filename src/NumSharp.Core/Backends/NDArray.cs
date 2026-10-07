@@ -470,6 +470,35 @@ namespace NumSharp
             InitializeArc();
         }
 
+        /// <summary>
+        ///     The allocation constructor behind <see cref="ForOverwrite"/>: no zero fill, not even a <c>U</c> array's
+        ///     <c>NPY_NEEDS_INIT</c> one.
+        /// </summary>
+        /// <param name="dtype">The dtype descriptor.</param>
+        /// <param name="shape">The dimensions.</param>
+        /// <param name="fillZeros">Zero the buffer (false for every caller: <see cref="ForOverwrite"/>).</param>
+        /// <param name="overwriteAll">Must be true (the marker that selects this overload).</param>
+        private NDArray(DType dtype, Shape shape, bool fillZeros, bool overwriteAll) : this(dtype)
+        {
+            Storage.Allocate(shape, dtype, fillZeros, overwriteAll);
+            InitializeArc();
+        }
+
+        /// <summary>
+        ///     A new array the caller fills COMPLETELY before anyone reads it (the destination of a copy, a cast, a
+        ///     concatenation): like <c>new NDArray(dtype, shape, false)</c>, but a fixed-width <c>U</c> array also skips
+        ///     NumPy's <c>NPY_NEEDS_INIT</c> zero fill, a pass the copy would only overwrite. Numeric dtypes are unaffected.
+        /// </summary>
+        /// <param name="dtype">The dtype descriptor.</param>
+        /// <param name="shape">The dimensions (a view's layout is re-laid out in C order, as for every allocation).</param>
+        /// <returns>The new array, its bytes undefined until written.</returns>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows.</exception>
+        /// <remarks>
+        ///     Footgun: a caller that can throw after allocating MUST NOT hand the array out (an unwritten <c>U</c> element
+        ///     holds pool noise — possibly units no code point maps to); dispose it on the failure path instead.
+        /// </remarks>
+        internal static NDArray ForOverwrite(DType dtype, Shape shape) => new NDArray(dtype, shape, false, true);
+
         private NDArray(IArraySlice array, Shape shape) : this(array.TypeCode)
         {
             Storage.Allocate(array, shape);

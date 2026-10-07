@@ -33,7 +33,7 @@ namespace NumSharp
                     // A string element has no element kernel: gather on the unit view (the mask covers the same leading
                     // axes there; the trailing character axis rides along).
                     if (typecode == NPTypeCode.String)
-                        return StringAdvancedGet(u => u[mask], p => p[mask]);
+                        return StringAdvancedGet(u => MaskedUnitRows(u, mask, units => units[mask]), p => p[mask]);
                     return this.TensorEngine.BooleanMask(this, mask);
                 }
 

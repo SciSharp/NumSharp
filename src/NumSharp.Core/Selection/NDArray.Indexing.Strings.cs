@@ -51,17 +51,62 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The index tuple for the unit view: the string array's index followed by <see cref="Slice.All"/> for the
-        ///     character axis.
+        ///     The index tuple for the unit view. Without an <see cref="Slice.Ellipsis"/> it is the string array's own index:
+        ///     the character axis is a trailing axis the index does not reach, so it is implicitly whole — and an index that
+        ///     is ONE integer array then reaches the fancy-index kernel route (whole-element slabs) instead of the general
+        ///     index path an explicit trailing <c>:</c> forces (measured 28x slower: <c>units[idx, :]</c> 10.2 ms vs
+        ///     <c>units[idx]</c> 0.37 ms at 100K <c>&lt;U8</c>). An ellipsis would stretch over the character axis, so that
+        ///     tuple gets <see cref="Slice.All"/> appended to pin it.
         /// </summary>
         /// <param name="normalized">The string array's (normalized) index tuple.</param>
-        /// <returns>A new array one item longer.</returns>
+        /// <returns>The same tuple, or a new one item longer when it holds an ellipsis.</returns>
         private static object[] WithCharacterAxis(object[] normalized)
         {
+            bool ellipsis = false;
+            foreach (var item in normalized)
+                ellipsis |= item is Slice s && s.IsEllipsis;
+            if (!ellipsis)
+                return normalized;
             var unit = new object[normalized.Length + 1];
             System.Array.Copy(normalized, unit, normalized.Length);
             unit[normalized.Length] = Slice.All;
             return unit;
+        }
+
+        /// <summary>
+        ///     A boolean-mask gather on a string array's unit view. When the mask covers the leading axes EXACTLY
+        ///     (<c>mask.shape == units.shape[:mask.ndim]</c>, at least one axis) and the unit view is C-contiguous, those axes
+        ///     are one run of rows: the gather is <c>flatnonzero(mask)</c> plus one integer-index gather of whole rows, which
+        ///     takes the fancy-index kernel route — every other case runs <paramref name="fallback"/>, the route it replaces.
+        /// </summary>
+        /// <param name="units">The unit view (<c>shape + (chars,)</c>).</param>
+        /// <param name="mask">The boolean mask over the string array's leading axes.</param>
+        /// <param name="fallback">The general mask gather, for a mask or layout the fast path does not cover.</param>
+        /// <returns>The gathered unit rows: <c>(count,) + units.shape[mask.ndim:]</c>, a fresh C-contiguous array.</returns>
+        /// <remarks>
+        ///     NumPy gathers the selected elements in C order of the mask, which is the order <c>flatnonzero</c> lists them;
+        ///     <c>(count,) + trailing</c> is NumPy's result shape for a prefix mask.
+        /// </remarks>
+        private static NDArray MaskedUnitRows(NDArray units, NDArray mask, Func<NDArray, NDArray> fallback)
+        {
+            int k = mask.ndim;
+            if (k == 0 || k >= units.ndim || !units.Shape.IsContiguous)
+                return fallback(units);
+            long rows = 1;
+            for (int d = 0; d < k; d++)
+            {
+                if (mask.Shape.dimensions[d] != units.Shape.dimensions[d])
+                    return fallback(units);
+                rows *= units.Shape.dimensions[d];
+            }
+
+            var dims = new long[1 + units.ndim - k];
+            dims[0] = rows;
+            for (int d = k; d < units.ndim; d++)
+                dims[1 + d - k] = units.Shape.dimensions[d];
+            using var flat = units.reshape(Shape.Adopt(dims)); // a view: the unit view is C-contiguous
+            using var picks = np.flatnonzero(mask);
+            return flat[picks];
         }
 
         /// <summary>
@@ -242,7 +287,14 @@ namespace NumSharp
         /// <param name="normalized">The normalized index tuple.</param>
         /// <returns>The selected string array.</returns>
         private NDArray StringFetchIndices(object[] normalized)
-            => StringAdvancedGet(u => u.FetchIndices(WithCharacterAxis(normalized)), p => p.FetchIndices((object[])normalized.Clone()));
+        {
+            // A lone boolean mask over leading axes gathers whole rows (MaskedUnitRows); any other index runs on the unit
+            // view as given.
+            if (normalized.Length == 1 && normalized[0] is NDArray m && m.typecode == NPTypeCode.Boolean)
+                return StringAdvancedGet(u => MaskedUnitRows(u, m, units => units.FetchIndices(WithCharacterAxis(normalized))),
+                                         p => p.FetchIndices((object[])normalized.Clone()));
+            return StringAdvancedGet(u => u.FetchIndices(WithCharacterAxis(normalized)), p => p.FetchIndices((object[])normalized.Clone()));
+        }
 
         /// <summary>
         ///     <c>this[indices] = value</c> for a string array whose (normalized) index has an advanced component.

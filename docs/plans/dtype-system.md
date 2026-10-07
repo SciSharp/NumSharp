@@ -378,6 +378,13 @@ Things learned while landing it that the design above did not anticipate:
   `StringComputationNotSupportedException` and is held to NumPy's answer the moment NumSharp computes it — the next
   phase is gated by the same corpus. Unit tests: `Backends/Strings/StringCallOrderTests.cs` (one per precedence rule),
   `Documentation/FundamentalsStringsBytesDocTests.cs`, the frombuffer / getfield / file I/O string tests.
+* **Movement perf** (NPY/NS, two pinned P-cores, 100K / 1M `<U8`): copy 5.0 / 3.7×, strided / reversed / transposed
+  copies 2.5–4.4×, `astype` width changes 2.7–4.2×, `S ↔ U` 44–86×, concatenate 3.3–3.6×, take / fancy / mask 1.7–3.1×,
+  `np.where` 3.7–5.8×. Same-layout copies are one block move; non-overlapping copies over at most two effective axes run
+  the `ElementCopy` IL kernel (constant-size cpblk + initblk per element); `np.where` runs the `WhereBytes` kernel;
+  integer-index and prefix-mask gathers take the fancy-index kernel route; fully-written `U` results skip the NEEDS_INIT
+  zero fill. Floors: 1K calls (the per-call NDArray floor), `copyto` / fill (memory-bound), `AsStringArray` at 1M
+  (.NET GC of live strings).
 * **Traps found.**
   - NumPy's ufunc DISPATCH CACHE makes an answer depend on call history: after
     `np.multiply(u, int8, dtype='U')` (whose promoter casts int8 → int64 and is cached per DType tuple),

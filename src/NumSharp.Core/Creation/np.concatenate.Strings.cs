@@ -93,7 +93,8 @@ namespace NumSharp
                 var inputShapes = new Shape[arrays.Length];
                 for (int k = 0; k < arrays.Length; k++)
                     inputShapes[k] = arrays[k].Shape;
-                dst = new NDArray(result, Shape.ConcatOutputShape(resultDims, inputShapes), fillZeros: false);
+                // The pieces cover the result exactly, so a U result skips the NEEDS_INIT zero fill.
+                dst = NDArray.ForOverwrite(result, Shape.ConcatOutputShape(resultDims, inputShapes));
             }
 
             var accessor = new Slice[ndim];

@@ -108,12 +108,51 @@ namespace NumSharp
                 // The string copy route converts the 0-d value (S <-> U with the ASCII checks, truncation) or refuses a
                 // numeric one; it runs only when there is an element to write.
                 if (size > 0)
-                    NDIter.Copy(Storage, nd.Storage);
+                    FillTextFrom(nd.Storage);
                 return;
             }
             using var scalar = Backends.Strings.NDStringArrays.FromScalar(value, dtype);
             if (size > 0)
-                NDIter.Copy(Storage, scalar.Storage);
+                FillTextFrom(scalar.Storage);
+        }
+
+        /// <summary>
+        ///     Writes one 0-d string value into every element of this string array. A C- or F-contiguous array (a constant
+        ///     fill does not care about order) converts the value into its FIRST element only — the string copy route's
+        ///     conversion and checks — and then replicates that element's bytes across the window by doubling block moves,
+        ///     each source a cache-resident prefix of the window; any other layout broadcasts the value through the copy
+        ///     route.
+        /// </summary>
+        /// <param name="value">A 0-d string storage (converted to this array's descriptor here).</param>
+        /// <exception cref="UnicodeEncodeError">Non-ASCII text into a bytes (<c>S</c>) array.</exception>
+        /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into a str (<c>U</c>) array.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A numeric value.</exception>
+        private unsafe void FillTextFrom(UnmanagedStorage value)
+        {
+            var shape = Shape;
+            if (!(shape.IsContiguous || shape.IsFContiguous) || shape.IsBroadcasted)
+            {
+                NDIter.Copy(Storage, value);
+                return;
+            }
+
+            long itemsize = Storage.StringSlice.ItemSize;
+            byte* window = Storage.Address + shape.offset * itemsize;
+            // The first element, as a 0-d view: the copy route converts the value into it (or raises before any write).
+            var first = Storage.Alias(new Shape(System.Array.Empty<long>(), System.Array.Empty<long>(), shape.offset, shape.bufferSize));
+            NDIter.Copy(first, value);
+
+            // Doubling block moves from the start of the window; past ~64 KB the source stays a fixed, cache-resident
+            // prefix (a whole number of elements, so the pattern stays aligned) and only the writes stream.
+            long total = shape.size * itemsize;
+            long cap = Math.Max(itemsize, (65536 / itemsize) * itemsize);
+            long filled = itemsize;
+            while (filled < total)
+            {
+                long chunk = Math.Min(Math.Min(filled, cap), total - filled);
+                Buffer.MemoryCopy(window, window + filled, chunk, chunk);
+                filled += chunk;
+            }
         }
 
         /// <summary>

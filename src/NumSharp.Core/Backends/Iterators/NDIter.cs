@@ -4391,8 +4391,19 @@ namespace NumSharp.Backends.Iteration
                 outShape = Shape.Adopt((long[])srcShape.dimensions.Clone(), physical);
             }
 
-            var dst = new NDArray(dstType, outShape, false) { TensorEngine = engine };
-            Copy(dst, src);
+            // Every byte of dst is written by the copy, so a U result skips NumPy's NEEDS_INIT zero fill (ForOverwrite);
+            // a failing copy (an S <-> U conversion error) disposes it rather than hand out its undefined bytes.
+            var dst = NDArray.ForOverwrite(dstType, outShape);
+            dst.TensorEngine = engine;
+            try
+            {
+                Copy(dst, src);
+            }
+            catch
+            {
+                dst.Dispose();
+                throw;
+            }
             return dst;
         }
 

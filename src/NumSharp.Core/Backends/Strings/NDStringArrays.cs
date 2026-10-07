@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends.Strings
 {
@@ -214,8 +215,18 @@ namespace NumSharp.Backends.Strings
             // The shape's own layout is kept when it describes a fresh buffer (np.full_like's KEEPORDER / F layouts); the
             // allocator re-lays a view's layout out in C order (Shape.ForFreshAllocation).
             var layout = shape.IsEmpty ? Shape.Adopt(Array.Empty<long>()) : shape;
-            var result = new NDArray(descr, layout, false);
-            Iteration.NDIter.Copy(result.Storage, value.Storage);
+            // The broadcast copy writes every element, so a U result skips the NEEDS_INIT zero fill; a failing conversion
+            // disposes it.
+            var result = NDArray.ForOverwrite(descr, layout);
+            try
+            {
+                Iteration.NDIter.Copy(result.Storage, value.Storage);
+            }
+            catch
+            {
+                result.Dispose();
+                throw;
+            }
             return result;
         }
 
@@ -297,6 +308,9 @@ namespace NumSharp.Backends.Strings
             NDArray ys = SameElement(y, descr) ? y : ConvertUnchecked(y, descr);
             try
             {
+                // The common case selects whole elements in one pass; any broadcast or strided operand runs on the unit views.
+                if (TryWhereContiguous(cond, xs, ys, descr, dims, layout, out var selected))
+                    return selected;
                 using var condUnits = np.expand_dims(cond, -1);
                 using var xu = UnitArray(xs);
                 using var yu = UnitArray(ys);
@@ -306,7 +320,7 @@ namespace NumSharp.Backends.Strings
                 // NumPy's layout: the values move into an array laid out like the iterator's output.
                 using (result)
                 {
-                    var laid = new NDArray(descr, layout, false);
+                    var laid = NDArray.ForOverwrite(descr, layout); // the copy writes every element
                     Iteration.NDIter.Copy(laid.Storage, result.Storage);
                     return laid;
                 }
@@ -321,6 +335,63 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
+        ///     <c>np.where</c> over string values that need no broadcast and no layout work: the condition and both values
+        ///     have the result's dimensions, are C-contiguous, and the values already hold the result descriptor. Then each
+        ///     condition byte selects one whole element — <see cref="DirectILKernelGenerator.GetWhereBytesKernel"/>, one pass
+        ///     over the result — where the unit route broadcasts the condition over each element's characters (2x slower
+        ///     than NumPy at 1M <c>&lt;U8</c> elements).
+        /// </summary>
+        /// <param name="cond">The bool condition.</param>
+        /// <param name="x">The values where the condition holds, in <paramref name="descr"/>.</param>
+        /// <param name="y">The values elsewhere, in <paramref name="descr"/>.</param>
+        /// <param name="descr">The result descriptor (its width is the kernel's element width).</param>
+        /// <param name="dims">The broadcast dimensions.</param>
+        /// <param name="layout">NumPy's result layout for the operands (C order when they are all C-contiguous).</param>
+        /// <param name="result">The new array when the fast path applied, else null.</param>
+        /// <returns>True when <paramref name="result"/> was produced; false for a shape or layout the kernel does not take
+        ///     (nothing allocated).</returns>
+        private static unsafe bool TryWhereContiguous(NDArray cond, NDArray x, NDArray y, DType descr, long[] dims, Shape layout,
+                                                      out NDArray result)
+        {
+            result = null;
+            long n = 1;
+            foreach (var d in dims)
+                n *= d;
+            if (n == 0 || !layout.IsContiguous)
+                return false;
+            foreach (var operand in new[] { cond, x, y })
+                if (!operand.Shape.IsContiguous || !SameDimensions(operand.Shape.dimensions, dims))
+                    return false;
+            var kernel = DirectILKernelGenerator.GetWhereBytesKernel(descr.itemsize);
+            if (kernel is null)
+                return false;
+
+            long width = descr.itemsize;
+            var r = NDArray.ForOverwrite(descr, layout); // the kernel writes every element
+            kernel((bool*)(cond.Storage.Address + cond.Shape.offset),
+                   x.Storage.Address + x.Shape.offset * width,
+                   y.Storage.Address + y.Shape.offset * width,
+                   r.Storage.Address + r.Shape.offset * width,
+                   n);
+            result = r;
+            return true;
+        }
+
+        /// <summary>True when two dimension lists are equal (rank and every extent).</summary>
+        /// <param name="a">One list.</param>
+        /// <param name="b">The other.</param>
+        /// <returns>True for equal ranks and extents.</returns>
+        private static bool SameDimensions(long[] a, long[] b)
+        {
+            if (a.Length != b.Length)
+                return false;
+            for (int i = 0; i < a.Length; i++)
+                if (a[i] != b[i])
+                    return false;
+            return true;
+        }
+
+        /// <summary>
         ///     A copy of <paramref name="a"/> converted to <paramref name="descr"/> without the ASCII check, for a caller that
         ///     already raised NumPy's error for every element it will read (non-ASCII bytes of an element nobody reads carry
         ///     through as garbage units and are discarded).
@@ -330,7 +401,7 @@ namespace NumSharp.Backends.Strings
         /// <returns>A fresh C-ordered array of <paramref name="a"/>'s dimensions.</returns>
         private static NDArray ConvertUnchecked(NDArray a, DType descr)
         {
-            var r = new NDArray(descr, Shape.Adopt((long[])a.Shape.dimensions.Clone()), false);
+            var r = NDArray.ForOverwrite(descr, Shape.Adopt((long[])a.Shape.dimensions.Clone())); // fully written below
             NDStringCopy.CopyUnchecked(r.Storage, a.Storage);
             return r;
         }

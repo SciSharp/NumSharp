@@ -1401,7 +1401,24 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentNullException"><paramref name="shape"/> is uninitialized, or <paramref name="dtype"/> is null.</exception>
         /// <exception cref="NotSupportedException">The descriptor's class has no storage lane yet (a datetime64/timedelta64 descriptor before Stage C).</exception>
         /// <exception cref="ValueError">A dimension is negative, or the byte count overflows (<see cref="AllocationGuard"/>).</exception>
-        public void Allocate(Shape shape, DType dtype, bool fillZeros)
+        public void Allocate(Shape shape, DType dtype, bool fillZeros) => Allocate(shape, dtype, fillZeros, overwriteAll: false);
+
+        /// <summary>
+        ///     <see cref="Allocate(Shape, DType, bool)"/> for a caller that WRITES EVERY BYTE of the new buffer before anyone
+        ///     reads it (a copy, a cast, a concatenation): <paramref name="overwriteAll"/> skips NumPy's <c>NPY_NEEDS_INIT</c>
+        ///     zero fill of a <c>U</c> allocation, which would only be overwritten — a whole extra pass over the buffer
+        ///     (3.2 MB for 100K <c>&lt;U8</c> elements, as long as the copy itself at L2/L3 sizes).
+        /// </summary>
+        /// <param name="shape">The dimensions (see <see cref="Allocate(Shape, DType, bool)"/>).</param>
+        /// <param name="dtype">The dtype descriptor.</param>
+        /// <param name="fillZeros">Zero the fresh buffer (wins over <paramref name="overwriteAll"/>).</param>
+        /// <param name="overwriteAll">True when the caller overwrites every byte: a <c>U</c> buffer is then left with the
+        ///     pool's noise, which no reader can observe. A caller that may leave an element unwritten (an early exception
+        ///     after which the array is still returned, a partial fill) must pass false.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="shape"/> is uninitialized, or <paramref name="dtype"/> is null.</exception>
+        /// <exception cref="NotSupportedException">The descriptor's class has no storage lane yet.</exception>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows (<see cref="AllocationGuard"/>).</exception>
+        internal void Allocate(Shape shape, DType dtype, bool fillZeros, bool overwriteAll)
         {
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
@@ -1420,7 +1437,8 @@ namespace NumSharp.Backends
                 // NumPy zero-fills EVERY allocation of a dtype flagged NPY_NEEDS_INIT (PyArray_NewFromDescr_int), so
                 // np.empty(3, 'U3') is three empty strings: a U element's NUL padding is part of its value, and a reused
                 // buffer could hold units no code point maps to. S carries no such flag; its leftover bytes are still text.
-                bool zero = fillZeros || (stringDescr.Meta.ItemFlags & DTypeMeta.NeedsInitFlag) != 0;
+                // A caller that overwrites every byte (overwriteAll) skips the fill: nothing can read the noise.
+                bool zero = fillZeros || (!overwriteAll && (stringDescr.Meta.ItemFlags & DTypeMeta.NeedsInitFlag) != 0);
                 _Allocate(fresh, StringArraySlice.Allocate(stringDescr, fresh.size, zero));
                 return;
             }
