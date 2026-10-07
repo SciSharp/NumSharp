@@ -102,6 +102,17 @@ namespace NumSharp.Backends
             // Replaces the promoted dtype BEFORE the out/where branch so a
             // provided out is validated against the dtype-overridden loop
             // (probed: power(dtype=f32, out=i32) reports float32 → int32).
+            // NEP 50: a 0-d Python-int operand is packed into the final loop dtype with NumPy's setitem, which range-checks
+            // it (OverflowError "Python integer 1000 out of bounds for int8") where the kernels' cast used to wrap
+            // (int8 + 1000 gave [-23, -22]). NumPy packs while it resolves the loop: after it parsed out= (a read-only
+            // out) and where= (the mask's dtype), before the dtype= input casts — so those two checks run first here
+            // (ExecuteBinaryUfuncInto repeats them; they are idempotent).
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
+            if (where is not null)
+                ValidateWhereMask(where);
+            CheckWeakPyIntOperand(lhs, rhs, dtype ?? resultType, loopFromPromotion: !dtype.HasValue);
+
             if (dtype.HasValue && dtype.Value != resultType)
             {
                 ValidateBinaryInputCasts(lhsType, rhsType, dtype.Value, UfuncName(op));
@@ -135,6 +146,19 @@ namespace NumSharp.Backends
                 // (max(F,T)=T=OR, min(F,T)=F=AND). Remap so the bitwise kernels handle them.
                 else if (op == BinaryOp.Maximum || op == BinaryOp.FMax) op = BinaryOp.BitwiseOr;
                 else if (op == BinaryOp.Minimum || op == BinaryOp.FMin) op = BinaryOp.BitwiseAnd;
+            }
+
+            // NEP 50: a 0-d operand against an array is a weak Python scalar, and NumPy re-packs it into the final loop
+            // dtype with PyArray_Pack (npy_update_operand_for_scalar): an int goes through the correctly rounded double, so
+            // an int64 / uint64 past 2^53 rounds TWICE into a float32 loop (np.float32 array + (2**60 + 2**36 + 1) adds
+            // 2^60), where the kernels' operand cast rounds once (2^60 + 2^37). Such an operand is re-packed here, before
+            // either route; for every other operand the cast is the pack and nothing is allocated. The temp is disposed at
+            // every exit (no result aliases it: each route writes a fresh output or out=).
+            using var weakInt = AdoptWeakIntOperand(ref lhs, ref rhs, resultType);
+            if (weakInt is not null)
+            {
+                lhsType = lhs.GetTypeCode;
+                rhsType = rhs.GetTypeCode;
             }
 
             // ufunc out=/where= path (Wave 2.1): the loop dtype above is final

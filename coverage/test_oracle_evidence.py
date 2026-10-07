@@ -386,7 +386,8 @@ class CommittedCorpusTests(unittest.TestCase):
         # "viewflags:getitem" is the array-object oracle's a[key] (view_flags.jsonl), attached to the type as get is.
         self.assertEqual({"get", "set", "ndarray.__len__", "ndarray", "viewflags:getitem"},
                          self.evidence("numpy.ndarray").keys)
-        self.assertEqual({"npy:header", "npy:npy"}, self.evidence("numpy.save").keys)
+        # "write_only" = Char arrays written as NumPy's '<U1' and compared byte for byte (they read back as strings).
+        self.assertEqual({"npy:header", "npy:npy", "npy:write_only"}, self.evidence("numpy.save").keys)
         self.assertEqual({"npy:npz:compressed"}, self.evidence("numpy.savez_compressed").keys)
         self.assertEqual({"flags:setflags"}, self.evidence("numpy.ndarray.setflags").keys)
         self.assertEqual({"evaluate"}, self.evidence("numsharp.np.evaluate").keys)

@@ -292,6 +292,7 @@ python test/oracle/gen_oracle.py mean_loops       # np.mean as NumPy's _mean: la
 python test/oracle/gen_oracle.py nanmean          # np.nanmean as NumPy's nanmean: NaN patterns, dtype= for every loop, fills, empties
 python test/oracle/gen_oracle.py clip_ufunc       # np.clip as a ufunc: broadcast bounds, out=, where=, overlap, the float loop
 python test/oracle/gen_oracle.py power_fast       # np.power's float loops: the stride-0 fast path on every route, float16 powf, float_power
+python test/oracle/gen_oracle.py weak_scalar      # NEP 50 Python scalars: comparisons + binary ufuncs, every route, long-array vector loops
 python test/oracle/gen_oracle.py reduce_kwargs    # reductions through their NumPy-shaped overload: out=, where=, axis forms, prologue errors
 python test/oracle/gen_oracle.py minmax_kwargs    # the max / min family with out= / initial= / where=: loops, casts, fills, run cuts, errors
 python test/oracle/gen_oracle.py precision        # truthful-vs-precise (adversarial accumulation; needs mpmath)
@@ -1214,6 +1215,42 @@ values for an overlapping masked copy (251 of 1,500 overlap cases), masks and so
 sources with leading unit axes refused, a read-only redundant self-copy refused, weak scalars wrapped instead of
 range-checked, and other errors, texts and orders. **Planted bugs:** see the plan item (each killed by the tier or
 by `Manipulation/np.copyto.NumPyPort.Test.cs`).
+
+### NEP 50 weak Python scalars (`weak_scalar` tier) — 2026-10-07
+
+`weak_scalar.jsonl` (`gen_oracle.py weak_scalar`, 15,050 cases, floor 14,500) gates the six comparisons and the binary
+ufuncs with one operand a Python scalar (plan `docs/plans/api-parameter-parity.md` X24, X25, X2, X21). Every other
+tier passes its operands as ARRAYS, which NumPy treats as strong, so no other tier could see the rule.
+- NumPy 2.x promotes a Python int / float / complex WEAKLY: the ufunc runs at the array's precision, and the scalar is
+  packed into the loop dtype (`PyArray_Pack`). An int goes through the correctly rounded double (two roundings past
+  2^53), overflow becomes inf, and a complex compares as complex64 against a float16 / float32 array. So
+  `np.array([0.1, 0.5], np.float32) > 0.1` is `[False, True]`.
+- An integer array compares EXACTLY with any Python int (`special_integer_comparisons.cpp`), in range or not.
+- A weak int packed into an INTEGER loop is range-checked: `np.maximum(int8, 1000)` raises "Python integer 1000 out of
+  bounds for int8".
+
+The scalar travels as the C# literal NumPy's Python scalar maps to (`params.scalar`: kind, exact value and the C# type
+`cs`, the house map of np.clip / np.copyto / `initial=`). bool, the integer primitives, float, double and `Complex` are
+weak Python scalars; `Half` is a strong `np.float16`.
+
+**Sections:** C (10,824: the six comparisons, array op scalar and scalar op array, through np.*, both C# operator
+overloads, out= and where=; every NumPy dtype against the scalars where the precision decides; the array holds the
+scalar packed into its dtype and that value's neighbours), L (532: the iterator route over reversed, stepped,
+transposed and broadcast float16 / float32 arrays), A (378: binary arithmetic and np.clip bounds over float16 /
+float32 arrays with int64 / uint64 literals past 2^53), O (1,612: a weak int into an integer loop, NumPy's
+OverflowError), W (1,344: arrays of 150 and 163 elements through the six comparisons, both sides; the
+scalar-broadcast kernels' 4×-unrolled packed-mask body, one-vector loop and tail at every lane width, which C's short
+arrays never reach), E (360: empty operands broadcast against others; NumPy's empty result or its broadcast error).
+
+**Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the `weak_scalar` op. The generator leaves out two
+classes: a where= comparison of an integer array with a Python int outside its dtype (NumPy 2.4.2 SEGFAULTS there,
+probed), and a bool array against a Python int past int64 (the C `long` text differs by platform; unit tests pin the
+LP64 text).
+
+**What it replaced** (fixed 2026-10-07): comparisons promoted a 0-d operand strongly, so a float32 / float16 array
+compared with a Python float at float64. Binary ufuncs wrapped an out-of-range weak int (`int8 + 1000` gave `[-23,
+-22]`) and cast an int past 2^53 into a float loop once instead of twice. **Planted bugs:** 8 edits to the pack and the
+dispatch, all killed (6–1,228 cases each); section W kills a wrong lane order in the packed mask store.
 
 ### np.power's float loops (`power_fast` tier) — 2026-10-06
 

@@ -514,8 +514,18 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 - [ ] X1 Audit: every existing `out=`, `where=`, `dtype=`, `keepdims=`, `axis=`, `ddof=`, `casting=` parameter against
   NumPy (returned object, values, dtype, shape, errors). Each finding becomes an item here.
-- [ ] X2 `np.maximum`, `np.minimum`, `np.add` (binary ufuncs): an out-of-range C# integer literal wraps
+- [x] X2 `np.maximum`, `np.minimum`, `np.add` (binary ufuncs): an out-of-range C# integer literal wraps
   (`np.maximum(int8, 1000)` gives -24); NumPy raises `OverflowError` (NEP 50 packing). Found by the `np.clip` work.
+  Done 2026-10-07 with X21 and X24 (this commit).
+  - Fix (`DefaultEngine.BinaryOp.cs`, `DefaultEngine.CompareOp.WeakScalar.cs`): `ExecuteBinaryOp` checks a 0-d
+    Python-int operand against the FINAL loop dtype before any kernel runs (`CheckWeakPyIntOperand`, NumPy's
+    `npy_update_operand_for_scalar` + `PyArray_Pack`: "Python integer 1000 out of bounds for int8", the LP64 texts
+    past int64). A bool array meets the int in NumPy's int64 loop. `dtype=` moves the check to that loop. A float16
+    / float32 loop re-packs an int past 2^53 through the correctly rounded double, two roundings as in NumPy
+    (`RepackWeakIntForFloatLoop`: `float32 + (2**60 + 2**36 + 1)` is 2^60). np.clip, np.arctan2 and the float-tier
+    binary ufuncs share the re-pack; the shifts share the check.
+  - Gates: the `weak_scalar` tier's arithmetic sections (A, O), `Logic/np.comparison.WeakScalar.Test.cs`
+    (`BinaryUfuncWeakIntPackTests`).
 - [x] **X3 binary ufuncs: two F-ordered operands where one broadcasts give WRONG values.** Found by A2 (the `_var`
   port subtracts a keepdims mean from an F-ordered input). Done 2026-10-05 (`d3c863ef`).
   - Proof: `np.subtract(F (2,3,2), F (2,1,2))` paired the elements wrongly (NumPy `[-100, -199, -98, …]`, NumSharp
@@ -877,11 +887,13 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     conversions ~3.5 ns more, so the ceiling is ~1.7×. A per-8-lane form (extract each lane, powf, rebuild the vector)
     reached only 1.32–1.41×. float_power: 0.96–1.06× (pow on both sides; the old 14–28× came from computing `x*x`,
     which is not NumPy's value).
-- [ ] **X21 `np.power(unsigned, -1)` raises the wrong error.** NumPy packs the weak Python int into the unsigned loop
+- [x] **X21 `np.power(unsigned, -1)` raises the wrong error.** NumPy packs the weak Python int into the unsigned loop
   first: `np.power(np.uint8([2]), -1)` raises `OverflowError: Python integer -1 out of bounds for uint8` (uint32 and
   uint64 the same). NumSharp reaches the integer loop's check and raises `ArgumentException: Integers to negative
   integer powers are not allowed.` It is X2's NEP 50 packing class on np.power: `np.add(np.uint8([2]), -1)` gives `[1]`
   in NumSharp and the same OverflowError in NumPy. The `power_fast` generator leaves these cases out. Found by X13.
+  Done 2026-10-07 with X2 (this commit): `Default.Power.cs` runs the read-only out check, the mask check and X2's pack
+  check before the negative-power error, in NumPy's order. Gate: `BinaryUfuncWeakIntPackTests`.
 - [ ] **X22 A binary ufunc's out= broadcast error omits the out's shape.** `np.power(ones(3), ones(4), out=empty(3))`:
   NumPy "operands could not be broadcast together with shapes (3,) (4,) (3,) " (every operand, the out included),
   NumSharp "… with shapes (3,) (4,) " (`IncorrectShapeException`). The 0-d exponent form and the "non-broadcastable
@@ -894,6 +906,61 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   `...c5`; the windows tier has no such M). The fix: a Power node whose exponent is a constant or a hoisted 0-d
   parameter emits NumPy's stride-0 branch (`PowerStrideZero<T>` and its vector forms) for the float32 / float64 loops.
   Found by X13. Next item.
+- [x] **X24 A comparison with a Python float compared at float64 against a float32 / float16 array: silent wrong
+  values.** Done 2026-10-07 with X2, X21 and X25 (this commit).
+  - Proof: `np.greater(np.array(new[] { 0.1f, 0.5f }), 0.1)` gave `[True, True]`; NumPy `[False, True]`. Under NEP 50
+    the weak `0.1` is packed into float32 first, and `0.1f > 0.1f` is False. All six comparisons and the C# operators
+    were affected: a literal that is not exact in the array's dtype (`0.1`, `1/3`), an int past 2^24 for float32 or
+    past 2048 for float16, and a complex literal (complex64 parts).
+  - Cause: the comparison dispatch promoted a 0-d operand strongly (`_FindCommonScalarType`). The arithmetic routes
+    already used the array-scalar table.
+  - Fix (`DefaultEngine.CompareOp.WeakScalar.cs`, `ExecuteComparison`): a 0-d Python-scalar operand against an array
+    is packed into the array's precision before both routes run. The pack is `PyArray_Pack`: the correctly rounded
+    double first, then the float16 / float32 narrow, overflow to inf; complex parts are rounded to float32.
+    - A 0-d against a 0-d stays strong. A 0-d NDArray against an array is read as a literal (np.clip's rule,
+      `[Misaligned]`).
+    - An integer array against an in-range Python int of another width is re-packed into the array's dtype. This is
+      NumPy's `special_integer_comparisons` in-range branch; the values do not change.
+    - numpy.ma stays strong: its comparison wrappers promote both operands (`PromoteMaScalar`, `strongOperand`), and
+      its domains see `getdata` data.
+    - np.evaluate compares a complex constant against a float16 / float32 array with the constant's parts rounded
+      to float32.
+    - An empty comparison returns its empty result without a kernel. The out= route compares at
+      `GetComparisonType`, so int64 / uint64 compare exactly.
+  - Gates: `weak_scalar.jsonl` (15,050 cases, zero excuses; 8 of 8 planted bugs killed; its section W kills a wrong
+    lane order in the packed mask store); `Logic/np.comparison.WeakScalar.Test.cs`, `Ma/np.ma.StrongScalar.Test.cs`.
+    The numpy.ma harness now refuses the old "NEP50 weak-scalar" dtype excuse.
+  - Speed (NPY/NS, two pinned P-cores), with X25's kernels: `f32 > 0.1` 0.82× / 1.17× / 1.73× at 1K / 100K / 10M (was
+    0.49× / 0.09× / 0.56×). `f16 > 0.1` 15× (the same-dtype float16 kernel). `u8 > 128` 3.9× at 10M. At 100K NumPy's
+    loop is the same packed form, so ~1.2× is its ceiling. The 1K cells of array op scalar (0.56–0.83×) are X26.
+- [x] **X25 The SIMD comparison and predicate kernels read one element past their inputs and wrote one bool past
+  their result.** Found by X24's kernel work. Done 2026-10-07 (this commit).
+  - Proof: `np.greater(a[:7], b[:7], out=o[:7])` (float32) overwrote slot 7 of o's parent buffer. The 4×-unrolled
+    and one-vector loops ran while `i <= n - step + 1`, so they ran one body too many when `n % step == step - 1`
+    (float32: n = 7, 15, 31, 39, 63, 127, …; every SIMD dtype). The same-dtype array-against-array kernel
+    (`SimdFull`) and the contiguous float / signbit predicate kernel (isnan, isinf, isfinite, isposinf, isneginf,
+    signbit) had it since they were written. A fresh result's extra byte landed past its allocation, because the
+    pool's buckets have exact sizes. A NUMSHARP_DEBUG_GUARD_PAGES sweep of 58,320 elementwise / comparison / cast /
+    flat-reduction cases faults at `equal Boolean n=31` on the old build.
+  - Fix: the loops subtract the whole step (`i <= n - step`).
+  - Gates: `Backends/Kernels/ComparisonBroadcastKernelTests.cs`. It checks sentinel slots past the result for the
+    three comparison kernels and the predicate kernel at every tail length, and an out= view's parent buffer; all
+    three tests fail with the old bound. The guard-page sweeps (72,630 cases, strided / reversed / broadcast inputs
+    and axis reductions included) pass.
+  - Also in the kernels:
+    - The scalar-broadcast comparison kernels (`array op scalar`, `scalar op array`) were scalar loops (0.72 ns an
+      element; NumPy 0.06). They now compare a whole vector per step, with the scalar broadcast once.
+    - Four masks of 2-, 4- and 8-byte lanes are packed into result bytes, as NumPy's `npyv_pack_b8_*` do. 1-byte lanes
+      store `mask & 1`.
+    - The single-mask store reads the lane bits as 64 bits. The old code stored them in a 32-bit local, which cannot
+      hold a Vector512 mask's 64 lanes (int8 / uint8 / bool on an AVX-512 host; not testable on this host).
+    - Measured over 100K elements against the per-vector store: float32 7.05 → 5.15 µs, float64 14.7 → 9.95, int16
+      6.8 → 3.8, int8 ~28 → 2.8.
+- [ ] **X26 A C# literal operand costs ~0.8 µs a call.** `x > 0.5f` at 1K float32 takes 1.46 µs; with a prebuilt 0-d
+  operand it takes 0.50 µs, as fast as array op array. The operator never disposes the 0-d NDArray of the implicit
+  conversion, so every call leaves a finalizable object: allocation, finalization, and the pool's paced collections.
+  The cost is library-wide: `f32 + 0.1` at 1K is 0.62× NumPy for the same reason. Levers: a pooled per-thread 0-d
+  operand for the operators, or a scalar overload set that disposes its temporary. Found by X24.
 
 ## 6. Findings
 
@@ -1037,9 +1104,21 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 32. **A workaround can outlive its bug** (A6 / X13). numpy.ma's port computes `abs(danom) ** 2` with the plain call
    and copies the result into its layout buffer, because the out= route skipped the fast path (finding 17). X13 fixed
    that route, so the copy can become a plain `out=` (not changed here; A6's tiers hold the values either way).
+33. **A value gate never sees a write past the result** (X25). The oracle and the unit tests compare the elements of a
+   result, and a kernel's extra byte lies outside every array they compare. The comparison kernels' overrun passed
+   every gate since it was written. It showed up only when a planted lane-order bug failed at a length the unrolled
+   loop should never have reached. Use sentinel slots past an `out=` view or past a directly called kernel's buffer,
+   and the opt-in NUMSHARP_DEBUG_GUARD_PAGES pool: every buffer then ends against an inaccessible page, so a read
+   or a write past it faults at once. Print each case before it runs; after a fault, the last line names it.
 
 ## 7. State log
 
+- **2026-10-07**: X24 done with X2, X21 and X25. Every comparison packs a Python scalar into the array's precision
+  (NEP 50); every binary ufunc range-checks a weak Python int against its loop and re-packs one past 2^53 into a
+  float loop; numpy.ma stays strong. The `weak_scalar` oracle tier (15,050 cases, zero excuses). The SIMD comparison
+  and predicate kernels no longer read or write one element past their arrays (a 72,630-case guard-page sweep found
+  no other kernel that does). The scalar-broadcast comparison kernels are vectorized, and the masks are stored packed. X26 and
+  finding 33 recorded. Commit: this commit.
 - **2026-10-06**: X13 done with X19 and X20. np.power's float loops take NumPy's stride-0 fast path exactly when
   NumPy's calls see a zero exponent step: the trivial-loop / NpyIter decision is ported once and shared with np.clip.
   float16 power is HALF_power's powf; float_power never takes the fast path; a one-element operand with more

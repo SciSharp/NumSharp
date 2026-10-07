@@ -49,8 +49,10 @@ namespace NumSharp
             if (lhs is null || rhs is null)
                 return Scalar<bool>(false).MakeGeneric<bool>();
 
-            // NumPy: empty array comparison returns empty array, not scalar
-            if (lhs.Shape.IsEmpty || lhs.size == 0)
+            // An uninitialized array (no shape at all) compares to an empty result. A zero-size array goes to the ufunc,
+            // which broadcasts it with the other operand as NumPy does: (0,3) against (2,1,3) is (2,0,3), and (0,) against
+            // (3,) raises NumPy's broadcast error (this branch used to answer the left operand's shape for both).
+            if (lhs.Shape.IsEmpty)
                 return np.empty(lhs.Shape, NPTypeCode.Boolean).MakeGeneric<bool>();
 
             // A string operand: two strings of one class compare their text (the next phase of the string support). For
@@ -59,9 +61,11 @@ namespace NumSharp
             if (lhs.typecode == NPTypeCode.String || rhs.typecode == NPTypeCode.String)
             {
                 var constant = Backends.Strings.NDStringUfuncs.FailedComparison(lhs, rhs, notEqual: false);
-                if (constant is null)
-                    throw Backends.Strings.NDStringUfuncs.NextPhase("equal", lhs);
-                return constant;
+                if (constant is not null)
+                    return constant;
+                // Two strings of one class: the equal ufunc compares their text (the next phase), except for an empty
+                // broadcast result, which compares nothing — the engine's string guard returns that result and raises
+                // the next-phase exception otherwise.
             }
 
             return lhs.TensorEngine.Compare(lhs, rhs).AsGeneric<bool>();
@@ -84,8 +88,10 @@ namespace NumSharp
             if (lhs is null)
                 return Scalar<bool>(false).MakeGeneric<bool>();
 
-            // NumPy: empty array comparison returns empty array, not scalar
-            if (lhs.Shape.IsEmpty || lhs.size == 0)
+            // An uninitialized array (no shape at all) compares to an empty result. A zero-size array goes to the ufunc,
+            // which broadcasts it with the other operand as NumPy does: (0,3) against (2,1,3) is (2,0,3), and (0,) against
+            // (3,) raises NumPy's broadcast error (this branch used to answer the left operand's shape for both).
+            if (lhs.Shape.IsEmpty)
                 return np.empty(lhs.Shape, NPTypeCode.Boolean).MakeGeneric<bool>();
 
             return lhs == np.asanyarray(rhs);

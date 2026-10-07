@@ -87,6 +87,11 @@ namespace NumSharp.Backends
             // Allocate result (always bool)
             var result = new NDArray<bool>(resultShape, true);
 
+            // Empty broadcast result: the kernels assume at least one element and walk a stride-0 axis as if it were
+            // populated, so a zero-length sibling axis would read out of bounds (the binary route's same guard).
+            if (result.size == 0)
+                return result;
+
             // Classify execution path using strides
             ExecutionPath path;
             fixed (long* lhsStrides = leftShape.strides)
@@ -374,9 +379,7 @@ namespace NumSharp.Backends
             // Two strings of one class compare their text (the next phase); any other pair with a string has no loop.
             if (Strings.NDStringUfuncs.BinaryGuard("equal", lhs, rhs, @out, typeCode, where) is { } textResult)
                 return textResult;
-            if (@out is null && where is null)
-                return ExecuteComparisonOp(lhs, rhs, ComparisonOp.Equal);
-            return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.Equal, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
+            return ExecuteComparison(lhs, rhs, ComparisonOp.Equal, @out, where);
         }
 
         public override NDArray NotEqual(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
@@ -386,9 +389,7 @@ namespace NumSharp.Backends
             // Two strings of one class compare their text (the next phase); any other pair with a string has no loop.
             if (Strings.NDStringUfuncs.BinaryGuard("not_equal", lhs, rhs, @out, typeCode, where) is { } textResult)
                 return textResult;
-            if (@out is null && where is null)
-                return ExecuteComparisonOp(lhs, rhs, ComparisonOp.NotEqual);
-            return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.NotEqual, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
+            return ExecuteComparison(lhs, rhs, ComparisonOp.NotEqual, @out, where);
         }
 
         public override NDArray Less(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
@@ -398,9 +399,7 @@ namespace NumSharp.Backends
             // Two strings of one class compare their text (the next phase); any other pair with a string has no loop.
             if (Strings.NDStringUfuncs.BinaryGuard("less", lhs, rhs, @out, typeCode, where) is { } textResult)
                 return textResult;
-            if (@out is null && where is null)
-                return ExecuteComparisonOp(lhs, rhs, ComparisonOp.Less);
-            return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.Less, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
+            return ExecuteComparison(lhs, rhs, ComparisonOp.Less, @out, where);
         }
 
         public override NDArray LessEqual(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
@@ -410,9 +409,7 @@ namespace NumSharp.Backends
             // Two strings of one class compare their text (the next phase); any other pair with a string has no loop.
             if (Strings.NDStringUfuncs.BinaryGuard("less_equal", lhs, rhs, @out, typeCode, where) is { } textResult)
                 return textResult;
-            if (@out is null && where is null)
-                return ExecuteComparisonOp(lhs, rhs, ComparisonOp.LessEqual);
-            return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.LessEqual, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
+            return ExecuteComparison(lhs, rhs, ComparisonOp.LessEqual, @out, where);
         }
 
         public override NDArray Greater(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
@@ -422,9 +419,7 @@ namespace NumSharp.Backends
             // Two strings of one class compare their text (the next phase); any other pair with a string has no loop.
             if (Strings.NDStringUfuncs.BinaryGuard("greater", lhs, rhs, @out, typeCode, where) is { } textResult)
                 return textResult;
-            if (@out is null && where is null)
-                return ExecuteComparisonOp(lhs, rhs, ComparisonOp.Greater);
-            return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.Greater, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
+            return ExecuteComparison(lhs, rhs, ComparisonOp.Greater, @out, where);
         }
 
         public override NDArray GreaterEqual(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
@@ -434,9 +429,7 @@ namespace NumSharp.Backends
             // Two strings of one class compare their text (the next phase); any other pair with a string has no loop.
             if (Strings.NDStringUfuncs.BinaryGuard("greater_equal", lhs, rhs, @out, typeCode, where) is { } textResult)
                 return textResult;
-            if (@out is null && where is null)
-                return ExecuteComparisonOp(lhs, rhs, ComparisonOp.GreaterEqual);
-            return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.GreaterEqual, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
+            return ExecuteComparison(lhs, rhs, ComparisonOp.GreaterEqual, @out, where);
         }
 
         #endregion
@@ -507,6 +500,12 @@ namespace NumSharp.Backends
                 : cleanShape;
 
             var result = new NDArray<bool>(resultShape, true);
+
+            // Empty broadcast result: nothing to compare. The iterator refuses a zero-size output against a size-1 input
+            // axis ("output operand requires a reduction along dimension 0"), so (2,1,3) > (0,3) raised where NumPy
+            // returns its (2,0,3) result; the binary route returns early for the same shapes.
+            if (result.size == 0)
+                return result;
 
             var order = allStrictFContig
                 ? NPY_ORDER.NPY_FORTRANORDER

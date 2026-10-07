@@ -5197,6 +5197,334 @@ def gen_copyto_full():
     return cases
 
 
+# ---- weak_scalar: NEP 50 Python scalars in the comparison and binary ufuncs ------------------------------------------
+#
+# NumPy 2.x promotes a Python int / float / complex WEAKLY: the ufunc runs at the array's precision, and the scalar is
+# packed into the loop dtype with PyArray_Pack (npy_update_operand_for_scalar): an int through the correctly rounded
+# double (two roundings past 2^53), a float narrowed once, overflow to infinity, a complex at complex64 against a
+# float16 / float32 array. So np.array([0.1, 0.5], np.float32) > 0.1 is [False, True]. Every other tier passes its
+# operands as ARRAYS, which NumPy treats as strong, so none of them could see the rule (NumSharp compared float32
+# arrays with Python floats in float64 until the fix this tier gates). Here the scalar travels as the C# LITERAL
+# NumPy's Python scalar maps to (params.scalar: kind + exact value + the C# type "cs"; the house map of np.clip /
+# np.copyto / initial=): bool, the integer primitives, float, double and Complex are weak Python scalars; Half is a
+# strong np.float16. Sections (params.section):
+#   C  the six comparisons, array op scalar and scalar op array (params.side), through np.* (route func), the C#
+#      operators (op: the NDArray overload a literal binds; opobj: the object overload), out= (out) and where=
+#      (where): every NumPy dtype against the scalars where the precision decides; the array holds the scalar packed
+#      into its dtype and that value's neighbours.
+#   L  the comparison routes over non-contiguous arrays (reversed, transposed 2-D, stepped): the iterator route.
+#   A  binary arithmetic over float16 / float32 arrays with int64 / uint64 literals past 2^53, and np.clip bounds of
+#      the same kind: the pack's double rounding (2**60 + 2**36 + 1 packs as 2^60, the array cast gives 2^60 + 2^37).
+#   O  a weak Python int packed into an INTEGER loop: NumPy's setitem range check (OverflowError, never a wrap).
+#   W  long arrays (150 and 163 elements) through the six comparisons, both sides: the scalar-broadcast kernels'
+#      4x-unrolled packed-mask body, one-vector loop and scalar tail, which C's short arrays never reach. The two
+#      lengths reach all three parts at every lane width (1-byte lanes run 128-element bodies and 32-element vectors).
+#   E  empty operands broadcast against others through np.* and the C# operators: NumPy broadcasts (an empty result)
+#      or raises its broadcast error; no element is compared.
+
+WEAK_SCALAR_CMP = ["equal", "not_equal", "less", "less_equal", "greater", "greater_equal"]
+WEAK_SCALAR_ARITH = ["add", "subtract", "multiply", "maximum", "minimum", "fmax", "fmin", "arctan2", "hypot",
+                     "copysign", "heaviside", "logaddexp"]
+_WS_DTYPES = ["bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64",
+              "float16", "float32", "float64", "complex128"]
+
+
+def _ws_scalar(value, cs):
+    """The scalar as the harness's C# literal: _ct_scalar_param's kind + exact value, and the C# type to spell it."""
+    if cs == "Half":
+        return {"kind": "half", "bits": int(np.float16(value).view(np.uint16)), "cs": "Half"}
+    p = _ct_scalar_param(value)
+    p["cs"] = cs
+    return p
+
+
+def _ws_numpy_scalar(value, cs):
+    """The NumPy-side operand: the Python scalar itself, or np.float16(value) for the strong Half."""
+    return np.float16(value) if cs == "Half" else value
+
+
+def _ws_int_cs(v):
+    """The narrowest of int / long / ulong a C# literal of value v takes (a Python int either way)."""
+    if -2**31 <= v < 2**31:
+        return "int"
+    if -2**63 <= v < 2**63:
+        return "long"
+    return "ulong"
+
+
+def _ws_scalar_set(dt):
+    """The (value, cs) scalars a comparison against a `dt` array is generated with."""
+    nan, inf = float("nan"), float("inf")
+    f32 = lambda v: float(np.float32(v))      # a Python float holding a float32 value: the C# float literal
+    if dt in ("float16", "float32"):
+        ints = [0, 1, -1, 2, 2048, 2049, 65504, 65519, 65520, 70000, 16777216, 16777217, -16777217,
+                2**31 - 1, -2**31, 2**53 + 1, 2**60 + 2**36 + 1, -(2**60 + 2**36 + 1), 2**63 - 1, -2**63,
+                2**63 + 2**39 + 1, 2**64 - 1]
+        floats = [0.1, 1 / 3, -0.1, 1e-8, 2.0**-24, 2.0**-25, 65504.0, 65519.99, 65520.0, 70000.0,
+                  3.4028234663852886e38, 3.5e38, 1e39, -1e39, nan, inf, -inf, 0.0, -0.0, 0.5, 2049.0,
+                  16777217.0, 2.0**-149, 1e-46]
+        out = [(v, _ws_int_cs(v)) for v in ints] + [(v, "double") for v in floats]
+        out += [(300, "short"), (200, "byte"), (-100, "sbyte"), (40000, "uint"), (65535, "ushort")]
+        out += [(f32(0.1), "float"), (f32(1 / 3), "float"), (f32(70000.0), "float"), (f32(-0.0), "float")]
+        out += [(complex(0.1, 0.0), "Complex"), (complex(0.1, 1e-50), "Complex"), (complex(0.1, 1e-9), "Complex"),
+                (complex(1, 1), "Complex"), (complex(-0.1, -0.2), "Complex"), (complex(nan, 0.0), "Complex"),
+                (complex(0.0, nan), "Complex"), (complex(inf, 0.0), "Complex"), (complex(1e39, 0.0), "Complex"),
+                (complex(0.0, 0.0), "Complex"), (complex(0.5, -0.0), "Complex")]
+        out += [(True, "bool"), (False, "bool"), (0.1, "Half"), (2049.0, "Half")]
+        return out
+    if dt == "float64":
+        return ([(0, "int"), (2**53 + 1, "long"), (2**60 + 2**36 + 1, "long"), (-2**63, "long"),
+                 (2**63 + 2**39 + 1, "ulong"), (2**64 - 1, "ulong")]
+                + [(v, "double") for v in [0.1, nan, inf, -0.0, 1e39, 1e-320]]
+                + [(f32(0.1), "float")]
+                + [(complex(0.1, 0.0), "Complex"), (complex(0.1, 1e-50), "Complex"), (complex(1, 1), "Complex"),
+                   (complex(nan, 0.0), "Complex")]
+                + [(True, "bool"), (0.1, "Half")])
+    if dt == "complex128":
+        return ([(0, "int"), (2**53 + 1, "long"), (2**64 - 1, "ulong")]
+                + [(v, "double") for v in [0.1, nan, -0.0]]
+                + [(complex(0.1, 0.0), "Complex"), (complex(0.1, 1e-9), "Complex"), (complex(nan, 0.0), "Complex")]
+                + [(True, "bool"), (0.1, "Half")])
+    # bool and the integer dtypes: Python ints compare EXACTLY in NumPy 2.x, in range or not
+    # (special_integer_comparisons.cpp); floats / complexes at float64 / complex128.
+    ints = [0, 1, -1, 127, 128, -129, 255, 256, 1000, 2**31, -2**31 - 1, 2**53 + 1, 2**63 - 1, -2**63, 2**63, 2**64 - 1]
+    return ([(v, _ws_int_cs(v)) for v in ints]
+            + [(v, "double") for v in [0.5, 1.5, -0.5, 0.1, nan, inf, -inf, 1e39, 2.0**63, 2.0**64]]
+            + [(complex(1, 0), "Complex"), (complex(1, 1), "Complex"), (complex(0.5, 0), "Complex")]
+            + [(True, "bool"), (False, "bool"), (1.5, "Half")])
+
+
+def _ws_array_values(dt, scalar):
+    """The array a comparison with `scalar` runs over: the scalar packed into `dt` and its neighbours, plus the
+    dtype's specials — the values where the comparison's precision decides the answer."""
+    import warnings as _w
+    d = np.dtype(dt)
+    with _w.catch_warnings():
+        _w.simplefilter("ignore")
+        if d.kind == "b":
+            return np.array([True, False, True, False], dtype=d)
+        if d.kind in "iu":
+            info = np.iinfo(d)
+            vals = [info.min, info.max, 0, 1, info.max - 1, info.min + 1]
+            if not isinstance(scalar, complex):
+                try:
+                    c = int(scalar)
+                except (ValueError, OverflowError):
+                    c = None
+                if c is not None:
+                    for v in (c - 1, c, c + 1):
+                        if info.min <= v <= info.max:
+                            vals.append(v)
+            return np.array(vals, dtype=d)
+        real = scalar.real if isinstance(scalar, complex) else float(scalar)
+        if d.kind == "c":
+            return np.array([complex(scalar), complex(real, 0.0), complex(real, 1.0), complex(0.0, 0.0),
+                             complex(1.0, 0.0), complex(float("nan"), 0.0), complex(float("inf"), 0.0)], dtype=d)
+        packed = np.array([real], dtype=d)[0]   # PyArray_Pack: the weak Python scalar in the array's dtype
+        vals = [packed, np.nextafter(packed, d.type(np.inf)), np.nextafter(packed, d.type(-np.inf)),
+                d.type(real) if np.isfinite(real) else packed, d.type(0.0), d.type(-0.0), d.type(1.0), d.type(-1.0),
+                d.type(np.nan), d.type(np.inf), d.type(-np.inf), np.finfo(d).max, np.finfo(d).smallest_subnormal]
+        return np.array(vals, dtype=d)
+
+
+def gen_weak_scalar():
+    import warnings as _w
+    cases = []
+    n = 0
+
+    def call(fn, route, x1, x2, out=None, where=None, bound=None):
+        if fn == "clip":
+            # np.clip with the scalar as the one bound (the other None): the routed maximum / minimum ufunc.
+            return np.clip(x1, x2, None) if bound == "min" else np.clip(x1, None, x2)
+        f = getattr(np, fn)
+        if route in ("func", "op", "opobj"):
+            return f(x1, x2)
+        if route == "out":
+            return f(x1, x2, out=out)
+        return f(x1, x2, out=out, where=where)
+
+    def numpy_crashes(route, view, scalar):
+        """NumPy 2.4.2 SEGFAULTS (access violation, probed) on a where= comparison of an integer array with a Python int
+        outside the array dtype's range — the masked path of special_integer_comparisons.cpp
+        (np.equal(np.array([1, 2, 3], np.int8), 128, where=mask)). There is no answer to record; without where= (and
+        with where=True) the same comparison is exact and is recorded."""
+        if route != "where" or view.dtype.kind not in "iu" or isinstance(scalar, (bool, float, complex)):
+            return False
+        info = np.iinfo(view.dtype)
+        return not (info.min <= scalar <= info.max)
+
+    def platform_text(view, scalar):
+        """A bool array meets a Python int in NumPy's int64 loop, whose pack of an int past int64 raises OverflowError
+        with the PLATFORM's C long text ("int too big to convert" on Windows, where this corpus is generated; "Python
+        int too large to convert to C long" on Linux / macOS, the LP64 text NumSharp pins). Kept out of the corpus, like
+        every platform-dependent text; unit tests pin the LP64 text."""
+        return (view.dtype.kind == "b" and isinstance(scalar, int) and not isinstance(scalar, bool)
+                and not (-2**63 <= scalar < 2**63))
+
+    def emit(section, fn, route, side, arr_pair, scalar, cs, layout, extra=None):
+        nonlocal n
+        base, view = arr_pair
+        if numpy_crashes(route, view, scalar) or platform_text(view, scalar):
+            return
+        params = {"section": section, "fn": fn, "route": route, "side": side, "scalar": _ws_scalar(scalar, cs)}
+        operands = [describe(base, view)]
+        out = where = None
+        if route in ("out", "where"):
+            # A comparison writes bool; an arithmetic ufunc its loop dtype, the float16 / float32 array's own (the weak
+            # scalar adopts it). The prior pattern is what a masked-off slot must keep.
+            out = np.zeros(view.shape, dtype=bool if fn in WEAK_SCALAR_CMP else view.dtype)
+            out.flat[::2] = True if fn in WEAK_SCALAR_CMP else 7
+            operands.append(describe(out, out))
+        if route == "where":
+            where = np.zeros(view.shape, dtype=bool)
+            where.flat[::3] = True
+            operands.append(describe(where, where))
+        if extra:
+            params.update(extra)
+        s = _ws_numpy_scalar(scalar, cs)
+        cid = f"weak_scalar/{section}/{fn}/{route}/{side}/{view.dtype.name}/{n}"
+        n += 1
+        with _w.catch_warnings():
+            _w.simplefilter("ignore")
+            try:
+                r = call(fn, route, *((view, s) if side == "array_first" else (s, view)), out=out, where=where,
+                         bound=(extra or {}).get("bound"))
+            except Exception as e:
+                cases.append(_error_case("weak_scalar", params, operands, e, layout, cid=cid))
+                return
+        cases.append(_case("weak_scalar", params, operands, _arr_expected(out if out is not None else r), layout,
+                           "weak_scalar", cid=cid))
+
+    # ---- C: every dtype against the scalars where the precision decides, every route ---------------------------
+    for dt in _WS_DTYPES:
+        for scalar, cs in _ws_scalar_set(dt):
+            arr = _ws_array_values(dt, scalar)
+            pair = (arr, arr)
+            for fn in WEAK_SCALAR_CMP:
+                for side in ("array_first", "scalar_first"):
+                    emit("C", fn, "func", side, pair, scalar, cs, "c_contiguous_1d")
+                emit("C", fn, "op", "array_first", pair, scalar, cs, "c_contiguous_1d")
+            emit("C", "greater", "opobj", "scalar_first", pair, scalar, cs, "c_contiguous_1d")
+            emit("C", "equal", "opobj", "array_first", pair, scalar, cs, "c_contiguous_1d")
+            emit("C", "greater", "out", "array_first", pair, scalar, cs, "c_contiguous_1d")
+            emit("C", "equal", "out", "scalar_first", pair, scalar, cs, "c_contiguous_1d")
+            emit("C", "less_equal", "where", "array_first", pair, scalar, cs, "c_contiguous_1d")
+            emit("C", "not_equal", "where", "scalar_first", pair, scalar, cs, "c_contiguous_1d")
+
+    # ---- L: the iterator route — non-contiguous float16 / float32 arrays ----------------------------------------
+    for dt in ("float16", "float32"):
+        for scalar, cs in [(0.1, "double"), (1 / 3, "double"), (16777217, "int"), (2049, "int"),
+                           (2**60 + 2**36 + 1, "long"), (complex(0.1, 0.0), "Complex"), (70000.0, "double")]:
+            v = _ws_array_values(dt, scalar)
+            k = len(v)
+            rev_base = np.concatenate([v, v])
+            t_base = np.tile(v, 2).reshape(2, k)
+            b_base = v.copy()
+            layouts = {
+                "reversed_1d": (rev_base, rev_base[::-1]),
+                "stepped_1d": (rev_base, rev_base[::2]),
+                "transposed_2d": (t_base, t_base.T),
+                "broadcast_2d": (b_base, np.broadcast_to(b_base, (3, k))),
+            }
+            for lname, lpair in layouts.items():
+                for fn in WEAK_SCALAR_CMP:
+                    emit("L", fn, "func", "array_first", lpair, scalar, cs, lname)
+                emit("L", "greater", "op", "array_first", lpair, scalar, cs, lname)
+                emit("L", "less", "func", "scalar_first", lpair, scalar, cs, lname)
+                if lname != "broadcast_2d":
+                    emit("L", "equal", "out", "array_first", lpair, scalar, cs, lname)
+                    emit("L", "greater_equal", "where", "array_first", lpair, scalar, cs, lname)
+
+    # ---- A: binary arithmetic and np.clip with int64 / uint64 literals past 2^53 --------------------------------
+    big = [2**60 + 2**36 + 1, -(2**60 + 2**36 + 1), 2**53 + 1, 2**54 + 3, 2**63 - 1, -2**63, 2**63 + 2**39 + 1,
+           2**64 - 1, 16777217]
+    for dt in ("float16", "float32"):
+        d = np.dtype(dt)
+        arr = np.array([0.0, 1.0, -1.0, 2.0**60, -2.0**60, 1e30, -1e30, 2.0**63, 65504.0], dtype=d) \
+            if dt == "float32" else np.array([0.0, 1.0, -1.0, 2048.0, 65504.0, -65504.0], dtype=d)
+        pair = (arr, arr)
+        for scalar in big:
+            cs = _ws_int_cs(scalar)
+            for fn in WEAK_SCALAR_ARITH:
+                emit("A", fn, "func", "array_first", pair, scalar, cs, "c_contiguous_1d")
+                if fn in ("add", "subtract", "arctan2", "copysign", "maximum"):
+                    emit("A", fn, "func", "scalar_first", pair, scalar, cs, "c_contiguous_1d")
+            emit("A", "add", "out", "array_first", pair, scalar, cs, "c_contiguous_1d")
+            emit("A", "multiply", "where", "array_first", pair, scalar, cs, "c_contiguous_1d")
+            emit("A", "clip", "func", "array_first", pair, scalar, cs, "c_contiguous_1d", extra={"bound": "min"})
+            emit("A", "clip", "func", "array_first", pair, scalar, cs, "c_contiguous_1d", extra={"bound": "max"})
+
+    # ---- O: a weak Python int packed into an INTEGER loop — NumPy's setitem range check raises OverflowError ("Python
+    #      integer 1000 out of bounds for int8"), it never wraps. Values stay inside +-2^31, where Windows (this corpus's
+    #      host) and Linux NumPy word the error alike; past that the C long text differs by platform (unit-tested). A
+    #      bool array meets a Python int in the int64 loop.
+    int_fns = ["add", "subtract", "multiply", "maximum", "minimum", "bitwise_and", "bitwise_or", "bitwise_xor",
+               "floor_divide", "remainder", "left_shift", "right_shift", "power", "gcd", "fmod"]
+    for dt in ("int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "bool"):
+        d = np.dtype(dt)
+        arr = np.array([1, 0, 1, 1], dtype=d) if d.kind == "b" else np.array([1, 2, 3, 0], dtype=d)
+        pair = (arr, arr)
+        if d.kind == "b":
+            values = [1000, -1, 2**31 - 1, -2**31]
+        else:
+            info = np.iinfo(d)
+            values = sorted({v for v in (info.min - 1, info.min, info.max, info.max + 1, -1, 1000, 2**31 - 1, -2**31)
+                             if -2**31 <= v < 2**31})
+        for v in values:
+            cs = _ws_int_cs(v)
+            for fn in int_fns:
+                for side in ("array_first", "scalar_first"):
+                    # A negative exponent is recorded too: NumPy packs first (uint8 ** -1 is the pack's OverflowError),
+                    # then the integer-power rule refuses a negative one that fits (int8 ** -1: ValueError).
+                    emit("O", fn, "func", side, pair, v, cs, "c_contiguous_1d")
+            emit("O", "add", "out", "array_first", pair, v, cs, "c_contiguous_1d")
+
+    # ---- W: long arrays through the vector loops of the scalar-broadcast comparison kernels -----------------------
+    # The array tiles C's values (the scalar packed into the dtype, its neighbours, the specials), so every lane of
+    # every body meets a value where the comparison's precision decides; the integer picks include ints the array
+    # dtype holds (re-packed into it) and ints it does not (the exact promoted compare).
+    long_picks = {
+        "float16": [(0.1, "double"), (16777217, "int"), (2**60 + 2**36 + 1, "long"), (complex(0.1, 1e-9), "Complex")],
+        "float32": [(0.1, "double"), (16777217, "int"), (2**60 + 2**36 + 1, "long"), (complex(0.1, 1e-9), "Complex")],
+        "float64": [(0.1, "double"), (2**53 + 1, "long"), (2**64 - 1, "ulong")],
+        "complex128": [(0.1, "double"), (complex(0.1, 1e-9), "Complex")],
+        "bool": [(True, "bool"), (1, "int"), (0.5, "double")],
+    }
+    for dt in _WS_DTYPES:
+        picks = long_picks.get(dt, [(128, "int"), (1000, "int"), (-1, "int"), (0.5, "double"), (2**63, "ulong")])
+        for scalar, cs in picks:
+            values = _ws_array_values(dt, scalar)
+            for length in (150, 163):
+                arr = np.resize(values, length)
+                pair = (arr, arr)
+                for fn in WEAK_SCALAR_CMP:
+                    for side in ("array_first", "scalar_first"):
+                        emit("W", fn, "func", side, pair, scalar, cs, "c_contiguous_1d")
+
+    # ---- E: empty operands broadcast against others ---------------------------------------------------------------
+    shapes = [((2, 1, 3), (0, 3)), ((0, 3), (2, 1, 3)), ((0,), (3,)), ((3,), (0,)), ((0,), (1,)), ((1,), (0,)),
+              ((0, 1), (1, 4)), ((2, 0), (2, 1)), ((0,), ()), ((), (0,)), ((0, 3), (3,)), ((4, 0, 1), (1, 5)),
+              ((0,), (0,)), ((0, 2), (3, 1)), ((3, 0), (3, 2))]
+    for sa, sb in shapes:
+        for dt_a, dt_b in (("float64", "float64"), ("int32", "float32")):
+            a = np.zeros(sa, dtype=dt_a)
+            b = np.ones(sb, dtype=dt_b)
+            for fn in WEAK_SCALAR_CMP:
+                for route in ("func", "op"):
+                    params = {"section": "E", "fn": fn, "route": route}
+                    operands = [describe(a, a), describe(b, b)]
+                    cid = f"weak_scalar/E/{fn}/{route}/{dt_a}_{dt_b}/{n}"
+                    n += 1
+                    try:
+                        r = getattr(np, fn)(a, b)
+                    except Exception as e:
+                        cases.append(_error_case("weak_scalar", params, operands, e, "empty_broadcast", cid=cid))
+                        continue
+                    cases.append(_case("weak_scalar", params, operands, _arr_expected(r), "empty_broadcast",
+                                       "weak_scalar", cid=cid))
+    return cases
+
+
 # ---- power_fast: np.power's float loops and NumPy's zero-exponent-step fast path (plan api-parameter-parity X13) --
 #
 # NumPy's DOUBLE_power / FLOAT_power take 1/x, 1, sqrt(x), x, x*x for an exponent of -1, 0, 0.5, 1, 2 when the
@@ -19594,6 +19922,9 @@ def main():
     elif mode == "copyto_full":
         # np.copyto as NumPy's array_copyto: where= masks, layouts, overlap, C# literal sources, errors (X16 + X11).
         write_jsonl(os.path.join(corpus_dir, "copyto_full.jsonl"), gen_copyto_full())
+    elif mode == "weak_scalar":
+        # NEP 50 Python scalars (C# literals) in the comparisons and binary ufuncs; empty-operand broadcasts.
+        write_jsonl(os.path.join(corpus_dir, "weak_scalar.jsonl"), gen_weak_scalar())
     elif mode == "power_fast":
         # np.power's float loops: NumPy's zero-exponent-step fast path on every route, float16's powf, float_power (X13).
         write_jsonl(os.path.join(corpus_dir, "power_fast.jsonl"), gen_power_fast())

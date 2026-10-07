@@ -41,6 +41,11 @@ namespace NumSharp.Backends
                     "ufunc 'arctan2' not supported for the input types, and the inputs " +
                     "could not be safely coerced to any supported types according to the casting rule ''safe''");
 
+            // NEP 50: a 0-d int64 / uint64 operand past 2^53 is a weak Python int that NumPy packs into a float32 loop
+            // through the correctly rounded double (two roundings); the kernels' operand cast rounds once
+            // (AdoptWeakIntOperand). The replacement is disposed at every exit.
+            using var weakInt = AdoptWeakIntOperand(ref y, ref x, typeCode ?? PromoteATan2Binary(y, x));
+
             // ufunc out=/where= ride the shared binary Into-path:
             // EmitScalarOperation special-cases ATan2 (Math.Atan2 /
             // DecimalMath.ATan2) and the mixed-dtype body converts both

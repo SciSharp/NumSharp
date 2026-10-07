@@ -340,6 +340,11 @@ namespace NumSharp.Tests.Fuzz
             // NumSharp gets wrong are carved by the generator (_gap_of) and replayed under [OpenBugs].
             if (c.Op is "viewflags" or "outflags" or "shapearg" || c.Valueclass == "arrayarg")
                 return null;
+            // weak_scalar.jsonl (NEP 50 weak Python scalars, given as C# literals, in the comparisons and the binary ufuncs,
+            // plus empty-operand broadcasts) is held to ZERO excuses, its error cases included: the generic "NEP50
+            // weak-scalar" dtype branch below exists for the tiers that pass a 0-d ARRAY, which NumPy treats as strong.
+            if (c.Op == "weak_scalar")
+                return null;
             // power_fast.jsonl (np.power's float loops as NumPy's DOUBLE_power / FLOAT_power — the zero-exponent-step fast
             // path exactly where NumPy's calls take it — float16's powf, float_power's plain pow, power's errors; plan
             // api-parameter-parity X13) is held to ZERO excuses, its error cases included: the "unary ~ULP" and power

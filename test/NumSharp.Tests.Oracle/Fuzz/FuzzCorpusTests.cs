@@ -862,6 +862,24 @@ namespace NumSharp.Tests.Fuzz
         public void CopytoFull() => RunCorpus("copyto_full.jsonl");
 
         /// <summary>
+        ///     NEP 50's weak Python scalars in the six comparisons and the binary ufuncs: one operand is the C# LITERAL that
+        ///     NumPy's Python int / float / complex / bool maps to (or a strong np.float16), so the comparison runs at the
+        ///     array's precision with the scalar packed into it (<c>float32 [0.1, 0.5] &gt; 0.1</c> is <c>[False, True]</c>),
+        ///     an int past 2^53 packs into float32 through the double (two roundings), a complex compares as complex64
+        ///     against a float16 / float32 array, an integer array compares exactly with any Python int, and every route is
+        ///     covered — np.*, both C# operator overloads, out=, where=, the iterator layouts —; plus binary arithmetic and
+        ///     np.clip with int64 / uint64 literals past 2^53, a weak int packed into an integer loop (NumPy's OverflowError,
+        ///     never a wrap), long arrays through the scalar-broadcast comparison kernels' vector loops (section W: the
+        ///     4×-unrolled packed-mask body, the one-vector loop and the tail at every lane width), and empty operands
+        ///     broadcast through np.* and the operators (NumPy's empty result or its broadcast error). Every other tier
+        ///     passes arrays, which NumPy treats as strong.
+        /// </summary>
+        /// <remarks>Zero excuses: <see cref="MisalignedRegistry"/> never classifies a <c>weak_scalar</c> case.</remarks>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void WeakScalar() => RunCorpus("weak_scalar.jsonl");
+
+        /// <summary>
         ///     np.power's float loops as NumPy's DOUBLE_power / FLOAT_power (plan <c>docs/plans/api-parameter-parity.md</c>
         ///     X13): the scalar-exponent fast path (1/x, 1, sqrt(x), x, x*x) exactly where NumPy's inner-loop calls see the
         ///     exponent with step 0 — 0-d, one-element, (1,1) and stride-0 exponents, varying exponents on both sides of
@@ -1027,6 +1045,7 @@ namespace NumSharp.Tests.Fuzz
             ["conversion.jsonl"] = 862,
             ["copyto.jsonl"] = 91,
             ["copyto_full.jsonl"] = 12000,
+            ["weak_scalar.jsonl"] = 14500,   // NEP 50 weak scalars + the long-array vector loops (15,050 at delivery)
             ["power_fast.jsonl"] = 7500,
             ["decimal_astype.jsonl"] = 17,
             ["decimal_binary.jsonl"] = 78,

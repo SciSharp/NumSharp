@@ -365,8 +365,13 @@ namespace NumSharp.Tests.Fuzz
 
             if (data0.typecode != tc)
             {
-                var reason = MisalignedRegistry.Classify(sc, DivergenceKind.Dtype, null, null, tc, empty)
-                             ?? (strict ? null : MaDtypeExcuse(sc));
+                var reason = MisalignedRegistry.Classify(sc, DivergenceKind.Dtype, null, null, tc, empty);
+                // The shared registry's NEP 50 weak-scalar excuse covers np.*'s house rule (a 0-d operand against an array
+                // is read as a Python scalar). numpy.ma's getdata keeps a 0-d operand STRONG and NDMaskedArray does the
+                // same (PromoteMaScalar), so that excuse never applies to an ma case: a 0-d dtype divergence here is a bug.
+                if (reason is not null && reason.StartsWith("NEP50 weak-scalar", StringComparison.Ordinal))
+                    reason = null;
+                reason ??= strict ? null : MaDtypeExcuse(sc);
                 if (reason != null) Bump(documented, reason);
                 else failures.Add($"{sc.Id} [{sc.Layout}]{at}: data dtype {data0.typecode} != NumPy {exp.Dtype}");
                 return;

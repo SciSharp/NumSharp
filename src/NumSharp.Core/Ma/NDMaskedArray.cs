@@ -2978,7 +2978,7 @@ namespace NumSharp
             var sdata = self._data;
             var odata = AsData(other);
             // `getdata(other)`: a C# number becomes NumPy's strong default-width array, promoted with the data.
-            PromoteMaScalar(self, other, ref sdata, ref odata);
+            PromoteMaScalar(self, other, ref sdata, ref odata, strongOperand: true);
             var check = compare(sdata, odata);
             // `if isinstance(check, (np.bool, bool)): return masked if mask else check`.
             if (check.ndim == 0)
@@ -3101,13 +3101,16 @@ namespace NumSharp
         /// <param name="b">Right operand.</param>
         /// <param name="promoteScalar">True (the ufunc family) makes a bare C# scalar operand numpy.ma's strong
         ///     default-width array (<see cref="PromoteMaScalar"/>).</param>
+        /// <param name="strongOperand">True for the six comparison ufuncs and the float-only <c>arctan2</c> /
+        ///     <c>hypot</c>: the scalar or 0-d side becomes a strong one-element operand instead of widening both sides
+        ///     (<see cref="PromoteMaScalar"/>'s <c>strongOperand</c> form).</param>
         /// <returns>The masked result, or the <see cref="NDMasked"/> constant for a fully-masked 0-D result. An array
         /// result takes the fill value (raw) and hard-mask flag of <paramref name="a"/> when it is a masked array, else of
         /// <paramref name="b"/> (<see cref="InheritFromOperands"/>).</returns>
         /// <remarks>Scoped by hand — the one scope every binary masked ufunc rides: operand materializations, the
         /// numpy.ma scalar-widening casts, the OR'd mask intermediates, the broadcast mask view and the fill-back
         /// scalar are reclaimed; only the result's data and mask leave.</remarks>
-        private NDMaskedArray Binary(Func<NDArray, NDArray, NDArray> f, object a, object b, bool promoteScalar = true)
+        private NDMaskedArray Binary(Func<NDArray, NDArray, NDArray> f, object a, object b, bool promoteScalar = true, bool strongOperand = false)
         {
             using var scope = NDScope.Open();
             var da = AsData(a);
@@ -3118,7 +3121,7 @@ namespace NumSharp
             // they do NOT wrap the shift-count scalar as strong — they keep the array's dtype
             // (ma.left_shift(int16, 1) → int16, not int64). Those callers pass promoteScalar:false.
             if (promoteScalar)
-                PromoteMaScalar(a, b, ref da, ref db);
+                PromoteMaScalar(a, b, ref da, ref db, strongOperand);
             var result = f(da, db);
             // `m = umath.logical_or(ma, getmaskarray(b))` (or the mirror, or both masks): a NEW array whenever either
             // operand has a mask — never an operand's own mask object, so a masked write through the result cannot reach
@@ -3150,10 +3153,16 @@ namespace NumSharp
             using var scope = NDScope.Open();
             var da = AsData(a);
             var db = AsData(b);
+            // The domain sees NumPy's `(da, db) = (getdata(a), getdata(b))`: a bare scalar as np.array(scalar) — its strong
+            // default width — and an array as given, NOT the promoted pair the ufunc gets. It matters at an integer
+            // minimum: `absolute` wraps there (abs(int16 -32768) is -32768), so ma.floor_divide(int16 [-32768], 0) leaves
+            // that slot unmasked in NumPy, where the int32 / int64 widened data would mask it.
+            var ga = StrongBareScalar(a, da);
+            var gb = StrongBareScalar(b, db);
             // Same scalar-strong promotion as Binary (e.g. ma.floor_divide(int32, 2) → int64).
             PromoteMaScalar(a, b, ref da, ref db);
             var result = f(da, db);
-            var m = Or(NonFiniteMask(result), domain(da, db));
+            var m = Or(NonFiniteMask(result), domain(ga, gb));
             m = Or(m, (a as NDMaskedArray)?._mask);
             m = Or(m, (b as NDMaskedArray)?._mask);
             // Domained fill-back differs from the plain binary: NumPy zeroes masked slots then re-adds da,
@@ -3354,11 +3363,19 @@ namespace NumSharp
             Array => null,
             null => null,
             bool => NPTypeCode.Boolean,
-            // Every C# integer type maps to int64 (python int's width) and every C# float type to float64
+            // A Python int past int64 is np.array(v)'s uint64 (np.array(2**63).dtype is uint64): reading it as int64
+            // would wrap it negative in the astype.
+            ulong u when u > long.MaxValue => NPTypeCode.UInt64,
+            // Every other C# integer type maps to int64 (python int's width) and the C# float types to float64
             // (python float's), the closest analogs of NumPy's scalar-wrapping — the common int/long/double/float
             // literal cases are exact; the odd narrow-scalar cases (byte/short) have no python literal analog.
-            sbyte or byte or short or ushort or int or uint or long or ulong or char => NPTypeCode.Int64,
-            Half or float or double or decimal => NPTypeCode.Double,
+            sbyte or byte or short or ushort or int or uint or long or ulong => NPTypeCode.Int64,
+            // The house map's NumPy scalars keep their own dtype in np.array(): a Half is np.float16
+            // (ma.add(int8, np.float16(0.5)) is float16) and a char is NumSharp's np.uint16 analog
+            // (ma.add(int8, np.uint16(5)) is int32).
+            Half => NPTypeCode.Half,
+            char => NPTypeCode.Char,
+            float or double or decimal => NPTypeCode.Double,
             Complex => NPTypeCode.Complex,
             _ => null
         };
@@ -3369,21 +3386,44 @@ namespace NumSharp
         ///     contributes its <see cref="BareScalarStrongDtype"/> and an array its own dtype — so
         ///     <c>ma.multiply(int32, 2)</c> computes at (and returns) int64, matching NumPy. The INPUTS are widened
         ///     (not just the result) so a value that overflows the narrow dtype is computed wide, as NumPy does
-        ///     (<c>ma.multiply(int32 2e9, 2) == 4_000_000_000</c>, not the int32-wrapped value). A no-op for
-        ///     array×array (each operand keeps its own dtype, and the underlying op already promotes them).
+        ///     (<c>ma.multiply(int32 2e9, 2) == 4_000_000_000</c>, not the int32-wrapped value). Two arrays keep their own
+        ///     dtypes, except where one data array is 0-d and the other is not (<see cref="StrongZeroDimOperands"/>).
         /// </summary>
         /// <param name="a">Left operand (the original object, to detect a bare scalar).</param>
         /// <param name="b">Right operand.</param>
         /// <param name="da">Left data array — widened in place when promotion applies.</param>
         /// <param name="db">Right data array — widened in place when promotion applies.</param>
-        /// <remarks>With a TEXT operand only the bare scalar is converted (to its strong width): text and numbers share no
-        /// numeric dtype, and NumPy's ufunc reports the pair itself (<c>ma.greater(u, 1)</c> names <c>Int64DType</c>).</remarks>
-        private static void PromoteMaScalar(object a, object b, ref NDArray da, ref NDArray db)
+        /// <param name="strongOperand">True for the six comparison ufuncs and the float-only <c>arctan2</c> / <c>hypot</c>:
+        ///     only the scalar side is converted, and a 0-d side becomes a strong one-element operand
+        ///     (<see cref="StrongComparisonOperands"/>), so the ufunc resolves its own loop from the two strong dtypes and
+        ///     the array is not copied. False (the arithmetic, bitwise, logical, <c>where</c> and <c>power</c> callers)
+        ///     widens both sides to the strong common dtype.</param>
+        /// <remarks>
+        ///     <para>With a TEXT operand only the bare scalar is converted (to its strong width): text and numbers share no
+        ///     numeric dtype, and NumPy's ufunc reports the pair itself (<c>ma.greater(u, 1)</c> names
+        ///     <c>Int64DType</c>).</para>
+        ///     <para>Why the strong-operand form exists: widening both sides to <c>promote_types</c> is exact for arithmetic
+        ///     (NumPy computes in that dtype too), but not for a ufunc whose loop is not the promotion of its inputs. A
+        ///     comparison NumPy runs EXACTLY at a pair <c>promote_types</c> sends to float64 — int64 against uint64 (the
+        ///     <c>qQ</c> loops) — so <c>ma.equal(int64 [2**63 - 1], 2**63)</c> must stay False, and the engine's own
+        ///     comparison type (<see cref="NumSharp.Backends.Kernels.ComparisonKernelKey"/>) keeps it exact. A float-only
+        ///     ufunc (<c>arctan2</c>, <c>hypot</c>) takes the first float loop each input casts to safely: int16 with uint16
+        ///     is float32 there, where their promotion (int32) would choose float64.</para>
+        /// </remarks>
+        private static void PromoteMaScalar(object a, object b, ref NDArray da, ref NDArray db, bool strongOperand = false)
         {
             var sa = BareScalarStrongDtype(a);
             var sb = BareScalarStrongDtype(b);
             if (sa is null && sb is null)
-                return; // array×array: nothing to widen — the underlying op promotes them itself.
+            {
+                // array × array: the underlying op promotes two arrays strongly by itself, but NumSharp reads a 0-d
+                // operand against an array as a Python scalar (weak), and numpy.ma's getdata keeps a 0-d array strong.
+                if (strongOperand)
+                    StrongComparisonOperands(ref da, ref db);
+                else
+                    StrongZeroDimOperands(ref da, ref db);
+                return;
+            }
             // A text operand has no numeric promotion with the scalar: numpy.ma only makes the scalar its strong
             // default-width array (getdata(1) is int64), and the ufunc then answers for the pair — no loop
             // ((StrDType, Int64DType)) or, for two strings, the comparison of their text.
@@ -3395,12 +3435,86 @@ namespace NumSharp
                     db = db.astype(strongB, copy: false);
                 return;
             }
+            if (strongOperand)
+            {
+                // getdata(number) is the strong default-width array. Converting only that operand, and presenting it as a
+                // one-element array, lets the ufunc resolve its loop from the pair the way NumPy's does (exactly, for the
+                // int64 / uint64 comparison) with no copy of the array operand.
+                if (sa is { } strongA)
+                    da = da.astype(strongA, copy: false);
+                if (sb is { } strongB)
+                    db = db.astype(strongB, copy: false);
+                StrongComparisonOperands(ref da, ref db);
+                return;
+            }
             NPTypeCode ea = sa ?? da.typecode;
             NPTypeCode eb = sb ?? db.typecode;
             var td = np.promote_types(ea, eb);
             // astype(copy:false) is a no-op when the dtype already matches, so no redundant allocation.
             da = da.astype(td, copy: false);
             db = db.astype(td, copy: false);
+        }
+
+        /// <summary>
+        ///     numpy.ma's <c>getdata(x)</c> of an operand: a bare C# scalar becomes the strong default-width array NumPy's
+        ///     <c>np.array(scalar)</c> makes (<see cref="BareScalarStrongDtype"/>: a C# int is int64); an array or a masked
+        ///     array's data stands as given.
+        /// </summary>
+        /// <param name="x">The operand as the caller passed it.</param>
+        /// <param name="data">The operand's data array (<see cref="AsData"/> of <paramref name="x"/>).</param>
+        /// <returns><paramref name="data"/> itself, or its strong-width conversion for a bare scalar (a 0-d temporary of
+        ///     the caller's scope).</returns>
+        /// <remarks>A text operand is never a bare number, and a text array stands as given.</remarks>
+        private static NDArray StrongBareScalar(object x, NDArray data)
+            => BareScalarStrongDtype(x) is { } strong && data.typecode != NPTypeCode.String
+                ? data.astype(strong, copy: false)
+                : data;
+
+        /// <summary>
+        ///     Widens a 0-d data operand and an array data operand to their strong common dtype — numpy.ma's
+        ///     <c>getdata</c> rule for an op other than a comparison: NumPy treats a 0-d ARRAY as strong
+        ///     (<c>ma.add(float32, np.array(0.1))</c> is float64), while NumSharp's ufuncs read a 0-d operand against an
+        ///     array as a Python scalar (weak, float32 here).
+        /// </summary>
+        /// <param name="da">The left data array, replaced by its widened form when the rule applies.</param>
+        /// <param name="db">The right data array, replaced by its widened form when the rule applies.</param>
+        /// <remarks>A no-op when both operands are 0-d or both have dimensions (the ufunc's own promotion is then NumPy's
+        ///     strong one), when the dtypes already match, or when one side is text (no numeric promotion; the ufunc answers
+        ///     for the pair). The shapes are kept, so the ufunc's broadcasting and its 0-d fast paths (np.power's
+        ///     scalar-exponent loop) see NumPy's operands.</remarks>
+        private static void StrongZeroDimOperands(ref NDArray da, ref NDArray db)
+        {
+            if ((da.ndim == 0) == (db.ndim == 0))
+                return;
+            if (da.typecode == db.typecode || da.typecode == NPTypeCode.String || db.typecode == NPTypeCode.String)
+                return;
+            var td = np.promote_types(da.typecode, db.typecode);
+            da = da.astype(td, copy: false);
+            db = db.astype(td, copy: false);
+        }
+
+        /// <summary>
+        ///     Presents a 0-d comparison operand as a one-element 1-D view when the other operand has dimensions, so the
+        ///     comparison ufunc promotes it STRONGLY, as numpy.ma's <c>getdata</c> makes it (<c>mx &gt; 0.1</c> over a
+        ///     float32 <c>mx</c> compares at float64 in NumPy).
+        /// </summary>
+        /// <param name="da">The left comparison operand, replaced by a (1,) view when it is the 0-d one.</param>
+        /// <param name="db">The right comparison operand, replaced by a (1,) view when it is the 0-d one.</param>
+        /// <remarks>
+        ///     NumSharp's comparison ufuncs read a 0-d operand against an array as a Python scalar (NEP 50 weak,
+        ///     <see cref="NumSharp.Backends.DefaultEngine.AdoptWeakComparisonScalar"/>); a (1,) array is strong in both
+        ///     libraries. The result is unchanged otherwise: a (1,) operand broadcasts against an array of ndim &gt;= 1
+        ///     exactly as a 0-d one does, and two 0-d operands are already compared strongly (left as they are). The view
+        ///     shares the operand's data; nothing is copied.
+        /// </remarks>
+        private static void StrongComparisonOperands(ref NDArray da, ref NDArray db)
+        {
+            if ((da.ndim == 0) == (db.ndim == 0))
+                return;
+            if (da.ndim == 0)
+                da = da.reshape(1);
+            else
+                db = db.reshape(1);
         }
 
         /// <summary>
@@ -3514,9 +3628,17 @@ namespace NumSharp
         /// <returns>Boolean mask, True where division is unsafe.</returns>
         /// <remarks><c>tiny</c> is NumPy's <c>np.finfo(float).tiny</c>, an <c>np.float64</c> scalar — STRONG — so
         /// <c>|a| * tiny</c> is float64 for every <paramref name="a"/> dtype (a float16 or float32 <c>|a|</c> would turn
-        /// tiny into 0 and an inf <c>|a|</c> into NaN). <c>|a|</c> is widened first, which is the float64 loop's own cast.</remarks>
+        /// tiny into 0 and an inf <c>|a|</c> into NaN). <c>|a|</c> is widened first, which is the float64 loop's own cast.
+        /// The comparison is strong too: NumPy compares <c>np.asarray</c> operands, and a 0-d one yields a NumPy scalar,
+        /// so a 0-d <c>|a| * tiny</c> must not narrow into a float32 or float16 <c>|b|</c>
+        /// (<see cref="StrongComparisonOperands"/>).</remarks>
         private static NDArray SafeDivideDomain(NDArray a, NDArray b)
-            => np.greater_equal(np.multiply(np.abs(a).astype(np.float64, copy: false), SafeDivideTiny), np.abs(b));
+        {
+            var scaled = np.multiply(np.abs(a).astype(np.float64, copy: false), SafeDivideTiny);
+            var magnitude = np.abs(b);
+            StrongComparisonOperands(ref scaled, ref magnitude);
+            return np.greater_equal(scaled, magnitude);
+        }
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Unary ufuncs — domain-free (mask passes through)
@@ -3657,42 +3779,42 @@ namespace NumSharp
         /// <summary>Two-argument arctangent; masked where either operand was.</summary>
         /// <param name="a">y operand.</param><param name="b">x operand.</param>
         /// <returns>A masked array of arctan2(a, b).</returns>
-        public NDMaskedArray arctan2(object a, object b) => Binary((x, y) => np.arctan2(x, y), a, b);
+        public NDMaskedArray arctan2(object a, object b) => Binary((x, y) => np.arctan2(x, y), a, b, strongOperand: true);
 
         /// <summary>Euclidean hypotenuse; masked where either operand was.</summary>
         /// <param name="a">Left leg.</param><param name="b">Right leg.</param>
         /// <returns>A masked array of hypot(a, b).</returns>
-        public NDMaskedArray hypot(object a, object b) => Binary((x, y) => np.hypot(x, y), a, b);
+        public NDMaskedArray hypot(object a, object b) => Binary((x, y) => np.hypot(x, y), a, b, strongOperand: true);
 
         /// <summary>Element-wise equality; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a==b.</returns>
-        public NDMaskedArray equal(object a, object b) => Binary((x, y) => np.equal(x, y), a, b);
+        public NDMaskedArray equal(object a, object b) => Binary((x, y) => np.equal(x, y), a, b, strongOperand: true);
 
         /// <summary>Element-wise inequality; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a!=b.</returns>
-        public NDMaskedArray not_equal(object a, object b) => Binary((x, y) => np.not_equal(x, y), a, b);
+        public NDMaskedArray not_equal(object a, object b) => Binary((x, y) => np.not_equal(x, y), a, b, strongOperand: true);
 
         /// <summary>Element-wise less-than; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a&lt;b.</returns>
-        public NDMaskedArray less(object a, object b) => Binary((x, y) => np.less(x, y), a, b);
+        public NDMaskedArray less(object a, object b) => Binary((x, y) => np.less(x, y), a, b, strongOperand: true);
 
         /// <summary>Element-wise less-or-equal; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a&lt;=b.</returns>
-        public NDMaskedArray less_equal(object a, object b) => Binary((x, y) => np.less_equal(x, y), a, b);
+        public NDMaskedArray less_equal(object a, object b) => Binary((x, y) => np.less_equal(x, y), a, b, strongOperand: true);
 
         /// <summary>Element-wise greater-than; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a&gt;b.</returns>
-        public NDMaskedArray greater(object a, object b) => Binary((x, y) => np.greater(x, y), a, b);
+        public NDMaskedArray greater(object a, object b) => Binary((x, y) => np.greater(x, y), a, b, strongOperand: true);
 
         /// <summary>Element-wise greater-or-equal; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a&gt;=b.</returns>
-        public NDMaskedArray greater_equal(object a, object b) => Binary((x, y) => np.greater_equal(x, y), a, b);
+        public NDMaskedArray greater_equal(object a, object b) => Binary((x, y) => np.greater_equal(x, y), a, b, strongOperand: true);
 
         /// <summary>Logical AND; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
@@ -3764,7 +3886,16 @@ namespace NumSharp
             // formatting is deferred behind it (FilledForNumericOp).
             Exception deferral = null;
             var fa = m is null ? AsData(a) : FilledForNumericOp(a, 0, ref deferral);
-            var raw = left ? np.left_shift(fa, AsData(n)) : np.right_shift(fa, AsData(n));
+            var fn = AsData(n);
+            // `filled(a)` makes a bare scalar np.array(a): a STRONG array of its default width
+            // (ma.left_shift(1, int16 array) is int64). `n` passes as given: a bare C# integer is a Python int and stays
+            // weak (ma.left_shift(int16 array, 1) is int16), while an array, 0-d included, is strong
+            // (ma.left_shift(int16 array, np.array(1)) is int64).
+            if (BareScalarStrongDtype(a) is { } strongA && fa.typecode != NPTypeCode.String)
+                fa = fa.astype(strongA, copy: false);
+            if (BareScalarStrongDtype(n) is null)
+                StrongZeroDimOperands(ref fa, ref fn);
+            var raw = left ? np.left_shift(fa, fn) : np.right_shift(fa, fn);
             if (deferral is not null)
                 throw deferral;
             object d = raw;
@@ -5859,8 +5990,10 @@ namespace NumSharp
                 throw ComparisonNoLoop(ufunc, x.dtype.Meta, scalarClass);
             NDArray operand;
             if (IsWeakPythonNumber(value) && x.typecode is NPTypeCode.Half or NPTypeCode.Single)
-                // NEP 50: the Python number takes the array's float width, so the comparison runs at float16/float32.
-                operand = NDArray.Scalar(value).astype(x.dtype);
+                // NEP 50: the Python number takes the array's float width, so the comparison runs at float16/float32 —
+                // packed as NumPy's PyArray_Pack does (an int through the correctly rounded double, so twice past 2^53;
+                // a BigInteger past the double range raises CPython's OverflowError).
+                operand = Backends.DefaultEngine.PackPythonScalarForFloatLoop(value, x.typecode);
             else
                 operand = value as NDArray ?? (value as NDMaskedArray)?._data ?? AsValueOperand(value);
             return ufunc switch
@@ -7027,7 +7160,12 @@ namespace NumSharp
         [NDScoped]
         public bool allequal(object a, object b, bool fill_value = true)
         {
-            NDArray eq = np.equal(AsData(a), AsData(b));
+            // `umath.equal(getdata(a), getdata(b))`: getdata makes a number or a 0-d array a STRONG array, so
+            // allequal(float32 [0.1], 0.1) compares at float64 (False), not at the array's float32.
+            var da = AsData(a);
+            var db = AsData(b);
+            PromoteMaScalar(a, b, ref da, ref db, strongOperand: true);
+            NDArray eq = np.equal(da, db);
             var mu = Or((a as NDMaskedArray)?._mask, (b as NDMaskedArray)?._mask);
             if (mu is not null)
                 eq = fill_value ? (eq | mu) : (eq & np.logical_not(mu));

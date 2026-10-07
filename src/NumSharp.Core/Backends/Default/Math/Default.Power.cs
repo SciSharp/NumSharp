@@ -58,9 +58,20 @@ namespace NumSharp.Backends
             // that promotion (the same one the compute path uses), so keying the guard off it —
             // rather than off lhs.IsInteger(), which is false for a bool base — closes the bool-base
             // gap without over-raising the uint64 case.
-            bool loopIsInteger = typeCode.HasValue
-                ? typeCode.Value.IsInteger()
-                : ResolvePowerResultType(lhs, rhs).IsInteger();
+            NPTypeCode promotedLoop = typeCode ?? ResolvePowerResultType(lhs, rhs);
+            bool loopIsInteger = promotedLoop.IsInteger();
+
+            // NEP 50: NumPy packs a 0-d Python-int operand into the loop BEFORE it applies the integer-power rule, and
+            // the pack range-checks it: uint8 ** -1 is the pack's OverflowError ("Python integer -1 out of bounds for
+            // uint8"), int8 ** -129 too, and only a negative exponent that fits meets the ValueError below (plan
+            // api-parameter-parity X21). NumPy parses out= (a read-only out) and where= (the mask's dtype) before it
+            // resolves the loop, so those come first; the routes below repeat them (idempotent).
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
+            if (where is not null)
+                ValidateWhereMask(where);
+            CheckWeakPyIntOperand(lhs, rhs, promotedLoop, loopFromPromotion: !typeCode.HasValue);
+
             if (loopIsInteger && IsSignedInteger(rhs.GetTypeCode) && ContainsNegative(rhs))
                 throw new ArgumentException("Integers to negative integer powers are not allowed.");
 

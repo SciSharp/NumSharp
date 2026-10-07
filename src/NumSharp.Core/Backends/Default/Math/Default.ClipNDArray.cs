@@ -129,6 +129,17 @@ namespace NumSharp.Backends
             CheckPyIntBoundPacks(min, outType);
             CheckPyIntBoundPacks(max, outType);
 
+            // ---- The pack itself, for a float16 / float32 loop: a Python int goes through the correctly rounded double,
+            //      so an int64 / uint64 bound past 2^53 rounds TWICE (np.clip(float32, 2**60 + 2**36 + 1, …) clips to
+            //      2^60), where the kernels' bound conversion rounds once. Only such a bound is re-packed; the temps are
+            //      disposed at every exit, and no result aliases them.
+            using var packedMin = RepackWeakIntForFloatLoop(min, outType);
+            using var packedMax = RepackWeakIntForFloatLoop(max, outType);
+            if (packedMin is not null)
+                min = packedMin;
+            if (packedMax is not null)
+                max = packedMax;
+
             // ---- dtype=: every input must reach the requested loop by a same_kind cast (validate_casting).
             if (typeCode.HasValue)
                 ValidateClipInputCasts(lhs, min, max, outType, ufunc);

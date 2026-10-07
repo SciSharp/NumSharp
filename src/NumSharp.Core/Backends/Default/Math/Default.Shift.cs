@@ -143,6 +143,12 @@ namespace NumSharp.Backends
             if (@out is not null || where is not null || dtc.HasValue)
                 return ExecuteBinaryOp(lhs, rhs, op, @out, where, dtc);
 
+            // NEP 50: a 0-d Python-int operand is packed into the shift loop with NumPy's range check
+            // (np.left_shift(int8 array, 1000) raises "Python integer 1000 out of bounds for int8", and a negative count
+            // into an unsigned loop raises too), where the shift kernels below would read it wrapped. The routed
+            // ExecuteBinaryOp call above runs the same check.
+            CheckWeakPyIntOperand(lhs, rhs, resultType, loopFromPromotion: true);
+
             // Algebraic fast path: `bool_array >> scalar` with a nonzero count is ALL ZEROS —
             // the loop dtype's value set is {0, 1} (NumPy casts bool normalized, probed 2.4.2),
             // so 1 >> s == 0 for s in [1, bits-1] and every overflow count (s < 0, s >= bits)
@@ -199,8 +205,13 @@ namespace NumSharp.Backends
             // the normalize-convert into the kernel's per-element load (EmitMixedScalarBody), the
             // same one-pass structure the unified mixed-dtype binary path uses.
             bool fusedBoolValue = lhs.GetTypeCode == NPTypeCode.Boolean;
-            var value = fusedBoolValue || lhs.GetTypeCode == resultType ? lhs : lhs.astype(resultType);
-            var count = rhs.GetTypeCode == resultType ? rhs : rhs.astype(resultType);
+            // The loop-dtype casts are temporaries of this call (never the result, which is fresh): disposed at every
+            // exit, so their pooled buffers return to the pool rather than wait for the finalizer (the leak gate's
+            // scalar-first shift cases, np.left_shift(5, int8 array), left one or two of them behind).
+            using var valueCast = fusedBoolValue || lhs.GetTypeCode == resultType ? null : lhs.astype(resultType);
+            using var countCast = rhs.GetTypeCode == resultType ? null : rhs.astype(resultType);
+            var value = valueCast ?? lhs;
+            var count = countCast ?? rhs;
             var valueLoopType = fusedBoolValue ? NPTypeCode.Boolean : resultType;
 
             var (valueShape, countShape) = Broadcast(value.Shape, count.Shape);
@@ -249,7 +260,12 @@ namespace NumSharp.Backends
             }
 
             if (!allStrictFContig && ShouldProduceFContigOutput(value, count, result.Shape))
-                return result.copy('F');
+            {
+                // The F copy is the result; the C-order kernel output it was copied from is dead.
+                var fResult = result.copy('F');
+                result.Dispose();
+                return fResult;
+            }
 
             return result;
         }

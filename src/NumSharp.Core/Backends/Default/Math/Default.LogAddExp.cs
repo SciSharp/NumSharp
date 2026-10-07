@@ -75,6 +75,11 @@ namespace NumSharp.Backends
                 throw new IncorrectTypeException(
                     $"No loop matching the specified signature and casting was found for ufunc {UfuncName(op)}");
 
+            // NEP 50: a 0-d int64 / uint64 operand past 2^53 is a weak Python int that NumPy packs into a float32 loop
+            // through the correctly rounded double (two roundings); the kernels' operand cast rounds once
+            // (AdoptWeakIntOperand). The replacement is disposed at every exit.
+            using var weakInt = AdoptWeakIntOperand(ref x1, ref x2, typeCode ?? PromoteATan2Binary(x1, x2));
+
             // out=/where= ride the shared binary Into-path (same compiled kernels).
             if (@out is not null || where is not null)
             {

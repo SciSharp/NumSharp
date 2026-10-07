@@ -1220,6 +1220,23 @@ namespace NumSharp.Backends.Iteration
             _ => new System.Numerics.Complex(AsDouble(), 0.0),
         };
 
+        /// <summary>
+        ///     Pushes a complex literal as NumPy's complex64 value: a <see cref="System.Numerics.Complex"/> whose parts are
+        ///     rounded to float32 (overflow to infinity), as <c>CFLOAT_setitem</c> packs a Python complex. Used where the
+        ///     literal meets a float16 / float32 operand in a comparison (<see cref="ComparisonNode"/>).
+        /// </summary>
+        /// <param name="il">The IL stream.</param>
+        /// <exception cref="InvalidOperationException">The literal is not a complex one — a caller bug.</exception>
+        internal void EmitLoadComplex64(ILGenerator il)
+        {
+            if (_kind != NDExprLiteralKind.Complex)
+                throw new InvalidOperationException($"EmitLoadComplex64 needs a complex literal, not a {_kind} one.");
+            il.Emit(OpCodes.Ldc_R8, (double)(float)_c.Real);
+            il.Emit(OpCodes.Ldc_R8, (double)(float)_c.Imaginary);
+            il.Emit(OpCodes.Newobj, typeof(System.Numerics.Complex).GetConstructor(new[] { typeof(double), typeof(double) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, ".ctor(double,double)"));
+        }
+
         /// <summary>Push the literal as a value of <paramref name="target"/> (its adopted / resolved dtype).</summary>
         internal void EmitLoadTyped(ILGenerator il, NPTypeCode target)
         {
@@ -2159,13 +2176,43 @@ namespace NumSharp.Backends.Iteration
                 ? ctx.OutputType
                 : NDExprTypeRules.ComparisonType(lT, rT);
 
-            _left.EmitScalar(il, ctx);
-            DirectILKernelGenerator.EmitConvertTo(il, lT, cmpType);
-            _right.EmitScalar(il, ctx);
-            DirectILKernelGenerator.EmitConvertTo(il, rT, cmpType);
+            EmitOperandAt(il, ctx, _left, lT, rT, cmpType);
+            EmitOperandAt(il, ctx, _right, rT, lT, cmpType);
             DirectILKernelGenerator.EmitComparisonOperation(il, _op, cmpType);
             // EmitComparisonOperation leaves an I4 (0 or 1) on the stack.
             DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, my);
+        }
+
+        /// <summary>
+        ///     Pushes one operand of the comparison at the comparison dtype <paramref name="cmpType"/>.
+        /// </summary>
+        /// <param name="il">The IL stream.</param>
+        /// <param name="ctx">The compile context.</param>
+        /// <param name="child">The operand to push.</param>
+        /// <param name="childType">The operand's resolved dtype.</param>
+        /// <param name="otherType">The other operand's resolved dtype.</param>
+        /// <param name="cmpType">The dtype both operands are compared at.</param>
+        /// <remarks>
+        ///     A weak Python complex compared with a float16 / float32 operand is NumPy's complex64 loop
+        ///     (<c>np.result_type(float32_array, 1j)</c> is complex64): the literal's parts round to float32. NumSharp has one
+        ///     complex width, so the comparison stays complex128 with the literal's parts rounded — exact, because the float
+        ///     operand widens into complex64 without rounding and widening keeps every order and equality
+        ///     (<see cref="NumSharp.Backends.DefaultEngine.PackPythonScalarForFloatLoop"/>, the engine's same rule).
+        ///     Complex comparisons are never vector-emitted (the comparison dtype is never a vector lane), so only the
+        ///     scalar body needs this.
+        /// </remarks>
+        private static void EmitOperandAt(ILGenerator il, NDExprCompileContext ctx, NDExpr child, NPTypeCode childType,
+            NPTypeCode otherType, NPTypeCode cmpType)
+        {
+            if (cmpType == NPTypeCode.Complex && child is ConstNode c && c.Kind == NDExprLiteralKind.Complex
+                && otherType is NPTypeCode.Half or NPTypeCode.Single)
+            {
+                c.EmitLoadComplex64(il);
+                return;
+            }
+
+            child.EmitScalar(il, ctx);
+            DirectILKernelGenerator.EmitConvertTo(il, childType, cmpType);
         }
 
         public override void EmitVector(ILGenerator il, NDExprCompileContext ctx)

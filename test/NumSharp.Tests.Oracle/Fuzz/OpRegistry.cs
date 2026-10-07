@@ -379,6 +379,11 @@ namespace NumSharp.Tests.Fuzz
                 case "copyto_full":
                     return ApplyCopytoFull(p, ops);
 
+                // NEP 50 weak Python scalars (weak_scalar.jsonl): comparisons and binary ufuncs with one operand given as
+                // the C# literal NumPy's Python scalar maps to, and empty-operand broadcasts (OpRegistry.WeakScalar.cs).
+                case "weak_scalar":
+                    return ApplyWeakScalar(p, ops);
+
                 // np.power / np.float_power and NumPy's zero-exponent-step fast path (power_fast.jsonl): exponent kinds,
                 // out= / where= / dtype=, buffer sizes; an out case returns the out's whole buffer (OpRegistry.PowerFast.cs).
                 case "power_fast":
