@@ -1340,7 +1340,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     - average with a tuple 1.52x, the stack cells above.
 
 - [x] **X37 np.argwhere / np.flatnonzero / np.unravel_index returned new owning C arrays; NumPy returns views of one
-  buffer.** Done 2026-10-08 (this commit; the rundown's bug 8).
+  buffer.** Done 2026-10-08 (`b87ff919`; the rundown's bug 8).
   - Proof (NumPy 2.4.2): `np.flatnonzero(a)` is `np.nonzero(np.ravel(a))[0]`, the column of nonzero's `(k, 1)` buffer;
     `np.argwhere(a)` is `np.transpose(np.nonzero(a))`, the transpose of the `(ndim, k)` stack `np.asarray` makes of the
     tuple — F-contiguous, byte strides `(8, 8k)`; `np.unravel_index(indices, dims)` returns the columns of ONE
@@ -1720,8 +1720,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   neighbours: unravel_index's error order and types, `shape=()` and a reciprocal-division kernel; ravel_multi_index's
   KEEPORDER output, error order and `dims=()`; NumPy's order converter ported once; memoryview.tobytes' order;
   diag_indices / tril_indices / triu_indices own their data). The layout-parity oracle's argwhere / flatnonzero /
-  `unravel` / `ravelmi` families, the string oracle without the layout excuses. Findings 58-62 recorded. Commit: this
-  commit.
+  `unravel` / `ravelmi` families, the string oracle without the layout excuses. Findings 58-62 recorded. Commit:
+  `b87ff919`.
 
 - **2026-10-08**: X36 done (axis arguments: NumPy's normalize_axis_index / normalize_axis_tuple ported once, every
   axis check routed through them, the house AxisError with NumPy's argument prefixes; the neighbours: wrap-then-test
