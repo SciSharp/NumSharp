@@ -663,7 +663,7 @@ namespace NumSharp.Backends.Iteration
                 BinaryOp.Gcd or BinaryOp.Lcm => GcdLcmResult(_op, common, lt, rt),
 
                 BinaryOp.Subtract when common == NPTypeCode.Boolean
-                    => throw new NotSupportedException(
+                    => throw new TypeError(
                         "numpy boolean subtract, the `-` operator, is not supported, " +
                         "use the bitwise_xor, the `^` operator, or the logical_xor function instead."),
 
@@ -905,7 +905,7 @@ namespace NumSharp.Backends.Iteration
                 // NumPy's bool quirks for dtype-preserving ufuncs:
                 result = _op switch
                 {
-                    UnaryOp.Negate => throw new NotSupportedException(
+                    UnaryOp.Negate => throw new TypeError(
                         "The numpy boolean negative, the `-` operator, is not supported, " +
                         "use the `~` operator or the logical_not function instead."),
                     UnaryOp.Sign => throw new NotSupportedException(

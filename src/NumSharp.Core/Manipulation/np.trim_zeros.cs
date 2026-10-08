@@ -15,7 +15,8 @@ namespace NumSharp
         /// <param name="axis">The single dimension to trim; <c>null</c> trims the whole-array bounding box.</param>
         /// <returns>A view of <paramref name="filt"/> (see the <c>int[]</c> overload).</returns>
         /// <exception cref="ValueError"><paramref name="trim"/> contains unexpected characters.</exception>
-        /// <exception cref="AxisOutOfRangeException"><paramref name="axis"/> is out of bounds for <paramref name="filt"/>.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="filt"/> ("axis: axis … is
+        ///     out of bounds for array of dimension …", NumPy names the argument).</exception>
         /// <exception cref="StringComputationNotSupportedException">A non-empty string array with an axis to trim: NumPy reads
         ///     the strings' truth values (the next phase of NumSharp's string support).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html</remarks>
@@ -47,7 +48,8 @@ namespace NumSharp
         /// </returns>
         /// <exception cref="ValueError">If <paramref name="trim"/> contains unexpected characters, or an axis is repeated
         ///     (NumPy's ValueError texts).</exception>
-        /// <exception cref="AxisOutOfRangeException">If an axis is out of bounds for <paramref name="filt"/>.</exception>
+        /// <exception cref="AxisError">If an axis is out of bounds for <paramref name="filt"/> (checked for every axis before
+        ///     the repeat check).</exception>
         /// <exception cref="StringComputationNotSupportedException">A non-empty string array with an axis to trim: NumPy reads
         ///     the strings' truth values (the next phase of NumSharp's string support). An empty one collapses every trimmed
         ///     axis to length 0, and a 0-d one (or an empty axis list) is returned as it is.</exception>
@@ -79,13 +81,11 @@ namespace NumSharp
             else
             {
                 anyAxis = axis.Length > 0;
-                foreach (var ax in axis)
-                {
-                    int a = DefaultEngine.check_and_adjust_axis(ndim, ax);
-                    if (trimAxis[a])
-                        throw new ValueError("repeated axis in `axis` argument");
+                // normalize_axis_tuple(axis, ndim, argname="axis"): every axis range-checked first ("axis: axis 3 is out
+                // of bounds ..."), then the "repeated axis in `axis` argument" check — NumPy's order, so a tuple holding
+                // both a repeat and an out-of-range axis reports the latter.
+                foreach (int a in DefaultEngine.normalize_axis_tuple(axis, ndim, "axis"))
                     trimAxis[a] = true;
-                }
             }
 
             // No trimming requested (axis == () or a 0-d input) -> return the input unmodified, like NumPy.

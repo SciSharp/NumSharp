@@ -64,6 +64,9 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         /// <exception cref="TypeError">A string array (or a string prepend/append) with <paramref name="n"/> above 0:
         ///     NumPy's <c>subtract</c> has no string loop, so its first <c>a[1:] - a[:-1]</c> refuses whatever the size.</exception>
+        /// <exception cref="ValueError"><paramref name="a"/> is 0-D ("diff requires input that is at least one
+        ///     dimensional").</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>'s rank.</exception>
         [NDScoped]
         public static NDArray diff(NDArray a, int n = 1, int axis = -1,
                                    object prepend = null, object append = null)
@@ -176,22 +179,17 @@ namespace NumSharp
         /// <param name="a">The array to be differenced.</param>
         /// <param name="axis">The caller's axis; negative counts from the end (NumPy's <c>normalize_axis_index</c>).</param>
         /// <returns>The axis in <c>[0, a.ndim)</c>.</returns>
-        /// <exception cref="ArgumentException"><paramref name="a"/> is 0-D ("diff requires input that is at least one dimensional").</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is outside <c>[-a.ndim, a.ndim-1]</c>.</exception>
+        /// <exception cref="ValueError"><paramref name="a"/> is 0-D ("diff requires input that is at least one dimensional").</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside <c>[-a.ndim, a.ndim-1]</c>.</exception>
         internal static int DiffAxis(NDArray a, int axis)
         {
             int nd = a.ndim;
             if (nd == 0)
-                throw new ArgumentException(
+                throw new ValueError(
                     "diff requires input that is at least one dimensional");
 
             // normalize_axis_index(axis, nd)
-            int ax = axis;
-            if (ax < 0) ax += nd;
-            if (ax < 0 || ax >= nd)
-                throw new ArgumentOutOfRangeException(nameof(axis),
-                    $"axis {axis} is out of bounds for array of dimension {nd}");
-            return ax;
+            return Backends.DefaultEngine.check_and_adjust_axis(nd, axis);
         }
 
         /// <summary>

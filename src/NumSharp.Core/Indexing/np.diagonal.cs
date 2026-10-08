@@ -39,21 +39,28 @@ namespace NumSharp
         ///     change pencilled in for NumPy 1.10 hasn't shipped in 2.x).
         ///     </para>
         /// </remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="a"/> has fewer than two dimensions ("diag requires an array of at
+        ///     least two dimensions"), or the two axes are the same axis ("axis1 and axis2 cannot be the same").</exception>
+        /// <exception cref="AxisError">An axis is out of range: "axis1: axis …" / "axis2: axis …" (axis1 checked
+        ///     first).</exception>
         public static NDArray diagonal(NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1)
         {
             using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (a is null) throw new ArgumentNullException(nameof(a));
 
             int ndim = a.ndim;
+            // PyArray_Diagonal's ValueError, before either axis is read.
             if (ndim < 2)
-                throw new ArgumentException(
+                throw new ValueError(
                     "diag requires an array of at least two dimensions",
                     nameof(a));
 
             int ax1 = NormalizeAxis(axis1, ndim, nameof(axis1));
             int ax2 = NormalizeAxis(axis2, ndim, nameof(axis2));
+            // PyArray_Diagonal's ValueError, after both axes are in range.
             if (ax1 == ax2)
-                throw new ArgumentException(
+                throw new ValueError(
                     "axis1 and axis2 cannot be the same",
                     nameof(axis2));
 
@@ -118,16 +125,16 @@ namespace NumSharp
 
         /// <summary>
         ///     Normalises a possibly-negative axis to the [0, ndim) range, matching
-        ///     NumPy's <c>check_and_adjust_axis_msg</c>. Throws with the parameter
-        ///     name embedded in the message.
+        ///     NumPy's <c>check_and_adjust_axis_msg</c> in <c>PyArray_Diagonal</c>: the
+        ///     argument name leads the AxisError's text.
         /// </summary>
+        /// <param name="axis">The axis; negative values count from the end.</param>
+        /// <param name="ndim">The array's rank.</param>
+        /// <param name="argName">The argument name (<c>"axis1"</c> / <c>"axis2"</c>).</param>
+        /// <returns>The non-negative axis.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range: "{argName}: axis … is out of bounds for
+        ///     array of dimension …".</exception>
         private static int NormalizeAxis(int axis, int ndim, string argName)
-        {
-            int adjusted = axis < 0 ? axis + ndim : axis;
-            if (adjusted < 0 || adjusted >= ndim)
-                throw new ArgumentOutOfRangeException(argName,
-                    $"{argName}: axis {axis} is out of bounds for array of dimension {ndim}");
-            return adjusted;
-        }
+            => Backends.DefaultEngine.check_and_adjust_axis(ndim, axis, argName);
     }
 }

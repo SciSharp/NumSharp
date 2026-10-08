@@ -473,28 +473,38 @@ namespace NumSharp.Tests.NumPyPortedTests
 
         // ===== [10] axis error conditions =============================================
 
+        /// <summary>
+        ///     np.cumsum with an axis past the last raises NumPy's AxisError.
+        /// </summary>
         [TestMethod]
         public void CumSum_AxisOutOfBounds_Positive_Throws()
         {
-            // NumPy raises AxisError; NumSharp raises ArgumentOutOfRangeException.
+            // NumPy raises AxisError, and so does NumSharp (the house AxisError).
             var a = np.ones(new Shape(2, 3));
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.cumsum(a, 2));
+            Assert.ThrowsException<AxisError>(() => np.cumsum(a, 2));
         }
 
+        /// <summary>
+        ///     np.cumsum with axis -ndim - 1 raises NumPy's AxisError; it is never wrapped a second time to the last axis.
+        /// </summary>
         [TestMethod]
         public void CumSum_AxisOutOfBounds_Negative_Throws()
         {
             // NumPy: axis=-3 on a 2-D array is an AxisError (NOT a silent wrap to axis 1).
             var a = np.ones(new Shape(2, 3));
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.cumsum(a, -3));
+            Assert.ThrowsException<AxisError>(() => np.cumsum(a, -3));
         }
 
+        /// <summary>
+        ///     np.cumsum checks the axis before its trivial shortcuts: a 0-d input (raveled to rank 1, PyArray_CheckAxis) and a
+        ///     one-element array still raise NumPy's AxisError.
+        /// </summary>
         [TestMethod]
         public void CumSum_AxisOutOfBounds_OnTrivialArray_Throws()
         {
             // NumPy validates the axis BEFORE the trivial shortcut: 0-d/size-1 still error.
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.cumsum(NDArray.Scalar(5), 1));
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.cumsum(np.array(new int[] { 5 }), -3));
+            Assert.ThrowsException<AxisError>(() => np.cumsum(NDArray.Scalar(5), 1));
+            Assert.ThrowsException<AxisError>(() => np.cumsum(np.array(new int[] { 5 }), -3));
         }
     }
 }

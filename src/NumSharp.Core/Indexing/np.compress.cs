@@ -13,7 +13,7 @@ namespace NumSharp
         /// <param name="condition">
         ///     <strong>1-D</strong> array of booleans (or any dtype interpreted as
         ///     truthy). Must be 1-D — a 2-D or 0-D condition raises
-        ///     <see cref="ArgumentException"/>, mirroring NumPy's
+        ///     <see cref="ValueError"/>, NumPy's
         ///     <c>ValueError("condition must be a 1-d array")</c>. If
         ///     <c>len(condition) &lt; a.shape[axis]</c>, only the first
         ///     <c>len(condition)</c> positions along <paramref name="axis"/> are
@@ -38,6 +38,10 @@ namespace NumSharp
         ///     false. Dtype matches <paramref name="a"/> (or
         ///     <paramref name="out"/>'s dtype when supplied).
         /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="condition"/> or <paramref name="a"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="condition"/> is not 1-D.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>'s rank (rank 1 for a
+        ///     0-d <paramref name="a"/>, which NumPy ravels first).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.compress.html
         ///     <para>
@@ -72,11 +76,17 @@ namespace NumSharp
             if (condition is null) throw new ArgumentNullException(nameof(condition));
             if (a is null) throw new ArgumentNullException(nameof(a));
 
-            // NumPy hard-requires 1-D condition; 0-D and 2-D+ both fail here.
+            // NumPy hard-requires 1-D condition; 0-D and 2-D+ both fail here (PyArray_Compress' ValueError).
             if (condition.ndim != 1)
-                throw new ArgumentException(
+                throw new ValueError(
                     "condition must be a 1-d array",
                     nameof(condition));
+
+            // PyArray_TakeFrom's PyArray_CheckAxis, which NumPy reaches next: the axis addresses rank max(ndim, 1) (a 0-d
+            // input ravels first), checked before either path reads anything — the fast path treated a 0-d input as one
+            // element for ANY axis.
+            if (axis is not null)
+                Backends.DefaultEngine.check_and_adjust_axis(Math.Max(a.ndim, 1), axis.Value);
 
             // Fast path: bool cond, contig src, no out= override (so result dtype
             // == src dtype). Wires straight into the fused gather kernel.
@@ -148,11 +158,7 @@ namespace NumSharp
             }
             else
             {
-                int ax = axis.Value;
-                if (ax < 0) ax += a.ndim;
-                if (ax < 0 || ax >= a.ndim)
-                    throw new ArgumentOutOfRangeException(nameof(axis),
-                        $"axis {axis.Value} is out of bounds for array of dimension {a.ndim}");
+                int ax = Backends.DefaultEngine.check_and_adjust_axis(a.ndim, axis.Value);
 
                 outerSize = 1;
                 for (int d = 0; d < ax; d++) outerSize *= a.Shape.dimensions[d];

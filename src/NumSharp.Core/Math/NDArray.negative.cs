@@ -16,7 +16,7 @@ namespace NumSharp
             // is no negative loop for the bool dtype, even for empty arrays. Use
             // the `~` operator (np.invert) or np.logical_not for a boolean flip.
             if (this.GetTypeCode == NPTypeCode.Boolean)
-                throw new NotSupportedException(
+                throw new TypeError(
                     "The numpy boolean negative, the `-` operator, is not supported, " +
                     "use the `~` operator or the logical_not function instead.");
 

@@ -369,10 +369,14 @@ class CommittedCorpusTests(unittest.TestCase):
         self.assertIn("numpy.trace", self.result.evidence)
         # The np.linalg Array-API forms have stricter contracts than their np.* namesakes (last-two-axes, 1-D only,
         # 3-vectors), so the bare corpus keys trace / diagonal / outer / cross never credit them; since 2026-10-08
-        # surface.jsonl gates each form under its own linalg.<name> key, and only that key may.
+        # surface.jsonl gates each form under its own linalg.<name> key, and only that key may. np.linalg.cross also
+        # has the axis tier's contracts (its x1.shape[axis] IndexError, its 3-vector ValueError) under its own key.
         for strict in ("numpy.linalg.trace", "numpy.linalg.diagonal", "numpy.linalg.outer", "numpy.linalg.cross"):
-            self.assertEqual({"linalg." + strict[13:]}, self.evidence(strict).keys,
-                             f"{strict} has a stricter contract than np.{strict[13:]}: only its own key may credit it")
+            own = {"linalg." + strict[13:]} | ({"axis_arg:linalg.cross"} if strict == "numpy.linalg.cross" else set())
+            self.assertEqual(own, self.evidence(strict).keys,
+                             f"{strict} has a stricter contract than np.{strict[13:]}: only its own keys may credit it")
+        cross = self.evidence("numpy.linalg.cross")
+        self.assertIsNone(cross.via, "np.linalg.cross must not borrow np.cross's contracts")
         for row_id in ("numpy.random.normal", "numpy.random.RandomState.normal"):
             normal = self.evidence(row_id)
             # The random-API oracle adds every overload of RandomState.normal (random_api_host.jsonl).

@@ -1380,6 +1380,19 @@ namespace NumSharp
             return GetAxis(shape.dimensions, axis);
         }
 
+        /// <summary>
+        ///     The dimensions with one axis removed — the shape a reduction over <paramref name="axis"/> leaves.
+        /// </summary>
+        /// <param name="dims">The dimensions.</param>
+        /// <param name="axis">The removed axis; negative values count from the end.</param>
+        /// <returns>A new array without <paramref name="axis"/> (empty for 0-d dimensions, whatever the axis).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dims"/> is null.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for a 1-D or higher shape.</exception>
+        /// <remarks>
+        ///     A negative axis is NumPy's normalization (<c>-2</c> is the second-to-last axis). This helper used to map
+        ///     EVERY negative axis to the last one and raise the legacy parenthesized AxisOutOfRangeException; its callers
+        ///     pass normalized axes, so only a direct caller ever saw the difference.
+        /// </remarks>
         public static long[] GetAxis(long[] dims, int axis)
         {
             if (dims == null)
@@ -1388,10 +1401,7 @@ namespace NumSharp
             if (dims.Length == 0)
                 return Array.Empty<long>();
 
-            if (axis <= -1) axis = dims.Length - 1;
-            if (axis >= dims.Length)
-                throw new AxisOutOfRangeException(dims.Length, axis);
-
+            axis = Backends.DefaultEngine.check_and_adjust_axis(dims.Length, axis);
             return dims.RemoveAt(axis);
         }
 

@@ -36,11 +36,12 @@ namespace NumSharp
         /// </param>
         /// <returns>The concatenated array (<paramref name="out"/> itself when given).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="arrays"/> or one of its elements is null.</exception>
-        /// <exception cref="ArgumentException">No arrays; an unknown <paramref name="casting"/> name; both
-        ///     <paramref name="out"/> and <paramref name="dtype"/>.</exception>
-        /// <exception cref="ValueError">A 0-d array with an axis (<c>zero-dimensional arrays cannot be concatenated</c>; NumPy's
-        ///     ValueError — <c>axis=None</c> ravels it into one element instead).</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is out of bounds.</exception>
+        /// <exception cref="ArgumentException">An unknown <paramref name="casting"/> name; both <paramref name="out"/> and
+        ///     <paramref name="dtype"/>.</exception>
+        /// <exception cref="ValueError">No arrays (<c>need at least one array to concatenate</c>); a 0-d array with an axis
+        ///     (<c>zero-dimensional arrays cannot be concatenated</c>; NumPy's ValueError — <c>axis=None</c> ravels it into one
+        ///     element instead).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for the inputs' rank.</exception>
         /// <exception cref="IncorrectShapeException">The inputs' ranks or non-axis dimensions differ, or
         ///     <paramref name="out"/> has the wrong rank or shape (NumPy's ValueError texts).</exception>
         /// <exception cref="InvalidCastException">An input does not cast to the result dtype under
@@ -61,9 +62,9 @@ namespace NumSharp
                 return NDMatrixBoundary.Wrapped((arrays, axis, @out, dtype, casting), static s => concatenate(s.arrays, s.axis, s.@out, s.dtype, s.casting), @out);
             if (arrays == null)
                 throw new ArgumentNullException(nameof(arrays));
+            // PyArray_ConcatenateInto: "need at least one array to concatenate", NumPy's ValueError.
             if (arrays.Length == 0)
-                throw new ArgumentException(
-                    "need at least one array to concatenate", nameof(arrays));
+                throw new ValueError("need at least one array to concatenate");
 
             // Validate casting name up-front. NumPy raises ValueError on invalid
             // casting strings regardless of whether any cast actually occurs.
@@ -124,12 +125,9 @@ namespace NumSharp
             var first = workArrays[0];
             int ndim = first.ndim;
 
-            // Normalize negative axis against input ndim (NumPy AxisError on out-of-range).
-            if (effectiveAxis < 0)
-                effectiveAxis += ndim;
-            if (effectiveAxis < 0 || effectiveAxis >= ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis),
-                    $"axis {axis} is out of bounds for array of dimension {ndim}");
+            // check_and_adjust_axis(&axis, ndim) of PyArray_ConcatenateArrays: NumPy's AxisError for an axis out of range,
+            // the axis as given (axis=None ravels first, so its effective axis 0 always fits).
+            effectiveAxis = DefaultEngine.check_and_adjust_axis(ndim, effectiveAxis);
 
             // Shape validation: all inputs must have same ndim and match on
             // non-axis dimensions. Accumulate axis size for the result.

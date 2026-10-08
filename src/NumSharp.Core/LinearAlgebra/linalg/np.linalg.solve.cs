@@ -59,9 +59,15 @@ namespace NumSharp
             /// <summary>
             ///     Solves the tensor equation <c>a x = b</c> for x.
             /// </summary>
+            /// <param name="a">The coefficient tensor; its leading <c>b.ndim</c> axes (after <paramref name="axes"/> moved
+            ///     some to the end) index the equations.</param>
+            /// <param name="b">The right-hand side.</param>
             /// <param name="axes">
-            ///     Axes of <paramref name="a"/> to move to the right before inversion.
+            ///     Axes of <paramref name="a"/> to move to the right before inversion. NumPy uses them as LIST VALUES
+            ///     (<c>allaxes.remove(k)</c>), never normalizing them: a negative axis is not found, so only
+            ///     <c>0 .. a.ndim - 1</c> are accepted.
             /// </param>
+            /// <returns>The solution, of shape <c>a.shape[b.ndim:]</c> (after the axis move).</returns>
             /// <remarks>
             ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.tensorsolve.html
             ///     <para>
@@ -70,6 +76,9 @@ namespace NumSharp
             ///     trailing block of <c>a.shape</c>.
             ///     </para>
             /// </remarks>
+            /// <exception cref="ValueError">An axis that is not one of <c>0 .. a.ndim - 1</c>: Python's
+            ///     "list.remove(x): x not in list" (a negative axis included; NumPy raises no AxisError here).</exception>
+            /// <exception cref="LinAlgError">The moved operand is not square in the equation / unknown split.</exception>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             [NDScoped]
@@ -88,7 +97,10 @@ namespace NumSharp
                         order.Add(k);
                     foreach (int k in axes)
                     {
-                        order.Remove(k);
+                        // Python's list.remove raises for a value the list does not hold; List.Remove only returns
+                        // false, which used to append a stray axis and surface as transpose's "axes don't match array".
+                        if (!order.Remove(k))
+                            throw new ValueError("list.remove(x): x not in list");
                         order.Add(k);
                     }
 

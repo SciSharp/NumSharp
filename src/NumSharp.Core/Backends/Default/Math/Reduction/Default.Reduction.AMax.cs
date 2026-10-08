@@ -6,11 +6,27 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
+        /// <summary>
+        ///     NumPy's <c>np.max</c> / <c>np.amax</c> (<c>np.maximum.reduce</c>) over <paramref name="axis_"/>, or over
+        ///     every axis when it is null.
+        /// </summary>
+        /// <param name="arr">The array.</param>
+        /// <param name="axis_">The reduced axis (negative values count from the end), or null for every axis. A 0-d input
+        ///     accepts 0 and -1 (NumPy's backward-compatibility rule) and nothing else.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <param name="dtype">The loop dtype (<c>dtype=</c>), or null for the input's.</param>
+        /// <returns>The maximum (a read-only 0-d scalar for a full reduction).</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range — checked before any shortcut.</exception>
+        /// <exception cref="ArgumentException">An empty reduction ("zero-size array to reduction operation maximum which has
+        ///     no identity", NumPy's ValueError).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A string input NumPy computes on (the next phase).</exception>
         public override NDArray ReduceAMax(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null)
         {
             // Text, or a string dtype= request: NumPy's max checks its arguments first (the axis, and the dtype= class where
             // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
             Strings.NDStringUfuncs.ThrowIfReduce("max", arr, axis_, dtype);
+            // The ufunc reduce's axis check, before every shortcut below (empty, 0-d and one-element inputs included).
+            ReductionArguments.CheckReduceAxis(arr.ndim, axis_);
             NPTypeCode? typeCode = UfuncLoopCode(dtype);
             var shape = arr.Shape;
 

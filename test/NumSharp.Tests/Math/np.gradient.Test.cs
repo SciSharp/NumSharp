@@ -194,12 +194,15 @@ namespace NumSharp.Tests.Math
 
         // ---------------------------- errors ----------------------------
 
+        /// <summary>
+        ///     np.gradient of a bool array raises NumPy's boolean-subtract TypeError, with NumPy's text.
+        /// </summary>
         [TestMethod]
         public void Gradient_Bool_Throws()
         {
-            // NumPy: TypeError "numpy boolean subtract ..."; NumSharp: NotSupportedException, same text.
+            // NumPy: TypeError "numpy boolean subtract ..."; NumSharp raises the same TypeError and text.
             Action act = () => np.gradient(np.array(new bool[] { true, false, true, false }));
-            act.Should().Throw<NotSupportedException>().WithMessage("*boolean subtract*");
+            act.Should().Throw<TypeError>().WithMessage("*boolean subtract*");
         }
 
         [TestMethod]

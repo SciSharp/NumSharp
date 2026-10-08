@@ -10500,6 +10500,502 @@ def gen_linalg_empty():
             _le_case(cases, "solve", f"{'x'.join(map(str, sa))}_{'x'.join(map(str, sb))}",
                      [(a, a), (b, b)], {}, lambda va, vb: np.linalg.solve(va, vb), "array", dt, "C")
     return cases
+# ---------------------------------------------------------------------------
+# T-axis — the AXIS ARGUMENTS of every axis-taking function (the open-bugs rundown's bug 7 and the neighbours its search
+# found; plan docs/plans/api-parameter-parity.md X36). Each function is called with every axis value of its operand's rank,
+# in range and out of it (`[-ndim - 2, ndim + 1]`), on 0-d / 1-D / 2-D / 3-D operands, and the functions that take a tuple
+# with repeated, out-of-range, empty and full tuples. NumPy's answer is the contract: the RESULT of an axis in range (the
+# fix must not move a valid axis), and of one out of range the exception TYPE and TEXT — normalize_axis_index's AxisError
+# with its msg_prefix ("source: " / "destination: " / "axis1: " / "axisa: " / "axis: "), PyArray_CheckAxis' rank of 1 for a
+# 0-d operand, normalize_axis_tuple's ValueError ("repeated axis", "repeated axis in `source` argument"), the IndexError
+# NumPy leaks where it reads `a.shape[axis]` first (np.split, np.linalg.cross), np.rollaxis' own `start` text. Every
+# function goes through ONE op key, "axis_arg", whose params.fn names the NumPy function ("sum", "ndarray.argmax",
+# "ma.sum", "linalg.norm", "fft.fft"): the replay calls the NumSharp twin of exactly that spelling. The ndarray methods and
+# numpy.ma's functions have their own axis code in both libraries, so they are separate fn keys. A numpy.ma result is
+# compared through its data (the operands carry no mask, so no slot is masked). The valueclass "axis_args" holds the types
+# STRICT (NumPy's AxisError / ValueError / IndexError must come back as the house type of the same name), zero excuses.
+# Excluded: NumSharp has no tuple axis for sum / prod / mean / std / var / max / min / the nan reductions / squeeze / roll /
+# size / cumsum (a library-wide gap), so those take the integer forms only.
+
+AX_OPERANDS = {
+    0: lambda: np.array(1.5),
+    1: lambda: np.arange(1.0, 5.0),
+    2: lambda: np.arange(1.0, 7.0).reshape(2, 3),
+    3: lambda: np.arange(1.0, 25.0).reshape(2, 3, 4),
+}
+
+
+def _ax_values(n):
+    """Every axis value the tier tries against rank `n`: the valid range [-n, n-1] and two past each end."""
+    return list(range(-n - 2, n + 2))
+
+
+def _ax_tuples(n):
+    """The tuple axes the tier tries against rank `n`: repeats (direct and through a negative alias), out of range on
+    both sides, the empty tuple, a valid partial and a valid full tuple, and a repeat TOGETHER with an out-of-range axis
+    in both orders (NumPy normalizes every axis before it looks for a repeat, so the out-of-range axis is reported)."""
+    if n == 1:
+        return [(0, 0), (0, -1), (-1,), (0,), (0, 1), (0, -2), (), (0, 0, 1), (1, 0, 0)]
+    if n == 2:
+        return [(0, 0), (0, -2), (1, -1), (0, 1), (1, 0), (-1, -2), (0, 2), (0, -3), (2, 0), (-3, 1), (),
+                (0, 0, 2), (2, 0, 0), (1, 1, -3)]
+    return [(0, 0), (0, -3), (0, 1), (2, 0), (1, 2, 0), (0, 1, 2), (0, 3), (0, -4), (3, 0), (-4, 2), (0, 1, 3), (),
+            (0, 0, 3), (3, 0, 0), (2, -1, -4)]
+
+
+def _ax_perms(n):
+    """The `axes` arguments of the permutation functions (transpose / permute_dims): a valid permutation, a repeated
+    entry, an entry out of range on each side, a short tuple and a long one."""
+    if n == 1:
+        return [(0,), (-1,), (0, 0), (1,), (-2,), ()]
+    if n == 2:
+        return [(1, 0), (-1, 0), (0, 0), (0, 2), (0, -3), (0,), (1, 0, 2)]
+    return [(2, 1, 0), (-1, -2, -3), (0, 0, 1), (0, 1, 3), (0, 1, -4), (0, 1), (2, 1, 0, 3)]
+
+
+def _ax_result(r):
+    """NumPy's result as the corpus expects it: one array (a numpy.ma result through its data), or a tuple of arrays
+    for a list / tuple result."""
+    if isinstance(r, (list, tuple)):
+        return _tuple_expected([np.asarray(np.ma.getdata(x)) for x in r])
+    return _arr_expected(np.asarray(np.ma.getdata(r)))
+
+
+def _ax_record(cases, fn, params, operands_pairs, call):
+    """Record one axis case: NumPy's result, or its error type and text (the contract either way)."""
+    cid = f"axis_arg/{fn}/{'/'.join(f'{k}={params[k]}' for k in sorted(params))}/{len(cases)}"
+    operands = [describe(b, v) for b, v in operands_pairs]
+    p = dict(params)
+    p["fn"] = fn
+    try:
+        r = call(*[v for _, v in operands_pairs])
+    except Exception as e:  # noqa: BLE001 — the error IS the contract
+        kind = "tuple" if fn in AX_TUPLE_FNS else None
+        cases.append({"id": cid, "op": "axis_arg", "params": p, "operands": operands,
+                      "expected": {"kind": kind} if kind else {}, "expects_throw": True, "error": _exc(e),
+                      "layout": "C", "valueclass": "axis_args"})
+        return
+    exp = _ax_result(r)
+    if fn in AX_TUPLE_FNS and exp.get("kind") != "tuple":
+        # A function that answers with a tuple for some axes (np.gradient over several axes) and an array for others
+        # (one axis) keeps the replay's kind consistent: the single array becomes a one-slot tuple.
+        exp = _tuple_expected([np.asarray(r)])
+    cases.append({"id": cid, "op": "axis_arg", "params": p, "operands": operands, "expected": exp,
+                  "layout": "C", "valueclass": "axis_args"})
+
+
+# The functions whose replay goes through the tuple kind (a list result, or a list for some axes).
+AX_TUPLE_FNS = {"split", "array_split", "unstack", "gradient"}
+
+
+def gen_axis_args():
+    import warnings
+    cases = []
+    warnings.simplefilter("ignore")   # np.nanmean of an all-NaN slice and friends warn; the value is the contract
+
+    def plain(n):
+        a = AX_OPERANDS[n]()
+        return [(a, a)]
+
+    def u8(n):
+        a = AX_OPERANDS[n]().astype(np.uint8)
+        return [(a, a)]
+
+    def with_idx(n):
+        a = AX_OPERANDS[n]()
+        idx = np.zeros(a.shape, np.int64)
+        return [(a, a), (idx, idx)]
+
+    def with_cond(n):
+        a = AX_OPERANDS[n]()
+        cond = np.array([True, False])
+        return [(cond, cond), (a, a)]
+
+    def with_take(n):
+        a = AX_OPERANDS[n]()
+        ix = np.array([0], np.int64)
+        return [(a, a), (ix, ix)]
+
+    def pair(n):
+        a = AX_OPERANDS[n]()
+        b = a * 2.0
+        return [(a, a), (b, b)]
+
+    # ---- one integer axis -------------------------------------------------------------------------------------------
+    # (fn, ranks, call(*operands, axis)).
+    int_jobs = [
+        ("sum", (0, 1, 2, 3), plain, lambda a, ax: np.sum(a, axis=ax)),
+        ("prod", (0, 1, 2, 3), plain, lambda a, ax: np.prod(a, axis=ax)),
+        ("mean", (0, 1, 2, 3), plain, lambda a, ax: np.mean(a, axis=ax)),
+        ("std", (0, 1, 2, 3), plain, lambda a, ax: np.std(a, axis=ax)),
+        ("var", (0, 1, 2, 3), plain, lambda a, ax: np.var(a, axis=ax)),
+        ("max", (0, 1, 2, 3), plain, lambda a, ax: np.max(a, axis=ax)),
+        ("min", (0, 1, 2, 3), plain, lambda a, ax: np.min(a, axis=ax)),
+        ("amax", (0, 1, 2, 3), plain, lambda a, ax: np.amax(a, axis=ax)),
+        ("amin", (0, 1, 2, 3), plain, lambda a, ax: np.amin(a, axis=ax)),
+        ("ptp", (0, 1, 2, 3), plain, lambda a, ax: np.ptp(a, axis=ax)),
+        ("all", (0, 1, 2, 3), plain, lambda a, ax: np.all(a, axis=ax)),
+        ("any", (0, 1, 2, 3), plain, lambda a, ax: np.any(a, axis=ax)),
+        ("argmax", (0, 1, 2, 3), plain, lambda a, ax: np.argmax(a, axis=ax)),
+        ("argmin", (0, 1, 2, 3), plain, lambda a, ax: np.argmin(a, axis=ax)),
+        ("nanargmax", (0, 1, 2, 3), plain, lambda a, ax: np.nanargmax(a, axis=ax)),
+        ("nanargmin", (0, 1, 2, 3), plain, lambda a, ax: np.nanargmin(a, axis=ax)),
+        ("cumsum", (0, 1, 2, 3), plain, lambda a, ax: np.cumsum(a, axis=ax)),
+        ("cumprod", (0, 1, 2, 3), plain, lambda a, ax: np.cumprod(a, axis=ax)),
+        ("nancumsum", (0, 1, 2, 3), plain, lambda a, ax: np.nancumsum(a, axis=ax)),
+        ("nancumprod", (0, 1, 2, 3), plain, lambda a, ax: np.nancumprod(a, axis=ax)),
+        ("nansum", (0, 1, 2, 3), plain, lambda a, ax: np.nansum(a, axis=ax)),
+        ("nanprod", (0, 1, 2, 3), plain, lambda a, ax: np.nanprod(a, axis=ax)),
+        ("nanmean", (0, 1, 2, 3), plain, lambda a, ax: np.nanmean(a, axis=ax)),
+        ("nanstd", (0, 1, 2, 3), plain, lambda a, ax: np.nanstd(a, axis=ax)),
+        ("nanvar", (0, 1, 2, 3), plain, lambda a, ax: np.nanvar(a, axis=ax)),
+        ("nanmax", (0, 1, 2, 3), plain, lambda a, ax: np.nanmax(a, axis=ax)),
+        ("nanmin", (0, 1, 2, 3), plain, lambda a, ax: np.nanmin(a, axis=ax)),
+        ("median", (0, 1, 2, 3), plain, lambda a, ax: np.median(a, axis=ax)),
+        ("nanmedian", (0, 1, 2, 3), plain, lambda a, ax: np.nanmedian(a, axis=ax)),
+        ("percentile", (0, 1, 2, 3), plain, lambda a, ax: np.percentile(a, 50, axis=ax)),
+        ("nanpercentile", (0, 1, 2, 3), plain, lambda a, ax: np.nanpercentile(a, 50, axis=ax)),
+        ("quantile", (0, 1, 2, 3), plain, lambda a, ax: np.quantile(a, 0.5, axis=ax)),
+        ("nanquantile", (0, 1, 2, 3), plain, lambda a, ax: np.nanquantile(a, 0.5, axis=ax)),
+        ("average", (0, 1, 2, 3), plain, lambda a, ax: np.average(a, axis=ax)),
+        ("count_nonzero", (0, 1, 2, 3), plain, lambda a, ax: np.count_nonzero(a, axis=ax)),
+        ("sort", (0, 1, 2, 3), plain, lambda a, ax: np.sort(a, axis=ax)),
+        ("argsort", (0, 1, 2, 3), plain, lambda a, ax: np.argsort(a, axis=ax)),
+        ("partition", (1, 2, 3), plain, lambda a, ax: np.partition(a, 1, axis=ax)),
+        ("argpartition", (1, 2, 3), plain, lambda a, ax: np.argpartition(a, 1, axis=ax)),
+        ("take", (0, 1, 2, 3), with_take, lambda a, ix, ax: np.take(a, ix, axis=ax)),
+        ("take_along_axis", (1, 2, 3), with_idx, lambda a, ix, ax: np.take_along_axis(a, ix, axis=ax)),
+        ("put_along_axis", (1, 2, 3), with_idx,
+         lambda a, ix, ax: (lambda c: (np.put_along_axis(c, ix, 7.0, axis=ax), c)[1])(a.copy())),
+        ("compress", (0, 1, 2, 3), with_cond, lambda cond, a, ax: np.compress(cond, a, axis=ax)),
+        ("repeat", (0, 1, 2, 3), plain, lambda a, ax: np.repeat(a, 2, axis=ax)),
+        ("delete", (0, 1, 2, 3), plain, lambda a, ax: np.delete(a, 0, axis=ax)),
+        ("insert", (0, 1, 2, 3), plain, lambda a, ax: np.insert(a, 0, 7.0, axis=ax)),
+        ("append", (0, 1, 2, 3), plain, lambda a, ax: np.append(a, a, axis=ax)),
+        ("unique", (0, 1, 2, 3), plain, lambda a, ax: np.unique(a, axis=ax)),
+        ("flip", (0, 1, 2, 3), plain, lambda a, ax: np.flip(a, axis=ax)),
+        ("roll", (0, 1, 2, 3), plain, lambda a, ax: np.roll(a, 1, axis=ax)),
+        ("rollaxis", (0, 1, 2, 3), plain, lambda a, ax: np.rollaxis(a, ax)),
+        ("concatenate", (0, 1, 2, 3), plain, lambda a, ax: np.concatenate([a, a], axis=ax)),
+        ("concat", (0, 1, 2, 3), plain, lambda a, ax: np.concat([a, a], axis=ax)),
+        ("split", (0, 1, 2, 3), plain, lambda a, ax: np.split(a, 1, axis=ax)),
+        ("array_split", (0, 1, 2, 3), plain, lambda a, ax: np.array_split(a, 1, axis=ax)),
+        ("unstack", (0, 1, 2, 3), plain, lambda a, ax: np.unstack(a, axis=ax)),
+        ("diff", (0, 1, 2, 3), plain, lambda a, ax: np.diff(a, axis=ax)),
+        ("gradient", (1, 2, 3), plain, lambda a, ax: np.gradient(a, axis=ax)),
+        ("trapezoid", (0, 1, 2, 3), plain, lambda a, ax: np.trapezoid(a, axis=ax)),
+        ("unwrap", (0, 1, 2, 3), plain, lambda a, ax: np.unwrap(a, axis=ax)),
+        ("apply_along_axis", (1, 2, 3), plain, lambda a, ax: np.apply_along_axis(np.sum, ax, a)),
+        ("apply_over_axes", (1, 2, 3), plain, lambda a, ax: np.apply_over_axes(np.sum, a, ax)),
+        ("trim_zeros", (1, 2, 3), plain, lambda a, ax: np.trim_zeros(a, axis=ax)),
+        ("packbits", (0, 1, 2, 3), u8, lambda a, ax: np.packbits(a, axis=ax)),
+        ("unpackbits", (0, 1, 2, 3), u8, lambda a, ax: np.unpackbits(a, axis=ax)),
+        ("size", (0, 1, 2, 3), plain, lambda a, ax: np.size(a, ax)),
+        ("lexsort", (1, 2, 3), plain, lambda a, ax: np.lexsort([a], axis=ax)),
+        ("linalg.norm", (1, 2, 3), plain, lambda a, ax: np.linalg.norm(a, axis=ax)),
+        ("linalg.vector_norm", (0, 1, 2, 3), plain, lambda a, ax: np.linalg.vector_norm(a, axis=ax)),
+        ("linalg.vecdot", (1, 2, 3), pair, lambda a, b, ax: np.linalg.vecdot(a, b, axis=ax)),
+        ("vecdot", (1, 2, 3), pair, lambda a, b, ax: np.vecdot(a, b, axis=ax)),
+        ("fft.fft", (1, 2, 3), plain, lambda a, ax: np.fft.fft(a, axis=ax)),
+        ("fft.ifft", (1, 2, 3), plain, lambda a, ax: np.fft.ifft(a, axis=ax)),
+        ("fft.rfft", (1, 2, 3), plain, lambda a, ax: np.fft.rfft(a, axis=ax)),
+        ("fft.irfft", (1, 2, 3), plain, lambda a, ax: np.fft.irfft(a, axis=ax)),
+        ("fft.hfft", (1, 2, 3), plain, lambda a, ax: np.fft.hfft(a, axis=ax)),
+        ("fft.ihfft", (1, 2, 3), plain, lambda a, ax: np.fft.ihfft(a, axis=ax)),
+        ("fft.fftshift", (1, 2, 3), plain, lambda a, ax: np.fft.fftshift(a, axes=ax)),
+        ("fft.ifftshift", (1, 2, 3), plain, lambda a, ax: np.fft.ifftshift(a, axes=ax)),
+        # The ndarray methods: their own axis code in NumPy (PyArray_CheckAxis for the C methods, the ufunc reduce for
+        # the reductions) and in NumSharp.
+        ("ndarray.argmax", (0, 1, 2, 3), plain, lambda a, ax: a.argmax(axis=ax)),
+        ("ndarray.argmin", (0, 1, 2, 3), plain, lambda a, ax: a.argmin(axis=ax)),
+        ("ndarray.cumsum", (0, 1, 2, 3), plain, lambda a, ax: a.cumsum(axis=ax)),
+        ("ndarray.cumprod", (0, 1, 2, 3), plain, lambda a, ax: a.cumprod(axis=ax)),
+        ("ndarray.sort", (0, 1, 2, 3), plain, lambda a, ax: (lambda c: (c.sort(axis=ax), c)[1])(a.copy())),
+        ("ndarray.argsort", (0, 1, 2, 3), plain, lambda a, ax: a.argsort(axis=ax)),
+        ("ndarray.partition", (1, 2, 3), plain, lambda a, ax: (lambda c: (c.partition(1, axis=ax), c)[1])(a.copy())),
+        ("ndarray.argpartition", (1, 2, 3), plain, lambda a, ax: a.argpartition(1, axis=ax)),
+        ("ndarray.take", (0, 1, 2, 3), with_take, lambda a, ix, ax: a.take(ix, axis=ax)),
+        ("ndarray.compress", (0, 1, 2, 3), with_cond, lambda cond, a, ax: a.compress(cond, axis=ax)),
+        ("ndarray.repeat", (0, 1, 2, 3), plain, lambda a, ax: a.repeat(2, axis=ax)),
+        ("ndarray.max", (0, 1, 2, 3), plain, lambda a, ax: a.max(axis=ax)),
+        ("ndarray.min", (0, 1, 2, 3), plain, lambda a, ax: a.min(axis=ax)),
+        ("ndarray.sum", (0, 1, 2, 3), plain, lambda a, ax: a.sum(axis=ax)),
+        ("ndarray.prod", (0, 1, 2, 3), plain, lambda a, ax: a.prod(axis=ax)),
+        ("ndarray.mean", (0, 1, 2, 3), plain, lambda a, ax: a.mean(axis=ax)),
+        ("ndarray.std", (0, 1, 2, 3), plain, lambda a, ax: a.std(axis=ax)),
+        ("ndarray.var", (0, 1, 2, 3), plain, lambda a, ax: a.var(axis=ax)),
+        ("ndarray.all", (0, 1, 2, 3), plain, lambda a, ax: a.all(axis=ax)),
+        ("ndarray.any", (0, 1, 2, 3), plain, lambda a, ax: a.any(axis=ax)),
+        # numpy.ma: the functions call the MaskedArray methods, which have their own axis code.
+        ("ma.sum", (0, 1, 2, 3), plain, lambda a, ax: np.ma.sum(a, axis=ax)),
+        ("ma.prod", (0, 1, 2, 3), plain, lambda a, ax: np.ma.prod(a, axis=ax)),
+        ("ma.mean", (0, 1, 2, 3), plain, lambda a, ax: np.ma.mean(a, axis=ax)),
+        ("ma.min", (0, 1, 2, 3), plain, lambda a, ax: np.ma.min(a, axis=ax)),
+        ("ma.max", (0, 1, 2, 3), plain, lambda a, ax: np.ma.max(a, axis=ax)),
+        ("ma.ptp", (0, 1, 2, 3), plain, lambda a, ax: np.ma.ptp(a, axis=ax)),
+        ("ma.std", (0, 1, 2, 3), plain, lambda a, ax: np.ma.std(a, axis=ax)),
+        ("ma.var", (0, 1, 2, 3), plain, lambda a, ax: np.ma.var(a, axis=ax)),
+        ("ma.count", (0, 1, 2, 3), plain, lambda a, ax: np.ma.count(a, axis=ax)),
+        ("ma.cumsum", (0, 1, 2, 3), plain, lambda a, ax: np.ma.cumsum(a, axis=ax)),
+        ("ma.cumprod", (0, 1, 2, 3), plain, lambda a, ax: np.ma.cumprod(a, axis=ax)),
+        ("ma.argmin", (0, 1, 2, 3), plain, lambda a, ax: np.ma.argmin(a, axis=ax)),
+        ("ma.argmax", (0, 1, 2, 3), plain, lambda a, ax: np.ma.argmax(a, axis=ax)),
+        ("ma.all", (0, 1, 2, 3), plain, lambda a, ax: np.ma.all(a, axis=ax)),
+        ("ma.any", (0, 1, 2, 3), plain, lambda a, ax: np.ma.any(a, axis=ax)),
+        ("ma.anom", (0, 1, 2, 3), plain, lambda a, ax: np.ma.anom(a, axis=ax)),
+        ("ma.repeat", (0, 1, 2, 3), plain, lambda a, ax: np.ma.repeat(a, 2, axis=ax)),
+        ("ma.take", (0, 1, 2, 3), with_take, lambda a, ix, ax: np.ma.take(a, ix, axis=ax)),
+        ("ma.compress", (0, 1, 2, 3), with_cond, lambda cond, a, ax: np.ma.compress(cond, a, axis=ax)),
+        ("ma.sort", (0, 1, 2, 3), plain, lambda a, ax: np.ma.sort(a, axis=ax)),
+        ("ma.argsort", (0, 1, 2, 3), plain, lambda a, ax: np.ma.argsort(a, axis=ax)),
+        ("ma.concatenate", (0, 1, 2, 3), plain, lambda a, ax: np.ma.concatenate([a, a], axis=ax)),
+        ("ma.diff", (0, 1, 2, 3), plain, lambda a, ax: np.ma.diff(a, axis=ax)),
+        ("ma.append", (0, 1, 2, 3), plain, lambda a, ax: np.ma.append(a, a, axis=ax)),
+        ("ma.count_masked", (0, 1, 2, 3), plain, lambda a, ax: np.ma.count_masked(np.ma.array(a), axis=ax)),
+        ("ma.average", (0, 1, 2, 3), plain, lambda a, ax: np.ma.average(a, axis=ax)),
+        ("ma.median", (0, 1, 2, 3), plain, lambda a, ax: np.ma.median(a, axis=ax)),
+        ("ma.apply_along_axis", (1, 2, 3), plain, lambda a, ax: np.ma.apply_along_axis(np.sum, ax, a)),
+        ("ma.compress_nd", (1, 2, 3), plain, lambda a, ax: np.ma.compress_nd(a, axis=ax)),
+        ("ma.mask_rowcols", (2,), plain, lambda a, ax: np.ma.mask_rowcols(a, axis=ax)),
+        ("ma.compress_rowcols", (2,), plain, lambda a, ax: np.ma.compress_rowcols(a, axis=ax)),
+    ]
+    for fn, ranks, ops_of, call in int_jobs:
+        for n in ranks:
+            for ax in _ax_values(n):
+                _ax_record(cases, fn, {"axis": ax}, ops_of(n), lambda *vs, ax=ax, c=call: c(*vs, ax))
+
+    # ---- the output-rank normalizers: the axis addresses the RESULT's rank (n + 1) ------------------------------------
+    out_jobs = [
+        ("expand_dims", lambda a, ax: np.expand_dims(a, ax)),
+        ("stack", lambda a, ax: np.stack([a, a], axis=ax)),
+        ("ma.expand_dims", lambda a, ax: np.ma.expand_dims(a, ax)),
+        ("ma.stack", lambda a, ax: np.ma.stack([a, a], axis=ax)),
+    ]
+    for fn, call in out_jobs:
+        for n in (0, 1, 2, 3):
+            for ax in _ax_values(n + 1):
+                _ax_record(cases, fn, {"axis": ax}, plain(n), lambda a, ax=ax, c=call: c(a, ax))
+
+    # ---- squeeze: the axis must name a length-1 axis ---------------------------------------------------------------
+    squeeze_shapes = {0: (), 1: (1,), 2: (1, 3), 3: (1, 3, 1)}
+    for fn, call in [("squeeze", lambda a, ax: np.squeeze(a, axis=ax)),
+                     ("ndarray.squeeze", lambda a, ax: a.squeeze(axis=ax)),
+                     ("ma.squeeze", lambda a, ax: np.ma.squeeze(a, axis=ax))]:
+        for n, shp in squeeze_shapes.items():
+            a = np.arange(1.0, 1.0 + int(np.prod(shp))).reshape(shp)
+            for ax in _ax_values(n):
+                _ax_record(cases, fn, {"axis": ax}, [(a, a)], lambda v, ax=ax, c=call: c(v, ax))
+
+    # ---- two axes: one varies, the other stays valid ----------------------------------------------------------------
+    for n in (0, 1, 2, 3):
+        for ax in _ax_values(n):
+            _ax_record(cases, "swapaxes", {"axis1": ax, "axis2": 0}, plain(n), lambda a, ax=ax: np.swapaxes(a, ax, 0))
+            _ax_record(cases, "swapaxes", {"axis1": 0, "axis2": ax}, plain(n), lambda a, ax=ax: np.swapaxes(a, 0, ax))
+            _ax_record(cases, "ndarray.swapaxes", {"axis1": ax, "axis2": 0}, plain(n),
+                       lambda a, ax=ax: a.swapaxes(ax, 0))
+            _ax_record(cases, "ma.swapaxes", {"axis1": 0, "axis2": ax}, plain(n),
+                       lambda a, ax=ax: np.ma.swapaxes(a, 0, ax))
+            _ax_record(cases, "moveaxis", {"source": ax, "destination": 0}, plain(n),
+                       lambda a, ax=ax: np.moveaxis(a, ax, 0))
+            _ax_record(cases, "moveaxis", {"source": 0, "destination": ax}, plain(n),
+                       lambda a, ax=ax: np.moveaxis(a, 0, ax))
+            _ax_record(cases, "rollaxis", {"axis": 0, "start": ax}, plain(n), lambda a, ax=ax: np.rollaxis(a, 0, ax))
+    for n in (2, 3):
+        for ax in _ax_values(n):
+            for fn, call1, call2 in [
+                ("diagonal", lambda a, x: np.diagonal(a, 0, x, n - 1), lambda a, x: np.diagonal(a, 0, 0, x)),
+                ("trace", lambda a, x: np.trace(a, 0, x, n - 1), lambda a, x: np.trace(a, 0, 0, x)),
+                ("ndarray.diagonal", lambda a, x: a.diagonal(0, x, n - 1), lambda a, x: a.diagonal(0, 0, x)),
+                ("ndarray.trace", lambda a, x: a.trace(0, x, n - 1), lambda a, x: a.trace(0, 0, x)),
+                ("ma.diagonal", lambda a, x: np.ma.diagonal(a, 0, x, n - 1), lambda a, x: np.ma.diagonal(a, 0, 0, x)),
+                ("ma.trace", lambda a, x: np.ma.trace(a, 0, x, n - 1), lambda a, x: np.ma.trace(a, 0, 0, x)),
+            ]:
+                _ax_record(cases, fn, {"axis1": ax, "axis2": n - 1}, plain(n), lambda a, ax=ax, c=call1: c(a, ax))
+                _ax_record(cases, fn, {"axis1": 0, "axis2": ax}, plain(n), lambda a, ax=ax, c=call2: c(a, ax))
+
+    # ---- np.cross: axisa / axisb / axisc each, and axis= (which overrides all three) --------------------------------
+    for n in (1, 2, 3):
+        shp = {1: (3,), 2: (2, 3), 3: (2, 2, 3)}[n]
+        a = np.arange(1.0, 1.0 + int(np.prod(shp))).reshape(shp)
+        b = a[..., ::-1].copy() * 0.5 + 1.0
+        ops_ab = [(a, a), (b, b)]
+        for ax in _ax_values(n):
+            _ax_record(cases, "cross", {"axisa": ax}, ops_ab, lambda x, y, ax=ax: np.cross(x, y, axisa=ax))
+            _ax_record(cases, "cross", {"axisb": ax}, ops_ab, lambda x, y, ax=ax: np.cross(x, y, axisb=ax))
+            _ax_record(cases, "cross", {"axisc": ax}, ops_ab, lambda x, y, ax=ax: np.cross(x, y, axisc=ax))
+            _ax_record(cases, "cross", {"axis": ax}, ops_ab, lambda x, y, ax=ax: np.cross(x, y, axis=ax))
+            _ax_record(cases, "linalg.cross", {"axis": ax}, ops_ab,
+                       lambda x, y, ax=ax: np.linalg.cross(x, y, axis=ax))
+
+    # ---- tuple axes ---------------------------------------------------------------------------------------------------
+    tuple_jobs = [
+        ("all", lambda a, t: np.all(a, axis=t)),
+        ("any", lambda a, t: np.any(a, axis=t)),
+        ("average", lambda a, t: np.average(a, axis=t)),
+        ("flip", lambda a, t: np.flip(a, axis=t)),
+        ("median", lambda a, t: np.median(a, axis=t)),
+        ("nanmedian", lambda a, t: np.nanmedian(a, axis=t)),
+        ("percentile", lambda a, t: np.percentile(a, 50, axis=t)),
+        ("nanpercentile", lambda a, t: np.nanpercentile(a, 50, axis=t)),
+        ("quantile", lambda a, t: np.quantile(a, 0.5, axis=t)),
+        ("nanquantile", lambda a, t: np.nanquantile(a, 0.5, axis=t)),
+        ("ptp", lambda a, t: np.ptp(a, axis=t)),
+        ("trim_zeros", lambda a, t: np.trim_zeros(a, axis=t)),
+        ("gradient", lambda a, t: np.gradient(a, axis=t)),
+        ("apply_over_axes", lambda a, t: np.apply_over_axes(np.sum, a, t)),
+        ("linalg.vector_norm", lambda a, t: np.linalg.vector_norm(a, axis=t)),
+        ("fft.fftn", lambda a, t: np.fft.fftn(a, axes=t)),
+        ("fft.ifftn", lambda a, t: np.fft.ifftn(a, axes=t)),
+        ("fft.rfftn", lambda a, t: np.fft.rfftn(a, axes=t)),
+        ("fft.irfftn", lambda a, t: np.fft.irfftn(a, axes=t)),
+        ("fft.fftshift", lambda a, t: np.fft.fftshift(a, axes=t)),
+        ("fft.ifftshift", lambda a, t: np.fft.ifftshift(a, axes=t)),
+    ]
+    for fn, call in tuple_jobs:
+        for n in (1, 2, 3):
+            for t in _ax_tuples(n):
+                _ax_record(cases, fn, {"axis": list(t)}, plain(n), lambda a, t=t, c=call: c(a, t))
+    for n in (0, 1, 2, 3):
+        for t in ([(0, 0), (0, 1), (0, -1), (1, 0), (0, n + 1), (0, -n - 2), (-1, -2), (n + 1, n + 1), ()]):
+            _ax_record(cases, "expand_dims", {"axis": list(t)}, plain(n), lambda a, t=t: np.expand_dims(a, t))
+    for n in (2, 3):
+        for t in [(0, 1), (1, 0), (0, 0), (-1, -2), (0, -n), (0, n), (0, -n - 1), (1,), (0, 1, 2), ()]:
+            _ax_record(cases, "rot90", {"axes": list(t)}, plain(n), lambda a, t=t: np.rot90(a, 1, t))
+            _ax_record(cases, "linalg.norm", {"axis": list(t)}, plain(n), lambda a, t=t: np.linalg.norm(a, axis=t))
+            _ax_record(cases, "fft.fft2", {"axes": list(t)}, plain(n), lambda a, t=t: np.fft.fft2(a, axes=t))
+            _ax_record(cases, "fft.ifft2", {"axes": list(t)}, plain(n), lambda a, t=t: np.fft.ifft2(a, axes=t))
+            _ax_record(cases, "fft.rfft2", {"axes": list(t)}, plain(n), lambda a, t=t: np.fft.rfft2(a, axes=t))
+            _ax_record(cases, "fft.irfft2", {"axes": list(t)}, plain(n), lambda a, t=t: np.fft.irfft2(a, axes=t))
+    for n in (1, 2, 3):
+        for t in _ax_perms(n):
+            _ax_record(cases, "transpose", {"axes": list(t)}, plain(n), lambda a, t=t: np.transpose(a, t))
+            _ax_record(cases, "permute_dims", {"axes": list(t)}, plain(n), lambda a, t=t: np.permute_dims(a, t))
+            _ax_record(cases, "ma.transpose", {"axes": list(t)}, plain(n), lambda a, t=t: np.ma.transpose(a, t))
+        for t in _ax_tuples(n):
+            dst = list(range(len(t)))
+            _ax_record(cases, "moveaxis", {"source": list(t), "destination": dst}, plain(n),
+                       lambda a, t=t, d=dst: np.moveaxis(a, t, d))
+            _ax_record(cases, "moveaxis", {"source": dst, "destination": list(t)}, plain(n),
+                       lambda a, t=t, d=dst: np.moveaxis(a, d, t))
+        # The length rule: source and destination must have the same number of elements.
+        _ax_record(cases, "moveaxis", {"source": [0], "destination": [0, 1]}, plain(n),
+                   lambda a: np.moveaxis(a, [0], [0, 1]))
+
+    # ---- a dtype sweep of the out-of-range axes ------------------------------------------------------------------------
+    # The axis check must not depend on the dtype, but several functions dispatch on it BEFORE they read the axis (an
+    # integer nansum is np.sum, a float16 max its own walk, a complex sort its own comparator, a bool cumsum a recursion
+    # through int64). Every integer-axis job runs its first out-of-range axis on each side (and a far one) for each dtype
+    # NumPy's function accepts; NumPy's answer (an AxisError, or a dtype error it raises first) is the contract.
+    sweep_dtypes = ["bool", "int8", "uint16", "int32", "int64", "uint64", "float16", "float32", "complex128"]
+
+    def typed(builder, dt):
+        def build(n):
+            pairs = builder(n)
+            out = []
+            for b, v in pairs:
+                # The data operand takes the dtype; index / condition operands keep theirs.
+                if v.dtype == np.float64:
+                    v = v.astype(dt)
+                    b = v
+                out.append((b, v))
+            return out
+        return build
+
+    for fn, ranks, ops_of, call in int_jobs:
+        if ops_of is u8:
+            dts = ["bool", "uint8"]
+        else:
+            dts = sweep_dtypes
+        for dt in dts:
+            for n in [r for r in ranks if r <= 2]:
+                for ax in (-n - 1, n, n + 5):
+                    _ax_record(cases, fn, {"axis": ax, "dt": dt}, typed(ops_of, dt)(n),
+                               lambda *vs, ax=ax, c=call: c(*vs, ax))
+
+    # ---- numpy.ma over MASKED operands --------------------------------------------------------------------------------
+    # A mask moves numpy.ma onto its masked code (filled data, mask reductions), which has its own axis handling in both
+    # libraries. The registry rebuilds the same mask (params.mask "every3": the flat positions divisible by 3) and the
+    # cases are the out-of-range axes, whose answer is an error (no masked data is compared).
+    def masked_of(n):
+        a = AX_OPERANDS[n]()
+        return [(a, a)]
+
+    def with_mask(call):
+        def run(a, ax):
+            m = (np.arange(a.size).reshape(a.shape) % 3 == 0)
+            return call(np.ma.array(a, mask=m), ax)
+        return run
+
+    for fn, ranks, ops_of, call in int_jobs:
+        if not fn.startswith("ma.") or ops_of is not plain:
+            continue
+        for n in [r for r in ranks if 1 <= r <= 3]:
+            for ax in (-n - 1, n, n + 5):
+                _ax_record(cases, fn, {"axis": ax, "mask": "every3"}, masked_of(n),
+                           lambda v, ax=ax, c=with_mask(call): c(v, ax))
+
+    # ---- the stacking family's empty operand list (the same validation family, ErrorParity's pins) ------------------
+    for fn, call in [("stack", lambda: np.stack([])), ("vstack", lambda: np.vstack([])),
+                     ("hstack", lambda: np.hstack([])), ("dstack", lambda: np.dstack([])),
+                     ("concatenate", lambda: np.concatenate([])), ("column_stack", lambda: np.column_stack([])),
+                     ("ma.stack", lambda: np.ma.stack([])), ("ma.concatenate", lambda: np.ma.concatenate([])),
+                     ("ma.vstack", lambda: np.ma.vstack([])), ("ma.hstack", lambda: np.ma.hstack([])),
+                     ("ma.dstack", lambda: np.ma.dstack([]))]:
+        _ax_record(cases, fn, {"operands": "empty"}, [], call)
+
+    # ---- np.linalg.tensorsolve's axes: list VALUES (allaxes.remove(k); allaxes.insert(an, k)), never normalized ----
+    # A negative axis or one past the rank is Python's ValueError "list.remove(x): x not in list" (no AxisError); a
+    # repeat removes the re-appended axis again, so it is legal. The operand is a permuted identity, so every solve
+    # is exact (no rounding to differ in), and an axis move that breaks squareness is NumPy's LinAlgError.
+    ts_a = np.eye(6).reshape(2, 3, 2, 3)
+    ts_b = np.arange(1.0, 7.0).reshape(2, 3)
+    for t in [(0, 1), (1, 0), (2, 3), (3, 2), (0,), (3,), (4,), (-1,), (-4,), (0, 0), (1, 1, 0), (), (0, 1, 2, 3),
+              (2, 0), (0, 5)]:
+        _ax_record(cases, "linalg.tensorsolve", {"axis": list(t)}, [(ts_a, ts_a), (ts_b, ts_b)],
+                   lambda a, b, t=t: np.linalg.tensorsolve(a, b, axes=t))
+
+    # ---- np.pad's dict pad_width (NumPy 2.3+): the keys are AXES, used as Python list indices ------------------------
+    # NumPy's dict branch: seq = [(0, 0)] * a.ndim; per item, `match width` (an int / a 2-tuple of ints, else
+    # typing.assert_never's AssertionError) THEN `seq[axis] = ...` (an axis outside [-ndim, ndim) is the list's IndexError,
+    # never an AxisError); then np.asarray(seq)'s integer-dtype TypeError, then _as_pairs' negative-width ValueError. Each
+    # item is encoded {"k": axis, "t": kind, "v": value} so the replay rebuilds the same C# values under the house map
+    # (an int a Python int, a bool a Python bool, a tuple a ValueTuple, "array" a typed int64 array = an ndarray).
+    def pad_value(t, v):
+        if t == "tuple":
+            return tuple(v)
+        if t == "tuple3":
+            return tuple(v)
+        if t == "array":
+            return np.array(v, np.int64)
+        if t == "huge":
+            return int(v)
+        if t == "none":
+            return None
+        return v
+
+    for n in (0, 1, 2, 3):
+        widths = [
+            [(0, "int", 1)], [(-1, "int", 2)], [(n, "int", 1)], [(-n - 1, "int", 1)], [(n + 3, "tuple", [1, 2])],
+            [(0, "bool", True)], [(0, "tuple", [True, 1])], [(0, "tuple", [True, False])], [],
+            [(0, "int", -1)], [(0, "tuple", [1, -2])], [(0, "int", -1), (n, "int", 1)], [(n, "int", -1)],
+            [(n, "str", "x")], [(0, "float", 1.5)], [(0, "str", "x")], [(0, "none", None)],
+            [(0, "tuple3", [1, 2, 3])], [(0, "array", [1, 2])], [(0, "huge", "9223372036854775808")],
+            [(0, "int", 1), (-n, "int", 2)], [(0, "tuple", [0, 1]), (-1, "tuple", [2, 0])],
+        ]
+        if n >= 2:
+            widths.append([(i, "bool", True) for i in range(n)])               # every row bools: a bool table
+            widths.append([(0, "bool", True), (1, "tuple", [False, True])])  # partial bools: an int table
+        for w in widths:
+            enc = [{"k": k, "t": t, "v": v} for k, t, v in w]
+            for mode in ("constant", "edge"):
+                if mode == "edge" and len(w) != 1:
+                    continue
+                def call(a, w=w, mode=mode):
+                    return np.pad(a, {k: pad_value(t, v) for k, t, v in w}, mode=mode)
+                _ax_record(cases, "pad", {"pad_width": enc, "mode": mode}, plain(n), call)
+    return cases
+
+
 # =====================================================================================
 # Result KINDS and ERROR parity.
 #
@@ -14791,6 +15287,8 @@ _EV_VERBATIM_ERRORS = (
     "numpy boolean negative",
     "Integers to negative integer powers are not allowed.",
     "not supported for the input types, and the inputs could not be safely coerced",
+    # normalize_axis_index's AxisError (block C10: a reduction's out-of-range axis, np.average's "axis: " prefix).
+    "is out of bounds for array of dimension",
 )
 
 _EV_FLOAT_DTYPES = {"float16", "float32", "float64"}
@@ -15884,6 +16382,45 @@ def gen_evaluate():
                          cid_tag=f"c9/{dt}/{kind}/nanleaf/N={N}/p{pos}")
                     emit("mul(in0,in1)", [(ca, ca), (sa, sa)], "c_contiguous_1d", params={"reduce": red},
                          cid_tag=f"c9/{dt}/{kind}/nanmul/N={N}/p{pos}")
+
+    # ---- C10. the reductions' AXIS ARGUMENTS (plan api-parameter-parity X36) -------------------------------------
+    # A reduction of a tree IS the NumPy reduction of the materialized tree, so its axis rule is that function's: the
+    # ufunc reductions (sum / prod / min / max / any / all, and the count_nonzero / nansum / nanprod / nanmean twins,
+    # which read the axis through np.sum) take axis 0 / -1 of a 0-d child as NO axis (the flat answer, keepdims or
+    # not); np.mean / np.var / np.std count the reduced items with normalize_axis_index and refuse every axis of a 0-d
+    # child; argmax / argmin ravel a 0-d input (rank 1); np.average names its argument ("axis: axis 2 is out of
+    # bounds ..."). Every axis of a 0-d and a 2-D child in [-ndim - 2, ndim + 1]; the AxisError texts are verbatim.
+    for nd in (0, 2):
+        for kind in _EV_REDUCE:
+            for ax in range(-nd - 2, nd + 2):
+                for kd in ((False, True) if nd == 0 else (False,)):
+                    b = np.array(2.5) if nd == 0 else np.arange(1.0, 7.0).reshape(2, 3)
+                    red = {"kind": kind, "axis": ax, "keepdims": kd}
+                    if kind in ("var", "std"):
+                        red["ddof"] = 0
+                    emit("mul(in0,lf:1.0)", [(b, b)], "scalar_0d" if nd == 0 else "c_contiguous_2d",
+                         params={"reduce": red}, cid_tag=f"c10/{kind}[{ax},{int(kd)}]/{nd}d")
+        for ax in range(-nd - 2, nd + 2):
+            b = np.array(2.5) if nd == 0 else np.arange(1.0, 7.0).reshape(2, 3)
+            red = {"kind": "average", "weights": "mul(in0,lf:1.0)", "axis": ax, "keepdims": False}
+            emit("mul(in0,lf:1.0)", [(b, b)], "scalar_0d" if nd == 0 else "c_contiguous_2d",
+                 params={"reduce": red}, cid_tag=f"c10/average[{ax}]/{nd}d")
+    # A strided operand (the streamed weighted sums decline it after their axis check) and an EMPTY one (the stream is
+    # skipped, so the materialized average route checks the axis itself; NumPy's zero total weight comes after it).
+    for ax in range(-4, 4):
+        sb = np.arange(1.0, 13.0).reshape(2, 6)
+        red = {"kind": "average", "weights": "mul(in0,lf:1.0)", "axis": ax, "keepdims": False}
+        emit("mul(in0,lf:1.0)", [(sb, sb[:, ::2])], "strided_cols_2d", params={"reduce": red},
+             cid_tag=f"c10/average_strided[{ax}]")
+        eb = np.zeros((0, 3))
+        emit("mul(in0,lf:1.0)", [(eb, eb)], "empty_2d", params={"reduce": red}, cid_tag=f"c10/average_empty[{ax}]")
+    # The child's rank is its BROADCAST rank: a 0-d leaf beside a 2-D one leaves axis 0 / -1 real axes.
+    for kind in ("sum", "max", "any", "nanmean"):
+        for ax in (-3, -1, 0, 2):
+            z = np.array(2.0)
+            m = np.arange(1.0, 7.0).reshape(2, 3)
+            emit("mul(in0,in1)", [(z, z), (m, m)], "scalar_by_2d",
+                 params={"reduce": {"kind": kind, "axis": ax, "keepdims": False}}, cid_tag=f"c10/{kind}_0d_by_2d[{ax}]")
 
     if skipped:
         print(f"  (skipped {skipped} evaluate cells: NumPy raised a non-verbatim error, or complex64 width)")
@@ -21075,6 +21612,9 @@ def main():
     elif mode == "linalg_empty":
         cases = gen_linalg_empty()                                      # empty-operand factorisations, portable
         write_jsonl(os.path.join(corpus_dir, "linalg_empty.jsonl"), cases)
+    elif mode == "axis_args":
+        cases = gen_axis_args()                                         # every axis argument, strict error types
+        write_jsonl(os.path.join(corpus_dir, "axis_args.jsonl"), cases)
     elif mode == "poly":
         cases = gen_poly()                                             # portable polynomial family
         write_jsonl(os.path.join(corpus_dir, "poly.jsonl"), cases)

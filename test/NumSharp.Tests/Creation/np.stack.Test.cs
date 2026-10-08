@@ -37,13 +37,17 @@ namespace NumSharp.Tests.Creation
             r.ToArray<long>().Should().Equal(1L, 3L, 2L, 4L);
         }
 
+        /// <summary>
+        ///     np.stack compares every operand's shape before it looks at the axis, so a shape mismatch with an out-of-range
+        ///     axis is NumPy's ValueError "all input arrays must have the same shape", not the AxisError.
+        /// </summary>
         [TestMethod]
         public void Stack_ComparesEveryShapeFirst()
         {
-            // np.stack([np.zeros(2), np.zeros(3)]) -> ValueError: all input arrays must have the same shape
-            // (house type InvalidOperationException), before the axis is looked at.
+            // np.stack([np.zeros(2), np.zeros(3)]) -> ValueError: all input arrays must have the same shape,
+            // before the axis is looked at.
             Action act = () => np.stack(new[] { np.zeros(new Shape(2L)), np.zeros(new Shape(3L)) }, 9);
-            act.Should().Throw<InvalidOperationException>().WithMessage("all input arrays must have the same shape");
+            act.Should().Throw<ValueError>().WithMessage("all input arrays must have the same shape");
         }
 
         /// <summary>The expanded operands are built in a separate array: writing them back into the caller's

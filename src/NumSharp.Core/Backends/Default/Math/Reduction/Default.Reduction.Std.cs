@@ -18,8 +18,7 @@ namespace NumSharp.Backends
         /// <returns>The standard deviation: a read-only 0-d scalar when the result has no dimensions, otherwise a fresh
         /// array.</returns>
         /// <exception cref="AxisError"><paramref name="axis_"/> is outside the operand (a 0-d operand included).</exception>
-        /// <exception cref="System.NotSupportedException">A bool input with <c>dtype=bool</c> (NumPy's boolean-subtract
-        /// TypeError).</exception>
+        /// <exception cref="TypeError">A bool input with <c>dtype=bool</c> (NumPy's boolean-subtract TypeError).</exception>
         /// <exception cref="System.ArgumentException">An integer or bool <paramref name="dtype"/> with a result that has
         /// dimensions: NumPy's <c>sqrt</c> output-cast error (a 0-d result truncates the root instead).</exception>
         /// <remarks>

@@ -213,7 +213,7 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void Unwrap_ZeroDim_Throws()
         {
-            var ex = Assert.ThrowsException<ArgumentException>(() => np.unwrap(np.array(5.0)));
+            var ex = Assert.ThrowsException<ValueError>(() => np.unwrap(np.array(5.0)));
             ex.Message.Should().Contain("at least one dimensional");
         }
 

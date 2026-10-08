@@ -295,6 +295,16 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void LinalgEmpty() => RunCorpus("linalg_empty.jsonl");
 
+        // The axis arguments of every axis-taking function (the open-bugs rundown's bug 7 and its neighbours): each axis
+        // value of the operand's rank, in range and out of it, on 0-d to 3-D operands, the repeated / out-of-range / empty
+        // tuples, for the np.* functions, the ndarray methods, numpy.ma, np.linalg and np.fft (one op key, params.fn the
+        // NumPy spelling; OpRegistry.AxisArgs.cs). PORTABLE, zero excuses, strict error types (valueclass "axis_args"):
+        // normalize_axis_index's AxisError with its msg_prefix, normalize_axis_tuple's ValueError, the IndexError NumPy
+        // leaks where it reads a.shape[axis] first, np.rollaxis' start text.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void AxisArgs() => RunCorpus("axis_args.jsonl");
+
         // nditer_construct.jsonl: np.nditer's DESCRIPTOR construction (the open-bugs rundown's bug 6 and its numeric
         // neighbours) - npyiter_check_casting's read / write-back checks, npyiter_allocate_arrays' copy routes (a read-only
         // 0-d operand, copy, updateifcopy written back at close), the "required copying or buffering" TypeError, the common
@@ -1118,6 +1128,7 @@ namespace NumSharp.Tests.Fuzz
             ["nditer_construct.jsonl"] = 9000,   // np.nditer's descriptor construction, cast checks, copy routes, check order, protocol (9,574 at delivery, 2026-10-08)
             ["nditer_protocol.jsonl"] = 1150,  // np.nditer's state contract, setters, delayed allocation, index coalescing, op_axes reductions (1,219 at delivery, 2026-10-08)
             ["linalg_empty.jsonl"] = 4800,   // every np.linalg factorisation over empty operands / zero-size batches, portable (5,066 at delivery, 2026-10-08)
+            ["axis_args.jsonl"] = 4900,      // every axis argument of every axis-taking function, strict error types (5,184 at delivery, 2026-10-08)
             ["poly.jsonl"] = 60,
             ["einsum.jsonl"] = 35,
             ["modf.jsonl"] = 165,   // all non-complex lanes + char (the 59f99320 per-width promotion, dtype-spread gate)

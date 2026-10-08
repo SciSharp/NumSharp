@@ -96,7 +96,7 @@ namespace NumSharp
         ///     <c>result_type(diff(p), period)</c> described above.
         /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="p"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="p"/> is 0-D (propagated from <see cref="diff(NDArray,int,int,object,object)"/>).</exception>
+        /// <exception cref="ValueError"><paramref name="p"/> is 0-D (propagated from <see cref="diff(NDArray,int,int,object,object)"/>).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="p"/>'s rank.</exception>
         /// <exception cref="TypeError"><paramref name="p"/> is complex (NumPy's <c>mod</c> has no complex loop).</exception>
         /// <remarks>
@@ -142,7 +142,7 @@ namespace NumSharp
         ///     integer dtype (bool -> int64); float inputs stay float.
         /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="p"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="p"/> is 0-D.</exception>
+        /// <exception cref="ValueError"><paramref name="p"/> is 0-D.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="p"/>'s rank.</exception>
         /// <exception cref="TypeError"><paramref name="p"/> is complex.</exception>
         /// <exception cref="OverflowException">
@@ -176,7 +176,7 @@ namespace NumSharp
         /// <param name="periodInt">The integer period value (valid only when <paramref name="periodIsInteger"/>).</param>
         /// <returns>The unwrapped array (see the overloads for dtype/shape).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="p"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="p"/> is 0-D.</exception>
+        /// <exception cref="ValueError"><paramref name="p"/> is 0-D.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="p"/>'s rank.</exception>
         /// <exception cref="TypeError"><paramref name="p"/> is complex.</exception>
         /// <exception cref="OverflowException">An integer interval bound or the period does not fit the input
@@ -199,14 +199,11 @@ namespace NumSharp
             // message BEFORE any axis handling — so a 0-D array never reaches axis
             // normalization (matching the order in which NumPy would raise).
             if (nd == 0)
-                throw new ArgumentException("diff requires input that is at least one dimensional");
+                throw new ValueError("diff requires input that is at least one dimensional");   // np.diff's ValueError, which unwrap's first statement raises
 
             // normalize_axis_index(axis, nd): valid range is [-nd, nd-1]. NumPy raises
             // AxisError here (via normalize_axis_index) reporting the ORIGINAL axis.
-            int ax = axis;
-            if (ax < 0) ax += nd;
-            if (ax < 0 || ax >= nd)
-                throw new AxisError($"axis {axis} is out of bounds for array of dimension {nd}");
+            int ax = Backends.DefaultEngine.check_and_adjust_axis(nd, axis);
 
             NPTypeCode tc = p.typecode;
 

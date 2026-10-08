@@ -45,8 +45,8 @@ namespace NumSharp.Backends.Sorting
         /// <param name="a">The array.</param>
         /// <param name="axis">The axis, or null for the flattened array.</param>
         /// <returns>The sorted copy.</returns>
-        /// <exception cref="ArgumentException">The axis is out of bounds (a numeric array).</exception>
-        /// <exception cref="AxisError">The axis is out of bounds (a string array; a 0-d one refuses every axis).</exception>
+        /// <exception cref="AxisError">The axis is out of bounds (a 0-d input refuses every axis: NumPy's sort does not ravel
+        ///     it first).</exception>
         /// <exception cref="StringComputationNotSupportedException">A string array whose lines hold two or more elements:
         ///     NumPy compares the text (the next phase of NumSharp's string support). Lines of at most one element come back
         ///     as copies.</exception>
@@ -110,8 +110,7 @@ namespace NumSharp.Backends.Sorting
         /// <param name="a">The array.</param>
         /// <param name="axis">The axis, or null for the flattened array.</param>
         /// <returns>A fresh int64 array of indices.</returns>
-        /// <exception cref="ArgumentException">The axis is out of bounds (the numeric path's house type).</exception>
-        /// <exception cref="AxisError">The axis is out of bounds for a string array (NumPy's type).</exception>
+        /// <exception cref="AxisError">The axis is out of bounds (for a 0-d input, outside rank 1).</exception>
         /// <exception cref="StringComputationNotSupportedException">A string array whose lines hold two or more elements:
         ///     NumPy compares the text (the next phase).</exception>
         [NDScoped]
@@ -142,13 +141,15 @@ namespace NumSharp.Backends.Sorting
             return ret;
         }
 
-        internal static int NormalizeAxis(int axis, int ndim)
-        {
-            int ax = axis < 0 ? axis + ndim : axis;
-            if (ax < 0 || ax >= ndim)
-                throw new ArgumentException($"axis {axis} is out of bounds for array of dimension {ndim}");
-            return ax;
-        }
+        /// <summary>
+        ///     The sort family's axis check — NumPy's <c>check_and_adjust_axis</c> in <c>PyArray_Sort</c> /
+        ///     <c>PyArray_ArgSort</c> / <c>PyArray_Partition</c> / <c>PyArray_LexSort</c>.
+        /// </summary>
+        /// <param name="axis">The axis; negative values count from the end.</param>
+        /// <param name="ndim">The rank it addresses (the caller passes 1 for a 0-d input NumPy ravels first).</param>
+        /// <returns>The non-negative axis.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside <c>[-ndim, ndim)</c>.</exception>
+        internal static int NormalizeAxis(int axis, int ndim) => DefaultEngine.check_and_adjust_axis(ndim, axis);
 
         // ============================ in-place line sort ============================
 

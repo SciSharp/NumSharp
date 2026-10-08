@@ -64,14 +64,16 @@ namespace NumSharp
         /// <param name="arys">One or more array-like sequences. Non-array inputs are converted to arrays. Arrays that already have three or more dimensions are preserved.</param>
         /// <returns>An array, or list of arrays, each with a.ndim >= 3. Copies are avoided where possible, and views with three or more dimensions are returned. For example, a 1-D array of shape (N,) becomes a view of shape (1, N, 1), and a 2-D array of shape (M, N) becomes a view of shape (M, N, 1).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_3d.html</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="arys"/> is null.</exception>
         [NDScoped] // per-element inner expand_dims aliases are reclaimed; every ret[i] is yielded via the NDArray[] egress
         public static NDArray[] atleast_3d(params object[] arys)
         {
             if (arys == null)
                 throw new ArgumentNullException(nameof(arys));
 
+            // NumPy's atleast_nd(*arys) of no arrays returns the empty tuple (no error).
             if (arys.Length == 0)
-                throw new ArgumentException("Value cannot be an empty collection.", nameof(arys));
+                return Array.Empty<NDArray>();
 
             var ret = new NDArray[arys.Length];
             for (var i = 0; i < arys.Length; i++)
@@ -104,6 +106,7 @@ namespace NumSharp
         /// <returns>An array, or list of arrays, each with a.ndim >= 3. Copies are avoided where possible, and views with three or more dimensions are returned. For example, a 1-D array of shape (N,) becomes a view of shape (1, N, 1), and a 2-D array of shape (M, N) becomes a view of shape (M, N, 1).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_3d.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="arys"/> is null.</exception>
         [NDScoped] // per-element inner expand_dims aliases are reclaimed; input passthroughs stay untracked
         public static NDArray[] atleast_3d(params NDArray[] arys)
         {
@@ -113,8 +116,9 @@ namespace NumSharp
             if (arys == null)
                 throw new ArgumentNullException(nameof(arys));
 
+            // NumPy's atleast_nd(*arys) of no arrays returns the empty tuple (no error).
             if (arys.Length == 0)
-                throw new ArgumentException("Value cannot be an empty collection.", nameof(arys));
+                return Array.Empty<NDArray>();
 
             var ret = new NDArray[arys.Length];
             for (var i = 0; i < arys.Length; i++)
@@ -191,13 +195,15 @@ namespace NumSharp
         /// <param name="arys">One or more array-like sequences. Non-array inputs are converted to arrays. Arrays that already have two or more dimensions are preserved.</param>
         /// <returns>An array, or list of arrays, each with a.ndim >= 2. Copies are avoided where possible, and views with two or more dimensions are returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_2d.html</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="arys"/> is null.</exception>
         public static NDArray[] atleast_2d(params object[] arys)
         {
             if (arys == null)
                 throw new ArgumentNullException(nameof(arys));
 
+            // NumPy's atleast_nd(*arys) of no arrays returns the empty tuple (no error).
             if (arys.Length == 0)
-                throw new ArgumentException("Value cannot be an empty collection.", nameof(arys));
+                return Array.Empty<NDArray>();
 
             var ret = new NDArray[arys.Length];
             for (var i = 0; i < arys.Length; i++)
@@ -225,13 +231,15 @@ namespace NumSharp
         /// <param name="arys">One or more array-like sequences. Non-array inputs are converted to arrays. Arrays that already have two or more dimensions are preserved.</param>
         /// <returns>An array, or list of arrays, each with a.ndim >= 2. Copies are avoided where possible, and views with two or more dimensions are returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_2d.html</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="arys"/> is null.</exception>
         public static NDArray[] atleast_2d(params NDArray[] arys)
         {
             if (arys == null)
                 throw new ArgumentNullException(nameof(arys));
 
+            // NumPy's atleast_nd(*arys) of no arrays returns the empty tuple (no error).
             if (arys.Length == 0)
-                throw new ArgumentException("Value cannot be an empty collection.", nameof(arys));
+                return Array.Empty<NDArray>();
 
             var ret = new NDArray[arys.Length];
             for (var i = 0; i < arys.Length; i++)
@@ -303,13 +311,15 @@ namespace NumSharp
         /// <param name="arys">One or more input arrays.</param>
         /// <returns>An array, or list of arrays, each with a.ndim >= 1. Copies are made only if necessary.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_1d.html</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="arys"/> is null.</exception>
         public static NDArray[] atleast_1d(params object[] arys)
         {
             if (arys == null)
                 throw new ArgumentNullException(nameof(arys));
 
+            // NumPy's atleast_nd(*arys) of no arrays returns the empty tuple (no error).
             if (arys.Length == 0)
-                throw new ArgumentException("Value cannot be an empty collection.", nameof(arys));
+                return Array.Empty<NDArray>();
 
             var ret = new NDArray[arys.Length];
             for (var i = 0; i < arys.Length; i++)
@@ -336,13 +346,15 @@ namespace NumSharp
         /// <param name="arys">One or more input arrays.</param>
         /// <returns>An array, or list of arrays, each with a.ndim >= 1. Copies are made only if necessary.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_1d.html</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="arys"/> is null.</exception>
         public static NDArray[] atleast_1d(params NDArray[] arys)
         {
             if (arys == null)
                 throw new ArgumentNullException(nameof(arys));
 
+            // NumPy's atleast_nd(*arys) of no arrays returns the empty tuple (no error).
             if (arys.Length == 0)
-                throw new ArgumentException("Value cannot be an empty collection.", nameof(arys));
+                return Array.Empty<NDArray>();
 
             var ret = new NDArray[arys.Length];
             for (var i = 0; i < arys.Length; i++)

@@ -72,6 +72,27 @@ namespace NumSharp
             return PadImpl(array, pad_width, mode, constant_values, end_values, stat_length, reflect_type);
         }
 
+        /// <summary>
+        ///     Pad an array by a per-axis dict (NumPy 2.3+): each key names an axis (negative counts from the end), each
+        ///     value pads it by an integer on both sides or by a <c>(before, after)</c> tuple; an axis without a key is not
+        ///     padded.
+        /// </summary>
+        /// <param name="array">The array to pad.</param>
+        /// <param name="pad_width">The per-axis widths, read in the dictionary's order (a later key for the same axis wins).</param>
+        /// <param name="mode">The pad mode, as for the other overloads.</param>
+        /// <param name="constant_values">The fill of <c>'constant'</c>.</param>
+        /// <param name="end_values">The ends of <c>'linear_ramp'</c>.</param>
+        /// <param name="stat_length">The window of the statistic modes.</param>
+        /// <param name="reflect_type"><c>'even'</c> or <c>'odd'</c> for <c>'reflect'</c> / <c>'symmetric'</c>.</param>
+        /// <returns>The padded array.</returns>
+        /// <exception cref="AssertionError">A value that is neither an integer nor a 2-tuple of integers (NumPy's
+        ///     <c>typing.assert_never</c>; a typed C# array is an ndarray, which NumPy refuses too).</exception>
+        /// <exception cref="IndexError">A key outside <c>[-ndim, ndim)</c> ("list assignment index out of range", NumPy's
+        ///     list assignment - not an AxisError). Every key of a 0-d array is one.</exception>
+        /// <exception cref="TypeError">The widths are no integer table: a 0-d array's empty dict, every axis given bools,
+        ///     or a width outside int64.</exception>
+        /// <exception cref="ValueError">A negative width (checked after every key, as NumPy's <c>_as_pairs</c> does).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.pad.html</remarks>
         public static NDArray pad(NDArray array, IDictionary<int, object> pad_width, string mode = "constant",
             object constant_values = null, object end_values = null,
             object stat_length = null, string reflect_type = "even")
@@ -105,6 +126,20 @@ namespace NumSharp
             return PadCallableImpl(array, pad_width, mode, kwargs);
         }
 
+        /// <summary>
+        ///     Pad an array by a per-axis dict with a callable mode: the dict is read as in the string-mode dict overload,
+        ///     then <paramref name="mode"/> fills each 1-D vector's pad area.
+        /// </summary>
+        /// <param name="array">The array to pad.</param>
+        /// <param name="pad_width">The per-axis widths, read in the dictionary's order (a later key for the same axis wins).</param>
+        /// <param name="mode">The callable that writes each vector's pad area in place.</param>
+        /// <param name="kwargs">Passed to <paramref name="mode"/> unchanged.</param>
+        /// <returns>The padded array.</returns>
+        /// <exception cref="AssertionError">A value that is neither an integer nor a 2-tuple of integers.</exception>
+        /// <exception cref="IndexError">A key outside <c>[-ndim, ndim)</c> ("list assignment index out of range").</exception>
+        /// <exception cref="TypeError">The widths are no integer table (a 0-d array's empty dict, every axis given bools,
+        ///     a width outside int64).</exception>
+        /// <exception cref="ValueError">A negative width.</exception>
         public static NDArray pad(NDArray array, IDictionary<int, object> pad_width, PadFunc mode, object kwargs = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
@@ -127,6 +162,11 @@ namespace NumSharp
             if (mode is null) throw new ArgumentNullException(nameof(mode));
 
             int ndim = Math.Max(array.ndim, 1); // 0-D treated as 1-D for pad_width normalization
+            // A dict pad_width runs NumPy's dict branch first, against the array's TRUE rank (a 0-d array's list has no
+            // slot, so every key is an IndexError there); the (ndim, 2) table it builds then goes through _as_pairs
+            // like any other pad_width.
+            if (pad_width is IDictionary<int, object> widths)
+                pad_width = DictPadWidth(widths, array.ndim);
             long[,] padPairs = _AsPairs(pad_width, ndim, asIndex: true);
 
             ValidateModeKwargs(mode, constant_values, end_values, stat_length, reflect_type);
@@ -177,6 +217,9 @@ namespace NumSharp
             if (array is null) throw new ArgumentNullException(nameof(array));
             if (func is null) throw new ArgumentNullException(nameof(func));
             int ndim = Math.Max(array.ndim, 1);
+            // The dict branch first, as in PadImpl (NumPy's pad runs it before it looks at the mode).
+            if (pad_width is IDictionary<int, object> widths)
+                pad_width = DictPadWidth(widths, array.ndim);
             long[,] padPairs = _AsPairs(pad_width, ndim, asIndex: true);
             if (AllPairsZero(padPairs)) return array.copy();
 
@@ -987,12 +1030,152 @@ namespace NumSharp
         // ---------------------------- pair normalisation ----------------------------
 
         /// <summary>
+        ///     NumPy's dict branch of <c>np.pad</c> (NumPy 2.3+), statement for statement: <c>seq = [(0, 0)] * array.ndim</c>;
+        ///     for each item in the dictionary's order, a <c>match</c> of the width (an int, or a 2-tuple of ints; anything
+        ///     else reaches <c>typing.assert_never</c>) and then the Python list assignment <c>seq[axis] = …</c>; then
+        ///     <c>np.asarray(seq)</c>'s integer-dtype test.
+        /// </summary>
+        /// <param name="widths">The per-axis widths: an integer pads both sides, a (before, after) tuple each side. Keys
+        ///     count from the end when negative, as Python list indices do.</param>
+        /// <param name="ndim">The padded array's TRUE rank (0 for a 0-d array, whose list has no slot at all).</param>
+        /// <returns>The <c>(ndim, 2)</c> width table, for <see cref="_AsPairs"/> to refuse negative widths and broadcast.</returns>
+        /// <exception cref="AssertionError">A width that is neither an integer nor a 2-tuple of integers: NumPy's
+        ///     <c>typing.assert_never</c>, "Expected code to be unreachable, but got: 1.5". Checked per item BEFORE that
+        ///     item's axis, as NumPy matches before it assigns.</exception>
+        /// <exception cref="IndexError">An axis outside <c>[-ndim, ndim)</c>: Python's "list assignment index out of range".
+        ///     The key is a list index and is never normalized, so NumPy raises no AxisError here.</exception>
+        /// <exception cref="TypeError">"`pad_width` must be of integral type.": <c>np.asarray(seq)</c> is not an integer
+        ///     array - the empty list of a 0-d array (float64), every row assigned Python bools (bool), or a width outside
+        ///     int64 (uint64 or object).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     A negative width is NOT refused here: NumPy refuses it afterwards, in <c>_as_pairs</c>, so an out-of-range axis
+        ///     LATER in the dict wins over a negative width earlier in it (<c>{0: -1, 5: 1}</c> is the IndexError). The old
+        ///     dict path checked the axis first and the widths per item, and raised the base <see cref="ArgumentException"/>
+        ///     for all of them; it still serves <c>stat_length</c>, where a dict is a NumSharp extension (NumPy refuses it).
+        ///     </para>
+        ///     <para>
+        ///     The house map: a C# integer primitive or <see cref="System.Numerics.BigInteger"/> is a Python int, a
+        ///     <see cref="bool"/> a Python bool (an int subclass: it pads by 0 or 1), a two-item <see cref="ValueTuple{T1,T2}"/>
+        ///     a tuple. A typed C# array is an ndarray and a Half / char / decimal a NumPy scalar; NumPy's match accepts
+        ///     neither, so both are the AssertionError (NumSharp used to accept a two-element <c>int[]</c> / <c>long[]</c>).
+        ///     </para>
+        /// </remarks>
+        private static long[,] DictPadWidth(IDictionary<int, object> widths, int ndim)
+        {
+            var seq = new long[ndim, 2];
+            // np.asarray(seq)'s dtype: bool only when EVERY row holds bools (an untouched row is the ints (0, 0)), not an
+            // integer type when ANY row holds a value past int64. Tracked per row: a later key can overwrite a row.
+            var boolRow = new bool[ndim];
+            var hugeRow = new bool[ndim];
+            foreach (var kv in widths)
+            {
+                if (!TryPadWidthItem(kv.Value, out long before, out long after, out bool isBool, out bool huge))
+                    throw new AssertionError($"Expected code to be unreachable, but got: {PolyIndexArgument.Repr(kv.Value)}");
+                int axis = kv.Key;
+                if (axis < -ndim || axis >= ndim)
+                    throw new IndexError("list assignment index out of range");
+                if (axis < 0)
+                    axis += ndim;
+                seq[axis, 0] = before;
+                seq[axis, 1] = after;
+                boolRow[axis] = isBool;
+                hugeRow[axis] = huge;
+            }
+
+            bool allBool = ndim > 0;
+            bool anyHuge = false;
+            for (int d = 0; d < ndim; d++)
+            {
+                allBool &= boolRow[d];
+                anyHuge |= hugeRow[d];
+            }
+            if (ndim == 0 || allBool || anyHuge)
+                throw new TypeError("`pad_width` must be of integral type.");
+            return seq;
+        }
+
+        /// <summary>
+        ///     The width patterns of NumPy's dict branch: <c>case int(both)</c> (one Python int, both sides) and
+        ///     <c>case tuple((int(before), int(after)))</c> (a tuple of exactly two Python ints).
+        /// </summary>
+        /// <param name="value">The dict value.</param>
+        /// <param name="before">The width before the axis.</param>
+        /// <param name="after">The width after the axis.</param>
+        /// <param name="isBool">Every matched item is a Python bool (the row's array dtype would be bool).</param>
+        /// <param name="huge">A matched item lies outside int64 (the row's array dtype would not be int64).</param>
+        /// <returns>False when neither pattern matches (NumPy's <c>typing.assert_never</c>).</returns>
+        private static bool TryPadWidthItem(object value, out long before, out long after, out bool isBool, out bool huge)
+        {
+            if (TryPythonInt(value, out before, out isBool, out huge))
+            {
+                after = before;
+                return true;
+            }
+            if (value is System.Runtime.CompilerServices.ITuple t && t.Length == 2
+                && TryPythonInt(t[0], out before, out bool b0, out bool h0)
+                && TryPythonInt(t[1], out after, out bool b1, out bool h1))
+            {
+                isBool = b0 && b1;
+                huge = h0 || h1;
+                return true;
+            }
+            before = after = 0;
+            isBool = huge = false;
+            return false;
+        }
+
+        /// <summary>
+        ///     Python's <c>isinstance(x, int)</c> under the house map: a C# integer primitive, a <see cref="System.Numerics.BigInteger"/>
+        ///     or a <see cref="bool"/> (an int subclass in Python).
+        /// </summary>
+        /// <param name="x">The value.</param>
+        /// <param name="value">Its value when it fits int64 (0 / 1 for a bool).</param>
+        /// <param name="isBool">The value is a bool.</param>
+        /// <param name="huge">The value lies outside int64 (<paramref name="value"/> is then meaningless).</param>
+        /// <returns>False for anything that is not a Python int.</returns>
+        private static bool TryPythonInt(object x, out long value, out bool isBool, out bool huge)
+        {
+            isBool = huge = false;
+            switch (x)
+            {
+                case bool b:
+                    value = b ? 1 : 0;
+                    isBool = true;
+                    return true;
+                case ulong ul when ul > long.MaxValue:
+                    value = 0;
+                    huge = true;
+                    return true;
+                case System.Numerics.BigInteger bi:
+                    if (bi < long.MinValue || bi > long.MaxValue)
+                    {
+                        value = 0;
+                        huge = true;
+                        return true;
+                    }
+                    value = (long)bi;
+                    return true;
+                default:
+                    return TryToInt64(x, out value);
+            }
+        }
+
+        /// <summary>
         ///     NumPy <c>_as_pairs</c> port for integer pair specs (pad_width / stat_length).
         ///     Broadcasts <paramref name="x"/> to a <c>long[ndim, 2]</c> table.
         ///     Accepts: <c>null</c>, scalar int, <c>int[]</c> / <c>long[]</c>,
         ///     <c>int[,]</c> / <c>long[,]</c>, <c>(int, int)</c>, or
-        ///     <c>IDictionary&lt;int, object&gt;</c>.
+        ///     <c>IDictionary&lt;int, object&gt;</c> (stat_length only: a pad_width dict is converted first by
+        ///     <see cref="DictPadWidth"/>).
         /// </summary>
+        /// <param name="x">The spec.</param>
+        /// <param name="ndim">The number of pairs (the array's rank, at least 1).</param>
+        /// <param name="asIndex">The pairs are widths / lengths: a negative one is NumPy's ValueError.</param>
+        /// <returns>The <c>(ndim, 2)</c> table.</returns>
+        /// <exception cref="ValueError">A negative value with <paramref name="asIndex"/> ("index can't contain negative
+        ///     values").</exception>
+        /// <exception cref="ArgumentException">A spec that does not broadcast to <c>(ndim, 2)</c>, or an unsupported type.</exception>
         internal static long[,] _AsPairs(object x, int ndim, bool asIndex)
         {
             var result = new long[ndim, 2];
@@ -1004,7 +1187,8 @@ namespace NumSharp
                 return result;
             }
 
-            // Dict path: per-axis (negative keys allowed) overlaid on (0,0) default
+            // Dict path: per-axis (negative keys allowed) overlaid on (0,0) default. Reached by a stat_length dict only (a
+            // NumSharp extension); a pad_width dict arrives here as DictPadWidth's table.
             if (x is IDictionary dict)
             {
                 foreach (DictionaryEntry kv in dict)
@@ -1025,7 +1209,7 @@ namespace NumSharp
             {
                 long b = vti.Item1, a = vti.Item2;
                 if (asIndex && (b < 0 || a < 0))
-                    throw new ArgumentException("index can't contain negative values");
+                    throw new ValueError("index can't contain negative values");
                 for (int i = 0; i < ndim; i++) { result[i, 0] = b; result[i, 1] = a; }
                 return result;
             }
@@ -1033,7 +1217,7 @@ namespace NumSharp
             {
                 long b = vtl.Item1, a = vtl.Item2;
                 if (asIndex && (b < 0 || a < 0))
-                    throw new ArgumentException("index can't contain negative values");
+                    throw new ValueError("index can't contain negative values");
                 for (int i = 0; i < ndim; i++) { result[i, 0] = b; result[i, 1] = a; }
                 return result;
             }
@@ -1047,7 +1231,7 @@ namespace NumSharp
                 if (rows == 1)
                 {
                     if (asIndex && (i2[0, 0] < 0 || i2[0, 1] < 0))
-                        throw new ArgumentException("index can't contain negative values");
+                        throw new ValueError("index can't contain negative values");
                     for (int i = 0; i < ndim; i++) { result[i, 0] = i2[0, 0]; result[i, 1] = i2[0, 1]; }
                     return result;
                 }
@@ -1057,7 +1241,7 @@ namespace NumSharp
                 {
                     long b = i2[i, 0], a = i2[i, 1];
                     if (asIndex && (b < 0 || a < 0))
-                        throw new ArgumentException("index can't contain negative values");
+                        throw new ValueError("index can't contain negative values");
                     result[i, 0] = b; result[i, 1] = a;
                 }
                 return result;
@@ -1070,7 +1254,7 @@ namespace NumSharp
                 if (rows == 1)
                 {
                     if (asIndex && (l2[0, 0] < 0 || l2[0, 1] < 0))
-                        throw new ArgumentException("index can't contain negative values");
+                        throw new ValueError("index can't contain negative values");
                     for (int i = 0; i < ndim; i++) { result[i, 0] = l2[0, 0]; result[i, 1] = l2[0, 1]; }
                     return result;
                 }
@@ -1080,7 +1264,7 @@ namespace NumSharp
                 {
                     long b = l2[i, 0], a = l2[i, 1];
                     if (asIndex && (b < 0 || a < 0))
-                        throw new ArgumentException("index can't contain negative values");
+                        throw new ValueError("index can't contain negative values");
                     result[i, 0] = b; result[i, 1] = a;
                 }
                 return result;
@@ -1100,7 +1284,7 @@ namespace NumSharp
             if (TryToInt64(x, out long scalar))
             {
                 if (asIndex && scalar < 0)
-                    throw new ArgumentException("index can't contain negative values");
+                    throw new ValueError("index can't contain negative values");
                 for (int i = 0; i < ndim; i++) { result[i, 0] = scalar; result[i, 1] = scalar; }
                 return result;
             }
@@ -1114,14 +1298,14 @@ namespace NumSharp
             if (arr.Length == 1)
             {
                 if (asIndex && arr[0] < 0)
-                    throw new ArgumentException("index can't contain negative values");
+                    throw new ValueError("index can't contain negative values");
                 for (int i = 0; i < ndim; i++) { result[i, 0] = arr[0]; result[i, 1] = arr[0]; }
                 return result;
             }
             if (arr.Length == 2)
             {
                 if (asIndex && (arr[0] < 0 || arr[1] < 0))
-                    throw new ArgumentException("index can't contain negative values");
+                    throw new ValueError("index can't contain negative values");
                 for (int i = 0; i < ndim; i++) { result[i, 0] = arr[0]; result[i, 1] = arr[1]; }
                 return result;
             }
@@ -1130,7 +1314,7 @@ namespace NumSharp
                 for (int i = 0; i < ndim; i++)
                 {
                     if (asIndex && arr[i] < 0)
-                        throw new ArgumentException("index can't contain negative values");
+                        throw new ValueError("index can't contain negative values");
                     result[i, 0] = arr[i]; result[i, 1] = arr[i];
                 }
                 return result;
@@ -1138,20 +1322,34 @@ namespace NumSharp
             throw new ArgumentException($"pad_width length {arr.Length} is not broadcastable to (ndim={ndim}, 2)");
         }
 
+        /// <summary>
+        ///     One value of the <c>stat_length</c> dict (a NumSharp extension: NumPy refuses a dict there) as a
+        ///     (before, after) pair.
+        /// </summary>
+        /// <param name="value">An integer (both sides), a two-item integer tuple, or a two-element <c>int[]</c> / <c>long[]</c>.</param>
+        /// <param name="asIndex">The pair is a length: a negative side is NumPy's ValueError.</param>
+        /// <returns>The pair.</returns>
+        /// <exception cref="ValueError">A negative side with <paramref name="asIndex"/>.</exception>
+        /// <exception cref="ArgumentException">A null or unsupported value.</exception>
         private static (long before, long after) NormalizeSinglePair(object value, bool asIndex)
         {
             if (value is null) throw new ArgumentException("pad_width dict value cannot be null");
             if (TryToInt64(value, out long scalar))
             {
                 if (asIndex && scalar < 0)
-                    throw new ArgumentException("index can't contain negative values");
+                    throw new ValueError("index can't contain negative values");
                 return (scalar, scalar);
             }
-            if (value is ValueTuple<int, int> vti) return (vti.Item1, vti.Item2);
-            if (value is ValueTuple<long, long> vtl) return (vtl.Item1, vtl.Item2);
-            if (value is int[] arr && arr.Length == 2) return (arr[0], arr[1]);
-            if (value is long[] arrL && arrL.Length == 2) return (arrL[0], arrL[1]);
-            throw new ArgumentException($"pad_width dict value must be int or (before, after) pair");
+            (long before, long after) pair;
+            if (value is ValueTuple<int, int> vti) pair = (vti.Item1, vti.Item2);
+            else if (value is ValueTuple<long, long> vtl) pair = (vtl.Item1, vtl.Item2);
+            else if (value is int[] arr && arr.Length == 2) pair = (arr[0], arr[1]);
+            else if (value is long[] arrL && arrL.Length == 2) pair = (arrL[0], arrL[1]);
+            else throw new ArgumentException($"pad_width dict value must be int or (before, after) pair");
+            // A pair is checked like a scalar: a negative side used to pass and reached the slicing as a garbage shape.
+            if (asIndex && (pair.before < 0 || pair.after < 0))
+                throw new ValueError("index can't contain negative values");
+            return pair;
         }
 
         /// <summary>

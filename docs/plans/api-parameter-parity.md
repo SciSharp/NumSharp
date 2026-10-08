@@ -1193,7 +1193,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     cholesky / lstsq / pinv / matrix_rank / cond / norm over empty matrices and zero-size batches, results disposed):
     geomean 5.92×, min 1.62× (`lstsq` of a 3×0 matrix with values in `b`: the residual sum's five allocations, ~6 µs);
     the full SVD of `(0, 512)` (a 512×512 identity) 3.76×, of `(100, 64, 0)` (100 identities of order 64) 6.80×.
-- [x] **X35 np.nditer refused string arrays; the iterator carries NumPy's descriptors.** Done 2026-10-08 (this commit;
+- [x] **X35 np.nditer refused string arrays; the iterator carries NumPy's descriptors.** Done 2026-10-08 (`5477074f`;
   the rundown's bug 6).
   - Proof: `np.nditer(np.array(['ab', 'c']))` raised NotSupportedException ("the iterator sizes elements by numeric
     storage lane"); NumPy yields 0-d `<U2` views, converts between widths and between `S` and `U` under buffering or a
@@ -1239,6 +1239,105 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     construction that allocates an output, 0.96× (`np.zeros(1000)` is about half of its 1.1 µs; the up-front
     allocation is reused when it already has the iteration layout, which saved ~0.6 µs), and a per-element walk of
     10,000 strings, 0.14× (the per-element NDArray view floor every `it[0]` loop pays, ~0.5 µs a view).
+
+- [x] **X36 Axis arguments raised .NET's argument exceptions, and several axis checks were not NumPy's.** Done 2026-10-08
+  (this commit; the rundown's bug 7).
+  - Proof: `np.expand_dims(a, 5)` and `np.stack([a, a], 3)` raised `ArgumentException` with NumPy's text, where NumPy
+    raises `AxisError` (np.stack's test from `26f7e32c` pinned the base type). A first probe (346 calls: 54 function forms
+    with every axis value of a 2-D operand, NumPy 2.4.2 against NumSharp) found 159 differences in 45 functions. 34 raised
+    `ArgumentException` / `ArgumentOutOfRangeException` / the legacy parenthesized `AxisOutOfRangeException` /
+    `IndexOutOfRangeException` / a bare `Exception` where NumPy raises `AxisError`. Eight (argmax / argmin / count_nonzero /
+    cumprod / nancumprod / nansum / nanprod / squeeze) ACCEPTED axis `-ndim - 1` and wrapped it twice to the last axis.
+  - Fix: NumPy's two normalizers, ported once (`Default.Transpose.cs`). `check_and_adjust_axis(ndims, axis, msgPrefix)`
+    is `check_and_adjust_axis_msg`: the range test on the axis as given, then one wrap, and the house `AxisError` with
+    NumPy's text and msg_prefix (a new `AxisError(axis, ndim, msgPrefix)` constructor). `normalize_axis_tuple(axis, ndim,
+    argname, allow_duplicate)` is NumPy's function: a new array, every axis range-checked, then the repeat `ValueError`
+    ("repeated axis" / "repeated axis in \`{argname}\` argument"). Every axis check in the library goes through them;
+    `AxisOutOfRangeException` is `[Obsolete]` and derives from `AxisError`, and nothing raises it any more.
+  - Neighbours, found by the probe and the tiers and fixed:
+    - wrap-then-test loops (`while (axis < 0) axis += ndim`) in argmax / argmin / cumprod / nancumprod / nansum / nanprod /
+      the nan axis kernels / count_nonzero / squeeze. They accepted `-ndim - 1`, and for a negative axis of a 0-d input they
+      NEVER TERMINATED: the tier's first replay hung on `np.count_nonzero(0-d, axis=-2)` until the case watchdog ended it;
+    - shortcuts that answered before the axis check. The prod / max / min / nanmax / nanmin one-element and 0-d
+      shortcuts now run `ReductionArguments.CheckReduceAxis` first (PyUFunc_GenericReduction's integer branch: a 0-d
+      operand takes axis 0 / -1, nothing else); cumsum / cumprod / argmax / argmin / compress check first too;
+    - the PyArray_CheckAxis functions (argmax / argmin / argsort / cumsum / cumprod / take / compress / repeat / packbits /
+      unpackbits) reported a 0-d input's axis against rank 0. NumPy ravels the input first, so the rank is 1;
+    - the argument prefixes: moveaxis' `source` / `destination`, swapaxes' and diagonal's / trace's `axis1` / `axis2`,
+      cross' `axisa` / `axisb` / `axisc`, average's and trim_zeros' `axis`; moveaxis' length mismatch is NumPy's
+      ValueError (it was a bare `Exception` with a stray quote); rollaxis' `start` is NumPy's message-only AxisError;
+    - `normalize_axis_tuple` REMOVED a repeated axis (`Distinct()`) and rewrote the caller's array;
+    - Python's IndexError where NumPy reads `a.shape[axis]` first: np.split / np.array_split (before the sections check) /
+      np.linalg.cross, and np.fft.irfftn's empty tuple ("tuple"; "list" only for the defaulted axes of a 0-d input);
+    - `np.linalg.vector_norm(x, axis=tuple)` is NumPy's tuple branch: the axes moved to the front and merged, then
+      norm's one-axis branch. A 2-tuple reached norm's matrix branch, so the default order computed the spectral norm;
+      a 3-tuple raised;
+    - the quantile family: an EMPTY tuple reduced every axis (NumPy reduces none); a complex input computed a value
+      (NumPy's TypeError "a must be an array of real numbers", raised first); a bool input was subtracted before the
+      axis check;
+    - `np.gradient(f, null, axes)` refused the null spacing;
+    - bool subtract / negative raised `NotSupportedException` where NumPy raises `TypeError`, at 8 sites (the ufuncs,
+      np.evaluate's typing pass, ediff1d, gradient, the quantile family);
+    - NumPy's ValueError where NumSharp raised its base types: a non-unit squeeze axis, equal diagonal / trace axes,
+      rot90's axes, split's sections, stack's shape mismatch, the stacking family's empty list (atleast_1d / 2d / 3d of
+      no arrays is the empty tuple), diff / unwrap / ma.diff of a 0-d input, the quantile q range, all / any's repeated
+      tuple axis;
+    - rollaxis with nothing to move and `np.expand_dims(a, ())` return a fresh view, never the input;
+    - `Shape.GetAxis` mapped every negative axis to the last; `ma.compress_nd` normalized its axis after the unmasked
+      shortcut;
+    - np.pad's dict `pad_width` (NumPy 2.3+) is NumPy's dict branch. The keys are LIST INDICES: an axis outside
+      `[-ndim, ndim)` is the list's IndexError "list assignment index out of range", and every key of a 0-d array is one.
+      Each width is matched before its axis is assigned; anything but an int or a 2-tuple of ints is `typing.assert_never`'s
+      AssertionError (a new house type), and a typed C# array is refused like NumPy's ndarray (NumSharp accepted a
+      two-element `int[]` / `long[]`). Then `np.asarray(seq)`'s TypeError: a 0-d array's empty dict, every row given
+      bools, a width past int64. Then the negative-width ValueError, after every key. A bool pads by 0 or 1. The old path
+      raised the base `ArgumentException` for all of these, checked the axis first, and let a negative side of a tuple
+      reach the slicing as a garbage shape (also in the stat_length dict, a NumSharp extension);
+    - np.evaluate's reductions follow the NumPy function each stands for. The ufunc kinds (sum / prod / min / max / any /
+      all, and count_nonzero / nansum / nanprod / nanmean) over a 0-d child raised for axis 0 / -1, which NumPy's reduce
+      takes as no axis (`ZeroDimAxisIsFlat`; mean / var / std keep NumPy's refusal from `_count_reduce_items`).
+      np.evaluate's average omitted np.average's "axis: " prefix, on both its routes;
+    - `np.linalg.tensorsolve`'s axes are list VALUES (`allaxes.remove(k)`): an axis outside `0 .. ndim - 1` (a negative
+      one included) is Python's ValueError "list.remove(x): x not in list". C#'s `List.Remove` returned false, and the
+      stray axis surfaced as transpose's "axes don't match array".
+  - Two speed levers rode along. Default-order `vector_norm` / `norm` of a float32 / float64 operand streams
+    `Sum(x * x, axis)` through np.evaluate (add.reduce's schedule, same bits, no temporary; `x * x` also keeps a
+    negative NaN's sign as NumPy's `x.conj() * x` does). `np.ptp` over a tuple naming every axis takes the flat
+    reductions.
+  - Not changed:
+    - no tuple axis for sum / prod / mean / std / var / max / min / the nan reductions / squeeze / roll / size / cumsum
+      (the library-wide gap);
+    - np.average over a tuple axis reduces one axis at a time: a mean of means, and with weights a sum of sums, where
+      NumPy runs ONE add.reduce over the axis set. Its last bits differ on order-sensitive data (pinned:
+      `OpenBugsReductionTests.Average_TupleAxis_IsOneReductionOverTheAxisSet`); the fix is that same multi-axis
+      add.reduce;
+    - NumPy's broadcast ValueError stays `IncorrectShapeException` (the house convention, kept by the strict tier);
+    - `np.split(a, 0)` keeps NumSharp's ValueError where NumPy leaks a ZeroDivisionError;
+    - squeeze / rollaxis / expand_dims return a fresh view where NumPy returns `self` (disposal safety);
+    - a 2-D q in the quantile family;
+    - np.pad accepts a dict for constant_values / end_values / stat_length, which NumPy refuses (TypeError);
+    - `NDExpr.Var(x, 2)` binds the ddof overload, where NumPy's positional `np.var(x, 2)` is an axis (a DSL quirk);
+    - np.stack's last-axis stack of two 1K vectors, 1.30x (the existing concatenate interleave; every other measured
+      stack is 1.53-5.5x).
+  - Gates:
+    - `axis_args.jsonl` (15,444 cases, zero excuses, STRICT error types: NumPy's AxisError / ValueError / IndexError /
+      TypeError / AssertionError must come back as the house type of that name; np.pad's dict keys and tensorsolve's
+      axes included);
+    - the evaluate tier's block C10 (330 cases: every axis of a 0-d, a 2-D, a strided and an empty child, a 0-d leaf
+      beside a 2-D one; NumPy's AxisError texts became verbatim cases);
+    - `Manipulation/AxisArgumentParity.Test.cs` (26 tests), `np.pad.Test.cs` (+1), and the three ErrorParity pins,
+      untagged as fixed;
+    - 37 unit tests that pinned the old types now assert NumPy's (the split tests renamed after the types).
+    - Planted bugs: 27 for the core port, 10 for np.pad, 7 + 2 for np.evaluate and tensorsolve, every one killed. The
+      first np.evaluate round left two survivors: the materialized average route, which only an EMPTY operand reaches
+      (a strided one passes the streamed route's axis check first), and a 0-d leaf beside an N-d one. Both shapes were
+      added to the tier and the unit test (finding 57).
+  - Perf (NPY/NS, two pinned P-cores, best of 21, results disposed, 24 cells over the changed paths):
+    - `vector_norm` over tuples 4.3-9.2x (it was 0.97x on a (100, 100, 10) slab before the fused route);
+    - `np.ptp` with an all-axes tuple 2.10x (was 1.05x);
+    - quantile with a tuple 2.64x, argmax / cumsum / count_nonzero along an axis 2.1-2.3x;
+    - the view functions 3.5-15.6x (squeeze / expand_dims / moveaxis / swapaxes / rollaxis / split / diagonal / trace);
+    - average with a tuple 1.52x, the stack cells above.
 
 ## 6. Findings
 
@@ -1466,18 +1565,60 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    that picks the coalescing pass — and a reduction output, laid out later, has stride 0 on its reduced axes, so the
    full-collapse pass left the iterator partly merged in its ascending layout and walked the reduced axis outermost.
    Decide the pass from the operands' REAL strides, or use the pass that merges whatever it can.
-51. **A short warm-up measures tier 0** (X35). The first np.nditer benchmark (2,000 calls per round, 300 ms of warm-up)
-   read 0.78 µs for a construction that takes 0.31 µs once tiered up (20,000 calls per round, 400–500 ms of warm-up);
-   it made a 1.7× win read as a 0.66× loss. Size a construction benchmark's rounds in milliseconds, not calls.
+51. **The first rows of a benchmark can stay at tier 0** (X35). The first np.nditer benchmark read 0.70–0.78 µs for a
+   one-operand construction that takes 0.29–0.31 µs tiered up, and made a 1.7× win read as a 0.66× loss. The cause is
+   tiered compilation's call-counting delay: methods first called while the process keeps JIT-compiling new code are not
+   counted until a 100 ms quiet window, so the FIRST rows of a run stay at tier 0 however long their own warm-up is.
+   Confirmed on the same script: `DOTNET_TC_CallCountingDelayMs=0` gives 0.293 µs, the default 0.700 µs, the later rows
+   equal under both. Run timing scripts with `DOTNET_TC_CallCountingDelayMs=0` (the nditer sheet already does).
+
+52. **Wrap-then-test is a hang on a 0-d input and a double wrap on every other** (X36). `while (axis < 0) axis += ndim`
+   never ends for ndim 0, and it accepts `-ndim - 1` by wrapping twice. One wrap followed by a full range test is correct;
+   NumPy's spelling, the test on the axis AS GIVEN and then one wrap, cannot go wrong. The case watchdog turned the hang
+   into a named failure (`np.count_nonzero(0-d, axis=-2)`); without it the replay would have spun for days.
+53. **A shortcut answers before the argument check unless the check is the first statement** (X36). prod / max / min /
+   nanmax / nanmin, cumsum / cumprod, argmax / argmin and compress each had a 0-d or one-element shortcut ahead of the
+   axis check, so an out-of-range axis returned a value. NumPy checks the axis before it looks at the operand; the check
+   belongs at the top of every entry point, not inside the general path.
+54. **The NumPy statement that touches the axis FIRST decides the error** (X36). The same out-of-range axis is one of:
+   - an AxisError against the rank (`normalize_axis_index`);
+   - an AxisError against rank 1 (`PyArray_CheckAxis` ravels a 0-d input);
+   - an AxisError with an argument prefix (`normalize_axis_tuple`'s argname);
+   - Python's IndexError: `a.shape[axis]` (split, array_split, linalg.cross, irfftn) or `seq[axis] = …` (pad's dict);
+   - Python's ValueError: `list.remove(k)` (tensorsolve).
+
+   A 0-d input takes axis 0 / -1 in a ufunc reduce, but not in np.mean's `_count_reduce_items`. Port the statement, not
+   "the axis check".
+55. **An empty tuple is not "every axis"** (X36). The quantile family's `axis.Length == 0` branch reduced every axis for
+   `axis=()`, which NumPy's `_ureduce` treats as reducing nothing. `None` is the spelling for every axis. vector_norm's
+   tuple is likewise ALWAYS a vector norm over the merged axes; handing a 2-tuple to norm reached its matrix branch.
+56. **On an error path the leak gate counts the registry's own temporaries** (X36). The oracle registry's copies made
+   before a call raises (put_along_axis's, sort's, partition's operand copies; the masked operand; callback results)
+   were left to the finalizer, and the leak gate reported them as library leaks. Release them in the replay. Do not
+   mask the library's paths: the library itself leaked nothing.
+57. **A route the tier never reaches keeps its mutants alive** (X36). np.evaluate's weighted average has a streamed
+   route and a materialized one, and the streamed route checks the axis before it declines a layout. A strided operand
+   therefore still raised from the streamed route; only an EMPTY operand skips it and reaches the materialized check.
+   The first mutation round left that route's mutant alive, and also the 0-d test that read only the first leaf (every
+   tree had one leaf). Before adding a case for a route, find which inputs actually reach it.
 
 ## 7. State log
+
+- **2026-10-08**: X36 done (axis arguments: NumPy's normalize_axis_index / normalize_axis_tuple ported once, every
+  axis check routed through them, the house AxisError with NumPy's argument prefixes; the neighbours: wrap-then-test
+  hangs, shortcuts before the check, PyArray_CheckAxis' rank 1, the IndexError / ValueError functions, vector_norm's
+  tuple branch, the quantile family, gradient's null spacing, the bool subtract / negative TypeError, np.pad's dict
+  pad_width, np.evaluate's reduction axis rules, tensorsolve's axes). The `axis_args` tier (15,444 cases, zero excuses,
+  strict types) and the evaluate tier's C10 block. The tuple-axis np.average order is pinned
+  (`OpenBugs.Reductions.cs` group 14). Findings 52-57 recorded. Commit: this commit.
 
 - **2026-10-08**: X35 done (np.nditer over strings: the iterator carries descriptors — cast checks, copy routes,
   string buffers, nditer_pywrap's state contract, `np.nested_iters`' per-level split; the neighbours: the flat index
   as strides, the shape order, `remove_multi_index`, NumPy's K-order sort on the descriptor path, the allocated
   reduction output's order, the op_axes reduction checks, the failed construction's leak). The `nditer_construct` and
   `nditer_protocol` tiers and the `striter` string section, zero excuses. The buffered reduction is pinned
-  (`OpenBugs.NditerBufferedReduce.cs`). Findings 49–51 recorded. Commit: this commit.
+  (`OpenBugs.NditerBufferedReduce.cs`). Findings 49–51 recorded. Commit: `5477074f` (finding 51's cause, the
+  call-counting delay, confirmed afterwards).
 
 - **2026-10-08**: X34 done (np.linalg's factorisations of an empty matrix or a zero-size batch are NumPy's answer without
   a backend: `LinAlgEmpty`, taken before the backend; NDIter's write-operand reduction check is NumPy's shape test, with

@@ -243,9 +243,8 @@ namespace NumSharp.Backends
         /// <param name="axis">The reduced axis.</param>
         /// <param name="keepdims">Whether the reduced axis stays with length one.</param>
         /// <returns>The int64 counts.</returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is out of bounds (a numeric array).</exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds (a string array; a 0-d one accepts 0 and
-        ///     -1).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds — the sum's rule NumPy's count_nonzero
+        ///     inherits (<c>a.astype(bool).sum(axis)</c>), so a 0-d input accepts 0 and -1 and nothing else.</exception>
         /// <exception cref="StringComputationNotSupportedException">A non-empty string array: NumPy compares every element with
         ///     <c>''</c> (the next phase of NumSharp's string support); an empty one gives the zeros of the reduced
         ///     shape.</exception>
@@ -264,11 +263,18 @@ namespace NumSharp.Backends
 
             var shape = nd.Shape;
 
-            // Normalize axis
-            while (axis < 0)
-                axis = nd.ndim + axis;
-            if (axis >= nd.ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis));
+            // NumPy's count_nonzero(a, axis) is a.astype(bool).sum(axis=axis, dtype=intp), so the sum's axis rule holds: a
+            // 0-d input accepts 0 and -1 (a reduction over no axis — the 0-d count of its one element), and every other
+            // axis is normalize_axis_index's AxisError. The wrap-then-test loop this replaces never ended for a negative
+            // axis of a 0-d input, and accepted -ndim - 1 (counting along the last axis).
+            if (nd.ndim == 0)
+            {
+                if (axis != 0 && axis != -1)
+                    throw new AxisError(axis, 0);
+                return NDArray.Scalar(CountNonZero(nd));
+            }
+
+            axis = check_and_adjust_axis(nd.ndim, axis);
 
             // Compute output shape
             var outputDims = new long[nd.ndim - 1];

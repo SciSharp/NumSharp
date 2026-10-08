@@ -26,6 +26,9 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/generated/numpy.rot90.html
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ValueError"><paramref name="axes"/> does not hold two axes ("len(axes) must be 2."), names one
+        ///     axis twice ("Axes must be different.", tested before the range), or is out of range ("Axes=(a, b) out of range
+        ///     for array of ndim=n.") — NumPy's own ValueErrors, not normalize_axis_index's AxisError.</exception>
         [NDScoped]
         public static NDArray rot90(NDArray m, int k = 1, int[] axes = null)
         {
@@ -35,7 +38,7 @@ namespace NumSharp
             axes ??= new[] {0, 1};
 
             if (axes.Length != 2)
-                throw new ArgumentException("len(axes) must be 2.");
+                throw new ValueError("len(axes) must be 2.");
 
             int ndim = m.ndim;
 
@@ -44,11 +47,11 @@ namespace NumSharp
             // ndim=2, or (0, 3) on ndim=3) — which therefore reports "Axes must be different"
             // rather than "out of range".
             if (axes[0] == axes[1] || Math.Abs(axes[0] - axes[1]) == ndim)
-                throw new ArgumentException("Axes must be different.");
+                throw new ValueError("Axes must be different.");
 
             if (axes[0] >= ndim || axes[0] < -ndim
                 || axes[1] >= ndim || axes[1] < -ndim)
-                throw new ArgumentException(
+                throw new ValueError(
                     $"Axes=({axes[0]}, {axes[1]}) out of range for array of ndim={ndim}.");
 
             // Python-style modulo: always in [0, 3], even for negative k.

@@ -231,10 +231,13 @@ namespace NumSharp.Tests.Math
             r.Should().Be(np.array(new[,] { { 1.0, 1.0, 4.0 }, { 1.0, 1.0, 4.0 } }));
         }
 
+        /// <summary>
+        ///     np.nancumsum with an out-of-range axis raises NumPy's AxisError.
+        /// </summary>
         [TestMethod]
         public void NanCumSum_AxisOutOfBounds_Throws()
         {
-            Assert.ThrowsException<ArgumentOutOfRangeException>(
+            Assert.ThrowsException<AxisError>(
                 () => np.nancumsum(np.array(new[] { 1.0, 2.0 }), axis: 5));
         }
 

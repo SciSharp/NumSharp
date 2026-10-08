@@ -45,6 +45,10 @@ namespace NumSharp
         ///     reduction that goes through NumSharp's IL reduction kernels.
         ///     </para>
         /// </remarks>
+        /// <exception cref="ValueError"><paramref name="a"/> has fewer than two dimensions, or the two axes are the same
+        ///     axis ("axis1 and axis2 cannot be the same").</exception>
+        /// <exception cref="AxisError">An axis is out of range: "axis1: axis …" / "axis2: axis …" (axis1 checked
+        ///     first).</exception>
         [NDScoped] // reclaims the diagonal view, its contig copy and the natural result on the out= path
         public static NDArray trace(
             NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1,
@@ -121,8 +125,9 @@ namespace NumSharp
             int ndim = a.ndim;
             int ax1 = NormalizeAxis(axis1, ndim, nameof(axis1));
             int ax2 = NormalizeAxis(axis2, ndim, nameof(axis2));
+            // PyArray_Diagonal's ValueError, after both axes are in range.
             if (ax1 == ax2)
-                throw new ArgumentException(
+                throw new ValueError(
                     "axis1 and axis2 cannot be the same",
                     nameof(axis2));
 

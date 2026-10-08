@@ -6,11 +6,26 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
+        /// <summary>
+        ///     NumPy's <c>np.prod</c> (<c>np.multiply.reduce</c>): the product of <paramref name="arr"/>'s elements over
+        ///     <paramref name="axis_"/>, or over every axis when it is null, in NEP 50's accumulator dtype.
+        /// </summary>
+        /// <param name="arr">The array.</param>
+        /// <param name="axis_">The reduced axis (negative values count from the end), or null for every axis. A 0-d input
+        ///     accepts 0 and -1 (NumPy's backward-compatibility rule) and nothing else.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <param name="dtype">The loop dtype (<c>dtype=</c>), or null for the accumulator of the input.</param>
+        /// <returns>The product (a read-only 0-d scalar for a full reduction).</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range — checked before any shortcut.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A string input or <paramref name="dtype"/> NumPy
+        ///     computes on (the next phase of NumSharp's string support).</exception>
         public override NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null)
         {
             // Text, or a string dtype= request: NumPy's prod checks its arguments first (the axis, and the dtype= class where
             // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
             Strings.NDStringUfuncs.ThrowIfReduce("prod", arr, axis_, dtype);
+            // The ufunc reduce's axis check, before every shortcut below (empty, 0-d and one-element inputs included).
+            ReductionArguments.CheckReduceAxis(arr.ndim, axis_);
             NPTypeCode? typeCode = UfuncLoopCode(dtype);
             var shape = arr.Shape;
 

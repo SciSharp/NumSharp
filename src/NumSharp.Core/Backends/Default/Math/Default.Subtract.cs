@@ -17,7 +17,7 @@ namespace NumSharp.Backends
             // Mixed bool + numeric promotes to the numeric type and subtracts fine,
             // so the guard is specifically "both operands boolean".
             if (lhs.GetTypeCode == NPTypeCode.Boolean && rhs.GetTypeCode == NPTypeCode.Boolean)
-                throw new NotSupportedException(
+                throw new TypeError(
                     "numpy boolean subtract, the `-` operator, is not supported, " +
                     "use the bitwise_xor, the `^` operator, or the logical_xor function instead.");
 

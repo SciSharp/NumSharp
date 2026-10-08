@@ -14,6 +14,8 @@ namespace NumSharp
         /// <returns>The array formed by stacking the given arrays, will be at least 3-D.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.dstack.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="tup"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="tup"/> is empty ("need at least one array to concatenate").</exception>
         public static NDArray dstack(params NDArray[] tup)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
@@ -22,8 +24,10 @@ namespace NumSharp
             if (tup == null)
                 throw new ArgumentNullException(nameof(tup));
 
+            // NumPy's atleast_3d(*tup) of no arrays is the empty tuple, and concatenating it is np.concatenate's ValueError —
+            // the text NumPy's dstack([]) raises.
             if (tup.Length == 0)
-                throw new ArgumentException("Value cannot be an empty collection.", nameof(tup));
+                throw new ValueError("need at least one array to concatenate");
 
             tup = np.atleast_3d(tup);
             return np.concatenate(tup, 2);

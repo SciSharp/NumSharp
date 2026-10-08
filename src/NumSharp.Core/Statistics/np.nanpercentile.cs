@@ -11,6 +11,8 @@ namespace NumSharp
         ///     A slice that is entirely NaN (or empty) yields NaN.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanpercentile.html</remarks>
+        /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
+        ///     first statement (before q is read).</exception>
         public static NDArray nanpercentile(NDArray a, double q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
@@ -18,6 +20,8 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => nanpercentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
+            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
+            RejectComplexQuantileData(a);
             ValidatePercentile(q);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
@@ -29,6 +33,8 @@ namespace NumSharp
                 emptyReturnsNaN: true, ignoreNaN: true);
         }
 
+        /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
+        ///     first statement (before q is read).</exception>
         public static NDArray nanpercentile(NDArray a, double[] q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
@@ -36,6 +42,8 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => nanpercentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
+            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
+            RejectComplexQuantileData(a);
             if (q is null) throw new ArgumentNullException(nameof(q));
             double[] qFracs = new double[q.Length];
             for (int i = 0; i < q.Length; i++)
@@ -53,10 +61,14 @@ namespace NumSharp
                 emptyReturnsNaN: true, ignoreNaN: true);
         }
 
+        /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
+        ///     first statement (before q is read).</exception>
         public static NDArray nanpercentile(NDArray a, double q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
         {
+            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
+            RejectComplexQuantileData(a);
             ValidatePercentile(q);
             // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
             // text itself (NDStringUfuncs.QuantileAnswer).
@@ -67,10 +79,14 @@ namespace NumSharp
                 emptyReturnsNaN: true, ignoreNaN: true);
         }
 
+        /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
+        ///     first statement (before q is read).</exception>
         public static NDArray nanpercentile(NDArray a, double[] q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
         {
+            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
+            RejectComplexQuantileData(a);
             if (q is null) throw new ArgumentNullException(nameof(q));
             double[] qFracs = new double[q.Length];
             for (int i = 0; i < q.Length; i++)
@@ -105,6 +121,8 @@ namespace NumSharp
         ///     <c>np.nanmean</c> for empty text data.</exception>
         /// <exception cref="ArgumentException">A q of rank above 1, or a percentile outside [0, 100] (NumPy's ValueError
         ///     texts).</exception>
+        /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
+        ///     first statement (before q is read).</exception>
         public static NDArray nanpercentile(NDArray a, NDArray q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
@@ -112,6 +130,8 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => nanpercentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
+            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
+            RejectComplexQuantileData(a);
             if (q is null) throw new ArgumentNullException(nameof(q));
             // Text q: NumPy's answer comes from its first statement on q (divide by 100, or the [0, 1] check), before the
             // data or q's rank is looked at.

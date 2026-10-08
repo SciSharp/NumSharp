@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp
 {
@@ -95,13 +96,25 @@ namespace NumSharp
             }
 
             /// <summary>
-            ///     The Array-API vector norm reduced over a single axis.
+            ///     The Array-API vector norm reduced over a single axis: NumPy's <c>norm(x, axis=axis, ord=ord)</c>, the
+            ///     one-axis branch of <see cref="norm(NDArray, object, int[], bool)"/>.
             /// </summary>
-            /// <inheritdoc cref="vector_norm(NDArray, int[], bool, object)"/>
+            /// <param name="x">Input array. Integer and bool operands are computed in float64.</param>
+            /// <param name="axis">The reduced axis (negative values count from the end).</param>
+            /// <param name="keepdims">Leave the reduced axis in the result with length 1.</param>
+            /// <param name="ord">The vector order; <c>null</c> means NumPy's default of 2.</param>
+            /// <returns>The norm along <paramref name="axis"/>.</returns>
+            /// <exception cref="AxisError"><paramref name="axis"/> is out of range (a 0-d input has no axis).</exception>
+            /// <exception cref="ValueError">A text order, or -inf of an empty axis.</exception>
+            /// <remarks>
+            ///     An integer axis is NOT the one-element tuple: NumPy hands it to norm as it is, while a tuple is moved to
+            ///     the front and merged first (see the <c>int[]</c> overload). Both reach the vector branch, but in different
+            ///     reduction layouts, so they are kept apart.
+            /// </remarks>
             public static NDArray vector_norm(NDArray x, int axis, bool keepdims = false, object ord = null)
                 => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
                 ? NDMatrixBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord))
-                : vector_norm(x, new[] {axis}, keepdims, ord);
+                : norm(x, ord ?? 2, new[] {axis}, keepdims);
 
             /// <summary>
             ///     The Array-API vector norm — <c>axis</c> defaults to flattening and <c>ord</c> to 2.
@@ -110,7 +123,26 @@ namespace NumSharp
             ///     The order. <c>null</c> means NumPy's default of <b>2</b> — C# cannot spell a
             ///     non-null default for an <c>object</c> parameter, so the sentinel carries it.
             /// </param>
-            /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.vector_norm.html</remarks>
+            /// <param name="x">Input array. Integer and bool operands are computed in float64.</param>
+            /// <param name="axis">The reduced axes, any number of them (negative values count from the end), or null for
+            ///     the flattened array. An empty tuple reduces nothing (the elementwise magnitude).</param>
+            /// <param name="keepdims">Leave the reduced axes in the result with length 1.</param>
+            /// <returns>The vector norm over the axes.</returns>
+            /// <exception cref="AxisError">An axis is out of range.</exception>
+            /// <exception cref="ValueError">An axis appears twice ("repeated axis"), a text order, or -inf of an empty
+            ///     operand.</exception>
+            /// <remarks>
+            ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.vector_norm.html
+            ///     <para>
+            ///     NumPy's tuple branch, statement for statement: <c>normalize_axis_tuple(axis, x.ndim)</c>, the reduced axes
+            ///     moved to the front (<c>transpose(x, axis + rest)</c>, the axes AS GIVEN) and merged into one
+            ///     (<c>reshape((prod(shape[axis]), *shape[rest]))</c>), then norm's ONE-axis branch over axis 0 - a vector
+            ///     norm whatever the tuple's length. Handing a 2-tuple to <see cref="norm(NDArray, object, int[], bool)"/>
+            ///     directly (as this method once did) reached its MATRIX branch instead: the default order then computed the
+            ///     largest singular value, not <c>sqrt(sum(|x|^2))</c>, and a 3-tuple raised "Improper number of dimensions
+            ///     to norm.".
+            ///     </para>
+            /// </remarks>
             [NDScoped]
             public static NDArray vector_norm(NDArray x, int[] axis = null, bool keepdims = false, object ord = null)
             {
@@ -119,7 +151,43 @@ namespace NumSharp
                     return NDMatrixBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord));
                 object order = ord ?? 2;
                 if (axis is not null)
-                    return norm(x, order, axis, keepdims);
+                {
+                    int nd = x.ndim;
+                    var normalized = Backends.DefaultEngine.normalize_axis_tuple(axis, nd);
+
+                    // rest = the axes not reduced, in order; newshape = axis + rest (the raw axes: transpose accepts them).
+                    var isReduced = new bool[nd];
+                    foreach (int ax in normalized)
+                        isReduced[ax] = true;
+                    var permutation = new int[nd];
+                    var mergedShape = new long[1 + nd - normalized.Length];
+                    long mergedLength = 1;
+                    for (int i = 0; i < axis.Length; i++)
+                    {
+                        permutation[i] = axis[i];
+                        mergedLength *= x.Shape.dimensions[normalized[i]];
+                    }
+                    mergedShape[0] = mergedLength;
+                    for (int d = 0, k = axis.Length, r = 1; d < nd; d++)
+                    {
+                        if (isReduced[d])
+                            continue;
+                        permutation[k++] = d;
+                        mergedShape[r++] = x.Shape.dimensions[d];
+                    }
+
+                    var merged = np.transpose(x, permutation).reshape(Shape.Adopt(mergedShape));
+                    var res = norm(merged, order, new[] {0}, false);
+                    if (!keepdims)
+                        return res;
+
+                    // keepdims: the input's shape with every reduced axis set to 1 (NumPy reshapes: after the merge it
+                    // cannot reuse norm's own keepdims).
+                    var kept = (long[])x.Shape.dimensions.Clone();
+                    foreach (int ax in normalized)
+                        kept[ax] = 1;
+                    return np.reshape(res, Shape.Adopt(kept));
+                }
 
                 // Flatten first, then reduce — and restore the rank afterwards when keepdims asks,
                 // because the ravel has already erased it.
@@ -158,7 +226,18 @@ namespace NumSharp
             private static NDArray VectorNorm(NDArray a, object ord, int axis, bool keepdims)
             {
                 if (ord is null || (IsNumber(ord, out double n) && n == 2d))
+                {
+                    // NumPy's special case: sqrt(add.reduce((x.conj() * x).real, axis)). For a real float32 / float64
+                    // operand the product is x * x, and np.evaluate streams Sum(x * x, axis) in add.reduce's own schedule:
+                    // the same bits as the eager product + np.sum (each product rounded, then summed in NumPy's order),
+                    // with no N-element temporary (a (10000, 10) slab: 45 us against 152 us for the eager pair). x * x
+                    // also keeps a negative NaN's sign as NumPy's x.conj() * x does, where |x| * |x| cleared it. float16
+                    // and complex keep the eager form (np.evaluate's float16 sum is not NumPy's HALF schedule, and a
+                    // complex |x|^2 is the real sum of squares), as does a host without dynamic code (no fused kernels).
+                    if (Backends.Kernels.DirectILKernelGenerator.Enabled && a.typecode is NPTypeCode.Double or NPTypeCode.Single)
+                        return np.sqrt(np.evaluate(NDExpr.Sum((NDExpr)a * a, axis, keepdims)));
                     return np.sqrt(np.sum(AbsSquared(a), axis, keepdims));
+                }
 
                 if (IsText(ord, out var word))
                     throw new ValueError($"Invalid norm order '{word}' for vectors");
@@ -332,12 +411,29 @@ namespace NumSharp
                 return ones;
             }
 
-            private static int NormalizeAxis(int axis, int nd)
+            /// <summary>
+            ///     NumPy's <c>normalize_axis_index</c> for the norm family (norm's matrix branch, and the reduce its vector
+            ///     branch runs through, which takes the axis as a TUPLE - so a 0-d input has no axis 0 here).
+            /// </summary>
+            /// <param name="axis">The axis; negative values count from the end.</param>
+            /// <param name="nd">The operand's rank.</param>
+            /// <returns>The non-negative axis.</returns>
+            /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+            private static int NormalizeAxis(int axis, int nd) => Backends.DefaultEngine.check_and_adjust_axis(nd, axis);
+
+            /// <summary>
+            ///     Python's <c>x.shape[axis]</c>: the tuple index np.linalg.cross reads BEFORE it normalizes anything, so an
+            ///     axis out of range is the IndexError Python raises there, not an AxisError.
+            /// </summary>
+            /// <param name="axis">The axis; negative values count from the end.</param>
+            /// <param name="nd">The operand's rank.</param>
+            /// <returns>The non-negative axis.</returns>
+            /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range").</exception>
+            private static int ShapeIndex(int axis, int nd)
             {
-                int resolved = axis < 0 ? axis + nd : axis;
-                if (resolved < 0 || resolved >= nd)
-                    throw new AxisOutOfRangeException($"axis {axis} is out of bounds for array of dimension {nd}");
-                return resolved;
+                if (axis < -nd || axis >= nd)
+                    throw new IndexError("tuple index out of range");
+                return axis < 0 ? axis + nd : axis;
             }
 
             private static bool IsText(object ord, out string word)

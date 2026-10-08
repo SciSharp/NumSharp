@@ -22,7 +22,7 @@ namespace NumSharp.Backends
             // np.logical_not.
             var loopType = typeCode ?? nd.GetTypeCode;
             if (loopType == NPTypeCode.Boolean)
-                throw new System.NotSupportedException(
+                throw new TypeError(
                     "The numpy boolean negative, the `-` operator, is not supported, " +
                     "use the `~` operator or the logical_not function instead.");
 

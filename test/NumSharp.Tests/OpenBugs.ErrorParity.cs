@@ -5,10 +5,11 @@ using NumSharp;
 namespace NumSharp.Tests
 {
     /// <summary>
-    ///     Open bugs where a function's ERROR message is not NumPy 2.4.2's — a .NET framework guard message leaks, a
-    ///     bare <see cref="Exception"/> carries a typo, or an axis error uses an old parenthesized format instead of
-    ///     the house <c>AxisError</c> text. Each test asserts NumPy's message, so it FAILS while NumSharp's differs and
-    ///     passes once the text matches. Remove <c>[OpenBugs]</c> from a test when its path is fixed.
+    ///     FIXED regression pins (the open-bugs rundown's bug 7, plan api-parameter-parity X36): error messages that were
+    ///     not NumPy 2.4.2's — a .NET framework guard message leaked, a bare <see cref="Exception"/> carried a typo, an
+    ///     axis error used an old parenthesized format instead of NumPy's AxisError text. Every test now passes; each
+    ///     asserts NumPy's message, so a regression to the old text fails it. The file keeps its name, as the other
+    ///     OpenBugs files that hold only fixed pins do.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -17,32 +18,29 @@ namespace NumSharp.Tests
     ///     <see cref="ArgumentOutOfRangeException"/>, so its message carries a trailing <c>(Parameter 'axis')</c>). That
     ///     type choice is a convention, not a bug. The MESSAGE TEXT, however, is meant to be NumPy's verbatim — the
     ///     library asserts verbatim texts across its surface and has an <c>errors_full</c> oracle tier for exactly this.
-    ///     The cases below are where the text is still wrong, found by a 2026-10-06 error-parity sweep that probed each
-    ///     call against Linux NumPy 2.4.2 (the oracle NumSharp's LP64 integer model matches).
+    ///     The cases below were found by a 2026-10-06 error-parity sweep that probed each call against Linux NumPy 2.4.2
+    ///     (the oracle NumSharp's LP64 integer model matches), and fixed on 2026-10-08 by porting NumPy's
+    ///     <c>normalize_axis_index</c> / <c>normalize_axis_tuple</c> once and routing every axis check through them (the
+    ///     whole family is gated by the <c>axis_args</c> oracle tier).
     ///     </para>
     ///     <para>
     ///     So each pin checks the message by SUBSTRING on NumPy's core text (tolerating the house
-    ///     <c>(Parameter 'axis')</c> suffix a fixed <c>AxisError</c> would add) — except the one exact-match case whose
-    ///     bug is a trailing character. The expected texts are the real target: NumPy is the oracle, and sibling
-    ///     functions already produce them (<c>np.sum</c> / <c>np.flip</c> give the house <c>AxisError</c> text with no
-    ///     parentheses; <c>np.bmat</c> / <c>np.r_</c> / <c>np.concatenate</c> give <c>need at least one array to
-    ///     concatenate</c> as a real <c>ValueError</c>), so these are inconsistencies, not open design questions.
+    ///     <c>(Parameter 'axis')</c> suffix an <c>AxisError</c> adds) — except the one exact-match case whose
+    ///     bug was a trailing character. The expected texts are NumPy's.
     ///     </para>
     /// </remarks>
     [TestClass]
     public class OpenBugsErrorParityTests : TestClass
     {
         /// <summary>
-        ///     The stacking family on an EMPTY operand list must raise NumPy's <c>ValueError</c> — "need at least one
+        ///     FIXED: the stacking family on an EMPTY operand list raises NumPy's <c>ValueError</c> — "need at least one
         ///     array to concatenate" (<c>np.vstack</c> / <c>np.hstack</c> / <c>np.dstack</c>) or "need at least one
-        ///     array to stack" (<c>np.stack</c>). NumSharp leaks .NET's generic guard-clause message
-        ///     ("Value cannot be an empty collection. (Parameter '…')"), which carries none of NumPy's text. Sibling
-        ///     entry points already do it right: <c>np.concatenate([])</c> and <c>np.column_stack()</c> carry NumPy's
-        ///     "need at least one array to concatenate", so this is an inconsistency, not an open question.
+        ///     array to stack" (<c>np.stack</c>). It leaked .NET's generic guard-clause message ("Value cannot be an
+        ///     empty collection. (Parameter '…')"); this pin guards NumPy's texts.
         /// </summary>
-        /// <exception cref="Exception">The assertion framework's failure exception, while the stacking family leaks the
-        /// .NET guard message — the expected state until these entry points raise NumPy's text.</exception>
-        [TestMethod, OpenBugs]
+        /// <exception cref="Exception">The assertion framework's failure exception, if an entry point regresses to the
+        /// .NET guard message.</exception>
+        [TestMethod]
         public void StackingFamily_EmptyInput_LeaksDotNetMessage()
         {
             var fails = new List<string>();
@@ -56,18 +54,16 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     The Transpose-delegating family (<c>np.moveaxis</c>, <c>np.rollaxis</c>, <c>np.swapaxes</c>) and
-        ///     <c>np.squeeze</c> must report an out-of-range axis with the house <c>AxisError</c> text — NumPy's
-        ///     "axis 5 is out of bounds for array of dimension 2", which NumPy prefixes with the operand's role
-        ///     (<c>destination:</c> / <c>source:</c> / <c>axis2:</c>) where it normalizes more than one axis.
-        ///     NumSharp instead throws a differently-formatted <c>AxisOutOfRangeException</c> ("axis (5) is out of
-        ///     bounds for array of dimension (2)" — parenthesized numbers, no role prefix), and <c>np.squeeze</c> leaks
-        ///     .NET's generic range message. The house format is confirmed by <c>np.sum</c> / <c>np.flip</c>, which give
-        ///     "axis 5 is out of bounds for array of dimension 2" with no parentheses.
+        ///     FIXED: the Transpose-delegating family (<c>np.moveaxis</c>, <c>np.rollaxis</c>, <c>np.swapaxes</c>) and
+        ///     <c>np.squeeze</c> report an out-of-range axis with NumPy's AxisError text — "axis 5 is out of bounds for
+        ///     array of dimension 2", prefixed with the argument's role (<c>destination:</c> / <c>source:</c> /
+        ///     <c>axis2:</c>) where NumPy normalizes more than one axis. They threw the legacy
+        ///     <c>AxisOutOfRangeException</c> ("axis (5) is out of bounds for array of dimension (2)" — parenthesized
+        ///     numbers, no role prefix), and <c>np.squeeze</c> leaked .NET's generic range message.
         /// </summary>
-        /// <exception cref="Exception">The assertion framework's failure exception, while these axis errors use the
-        /// parenthesized format or the .NET message — the expected state until they use the house AxisError text.</exception>
-        [TestMethod, OpenBugs]
+        /// <exception cref="Exception">The assertion framework's failure exception, if one of these regresses to the
+        /// parenthesized format or the .NET message.</exception>
+        [TestMethod]
         public void AxisOutOfRange_TransposeFamilyAndSqueeze_NotNumPysAxisErrorText()
         {
             var fails = new List<string>();
@@ -88,15 +84,14 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.moveaxis</c> with <c>source</c> and <c>destination</c> of different lengths must raise NumPy's
-        ///     <c>ValueError</c> — "`source` and `destination` arguments must have the same number of elements".
-        ///     NumSharp throws a bare <see cref="Exception"/> whose message ends in a stray backtick
-        ///     ("…same number of elements'"), so it is both the wrong (uncatchable) type and a typo'd text. Asserted by
-        ///     EXACT equality because the only defect in an otherwise-correct message is that trailing character.
+        ///     FIXED: <c>np.moveaxis</c> with <c>source</c> and <c>destination</c> of different lengths raises NumPy's
+        ///     <c>ValueError</c> — "`source` and `destination` arguments must have the same number of elements". It threw
+        ///     a bare <see cref="Exception"/> whose message ended in a stray quote ("…same number of elements'"), the wrong
+        ///     (uncatchable) type and a typo'd text. Asserted by EXACT equality because the defect was that trailing
+        ///     character.
         /// </summary>
-        /// <exception cref="Exception">The assertion framework's failure exception, while the message carries the
-        /// trailing backtick — the expected state until the text matches NumPy's verbatim.</exception>
-        [TestMethod, OpenBugs]
+        /// <exception cref="Exception">The assertion framework's failure exception, if the text regresses.</exception>
+        [TestMethod]
         public void Moveaxis_SourceDestinationLengthMismatch_HasTrailingBacktickTypo()
         {
             var fails = new List<string>();

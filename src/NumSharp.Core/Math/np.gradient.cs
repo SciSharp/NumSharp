@@ -177,8 +177,8 @@ namespace NumSharp
         ///     The number of positional spacings equals neither 0, 1, nor the number of requested axes
         ///     ("invalid number of arguments").
         /// </exception>
-        /// <exception cref="NotSupportedException">
-        ///     <paramref name="f"/> is boolean (NumPy rejects the internal subtract).
+        /// <exception cref="TypeError">
+        ///     <paramref name="f"/> is boolean (NumPy's boolean-subtract TypeError from the internal subtract).
         /// </exception>
         public static GradientResult gradient(NDArray f, object spacing = null, int? axis = null, int edge_order = 1)
         {
@@ -189,12 +189,21 @@ namespace NumSharp
                             edge_order);
         }
 
-        /// <summary>Single spacing with a tuple <paramref name="axis"/> — see the main overload.</summary>
+        /// <summary>
+        ///     Single spacing with a tuple <paramref name="axis"/> — see the main overload. A null
+        ///     <paramref name="spacing"/> means no spacing (NumPy's <c>np.gradient(f, axis=(…))</c>), as in the main
+        ///     overload; it used to be passed on as a spacing VALUE and refused.
+        /// </summary>
+        /// <param name="f">The sampled values.</param>
+        /// <param name="spacing">One spacing for every axis (a scalar or a coordinate array), or null for unit spacing.</param>
+        /// <param name="axis">The axes to differentiate along (negative values count from the end).</param>
+        /// <param name="edge_order">The boundary order, 1 or 2.</param>
+        /// <returns>One gradient per axis (a single array when the tuple has one axis).</returns>
         /// <inheritdoc cref="gradient(NDArray, object, int?, int)" path="/exception"/>
         public static GradientResult gradient(NDArray f, object spacing, int[] axis, int edge_order = 1)
         {
             using var plain = NDMatrixBoundary.PlainFor(f);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return GradientImpl(f, new[] { spacing }, axis, edge_order);
+            return GradientImpl(f, spacing is null ? Array.Empty<object>() : new[] { spacing }, axis, edge_order);
         }
 
         /// <summary>Two per-axis spacings — see the main overload.</summary>
@@ -317,7 +326,7 @@ namespace NumSharp
             // TypeError. Float-family (incl. Decimal) keeps its dtype.
             NPTypeCode ftc = f.GetTypeCode;
             if (ftc == NPTypeCode.Boolean)
-                throw new NotSupportedException(
+                throw new TypeError(
                     "numpy boolean subtract, the `-` operator, is not supported, " +
                     "use the bitwise_xor, the `^` operator, or the logical_xor function instead.");
             NDArray work = IsIntegerLike(ftc) ? f.astype(np.float64) : f;

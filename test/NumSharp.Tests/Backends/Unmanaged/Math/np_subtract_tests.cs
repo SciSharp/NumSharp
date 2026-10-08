@@ -49,6 +49,10 @@ namespace NumSharp.Tests.Backends.Unmanaged.Math
             }
         }
 
+        /// <summary>
+        ///     <c>bool - bool</c> raises NumPy's TypeError through the operator, np.subtract and 0-d operands (it raised
+        ///     NotSupportedException); a bool mixed with a number still promotes and subtracts.
+        /// </summary>
         [TestMethod]
         public void SubtractBoolBool_ThrowsLikeNumPy()
         {
@@ -57,10 +61,10 @@ namespace NumSharp.Tests.Backends.Unmanaged.Math
             // Mixed bool + numeric promotes and is fine (covered above).
             var a = np.ones(new Shape(5, 5), NPTypeCode.Boolean);
             var b = np.ones(new Shape(5, 5), NPTypeCode.Boolean);
-            Assert.ThrowsException<NotSupportedException>(() => a - b);
-            Assert.ThrowsException<NotSupportedException>(() => np.subtract(a, b));
+            Assert.ThrowsException<TypeError>(() => a - b);
+            Assert.ThrowsException<TypeError>(() => np.subtract(a, b));
             // scalar bool - scalar bool also raises
-            Assert.ThrowsException<NotSupportedException>(() => np.asarray(true) - np.asarray(false));
+            Assert.ThrowsException<TypeError>(() => np.asarray(true) - np.asarray(false));
         }
 
         [TestMethod]

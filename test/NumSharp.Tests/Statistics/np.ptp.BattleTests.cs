@@ -341,6 +341,9 @@ public class np_ptp_BattleTests
         v.Imaginary.Should().Be(-2.0);
     }
 
+    /// <summary>
+    ///     np.ptp of a bool array raises NumPy's boolean-subtract TypeError (ptp is max - min).
+    /// </summary>
     [TestMethod]
     public void Ptp_Bool_ThrowsLikeNumPy()
     {
@@ -351,6 +354,6 @@ public class np_ptp_BattleTests
         // NumSharp now matches NumPy: the bool-subtract guard in
         // DefaultEngine.Subtract propagates up through ptp's max - min.
         var a = np.array(new bool[] { false, true, false, true });
-        Assert.ThrowsException<System.NotSupportedException>(() => np.ptp(a));
+        Assert.ThrowsException<TypeError>(() => np.ptp(a));
     }
 }

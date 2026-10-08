@@ -6993,7 +6993,7 @@ namespace NumSharp
             if (n < 0) throw new ArgumentException("order must be non-negative but got " + n);
             using var scope = NDScope.Open();
             var d = AsData(a);
-            if (d.ndim == 0) throw new ArgumentException("diff requires input that is at least one dimensional");
+            if (d.ndim == 0) throw new ValueError("diff requires input that is at least one dimensional");   // NumPy's ValueError
 
             // Build the (optionally prepend/append-extended) data + full mask, then difference each independently:
             // the DATA via np.diff (which handles bool/unsigned exactly like NumPy), the MASK via an n-fold
@@ -7927,6 +7927,8 @@ namespace NumSharp
         /// <param name="axis">null (all axes) or a single axis (negative allowed).</param>
         /// <returns>A plain <see cref="NDArray"/> of the surviving data (an unmasked input returns its data;
         /// a fully-masked input returns an empty array).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the operand's rank — checked first,
+        ///     before the unmasked shortcut (NumPy's <c>normalize_axis_tuple</c> is compress_nd's first statement).</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>): every per-axis reduction, keep-mask and intermediate compression is
         /// reclaimed; only the final compression (or the operand's own data, which the scope never owned) leaves.</remarks>
         [NDScoped]
@@ -7934,16 +7936,18 @@ namespace NumSharp
         {
             var data = AsData(x);
             var m = (x as NDMaskedArray)?._mask;
+            int nd = data.ndim;
+            // `axis = normalize_axis_tuple(axis, x.ndim)` runs BEFORE the nothing-masked return, so an out-of-range axis is
+            // NumPy's AxisError even for an unmasked operand (this method used to wrap it and return the data).
+            int[] axes = axis is null
+                ? Enumerable.Range(0, nd).ToArray()
+                : DefaultEngine.normalize_axis_tuple(axis.Value, nd);
             // `if m is nomask or not m.any(): return x._data` — a VIEW of the data (OWNDATA false), as NumPy's
             // `asarray(x)._data` is, never the operand's own array object.
             if (m is null || !np.any(m))
                 return data.view();
             if (np.all(m))
                 return np.array(Array.Empty<double>());
-            int nd = data.ndim;
-            int[] axes = axis is null
-                ? Enumerable.Range(0, nd).ToArray()
-                : new[] { axis.Value < 0 ? axis.Value + nd : axis.Value };
             var result = data;
             foreach (var ax in axes)
             {

@@ -367,7 +367,17 @@ namespace NumSharp
         public abstract NDArray CreateNDArray(Shape shape, DType dtype = null, IArraySlice buffer = null, char order = 'C');
         public abstract NDArray Transpose(NDArray nd, int[] premute = null);
         public abstract NDArray SwapAxes(NDArray nd, int axis1, int axis2);
-        public abstract NDArray MoveAxis(NDArray nd, int[] source, int[] destinition);
+        /// <summary>
+        ///     NumPy's <c>np.moveaxis</c>: the axes of <paramref name="source"/> moved to the positions of
+        ///     <paramref name="destination"/>, the other axes keeping their order (a view).
+        /// </summary>
+        /// <param name="nd">The array.</param>
+        /// <param name="source">The axes to move (negative values count from the end).</param>
+        /// <param name="destination">Their new positions.</param>
+        /// <returns>A view with the permuted axes.</returns>
+        /// <exception cref="AxisError">An axis is out of range ("source: …" / "destination: …").</exception>
+        /// <exception cref="ValueError">An argument repeats an axis, or the two have different lengths.</exception>
+        public abstract NDArray MoveAxis(NDArray nd, int[] source, int[] destination);
         public abstract NDArray RollAxis(NDArray nd, int axis, int start = 0);
         public abstract NDArray Cast(NDArray x, Type dtype, bool copy);
 

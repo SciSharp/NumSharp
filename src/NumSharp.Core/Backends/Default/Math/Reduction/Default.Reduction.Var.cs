@@ -18,8 +18,7 @@ namespace NumSharp.Backends
         /// to its own dtype); it decides the result dtype, and an integer dtype truncates the mean as in NumPy.</param>
         /// <returns>The variance: a read-only 0-d scalar when the result has no dimensions, otherwise a fresh array.</returns>
         /// <exception cref="AxisError"><paramref name="axis_"/> is outside the operand (a 0-d operand included).</exception>
-        /// <exception cref="System.NotSupportedException">A bool input with <c>dtype=bool</c> (NumPy's boolean-subtract
-        /// TypeError).</exception>
+        /// <exception cref="TypeError">A bool input with <c>dtype=bool</c> (NumPy's boolean-subtract TypeError).</exception>
         /// <remarks>
         ///     The boundary scope reclaims every intermediate of the port — the keepdims mean, the squared deviations and
         ///     the quotient temporaries — and yields only the result (the uninitialized-shape sentinel passes through).

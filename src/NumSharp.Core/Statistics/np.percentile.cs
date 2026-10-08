@@ -10,6 +10,8 @@ namespace NumSharp
         ///     <paramref name="q"/> must be in [0, 100]. Equivalent to <c>np.quantile(a, q/100)</c>.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.percentile.html</remarks>
+        /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
+        ///     first statement (before q is read).</exception>
         public static NDArray percentile(NDArray a, double q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
@@ -17,6 +19,8 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
+            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
+            RejectComplexQuantileData(a);
             ValidatePercentile(q);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
@@ -27,6 +31,8 @@ namespace NumSharp
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: true);
         }
 
+        /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
+        ///     first statement (before q is read).</exception>
         public static NDArray percentile(NDArray a, double[] q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
@@ -34,6 +40,8 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
+            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
+            RejectComplexQuantileData(a);
             if (q is null) throw new ArgumentNullException(nameof(q));
             double[] qFracs = new double[q.Length];
             for (int i = 0; i < q.Length; i++)
@@ -50,10 +58,14 @@ namespace NumSharp
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: false);
         }
 
+        /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
+        ///     first statement (before q is read).</exception>
         public static NDArray percentile(NDArray a, double q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
         {
+            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
+            RejectComplexQuantileData(a);
             ValidatePercentile(q);
             // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
             // text itself (NDStringUfuncs.QuantileAnswer).
@@ -63,10 +75,14 @@ namespace NumSharp
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: true);
         }
 
+        /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
+        ///     first statement (before q is read).</exception>
         public static NDArray percentile(NDArray a, double[] q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
         {
+            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
+            RejectComplexQuantileData(a);
             if (q is null) throw new ArgumentNullException(nameof(q));
             double[] qFracs = new double[q.Length];
             for (int i = 0; i < q.Length; i++)
@@ -101,6 +117,8 @@ namespace NumSharp
         ///     texts).</exception>
         /// <exception cref="StringComputationNotSupportedException">Text data that NumPy partitions (see
         ///     <see cref="Backends.Strings.NDStringUfuncs.QuantileAnswer"/> for the errors it raises first).</exception>
+        /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
+        ///     first statement (before q is read).</exception>
         public static NDArray percentile(NDArray a, NDArray q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
@@ -108,6 +126,8 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
+            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
+            RejectComplexQuantileData(a);
             if (q is null) throw new ArgumentNullException(nameof(q));
             // Text q: NumPy's answer comes from its first statement on q (divide by 100, or the [0, 1] check), before the
             // data or q's rank is looked at.
@@ -141,10 +161,14 @@ namespace NumSharp
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar);
         }
 
+        /// <summary>NumPy's <c>_quantile_is_valid</c> for one percentile: inside <c>[0, 100]</c> (NaN is not).</summary>
+        /// <param name="q">The percentile.</param>
+        /// <exception cref="ValueError"><paramref name="q"/> is outside [0, 100] ("Percentiles must be in the range [0,
+        ///     100]").</exception>
         private static void ValidatePercentile(double q)
         {
             if (!(q >= 0.0 && q <= 100.0))
-                throw new ArgumentException("Percentiles must be in the range [0, 100]");
+                throw new ValueError("Percentiles must be in the range [0, 100]");
         }
     }
 }

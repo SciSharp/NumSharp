@@ -39,17 +39,21 @@ namespace NumSharp.Tests.Math
             Assert.IsTrue(nd.Data<float>().All(v => v > 0));
         }
 
+        /// <summary>
+        ///     np.negative, the instance method and the unary <c>-</c> refuse a bool array with NumPy's TypeError, an empty
+        ///     one included; <c>~</c> and np.logical_not still flip it.
+        /// </summary>
         [TestMethod]
         public void Negative_Bool_ThrowsLikeNumPy()
         {
             // NumPy has no negative loop for the bool dtype: np.negative(bool) and
             // unary -bool raise TypeError (even for empty arrays). NumSharp matches.
             NDArray b = new bool[] { true, false, true };
-            Assert.ThrowsException<NotSupportedException>(() => np.negative(b));
-            Assert.ThrowsException<NotSupportedException>(() => b.negative());
-            Assert.ThrowsException<NotSupportedException>(() => -b);
+            Assert.ThrowsException<TypeError>(() => np.negative(b));
+            Assert.ThrowsException<TypeError>(() => b.negative());
+            Assert.ThrowsException<TypeError>(() => -b);
             NDArray empty = new bool[0];
-            Assert.ThrowsException<NotSupportedException>(() => np.negative(empty));
+            Assert.ThrowsException<TypeError>(() => np.negative(empty));
 
             // The boolean flip lives on `~` (np.invert) and np.logical_not, which
             // are unaffected by the negative guard and still return [F, T, F].

@@ -8,6 +8,20 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
+        /// <summary>
+        ///     NumPy's <c>np.cumsum</c> (<c>np.add.accumulate</c>): the running sums along
+        ///     <paramref name="axis_"/>, or along the flattened array when it is null.
+        /// </summary>
+        /// <param name="arr">The array.</param>
+        /// <param name="axis_">The accumulated axis (negative values count from the end), or null for the flattened array. A
+        ///     0-d input is treated as 1-D (NumPy's <c>PyArray_CheckAxis</c>), so only 0 and -1 address it.</param>
+        /// <param name="dtype">The accumulator dtype (<c>dtype=</c>), or null for NEP 50's accumulator of the input.</param>
+        /// <returns>A fresh array of the accumulator dtype: the input's shape with an axis, 1-D for the flattened form (a 0-d
+        ///     input gives shape (1,)).</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range — checked before every shortcut (empty,
+        ///     0-d and one-element inputs included).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A string input or a string <paramref name="dtype"/> that
+        ///     NumPy computes on (the next phase of NumSharp's string support).</exception>
         public override unsafe NDArray ReduceCumAdd(NDArray arr, int? axis_, DType dtype = null)
         {
             // Text, or a string dtype= request: NumPy's cumsum checks its arguments first (the axis, and the dtype= class where
@@ -36,14 +50,7 @@ namespace NumSharp.Backends
             // treated as 1-D for cumsum, so the valid range is [-nd, nd) with nd = max(ndim, 1).
             int axis = 0;
             if (axis_ != null)
-            {
-                int nd = Math.Max(arr.ndim, 1);
-                axis = axis_.Value;
-                if (axis < 0) axis += nd;
-                if (axis < 0 || axis >= nd)
-                    throw new ArgumentOutOfRangeException(nameof(axis_),
-                        $"axis {axis_.Value} is out of bounds for array of dimension {nd}");
-            }
+                axis = check_and_adjust_axis(Math.Max(arr.ndim, 1), axis_.Value);
 
             // Empty: cumsum returns a FRESH array of the accumulator dtype — NEP50 widening applies
             // even when empty (cumsum(empty int32) is int64). axis=None ravels to 1-D (NumPy shape

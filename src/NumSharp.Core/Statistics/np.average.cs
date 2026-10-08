@@ -462,29 +462,19 @@ namespace NumSharp
             return true;
         }
 
+        /// <summary>
+        ///     np.average's first statement for an axis: <c>normalize_axis_tuple(axis, a.ndim, argname="axis")</c>.
+        /// </summary>
+        /// <param name="axis">The axes as given, or null for every axis.</param>
+        /// <param name="ndim">The input's rank.</param>
+        /// <returns>The normalized axes in input order, or null for null.</returns>
+        /// <exception cref="AxisError">An axis is out of range: "axis: axis … is out of bounds for array of dimension …"
+        ///     (NumPy names the argument).</exception>
+        /// <exception cref="ValueError">An axis appears twice: "repeated axis in `axis` argument".</exception>
         private static int[] NormalizeAxisTuple(int[] axis, int ndim)
         {
             if (axis is null) return null;
-
-            int[] normalized = new int[axis.Length];
-            for (int i = 0; i < axis.Length; i++)
-            {
-                int ax = axis[i];
-                if (ax < 0) ax += ndim;
-                if (ax < 0 || ax >= ndim)
-                    throw new ArgumentOutOfRangeException(nameof(axis),
-                        $"axis {axis[i]} is out of bounds for array of dimension {ndim}");
-                normalized[i] = ax;
-            }
-
-            // Duplicate detection
-            int[] sorted = (int[])normalized.Clone();
-            Array.Sort(sorted);
-            for (int i = 1; i < sorted.Length; i++)
-                if (sorted[i] == sorted[i - 1])
-                    throw new ArgumentException("duplicate value in 'axis'");
-
-            return normalized;
+            return Backends.DefaultEngine.normalize_axis_tuple(axis, ndim, "axis");
         }
 
         private static NDArray MeanWithAxes(NDArray a, int[] axes, bool keepdims)

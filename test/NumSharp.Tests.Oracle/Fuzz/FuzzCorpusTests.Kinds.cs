@@ -710,11 +710,20 @@ namespace NumSharp.Tests.Fuzz
             // ValueError / LinAlgError / TypeError each have a house exception of the same name) accepts only that exact
             // name; every other tier keeps the class-level map, where a regression to a looser type would pass unseen.
             // np.nditer's construction tier holds NumPy's ValueError / TypeError the same way.
+            // The axis_args tier holds normalize_axis_index's AxisError, normalize_axis_tuple's ValueError and the
+            // IndexError NumPy leaks where it reads a.shape[axis] first, the same way.
             bool strictType = c.Valueclass == "linalg_empty" || c.Valueclass == "nditer_construct" ||
-                              c.Valueclass == "nditer_protocol";
+                              c.Valueclass == "nditer_protocol" || c.Valueclass == "axis_args";
             bool typeOk = gotType == c.Error.Type
                           || (!strictType && (!ErrorTypeMap.TryGetValue(c.Error.Type, out var allowed)
-                                              || allowed.Contains(gotType)));
+                                              || allowed.Contains(gotType)))
+                          // The one house convention the axis tier keeps: NumPy's broadcast ValueError ("shape mismatch:
+                          // objects cannot be broadcast to a single shape…", np.cross over operands whose axis moves leave
+                          // other shapes) is NumSharp's IncorrectShapeException library-wide (np.broadcast and every shape
+                          // check built on it). The text is still compared verbatim.
+                          || (c.Valueclass == "axis_args" && c.Error.Type == "ValueError" &&
+                              gotType == "IncorrectShapeException" &&
+                              wantText.StartsWith("shape mismatch: objects cannot be broadcast", StringComparison.Ordinal));
             bool textOk = string.Equals(gotText, wantText, StringComparison.Ordinal);
 
             if (typeOk && textOk)

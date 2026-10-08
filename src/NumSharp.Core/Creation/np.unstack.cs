@@ -21,6 +21,10 @@ namespace NumSharp
         ///     shape equal to <c>x.shape</c> with the <paramref name="axis"/>
         ///     entry removed.
         /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="x"/> is 0-d ("Input array must be at least 1-d.").</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range: moveaxis' "source: axis … is out of
+        ///     bounds for array of dimension …".</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.unstack.html
         ///     <br></br>
@@ -48,8 +52,9 @@ namespace NumSharp
             if (ndim == 0)
                 throw new ValueError("Input array must be at least 1-d.");
 
-            // AxisError parity (moveaxis would raise the same for a bad axis).
-            axis = DefaultEngine.check_and_adjust_axis(ndim, axis);
+            // NumPy's unstack is `tuple(moveaxis(x, axis, 0))`, so a bad axis is moveaxis' "source: axis … is out of
+            // bounds" AxisError.
+            axis = DefaultEngine.check_and_adjust_axis(ndim, axis, "source");
 
             var shape = x.Shape;
             var result = new NDArray[checked((int)shape.dimensions[axis])];

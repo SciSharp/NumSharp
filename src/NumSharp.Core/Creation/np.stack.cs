@@ -14,10 +14,10 @@ namespace NumSharp
         /// <returns>The stacked array has one more dimension than the input arrays: stacking <c>n</c> 0-d arrays gives
         ///     shape <c>(n,)</c>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="arrays"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="arrays"/> is empty, or <paramref name="axis"/> is outside the
-        ///     RESULT's rank (the operands' rank plus one; <c>axis 3 is out of bounds for array of dimension 2</c>).</exception>
-        /// <exception cref="InvalidOperationException">The arrays' shapes differ (<c>all input arrays must have the same
-        ///     shape</c>), checked before the axis.</exception>
+        /// <exception cref="ValueError"><paramref name="arrays"/> is empty (<c>need at least one array to stack</c>), or the
+        ///     arrays' shapes differ (<c>all input arrays must have the same shape</c>, checked before the axis).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the RESULT's rank (the operands' rank plus one;
+        ///     <c>axis 3 is out of bounds for array of dimension 3</c>, the axis as given).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.stack.html
         /// <para>NumPy's statements: <c>if len({arr.shape for arr in arrays}) != 1: raise ValueError(...)</c>, then each
         /// array gets a new axis at <paramref name="axis"/> (normalized against <c>ndim + 1</c>) and the expanded arrays are
@@ -33,14 +33,19 @@ namespace NumSharp
             if (arrays == null)
                 throw new ArgumentNullException(nameof(arrays));
 
+            // `if not arrays: raise ValueError('need at least one array to stack')`.
             if (arrays.Length == 0)
-                throw new ArgumentException("Value cannot be an empty collection.", nameof(arrays));
+                throw new ValueError("need at least one array to stack");
 
             // `shapes = {arr.shape for arr in arrays}; if len(shapes) != 1: raise` — every shape, before the axis.
             var first = arrays[0];
             for (int i = 1; i < arrays.Length; i++)
                 if (!arrays[i].Shape.dimensions.AsSpan().SequenceEqual(first.Shape.dimensions))
-                    throw new InvalidOperationException("all input arrays must have the same shape");
+                    throw new ValueError("all input arrays must have the same shape");
+
+            // `axis = normalize_axis_index(axis, result_ndim)` — NumPy's AxisError against the RESULT's rank, raised once
+            // here (the expansion below then sees an axis in range).
+            axis = Backends.DefaultEngine.check_and_adjust_axis(first.ndim + 1, axis);
 
             // `expanded_arrays = [arr[sl] for arr in arrays]` — the new axis at `axis` of the (ndim + 1)-D result.
             var expanded = new NDArray[arrays.Length];

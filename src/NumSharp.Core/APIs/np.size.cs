@@ -10,7 +10,16 @@ namespace NumSharp
         /// <param name="a">Input data.</param>
         /// <param name="axis">Axis along which the elements are counted. By default, give the total number of elements.</param>
         /// <returns>Number of elements along the specified axis.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ma.size.html</remarks>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.size.html
+        ///     <para>
+        ///     NumPy 2.4's statements: <c>axis = normalize_axis_tuple(axis, len(shape))</c>, then the product of those
+        ///     lengths — so a 0-d input has no axis at all.
+        ///     </para>
+        /// </remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range ("axis … is out of bounds for array of
+        ///     dimension …").</exception>
         public static long size(NDArray a, int? axis = null)
         {
             if (a is null)
@@ -19,10 +28,9 @@ namespace NumSharp
             if (!axis.HasValue)
                 return a.size;
 
-            if (axis.Value <= -1)
-                axis = a.ndim + axis.Value;
-
-            return a.Shape.dimensions[axis.Value];
+            // normalize_axis_tuple's AxisError, on the axis as given: the old wrap-then-index read the dimension array
+            // out of its bounds (IndexOutOfRangeException) for an axis past either end, and a 0-d input.
+            return a.Shape.dimensions[Backends.DefaultEngine.check_and_adjust_axis(a.ndim, axis.Value)];
         }
 
         //based on:

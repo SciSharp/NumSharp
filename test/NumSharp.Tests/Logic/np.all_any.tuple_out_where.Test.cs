@@ -67,12 +67,16 @@ namespace NumSharp.Tests.Logic
             CollectionAssert.AreEqual(new long[] { 3 }, r.shape);
         }
 
+        /// <summary>
+        ///     np.all with a repeated axis in its tuple raises NumPy's ValueError (ufunc.reduce's "duplicate value in
+        ///     'axis'"), after every axis is range-checked.
+        /// </summary>
         [TestMethod]
         public void all_tuple_axis_duplicate_throws()
         {
             // numpy raises ValueError("duplicate value in 'axis'")
             var a = np.ones(new Shape(2, 3, 4));
-            Assert.ThrowsException<ArgumentException>(() => np.all(a, new[] { 0, 0 }));
+            Assert.ThrowsException<ValueError>(() => np.all(a, new[] { 0, 0 }));
         }
 
         [TestMethod]

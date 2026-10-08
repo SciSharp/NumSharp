@@ -19,6 +19,7 @@ namespace NumSharp
         /// https://numpy.org/doc/stable/reference/generated/numpy.roll.html
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>'s rank.</exception>
         [NDScoped]
         public static NDArray roll(NDArray a, long shift, int? axis = null)
         {
@@ -28,11 +29,8 @@ namespace NumSharp
             if (axis == null)
                 return roll(a.ravel(), shift, 0).reshape(Shape.Adopt(a.Shape.dimensions));
 
-            int ax = axis.Value;
-            if (ax < 0) ax += a.ndim;
-            if (ax < 0 || ax >= a.ndim)
-                throw new ArgumentException(
-                    $"axis {axis.Value} is out of bounds for array of dimension {a.ndim}");
+            // normalize_axis_tuple(axis, a.ndim, allow_duplicate=True): NumPy's AxisError, the axis as given.
+            int ax = Backends.DefaultEngine.check_and_adjust_axis(a.ndim, axis.Value);
 
             long n = a.Shape.dimensions[ax];
 

@@ -185,6 +185,8 @@ namespace NumSharp.Backends
         {
             // nanmax / nanmin are fmax.reduce / fmin.reduce in NumPy: a string array gets the fmax / fmin no-loop text.
             Strings.NDStringUfuncs.ThrowIfReduce(op == MinMaxOp.FMax ? "nanmax" : "nanmin", a, axis);
+            // fmax.reduce's axis check, before every shortcut below (empty, 0-d and one-element inputs included).
+            ReductionArguments.CheckReduceAxis(a.ndim, axis);
             var arr = a;
             var shape = arr.Shape;
             var tc = arr.GetTypeCode;
@@ -464,15 +466,23 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Execute a NaN-aware axis reduction.
+        ///     Execute a NaN-aware axis reduction (nansum / nanprod and the NaN min/max family's IL axis route) over a
+        ///     float input of one or more dimensions.
         /// </summary>
+        /// <param name="arr">The input (ndim &gt;= 1: the callers send a 0-d or one-element input elsewhere).</param>
+        /// <param name="axis">The reduced axis; negative values count from the end.</param>
+        /// <param name="keepdims">Whether the reduced axis stays with length one.</param>
+        /// <param name="op">The NaN-aware reduction.</param>
+        /// <returns>The reduced array.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range — NumPy's np.sum / np.prod rule, which the
+        ///     nan functions inherit (they call them on the NaN-replaced copy).</exception>
         private unsafe NDArray ExecuteNanAxisReduction(NDArray arr, int axis, bool keepdims, ReductionOp op)
         {
             var shape = arr.Shape;
 
-            // Normalize axis
-            while (axis < 0) axis = arr.ndim + axis;
-            if (axis >= arr.ndim) throw new ArgumentOutOfRangeException(nameof(axis));
+            // normalize_axis_index, on the axis as given: the wrap-then-test loop this replaces accepted -ndim - 1 and
+            // reduced the last axis instead of raising.
+            axis = check_and_adjust_axis(arr.ndim, axis);
 
             // Get kernel
             var inputType = arr.GetTypeCode;

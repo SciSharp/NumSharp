@@ -110,6 +110,27 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     The axis check of an integer (or absent) <c>axis</c> in <c>PyUFunc_GenericReduction</c>, with no flags built:
+        ///     the guard every reduction runs BEFORE its shortcuts (an empty input, a 0-d or one-element input, an extent-1
+        ///     axis), so a shortcut never answers for an axis NumPy refuses.
+        /// </summary>
+        /// <param name="ndim">The input's rank.</param>
+        /// <param name="axis">The axis, or <c>null</c> for every axis (always valid).</param>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds ("axis … is out of bounds for array of
+        ///     dimension …", the axis as given).</exception>
+        /// <remarks>
+        ///     A 0-d input accepts axis 0 and -1 (NumPy's backward-compatibility special case, see
+        ///     <see cref="AxisFlags(int, int?)"/>) and refuses every other axis. The one-element shortcuts used to run first,
+        ///     so <c>np.prod(np.array(1.5), axis=1)</c> returned 1.5 where NumPy raises.
+        /// </remarks>
+        internal static void CheckReduceAxis(int ndim, int? axis)
+        {
+            if (axis is null || (ndim == 0 && (axis.Value == 0 || axis.Value == -1)))
+                return;
+            DefaultEngine.check_and_adjust_axis(ndim, axis.Value);
+        }
+
+        /// <summary>
         ///     NumPy's conversion of an integer (or absent) <c>axis</c> into reduction flags.
         /// </summary>
         /// <param name="ndim">The input's rank.</param>

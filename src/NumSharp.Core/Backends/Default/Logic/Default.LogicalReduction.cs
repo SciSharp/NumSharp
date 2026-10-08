@@ -254,19 +254,29 @@ namespace NumSharp.Backends
             return nd != 0;
         }
 
-        // Resolve negative axis values, bounds-check, and reject duplicates (NumPy raises
-        // ValueError: "duplicate value in 'axis'").
+        /// <summary>
+        ///     The tuple axis of np.all / np.any (ufunc reduce): every axis normalized first, then the repeat check.
+        /// </summary>
+        /// <param name="axes">The axes as given.</param>
+        /// <param name="ndim">The input's rank.</param>
+        /// <returns>The normalized axes in input order.</returns>
+        /// <exception cref="AxisError">An axis is out of range (the first one, in input order).</exception>
+        /// <exception cref="ValueError">An axis appears twice ("duplicate value in 'axis'").</exception>
+        /// <remarks>
+        ///     NumPy's order: PyUFunc_GenericReduction's tuple branch runs check_and_adjust_axis on every entry, and only
+        ///     then PyUFunc_Reduce's flag array rejects a repeat — so <c>(0, 0, 5)</c> reports the axis 5. A per-entry
+        ///     check-then-repeat loop (this method's old form) reported the repeat.
+        /// </remarks>
         internal static int[] NormalizeAndValidateAxes(int[] axes, int ndim)
         {
             var result = new int[axes.Length];
-            var seen = new HashSet<int>();
             for (int i = 0; i < axes.Length; i++)
-            {
-                int a = NormalizeAxis(axes[i], ndim);
+                result[i] = NormalizeAxis(axes[i], ndim);
+
+            var seen = new HashSet<int>();
+            foreach (int a in result)
                 if (!seen.Add(a))
-                    throw new ArgumentException("duplicate value in 'axis'");
-                result[i] = a;
-            }
+                    throw new ValueError("duplicate value in 'axis'");
             return result;
         }
 

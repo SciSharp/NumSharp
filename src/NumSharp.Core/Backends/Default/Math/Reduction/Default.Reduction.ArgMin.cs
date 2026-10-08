@@ -16,7 +16,8 @@ namespace NumSharp.Backends
         /// <returns>The int64 indices (0-d for the flattened form).</returns>
         /// <exception cref="ArgumentException">An empty line (<c>attempt to get argmin of an empty sequence</c>; NumPy's
         ///     ValueError, which a string array raises as <see cref="ValueError"/>).</exception>
-        /// <exception cref="AxisError">A string array with an out-of-bounds axis.</exception>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is outside the input's rank (rank 1 for a 0-d input, which
+        ///     NumPy ravels first) — checked before anything else, for every dtype.</exception>
         /// <exception cref="StringComputationNotSupportedException">A string array whose lines hold two or more elements:
         ///     NumPy compares the text (the next phase of NumSharp's string support). An empty result or lines of one
         ///     element give their zero indices.</exception>
@@ -36,6 +37,12 @@ namespace NumSharp.Backends
             //the size of what we need to reduce is the size of the shape of the given axis (shape[axis])
             var shape = arr.Shape;
 
+            // PyArray_CheckAxis runs before anything reads the data: the axis is checked against the input's rank — rank 1
+            // for a 0-d input, which NumPy ravels first — so an empty, a one-element and a 0-d input all raise NumPy's
+            // AxisError for an axis out of range (a wrap-then-test loop here used to accept -ndim - 1, return 0 for any
+            // axis of a 0-d or one-element input, and never end for a negative axis of a 0-d input).
+            int? axisChecked = axis_ is null ? (int?)null : check_and_adjust_axis(Math.Max(arr.ndim, 1), axis_.Value);
+
             if (shape.IsEmpty)
                 throw new ValueError("attempt to get argmin of an empty sequence"); // NumPy's ValueError (an ArgumentException)
 
@@ -51,11 +58,7 @@ namespace NumSharp.Backends
                 }
 
                 // Axis specified - check if reducing along zero-size axis
-                var emptyAxis = axis_.Value;
-                while (emptyAxis < 0)
-                    emptyAxis = arr.ndim + emptyAxis;
-                if (emptyAxis >= arr.ndim)
-                    throw new ArgumentOutOfRangeException(nameof(axis_));
+                var emptyAxis = axisChecked.Value;
 
                 if (shape[emptyAxis] == 0)
                 {
@@ -111,12 +114,7 @@ namespace NumSharp.Backends
                 return r.MarkReductionScalar();
             }
 
-            var axis = axis_.Value;
-            while (axis < 0)
-                axis = arr.ndim + axis; //handle negative axis
-
-            if (axis >= arr.ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis));
+            var axis = axisChecked.Value;
             if (shape[axis] == 1)
             {
                 //if the given div axis is 1, result is all zeros

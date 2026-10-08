@@ -35,8 +35,8 @@ namespace NumSharp.Backends
         /// With <paramref name="sumOnly"/>: that sum, as the reduction returned it.</returns>
         /// <exception cref="AxisError"><paramref name="axis_"/> is outside the operand, a 0-d operand included (NumPy
         /// normalizes the axis before any arithmetic, unlike <c>ufunc.reduce</c>).</exception>
-        /// <exception cref="NotSupportedException">A bool input with <c>dtype=bool</c>: NumPy's boolean-subtract
-        /// TypeError, raised by <c>arr - mean</c>.</exception>
+        /// <exception cref="TypeError">A bool input with <c>dtype=bool</c>: NumPy's boolean-subtract TypeError, raised by
+        /// <c>arr - mean</c>.</exception>
         /// <exception cref="ArgumentException"><c>np.std</c> with an integer or bool <paramref name="dtype"/> and a result
         /// that has dimensions: NumPy's <c>sqrt</c> output-cast UFuncTypeError (a 0-d result casts instead).</exception>
         /// <remarks>

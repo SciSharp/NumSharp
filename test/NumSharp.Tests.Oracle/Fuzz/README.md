@@ -279,6 +279,7 @@ python test/oracle/gen_oracle.py multioutput      # full tuple arity + every res
 python test/oracle/gen_oracle.py iter             # ndindex/ndenumerate/nditer/broadcast TRACES (order gate)
 python test/oracle/gen_oracle.py nditer_construct # np.nditer's descriptor construction: casts, copy routes, check order
 python test/oracle/gen_oracle.py nditer_protocol  # np.nditer's state contract: scripted pulls, seeks, setters, index, op_axes
+python test/oracle/gen_oracle.py axis_args        # every axis argument of every axis-taking function, strict error types
 python test/oracle/gen_oracle.py dtype_text       # dtype/scalar/text/tuple result kinds
 python test/oracle/gen_oracle.py errors_full      # the raising cells every value generator skips
 python test/oracle/gen_oracle.py out_where        # ufunc out=/where= x out layout x mask layout
@@ -2114,6 +2115,68 @@ failed after allocating an output leaked that output's pooled buffer to the fina
 `reduce` section's error cases). The tiers leave out a BUFFERED reduction, which NumSharp computes wrongly — pinned
 in `OpenBugs.NditerBufferedReduce.cs`, a port of NumPy's buffered-reduce design to come — and a buffered iterator's
 `index` (NumPy's is uninitialized memory there).
+
+### The axis arguments of every axis-taking function (`axis_args` tier) — 2026-10-08
+
+`axis_args.jsonl` (15,444 cases, `gen_oracle.py axis_args`; the open-bugs rundown's bug 7 and the neighbours its sweep
+found, plan `docs/plans/api-parameter-parity.md` X36). ONE op key, `axis_arg`, whose `params.fn` names the NumPy
+spelling — `sum`, `ndarray.argmax`, `ma.sum`, `linalg.norm`, `fft.fft` — so the replay (`OpRegistry.AxisArgs.cs`) calls
+the NumSharp twin of exactly that spelling: the np.* function, the ndarray method and the numpy.ma function have
+their own axis code in both libraries. Sections:
+
+- every integer-axis function (the reductions, the nan family, the quantile family, sort / argsort / partition,
+  take / take_along_axis / put_along_axis / compress / repeat / delete / insert / append / unique / flip / roll /
+  rollaxis / concatenate / concat / split / array_split / unstack / diff / gradient / trapezoid / unwrap /
+  apply_along_axis / apply_over_axes / trim_zeros / packbits / unpackbits / size / lexsort, np.linalg's norm /
+  vector_norm / vecdot, np.vecdot, np.fft's 1-D transforms and shifts, 20 ndarray methods, 31 numpy.ma functions)
+  with every axis value of a 0-d / 1-D / 2-D / 3-D operand in `[-ndim - 2, ndim + 1]`;
+- the output-rank normalizers (expand_dims, stack, ma's twins) against `ndim + 1`; squeeze over shapes with unit axes;
+- the two-axis functions one axis at a time (swapaxes, moveaxis, rollaxis' start, diagonal / trace and their ndarray
+  and numpy.ma spellings, np.cross' axisa / axisb / axisc / axis, np.linalg.cross);
+- the tuple axes (all / any / average / flip / median / percentile / quantile and their nan twins / ptp / trim_zeros /
+  gradient / apply_over_axes / vector_norm / fftn / ifftn / rfftn / irfftn / fft2 family / fftshift / ifftshift /
+  expand_dims / rot90 / linalg.norm / transpose / permute_dims / moveaxis): repeats direct and through a negative
+  alias, out of range on both sides, empty, partial, full, and a repeat TOGETHER with an out-of-range axis in both
+  orders (NumPy normalizes every axis before it looks for a repeat);
+- a dtype sweep: every integer-axis job's first out-of-range axis on each side, and a far one, for 9 dtypes (a
+  dtype-specific path must not skip the axis check, or must raise NumPy's dtype error first where NumPy does);
+- numpy.ma over MASKED operands (`params.mask` = `every3`, the registry rebuilds the mask) for the out-of-range axes;
+- the stacking family's empty operand list (np.stack / vstack / hstack / dstack / concatenate / column_stack and
+  numpy.ma's twins);
+- np.linalg.tensorsolve's axes, which NumPy uses as LIST VALUES (`allaxes.remove(k)`: a negative axis or one past the
+  rank is Python's ValueError "list.remove(x): x not in list", a repeat is legal), over a permuted identity so every
+  solve is exact;
+- np.pad's dict `pad_width`, whose keys NumPy uses as LIST INDICES (`seq[axis] = …`): 164 cases over 0-d to 3-D operands
+  — out-of-range keys (the list's IndexError), invalid widths (`typing.assert_never`'s AssertionError, a typed array
+  included), bool rows and widths past int64 (`np.asarray(seq)`'s TypeError), negative widths (the ValueError, after
+  every key), overwritten axes, both modes. Each item is encoded `{"k", "t", "v"}` so the replay rebuilds the C# values of
+  the house map.
+
+A numpy.ma result is compared through its data (the operands carry no mask). Held to ZERO excuses and to STRICT error
+types (valueclass `axis_args`): NumPy's `AxisError` / `ValueError` / `IndexError` / `TypeError` must come back as the
+house type of the same name; the ONE house convention kept is NumPy's broadcast `ValueError` ("shape mismatch: objects
+cannot be broadcast…", np.cross over operands whose moved axes leave other shapes), which is NumSharp's
+`IncorrectShapeException` library-wide (the text is compared verbatim). Found by it, all fixed: `np.count_nonzero` /
+`np.squeeze` / the argmax family / cumprod / the nan axis kernels never TERMINATED for a negative axis of a 0-d input
+(the wrap-then-test loop `while (axis < 0) axis += ndim` with ndim 0 — the case watchdog ended the first replay), and
+accepted `-ndim - 1` (wrapping twice to the last axis) where NumPy raises; the prod / max / min / nanmax / nanmin
+one-element shortcuts answered for any axis of a 0-d input; the PyArray_CheckAxis functions reported a 0-d input's
+axis against rank 0 (NumPy ravels it: rank 1); 34 functions of a first probe over a 2-D operand (the tier adds their
+ndarray, numpy.ma and np.fft spellings) raised `ArgumentException` / `ArgumentOutOfRangeException` / the legacy
+parenthesized `AxisOutOfRangeException` / `IndexOutOfRangeException` / a bare `Exception` where NumPy raises
+`AxisError` — the moveaxis / swapaxes / diagonal / cross / average / trim_zeros / unstack texts without NumPy's
+argument prefix; np.split / np.array_split / np.linalg.cross raised an axis error where NumPy leaks the `IndexError` of
+`a.shape[axis]`; `normalize_axis_tuple` REMOVED a repeated axis instead of raising; `np.linalg.vector_norm` over a
+2-tuple computed the spectral norm (norm's matrix branch) and refused a 3-tuple; the quantile family reduced every axis
+for an EMPTY tuple, accepted complex input and subtracted bools before the axis check; `np.gradient(f, null, axes)`
+refused the null spacing; bool subtract / negative raised `NotSupportedException` (NumPy's `TypeError`); np.pad's dict
+keys raised the base `ArgumentException`, checked the axis before the width, and let a negative tuple side through;
+tensorsolve's out-of-range axes surfaced as transpose's "axes don't match array".
+
+The evaluate tier's block C10 (330 cases, the same commit) holds np.evaluate's reductions to the axis rule of the NumPy
+function each stands for: every axis of a 0-d, a 2-D, a strided and an empty child, and a 0-d leaf beside a 2-D one. The
+ufunc kinds took axis 0 / -1 of a 0-d child as an error (NumPy: no axis), and the weighted average omitted np.average's
+"axis: " prefix on both its routes. NumPy's AxisError texts joined that tier's verbatim errors (`_EV_VERBATIM_ERRORS`).
 
 ### Polynomial family (`poly` tier)
 

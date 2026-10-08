@@ -296,6 +296,10 @@ namespace NumSharp.Tests.Math
             Assert.IsTrue(double.IsNegative(r.GetDouble(1)), "NumPy yields -0.0 for negative(False)");
         }
 
+        /// <summary>
+        ///     np.negative raises NumPy's TypeError, verbatim, for a bool input and for an explicit dtype=bool loop (the loop is
+        ///     what NumPy refuses).
+        /// </summary>
         [TestMethod]
         public void Negative_BoolLoop_RaisesNumPyText()
         {
@@ -305,10 +309,10 @@ namespace NumSharp.Tests.Math
                 "The numpy boolean negative, the `-` operator, is not supported, " +
                 "use the `~` operator or the logical_not function instead.";
 
-            var ex1 = Assert.ThrowsException<NotSupportedException>(() => np.negative(np.array(new[] { true })));
+            var ex1 = Assert.ThrowsException<TypeError>(() => np.negative(np.array(new[] { true })));
             Assert.AreEqual(text, ex1.Message);
 
-            var ex2 = Assert.ThrowsException<NotSupportedException>(() =>
+            var ex2 = Assert.ThrowsException<TypeError>(() =>
                 np.negative(np.array(new double[] { 1.0 }), dtype: NPTypeCode.Boolean));
             Assert.AreEqual(text, ex2.Message);
         }

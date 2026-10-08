@@ -281,11 +281,13 @@ namespace NumSharp
 
             if (invreal && shapeless)
             {
-                // irfftn/irfft2 of a 0-d input (or explicit empty axes): NumPy indexes s[-1]/axes[-1] on
-                // an empty list and leaks a plain IndexError. Reproduce it before the subscript below
-                // throws a raw IndexOutOfRangeException.
+                // irfftn/irfft2 with no axis to transform: NumPy evaluates `s[-1] = (a.shape[axes[-1]] - 1) * 2`
+                // right side first, so `axes[-1]` raises — on the caller's TUPLE when axes was given (an explicit
+                // empty `axes=()`: "tuple index out of range"), on the LIST `range(-len(s), 0)` built above when it
+                // was not (a 0-d input: "list index out of range"). Reproduce it before the subscript below throws a
+                // raw IndexOutOfRangeException.
                 if (axesList.Length == 0)
-                    throw new IndexError("list index out of range");
+                    throw new IndexError(axes != null ? "tuple index out of range" : "list index out of range");
                 sList[sList.Length - 1] = (ShapeAt(a, axesList[axesList.Length - 1]) - 1) * 2;
             }
 

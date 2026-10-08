@@ -34,6 +34,20 @@ namespace NumSharp
             return @out is null ? diff.MarkReductionScalar() : WriteOrReturn(diff, @out);
         }
 
+        /// <summary>
+        ///     Range of values (maximum - minimum) over the axes of a tuple: NumPy's
+        ///     <c>np.ptp(a, axis=(…))</c>, i.e. <c>maximum.reduce(a, axis) - minimum.reduce(a, axis)</c>.
+        /// </summary>
+        /// <param name="a">The array.</param>
+        /// <param name="axis">The reduced axes (negative values count from the end), or null for every axis. An empty array
+        ///     reduces nothing (the result is <c>a - a</c>).</param>
+        /// <param name="out">An optional output; the result is written into it and it is returned.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <returns>The range, dtype preserved (integer overflow wraps as in NumPy).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="AxisError">An axis is out of range (a 0-d input has no axis for a tuple to name).</exception>
+        /// <exception cref="ValueError">An axis appears twice ("duplicate value in 'axis'").</exception>
+        /// <exception cref="ArgumentException"><paramref name="out"/> has the wrong shape.</exception>
         [NDScoped]
         public static NDArray ptp(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false)
         {
@@ -45,26 +59,28 @@ namespace NumSharp
             if (a is null) throw new ArgumentNullException(nameof(a));
             Backends.Strings.NDStringUfuncs.ThrowIfReduce("ptp", a, axis, @out);
             if (axis is null) return ptp(a, (int?)null, @out, keepdims);
+
+            // maximum.reduce's tuple axis (PyUFunc_GenericReduction's tuple branch, then PyUFunc_Reduce's flags): every
+            // axis normalized first — NumPy's AxisError, with no 0-d exception for a tuple — then "duplicate value in
+            // 'axis'" (NumPy's ValueError). Checked before the one-axis delegation, which would let (0,) through on a 0-d
+            // input.
+            var flags = Backends.ReductionArguments.AxisFlags(a.ndim, axis);
             if (axis.Length == 1) return ptp(a, (int?)axis[0], @out, keepdims);
 
-            int ndim = a.ndim;
-            var normalized = new int[axis.Length];
-            for (int i = 0; i < axis.Length; i++)
-            {
-                int ax = axis[i];
-                if (ax < 0) ax += ndim;
-                if (ax < 0 || ax >= ndim)
-                    throw new ArgumentOutOfRangeException(nameof(axis),
-                        $"axis {axis[i]} is out of bounds for array of dimension {ndim}");
-                normalized[i] = ax;
-            }
+            // A tuple naming EVERY axis is ufunc.reduce's axis=None (PyUFunc_Reduce reduces the same axis set either
+            // way), so it takes the flat reductions - NumPy's own schedule for the whole operand, one pass each - instead
+            // of the axis-by-axis chain below (four reductions and their temporaries: 7.7 us against 3.8 us on (100, 100)).
+            bool everyAxis = flags.Length > 0;
+            foreach (bool reduced in flags)
+                everyAxis &= reduced;
+            if (everyAxis)
+                return ptp(a, (int?)null, @out, keepdims);
 
-            var sortedDesc = (int[])normalized.Clone();
-            Array.Sort(sortedDesc);
-            for (int i = 1; i < sortedDesc.Length; i++)
-                if (sortedDesc[i] == sortedDesc[i - 1])
-                    throw new ArgumentException("duplicate value in 'axis'");
-            Array.Reverse(sortedDesc);
+            // The reduced axes, highest first, so each keepdims reduction leaves the lower axes' positions unchanged.
+            var sortedDesc = new List<int>(axis.Length);
+            for (int d = flags.Length - 1; d >= 0; d--)
+                if (flags[d])
+                    sortedDesc.Add(d);
 
             NDArray maxRes = a;
             NDArray minRes = a;
@@ -78,14 +94,10 @@ namespace NumSharp
 
             if (!keepdims)
             {
-                var kept = new List<long>(ndim - normalized.Length);
-                for (int i = 0; i < ndim; i++)
-                {
-                    bool reduced = false;
-                    for (int j = 0; j < normalized.Length; j++)
-                        if (normalized[j] == i) { reduced = true; break; }
-                    if (!reduced) kept.Add(a.Shape.dimensions[i]);
-                }
+                var kept = new List<long>(a.ndim - sortedDesc.Count);
+                for (int i = 0; i < a.ndim; i++)
+                    if (!flags[i])
+                        kept.Add(a.Shape.dimensions[i]);
                 diff = diff.reshape(Shape.Adopt(kept.ToArray()));
             }
 

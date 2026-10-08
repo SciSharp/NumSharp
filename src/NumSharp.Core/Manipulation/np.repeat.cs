@@ -211,11 +211,12 @@ namespace NumSharp
         {
             int ndim = a.ndim;
 
-            // NumPy: 0-d input with axis=0/-1 is silently promoted to a 1-d, size-1 array.
+            // NumPy: 0-d input with axis=0/-1 is silently promoted to a 1-d, size-1 array (PyArray_CheckAxis ravels it), so
+            // any other axis is reported against that rank of 1.
             if (ndim == 0)
             {
                 if (axis != 0 && axis != -1)
-                    throw new AxisError(axis, ndim);
+                    throw new AxisError(axis, 1);
                 a = a.reshape(1);
                 ndim = 1;
             }
@@ -254,10 +255,11 @@ namespace NumSharp
         private static unsafe NDArray RepeatPerElementAlongAxis(NDArray a, NDArray repeats, int axis)
         {
             int ndim = a.ndim;
+            // A 0-d input ravels to 1-D first (PyArray_CheckAxis): axis 0 / -1 fit, any other is reported against rank 1.
             if (ndim == 0)
             {
                 if (axis != 0 && axis != -1)
-                    throw new AxisError(axis, ndim);
+                    throw new AxisError(axis, 1);
                 a = a.reshape(1);
                 ndim = 1;
             }

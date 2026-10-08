@@ -23,6 +23,9 @@ namespace NumSharp.Tests.Fuzz
                 return ApplyInstance(op.Substring("ndarray.".Length), p, ops);
             if (op.StartsWith("emath.", StringComparison.Ordinal))
                 return ApplyEmath(op.Substring("emath.".Length), p, ops);
+            // Every axis-taking function under one key, params.fn naming the NumPy spelling (OpRegistry.AxisArgs.cs).
+            if (op == "axis_arg")
+                return AxisArgFromCorpus(p, ops);
             // numpy.polynomial submodules (OpRegistry.Polynomial.cs): module-qualified keys, plan D5.
             if (IsPolynomialOp(op))
                 return ApplyPolynomial(op, p, ops);

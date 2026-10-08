@@ -105,14 +105,22 @@ namespace NumSharp
             ///     separate <c>axisa</c>/<c>axisb</c>/<c>axisc</c> per operand.
             ///     </para>
             /// </remarks>
+            /// <param name="x1">The first operand.</param>
+            /// <param name="x2">The second operand.</param>
+            /// <returns>The cross product, the component axis at <paramref name="axis"/> of the broadcast result.</returns>
+            /// <exception cref="IndexError"><paramref name="axis"/> is out of range for either operand ("tuple index out of
+            ///     range": NumPy indexes <c>x1.shape[axis]</c> before anything else).</exception>
+            /// <exception cref="ValueError">The component axis of either operand does not have length 3.</exception>
             [NDScoped] // reclaims the moveaxis views, the six component products and the pre-moveaxis stack
             public static NDArray cross(NDArray x1, NDArray x2, int axis = -1)
             {
                 // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
                 if (NDMatrixBoundary.Sees(x1, x2))
                     return NDMatrixBoundary.Plain((x1, x2, axis), static s => cross(s.x1, s.x2, s.axis));
-                int a1 = NormalizeAxis(axis, x1.ndim);
-                int a2 = NormalizeAxis(axis, x2.ndim);
+                // `if x1.shape[axis] != 3 or x2.shape[axis] != 3` is NumPy's first statement: Python tuple indexing, so an
+                // axis out of range for either operand is an IndexError (x1's first), not an AxisError.
+                int a1 = ShapeIndex(axis, x1.ndim);
+                int a2 = ShapeIndex(axis, x2.ndim);
 
                 if (x1.Shape.dimensions[a1] != 3 || x2.Shape.dimensions[a2] != 3)
                     throw new ValueError(

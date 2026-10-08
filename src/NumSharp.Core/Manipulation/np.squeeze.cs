@@ -42,23 +42,35 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Input data.</param>
         /// <param name="axis">Selects a subset of the single-dimensional entries in the shape. If an axis is selected with shape entry greater than one, an error is raised.</param>
-        /// <returns>The input array, but with all or a subset of the dimensions of length 1 removed. This is always a itself or a view into a.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.squeeze.html</remarks>
-        /// <exception cref="IncorrectShapeException">If axis is not None, and an axis being squeezed is not of length 1</exception>
+        /// <returns>A view of <paramref name="a"/> without the named axis (a fresh view object, the 0-d case included).</returns>
+        /// <remarks>
+        ///     NumPy's <c>PyArray_ConvertMultiAxis</c> (its integer branch) then <c>PyArray_SqueezeSelected</c>: a 0-d input
+        ///     lets axis 0 and -1 through (no axis is selected, so nothing is removed), every other axis must be in range
+        ///     (<c>normalize_axis_index</c>), and the selected axis must have length one.
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.squeeze.html
+        /// </remarks>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range ("axis … is out of bounds for array of
+        ///     dimension …").</exception>
+        /// <exception cref="ValueError">The selected axis does not have length one ("cannot select an axis to squeeze out
+        ///     which has size not equal to one").</exception>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray squeeze(NDArray a, int axis)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, axis), static s => squeeze(s.a, s.axis));
-            while (axis < 0)
-                axis = a.ndim + axis; //handle negative axis
+            // The backward-compatibility special case of PyArray_ConvertMultiAxis: axis 0 / -1 of a 0-d input selects no
+            // axis. NumPy then returns the array itself; NumSharp returns a fresh view object (as squeeze(NDArray) does for
+            // an array with nothing to remove), so disposing the result never disposes the input.
+            if (a.ndim == 0 && (axis == 0 || axis == -1))
+                return new NDArray(a.Storage.Alias());
 
-            if (axis >= a.ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis));
+            // normalize_axis_index on the axis as given. The wrap-then-test loop this replaces never ended for a negative
+            // axis of a 0-d input, and wrapped -ndim - 1 to the last axis.
+            axis = Backends.DefaultEngine.check_and_adjust_axis(a.ndim, axis);
 
             if (a.Shape.dimensions[axis] != 1)
-                throw new IncorrectShapeException($"Unable to squeeze axis {axis} because it is of length {a.Shape.dimensions[axis]} and not 1.");
+                throw new ValueError("cannot select an axis to squeeze out which has size not equal to one");
 
             // Stride-dropping VIEW (see squeeze(NDArray)) removing ONLY the named axis.
             return SqueezeView(a, a.ndim - 1, onlyAxis: axis);

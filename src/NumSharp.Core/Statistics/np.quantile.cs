@@ -10,6 +10,8 @@ namespace NumSharp
         ///     <paramref name="q"/> must be in the range [0, 1].
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.quantile.html</remarks>
+        /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
+        ///     first statement (before q is read).</exception>
         public static NDArray quantile(NDArray a, double q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
@@ -17,6 +19,8 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
+            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
+            RejectComplexQuantileData(a);
             ValidateQuantile(q);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
@@ -31,6 +35,8 @@ namespace NumSharp
         ///     Compute the q-th quantiles of the data along the specified axis.
         ///     Each value in <paramref name="q"/> must be in [0, 1]. Result's first axis is q.
         /// </summary>
+        /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
+        ///     first statement (before q is read).</exception>
         public static NDArray quantile(NDArray a, double[] q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
@@ -38,6 +44,8 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
+            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
+            RejectComplexQuantileData(a);
             if (q is null) throw new ArgumentNullException(nameof(q));
             for (int i = 0; i < q.Length; i++) ValidateQuantile(q[i]);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
@@ -52,10 +60,14 @@ namespace NumSharp
         /// <summary>
         ///     Compute the q-th quantile, reducing along multiple axes.
         /// </summary>
+        /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
+        ///     first statement (before q is read).</exception>
         public static NDArray quantile(NDArray a, double q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
         {
+            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
+            RejectComplexQuantileData(a);
             ValidateQuantile(q);
             // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
             // text itself (NDStringUfuncs.QuantileAnswer).
@@ -65,10 +77,14 @@ namespace NumSharp
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: true);
         }
 
+        /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
+        ///     first statement (before q is read).</exception>
         public static NDArray quantile(NDArray a, double[] q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
         {
+            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
+            RejectComplexQuantileData(a);
             if (q is null) throw new ArgumentNullException(nameof(q));
             for (int i = 0; i < q.Length; i++) ValidateQuantile(q[i]);
             // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
@@ -99,6 +115,8 @@ namespace NumSharp
         ///     texts).</exception>
         /// <exception cref="StringComputationNotSupportedException">Text data that NumPy partitions (see
         ///     <see cref="Backends.Strings.NDStringUfuncs.QuantileAnswer"/> for the errors it raises first).</exception>
+        /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
+        ///     first statement (before q is read).</exception>
         public static NDArray quantile(NDArray a, NDArray q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
@@ -106,6 +124,8 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
+            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
+            RejectComplexQuantileData(a);
             if (q is null) throw new ArgumentNullException(nameof(q));
             // Text q: NumPy's answer comes from its first statement on q (divide by 100, or the [0, 1] check), before the
             // data or q's rank is looked at.
@@ -124,10 +144,26 @@ namespace NumSharp
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar);
         }
 
+        /// <summary>NumPy's <c>_quantile_is_valid</c> for one quantile: inside <c>[0, 1]</c> (NaN is not).</summary>
+        /// <param name="q">The quantile.</param>
+        /// <exception cref="ValueError"><paramref name="q"/> is outside [0, 1] ("Quantiles must be in the range [0, 1]").</exception>
         private static void ValidateQuantile(double q)
         {
             if (!(q >= 0.0 && q <= 1.0))
-                throw new ArgumentException("Quantiles must be in the range [0, 1]");
+                throw new ValueError("Quantiles must be in the range [0, 1]");
+        }
+
+        /// <summary>
+        ///     The first statement of np.quantile / np.percentile / np.nanquantile / np.nanpercentile:
+        ///     <c>if a.dtype.kind == "c": raise TypeError("a must be an array of real numbers")</c>. np.median and
+        ///     np.nanmedian do not have it (a complex median sorts lexicographically).
+        /// </summary>
+        /// <param name="a">The data operand (null passes; the caller's own null check reports it).</param>
+        /// <exception cref="TypeError"><paramref name="a"/> is complex.</exception>
+        internal static void RejectComplexQuantileData(NDArray a)
+        {
+            if (a is not null && a.typecode == NPTypeCode.Complex)
+                throw new TypeError("a must be an array of real numbers");
         }
 
         private static double[] QArrayFromNDArray(NDArray q)

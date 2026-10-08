@@ -108,13 +108,18 @@ namespace NumSharp.Statistics
             if (ignoreNaN && a.size == 0)
                 return BuildEmptyNanResult(a, axisArr, keepdims, @out);
 
+            // _ureduce normalizes the axis BEFORE the reduction function runs, so an out-of-range or repeated axis is
+            // reported before the boolean subtract below (np.quantile(bool, 0.5, axis=5) is NumPy's AxisError).
+            if (axisArr != null)
+                NormalizeAxes(axisArr, a.ndim);
+
             // NumPy raises TypeError for boolean input with a continuous (interpolating)
             // method: the underlying lerp performs `b - a` and boolean subtraction is
             // unsupported. Discrete methods only index (never subtract), so they are fine;
             // np.median / np.nanmedian coerce through mean() and pass
             // allowBooleanContinuous: true to keep computing a float64 result.
             if (!allowBooleanContinuous && a.typecode == NPTypeCode.Boolean && !IsDiscrete(method))
-                throw new NotSupportedException(
+                throw new TypeError(
                     "numpy boolean subtract, the `-` operator, is not supported, use the "
                     + "bitwise_xor, the `^` operator, or the logical_xor function instead.");
 
@@ -131,7 +136,10 @@ namespace NumSharp.Statistics
             int n;
             long outerSize;
 
-            if (axisArr == null || axisArr.Length == 0)
+            // Only a null axis reduces every axis. An EMPTY tuple reduces none: NumPy's _ureduce keeps every axis and
+            // reshapes to `a.shape[:nkeep] + (-1,)`, a new trailing axis of length 1 (the product of no axes), so each
+            // element is its own slice — the multi-axis branch below does exactly that for zero axes.
+            if (axisArr == null)
             {
                 if (a.ndim == 1 && a.Shape.IsContiguous)        staged = a;
                 else if (a.Shape.IsContiguous)                  staged = a.reshape((long)a.size);
@@ -179,7 +187,7 @@ namespace NumSharp.Statistics
             int qLen = q.Length;
             int outerDims = staged.ndim - 1;
             long[] outShape;
-            if (axisArr == null || axisArr.Length == 0)
+            if (axisArr == null)
             {
                 outShape = qIsScalar ? Array.Empty<long>() : new long[] { qLen };
             }
@@ -353,7 +361,8 @@ namespace NumSharp.Statistics
                                                    NPTypeCode.Double;
 
             int nd = a.ndim;
-            bool reduceAll = axisArr == null || axisArr.Length == 0;
+            // A null axis reduces every axis; an empty tuple reduces none (NumPy's normalize_axis_tuple of () is ()).
+            bool reduceAll = axisArr == null;
             HashSet<int> axes = reduceAll ? null : new HashSet<int>(NormalizeAxes(axisArr, nd));
 
             long[] shapeArr;
@@ -563,22 +572,19 @@ namespace NumSharp.Statistics
             }
         }
 
+        /// <summary>
+        ///     <c>_ureduce</c>'s <c>axis = _nx.normalize_axis_tuple(axis, nd)</c> (median / percentile / quantile and their
+        ///     nan twins): every axis range-checked first, then NumPy's plain "repeated axis".
+        /// </summary>
+        /// <param name="axes">The axes as given.</param>
+        /// <param name="ndim">The input's rank.</param>
+        /// <returns>The normalized axes in input order (empty for an empty tuple).</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">An axis appears twice ("repeated axis" — NumPy passes no argname here).</exception>
         internal static int[] NormalizeAxes(int[] axes, int ndim)
         {
             if (axes.Length == 0) return Array.Empty<int>();
-            var seen = new HashSet<int>();
-            int[] outAx = new int[axes.Length];
-            for (int i = 0; i < axes.Length; i++)
-            {
-                int ax = axes[i];
-                if (ax < 0) ax += ndim;
-                if (ax < 0 || ax >= ndim)
-                    throw new AxisError(axes[i], ndim);
-                if (!seen.Add(ax))
-                    throw new ArgumentException($"repeated axis in axis argument");
-                outAx[i] = ax;
-            }
-            return outAx;
+            return DefaultEngine.normalize_axis_tuple(axes, ndim);
         }
 
         internal static NDArray ApplyKeepdims(NDArray result, NDArray source, int[] axisArr, bool keepdims, bool qIsScalar)
@@ -589,7 +595,9 @@ namespace NumSharp.Statistics
             int srcNd = source.ndim;
 
             long[] outShape;
-            if (axisArr == null || axisArr.Length == 0)
+            // keepdims sets the REDUCED axes to 1: every axis for a null axis, none for an empty tuple (the branch below
+            // keeps each of the result's dimensions then).
+            if (axisArr == null)
             {
                 outShape = new long[qDim + srcNd];
                 if (!qIsScalar) outShape[0] = result.Shape.dimensions[0];

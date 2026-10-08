@@ -93,16 +93,21 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.IsFalse(inv.GetBoolean(0)); // ~True → False (not byte 254)
         }
 
+        /// <summary>
+        ///     np.evaluate's boolean Negate / Subtract nodes raise NumPy's TypeError with its "numpy boolean negative" /
+        ///     "numpy boolean subtract" texts at typing time (they raised NotSupportedException), the same refusal the eager
+        ///     ufuncs give.
+        /// </summary>
         [TestMethod]
         public void Dtypes_BoolErrors_MatchNumPyTexts()
         {
             var b = np.array(new bool[] { true });
 
-            var negEx = Assert.ThrowsException<NotSupportedException>(
+            var negEx = Assert.ThrowsException<TypeError>(
                 () => np.evaluate(NDExpr.Negate(NDExpr.Arr(b))));
             StringAssert.Contains(negEx.Message, "numpy boolean negative");
 
-            var subEx = Assert.ThrowsException<NotSupportedException>(
+            var subEx = Assert.ThrowsException<TypeError>(
                 () => np.evaluate(NDExpr.Subtract(NDExpr.Arr(b), NDExpr.Arr(b))));
             StringAssert.Contains(subEx.Message, "numpy boolean subtract");
         }

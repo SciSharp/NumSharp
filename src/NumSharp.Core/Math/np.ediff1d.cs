@@ -46,8 +46,7 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="ary"/> is null.</exception>
         /// <exception cref="ArgumentException"><paramref name="to_begin"/> or <paramref name="to_end"/> cannot be
         ///     cast to <paramref name="ary"/>'s dtype under <c>same_kind</c>.</exception>
-        /// <exception cref="NotSupportedException"><paramref name="ary"/> is boolean (NumPy forbids boolean
-        ///     subtraction).</exception>
+        /// <exception cref="TypeError"><paramref name="ary"/> is boolean (NumPy's boolean-subtract TypeError).</exception>
         /// <exception cref="TypeError"><paramref name="ary"/> holds fixed-width strings: NumPy's subtract has no string
         ///     loop (<c>ufunc 'subtract' did not contain a loop with signature matching types (dtype('&lt;U2'),
         ///     dtype('&lt;U2')) -&gt; None</c>), raised after the <paramref name="to_begin"/> / <paramref name="to_end"/>
@@ -88,7 +87,7 @@ namespace NumSharp
             // ediff1d differences with subtract for ALL dtypes; NumPy forbids
             // boolean subtraction (np.diff special-cases bool, ediff1d does not).
             if (dt == NPTypeCode.Boolean)
-                throw new NotSupportedException(
+                throw new TypeError(
                     "numpy boolean subtract, the `-` operator, is not supported, " +
                     "use the bitwise_xor, the `^` operator, or the logical_xor function instead.");
 

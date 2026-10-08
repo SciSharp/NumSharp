@@ -8,6 +8,20 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
+        /// <summary>
+        ///     NumPy's <c>np.cumprod</c> (<c>np.multiply.accumulate</c>): the running products along
+        ///     <paramref name="axis_"/>, or along the flattened array when it is null.
+        /// </summary>
+        /// <param name="arr">The array.</param>
+        /// <param name="axis_">The accumulated axis (negative values count from the end), or null for the flattened array. A
+        ///     0-d input is treated as 1-D (NumPy's <c>PyArray_CheckAxis</c>), so only 0 and -1 address it.</param>
+        /// <param name="dtype">The accumulator dtype (<c>dtype=</c>), or null for NEP 50's accumulator of the input.</param>
+        /// <returns>A fresh array of the accumulator dtype: the input's shape with an axis, 1-D for the flattened form (a 0-d
+        ///     input gives shape (1,)).</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range — checked before every shortcut (empty,
+        ///     0-d and one-element inputs included).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A string input or a string <paramref name="dtype"/> that
+        ///     NumPy computes on (the next phase of NumSharp's string support).</exception>
         public override unsafe NDArray ReduceCumMul(NDArray arr, int? axis_, DType dtype = null)
         {
             // Text, or a string dtype= request: NumPy's cumprod checks its arguments first (the axis, and the dtype= class where
@@ -26,6 +40,11 @@ namespace NumSharp.Backends
 
             var shape = arr.Shape;
 
+            // PyArray_CheckAxis, before any shortcut: the axis addresses rank max(ndim, 1) (a 0-d input ravels to 1-D), so
+            // cumprod([5], axis=-3) and cumprod(0-d, axis=1) are NumPy's AxisError, not the value itself. The shortcuts below
+            // used to run first, and the later wrap-then-test loop accepted -ndim - 1 (reducing the last axis).
+            int axisChecked = axis_ is null ? 0 : check_and_adjust_axis(Math.Max(arr.ndim, 1), axis_.Value);
+
             // Empty: cumprod returns a FRESH array of the accumulator dtype (NEP50 widening applies
             // even when empty — cumprod(empty int32) is int64, like cumsum). axis=None ravels to a
             // 1-D (0,) result; with an axis the shape is preserved. Returning `arr` unchanged (as
@@ -34,14 +53,6 @@ namespace NumSharp.Backends
             if (shape.IsEmpty || shape.size == 0)
             {
                 var emptyRetType = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
-                if (axis_ != null)
-                {
-                    int nd = Math.Max(arr.ndim, 1);
-                    int ax = axis_.Value < 0 ? axis_.Value + nd : axis_.Value;
-                    if (ax < 0 || ax >= nd)
-                        throw new ArgumentOutOfRangeException(nameof(axis_),
-                            $"axis {axis_.Value} is out of bounds for array of dimension {nd}");
-                }
 
                 return new NDArray(emptyRetType,
                     axis_ == null ? Shape.Vector(shape.size) : Shape.Adopt(shape.dimensions), false);
@@ -67,12 +78,7 @@ namespace NumSharp.Backends
                 return r;
             }
 
-            var axis = axis_.Value;
-            while (axis < 0)
-                axis = arr.ndim + axis; //handle negative axis
-
-            if (axis >= arr.ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis));
+            var axis = axisChecked;
 
             if (shape[axis] == 1)
             {

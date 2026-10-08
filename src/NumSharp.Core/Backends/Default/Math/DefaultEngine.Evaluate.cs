@@ -637,6 +637,31 @@ namespace NumSharp.Backends
                     $"has the wrong number of dimensions: Found {@out.ndim} but expected {expected}");
         }
 
+        /// <summary>
+        ///     Whether an axis reduction over a 0-d child is NumPy's FLAT reduction: PyUFunc_GenericReduction's integer-axis
+        ///     branch accepts axis 0 / -1 of a 0-d operand as selecting no axis (<c>np.sum(np.array(2.0), axis=0)</c> is
+        ///     <c>2.0</c>), and reports every other axis against rank 0.
+        /// </summary>
+        /// <param name="inputs">The call's array inputs (the child's leaves).</param>
+        /// <param name="kind">The reduction kind.</param>
+        /// <param name="axis">The axis as given.</param>
+        /// <returns><c>true</c> to run the flat reduction instead of the axis route.</returns>
+        /// <remarks>
+        ///     <c>Mean</c> is NOT a ufunc reduction there: NumPy's <c>_mean</c> counts the reduced items first
+        ///     (<c>_count_reduce_items</c> runs <c>normalize_axis_index(0, 0)</c>), so <c>np.mean(0-d, axis=0)</c> raises
+        ///     the AxisError the axis route raises. The child broadcasts its leaves, so it is 0-d exactly when every leaf
+        ///     is (a hoisted 0-d parameter is a leaf too); reading the leaves allocates nothing on the hot axis route.
+        /// </remarks>
+        private static bool ZeroDimAxisIsFlat(NDArray[] inputs, NDExprReduceKind kind, int axis)
+        {
+            if ((axis != 0 && axis != -1) || kind == NDExprReduceKind.Mean)
+                return false;
+            foreach (var leaf in inputs ?? Array.Empty<NDArray>())
+                if (leaf.ndim != 0)
+                    return false;
+            return true;
+        }
+
         private unsafe NDArray EvaluateReduce(NDExprProgram program, NDArray[] inputs, NDArray @out, in NDEvaluateOptions options = default)
         {
             var reduce = program.Reduce;
@@ -662,7 +687,10 @@ namespace NumSharp.Backends
             if (reduce.Kind is NDExprReduceKind.NanMean or NDExprReduceKind.Var or NDExprReduceKind.Std)
                 return EvaluateStatReduce(program, inputs, @out, options);
 
-            if (reduce.Axis is int ax)
+            // A 0-d child with axis 0 / -1 is the FLAT reduction (falls through to it below): PyUFunc_GenericReduction's
+            // integer-axis branch, the rule np.sum / np.prod / np.max / np.min / np.any / np.all (and np.count_nonzero /
+            // np.nansum / np.nanprod, which these kinds stand for) apply. The axis route would raise AxisError there.
+            if (reduce.Axis is int ax && !ZeroDimAxisIsFlat(inputs, reduce.Kind, ax))
                 return EvaluateAxisReduce(program, inputs, @out, ax, options);
 
             var ops = program.IteratorOperands(inputs);
@@ -1056,14 +1084,21 @@ namespace NumSharp.Backends
                     $"(a bit-exact float16/decimal reduction needs a pairwise sum kernel that dtype lacks; " +
                     $"use np.{ReduceUfuncName(reduce.Kind)} directly). Plan P2 M-Half/M-Decimal.");
 
+            // np.nanmean reads its axis through np.sum first (ufunc.reduce's rule: a 0-d child takes axis 0 / -1 as no
+            // axis, the flat answer), where np.var / np.std count the reduced items with normalize_axis_index (which
+            // raises for every axis of a 0-d child): only NanMean drops the axis here.
+            int? axis = reduce.Axis;
+            if (reduce.Kind == NDExprReduceKind.NanMean && materialized.ndim == 0 && axis is 0 or -1)
+                axis = null;
+
             NDArray computed = reduce.Kind == NDExprReduceKind.NanMean
-                ? ExactNanMean(materialized, reduce.Axis, reduce.Keepdims, resultType)
-                : ExactVarStd(materialized, reduce.Axis, reduce.Keepdims, reduce.Ddof,
+                ? ExactNanMean(materialized, axis, reduce.Keepdims, resultType)
+                : ExactVarStd(materialized, axis, reduce.Keepdims, reduce.Ddof,
                               sqrtResult: reduce.Kind == NDExprReduceKind.Std, resultType);
 
             // ExactNanMean/ExactVarStd apply keepdims on the AXIS path (via FinishReduced); a FLAT reduce
             // returns a 0-d scalar, so keep every axis as size 1 here → (1,)*childNdim (plan P2 M5).
-            if (reduce.Axis is null)
+            if (axis is null)
                 computed = KeepdimsFlat(computed, materialized.ndim, reduce.Keepdims);
 
             if (@out is null)
@@ -1072,7 +1107,7 @@ namespace NumSharp.Backends
             // A flat reduction's out must be 0-d (or (1,)*childNdim under keepdims); NumPy rejects a
             // wrong-rank out with this message (same shape as the fold / delegating paths). The axis
             // out shape is checked by np.copyto below.
-            if (reduce.Axis is null)
+            if (axis is null)
                 ValidateFlatReduceOut(@out, materialized.ndim, reduce.Keepdims, ReduceUfuncName(reduce.Kind));
 
             np.copyto(@out, computed);
@@ -1164,7 +1199,9 @@ namespace NumSharp.Backends
                     ? wRt
                     : np.broadcast_to(wRt, prod.Shape).copy();
 
-                nax = avg.Axis is int rawAxis ? NormalizeAxis(rawAxis, prod.ndim) : (int?)null;
+                // np.average's normalize_axis_tuple(axis, a.ndim, argname="axis"): NumPy's AxisError names the argument
+                // ("axis: axis 2 is out of bounds for array of dimension 2").
+                nax = avg.Axis is int rawAxis ? check_and_adjust_axis(prod.ndim, rawAxis, "axis") : (int?)null;
                 avgChildNdim = prod.ndim;                      // the (broadcast) rank — the flat keepdims result is (1,)*avgChildNdim
 
                 num = ExactSumArray(prod, nax, rt);            // Σ(v·w) at rt (pairwise / axis add.reduce)

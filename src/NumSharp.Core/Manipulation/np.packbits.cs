@@ -208,9 +208,10 @@ namespace NumSharp
             int requested = axis.Value;
             if (a.ndim == 0)
             {
-                // A 0-d array has one implicit axis after promotion; NumPy accepts axis 0 or -1.
+                // A 0-d array has one implicit axis after promotion (PyArray_CheckAxis ravels it first), so NumPy accepts
+                // axis 0 or -1 and reports any other against that rank of 1.
                 if (requested != 0 && requested != -1)
-                    throw new AxisError(requested, 0);
+                    throw new AxisError(requested, 1);
                 axis = 0;
                 return a.reshape(1);
             }

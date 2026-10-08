@@ -201,6 +201,10 @@ namespace NumSharp.Tests.Fuzz
 
             switch (op)
             {
+                // The tuple-result axis functions of the axis_args tier (OpRegistry.AxisArgs.cs).
+                case "axis_arg":
+                    return AxisArgTupleFromCorpus(p, ops);
+
                 // np.evaluate(expr, out=): [returned view, whole out base buffer] — the out_where shape.
                 case "evaluate":
                     return EvaluateOutFromCorpus(p, ops);

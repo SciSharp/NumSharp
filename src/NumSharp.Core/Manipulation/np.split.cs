@@ -16,7 +16,11 @@ namespace NumSharp
         /// </param>
         /// <param name="axis">The axis along which to split, default is 0.</param>
         /// <returns>A list of sub-arrays as views into ary.</returns>
-        /// <exception cref="ArgumentException">If indices_or_sections is an integer and does not result in equal division.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="ary"/> is null.</exception>
+        /// <exception cref="IndexError"><paramref name="axis"/> is out of range: NumPy reads <c>ary.shape[axis]</c> first,
+        ///     a Python tuple index ("tuple index out of range"), so a 0-d array refuses every axis.</exception>
+        /// <exception cref="ValueError">The sections do not divide the axis ("array split does not result in an equal
+        ///     division"), or are not positive ("number sections must be larger than 0.").</exception>
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.split.html
         /// </remarks>
@@ -28,18 +32,19 @@ namespace NumSharp
                 return NDMatrixBoundary.WrappedAll((ary, indices_or_sections, axis), static s => split(s.ary, s.indices_or_sections, s.axis));
             if (ary is null) throw new ArgumentNullException(nameof(ary));
 
-            // array_split's argument validation handles section<=0; we validate first
-            // so the equal-division check below doesn't divide by zero (NumPy: raw
-            // int /% 0 throws ZeroDivisionError, but our ArgumentException is clearer
-            // and consistent with array_split's own check).
-            if (indices_or_sections <= 0)
-                throw new ArgumentException("number sections must be larger than 0.");
-
+            // `N = ary.shape[axis]` is NumPy's first statement: the axis is checked before the sections.
             int ax = NormalizeSplitAxis(axis, ary.ndim);
+
+            // array_split's argument validation handles section<=0; we validate here
+            // so the equal-division check below doesn't divide by zero (NumPy: raw
+            // int % 0 throws ZeroDivisionError, but array_split's ValueError is clearer
+            // and is what NumPy raises for the same count one call later).
+            if (indices_or_sections <= 0)
+                throw new ValueError("number sections must be larger than 0.");
 
             long N = ary.Shape.dimensions[ax];
             if (N % indices_or_sections != 0)
-                throw new ArgumentException("array split does not result in an equal division");
+                throw new ValueError("array split does not result in an equal division");
 
             return SplitContext.FromParent(ary, ax).SplitBySections(indices_or_sections);
         }
@@ -71,16 +76,26 @@ namespace NumSharp
         /// https://numpy.org/doc/stable/reference/generated/numpy.array_split.html
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <param name="ary">Array to be divided into sub-arrays.</param>
+        /// <param name="indices_or_sections">The number of sections (sizes differ by at most one).</param>
+        /// <param name="axis">The axis along which to split, default is 0.</param>
+        /// <returns>The sub-arrays, views into <paramref name="ary"/>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="ary"/> is null.</exception>
+        /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range": NumPy's
+        ///     <c>Ntotal = ary.shape[axis]</c> runs first).</exception>
+        /// <exception cref="ValueError"><paramref name="indices_or_sections"/> is not positive ("number sections must be
+        ///     larger than 0.").</exception>
         public static NDArray[] array_split(NDArray ary, int indices_or_sections, int axis = 0)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(ary))
                 return NDMatrixBoundary.WrappedAll((ary, indices_or_sections, axis), static s => array_split(s.ary, s.indices_or_sections, s.axis));
             if (ary is null) throw new ArgumentNullException(nameof(ary));
-            if (indices_or_sections <= 0)
-                throw new ArgumentException("number sections must be larger than 0.");
 
+            // `Ntotal = ary.shape[axis]` first, then `Nsections = int(…); if Nsections <= 0: raise`.
             int ax = NormalizeSplitAxis(axis, ary.ndim);
+            if (indices_or_sections <= 0)
+                throw new ValueError("number sections must be larger than 0.");
             return SplitContext.FromParent(ary, ax).SplitBySections(indices_or_sections);
         }
 
@@ -117,21 +132,20 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Normalises a possibly-negative axis to the [0, ndim) range. Throws when
-        ///     the array is 0-d (no axes to split on) or the axis is out of range.
+        ///     The split family's axis: NumPy reads <c>ary.shape[axis]</c> before anything else, a Python tuple index, so an
+        ///     axis outside <c>[-ndim, ndim)</c> is the IndexError Python raises there — not an AxisError (NumPy never
+        ///     normalizes it first). A 0-d array has the empty shape, which no index fits.
         /// </summary>
+        /// <param name="axis">The axis; negative values count from the end.</param>
+        /// <param name="ndim">The array's rank.</param>
+        /// <returns>The non-negative axis.</returns>
+        /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range").</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static int NormalizeSplitAxis(int axis, int ndim)
         {
-            if (ndim == 0)
-                throw new ArgumentOutOfRangeException(nameof(axis),
-                    $"axis {axis} is out of bounds for array of dimension {ndim}");
-
-            int adjusted = axis < 0 ? axis + ndim : axis;
-            if (adjusted < 0 || adjusted >= ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis),
-                    $"axis {axis} is out of bounds for array of dimension {ndim}");
-            return adjusted;
+            if (axis < -ndim || axis >= ndim)
+                throw new IndexError("tuple index out of range");
+            return axis < 0 ? axis + ndim : axis;
         }
 
         /// <summary>
