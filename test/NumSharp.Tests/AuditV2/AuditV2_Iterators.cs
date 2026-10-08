@@ -69,75 +69,70 @@ public class AuditV2_Iterators
     }
 
     // =====================================================================
-    // T1.2 — Iternext() BUFFERED non-reduce path has no buffer-refill logic
+    // T1.2 — Iternext() BUFFERED non-reduce path had no buffer-refill logic
     // → AccessViolationException on the second buffer fill.
     // File: src/NumSharp.Core/Backends/Iterators/NDIter.cs:1985-2003
     //       src/NumSharp.Core/Backends/Iterators/NDIter.cs:2723-2756 (GetDataPtr)
     //
-    // For BUFFERED + !REDUCE, Iternext() falls through to state.Advance()
-    // which doesn't refill the buffer; GetDataPtr then computes a pointer
-    // past the buffer boundary.
+    // For BUFFERED + !REDUCE, Iternext() fell through to state.Advance()
+    // which did not refill the buffer; GetDataPtr then computed a pointer
+    // past the buffer boundary. FIXED by the windowed buffering (the test is
+    // a regression pin; its [OpenBugs] tag was removed 2026-10-08).
     // =====================================================================
     /// <summary>
     /// T1.2 — BUFFERED non-reduce iteration must work on arrays larger than
-    /// the iterator's BufferSize. NumSharp's Iternext() never refills the
-    /// buffer → AccessViolationException / segfault on second buffer fill.
+    /// the iterator's BufferSize.
     ///
     /// NumPy 2.4.2: np.nditer(arange(20000).astype(int32), op_dtypes=[np.float64],
     /// flags=['buffered'], casting='safe') iterates all 20000 elements correctly.
-    /// NumSharp: AccessViolationException after BufferSize elements (process crash).
     ///
-    /// Note: Test reproduces the bug indirectly by asserting NumSharp yields
-    /// 20000 iterations without throwing. Since the actual repro is an
-    /// AccessViolationException (process crash, not catchable in .NET),
-    /// we wrap in a Func and validate the count.
+    /// FIXED (the windowed buffering: FillBufferWindow / FlushBufferWindow refill a
+    /// buffered operand at every window boundary, NumPy's npyiter_buffered_iternext).
+    /// The audit's NumSharp crashed with an AccessViolationException on the second
+    /// buffer fill, so this test used to look for a refill method by reflection
+    /// instead of iterating; it now walks the whole array, through the engine and
+    /// through np.nditer at a buffer size that crosses many windows, and checks
+    /// every value arrives in order.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.2")]
+    [TestMethod]
     public unsafe void T1_2_Iternext_Buffered_NonReduce_Must_Refill_Buffer()
     {
-        // WARNING: A naive port of this test ("loop until Iternext returns
-        // false") currently triggers an AccessViolationException — an
-        // uncatchable, process-fatal segfault — on the second buffer fill.
-        // That would bring down the entire test runner.
-        //
-        // To make the bug visible WITHOUT segfaulting, we assert that
-        // NumSharp's NDIter exposes a buffer-refill path for non-reduce
-        // buffered iteration. NumPy's npyiter_buffered_iternext
-        // (`numpy/_core/src/multiarray/nditer_templ.c.src:325`) handles this
-        // by refilling READ operands and flushing WRITE operands across
-        // buffer boundaries. NumSharp's public Iternext() at NDIter.cs:1985
-        // has no equivalent — for BUFFERED + non-REDUCE, it falls through
-        // to state.Advance(), and GetDataPtr then reads past the buffer end.
-        //
-        // The assertion: NumSharp must define a member named
-        // BufferedNonReduceIternext (or similar refill path) on NDIterRef
-        // — searching by reflection. When the fix lands and such a method
-        // exists (or Iternext() is rewritten to handle the case), this test
-        // will start passing.
         var src = np.arange(20000).astype(NPTypeCode.Int32);
         var dtypes = new[] { NPTypeCode.Double };
         var opFlags = new[] { NDIterPerOpFlags.READONLY };
 
-        using var it = NDIterRef.MultiNew(
-            1, new[] { src },
-            NDIterGlobalFlags.BUFFERED,
-            NPY_ORDER.NPY_KEEPORDER,
-            NPY_CASTING.NPY_SAFE_CASTING,
-            opFlags,
-            dtypes);
+        using (var it = NDIterRef.MultiNew(
+                   1, new[] { src },
+                   NDIterGlobalFlags.BUFFERED,
+                   NPY_ORDER.NPY_KEEPORDER,
+                   NPY_CASTING.NPY_SAFE_CASTING,
+                   opFlags,
+                   dtypes))
+        {
+            it.IterSize.Should().Be(20000L,
+                "the buffered iterator must still advertise all 20000 elements");
 
-        it.IterSize.Should().Be(20000L,
-            "the buffered iterator must still advertise all 20000 elements");
+            long count = 0;
+            do
+            {
+                double v = *(double*)it.GetDataPtr(0);
+                v.Should().Be(count, "each refilled window must hold the next elements, cast to float64");
+                count++;
+            } while (it.Iternext());
 
-        // NDIterRef is a ref struct; use typeof() rather than GetType().
-        var type = typeof(NDIterRef);
-        var method = type.GetMethod("BufferedNonReduceIternext",
-            System.Reflection.BindingFlags.Instance |
-            System.Reflection.BindingFlags.NonPublic |
-            System.Reflection.BindingFlags.Public);
+            count.Should().Be(20000L);
+        }
 
-        method.Should().NotBeNull(
-            "NDIter must implement BufferedNonReduceIternext (or equivalent buffer-refill logic in Iternext) to safely iterate buffered non-reduce arrays larger than BufferSize. Without it, GetDataPtr reads past the buffer end → AccessViolationException / segfault.");
+        // np.nditer with buffersize=1000: twenty windows.
+        using var w = np.nditer(src, new[] { "buffered" }, op_dtypes: new DType[] { np.float64 }, buffersize: 1000);
+        long n = 0;
+        foreach (var x in w)
+        {
+            x[0].GetDouble(0).Should().Be(n);
+            n++;
+        }
+
+        n.Should().Be(20000L);
     }
 
     // =====================================================================
@@ -245,11 +240,10 @@ public class AuditV2_Iterators
     }
 
     // =====================================================================
-    // T1.24 — NDIter.EnableExternalLoop doesn't validate MULTI_INDEX/HASINDEX.
-    // File: src/NumSharp.Core/Backends/Iterators/NDIter.cs:2852-2857
-    //
-    // NumPy raises ValueError; NumSharp silently sets the flag, leaving the
-    // iterator in an illegal (HasMultiIndex && HasExternalLoop) state.
+    // T1.24 — FIXED. NDIter.EnableExternalLoop did not validate MULTI_INDEX/HASINDEX: it
+    // silently set the flag, leaving the iterator in an illegal (HasMultiIndex &&
+    // HasExternalLoop) state. It now runs NpyIter_EnableExternalLoop's checks (NumPy's
+    // ValueError and text) and resets the iterator, as NumPy's does.
     // =====================================================================
     /// <summary>
     /// T1.24 — EnableExternalLoop must raise an error when MULTI_INDEX or
@@ -258,11 +252,13 @@ public class AuditV2_Iterators
     /// NumPy 2.4.2: np.nditer(a, flags=['multi_index']).enable_external_loop()
     ///   raises ValueError("Iterator flag EXTERNAL_LOOP cannot be used if an
     ///   index or multi-index is being tracked").
-    /// NumSharp: returns true, leaves iterator in HasMultiIndex && HasExternalLoop state.
+    /// NumSharp (fixed): the same ValueError and text.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.24")]
+    [TestMethod]
     public void T1_24_EnableExternalLoop_Must_Reject_MultiIndex()
     {
+        // FIXED (the np.nditer state-contract pass): EnableExternalLoop runs NpyIter_EnableExternalLoop's checks and raises
+        // NumPy's ValueError with its text.
         var a = np.arange(12).reshape(3, 4);
         using var it = NDIterRef.New(
             a,
@@ -273,8 +269,10 @@ public class AuditV2_Iterators
         Exception? captured = null;
         try { it.EnableExternalLoop(); } catch (Exception e) { captured = e; }
 
-        captured.Should().BeOfType<InvalidOperationException>(
+        captured.Should().BeOfType<ValueError>(
             "EXTERNAL_LOOP and MULTI_INDEX are mutually exclusive per NumPy spec");
+        captured!.Message.Should().Be(
+            "Iterator flag EXTERNAL_LOOP cannot be used if an index or multi-index is being tracked");
     }
 
     // =====================================================================
@@ -494,9 +492,10 @@ public class AuditV2_Iterators
     /// NumSharp silently sets EXLOOP, leaving HasIndex && HasExternalLoop in an
     /// illegal combination.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.24")]
+    [TestMethod]
     public void T1_24_EnableExternalLoop_Must_Reject_CIndex()
     {
+        // FIXED with the MultiIndex variant above: NumPy's ValueError, NumPy's text.
         var a = np.arange(12).reshape(3, 4);
         using var it = NDIterRef.New(
             a,
@@ -509,8 +508,10 @@ public class AuditV2_Iterators
         Exception? captured = null;
         try { it.EnableExternalLoop(); } catch (Exception e) { captured = e; }
 
-        captured.Should().BeOfType<InvalidOperationException>(
+        captured.Should().BeOfType<ValueError>(
             "EXTERNAL_LOOP and HASINDEX (C_INDEX / F_INDEX) are mutually exclusive per NumPy spec");
+        captured!.Message.Should().Be(
+            "Iterator flag EXTERNAL_LOOP cannot be used if an index or multi-index is being tracked");
     }
 
     // =====================================================================

@@ -453,12 +453,18 @@ namespace NumSharp.Tests.APIs
             Values(a).Should().Be(Values(b));
         }
 
+        /// <summary>
+        ///     A closed iterator raises NumPy's texts (nditer_pywrap.c): "Iterator is invalid" from the members that need the
+        ///     iterator, "Iterator is past the end" from the position getters and the views — never a .NET-specific error.
+        /// </summary>
         [TestMethod]
         public void NdIter_UseAfterClose_Throws()
         {
             var it = np.nditer(A());
             it.close();
-            new Action(() => _ = it.nop).Should().Throw<InvalidOperationException>();
+            new Action(() => _ = it.nop).Should().Throw<ValueError>().WithMessage("Iterator is invalid");
+            new Action(() => _ = it[0]).Should().Throw<ValueError>().WithMessage("Iterator is past the end");
+            it.finished.Should().BeFalse("NumPy's finished getter reads False on a closed iterator");
         }
 
         [TestMethod]

@@ -217,9 +217,9 @@ strong int64 (the literal reaches `operator +(NDMaskedArray, NDArray)` as a mark
 floats `astype(object)` makes of them (`1.732421875`, not `1.732`).
 
 Open: a 0-d result NumPy returns as a plain
-scalar stays a 0-d masked array; `np.nditer` over strings; `argwhere` / `flatnonzero` / `unravel_index` result layout (views in NumPy,
+scalar stays a 0-d masked array; `argwhere` / `flatnonzero` / `unravel_index` result layout (views in NumPy,
 `OpenBugs.IndexSearchLayout.cs`). (An empty matrix's QR / SVD without the OpenBLAS backend is NumPy's answer since
-2026-10-08: see "The BLAS/LAPACK API surface".)
+2026-10-08: see "The BLAS/LAPACK API surface". `np.nditer` iterates strings since 2026-10-08: see "Iteration".)
 **Trap:** NumPy's ufunc dispatch cache makes some answers depend on call HISTORY (`np.prod(int8, dtype='U')` names no
 loop in a fresh process but finds the string repeat loop after `np.multiply(u, int8, dtype='U')`); the corpus records
 the fresh-process answer. **Movement perf** (NPY/NS, two pinned P-cores, 100K / 1M `<U8`): copy 5.0 / 3.7×, strided /
@@ -2990,6 +2990,31 @@ behaviour.
 ### Iteration
 `nditer`, `ndenumerate`, `ndindex`, `nested_iters`, `flatiter` (plus the pre-existing `broadcast`), and
 the NumSharp-extension typed forms `nditer<T>` / `nditer_chunks<T>`
+
+**`np.nditer` carries NumPy's descriptors** (2026-10-08, the open-bugs rundown's bug 6; plan
+`docs/plans/api-parameter-parity.md` X35). Construction is NumPy's (`NDIterRef.AdvancedNew(..., opDescrs)`,
+`Backends/Iterators/NDIter.Descriptors.cs`): `npyiter_check_casting`'s read and write-back checks, the copy routes of
+`npyiter_allocate_arrays` (a read-only 0-d cast operand, `copy`, `updateifcopy` written back at `close()`), the
+"required copying or buffering" TypeError, allocated outputs laid out in the settled order (reused when the up-front
+allocation already has it), and fixed-width strings: 0-d `S` / `U` views, buffered / copy-route conversions between
+widths and between `S` and `U` (ASCII; text ↔ number is phase 2's `StringComputationNotSupportedException`). The
+wrapper (`APIs/np.nditer.cs`) is `nditer_pywrap.c`: the started / finished flags (advance-on-entry pulls), every
+getter's and setter's checks and texts ("Iterator is past the end", "Iterator is invalid", the delayed-allocation
+text), `it[i] = v` packing a Python int with NumPy's range check, NumPy's write flags on the views; `np.nested_iters`
+splits flags and dtypes per level (`NpyIter_NestedIters`: a buffered cast lands in the innermost level). Three engine
+rules a port must keep: **the flat index rides its own strides** (`NDIterState.IndexStrides`, NumPy's index
+"operand" — permuted, flipped and merged with the axes, so an index-tracking iterator coalesces when the index allows
+and `remove_multi_index` cannot break it; it used to be recomputed from coordinates, which counted an `f_index` in C
+order after a coalesce); **`shape` without a multi-index lists the iterator's axes innermost first** (NumPy's axisdata
+order); **`remove_multi_index` only coalesces** (a forced C / F order keeps walking that order). On the descriptor
+path the K-order sort is NumPy's `npyiter_find_best_axis_ordering` (`NDIterCoalescing.FindBestAxisOrderingNumPy`: a
+zero stride is ambiguous, C order wins a conflict — no broadcast fallback to C); the internal callers keep the
+min-stride sort. The op_axes reduction checks are `npyiter_check_reduce_ok_and_set_flags` (innermost axis first; an
+explicit reduction axis needs no `reduce_ok`). **Open:** a BUFFERED reduction computes wrong values for every dtype
+(the legacy double loop; `OpenBugs.NditerBufferedReduce.cs`) — a port of NumPy's buffered-reduce design is the fix.
+Gates: `nditer_construct.jsonl` (9,574), `nditer_protocol.jsonl` (1,219), the string oracle's `striter` section,
+`APIs/np.nditer.NumPyParity.Test.cs`. Perf (NPY/NS): construction 1.67–1.90×, index walks ~13×; a construction that
+allocates an output 0.96× (the `np.zeros` floor), a per-element string walk 0.14× (the per-element view floor below).
 
 **`np.nested_iters(op, axes, flags=null, op_flags=null, op_dtypes=null, order='K', casting="safe",
 buffersize=0)` → `NDIterator[]`** — the port of NumPy's `NpyIter_NestedIters` (`nditer_pywrap.c`).

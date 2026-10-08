@@ -26,13 +26,11 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.nested_iters.html
         ///     <para>
-        ///     Parity: the <c>multi_index</c> path — the documented primary use — is bit-exact with NumPy
-        ///     2.4.2 across single/multiple operands, any axis order, and any nesting depth (coordinates
-        ///     AND values pair identically). One KNOWN divergence: WITHOUT <c>multi_index</c>, the pure
-        ///     value-stream TRAVERSAL ORDER can differ, because NumSharp's underlying <see cref="NDIterator"/>
-        ///     currently reorders <c>op_axes</c> iteration by memory (F-like) regardless of the <c>order</c>
-        ///     argument, where NumPy follows <c>order</c> (C/F/K). This is a pre-existing NDIter <c>op_axes</c>
-        ///     limitation, not a property of the nesting itself; track <c>multi_index</c> for order parity.
+        ///     Parity: the levels are built as NumPy's <c>NpyIter_NestedIters</c> builds them — only the innermost level
+        ///     is buffered (and keeps <c>external_loop</c>); with buffering, a requested dtype moves to that level
+        ///     (the outer levels iterate the operand as it is); copies and allocated outputs are made by the first
+        ///     level and shared by the rest. The value streams and multi-indices match NumPy 2.4.2, fixed-width strings
+        ///     included (buffered width and class conversions on the inner level).
         ///     </para>
         /// </remarks>
         public static NDIterator[] nested_iters(
@@ -74,32 +72,109 @@ namespace NumSharp
                 throw new ArgumentException("Must provide at least one operand");
             int nop = op.Length;
 
-            // Outer levels drop external_loop/buffered; the innermost keeps them and gets the
-            // buffersize — exactly as NpyIter_NestedIters splits flags_inner from flags.
+            // Only the innermost level is buffered (and keeps external_loop): NpyIter_NestedIters splits flags_inner
+            // from the outer levels' flags, and common_dtype is the first level's alone.
             var outerFlags = FilterFlags(flags, "external_loop", "buffered");
             var innerFlags = FilterFlags(flags, "common_dtype");
+            bool buffered = flags != null && Array.IndexOf(flags, "buffered") >= 0;
+
+            // NpyIter_NestedIters' per-operand split. Done only for well-formed per-operand arguments (a malformed one is
+            // passed through, for NDIterator to raise NumPy's error about it):
+            //  - ALLOCATE is dropped from an operand the caller passed (it marks exactly the allocated outputs);
+            //  - the innermost level never copies or allocates (its operands are the first level's);
+            //  - with buffering and no copy route, the REQUESTED dtype moves to the innermost (buffered) level — the outer
+            //    levels iterate the operand as it is, so they need neither a cast nor its buffering — and the outer
+            //    levels drop nbo / aligned / contig with it.
+            string[][] outerOpFlags = op_flags;
+            string[][] innerOpFlags = op_flags;
+            DType[] outerDtypes = op_dtypes;
+            DType[] innerDtypes = op_dtypes;
+            bool[] allocatedOutput = new bool[nop];
+            bool flagsWellFormed = op_flags == null || ((op_flags.Length == 1 || op_flags.Length == nop) &&
+                                                         Array.TrueForAll(op_flags, f => f != null));
+            if (flagsWellFormed && (op_dtypes == null || op_dtypes.Length == nop))
+            {
+                outerOpFlags = new string[nop][];
+                innerOpFlags = new string[nop][];
+                outerDtypes = op_dtypes == null ? null : (DType[])op_dtypes.Clone();
+                // NumPy starts the innermost requests empty: without buffering it iterates the first level's operands
+                // (their copies already hold the requested dtype).
+                innerDtypes = op_dtypes == null ? null : new DType[nop];
+                for (int i = 0; i < nop; i++)
+                {
+                    // npyiter_convert_ops: one list for every operand, NumPy's defaults when there is none.
+                    var given = op_flags == null ? null : op_flags.Length == 1 ? op_flags[0] : op_flags[i];
+                    var f = given != null
+                        ? new List<string>(given)
+                        : op[i] is null ? new List<string> { "writeonly", "allocate" } : new List<string> { "readonly" };
+                    if (op[i] is not null)
+                        f.RemoveAll(x => x == "allocate");
+                    allocatedOutput[i] = f.Contains("allocate");
+
+                    innerOpFlags[i] = f.FindAll(x => x != "copy" && x != "updateifcopy" && x != "allocate").ToArray();
+                    if (buffered && !f.Contains("copy") && !f.Contains("updateifcopy") && !f.Contains("allocate"))
+                    {
+                        f.RemoveAll(x => x == "nbo" || x == "aligned" || x == "contig");
+                        if (op_dtypes != null)
+                        {
+                            innerDtypes[i] = outerDtypes[i];
+                            outerDtypes[i] = null;
+                        }
+                    }
+
+                    outerOpFlags[i] = f.ToArray();
+                }
+            }
 
             var iters = new NDIterator[nnest];
             NDArray[] sharedOps = op;
             for (int inest = 0; inest < nnest; inest++)
             {
-                // Every operand uses this level's axes as its op_axes entry.
+                // Every operand uses this level's axes as its op_axes entry — except an allocated output, which the
+                // first level broadcasts naturally and every later level walks as a reduction (all axes -1).
                 var opAxes = new int[nop][];
                 for (int o = 0; o < nop; o++)
-                    opAxes[o] = axes[inest];
+                {
+                    if (allocatedOutput[o])
+                    {
+                        if (inest == 0)
+                        {
+                            opAxes[o] = null;
+                        }
+                        else
+                        {
+                            var negones = new int[axes[inest].Length];
+                            Array.Fill(negones, -1);
+                            opAxes[o] = negones;
+                        }
+                    }
+                    else
+                    {
+                        opAxes[o] = axes[inest];
+                    }
+                }
 
                 bool innermost = inest == nnest - 1;
                 iters[inest] = new NDIterator(
                     sharedOps,
                     innermost ? innerFlags : outerFlags,
-                    op_flags, op_dtypes, order, casting,
+                    innermost ? innerOpFlags : outerOpFlags,
+                    innermost ? innerDtypes : outerDtypes,
+                    order, casting,
                     opAxes, null,
                     innermost ? buffersize : 0);
 
                 // Share iter0's (possibly allocated/processed) operands with the rest, so every level
-                // iterates the SAME buffer — the invariant the base-pointer re-base relies on.
+                // iterates the SAME buffer — the invariant the base-pointer re-base relies on. The later levels make no
+                // copies of their own and resolve no common dtype (NumPy clears copy / updateifcopy / common_dtype).
                 if (inest == 0)
+                {
                     sharedOps = iters[0].operands;
+                    outerFlags = FilterFlags(outerFlags, "common_dtype");
+                    if (outerOpFlags != null && !ReferenceEquals(outerOpFlags, op_flags))
+                        for (int o = 0; o < nop; o++)
+                            outerOpFlags[o] = Array.FindAll(outerOpFlags[o], x => x != "copy" && x != "updateifcopy");
+                }
             }
 
             // Switch all levels to advance-on-entry, link the chain, then run the initial re-base

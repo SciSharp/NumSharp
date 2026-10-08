@@ -12,13 +12,17 @@ namespace NumSharp
         public unsafe partial class NDIterator
         {
             /// <summary>
-            ///     Enroll this iterator in a nested group: switch to advance-on-entry iteration and record
-            ///     the inner level (null for the innermost) that this level re-bases on each advance.
+            ///     Enroll this iterator in a nested group: mark it nested and record the inner level (null for the innermost)
+            ///     that this level re-bases on each advance and seek.
             /// </summary>
+            /// <param name="child">The next inner level, or null for the innermost.</param>
+            /// <remarks>
+            ///     The started / finished flags are left as construction set them (NumPy's <c>NpyIter_NestedIters</c> sets
+            ///     both for an empty level, neither otherwise); the initial re-base cascade then sets every child's.
+            /// </remarks>
             internal void SetupNested(NDIterator child)
             {
                 _nestedMode = true;
-                _started = false;
                 _nestedChild = child;
             }
 
@@ -42,23 +46,27 @@ namespace NumSharp
                     var cit = child.Borrow();
                     cit.ResetBasePointers(baseptrs);
                     child._cachedNext = cit.PeekCachedIterNext();
-                    child._started = false;
-                    child._exhausted = cit.IterSize == 0;
+                    // NpyIter_ResetBasePointers allocates delayed buffers; npyiter_resetbasepointers then restarts the child:
+                    // finished (and started) at once when it has nothing to visit.
+                    child._reduceDelayPending = false;
+                    child._started = child._finished = cit.IterSize == 0;
 
                     parent = child;
                 }
             }
 
             /// <summary>
-            ///     Advance-on-entry MoveNext (NumPy's <c>npyiter_next</c>): the first pull publishes the start
-            ///     position WITHOUT advancing; every later pull advances (reusing <see cref="iternext"/>,
-            ///     which cascades the re-base) then publishes. This is what NumSharp's default
-            ///     publish-then-advance <see cref="MoveNext"/> cannot provide — it would misalign the in-body
-            ///     <see cref="multi_index"/> and re-base the child one step early.
+            ///     MoveNext for a nested level — NumPy's <c>npyiter_next</c>, as the plain <see cref="MoveNext"/>: the first
+            ///     pull publishes the start position WITHOUT advancing; every later pull advances (reusing
+            ///     <see cref="iternext"/>, which cascades the re-base to the inner levels) then publishes. Advance-on-entry is
+            ///     what keeps the in-body <see cref="multi_index"/> aligned and re-bases the child at the parent's CURRENT
+            ///     position while the parent's body runs.
             /// </summary>
+            /// <returns>True when a value was published; false at the end.</returns>
             private bool MoveNextNested()
             {
-                if (_state == null || _exhausted)
+                // An empty level starts finished (construction / the parent's re-base set the flag).
+                if (_state == null || _finished)
                 {
                     Current = null;
                     return false;
@@ -66,17 +74,11 @@ namespace NumSharp
 
                 if (_started)
                 {
-                    if (!iternext())    // advances, cascades the re-base, and flags _exhausted at the end
+                    if (!iternext())    // advances, cascades the re-base, and sets _finished at the end
                     {
                         Current = null;
                         return false;
                     }
-                }
-                else if (Borrow().IterSize == 0)   // empty from the start
-                {
-                    _exhausted = true;
-                    Current = null;
-                    return false;
                 }
 
                 _started = true;

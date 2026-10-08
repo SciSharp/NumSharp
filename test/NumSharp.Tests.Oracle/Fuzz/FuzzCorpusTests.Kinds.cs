@@ -709,7 +709,9 @@ namespace NumSharp.Tests.Fuzz
             // A tier that holds NumPy's exception TYPE as part of its contract (the empty-operand linalg tier: NumPy's
             // ValueError / LinAlgError / TypeError each have a house exception of the same name) accepts only that exact
             // name; every other tier keeps the class-level map, where a regression to a looser type would pass unseen.
-            bool strictType = c.Valueclass == "linalg_empty";
+            // np.nditer's construction tier holds NumPy's ValueError / TypeError the same way.
+            bool strictType = c.Valueclass == "linalg_empty" || c.Valueclass == "nditer_construct" ||
+                              c.Valueclass == "nditer_protocol";
             bool typeOk = gotType == c.Error.Type
                           || (!strictType && (!ErrorTypeMap.TryGetValue(c.Error.Type, out var allowed)
                                               || allowed.Contains(gotType)));

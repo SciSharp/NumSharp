@@ -20053,6 +20053,712 @@ def gen_polyroots():
     return cases, host
 
 
+# ---------------------------------------------------------------------------
+# T-nditer-construct — np.nditer's DESCRIPTOR construction (the open-bugs rundown's bug 6 and its numeric neighbours):
+# npyiter_check_casting's read / write-back cast checks, npyiter_allocate_arrays' copy routes (a read-only 0-d operand
+# copied whatever the flags say, a `copy` / `updateifcopy` operand copied into a temporary laid out in the iterator's
+# order and written back at close), the "required copying or buffering" TypeError, the common dtype of
+# npyiter_get_common_dtype, NumPy's per-operand flag checks in their order, and the iteration PROTOCOL (npyiter_next
+# advances on ENTRY, so a buffered readwrite loop's last write of every buffer reaches the array; journey4's SU42).
+#
+# One op, "nditer_construct": the operands are built over a CLEAN value pool (small integers every dtype holds exactly,
+# so a cast's VALUE is never the question — the astype tiers own those) and replayed through np.nditer with the case's
+# flags / op_flags / op_dtypes / casting / order / buffersize. Per operand the tuple records three slots, in order:
+#   [values]   the stream of it[i] in iteration order, as an array of the ITERATION dtype (empty when the operand is
+#              not read);
+#   [operand]  it.operands[i] right after construction — the temporary of a copy route, the allocated output, or the
+#              operand itself (empty when the operand is only written: NumPy's write-only temporary is uninitialized);
+#   [after]    the caller's array after the iterator closed (a write-back route or a readwrite operand changed it).
+# A `write` case stores the step index k into operand 0 at every step (x[...] = k), so the write-backs are observable.
+# Held to ZERO excuses with STRICT error types (valueclass "nditer_construct").
+NC_DTYPES = ["bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float16", "float32",
+             "float64", "complex128"]
+NC_CASTINGS = ["no", "equiv", "safe", "same_kind", "unsafe"]
+NC_CLEAN = [0, 1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79]
+
+# name -> (base length, view builder over the 1-D base)
+NC_LAYOUTS = {
+    "c1": (6, lambda b: b),
+    "c2": (12, lambda b: b.reshape(3, 4)),
+    "f2": (12, lambda b: b.reshape(4, 3).T),
+    "t3": (24, lambda b: b.reshape(2, 3, 4).transpose(1, 2, 0)),
+    "s1": (12, lambda b: b[::2]),
+    "s2": (24, lambda b: b.reshape(4, 6)[::2, 1::2]),
+    "r1": (6, lambda b: b[::-1]),
+    "r2": (12, lambda b: b.reshape(3, 4)[::-1, ::-1]),
+    "o1": (8, lambda b: b[2:6]),
+    "col": (12, lambda b: b.reshape(3, 4)[:, 1]),
+    "z0": (5, lambda b: b[3, ...]),
+    "one": (5, lambda b: b[2:3]),
+    "bc": (4, lambda b: np.broadcast_to(b, (3, 4))),
+    "e1": (0, lambda b: b),
+}
+
+
+def _nc_base(dt, n, seed=0):
+    vals = [NC_CLEAN[(seed + i) % len(NC_CLEAN)] for i in range(n)]
+    if np.dtype(dt).kind == "b":
+        return np.array([v % 2 == 1 for v in vals], dtype=dt)
+    return np.array(vals, dtype=dt)
+
+
+def _nc_operand(dt, layout, seed=0):
+    n, build = NC_LAYOUTS[layout]
+    base = _nc_base(dt, n, seed)
+    return base, build(base)
+
+
+def _nc_run(views, flags, op_flags, op_dtypes, casting, order, buffersize, write):
+    """NumPy's answer for one construction + walk: the per-operand (values, operand, after) slots."""
+    kw = {}
+    if flags is not None:
+        kw["flags"] = flags
+    if op_flags is not None:
+        kw["op_flags"] = op_flags
+    if op_dtypes is not None:
+        # The C# API takes DType DESCRIPTORS (np.dtype objects), so the request is passed as np.dtype objects too:
+        # NumPy's malformed-sequence text quotes the first entry's repr ('dtype('float64')' for a descriptor).
+        kw["op_dtypes"] = [None if d is None else np.dtype(d) for d in op_dtypes]
+    it = np.nditer(views if len(views) > 1 else views[0], casting=casting, order=order, buffersize=buffersize, **kw)
+    nop = it.nop
+    dtypes = it.dtypes
+    reads, writes = [], []
+    per_op = op_flags if (op_flags is not None and len(op_flags) == nop and isinstance(op_flags[0], list)) else \
+        [op_flags if op_flags is not None else None] * nop
+    for i in range(nop):
+        f = per_op[i] if per_op[i] is not None else (["writeonly", "allocate"] if views[i] is None else ["readonly"])
+        reads.append(("readonly" in f) or ("readwrite" in f))
+        writes.append(("writeonly" in f) or ("readwrite" in f))
+    snaps = [it.operands[i].copy() if reads[i] else np.empty(0, dtypes[i]) for i in range(nop)]
+    streams = [[] for _ in range(nop)]
+    with it:
+        k = 0
+        for x in it:
+            xs = (x,) if nop == 1 else x
+            for i in range(nop):
+                if reads[i]:
+                    streams[i].append(xs[i].copy())
+            if write:
+                xs[0][...] = k
+            k += 1
+        results = []
+        for i in range(nop):
+            vals = np.array(streams[i], dtype=dtypes[i]) if streams[i] else np.empty(0, dtypes[i])
+            results.append(vals)
+            results.append(snaps[i])
+    after = [np.asarray(v).copy() if v is not None else np.empty(0, dtypes[i]) for i, v in enumerate(views)]
+    out = []
+    for i in range(nop):
+        out += [results[2 * i], results[2 * i + 1], after[i]]
+    return out
+
+
+def _nc_case(cases, name, pairs, params, layout):
+    views = [v for _, v in pairs]
+    operands = [describe(b, v) for b, v in pairs if b is not None]
+    cid = f"nditer_construct/{name}/{len(cases)}"
+    try:
+        slots = _nc_run(views, params.get("flags"), params.get("op_flags"), params.get("op_dtypes"),
+                        params["casting"], params["order"], params["buffersize"], params["write"])
+    except Exception as e:  # noqa: BLE001 — NumPy's error, type and text, IS the contract
+        cases.append({"id": cid, "op": "nditer_construct", "params": params, "operands": operands,
+                      "expected": {"kind": "tuple"}, "expects_throw": True, "error": _exc(e),
+                      "layout": layout, "valueclass": "nditer_construct"})
+        return
+    cases.append({"id": cid, "op": "nditer_construct", "params": params, "operands": operands,
+                  "expected": _tuple_expected(slots), "layout": layout, "valueclass": "nditer_construct"})
+
+
+def _nc_params(flags=None, op_flags=None, op_dtypes=None, casting="safe", order="K", buffersize=0, write=False,
+               none_ops=None):
+    p = {"casting": casting, "order": order, "buffersize": buffersize, "write": write}
+    if flags is not None:
+        p["flags"] = flags
+    if op_flags is not None:
+        p["op_flags"] = op_flags
+    if op_dtypes is not None:
+        p["op_dtypes"] = op_dtypes
+    if none_ops:
+        p["none_ops"] = none_ops   # operand positions that are None (outputs the iterator allocates)
+    return p
+
+
+# The single-operand modes: (name, flags, op_flags, write)
+NC_MODES = [
+    ("plain", None, None, False),
+    ("buffered", ["buffered"], None, False),
+    ("copy", None, ["readonly", "copy"], False),
+    ("uic", None, ["readwrite", "updateifcopy"], True),
+    ("brw", ["buffered"], ["readwrite"], True),
+]
+
+
+def gen_nditer_construct():
+    import warnings
+    warnings.simplefilter("ignore")   # complex -> real casts warn (ComplexWarning); the value is still the contract
+    cases = []
+
+    # A. every (dtype, request, casting, mode) on a 1-D operand and on a 0-d one (the 0-d read-only auto copy).
+    for layout in ("c1", "z0"):
+        for s in NC_DTYPES:
+            for req in [None] + NC_DTYPES:
+                for casting in NC_CASTINGS:
+                    if req is None and casting not in ("safe",):
+                        continue
+                    for mname, flags, op_flags, write in NC_MODES:
+                        if layout == "z0" and mname in ("brw",):
+                            continue
+                        pair = _nc_operand(s, layout)
+                        params = _nc_params(flags=flags, op_flags=op_flags,
+                                            op_dtypes=None if req is None else [req], casting=casting, write=write)
+                        _nc_case(cases, f"{mname}/{layout}/{s}->{req}/{casting}", [pair], params, layout)
+
+    # B. the copy routes and buffered casts over every layout and both K / C orders (the temporary's layout follows the
+    # iterator's order; a flipped axis is walked backward through it), plus small buffers for the protocol.
+    pairs_b = [("int64", "float64", "safe"), ("float32", "float64", "safe"), ("int32", "int16", "unsafe"),
+               ("float64", "float32", "same_kind"), ("uint8", "int8", "same_kind"), ("int16", "int16", "safe")]
+    for layout in NC_LAYOUTS:
+        for (s, req, casting) in pairs_b:
+            for mname, flags, op_flags, write in NC_MODES:
+                for order in ("K", "C", "F"):
+                    fl = list(flags) if flags else []
+                    if layout == "e1":
+                        fl.append("zerosize_ok")
+                    pair = _nc_operand(s, layout, seed=3)
+                    params = _nc_params(flags=fl or None, op_flags=op_flags, op_dtypes=[req], casting=casting,
+                                        order=order, write=write)
+                    _nc_case(cases, f"lay/{mname}/{layout}/{s}->{req}/{order}", [pair], params, layout)
+                    if mname == "brw" and layout in ("c1", "c2", "f2", "r2", "s1", "t3"):
+                        for bs in (2, 3, 4, 5):
+                            params = _nc_params(flags=fl, op_flags=op_flags, op_dtypes=[req], casting=casting,
+                                                order=order, write=write, buffersize=bs)
+                            _nc_case(cases, f"buf{bs}/{mname}/{layout}/{s}->{req}/{order}", [pair], params, layout)
+
+    # C. two operands: common_dtype (unbuffered: a cast operand needs buffering; buffered: both iterate as the common
+    # dtype), an allocated output inferring its dtype from the read operands, and a cast on one operand only.
+    pairs_c = [("int8", "float32"), ("int64", "float64"), ("uint8", "int8"), ("bool", "int16"), ("int32", "uint32"),
+               ("float16", "int8"), ("int64", "uint64"), ("complex128", "float32"), ("int16", "int16")]
+    for (sa, sb) in pairs_c:
+        pa = _nc_operand(sa, "c2", seed=1)
+        pb = _nc_operand(sb, "c1", seed=5)
+        pb = (pb[0], pb[1][:4])   # broadcasts against (3, 4)
+        for fl in (["common_dtype"], ["common_dtype", "buffered"], ["buffered"], None):
+            _nc_case(cases, f"pair/{sa},{sb}/{'+'.join(fl) if fl else 'none'}", [pa, pb], _nc_params(flags=fl), "pair")
+        # an allocated output (None): its dtype is the common dtype of the READ operands
+        _nc_case(cases, f"alloc/{sa},{sb}", [pa, pb, (None, None)],
+                 _nc_params(none_ops=[2]), "alloc")
+        _nc_case(cases, f"alloc_req/{sa},{sb}", [pa, pb, (None, None)],
+                 _nc_params(op_dtypes=[None, None, "float64"], none_ops=[2]), "alloc")
+        # one cast operand among two
+        for casting in ("safe", "unsafe"):
+            _nc_case(cases, f"onecast/{sa},{sb}/{casting}", [pa, pb],
+                     _nc_params(flags=["buffered"], op_dtypes=[sb, None], casting=casting), "pair")
+
+    # D. NumPy's checks in their order: the global flags, then each operand's flags, writeability, size and request.
+    ro_base = _nc_base("int64", 3)
+    ro_pair = (ro_base, np.broadcast_to(ro_base, (3,)))   # a read-only view of its base
+    c1 = _nc_operand("int64", "c1")
+    e1 = _nc_operand("float64", "e1")
+    d_jobs = [
+        ("rw_ro_flags", [ro_pair], _nc_params(op_flags=["readwrite", "readonly"])),
+        ("ro_write", [ro_pair], _nc_params(op_flags=["readwrite"])),
+        ("extloop_multi_ro", [ro_pair], _nc_params(flags=["external_loop", "multi_index"], op_flags=["readwrite"])),
+        ("extloop_cindex", [c1], _nc_params(flags=["external_loop", "c_index"])),
+        ("c_f_index", [c1], _nc_params(flags=["c_index", "f_index"], op_flags=["readwrite", "readonly"])),
+        ("ranged_extloop", [c1], _nc_params(flags=["ranged", "external_loop"])),
+        ("ranged_extloop_buffered", [c1], _nc_params(flags=["ranged", "external_loop", "buffered"])),
+        ("zerosize_vs_cast", [e1], _nc_params(op_dtypes=["int32"])),
+        ("zero_op0_ro_op1", [e1, ro_pair], _nc_params(op_flags=[["readonly"], ["readwrite"]])),
+        ("ro_op0_zero_op1", [ro_pair, e1], _nc_params(op_flags=[["readwrite"], ["readonly"]])),
+        ("no_rw_flag", [c1], _nc_params(op_flags=["copy"])),
+        ("copy_on_rw", [c1], _nc_params(op_flags=["readwrite", "copy"], op_dtypes=["float64"])),
+        ("copy_on_rw_nocast", [c1], _nc_params(op_flags=["readwrite", "copy"])),
+        ("copy_on_writeonly", [c1], _nc_params(op_flags=["writeonly", "copy"])),
+        ("bcast_vs_cast", [c1, _nc_operand("int64", "o1")], _nc_params(op_dtypes=["int32", None])),
+        ("reduce_vs_cast", [_nc_operand("int64", "c2"), _nc_operand("float64", "o1")],
+         _nc_params(op_flags=[["readonly"], ["readwrite"]], op_dtypes=["int32", None])),
+        ("cast_err_op1_vs_copy_op0", [c1, _nc_operand("int64", "c1", 2)], _nc_params(op_dtypes=["float64", "int16"])),
+        ("copybuf_op0_cast_op1", [c1, _nc_operand("int64", "c1", 2)],
+         _nc_params(op_dtypes=["float64", "int16"], casting="unsafe")),
+        ("alloc_not_writable", [c1, (None, None)], _nc_params(op_flags=[["readonly"], ["readonly", "allocate"]],
+                                                              none_ops=[1])),
+        ("alloc_readable_buffered", [c1, (None, None)],
+         _nc_params(flags=["buffered"], op_flags=[["readonly"], ["readwrite", "allocate"]], none_ops=[1])),
+        ("alloc_readable_buffered_delay", [c1, (None, None)],
+         _nc_params(flags=["buffered", "delay_bufalloc"], op_flags=[["readonly"], ["readwrite", "allocate"]],
+                    none_ops=[1])),
+        ("none_no_allocate", [c1, (None, None)], _nc_params(op_flags=[["readonly"], ["writeonly"]], none_ops=[1])),
+        ("none_no_rw", [c1, (None, None)], _nc_params(op_flags=[["readonly"], ["allocate"]], none_ops=[1])),
+        ("none_only", [(None, None)], _nc_params(op_flags=[["writeonly", "allocate"]], none_ops=[0])),
+        ("virtual_nonnull", [c1], _nc_params(op_flags=["readwrite", "virtual"])),
+        ("virtual_ro_null", [c1, (None, None)], _nc_params(op_flags=[["readonly"], ["readonly", "virtual"]],
+                                                           none_ops=[1])),
+        ("arraymask_twice", [c1, c1, c1],
+         _nc_params(op_flags=[["readonly", "arraymask"], ["readonly", "arraymask"], ["readwrite", "writemasked"]])),
+        ("writemasked_ro", [c1, c1], _nc_params(op_flags=[["readonly", "writemasked"], ["readonly", "arraymask"]])),
+        ("writemasked_no_mask", [c1], _nc_params(op_flags=["readwrite", "writemasked"])),
+        ("arraymask_no_writemasked", [c1, c1], _nc_params(op_flags=[["readonly"], ["readonly", "arraymask"]])),
+        ("op_flags_len", [c1, c1], _nc_params(op_flags=[["readonly"], ["readonly"], ["readonly"]])),
+        ("op_dtypes_len", [c1, c1], _nc_params(op_dtypes=["float64"])),
+    ]
+    for name, pairs, params in d_jobs:
+        _nc_case(cases, f"order/{name}", pairs, params, "order")
+
+    # E. the protocol over buffered reads: a ranged window and a seek (iterrange / iterindex).
+    # Every source dtype: buffered to float64 (complex128 stays itself, a complex -> float64 cast is refused under
+    # 'safe'), plus the three original pairs.
+    ranged_pairs = [("int32", "float64"), ("int64", "int64"), ("float32", "float64")]
+    ranged_pairs += [(d, "complex128" if d == "complex128" else "float64") for d in NC_DTYPES
+                     if (d, "complex128" if d == "complex128" else "float64") not in ranged_pairs]
+    for s, req in ranged_pairs:
+        for start, end in ((0, 10), (3, 6), (9, 10), (4, 4)):
+            pair = _nc_operand(s, "c1", seed=2)
+            base = _nc_base(s, 10, seed=2)
+            pair = (base, base)
+            cid = f"nditer_ranged/{s}->{req}/{start}-{end}/{len(cases)}"
+            params = {"op_dtypes": [req], "start": start, "end": end}
+            try:
+                it = np.nditer(base, flags=["ranged", "buffered"], op_dtypes=[req])
+                it.iterrange = (start, end)
+                vals = np.array([x.copy() for x in it], dtype=it.dtypes[0]) if start < end else np.empty(0, req)
+                cases.append({"id": cid, "op": "nditer_ranged", "params": params,
+                              "operands": [describe(base, base)], "expected": _arr_expected(vals),
+                              "layout": "c1", "valueclass": "nditer_construct"})
+            except Exception as e:  # noqa: BLE001
+                cases.append({"id": cid, "op": "nditer_ranged", "params": params, "operands": [describe(base, base)],
+                              "expected": {}, "expects_throw": True, "error": _exc(e), "layout": "c1",
+                              "valueclass": "nditer_construct"})
+    return cases
+
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# np.nditer's iteration protocol and state contract (corpus nditer_protocol.jsonl, text results).
+#
+# Each case builds an iterator and runs a SCRIPT of steps against it — pulls, seeks (iterindex / multi_index / index /
+# iterrange), resets, remove_axis / remove_multi_index / enable_external_loop, element reads and writes through it[i],
+# copies, and close — recording one line per step: the step's result, or NumPy's exception as "!Type: text". So the
+# trace pins what NumPy's nditer_pywrap.c promises between construction and close: the started / finished flags (a pull
+# after a seek yields the element there, a finished iterator refuses its position getters with "Iterator is past the
+# end"), the delayed-allocation refusals until reset, the closed-iterator texts, the views' write flags, and the axis
+# bookkeeping of remove_axis (an ORIGINAL axis, whatever order the iterator walks). Values are int64 / int8 / float64
+# with integral values, rendered as Python's tolist() reprs, so the C# replay renders them the same way.
+# ----------------------------------------------------------------------------------------------------------------------
+
+def _np_render(v):
+    """NumPy's value rendering for the protocol trace: Python's repr of tolist()."""
+    return repr(v.tolist())
+
+
+def _np_step_row(it):
+    """One pulled step: the multi-index (when tracked) and each operand's current value."""
+    xs = (it[0],) if it.nop == 1 else tuple(it[i] for i in range(it.nop))
+    row = []
+    if it.has_multi_index:
+        row.append(str(it.multi_index))
+    row += [_np_render(v) for v in xs]
+    return " ".join(row)
+
+
+def _np_walk(it, limit=None):
+    out = []
+    try:
+        k = 0
+        for x in it:
+            xs = (x,) if it.nop == 1 else x
+            row = []
+            if it.has_multi_index:
+                row.append(str(it.multi_index))
+            row += [_np_render(v) for v in xs]
+            out.append(" ".join(row))
+            k += 1
+            if limit is not None and k >= limit:
+                break
+    except Exception as e:  # noqa: BLE001 — the error is part of the trace
+        out.append(f"!{type(e).__name__}: {e}")
+    return " | ".join(out) if out else "[]"
+
+
+def _np_walk_index(it, limit=None):
+    """A walk that records each element's tracked flat index and iteration index: value@index#iterindex ('-' when
+    no index is tracked). It gates the index through the axis ordering, the stride flips and the coalescing, which
+    the plain walk cannot see (a wrong index walks the same values)."""
+    out = []
+    try:
+        k = 0
+        for x in it:
+            xs = (x,) if it.nop == 1 else x
+            idx = str(it.index) if it.has_index else "-"
+            out.append(" ".join(_np_render(v) for v in xs) + f"@{idx}#{it.iterindex}")
+            k += 1
+            if limit is not None and k >= limit:
+                break
+    except Exception as e:  # noqa: BLE001 — the error is part of the trace
+        out.append(f"!{type(e).__name__}: {e}")
+    return " | ".join(out) if out else "[]"
+
+
+def _np_parse_value(text):
+    """A setitem / write value: an int literal (a Python int) or a [a,b,...] list (a 1-D int64 ndarray)."""
+    if text.startswith("["):
+        inner = text[1:-1]
+        return np.array([int(t) for t in inner.split(",")] if inner else [], dtype=np.int64)
+    return int(text)
+
+
+def _np_protocol_step(it_holder, step):
+    """Runs one script step against it_holder[0]; returns the rendered result."""
+    it = it_holder[0]
+    name, _, arg = step.partition(":")
+    if name == "next":
+        x = next(it)
+        xs = (x,) if it.nop == 1 else x
+        return " ".join(_np_render(v) for v in xs)
+    if name == "walk":
+        return _np_walk(it, int(arg) if arg else None)
+    if name == "walkidx":
+        return _np_walk_index(it, int(arg) if arg else None)
+    if name == "value":
+        v = it.value
+        xs = (v,) if it.nop == 1 else v
+        return " ".join(_np_render(t) for t in xs)
+    if name == "it":
+        return _np_render(it[int(arg)])
+    if name == "writeable":
+        return str(it[int(arg)].flags.writeable)
+    if name in ("finished", "iterindex", "index", "itersize", "ndim", "nop", "has_index", "has_multi_index",
+                "has_delayed_bufalloc"):
+        return str(getattr(it, name))
+    if name in ("multi_index", "shape", "iterrange"):
+        return str(getattr(it, name))
+    if name == "dtypes":
+        return "[" + ", ".join(repr(d) for d in it.dtypes) + "]"
+    if name == "operands":
+        return "[" + ", ".join(repr(o.tolist()) for o in it.operands) + "]"
+    if name == "iternext":
+        return str(it.iternext())
+    if name == "reset":
+        it.reset()
+        return "None"
+    if name == "close":
+        it.close()
+        return "None"
+    if name == "copywalk":
+        c = it.copy()
+        try:
+            return _np_walk(c)
+        finally:
+            c.close()
+    if name == "remove_axis":
+        it.remove_axis(int(arg))
+        return "None"
+    if name == "remove_multi_index":
+        it.remove_multi_index()
+        return "None"
+    if name == "enable_external_loop":
+        it.enable_external_loop()
+        return "None"
+    if name == "set_iterindex":
+        it.iterindex = int(arg)
+        return "None"
+    if name == "set_index":
+        it.index = int(arg)
+        return "None"
+    if name == "set_multi_index":
+        it.multi_index = tuple(int(t) for t in arg.split(",")) if arg else ()
+        return "None"
+    if name == "set_iterrange":
+        a, b = arg.split(",")
+        it.iterrange = (int(a), int(b))
+        return "None"
+    if name == "setitem":
+        k, _, v = arg.partition(":")
+        it[int(k)] = _np_parse_value(v)
+        return "None"
+    if name == "write":
+        k, _, v = arg.partition(":")
+        it[int(k)][...] = _np_parse_value(v)
+        return "None"
+    if name == "zero_out":
+        it.operands[int(arg)][...] = 0
+        return "None"
+    if name == "accumwalk":
+        # NumPy's reduction idiom: `for x, y in it: y[...] += x` over the rest of the iteration (an in-place add through
+        # each step's views; an external-loop chunk of a stride-0 y keeps the last element's sum, NumPy's
+        # COPY_IF_OVERLAP semantics for an output that overlaps its input).
+        for xs in it:
+            xs[1][...] += xs[0]
+        return "None"
+    raise ValueError(f"unknown protocol step {step!r}")
+
+
+def _np_protocol_trace(views, params, script):
+    kw = {}
+    for key in ("flags", "op_flags", "op_axes"):
+        if params.get(key) is not None:
+            kw[key] = params[key]
+    if params.get("op_dtypes") is not None:
+        kw["op_dtypes"] = [None if d is None else np.dtype(d) for d in params["op_dtypes"]]
+    it = np.nditer(views if len(views) > 1 else views[0], order=params["order"], casting=params["casting"],
+                   buffersize=params["buffersize"], **kw)
+    holder = [it]
+    lines = []
+    try:
+        for step in script:
+            try:
+                lines.append(f"{step}: {_np_protocol_step(holder, step)}")
+            except StopIteration:
+                lines.append(f"{step}: !StopIteration: ")
+            except Exception as e:  # noqa: BLE001 — NumPy's error, type and text, IS the contract
+                lines.append(f"{step}: !{type(e).__name__}: {e}")
+    finally:
+        it.close()
+    return "\n".join(lines)
+
+
+NP_SCRIPTS = {
+    "seek": ["walk:2", "iterindex", "set_iterindex:3", "next", "iterindex", "set_iterindex:-1", "set_iterindex:100",
+             "walk", "finished", "iterindex", "value", "shape", "it:0", "reset", "finished", "next", "iternext",
+             "iterindex", "next"],
+    # A reset right after an EMPTY range is left out: NumPy's npyiter_reset clears `finished` by the whole iteration
+    # size, so its next pull reads the buffer window the empty range left unfilled (a stale element), not a contract.
+    "range": ["set_iterrange:1,4", "walk", "iterrange", "finished", "set_iterrange:2,2", "finished", "next",
+              "set_iterrange:3,1", "set_iterrange:0,100", "set_iterrange:-1,2", "set_iterrange:2,5", "reset", "walk:3",
+              "set_iterindex:0", "next"],
+    "multi": ["multi_index", "set_multi_index:@last", "next", "multi_index", "set_multi_index:@oob",
+              "set_multi_index:@short", "walk", "multi_index", "set_multi_index:@first", "finished", "next"],
+    "index": ["index", "set_index:3", "next", "index", "set_index:-1", "set_index:100", "walk", "index",
+              "set_index:0", "next"],
+    "remove": ["walk:2", "remove_axis:1", "shape", "ndim", "itersize", "finished", "walk", "remove_axis:0", "walk",
+               "remove_axis:5", "remove_multi_index", "shape", "walk"],
+    "extloop": ["walk:2", "enable_external_loop", "finished", "walk", "enable_external_loop", "reset", "walk"],
+    "close": ["walk:1", "close", "finished", "nop", "ndim", "itersize", "iterrange", "shape", "iterindex", "index",
+              "multi_index", "it:0", "value", "dtypes", "operands", "has_index", "has_multi_index",
+              "has_delayed_bufalloc", "iternext", "next", "reset", "copywalk", "remove_multi_index",
+              "enable_external_loop", "remove_axis:0", "set_iterindex:0", "set_index:0", "set_multi_index:0",
+              "set_iterrange:0,1", "walk", "close"],
+    "copy": ["walk:2", "copywalk", "walk:1", "copywalk", "walk", "copywalk"],
+    "empty": ["finished", "it:0", "value", "shape", "iterindex", "walk", "reset", "finished", "iternext", "next"],
+}
+
+
+def _np_resolve_script(script, ndim, shape):
+    """Fills the multi-index placeholders of a script for an operand shape."""
+    out = []
+    for step in script:
+        if step.startswith("set_multi_index:@"):
+            what = step.split("@")[1]
+            if what == "last":
+                coords = [max(s - 1, 0) for s in shape]
+            elif what == "first":
+                coords = [0] * ndim
+            elif what == "oob":
+                coords = list(shape)
+            else:  # short
+                coords = [0] * max(ndim - 1, 0) if ndim > 1 else [0, 0]
+            step = "set_multi_index:" + ",".join(str(c) for c in coords)
+        out.append(step)
+    return out
+
+
+def gen_nditer_protocol():
+    cases = []
+
+    def add(name, pairs, params, script, layout):
+        views = [v for _, v in pairs]
+        operands = [describe(b, v) for b, v in pairs if b is not None]
+        cid = f"nditer_protocol/{name}/{len(cases)}"
+        full = {"casting": "safe", "order": "K", "buffersize": 0}
+        full.update(params)
+        full["script"] = script
+        try:
+            text = _np_protocol_trace(views, full, script)
+        except Exception as e:  # noqa: BLE001 — a construction error is the case's outcome
+            cases.append({"id": cid, "op": "nditer_protocol", "params": full, "operands": operands,
+                          "expected": {"kind": "text"}, "expects_throw": True, "error": _exc(e),
+                          "layout": layout, "valueclass": "nditer_protocol"})
+            return
+        cases.append({"id": cid, "op": "nditer_protocol", "params": full, "operands": operands,
+                      "expected": {"kind": "text", "value": text}, "layout": layout,
+                      "valueclass": "nditer_protocol"})
+
+    # Every operand is a view of a C-contiguous base (describe() serializes the base in C order): an F-ordered view is
+    # the transpose of a C buffer holding the transposed values.
+    base2 = np.arange(12, dtype=np.int64).reshape(3, 4)
+    base3 = np.arange(24, dtype=np.int64).reshape(2, 3, 4)
+    fbase2 = np.ascontiguousarray(base2.T)
+    fbase3 = np.ascontiguousarray(base3.transpose(2, 1, 0))
+    base1 = np.arange(6, dtype=np.int64)
+    base0 = np.array(7, dtype=np.int64)
+    layouts = {
+        "c2": (base2, base2),
+        "f2": (fbase2, fbase2.T),
+        "t2": (base2, base2.T),
+        "rev2": (base2, base2[::-1, ::-1]),
+        "step2": (base2, base2[:, ::2]),
+        "c3": (base3, base3),
+        "f3": (fbase3, fbase3.transpose(2, 1, 0)),
+        "rev3": (base3, base3[::-1, :, ::-1]),
+        "perm3": (base3, base3.transpose(1, 2, 0)),
+        "c1": (base1, base1),
+        "z0": (base0, base0),
+    }
+    flag_sets = {
+        "plain": None,
+        "multi": ["multi_index"],
+        "cidx": ["c_index"],
+        "fidx": ["f_index"],
+        "multi_cidx": ["multi_index", "c_index"],
+        "ranged": ["ranged"],
+        "ranged_multi": ["ranged", "multi_index"],
+        "buf": ["buffered"],
+        "buf_ranged": ["buffered", "ranged"],
+        "buf_multi": ["buffered", "multi_index"],
+        "ext": ["external_loop"],
+    }
+    script_flags = {
+        "seek": ["plain", "multi", "cidx", "ranged", "buf", "buf_ranged", "buf_multi", "ext"],
+        "range": ["ranged", "ranged_multi", "buf_ranged", "plain", "multi"],
+        "multi": ["multi", "multi_cidx", "ranged_multi", "buf_multi", "plain"],
+        "index": ["cidx", "fidx", "multi_cidx", "plain"],
+        # remove_axis refuses an index-tracking iterator ("Iterator RemoveAxis may not be called on an index is being
+        # tracked"); multi_index + c_index reaches remove_multi_index through that refusal, where NumPy coalesces the
+        # index with the axes.
+        "remove": ["multi", "buf_multi", "plain", "ranged_multi", "multi_cidx"],
+        "extloop": ["plain", "multi", "cidx", "ranged", "buf", "buf_ranged"],
+        "close": ["plain", "multi_cidx", "buf"],
+        "copy": ["plain", "multi", "buf", "buf_ranged", "ext"],
+    }
+    for sname, fnames in script_flags.items():
+        for lname, (b, v) in layouts.items():
+            script = _np_resolve_script(NP_SCRIPTS[sname], v.ndim, v.shape)
+            for fname in fnames:
+                params = {"flags": flag_sets[fname]}
+                add(f"{sname}/{fname}/{lname}", [(b, v)], params, script, lname)
+                # A buffered cast: the views read the buffer, so seeks, resets and copies must refill it.
+                if fname.startswith("buf"):
+                    params = {"flags": flag_sets[fname], "op_dtypes": ["float64"]}
+                    add(f"{sname}/{fname}+f8/{lname}", [(b, v)], params, script, lname)
+            # buffersize small enough to cross windows
+            for fname in ("buf", "buf_ranged"):
+                if fname in fnames:
+                    params = {"flags": flag_sets[fname], "op_dtypes": ["float64"], "buffersize": 3}
+                    add(f"{sname}/{fname}+f8+bs3/{lname}", [(b, v)], params, script, lname)
+
+    # Every NumPy dtype through the plain, buffered and multi-index protocol: the state contract does not depend on the
+    # dtype, but the views it hands out do (their values, their write flags), and so does the buffered window.
+    for dt in NC_DTYPES:
+        dbase = (np.arange(12) % 2 == 1) if dt == "bool" else np.arange(12).astype(dt)
+        dbase = dbase.reshape(3, 4)
+        for fname in ("plain", "buf", "multi"):
+            for sname in ("seek", "copy"):
+                script = _np_resolve_script(NP_SCRIPTS[sname], 2, (3, 4))
+                add(f"dtype/{dt}/{sname}/{fname}", [(dbase, dbase)], {"flags": flag_sets[fname]}, script, "c2")
+
+    # The tracked index and the axis structure NumPy reports: an iterator without a multi-index coalesces whenever its
+    # operands AND its index step across two axes as one run (the index rides as one more operand), its shape lists the
+    # iteration axes innermost first, GotoIndex reads the index strides, and remove_multi_index only coalesces (a
+    # forced order keeps walking in that order). Layouts that do not coalesce (stepped rows, broadcasts, forced
+    # orders) keep N-D shapes, so the order of the reported axes is visible.
+    wide = np.arange(24, dtype=np.int64).reshape(4, 6)
+    cl_layouts = dict(layouts)
+    cl_layouts.update({
+        "revrow": (base2, base2[::-1]),
+        "step2d": (wide, wide[::2, ::2]),
+        "bcast": (base2[0], np.broadcast_to(base2[0], (3, 4))),
+        "col": (base1[:3].reshape(3, 1), base1[:3].reshape(3, 1)),
+        "row": (base2[:1], base2[:1]),
+    })
+    for lname, (b, v) in cl_layouts.items():
+        n = v.size
+        goto = [f"set_index:{n // 2}", "iterindex", "it:0", f"set_index:{n - 1}", "iterindex", "it:0"]
+        scripts = {
+            "cidx": (["c_index"], ["shape", "ndim", "walkidx"] + goto),
+            "fidx": (["f_index"], ["shape", "ndim", "walkidx"] + goto),
+            "multi_cidx": (["multi_index", "c_index"],
+                           ["shape", "walkidx:2", "remove_multi_index", "shape", "ndim", "has_index",
+                            "has_multi_index", "walkidx"] + goto),
+            "multi_fidx": (["multi_index", "f_index"],
+                           ["shape", "walkidx:2", "remove_multi_index", "shape", "ndim", "has_index",
+                            "has_multi_index", "walkidx"] + goto),
+            "plain": (None, ["shape", "ndim", "walkidx"]),
+            "multi": (["multi_index"], ["shape", "ndim", "remove_multi_index", "shape", "ndim", "walkidx"]),
+        }
+        for fname, (fl, script) in scripts.items():
+            for order in ("K", "C", "F", "A"):
+                add(f"coalesce/{fname}/{order}/{lname}", [(b, v)], {"flags": fl, "order": order}, script, lname)
+
+    # Reductions through op_axes (reduce_ok, unbuffered — the buffered double loop is pinned in
+    # OpenBugs.NditerBufferedReduce.cs): an allocated or given output with -1 entries, over C / F / transposed inputs,
+    # walked plainly, with an external loop (the chunks show the axis order: an allocated output does not vote in it)
+    # and with a multi-index; the reduction idiom accumulates through the views.
+    red_inputs = {
+        "c3": (base3, base3),
+        "f3": (fbase3, fbase3.transpose(2, 1, 0)),
+        "perm3": (base3, base3.transpose(1, 2, 0)),
+    }
+    red_axes = {
+        "last": [0, 1, -1],
+        "first": [-1, 0, 1],
+        "middle": [0, -1, 1],
+        "two": [0, -1, -1],
+    }
+    for iname, (b, v) in red_inputs.items():
+        for aname, axes in red_axes.items():
+            oshape = tuple(v.shape[i] for i, ax in enumerate(axes) if ax >= 0)
+            for fname, fl in (("plain", ["reduce_ok"]), ("ext", ["reduce_ok", "external_loop"]),
+                              ("multi", ["reduce_ok", "multi_index"])):
+                # The allocated output is np.empty memory until zeroed: nothing reads it before zero_out.
+                script = ["shape", "ndim", "zero_out:1", "reset", "walk:4", "reset", "accumwalk", "operands"]
+                params = {"flags": fl, "op_flags": [["readonly"], ["readwrite", "allocate"]],
+                          "op_axes": [None, axes], "none_ops": [1]}
+                add(f"reduce/alloc/{fname}/{aname}/{iname}", [(b, v), (None, None)], params, script, iname)
+                out = np.zeros(oshape, dtype=np.int64)
+                params = {"flags": fl, "op_flags": [["readonly"], ["readwrite"]], "op_axes": [None, axes]}
+                add(f"reduce/given/{fname}/{aname}/{iname}", [(b, v), (out, out)], params,
+                    ["shape", "ndim", "walk:4", "reset", "accumwalk", "operands"], iname)
+        # A write-only reduction operand, and a reduction without reduce_ok, are NumPy's construction errors.
+        add(f"reduce/writeonly/{iname}", [(b, v), (None, None)],
+            {"flags": ["reduce_ok"], "op_flags": [["readonly"], ["writeonly", "allocate"]],
+             "op_axes": [None, [0, 1, -1]], "none_ops": [1]}, ["shape"], iname)
+        add(f"reduce/no_reduce_ok/{iname}", [(b, v), (None, None)],
+            {"flags": None, "op_flags": [["readonly"], ["readwrite", "allocate"]],
+             "op_axes": [None, [0, 1, -1]], "none_ops": [1]}, ["shape"], iname)
+
+    # Empty iterations (zerosize_ok): finished from the start, every position getter refuses.
+    e = np.zeros((0, 3), dtype=np.int64)
+    for fname in ("plain", "multi", "buf"):
+        flags = ["zerosize_ok"] + (flag_sets[fname] or [])
+        add(f"empty/{fname}", [(e, e)], {"flags": flags}, NP_SCRIPTS["empty"], "empty")
+
+    # it[i] = v and writes through the views: write flags, NumPy's Python-int packing (int8 overflow), broadcasting.
+    src = np.arange(3, dtype=np.int64)
+    for dt in ("int64", "int8", "float64"):
+        dst = np.zeros(3, dtype=dt)
+        for fl, tag in ((None, "plain"), (["external_loop"], "ext"), (["buffered"], "buf")):
+            script = ["writeable:0", "writeable:1", "setitem:1:7", "operands", "setitem:0:7", "setitem:2:7",
+                      "setitem:-3:7", "setitem:-1:300", "setitem:1:[5]", "setitem:1:[5,6]", "setitem:1:[1,2,3]",
+                      "operands", "write:0:5", "write:1:9", "operands", "walk", "setitem:1:1", "operands"]
+            add(f"setitem/{dt}/{tag}", [(src, src), (dst, dst)],
+                {"flags": fl, "op_flags": [["readonly"], ["readwrite"]]}, script, "pair")
+        add(f"setitem_wo/{dt}", [(src, src), (dst, dst)],
+            {"op_flags": [["readonly"], ["writeonly"]]},
+            ["writeable:1", "setitem:1:4", "walk", "operands"], "pair")
+
+    # delay_bufalloc: the views and the multi-index refuse until reset; seeks and iternext still move.
+    for fl in (["buffered", "delay_bufalloc"], ["buffered", "delay_bufalloc", "multi_index"],
+               ["buffered", "delay_bufalloc", "ranged"], ["buffered", "delay_bufalloc", "external_loop"]):
+        script = ["has_delayed_bufalloc", "it:0", "value", "multi_index", "next", "iternext", "iterindex",
+                  "set_iterindex:2", "has_delayed_bufalloc", "it:0", "zero_out:1", "reset", "has_delayed_bufalloc",
+                  "multi_index", "walk", "operands"]
+        if "ranged" in fl:
+            script = script[:7] + ["set_iterrange:1,4", "has_delayed_bufalloc", "walk"]
+        add(f"delayed/{'+'.join(fl)}", [(src, src), (None, None)],
+            {"flags": fl, "op_flags": [["readonly"], ["readwrite", "allocate"]], "none_ops": [1]}, script,
+            "delayed")
+    return cases
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
@@ -20074,6 +20780,13 @@ def main():
     elif mode == "iter":
         # Iterator traces — see gen_iter. Order/layout resolution has no other gate.
         write_jsonl(os.path.join(corpus_dir, "iter.jsonl"), gen_iter())
+    elif mode == "nditer_construct":
+        # np.nditer's descriptor construction: cast checks, copy routes, NumPy's check order, the protocol.
+        write_jsonl(os.path.join(corpus_dir, "nditer_construct.jsonl"), gen_nditer_construct())
+    elif mode == "nditer_protocol":
+        # np.nditer's state contract between construction and close: scripted traces of pulls, seeks, resets,
+        # remove_axis / external loop, element reads and writes, copies and close (text results).
+        write_jsonl(os.path.join(corpus_dir, "nditer_protocol.jsonl"), gen_nditer_protocol())
     elif mode == "dtype_text":
         write_jsonl(os.path.join(corpus_dir, "dtype_text.jsonl"), gen_dtype_text())
     elif mode == "out_where":

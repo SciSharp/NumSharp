@@ -67,6 +67,21 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
+        ///     Allocates an aligned buffer of <paramref name="elements"/> elements of <paramref name="elementSize"/> bytes —
+        ///     the form every buffer of the iterator uses, because a fixed-width string's element size is its descriptor's
+        ///     (<c>&lt;U5</c> is 20 bytes) and its storage lane names none.
+        /// </summary>
+        /// <param name="elements">The element count.</param>
+        /// <param name="elementSize">The bytes per element.</param>
+        /// <returns>The buffer (free it with <see cref="FreeAligned"/>).</returns>
+        /// <exception cref="OutOfMemoryException">The allocation failed.</exception>
+        public static void* AllocateAligned(long elements, int elementSize)
+        {
+            long bytes = elements * elementSize;
+            return NativeMemory.AlignedAlloc((nuint)bytes, Alignment);
+        }
+
+        /// <summary>
         /// Free aligned buffer.
         /// </summary>
         public static void FreeAligned(void* buffer)
@@ -175,7 +190,8 @@ namespace NumSharp.Backends.Iteration
                         }
                     }
 
-                    var buffer = AllocateAligned(bufferSize, dtype);
+                    // Sized by the stored element size (a fixed-width string's item size included).
+                    var buffer = AllocateAligned(bufferSize, state.GetElementSize(op));
                     if (buffer == null)
                     {
                         // Cleanup already allocated buffers
@@ -302,6 +318,14 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public static void CopyToBuffer(ref NDIterState state, int op, long count)
         {
+            // A fixed-width string on either side moves through the string transfer: its width and class live in the
+            // state's element sizes and string kinds, not in the (shared) String type code.
+            if (state.IsStringOp(op))
+            {
+                CopyStringOperandFromStart(ref state, op, count, toBuffer: true);
+                return;
+            }
+
             // Check if casting is needed
             if (state.NeedsCast(op))
             {
@@ -340,6 +364,12 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public static void CopyFromBuffer(ref NDIterState state, int op, long count)
         {
+            if (state.IsStringOp(op))
+            {
+                CopyStringOperandFromStart(ref state, op, count, toBuffer: false);
+                return;
+            }
+
             // Check if casting is needed
             if (state.NeedsCast(op))
             {
@@ -738,6 +768,8 @@ namespace NumSharp.Backends.Iteration
             var dstType = state.GetOpDType(op);
             int srcSize = state.GetSrcElementSize(op);
             int dstSize = state.GetElementSize(op);
+            // A fixed-width string on either side takes the string run transfer (widths and classes from the state).
+            bool stringOp = state.IsStringOp(op);
 
             byte* src = (byte*)state.GetArrayWritebackPtr(op);
             byte* dst = (byte*)state.GetBuffer(op);
@@ -745,7 +777,10 @@ namespace NumSharp.Backends.Iteration
             if (state.NDim <= 1)
             {
                 long stride = state.NDim == 0 ? 0 : state.GetStride(0, op);
-                CopyRunToBuffer(src, stride, srcType, srcSize, dst, dstType, count);
+                if (stringOp)
+                    CopyStringRun(ref state, op, src, stride, dst, 1, count, toBuffer: true);
+                else
+                    CopyRunToBuffer(src, stride, srcType, srcSize, dst, dstType, count);
                 return;
             }
 
@@ -776,7 +811,10 @@ namespace NumSharp.Backends.Iteration
                 while (remaining > 0)
                 {
                     long run = Math.Min(remaining, innerLen - coords[innerAxis]);
-                    CopyRunToBuffer(src, innerStride, srcType, srcSize, dst, dstType, run);
+                    if (stringOp)
+                        CopyStringRun(ref state, op, src, innerStride, dst, 1, run, toBuffer: true);
+                    else
+                        CopyRunToBuffer(src, innerStride, srcType, srcSize, dst, dstType, run);
 
                     dst += run * dstSize;
                     remaining -= run;
@@ -821,6 +859,7 @@ namespace NumSharp.Backends.Iteration
             var arrType = state.GetOpSrcDType(op);
             int bufSize = state.GetElementSize(op);
             int arrSize = state.GetSrcElementSize(op);
+            bool stringOp = state.IsStringOp(op);
 
             byte* buf = (byte*)state.GetBuffer(op);
             byte* dst = (byte*)state.GetArrayWritebackPtr(op);
@@ -828,7 +867,10 @@ namespace NumSharp.Backends.Iteration
             if (state.NDim <= 1)
             {
                 long stride = state.NDim == 0 ? 0 : state.GetStride(0, op);
-                CopyRunFromBuffer(buf, bufType, bufSize, dst, stride, arrType, count);
+                if (stringOp)
+                    CopyStringRun(ref state, op, buf, 1, dst, stride, count, toBuffer: false);
+                else
+                    CopyRunFromBuffer(buf, bufType, bufSize, dst, stride, arrType, count);
                 return;
             }
 
@@ -858,7 +900,10 @@ namespace NumSharp.Backends.Iteration
                 while (remaining > 0)
                 {
                     long run = Math.Min(remaining, innerLen - coords[innerAxis]);
-                    CopyRunFromBuffer(buf, bufType, bufSize, dst, innerStride, arrType, run);
+                    if (stringOp)
+                        CopyStringRun(ref state, op, buf, 1, dst, innerStride, run, toBuffer: false);
+                    else
+                        CopyRunFromBuffer(buf, bufType, bufSize, dst, innerStride, arrType, run);
 
                     buf += run * bufSize;
                     remaining -= run;
@@ -916,6 +961,7 @@ namespace NumSharp.Backends.Iteration
             var arrType = state.GetOpSrcDType(op);
             int bufSize = state.GetElementSize(op);
             int arrSize = state.GetSrcElementSize(op);
+            bool stringOp = state.IsStringOp(op);
 
             byte* buf = (byte*)state.GetBuffer(op);
             byte* dst = (byte*)state.GetArrayWritebackPtr(op);
@@ -923,8 +969,11 @@ namespace NumSharp.Backends.Iteration
             if (state.NDim <= 1)
             {
                 long stride = state.NDim == 0 ? 0 : state.GetStride(0, op);
-                CopyRunFromBufferMasked(buf, bufType, bufSize, dst, stride, arrType, arrSize,
-                    count, mask, maskStride);
+                if (stringOp)
+                    CopyStringRunFromBufferMasked(ref state, op, buf, dst, stride, count, mask, maskStride);
+                else
+                    CopyRunFromBufferMasked(buf, bufType, bufSize, dst, stride, arrType, arrSize,
+                        count, mask, maskStride);
                 return;
             }
 
@@ -954,8 +1003,11 @@ namespace NumSharp.Backends.Iteration
                 while (remaining > 0)
                 {
                     long run = Math.Min(remaining, innerLen - coords[innerAxis]);
-                    CopyRunFromBufferMasked(buf, bufType, bufSize, dst, innerStride, arrType, arrSize,
-                        run, mask, maskStride);
+                    if (stringOp)
+                        CopyStringRunFromBufferMasked(ref state, op, buf, dst, innerStride, run, mask, maskStride);
+                    else
+                        CopyRunFromBufferMasked(buf, bufType, bufSize, dst, innerStride, arrType, arrSize,
+                            run, mask, maskStride);
 
                     buf += run * bufSize;
                     mask += run * maskStride;
@@ -1126,6 +1178,165 @@ namespace NumSharp.Backends.Iteration
             }
 
             NDIterCasting.CopyWithCast(buf, 1, bufType, dst, dstStride, arrType, count);
+        }
+
+        /// <summary>
+        ///     One run of a fixed-width string operand between its array and its buffer: the widths and classes come from
+        ///     the state (<see cref="NDIterState.OpStringKinds"/> and the element sizes), the move is
+        ///     <see cref="Strings.NDStringCopy.TransferElements"/> — NumPy's <c>string_to_string</c> zero-pad copy and its
+        ///     <c>S ↔ U</c> casts.
+        /// </summary>
+        /// <param name="state">The iterator state.</param>
+        /// <param name="op">The operand (one side, at least, is a string).</param>
+        /// <param name="src">The run's first source element.</param>
+        /// <param name="srcElemStride">The source stride in ELEMENTS of the source side.</param>
+        /// <param name="dst">The run's first destination element.</param>
+        /// <param name="dstElemStride">The destination stride in ELEMENTS of the destination side.</param>
+        /// <param name="count">The number of elements.</param>
+        /// <param name="toBuffer">True for array → buffer (the fill), false for buffer → array (the flush).</param>
+        /// <exception cref="StringComputationNotSupportedException">One side is numeric and the run has elements: NumPy
+        ///     formats / parses the values here, which is the computational phase of the string dtypes.</exception>
+        /// <exception cref="UnicodeEncodeError">A <c>U → S</c> element holds a code point at or above 128.</exception>
+        /// <exception cref="UnicodeDecodeError">An <c>S → U</c> element holds a byte at or above <c>0x80</c>.</exception>
+        private static void CopyStringRun(ref NDIterState state, int op, byte* src, long srcElemStride,
+                                          byte* dst, long dstElemStride, long count, bool toBuffer)
+        {
+            if (count <= 0)
+                return;
+
+            var bufType = state.GetOpDType(op);
+            var arrType = state.GetOpSrcDType(op);
+            if (bufType != NPTypeCode.String || arrType != NPTypeCode.String)
+            {
+                // Numbers <-> text: NumPy converts each element at this point (after every construction check passed).
+                var from = toBuffer ? state.GetOpSrcDescr(op) : state.GetOpDescr(op);
+                var to = toBuffer ? state.GetOpDescr(op) : state.GetOpSrcDescr(op);
+                throw Strings.NDStringCasting.TextConversion(from, to);
+            }
+
+            int kinds = state.OpStringKinds[op];
+            bool bufUnicode = (kinds & NDIterState.StringBufferUnicode) != 0;
+            bool arrUnicode = (kinds & NDIterState.StringSourceUnicode) != 0;
+            int bufSize = state.GetElementSize(op);
+            int arrSize = state.GetSrcElementSize(op);
+            if (toBuffer)
+                Strings.NDStringCopy.TransferElements(src, srcElemStride * arrSize, arrSize, arrUnicode,
+                                                      dst, dstElemStride * bufSize, bufSize, bufUnicode, count);
+            else
+                Strings.NDStringCopy.TransferElements(src, srcElemStride * bufSize, bufSize, bufUnicode,
+                                                      dst, dstElemStride * arrSize, arrSize, arrUnicode, count);
+        }
+
+        /// <summary>
+        ///     The masked flush of one run of a fixed-width string operand — <see cref="CopyRunFromBufferMasked"/>'s structure
+        ///     (each stretch of true mask bytes moved as one run) over <see cref="CopyStringRun"/>.
+        /// </summary>
+        /// <param name="state">The iterator state.</param>
+        /// <param name="op">The WRITEMASKED string operand.</param>
+        /// <param name="buf">The run's first buffer element.</param>
+        /// <param name="dst">The run's first array element.</param>
+        /// <param name="dstElemStride">The array stride in elements.</param>
+        /// <param name="count">The run length.</param>
+        /// <param name="mask">The run's first mask byte.</param>
+        /// <param name="maskStride">The mask byte stride (0 for a broadcast mask).</param>
+        private static void CopyStringRunFromBufferMasked(ref NDIterState state, int op, byte* buf, byte* dst,
+                                                          long dstElemStride, long count, byte* mask, long maskStride)
+        {
+            if (count <= 0)
+                return;
+            int bufSize = state.GetElementSize(op);
+            int arrSize = state.GetSrcElementSize(op);
+
+            if (maskStride == 0)
+            {
+                if (mask[0] != 0)
+                    CopyStringRun(ref state, op, buf, 1, dst, dstElemStride, count, toBuffer: false);
+                return;
+            }
+
+            long i = 0;
+            while (i < count)
+            {
+                while (i < count && mask[i * maskStride] == 0)
+                    i++;
+                long start = i;
+                while (i < count && mask[i * maskStride] != 0)
+                    i++;
+                if (i > start)
+                    CopyStringRun(ref state, op, buf + start * bufSize, 1,
+                                  dst + start * dstElemStride * arrSize, dstElemStride, i - start, toBuffer: false);
+            }
+        }
+
+        /// <summary>
+        ///     The buffered-REDUCE transfer of a fixed-width string operand: <paramref name="count"/> elements from the
+        ///     operand's current data pointer, walking the iteration space from coordinate zero — the layout
+        ///     <see cref="CopyToBuffer{T}"/> / <see cref="CopyFromBuffer{T}"/> assume — in inner-axis runs of
+        ///     <see cref="CopyStringRun"/>.
+        /// </summary>
+        /// <param name="state">The iterator state.</param>
+        /// <param name="op">The string operand.</param>
+        /// <param name="count">The number of elements.</param>
+        /// <param name="toBuffer">True to fill the buffer, false to flush it (a read-only operand is not flushed).</param>
+        private static void CopyStringOperandFromStart(ref NDIterState state, int op, long count, bool toBuffer)
+        {
+            byte* buffer = (byte*)state.GetBuffer(op);
+            if (buffer == null || count <= 0)
+                return;
+            if (!toBuffer && (state.GetOpFlags(op) & NDIterOpFlags.WRITE) == 0)
+                return;
+
+            byte* arr = (byte*)state.GetDataPtr(op);
+            int arrSize = state.GetSrcElementSize(op);
+            int bufSize = state.GetElementSize(op);
+            int ndim = state.NDim;
+            if (ndim == 0)
+            {
+                if (toBuffer)
+                    CopyStringRun(ref state, op, arr, 0, buffer, 1, 1, toBuffer: true);
+                else
+                    CopyStringRun(ref state, op, buffer, 1, arr, 0, 1, toBuffer: false);
+                return;
+            }
+
+            int innerAxis = ndim - 1;
+            long innerLen = state.Shape[innerAxis];
+            long innerStride = state.GetStride(innerAxis, op);
+
+            // The coordinates live on the stack, as in CopyStridedToContiguous<T> (the numeric twin of this walk).
+            long* coords = stackalloc long[ndim];
+            for (int d = 0; d < ndim; d++)
+                coords[d] = 0;
+
+            long remaining = count;
+            while (remaining > 0)
+            {
+                long run = Math.Min(remaining, innerLen - coords[innerAxis]);
+                if (toBuffer)
+                    CopyStringRun(ref state, op, arr, innerStride, buffer, 1, run, toBuffer: true);
+                else
+                    CopyStringRun(ref state, op, buffer, 1, arr, innerStride, run, toBuffer: false);
+
+                buffer += run * bufSize;
+                remaining -= run;
+                if (remaining <= 0)
+                    break;
+
+                // Row finished: ripple-carry to the next position, moving the array pointer incrementally.
+                arr += run * innerStride * arrSize;
+                coords[innerAxis] += run;
+                for (int d = innerAxis; d >= 0; d--)
+                {
+                    if (coords[d] < state.Shape[d])
+                        break;
+                    coords[d] = 0;
+                    arr -= state.GetStride(d, op) * state.Shape[d] * arrSize;
+                    if (d == 0)
+                        break;
+                    coords[d - 1]++;
+                    arr += state.GetStride(d - 1, op) * arrSize;
+                }
+            }
         }
 
         /// <summary>

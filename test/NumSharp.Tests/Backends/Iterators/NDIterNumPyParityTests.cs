@@ -2026,7 +2026,9 @@ namespace NumSharp.Tests.Backends.Iterators
         [TestMethod]
         public void GetIterView_BufferedIterator_ThrowsException()
         {
-            // NumPy: Cannot provide an iterator view when buffering is enabled
+            // NumPy 2.4.2: np.nditer(a, flags=['buffered']).itviews raises
+            //   ValueError: cannot provide an iterator view when buffering is enabled
+            // whether or not any operand is actually buffered.
 
             var arr = np.arange(24).reshape(2, 3, 4);
 
@@ -2037,8 +2039,9 @@ namespace NumSharp.Tests.Backends.Iterators
             {
                 iter.GetIterView(0);
             }
-            catch (InvalidOperationException)
+            catch (ValueError e)
             {
+                Assert.AreEqual("cannot provide an iterator view when buffering is enabled", e.Message);
                 threw = true;
             }
 

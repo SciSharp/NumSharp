@@ -228,6 +228,9 @@ namespace NumSharp.Tests.Strings
             // Section N (numpy.ma over text) builds masked arguments from data / mask operand pairs in its own partial.
             if (TryInvokeMa(c.Op, p, ops, out var masked))
                 return masked;
+            // Section striter (np.nditer / np.nested_iters over text, recorded as traces) lives in its own partial.
+            if (TryInvokeNditer(c.Op, p, ops, out var iterated))
+                return iterated;
             throw new InvalidOperationException($"the string oracle has no op '{c.Op}'");
         }
 

@@ -346,6 +346,15 @@ namespace NumSharp.Tests.Fuzz
             // included (their types are strict too: FuzzCorpusTests.Kinds.CheckError).
             if (c.Valueclass == "linalg_empty")
                 return null;
+            // nditer_construct.jsonl (np.nditer's descriptor construction: cast checks, copy routes, NumPy's check order,
+            // the advance-on-entry protocol; the rundown's bug 6) is held to ZERO excuses, its error cases included (their
+            // types are strict too: FuzzCorpusTests.Kinds.CheckError).
+            if (c.Valueclass == "nditer_construct")
+                return null;
+            // nditer_protocol.jsonl (np.nditer's state contract between construction and close, as scripted text traces)
+            // is held to ZERO excuses.
+            if (c.Valueclass == "nditer_protocol")
+                return null;
             // copyto_full.jsonl (np.copyto as NumPy's array_copyto, plan api-parameter-parity X16 + X11: where= masks,
             // layouts, every dtype, casts, overlap, C# literal sources, 0-d / empty arrays, NumPy's errors and their
             // order) is held to ZERO excuses, its error cases (valueclass "error") included — hence the op test.
@@ -1232,23 +1241,12 @@ namespace NumSharp.Tests.Fuzz
             // neighbouring regression still fails.
             // =================================================================================
 
-            // (K1) np.nditer traversal with order='A' over a TRANSPOSED 3-D operand — NumSharp
-            // picks a different axis ordering than NumPy's stride-sorted 'A'/'K' heuristic, so the
-            // value stream, the multi_index stream and BOTH tracked-index streams (c_index/f_index)
-            // all differ. Scoped to nditer_* on that one layout; every other layout/order is gated
-            // exactly.
-            //
-            // This excuse used to also cover `strided_2d_cols` and `negstride_2d_offset` for a
-            // second cause — external_loop CHUNKING: NumSharp's constructor only coalesced axes when
-            // every operand was contiguous and nothing was broadcast, so a uniformly strided
-            // a[:, ::2] ran one chunk per row where NumPy's unconditional npyiter_coalesce_axes hands
-            // out ONE strided chunk ([8] vs [4], [6] vs [1]). NDIterCoalescing.CoalesceAxesIterationOrder
-            // (2026-09-03) merges in iteration order exactly as NumPy does; probed against 2.4.2 on
-            // all three layouts × C/F/A/K, the chunk lengths and value streams are identical except
-            // the 'A'-order transposed_3d case above, so those two layouts are gated bit-exactly now.
-            if (c.Op != null && (c.Op == "nditer" || c.Op.StartsWith("nditer_"))
-                && c.Layout == "transposed_3d")
-                return "nditer traversal: order='A' axis ordering over a transposed 3-D operand [known bug]";
+            // (K1) CLOSED — np.nditer traversal with order='A' over a TRANSPOSED 3-D operand used to take K's stride sort.
+            // NumPy's npyiter_apply_forced_iteration_order makes 'A' a FORCED order (Fortran when every operand is
+            // F-contiguous, C otherwise), and NDIterRef.Initialize resolves it that way since the np.nditer string work
+            // (the rundown's bug 6), so the value, multi_index and c_index / f_index streams are gated exactly on every
+            // layout. (Its earlier second cause, external_loop chunking of strided views, closed on 2026-09-03 with
+            // NDIterCoalescing.CoalesceAxesIterationOrder.) OpenBugs.FuzzGate's K1 tests pin that no carve remains.
 
             // (K2) np.isscalar on a 0-D ARRAY. NumPy answers False — a 0-d ndarray is an array, not
             // a scalar, which is one of its best-known gotchas — while NumSharp answers True.

@@ -462,6 +462,171 @@ namespace NumSharp.Backends.Strings
             return true;
         }
 
+        /// <summary>
+        ///     Moves <paramref name="count"/> string elements between two raw element runs with independent BYTE strides —
+        ///     the run copy of the iterator's buffers (<see cref="NDIterBufferManager"/>), which hold no storages. It is the
+        ///     element half of <see cref="Copy"/>: the same class copies the first <c>min(src, dst)</c> characters and
+        ///     NUL-pads a wider destination; <c>S ↔ U</c> checks every source element whole first (NumPy decodes / encodes the
+        ///     full value before it truncates), then widens / narrows the units.
+        /// </summary>
+        /// <param name="src">The first source element.</param>
+        /// <param name="srcByteStride">The source's stride in bytes (negative for a reversed run, 0 for a broadcast).</param>
+        /// <param name="srcItemSize">The source element size in bytes.</param>
+        /// <param name="srcUnicode">True when the source is <c>U</c> (UCS-4 units), false for <c>S</c>.</param>
+        /// <param name="dst">The first destination element.</param>
+        /// <param name="dstByteStride">The destination's stride in bytes.</param>
+        /// <param name="dstItemSize">The destination element size in bytes.</param>
+        /// <param name="dstUnicode">True when the destination is <c>U</c>.</param>
+        /// <param name="count">The number of elements.</param>
+        /// <exception cref="UnicodeEncodeError">A <c>U → S</c> element holds a code point at or above 128.</exception>
+        /// <exception cref="UnicodeDecodeError">An <c>S → U</c> element holds a byte at or above <c>0x80</c>.</exception>
+        /// <exception cref="SystemError">A <c>U → S</c> element holds a unit above <c>U+10FFFF</c>.</exception>
+        /// <remarks>
+        ///     The check runs before any unit is written, so a failing run leaves its destination untouched (NumPy's
+        ///     element-by-element conversion has written the elements before the failing one) — the same difference
+        ///     <see cref="Copy"/> documents. The element that fails is the first in RUN order, which is the order NumPy's
+        ///     buffered transfer visits. The overlapping case does not arise: one side is always the iterator's own buffer.
+        /// </remarks>
+        internal static void TransferElements(byte* src, long srcByteStride, int srcItemSize, bool srcUnicode,
+                                              byte* dst, long dstByteStride, int dstItemSize, bool dstUnicode, long count)
+        {
+            if (count <= 0)
+                return;
+
+            if (srcUnicode == dstUnicode)
+            {
+                // string_to_string: copy the shorter width, NUL-pad the rest of a wider destination element.
+                int copy = Math.Min(srcItemSize, dstItemSize);
+                int zero = dstItemSize - copy;
+                var kernel = DirectILKernelGenerator.GetElementCopyKernel(copy, zero);
+                if (kernel != null)
+                {
+                    kernel(dst, src, 1, count, 0, dstByteStride, 0, srcByteStride);
+                    return;
+                }
+                // IL generation is unavailable: the same per-element move.
+                for (long i = 0; i < count; i++)
+                {
+                    byte* d = dst + i * dstByteStride;
+                    Buffer.MemoryCopy(src + i * srcByteStride, d, copy, copy);
+                    if (zero > 0)
+                        new Span<byte>(d + copy, zero).Clear();
+                }
+                return;
+            }
+
+            int srcUnit = srcUnicode ? 4 : 1;
+            int dstUnit = dstUnicode ? 4 : 1;
+            int srcChars = srcItemSize / srcUnit;
+            int dstChars = dstItemSize / dstUnit;
+            ThrowIfAnyRunElementNotAscii(src, srcByteStride, srcChars, srcUnicode, count);
+
+            // Every unit that is read is ASCII now, so the uint8 <-> uint32 unit cast is exact. The units form a 2-D grid
+            // (elements x characters); the cast kernels take ELEMENT strides of their own unit type.
+            int common = Math.Min(srcChars, dstChars);
+            var srcCode = srcUnicode ? NPTypeCode.UInt32 : NPTypeCode.Byte;
+            var dstCode = dstUnicode ? NPTypeCode.UInt32 : NPTypeCode.Byte;
+            var cast = DirectILKernelGenerator.TryGetStridedCastKernel(srcCode, dstCode);
+            if (cast != null)
+            {
+                long* sStrides = stackalloc long[2];
+                long* dStrides = stackalloc long[2];
+                long* shape = stackalloc long[2];
+                sStrides[0] = srcByteStride / srcUnit;
+                sStrides[1] = 1;
+                dStrides[0] = dstByteStride / dstUnit;
+                dStrides[1] = 1;
+                shape[0] = count;
+                shape[1] = common;
+                cast(src, dst, sStrides, dStrides, shape, 2);
+            }
+            else
+            {
+                for (long i = 0; i < count; i++)
+                {
+                    byte* s = src + i * srcByteStride;
+                    byte* d = dst + i * dstByteStride;
+                    for (int c = 0; c < common; c++)
+                    {
+                        uint unit = srcUnicode ? ((uint*)s)[c] : s[c];
+                        if (dstUnicode)
+                            ((uint*)d)[c] = unit;
+                        else
+                            d[c] = (byte)unit;
+                    }
+                }
+            }
+
+            if (dstChars > common)
+            {
+                // NUL-pad the trailing characters of every destination element: a broadcast (stride 0) zero source moved by
+                // the element copy kernel, or plain clears when IL generation is unavailable.
+                int tailBytes = (dstChars - common) * dstUnit;
+                byte* tail = dst + common * dstUnit;
+                // Up to 1 KB of padding per element: the element copy kernel moving a stack block of zeros (stride 0) —
+                // the cpblk it emits is a few vector stores. A wider tail is cleared element by element instead (each clear
+                // is at least 1 KB of vectorized stores, so the per-element call costs nothing), which also keeps a raw
+                // allocation for the zero block out of this file.
+                var zeroKernel = tailBytes <= 1024 ? DirectILKernelGenerator.GetElementCopyKernel(tailBytes, 0) : null;
+                if (zeroKernel != null)
+                {
+                    byte* zeros = stackalloc byte[tailBytes];
+                    new Span<byte>(zeros, tailBytes).Clear();
+                    zeroKernel(tail, zeros, 1, count, 0, dstByteStride, 0, 0);
+                }
+                else
+                {
+                    for (long i = 0; i < count; i++)
+                        new Span<byte>(tail + i * dstByteStride, tailBytes).Clear();
+                }
+            }
+        }
+
+        /// <summary>
+        ///     NumPy's error for the first element of a run that cannot cross between <c>S</c> and <c>U</c>: a contiguous run
+        ///     is scanned in one SIMD pass and only a hit is looked at element-wise; a strided run is scanned per element.
+        /// </summary>
+        /// <param name="src">The first source element.</param>
+        /// <param name="byteStride">The source's stride in bytes.</param>
+        /// <param name="chars">Characters per source element.</param>
+        /// <param name="unicode">True for a <c>U</c> source, false for <c>S</c>.</param>
+        /// <param name="count">The number of elements.</param>
+        /// <exception cref="UnicodeEncodeError">A <c>U</c> element holds a code point at or above 128.</exception>
+        /// <exception cref="UnicodeDecodeError">An <c>S</c> element holds a byte at or above <c>0x80</c>.</exception>
+        /// <exception cref="SystemError">A <c>U</c> element holds a unit above <c>U+10FFFF</c>.</exception>
+        private static void ThrowIfAnyRunElementNotAscii(byte* src, long byteStride, int chars, bool unicode, long count)
+        {
+            long itemSize = unicode ? chars * 4L : chars;
+            if (byteStride == itemSize)
+            {
+                long total = count * chars;
+                long hit = unicode ? FirstAbove((uint*)src, total, 0x7Fu) : FirstAbove(src, total, (byte)0x7F);
+                if (hit < 0)
+                    return;
+                // The first offending element in run order; the codec names the character position inside it.
+                byte* element = src + hit / chars * itemSize;
+                if (unicode)
+                    NDStringCodec.ThrowIfNotAscii((uint*)element, chars);
+                else
+                    NDStringCodec.ThrowIfNotAscii(new ReadOnlySpan<byte>(element, chars));
+                return;
+            }
+
+            for (long i = 0; i < count; i++)
+            {
+                byte* element = src + i * byteStride;
+                if (unicode)
+                {
+                    if (FirstAbove((uint*)element, chars, 0x7Fu) >= 0)
+                        NDStringCodec.ThrowIfNotAscii((uint*)element, chars);
+                }
+                else
+                {
+                    NDStringCodec.ThrowIfNotAscii(new ReadOnlySpan<byte>(element, chars));
+                }
+            }
+        }
+
         /// <summary>The index of the first unit above <paramref name="max"/> in a contiguous run (SIMD, in int-sized chunks).</summary>
         /// <typeparam name="T">The unit type (<see cref="byte"/> or <see cref="uint"/>).</typeparam>
         /// <param name="p">The first unit.</param>

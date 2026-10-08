@@ -226,8 +226,13 @@ public class AuditV2_NDArrayCreation
     //
     //   The audit grouped both observations under T1.46; the arithmetic
     //   path is the real defect.
+    //
+    //   FIXED (d0a6f4c8, plan api-parameter-parity X2): the binary ufuncs pack the
+    //   weak Python int with NumPy's range check, so `arr + 1000` raises
+    //   OverflowError. This test is the regression pin.
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.46")]
+    /// <summary>Guards the NEP 50 promotion (uint8) and the range check of the Python int 1000 against it.</summary>
+    [TestMethod]
     public void T1_46_FindCommonType_UInt8Array_PlusLargeInt_SilentOverflow()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });

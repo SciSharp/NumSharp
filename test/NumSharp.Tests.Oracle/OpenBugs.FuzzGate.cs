@@ -581,18 +581,23 @@ namespace NumSharp.Tests
                 new[] { new BitDiff.Diff(0, "NaN:aa", "NaN:NaN") }).Should().NotBeNull();
         }
 
-        // ---- K1: the public nditer trace uses the same narrow layout carve as nditer_* ----
+        // ---- K1 (closed): order='A' is NumPy's forced order, so no nditer layout is carved any more ----
 
+        /// <summary>
+        ///     The K1 carve (order='A' over a transposed 3-D operand) is gone: NumPy's 'A' is a forced C / F order and
+        ///     NDIterRef resolves it that way, so a divergence on that layout is a regression, not an excuse.
+        /// </summary>
         [TestMethod]
-        public void K1_NditerDirect_Transposed3d_StillExcused()
+        public void K1_NditerDirect_Transposed3d_NoLongerExcused()
         {
             var c = Case("nditer", ("int32", new long[] { 2, 3, 4 }));
             c.Layout = "transposed_3d";
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
                 BitConverter.GetBytes(1), BitConverter.GetBytes(2), NPTypeCode.Int32, OneDiff)
-                .Should().NotBeNull("the renamed public trace must retain the measured K1 carve");
+                .Should().BeNull("order='A' resolves to NumPy's forced C / F order, so the K1 carve was removed");
         }
 
+        /// <summary>The neighbouring contiguous layout was never carved, and stays gated exactly.</summary>
         [TestMethod]
         public void K1_NditerDirect_ContiguousNeighbour_NotExcused()
         {
@@ -600,7 +605,7 @@ namespace NumSharp.Tests
             c.Layout = "c_contiguous_3d";
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
                 BitConverter.GetBytes(1), BitConverter.GetBytes(2), NPTypeCode.Int32, OneDiff)
-                .Should().BeNull("K1 is limited to the three measured layouts");
+                .Should().BeNull("no nditer layout is carved");
         }
 
         // ---- decimal std last-digit scope (surfaced by B1) ----

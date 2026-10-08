@@ -277,6 +277,8 @@ python test/oracle/gen_oracle.py creation         # deterministic zero-operand c
 python test/oracle/gen_oracle.py conversion       # array/as*/require/frombuffer/fromstring + errors
 python test/oracle/gen_oracle.py multioutput      # full tuple arity + every result slot
 python test/oracle/gen_oracle.py iter             # ndindex/ndenumerate/nditer/broadcast TRACES (order gate)
+python test/oracle/gen_oracle.py nditer_construct # np.nditer's descriptor construction: casts, copy routes, check order
+python test/oracle/gen_oracle.py nditer_protocol  # np.nditer's state contract: scripted pulls, seeks, setters, index, op_axes
 python test/oracle/gen_oracle.py dtype_text       # dtype/scalar/text/tuple result kinds
 python test/oracle/gen_oracle.py errors_full      # the raising cells every value generator skips
 python test/oracle/gen_oracle.py out_where        # ufunc out=/where= x out layout x mask layout
@@ -397,8 +399,8 @@ row is scoped in `MisalignedRegistry` branches K1–K9, so each is counted and p
 | Finding | Where | Status |
 |---|---|---|
 | `np.nditer(0-d, external_loop)` → `it[0]` **kills the process** (AccessViolation): `GetInnerLoopSizePtr` reads `Shape[-1]` | `np.nditer.cs` indexer | **FIXED** — 0-d answered directly, as `NDIterTyped.ReadInnerLoop` already did |
-| `order='A'` over a transposed 3-D operand picks a different axis ordering than NumPy | K1 | known bug |
-| `external_loop` coalesces fewer dimensions → more/shorter chunks (values agree, chunk lengths do not) | K1 | known bug |
+| `order='A'` over a transposed 3-D operand picks a different axis ordering than NumPy | K1 | **FIXED** — `'A'` is NumPy's FORCED order (Fortran when every operand is F-contiguous, else C; `npyiter_apply_forced_iteration_order`), resolved in `NDIterRef.Initialize`; the carve is gone |
+| `external_loop` coalesces fewer dimensions → more/shorter chunks (values agree, chunk lengths do not) | K1 | **FIXED** (2026-09-03, `NDIterCoalescing.CoalesceAxesIterationOrder`) |
 | `isscalar(0-d array)` → True, NumPy False | K2 | known bug |
 | `nonzero(0-d)` returns a tuple, NumPy raises | K3 | known bug |
 | complex-input ufunc rejection (cbrt/floor/ceil/trunc/deg2rad/rad2deg/floor_divide/mod) | K4 | **FIXED** — each `Default.<Op>` guard now raises NumPy's exact `TypeError("ufunc '<name>' not supported for the input types…")` (mod→'remainder') instead of a kernel `NotSupportedException`; excuse deleted |
@@ -2076,6 +2078,42 @@ the complex Frobenius norm of an empty matrix threw from the typed iterator (NDI
 written zero-size operand as a reduction; NumPy's test is the operand's SHAPE), and the empty `np.max` /
 `np.argmax` family raised the base `ArgumentException` where NumPy raises `ValueError`. Excluded: `lstsq` of a
 non-empty `a` with an empty `b` (gelsd still computes `a`'s singular values — backend only) and text operands.
+
+### np.nditer's construction and state contract (`nditer_construct` + `nditer_protocol` tiers) — 2026-10-08
+
+The open-bugs rundown's bug 6 (`np.nditer` over strings) made the iterator carry DESCRIPTORS, so these two tiers gate
+the numeric half of that work; the string half is the string oracle's `striter` section. Both are portable, held to
+ZERO excuses and to STRICT error types (valueclasses `nditer_construct` / `nditer_protocol`).
+
+- **`nditer_construct.jsonl`** (9,574 cases): `npyiter_check_casting`'s read and write-back checks, the copy routes of
+  `npyiter_allocate_arrays` (a read-only 0-d cast operand copied whatever the flags say, `copy`, `updateifcopy`
+  written back at close), the "required copying or buffering" TypeError, the common dtype, NumPy's per-operand check
+  order, buffered casts and the advance-on-entry protocol, over every NumPy dtype and the layout catalog. Each case
+  records the value stream, the operand after construction and the array after close. Its ranged section
+  (`nditer_ranged`) walks a buffered cast over `[start, end)` for every source dtype.
+- **`nditer_protocol.jsonl`** (1,219 cases): scripted traces of the state between construction and close —
+  nditer_pywrap's started / finished flags, "Iterator is past the end", the delayed-allocation and closed-iterator
+  texts, seeks (`iterindex` / `index` / `multi_index` / `iterrange`), `remove_axis`, `remove_multi_index`,
+  `enable_external_loop`, `copy`, element reads and `it[i] = v` writes (NumPy's Python-int packing, the views' write
+  flags), over 13 dtypes. Its `coalesce` section walks `c_index` / `f_index` / `multi_index` iterators over coalescable
+  and non-coalescable layouts in every order and records each element's flat index and iteration index (`walkidx`),
+  the reported shape, GotoIndex and `remove_multi_index`; its `reduce` section runs NumPy's unbuffered reduction idiom
+  through `op_axes` (allocated and given outputs, -1 entries on every axis, plain / external loop / multi-index walks,
+  and the reduction errors).
+
+Found by them, all fixed: NumSharp computed the flat index from the coordinates, so an `f_index` counted in C order
+once `remove_multi_index` coalesced the axes (the index now rides its own strides, NumPy's index "operand", and
+coalesces with the axes); the shape without a multi-index was listed outermost first (NumPy lists the iterator's axes
+innermost first); `remove_multi_index` re-sorted the axes by stride, so a forced C / F order walked memory order
+instead; an allocated reduction output put the reduced axis outermost (the allocated operand does not vote in the
+ordering, and the contiguous branch's coalescing cannot leave an iterator partly merged); a K-order walk with a
+broadcast or reduction operand fell back to C order where NumPy's `npyiter_find_best_axis_ordering` treats a zero
+stride as ambiguous (the descriptor path now runs NumPy's sort); the op_axes reduction checks raised NumSharp's own
+texts and an explicit reduction axis demanded `reduce_ok` (NumPy marks it without the flag); and a construction that
+failed after allocating an output leaked that output's pooled buffer to the finalizer (found by the leak gate on the
+`reduce` section's error cases). The tiers leave out a BUFFERED reduction, which NumSharp computes wrongly — pinned
+in `OpenBugs.NditerBufferedReduce.cs`, a port of NumPy's buffered-reduce design to come — and a buffered iterator's
+`index` (NumPy's is uninitialized memory there).
 
 ### Polynomial family (`poly` tier)
 

@@ -23,9 +23,9 @@ namespace NumSharp.Tests.Fuzz
     ///
     ///     <para>
     ///     <b>The iteration protocol used here is NumPy's own</b> — <c>while (!it.finished) { read;
-    ///     it.iternext(); }</c> — not <c>foreach</c>. np.NDIterator.MoveNext publishes THEN advances
-    ///     (matching Python's <c>__next__</c>), so mixing the two styles would offset the trace by
-    ///     one step. Values are read with GetAtIndex, which COPIES: <c>it[0]</c> aliases the
+    ///     it.iternext(); }</c> — for the traces, and <c>foreach</c> (np.NDIterator.MoveNext, which
+    ///     advances on ENTRY like Python's <c>__next__</c>) for the construction tier; the two are never
+    ///     mixed on one iterator. Values are read with GetAtIndex, which COPIES: <c>it[0]</c> aliases the
     ///     iterator's live data pointer (and, when buffered, a buffer the next step refills), so
     ///     holding the view instead of its value is the documented foot-gun.
     ///     </para>
@@ -54,6 +54,10 @@ namespace NumSharp.Tests.Fuzz
         {
             switch (op)
             {
+                // A ranged, buffered cast iteration's value stream (OpRegistry.Nditer.cs).
+                case "nditer_ranged":
+                    return NditerRangedFromCorpus(p, ops);
+
                 // ---- iterator traces (array-shaped) ----
                 //
                 // np.ndindex has NO operand: the index space comes entirely from params, like the
@@ -223,6 +227,11 @@ namespace NumSharp.Tests.Fuzz
                 // returned-is-out] (OpRegistry.MinMaxKwargs.cs).
                 case "minmax_kwargs":
                     return MinMaxKwargsFromCorpus(p, ops);
+
+                // np.nditer's descriptor construction: per operand [values, operand after construction, array after
+                // close] (OpRegistry.Nditer.cs).
+                case "nditer_construct":
+                    return NditerConstructFromCorpus(p, ops);
 
                 // (index, value) for every element, in flatiter C-order whatever the layout.
                 case "ndenumerate":
@@ -574,6 +583,8 @@ namespace NumSharp.Tests.Fuzz
                 return ApplyMatrixText(op, p, ops);
             switch (op)
             {
+                // np.nditer's state contract between construction and close (OpRegistry.Nditer.cs).
+                case "nditer_protocol": return NditerProtocolFromCorpus(p, ops);
                 case "array_str": return np.array_str(ops[0]);
                 case "array_repr": return np.array_repr(ops[0]);
                 case "mintypecode": return np.mintypecode(p["typechars"].GetString()).ToString();

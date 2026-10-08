@@ -255,6 +255,29 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
+        ///     Packs the combined transfer flags into the top 8 bits of <see cref="NDIterState.ItFlags"/> WITHOUT validating
+        ///     the casts — the descriptor construction path, which runs NumPy's own descriptor-level cast checks
+        ///     (<c>npyiter_check_casting</c>) and must not meet <see cref="ValidateCasts"/>' type-code check, which knows no
+        ///     string width or class.
+        /// </summary>
+        /// <param name="state">The iterator state (its operands' dtypes already set).</param>
+        /// <remarks>
+        ///     Every transfer NumSharp runs — a cast, a same-type copy, a string copy — reports the same characteristics
+        ///     (<see cref="ComputeCastTransferFlags"/>: unaligned-safe, no floating-point errors, reorderable; never
+        ///     <c>REQUIRES_PYAPI</c>), so the packed value equals what <see cref="ValidateCasts"/> would pack.
+        /// </remarks>
+        public static void PackTransferFlags(ref NDIterState state)
+        {
+            if (state.NOp <= 0)
+                return;
+            var combinedFlags = NDArrayMethodFlags.SUPPORTS_UNALIGNED |
+                                NDArrayMethodFlags.NO_FLOATINGPOINT_ERRORS |
+                                NDArrayMethodFlags.IS_REORDERABLE;
+            uint packed = ((uint)combinedFlags & 0xFFu) << NDIterConstants.TRANSFERFLAGS_SHIFT;
+            state.ItFlags = (state.ItFlags & ~NDIterConstants.TRANSFERFLAGS_MASK) | packed;
+        }
+
+        /// <summary>
         /// Compute the NDArrayMethodFlags that characterize a single cast transfer.
         /// In .NET:
         /// - REQUIRES_PYAPI is never set (no Python).

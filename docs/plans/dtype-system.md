@@ -486,8 +486,12 @@ oracle sections closed the gaps between "NumPy refuses" and "NumPy computes":
   arraysetops: `Ma/NDMaskedArray.SetOps.cs`, the zero-excuse `ma_setops.jsonl` tier; `ma.put` is NumPy's
   `MaskedArray.put` statements since 2026-10-08 — a hard-masked N-D put raises NumPy's IndexError, the zero-excuse
   `ma_put.jsonl` tier; numeric fill values are stored, converted and materialized as NumPy's are since 2026-10-08 —
-  the text path's model for every dtype, the zero-excuse `ma_fill.jsonl` tier.) `np.nditer` over strings; the result
-  layout of
+  the text path's model for every dtype, the zero-excuse `ma_fill.jsonl` tier; `np.nditer` iterates strings since
+  2026-10-08 — the iterator carries descriptors: 0-d `S` / `U` views, buffered and copy-route conversions between
+  widths and between `S` and `U` (ASCII; NumPy's Unicode errors otherwise), write-back at close, `np.nested_iters`'
+  per-level split; the string oracle's `striter` section, the numeric `nditer_construct` / `nditer_protocol` tiers;
+  a conversion between text and numbers is phase 2's `StringComputationNotSupportedException`, and a BUFFERED
+  reduction through `np.nditer` is wrong for every dtype, `OpenBugs.NditerBufferedReduce.cs`.) The result layout of
   `argwhere` / `flatnonzero` / `unravel_index` (views in NumPy; `OpenBugs.IndexSearchLayout.cs`, the oracle excuses only
   their layout). (An empty matrix's QR / SVD — every factorisation of an empty matrix or a zero-size batch — is NumPy's
   answer without a backend since 2026-10-08: `Backends/Default/LinearAlgebra/LinAlgEmpty.cs`, the portable

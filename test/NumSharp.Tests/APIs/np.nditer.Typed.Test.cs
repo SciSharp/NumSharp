@@ -132,7 +132,7 @@ namespace NumSharp.Tests.APIs
             // typed form is a NumSharp extension, not a parity surface, so empty means empty.
             var empty = np.zeros(new Shape(0, 5), np.float64);
 
-            Assert.ThrowsException<ArgumentException>(() => np.nditer(empty));
+            Assert.ThrowsException<ValueError>(() => np.nditer(empty));
 
             long n = 0;
             foreach (ref double _ in np.nditer<double>(empty)) n++;

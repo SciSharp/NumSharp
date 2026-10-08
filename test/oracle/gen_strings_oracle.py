@@ -2744,6 +2744,284 @@ def _ma_str_disabled(x):
         np.ma.masked_print_option.enable(True)
 
 
+
+# ----------------------------------------------------------------------------------------------------------------------
+# striter: np.nditer and np.nested_iters over fixed-width strings
+# ----------------------------------------------------------------------------------------------------------------------
+#
+# Each case is a TRACE of one iteration, recorded as text: the iteration descriptors, every step's values (and its
+# multi-index / flat index when tracked), the iterator's operands before close, and the caller's arrays after close (so
+# copy / updateifcopy write-backs and writes through the views are part of the answer). Values travel as hex (u = UTF-32,
+# b = bytes), so supplementary-plane text, embedded NULs and non-ASCII bytes survive. A step that raises ends the walk
+# with "!Type: text"; a construction that raises is the case's error.
+
+def _it_val(v):
+    """One traced value: text / bytes as hex, numbers by kind, a 1-D chunk (external_loop) as a bracketed list."""
+    if isinstance(v, list):
+        return "[" + ",".join(_it_val(x) for x in v) + "]"
+    if isinstance(v, (str, np.str_)):
+        return "u" + str(v).encode("utf-32-le", "surrogatepass").hex()
+    if isinstance(v, (bytes, np.bytes_)):
+        return "b" + bytes(v).hex()
+    if isinstance(v, (bool, np.bool_)):
+        return "B1" if v else "B0"
+    if isinstance(v, (int, np.integer)):
+        return "i" + str(int(v))
+    if isinstance(v, (float, np.floating)):
+        return "f" + repr(float(v))
+    raise TypeError(f"untraceable value {type(v)}")
+
+
+def _it_trace(views, flags=None, op_flags=None, op_dtypes=None, order="K", casting="safe", buffersize=0, writes=None,
+              copy_to=None, iterrange=None):
+    kw = {}
+    if flags is not None:
+        kw["flags"] = flags
+    if op_flags is not None:
+        kw["op_flags"] = op_flags
+    if op_dtypes is not None:
+        kw["op_dtypes"] = [None if d is None else np.dtype(d) for d in op_dtypes]
+    it = np.nditer(views if len(views) > 1 else views[0], order=order, casting=casting, buffersize=buffersize, **kw)
+    lines = ["dtypes " + " ".join(d.str for d in it.dtypes)]
+    # A write-only operand is never read by the iterator: an allocated one starts uninitialized (np.empty — an 'S'
+    # buffer then holds whatever the allocator recycled), so its step values are rendered as "-", not traced.
+    nop = len(views)
+    if op_flags is None:
+        per_op = [None] * nop
+    elif isinstance(op_flags[0], list):
+        per_op = op_flags
+    else:
+        per_op = [op_flags] * nop
+    readable = []
+    for i in range(nop):
+        f = per_op[i] if per_op[i] is not None else (["writeonly", "allocate"] if views[i] is None else ["readonly"])
+        readable.append("readonly" in f or "readwrite" in f)
+    with it:
+        if iterrange is not None:
+            it.iterrange = tuple(iterrange)
+        k = 0
+        walked = False
+        try:
+            for x in it:
+                xs = (x,) if it.nop == 1 else x
+                row = []
+                if it.has_multi_index:
+                    row.append("m" + ",".join(str(i) for i in it.multi_index))
+                if it.has_index:
+                    row.append("x" + str(it.index))
+                row += [_it_val(t.tolist()) if readable[i] else "-" for i, t in enumerate(xs)]
+                lines.append(" ".join(row))
+                if writes is not None:
+                    xs[0][...] = writes[k % len(writes)]
+                if copy_to is not None:
+                    xs[copy_to][...] = xs[0]
+                k += 1
+            walked = True
+        except Exception as e:  # noqa: BLE001 — a step's error is part of the trace
+            lines.append(f"!{err_info(e)['type']}: {e}")
+        # An allocated output a failed walk did not finish writing holds uninitialized elements: "-", not traced.
+        lines.append("operands " + " ".join(
+            _it_val(o.tolist()) if (walked or views[i] is not None) else "-" for i, o in enumerate(it.operands)))
+    lines.append("after " + " ".join(_it_val(v.tolist()) for v in views if v is not None))
+    return "\n".join(lines)
+
+
+def _nested_trace(view, axes, flags=None, op_flags=None, op_dtypes=None, buffersize=0):
+    kw = {}
+    if flags is not None:
+        kw["flags"] = flags
+    if op_flags is not None:
+        kw["op_flags"] = op_flags
+    if op_dtypes is not None:
+        kw["op_dtypes"] = [None if d is None else np.dtype(d) for d in op_dtypes]
+    iters = np.nested_iters(view, axes, buffersize=buffersize, **kw)
+    outer, inner = iters[0], iters[-1]
+    lines = ["dtypes " + " ".join(d.str for d in inner.dtypes)]
+    try:
+        for _ in outer:
+            row = []
+            for y in inner:
+                row.append(_it_val(y.tolist()))
+            lines.append(" ".join(row))
+    except Exception as e:  # noqa: BLE001
+        lines.append(f"!{err_info(e)['type']}: {e}")
+    for i in iters:
+        i.close()
+    return "\n".join(lines)
+
+
+def _it_params(flags=None, op_flags=None, op_dtypes=None, order="K", casting="safe", buffersize=0, writes=None,
+               copy_to=None, iterrange=None, none_ops=None):
+    p = {"order": order, "casting": casting, "buffersize": buffersize}
+    if flags is not None:
+        p["flags"] = flags
+    if op_flags is not None:
+        p["op_flags"] = op_flags
+    if op_dtypes is not None:
+        p["op_dtypes"] = op_dtypes
+    if writes is not None:
+        p["writes"] = enc(writes)
+    if copy_to is not None:
+        p["copy_to"] = copy_to
+    if iterrange is not None:
+        p["iterrange"] = iterrange
+    if none_ops is not None:
+        p["none_ops"] = none_ops
+    return p
+
+
+def _it_add(name, pairs, phase=1, layout="", **kw):
+    """One nditer trace case: pairs are (base, view) operands, None entries the outputs NumPy allocates."""
+    views = [v for _, v in pairs]
+    real = [(b, v) for b, v in pairs if b is not None]
+    none_ops = [i for i, (b, _) in enumerate(pairs) if b is None] or None
+    params = _it_params(none_ops=none_ops, **kw)
+
+    def call(*rviews):
+        it_views, j = [], 0
+        for b, _ in pairs:
+            if b is None:
+                it_views.append(None)
+            else:
+                it_views.append(rviews[j])
+                j += 1
+        return _it_trace(it_views, **kw)
+
+    add("striter", "nditer_" + name.replace("/", "_"), params=params, operands=real, call=call, phase=phase,
+        layout=layout)
+
+
+def gen_striter():
+    flag_sets = [None, ["multi_index"], ["c_index"], ["f_index"], ["external_loop"], ["buffered"],
+                 ["buffered", "external_loop"], ["multi_index", "c_index"]]
+
+    # A. the value stream: every layout x both classes x the flag sets x the orders.
+    for spec in ("<U3", "|S3"):
+        for lname, (n, build) in LAYOUTS.items():
+            for flags in flag_sets:
+                for order in ("K", "C", "F", "A"):
+                    base = base_of(spec, n, seed=len(lname))
+                    _it_add("values", [(base, build(base))], layout=lname, flags=flags, order=order)
+
+    # B. buffered requests: widths, the class conversions (ASCII only), unsized requests, every casting rule.
+    sources = {
+        "u_ascii": ("<U3", True), "u_text": ("<U3", False), "s_ascii": ("|S3", True), "s_bytes": ("|S3", False),
+        "u1": ("<U1", True), "s5": ("|S5", True),
+    }
+    requests = ["<U1", "<U2", "<U3", "<U5", "<U8", "|S1", "|S3", "|S8", "U", "S"]
+    for sname, (spec, ascii_only) in sources.items():
+        for req in requests:
+            for casting in ("no", "safe", "same_kind", "unsafe"):
+                for lname in ("c1", "r2", "f2", "s2", "bc", "z0", "t3"):
+                    n, build = LAYOUTS[lname]
+                    base = base_of(spec, n, seed=3, ascii_only=ascii_only)
+                    for bs in (0, 2):
+                        _it_add("cast", [(base, build(base))], layout=lname, flags=["buffered"], op_dtypes=[req],
+                                casting=casting, buffersize=bs)
+
+    # C. copy routes: a 0-d read-only operand copied without being asked, copy / updateifcopy temporaries written back.
+    for spec, ascii_only in (("<U3", True), ("<U3", False), ("|S3", True)):
+        for req in ("<U5", "<U2", "|S3", "<U3", "U", "S"):
+            for lname in ("c1", "r2", "f2", "z0", "t3", "e2"):
+                n, build = LAYOUTS[lname]
+                base = base_of(spec, n, seed=5, ascii_only=ascii_only)
+                _it_add("copy_ro", [(base, build(base))], layout=lname, op_flags=[["readonly", "copy"]],
+                        op_dtypes=[req], casting="unsafe")
+                base = base_of(spec, n, seed=5, ascii_only=ascii_only)
+                w = ["XYZW", "ab", ""] if req.lstrip("<|")[0] == "U" else [b"XYZW", b"ab", b""]
+                _it_add("updateifcopy", [(base, build(base))], layout=lname,
+                        op_flags=[["readwrite", "updateifcopy"]], op_dtypes=[req], casting="unsafe", writes=w)
+                base = base_of(spec, n, seed=5, ascii_only=ascii_only)
+                _it_add("zero_d_auto", [(base, build(base))], layout=lname, op_dtypes=[req], casting="unsafe")
+
+    # D. writes through the views: unbuffered and buffered (a buffered window written back), truncation, NULs, the
+    # other class (decoded / ASCII-encoded), and non-ASCII into bytes (NumPy's encode error mid-walk).
+    write_sets = {
+        "same": (["Q", "RS", "TUVW"], [b"Q", b"RS", b"TUVW"]),
+        "nul": (["a\x00", "\x00b", ""], [b"a\x00", b"\x00b", b""]),
+        "other": ([b"ab", b"c"], ["ab", "c"]),
+        "nonascii": (["é", "ok"], [b"\xff", b"ok"]),
+        "supp": (["\U0001F600", "x\U0001F600"], [b"x", b"y"]),
+    }
+    for spec in ("<U3", "|S3"):
+        for wname, (for_u, for_s) in write_sets.items():
+            w = for_u if spec[1] == "U" else for_s
+            for lname in ("c1", "c2", "r2", "f2", "s2", "z0", "t3"):
+                n, build = LAYOUTS[lname]
+                for flags, req in ((None, None), (["buffered"], None), (["buffered"], "<U5" if spec[1] == "U" else "|S5"),
+                                   (["external_loop"], None)):
+                    base = base_of(spec, n, seed=7, ascii_only=True)
+                    _it_add(f"write/{wname}", [(base, build(base))], layout=lname, flags=flags,
+                            op_flags=[["readwrite"]], op_dtypes=None if req is None else [req], casting="unsafe",
+                            writes=w)
+
+    # E. allocated outputs: their descriptors (the common dtype, a sized or an unsized request), filled from the input.
+    for spec, ascii_only in (("<U3", True), ("<U3", False), ("|S3", True)):
+        for req in (None, "<U5", "<U2", "|S4", "<U3"):
+            for flags in (None, ["buffered"], ["external_loop"]):
+                for lname in ("c1", "c2", "r2", "f2", "z0", "e2"):
+                    n, build = LAYOUTS[lname]
+                    base = base_of(spec, n, seed=9, ascii_only=ascii_only)
+                    _it_add("alloc", [(base, build(base)), (None, None)], layout=lname, flags=flags,
+                            op_flags=[["readonly"], ["writeonly", "allocate"]], op_dtypes=[None, req], casting="unsafe",
+                            copy_to=1)
+
+    # F. two operands of different classes / widths: each iterated as its own, or with common_dtype / a request.
+    for (sa, sb) in (("<U3", "|S3"), ("<U2", "<U5"), ("|S1", "|S4"), ("<U3", "<i8"), ("|S3", "<f8"), ("<U3", "?")):
+        for flags in (None, ["common_dtype"], ["common_dtype", "buffered"], ["buffered"]):
+            n, build = LAYOUTS["c2"]
+            ba = base_of(sa, n, seed=2, ascii_only=True) if np.dtype(sa).kind in "US" else np.arange(n).astype(sa)
+            bb = base_of(sb, 4, seed=4, ascii_only=True) if np.dtype(sb).kind in "US" else np.arange(4).astype(sb)
+            _it_add("pair", [(ba, build(ba)), (bb, bb)], layout="pair", flags=flags, casting="unsafe",
+                    phase="compute")
+
+    # G. text <-> number through the buffers: NumPy parses / formats (the computational phase).
+    for spec, values in (("<U3", ["1", "22", "-3"]), ("|S3", [b"1", b"22", b"-3"]), ("<U3", ["1.5", "x", "2"])):
+        base = np.array(values * 2, dtype=spec)
+        for req in ("<i8", "<f8", "?"):
+            for casting in ("safe", "unsafe"):
+                _it_add("tonumber", [(base, base)], layout="c1", flags=["buffered"], op_dtypes=[req],
+                        casting=casting, phase="compute")
+    for src in (np.arange(6, dtype=np.int64), np.array([1.5, -2.0, 3.25, 0.0, 1e20, -0.5]), np.array([True, False] * 3)):
+        for req in ("<U5", "|S5", "U", "S", "<U2"):
+            for casting in ("safe", "unsafe"):
+                _it_add("fromnumber", [(src, src)], layout="c1", flags=["buffered"], op_dtypes=[req],
+                        casting=casting, phase="compute")
+
+    # H. NumPy's refusals over strings: a cast neither copied nor buffered, a read-only broadcast written, ranges.
+    for spec in ("<U3", "|S3"):
+        n, build = LAYOUTS["bc"]
+        base = base_of(spec, n, seed=1, ascii_only=True)
+        _it_add("refuse/readonly_bcast", [(base, build(base))], layout="bc", op_flags=[["readwrite"]])
+        n, build = LAYOUTS["c2"]
+        base = base_of(spec, n, seed=1, ascii_only=True)
+        other = "<U5" if spec[1] == "U" else "|S5"
+        _it_add("refuse/unbuffered_cast", [(base, build(base))], layout="c2", op_dtypes=[other], casting="unsafe")
+        _it_add("refuse/safe_narrow", [(base, build(base))], layout="c2", flags=["buffered"],
+                op_dtypes=["<U1" if spec[1] == "U" else "|S1"], casting="safe")
+        _it_add("refuse/class_safe", [(base, build(base))], layout="c2", flags=["buffered"],
+                op_dtypes=["|S3" if spec[1] == "U" else "<U3"], casting="safe")
+        for rng in ((1, 4), (0, 12), (5, 5)):
+            _it_add("ranged", [(base, build(base))], layout="c2", flags=["buffered", "ranged"],
+                    op_dtypes=["<U5" if spec[1] == "U" else "|S5"], casting="unsafe", iterrange=list(rng))
+
+    # I. np.nested_iters over strings.
+    for spec in ("<U3", "|S3"):
+        for lname, axes in (("c2", [[0], [1]]), ("c2", [[1], [0]]), ("f2", [[0], [1]]), ("c3", [[0], [1, 2]]),
+                            ("c3", [[2], [0, 1]]), ("t3", [[1], [0, 2]]), ("r2", [[1], [0]])):
+            n, build = LAYOUTS[lname]
+            base = base_of(spec, n, seed=11)
+            view = build(base)
+            add("striter", "nested_iters", params={"axes": axes}, operands=[(base, view)],
+                call=lambda v, axes=axes: _nested_trace(v, axes), layout=lname)
+            base = base_of(spec, n, seed=11, ascii_only=True)
+            view = build(base)
+            req = "<U5" if spec[1] == "U" else "|S5"
+            add("striter", "nested_iters", params={"axes": axes, "flags": ["buffered"], "op_dtypes": [req]},
+                operands=[(base, view)], call=lambda v, axes=axes, req=req: _nested_trace(
+                    v, axes, flags=["buffered"], op_dtypes=[req]), layout=lname)
+
+
 def main():
     gen_dtypes()
     gen_creation()
@@ -2760,6 +3038,7 @@ def main():
     gen_validation_order()
     gen_surface()
     gen_strma()
+    gen_striter()
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with open(OUT, "wb") as f:
         for c in CASES:

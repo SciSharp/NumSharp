@@ -295,6 +295,29 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void LinalgEmpty() => RunCorpus("linalg_empty.jsonl");
 
+        // nditer_construct.jsonl: np.nditer's DESCRIPTOR construction (the open-bugs rundown's bug 6 and its numeric
+        // neighbours) - npyiter_check_casting's read / write-back checks, npyiter_allocate_arrays' copy routes (a read-only
+        // 0-d operand, copy, updateifcopy written back at close), the "required copying or buffering" TypeError, the common
+        // dtype, NumPy's per-operand check order, and the advance-on-entry protocol (a buffered readwrite loop's last write
+        // of every buffer reaches the array; journey4's SU42). Portable, zero excuses, STRICT error types (valueclass
+        // "nditer_construct"). The string half lives in the string oracle's "striter" section.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void NditerConstruct() => RunCorpus("nditer_construct.jsonl");
+
+        /// <summary>
+        ///     np.nditer's state contract between construction and close: scripted traces of pulls, seeks, range resets,
+        ///     remove_axis / external loop, element reads and writes through <c>it[i]</c>, copies and close, against
+        ///     NumPy 2.4.2's (nditer_pywrap.c's started / finished flags, "Iterator is past the end", the delayed-allocation
+        ///     and closed-iterator texts, the views' write flags). Its "coalesce" section walks c_index / f_index /
+        ///     multi_index iterators over coalescable and non-coalescable layouts in every order, recording each element's
+        ///     flat index and iteration index, the reported shape (innermost first without a multi-index), GotoIndex and
+        ///     remove_multi_index (which only coalesces). Zero excuses.
+        /// </summary>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void NditerProtocol() => RunCorpus("nditer_protocol.jsonl");
+
         // T9 bitwise & shift: bitwise_and/or/xor (& | ^), invert (~), left/right_shift across
         // integer + bool dtypes, pairwise layouts, and shift-count edges that straddle the bit width.
         [TestMethod]
@@ -1092,6 +1115,8 @@ namespace NumSharp.Tests.Fuzz
             ["matmul.jsonl"] = 769,
             ["matmul_parity.jsonl"] = 470,
             ["linalg_parity.jsonl"] = 340,   // +90: LU family (solve/inv/det/slogdet/tensorinv/tensorsolve) + matrix_power(n<0)
+            ["nditer_construct.jsonl"] = 9000,   // np.nditer's descriptor construction, cast checks, copy routes, check order, protocol (9,574 at delivery, 2026-10-08)
+            ["nditer_protocol.jsonl"] = 1150,  // np.nditer's state contract, setters, delayed allocation, index coalescing, op_axes reductions (1,219 at delivery, 2026-10-08)
             ["linalg_empty.jsonl"] = 4800,   // every np.linalg factorisation over empty operands / zero-size batches, portable (5,066 at delivery, 2026-10-08)
             ["poly.jsonl"] = 60,
             ["einsum.jsonl"] = 35,

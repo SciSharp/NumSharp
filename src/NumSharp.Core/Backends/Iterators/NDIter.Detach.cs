@@ -33,17 +33,39 @@ namespace NumSharp.Backends.Iteration
         /// </param>
         internal NDIterState* Detach(out NDArray[]? operands, out NDArray?[]? writebackOriginals)
         {
+            var released = Detach(out operands, out writebackOriginals, out var releaseOnly);
+            // A caller that takes no release-only list owns no copy-route temporaries (only the descriptor
+            // construction makes them, and np.nditer takes the three-list form); release any defensively so
+            // nothing is stranded in the pool.
+            ReleaseRouteTemps(operands, releaseOnly);
+            return released;
+        }
+
+        /// <summary>
+        ///     The full hand-over: also the READ-ONLY copy-route registrations (<paramref name="releaseOnlyOriginals"/>),
+        ///     whose temporaries the owner releases at teardown without writing anything back
+        ///     (<see cref="ResolveDetachedWritebacks"/>).
+        /// </summary>
+        /// <param name="operands">The operand arrays the iterator was built over (temporaries in the copy-route slots).</param>
+        /// <param name="writebackOriginals">Per slot, the original a WRITTEN temporary copies back into, or null.</param>
+        /// <param name="releaseOnlyOriginals">Per slot, the original a READ-ONLY temporary stands in for, or null.</param>
+        /// <returns>The released state (the owner frees it with <see cref="FreeState"/>).</returns>
+        /// <exception cref="InvalidOperationException">This instance does not own its state.</exception>
+        internal NDIterState* Detach(out NDArray[]? operands, out NDArray?[]? writebackOriginals, out NDArray?[]? releaseOnlyOriginals)
+        {
             if (!_ownsState)
                 throw new InvalidOperationException("Iterator does not own its state; cannot detach.");
 
             operands = _operands;
             writebackOriginals = _writebackOriginals;
+            releaseOnlyOriginals = _releaseOnlyOriginals;
 
             var released = _state;
             _state = null;
             _ownsState = false;
             _operands = null;
             _writebackOriginals = null;
+            _releaseOnlyOriginals = null;
             return released;
         }
 
@@ -101,8 +123,13 @@ namespace NumSharp.Backends.Iteration
         ///     <c>ResolveWritebacks</c> that <see cref="Dispose"/> runs, operating on the arrays
         ///     handed out by <see cref="Detach"/>.
         /// </summary>
-        internal static void ResolveDetachedWritebacks(NDArray[]? operands, NDArray?[]? writebackOriginals)
+        /// <param name="operands">The detached operand slots.</param>
+        /// <param name="writebackOriginals">The written temporaries' originals (copied back, then released).</param>
+        /// <param name="releaseOnlyOriginals">The read-only temporaries' originals (released, nothing copied back).</param>
+        internal static void ResolveDetachedWritebacks(NDArray[]? operands, NDArray?[]? writebackOriginals,
+                                                       NDArray?[]? releaseOnlyOriginals = null)
         {
+            ReleaseRouteTemps(operands, releaseOnlyOriginals);
             if (writebackOriginals is null || operands is null)
                 return;
 
@@ -113,7 +140,9 @@ namespace NumSharp.Backends.Iteration
                     continue;
 
                 var temp = operands[iop];
-                np.copyto(original, temp);
+                // UNSAFE casting, as NumPy's PyArray_ResolveWritebackIfCopy (PyArray_CopyAnyInto): an updateifcopy
+                // temporary in its iteration dtype writes back whatever rule the construction checked.
+                np.copyto(original, temp, casting: "unsafe");
 
                 // Same as ResolveWritebacks: the operand slot reverts to the original and the
                 // forced-copy temp is released eagerly instead of leaking to the finalizer.

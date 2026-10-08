@@ -128,6 +128,15 @@ namespace NumSharp.Tests.Strings
         /// </summary>
         [TestMethod] public void TextMaskedArrays() => Run("strma");
 
+        /// <summary>
+        ///     Section striter: <c>np.nditer</c> and <c>np.nested_iters</c> over fixed-width strings, as traces — the value
+        ///     stream of every layout under each order and flag set, buffered width / class conversions under every casting
+        ///     rule (NumPy's Unicode errors included), the copy routes and their write-backs, writes through the views,
+        ///     allocated outputs, mixed pairs, NumPy's refusals and ranges; text-number conversions are the computational
+        ///     phase (deferred).
+        /// </summary>
+        [TestMethod] public void TextIteration() => Run("striter");
+
         /// <summary>The corpus is complete: every section has cases and every case belongs to a section above.</summary>
         [TestMethod]
         public void Corpus_EverySectionIsReplayed()
@@ -135,7 +144,7 @@ namespace NumSharp.Tests.Strings
             var sections = new HashSet<string>
             {
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
-                "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma",
+                "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)

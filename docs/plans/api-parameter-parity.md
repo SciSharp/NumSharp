@@ -1193,6 +1193,52 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     cholesky / lstsq / pinv / matrix_rank / cond / norm over empty matrices and zero-size batches, results disposed):
     geomean 5.92×, min 1.62× (`lstsq` of a 3×0 matrix with values in `b`: the residual sum's five allocations, ~6 µs);
     the full SVD of `(0, 512)` (a 512×512 identity) 3.76×, of `(100, 64, 0)` (100 identities of order 64) 6.80×.
+- [x] **X35 np.nditer refused string arrays; the iterator carries NumPy's descriptors.** Done 2026-10-08 (this commit;
+  the rundown's bug 6).
+  - Proof: `np.nditer(np.array(['ab', 'c']))` raised NotSupportedException ("the iterator sizes elements by numeric
+    storage lane"); NumPy yields 0-d `<U2` views, converts between widths and between `S` and `U` under buffering or a
+    copy route, and writes a `readwrite` view through.
+  - Fix: NDIter's construction takes the per-operand descriptors (`NDIterRef.AdvancedNew(..., opDescrs)`,
+    `NDIter.Descriptors.cs`): NumPy's `npyiter_check_casting` read and write-back checks, the copy routes of
+    `npyiter_allocate_arrays` (a read-only 0-d cast operand, `copy`, `updateifcopy` written back at close, the
+    "required copying or buffering" TypeError), allocated operands laid out in the settled iteration order, string runs
+    in the buffer manager and the string copy kernels. The wrapper (`np.nditer.cs`) is nditer_pywrap's: the
+    started / finished flags, every getter's and setter's checks and texts, `it[i] = v` packing a Python int with
+    NumPy's range check, the views' write flags, the delayed-allocation state; `np.nested_iters` splits the flags and
+    dtypes per level (`NpyIter_NestedIters`).
+  - Neighbours, found by the tiers and fixed:
+    - the flat index rides its own strides (NumPy's index "operand"; `NDIterState.IndexStrides`): it was recomputed from
+      the coordinates, so after `remove_multi_index` coalesced the axes an `f_index` counted in C order; an
+      index-tracking iterator now coalesces when the index allows, as NumPy's does, and GotoIndex reads the strides;
+    - `shape` without a multi-index lists the axes innermost first (NumPy's axisdata order);
+    - `remove_multi_index` only coalesces: it re-sorted the axes by stride, so a forced C / F order walked memory
+      order, and the ascending layout reversed any walk that did not collapse to one axis;
+    - the descriptor path orders K-order axes with NumPy's `npyiter_find_best_axis_ordering` (a zero stride is
+      ambiguous, C order wins a conflict), with no broadcast fallback to C order;
+    - an allocated reduction output walked the reduced axis outermost (it abstained from the contiguity test, and
+      `CoalesceAxes` cannot leave an iterator partly merged);
+    - the op_axes reduction checks are `npyiter_check_reduce_ok_and_set_flags` (innermost axis first, NumPy's texts and
+      ValueError, the operand axis named); an explicit reduction axis needs no `reduce_ok`; an explicit reduction along
+      an axis longer than 1 is NumPy's ValueError;
+    - a construction that failed after allocating an output leaked it to the finalizer (`_allocatedSlots`);
+    - a stale `[OpenBugs]` (the buffered refill, T1.2) checked by reflection for a method name; it now iterates.
+  - Not changed: a BUFFERED reduction through np.nditer computes wrong values for every dtype (the legacy double loop;
+    `OpenBugs.NditerBufferedReduce.cs`, 4 pins with NumPy's values) — the fix is a port of NumPy's buffered-reduce
+    design (`npyiter_find_buffering_setup`'s core / outer split and the reduce double loop). A buffered iterator's
+    `index` is uninitialized memory in NumPy (left out of the tiers). Conversions between text and numbers raise
+    phase 2's `StringComputationNotSupportedException`. A null `it[i] = null` is ArgumentNullException (NumPy's
+    `int()` TypeError).
+  - Gates: `nditer_construct.jsonl` (9,574 cases) and `nditer_protocol.jsonl` (1,219: its `coalesce` and `reduce`
+    sections hold the neighbours), zero excuses and strict error types; the string oracle's `striter` section (5,756);
+    `APIs/np.nditer.NumPyParity.Test.cs` (24); `Backends/Iterators/NDIterReductionAxisEncodingTests.cs` (+1). Nine
+    planted bugs (the index flip, the index in coalescing, the re-sort, the ordering, the error axis, the partial
+    coalesce, the shape order, the index carry, the allocation release), every one killed by the unit tests.
+  - Perf (NPY/NS, two pinned P-cores, best of 21): construction 1.67× (one operand), 1.90× (`c_index`), 1.77× (an
+    op_axes reduction); a `c_index` walk of 10,000 elements 13.9×, an `f_index` walk after `remove_multi_index`
+    13.3×; an external-loop walk of 1M doubles (one chunk) 1.33×, of a 10,000-string array 1.25×. Under parity: a
+    construction that allocates an output, 0.96× (`np.zeros(1000)` is about half of its 1.1 µs; the up-front
+    allocation is reused when it already has the iteration layout, which saved ~0.6 µs), and a per-element walk of
+    10,000 strings, 0.14× (the per-element NDArray view floor every `it[0]` loop pays, ~0.5 µs a view).
 
 ## 6. Findings
 
@@ -1409,8 +1455,29 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    1e16 + 16) catch it. The same run hid the gap a second way: the unit filter's baseline already had one failing test
    (an `[OpenBugs]` pin, `Var_Float32_NumPyReturnsFloat64`, whose premise was false: NumPy's var of float32 is float32;
    removed), so "1 failed" read as a kill. Count failures against the unmutated tree, by name.
+49. **A tracked flat index must ride strides, not be recomputed from coordinates** (X35). The coordinates name the
+   operands' axes only until something coalesces them; NumPy keeps the index as one more "operand" whose strides are
+   permuted, flipped and merged with the others, so `remove_multi_index` (or an index-tracking iterator's own
+   coalescing) cannot break it. NumSharp recomputed it through `Perm`, which went on reading C coordinates of a merged
+   axis — the f_index after `remove_multi_index` counted `0 1 2 …`. No tier saw it: the protocol scripts read `shape`
+   only after the walk had finished (past the end) and left index iterators out of `remove`.
+50. **An operand that abstains from the order still shapes the coalescing** (X35). Zeroing an allocated operand's
+   strides keeps it out of the axis sort (NumPy has no array for it yet), but it also kept it out of the contiguity test
+   that picks the coalescing pass — and a reduction output, laid out later, has stride 0 on its reduced axes, so the
+   full-collapse pass left the iterator partly merged in its ascending layout and walked the reduced axis outermost.
+   Decide the pass from the operands' REAL strides, or use the pass that merges whatever it can.
+51. **A short warm-up measures tier 0** (X35). The first np.nditer benchmark (2,000 calls per round, 300 ms of warm-up)
+   read 0.78 µs for a construction that takes 0.31 µs once tiered up (20,000 calls per round, 400–500 ms of warm-up);
+   it made a 1.7× win read as a 0.66× loss. Size a construction benchmark's rounds in milliseconds, not calls.
 
 ## 7. State log
+
+- **2026-10-08**: X35 done (np.nditer over strings: the iterator carries descriptors — cast checks, copy routes,
+  string buffers, nditer_pywrap's state contract, `np.nested_iters`' per-level split; the neighbours: the flat index
+  as strides, the shape order, `remove_multi_index`, NumPy's K-order sort on the descriptor path, the allocated
+  reduction output's order, the op_axes reduction checks, the failed construction's leak). The `nditer_construct` and
+  `nditer_protocol` tiers and the `striter` string section, zero excuses. The buffered reduction is pinned
+  (`OpenBugs.NditerBufferedReduce.cs`). Findings 49–51 recorded. Commit: this commit.
 
 - **2026-10-08**: X34 done (np.linalg's factorisations of an empty matrix or a zero-size batch are NumPy's answer without
   a backend: `LinAlgEmpty`, taken before the backend; NDIter's write-operand reduction check is NumPy's shape test, with
