@@ -593,7 +593,10 @@ def gen_ma_select():
                     cases.append(_case("put", {}, [op0, idx_op, vals_op], _ma_expected(mm), ln, f"{s}.{mp}", n))
                 except Exception:
                     skipped += 1
-                # putmask
+                # putmask. NOTE (2026-10-08): this block has never emitted a case: val1_op describes two DIFFERENT
+                # arrays as (base, view), so layout_catalog.describe raises and the except below skips it. putmask is
+                # covered by the numpy.ma surface tier (gen_ma_surface_oracle.py, section "putmask") instead; left as is
+                # so this tier's committed output does not change.
                 try:
                     mm = _ma_build(view, mask).copy()
                     pmask = (np.arange(sz) % 3 == 0)

@@ -307,6 +307,7 @@ python test/oracle/gen_oracle.py polyroots        # np.polynomial.* companion / 
 python test/oracle/gen_index_oracle.py            # the four index_* corpora (seed pinned 20240626)
 python test/oracle/gen_viewflags_oracle.py        # the array-object oracle: view_flags / out_flags / shape_args / array_args + corpus/gaps/ (carve: _gap_of)
 python test/oracle/gen_surface_oracle.py          # surface + corpus/gaps/surface_gaps.jsonl: the APIs the coverage inventory listed as available but unproven (carve: _gap_of)
+python test/oracle/gen_ma_surface_oracle.py       # ma_surface + corpus/gaps/ma_surface_gaps.jsonl: the numpy.ma functions the inventory listed as available but unproven (carve: _gap_of)
 python test/oracle/gen_relayout_oracle.py         # relayout / relayout_host + corpus/gaps/relayout*_gaps.jsonl: every corpus cell's missing ndarray kinds (run LAST: it reads the other tiers)
 python test/oracle/gen_nan_oracle.py              # nan.jsonl — NaN parity grid (standalone; complex bit-exact)
 python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
@@ -673,6 +674,7 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | `gen_viewflags_oracle._gap_of` (view_flags / out_flags / shape_args / array_args) | 717 cells under 47 gap ids, written to `corpus/gaps/<tier>_gaps.jsonl` instead of the gate: the returned object's flags / strides / view-copy-identity facet where NumSharp differs (the other VF ids, VS01, VO01, VA02, VA04), and silent WRONG VALUES from C-contiguous views at a non-zero offset (VA01 searchsorted, VA03 where, VA05 ldexp, VF22 a[:, idx] throws, VF30 nansum / nanprod, VF39 repeat, VF40 unique + the set routines). The carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests` `*_KnownGaps` (per-gap open counts), `OpenBugs.ViewFlags.cs` (18 public-call repros) |
 | `gen_relayout_oracle._gap_of` (relayout / relayout_host) | 179 cells under 7 gap ids, written to `corpus/gaps/relayout_gaps.jsonl`: the C-contiguous-offset misreads RL01 (searchsorted, digitize, complex / float16 isin), RL02 (where, float16 / complex nancumsum / nancumprod), RL03 (ldexp), RL04 (unique, unique_values, the set routines), RL05 (repeat of a 0-d offset view), and the empty-operand early returns RL06 (comparison operators) and RL07 (logaddexp / logaddexp2). Drawn by emulating each bug (the misread window, the early return), so the carve is exact; also DROPPED (not carved): ufunc / where variants whose answer depends on NEP50's weak 0-d promotion (the registry's NEP50 branches document that divergence in every other tier), and the flat np.mean of a broadcast float operand that is not order-free (the mean_loops tier owns that residual) | `FuzzCorpusTests.Relayout_KnownGaps` (both verdicts), `OpenBugs.Relayout.cs` (8 public-call repros) |
 | `gen_surface_oracle._gap_of` (surface) | 909 cells under 40 gap ids, written to `corpus/gaps/surface_gaps.jsonl`: error texts and refusals (SU1, SU2, SU4, SU8, SU10, SU11, SU15, SU16, SU22, SU28, SU29, SU32-SU35, SU40), silent wrong values (SU12-SU14 finfo, SU20 broadcast.iters, SU25 / SU31 nditer order, SU38 / SU39 cumsum / cumprod dtype=, SU6 / SU9 / SU18 / SU19 the float formatters), crashes (SU5 apply_along_axis over a stride-0 offset view, SU30 nditer.remove_axis), reporting (SU3, SU17, SU21, SU23, SU24, SU26, SU27), the double-only float formatters (SU7) and the cumulative_* aliases (SU36 / SU37). Drawn by modelling each bug where it is not a fixed set (the float formatters on the widened double with NumSharp's Dragon4 carry and trim rules; np.nditer's C walk for an F + broadcast set via NumPy with order='C'; the edgeitems=0 format from the last element), so the carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests.Surface_KnownGaps`, `OpenBugs.Surface.cs` (37 public-call repros) |
+| `gen_ma_surface_oracle._gap_of` (ma_surface) | 10,123 cells under 37 gap ids, written to `corpus/gaps/ma_surface_gaps.jsonl`: the result FORM (MS1 an all-False result mask dropped to nomask, MS2 the _fromnxfunction wrappers' full mask, MS3 the *_like mask, MS4 a 0-d resize, MS5 apply_over_axes' plain ndarray, MS9 masked_object's kept all-False mask), silent wrong values (MS7 / MS12 / MS13 fill values never converted, MS11 / MS31 unsafe casts in putmask and the hard-masked setitem, MS14 the bool extremum fills, MS17 is_mask, MS34 corrcoef's masked-slot data, MS36 ids of a strided / reversed view, MS37 cov / corrcoef with a 1-D y under rowvar=False), crashes and refusals (MS15, MS22, MS26, MS33, MS35), NumPy's refusals and texts (MS6, MS8, MS21, MS23, MS24, MS25, MS27, MS28, MS30, MS32) and the API shape (MS10, MS16, MS18, MS19, MS20, MS29). Drawn by fixed predicates and two models (NumSharp's raw fill values for set_fill_value / common_fill_value; which ids views re-seat the storage address), so the carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests.MaSurface_KnownGaps`, `OpenBugs.MaSurface.cs` (30 public-call repros) |
 | `gen_random_parity` carve list | `multivariate_normal` only: byte-identical only through a LAPACK backend's `gesdd` (the managed Jacobi SVD flips a singular vector's sign). The other seven samplers (gamma shape<1, f, pareto, standard_cauchy, binomial, negative_binomial, multinomial) were uncarved 2026-09-25 — legacy-distributions.c ports — and every sampler is also covered by the `random_api` tiers | `OpenBugsRandom.RandomParity_MultivariateNormal_Seed42_ShouldMatchNumPy` (the seven former pins are ordinary tests) |
 
 **FIXED on this branch or before it** (classifier branch/carve removed — the matrix now verifies
@@ -1472,6 +1474,91 @@ alike), the C-long dtype spellings ('l', 'L', 'long', 'ulong') and 'longdouble' 
 file over the build output's corpus, run `Surface` with `NUMSHARP_ORACLE_FAILURE_DUMP=<file>`, compare the dump with
 `_gap_of`, then regenerate; `Surface_KnownGaps` must report every carved case still open. The relayout generator skips
 this tier (its vehicle params are no plain NumPy call).
+
+### The numpy.ma surface tier (`ma_surface`) — 2026-10-08
+
+`test/oracle/gen_ma_surface_oracle.py` writes contracts for the 51 numpy.ma functions the coverage inventory still
+listed as available but unproven after the surface tier. Seven of them (diagflat, dstack, column_stack, resize, getmask,
+putmask, hsplit) were registered in `OpRegistry.Ma.cs` but had never produced a case: the ma generator's putmask block
+built a values operand that was not a view of its base (so `describe` raised and every case was skipped), and every
+catalog 2-D layout has an odd last axis (so the hsplit block never ran). The tier replaces both blocks' intent.
+
+The cases ride the ma harness (`FuzzCorpusTests.Ma`): every operand is a DATA view in one of the relayout tier's kinds
+(C, F, permuted, stepped and C views at an offset, reversed, stepped-and-reversed, read-only, broadcast, one-element
+1-D, 0-d, empty, an empty view inside a buffer) plus a C-contiguous mask in one of eight patterns (nomask, an explicit
+all-False mask, a mixed pattern, all masked, the first / last element, alternating, runs). NumPy computes each record on
+masked arrays rebuilt from the descriptors NumSharp reconstructs. Inputs with no operand form are params: a function
+argument is a name from a fixed menu (`ALONG_FUNCS`, `OVER_FUNCS`, `FROMFUNCTION_FUNCS` / `AlongAxisMaFunc`,
+`OverAxesMaFunc`, `FromFunctionFunc`); a Python scalar is a JSON value typed as the C# literal it stands for
+(`MaPyValue`); an object's state is steps applied before the call (set a fill value, harden the mask, assign through
+the indexer).
+
+The ma harness gained two result kinds for the tier, both also used by its error cases (an error case keeps its kind,
+so it is dispatched like its success case): `tuple` (a tuple of plain arrays: ma.nonzero) and `text` (a Python object
+as its normalized repr: a fill value, a list of slices, an edge tuple, a shape tuple, None). The normalization
+(`pyrepr` / `MaRepr`) writes a NumPy scalar or 0-d array as its `.item()` (C# has one boxed double for a Python float
+and np.float64) and a slice's None step as 1 (C#'s Slice has no None step). A masked result records the FORM (the
+masked singleton, a scalar, nomask, a mask array) and, where NumPy defines the masked slots' data (copies, joins,
+putmask writes, products, the hard-mask assignment), the RAW data at every slot.
+
+| Section | Functions | Variations |
+|---|---|---|
+| create | arange (every overload, dtype=), zeros / ones / empty (7 shapes x 14 dtypes, order=), zeros_like / ones_like / empty_like (13 dtypes x shapes x data kinds x mask patterns, dtype=), identity, indices (sparse=), frombuffer (13 dtypes x count / offset in and out of range), fromfunction (7 menu functions x shapes x dtypes) | empty / empty_like compare a `nodata` facet (data zeroed, dtype / shape / mask / form kept) |
+| join | column_stack, dstack (8 shape pairs x 6 dtype pairs x mask pairs, three operands), hsplit (sections and index lists), diagflat (k), resize (8 shapes incl. () and a negative dimension) | data kinds of the first operand |
+| fill | default_fill_value (dtype specs, array and scalar arguments), minimum_fill_value / maximum_fill_value (13 dtypes, scalars, dtypes), set_fill_value (13 dtypes x 19 values incl. out-of-range ints, nan, inf, bool, complex, None, str), common_fill_value (8 dtype pairs x 9 fill-value pairs) | text results |
+| query | getmask, nonzero, ndim, shape, size (axis=), is_mask / isarray / isMA / isMaskedArray (8 argument forms each), ids (the byte delta between a view and its array: 9 view recipes x 5 data kinds x 3 mask forms), harden_mask / soften_mask (returns self, the hardmask flag, five assignments under a hard and a re-softened mask), masked_object (a present value, an absent one, nan; the fill_value facet; shrink=) | 13 dtypes, every data kind, every mask pattern |
+| putmask | putmask (a Python int / float / bool / complex, a full array, a masked one, a broadcast row, a short array, another dtype, the masked singleton) x soft / hard target | read-only targets raise |
+| products | convolve / correlate (9 dtypes x 4 length pairs x 7 mask pairs; every mode / propagate_mask pair for four dtypes and four pairs for the rest; default arguments; empty and 2-D refusals), cov / corrcoef (6 shapes x 4 dtypes x 5 mask patterns x rowvar x bias / ddof / allow_masked, a y operand) | values chosen so every product and sum is exact (`_exact_cov_values`: each variable's unmasked mean is exact), so any summation order gives NumPy's bits |
+| edges | clump_masked / clump_unmasked, flatnotmasked_contiguous / flatnotmasked_edges, notmasked_contiguous / notmasked_edges (axis None / 0 / 1 / -1 / out of range), compress_nd (axis incl. a tuple) / compress_rowcols, ndenumerate (compressed=False) | every mask pattern x 8 shapes incl. 0-d and empty |
+| apply | apply_along_axis (8 menu functions x every axis incl. out of range), apply_over_axes (5 menu functions x int and list axes) | 7 dtypes x 4 shapes x 5 mask patterns, every data kind |
+
+| File | Cases | Replayed by |
+|---|---|---|
+| `ma_surface.jsonl` | 24,021 cases over 50 op keys | `FuzzCorpusTests.MaSurface` (valueclass `masurface`: zero excuses — MisalignedRegistry returns null and the ma harness's own excuses skip it) |
+| `gaps/ma_surface_gaps.jsonl` | 10,123 carved under 37 ids | `MaSurface_KnownGaps` (`[OpenBugs]`) |
+
+**What it found** (37 ids; the library defects reproduced through public calls in
+`NumSharp.Tests/OpenBugs.MaSurface.cs`, 30 tests with NumPy 2.4.2 literals):
+- *Silent wrong values*: ma.putmask and a hard-masked setitem cast unsafely where NumPy's np.copyto casts same_kind
+  and raises TypeError (MS11, MS31); ma.set_fill_value stores the raw value (1.5 stays 1.5 on an int array, 7 stays 7
+  on a bool array) and never raises, and common_fill_value compares raw values (3 != 3.0) (MS12, MS13); ma.masked_object
+  never sets fill_value=value (MS7); zeros_like / ones_like / empty_like drop the prototype's mask (MS3); ma.resize to
+  0-d keeps the mask NumPy drops (MS4); ma.cov / ma.corrcoef with a 1-D x and y under rowvar=False decide rowvar after
+  concatenating y (one variable of 2N observations instead of two) (MS37); ma.corrcoef's masked slots hold +0.0 where
+  NumPy keeps cov's -0.0 (MS34); ma.ids reports the buffer start for a strided or reversed view (MS36); ma.is_mask of a
+  masked bool array is False (MS17); the bool extremum fills are True / False instead of the ints 1 / 0 (MS14).
+- *Crashes and refusals where NumPy computes*: ma.corrcoef of one variable throws (NumPy: the masked singleton) (MS33);
+  ma.convolve of a 0-d operand throws (MS35); ma.frombuffer rejects a buffer whose whole length is not a multiple of
+  the item size before count / offset select a range (MS22); notmasked_edges of a 0-d array with an axis (MS26);
+  minimum_fill_value / maximum_fill_value of a dtype (MS15).
+- *NumPy's refusals and texts*: NumPy raises and NumSharp computes for apply_along_axis over a narrow-int result
+  (NumPy's default fill 999999 does not fit: MS6), masked_object with a value that does not fit (MS8), nonzero of a 0-d
+  array (MS23), clump_* of a 0-d or empty array with a mask (MS24), compress_nd / compress_rowcols with an
+  out-of-range axis (MS28), hsplit into unequal parts (NumPy's _fromnxfunction_single wraps the parts in one masked
+  array: MS30); error types / texts differ for arange's zero step (MS21), notmasked_contiguous's out-of-range axis
+  (MS27) and the setitem broadcast errors (MS32).
+- *Reporting*: NumSharp drops an all-False result mask to nomask where NumPy keeps the array (convolve, correlate, cov,
+  apply_along_axis: MS1; the _fromnxfunction wrappers over nomask operands: MS2) and keeps one where NumPy shrinks
+  (masked_object: MS9); apply_over_axes returns a masked array where NumPy returns a plain ndarray (MS5);
+  flatnotmasked_edges / notmasked_edges of an empty array return None (NumPy: `array([0, -1])`) (MS25).
+- *API shape*: masked_object has no shrink= (MS10), default_fill_value takes a DType only (MS16), ma.size has no axis=
+  (MS18), ma.ndenumerate has no compressed= (MS19), ma.arange has no dtype= and no lone float stop, the creation
+  wrappers no order=, ma.indices no sparse= (MS20), compress_nd takes an int axis only (MS29).
+- *Leaks*: the scope sweep replays the tier; the adapters dispose every array they build. One known escape remains:
+  np.ma.fromfunction's gt2 menu callback over an empty grid reaches the comparison operators' empty-left leak
+  (relayout RL06), pinned in `KnownEscapes`.
+- *Validated clean*: flatnotmasked_contiguous, fromfunction, getmask, identity, isMA / isarray / isMaskedArray, ndim,
+  shape match NumPy on every case; the other functions match outside their carved cells.
+
+**Hidden divergences checked**: a carve on the result form could hide a value or mask divergence behind it (the form is
+compared first). `NUMSHARP_MA_SKIP_FORM=1` (a diagnostic knob of `CompareMasked`, never set in CI) skips the form
+comparison; replayed with it, the form-carved cases (MS1-MS5, MS9) show only the mask divergences their own ids
+describe.
+
+**Redraw the carve after a change** (it must stay exact): `python gen_ma_surface_oracle.py --uncarved <dir>`, copy the
+file over the build output's corpus, run `MaSurface` with `NUMSHARP_ORACLE_FAILURE_DUMP=<file>` (`RunMaCorpus` dumps
+every failure line), compare the dump with `_gap_of`, then regenerate; `MaSurface_KnownGaps` must report every carved
+case still open.
 
 ### float16 selections (`half_minmax` tier + the selection contract) — 2026-10-03
 

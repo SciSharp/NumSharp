@@ -76,9 +76,15 @@ namespace NumSharp.Tests.Fuzz
                     continue;
                 }
 
-                object Run() => c.Expected.KindOrArray == "masked_tuple"
-                    ? OpRegistry.ApplyMaskedTuple(c.Op, c.Params, ops)
-                    : OpRegistry.ApplyMasked(c.Op, c.Params, ops);
+                // The dispatcher of the case's result kind (an error case keeps its kind in ma_surface.jsonl): the text
+                // and plain-array tuple ops of the numpy.ma surface tier are not registered in ApplyMasked.
+                object Run() => c.Expected.KindOrArray switch
+                {
+                    "masked_tuple" => OpRegistry.ApplyMaskedTuple(c.Op, c.Params, ops),
+                    "tuple" => OpRegistry.ApplyMaskedArrayTuple(c.Op, c.Params, ops),
+                    "text" => OpRegistry.ApplyMaskedText(c.Op, c.Params, ops),
+                    _ => OpRegistry.ApplyMasked(c.Op, c.Params, ops),
+                };
 
                 // Arrays that must survive the region: everything the harness built, whatever the
                 // operands reference NOW (a mutator may have attached a new mask to one of them), and

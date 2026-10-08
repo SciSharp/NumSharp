@@ -535,6 +535,10 @@ namespace NumSharp.Tests.Fuzz
                 //   * np.array_equiv with an empty operand: its `a1 == a2` composition reaches the comparison
                 //     operators' empty-left early return (the relayout entries above): 1 per call.
                 ["array_equiv"] = 1,
+                //   * np.ma.fromfunction with the gt2 menu callback (i > j) over an empty grid (shape (0, 2)): the
+                //     callback's `>` reaches the same comparison operators' empty-left early return: 1 per call
+                //     (numpy.ma surface tier, 2026-10-08). The callback disposes everything it owns.
+                ["ma.fromfunction"] = 1,
             };
 
             public static bool Contains(string op) => CeilingByOp.ContainsKey(op);

@@ -520,24 +520,15 @@ namespace NumSharp.Tests.Fuzz
             ["average_returned"] = "ma.average",
         };
 
-        // Gated by the NDMaskedArrayTests suite + the ledger in docs/MA_ORACLE_DESIGN.md: creation
-        // helpers returning plain/unmasked arrays, callable-taking wrappers, fill-value plumbing,
-        // mask-structure helpers with no serializable operand form, and predicates.
+        // Gated by the NDMaskedArrayTests suite + the ledger in docs/MA_ORACLE_DESIGN.md. Since 2026-10-08 the
+        // numpy.ma surface tier (ma_surface.jsonl, gen_ma_surface_oracle.py) gives the creation wrappers, the
+        // callable-taking wrappers (a function menu), the fill-value helpers, the predicates, ids, putmask, the
+        // products, the edge finders and the joins direct ops, so their entries here retired (the self-retirement
+        // check below enforces it). Left: polyfit (lstsq: a LAPACK backend, which the ma harness does not load),
+        // moveaxis and shrink_mask (no NumPy numpy.ma counterpart in the coverage inventory).
         private static readonly HashSet<string> MaSiblingOwned = new()
         {
-            "apply_along_axis", "apply_over_axes",              // C# callable — not serializable
-            "arange", "empty", "empty_like", "ones", "ones_like", "zeros", "zeros_like",
-            "identity", "indices", "frombuffer", "fromfunction", // creation (plain np twins fuzzed)
-            "clump_masked", "clump_unmasked", "column_stack", "common_fill_value",
-            "compress_nd", "compress_rowcols", "convolve", "corrcoef", "correlate", "cov",
-            "default_fill_value", "diagflat", "dstack",
-            "flatnotmasked_contiguous", "flatnotmasked_edges",
-            "getmask",                                          // nomask (null) has no byte form; getmaskarray is corpus-gated
-            "harden_mask", "hsplit", "ids", "isMA", "isMaskedArray", "is_mask", "isarray",
-            "masked_object", "maximum_fill_value", "minimum_fill_value", "moveaxis",
-            "ndenumerate", "ndim", "nonzero", "notmasked_contiguous", "notmasked_edges",
-            "polyfit", "putmask", "resize", "set_fill_value", "shape", "shrink_mask", "size",
-            "soften_mask",
+            "moveaxis", "polyfit", "shrink_mask",
         };
 
         [TestMethod]

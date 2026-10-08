@@ -118,6 +118,9 @@ namespace NumSharp.Tests.Fuzz
             ["ma_extras.jsonl"] = 58,
             // ~80% of the 26,328 committed cases (plan api-parameter-parity A6, 2026-10-06).
             ["ma_meanvar.jsonl"] = 21000,
+            // ~95% of the 24,021 kept cases of the numpy.ma surface tier (gen_ma_surface_oracle.py, 2026-10-08; its
+            // 10,123 carved cases live in gaps/ma_surface_gaps.jsonl).
+            ["ma_surface.jsonl"] = 22800,
         };
 
         /// <summary>
@@ -152,73 +155,11 @@ namespace NumSharp.Tests.Fuzz
 
             var failures = new List<string>();
             var documented = new Dictionary<string, int>();
-            var empty = Array.Empty<BitDiff.Diff>();
 
             foreach (var c in cases)
-            {
-                // Classify against the SHARED ledger under the bare np op name (np.ma delegates to it).
-                var sc = StripMa(c);
-                try
-                {
-                    var ops = new NDMaskedArray[c.Operands.Length];
-                    for (int i = 0; i < ops.Length; i++)
-                    {
-                        var data = FuzzCorpus.Reconstruct(c.Operands[i]);
-                        var mask = FuzzCorpus.ReconstructMask(c.Operands[i].Shape, c.Operands[i].Mask);
-                        // mask==null keeps _mask==null (NumPy's nomask fast path); an explicit mask pairs
-                        // with the data view exactly as the generator's np.ma.array(view, mask=…) does.
-                        ops[i] = np.ma.masked_array(data, mask);
-                    }
-
-                    // NumPy raised (ma_meanvar.jsonl records its errors; the older ma tiers skip such cells). The op must
-                    // throw too, with a plausible type and NumPy's text.
-                    if (c.Expects_Throw)
-                    {
-                        CheckMaError(sc, ops, failures, documented);
-                        continue;
-                    }
-
-                    switch (c.Expected.KindOrArray)
-                    {
-                        case "masked":
-                            CompareMasked(sc, (NDMaskedArray)OpRegistry.ApplyMasked(c.Op, c.Params, ops),
-                                          c.Expected, null, failures, documented);
-                            break;
-                        case "masked_tuple":
-                        {
-                            var got = OpRegistry.ApplyMaskedTuple(c.Op, c.Params, ops);
-                            var want = c.Expected.Slots ?? Array.Empty<FuzzCorpus.Expected>();
-                            if (got.Length != want.Length)
-                                failures.Add($"{sc.Id} [{sc.Layout}]: masked tuple arity {got.Length} != NumPy {want.Length}");
-                            else
-                                for (int i = 0; i < want.Length; i++)
-                                    CompareMasked(sc, got[i], want[i], $"slot[{i}]", failures, documented);
-                            break;
-                        }
-                        case "array":
-                        case "scalar":
-                            CompareArray(sc, ToNDArray(OpRegistry.ApplyMasked(c.Op, c.Params, ops)),
-                                         c.Expected, null, failures, documented);
-                            break;
-                        case "dtype":
-                        {
-                            var got = ((DType)OpRegistry.ApplyMasked(c.Op, c.Params, ops)).name;
-                            if (!string.Equals(got, c.Expected.Value, StringComparison.Ordinal))
-                                failures.Add($"{sc.Id} [{sc.Layout}]: dtype result '{got}' != NumPy '{c.Expected.Value}'");
-                            break;
-                        }
-                        default:
-                            failures.Add($"{sc.Id}: unknown ma expected.kind '{c.Expected.Kind}'");
-                            break;
-                    }
-                }
-                catch (Exception e)
-                {
-                    var reason = MisalignedRegistry.Classify(sc, DivergenceKind.Threw, null, null, default, empty);
-                    if (reason != null) Bump(documented, reason);
-                    else failures.Add($"{sc.Id} [{sc.Layout}]: THREW {e.GetType().Name}: {e.Message}");
-                }
-            }
+                ReplayMaOne(c, failures, documented);
+            // NUMSHARP_ORACLE_FAILURE_DUMP: every failure line, for drawing a new tier's carve (diagnostic only).
+            DumpFailures(file, failures);
 
             if (documented.Count > 0)
                 Console.WriteLine($"[{file}] documented Misaligned divergences excused: " +
@@ -227,6 +168,147 @@ namespace NumSharp.Tests.Fuzz
             if (failures.Count > 0)
                 Assert.Fail($"{failures.Count}/{cases.Count} ma cases diverged from NumPy (unexpected):\n  " +
                             string.Join("\n  ", failures.Take(60)));
+        }
+
+        /// <summary>
+        ///     Replays ONE masked case: rebuilds its masked operands (data view + optional contiguous bool mask), runs the
+        ///     <c>ma.*</c> op through <see cref="OpRegistry"/> and compares the result by its declared kind, appending one
+        ///     line per unexcused divergence to <paramref name="failures"/>.
+        /// </summary>
+        /// <param name="c">The corpus case.</param>
+        /// <param name="failures">Collects the divergence lines (empty after the call when the case matches NumPy).</param>
+        /// <param name="documented">Counts the excused divergences by reason.</param>
+        /// <remarks>
+        ///     Shared by <see cref="RunMaCorpus"/> (one list for the whole tier) and <see cref="RunMaGapCorpus"/> (one list
+        ///     per carved case, so each case gets its own verdict). The result kinds: <c>masked</c> / <c>masked_tuple</c>
+        ///     (filled(0) + mask, and the form / raw data when recorded), <c>array</c> / <c>scalar</c> (CompareArray),
+        ///     <c>tuple</c> (CompareArray per slot, arity checked), <c>text</c> (a Python repr, ordinal string equality)
+        ///     and <c>dtype</c> (the dtype name). Any exception from the replay itself counts as a THREW divergence.
+        /// </remarks>
+        private static void ReplayMaOne(FuzzCorpus.Case c, List<string> failures, Dictionary<string, int> documented)
+        {
+            var empty = Array.Empty<BitDiff.Diff>();
+            // Classify against the SHARED ledger under the bare np op name (np.ma delegates to it).
+            var sc = StripMa(c);
+            try
+            {
+                var ops = new NDMaskedArray[c.Operands.Length];
+                for (int i = 0; i < ops.Length; i++)
+                {
+                    var data = FuzzCorpus.Reconstruct(c.Operands[i]);
+                    var mask = FuzzCorpus.ReconstructMask(c.Operands[i].Shape, c.Operands[i].Mask);
+                    // mask==null keeps _mask==null (NumPy's nomask fast path); an explicit mask pairs
+                    // with the data view exactly as the generator's np.ma.array(view, mask=…) does.
+                    ops[i] = np.ma.masked_array(data, mask);
+                }
+
+                // NumPy raised (ma_meanvar.jsonl and ma_surface.jsonl record their errors; the older ma tiers skip such
+                // cells). The op must throw too, with a plausible type and NumPy's text.
+                if (c.Expects_Throw)
+                {
+                    CheckMaError(sc, ops, failures, documented);
+                    return;
+                }
+
+                switch (c.Expected.KindOrArray)
+                {
+                    case "masked":
+                        CompareMasked(sc, (NDMaskedArray)OpRegistry.ApplyMasked(c.Op, c.Params, ops),
+                                      c.Expected, null, failures, documented);
+                        break;
+                    case "masked_tuple":
+                    {
+                        var got = OpRegistry.ApplyMaskedTuple(c.Op, c.Params, ops);
+                        var want = c.Expected.Slots ?? Array.Empty<FuzzCorpus.Expected>();
+                        if (got.Length != want.Length)
+                            failures.Add($"{sc.Id} [{sc.Layout}]: masked tuple arity {got.Length} != NumPy {want.Length}");
+                        else
+                            for (int i = 0; i < want.Length; i++)
+                                CompareMasked(sc, got[i], want[i], $"slot[{i}]", failures, documented);
+                        break;
+                    }
+                    case "array":
+                    case "scalar":
+                        CompareArray(sc, ToNDArray(OpRegistry.ApplyMasked(c.Op, c.Params, ops)),
+                                     c.Expected, null, failures, documented);
+                        break;
+                    case "tuple":
+                    {
+                        // A tuple of plain arrays (ma.nonzero's index arrays): arity first, then each slot as an array.
+                        var got = OpRegistry.ApplyMaskedArrayTuple(c.Op, c.Params, ops);
+                        var want = c.Expected.Slots ?? Array.Empty<FuzzCorpus.Expected>();
+                        if (got.Length != want.Length)
+                            failures.Add($"{sc.Id} [{sc.Layout}]: tuple arity {got.Length} != NumPy {want.Length}");
+                        else
+                            for (int i = 0; i < want.Length; i++)
+                                CompareArray(sc, got[i], want[i], $"slot[{i}]", failures, documented);
+                        break;
+                    }
+                    case "text":
+                    {
+                        // A Python object NumPy returns (a fill value, a list of slices, an edge tuple, a shape tuple,
+                        // None) as its normalized repr (gen_ma_surface_oracle.pyrepr / OpRegistry.MaRepr).
+                        string got = OpRegistry.ApplyMaskedText(c.Op, c.Params, ops);
+                        if (!string.Equals(got, c.Expected.Value, StringComparison.Ordinal))
+                            failures.Add($"{sc.Id} [{sc.Layout}]: text {Show(got)} != NumPy {Show(c.Expected.Value)}");
+                        break;
+                    }
+                    case "dtype":
+                    {
+                        var got = ((DType)OpRegistry.ApplyMasked(c.Op, c.Params, ops)).name;
+                        if (!string.Equals(got, c.Expected.Value, StringComparison.Ordinal))
+                            failures.Add($"{sc.Id} [{sc.Layout}]: dtype result '{got}' != NumPy '{c.Expected.Value}'");
+                        break;
+                    }
+                    default:
+                        failures.Add($"{sc.Id}: unknown ma expected.kind '{c.Expected.Kind}'");
+                        break;
+                }
+            }
+            catch (Exception e)
+            {
+                var reason = MisalignedRegistry.Classify(sc, DivergenceKind.Threw, null, null, default, empty);
+                if (reason != null) Bump(documented, reason);
+                else failures.Add($"{sc.Id} [{sc.Layout}]: THREW {e.GetType().Name}: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        ///     Replays a carved masked-array gap file (<c>corpus/gaps/*.jsonl</c>): every case must carry a gap id, and
+        ///     the test passes only when NO carved case still diverges, so it stays red (an [OpenBugs] test) until the
+        ///     gaps are fixed, and prints per gap how many of its cases now match NumPy (a fix shrinks the carve).
+        /// </summary>
+        /// <param name="fileName">The file name under <c>corpus/gaps/</c>.</param>
+        /// <exception cref="AssertFailedException">A case without a gap id, or any carved case that still diverges.</exception>
+        private static void RunMaGapCorpus(string fileName)
+        {
+            using var cases = FuzzCorpus.Open(System.IO.Path.Combine("gaps", fileName));
+            var byGap = new SortedDictionary<string, (int total, int open, string sample)>(StringComparer.Ordinal);
+            var orphans = new List<string>();
+            foreach (var c in cases)
+            {
+                if (string.IsNullOrEmpty(c.Gap))
+                {
+                    orphans.Add(c.Id);
+                    continue;
+                }
+                // A fresh list per case: the verdict is whether THIS case still diverges.
+                var failures = new List<string>();
+                ReplayMaOne(c, failures, new Dictionary<string, int>());
+                var (total, open, sample) = byGap.TryGetValue(c.Gap, out var e) ? e : (0, 0, null);
+                byGap[c.Gap] = (total + 1, open + (failures.Count > 0 ? 1 : 0), sample ?? (failures.Count > 0 ? failures[0] : null));
+            }
+
+            foreach (var (gap, (total, open, sample)) in byGap)
+                Console.WriteLine($"[{fileName}] {gap}: {open}/{total} carved cases still diverge" +
+                                  (open < total ? $", {total - open} now match NumPy" : "") +
+                                  (sample != null ? $"\n    e.g. {sample}" : ""));
+
+            Assert.AreEqual(0, orphans.Count, "carved cases without a gap id: " + string.Join(", ", orphans.Take(10)));
+            int stillOpen = byGap.Values.Sum(v => v.open);
+            Assert.AreEqual(0, stillOpen,
+                $"{stillOpen} carved cases still diverge from NumPy across {byGap.Count(kv => kv.Value.open > 0)} open gaps " +
+                $"({string.Join(", ", byGap.Where(kv => kv.Value.open > 0).Select(kv => kv.Key))})");
         }
 
         // ---- comparators -------------------------------------------------------------------------
@@ -251,14 +333,15 @@ namespace NumSharp.Tests.Fuzz
             var empty = Array.Empty<BitDiff.Diff>();
             string at = slot == null ? "" : $" {slot}";
 
-            // ma_meanvar.jsonl is held to ZERO excuses: MisalignedRegistry returns null for its valueclass, and none of
-            // this file's own excuses below run for it either.
-            bool strict = sc.Valueclass == "mameanvar";
+            // ma_meanvar.jsonl and ma_surface.jsonl are held to ZERO excuses: MisalignedRegistry returns null for their
+            // valueclasses, and none of this file's own excuses below run for them either.
+            bool strict = sc.Valueclass is "mameanvar" or "masurface";
 
             // FORM: the masked singleton, a scalar, an array with nomask or with a mask array. getmaskarray cannot tell
             // these apart (an all-False mask reads like nomask, the singleton like a masked 0-d array), so the object
-            // kind is checked before any value.
-            if (exp.Form != null)
+            // kind is checked before any value. NUMSHARP_MA_SKIP_FORM=1 (diagnostic only, never set in CI) skips it, so a
+            // replay shows the value and mask divergences a form gap's carve would otherwise hide.
+            if (exp.Form != null && Environment.GetEnvironmentVariable("NUMSHARP_MA_SKIP_FORM") != "1")
             {
                 string gotForm = MaResultForm(result);
                 if (!string.Equals(gotForm, exp.Form, StringComparison.Ordinal))
@@ -430,7 +513,15 @@ namespace NumSharp.Tests.Fuzz
             Exception caught = null;
             try
             {
-                _ = OpRegistry.ApplyMasked(sc.Op, sc.Params, ops);
+                // An error case keeps its result kind (ma_surface.jsonl), so the call goes through the dispatcher that
+                // kind's success case would use: a text or tuple op is not registered in ApplyMasked.
+                switch (sc.Expected?.KindOrArray)
+                {
+                    case "text": _ = OpRegistry.ApplyMaskedText(sc.Op, sc.Params, ops); break;
+                    case "tuple": _ = OpRegistry.ApplyMaskedArrayTuple(sc.Op, sc.Params, ops); break;
+                    case "masked_tuple": _ = OpRegistry.ApplyMaskedTuple(sc.Op, sc.Params, ops); break;
+                    default: _ = OpRegistry.ApplyMasked(sc.Op, sc.Params, ops); break;
+                }
             }
             catch (Exception e)
             {

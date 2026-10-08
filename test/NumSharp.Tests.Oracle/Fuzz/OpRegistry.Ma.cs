@@ -163,7 +163,8 @@ namespace NumSharp.Tests.Fuzz
                 case "resize": return np.ma.resize(ops[0], new Shape(ParseLongArray(p["shape"])));
                 case "compressed": return np.ma.compressed(ops[0]);
                 case "getdata": return np.ma.getdata(ops[0]);
-                case "getmask": return np.ma.getmask(ops[0]);
+                // ma_surface.jsonl's getmask cases pass the operand's plain data when "plain" is set.
+                case "getmask": return p.ContainsKey("plain") ? np.ma.getmask(ops[0].data) : np.ma.getmask(ops[0]);
                 case "getmaskarray": return np.ma.getmaskarray(ops[0]);
                 case "filled": return np.ma.filled(ops[0], p.TryGetValue("fill", out var fv) ? (object)fv.GetDouble() : null);
 
@@ -200,8 +201,9 @@ namespace NumSharp.Tests.Fuzz
                     ops[0].put(ops[1].data, ops[2], p.TryGetValue("mode", out var pm) ? pm.GetString() : "raise");
                     return ops[0];
                 case "putmask":
-                    ops[0].putmask(ops[1], ops[2]);
-                    return ops[0];
+                    // ma.putmask(a, mask.data, values): values from the third operand, or a Python scalar / the masked
+                    // singleton param; "hard" hardens the target first (OpRegistry.MaSurface.cs).
+                    return MaPutmask(p, ops);
 
                 // ---- sort / set operations -> masked (argsort -> array) --------------------------
                 case "sort": return np.ma.sort(ops[0], p.TryGetValue("axis", out var sa) ? sa.GetInt32() : -1,
@@ -228,7 +230,8 @@ namespace NumSharp.Tests.Fuzz
                 case "compress_rows": return np.ma.compress_rows(ops[0]);
                 case "compress_cols": return np.ma.compress_cols(ops[0]);
                 case "is_masked": return np.ma.is_masked(ops[0]);
-                case "isMaskedArray": return np.ma.isMaskedArray(ops[0]);
+                // ma_surface.jsonl's predicate cases name the argument form ("arg": data, list, the singleton, ...).
+                case "isMaskedArray": return p.ContainsKey("arg") ? ApplyMaskedSurface(name, p, ops) : np.ma.isMaskedArray(ops[0]);
                 case "allclose": return np.ma.allclose(ops[0], ops[1]);
                 case "allequal": return np.ma.allequal(ops[0], ops[1]);
                 case "make_mask": return np.ma.make_mask(ops[0].data);
@@ -255,7 +258,9 @@ namespace NumSharp.Tests.Fuzz
                 case "make_mask_descr": return np.ma.make_mask_descr(FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
 
                 default:
-                    throw new NotSupportedException($"ma op '{op}' not registered in OpRegistry.ApplyMasked");
+                    // The numpy.ma surface tier's ops (ma_surface.jsonl) live in OpRegistry.MaSurface.cs, which throws for
+                    // an unknown name.
+                    return ApplyMaskedSurface(name, p, ops);
             }
         }
 
@@ -270,7 +275,11 @@ namespace NumSharp.Tests.Fuzz
             string name = op.StartsWith("ma.", StringComparison.Ordinal) ? op.Substring(3) : op;
             switch (name)
             {
-                case "hsplit": return np.ma.hsplit(ops[0], p["sections"].GetInt32());
+                // NumPy's indices_or_sections: an int (equal sections) or a list of cut points (the int[] overload).
+                case "hsplit":
+                    return p.TryGetValue("indices", out var hi)
+                        ? np.ma.hsplit(ops[0], hi.EnumerateArray().Select(x => x.GetInt32()).ToArray())
+                        : np.ma.hsplit(ops[0], p["sections"].GetInt32());
                 default:
                     throw new NotSupportedException($"ma tuple op '{op}' not registered in OpRegistry.ApplyMaskedTuple");
             }
