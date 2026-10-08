@@ -1185,6 +1185,48 @@ carried NaN instead of the masked 0, an unmasked inf stayed where NumPy masks it
 divide's mask, and the masked mean of a float32 stayed float32. `ma_reduce` hid it under the summation and dtype
 blankets (`IsMaVarStd` / `IsMaMean`, 254 cases).
 
+### numpy.ma's put (`ma_put` tier) — 2026-10-08
+
+`ma_put.jsonl` (`gen_ma_oracle.py put`, 3,660 cases, 1,900 of them NumPy errors, floor 2,900) gates `np.ma.put` as
+`MaskedArray.put` / `ma.put`'s statements (`Ma/NDMaskedArray.cs`): under a HARD mask `mask = self._mask[indices]; values
+= narray(values, subok=True); values.resize(indices.shape); indices = indices[~mask]; values = values[~mask]`, then
+`self._data.put` and the mask update. A section of hand cases (the rundown's and the probes' — each under a hard mask, a
+soft mask, a nomask hard array and as a plain target; 3-D, (1, n), (n, 1), 0-d and empty targets; the literal
+conversion of both branches) and a random section (every dtype × 260 draws over the target layouts, mask kinds, hard /
+soft / plain targets, index kinds, value kinds and modes).
+
+**Params** (`OpRegistry.Ma` `put`): `mode`; `hard` (harden the target); `plain` (the target is the plain data view:
+`ma.put` runs `ndarray.put`); `vkind` — `array` (the ndarray operand; `vown`: NumPy OWNED it, so the replay copies the
+reconstructed view, which never owns its data — the hard branch's resize answers an owning array with the reference-count
+text and a view with the OWNDATA one), `list` (a Python list: the operand holds `np.array(list)`; the replay passes the C#
+typed array, which NumPy's in-range list values convert like), `scalar` (`value` + `vtype`), `masked` (the masked-array
+operand), `constant` (`ma.masked`). The ma_select tier's put cases carry no params (a plain ndarray into a soft mask).
+
+**Bit-exact, 0 excused, STRICT types.** `MisalignedRegistry` returns null for valueclass `maput`, `CompareMasked` runs
+none of the ma harness's own excuses for it, and `CheckMaError` requires NumPy's exception TYPE (only OverflowError →
+`OverflowException` and ValueError → the house `IncorrectShapeException` of `ndarray.resize` are mapped,
+`StrictErrorTypes`), so an IndexError regressing to `IndexOutOfRangeException` turns the tier red. Cases record the
+mutated target's `form` (nomask after an all-False shrink) and `raw` data (the masked slots' data: the soft branch writes
+a masked values' data, the masked constant's 0.0 included).
+
+**Generator traps.** `np.ascontiguousarray` turns a 0-d index into shape (1,) — the index operand is `np.array(idx)`;
+`describe()` serializes a base in C order, so an F-order values array is described as the transpose of a C buffer; the
+operands are described BEFORE NumPy runs, because NumPy's `values.resize` relabels a values view in place.
+**Replay trap:** a C# conditional of an `NDArray` and an `NDMaskedArray` arm takes one arm's type, and the implicit
+`NDArray` → `NDMaskedArray` conversion wrapped the plain target in a NEW masked array (whose filled data hid the masked
+slots) — cast both arms to `object`. **Leak sweep:** put mutates its target, so the sweep's measured runs start from the
+state its warm run left (a nomask hard target the warm run gave a mask now refuses masked values); for the mutators
+(`ma.put`, `ma.putmask`) the measured region tolerates that exception (`MaskedMutators`).
+
+**Aliasing is the `aliasing` tier's job.** Every `ma_put` operand is its own buffer, so this tier cannot see `np.put`'s
+overlap rule (PyArray_PutTo copies the target first when its values or indices may share memory with it): the planted
+"put ignores overlap" bug stayed green here. The aliasing tier's `put_selfvals` (180 cases: the values a view of the
+target, `params.vslice` over its flat C view, `":"` the target itself) and `put_selfidx` (63: the indices a view of an
+integer target, `params.islice`; uint64 is absent — put's 'safe' index cast refuses it) rebuild the view inside the case
+(`OpRegistry.PutIntoSelf`), over a COPY of the reconstructed target: the leak sweep replays each case twice over the same
+operands, and a second put into the first one's result reads its written values as indices (out of bounds under
+`raise`). The overlap bug turns 50 of them red.
+
 ### numpy.ma's arraysetops (`ma_setops` tier) — 2026-10-08
 
 `ma_setops.jsonl` (`gen_ma_oracle.py setops`, 7,030 cases, floor 5,580) gates `np.ma.unique` (with `return_index` /

@@ -10,10 +10,11 @@ namespace NumSharp
         ///     indexing along the specified axis.
         /// </summary>
         /// <param name="a">Source array.</param>
-        /// <param name="indices">Integer array of indices to take.</param>
+        /// <param name="indices">Integer array of indices to take (any layout; read in C order).</param>
         /// <param name="axis">
         ///     Axis along which to take. <c>null</c> (default) flattens <paramref name="a"/>
-        ///     and treats <paramref name="indices"/> as flat indices.
+        ///     and treats <paramref name="indices"/> as flat indices. A 0-d <paramref name="a"/> is flattened too, so its
+        ///     axis must be valid for one dimension (0 or -1).
         /// </param>
         /// <param name="out">
         ///     Optional destination array. When supplied, its shape must match the
@@ -24,7 +25,7 @@ namespace NumSharp
         /// </param>
         /// <param name="mode">
         ///     Boundary mode: <c>"raise"</c> (default — throw on OOB), <c>"wrap"</c>
-        ///     (modulo with sign correction), or <c>"clip"</c> (saturate).
+        ///     (modulo with sign correction), or <c>"clip"</c> (saturate); <c>null</c> is NumPy's <c>None</c> (raise).
         /// </param>
         /// <returns>
         ///     New array with shape:
@@ -35,9 +36,24 @@ namespace NumSharp
         ///     Dtype matches <paramref name="a"/> (or <paramref name="out"/>'s dtype
         ///     when <paramref name="out"/> is supplied).
         /// </returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.take.html</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="indices"/> is null.</exception>
+        /// <exception cref="ValueError">A bad <paramref name="mode"/> (<see cref="ClipModeConverter"/>), checked first;
+        ///     an <paramref name="out"/> of another shape (<c>output array does not match result of ndarray.take</c>) or a
+        ///     read-only one (<c>WRITEBACKIFCOPY base is read-only</c>).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="TypeError">The index dtype does not cast to int64 under <c>same_kind</c> (float, complex),
+        ///     an empty index array included; or <paramref name="out"/>'s dtype does not cast to <paramref name="a"/>'s
+        ///     under <c>safe</c>.</exception>
+        /// <exception cref="IndexError">A non-empty result from an empty axis (<c>cannot do a non-empty take from an empty
+        ///     axes.</c>), or an index out of bounds under <c>mode="raise"</c> (<c>index 9 is out of bounds for axis 0 with
+        ///     size 4</c>).</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.take.html
+        ///     <para>The work is <see cref="TakeFrom"/>, NumPy's <c>PyArray_TakeFrom</c>, which also fixes the order of the
+        ///     checks above.</para>
+        /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        [NDScoped] // reclaims the 0-d reshape alias and the natural-result temp on the out= path
+        [NDScoped] // reclaims the int64 index copy, the C-order source copy and the natural-result temp on the out= path
         public static NDArray take(NDArray a, NDArray indices, int? axis = null, NDArray @out = null, string mode = "raise")
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
@@ -46,46 +62,177 @@ namespace NumSharp
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
 
-            int modeInt = ParseMode(mode, nameof(mode));
+            // array_take converts the mode (and parses the axis) with its arguments, before PyArray_TakeFrom runs.
+            int modeInt = ClipModeConverter(mode);
+            return TakeFrom(a, indices, axis, @out, modeInt);
+        }
 
-            // 0-d source — treat as 1-element 1-D for the gather. Output shape =
-            // indices.shape regardless of axis (NumPy parity).
-            NDArray result;
-            if (a.ndim == 0)
+        /// <summary>
+        ///     Scalar convenience overload — take a single element by flat index.
+        /// </summary>
+        /// <param name="a">Source array.</param>
+        /// <param name="index">The index (a 0-d index: the result has the shape of the taken element).</param>
+        /// <param name="axis">As in <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>.</param>
+        /// <param name="out">As in <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>.</param>
+        /// <param name="mode">As in <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>.</param>
+        /// <returns>The taken element(s).</returns>
+        /// <exception cref="ValueError">See <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>.</exception>
+        /// <exception cref="AxisError">See <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>.</exception>
+        /// <exception cref="IndexError">See <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>.</exception>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        [NDScoped] // the 0-d index wrapper is built in THIS frame, before the array overload's scope opens
+        public static NDArray take(NDArray a, long index, int? axis = null, NDArray @out = null, string mode = "raise")
+        {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, index, axis, @out, mode), static s => take(s.a, s.index, s.axis, s.@out, s.mode), @out);
+            // Wrap the scalar in a 0-d NDArray so the array overload's shape-preserving
+            // logic emits a 0-d result (NumPy semantic for scalar input).
+            var idxArr = NDArray.Scalar(index);
+            return take(a, idxArr, axis, @out, mode);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_TakeFrom</c> (<c>item_selection.c</c>), statement for statement: the axis check, the index
+        ///     cast, the result shape, the <paramref name="out"/> checks, the empty-axis check and the gather.
+        /// </summary>
+        /// <param name="a">The source array, any layout (a non-contiguous source is first copied to C order).</param>
+        /// <param name="indices">The integer index array; a C-contiguous int32/int64 one is read in place.</param>
+        /// <param name="axis">The caller's axis, or null for a flat take.</param>
+        /// <param name="out">The caller's destination, or null.</param>
+        /// <param name="mode">The parsed out-of-bounds policy (<see cref="ClipModeConverter"/>).</param>
+        /// <returns>The taken values: <paramref name="out"/> itself when given, else a new C-contiguous array of
+        ///     <paramref name="a"/>'s dtype.</returns>
+        /// <exception cref="AxisError">An out-of-range <paramref name="axis"/>.</exception>
+        /// <exception cref="TypeError">An index dtype that does not cast to int64 under <c>same_kind</c>, or an
+        ///     <paramref name="out"/> dtype that does not cast to <paramref name="a"/>'s under <c>safe</c>.</exception>
+        /// <exception cref="ValueError">An <paramref name="out"/> of another shape, or a read-only one.</exception>
+        /// <exception cref="IndexError">A non-empty result from an empty axis, or an out-of-bounds index under
+        ///     raise.</exception>
+        /// <exception cref="NotSupportedException">No IL kernel exists for the element width.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy's order (probed 2.4.2): <c>PyArray_CheckAxis</c> first — <c>axis=None</c> and a 0-d source are
+        ///     raveled, so a 0-d source takes axis 0 or -1 only (<c>np.take(np.array(5), [0], axis=1)</c> is the AxisError
+        ///     "axis 1 is out of bounds for array of dimension 1") —; the index cast
+        ///     (<c>PyArray_FromAny(indices, intp, SAME_KIND_CASTING)</c>, an empty float array too); the <c>out</c> shape,
+        ///     its safe cast and its writeability (<c>PyArray_FromArray(out, a.dtype, WRITEBACKIFCOPY)</c>); then
+        ///     <c>max_item == 0 &amp;&amp; size != 0</c>; then the gather, whose raise loop checks every index of every
+        ///     outer position even when the slabs are empty (<c>np.take(np.zeros((3, 0, 0)), [0], axis=1)</c> is "index 0
+        ///     is out of bounds for axis 1 with size 0", while an empty OUTER block checks nothing).
+        ///     </para>
+        ///     <para>
+        ///     Covered by <c>[NDScopedCovered]</c>: the only callers are the <c>[NDScoped]</c> <c>take</c> overloads, so the
+        ///     C-order copy of a non-contiguous source, the int64 copy of the indices and the natural result of an
+        ///     <paramref name="out"/> call are released by that caller's scope, exceptions included. The caller's
+        ///     <paramref name="a"/>, <paramref name="indices"/> and <paramref name="out"/> were built before any scope
+        ///     opened, so an operand used as-is is never disposed.
+        ///     </para>
+        /// </remarks>
+        [NDScopedCovered]
+        private static NDArray TakeFrom(NDArray a, NDArray indices, int? axis, NDArray @out, int mode)
+        {
+            // PyArray_CheckAxis(self, &axis, CARRAY_RO): axis=None ravels the source, and so does a 0-d source (NumPy
+            // ravels it to one dimension before it checks a given axis against that ONE dimension).
+            bool ravel = axis is null || a.ndim == 0;
+            int ax = 0;
+            if (axis is not null)
             {
-                var flat0d = a.reshape(new Shape(1));
-                result = TakeFlat(flat0d, indices, modeInt);
+                int n = ravel ? 1 : a.ndim;
+                ax = axis.Value;
+                if (ax < -n || ax >= n)
+                    throw new AxisError(axis.Value, n);
+                if (ax < 0)
+                    ax += n;
             }
-            else if (axis == null)
+
+            // PyArray_FromAny(indices0, intp, SAME_KIND_CASTING | DEFAULT): the cast rule is checked before the out
+            // array and before the empty-axis check. A contiguous int32 array is read in place; any other cast is made in
+            // C order (the kernels read the indices linearly).
+            var idx64 = CastIndicesToInt64(indices, "same_kind", out _, out bool idx32);
+
+            // The result shape: indices.shape for a raveled source, else a.shape[:axis] + indices.shape +
+            // a.shape[axis+1:]; outer x indices x inner is the gather's factorisation around the axis.
+            long outerSize = 1, maxItem, innerCount = 1;
+            long[] outDims;
+            if (ravel)
             {
-                result = TakeFlat(a, indices, modeInt);
+                maxItem = a.size;
+                outDims = (long[])indices.Shape.dimensions.Clone();
             }
             else
             {
-                int ax = axis.Value;
-                if (ax < 0) ax += a.ndim;
-                if (ax < 0 || ax >= a.ndim)
-                    throw new ArgumentOutOfRangeException(nameof(axis),
-                        $"axis {axis.Value} is out of bounds for array of dimension {a.ndim}");
-                result = TakeAxis(a, indices, ax, modeInt);
+                var dims = a.Shape.dimensions;
+                for (int d = 0; d < ax; d++) outerSize *= dims[d];
+                maxItem = dims[ax];
+                for (int d = ax + 1; d < a.ndim; d++) innerCount *= dims[d];
+
+                outDims = new long[a.ndim + indices.ndim - 1];
+                int o = 0;
+                for (int d = 0; d < ax; d++) outDims[o++] = dims[d];
+                for (int d = 0; d < indices.ndim; d++) outDims[o++] = indices.Shape.dimensions[d];
+                for (int d = ax + 1; d < a.ndim; d++) outDims[o++] = dims[d];
             }
 
-            // out= dispatch: validate shape, validate safe-cast direction
-            // (out.dtype → a.dtype), then writeback-if-copy via copyto with unsafe
-            // casting. NumPy's PyArray_TakeFrom invokes PyArray_FromArray(out,
-            // src_dtype, WRITEBACKIFCOPY) which checks out.dtype can be SAFELY
-            // cast to src.dtype — i.e. the user-supplied out must be at least as
-            // narrow as src so the kernel's writes don't lose precision when later
-            // written back. Matching error message:
-            //   "Cannot cast array data from dtype('{out}') to dtype('{src}')
-            //    according to the rule 'safe'".
+            if (@out is not null)
+                ValidateTakeOut(a, @out, outDims);
+
+            var result = new NDArray(a.dtype, Shape.Adopt(outDims), false); // the descriptor: a string's width
+            long indicesCount = indices.size;
+
+            // "Index error, since that is the usual error for raise mode" — only when something would be written.
+            if (maxItem == 0 && result.size != 0)
+                throw new IndexError("cannot do a non-empty take from an empty axes.");
+
+            // npy_fasttake's raise loop checks indices[j] for every outer position i even when a slab is empty (chunk 0),
+            // so an empty result still raises for an out-of-bounds index unless the outer block or the index list is
+            // empty. Wrap and clip modes write nothing there and never fail.
+            if (outerSize != 0 && indicesCount != 0)
+            {
+                if (result.size != 0)
+                {
+                    // Materialise a non-contiguous source to C order so the kernel can walk it linearly.
+                    NDArray source = a.Shape.IsContiguous ? a : np.ascontiguousarray(a);
+                    ExecuteTakeKernel(source, idx64, result,
+                        outerSize: outerSize, indicesCount: indicesCount,
+                        maxItem: maxItem, innerSize: innerCount * a.dtypesize, mode: mode, idx32: idx32,
+                        axis: ravel ? null : ax);   // axis form: the raise-mode IndexError names this axis
+                }
+                else if (mode == ClipModeRaise)
+                {
+                    ThrowIfTakeIndexOutOfBounds(idx64, idx32, indicesCount, maxItem, ravel ? 0 : ax);
+                }
+            }
+
             if (@out is null)
                 return result;
 
-            if (!@out.Shape.Equals(result.Shape))
-                throw new ArgumentException(
-                    $"output array does not match result of ndarray.take: expected shape {result.Shape}, got {@out.Shape}",
-                    nameof(@out));
+            np.copyto(@out, result, casting: "unsafe");
+            return @out;
+        }
+
+        /// <summary>
+        ///     <c>PyArray_TakeFrom</c>'s three checks of a caller's <paramref name="out"/>, in NumPy's order: the shape (dims
+        ///     only, any layout), the safe cast of <paramref name="out"/>'s dtype to <paramref name="a"/>'s
+        ///     (<c>PyArray_FromArray(out, a.dtype, CARRAY | WRITEBACKIFCOPY)</c> casts the result back into it), and the
+        ///     writeability of the write-back base.
+        /// </summary>
+        /// <param name="a">The source, whose dtype the gather writes.</param>
+        /// <param name="out">The caller's destination.</param>
+        /// <param name="outDims">The natural result's dimensions.</param>
+        /// <exception cref="ValueError">Another shape (<c>output array does not match result of ndarray.take</c>), or a
+        ///     read-only <paramref name="out"/> (<c>WRITEBACKIFCOPY base is read-only</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="out"/>'s dtype does not cast to <paramref name="a"/>'s under
+        ///     <c>safe</c>.</exception>
+        private static void ValidateTakeOut(NDArray a, NDArray @out, long[] outDims)
+        {
+            // PyArray_CompareLists(PyArray_DIMS(out), shape, nd): the dimensions alone, NumPy's text verbatim.
+            var dims = @out.Shape.dimensions ?? Array.Empty<long>();
+            bool sameShape = dims.Length == outDims.Length;
+            for (int i = 0; sameShape && i < dims.Length; i++)
+                sameShape = dims[i] == outDims[i];
+            if (!sameShape)
+                throw new ValueError("output array does not match result of ndarray.take");
 
             if (a.typecode == NPTypeCode.String || @out.typecode == NPTypeCode.String)
             {
@@ -102,145 +249,34 @@ namespace NumSharp
                     $"Cannot cast array data from dtype('{@out.GetTypeCode.AsNumpyDtypeName()}') to dtype('{a.GetTypeCode.AsNumpyDtypeName()}') according to the rule 'safe'");
             }
 
-            // A read-only out refuses LAST of the three out validations (probed 2.4.2: shape, then
-            // castability, then this) — and with take's own quirky text: PyArray_TakeFrom wraps out
-            // in PyArray_FromArray(..., NPY_ARRAY_WRITEBACKIFCOPY), whose writeability check names
-            // the writeback base, not the "output array" the elementwise ufuncs name.
+            // A read-only out refuses LAST of the three (probed 2.4.2: shape, then castability, then this) — with take's
+            // own text: the writeability check of PyArray_FromArray(..., WRITEBACKIFCOPY) names the writeback base, not
+            // the "output array" the elementwise ufuncs name.
             NumSharpException.ThrowIfNotWriteable(@out.Shape, "WRITEBACKIFCOPY base");
-
-            np.copyto(@out, result, casting: "unsafe");
-            return @out;
         }
 
         /// <summary>
-        ///     Scalar convenience overload — take a single element by flat index.
+        ///     The bounds check of <c>npy_fasttake</c>'s raise loop for a take whose slabs are empty: every index is still
+        ///     checked against the axis length, as NumPy checks it before it copies the (empty) slab.
         /// </summary>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        [NDScoped] // the 0-d index wrapper is built in THIS frame, before the array overload's scope opens
-        public static NDArray take(NDArray a, long index, int? axis = null, NDArray @out = null, string mode = "raise")
+        /// <param name="idx64">The C-contiguous indices (int64, or int32 when <paramref name="idx32"/>).</param>
+        /// <param name="idx32">True when <paramref name="idx64"/> holds int32 values.</param>
+        /// <param name="count">The number of indices.</param>
+        /// <param name="maxItem">The axis length.</param>
+        /// <param name="axis">The axis NumPy names (0 for a flat take).</param>
+        /// <exception cref="IndexError">The first index outside <c>[-maxItem, maxItem)</c>, NumPy's text.</exception>
+        private static unsafe void ThrowIfTakeIndexOutOfBounds(NDArray idx64, bool idx32, long count, long maxItem, int axis)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((a, index, axis, @out, mode), static s => take(s.a, s.index, s.axis, s.@out, s.mode), @out);
-            // Wrap the scalar in a 0-d NDArray so the array overload's shape-preserving
-            // logic emits a 0-d result (NumPy semantic for scalar input).
-            var idxArr = NDArray.Scalar(index);
-            return take(a, idxArr, axis, @out, mode);
-        }
-
-        /// <summary>
-        ///     Flat <c>np.take</c> (no axis): gathers <c>a.flat[indices]</c> through the IL take kernel into a fresh
-        ///     C-contiguous array shaped like <paramref name="indices"/>.
-        /// </summary>
-        /// <param name="a">The source array, any layout (a non-contiguous source is first copied to C order).</param>
-        /// <param name="indices">The integer index array; a C-contiguous int32/int64 one is read in place.</param>
-        /// <param name="mode">The parsed out-of-bounds policy (raise / wrap / clip).</param>
-        /// <returns>The gathered values: dtype of <paramref name="a"/>, shape of <paramref name="indices"/>.</returns>
-        /// <exception cref="ArgumentException"><paramref name="a"/> is empty and <paramref name="indices"/> is not.</exception>
-        /// <exception cref="TypeError">The index dtype cannot be cast to int64 under <c>same_kind</c> (float/complex).</exception>
-        /// <exception cref="ArgumentOutOfRangeException">An index is out of bounds under mode <c>raise</c>.</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>: the only caller is the <c>[NDScoped]</c>
-        /// <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>, so the C-order copy of a non-contiguous source
-        /// and the int64 copy of the indices are released by that caller's scope, exceptions included. A scope of this
-        /// helper's own would be nested under the caller's and cost one scope allocation per call; the caller returns
-        /// right after this helper, so it would release nothing sooner. The caller's <paramref name="a"/> and
-        /// <paramref name="indices"/> were built before any scope opened, so a source or index array used as-is is
-        /// never disposed.</remarks>
-        [NDScopedCovered]
-        private static unsafe NDArray TakeFlat(NDArray a, NDArray indices, int mode)
-        {
-            // Materialise non-contig source to C-contig so the kernel can walk linearly.
-            NDArray source = a;
-            if (!a.Shape.IsContiguous)
-                source = np.ascontiguousarray(a);
-
-            // Cast indices to contig int64 (a contig int32 array is read in place).
-            var idx64 = CastIndicesToInt64(indices, "same_kind", out _, out bool idx32);
-
-            // Output shape = indices.shape, dtype = a.dtype (the DESCRIPTOR: a string's width), C-contig allocated.
-            var outShape = Shape.Adopt((long[])indices.Shape.dimensions.Clone());
-            var result = new NDArray(a.dtype, outShape, false);
-
-            long indicesCount = indices.size;
-            long maxItem = a.size;
-            long elemBytes = a.dtypesize;
-
-            if (indicesCount == 0)
-                return result;
-
-            // NumPy's PyArray_TakeFrom text, verbatim ("axes" included; probed 2.4.2).
-            if (maxItem == 0)
-                throw new ArgumentException("cannot do a non-empty take from an empty axes.", nameof(a));
-
-            ExecuteTakeKernel(source, idx64, result,
-                outerSize: 1, indicesCount: indicesCount,
-                maxItem: maxItem, innerSize: elemBytes, mode: mode, idx32: idx32);
-
-            return result;
-        }
-
-        /// <summary>
-        ///     <c>np.take</c> along <paramref name="axis"/>: gathers whole slabs <c>a[..., indices, ...]</c> through
-        ///     the IL take kernel into a fresh C-contiguous array of shape
-        ///     <c>a.shape[:axis] + indices.shape + a.shape[axis+1:]</c>.
-        /// </summary>
-        /// <param name="a">The source array, any layout (a non-contiguous source is first copied to C order).</param>
-        /// <param name="indices">The integer index array; a C-contiguous int32/int64 one is read in place.</param>
-        /// <param name="axis">The normalized (non-negative, in-range) axis to take along.</param>
-        /// <param name="mode">The parsed out-of-bounds policy (raise / wrap / clip).</param>
-        /// <returns>The gathered slabs, dtype of <paramref name="a"/>.</returns>
-        /// <exception cref="ArgumentException">The axis is empty and <paramref name="indices"/> is not.</exception>
-        /// <exception cref="TypeError">The index dtype cannot be cast to int64 under <c>same_kind</c> (float/complex).</exception>
-        /// <exception cref="ArgumentOutOfRangeException">An index is out of bounds under mode <c>raise</c>.</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>: the only caller is the <c>[NDScoped]</c>
-        /// <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>, so the C-order copy of a non-contiguous source
-        /// and the int64 copy of the indices are released by that caller's scope, exceptions included. A scope of this
-        /// helper's own would be nested under the caller's and cost one scope allocation per call; the caller returns
-        /// right after this helper, so it would release nothing sooner. The caller's <paramref name="a"/> and
-        /// <paramref name="indices"/> were built before any scope opened, so a source or index array used as-is is
-        /// never disposed.</remarks>
-        [NDScopedCovered]
-        private static unsafe NDArray TakeAxis(NDArray a, NDArray indices, int axis, int mode)
-        {
-            NDArray source = a;
-            if (!a.Shape.IsContiguous)
-                source = np.ascontiguousarray(a);
-
-            var idx64 = CastIndicesToInt64(indices, "same_kind", out _, out bool idx32);
-
-            // Compute outer × inner factorisation around `axis`.
-            long outerSize = 1;
-            for (int d = 0; d < axis; d++) outerSize *= a.Shape.dimensions[d];
-            long maxItem = a.Shape.dimensions[axis];
-            long innerCount = 1;
-            for (int d = axis + 1; d < a.ndim; d++) innerCount *= a.Shape.dimensions[d];
-            long elemBytes = a.dtypesize;
-            long innerBytes = innerCount * elemBytes;
-
-            // Output shape = a.shape[:axis] + indices.shape + a.shape[axis+1:].
-            int outNdim = a.ndim + indices.ndim - 1;
-            var outDims = new long[outNdim];
-            int outIdx = 0;
-            for (int d = 0; d < axis; d++) outDims[outIdx++] = a.Shape.dimensions[d];
-            for (int d = 0; d < indices.ndim; d++) outDims[outIdx++] = indices.Shape.dimensions[d];
-            for (int d = axis + 1; d < a.ndim; d++) outDims[outIdx++] = a.Shape.dimensions[d];
-
-            var result = new NDArray(a.dtype, Shape.Adopt(outDims), false); // descriptor: a string's width
-
-            long indicesCount = indices.size;
-            if (indicesCount == 0 || outerSize == 0)
-                return result;
-
-            // NumPy's PyArray_TakeFrom text, verbatim ("axes" included; probed 2.4.2).
-            if (maxItem == 0)
-                throw new ArgumentException("cannot do a non-empty take from an empty axes.", nameof(a));
-
-            ExecuteTakeKernel(source, idx64, result,
-                outerSize: outerSize, indicesCount: indicesCount,
-                maxItem: maxItem, innerSize: innerBytes, mode: mode, idx32: idx32,
-                axis: axis);   // axis form: the raise-mode IndexError names this axis (NumPy wording)
-
-            return result;
+            long* p64 = (long*)idx64.Storage.Address + idx64.Shape.offset;
+            int* p32 = (int*)idx64.Storage.Address + idx64.Shape.offset;
+            for (long j = 0; j < count; j++)
+            {
+                long v = idx32 ? p32[j] : p64[j];
+                // check_and_adjust_index: one negative wrap, then [0, maxItem).
+                long adjusted = v < 0 ? v + maxItem : v;
+                if (adjusted < 0 || adjusted >= maxItem)
+                    throw new IndexError($"index {v} is out of bounds for axis {axis} with size {maxItem}");
+            }
         }
 
         /// <summary>
@@ -273,8 +309,8 @@ namespace NumSharp
         ///     entirely ("for size 8") on a flat one.</param>
         /// <exception cref="NotSupportedException">No IL kernel exists for this element width
         ///     (dynamic codegen unavailable).</exception>
-        /// <exception cref="ArgumentOutOfRangeException">Mode 'raise' met an index still out of
-        ///     [0, <paramref name="maxItem"/>) after the single negative wrap — message per
+        /// <exception cref="IndexError">Mode 'raise' met an index still out of
+        ///     [0, <paramref name="maxItem"/>) after the single negative wrap — NumPy's IndexError, message per
         ///     <paramref name="axis"/> above, and nothing has been partially written that the
         ///     caller exposes (the result buffer is discarded on throw).</exception>
         private static unsafe void ExecuteTakeKernel(
@@ -324,9 +360,7 @@ namespace NumSharp
                 // NumPy's IndexError text, verbatim (probed 2.4.2): the flat (axis=None) take runs on the raveled
                 // array, so it names axis 0 too ("index 7 is out of bounds for axis 0 with size 5"). The
                 // axis-less "for size {n}" spelling belongs to a.flat[i], not to take.
-                throw new ArgumentOutOfRangeException(
-                    nameof(idx64),
-                    $"index {badVal} is out of bounds for axis {axis ?? 0} with size {maxItem}");
+                throw new IndexError($"index {badVal} is out of bounds for axis {axis ?? 0} with size {maxItem}");
             }
         }
 
@@ -388,8 +422,10 @@ namespace NumSharp
                 throw new TypeError(
                     $"Cannot cast array data from dtype('{tc.AsNumpyDtypeName()}') to dtype('int64') according to the rule '{castingRule}'");
 
+            // C order: the take / put kernels read the indices linearly, and astype's default 'K' keeps an F-order
+            // input F-ordered — np.take(src, int16 F-order [[3, 2], [1, 0]]) read [3, 1, 2, 0] (NumPy: [3, 2, 1, 0]).
             owned = true;
-            return indices.astype(NPTypeCode.Int64);
+            return indices.astype(NPTypeCode.Int64, copy: true, order: 'C');
         }
     }
 }

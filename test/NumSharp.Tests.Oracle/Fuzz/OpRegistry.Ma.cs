@@ -198,8 +198,29 @@ namespace NumSharp.Tests.Fuzz
                 case "clip": return np.ma.clip(ops[0], p["min"].GetDouble(), p["max"].GetDouble());
                 case "where": return np.ma.where(ops[0], ops[1], ops[2]);
                 case "put":
-                    ops[0].put(ops[1].data, ops[2], p.TryGetValue("mode", out var pm) ? pm.GetString() : "raise");
-                    return ops[0];
+                {
+                    // ma_put.jsonl says how NumPy received each operand: `plain` (the target was the plain data view: ma.put
+                    // runs ndarray.put), `hard` (a hardened target), and `vkind` for the values (PutValues). The ma_select
+                    // cases carry none of them: NumPy put a plain ndarray of values into a soft-masked array.
+                    // Both arms cast to object: a conditional of NDArray and NDMaskedArray takes one arm's type, and the implicit
+                    // NDArray -> NDMaskedArray conversion would wrap the plain target in a NEW masked array (whose filled data
+                    // then hid the slots the put masked).
+                    object target = Flag(p, "plain") ? (object)ops[0].data : ops[0];
+                    if (Flag(p, "hard"))
+                        ops[0].harden_mask();
+                    var values = PutValues(p, ops, out var valuesCopy);
+                    try
+                    {
+                        np.ma.put(target, ops[1].data, values, p.TryGetValue("mode", out var pm) ? pm.GetString() : "raise");
+                    }
+                    finally
+                    {
+                        // The replay's own copy of an owned values operand is not part of the op: released here, so the
+                        // leak sweep audits np.ma.put alone.
+                        valuesCopy?.Dispose();
+                    }
+                    return target;
+                }
                 case "putmask":
                     // ma.putmask(a, mask.data, values): values from the third operand, or a Python scalar / the masked
                     // singleton param; "hard" hardens the target first (OpRegistry.MaSurface.cs).
@@ -341,6 +362,69 @@ namespace NumSharp.Tests.Fuzz
         /// <returns>The value, false when absent.</returns>
         private static bool Flag(IReadOnlyDictionary<string, JsonElement> p, string key)
             => p.TryGetValue(key, out var v) && v.ValueKind == JsonValueKind.True;
+
+        /// <summary>
+        ///     The values of a ma.put case as NumPy received them (the <c>vkind</c> param): an ndarray (<c>array</c>, the
+        ///     default: the third operand's data — copied when NumPy owned it, <c>vown</c>, since a reconstructed operand
+        ///     never owns its data and the hard-mask branch's resize distinguishes the two), a Python list (<c>list</c>: a
+        ///     C# typed array of the list's NumPy dtype — the house map's ndarray, which NumPy's in-range list values cast
+        ///     like), a Python scalar (<c>scalar</c>: <c>value</c> + <c>vtype</c>), a masked array (<c>masked</c>: the
+        ///     third operand itself) or the masked constant (<c>constant</c>).
+        /// </summary>
+        /// <param name="p">The case params.</param>
+        /// <param name="ops">The reconstructed operands (target, indices, values).</param>
+        /// <param name="copy">The array this method made (the owned copy of an <c>array</c> operand), which the caller
+        ///     disposes after the put; null when it made none.</param>
+        /// <returns>The values object to pass to <c>np.ma.put</c>.</returns>
+        /// <exception cref="NotSupportedException">An unknown <c>vkind</c> / <c>vtype</c>, or a list of another dtype
+        ///     (a corpus / registry drift).</exception>
+        private static object PutValues(IReadOnlyDictionary<string, JsonElement> p, NDMaskedArray[] ops, out NDArray copy)
+        {
+            copy = null;
+            string kind = p.TryGetValue("vkind", out var vk) ? vk.GetString() : "array";
+            switch (kind)
+            {
+                case "array":
+                    // copy('K') keeps the operand's layout (an F-order array stays F, whose memory order the resize keeps).
+                    if (!Flag(p, "vown"))
+                        return ops[2].data;
+                    copy = ops[2].data.copy('K');
+                    return copy;
+                case "list":
+                {
+                    var d = ops[2].data;
+                    return d.typecode switch
+                    {
+                        NPTypeCode.Int64 => d.ToArray<long>(),
+                        NPTypeCode.Double => d.ToArray<double>(),
+                        NPTypeCode.Boolean => d.ToArray<bool>(),
+                        NPTypeCode.Complex => d.ToArray<System.Numerics.Complex>(),
+                        _ => throw new NotSupportedException($"ma.put list of {d.typecode}"),
+                    };
+                }
+                case "masked":
+                    return ops[2];
+                case "constant":
+                    return np.ma.masked;
+                case "scalar":
+                {
+                    var v = p["value"];
+                    double Num(JsonElement e) => e.ValueKind == JsonValueKind.String
+                        ? e.GetString() switch { "nan" => double.NaN, "inf" => double.PositiveInfinity, _ => double.NegativeInfinity }
+                        : e.GetDouble();
+                    return p["vtype"].GetString() switch
+                    {
+                        "int" => (object)v.GetInt64(),
+                        "float" => Num(v),
+                        "bool" => v.GetBoolean(),
+                        "complex" => new System.Numerics.Complex(Num(v[0]), Num(v[1])),
+                        var t => throw new NotSupportedException($"ma.put scalar vtype {t}"),
+                    };
+                }
+                default:
+                    throw new NotSupportedException($"ma.put vkind {kind}");
+            }
+        }
 
         /// <summary>
         ///     The <c>dtype=</c> of ma.mean / ma.var / ma.std / ma.anom: a NumPy dtype name, or null when the case has none

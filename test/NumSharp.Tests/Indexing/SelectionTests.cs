@@ -239,12 +239,16 @@ public class SelectionTests
         r.size.Should().Be(0);
     }
 
+    /// <summary>
+    ///     An out-of-bounds index under raise is NumPy's IndexError with its <c>check_and_adjust_index</c> text (probed
+    ///     2.4.2); it used to be an <see cref="ArgumentOutOfRangeException"/> carrying "(Parameter 'idx64')".
+    /// </summary>
     [TestMethod]
     public void Take_OOB_Raise_Throws()
     {
         var a = np.array(new int[] { 10, 20, 30 });
         var act = () => np.take(a, np.array(new int[] { 10 }));
-        act.Should().Throw<ArgumentOutOfRangeException>();
+        act.Should().Throw<IndexError>().WithMessage("index 10 is out of bounds for axis 0 with size 3");
     }
 
     [TestMethod]
@@ -283,7 +287,7 @@ public class SelectionTests
         // -13 on size 12 stays < 0 after the += n shift → out of bounds.
         var a = np.arange(12).astype(NPTypeCode.Int64);
         var act = () => np.take(a, np.array(new long[] { -13 }));
-        act.Should().Throw<ArgumentOutOfRangeException>();
+        act.Should().Throw<IndexError>().WithMessage("index -13 is out of bounds for axis 0 with size 12");
     }
 
     [TestMethod]
@@ -407,12 +411,16 @@ public class SelectionTests
         a.ToArray<int>().Should().Equal(88, 20, 99);
     }
 
+    /// <summary>
+    ///     An out-of-bounds index under raise is NumPy's IndexError (probed 2.4.2); it used to be an
+    ///     <see cref="IndexOutOfRangeException"/> with the same text.
+    /// </summary>
     [TestMethod]
     public void Put_Raise_OOBThrows()
     {
         var a = np.array(new int[] { 10, 20, 30 });
         var act = () => np.put(a, np.array(new int[] { 5 }), np.array(new int[] { 99 }));
-        act.Should().Throw<IndexOutOfRangeException>();
+        act.Should().Throw<IndexError>().WithMessage("index 5 is out of bounds for axis 0 with size 3");
     }
 
     [TestMethod]
@@ -430,7 +438,7 @@ public class SelectionTests
     {
         var a = np.arange(6).astype(NPTypeCode.Int64);
         var act = () => np.put(a, np.array(new long[] { -7 }), np.array(new long[] { 1 }));
-        act.Should().Throw<IndexOutOfRangeException>();
+        act.Should().Throw<IndexError>().WithMessage("index -7 is out of bounds for axis 0 with size 6");
     }
 
     [TestMethod]
@@ -454,12 +462,13 @@ public class SelectionTests
         a.ToArray<int>().Should().Equal(10, 20, 30);
     }
 
+    /// <summary>NumPy's <c>PyArray_PutTo</c>: a non-empty index list into an empty target is an IndexError.</summary>
     [TestMethod]
     public void Put_EmptyArray_WithIndices_Throws()
     {
         var a = np.array(new int[0]);
         var act = () => np.put(a, np.array(new int[] { 0 }), np.array(new int[] { 99 }));
-        act.Should().Throw<IndexOutOfRangeException>();
+        act.Should().Throw<IndexError>().WithMessage("cannot replace elements of an empty array");
     }
 
     [TestMethod]

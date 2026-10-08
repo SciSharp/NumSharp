@@ -66,8 +66,11 @@ namespace NumSharp.Backends
             if (blockSize == 0)
                 return new NDArray(arr.dtype, BooleanMaskResultShape(trueCount, arr, leadNdim));
 
-            // Flat gather buffer of trueCount*B elements, reshaped to (count,)+trailing below.
-            var result = new NDArray(arr.dtype, new Shape(trueCount * blockSize));
+            // Flat gather buffer of trueCount*B elements, reshaped to (count,)+trailing below. Both gathers below write
+            // EVERY element (one per True, counted from the same mask bytes), so the buffer is not zero-filled: the zero
+            // fill came from OS-zeroed pages, whose first touch page-faulted on every call — 165 of the 184 us of a
+            // 40,000-element int64 selection (2026-10-08; the pool's recycled buffer costs nothing to touch).
+            var result = NDArray.ForOverwrite(arr.dtype, new Shape(trueCount * blockSize));
 
             bool simd = DirectILKernelGenerator.Enabled && DirectILKernelGenerator.VectorBits > 0;
 

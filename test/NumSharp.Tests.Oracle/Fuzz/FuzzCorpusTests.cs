@@ -830,8 +830,9 @@ namespace NumSharp.Tests.Fuzz
             }
         }
 
-        // W11 operand-relationship flags (section C): input aliasing (a op a, same buffer) and
-        // in-place out= (maximum/minimum/clip writing into an input operand).
+        // W11 operand-relationship flags (section C): input aliasing (a op a, same buffer),
+        // in-place out= (maximum/minimum/clip writing into an input operand), and np.put whose values or
+        // indices are a view of the target (NumPy copies the target first, so both are the original's).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Aliasing() => RunCorpus("aliasing.jsonl");
@@ -1036,7 +1037,7 @@ namespace NumSharp.Tests.Fuzz
         // Unknown files (e.g. regressions/*.jsonl) keep the floor of 1.
         private static readonly Dictionary<string, int> MinCases = new()
         {
-            ["aliasing.jsonl"] = 70,
+            ["aliasing.jsonl"] = 320,
             ["astype_full.jsonl"] = 4056,
             ["astype_smoke.jsonl"] = 249,
             ["binary_arith.jsonl"] = 1782,   // +608 F-broadcast pairs (pp_fbcast_*, plan api-parameter-parity X3) - 2228

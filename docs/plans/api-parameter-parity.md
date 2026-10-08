@@ -1000,7 +1000,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   (`int8[i] = int64_array[j]` with 1000 raises); NumSharp's `b[j]` is an unmarked 0-d view, which is cast (-24). Every
   in-range value agrees. Lever: mark the getter's full-integer-index result `WasNumPyScalar`. Found by X27.
 - [x] **X30 numpy.ma's arraysetops were rewritten compositions, not NumPy's statements: in1d / isin flags never masked,
-  ma.unique without `return_index` / `return_inverse`.** Done 2026-10-08 (this commit; the rundown's bug 2).
+  ma.unique without `return_index` / `return_inverse`.** Done 2026-10-08 (commit fa7108b9; the rundown's bug 2).
   - Proof: removing the `[known gap] ma.isin/in1d` excuse turned all 8 corpus cases red (mask `[FFFFFF]` against
     NumPy's `[FFTTFF]`); a 120,000-call differential against a stable copy of NumPy's statements then showed
     `unique`, `intersect1d`, `setxor1d`, `union1d` and `setdiff1d` diverging too (NaN beside masked slots, masked keys
@@ -1019,6 +1019,65 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     inverse permutation (one scatter).
   - Gates: `ma_setops.jsonl` (7,030 cases, zero excuses, 8 planted bugs killed), `Ma/np.ma.setops.NumPyPort.Test.cs`,
     `Sorting/np.argsort.SignedZero.Test.cs`, `Manipulation/np.unique.ComplexHash.Test.cs`.
+- [x] **X31 numpy.ma's put with a hard mask was a rewrite, not NumPy's statements: an N-D hard-mask put wrote where NumPy
+  raises IndexError; np.put / np.take checked in another order and np.put read overlapping operands mid-write.** Done
+  2026-10-08 (this commit; the rundown's bug 3).
+  - Proof: NumPy's `MaskedArray.put` (`numpy/ma/core.py`) looks the indices up with `self._mask[indices]` BEFORE it
+    writes. On an N-D mask that lookup indexes axis 0, and its N-D result then boolean-indexes the 1-D index array, so
+    almost every N-D hard-mask put raises (`index 4 is out of bounds for axis 0 with size 2`, `too many indices for
+    array: array is 1-dimensional, but 2 were indexed`) and writes nothing. NumSharp applied the mask to the flat
+    positions and wrote. The 1-D branch differed too: NumPy zero-pads short values (`values.resize(indices.shape)`,
+    never a cycle), refuses masked values (`MaskedArray.resize` always raises), and refuses a caller's ndarray of another
+    size that it does not own or that another reference holds (`ndarray.resize`'s refcheck).
+  - Fix: `MaskedArrayModule.put` runs NumPy's statements over the house primitives (the mask lookup, `values.resize`
+    as `ResizeValuesForHardPut`, the two boolean selections, np.put of the data, np.put of the mask, the shrink to
+    nomask). One documented divergence: a caller's same-size values are relabeled through an alias view, not reshaped
+    in place (NumSharp's `data` / `mask` return internal arrays, so an in-place reshape of a caller's array could write
+    into a masked array's storage).
+  - Neighbours, found by the search and fixed:
+    - `np.put` is `PyArray_PutTo` in its order: mode, writeability, the index cast ('safe'), `cannot replace elements of
+      an empty array`, the values packed, an empty values array a no-op, then the target copied when its values or
+      indices may share its memory (written back after). Raise-mode errors are NumPy's IndexError (`index 9 is out of
+      bounds for axis 0 with size 4`), with NumPy's partial writes. Before: a values view of the target read slots the
+      put had already written (silent wrong values), ArgumentOutOfRangeException where NumPy raises IndexError.
+    - `np.take` is `PyArray_TakeFrom`: a 0-d source's axis checked against one dimension (AxisError), an `out` checked
+      for shape, then cast, then writeability, `cannot do a non-empty take from an empty axes.`, and the bounds of an
+      empty slab checked.
+    - One clip-mode converter, NumPy's `PyArray_ClipmodeConverter` (`Indexing/np.clipmode.cs`: the first letter, then
+      the exact lowercase name, NumPy's two texts), for put / take / choose / ravel_multi_index, and the sequence form's
+      length text.
+    - The selection kernels read their operands linearly, while `astype`'s default order 'K' keeps an F-order operand
+      F-ordered: put's values and indices, take's indices, place's values and mask, putmask's mask and unravel_index's
+      indices were read in memory order (silent wrong values: `np.take(src, int16 F-order [[3, 2], [1, 0]])` read
+      `[3, 1, 2, 0]`). Each cast asks for order 'C' now.
+    - The indexers raise NumPy's `prepare_index` IndexErrors: a boolean index that does not fit names its axis
+      (`boolean index did not match indexed array along axis 1; size of axis is 3 but size of corresponding boolean axis
+      is 4`, where the old IndexOutOfRangeException named axis 0 and the mask's first length), an index array that is
+      neither integer nor bool is `arrays used as indices must be of integer (or boolean) type` whatever its size (an
+      empty float array was an empty fancy index), checked before the too-many check, and an empty bool array in a tuple
+      stays a mask (NumPy force-casts an empty index to intp only when it is a Python list).
+    - The boolean-mask getter allocated its result zero-filled, from OS-zeroed pages, so every call page-faulted it
+      (165 of the 184 µs of a 40,000-element int64 selection, 0.58× NumPy). Both gathers write every element, so the
+      result skips the fill (`NDArray.ForOverwrite`): 31.6 µs, 3.3× NumPy. ma.put's hard branch runs two of them.
+  - Perf (NPY/NS, two pinned P-cores, a warm-up pass first; int64 / float64 × 1K / 100K / 1M): ma.put soft 3.1–5.9×,
+    hard 1.57–4.7× (1.10–1.51× before the boolean-mask fix), a plain target 2.4–4.2×, np.put 2.5–4.9×, np.take 3.1–3.4×.
+  - Gates: `ma_put.jsonl` (3,660 cases, 1,900 NumPy errors with strict error types, zero excuses); the aliasing tier's
+    `put_selfvals` / `put_selfidx` (243 cases: values or indices a view of the target); `Ma/np.ma.put.NumPyPort.Test.cs`
+    (10), `Indexing/np.put.take.NumPyPort.Test.cs` (6), `Selection/IndexErrors.NumPyPort.Test.cs` (5). 14 planted bugs,
+    each killed: the six ma.put ones by the tier (34–479 cases each), np.put's missing overlap copy by the aliasing tier
+    (50 cases), the order, clip-mode, take and index-error ones by the unit tests (one survivor, an empty float index
+    accepted, needed two more unit cases: the dtype error comes before a 0-d target's too-many error).
+- [ ] **X32 Error texts the X31 search found and did not fix.**
+  - `OrderResolver`'s order-argument texts (used library-wide) are not NumPy's `order must be one of 'C', 'F', 'A', or
+    'K' (got 'Q')`.
+  - `np.ravel_multi_index` / `np.unravel_index` validate `order` with one ArgumentException text; NumPy raises the text
+    above while it parses the arguments, and `only 'C' or 'F' order is permitted` after the mode conversion.
+  - `np.insert` with values that do not broadcast raises IncorrectShapeException with an NDIter remapped-shapes text;
+    NumPy raises `ValueError: could not broadcast input array from shape (2,2) into shape (2,)`.
+  - A multi-index's invalid-item text quotes `':'` and appends `(got ...)`; NumPy's is `only integers, slices (`:`),
+    ellipsis (`...`), numpy.newaxis (`None`) and integer or boolean arrays are valid indices`.
+  - An `object[]` (Python list) store value is cast through `np.asanyarray`, not packed element by element (X28's
+    coercion gap, seen from the store side).
 
 ## 6. Findings
 
@@ -1188,12 +1247,31 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    set-operation benchmark ran 1.3–2× slow (an identical `np.argsort` of the same permutation cost 19.1 µs in the first
    block and 8.6 µs in the second); `DOTNET_TC_CallCountingDelayMs=0` plus a warm-up pass over every cell before
    measuring removed it.
+38. **`astype`'s default order 'K' under a kernel that reads by flat position is a silent-wrong-values class** (X31).
+   A cast copy of an F-order operand stays F-ordered, so a kernel that reads the cast operand linearly reads it in memory
+   order. Five selection functions had it (put, take, place, putmask, unravel_index); every oracle case gave them C-order
+   operands. Ask for order 'C' wherever the consumer is linear.
+39. **An oracle whose operands are independent buffers cannot see aliasing** (X31). The `ma_put` tier killed every
+   ma.put mutant and missed np.put's missing overlap copy, because two corpus operands never share a base. A case that
+   needs one has to rebuild the view inside the replay (the aliasing tier's `put_selfvals` / `put_selfidx`).
+40. **The leak sweep replays a case twice over the same operands, so a mutating case must not consume its own output**
+   (X31). `put_selfidx`'s second run read the values its first run wrote (100..105) as indices and raised; the case now
+   puts into a copy of its target.
+41. **A zero-filled result that a kernel overwrites page-faults on every call** (X31). `new NDArray(dtype, shape)` takes
+   OS-zeroed pages, whose first touch costs ~0.5 µs per 4 KB; the pool's recycled buffer (`fillZeros: false`,
+   `NDArray.ForOverwrite`) costs nothing to touch. The boolean-mask getter lost 165 µs of 184 to it. np.repeat allocates
+   its four results the same way (`Manipulation/np.repeat.cs`, lines 133, 168, 224 and 275) — not measured, not changed.
 
 ## 7. State log
 
+- **2026-10-08**: X31 done (numpy.ma's put as NumPy's statements; np.put as `PyArray_PutTo`, np.take as
+  `PyArray_TakeFrom`; one clip-mode converter; the selection kernels' order-'C' casts; the indexers' `prepare_index`
+  IndexErrors; the boolean-mask getter without a zero fill). The `ma_put` tier (3,660 cases, zero excuses, strict error
+  types) and 243 aliasing-tier put cases; 14 planted bugs killed. X32 and findings 38–41 recorded. Commit: this commit.
+
 - **2026-10-08**: X30 done (numpy.ma's arraysetops as NumPy's statements; `np.argsort`'s ±0 order; `np.unique`'s
   complex hash representative). The `ma_setops` tier (7,030 cases, zero excuses; 8 planted bugs killed); the
-  `ma_sortsetops` tier lost its isin / in1d and complex unique excuses. Findings 36–37 recorded. Commit: this commit.
+  `ma_sortsetops` tier lost its isin / in1d and complex unique excuses. Findings 36–37 recorded. Commit: fa7108b9.
 
 - **2026-10-08**: X27 done (storing a C# literal is NumPy's `PyArray_Pack` at every store entry point: the literal
   marks, the NumPy-scalar route split, np.full's unsafe copyto, np.put's order and empty-values no-op, np.pad's NumPy

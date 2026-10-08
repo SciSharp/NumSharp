@@ -4566,9 +4566,55 @@ def gen_aliasing(dtypes):
                                    "buffer": np.ascontiguousarray(acc).tobytes().hex()},
                       "layout": "out", "valueclass": "alias"})
         n += 1
+        # (3) np.put whose VALUES are a view of the target. PyArray_PutTo copies the target first when its values or
+        #     its indices may share memory with it (arrays_overlap -> ENSURECOPY | WRITEBACKIFCOPY), so every value is
+        #     read from the ORIGINAL target; writing in place would feed already-written slots back in as values. Two
+        #     corpus operands cannot share a base, so the harness rebuilds the values view from params.vslice over the
+        #     target's flat C view (":" is the target itself). wrap / clip take out-of-range and negative indices.
+        for vsl in (":", "5:13", "::-2", "1::3", "12:4:-1"):
+            for mode in ("raise", "wrap", "clip"):
+                idx = np.array([0, 2, 4, 6, 8, 10, 12, 14] if mode == "raise" else [0, 2, -3, 25, 41, 7, -22, 14],
+                               dtype=np.int64)
+                acc = a.copy()
+                np.put(acc, idx, acc.reshape(-1)[_put_slice(vsl)], mode=mode)
+                cases.append({"id": f"put_selfvals/{s}/{n}", "op": "put_selfvals",
+                              "params": {"vslice": vsl, "mode": mode},
+                              "operands": [describe(a, a), describe(idx, idx)],
+                              "expected": {"dtype": acc.dtype.name, "shape": [int(d) for d in acc.shape],
+                                           "buffer": np.ascontiguousarray(acc).tobytes().hex()},
+                              "layout": "put_self", "valueclass": "alias"})
+                n += 1
+        # (4) np.put whose INDICES are a view of an integer target: the copy above also makes every index the
+        #     original's, so a write landing inside the index view cannot redirect a later write. An int64 C view
+        #     overlaps (NumPy reads intp in place; NumSharp reads int32 in place too); a narrower or a reversed view is
+        #     cast / made contiguous first, the same answer by another route. wrap / clip targets hold out-of-range
+        #     indices (negative ones only for a signed dtype). uint64 is not here: put casts its indices to intp under
+        #     the 'safe' rule, which refuses uint64 (the TypeError SelectionTests pins).
+        if dt.kind in "iu" and dt != np.uint64:
+            perm = [7, 3, 0, 15, 2, 19, 11, 4, 8, 1, 16, 5, 12, 9, 18, 6, 13, 10, 17, 14]
+            far = [3 * v - 25 for v in perm] if dt.kind == "i" else [3 * v for v in perm]
+            for isl in ("0:8", "::-3", "2:12:2"):
+                for mode in ("raise", "wrap", "clip"):
+                    t = np.array(perm if mode == "raise" else far, dtype=dt).reshape(4, 5)
+                    vals = np.arange(100, 106, dtype=dt)
+                    acc = t.copy()
+                    np.put(acc, acc.reshape(-1)[_put_slice(isl)], vals, mode=mode)
+                    cases.append({"id": f"put_selfidx/{s}/{n}", "op": "put_selfidx",
+                                  "params": {"islice": isl, "mode": mode},
+                                  "operands": [describe(t, t), describe(vals, vals)],
+                                  "expected": {"dtype": acc.dtype.name, "shape": [int(d) for d in acc.shape],
+                                               "buffer": np.ascontiguousarray(acc).tobytes().hex()},
+                                  "layout": "put_self", "valueclass": "alias"})
+                    n += 1
     if skipped:
         print(f"  (skipped {skipped} cases where NumPy raised)")
     return cases
+
+
+def _put_slice(text):
+    """The Python slice a NumSharp slice string spells ("5:13", "::-2", ":"), for the put aliasing cases."""
+    parts = [int(p) if p.strip() else None for p in text.split(":")]
+    return slice(*parts)
 
 
 # W14 — error parity. The other generators SKIP every case where NumPy raises, so "NumPy raises =>

@@ -21,6 +21,15 @@ namespace NumSharp.Tests.Fuzz
         // ---------------------------------------------------------------------------------
 
         /// <summary>
+        ///     The masked-array op keys that MUTATE an operand in place (<c>put</c> / <c>putmask</c>), whose measured runs
+        ///     may raise where the case's first run succeeded: the warm run changes the target's state (it may promote a
+        ///     <c>nomask</c> target to a mask, which sends a hard-masked put into NumPy's hard-mask branch). The sweep
+        ///     audits the pool traffic of whichever path those runs take instead of crashing on the exception; the corpus
+        ///     tiers gate the outcome on fresh operands.
+        /// </summary>
+        private static readonly HashSet<string> MaskedMutators = new(StringComparer.Ordinal) { "ma.put", "ma.putmask" };
+
+        /// <summary>
         ///     Replays one masked-array tier: each operand is rebuilt as an <see cref="NDMaskedArray"/>
         ///     (data view + optional contiguous bool mask, exactly as FuzzCorpusTests.Ma does), the op
         ///     runs through <see cref="OpRegistry.ApplyMasked"/>/<see cref="OpRegistry.ApplyMaskedTuple"/>,
@@ -148,7 +157,23 @@ namespace NumSharp.Tests.Fuzz
                         continue;
                     }
 
-                    var traffic = ScopeAudit.MeasureConfirmedTraffic(Region);
+                    // A mutator's measured runs start from the state its warm run left, not the case's: the warm ma.put of
+                    // masked values into a nomask hard-masked target creates a mask, so the next run takes NumPy's
+                    // hard-mask branch and raises its ValueError. The measured region then audits that error path's pool
+                    // traffic instead of crashing the sweep (the ma_put / ma_select tiers gate the outcome itself).
+                    void MutatorRegion()
+                    {
+                        try
+                        {
+                            Region();
+                        }
+                        catch when (MaskedMutators.Contains(c.Op))
+                        {
+                            // expected: see above
+                        }
+                    }
+
+                    var traffic = ScopeAudit.MeasureConfirmedTraffic(MutatorRegion);
                     if (traffic == null)
                     {
                         acc.Inconclusive(c.Op, errorPath: false);

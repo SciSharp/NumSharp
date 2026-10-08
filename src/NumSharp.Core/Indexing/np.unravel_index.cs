@@ -54,9 +54,11 @@ namespace NumSharp
             // A materialized copy is released by this method's scope (exceptions included) and is
             // kept reachable by it while the kernel reads it; an `indices` used as-is is the caller's
             // (built before the scope opened) and is never disposed.
+            // C order on every route: the kernel reads the indices linearly beside C-order results, and astype's default
+            // 'K' kept an F-order int16 / int32 index array F-ordered (its coordinates came back in memory order).
             var idx64 = indices.GetTypeCode == NPTypeCode.Int64
                 ? (indices.Shape.IsContiguous ? indices : np.ascontiguousarray(indices))
-                : indices.astype(NPTypeCode.Int64);
+                : indices.astype(NPTypeCode.Int64, copy: true, order: 'C');
 
             // Result NDArrays have the same DIMENSIONS as the input but with fresh
             // C-contiguous strides. Cloning indices.Shape directly would copy

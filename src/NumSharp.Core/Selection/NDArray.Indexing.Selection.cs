@@ -70,9 +70,10 @@ namespace NumSharp
         /// </summary>
         /// <param name="indices">The index array to normalize.</param>
         /// <returns>The normalized index array (Int32 or Int64).</returns>
-        /// <exception cref="IndexOutOfRangeException">When the index array is not an integer type, with NumPy's IndexError
-        ///     text (<c>arrays used as indices must be of integer (or boolean) type</c>); the type stays this legacy
-        ///     path's documented one.</exception>
+        /// <exception cref="IndexError">When the index array is not an integer type: NumPy's IndexError and text
+        ///     (<c>arrays used as indices must be of integer (or boolean) type</c>). It used to be an
+        ///     <see cref="IndexOutOfRangeException"/> with that text; every other index path raises
+        ///     <see cref="IndexError"/>.</exception>
         [MethodImpl(Inline)]
         protected static NDArray NormalizeIndexArray(NDArray indices)
         {
@@ -92,7 +93,7 @@ namespace NumSharp
 
             // Non-integer types are not valid for indexing (matches NumPy behavior and NumPy's text; a string index
             // array's dtype has no CLR element type to name, and NumPy names none).
-            throw new IndexOutOfRangeException("arrays used as indices must be of integer (or boolean) type");
+            throw new IndexError("arrays used as indices must be of integer (or boolean) type");
         }
 
         /// <summary>

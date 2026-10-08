@@ -150,9 +150,12 @@ namespace NumSharp
             }
             else
             {
+                // C order: the kernel walks the mask linearly beside the target's C-order positions, and astype's
+                // default 'K' keeps an F-order mask F-ordered (an int8 F-order [[1, 1], [0, 0]] selected positions 0 and
+                // 2 where NumPy selects 0 and 1).
                 maskCast = mask.GetTypeCode == NPTypeCode.Boolean
                     ? np.ascontiguousarray(mask)
-                    : mask.astype(NPTypeCode.Boolean);
+                    : mask.astype(NPTypeCode.Boolean, copy: true, order: 'C');
             }
 
             if (vals.size == 0 && AnyTrueMask(maskCast))
@@ -229,8 +232,10 @@ namespace NumSharp
                 return null;
             }
             // Number to number (unsafe for a scalar, the rule already checked for an array), or text to text (truncated /
-            // NUL-padded, S <-> U ASCII-checked): every value converted now, as NumPy does before reading the mask.
-            return values.astype(target.dtype);
+            // NUL-padded, S <-> U ASCII-checked): every value converted now, as NumPy does before reading the mask. In C
+            // order: the place / putmask kernels read the values linearly (PyArray_FromAny's CARRAY), and astype's default
+            // 'K' kept an F-order input F-ordered (np.place's int32 F-order values were written in memory order).
+            return values.astype(target.dtype, copy: true, order: 'C');
         }
 
         private static unsafe bool AnyTrueMask(NDArray maskBool)

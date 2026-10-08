@@ -332,6 +332,10 @@ namespace NumSharp.Tests.Fuzz
             // quicksort tie order are dropped by the generator (gen_ma_oracle.gen_ma_setops), never excused.
             if (c.Valueclass == "masetops")
                 return null;
+            // ma_put.jsonl (numpy.ma's put as NumPy's statements: hard / soft masks, plain targets, every values kind,
+            // index kind and mode, NumPy's errors, 2026-10-08) is held to ZERO excuses too.
+            if (c.Valueclass == "maput")
+                return null;
             // copyto_full.jsonl (np.copyto as NumPy's array_copyto, plan api-parameter-parity X16 + X11: where= masks,
             // layouts, every dtype, casts, overlap, C# literal sources, 0-d / empty arrays, NumPy's errors and their
             // order) is held to ZERO excuses, its error cases (valueclass "error") included — hence the op test.

@@ -30,16 +30,23 @@ namespace NumSharp
         ///     multi_index must be a sequence of length N</c>).</exception>
         /// <exception cref="TypeError">A coordinate array that is neither integer nor bool (<c>only int indices
         ///     permitted</c>).</exception>
-        /// <exception cref="ArgumentException">An invalid mode or order, coordinates that do not broadcast, or (mode
+        /// <exception cref="ValueError">A bad <paramref name="mode"/> (NumPy's <c>clipmode_parser</c> texts, see
+        ///     <see cref="ClipModeConverter"/>), checked before the coordinate count.</exception>
+        /// <exception cref="ArgumentException">An invalid order, coordinates that do not broadcast, or (mode
         ///     <c>raise</c>) a coordinate out of range.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ravel_multi_index.html</remarks>
         public static NDArray<long> ravel_multi_index(NDArray[] multi_index, int[] dims, string mode = "raise", char order = 'C')
         {
             using var plain = NDMatrixBoundary.PlainFor(multi_index);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            int ndim = ValidateRavelInputs(multi_index, dims);
-            var modes = new int[ndim];
-            int singleMode = ParseMode(mode, nameof(mode));
-            for (int d = 0; d < ndim; d++) modes[d] = singleMode;
+            if (multi_index == null) throw new ArgumentNullException(nameof(multi_index));
+            if (dims == null) throw new ArgumentNullException(nameof(dims));
+            // arr_ravel_multi_index (compiled_base.c) converts the modes before it reads the coordinates
+            // (PyArray_ConvertClipmodeSequence ahead of int_sequence_to_arrays): a bad mode wins over a coordinate count
+            // that does not match. One mode string serves every dimension.
+            var modes = new int[dims.Length];
+            int singleMode = ClipModeConverter(mode);
+            for (int d = 0; d < modes.Length; d++) modes[d] = singleMode;
+            ValidateRavelInputs(multi_index, dims);
 
             return RavelMultiIndexImpl(multi_index, dims, modes, order);
         }
@@ -50,27 +57,27 @@ namespace NumSharp
         /// </summary>
         /// <param name="multi_index">Tuple of integer arrays, one per dimension.</param>
         /// <param name="dims">Shape of the array the indices are unravelling into.</param>
-        /// <param name="modes">One boundary mode per dimension.</param>
+        /// <param name="modes">One boundary mode per dimension (NumPy's <c>mode</c> tuple); <c>null</c> is NumPy's
+        ///     <c>None</c>, which raises on every dimension.</param>
         /// <param name="order"><c>'C'</c> (default) or <c>'F'</c>.</param>
         /// <returns>The flat indices.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="multi_index"/> or <paramref name="dims"/> is null.</exception>
-        /// <exception cref="ValueError">The coordinate count differs from <paramref name="dims"/>' length.</exception>
+        /// <exception cref="ValueError">A mode count that differs from the dimensions (<c>list of clipmodes has wrong length
+        ///     (1 instead of 2)</c>) or a bad mode (<see cref="ClipModeConverter"/>), both checked before the coordinate
+        ///     count; then a coordinate count that differs from <paramref name="dims"/>' length.</exception>
         /// <exception cref="TypeError">A coordinate array that is neither integer nor bool (<c>only int indices
         ///     permitted</c>).</exception>
-        /// <exception cref="ArgumentException">A mode count that differs from the dimensions, an invalid mode or order,
-        ///     coordinates that do not broadcast, or (mode <c>raise</c>) a coordinate out of range.</exception>
+        /// <exception cref="ArgumentException">An invalid order, coordinates that do not broadcast, or (mode
+        ///     <c>raise</c>) a coordinate out of range.</exception>
         public static NDArray<long> ravel_multi_index(NDArray[] multi_index, int[] dims, string[] modes, char order = 'C')
         {
             using var plain = NDMatrixBoundary.PlainFor(multi_index);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            int ndim = ValidateRavelInputs(multi_index, dims);
-            if (modes == null || modes.Length != ndim)
-                throw new ArgumentException(
-                    $"mode tuple length ({modes?.Length ?? 0}) must match the number of dimensions ({ndim}).",
-                    nameof(modes));
-
-            var modeInts = new int[ndim];
-            for (int d = 0; d < ndim; d++)
-                modeInts[d] = ParseMode(modes[d], nameof(modes));
+            if (multi_index == null) throw new ArgumentNullException(nameof(multi_index));
+            if (dims == null) throw new ArgumentNullException(nameof(dims));
+            // NumPy's PyArray_ConvertClipmodeSequence: the tuple's length, then each mode in order — all before the
+            // coordinates are read.
+            var modeInts = ConvertClipmodeSequence(modes, dims.Length);
+            ValidateRavelInputs(multi_index, dims);
 
             return RavelMultiIndexImpl(multi_index, dims, modeInts, order);
         }
@@ -84,13 +91,14 @@ namespace NumSharp
         {
             if (coords == null) throw new ArgumentNullException(nameof(coords));
             if (dims == null) throw new ArgumentNullException(nameof(dims));
+            // The mode first, as NumPy converts it before it reads the coordinates.
+            int modeInt = ClipModeConverter(mode);
             if (coords.Length != dims.Length)
                 throw new ArgumentException(
                     $"coords length ({coords.Length}) must match dims length ({dims.Length}).",
                     nameof(coords));
 
             int ndim = dims.Length;
-            int modeInt = ParseMode(mode, nameof(mode));
 
             Span<long> ravelStrides = stackalloc long[ndim];
             ComputeRavelStrides(dims, order, ravelStrides);
@@ -263,7 +271,8 @@ namespace NumSharp
             }
         }
 
-        /// <summary>The argument checks <c>ravel_multi_index</c> makes before the modes: both present, one array per dimension.</summary>
+        /// <summary>The coordinate checks <c>ravel_multi_index</c> makes after it converts the modes (NumPy's order): both
+        ///     present, one array per dimension.</summary>
         /// <param name="multi_index">The coordinate arrays.</param>
         /// <param name="dims">The shape.</param>
         /// <returns>The number of dimensions.</returns>
@@ -281,19 +290,6 @@ namespace NumSharp
             if (dims.Length == 0)
                 throw new ArgumentException("dims must contain at least one dimension.", nameof(dims));
             return dims.Length;
-        }
-
-        private static int ParseMode(string mode, string paramName)
-        {
-            if (string.IsNullOrEmpty(mode)) return 0;
-            return mode switch
-            {
-                "raise" => 0,
-                "wrap" => 1,
-                "clip" => 2,
-                _ => throw new ArgumentException(
-                    $"clipmode '{mode}' is invalid. Expected 'raise', 'wrap', or 'clip'.", paramName)
-            };
         }
 
         private static long ApplyMode(long j, long m, int mode, int dim)

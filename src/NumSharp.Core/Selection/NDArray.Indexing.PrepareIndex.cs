@@ -158,18 +158,14 @@ namespace NumSharp
                 // From here the item must be an (integer or boolean) array, a 0-d array scalar, or invalid.
                 NDArray arr = AsIndexArray(obj);     // throws the NumPy invalid-index IndexError otherwise
 
-                // An EMPTY index array (size 0) of ANY dtype is force-cast to intp and treated as an
-                // empty integer fancy index, NOT a boolean mask (NumPy mapping.c:425). So
-                // A[np.array([], bool)] -> (0,4), never a length-mismatch error.
-                if (arr.size == 0 && arr.ndim >= 1)
-                {
-                    var emptyFancy = arr.typecode == NPTypeCode.Boolean ? arr.astype(NPTypeCode.Int64) : arr;
-                    if (fancyNdim < arr.ndim) fancyNdim = arr.ndim;
-                    indexType |= IndexType.Fancy;
-                    ops.Add(IndexOp.FancyArr(emptyFancy));
-                    usedNdim += 1;
-                    continue;
-                }
+                // A non-index dtype is refused whatever the array's size (NumPy probed: a[np.array([], float), 0] is
+                // this IndexError). NumPy's force-cast of an EMPTY index to intp (mapping.c) applies only to an index
+                // that is not yet an array — a Python list such as [] — and every index AsIndexArray accepts is an
+                // array: an empty bool array stays a mask (its nonzero gives one empty index per mask axis, a zero-length
+                // mask axis matching any length), an empty integer array is the empty fancy index below. The force-cast
+                // used to apply to every empty array, so an empty float array passed and an empty 2-D mask consumed one
+                // axis instead of two.
+                ThrowIfNotIndexArrayDtype(arr);
 
                 if (arr.typecode == NPTypeCode.Boolean)
                 {
@@ -228,7 +224,8 @@ namespace NumSharp
                     continue;
                 }
 
-                // An array of a non-index (e.g. float) dtype.
+                // An array of a non-index (e.g. float) dtype — unreachable since ThrowIfNotIndexArrayDtype above;
+                // kept as the classifier's last word.
                 throw new IndexError("arrays used as indices must be of integer (or boolean) type");
             }
 
@@ -361,6 +358,19 @@ namespace NumSharp
             }
 
             return new PreparedIndex(ops.ToArray(), indexType, newNdim, fancyNdim);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>prepare_index</c> refusal of an index ARRAY whose dtype is neither integer nor bool (float,
+        ///     complex, decimal, char, half, text), raised while the index is walked — before the too-many-indices and
+        ///     boolean-shape checks — and for an empty or 0-d array too.
+        /// </summary>
+        /// <param name="arr">The index array.</param>
+        /// <exception cref="IndexError"><c>arrays used as indices must be of integer (or boolean) type</c>, NumPy's text.</exception>
+        internal static void ThrowIfNotIndexArrayDtype(NDArray arr)
+        {
+            if (arr.typecode != NPTypeCode.Boolean && !IsIntegerArrayType(arr.typecode))
+                throw new IndexError("arrays used as indices must be of integer (or boolean) type");
         }
 
         /// <summary>True for the integer NPTypeCodes accepted as fancy indices (NumPy <c>PyArray_ISINTEGER</c>).</summary>

@@ -489,36 +489,23 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Parse the clip mode, reproducing NumPy's <c>clipmode_parser</c> (conversion_utils.c):
-        ///     case-sensitive exact match of <c>"clip"</c>/<c>"wrap"</c>/<c>"raise"</c>. A first char of
-        ///     c/w/r that is not the exact spelling raises
-        ///     <c>"Use one of 'clip', 'raise', or 'wrap' for clip mode"</c>; any other (or empty) string
-        ///     raises <c>"clipmode must be one of 'clip', 'raise', or 'wrap' (got '{mode}')"</c>.
+        ///     Parse the clip mode with NumPy's <c>PyArray_ClipmodeConverter</c> (<see cref="ClipModeConverter"/>, the
+        ///     parser <c>np.take</c>, <c>np.put</c> and <c>np.ravel_multi_index</c> share) and map it to the choose
+        ///     kernel's constants.
         /// </summary>
-        private static int ParseChooseMode(string mode)
+        /// <param name="mode"><c>"raise"</c>, <c>"wrap"</c>, <c>"clip"</c>, or <c>null</c> (NumPy's <c>None</c>:
+        ///     raise).</param>
+        /// <returns>The <see cref="DirectILKernelGenerator"/> <c>ChooseMode*</c> constant.</returns>
+        /// <exception cref="ValueError">See <see cref="ClipModeConverter"/>: a misspelled mode (<c>Use one of 'clip',
+        ///     'raise', or 'wrap' for clip mode</c>) or any other string (<c>clipmode must be one of 'clip', 'raise', or
+        ///     'wrap' (got 'bogus')</c>).</exception>
+        /// <remarks>The mapping is spelled out, not assumed: the shared numbering and the choose kernel's are equal
+        ///     today, and a switch keeps a later renumbering of either from silently selecting the wrong mode.</remarks>
+        private static int ParseChooseMode(string mode) => ClipModeConverter(mode) switch
         {
-            if (mode is null)
-                return DirectILKernelGenerator.ChooseModeRaise;   // NumPy: mode=None → RAISE
-            if (mode.Length < 1)
-                throw new ValueError($"clipmode must be one of 'clip', 'raise', or 'wrap' (got '{mode}')");
-
-            char c0 = mode[0];
-            if (c0 == 'C' || c0 == 'c')
-            {
-                if (mode == "clip") return DirectILKernelGenerator.ChooseModeClip;
-                throw new ValueError("Use one of 'clip', 'raise', or 'wrap' for clip mode");
-            }
-            if (c0 == 'W' || c0 == 'w')
-            {
-                if (mode == "wrap") return DirectILKernelGenerator.ChooseModeWrap;
-                throw new ValueError("Use one of 'clip', 'raise', or 'wrap' for clip mode");
-            }
-            if (c0 == 'R' || c0 == 'r')
-            {
-                if (mode == "raise") return DirectILKernelGenerator.ChooseModeRaise;
-                throw new ValueError("Use one of 'clip', 'raise', or 'wrap' for clip mode");
-            }
-            throw new ValueError($"clipmode must be one of 'clip', 'raise', or 'wrap' (got '{mode}')");
-        }
+            ClipModeWrap => DirectILKernelGenerator.ChooseModeWrap,
+            ClipModeClip => DirectILKernelGenerator.ChooseModeClip,
+            _ => DirectILKernelGenerator.ChooseModeRaise,
+        };
     }
 }

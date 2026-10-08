@@ -238,6 +238,14 @@ namespace NumSharp.Tests.Fuzz
                 case "minimum_out": np.minimum(ops[0], ops[1], ops[0]); return ops[0];
                 case "clip_out": np.clip(ops[0], ops[1], ops[2], ops[0]); return ops[0];
 
+                // np.put whose values (put_selfvals) or indices (put_selfidx) are a VIEW of the target: NumPy copies the
+                // target first when either may share memory with it, so every value and index is the original's. Two
+                // corpus operands cannot share a base, so the view is rebuilt here over the target's flat C view.
+                case "put_selfvals": return PutIntoSelf(ops[0], p["vslice"].GetString(), p["mode"].GetString(),
+                                                        (t, view, mode) => np.put(t, ops[1], view, mode));
+                case "put_selfidx": return PutIntoSelf(ops[0], p["islice"].GetString(), p["mode"].GetString(),
+                                                       (t, view, mode) => np.put(t, view, ops[1], mode));
+
                 // Parameter sweep (W12): ddof=1 std/var, order='F' ravel.
                 case "std_ddof": { var ax = ParseAxis(p); int dd = p["ddof"].GetInt32();
                     return ax.HasValue ? np.std(ops[0], ax.Value, false, dd) : np.std(ops[0], false, dd); }
@@ -971,6 +979,43 @@ namespace NumSharp.Tests.Fuzz
                 if (x is not null && seen.Add(x))
                     x.Dispose();
             return keep;
+        }
+
+        /// <summary>
+        ///     Runs an <c>np.put</c> whose values or indices are a view of the target itself — the aliasing tier's
+        ///     <c>put_selfvals</c> / <c>put_selfidx</c> — over a fresh copy of the reconstructed target, and returns that
+        ///     copy (the result the case compares).
+        /// </summary>
+        /// <param name="target">The reconstructed target operand; read only, never written.</param>
+        /// <param name="slice">The NumSharp slice string (Python's slice syntax) that selects the view of the target's
+        ///     flat C view: the values for put_selfvals, the indices for put_selfidx.</param>
+        /// <param name="mode">NumPy's clip mode, passed through.</param>
+        /// <param name="put">The put call; receives the target copy, the view of it and the mode.</param>
+        /// <returns>The target copy after the put, owned by the caller (the harness disposes the result).</returns>
+        /// <exception cref="Exception">Whatever <paramref name="put"/> raises; the copy is disposed first.</exception>
+        /// <remarks>
+        ///     A COPY is the target because the leak gates replay every case twice over the same operands: a second put
+        ///     into the first one's result reads other values, and for put_selfidx other indices — out of bounds under
+        ///     <c>raise</c> (the values 100..105 the first run wrote become indices). The copy is C-contiguous and owns
+        ///     its data, so <c>reshape(-1)</c> is a view of it and the view really shares the target's memory: the case
+        ///     still runs NumPy's overlap route. The flat and slice views are disposed before returning; the copy is
+        ///     disposed when the put throws, since no caller receives it then.
+        /// </remarks>
+        private static NDArray PutIntoSelf(NDArray target, string slice, string mode, Action<NDArray, NDArray, string> put)
+        {
+            var copy = target.copy();
+            try
+            {
+                using var flat = copy.reshape(-1);
+                using var view = flat[slice];
+                put(copy, view, mode);
+                return copy;
+            }
+            catch
+            {
+                copy.Dispose();
+                throw;
+            }
         }
 
         private static int[] ParseIntArray(JsonElement arr)

@@ -264,7 +264,7 @@ public class BooleanIndexing_BattleTests
             // Third True at (1,1) → arr3d[1,1,:] = [16,17,18,19]
             Assert.AreEqual(16, result.item<int>(2, 0));
         }
-        catch (IndexOutOfRangeException)
+        catch (IndexError)
         {
             // NumSharp doesn't support partial shape match yet
             Assert.Fail("Partial shape match (2D mask on 3D array) not supported - NumPy allows this");
@@ -413,32 +413,30 @@ public class BooleanIndexing_BattleTests
 
     #region Case 8: Shape Mismatch Errors
 
+    /// <summary>A mask of another length is NumPy's IndexError (prepare_index), not an IndexOutOfRangeException.</summary>
     [TestMethod]
     public void Case8_ShapeMismatch_ThrowsError()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
         var badMask = np.array(new[] { true, false }).MakeGeneric<bool>(); // Length 2 vs 5
 
-        Assert.ThrowsException<IndexOutOfRangeException>(() => arr[badMask]);
+        Assert.ThrowsException<IndexError>(() => arr[badMask]);
     }
 
+    /// <summary>NumPy 2.4.2's text, verbatim: the axis, its length and the boolean axis' length.</summary>
     [TestMethod]
     public void Case8_ShapeMismatch_ErrorMessage()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
         var badMask = np.array(new[] { true, false }).MakeGeneric<bool>();
 
-        try
-        {
-            var _ = arr[badMask];
-            Assert.Fail("Should have thrown IndexOutOfRangeException");
-        }
-        catch (IndexOutOfRangeException ex)
-        {
-            Assert.IsTrue(ex.Message.Contains("boolean index did not match"), $"Error message should contain 'boolean index did not match', got: {ex.Message}");
-        }
+        var ex = Assert.ThrowsException<IndexError>(() => arr[badMask]);
+        Assert.AreEqual(
+            "boolean index did not match indexed array along axis 0; size of axis is 5 but size of corresponding boolean axis is 2",
+            ex.Message);
     }
 
+    /// <summary>A 2-D mask whose first axis already differs: NumPy names axis 0 and the two lengths.</summary>
     [TestMethod]
     public void Case8_2D_WrongMaskShape()
     {
@@ -446,7 +444,10 @@ public class BooleanIndexing_BattleTests
         // Mask shape (2, 2) doesn't match array shape (3, 4) or prefix
         var badMask = np.array(new[,] { { true, false }, { false, true } }).MakeGeneric<bool>();
 
-        Assert.ThrowsException<IndexOutOfRangeException>(() => arr2d[badMask]);
+        var ex = Assert.ThrowsException<IndexError>(() => arr2d[badMask]);
+        Assert.AreEqual(
+            "boolean index did not match indexed array along axis 0; size of axis is 3 but size of corresponding boolean axis is 2",
+            ex.Message);
     }
 
     #endregion

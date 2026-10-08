@@ -1251,10 +1251,15 @@ namespace NumSharp
                 _mask = MaskedArrayModule.Own(np.zeros(Shape.Adopt(_data.Shape.dimensions), np.@bool));
         }
 
-        /// <summary>Sets <c>x.flat[indices] = values</c> (mask-aware) — the instance form of
-        /// <see cref="MaskedArrayModule.put"/>. Masked <paramref name="values"/> mask the slots; plain values unmask.</summary>
+        /// <summary>Sets <c>x.flat[indices] = values</c> (mask-aware) — NumPy's <c>MaskedArray.put</c>, the instance form of
+        /// <see cref="MaskedArrayModule.put"/>: masked <paramref name="values"/> mask the slots, plain values unmask them, and
+        /// under a hard mask NumPy's statements drop the indices on masked slots first (an N-D target then always raises
+        /// IndexError, short values are zero-padded rather than cycled; see <see cref="MaskedArrayModule.put"/>).</summary>
         /// <param name="indices">Flat integer indices.</param><param name="values">Scalar/array/masked values.</param>
         /// <param name="mode">Out-of-bounds policy: "raise" (default)/"wrap"/"clip".</param>
+        /// <exception cref="IndexError">See <see cref="MaskedArrayModule.put"/>.</exception>
+        /// <exception cref="ValueError">See <see cref="MaskedArrayModule.put"/>.</exception>
+        /// <exception cref="IncorrectShapeException">See <see cref="MaskedArrayModule.put"/>.</exception>
         public void put(NDArray indices, object values, string mode = "raise") => np.ma.put(this, indices, values, mode);
 
         /// <summary>Makes the mask HARD (NumPy's <c>harden_mask</c>): from now on a plain-value assignment cannot
@@ -7812,74 +7817,258 @@ namespace NumSharp
         // ─────────────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        ///     IN-PLACE flat scatter (NumPy's <c>ma.put</c>): sets <c>a.flat[indices] = values</c>, cycling
-        ///     <paramref name="values"/> when shorter. A masked <paramref name="values"/> (the <c>masked</c>
-        ///     singleton or a masked-array's mask) masks the written slots; a plain value UNMASKS them. The mask
-        ///     is created on demand and shrunk back to <c>nomask</c> if it ends up all-False.
+        ///     IN-PLACE flat scatter, NumPy's <c>ma.put</c> and <c>MaskedArray.put</c> statement for statement: writes
+        ///     <paramref name="values"/> into <c>a.flat[indices]</c> through <c>ndarray.put</c> (cycling them), then masks the
+        ///     written slots where <paramref name="values"/> is masked and unmasks them where it is not. Under a HARD mask
+        ///     NumPy first drops the indices that fall on masked slots, with consequences listed in the remarks.
         /// </summary>
-        /// <param name="a">The <see cref="NDMaskedArray"/> (or plain array) to mutate.</param>
-        /// <param name="indices">Flat integer target indices.</param>
-        /// <param name="values">Scalar/array/<see cref="NDMaskedArray"/>/the <c>masked</c> singleton.</param>
-        /// <param name="mode">Out-of-bounds policy: "raise" (default)/"wrap"/"clip".</param>
+        /// <param name="a">The <see cref="NDMaskedArray"/> to mutate; a plain <see cref="NDArray"/> is written as
+        ///     <c>ndarray.put</c> writes it; any other operand is converted, written and dropped (NumPy writes into
+        ///     <c>np.asarray(a)</c>, a temporary).</param>
+        /// <param name="indices">The flat target indices (any integer array; a bool array indexes as NumPy's put does,
+        ///     False as 0 and True as 1).</param>
+        /// <param name="values">A scalar, a C# array, an <see cref="NDArray"/>, an <see cref="NDMaskedArray"/> or the
+        ///     <c>masked</c> constant. A masked array's DATA is written, masked slots included (the masked constant writes
+        ///     its 0.0, cast).</param>
+        /// <param name="mode">Out-of-bounds policy: "raise" (default) / "wrap" / "clip"; <c>null</c> is NumPy's
+        ///     <c>None</c> (raise).</param>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/>, <paramref name="indices"/> or
+        ///     <paramref name="values"/> is null.</exception>
+        /// <exception cref="IndexError">
+        ///     <para>Under a hard mask (a mask array present, even an all-False one), from <c>self._mask[indices]</c>: an
+        ///     index out of bounds for the mask's FIRST axis whatever <paramref name="mode"/> is (<c>index 9 is out of bounds
+        ///     for axis 0 with size 4</c>), a float index array, a 0-d target. Then, for an N-D target, from
+        ///     <c>indices[~mask]</c>: <c>self._mask[indices]</c> indexed the mask's first axis, so the boolean array has more
+        ///     dimensions than the index array (<c>too many indices for array: array is 1-dimensional, but 2 were
+        ///     indexed</c>) — every hard-masked N-D put raises one of these before it writes.</para>
+        ///     <para>Otherwise <c>ndarray.put</c>'s (<see cref="np.put(NDArray, NDArray, NDArray, string)"/>): an
+        ///     out-of-bounds index under raise, a non-empty index list into an empty target.</para>
+        /// </exception>
+        /// <exception cref="ValueError">Under a hard mask: a masked <paramref name="values"/> (the masked constant
+        ///     included) cannot be resized (<c>A masked array does not own its data and therefore cannot be resized.</c>);
+        ///     otherwise a bad <paramref name="mode"/> (NumPy's <c>clipmode_parser</c> texts) or a read-only target.</exception>
+        /// <exception cref="IncorrectShapeException">Under a hard mask, <c>ndarray.resize</c>'s errors for an
+        ///     <see cref="NDArray"/> <paramref name="values"/> of another size than <paramref name="indices"/> (the caller
+        ///     holds it, so NumPy's reference check refuses: <c>cannot resize an array that references or is referenced by
+        ///     another array in this way. Use the np.resize function or refcheck=False</c>; a view: <c>cannot resize this
+        ///     array: it does not own its data</c>) or of a non-contiguous layout (<c>resize only works on single-segment
+        ///     arrays</c>). The house type of NumSharp's <c>ndarray.resize</c> errors; NumPy raises ValueError.</exception>
+        /// <exception cref="TypeError">A float or complex index array (<c>ndarray.put</c>'s safe cast).</exception>
+        /// <exception cref="OverflowException">Without a hard mask: a C# literal out of the target's range (NumPy's
+        ///     <c>PyArray_Pack</c>); under a hard mask the literal becomes an int64 / float64 array first and is cast.</exception>
         /// <remarks>
-        ///     Scoped by hand: the hard-mask snapshots, the fill scalars and any array-like value this method had
-        ///     to materialize are reclaimed — on an out-of-bounds throw too. A mask the call CREATES
-        ///     (<see cref="NDMaskedArray.EnsureMask"/>) is a field store and so escapes every scope by design; the
-        ///     hard-mask restore ORs into the existing mask IN PLACE (NumPy writes <c>self._mask</c> in place too),
-        ///     so no second mask array is created and none is orphaned. When the mask shrinks back to
-        ///     <c>nomask</c> the dropped mask array is NOT disposed: another masked array may share it (NumPy's
-        ///     <c>_sharedmask</c>), so it is left to its remaining owners and, finally, the GC.
+        ///     <para>
+        ///     The hard-mask branch is NumPy's <c>mask = self._mask[indices]; indices = narray(indices); values =
+        ///     narray(values, subok=True); values.resize(indices.shape); indices = indices[~mask]; values =
+        ///     values[~mask]</c>, and its consequences are NumPy's too, kept for parity:
+        ///     <list type="bullet">
+        ///       <item>an N-D target always raises an IndexError and writes nothing (above);</item>
+        ///       <item><c>values.resize</c> ZERO-PADS or truncates rather than cycling: <c>put([0, 2, 3], 5)</c> writes 5, 0,
+        ///       0 (a C# number or array is a fresh <c>np.array</c>, which resizes);</item>
+        ///       <item>a masked <paramref name="values"/> always raises, and an <see cref="NDArray"/> of another size than
+        ///       <paramref name="indices"/> raises (the caller holds it);</item>
+        ///       <item>the mask lookup ignores <paramref name="mode"/>, but the write does not: under <c>"clip"</c> a
+        ///       negative index passes the lookup as the LAST element and is written (and unmasked) at index 0 —
+        ///       <c>put([-1], [7], mode: "clip")</c> on <c>[--, 2, 3, 4]</c> gives <c>[7, 2, 3, 4]</c>, unmasked;</item>
+        ///       <item>a C# literal is converted before the cast, so it wraps (300 into int8 is 44) where the soft branch
+        ///       raises NumPy's OverflowError.</item>
+        ///     </list>
+        ///     One divergence (<c>[Misaligned]</c>): for an <see cref="NDArray"/> <paramref name="values"/> of the indices'
+        ///     size but another shape NumPy reshapes the caller's array in place; NumSharp relabels an alias of it, because
+        ///     <see cref="NDMaskedArray.data"/> and <see cref="NDMaskedArray.mask"/> hand out a masked array's own arrays
+        ///     (NumPy hands out fresh views), so an in-place relabel could reshape a masked array's data under its mask. The
+        ///     values written are the same: the relabel keeps the memory order, F order included.
+        ///     </para>
+        ///     <para>
+        ///     The mask update is NumPy's: nothing when neither the target nor the values are masked; otherwise
+        ///     <c>getmaskarray(self)</c> (the mask itself, written IN PLACE, so a view sharing it sees the change — or a fresh
+        ///     all-False mask for <c>nomask</c>), <c>put(indices, False)</c> or <c>put(indices, values._mask)</c> (cycled),
+        ///     and <c>make_mask(m, shrink=True)</c>: an all-False result becomes <c>nomask</c>.
+        ///     </para>
+        ///     <para>
+        ///     Scoped by hand: the hard branch's lookups and conversions, the plain branch's conversion and a fresh mask that
+        ///     shrinks back to <c>nomask</c> are reclaimed — on a throw too. A mask the call KEEPS is a field store and is
+        ///     detached from the scope (<see cref="Own"/>). When an existing mask shrinks to <c>nomask</c> the dropped mask
+        ///     array is NOT disposed: another masked array may share it (NumPy's <c>_sharedmask</c>), so it is left to its
+        ///     remaining owners and, finally, the GC.
+        ///     </para>
         /// </remarks>
         public void put(object a, NDArray indices, object values, string mode = "raise")
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            if (indices is null) throw new ArgumentNullException(nameof(indices));
+            if (values is null) throw new ArgumentNullException(nameof(values));
             using var scope = NDScope.Open();
-            var ma_ = a as NDMaskedArray;
-            var data = AsData(a);
-            if (values is NDMaskedConstant)
+
+            if (a is not NDMaskedArray x)
             {
-                // Mask the slots; leave the data (hidden). A plain array carries no mask, so nothing to do there.
-                if (ma_ is not null)
-                {
-                    ma_.EnsureMask();
-                    np.put(ma_._mask, indices, NDArray.Scalar(true), mode);
-                }
+                // ma.put: `a.put(indices, values, mode=mode)`, or `np.asarray(a).put(...)` when `a` has no put. For an
+                // ndarray that is ndarray.put, which reads a masked values' DATA (np.arange(4) put masked at [0, 2] is
+                // [0, 1, 0, 3]); any other operand is a converted temporary the caller never sees.
+                np.PutTo(AsData(a), indices, PutValuesOperand(values), mode);
                 return;
             }
-            // HARD MASK: a plain put must not reach masked slots nor unmask them (NumPy leaves a hard-masked
-            // target untouched). Snapshot data+mask, do the ordinary put, then restore the masked positions.
-            bool hard = ma_ is not null && ma_._hardmask && ma_._mask is not null;
-            NDArray savedMask = hard ? ma_._mask.copy() : null;
-            NDArray savedData = hard ? data.copy() : null;
-            if (values is NDMaskedArray mv)
+
+            NDArray dataIndices = indices;
+            object dataValues = values;
+
+            // "Hard mask: Get rid of the values/indices that fall on masked data" — when a mask array exists, even an
+            // all-False one (NumPy tests `self._mask is not nomask`).
+            if (x._hardmask && x._mask is not null)
             {
-                np.put(data, indices, mv._data, mode);
-                if (mv._mask is not null && ma_ is not null)
-                {
-                    ma_.EnsureMask();
-                    np.put(ma_._mask, indices, mv._mask, mode);
-                }
-                else if (!hard && ma_?._mask is not null)
-                {
-                    np.put(ma_._mask, indices, NDArray.Scalar(false), mode); // unmask (soft only)
-                }
+                // mask = self._mask[indices]: an ORDINARY index of the mask, which ignores `mode` (an out-of-bounds index
+                // is the IndexError in wrap and clip mode too) and indexes the FIRST axis of an N-D mask (one row per
+                // index), not the flat positions put writes.
+                var hidden = x._mask[indices];
+
+                // indices = narray(indices, copy=None) is the index array itself; values = narray(values, copy=None,
+                // subok=True); values.resize(indices.shape) — zero-padded or truncated, never cycled.
+                var resized = ResizeValuesForHardPut(values, indices);
+
+                // indices = indices[~mask]; values = values[~mask]. For an N-D mask `hidden` has more dimensions than the
+                // index array, so the first statement is the IndexError NumPy raises (the boolean indexer's too-many text).
+                var keep = np.logical_not(hidden);
+                dataIndices = indices[keep];
+                dataValues = resized[keep];
             }
+
+            // self._data.put(indices, values, mode=mode): ndarray.put's checks, packing, cycling and overlap copy.
+            np.PutTo(x._data, dataIndices, PutValuesOperand(dataValues), mode);
+
+            // "short circuit if neither self nor values are masked"
+            var valuesMask = PutValuesMask(dataValues);
+            if (x._mask is null && valuesMask is null)
+                return;
+
+            // m = getmaskarray(self): the mask itself (written in place — a view sharing it sees the change), or a fresh
+            // all-False one for nomask, built inside the scope so it is reclaimed if it shrinks back below.
+            bool freshMask = x._mask is null;
+            var m = x._mask ?? np.zeros(DimsOf(x._data), np.@bool);
+
+            // m.put(indices, False, mode=mode) for plain values, m.put(indices, values._mask, mode=mode) (cycled) for
+            // masked ones — the same indices and mode as the data, so the same slots.
+            if (valuesMask is null)
+                np.PutTo(m, dataIndices, false, mode);
             else
+                np.PutTo(m, dataIndices, valuesMask, mode);
+
+            // m = make_mask(m, copy=False, shrink=True); self._mask = m. An all-False mask collapses to nomask; a kept
+            // fresh mask becomes a field and leaves the scope.
+            if (np.any(m))
+                x._mask = freshMask ? Own(m) : m;
+            else
+                x._mask = null;
+        }
+
+        /// <summary>
+        ///     The values operand <c>ndarray.put</c> receives (<c>PyArray_FromAny(values, ...)</c>): a masked array's DATA,
+        ///     masked slots included (the masked constant's 0-d 0.0 too); any other value as it is, for
+        ///     <see cref="np.PutTo"/> to convert.
+        /// </summary>
+        /// <param name="values">The values of a put.</param>
+        /// <returns>The masked array's data array, or <paramref name="values"/> itself.</returns>
+        private static object PutValuesOperand(object values) => values is NDMaskedArray m ? m._data : values;
+
+        /// <summary>
+        ///     numpy.ma's <c>getmask(values)</c> for put's values: a masked array's mask (the masked constant's 0-d True), or
+        ///     null (<c>nomask</c>) for a masked array without one and for every unmasked value.
+        /// </summary>
+        /// <param name="values">The values of a put (after the hard branch: always an unmasked array).</param>
+        /// <returns>The mask array, or null.</returns>
+        private static NDArray PutValuesMask(object values) => (values as NDMaskedArray)?._mask;
+
+        /// <summary>
+        ///     The hard-mask branch's <c>values = narray(values, copy=None, subok=True); values.resize(indices.shape)</c>:
+        ///     the values as an array of the index array's shape, ZERO-PADDED or truncated in memory order (NumPy's
+        ///     <c>ndarray.resize</c>), never cycled.
+        /// </summary>
+        /// <param name="values">The values of the put.</param>
+        /// <param name="indices">The index array whose shape the values take.</param>
+        /// <returns>A new array, or an alias of a caller's <see cref="NDArray"/> of the same size (released by the
+        ///     caller's scope).</returns>
+        /// <exception cref="ValueError">A masked <paramref name="values"/>: <c>MaskedArray.resize</c> always refuses.</exception>
+        /// <exception cref="IncorrectShapeException">A caller's <see cref="NDArray"/> that NumPy's <c>ndarray.resize</c>
+        ///     refuses (see <see cref="ResizeCallerValues"/>).</exception>
+        /// <remarks>
+        ///     <c>narray(values, copy=None, subok=True)</c> returns a masked array as it is (subok), so its
+        ///     <c>MaskedArray.resize</c> raises whatever the sizes; an ndarray as it is, the CALLER's object
+        ///     (<see cref="ResizeCallerValues"/>); and anything else as a NEW array — a C# number as NumPy's Python scalar
+        ///     (its strong default dtype: an int is int64), a C# array as its typed array, a C# literal's marked 0-d
+        ///     array as the literal — which <c>ndarray.resize</c> grows with zeros or truncates (refcount 2: the check
+        ///     passes). The new array is of the VALUES' dtype; <see cref="np.PutTo"/> casts it into the target afterwards
+        ///     (unsafe), which is why a literal past the target's range wraps on this branch.
+        /// </remarks>
+        private static NDArray ResizeValuesForHardPut(object values, NDArray indices)
+        {
+            var dims = (long[])indices.Shape.dimensions.Clone();
+
+            if (values is NDMaskedArray)
+                throw new ValueError(
+                    "A masked array does not own its data and therefore cannot be resized.\nUse the numpy.ma.resize function instead.");
+
+            if (values is NDArray nd && !(nd.WasPythonLiteral || nd.WasNumPyScalar))
+                return ResizeCallerValues(nd, dims);
+
+            // np.array(values): a new C-contiguous array owning its data. A marked literal array stands for the scalar it
+            // was made from (NumPy's narray(5) is a fresh int64 0-d array).
+            var fresh = values is NDArray literal
+                ? GetDataStrong(literal.Storage.GetAtIndex(0))
+                : GetDataStrong(values);
+            // GetDataStrong hands back a new array for a scalar or a C# array, never the caller's; copy() only when it
+            // could not (an exotic AsData route), so the resize never touches memory the caller owns.
+            if (ReferenceEquals(fresh, values) || !fresh.Storage.OwnsData)
+                fresh = fresh.copy();
+            fresh.resize(Shape.Adopt(dims), refcheck: false);
+            return fresh;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>ndarray.resize</c> (<c>PyArray_Resize_int</c>) on put's values when they are the CALLER's
+        ///     <see cref="NDArray"/>: in NumPy the caller's reference counts, so a size change always fails the reference
+        ///     check (<c>Py_REFCNT &gt; 2</c>), after the single-segment and OWNDATA checks, in that order.
+        /// </summary>
+        /// <param name="nd">The caller's values array.</param>
+        /// <param name="dims">The index array's dimensions.</param>
+        /// <returns>An ALIAS of <paramref name="nd"/> relabelled to <paramref name="dims"/> (same byte size).</returns>
+        /// <exception cref="IncorrectShapeException"><c>resize only works on single-segment arrays</c> (neither C- nor
+        ///     F-contiguous; checked first, so even a same-size strided view raises), <c>cannot resize this array: it does
+        ///     not own its data</c> (a view of another size), or <c>cannot resize an array that references or is referenced
+        ///     by another array in this way. Use the np.resize function or refcheck=False</c> (an owning array of another
+        ///     size) — NumPy's texts, NumSharp's resize error type.</exception>
+        /// <remarks>
+        ///     NumPy relabels the caller's array itself when the size matches (its C strides, or F strides for an F-only
+        ///     contiguous array: the memory order, which is the order its elements are then read). NumSharp relabels an
+        ///     ALIAS (<see cref="NDArray.view"/>) to the same layout, so the caller's array keeps its shape — the one
+        ///     divergence documented on <see cref="put"/>: NumSharp's <c>x.data</c> / <c>x.mask</c> are a masked array's
+        ///     own arrays, which an in-place relabel would reshape.
+        /// </remarks>
+        private static NDArray ResizeCallerValues(NDArray nd, long[] dims)
+        {
+            if (nd.ndim != 0 && !nd.Shape.IsContiguous && !nd.Shape.IsFContiguous)
+                throw new IncorrectShapeException("resize only works on single-segment arrays");
+
+            // PyArray_Resize_int's size: the first zero dimension ends the product (dims of an index array are never
+            // negative).
+            long newSize = 1;
+            foreach (var d in dims)
             {
-                np.put(data, indices, AsData(values), mode);
-                if (!hard && ma_?._mask is not null)
-                    np.put(ma_._mask, indices, NDArray.Scalar(false), mode); // unmask (soft only)
+                if (d == 0) { newSize = 0; break; }
+                newSize *= d;
             }
-            if (hard)
+
+            if (newSize != nd.size)
             {
-                // Restore data where originally masked and keep those slots masked (retain any freshly-masked ones).
-                // The OR lands IN PLACE in the live mask: replacing the field with a fresh array would orphan the
-                // mask the put just wrote into (and break a sharer that sees this mask object).
-                np.copyto(data, savedData, casting: "unsafe", where: savedMask);
-                np.logical_or(savedMask, ma_._mask, @out: ma_._mask);
+                if (!nd.Storage.OwnsData)
+                    throw new IncorrectShapeException("cannot resize this array: it does not own its data");
+                throw new IncorrectShapeException(
+                    "cannot resize an array that references or is referenced\nby another array in this way.\n" +
+                    "Use the np.resize function or refcheck=False");
             }
-            // NumPy shrinks the mask after put: an all-False mask collapses to nomask.
-            if (ma_?._mask is not null && !np.any(ma_._mask))
-                ma_._mask = null;
+
+            // Same size: the relabel keeps the memory order (C, or F for an F-only contiguous array).
+            var alias = nd.view();
+            alias.resize(Shape.Adopt(dims), refcheck: false);
+            return alias;
         }
 
         /// <summary>

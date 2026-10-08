@@ -9,9 +9,14 @@ namespace NumSharp
         /// <summary>
         ///     Used to perform selection based on a boolean mask.
         /// </summary>
+        /// <param name="mask">The boolean mask: of this array's leading dimensions (<c>mask.shape ==
+        ///     a.shape[:mask.ndim]</c>, a zero-length mask axis matching any length), or 0-d.</param>
         /// <remarks>https://numpy.org/doc/stable/user/basics.indexing.html</remarks>
-        /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
-        /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
+        /// <exception cref="IndexError">The mask has more dimensions than this array (<c>too many indices for array: array
+        ///     is 1-dimensional, but 2 were indexed</c>), or a mask axis of non-zero length differs from the array axis it
+        ///     indexes (<c>boolean index did not match indexed array along axis 0; size of axis is 4 but size of
+        ///     corresponding boolean axis is 2</c>) — NumPy's <c>prepare_index</c> texts (<see cref="BooleanIndexError"/>).
+        ///     </exception>
         [SuppressMessage("ReSharper", "CoVariantArrayConversion")]
         public NDArray this[NDArray<bool> mask]
         {
@@ -37,10 +42,8 @@ namespace NumSharp
                     return this.TensorEngine.BooleanMask(this, mask);
                 }
 
-                // Error: mask doesn't match a leading prefix of the array shape.
-                throw new IndexOutOfRangeException(
-                    $"boolean index did not match indexed array along axis 0; " +
-                    $"size of axis is {this.Shape.dimensions[0]} but size of boolean index is {mask.Shape.dimensions[0]}");
+                // The mask does not match a leading prefix of the array shape: NumPy's prepare_index error.
+                throw BooleanIndexError(mask);
             }
             set
             {
@@ -80,10 +83,43 @@ namespace NumSharp
                     return;
                 }
 
-                throw new IndexOutOfRangeException(
-                    $"boolean index did not match indexed array along axis 0; " +
-                    $"size of axis is {this.Shape.dimensions[0]} but size of boolean index is {mask.Shape.dimensions[0]}");
+                // NumPy's assignment runs the same prepare_index as the getter (after the writeability check above).
+                throw BooleanIndexError(mask);
             }
+        }
+
+        /// <summary>
+        ///     The IndexError NumPy's <c>prepare_index</c> (<c>mapping.c</c>) raises for a boolean index array that does
+        ///     not fit this array: a mask converts to one integer index per mask axis (its nonzero), so more mask axes than
+        ///     array axes is the too-many-indices error, checked first; otherwise the FIRST mask axis whose non-zero length
+        ///     differs from the array axis it acts on.
+        /// </summary>
+        /// <param name="mask">The boolean index array, known not to fit.</param>
+        /// <returns>The error to throw (NumPy's texts, verbatim).</returns>
+        /// <remarks>
+        ///     A mask axis of length 0 matches any array axis: NumPy records the mask axis length and skips the comparison
+        ///     when it is 0 (<c>indices[i].value &gt; 0</c>), so <c>a[np.zeros(0, bool)]</c> selects nothing from an axis
+        ///     of any length. The axis NumPy names is the array axis — for a single mask, the mask axis itself. This
+        ///     replaced an <see cref="IndexOutOfRangeException"/> whose text always named axis 0 and the mask's first
+        ///     length, even for a mask with too many dimensions ("size of axis is 2 but size of boolean index is 2").
+        /// </remarks>
+        internal IndexError BooleanIndexError(NDArray mask)
+        {
+            if (mask.ndim > this.ndim)
+                return new IndexError($"too many indices for array: array is {this.ndim}-dimensional, but {mask.ndim} were indexed");
+
+            var dims = this.Shape.dimensions;
+            var maskDims = mask.Shape.dimensions;
+            for (int i = 0; i < mask.ndim; i++)
+            {
+                if (maskDims[i] != 0 && maskDims[i] != dims[i])
+                    return new IndexError(
+                        $"boolean index did not match indexed array along axis {i}; size of axis is {dims[i]} but size of " +
+                        $"corresponding boolean axis is {maskDims[i]}");
+            }
+
+            // Unreachable for a mask the caller found not to fit; kept so a future caller cannot throw null.
+            return new IndexError("boolean index did not match indexed array");
         }
 
         /// <summary>

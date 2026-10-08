@@ -108,6 +108,17 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void MaSetops() => RunMaCorpus("ma_setops.jsonl");
 
+        /// <summary>
+        ///     numpy.ma's put as NumPy's statements (ma_put.jsonl, gen_ma_oracle.py <c>put</c>): MaskedArray.put / ma.put
+        ///     over every dtype, target layout, mask kind, hard and soft masks, plain targets, index kinds, value kinds and
+        ///     modes, NumPy's errors included (its hard-mask branch raises IndexError for every N-D target and ValueError for
+        ///     masked values). Held to ZERO excuses (valueclass <c>maput</c>), with the mutated target's form and raw data
+        ///     checked and the exception TYPE checked strictly (<see cref="StrictErrorTypes"/>).
+        /// </summary>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void MaPut() => RunMaCorpus("ma_put.jsonl");
+
         // Extras: small exact products (dot/inner/outer) + trace/vander(->array) + triangular-mask
         // (mask_rows/cols/rowcols, compress_rows/cols) + predicates (is_masked/allclose/allequal->scalar)
         // + mask helpers (make_mask/make_mask_none/mask_or/flatten_mask->array, make_mask_descr->dtype).
@@ -138,6 +149,8 @@ namespace NumSharp.Tests.Fuzz
             ["ma_surface.jsonl"] = 22800,
             // ~80% of the 6,976 committed cases (the arraysetops port, 2026-10-08).
             ["ma_setops.jsonl"] = 5580,
+            // ~80% of the 3,660 committed cases (the put port, 2026-10-08).
+            ["ma_put.jsonl"] = 2900,
         };
 
         /// <summary>
@@ -350,9 +363,9 @@ namespace NumSharp.Tests.Fuzz
             var empty = Array.Empty<BitDiff.Diff>();
             string at = slot == null ? "" : $" {slot}";
 
-            // ma_meanvar.jsonl, ma_surface.jsonl and ma_setops.jsonl are held to ZERO excuses: MisalignedRegistry returns
-            // null for their valueclasses, and none of this file's own excuses below run for them either.
-            bool strict = sc.Valueclass is "mameanvar" or "masurface" or "masetops";
+            // ma_meanvar.jsonl, ma_surface.jsonl, ma_setops.jsonl and ma_put.jsonl are held to ZERO excuses: MisalignedRegistry
+            // returns null for their valueclasses, and none of this file's own excuses below run for them either.
+            bool strict = sc.Valueclass is "mameanvar" or "masurface" or "masetops" or "maput";
 
             // FORM: the masked singleton, a scalar, an array with nomask or with a mask array. getmaskarray cannot tell
             // these apart (an all-False mask reads like nomask, the singleton like a masked 0-d array), so the object
@@ -528,6 +541,18 @@ namespace NumSharp.Tests.Fuzz
         /// <param name="ops">The reconstructed operands.</param>
         /// <param name="failures">Collects one line per unexcused mismatch.</param>
         /// <param name="documented">Counts the excused mismatches by reason.</param>
+        /// <summary>
+        ///     The exception types a STRICT ma tier accepts besides NumPy's own name: OverflowError is .NET's
+        ///     <see cref="OverflowException"/> (the house type for NumPy's OverflowError), and a ValueError may be the
+        ///     house <see cref="IncorrectShapeException"/> that NumSharp's <c>ndarray.resize</c> raises with NumPy's texts.
+        ///     An IndexError or a TypeError must be NumSharp's <see cref="IndexError"/> / <see cref="TypeError"/>.
+        /// </summary>
+        private static readonly Dictionary<string, string[]> StrictErrorTypes = new()
+        {
+            ["OverflowError"] = new[] { "OverflowException" },
+            ["ValueError"] = new[] { "IncorrectShapeException" },
+        };
+
         private static void CheckMaError(
             FuzzCorpus.Case sc, NDMaskedArray[] ops, List<string> failures, Dictionary<string, int> documented)
         {
@@ -564,10 +589,14 @@ namespace NumSharp.Tests.Fuzz
             string gotType = caught.GetType().Name;
             string gotText = NormalizeMessage(caught.Message);
             string wantText = (sc.Error.Text ?? "").Trim();
-            // An exception named after NumPy's (Exceptions/{ValueError,TypeError,AxisError}.cs) is the strongest match.
-            bool typeOk = gotType == sc.Error.Type
-                          || !ErrorTypeMap.TryGetValue(sc.Error.Type, out var allowed)
-                          || allowed.Contains(gotType);
+            // An exception named after NumPy's (Exceptions/{ValueError,TypeError,AxisError}.cs) is the strongest match. The
+            // strict tiers accept only NumPy's own type or the house type NumSharp documents for it (StrictErrorTypes).
+            bool typeOk = sc.Valueclass == "maput"
+                ? gotType == sc.Error.Type || (StrictErrorTypes.TryGetValue(sc.Error.Type, out var strictAllowed)
+                                               && strictAllowed.Contains(gotType))
+                : gotType == sc.Error.Type
+                  || !ErrorTypeMap.TryGetValue(sc.Error.Type, out var allowed)
+                  || allowed.Contains(gotType);
             bool textOk = string.Equals(gotText, wantText, StringComparison.Ordinal);
             if (typeOk && textOk)
                 return;

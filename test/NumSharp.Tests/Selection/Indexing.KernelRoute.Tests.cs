@@ -337,7 +337,7 @@ namespace NumSharp.Tests.Selection
             // NumPy's FLAT (axis=None) take runs on the raveled array and names axis 0 (probed 2.4.2:
             // "index 150 is out of bounds for axis 0 with size 100"); the axis-less "for size" text is
             // a.flat[i]'s, not take's.
-            raise.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*index 150 is out of bounds for axis 0 with size 100*");
+            raise.Should().Throw<IndexError>().WithMessage("index 150 is out of bounds for axis 0 with size 100");
 
             var m = np.arange(24, dtype: np.int64).reshape(6, 4);
             Assert.IsTrue(np.array_equal(np.take(m, np.array(new[] { 5, 0 }), axis: 0), np.take(m, np.array(new long[] { 5, 0 }), axis: 0)));
@@ -355,7 +355,7 @@ namespace NumSharp.Tests.Selection
             np.put(a, np.array(new[] { 99 }), np.array(new long[] { 8 }), mode: "clip");
             Longs(a)[9].Should().Be(8);
             Action raise = () => np.put(a, np.array(new[] { 0, 10 }), np.array(new long[] { 1 }));
-            raise.Should().Throw<IndexOutOfRangeException>().WithMessage("index 10 is out of bounds for axis 0 with size 10");
+            raise.Should().Throw<IndexError>().WithMessage("index 10 is out of bounds for axis 0 with size 10");
         }
 
         [TestMethod]

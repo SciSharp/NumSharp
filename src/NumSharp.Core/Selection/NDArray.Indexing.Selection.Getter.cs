@@ -146,6 +146,10 @@ namespace NumSharp
                 switch (indicesObjects[0])
                 {
                     case NDArray nd:
+                        // prepare_index refuses an index array of a non-index dtype while it walks the index, before
+                        // the too-many check and whatever the array's size: an empty or 0-d float array is the
+                        // IndexError too (it used to become an empty fancy index here).
+                        ThrowIfNotIndexArrayDtype(nd);
                         // A 0-d (scalar) array has NO axes to consume, so any axis-consuming index
                         // — an integer/boolean ARRAY, even an empty one (s[np.array([],int)]) — is
                         // "too many indices" (NumPy mapping.c prepare_index). A 0-d boolean

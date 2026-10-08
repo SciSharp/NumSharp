@@ -155,10 +155,29 @@ float64 with 10% masks, two pinned P-cores): geomean 3.3×, float64 3.6–8.7×,
 1.5–1.7×; NumSharp's int64 masked argsort sorts the unmasked values alone when no unmasked value equals the fill key,
 and in1d's `order.argsort()` of a permutation is its inverse permutation, one scatter).
 
+**`ma.put` is NumPy's `MaskedArray.put` / `ma.put`, statement for statement** (2026-10-08; `Ma/NDMaskedArray.cs`; gates
+the zero-excuse, type-strict oracle tier `ma_put.jsonl` (3,660 cases: `gen_ma_oracle.py put`) +
+`Ma/np.ma.put.NumPyPort.Test.cs`). Under a HARD mask (a mask array present, even an all-False one) NumPy runs `mask =
+self._mask[indices]; values = narray(values, subok=True); values.resize(indices.shape); indices = indices[~mask]; values
+= values[~mask]` before `self._data.put`, and so does NumSharp, with every consequence: the mask lookup indexes the
+FIRST axis of an N-D mask, so every hard-masked N-D put raises IndexError before it writes (`too many indices for array:
+array is 1-dimensional, but 2 were indexed`, or the lookup's own out-of-bounds text); short values are ZERO-PADDED, not
+cycled (`put([0, 2, 3], 5)` writes 5, 0, 0; a C# number or array is a fresh `np.array`, which resizes); masked values
+(the masked constant included) raise `A masked array does not own its data and therefore cannot be resized.`; an
+`NDArray` values of another size raises `ndarray.resize`'s errors (the caller holds it, so NumPy's reference check
+refuses; single-segment and OWNDATA first — the house `IncorrectShapeException`); the lookup ignores `mode`, the write
+does not (under `clip` a negative index writes, and unmasks, index 0); a literal is converted before the cast, so it
+wraps where the soft branch raises the OverflowError. The soft branch writes a masked values' DATA (the masked
+constant's 0.0, cast — it used to leave those slots' data), a plain target goes through `ndarray.put`, and the mask is
+written in place and shrunk to nomask when all-False. **One divergence (`[Misaligned]`):** for an `NDArray` values of
+the indices' size but another shape NumPy reshapes the caller's array in place; NumSharp relabels an alias, because
+`x.data` / `x.mask` hand out a masked array's own arrays (NumPy hands out fresh views). Neighbours fixed with it (see
+"Selection" and "Indexing"): `np.put` / `np.take` as `PyArray_PutTo` / `PyArray_TakeFrom`, the shared clip-mode
+converter, the indexer's `prepare_index` IndexErrors, and the C-order casts of five selection functions.
+
 Open: numeric fill values are not converted or
 materialized (a documented simplification: `astype(int64)` keeps a float fill); a 0-d result NumPy returns as a plain
-scalar stays a 0-d masked array; `ma.put` with a hard mask on an N-D array writes where NumPy raises its IndexError;
-`np.nditer` over strings; `argwhere` / `flatnonzero` / `unravel_index` result layout (views in NumPy,
+scalar stays a 0-d masked array; `np.nditer` over strings; `argwhere` / `flatnonzero` / `unravel_index` result layout (views in NumPy,
 `OpenBugs.IndexSearchLayout.cs`); an empty matrix's QR / SVD without the OpenBLAS backend.
 **Trap:** NumPy's ufunc dispatch cache makes some answers depend on call HISTORY (`np.prod(int8, dtype='U')` names no
 loop in a fresh process but finds the string repeat loop after `np.multiply(u, int8, dtype='U')`); the corpus records
@@ -2668,6 +2687,36 @@ under **`same_kind`** (so a `uint64` index is allowed) while `put` uses **`safe`
 refused. Pinned by `SelectionTests` (`Take_FloatIndices_Throws_SameKind`, `Put_FloatIndices_Throws_Safe`,
 `Take_UInt64Indices_Allowed_But_Put_Rejects`) + the 16-byte-fidelity and cyclic-wrap tests.
 
+**`np.put` / `np.take` are NumPy's `PyArray_PutTo` / `PyArray_TakeFrom`, statement for statement** (2026-10-08, found as
+neighbours of numpy.ma's put; plan `docs/plans/api-parameter-parity.md` X31; `Indexing/np.{put,take,clipmode}.cs`; gates
+`Indexing/np.put.take.NumPyPort.Test.cs`, the `ma_put` tier and the aliasing tier's `put_selfvals` / `put_selfidx` (243
+cases: the values or indices a view of the target); probed against 2.4.2):
+- **The mode** is `ClipModeConverter` (NumPy's `PyArray_ClipmodeConverter` + `clipmode_parser`), shared by `put`, `take`,
+  `choose` and `ravel_multi_index`, and parsed FIRST: the first character selects, the exact lowercase spelling is
+  required (`"Raise"` is `ValueError: Use one of 'clip', 'raise', or 'wrap' for clip mode`), an empty or unknown string
+  is `ValueError: clipmode must be one of 'clip', 'raise', or 'wrap' (got 'bogus')`, `null` is NumPy's None (raise).
+  `ravel_multi_index`'s `modes` is `ConvertClipmodeSequence` (`list of clipmodes has wrong length (1 instead of 2)`),
+  converted before the coordinates are counted. NumSharp's old parser raised ArgumentException with its own text and
+  read `""` as raise.
+- **put's order:** mode → writeability → the index cast (safe; an EMPTY float index array is the TypeError too) →
+  IndexError `cannot replace elements of an empty array` → the value packing (a literal is range-checked even when
+  nothing is written) → the no-op of empty values → the kernel (out of bounds: IndexError, the indices before it written
+  into a contiguous target, as NumPy's loop writes).
+- **put's overlap copy:** NumPy writes into a copy of the target when it may share memory with the converted values or
+  indices (`arrays_overlap`); NumSharp wrote in place — `np.put(a, [1, 2, 3], a[0:3])` gave `[0, 0, 0, 0, 4]` (NumPy
+  `[0, 0, 1, 2, 4]`) and `np.put(a, a, v)` raised an IndexError on an index it had just written.
+- **take's order:** AxisError (a 0-d source is raveled first, so only axis 0 / -1) → the index cast → the `out` checks
+  (ValueError `output array does not match result of ndarray.take`, the safe cast, `WRITEBACKIFCOPY base is read-only`) →
+  IndexError `cannot do a non-empty take from an empty axes.` only when the RESULT is non-empty → the gather, whose raise
+  loop checks every index of every outer position even when the slabs are empty (`np.take(np.zeros((3, 0, 0)), [0],
+  axis=1)` raises, an empty outer block checks nothing). Out of bounds is NumPy's IndexError (was
+  ArgumentOutOfRangeException "(Parameter 'idx64')").
+- **C-order casts:** put's values, the take / put index cast (`CastIndicesToInt64`), place's values and mask, putmask's
+  mask and unravel_index's indices were converted with `astype`'s default `'K'` and read linearly by the kernels, so an
+  F-order operand of another dtype was read in MEMORY order (`np.put` of an F-order int32 array into int64 wrote `[10,
+  12, 11, 13]`, NumPy `[10, 11, 12, 13]`; `np.putmask` / `np.place` with an F-order int8 mask selected the wrong slots);
+  every such cast is now `order: 'C'`.
+
 **`np.putmask(a, mask, values)` — the position-cursor sibling of `np.place`** (NumPy `PyArray_PutMask` /
 `npy_fastputmask`; `Indexing/np.putmask.cs`, kernel `DirectILKernelGenerator.PutMask.cs`). Writes
 `a.flat[i] = values.flat[i % values.size]` wherever `mask` is True, walking both in C-order. It shares
@@ -4909,6 +4958,19 @@ non-structured subset would only re-expose `loadtxt`.
   shim `nd.GetData(int[]/long[])`** (`Backends/NDArray.cs`) — e.g. `nd.GetData(0, 2)`. Internal
   coordinate callers must use `GetData`, not `nd[coordArray]`.
   The typed `NDArray<T>.this[int[]]` is unaffected — it returns a scalar `T` (inherently coordinate).
+- **Index errors are NumPy's `prepare_index` IndexErrors** (2026-10-08, `Selection/IndexErrors.NumPyPort.Test.cs`): a
+  boolean mask with more dimensions than the array is `too many indices for array: array is 1-dimensional, but 2 were
+  indexed` (checked first); otherwise the first mask axis of non-zero length that differs is `boolean index did not
+  match indexed array along axis 1; size of axis is 3 but size of corresponding boolean axis is 4` (a zero-length mask
+  axis matches any length); an index array that is neither integer nor bool — empty and 0-d included — is `arrays used
+  as indices must be of integer (or boolean) type`, before the too-many check. The single-mask indexer used to raise an
+  IndexOutOfRangeException naming axis 0 and the mask's first length for every mismatch, the integer-index normalizer an
+  IndexOutOfRangeException, and an EMPTY float index array became an empty fancy index (a tuple's empty 2-D mask
+  consumed one axis instead of two).
+- **The boolean-mask getter's result is not zero-filled** (2026-10-08, X31): both of its gathers write every element (one
+  per True, counted from the same mask bytes), so `DefaultEngine.BooleanMask` allocates with `NDArray.ForOverwrite`. Its
+  zero-filled allocation came from OS-zeroed pages that page-faulted on every call: a 40,000-element int64 selection took
+  184 µs (0.58× NumPy), now 31.6 µs (3.3×).
 
 **Storing a C# literal is NumPy's `PyArray_Pack` of a Python scalar, at every store entry point** (2026-10-08, plan
 `docs/plans/api-parameter-parity.md` X27; gates section S of the `weak_scalar` tier (15,301 store cases, zero excuses)

@@ -174,9 +174,12 @@ namespace NumSharp
             }
             else
             {
+                // C order: the kernel walks the mask linearly beside the target's C-order positions, and astype's
+                // default 'K' keeps an F-order mask F-ordered (an int8 F-order [[1, 1], [0, 0]] selected positions 0 and
+                // 2 where NumPy selects 0 and 1).
                 maskCast = mask.GetTypeCode == NPTypeCode.Boolean
                     ? np.ascontiguousarray(mask)
-                    : mask.astype(NPTypeCode.Boolean);
+                    : mask.astype(NPTypeCode.Boolean, copy: true, order: 'C');
             }
 
             // Numbers formatted into a text array: unobservable unless written, and the loop writes only where the mask

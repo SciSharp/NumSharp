@@ -233,14 +233,16 @@ namespace NumSharp.Tests.Selection
         {
             // np.arange(5)[[T,F,T]] -> IndexError
             Action act = () => { var _ = Iota(5)[M(true, false, true)]; };
-            act.Should().Throw<IndexOutOfRangeException>();
+            act.Should().Throw<IndexError>().WithMessage(
+                "boolean index did not match indexed array along axis 0; size of axis is 5 but size of corresponding boolean axis is 3");
         }
 
         [TestMethod]
         public void Get_MaskLongerThanAxis_Throws()
         {
             Action act = () => { var _ = Iota(5)[M(true, false, true, false, true, true)]; };
-            act.Should().Throw<IndexOutOfRangeException>();
+            act.Should().Throw<IndexError>().WithMessage(
+                "boolean index did not match indexed array along axis 0; size of axis is 5 but size of corresponding boolean axis is 6");
         }
 
         [TestMethod]
@@ -249,7 +251,8 @@ namespace NumSharp.Tests.Selection
             // np.arange(3)[[[T,F,T]]] (mask 2-D on 1-D arr) -> IndexError
             var mask = np.array(new bool[,] { { true, false, true } }).MakeGeneric<bool>();
             Action act = () => { var _ = Iota(3)[mask]; };
-            act.Should().Throw<IndexOutOfRangeException>();
+            // A mask with more dimensions than the array is NumPy's too-many-indices error (each mask axis consumes one).
+            act.Should().Throw<IndexError>().WithMessage("too many indices for array: array is 1-dimensional, but 2 were indexed");
         }
 
         // =================================================================

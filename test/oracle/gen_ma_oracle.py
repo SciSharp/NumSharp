@@ -1594,6 +1594,333 @@ def gen_ma_setops():
 
 
 # ---------------------------------------------------------------------------------------------
+# ma.put as numpy.ma's statements (2026-10-08): MaskedArray.put / ma.put over every dtype, target layout (1-D, strided,
+# reversed, 2-D, F-order, 3-D, (1, n), (n, 1), 0-d, empty), mask kind (nomask / all-False / some / all), hard and soft
+# masks, plain ndarray targets, index kinds (int64 / int32 / int8 / uint64 / bool / float / 2-D / 0-d / empty, in range,
+# negative, out of bounds), value kinds (Python scalars, Python lists, ndarrays NumPy owns or views — C, F, strided,
+# 0-d, (k, 1) —, masked arrays, the masked constant) and modes (raise / wrap / clip / a bad one). NumPy's errors are
+# cases (type + text). Under a hard mask NumPy runs mask = self._mask[indices]; values.resize(indices.shape);
+# indices[~mask]: an N-D target always raises IndexError, short values are zero-padded, masked values raise
+# ValueError, an ndarray of another size raises ndarray.resize's errors.
+#
+# Params (OpRegistry.Ma "put"): mode; hard (harden the target); plain (the target is the plain data view); vkind —
+# "array" (the ndarray operand; vown: NumPy owned it, so the replay copies the reconstructed view), "list" (a Python
+# list: the operand holds np.array(list)), "scalar" (value + vtype in params), "masked" (the masked-array operand),
+# "constant" (ma.masked).
+# ---------------------------------------------------------------------------------------------
+PUT_LAYOUTS = ["c1d", "c1d", "strided", "reversed", "c2d", "t2d", "c3d", "row", "col", "0d", "empty", "empty2d"]
+
+
+def _put_target(vals, layout):
+    """(base, view) of a put target holding VALS (reshaped as needed) in LAYOUT; the base is always C-contiguous
+    (describe() serializes a base in C order)."""
+    if layout in ("c1d", "strided", "reversed", "c2d", "t2d", "0d"):
+        return _so_layout(vals, layout)
+    if layout == "c3d":
+        base = vals[:8].copy()
+        return base, base.reshape(2, 2, 2)
+    if layout == "row":
+        base = vals.copy()
+        return base, base.reshape(1, -1)
+    if layout == "col":
+        base = vals.copy()
+        return base, base.reshape(-1, 1)
+    if layout == "empty":
+        base = vals[:0].copy()
+        return base, base
+    base = np.zeros((0, 3), dtype=vals.dtype)          # empty2d
+    return base, base
+
+
+def _put_scalar_param(v):
+    """A Python scalar as JSON params (value + vtype); NaN / inf as strings, complex as [re, im]."""
+    def num(x):
+        if isinstance(x, float) and (np.isnan(x) or np.isinf(x)):
+            return "nan" if np.isnan(x) else ("inf" if x > 0 else "-inf")
+        return x
+    if isinstance(v, bool):
+        return {"vtype": "bool", "value": v}
+    if isinstance(v, int):
+        return {"vtype": "int", "value": v}
+    if isinstance(v, float):
+        return {"vtype": "float", "value": num(v)}
+    return {"vtype": "complex", "value": [num(v.real), num(v.imag)]}
+
+
+def _put_array_values(src, layout):
+    """An ndarray of SRC's values in LAYOUT, as (numpy object, C base, view describing it, owndata). The (base, view)
+    pair describes the same logical values and layout flags with a C-contiguous base."""
+    k = src.shape[0]
+    if layout == "f" and k >= 2 and k % 2 == 0:
+        arr = np.asfortranarray(src.reshape(2, k // 2))
+        cbuf = np.ascontiguousarray(arr.T)
+        return arr, cbuf, cbuf.T, True
+    if layout == "strided":
+        big = np.empty(2 * k, dtype=src.dtype)
+        big[::2] = src
+        big[1::2] = src
+        return big[::2], big, big[::2], False
+    if layout == "view":
+        big = np.concatenate([src, src])
+        return big[:k], big, big[:k], False
+    if layout == "col":
+        arr = src.reshape(k, 1).copy()
+        return arr, arr, arr, True
+    if layout == "0d":
+        arr = np.array(src[0])
+        return arr, arr, arr, True
+    arr = src.copy()
+    return arr, arr, arr, True
+
+
+def gen_ma_put():
+    cases, n = [], _N()
+    ma = np.ma
+    rng = np.random.default_rng(20261008 + 7)
+    stats = {"kept": 0, "errors": 0}
+
+    def emit(tag, tvals, layout, mask, kind, hard, idx, values, mode):
+        """Describes the operands, then runs NumPy on fresh objects and records the mutated target or NumPy's error.
+        kind: 'masked' / 'plain'; values: ('array', (obj, base, view, own)) / ('list', list) / ('scalar', v) /
+        ('masked', MaskedArray) / ('constant', None)."""
+        base, view = _put_target(tvals, layout)
+        if mask is not None and mask.shape != view.shape:
+            mask = _so_mask(view.shape, "some", rng)
+        p = {"mode": mode}
+        if kind == "plain":
+            p["plain"] = True
+        if hard:
+            p["hard"] = True
+        vk, vv = values
+        p["vkind"] = vk
+        operands = [_ma_operand(base, view, None if kind == "plain" else mask)]
+        # np.array(idx) keeps a 0-d index 0-d (np.ascontiguousarray would return it as shape (1,)).
+        ib = np.array(idx)
+        operands.append(_ma_operand(ib, ib, None))
+        if vk == "array":
+            vobj, vbase, vview, vown = vv
+            operands.append(_ma_operand(vbase, vview, None))
+            p["vown"] = bool(vown)
+        elif vk == "list":
+            la = np.array(vv)
+            operands.append(_ma_operand(la, la, None))
+        elif vk == "masked":
+            d = np.ascontiguousarray(vv.data)
+            vm = ma.getmask(vv)
+            operands.append(_ma_operand(d, d, None if vm is ma.nomask else vm))
+        elif vk == "scalar":
+            p.update(_put_scalar_param(vv))
+
+        # NumPy runs on fresh objects: a copy of the target, and of every values object NumPy may resize.
+        b2, v2 = _put_target(tvals.copy(), layout)
+        if kind == "plain":
+            target = v2
+        else:
+            target = ma.array(v2, mask=(ma.nomask if mask is None else mask.copy()))
+            if hard:
+                target.harden_mask()
+        if vk == "array":
+            vobj = vv[0]
+            vnp = vobj.copy(order="K") if vv[3] else vobj
+        elif vk == "masked":
+            vm = ma.getmask(vv)
+            vnp = ma.array(vv.data.copy(), mask=(ma.nomask if vm is ma.nomask else vm.copy()))
+        elif vk == "constant":
+            vnp = ma.masked
+        else:
+            vnp = vv
+        try:
+            if kind == "plain":
+                ma.put(target, idx, vnp, mode=mode)
+            else:
+                target.put(idx, vnp, mode=mode)
+            err = None
+        except Exception as e:  # noqa: BLE001 — NumPy's error is an expectation
+            err = e
+
+        cid = f"ma.put/{tag}/{n.next()}"
+        stats["kept"] += 1
+        if err is not None:
+            stats["errors"] += 1
+            cases.append({"id": cid, "op": "ma.put", "params": p, "operands": operands, "expected": {},
+                          "expects_throw": True, "error": {"type": type(err).__name__, "text": str(err)},
+                          "layout": layout, "valueclass": "maput"})
+            return
+        expected = _plain_expected(target) if kind == "plain" else _so_expected(target, raw=True)
+        cases.append({"id": cid, "op": "ma.put", "params": p, "operands": operands, "expected": expected,
+                      "layout": layout, "valueclass": "maput"})
+
+    def i64(*v):
+        return np.array(v, dtype=np.int64)
+
+    def arr(a, layout="c"):
+        a = np.asarray(a)
+        return ("array", _put_array_values(a.ravel(), layout) if a.ndim <= 1 else (a, a, a, True))
+
+    # Section H: the rundown's cases and the probes behind the port (numpy 2.4.2 outputs, every one).
+    t = np.array([1, 2, 3, 4], dtype=np.int64)
+    m1 = np.array([False, True, False, False])
+    m0 = np.array([True, False, False, False])
+    t6 = np.array([1, 2, 3, 4, 5, 6], dtype=np.int64)
+    m6 = np.array([[False, True, False], [False, False, True]])
+    hand = [
+        # 1-D: zero-padded / truncated values, index forms, modes
+        ("short", t, "c1d", m1, i64(0, 1, 2, 3), ("list", [10, 20]), "raise"),
+        ("scalar", t, "c1d", m1, i64(0, 2, 3), ("scalar", 5), "raise"),
+        ("long", t, "c1d", m1, i64(0, 2), ("list", [10, 20, 30, 40]), "raise"),
+        ("idx0d", t, "c1d", m1, np.array(0), ("scalar", 5), "raise"),
+        ("idx0d.masked", t, "c1d", m1, np.array(1), ("scalar", 5), "raise"),
+        ("neg", t, "c1d", m1, i64(-1, -3), ("list", [7, 8]), "raise"),
+        ("oob.raise", t, "c1d", m1, i64(0, 9), ("list", [7, 8]), "raise"),
+        ("oob.wrap", t, "c1d", m1, i64(0, 9), ("list", [7, 8]), "wrap"),
+        ("oob.clip", t, "c1d", m1, i64(0, 9), ("list", [7, 8]), "clip"),
+        ("clip.neg", t, "c1d", m0, i64(-1), ("list", [7]), "clip"),
+        ("clip.neg4", t, "c1d", m0, i64(-4), ("list", [7]), "clip"),
+        ("wrap.neg", t, "c1d", m0, i64(-1), ("list", [7]), "wrap"),
+        ("badmode", t, "c1d", m1, i64(0), ("list", [7]), "bogus"),
+        ("badmode.oob", t, "c1d", m1, i64(9), ("list", [7]), "bogus"),
+        ("badmode.Raise", t, "c1d", m1, i64(0), ("list", [7]), "Raise"),
+        ("2didx", t, "c1d", m1, np.array([[0, 2], [3, 1]], dtype=np.int64), ("list", [7, 8]), "raise"),
+        ("boolidx", t, "c1d", m1, np.array([True, False, True, False]), ("list", [7, 8]), "raise"),
+        ("boolidx.all", t, "c1d", m0, np.array([True, True, True, True]), ("list", [7, 8, 9, 10]), "raise"),
+        ("floatidx", t, "c1d", m1, np.array([0.0, 2.0]), ("list", [7, 8]), "raise"),
+        ("emptyidx", t, "c1d", m1, np.array([], dtype=np.int64), ("list", [7]), "raise"),
+        ("emptyfloatidx", t, "c1d", m1, np.array([], dtype=np.float64), ("list", [7]), "raise"),
+        ("u64idx", t, "c1d", m1, np.array([0, 2], dtype=np.uint64), ("list", [7, 8]), "raise"),
+        ("emptyvals", t, "c1d", m1, i64(1, 2), ("list", []), "raise"),
+        # ndarray values (the caller holds them)
+        ("arr.eq", t, "c1d", m1, i64(0, 2), arr(i64(7, 8)), "raise"),
+        ("arr.short", t, "c1d", m1, i64(0, 2, 3), arr(i64(7, 8)), "raise"),
+        ("arr.col", t, "c1d", m1, i64(0, 2), arr(np.array([7, 8], dtype=np.int64), "col"), "raise"),
+        ("arr.float", t, "c1d", m1, i64(0, 2), arr(np.array([7.5, 8.5])), "raise"),
+        ("arr.0d", t, "c1d", m1, i64(0, 2), arr(np.array([5]), "0d"), "raise"),
+        ("arr.0d.one", t, "c1d", m1, i64(0), arr(np.array([5]), "0d"), "raise"),
+        ("arr.F", t, "c1d", np.zeros(4, bool), i64(0, 1, 2, 3), arr(np.array([10, 12, 11, 13]), "f"), "raise"),
+        ("arr.strided", t, "c1d", np.zeros(4, bool), i64(0, 1), arr(np.arange(2), "strided"), "raise"),
+        ("arr.view", t, "c1d", np.zeros(4, bool), i64(0, 1, 2), arr(np.arange(2), "view"), "raise"),
+        ("arr.view.eq", t, "c1d", np.zeros(4, bool), i64(0, 1), arr(np.arange(2), "view"), "raise"),
+        # masked values
+        ("masked", t, "c1d", m1, i64(0, 2), ("masked", ma.array([7, 8], mask=[0, 1])), "raise"),
+        ("masked.nomask", t, "c1d", m1, i64(0, 2), ("masked", ma.array([7, 8])), "raise"),
+        ("masked.cycle", t, "c1d", m1, i64(0, 1, 2, 3), ("masked", ma.array([7, 8], mask=[1, 0])), "raise"),
+        ("constant", t, "c1d", m1, i64(0, 2), ("constant", None), "raise"),
+        ("allfalse.list", t, "c1d", np.zeros(4, bool), i64(0, 2), ("list", [7, 8]), "raise"),
+        ("allfalse.constant", t, "c1d", np.zeros(4, bool), i64(0, 2), ("constant", None), "raise"),
+        # N-D: under a hard mask always IndexError
+        ("2d.oob", t6, "c2d", m6, i64(0, 4), ("list", [7, 8]), "raise"),
+        ("2d.rows", t6, "c2d", m6, i64(0, 1), ("list", [7, 8]), "raise"),
+        ("2d.row", t6, "c2d", m6, i64(1), ("list", [7]), "raise"),
+        ("2d.idx0d", t6, "c2d", m6, np.array(0), ("scalar", 7), "raise"),
+        ("2d.idx0d.oob", t6, "c2d", m6, np.array(4), ("scalar", 7), "raise"),
+        ("2d.neg", t6, "c2d", m6, i64(-1), ("list", [7]), "raise"),
+        ("2d.wrap", t6, "c2d", m6, i64(0, 1), ("list", [7, 8]), "wrap"),
+        ("2d.wrap.oob", t6, "c2d", m6, i64(0, 9), ("list", [7, 8]), "wrap"),
+        ("2d.2didx", t6, "c2d", m6, np.array([[0], [1]], dtype=np.int64), ("list", [7, 8]), "raise"),
+        ("2d.floatidx", t6, "c2d", m6, np.array([0.0]), ("list", [7]), "raise"),
+        ("2d.masked", t6, "c2d", m6, i64(0, 1), ("masked", ma.array([7, 8], mask=[0, 1])), "raise"),
+        ("2d.arr.short", t6, "c2d", m6, i64(0, 1), arr(i64(7, 8, 9)), "raise"),
+        ("2d.arr.col", t6, "c2d", m6, i64(0, 1), arr(np.array([7, 8], dtype=np.int64), "col"), "raise"),
+        ("2d.allfalse", t6, "c2d", np.zeros((2, 3), bool), i64(0, 1), ("list", [7, 8]), "raise"),
+        ("2d.soft.short", t6, "c2d", m6, i64(0, 2, 4), ("list", [7, 8]), "raise"),
+        ("2d.soft.constant", t6, "c2d", m6, i64(1, 4), ("constant", None), "raise"),
+    ]
+    # Every hand case under a hard mask, a soft mask, a nomask hard array and as a plain target.
+    for tag, tv, lay, mk, idx, vals, mode in hand:
+        emit("h." + tag, tv, lay, mk, "masked", True, idx, vals, mode)
+        emit("s." + tag, tv, lay, mk, "masked", False, idx, vals, mode)
+        emit("n." + tag, tv, lay, None, "masked", True, idx, vals, mode)
+        emit("p." + tag, tv, lay, None, "plain", False, idx, vals, mode)
+    # 3-D, (1, n), (n, 1), 0-d and empty targets.
+    t8 = np.arange(8, dtype=np.int64)
+    m8 = (np.arange(8) % 3 == 0).reshape(2, 2, 2)
+    for hard in (True, False):
+        emit(f"3d.rows.{hard}", t8, "c3d", m8, "masked", hard, i64(0, 1), ("list", [7, 8]), "raise")
+        emit(f"3d.oob.{hard}", t8, "c3d", m8, "masked", hard, i64(0, 5), ("list", [7, 8]), "raise")
+        emit(f"row.{hard}", t, "row", np.array([[False, True, False, False]]), "masked", hard, i64(0), ("list", [7]), "raise")
+        emit(f"row.oob.{hard}", t, "row", np.array([[False, True, False, False]]), "masked", hard, i64(2), ("list", [7]), "raise")
+        emit(f"col.{hard}", t, "col", np.array([[False], [True], [False], [False]]), "masked", hard, i64(0, 2), ("list", [7, 8]), "raise")
+        for mk0 in (np.array(False), np.array(True)):
+            emit(f"0d.{hard}", t, "0d", mk0, "masked", hard, np.array(0), ("scalar", 9), "raise")
+            emit(f"0d.idx1.{hard}", t, "0d", mk0, "masked", hard, i64(0), ("scalar", 9), "raise")
+        emit(f"empty.{hard}", t, "empty", np.zeros(0, bool), "masked", hard, i64(0), ("list", [1]), "raise")
+        emit(f"empty.noidx.{hard}", t, "empty", np.zeros(0, bool), "masked", hard, np.array([], dtype=np.int64), ("list", [1]), "raise")
+    emit("0d.nomask", t, "0d", None, "masked", True, np.array(0), ("scalar", 9), "raise")
+    # Value conversion: the hard branch converts first (a literal wraps), the soft branch packs it as a Python scalar.
+    t8i = np.array([1, 2, 3, 4], dtype=np.int8)
+    m8i = np.array([False, False, True, False])
+    for hard in (True, False):
+        for v in (300, -129, 2.7, float("nan"), float("inf"), True):
+            emit(f"conv8.{hard}", t8i, "c1d", m8i, "masked", hard, i64(0), ("scalar", v), "raise")
+            emit(f"conv64.{hard}", t, "c1d", m1, "masked", hard, i64(0), ("scalar", v), "raise")
+            emit(f"convf.{hard}", np.array([1.0, 2.0, 3.0, 4.0]), "c1d", m1, "masked", hard, i64(0), ("scalar", v), "raise")
+    emit("conv8.list.hard", t8i, "c1d", m8i, "masked", True, i64(0, 1), ("list", [300, 7]), "raise")
+
+    # Section R: random cases over every dtype.
+    for dt in SO_DTYPES:
+        d = np.dtype(dt)
+        for draw in range(260):
+            lay = str(rng.choice(PUT_LAYOUTS))
+            size = 8 if lay == "c3d" else int(rng.choice([1, 2, 4, 5, 6, 8, 9]))
+            tv = _so_values(dt, size, rng, str(rng.choice(["small", "small", "special", "wide"])))
+            _, view = _put_target(tv, lay)
+            mask = _so_mask(view.shape, str(rng.choice(["none", "false", "some", "some", "all"])), rng)
+            kind = "plain" if rng.random() < 0.12 else "masked"
+            hard = kind == "masked" and rng.random() < 0.55
+            vsz = max(int(view.size), 1)
+
+            ik = str(rng.choice(["i64", "i64", "i64", "i32", "i8", "u64", "bool", "float", "2d", "0d", "empty", "oob"]))
+            if ik == "bool":
+                idx = rng.random(int(rng.choice([vsz, vsz, 3]))) < 0.5
+            elif ik == "float":
+                idx = rng.integers(0, vsz, int(rng.integers(1, 4))).astype(np.float64)
+            elif ik == "2d":
+                idx = rng.integers(-vsz, vsz, (2, 2)).astype(np.int64)
+            elif ik == "0d":
+                idx = np.array(int(rng.integers(-vsz, vsz)), dtype=np.int64)
+            elif ik == "empty":
+                idx = np.array([], dtype=np.int64)
+            elif ik == "oob":
+                idx = np.array([0, vsz + int(rng.integers(0, 3))], dtype=np.int64)
+            elif ik == "u64":
+                idx = rng.integers(0, vsz, int(rng.integers(1, 4))).astype(np.uint64)
+            else:
+                idx = rng.integers(-vsz, vsz, int(rng.integers(1, 6))).astype(
+                    {"i64": np.int64, "i32": np.int32, "i8": np.int8}[ik])
+            mode = str(rng.choice(["raise", "raise", "wrap", "clip"]))
+            ni = int(np.size(idx))
+
+            vk = str(rng.choice(["scalar", "list", "list", "array", "array", "masked", "constant"]))
+            if vk == "scalar":
+                if d.kind == "b":
+                    vv = bool(rng.integers(0, 2))
+                elif d.kind == "c":
+                    vv = complex(int(rng.integers(0, 9)), int(rng.integers(-2, 3)))
+                elif d.kind == "f":
+                    vv = float(rng.choice([0.5, 1.0, -2.0, 3.25]))
+                else:
+                    vv = int(rng.integers(0, 50))
+                values = ("scalar", vv)
+            elif vk == "list":
+                k = int(rng.choice([max(ni, 1), max(ni, 1), 1, 3, 6]))
+                values = ("list", _so_values(dt, k, rng, "small").tolist())
+            elif vk == "array":
+                k = int(rng.choice([max(ni, 1), max(ni, 1), 1, 2, 5]))
+                lay_v = str(rng.choice(["c", "c", "f", "strided", "view", "col", "0d"]))
+                src = _so_values(dt, max(k, 1), rng, str(rng.choice(["small", "special"])))
+                values = ("array", _put_array_values(src, lay_v))
+            elif vk == "masked":
+                k = int(rng.choice([max(ni, 1), 1, 3]))
+                mv = _so_values(dt, k, rng, "small")
+                values = ("masked", ma.array(mv, mask=_so_mask(mv.shape, str(rng.choice(["none", "some", "all"])), rng)))
+            else:
+                values = ("constant", None)
+            emit(f"{dt}.{lay}.{ik}.{vk}", tv, lay, mask, kind, hard, idx, values, mode)
+
+    print(f"  (ma_put kept {stats['kept']}, {stats['errors']} of them NumPy errors)")
+    return cases
+
+
+# ---------------------------------------------------------------------------------------------
 TIERS = {
     "unary": ("ma_unary.jsonl", gen_ma_unary),
     "binary": ("ma_binary.jsonl", gen_ma_binary),
@@ -1606,6 +1933,7 @@ TIERS = {
     "extras": ("ma_extras.jsonl", gen_ma_extras),
     "meanvar": ("ma_meanvar.jsonl", gen_ma_meanvar),
     "setops": ("ma_setops.jsonl", gen_ma_setops),
+    "put": ("ma_put.jsonl", gen_ma_put),
 }
 
 
