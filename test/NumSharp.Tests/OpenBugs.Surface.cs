@@ -14,13 +14,17 @@ namespace NumSharp.Tests
     // the histogram family, the memory predicates, the text formatters, the ndarray members, the finfo / iinfo / dtype /
     // flags / poly1d attributes, the np.broadcast / flatiter / np.nditer members, the print and buffer options and the
     // cumulative_* aliases. Every divergence is carved into NumSharp.Tests.Oracle/Fuzz/corpus/gaps/surface_gaps.jsonl
-    // under a gap id (SU1-SU40, the GAPS table of the generator) and replayed by Surface_KnownGaps. This file reproduces
-    // the library defects among them through PUBLIC calls, one test per gap:
+    // under a gap id (SU1-SU42, the GAPS table of the generator) and replayed by Surface_KnownGaps. This file reproduces
+    // the library defects among them through PUBLIC calls, one test per gap (two for SU42):
     //
     //   * Silent wrong values: np.cumsum / np.cumprod with dtype=complex128 over integers (SU38), np.cumsum with
     //     dtype=bool (SU39), np.finfo's float32 / float64 minexp, float32 resolution and tiny (SU12-SU14), np.nditer's K
     //     order over an F operand and a broadcast one (SU25) and after remove_multi_index (SU31), np.broadcast.iters
     //     after a step (SU20), the float formatters' inf / nan text (SU6) and rounding carries (SU18, SU19, SU9).
+    //   * np.nditer's write-backs (the second pass): a readwrite updateifcopy operand of another dtype is refused without
+    //     buffering, where NumPy iterates a copy that close() writes back (SU41); the iteration protocol publishes the
+    //     element and THEN advances, where NumPy's __next__ advances on entry, so after k next() calls the cursor is one
+    //     element ahead and a buffered readwrite loop loses its write into the last element of each buffer (SU42).
     //   * Crashes where NumPy computes: np.apply_along_axis over a stride-0 view at an offset (SU5), np.nditer.remove_axis
     //     under a non-C iteration order (SU30).
     //   * Refusals NumPy makes and NumSharp does not (or the reverse), and error texts: SU1, SU2, SU4, SU8, SU10, SU11,
@@ -33,6 +37,10 @@ namespace NumSharp.Tests
     // SU36 / SU37 (numpy.cumulative_sum / cumulative_prod do not exist in NumSharp; the inventory aliases them to
     // np.cumsum / np.cumprod, whose own contract differs). Two pooled-buffer leaks the sweep found are pinned in the
     // oracle's KnownEscapes (np.MemoryView.tobytes of a non-contiguous array; np.array_equiv with an empty operand).
+    //
+    // Outside NumPy's contract, found by the harness itself: NDArray.SetAtIndex<T>(T, long) checks T against the dtype
+    // only with a Debug.Assert, so in Release a double written into a float32 array lands as 8 bytes over the next two
+    // elements (and past the buffer's end for the last one). The last test pins it; it is Inconclusive in Debug.
     //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's rule from the generator's _gap_of so the
@@ -569,6 +577,94 @@ namespace NumSharp.Tests
 
             act.Should().Throw<Exception>().Which.Message.Should().StartWith(
                 "axis 1 is out of bounds for array of dimension 1");
+        }
+
+        // ----- np.nditer's write-backs (the second pass, 2026-10-08) -----
+
+        /// <summary>
+        ///     <c>np.nditer(a_f32, op_flags=[['readwrite', 'updateifcopy']], op_dtypes=['float64'], casting='same_kind')</c>
+        ///     without buffering: NumPy iterates a float64 COPY and close() writes it back (a = [1, 3, 5, 7, 9, 11] after
+        ///     <c>x[...] = x * 2 + 1</c>); NumSharp refuses the cast ('Casting between different dtypes requires the BUFFERED
+        ///     flag') (gap SU41).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "surface-SU41")]
+        public void Surface_Nditer_UpdateIfCopy_WritesBackAtClose()
+        {
+            using var a = np.arange(6).astype(np.float32);
+            var it = np.nditer(a, op_flags: new[] { "readwrite", "updateifcopy" }, op_dtypes: new DType[] { np.float64 },
+                               casting: "same_kind");
+            foreach (var v in it)
+                v[0].SetAtIndex(v[0].GetAtIndex<double>(0) * 2 + 1, 0);
+            it.close();
+
+            a.ToArray<float>().Should().Equal(1f, 3f, 5f, 7f, 9f, 11f);
+        }
+
+        /// <summary>
+        ///     A buffered readwrite loop, <c>for x in np.nditer(a_f32, flags=['buffered'], op_flags=[['readwrite']],
+        ///     op_dtypes=['float64'], casting='same_kind'): x[...] = x * 2 + 1</c>: NumPy's <c>__next__</c> advances ON ENTRY,
+        ///     so every write lands before its buffer is flushed (a = [1, 3, 5, 7, 9, 11]); NumSharp publishes the element
+        ///     and THEN advances, so the last element's buffer is flushed before the loop body writes it (a[5] stays 5)
+        ///     (gap SU42).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "surface-SU42")]
+        public void Surface_Nditer_BufferedReadWriteLoop_KeepsTheLastWrite()
+        {
+            using var a = np.arange(6).astype(np.float32);
+            using (var it = np.nditer(a, flags: new[] { "buffered" }, op_flags: new[] { "readwrite" },
+                                      op_dtypes: new DType[] { np.float64 }, casting: "same_kind"))
+            {
+                foreach (var v in it)
+                    v[0].SetAtIndex(v[0].GetAtIndex<double>(0) * 2 + 1, 0);
+            }
+
+            a.ToArray<float>().Should().Equal(1f, 3f, 5f, 7f, 9f, 11f);
+        }
+
+        /// <summary>
+        ///     One step of the iteration protocol (NumPy's <c>next(it)</c>, C#'s MoveNext): NumPy's cursor is still at the
+        ///     element it returned (iterindex 0); NumSharp's has already advanced (iterindex 1) (gap SU42).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "surface-SU42")]
+        public void Surface_Nditer_AfterOneNext_IterindexIsTheReturnedElement()
+        {
+            using var a = np.arange(3);
+            using var it = np.nditer(a);
+            var en = it.GetEnumerator();
+            en.MoveNext();
+
+            it.iterindex.Should().Be(0);
+        }
+
+        /// <summary>
+        ///     <c>NDArray.SetAtIndex&lt;T&gt;(T, long)</c> with T other than the array's element type: the type check is a
+        ///     <c>Debug.Assert</c> only, so in Release <c>a.SetAtIndex(7.5, 1)</c> on a float32 array writes the double's 8
+        ///     bytes at byte offset 8 — elements 2 and 3 — and leaves element 1 unchanged (for the last element the write
+        ///     runs past the buffer's end). NumPy's <c>a.flat[1] = 7.5</c> casts the value into element 1. Found while building
+        ///     the surface tier's write-back adapter; EXPECTED (when fixed): element 1 holds 7.5 (or the call refuses), and
+        ///     the neighbours are untouched.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "surface-SetAtIndex")]
+        public void Surface_SetAtIndexGeneric_WrongElementType_DoesNotWriteIntoTheNeighbours()
+        {
+#if DEBUG
+            // The Debug.Assert fires in a Debug build (and may end the test host): the defect is the Release behaviour.
+            Assert.Inconclusive("Release-only defect: in Debug the type mismatch trips SetAtIndex<T>'s Debug.Assert.");
+#else
+            using var a = np.zeros(new Shape(4), np.float32);
+            try
+            {
+                a.SetAtIndex(7.5, 1);
+            }
+            catch (Exception)
+            {
+                // A refusal is an acceptable fix; the neighbours must still be untouched (checked below).
+            }
+
+            var v = a.ToArray<float>();
+            v[2].Should().Be(0f);
+            v[3].Should().Be(0f);
+#endif
         }
     }
 }

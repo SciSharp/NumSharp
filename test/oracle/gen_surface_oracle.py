@@ -1027,6 +1027,18 @@ def gen_attributes():
                         ("scalar_coeff", np.array([5.0]), {"m": 2})]:
         emit("attrs", "poly1d.deriv", label, [operand(c, "c")[1]], p, "array",
              lambda o, p=p: np.poly1d(o[0]).deriv(p["m"]).coeffs)
+    # poly1d.r / poly1d.roots = np.roots(coeffs): only the polynomials whose stripped coefficients have at most one
+    # term, so np.roots never builds a companion matrix (eigvals needs a LAPACK backend, which this portable tier does
+    # not load): the trailing zeros are the roots, a constant has none, the zero polynomial has none.
+    for cname, coeffs in [("const", [5.0]), ("linear0", [3.0, 0.0]), ("pow2", [2.0, 0.0, 0.0]), ("lead0", [0.0, 4.0]),
+                          ("lead0pow", [0.0, 0.0, 7.0, 0.0]), ("neg", [-2.5]), ("zero", [0.0]), ("zeros", [0.0, 0.0]),
+                          ("pow5", [1.0, 0.0, 0.0, 0.0, 0.0, 0.0])]:
+        for dt in ["float64", "int64", "complex128", "float32", "int8"]:
+            c = np.array(coeffs, dtype=dt)
+            for kind, d in kinds_of(c, ["c", "c_offset", "reversed", "strided_neg"]):
+                for attr in ["r", "roots"]:
+                    emit("attrs", f"poly1d.{attr}", f"{cname}:{dt}:{kind}", [d], {}, "array",
+                         lambda o, attr=attr: getattr(np.poly1d(o[0]), attr))
 
 
 # =============================================================================================================
@@ -1093,6 +1105,8 @@ def _nditer(o, p):
         kw["op_dtypes"] = list(p["op_dtypes"]) * len(o)
     if p.get("op_flags") is not None:
         kw["op_flags"] = [list(f) for f in p["op_flags"]]
+    if p.get("buffersize"):
+        kw["buffersize"] = p["buffersize"]
     return np.nditer(list(o) if len(o) > 1 else o[0], **kw)
 
 
@@ -1108,6 +1122,10 @@ def _nditer_attr(o, p):
     with it:
         for _ in range(p.get("steps", 0)):
             it.iternext()
+        # "next": elements consumed through the Python iteration protocol (NumPy's __next__ advances ON ENTRY: after k
+        # calls the cursor is at element k - 1, the one last returned).
+        for _ in range(p.get("next", 0)):
+            next(it)
         attr = p["attr"]
         if attr == "iternext":
             return np.bool_(it.iternext())
@@ -1137,6 +1155,8 @@ def _nditer_attr(o, p):
             return _nd_values(it)
         if attr == "shape":
             return np.array(it.shape, dtype=np.int64)
+        if attr == "multi_index":
+            return np.array(it.multi_index, dtype=np.int64)
         if attr in ("iterrange", "dtypes"):
             return repr(getattr(it, attr))
         if attr in ("finished", "has_index", "has_multi_index", "has_delayed_bufalloc", "iterationneedsapi"):
@@ -1149,7 +1169,7 @@ DTYPE_CONFIGS = {"plain", "multi", "extloop", "order_f"}
 
 NDITER_KINDS = {"iternext": "scalar", "value": "tuple", "operands": "tuple", "itviews": "tuple", "copy": "tuple",
                 "reset": "tuple", "remove_axis": "array", "remove_multi_index": "tuple", "enable_external_loop": "tuple",
-                "shape": "array", "iterrange": "text", "dtypes": "text"}
+                "shape": "array", "iterrange": "text", "dtypes": "text", "multi_index": "array"}
 
 # The print options NumSharp's set_printoptions / printoptions take, with values NumPy accepts and refuses.
 PRINT_OPTS = [({"precision": 3}, "p3"), ({"threshold": 5, "edgeitems": 1}, "summ"), ({"linewidth": 20}, "lw20"),
@@ -1292,6 +1312,41 @@ def gen_objects():
         p = {"flags": [], "after": after}
         emit("objects", "nditer.close", f"then:{after}", single, p,
              {"iternext": "scalar", "value": "tuple"}.get(after, "scalar"), lambda o, p=p: _nditer_closed(o, p))
+    # The iteration protocol: k next() calls (C#: k MoveNext of the enumerator), then iterindex / value / multi_index.
+    proto_vals = np.arange(6, dtype=np.float32).reshape(2, 3)
+    for cfg_label, cfg in [("plain", {"flags": []}), ("multi", {"flags": ["multi_index"]}),
+                           ("buffered", {"flags": ["buffered"], "op_dtypes": ["float64"], "casting": "same_kind"})]:
+        for k in [1, 2, 3, 6]:
+            for attr in ["iterindex", "value"] + (["multi_index"] if cfg_label == "multi" else []):
+                p = {**cfg, "next": k, "attr": attr}
+                emit("objects", f"nditer.{attr}", f"protocol:{cfg_label}:next{k}", [operand(proto_vals, "c")[1]], p,
+                     NDITER_KINDS.get(attr, "scalar"), lambda o, p=p: _nditer_attr(o, p))
+    # close() resolves the write-backs: a copy (updateifcopy) reaches the operand only at close, a buffered operand by the
+    # end of the loop, a plain readwrite one directly. Each config writes x * 2 + 1 through the iterator and records the
+    # operand after the loop ("before" close) and after close() — called twice (NumPy allows it).
+    wb_vals = np.arange(6, dtype=np.float32).reshape(2, 3)
+    for cfg_label, cfg, vals in [
+            ("updateifcopy", {"flags": [], "op_flags": [["readwrite", "updateifcopy"]], "op_dtypes": ["float64"],
+                              "casting": "same_kind"}, wb_vals),
+            ("buffered", {"flags": ["buffered"], "op_flags": [["readwrite"]], "op_dtypes": ["float64"],
+                          "casting": "same_kind"}, wb_vals),
+            ("buffered_ext", {"flags": ["buffered", "external_loop"], "op_flags": [["readwrite"]],
+                              "op_dtypes": ["float64"], "casting": "same_kind", "buffersize": 4}, wb_vals),
+            ("plain", {"flags": [], "op_flags": [["readwrite"]]}, wb_vals),
+            # A plain readwrite iterator over other dtypes: no copy, no cast, the writes land directly.
+            ("plain_f8", {"flags": [], "op_flags": [["readwrite"]]}, wb_vals.astype(np.float64)),
+            ("plain_i8", {"flags": [], "op_flags": [["readwrite"]]}, wb_vals.astype(np.int64)),
+            ("plain_i2", {"flags": [], "op_flags": [["readwrite"]]}, wb_vals.astype(np.int16)),
+            ("plain_u1", {"flags": [], "op_flags": [["readwrite"]]}, wb_vals.astype(np.uint8)),
+            ("int_unsafe", {"flags": [], "op_flags": [["readwrite", "updateifcopy"]], "op_dtypes": ["float64"],
+                            "casting": "unsafe"}, np.arange(6, dtype=np.int32).reshape(2, 3)),
+            ("int_same_kind", {"flags": [], "op_flags": [["readwrite", "updateifcopy"]], "op_dtypes": ["float64"],
+                               "casting": "same_kind"}, np.arange(6, dtype=np.int32).reshape(2, 3))]:
+        for kind, d in kinds_of(vals, ["c", "f", "reversed", "strided_offset", "c_offset", "readonly"]):
+            for when in ["before", "after"]:
+                p = {**cfg, "writeback": when}
+                emit("objects", "nditer.close", f"writeback:{cfg_label}:{kind}:{when}", [d], p, "array",
+                     lambda o, p=p: _nditer_writeback(o, p))
 
     # ---- print options -------------------------------------------------------------------------------------------
     arrays = [("f8", np.array([1 / 3, 1e-9, np.nan, np.inf, -2.5, 1e5])), ("i4", np.arange(12, dtype=np.int32)),
@@ -1405,6 +1460,21 @@ def _nditer_closed(o, p):
     return np.int64(getattr(it, after))
 
 
+def _nditer_writeback(o, p):
+    """np.nditer over the operand with the case's params, x[...] = x * 2 + 1 for every element (or chunk), then the
+    operand copied after the loop (writeback "before" close) or after close() called twice (writeback "after")."""
+    it = _nditer(o, p)
+    for x in it:
+        x[...] = x * 2 + 1
+    if p["writeback"] == "before":
+        snap = np.array(o[0], copy=True)
+        it.close()
+        return snap
+    it.close()
+    it.close()
+    return np.array(o[0], copy=True)
+
+
 def _with_set_printoptions(opts, fn):
     """np.set_printoptions(**opts), then fn(), the previous options restored either way."""
     with np.printoptions():
@@ -1501,6 +1571,13 @@ GAPS = {
             "linear (a C array with c_index is a 1-D (6,) iterator), so ndim, shape and itviews differ",
     "SU28": "np.nditer members read past the end (iterindex, value, copy after the last iternext) return a value; "
             "NumPy raises ValueError 'Iterator is past the end'",
+    "SU41": "np.nditer refuses a readwrite updateifcopy (copy) operand of another dtype without buffering ('Casting "
+            "between different dtypes requires the BUFFERED flag'); NumPy makes a write-back copy that close() resolves "
+            "(and raises its own same_kind TypeError for an int32 operand)",
+    "SU42": "np.nditer's iteration protocol publishes the current element and THEN advances, where NumPy's __next__ "
+            "advances on entry: after k next() calls iterindex / value / multi_index are one element ahead, and a "
+            "buffered readwrite loop's write into the last element of each buffer (or each external-loop chunk) is "
+            "flushed before the loop body runs, so it never reaches the operand",
     "SU29": "np.nditer after close() throws InvalidOperationException 'Iterator is closed' for every member; NumPy's "
             "iternext() returns False, ndim raises 'Iterator is invalid', value / iterindex 'Iterator is past the end'",
     "SU30": "np.nditer.remove_axis throws IndexOutOfRangeException when the iteration order is not the operands' C "
@@ -1547,8 +1624,22 @@ def _nditer_gap(case):
         A GAPS id or None.
     """
     op, p, err = case["op"], case["params"], case.get("error")
-    if op == "nditer.close":
+    if op == "nditer.close" and "after" in p:
         return "SU29"
+    if op == "nditer.close" and "writeback" in p:
+        flags = [f for fl in (p.get("op_flags") or []) for f in fl]
+        if "updateifcopy" in flags and "buffered" not in p.get("flags", []) and (
+                not err or err["text"].startswith("Iterator requested dtype could not be cast")):
+            return "SU41"
+        if "buffered" in p.get("flags", []) and not err:
+            return "SU42"
+        return None  # the plain readwrite write-back and the read-only refusals match NumPy
+    if op.startswith("nditer.") and p.get("next") and not err:
+        # After the last element NumSharp's buffered iterator is past the end but its buffer still holds that element,
+        # so value matches NumPy's (which has not advanced yet) there; iterindex does not.
+        if p["attr"] == "value" and "buffered" in p.get("flags", []) and p["next"] == 6:
+            return None
+        return "SU42"
     if err:
         text = err["text"]
         if text == "Iterator is past the end":

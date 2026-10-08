@@ -233,9 +233,11 @@ namespace NumSharp.Tests.Fuzz
             string[][] opFlags = p.TryGetValue("op_flags", out var of) && of.ValueKind == JsonValueKind.Array
                 ? of.EnumerateArray().Select(l => l.EnumerateArray().Select(x => x.GetString()).ToArray()).ToArray()
                 : null;
+            // buffersize: absent or 0 is NumPy's default (the iterator picks it).
+            long bufferSize = p.TryGetValue("buffersize", out var bs) ? bs.GetInt64() : 0;
             return ops.Length == 1
-                ? np.nditer(ops[0], flags, opFlags?[0], opDtypes, order, casting)
-                : np.nditer(ops, flags, opFlags, opDtypes, order, casting);
+                ? np.nditer(ops[0], flags, opFlags?[0], opDtypes, order, casting, buffersize: bufferSize)
+                : np.nditer(ops, flags, opFlags, opDtypes, order, casting, buffersize: bufferSize);
         }
 
         /// <summary>nditer.value as tuple slots, each copied so it outlives the iterator (the live views alias it).</summary>
@@ -255,6 +257,15 @@ namespace NumSharp.Tests.Fuzz
             int steps = p.TryGetValue("steps", out var s) ? s.GetInt32() : 0;
             for (int i = 0; i < steps; i++)
                 it.iternext();
+            // "next": elements consumed through the iteration protocol — C#'s MoveNext on the iterator's enumerator,
+            // NumPy's next(it) (which advances on entry). The enumerator shares the iterator's cursor and owns nothing.
+            int nexts = p.TryGetValue("next", out var nx) ? nx.GetInt32() : 0;
+            if (nexts > 0)
+            {
+                var en = it.GetEnumerator();
+                for (int i = 0; i < nexts; i++)
+                    en.MoveNext();
+            }
             string attr = SurfStr(p, "attr");
             switch (attr)
             {
@@ -295,6 +306,8 @@ namespace NumSharp.Tests.Fuzz
                     it.enable_external_loop();
                     return NditerValues(it).ToArray();
                 case "shape": return new[] { np.array(it.shape) };
+                // NumPy's multi_index tuple; NumSharp returns the same coordinates as a long[].
+                case "multi_index": return new[] { np.array(it.multi_index) };
                 case "finished": return new[] { NDArray.Scalar(it.finished) };
                 case "has_index": return new[] { NDArray.Scalar(it.has_index) };
                 case "has_multi_index": return new[] { NDArray.Scalar(it.has_multi_index) };
@@ -321,9 +334,18 @@ namespace NumSharp.Tests.Fuzz
             return reprs.Count == 1 ? "(" + reprs[0] + ",)" : "(" + string.Join(", ", reprs) + ")";
         }
 
-        /// <summary>np.nditer closed, then one member read (<c>params.after</c>): NumPy's answer for a closed iterator.</summary>
+        /// <summary>
+        ///     np.nditer closed, then one member read (<c>params.after</c>): NumPy's answer for a closed iterator; or, for a
+        ///     <c>params.writeback</c> case, the operand after the write-back (<see cref="NditerWriteback"/>).
+        /// </summary>
+        /// <param name="p">The case params.</param>
+        /// <param name="ops">The operands.</param>
+        /// <returns>The result slots (one array).</returns>
+        /// <exception cref="NotSupportedException">A member the generator does not emit.</exception>
         private static NDArray[] NditerClosed(IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
         {
+            if (p.ContainsKey("writeback"))
+                return new[] { NditerWriteback(p, ops) };
             var it = SurfNditer(p, ops);
             it.close();
             return SurfStr(p, "after") switch
@@ -334,6 +356,73 @@ namespace NumSharp.Tests.Fuzz
                 "iterindex" => new[] { NDArray.Scalar(it.iterindex) },
                 var a => throw new NotSupportedException($"nditer member after close '{a}'"),
             };
+        }
+
+        /// <summary>
+        ///     The write-back contract of close(): an iterator over the operand with the case's params (a copy for
+        ///     updateifcopy, buffers, or the operand itself), <c>x = x * 2 + 1</c> written through every element (or
+        ///     external-loop chunk) it yields, then the operand copied after the loop (<c>writeback: "before"</c> close) or
+        ///     after close() called twice (<c>"after"</c>) — the generator's <c>_nditer_writeback</c>.
+        /// </summary>
+        /// <param name="p">The case params.</param>
+        /// <param name="ops">The operands (one).</param>
+        /// <returns>A copy of the operand at that point.</returns>
+        /// <exception cref="ValueError">A read-only operand with a write flag ("operand array with iterator write flag set
+        /// is read-only", NumPy's ValueError text).</exception>
+        /// <exception cref="ArgumentException">NumSharp's "Casting between different dtypes requires the BUFFERED flag"
+        /// for an unbuffered updateifcopy cast, where NumPy makes the write-back copy (or raises its own TypeError for a
+        /// same_kind int32 operand) — gap SU41, carved.</exception>
+        /// <exception cref="InvalidCastException">A buffered cast the casting rule refuses ("Iterator operand 0 dtype
+        /// could not be cast …").</exception>
+        /// <exception cref="NotSupportedException">An element dtype <see cref="SetElement"/> does not list.</exception>
+        /// <remarks>The values are small integers, so the double arithmetic here equals NumPy's in the iterator's
+        /// float64 (or the operand's own) dtype exactly.</remarks>
+        private static NDArray NditerWriteback(IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
+        {
+            var it = SurfNditer(p, ops);
+            foreach (var v in it)
+            {
+                var x = v[0];
+                for (long i = 0; i < x.size; i++)
+                    SetElement(x, i, Convert.ToDouble(x.GetAtIndex(i), CultureInfo.InvariantCulture) * 2 + 1);
+            }
+            if (SurfStr(p, "writeback") == "before")
+            {
+                // The snapshot comes BEFORE close(): it shows which writes reached the operand during the loop (every one
+                // for a plain operand, every buffer flush for a buffered one, none yet for an updateifcopy copy, whose
+                // write-back is close()'s job).
+                var snapshot = ops[0].copy();
+                it.close();
+                return snapshot;
+            }
+            // "after": close() twice — the write-back must happen exactly once and the second close() must be a no-op.
+            it.close();
+            it.close();
+            return ops[0].copy();
+        }
+
+        /// <summary>
+        ///     Writes <paramref name="value"/> into element <paramref name="i"/> of <paramref name="x"/> as x's OWN element
+        ///     type. Never <c>x.SetAtIndex(double, i)</c> on a non-float64 array: the generic SetAtIndex&lt;T&gt; checks T
+        ///     against the dtype only with a Debug.Assert, so in Release it writes sizeof(T) bytes at index * sizeof(T) —
+        ///     into the wrong element, and past the buffer's end for the last one.
+        /// </summary>
+        /// <param name="x">The (writeable) array or view the iterator yielded.</param>
+        /// <param name="i">The flat element index.</param>
+        /// <param name="value">The value (a small integer here, exact in every listed dtype).</param>
+        /// <exception cref="NotSupportedException">A dtype the writeback cases do not use.</exception>
+        private static void SetElement(NDArray x, long i, double value)
+        {
+            switch (x.typecode)
+            {
+                case NPTypeCode.Double: x.SetAtIndex(value, i); break;
+                case NPTypeCode.Single: x.SetAtIndex((float)value, i); break;
+                case NPTypeCode.Int32: x.SetAtIndex((int)value, i); break;
+                case NPTypeCode.Int64: x.SetAtIndex((long)value, i); break;
+                case NPTypeCode.Int16: x.SetAtIndex((short)value, i); break;
+                case NPTypeCode.Byte: x.SetAtIndex((byte)value, i); break;
+                default: throw new NotSupportedException($"writeback element dtype {x.typecode}");
+            }
         }
 
         // ---- print options and buffer size ------------------------------------------------------------------------

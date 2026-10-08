@@ -145,6 +145,19 @@ namespace NumSharp.Tests.Fuzz
                     using var poly = new poly1d(ops[0]);
                     return poly.integ(SurfInt(p, "m"), k).coeffs;
                 }
+                // poly1d.r / poly1d.roots = np.roots(coeffs): a fresh array the caller disposes, so the polynomial (which
+                // owns its coefficients) is released here. The cases keep np.roots off its companion-matrix path (at most
+                // one term after stripping), so no LAPACK backend is needed.
+                case "poly1d.r":
+                {
+                    using var poly = new poly1d(ops[0]);
+                    return poly.r;
+                }
+                case "poly1d.roots":
+                {
+                    using var poly = new poly1d(ops[0]);
+                    return poly.roots;
+                }
             }
             if (op.StartsWith("finfo.", StringComparison.Ordinal))
                 return FinfoAttribute(op.Substring("finfo.".Length), np.finfo(SurfStr(p, "dtype")));
