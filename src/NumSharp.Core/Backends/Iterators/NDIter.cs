@@ -599,17 +599,40 @@ namespace NumSharp.Backends.Iteration
                     {
                         if (!opAxesMapped && (opFlag & NDIterOpFlags.WRITE) != 0)
                         {
+                            // NumPy marks a written operand's axis as a REDUCTION only where the OPERAND's own dimension
+                            // is 1 or missing under the longer iteration axis (npyiter_fill_axisdata's broadcast branches),
+                            // not wherever a stride is 0: a zero-size array has zero strides without being broadcast
+                            // (NumPy zeroes them all; NumSharp's C strides are 0 on the axes before the zero-length one),
+                            // and NumPy iterates np.zeros((3, 0)) read-write (visiting nothing). A writeable array with an
+                            // explicit 0 stride (np.ndarray(..., strides=(0,))) is not refused by NumPy either.
+                            if (!IsBroadcastAxis(arrShape, d, _state->NDim))
+                                continue;
+
                             if ((flags & NDIterGlobalFlags.REDUCE_OK) == 0)
                             {
-                                throw new ArgumentException(
-                                    $"output operand requires a reduction along dimension {d}, " +
+                                // NumPy's ValueError (house ValueError: an ArgumentException). Its loop walks the
+                                // iterator axes from the INNERMOST out and numbers them that way, so the axis it reports is
+                                // this operand's innermost broadcast axis, counted from the inside: an out of shape
+                                // (1, 3, 4) against (2, 3, 4) is "dimension 2", (1, 1, 4) is "dimension 1".
+                                int reported = d;
+                                for (int e = _state->NDim - 1; e > d; e--)
+                                {
+                                    if (_state->Shape[e] > 1 && stridePtr[e] == 0 && IsBroadcastAxis(arrShape, e, _state->NDim))
+                                    {
+                                        reported = e;
+                                        break;
+                                    }
+                                }
+                                throw new ValueError(
+                                    $"output operand requires a reduction along dimension {_state->NDim - 1 - reported}, " +
                                     "but the reduction is not enabled. The dimension size of 1 " +
                                     "does not match the expected output shape.");
                             }
 
                             if ((opFlag & NDIterOpFlags.READ) == 0)
                             {
-                                throw new ArgumentException(
+                                // NumPy's ValueError (npyiter_check_reduce_ok_and_set_flags).
+                                throw new ValueError(
                                     "output operand requires a reduction, but is flagged as " +
                                     "write-only, not read-write");
                             }
@@ -623,7 +646,8 @@ namespace NumSharp.Backends.Iteration
                             // (nditer_constr.c:1404-1421).
                             if (i == _state->MaskOp)
                             {
-                                throw new ArgumentException(
+                                // NumPy's ValueError, as the two above.
+                                throw new ValueError(
                                     "output operand requires a " +
                                     "reduction, but is flagged as " +
                                     "the ARRAYMASK operand which " +
@@ -1285,6 +1309,23 @@ namespace NumSharp.Backends.Iteration
                     }
                 }
             }
+        }
+
+        /// <summary>
+        ///     Whether iteration axis <paramref name="d"/> BROADCASTS an operand of shape <paramref name="arrShape"/> under
+        ///     the standard (right-aligned) broadcasting: the operand has no axis there, or its axis has length 1. This is
+        ///     NumPy's test for a reduction axis of a written operand (<c>npyiter_fill_axisdata</c>'s <c>shape == 1</c> and
+        ///     absent-axis branches), and it is a SHAPE test: a stride of 0 on an axis the operand really has (a zero-size
+        ///     array's strides, an explicit 0 stride of <c>np.ndarray(..., strides=...)</c>) is not a broadcast.
+        /// </summary>
+        /// <param name="arrShape">The operand's own shape (not broadcast).</param>
+        /// <param name="d">The iteration axis.</param>
+        /// <param name="iterNDim">The iteration's rank (the operand is right-aligned against it).</param>
+        /// <returns>True when the operand is stretched along the axis.</returns>
+        private static bool IsBroadcastAxis(in NumSharp.Shape arrShape, int d, int iterNDim)
+        {
+            int off = iterNDim - arrShape.NDim;
+            return d < off || arrShape.dimensions[d - off] == 1;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]

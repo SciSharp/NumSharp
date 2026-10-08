@@ -706,9 +706,13 @@ namespace NumSharp.Tests.Fuzz
             // NumSharp names several exceptions exactly after NumPy's (Exceptions/{ValueError,
             // TypeError,IndexError,AxisError}.cs), so an identical name is the strongest possible
             // match and is accepted before the taxonomy map is consulted at all.
+            // A tier that holds NumPy's exception TYPE as part of its contract (the empty-operand linalg tier: NumPy's
+            // ValueError / LinAlgError / TypeError each have a house exception of the same name) accepts only that exact
+            // name; every other tier keeps the class-level map, where a regression to a looser type would pass unseen.
+            bool strictType = c.Valueclass == "linalg_empty";
             bool typeOk = gotType == c.Error.Type
-                          || !ErrorTypeMap.TryGetValue(c.Error.Type, out var allowed)
-                          || allowed.Contains(gotType);
+                          || (!strictType && (!ErrorTypeMap.TryGetValue(c.Error.Type, out var allowed)
+                                              || allowed.Contains(gotType)));
             bool textOk = string.Equals(gotText, wantText, StringComparison.Ordinal);
 
             if (typeOk && textOk)

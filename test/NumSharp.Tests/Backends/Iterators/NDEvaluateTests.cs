@@ -457,9 +457,10 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.AreEqual(0.0, np.evaluate(NDExpr.Sum(NDExpr.Arr(empty))).GetDouble(0));
             Assert.AreEqual(1.0, np.evaluate(NDExpr.Prod(NDExpr.Arr(empty))).GetDouble(0));
 
-            var ex = Assert.ThrowsException<ArgumentException>(
+            // NumPy's ValueError (an ArgumentException), with NumPy's exact text.
+            var ex = Assert.ThrowsException<ValueError>(
                 () => np.evaluate(NDExpr.Min(NDExpr.Arr(empty))));
-            StringAssert.Contains(ex.Message, "zero-size array to reduction operation minimum which has no identity");
+            Assert.AreEqual("zero-size array to reduction operation minimum which has no identity", ex.Message);
 
             // mean([]) → NaN at the result dtype (np.mean of empty f4 → float32 nan)
             var emptyF4 = np.array(new float[0]);
@@ -772,13 +773,13 @@ namespace NumSharp.Tests.Backends.Iterators
         {
             var e = np.array(new double[] { });
 
-            Assert.ThrowsException<ArgumentException>(   // zero-size max/min has no identity, like np.ptp([])
+            Assert.ThrowsException<ValueError>(   // zero-size max/min has no identity, like np.ptp([]) (NumPy's ValueError)
                 () => np.evaluate(NDExpr.Ptp((NDExpr)e)));
 
             Assert.AreEqual("zero-size array to reduction operation fmin which has no identity",
-                Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.NanMin((NDExpr)e))).Message);
+                Assert.ThrowsException<ValueError>(() => np.evaluate(NDExpr.NanMin((NDExpr)e))).Message);
             Assert.AreEqual("zero-size array to reduction operation fmax which has no identity",
-                Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.NanMax((NDExpr)e))).Message);
+                Assert.ThrowsException<ValueError>(() => np.evaluate(NDExpr.NanMax((NDExpr)e))).Message);
         }
 
         // ===================================================================
@@ -881,8 +882,11 @@ namespace NumSharp.Tests.Backends.Iterators
         public void M4c_ArgMaxMin_EmptyRaises()
         {
             var e = np.array(new double[] { });
-            Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.ArgMax((NDExpr)e)));
-            Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.ArgMin((NDExpr)e)));
+            // NumPy's ValueError (an ArgumentException), with NumPy's exact text.
+            Assert.AreEqual("attempt to get argmax of an empty sequence",
+                Assert.ThrowsException<ValueError>(() => np.evaluate(NDExpr.ArgMax((NDExpr)e))).Message);
+            Assert.AreEqual("attempt to get argmin of an empty sequence",
+                Assert.ThrowsException<ValueError>(() => np.evaluate(NDExpr.ArgMin((NDExpr)e))).Message);
         }
 
         // ===================================================================

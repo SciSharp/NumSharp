@@ -816,7 +816,8 @@ namespace NumSharp.Backends
                 {
                     case NDExprReduceKind.Min:
                     case NDExprReduceKind.Max:
-                        throw new ArgumentException(
+                        // NumPy's ValueError (it derives from ArgumentException), as np.max / np.min raise it.
+                        throw new ValueError(
                             $"zero-size array to reduction operation {ReduceUfuncName(reduce.Kind)} which has no identity");
                     case NDExprReduceKind.Prod:
                         WriteOne(slot, accType);

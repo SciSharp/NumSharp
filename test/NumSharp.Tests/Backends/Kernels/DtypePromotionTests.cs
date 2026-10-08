@@ -244,25 +244,16 @@ public class DtypePromotionTests
         result.typecode.Should().Be(NPTypeCode.Double);
     }
 
-    [TestMethod]
-    [OpenBugs] // NumPy 2.x returns float64 for var(float32), NumSharp returns float32
-    public async Task Var_Float32_NumPyReturnsFloat64()
-    {
-        // NumPy: np.var(np.array([1.0, 2.0, 3.0], dtype=np.float32)).dtype == float64
-        // NumPy always promotes to float64 for var/std for numerical stability
-        // NumSharp follows GetComputingType() which preserves float32
-        var a = np.array(new float[] { 1.0f, 2.0f, 3.0f });
-        var result = np.var(a);
-
-        // This test documents NumPy expected behavior (fails currently)
-        result.typecode.Should().Be(NPTypeCode.Double);
-    }
-
+    /// <summary>
+    ///     np.var of a float32 array is float32, as in NumPy 2.4.2 (<c>np.var(np.array([1, 2, 3], np.float32)).dtype</c>
+    ///     is float32: <c>_var</c> takes the float64 loop only for an integer or bool input, an inexact input keeps its
+    ///     own dtype). A former <c>[OpenBugs]</c> twin asserted float64 and failed for that reason; it was removed
+    ///     2026-10-08, so this test is the one pin of the rule.
+    /// </summary>
     [TestMethod]
     public async Task Var_Float32_ReturnsFloat32()
     {
-        // NumSharp's current behavior - preserves float32 via GetComputingType()
-        // This differs from NumPy which always returns float64 for numerical stability
+        // NumPy's rule: an inexact input keeps its dtype (np.var is NumPy's _var since 2026-10-05).
         var a = np.array(new float[] { 1.0f, 2.0f, 3.0f });
         var result = np.var(a);
 

@@ -126,23 +126,17 @@ namespace NumSharp.Tests.Fuzz
             ["set_state"] = "state-tuple round-trip (uint32 key vector by MT19937 contract)",
 
             // Host-pinned LAPACK/CBLAS parity family: float32/float64/complex128 are the three
-            // dtypes NumPy itself routes through the backend; int/bool ride the managed tiers.
-            ["cond"] = "LAPACK family: f32/f64/c128 (linalg_parity host pin)",
+            // dtypes NumPy itself routes through the backend; int/bool ride the managed tiers. (cond, eig, eigh,
+            // eigvals, norm, pinv, svd and svdvals retired 2026-10-08: the portable linalg_empty tier gives them
+            // empty operands of 7-8 dtypes, int / uint8 / bool widened to float64 by _commonType.)
             ["corrcoef"] = "normalized cov: f64/c128 (weighted lanes are 1-ULP battle-tests)",
             ["cov"] = "GEMM-bound composition: int64/f64/c128 span the exactness classes",
             ["dot_aat"] = "matmul_parity syrk-shortcut probe: f32/f64/c128 (the BLAS dtypes)",
             ["dot_ata"] = "matmul_parity syrk-shortcut probe: f32/f64/c128",
-            ["eig"] = "LAPACK family: f32/f64/c128",
-            ["eigh"] = "LAPACK family: f32/f64/c128",
-            ["eigvals"] = "LAPACK family: f32/f64/c128",
             ["matmul_aat"] = "matmul_parity syrk-shortcut probe: f32/f64/c128",
             ["matmul_ata"] = "matmul_parity syrk-shortcut probe: f32/f64/c128",
-            ["norm"] = "SVD-defined matrix orders: f64/c128 (other orders ride the products tier)",
-            ["pinv"] = "LAPACK family: f32/f64/c128",
             ["polyfit"] = "lstsq-backed: f32/f64 (the gelsd dtypes exercised)",
             ["roots"] = "eigvals-backed: f32/f64/c128",
-            ["svd"] = "LAPACK family: f32/f64/c128",
-            ["svdvals"] = "LAPACK family: f32/f64/c128",
             ["tensorinv"] = "LU-backed: f32/f64/c128",
             ["tensorsolve"] = "LU-backed: f32/f64/c128",
 

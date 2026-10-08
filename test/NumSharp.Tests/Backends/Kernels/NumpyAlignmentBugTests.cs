@@ -1534,23 +1534,23 @@ public class TypePromotionDifferenceTests
     [TestMethod]
     public void Max_EmptyArray_ThrowsException()
     {
-        // NumPy: np.max([]) raises ValueError
-        // NumSharp: Now throws ArgumentException (FIXED in Task #84)
+        // NumPy: np.max([]) raises ValueError; NumSharp raises the same type (ValueError, an
+        // ArgumentException) since 2026-10-08 (it was a plain ArgumentException).
         var empty = np.array(Array.Empty<double>());
 
-        Assert.ThrowsException<ArgumentException>(() => np.amax(empty),
-            "NumSharp now raises ArgumentException matching NumPy's ValueError.");
+        Assert.ThrowsException<ValueError>(() => np.amax(empty),
+            "NumSharp raises NumPy's ValueError.");
     }
 
     [TestMethod]
     public void Min_EmptyArray_ThrowsException()
     {
-        // NumPy: np.min([]) raises ValueError
-        // NumSharp: Now throws ArgumentException (FIXED in Task #84)
+        // NumPy: np.min([]) raises ValueError; NumSharp raises the same type (ValueError, an
+        // ArgumentException) since 2026-10-08 (it was a plain ArgumentException).
         var empty = np.array(Array.Empty<double>());
 
-        Assert.ThrowsException<ArgumentException>(() => np.amin(empty),
-            "NumSharp now raises ArgumentException matching NumPy's ValueError.");
+        Assert.ThrowsException<ValueError>(() => np.amin(empty),
+            "NumSharp raises NumPy's ValueError.");
     }
 
     [TestMethod]

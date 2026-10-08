@@ -581,8 +581,8 @@ namespace NumSharp.Tests.Fuzz
                     if (p.ContainsKey("tol")) return np.linalg.matrix_rank(ops[0], tol: p["tol"].GetDouble());
                     if (p.ContainsKey("rtol")) return np.linalg.matrix_rank(ops[0], rtol: p["rtol"].GetDouble());
                     return np.linalg.matrix_rank(ops[0]);
-                case "cond":                                                        // SVD orders only (None/2/-2)
-                    return p.ContainsKey("p") ? np.linalg.cond(ops[0], p["p"].GetInt32()) : np.linalg.cond(ops[0]);
+                case "cond":                                                        // None / an int order / 'fro'
+                    return p.ContainsKey("p") ? np.linalg.cond(ops[0], ParseOrd(p["p"])) : np.linalg.cond(ops[0]);
                 case "norm":                                                        // matrix orders 2/-2/'nuc'
                     return p.ContainsKey("axis")
                         ? np.linalg.norm(ops[0], ParseOrd(p["ord"]), ParseIntArray(p["axis"]),
@@ -590,8 +590,12 @@ namespace NumSharp.Tests.Fuzz
                         : np.linalg.norm(ops[0], ParseOrd(p["ord"]));
                 // svd(compute_uv=false) -> just S; the (U,S,Vh) tuple form is in ApplyTuple.
                 case "svd": return np.linalg.svd(ops[0], full_matrices: p["full_matrices"].GetBoolean(), compute_uv: false).S;
-                // qr(mode='r') -> just R; reduced/complete/raw tuples are in ApplyTuple.
-                case "qr": return np.linalg.qr(ops[0], "r").R;
+                // qr(mode='r') -> just R, and the deprecated mode='economic' -> the packed matrix alone (NumPy returns
+                // one array; NumSharp's tuple carries it in the Q slot); reduced/complete/raw tuples are in ApplyTuple.
+                case "qr":
+                    return p.TryGetValue("mode", out var qrm) && qrm.GetString() == "economic"
+                        ? np.linalg.qr(ops[0], "economic").Q
+                        : np.linalg.qr(ops[0], "r").R;
 
                 // ---- LU-factorisation family (linalg_parity tier; ARRAY results) --------
                 // solve/inv/det/tensorinv/tensorsolve reach getrf/gesv (deterministic partial

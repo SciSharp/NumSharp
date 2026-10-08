@@ -37,7 +37,7 @@ namespace NumSharp.Backends
             var shape = arr.Shape;
 
             if (shape.IsEmpty)
-                throw new ArgumentException("attempt to get argmin of an empty sequence");
+                throw new ValueError("attempt to get argmin of an empty sequence"); // NumPy's ValueError (an ArgumentException)
 
             // Handle empty arrays (size == 0) with axis reduction
             // NumPy: np.argmin(np.zeros((0,3)), axis=0) raises ValueError (reducing along zero-size axis)
@@ -47,7 +47,7 @@ namespace NumSharp.Backends
                 if (axis_ == null)
                 {
                     // No axis specified - raise error
-                    throw new ArgumentException("attempt to get argmin of an empty sequence");
+                    throw new ValueError("attempt to get argmin of an empty sequence"); // NumPy's ValueError (an ArgumentException)
                 }
 
                 // Axis specified - check if reducing along zero-size axis
@@ -60,7 +60,7 @@ namespace NumSharp.Backends
                 if (shape[emptyAxis] == 0)
                 {
                     // Reducing along a zero-size axis - raise error
-                    throw new ArgumentException("attempt to get argmin of an empty sequence");
+                    throw new ValueError("attempt to get argmin of an empty sequence"); // NumPy's ValueError (an ArgumentException)
                 }
 
                 // Reducing along non-zero axis - return empty Int64 array with reduced shape

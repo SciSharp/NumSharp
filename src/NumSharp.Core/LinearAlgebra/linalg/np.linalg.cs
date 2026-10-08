@@ -15,7 +15,11 @@ namespace NumSharp
         ///     and carries no LU, QR, SVD or eigensolver, so — unlike the matrix products, which
         ///     always have a managed kernel to fall back on — a factorisation has nothing to compute
         ///     with until something assigns <see cref="TensorEngine.Blas"/>. The validation in front
-        ///     of the throw is NumPy-exact, so shape, rank and argument errors are the real ones.
+        ///     of the throw is NumPy-exact, so shape, rank and argument errors are the real ones. An
+        ///     EMPTY operand (an empty matrix or a zero-size batch) is the exception: NumPy's answer for it
+        ///     needs no arithmetic (shapes, zeros, and the identity that a full SVD or a complete QR of an
+        ///     empty matrix carries), so every factorisation gives it without a backend
+        ///     (<see cref="Backends.LinAlgEmpty"/>).
         ///     </para>
         ///     <para>
         ///     <b>What works today</b>, because it composes out of primitives NumSharp already has:

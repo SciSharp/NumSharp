@@ -578,16 +578,17 @@ namespace NumSharp.Backends
         {
             var shape = arr.Shape;
 
-            // No axis specified - always throw for empty arrays (no identity element for min/max)
+            // No axis specified - always throw for empty arrays (no identity element for min/max). NumPy's type is
+            // ValueError (it derives from ArgumentException, so a handler for that still catches it).
             if (axis_ == null)
-                throw new ArgumentException($"zero-size array to reduction operation {opName} which has no identity");
+                throw new ValueError($"zero-size array to reduction operation {opName} which has no identity");
 
             var axis = NormalizeAxis(axis_.Value, arr.ndim);
 
             // If the axis being reduced has size 0, we're reducing over an empty dimension
             // which results in an error (no values to take min/max of)
             if (shape.dimensions[axis] == 0)
-                throw new ArgumentException($"zero-size array to reduction operation {opName} which has no identity");
+                throw new ValueError($"zero-size array to reduction operation {opName} which has no identity");
 
             // If the axis being reduced has size > 0, but the result would be empty,
             // return an empty array of the correct shape

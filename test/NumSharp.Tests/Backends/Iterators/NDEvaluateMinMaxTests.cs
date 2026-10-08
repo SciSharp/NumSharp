@@ -405,7 +405,7 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.AreEqual(1, NDExpr.ExactMinMaxRuns, "Half runs NumPy's sequential fold");
             Assert.AreEqual(np.amax(h).GetAtIndex(0), hr.GetAtIndex(0), "Half value");
 
-            Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.Max((NDExpr)np.zeros(new Shape(0), NPTypeCode.Double))),
+            Assert.ThrowsException<ValueError>(() => np.evaluate(NDExpr.Max((NDExpr)np.zeros(new Shape(0), NPTypeCode.Double))),
                 "an empty max still raises (no identity) — the exact route only runs for n > 0");
         }
 

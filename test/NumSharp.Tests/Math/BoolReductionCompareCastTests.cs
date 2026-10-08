@@ -59,7 +59,7 @@ namespace NumSharp.UnitTest.Math
             CollectionAssert.AreEqual(new long[] { 1, 0, 0 }, np.argmax(m, 1).ToArray<long>());
             CollectionAssert.AreEqual(new long[] { 0, 1, 0 }, np.argmin(m, 1).ToArray<long>());
 
-            Assert.ThrowsException<ArgumentException>(() => np.argmax(np.array(new bool[0])));
+            Assert.ThrowsException<ValueError>(() => np.argmax(np.array(new bool[0])));
         }
 
         /// <summary>

@@ -25,8 +25,10 @@ namespace NumSharp
     ///     no BLOCKED LU to reproduce LAPACK's exact accumulation) rather than raising. The remaining
     ///     factorisations — Cholesky, QR, SVD, the eigensolvers, <c>lstsq</c> — still have no managed
     ///     numerics and raise <see cref="OpenBlasMissingBackendException"/> when no backend serves the
-    ///     operands. The members are <c>virtual</c> rather than <c>abstract</c> so an alternative
-    ///     engine overrides only what it actually implements.
+    ///     operands, EXCEPT an empty operand (an empty matrix or a zero-size batch): its answer needs no
+    ///     arithmetic, so every member gives NumPy's empty result itself, before it asks a backend
+    ///     (<see cref="Backends.LinAlgEmpty"/>). The members are <c>virtual</c> rather than <c>abstract</c>
+    ///     so an alternative engine overrides only what it actually implements.
     ///     </para>
     /// </remarks>
     public abstract partial class TensorEngine
@@ -140,9 +142,18 @@ namespace NumSharp
 
         #region Factorisations — LU family has a managed fallback; the rest need a backend
 
-        /// <summary><c>np.linalg.cholesky</c> — OpenBLAS <c>potrf</c>.</summary>
+        /// <summary><c>np.linalg.cholesky</c> — OpenBLAS <c>potrf</c>; an empty operand is
+        /// <see cref="Backends.LinAlgEmpty.Cholesky"/>, with or without a backend.</summary>
+        /// <param name="a">The operand, validated and cast to <c>result_t</c> by <c>np.linalg.cholesky</c>.</param>
+        /// <param name="upper">Return the upper factor (NumPy's <c>upper=True</c>).</param>
+        /// <returns>The Cholesky factor.</returns>
+        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand and no backend serves it.</exception>
         public virtual NDArray Cholesky(NDArray a, bool upper)
         {
+            // An empty operand (an empty matrix or a zero-size batch) factorises nothing: NumPy's answer needs no LAPACK, so
+            // Core gives it whether or not a backend is installed (LinAlgEmpty, probed against NumPy 2.4.2).
+            if (a.size == 0)
+                return Backends.LinAlgEmpty.Cholesky(a);
             var blas = Blas;
             if (blas != null && blas.TryCholesky(a, upper, out var result))
                 return result;
@@ -173,9 +184,19 @@ namespace NumSharp
             return Backends.ManagedLu.Slogdet(a);
         }
 
-        /// <summary><c>np.linalg.eig</c> / <c>np.linalg.eigvals</c> — OpenBLAS <c>geev</c>.</summary>
+        /// <summary><c>np.linalg.eig</c> / <c>np.linalg.eigvals</c> — OpenBLAS <c>geev</c> (always complex128; the caller
+        /// collapses a real result); an empty operand is <see cref="Backends.LinAlgEmpty.Eig"/>, with or without a
+        /// backend.</summary>
+        /// <param name="a">The operand, validated and cast to <c>result_t</c>.</param>
+        /// <param name="computeVectors">Whether the eigenvectors are wanted (null slot otherwise).</param>
+        /// <returns>The eigenvalues and (optionally) eigenvectors, complex128.</returns>
+        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand and no backend serves it.</exception>
         public virtual (NDArray eigenvalues, NDArray eigenvectors) Eig(NDArray a, bool computeVectors)
         {
+            // An empty operand (an empty matrix or a zero-size batch) factorises nothing: NumPy's answer needs no LAPACK, so
+            // Core gives it whether or not a backend is installed (LinAlgEmpty, probed against NumPy 2.4.2).
+            if (a.size == 0)
+                return Backends.LinAlgEmpty.Eig(a, computeVectors);
             var blas = Blas;
             if (blas != null && blas.TryEig(a, computeVectors, out var w, out var v))
                 return (w, v);
@@ -185,10 +206,20 @@ namespace NumSharp
 
         /// <summary>
         ///     <c>np.linalg.eigh</c> / <c>np.linalg.eigvalsh</c> — OpenBLAS <c>syevd</c> (real
-        ///     symmetric) or <c>heevd</c> (complex Hermitian).
+        ///     symmetric) or <c>heevd</c> (complex Hermitian); an empty operand is
+        ///     <see cref="Backends.LinAlgEmpty.Eigh"/>, with or without a backend.
         /// </summary>
+        /// <param name="a">The operand, validated and cast to <c>result_t</c>.</param>
+        /// <param name="uplo">The triangle read, <c>'L'</c> or <c>'U'</c>.</param>
+        /// <param name="computeVectors">Whether the eigenvectors are wanted (null slot otherwise).</param>
+        /// <returns>The real eigenvalues and (optionally) eigenvectors.</returns>
+        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand and no backend serves it.</exception>
         public virtual (NDArray eigenvalues, NDArray eigenvectors) Eigh(NDArray a, char uplo, bool computeVectors)
         {
+            // An empty operand (an empty matrix or a zero-size batch) factorises nothing: NumPy's answer needs no LAPACK, so
+            // Core gives it whether or not a backend is installed (LinAlgEmpty, probed against NumPy 2.4.2).
+            if (a.size == 0)
+                return Backends.LinAlgEmpty.Eigh(a, computeVectors);
             var blas = Blas;
             if (blas != null && blas.TryEigh(a, uplo, computeVectors, out var w, out var v))
                 return (w, v);
@@ -210,10 +241,20 @@ namespace NumSharp
             return Backends.ManagedLu.Inv(a);
         }
 
-        /// <summary><c>np.linalg.lstsq</c> — OpenBLAS <c>gelsd</c>.</summary>
+        /// <summary><c>np.linalg.lstsq</c> — OpenBLAS <c>gelsd</c>; an empty coefficient matrix is
+        /// <see cref="Backends.LinAlgEmpty.Lstsq"/>, with or without a backend.</summary>
+        /// <param name="a">The coefficient matrix <c>(M, N)</c>, cast to <c>result_t</c>.</param>
+        /// <param name="b">The right-hand sides <c>(M, K)</c>, K &gt;= 1 (the wrapper pads K == 0), cast to <c>result_t</c>.</param>
+        /// <param name="rcond">The singular-value cutoff ratio.</param>
+        /// <returns>The solution, the residuals, the rank and the singular values, before the wrapper's casts.</returns>
+        /// <exception cref="OpenBlasMissingBackendException">A non-empty coefficient matrix and no backend serves it.</exception>
         public virtual (NDArray Solution, NDArray Residuals, NDArray Rank, NDArray SingularValues) Lstsq(
             NDArray a, NDArray b, double rcond)
         {
+            // An empty operand (an empty matrix or a zero-size batch) factorises nothing: NumPy's answer needs no LAPACK, so
+            // Core gives it whether or not a backend is installed (LinAlgEmpty, probed against NumPy 2.4.2).
+            if (a.size == 0)
+                return Backends.LinAlgEmpty.Lstsq(a, b);
             var blas = Blas;
             if (blas != null && blas.TryLstsq(a, b, rcond, out var x, out var res, out var rank, out var s))
                 return (x, res, rank, s);
@@ -221,10 +262,19 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     <c>np.linalg.qr</c> — OpenBLAS <c>geqrf</c> plus <c>orgqr</c>/<c>ungqr</c>.
+        ///     <c>np.linalg.qr</c> — OpenBLAS <c>geqrf</c> plus <c>orgqr</c>/<c>ungqr</c>; an empty operand is
+        ///     <see cref="Backends.LinAlgEmpty.Qr"/>, with or without a backend.
         /// </summary>
+        /// <param name="a">The operand, validated and cast to <c>result_t</c>.</param>
+        /// <param name="mode">The resolved mode (<c>reduced</c>, <c>complete</c>, <c>r</c>, <c>raw</c>, <c>economic</c>).</param>
+        /// <returns>The mode's pair: (Q, R), (null, R), (h, tau) or (packed, null).</returns>
+        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand and no backend serves it.</exception>
         public virtual (NDArray Q, NDArray R) Qr(NDArray a, string mode)
         {
+            // An empty operand (an empty matrix or a zero-size batch) factorises nothing: NumPy's answer needs no LAPACK, so
+            // Core gives it whether or not a backend is installed (LinAlgEmpty, probed against NumPy 2.4.2).
+            if (a.size == 0)
+                return Backends.LinAlgEmpty.Qr(a, mode);
             var blas = Blas;
             if (blas != null && blas.TryQr(a, mode, out var q, out var r))
                 return (q, r);
@@ -245,10 +295,20 @@ namespace NumSharp
 
         /// <summary>
         ///     <c>np.linalg.svd</c> / <c>np.linalg.svdvals</c> — OpenBLAS <c>gesdd</c>. Also the engine
-        ///     behind <c>pinv</c>, <c>matrix_rank</c>, <c>cond</c> and the spectral/nuclear norms.
+        ///     behind <c>pinv</c>, <c>matrix_rank</c>, <c>cond</c> and the spectral/nuclear norms. An empty
+        ///     operand is <see cref="Backends.LinAlgEmpty.Svd"/>, with or without a backend.
         /// </summary>
+        /// <param name="a">The operand, validated and cast to <c>result_t</c>.</param>
+        /// <param name="fullMatrices">NumPy's <c>full_matrices</c>.</param>
+        /// <param name="computeUv">NumPy's <c>compute_uv</c> (null U / Vh slots otherwise).</param>
+        /// <returns>U, the real singular values and Vh.</returns>
+        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand and no backend serves it.</exception>
         public virtual (NDArray U, NDArray S, NDArray Vh) Svd(NDArray a, bool fullMatrices, bool computeUv)
         {
+            // An empty operand (an empty matrix or a zero-size batch) factorises nothing: NumPy's answer needs no LAPACK, so
+            // Core gives it whether or not a backend is installed (LinAlgEmpty, probed against NumPy 2.4.2).
+            if (a.size == 0)
+                return Backends.LinAlgEmpty.Svd(a, fullMatrices, computeUv);
             var blas = Blas;
             if (blas != null && blas.TrySvd(a, fullMatrices, computeUv, out var u, out var s, out var vh))
                 return (u, s, vh);

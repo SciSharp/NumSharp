@@ -898,8 +898,8 @@ namespace NumSharp.Tests.Backends.Iterators
             AssertSameBothWaysExact(() => NDExpr.ArgMin((NDExpr)dm * 2, 0), expectStream: false);
             // Empty: NumPy's error from the materialize route, whichever route was tried.
             var e0 = np.zeros(new Shape(0, 5), NPTypeCode.Double);
-            Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.ArgMax((NDExpr)e0 * 2.0)));
-            Assert.ThrowsException<ArgumentException>(() => np.evaluate(NDExpr.ArgMax((NDExpr)e0 * 2.0, 0)));
+            Assert.ThrowsException<ValueError>(() => np.evaluate(NDExpr.ArgMax((NDExpr)e0 * 2.0)));
+            Assert.ThrowsException<ValueError>(() => np.evaluate(NDExpr.ArgMax((NDExpr)e0 * 2.0, 0)));
             AssertSameBothWaysExact(() => NDExpr.ArgMax((NDExpr)e0 * 2.0, 1), expectStream: false);
 
             // out=: the streamed result lands in the caller's array, which is what comes back.

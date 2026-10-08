@@ -1047,12 +1047,12 @@ public class NanMinMaxExactScheduleTests
 
             foreach (var empty in new[] { np.array(new double[0]), np.array(new int[0]), np.array(new Half[0]), np.zeros(new Shape(0, 3)) })
             {
-                var ex = Assert.ThrowsException<ArgumentException>(() => f(empty, null, false), $"{empty.dtype.name} flat");
+                var ex = Assert.ThrowsException<ValueError>(() => f(empty, null, false), $"{empty.dtype.name} flat");
                 Assert.AreEqual(text, ex.Message);
             }
 
-            Assert.AreEqual(text, Assert.ThrowsException<ArgumentException>(() => f(np.array(new double[0]), null, true)).Message);
-            Assert.AreEqual(text, Assert.ThrowsException<ArgumentException>(() => f(np.zeros(new Shape(0, 3)), 0, false)).Message);
+            Assert.AreEqual(text, Assert.ThrowsException<ValueError>(() => f(np.array(new double[0]), null, true)).Message);
+            Assert.AreEqual(text, Assert.ThrowsException<ValueError>(() => f(np.zeros(new Shape(0, 3)), 0, false)).Message);
             CollectionAssert.AreEqual(new long[] { 0 }, f(np.zeros(new Shape(0, 3)), 1, false).shape);
             CollectionAssert.AreEqual(new long[] { 0, 1 }, f(np.zeros(new Shape(0, 3)), 1, true).shape);
             CollectionAssert.AreEqual(new long[] { 0 }, f(np.zeros(new Shape(3, 0)), 0, false).shape);

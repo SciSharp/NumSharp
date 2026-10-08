@@ -489,7 +489,9 @@ oracle sections closed the gaps between "NumPy refuses" and "NumPy computes":
   the text path's model for every dtype, the zero-excuse `ma_fill.jsonl` tier.) `np.nditer` over strings; the result
   layout of
   `argwhere` / `flatnonzero` / `unravel_index` (views in NumPy; `OpenBugs.IndexSearchLayout.cs`, the oracle excuses only
-  their layout); an empty matrix's QR / SVD without the OpenBLAS backend (Core ships no QR / SVD).
+  their layout). (An empty matrix's QR / SVD — every factorisation of an empty matrix or a zero-size batch — is NumPy's
+  answer without a backend since 2026-10-08: `Backends/Default/LinearAlgebra/LinAlgEmpty.cs`, the portable
+  `linalg_empty.jsonl` tier, plan `api-parameter-parity.md` X34.)
 
 **Not yet:** datetime storage/kernels/NaT/ISO (C — `docs/plans/datetime64.md`); Stage D phase 2 (computing on text —
 comparisons, `np.strings`, sorting, `add`/`multiply` loops, text ↔ number casts, the gated corpus is ready) and NEP 55

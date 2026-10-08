@@ -1150,6 +1150,49 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     `byteswap` sharing the source's mask) by the unit tests only, the slice-array copy by the indexer test. Two (the
     unsigned default stored as int64, C#'s exponent format in the error text) were at first killed by the tier alone;
     the unit tests now catch them too (finding 42).
+- [x] **X34 np.linalg's factorisations threw on an empty operand without a backend; NumPy answers it without
+  arithmetic.** Done 2026-10-08 (this commit; the rundown's bug 5).
+  - Proof: with no backend, `qr` / `svd` / `svdvals` / `eig` / `eigvals` / `eigh` / `eigvalsh` / `cholesky` / `lstsq` of
+    an empty matrix or a zero-size batch (`(0, 3)`, `(3, 0)`, `(2, 0, 0)`, `(0, 3, 3)`) raised
+    `OpenBlasMissingBackendException`, and so did the composites over them (`pinv` / `matrix_rank` / `cond` / the SVD
+    norms of a zero-size batch). NumPy's gufunc loops zero times over an empty batch, and LAPACK returns at once for an
+    empty matrix, after which NumPy's C wrappers write the identities LAPACK left out: `np.linalg.svd(np.zeros((0, 3)))`
+    has `Vh = eye(3)`, `np.linalg.qr(np.zeros((3, 0)), 'complete')` has `Q = eye(3)`.
+  - Fix: `Backends/Default/LinearAlgebra/LinAlgEmpty.cs` gives NumPy's empty result for the six seams (Cholesky, Eig,
+    Eigh, Lstsq, Qr, Svd), and each `TensorEngine` virtual takes it BEFORE it asks a backend, so the answer is the same
+    with or without OpenBLAS. Dtypes are the backend's: the operand's `result_t`, the real type for S and eigh's
+    eigenvalues, complex128 for `geev` (the realness collapse then makes an empty real operand's result real: NumPy's
+    `all(w.imag == 0)` is vacuously true). `lstsq` of an M×0 matrix: x `(0, K)`, rank int32 0, no singular values, and
+    the residuals NumPy's SEQUENTIAL `res += el*el` over every row of b (a `cumsum` down the columns, squares in double;
+    `lstsq(zeros((3, 0)), [1, 2, 3])` is `[14.]`). The composites inherit it through their own NumPy statements:
+    `matrix_rank` of an empty matrix raises `S.max()`'s ValueError, the 2-norm is 0 (`amax(initial=0)`), -2 raises
+    `amin`'s, `cond` refuses an empty matrix (`_is_empty_2d`), a zero-size batch gives empty results.
+  - Neighbours, found by the tier and fixed:
+    - NDIter refused a written zero-size operand: its reduction check tested `stride == 0`, NumPy's
+      `npyiter_fill_axisdata` tests the operand's SHAPE (its dimension is 1 or missing under a longer axis). A zero-size
+      array's strides are 0 without a broadcast, so `np.nditer<double>(np.zeros((3, 0)), writeable: true)` threw (the
+      empty complex Frobenius norm runs it). `NDIterRef.IsBroadcastAxis` is the shape test; a writeable array with an
+      explicit 0 stride now iterates too, as in NumPy. The refusal itself is NumPy's `ValueError` numbering the axis from
+      the inside (`(1, 3, 4)` against `(2, 3, 4)` is "dimension 2"; it said 0, as an `ArgumentException`).
+    - An empty reduction without an identity raised the base `ArgumentException` on the engine routes (`np.max` /
+      `np.min` / the nan forms / `np.ptp`, `np.argmax` / `np.argmin`, np.evaluate's `Min` / `Max` / `ArgMax` /
+      `ArgMin`); NumPy raises `ValueError`, and the keyword route already did. `ValueError` derives from
+      `ArgumentException`, so a handler for that still catches it; 20 unit tests pinned the exact old type.
+  - Not changed: `lstsq` of a non-empty `a` with an empty `b` still needs the backend (`gelsd` computes `a`'s singular
+    values).
+  - Gates: `linalg_empty.jsonl` (5,075 cases, 1,465 NumPy errors; zero excuses and strict error types: `CheckError`
+    accepts only the house exception of NumPy's name for valueclass `linalg_empty`);
+    `LinearAlgebra/LinAlgEmpty.NumPyPort.Test.cs` (6); the dtype-spread ledger's eight LAPACK entries (cond, eig, eigh,
+    eigvals, norm, pinv, svd, svdvals) retired, the tier spreads them over 7–8 dtypes. 16 planted bugs, every one
+    killed (the tier turns 2–107 cases red for the 11 it can see; the unit tests catch the other five — the NDIter
+    axis number and type, the empty max / argmax / argmin types): the identities of a complete QR and a full SVD,
+    eigh's and the SVD's real dtypes, the residual order (only after the single-column cases, finding 48), the rank's
+    int32, raw's transposed `h`, the solution's N rows, the complex abs2, the stacked identity, the shape test, and the
+    four error types.
+  - Perf (NPY/NS, two pinned P-cores, best of 9, 20 cells: qr / svd / svdvals / eig / eigvals / eigh / eigvalsh /
+    cholesky / lstsq / pinv / matrix_rank / cond / norm over empty matrices and zero-size batches, results disposed):
+    geomean 5.92×, min 1.62× (`lstsq` of a 3×0 matrix with values in `b`: the residual sum's five allocations, ~6 µs);
+    the full SVD of `(0, 512)` (a 512×512 identity) 3.76×, of `(100, 64, 0)` (100 identities of order 64) 6.80×.
 
 ## 6. Findings
 
@@ -1350,8 +1393,29 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    axis is inserted. Reusing one parsed `Slice[]` for two arrays gives the second the first's shape without the new axes
    — the same element count, so only a SHAPE assertion shows it (or, with two newaxis entries around an integer, a
    too-many-indices error). Give each consumer its own copy of the array; the `Slice` objects are not written.
+46. **A zero stride is not a broadcast** (X34). NDIter refused a written operand wherever a stride was 0; NumPy refuses
+   it only where the operand's DIMENSION is 1 or missing. A zero-size array has zero strides on the axes before its
+   zero-length axis (NumPy zeroes them all), so the typed iterator refused `np.zeros((3, 0))` read-write — and only an
+   empty complex Frobenius norm ever handed it one.
+47. **An oracle that maps a NumPy error to a class of .NET types cannot see a type regression** (X34). The ordinary
+   tiers accept `ArgumentException` for NumPy's `ValueError`, so the empty `np.max` / `np.argmax` family raising the base
+   type passed every tier for months; the first tier that holds the exact type (`linalg_empty`, valueclass-strict
+   `CheckError`) found it on its first run.
+48. **Only a long SINGLE column tells a pairwise sum from a sequential one** (X34). NumPy's pairwise sum runs one
+   accumulator for fewer than 8 elements, and an axis-0 sum with two or more outputs is the sequential slab schedule
+   either way; only one output over more than 8 rows takes the flat pairwise schedule. The first tier had a 20-row `b`
+   of TWO columns, so a planted pairwise residual (`np.sum(squares, 0)` for the cumsum) passed the tier AND the unit
+   tests. The 1-D and `(20, 1)` forms of the same column (one large square, nineteen ones: sequential 1e16, pairwise
+   1e16 + 16) catch it. The same run hid the gap a second way: the unit filter's baseline already had one failing test
+   (an `[OpenBugs]` pin, `Var_Float32_NumPyReturnsFloat64`, whose premise was false: NumPy's var of float32 is float32;
+   removed), so "1 failed" read as a kill. Count failures against the unmutated tree, by name.
 
 ## 7. State log
+
+- **2026-10-08**: X34 done (np.linalg's factorisations of an empty matrix or a zero-size batch are NumPy's answer without
+  a backend: `LinAlgEmpty`, taken before the backend; NDIter's write-operand reduction check is NumPy's shape test, with
+  NumPy's ValueError and axis number; the empty reductions raise NumPy's ValueError). The portable `linalg_empty` tier
+  (5,075 cases, zero excuses, strict error types). Findings 46–48 recorded. Commit: this commit.
 
 - **2026-10-08**: X33 done (numpy.ma's fill value as NumPy stores it, for every dtype: `_check_fill_value`'s conversion
   and texts, the default materialized at its own dtype on the first read, the setter writing into a stored array,

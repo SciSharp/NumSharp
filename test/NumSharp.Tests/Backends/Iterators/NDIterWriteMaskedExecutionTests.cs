@@ -313,7 +313,7 @@ public class NDIterWriteMaskedExecutionTests
         var a = np.zeros(new Shape(3, 4), np.float64);
         var mr = np.array(new[] { true });
 
-        var ex = Assert.ThrowsException<ArgumentException>(() =>
+        var ex = Assert.ThrowsException<ValueError>(() =>
             NDIterRef.MultiNew(2, new[] { a, mr },
                 NDIterGlobalFlags.REDUCE_OK, NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_SAFE_CASTING,
                 new[]

@@ -10328,6 +10328,178 @@ def gen_linalg_parity():
                 lambda v: np.linalg.matrix_power(v, -1), "float64", lay, rng)
 
     return cases
+
+
+# ---------------------------------------------------------------------------
+# T-linalg-empty — every np.linalg factorisation over EMPTY operands (an empty core matrix or a zero-size batch), a
+# PORTABLE tier (the open-bugs rundown's bug 5; plan docs/plans/api-parameter-parity.md X34). NumPy answers them without
+# arithmetic: its gufunc loops zero times over an empty batch, and LAPACK returns at once for an empty matrix, after which
+# NumPy's C wrappers write identities into the non-empty factors LAPACK left untouched (a complete QR's Q of an Mx0 matrix,
+# a full SVD's U / Vh). NumSharp.Core computes all of it WITHOUT a backend (Backends/Default/LinearAlgebra/LinAlgEmpty.cs),
+# so the tier replays managed, strict everywhere, with zero excuses and STRICT error types (valueclass "linalg_empty":
+# NumPy's ValueError / LinAlgError / TypeError must come back as the house type of the same name). The composites ride
+# along (pinv / matrix_rank / cond / norm / svdvals / matrix_power) and so does the managed LU family (det / slogdet / inv
+# / solve), whose empty results are values (det 1, slogdet (1, 0)). Excluded: lstsq with a non-empty a and an empty b
+# (gelsd still computes a's singular values: backend only) and text operands (the string tier owns them).
+LE_SQUARE = [(0, 0), (2, 0, 0), (0, 3, 3), (0, 0, 0), (2, 1, 0, 0), (0, 1, 1)]
+LE_RECT = [(0, 3), (3, 0), (2, 0, 3), (2, 3, 0), (0, 2, 3), (0, 3, 2), (1, 4, 0)]
+LE_DTYPES = ["float64", "float32", "complex128", "int64", "int32", "uint8", "bool"]
+
+
+def _le_operand(shape, dt, layout):
+    """(base, view) of an all-zero operand of `shape` in a memory layout: 'C', 'F', 'T' (the transpose of a C array of
+    the reversed shape) or 'view' (an empty slice of a larger base along the first zero axis, so the operand sits at an
+    offset inside a buffer with the base's strides)."""
+    if layout == "C":
+        a = np.zeros(shape, dt)
+        return a, a
+    if layout == "F":
+        a = np.zeros(shape, dt, order="F")
+        return a, a
+    if layout == "T":
+        base = np.zeros(shape[::-1], dt)
+        return base, base.T
+    # 'view': grow the first zero axis to 4 and slice [1:1] there.
+    ax = next(i for i, d in enumerate(shape) if d == 0)
+    big = list(shape)
+    big[ax] = 4
+    base = np.zeros(big, dt)
+    idx = [slice(None)] * len(shape)
+    idx[ax] = slice(1, 1)
+    return base, base[tuple(idx)]
+
+
+def _le_case(cases, op, name, pairs, params, fn, kind, dt, layout):
+    """Record one empty-operand case: NumPy's result (an array or a tuple of arrays) or NumPy's error, type and text."""
+    base_id = f"{op}/{name}/{dt}/{layout}/{len(cases)}"
+    operands = [describe(b, v) for b, v in pairs]
+    try:
+        r = fn(*[v for _, v in pairs])
+    except Exception as e:  # noqa: BLE001 — the error IS the contract
+        cases.append({"id": base_id, "op": op, "params": params, "operands": operands,
+                      "expected": {"kind": kind} if kind != "array" else {}, "expects_throw": True, "error": _exc(e),
+                      "layout": layout, "valueclass": "linalg_empty"})
+        return
+    expected = _tuple_expected([np.asarray(x) for x in r]) if kind == "tuple" else _arr_expected(np.asarray(r))
+    cases.append({"id": base_id, "op": op, "params": params, "operands": operands, "expected": expected,
+                  "layout": layout, "valueclass": "linalg_empty"})
+
+
+def gen_linalg_empty():
+    import warnings
+    cases = []
+    warnings.simplefilter("ignore")   # qr(mode='economic') is deprecated; the value is still the contract
+
+    def layouts(dt):
+        return ["C", "F", "T", "view"] if dt == "float64" else ["C"]
+
+    square_jobs = [
+        ("cholesky", "lo", {"upper": False}, lambda v: np.linalg.cholesky(v), "array"),
+        ("cholesky", "up", {"upper": True}, lambda v: np.linalg.cholesky(v, upper=True), "array"),
+        ("eig", "eig", {}, lambda v: np.linalg.eig(v), "tuple"),
+        ("eigvals", "eigvals", {}, lambda v: np.linalg.eigvals(v), "array"),
+        ("eigh", "L", {"UPLO": "L"}, lambda v: np.linalg.eigh(v, UPLO="L"), "tuple"),
+        ("eigh", "U", {"UPLO": "U"}, lambda v: np.linalg.eigh(v, UPLO="U"), "tuple"),
+        ("eigvalsh", "L", {"UPLO": "L"}, lambda v: np.linalg.eigvalsh(v, UPLO="L"), "array"),
+        ("eigvalsh", "U", {"UPLO": "U"}, lambda v: np.linalg.eigvalsh(v, UPLO="U"), "array"),
+        ("det", "det", {}, lambda v: np.linalg.det(v), "array"),
+        ("slogdet", "slogdet", {}, lambda v: np.linalg.slogdet(v), "tuple"),
+        ("inv", "inv", {}, lambda v: np.linalg.inv(v), "array"),
+    ] + [("matrix_power", f"n{n}", {"n": n}, (lambda v, n=n: np.linalg.matrix_power(v, n)), "array")
+         for n in (0, 1, 2, -1, -2)]
+    any_jobs = [
+        ("svd", "full", {"full_matrices": True}, lambda v: np.linalg.svd(v), "tuple"),
+        ("svd", "reduced", {"full_matrices": False}, lambda v: np.linalg.svd(v, full_matrices=False), "tuple"),
+        ("svd", "s_full", {"full_matrices": True}, lambda v: np.linalg.svd(v, compute_uv=False), "array"),
+        ("svd", "s_reduced", {"full_matrices": False},
+         lambda v: np.linalg.svd(v, full_matrices=False, compute_uv=False), "array"),
+        ("svdvals", "svdvals", {}, lambda v: np.linalg.svdvals(v), "array"),
+        ("qr", "reduced", {"mode": "reduced"}, lambda v: np.linalg.qr(v, "reduced"), "tuple"),
+        ("qr", "complete", {"mode": "complete"}, lambda v: np.linalg.qr(v, "complete"), "tuple"),
+        ("qr", "raw", {"mode": "raw"}, lambda v: np.linalg.qr(v, "raw"), "tuple"),
+        ("qr", "r", {}, lambda v: np.linalg.qr(v, "r"), "array"),
+        ("qr", "economic", {"mode": "economic"}, lambda v: np.linalg.qr(v, "economic"), "array"),
+        ("pinv", "default", {}, lambda v: np.linalg.pinv(v), "array"),
+        ("pinv", "rcond", {"rcond": 1e-10}, lambda v: np.linalg.pinv(v, rcond=1e-10), "array"),
+        ("matrix_rank", "default", {}, lambda v: np.linalg.matrix_rank(v), "array"),
+        ("matrix_rank", "tol", {"tol": 0.5}, lambda v: np.linalg.matrix_rank(v, tol=0.5), "array"),
+        ("matrix_rank", "rtol", {"rtol": 0.1}, lambda v: np.linalg.matrix_rank(v, rtol=0.1), "array"),
+    ] + [("cond", f"p{p}", ({"p": p} if p is not None else {}), (lambda v, p=p: np.linalg.cond(v, p)), "array")
+         for p in (None, 2, -2, 1, -1, "fro")] \
+      + [("norm", f"ord{o}", {"ord": o, "axis": [-2, -1]}, (lambda v, o=o: np.linalg.norm(v, o, axis=(-2, -1))), "array")
+         for o in (2, -2, "nuc", 1, -1, "fro")]
+
+    for shape in LE_SQUARE:
+        for dt in LE_DTYPES:
+            for lay in layouts(dt):
+                if lay == "T" and len(shape) < 2:
+                    continue
+                pair = _le_operand(shape, dt, lay)
+                for op, name, params, fn, kind in square_jobs + any_jobs:
+                    _le_case(cases, op, f"{name}_{'x'.join(map(str, shape))}", [pair], params, fn, kind, dt, lay)
+    for shape in LE_RECT:
+        for dt in LE_DTYPES:
+            for lay in layouts(dt):
+                pair = _le_operand(shape, dt, lay)
+                for op, name, params, fn, kind in any_jobs:
+                    _le_case(cases, op, f"{name}_{'x'.join(map(str, shape))}", [pair], params, fn, kind, dt, lay)
+                # The square-only factorisations refuse a non-square empty operand (NumPy's LinAlgError).
+                for op, name, params, fn, kind in square_jobs[:4] + square_jobs[8:11]:
+                    _le_case(cases, op, f"{name}_{'x'.join(map(str, shape))}_nonsquare", [pair], params, fn, kind, dt,
+                             lay)
+    # float16 is refused by _commonType before anything reads the shape (TypeError), empty or not.
+    for shape in ((0, 0), (0, 3), (2, 0, 0)):
+        pair = _le_operand(shape, "float16", "C")
+        for op, name, params, fn, kind in any_jobs[:6] + square_jobs[:3]:
+            _le_case(cases, op, f"{name}_{'x'.join(map(str, shape))}_f16", [pair], params, fn, kind, "float16", "C")
+
+    # lstsq with an EMPTY coefficient matrix: x zeros (N, K), rank 0, no singular values, and for an Mx0 matrix NumPy's
+    # sequential sum of squares of b as the residuals.
+    def lstsq_b(shape, dt):
+        b = (np.arange(int(np.prod(shape)), dtype=np.float64).reshape(shape) * 1.25 + 1.0)
+        if dt == "complex128":
+            b = b + 1j * (b[::-1] if b.ndim == 1 else b[::-1, ::-1]) * 0.5
+        return b.astype(dt)
+    for sa, sb in [((0, 3), (0,)), ((0, 3), (0, 2)), ((3, 0), (3,)), ((3, 0), (3, 2)), ((0, 0), (0, 0)),
+                   ((0, 0), (0,)), ((5, 0), (5, 3)), ((4, 0), (4, 0)), ((0, 4), (0, 0))]:
+        for dt in ("float64", "float32", "complex128", "int64", "bool"):
+            a = np.zeros(sa, dt)
+            b = lstsq_b(sb, dt) if dt != "bool" else (np.arange(int(np.prod(sb))).reshape(sb) % 2 == 0)
+            _le_case(cases, "lstsq", f"{'x'.join(map(str, sa))}_{'x'.join(map(str, sb))}",
+                     [(np.ascontiguousarray(a), np.ascontiguousarray(a)), (np.ascontiguousarray(b), np.ascontiguousarray(b))],
+                     {"rcond": None}, lambda va, vb: np.linalg.lstsq(va, vb, rcond=None), "tuple", dt, "C")
+    # A non-empty b column with a big sum, so the sequential order of the residual sum shows (float32 squares in double).
+    bigb = (np.array([1e8, 3.0, 1e-8, 7.0, -2.5e7], np.float64)).reshape(5, 1)
+    for dt in ("float64", "float32"):
+        za, bb = np.zeros((5, 0), dt), np.ascontiguousarray(bigb.astype(dt))
+        _le_case(cases, "lstsq", "5x0_order", [(za, za), (bb, bb)],
+                 {"rcond": None}, lambda va, vb: np.linalg.lstsq(va, vb, rcond=None), "tuple", dt, "C")
+    # Past 8 rows a pairwise sum differs from NumPy's sequential residual loop: one large square followed by many small
+    # ones (each lost to 1e16's rounding sequentially, kept by a pairwise grouping). Only a SINGLE column shows it: an
+    # axis-0 sum with one output runs np.sum's flat (pairwise) schedule, while two or more outputs are summed
+    # sequentially per column in either order. So the 1-D and (20, 1) forms carry the order check (float64 and
+    # complex128; float32's cast rounds both sums to one value) and the (20, 2) form the per-column layout.
+    longb = np.array([[1e8, 3.0], [1.0, 2.5]] + [[1.0, 1e-3 * k] for k in range(1, 19)], np.float64)
+    for dt in ("float64", "float32", "complex128"):
+        za = np.zeros((20, 0), dt)
+        for tag, bsrc in (("", longb), ("_col", longb[:, :1]), ("_1d", longb[:, 0])):
+            lb = np.ascontiguousarray(bsrc.astype(dt) * (1 + 1j if dt == "complex128" else 1))
+            _le_case(cases, "lstsq", f"20x0_order{tag}", [(za, za), (lb, lb)],
+                     {"rcond": None}, lambda va, vb: np.linalg.lstsq(va, vb, rcond=None), "tuple", dt, "C")
+
+    # solve over empties: a stack of 0x0 / zero-batch matrices against vector and matrix right-hand sides.
+    for sa, sb in [((0, 0), (0,)), ((0, 0), (0, 3)), ((2, 0, 0), (2, 0)), ((2, 0, 0), (2, 0, 3)), ((0, 3, 3), (0, 3)),
+                   ((0, 3, 3), (0, 3, 2)), ((0, 0), (0, 0)), ((3, 3), (3, 0))]:
+        for dt in ("float64", "float32", "complex128", "int64"):
+            a = np.zeros(sa, dt)
+            if a.size == 0:
+                pass
+            else:
+                a = (np.eye(sa[-1]) * 2.0).astype(dt)
+            b = np.zeros(sb, dt)
+            _le_case(cases, "solve", f"{'x'.join(map(str, sa))}_{'x'.join(map(str, sb))}",
+                     [(a, a), (b, b)], {}, lambda va, vb: np.linalg.solve(va, vb), "array", dt, "C")
+    return cases
 # =====================================================================================
 # Result KINDS and ERROR parity.
 #
@@ -20187,6 +20359,9 @@ def main():
         # interop live-parity suite proves) — gen_linalg_parity() forces single-thread, so
         # blas_identity() records blas_threads=1 and the C# gate enables the backend at 1.
         write_jsonl(os.path.join(corpus_dir, "linalg_parity.host.jsonl"), [blas_identity()])
+    elif mode == "linalg_empty":
+        cases = gen_linalg_empty()                                      # empty-operand factorisations, portable
+        write_jsonl(os.path.join(corpus_dir, "linalg_empty.jsonl"), cases)
     elif mode == "poly":
         cases = gen_poly()                                             # portable polynomial family
         write_jsonl(os.path.join(corpus_dir, "poly.jsonl"), cases)

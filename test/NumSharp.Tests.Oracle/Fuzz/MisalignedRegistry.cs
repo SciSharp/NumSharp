@@ -341,6 +341,11 @@ namespace NumSharp.Tests.Fuzz
             // inheritance by every derive kind, filled(), the repr's fill_value= line) is held to ZERO excuses.
             if (c.Valueclass == "mafill")
                 return null;
+            // linalg_empty.jsonl (every np.linalg factorisation over an empty matrix or a zero-size batch, computed without
+            // a backend, plan api-parameter-parity X34, the rundown's bug 5) is held to ZERO excuses, its error cases
+            // included (their types are strict too: FuzzCorpusTests.Kinds.CheckError).
+            if (c.Valueclass == "linalg_empty")
+                return null;
             // copyto_full.jsonl (np.copyto as NumPy's array_copyto, plan api-parameter-parity X16 + X11: where= masks,
             // layouts, every dtype, casts, overlap, C# literal sources, 0-d / empty arrays, NumPy's errors and their
             // order) is held to ZERO excuses, its error cases (valueclass "error") included — hence the op test.

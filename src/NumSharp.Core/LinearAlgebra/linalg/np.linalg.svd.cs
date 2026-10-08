@@ -27,7 +27,7 @@ namespace NumSharp
             ///     spectral and nuclear matrix norms — which is why all of those stop here too.
             ///     </para>
             /// </remarks>
-            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves (an empty operand or a zero-size batch needs none).</exception>
             /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             [NDScoped] // reclaims the ToCommon cast temp; the (U, S, Vh) tuple is yielded component-wise
             public static (NDArray U, NDArray S, NDArray Vh) svd(NDArray a, bool full_matrices = true,
@@ -54,7 +54,7 @@ namespace NumSharp
             ///     <c>svd(x, compute_uv: false)</c>.
             /// </summary>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.svdvals.html</remarks>
-            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves (an empty operand or a zero-size batch needs none).</exception>
             [NDScoped] // reclaims the ToCommon cast temp (U/Vh are null under compute_uv: false)
             public static NDArray svdvals(NDArray x)
             {
@@ -75,7 +75,7 @@ namespace NumSharp
             /// <param name="hermitian">Assume the operand is Hermitian.</param>
             /// <param name="rtol">Relative threshold; supplying it together with <paramref name="tol"/> is an error.</param>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.matrix_rank.html</remarks>
-            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves (an empty operand or a zero-size batch needs none).</exception>
             [NDScoped]
             public static NDArray matrix_rank(NDArray A, double? tol = null, bool hermitian = false,
                 double? rtol = null)
@@ -142,7 +142,7 @@ namespace NumSharp
             ///     works without a backend.
             ///     </para>
             /// </remarks>
-            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves (an empty operand or a zero-size batch needs none).</exception>
             [NDScoped]
             public static NDArray cond(NDArray x, object p = null)
             {

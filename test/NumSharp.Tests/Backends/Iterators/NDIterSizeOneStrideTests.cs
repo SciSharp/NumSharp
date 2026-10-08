@@ -183,7 +183,7 @@ namespace NumSharp.Tests.Backends.Iterators
             var a = np.arange(3.0);
             var outArr = np.zeros(new Shape(1));
 
-            var ex = Assert.ThrowsException<ArgumentException>(() =>
+            var ex = Assert.ThrowsException<ValueError>(() =>
             {
                 using var iter = NDIterRef.MultiNew(
                     nop: 2,
@@ -206,7 +206,7 @@ namespace NumSharp.Tests.Backends.Iterators
             var a = np.arange(3.0);
             var outArr = np.zeros(new Shape(1));
 
-            var ex = Assert.ThrowsException<ArgumentException>(() =>
+            var ex = Assert.ThrowsException<ValueError>(() =>
             {
                 using var iter = NDIterRef.MultiNew(
                     nop: 2,

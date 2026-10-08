@@ -285,6 +285,16 @@ namespace NumSharp.Tests.Fuzz
             }
         }
 
+        // The np.linalg family over EMPTY operands (an empty core matrix or a zero-size batch), the open-bugs rundown's
+        // bug 5: NumPy answers them without arithmetic (shapes, zeros, the identity a full SVD or a complete QR of an empty
+        // matrix carries, lstsq's sum of squares for an Mx0 matrix), so NumSharp.Core gives every case WITHOUT a backend
+        // (Backends/Default/LinearAlgebra/LinAlgEmpty.cs). PORTABLE: replayed managed, strict on every host, zero excuses
+        // and strict error types (valueclass "linalg_empty"). The composites (pinv / matrix_rank / cond / norm / svdvals /
+        // matrix_power) and the managed LU family (det / slogdet / inv / solve) ride along.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void LinalgEmpty() => RunCorpus("linalg_empty.jsonl");
+
         // T9 bitwise & shift: bitwise_and/or/xor (& | ^), invert (~), left/right_shift across
         // integer + bool dtypes, pairwise layouts, and shift-count edges that straddle the bit width.
         [TestMethod]
@@ -1082,6 +1092,7 @@ namespace NumSharp.Tests.Fuzz
             ["matmul.jsonl"] = 769,
             ["matmul_parity.jsonl"] = 470,
             ["linalg_parity.jsonl"] = 340,   // +90: LU family (solve/inv/det/slogdet/tensorinv/tensorsolve) + matrix_power(n<0)
+            ["linalg_empty.jsonl"] = 4800,   // every np.linalg factorisation over empty operands / zero-size batches, portable (5,066 at delivery, 2026-10-08)
             ["poly.jsonl"] = 60,
             ["einsum.jsonl"] = 35,
             ["modf.jsonl"] = 165,   // all non-complex lanes + char (the 59f99320 per-width promotion, dtype-spread gate)

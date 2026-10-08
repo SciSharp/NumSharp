@@ -23,8 +23,8 @@ namespace NumSharp
             ///     than two reduced axes, or a min order (-1, -inf, -2) of an empty operand.</exception>
             /// <exception cref="StringComputationNotSupportedException">A non-empty text array: NumPy parses its text as
             ///     numbers (<c>x.astype(float)</c>); an empty one converts to an empty float64 array.</exception>
-            /// <exception cref="OpenBlasMissingBackendException">A matrix order 2, -2 or <c>"nuc"</c> with no matrix
-            ///     backend installed.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">A matrix order 2, -2 or <c>"nuc"</c> over a non-empty
+            ///     matrix with no matrix backend installed (an empty matrix or a zero-size batch needs none).</exception>
             /// <remarks>
             ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.norm.html
             ///     <para>
@@ -201,7 +201,7 @@ namespace NumSharp
             /// <returns>The reduced norm.</returns>
             /// <exception cref="ValueError">Duplicate axes, an invalid matrix order, or a min order of an empty
             ///     matrix.</exception>
-            /// <exception cref="OpenBlasMissingBackendException">An order 2, -2 or "nuc" with no matrix backend.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">An order 2, -2 or "nuc" over a non-empty matrix with no matrix backend.</exception>
             [NDScopedCovered] // always dispatched from the [NDScoped] norm overloads; rides their scope
             private static NDArray MatrixNorm(NDArray a, object ord, int[] axes, int nd, bool keepdims)
             {
@@ -284,7 +284,7 @@ namespace NumSharp
             /// <param name="colAxis">The normalized column axis.</param>
             /// <param name="which">"2", "-2" or "nuc".</param>
             /// <returns>The reduced norm.</returns>
-            /// <exception cref="OpenBlasMissingBackendException">No matrix backend computes the singular values.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend computes the singular values of a non-empty operand.</exception>
             /// <exception cref="ValueError">"-2" of an empty matrix (the empty-min error).</exception>
             [NDScopedCovered] // only reached via MatrixNorm, itself under the [NDScoped] norm scope
             private static NDArray SingularValueNorm(NDArray a, int rowAxis, int colAxis, string which)

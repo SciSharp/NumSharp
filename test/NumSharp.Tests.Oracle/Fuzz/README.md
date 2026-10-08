@@ -2052,6 +2052,31 @@ dtypes/layouts/shapes/batched/degenerate.
 reach the LAPACK seam (companion-matrix `eigvals` / `lstsq`) and THROW without the backend, so they cannot
 be portable. Small operands, threads=1, byte-exact.
 
+### The factorisations of EMPTY operands (`linalg_empty` tier) — 2026-10-08
+
+`linalg_empty.jsonl` (5,075 cases, `gen_oracle.py linalg_empty`; the open-bugs rundown's bug 5, plan
+`docs/plans/api-parameter-parity.md` X34) is the PORTABLE companion of `linalg_parity`: every `np.linalg`
+factorisation over an empty core matrix or a zero-size batch — `cholesky`, `eig`, `eigvals`, `eigh`, `eigvalsh`,
+`svd` (full / reduced, with and without U / Vh), `svdvals`, `qr` (reduced / complete / r / raw / economic), `lstsq`,
+and the composites `pinv`, `matrix_rank`, `cond` (None / ±2 / ±1 / 'fro'), `norm` (±2 / 'nuc' / ±1 / 'fro') — plus
+the managed LU family (`det`, `slogdet`, `inv`, `solve`, `matrix_power` at n ∈ {0, 1, 2, -1, -2}). NumPy answers
+these without arithmetic (its gufunc loops zero times over an empty batch; LAPACK returns at once for an empty
+matrix, and NumPy's C wrappers write the identities LAPACK leaves out), so NumSharp.Core computes them WITHOUT a
+backend (`Backends/Default/LinearAlgebra/LinAlgEmpty.cs`) and the tier replays managed, strict on every host.
+Shapes `(0,0) (2,0,0) (0,3,3) (0,0,0) (2,1,0,0) (0,1,1)` (square) and `(0,3) (3,0) (2,0,3) (2,3,0) (0,2,3) (0,3,2)
+(1,4,0)` (non-square: the square-only functions' LinAlgError too) × 7 dtypes (float64 in four layouts: C, F, the
+transpose of a reversed-shape array, an empty slice inside a larger buffer); float16's `_commonType` TypeError;
+`lstsq` of an empty `a` with values in `b` (the M×0 residuals, NumPy's SEQUENTIAL sum of squares: a 20-row column,
+1-D and `(20, 1)`, whose pairwise sum differs from it — a `b` of two or more columns cannot show the order, because an
+axis-0 sum with several outputs is sequential per column in either order, and the first version of the tier had only
+that form, so a planted pairwise residual passed it); `solve` with empty and zero-batch operands. Held to ZERO excuses
+(valueclass `linalg_empty`) and to STRICT error types: `CheckError` accepts only the house exception of NumPy's
+name (`ValueError`, `LinAlgError`, `TypeError`), where every other tier keeps the class-level map. Found by it:
+the complex Frobenius norm of an empty matrix threw from the typed iterator (NDIter refused a zero-stride axis of a
+written zero-size operand as a reduction; NumPy's test is the operand's SHAPE), and the empty `np.max` /
+`np.argmax` family raised the base `ArgumentException` where NumPy raises `ValueError`. Excluded: `lstsq` of a
+non-empty `a` with an empty `b` (gelsd still computes `a`'s singular values — backend only) and text operands.
+
 ### Polynomial family (`poly` tier)
 
 `poly.jsonl` (`gen_oracle.py poly`) is the FIRST value gate for the PORTABLE polynomial family — `poly`

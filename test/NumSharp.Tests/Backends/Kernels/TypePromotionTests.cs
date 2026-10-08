@@ -558,10 +558,11 @@ public class TypePromotionTests
     /// "zero-size array to reduction operation maximum which has no identity"
     /// </summary>
     [TestMethod]
-    public void Max_EmptyArray_ThrowsArgumentException()
+    public void Max_EmptyArray_ThrowsValueError()
     {
         var empty = np.array(new double[0]);
-        Assert.ThrowsException<ArgumentException>(() => np.amax(empty));
+        var ex = Assert.ThrowsException<ValueError>(() => np.amax(empty));
+        Assert.AreEqual("zero-size array to reduction operation maximum which has no identity", ex.Message);
     }
 
     /// <summary>
@@ -569,10 +570,11 @@ public class TypePromotionTests
     /// "zero-size array to reduction operation minimum which has no identity"
     /// </summary>
     [TestMethod]
-    public void Min_EmptyArray_ThrowsArgumentException()
+    public void Min_EmptyArray_ThrowsValueError()
     {
         var empty = np.array(new double[0]);
-        Assert.ThrowsException<ArgumentException>(() => np.amin(empty));
+        var ex = Assert.ThrowsException<ValueError>(() => np.amin(empty));
+        Assert.AreEqual("zero-size array to reduction operation minimum which has no identity", ex.Message);
     }
 
     /// <summary>
@@ -580,10 +582,11 @@ public class TypePromotionTests
     /// "attempt to get argmax of an empty sequence"
     /// </summary>
     [TestMethod]
-    public void ArgMax_EmptyArray_ThrowsArgumentException()
+    public void ArgMax_EmptyArray_ThrowsValueError()
     {
         var empty = np.array(new double[0]);
-        Assert.ThrowsException<ArgumentException>(() => np.argmax(empty));
+        var ex = Assert.ThrowsException<ValueError>(() => np.argmax(empty));
+        Assert.AreEqual("attempt to get argmax of an empty sequence", ex.Message);
     }
 
     /// <summary>
@@ -591,10 +594,11 @@ public class TypePromotionTests
     /// "attempt to get argmin of an empty sequence"
     /// </summary>
     [TestMethod]
-    public void ArgMin_EmptyArray_ThrowsArgumentException()
+    public void ArgMin_EmptyArray_ThrowsValueError()
     {
         var empty = np.array(new double[0]);
-        Assert.ThrowsException<ArgumentException>(() => np.argmin(empty));
+        var ex = Assert.ThrowsException<ValueError>(() => np.argmin(empty));
+        Assert.AreEqual("attempt to get argmin of an empty sequence", ex.Message);
     }
 
     #endregion
