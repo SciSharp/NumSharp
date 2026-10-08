@@ -160,8 +160,11 @@ namespace NumSharp.Tests.Fuzz
                 object res = entry.Run(fx);
                 // Freshness BEFORE disposal: a result that is neither a fixture view nor a scalar slot is
                 // a fresh allocation, and one with zero pool traffic is the full-bypass signature.
-                freshBytes = FreshBytesAny(res, fx.Keep, fx.Ranges);
-                DisposeAny(res, fx.Keep);
+                // KeepNow: the fixture's arrays plus the fills its masked arrays hold now (one an entry materialized is
+                // shared by every array later derived from that fixture).
+                var keep = fx.KeepNow();
+                freshBytes = FreshBytesAny(res, keep, fx.Ranges);
+                DisposeAny(res, keep);
             }
 
             if (entry.Throws)

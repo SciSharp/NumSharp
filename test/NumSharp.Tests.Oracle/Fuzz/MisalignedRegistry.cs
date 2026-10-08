@@ -336,6 +336,11 @@ namespace NumSharp.Tests.Fuzz
             // index kind and mode, NumPy's errors, 2026-10-08) is held to ZERO excuses too.
             if (c.Valueclass == "maput")
                 return null;
+            // ma_fill.jsonl (numpy.ma's fill value as NumPy stores it, plan api-parameter-parity X33: the constructor's
+            // conversion and its TypeErrors, the getter's materialized default, the setter's write into a stored fill,
+            // inheritance by every derive kind, filled(), the repr's fill_value= line) is held to ZERO excuses.
+            if (c.Valueclass == "mafill")
+                return null;
             // copyto_full.jsonl (np.copyto as NumPy's array_copyto, plan api-parameter-parity X16 + X11: where= masks,
             // layouts, every dtype, casts, overlap, C# literal sources, 0-d / empty arrays, NumPy's errors and their
             // order) is held to ZERO excuses, its error cases (valueclass "error") included — hence the op test.

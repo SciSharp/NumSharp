@@ -1021,7 +1021,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     `Sorting/np.argsort.SignedZero.Test.cs`, `Manipulation/np.unique.ComplexHash.Test.cs`.
 - [x] **X31 numpy.ma's put with a hard mask was a rewrite, not NumPy's statements: an N-D hard-mask put wrote where NumPy
   raises IndexError; np.put / np.take checked in another order and np.put read overlapping operands mid-write.** Done
-  2026-10-08 (this commit; the rundown's bug 3).
+  2026-10-08 (commit 23a51194; the rundown's bug 3).
   - Proof: NumPy's `MaskedArray.put` (`numpy/ma/core.py`) looks the indices up with `self._mask[indices]` BEFORE it
     writes. On an N-D mask that lookup indexes axis 0, and its N-D result then boolean-indexes the 1-D index array, so
     almost every N-D hard-mask put raises (`index 4 is out of bounds for axis 0 with size 2`, `too many indices for
@@ -1078,6 +1078,61 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     ellipsis (`...`), numpy.newaxis (`None`) and integer or boolean arrays are valid indices`.
   - An `object[]` (Python list) store value is cast through `np.asanyarray`, not packed element by element (X28's
     coercion gap, seen from the store side).
+- [x] **X33 numpy.ma's numeric fill value was the caller's raw C# value: never converted to the data dtype, never
+  materialized, never refused.** Done 2026-10-08 (this commit; the rundown's bug 4).
+  - Proof: NumPy's `_check_fill_value` stores `np.array(np.asarray(fill_value, dtype=ndtype))`, a 0-d array of the
+    data's dtype, and the getter returns `_fill_value[()]`. NumSharp kept the C# value as given: `astype(int64)` kept
+    7.5 (NumPy: `np.int64(7)`), `fill_value=300` on int8 was accepted (NumPy: `TypeError: Cannot convert fill_value 300
+    to dtype int8`), and every read computed the default again, so a later `fill_value = 5` stored an int8 where NumPy
+    writes 5 INTO the int64 default it stored on the first read (`np.int64(5)`). The text dtypes already had the
+    store / convert / materialize model (26f7e32c).
+  - Fix (`Ma/NDMaskedArray.cs`): `_fill_value` is an NDArray (null = None) for every dtype.
+    - `CheckFillValue` is `_check_fill_value`: a str for a non-text dtype is refused by its type; anything else goes
+      through `NDArray.AsStoreValue` (`PyArray_FromAny`): a C# number is a Python scalar, packed with the range checks,
+      its OverflowError / ValueError rewrapped as NumPy's TypeError with the value in Python's `%s`
+      (`PolyIndexArgument.Format`: `1e+20`, `nan`); a complex into a real dtype raises Python's own `int()` / `float()`
+      TypeError; a `Half` / `char` / `decimal` (NumPy scalars) or an array is cast (`np.float16(300)` into int8 is 44).
+    - The getter stores `DefaultFill` on its first read: the DEFAULT's own dtype (int64 999999 for signed integers,
+      uint64 for unsigned, NumPy's `np.uint(...)`; float64 1e20 for every float; complex128; bool True).
+    - The setter writes INTO a stored array (`_fill_value[()] = target`, unsafe), with NumPy's three texts for an array
+      with dimensions into a stored 0-d fill.
+    - `UpdateFrom` (`_update_from`) shares the stored object; `FinalizeFrom` (`__array_finalize__`) stores a converted
+      copy, so `astype` / `view` / `byteswap` / `argpartition` convert a STORED fill and leave an unread one unread.
+    - `filled()` casts the stored fill under `same_kind` (`np.copyto`), as NumPy does.
+    - The repr prints the fill by the STORED dtype (`fill_value=np.int64(999999)` beside int8 data, `fill_value=1` when
+      the dtypes agree).
+    - The masked singleton's getter and setter raise `AttributeError: attributes of masked are not writeable`.
+  - Neighbours, found by the search and fixed:
+    - `byteswap`, `argpartition`, `ma.cumsum` and `ma.cumprod` gave the result the SOURCE's mask, so a mask write through
+      the result reached the source; NumPy copies it (`__array_finalize__`'s `_mask.astype(...)`, `__setmask__`'s
+      `make_mask_none` + `.flat =`). `byteswap` / `argpartition` also came back soft.
+    - `view(dtype)` with a mask and another itemsize raised NotSupportedException; NumPy's dtype setter raises
+      `ValueError: cannot reshape array of size 4 into shape (16,)`, which NumSharp raises as its house
+      IncorrectShapeException. A view finalizes at the SOURCE dtype (NumPy sets the dtype afterwards), resets a stored
+      fill when a dtype is given, and ignores `fill_value=` when nothing is stored.
+    - `x + 1` on an int8 / uint8 / int16 / uint16 / bool masked array stayed narrow; numpy.ma's `getdata` makes a Python
+      int a strong int64. The C# literal reaches `operator +(NDMaskedArray, NDArray)` (an NDArray is the better conversion
+      target than `object`) as a marked 0-d int32 array, which `BareScalarStrongDtype` now reads as the Python int.
+    - The masked print showed float16 / float32 elements with their own short repr (`1.732`); NumPy's
+      `_insert_masked_print` converts with `astype(object)`, which makes Python floats (`1.732421875`).
+    - The masked indexer parsed a lone slice string twice (once per array), ~0.8 µs each: `x["1:"]` took 2.84 µs, 1.33–
+      1.40× NumPy. It parses once now (1.77 µs). `GetView` rewrites its slice ARRAY (a newaxis entry becomes
+      `Slice.All`), so the mask indexes a copy of the parsed array (finding 45).
+  - Divergence (documented): `filled()` whose stored fill cannot reach the data under `same_kind` (a complex fill shared
+    with `ma.absolute`'s float result) is NumPy's object-array fallback; NumSharp raises NotSupportedException.
+  - Not changed: the masked SETTER still parses a lone slice string twice (not measured).
+  - Leak gates: a masked result's fill is now an array the result owns, so the corpus sweep's `CollectDisposables`
+    collects it, and `Keep` / `LeakCatalogue.KeepNow` keep the operands' and fixtures' current fills.
+  - Perf (NPY/NS, two pinned P-cores, a warm-up pass first; int8 / int64 / float64 × 1K / 100K / 1M; 93 cells): geomean
+    5.60×, min 1.79× (`fill_value = 3` at 100K). Construct with a fill 8.3–13.2×, construct and read 9.8–19.5×,
+    `astype` 2.8–5.8×, `filled()` 3.4–14.4×, `view` 4.8–7.8×, slice 2.1–3.3×, `common_fill_value` 7.4–10.7×, the setter
+    1.8–2.6×, `x + 1` 2.5–5.2×, the repr 8.5–14.3×.
+  - Gates: `ma_fill.jsonl` (3,867 call-history scripts: construct → read / set / derive → observe; zero excuses, strict
+    types); `Ma/np.ma.fill_value.NumPyPort.Test.cs` (10); `NDMaskedArrayTests.Indexer_Get_SliceString_ParsedOnce_KeepsMaskAligned`.
+    15 planted bugs, each killed: 11 by the tier (3–556 cases each), three (`filled()` casting unsafe, `cumsum` and
+    `byteswap` sharing the source's mask) by the unit tests only, the slice-array copy by the indexer test. Two (the
+    unsigned default stored as int64, C#'s exponent format in the error text) were at first killed by the tier alone;
+    the unit tests now catch them too (finding 42).
 
 ## 6. Findings
 
@@ -1261,13 +1316,37 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    OS-zeroed pages, whose first touch costs ~0.5 µs per 4 KB; the pool's recycled buffer (`fillZeros: false`,
    `NDArray.ForOverwrite`) costs nothing to touch. The boolean-mask getter lost 165 µs of 184 to it. np.repeat allocates
    its four results the same way (`Manipulation/np.repeat.cs`, lines 133, 168, 224 and 275) — not measured, not changed.
+42. **AwesomeAssertions' object `Be` compares boxed numbers across types, and `WithMessage` is a case-insensitive
+   wildcard pattern** (X33). `x.fill_value.Should().Be(999999L)` passed with the getter returning `999999UL`, and
+   `WithMessage("Cannot convert fill_value 1e+20 …")` passed C#'s `1E+20`: two planted bugs the oracle tier caught and the
+   unit tests did not. A test of a NumPy scalar's TYPE needs an explicit `GetType()` check; a test of NumPy's text needs
+   whole-string equality (`.Which.Message.Should().Be(text)`).
+43. **A stored attribute's lifetime follows WHO stores it** (X33). A fill built with a NEW masked array stays in the
+   ambient scope with its data and mask and leaves with the result (`Yield`); detaching every new fill made an
+   intermediate's fill (`ma.trace`'s `astype` copy) a finalizer leak. A fill stored into an EXISTING array (the getter's
+   default, the setter's replacement) must be detached, or a scope disposes it under a longer-lived array.
+44. **A state that depends on call history needs scripts, not cases** (X33). Whether `astype` converts a fill, and to
+   what, depends on whether something READ the fill first (an unread float64 array casts to int64 with the fill 999999,
+   a read one with `long.MinValue`). The `ma_fill` tier records scripts (construct → read / set / derive → observe) and
+   replays them step for step; a single-call case cannot express the order.
+45. **`UnmanagedStorage.GetView` rewrites its slice ARRAY argument** (X33): a newaxis entry becomes `Slice.All` once the
+   axis is inserted. Reusing one parsed `Slice[]` for two arrays gives the second the first's shape without the new axes
+   — the same element count, so only a SHAPE assertion shows it (or, with two newaxis entries around an integer, a
+   too-many-indices error). Give each consumer its own copy of the array; the `Slice` objects are not written.
 
 ## 7. State log
+
+- **2026-10-08**: X33 done (numpy.ma's fill value as NumPy stores it, for every dtype: `_check_fill_value`'s conversion
+  and texts, the default materialized at its own dtype on the first read, the setter writing into a stored array,
+  `_update_from` sharing and `__array_finalize__` converting; `byteswap` / `argpartition` / `cumsum` / `cumprod` own
+  their masks; `view`'s reshape error; `x + 1`'s strong int64; the float16 masked print; the masked slice parsing its
+  string once). The `ma_fill` tier (3,867 call-history scripts, zero excuses, strict types); 15 planted bugs killed.
+  Findings 42–45 recorded. Commit: this commit.
 
 - **2026-10-08**: X31 done (numpy.ma's put as NumPy's statements; np.put as `PyArray_PutTo`, np.take as
   `PyArray_TakeFrom`; one clip-mode converter; the selection kernels' order-'C' casts; the indexers' `prepare_index`
   IndexErrors; the boolean-mask getter without a zero fill). The `ma_put` tier (3,660 cases, zero excuses, strict error
-  types) and 243 aliasing-tier put cases; 14 planted bugs killed. X32 and findings 38–41 recorded. Commit: this commit.
+  types) and 243 aliasing-tier put cases; 14 planted bugs killed. X32 and findings 38–41 recorded. Commit: 23a51194.
 
 - **2026-10-08**: X30 done (numpy.ma's arraysetops as NumPy's statements; `np.argsort`'s ±0 order; `np.unique`'s
   complex hash representative). The `ma_setops` tier (7,030 cases, zero excuses; 8 planted bugs killed); the

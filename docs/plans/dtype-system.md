@@ -485,8 +485,9 @@ oracle sections closed the gaps between "NumPy refuses" and "NumPy computes":
 * **Open.** (`np.ma.isin` / `in1d`'s numeric algorithm is NumPy's statements since 2026-10-08, with the other ma
   arraysetops: `Ma/NDMaskedArray.SetOps.cs`, the zero-excuse `ma_setops.jsonl` tier; `ma.put` is NumPy's
   `MaskedArray.put` statements since 2026-10-08 — a hard-masked N-D put raises NumPy's IndexError, the zero-excuse
-  `ma_put.jsonl` tier.) Numeric fill values are neither converted nor materialized (a documented simplification);
-  `np.nditer` over strings; the result layout of
+  `ma_put.jsonl` tier; numeric fill values are stored, converted and materialized as NumPy's are since 2026-10-08 —
+  the text path's model for every dtype, the zero-excuse `ma_fill.jsonl` tier.) `np.nditer` over strings; the result
+  layout of
   `argwhere` / `flatnonzero` / `unravel_index` (views in NumPy; `OpenBugs.IndexSearchLayout.cs`, the oracle excuses only
   their layout); an empty matrix's QR / SVD without the OpenBLAS backend (Core ships no QR / SVD).
 

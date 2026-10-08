@@ -175,8 +175,45 @@ the indices' size but another shape NumPy reshapes the caller's array in place; 
 "Selection" and "Indexing"): `np.put` / `np.take` as `PyArray_PutTo` / `PyArray_TakeFrom`, the shared clip-mode
 converter, the indexer's `prepare_index` IndexErrors, and the C-order casts of five selection functions.
 
-Open: numeric fill values are not converted or
-materialized (a documented simplification: `astype(int64)` keeps a float fill); a 0-d result NumPy returns as a plain
+**The fill value is stored as NumPy stores it, for every dtype** (2026-10-08, plan `docs/plans/api-parameter-parity.md`
+X33, the rundown's bug 4; `Ma/NDMaskedArray.cs`; gates the zero-excuse, type-strict oracle tier `ma_fill.jsonl` (3,867
+call-history scripts: `gen_ma_oracle.py fill`) + `Ma/np.ma.fill_value.NumPyPort.Test.cs`). `_fill_value` is an NDArray
+(null = NumPy's None) — the text path's model, which the numeric dtypes now share:
+- **Conversion** (`MaskedArrayModule.CheckFillValue`, `_check_fill_value`): a given fill becomes a 0-d array of the DATA's
+  dtype through `NDArray.AsStoreValue` (`PyArray_FromAny`): a C# number is a Python scalar, packed with the range checks
+  (`5.7` on int8 is 5; `300` raises `TypeError: Cannot convert fill_value 300 to dtype int8`, the OverflowError /
+  ValueError rewrapped, the value in Python's `%s`); a complex into a real dtype raises Python's own `int()` / `float()`
+  TypeError; a `Half` / `char` / `decimal` (NumPy scalars) or any array is cast (`np.float16(300)` on int8 is 44).
+- **The default is materialized on first read** (`DefaultFill`, `_check_fill_value(None)`) at the DEFAULT's own dtype:
+  int64 999999 for every signed integer dtype, uint64 for unsigned (char too), float64 1e20 for every float (decimal
+  too), complex128, bool. So `fill_value` of int8 data is a `long`, the repr prints `fill_value=np.int64(999999)`, and
+  `filled()` casts it under `same_kind` (63 in int8). The repr reads the getter, so printing materializes too.
+- **The setter writes INTO a stored array** (`_fill_value[()] = target`, unsafe): `fill_value = 5` on a fresh int8 array
+  reads back `(sbyte)5`, after a read of the default `5L`; `fill_value = null` after `fill_value = 5` writes 999999 into
+  the int8 fill (63). An array with dimensions into a stored 0-d fill is NumPy's `ValueError: setting an array element
+  with a sequence.` (complex: `only 0-dimensional arrays can be converted to Python scalars`).
+- **Inheritance**: `_update_from` (the `_arraymethod` family, views, the masked ufuncs, the operators) SHARES the stored
+  object, so once a fill was set or read a set on either array reaches both (`x.copy()` included); `__array_finalize__`
+  (constructors, `astype`, `view`, `byteswap`, `argpartition`, `masked_where`, the `*_like` functions) stores a converted
+  COPY — `astype(int64)` of a float64 array whose default 1e20 was READ gives `long.MinValue` (MSVC's out-of-range cast),
+  of an unread one 999999. The masked singleton refuses both getter and setter (`AttributeError: attributes of masked are
+  not writeable`).
+- **Lifetime**: a NEW array's fill (StoreFill) is tracked by the ambient scope like its data and leaves with it
+  (`Yield`); a fill stored into an EXISTING array (the getter's default, the setter) is detached (`Own`).
+- **Divergence**: `filled()` whose stored fill cannot reach the data under `same_kind` (a fill of another kind shared with a
+  derived array: `ma.absolute(complex_with_fill).filled()`) is NumPy's OBJECT-array fallback; NumSharp raises
+  `NotSupportedException` (no object dtype).
+Neighbours fixed with it: `byteswap` / `argpartition` / `ma.cumsum` / `ma.cumprod` gave the result the SOURCE's mask
+(a mask write through the result reached the source; NumPy copies it) and `byteswap` / `argpartition` came back soft;
+`view(dtype)` of an array with a mask and another itemsize raises NumPy's text `cannot reshape array of size 4 into shape
+(16,)` (the house IncorrectShapeException, NumPy's ValueError; was NotSupportedException); the indexer parses a lone slice
+string once for the data and the mask (`x["1:"]` 2.84 → 1.77 µs; GetView rewrites its slice ARRAY, so the mask indexes a
+copy of it); `x + 1` on an int8 / uint8 / int16 / uint16 / bool masked array is numpy.ma's
+strong int64 (the literal reaches `operator +(NDMaskedArray, NDArray)` as a marked int32 0-d array, which
+`BareScalarStrongDtype` now reads as the Python int); the masked print renders float16 / float32 elements as the Python
+floats `astype(object)` makes of them (`1.732421875`, not `1.732`).
+
+Open: a 0-d result NumPy returns as a plain
 scalar stays a 0-d masked array; `np.nditer` over strings; `argwhere` / `flatnonzero` / `unravel_index` result layout (views in NumPy,
 `OpenBugs.IndexSearchLayout.cs`); an empty matrix's QR / SVD without the OpenBLAS backend.
 **Trap:** NumPy's ufunc dispatch cache makes some answers depend on call HISTORY (`np.prod(int8, dtype='U')` names no

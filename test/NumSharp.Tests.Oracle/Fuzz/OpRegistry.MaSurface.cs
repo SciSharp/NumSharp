@@ -146,13 +146,16 @@ namespace NumSharp.Tests.Fuzz
             }
         }
 
-        /// <summary>Dispatches a surface op whose result kind is <c>text</c>: a Python object NumPy returns, as the
-        /// normalized repr <c>gen_ma_surface_oracle.pyrepr</c> writes for NumPy's (see <see cref="MaRepr"/>).</summary>
+        /// <summary>Dispatches an op whose result kind is <c>text</c>. A surface op returns a Python object NumPy returns,
+        /// as the normalized repr <c>gen_ma_surface_oracle.pyrepr</c> writes for NumPy's (see <see cref="MaRepr"/>); any
+        /// other op (ma_fill's <c>ma.fill</c> script) runs through <see cref="ApplyMasked"/>, whose result is the text.</summary>
         /// <param name="op">The <c>ma.</c>-prefixed corpus op key.</param>
         /// <param name="p">The case params.</param>
         /// <param name="ops">The reconstructed masked operands.</param>
-        /// <returns>The repr text.</returns>
-        /// <exception cref="NotSupportedException">The op is not a text op, or the case's NumPy call has no C# form.</exception>
+        /// <returns>The repr text; for an op outside the surface tier, <see cref="ApplyMasked"/>'s string, or a rendering
+        ///     of a non-string result (<c>&lt;TypeName&gt; value</c>), or null for a null result.</returns>
+        /// <exception cref="NotSupportedException">Neither this dispatcher nor <see cref="ApplyMasked"/> knows the op, or
+        ///     the case's NumPy call has no C# form.</exception>
         internal static string ApplyMaskedText(string op, IReadOnlyDictionary<string, JsonElement> p, NDMaskedArray[] ops)
         {
             string name = op.StartsWith("ma.", StringComparison.Ordinal) ? op.Substring(3) : op;
@@ -229,7 +232,15 @@ namespace NumSharp.Tests.Fuzz
                     return "[" + string.Join(", ", parts) + "]";
                 }
                 default:
-                    throw new NotSupportedException($"ma text op '{op}' not registered in OpRegistry.ApplyMaskedText");
+                {
+                    // The other tier with a text result, ma_fill (its "ma.fill" script: a rendered fill-value
+                    // observation, or common_fill_value's "None"), runs through ApplyMasked and is compared verbatim. A
+                    // non-text result (an array where NumPy answered None) shows as its own rendering, so it fails the
+                    // comparison instead of matching by accident. An op neither dispatcher knows throws ApplyMasked's
+                    // NotSupportedException.
+                    object raw = ApplyMasked(op, p, ops);
+                    return raw as string ?? (raw is null ? null : $"<{raw.GetType().Name}> {raw}");
+                }
             }
         }
 

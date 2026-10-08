@@ -56,21 +56,26 @@ namespace NumSharp
         /// promotes a <c>nomask</c> array to a real mask on the first masking write).</summary>
         internal NDArray _mask;
 
-        /// <summary>The value substituted for masked elements by <see cref="filled(object)"/> when the caller
-        /// gives none; null means "use the dtype default" (<see cref="MaskedArrayModule.default_fill_value"/>).
-        /// NOT readonly: NumPy's <c>MaskedArray.fill_value</c> is settable, so <see cref="fill_value"/> and
-        /// <see cref="MaskedArrayModule.set_fill_value"/> mutate it in place on the SAME instance.</summary>
+        /// <summary>NumPy's <c>MaskedArray._fill_value</c>: the stored fill as an array (0-d, or N-d for NumPy's deprecated
+        /// non-scalar fill), or null for NumPy's None — no fill set or read yet, so <see cref="fill_value"/> will
+        /// materialize the default on its first read. NOT readonly: the getter materializes into it, and
+        /// <see cref="fill_value"/> / <see cref="MaskedArrayModule.set_fill_value"/> write it in place.</summary>
         /// <remarks>
-        ///     <b>What is stored.</b> A TEXT array stores NumPy's own representation, a 0-d <c>U</c>/<c>S</c> array whose
-        ///     WIDTH is part of the state: a fill set by the caller is converted to the data's dtype (<c>'hello'</c> on
-        ///     <c>&lt;U2</c> data is stored as <c>'he'</c>), while the default the getter MATERIALIZES on first read is
-        ///     stored at its own width (<c>np.array('N/A')</c>, a <c>&lt;U3</c>), and later writes go INTO the stored array
-        ///     (<c>_fill_value[()] = target</c>), truncating to that width. A numeric fill is the caller's value, stored
-        ///     unconverted (the module's documented simplification). Derived arrays share this object
-        ///     (<see cref="UpdateFrom"/>, NumPy's <c>_update_from</c>) or convert it to their dtype
-        ///     (<see cref="FinalizeFrom"/>, NumPy's <c>__array_finalize__</c>).
+        ///     <b>What is stored, for every dtype.</b> A fill the caller gives is converted to the DATA's dtype
+        ///     (<see cref="MaskedArrayModule.CheckFillValue"/>: <c>fill_value=5.7</c> on int8 is stored as an int8 5,
+        ///     <c>'hello'</c> on <c>&lt;U2</c> data as <c>'he'</c>), while the default the getter materializes has the
+        ///     DEFAULT's own dtype and width (<see cref="MaskedArrayModule.DefaultFill"/>: an int64 999999 for int8 data,
+        ///     <c>np.array('N/A')</c> at <c>&lt;U3</c>), and later writes go INTO the stored array (<c>_fill_value[()] =
+        ///     target</c>) at its dtype and width. Derived arrays SHARE this object (<see cref="UpdateFrom"/>, NumPy's
+        ///     <c>_update_from</c>: a set through either reaches both) or store a converted copy (<see cref="FinalizeFrom"/>,
+        ///     NumPy's <c>__array_finalize__</c>). Lifetime follows who stores it: the fill of an array being BUILT rides the
+        ///     ambient scope with the new data and mask (<see cref="MaskedArrayModule.StoreFill"/>; <see
+        ///     cref="MaskedArrayModule.Yield(NDScope, NDMaskedArray)"/> hands it back with a result, an intermediate's is
+        ///     reclaimed), while a fill stored into an EXISTING array (the getter's default, the setter's replacement) is
+        ///     detached (<see cref="MaskedArrayModule.Own"/>) and lives as long as the masked arrays referencing it. Until
+        ///     2026-10-08 a numeric fill was the caller's raw C# value, never converted and never materialized.
         /// </remarks>
-        internal object _fill_value;
+        internal NDArray _fill_value;
 
         /// <summary>Whether the mask is HARD (NumPy's <c>hardmask</c>): when true, a plain-value assignment
         /// (the indexer, <see cref="MaskedArrayModule.put"/>, <see cref="MaskedArrayModule.putmask"/>) does NOT
@@ -109,9 +114,12 @@ namespace NumSharp
         /// <param name="data">The data buffer (aliased, not copied). Must not be null.</param>
         /// <param name="mask">The boolean mask (True = masked), or null for no mask. When non-null it should
         /// already match <paramref name="data"/>'s shape; callers building it via broadcasting materialize it first.</param>
-        /// <param name="fill_value">Optional default fill value for <see cref="filled(object)"/>; null = dtype default.</param>
+        /// <param name="fill_value">The stored fill array (<see cref="_fill_value"/>) — already converted to
+        /// <paramref name="data"/>'s dtype (<see cref="MaskedArrayModule.StoreFill"/>; it stays in the ambient scope with
+        /// the new data and mask, so a scoped builder must yield it with the result), or a source's stored array this one
+        /// SHARES (NumPy's <c>_update_from</c>) — or null for NumPy's None (the getter materializes the default).</param>
         /// <exception cref="ArgumentNullException"><paramref name="data"/> is null.</exception>
-        internal NDMaskedArray(NDArray data, NDArray mask, object fill_value = null)
+        internal NDMaskedArray(NDArray data, NDArray mask, NDArray fill_value = null)
         {
             // Data is the one invariant that must always hold — every property and the printer dereference it.
             if (data is null)
@@ -137,13 +145,18 @@ namespace NumSharp
         /// <returns>This array, so the call chains onto its <c>new</c> expression.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
         /// <remarks>
-        ///     The attributes are COPIED, not linked. NumPy keeps them in each instance's own <c>__dict__</c>, so a
-        ///     later <see cref="harden_mask()"/>/<see cref="soften_mask()"/> or fill-value change on either array does
-        ///     not reach the other. Probed on NumPy 2.4.2: softening a slice leaves its parent hard, and hardening a
-        ///     parent leaves an earlier slice soft. NumPy's other <c>_update_from</c> attributes (<c>_sharedmask</c>,
-        ///     <c>_isfield</c>, <c>_baseclass</c>, <c>_optinfo</c>) have no NumSharp model and are not copied.
-        ///     Decide per construction site: NumPy does NOT run it for every derived array (its <see cref="real"/>/
-        ///     <see cref="imag"/>/<see cref="mT"/>/take/reductions come back soft with the default fill value).
+        ///     The hard-mask flag is COPIED: NumPy keeps it in each instance's own <c>__dict__</c>, so a later
+        ///     <see cref="harden_mask()"/>/<see cref="soften_mask()"/> on either array does not reach the other (probed on
+        ///     NumPy 2.4.2: softening a slice leaves its parent hard, hardening a parent leaves an earlier slice soft). The
+        ///     fill is LINKED: <c>_update_from</c> copies the REFERENCE of the stored 0-d array, and the setter writes INTO
+        ///     a stored array (<c>_fill_value[()] = target</c>), so once a fill was set or read, setting it on either array
+        ///     reaches the other (<c>x[1:].fill_value = 7</c> changes <c>x.fill_value</c>, also for <c>x.copy()</c>, the
+        ///     masked ufuncs and the operators — probed). With nothing stored yet each array materializes its own default.
+        ///     NumPy's other <c>_update_from</c> attributes (<c>_sharedmask</c>, <c>_isfield</c>, <c>_baseclass</c>,
+        ///     <c>_optinfo</c>) have no NumSharp model and are not copied. Decide per construction site: NumPy does NOT run
+        ///     it for every derived array (its <see cref="real"/>/<see cref="imag"/>/<see cref="mT"/>/take/reductions come
+        ///     back soft with the default fill value), and a new array or view OF a masked array runs
+        ///     <see cref="FinalizeFrom"/> instead (a converted copy of the fill).
         /// </remarks>
         internal NDMaskedArray UpdateFrom(NDMaskedArray source)
         {
@@ -157,22 +170,27 @@ namespace NumSharp
         /// <summary>
         ///     NumPy's <c>MaskedArray.__array_finalize__(obj)</c> for a masked <paramref name="source"/>: the
         ///     <see cref="UpdateFrom"/> copy followed by the fill check <c>_check_fill_value(self._fill_value,
-        ///     self.dtype)</c>, which converts an inherited TEXT fill to THIS array's dtype. Use it where NumPy builds the
-        ///     result as a new array or view OF a masked array (<c>np.array(a, copy=..., subok=True)</c> in
-        ///     <c>masked_where</c>, <c>a.view(MaskedArray)</c> at the end of <c>ma.unique</c>); use <see cref="UpdateFrom"/>
-        ///     where NumPy calls <c>_update_from</c> on a view of the plain data (the <c>_arraymethod</c> family: ravel,
-        ///     reshape, copy, ...), which shares the fill object unconverted.
+        ///     self.dtype)</c>, which stores a CONVERTED COPY of an inherited fill in THIS array's dtype (never the shared
+        ///     object). Use it where NumPy builds the result as a new array or view OF a masked array
+        ///     (<c>np.array(a, copy=..., subok=True)</c> in <c>masked_where</c>, <see cref="astype"/>, <see cref="byteswap"/>,
+        ///     <see cref="argpartition"/>, <c>a.view(MaskedArray)</c> at the end of <c>ma.unique</c>); use
+        ///     <see cref="UpdateFrom"/> where NumPy calls <c>_update_from</c> on a view of the plain data (the
+        ///     <c>_arraymethod</c> family: ravel, reshape, copy, ...), which shares the fill object unconverted.
         /// </summary>
         /// <param name="source">The masked array this one derives from.</param>
         /// <returns>This array, so the call chains onto its <c>new</c> expression.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
         /// <exception cref="TypeError">The inherited text fill cannot be encoded / decoded into this array's string class
         ///     (see <see cref="MaskedArrayModule.CheckFillValue"/>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">An inherited text fill for a numeric array, or a
+        ///     numeric one for a text array: the conversion computes on text.</exception>
         /// <remarks>
-        ///     The two only differ for a fill whose width is not this array's: chiefly the default NumPy materializes at
-        ///     its own width (<c>'N/A'</c>), which this conversion truncates (<c>'N'</c> for <c>&lt;U1</c>). So
-        ///     <c>ma.masked_inside</c> of a <c>&lt;U1</c> array (whose <c>filled()</c> read the source's fill and so
-        ///     materialized it) comes back with the fill <c>'N'</c>, as NumPy's does. A numeric fill passes unconverted.
+        ///     The conversion is an ARRAY cast (unsafe), so a numeric fill never raises: the default 1e20 a float64 source
+        ///     materialized becomes <c>long.MinValue</c> in an int64 result and 0 in an int8 one (MSVC's out-of-range casts,
+        ///     as in NumPy), 7.5 becomes 7. A text fill follows a width change: the default NumPy materializes at its own
+        ///     width (<c>'N/A'</c>) is truncated (<c>'N'</c> for <c>&lt;U1</c>), so <c>ma.masked_inside</c> of a
+        ///     <c>&lt;U1</c> array (whose <c>filled()</c> read the source's fill and so materialized it) comes back with the
+        ///     fill <c>'N'</c>, as NumPy's does.
         /// </remarks>
         internal NDMaskedArray FinalizeFrom(NDMaskedArray source)
         {
@@ -232,17 +250,28 @@ namespace NumSharp
         ///     or no slot masked) the result is a VIEW of the data, as NumPy's <c>return self._data</c> is.
         /// </summary>
         /// <param name="fill_value">The value written at masked positions; null uses this array's
-        /// <see cref="fill_value"/> (whose getter materializes a text default, as NumPy's does). An explicit value first
-        /// goes through NumPy's <c>_check_fill_value</c> (<see cref="MaskedArrayModule.CheckFillValue"/>), then is cast to
-        /// the data dtype (unsafe cast, like NumPy). A text fill is truncated to the data's width (<c>'N/A'</c> into
-        /// <c>&lt;U2</c> is <c>'N/'</c>).</param>
+        /// <see cref="fill_value"/> (whose getter materializes the default, as NumPy's does: for int8 data the int64
+        /// 999999, which the copy casts to 63). An explicit value first goes through NumPy's <c>_check_fill_value</c>
+        /// (<see cref="MaskedArrayModule.CheckFillValue"/>: converted to the data dtype, <c>300</c> on int8 refused, 2.5 on
+        /// int8 stored as 2). A text fill is truncated to the data's width (<c>'N/A'</c> into <c>&lt;U2</c> is
+        /// <c>'N/'</c>).</param>
         /// <returns>A K-order copy of the data with the masked slots filled; or, when no slot is masked, a new VIEW of the
         ///     data (writes through it reach this array; disposing it releases only the view's own reference).</returns>
-        /// <exception cref="TypeError">A <see cref="string"/> <paramref name="fill_value"/> for a numeric array, or a text
-        ///     fill the data's class cannot encode or decode (see <see cref="MaskedArrayModule.CheckFillValue"/>).</exception>
+        /// <exception cref="TypeError">See <see cref="MaskedArrayModule.CheckFillValue"/>: a <see cref="string"/>
+        ///     <paramref name="fill_value"/> for a numeric array, a number the data dtype cannot hold (<c>Cannot convert
+        ///     fill_value 300 to dtype int8</c>), a complex for a real dtype, or a text fill the data's class cannot encode
+        ///     or decode.</exception>
+        /// <exception cref="AttributeError">No <paramref name="fill_value"/> on the <see cref="MaskedArrayModule.masked"/>
+        ///     singleton: its getter cannot materialize a default (NumPy's <c>attributes of masked are not
+        ///     writeable</c>).</exception>
         /// <exception cref="StringComputationNotSupportedException">A masked slot of a text array must receive a number
         ///     formatted as text, or a text fill must be parsed as a number for a numeric array: the next phase of the
         ///     string support.</exception>
+        /// <exception cref="NotSupportedException">The stored fill cannot reach the data under NumPy's <c>same_kind</c>
+        ///     rule — a fill of another kind SHARED with a derived array (an int64 fill on the bool result of
+        ///     <c>ma.logical_not</c> / <c>ma.equal</c>, a complex fill on the float result of <c>ma.absolute</c>): NumPy's
+        ///     <c>np.copyto</c> raises and NumPy then returns an OBJECT array (<c>np.choose</c> over the data as objects),
+        ///     a dtype NumSharp lacks.</exception>
         /// <remarks>
         ///     NumPy's order: <c>if m is nomask: return self._data</c>; resolve the fill (<c>self.fill_value</c> or
         ///     <c>_check_fill_value(fill_value, self.dtype)</c>); <c>elif not m.any(): return self._data</c>; else
@@ -267,18 +296,39 @@ namespace NumSharp
                                        && MaskedArrayModule.FormatsAsText(fill_value) && !np.any(_mask))
                 return _data.view();
 
-            // `fill_value = self.fill_value` when omitted, else `_check_fill_value(fill_value, self.dtype)`.
-            var fv = fill_value is null ? this.fill_value : MaskedArrayModule.CheckFillValue(fill_value, _data.dtype);
+            // `fill_value = self.fill_value` when omitted (the getter materializes the default: the STORED array is the
+            // copy's source, of its own dtype), else `_check_fill_value(fill_value, self.dtype)` (a new array of the data
+            // dtype, reclaimed by the scope).
+            NDArray fv;
+            if (fill_value is null)
+            {
+                _ = this.fill_value;
+                fv = _fill_value;
+            }
+            else
+                fv = MaskedArrayModule.CheckFillValue(fill_value, _data.dtype);
 
             // `elif not m.any(): return self._data`.
             if (!np.any(_mask))
                 return _data.view();
 
             // `result = self._data.copy('K'); np.copyto(result, fill_value, where=m)`: copyto broadcasts the fill into every
-            // masked slot; unsafe cast because a generic fill value (e.g. 1e20 into an int array default) must land in the
-            // data dtype exactly as NumPy coerces it. An array fill (NumPy's deprecated non-scalar fill) is broadcast as is.
+            // masked slot under its default rule, 'same_kind' — the default of a narrower dtype (int64 999999 into int8: 63)
+            // casts, a deprecated array fill broadcasts as is.
             var result = _data.copy('K');
-            np.copyto(result, fv as NDArray ?? NDArray.Scalar(fv), casting: "unsafe", where: _mask);
+            try
+            {
+                np.copyto(result, fv, casting: "same_kind", where: _mask);
+            }
+            catch (InvalidCastException e)
+            {
+                // `except (TypeError, AttributeError): fill_value = narray(fill_value, dtype=object); d = result.astype(object);
+                // result = np.choose(m, (d, fill_value))` — an object array NumSharp cannot build.
+                throw new NotSupportedException(
+                    $"filled(): the fill value of dtype {fv.dtype} cannot be cast to the data dtype {_data.dtype} under the " +
+                    "'same_kind' rule, so NumPy returns an object array (np.choose over the data as objects); NumSharp has " +
+                    "no object dtype. Pass a fill_value of the data's kind.", e);
+            }
             return result;
         }
 
@@ -447,29 +497,35 @@ namespace NumSharp
             tc == NPTypeCode.Complex || tc == NPTypeCode.Boolean;
 
         /// <summary>
-        ///     Renders the <c>fill_value=</c> value exactly as NumPy 2.4.2's repr: the plain scalar string when the
-        ///     fill's effective dtype matches the data dtype, else the NumPy-2.x <c>np.&lt;dtype&gt;(value)</c>
-        ///     wrapper. For the DEFAULT fill the effective dtype follows NumPy's <c>_check_fill_value</c> promotion
-        ///     (signed→int64, unsigned→uint64, float→float64, complex→complex128, bool→bool), which only differs
-        ///     from the data dtype for a non-implied data dtype (int8/16/32, uint8/16/32, float16/32) — precisely
-        ///     the arrays that also show a <c>dtype=</c> line. A caller-SET custom fill is rendered against the data
-        ///     dtype (the plain form), matching NumPy whenever the value fits that dtype. A TEXT array prints Python's repr
-        ///     of its fill (<c>fill_value='N/A'</c>, <c>fill_value=b'N/A'</c>), NumPy's string branch.
+        ///     Renders the <c>fill_value=</c> value exactly as NumPy 2.4.2's repr, from the STORED fill array's dtype: a text
+        ///     fill of the data's string class prints Python's repr of its element (<c>fill_value='N/A'</c>,
+        ///     <c>fill_value=b'N/A'</c>); a fill whose dtype IS the data's prints the scalar's str (<c>fill_value=5</c>,
+        ///     <c>fill_value=1e+20</c>); any other prints the NumPy scalar's repr (<c>fill_value=np.int64(999999)</c> for the
+        ///     default of int8 data, <c>np.float64(1e+20)</c> for float32 data, <c>np.True_</c>).
         /// </summary>
         /// <returns>The fill-value display string.</returns>
         /// <exception cref="ValueError">A text array whose fill value is an array of more or fewer than one element
         ///     (NumPy's deprecated non-scalar fill): NumPy's repr calls <c>.item()</c> on it and raises <c>can only convert
         ///     an array of size 1 to a Python scalar</c>.</exception>
+        /// <remarks>
+        ///     <c>if self._fill_value is None: self.fill_value</c> — the repr MATERIALIZES the default through the getter, for
+        ///     every dtype, so printing an array changes what a later <see cref="astype"/> converts (see
+        ///     <see cref="fill_value"/>), as in NumPy. The default's dtype is the DEFAULT's own (int64 / uint64 / float64 /
+        ///     complex128 / bool, <see cref="MaskedArrayModule.DefaultFill"/>), which differs from the data's exactly for the
+        ///     narrower dtypes — the arrays whose repr also shows a <c>dtype=</c> line. A non-scalar (deprecated) fill prints
+        ///     as its array's str or repr.
+        /// </remarks>
         private string FillValueRepr()
         {
-            NPTypeCode dtc = _data.typecode;
-            // `if self._fill_value is None: self.fill_value  # initialize fill_value` — NumPy's repr MATERIALIZES a text
-            // default through the getter (a numeric default is not materialized; see the fill_value getter).
-            object fv = dtc == NPTypeCode.String ? fill_value : _fill_value ?? np.ma.default_fill_value(_data.dtype);
-            if (dtc == NPTypeCode.String)
+            // `if self._fill_value is None: self.fill_value  # initialize fill_value`.
+            object fv = fill_value;
+            NDArray stored = _fill_value;
+            DType fdt = stored.dtype;
+            DType ddt = _data.dtype;
+            // `if self._fill_value.dtype.kind in ("S", "U") and self.dtype.kind == self._fill_value.dtype.kind:
+            //  fill_repr = repr(self.fill_value.item())` — the default 'N/A' is <U3 whatever the data's width.
+            if (stored.typecode == NPTypeCode.String && _data.typecode == NPTypeCode.String && fdt.kind == ddt.kind)
             {
-                // `repr(self.fill_value.item())` when the fill's kind is the data's (S with S, U with U), which every text
-                // fill is after _check_fill_value: Python's repr of the str ('N/A', "q'") or of the bytes (b'N/A').
                 if (fv is NDArray arrayFill)
                 {
                     if (arrayFill.size != 1)
@@ -478,43 +534,37 @@ namespace NumSharp
                 }
                 return fv is byte[] bytes ? PyRepr.Bytes(bytes) : PyRepr.Str((string)fv);
             }
-            // Effective fill dtype: a default fill promotes by kind; a user-set fill is shown against the data dtype.
-            NPTypeCode ftc = _fill_value is not null ? dtc : CanonicalFillTypecode(dtc);
-            string valStr = ArrayFormatter.ScalarStr(fv, ftc);
-            if (ftc == dtc)
-                return valStr;
-            // Non-matching promoted dtype ⇒ NumPy shows np.<name>(value); a complex value's str carries outer
-            // parens that the wrapped form drops (np.complex128(1e+20+0j), not np.complex128((1e+20+0j))).
-            string inner = ftc == NPTypeCode.Complex && valStr.Length >= 2 && valStr[0] == '(' && valStr[^1] == ')'
-                ? valStr.Substring(1, valStr.Length - 2)
-                : valStr;
-            return "np." + ftc.AsNumpyDtypeName() + "(" + inner + ")";
+            // `elif self._fill_value.dtype == self.dtype: fill_repr = str(self.fill_value)` — the scalar's str, or the str of
+            // a deprecated array fill.
+            if (fdt.Equals(ddt))
+                return fv is NDArray sameDtypeArray ? sameDtypeArray.ToString() : ArrayFormatter.ScalarStr(fv, stored.typecode);
+            // `else: fill_repr = repr(self.fill_value)`.
+            return fv is NDArray otherDtypeArray ? otherDtypeArray.ToString(true) : NumPyScalarRepr(fv, stored.typecode);
         }
 
-        /// <summary>The dtype NumPy's <c>default_fill_value</c> scalar carries per data kind (its repr dtype):
-        /// signed integers → int64, unsigned integers → uint64, any float → float64, complex → complex128, bool →
-        /// bool. NumSharp-only Char/Decimal (no NumPy analog) map to themselves so their fill shows the plain form.</summary>
-        /// <param name="tc">The data typecode.</param>
-        /// <returns>The fill scalar's effective typecode for repr.</returns>
-        private static NPTypeCode CanonicalFillTypecode(NPTypeCode tc)
+        /// <summary>
+        ///     Python's <c>repr</c> of a NumPy scalar under NumPy 2.x's printing: <c>np.&lt;dtype&gt;(&lt;str&gt;)</c>
+        ///     (<c>np.int64(999999)</c>, <c>np.float64(1e+20)</c>, <c>np.complex128(1e+20+0j)</c> — the complex str's outer
+        ///     parentheses dropped), <c>np.True_</c> / <c>np.False_</c> for bool, <c>np.str_('N/A')</c> /
+        ///     <c>np.bytes_(b'N/A')</c> for text.
+        /// </summary>
+        /// <param name="value">The boxed scalar (the stored fill's element).</param>
+        /// <param name="tc">The scalar's dtype.</param>
+        /// <returns>The repr text.</returns>
+        private static string NumPyScalarRepr(object value, NPTypeCode tc)
         {
             switch (tc)
             {
-                case NPTypeCode.Boolean: return NPTypeCode.Boolean;
-                case NPTypeCode.SByte:
-                case NPTypeCode.Int16:
-                case NPTypeCode.Int32:
-                case NPTypeCode.Int64: return NPTypeCode.Int64;
-                case NPTypeCode.Byte:
-                case NPTypeCode.UInt16:
-                case NPTypeCode.UInt32:
-                case NPTypeCode.UInt64: return NPTypeCode.UInt64;
-                case NPTypeCode.Half:
-                case NPTypeCode.Single:
-                case NPTypeCode.Double: return NPTypeCode.Double;
-                case NPTypeCode.Complex: return NPTypeCode.Complex;
-                default: return tc; // Char/Decimal — NumSharp extensions with no NumPy fill-dtype promotion
+                case NPTypeCode.Boolean:
+                    return Convert.ToBoolean(value) ? "np.True_" : "np.False_";
+                case NPTypeCode.String:
+                    return value is byte[] bytes ? "np.bytes_(" + PyRepr.Bytes(bytes) + ")" : "np.str_(" + PyRepr.Str((string)value) + ")";
             }
+            string str = ArrayFormatter.ScalarStr(value, tc);
+            // np.complex128's repr wraps the bare form: np.complex128(1e+20+0j), not np.complex128((1e+20+0j)).
+            if (tc == NPTypeCode.Complex && str.Length >= 2 && str[0] == '(' && str[^1] == ')')
+                str = str.Substring(1, str.Length - 2);
+            return "np." + tc.AsNumpyDtypeName() + "(" + str + ")";
         }
 
         /// <summary>
@@ -590,11 +640,15 @@ namespace NumSharp
         ///     a text fill value): the next phase of the string support.</exception>
         /// <remarks>
         ///     NumPy's <c>__array_finalize__</c> re-checks a stored fill against the new dtype
-        ///     (<c>_check_fill_value(self._fill_value, self.dtype)</c>), so a text fill follows a width change: a
-        ///     <c>'qrs'</c> fill becomes <c>'q'</c> after <c>astype('U1')</c> and <c>b'qr'</c> after <c>astype('S2')</c>.
-        ///     The data is cast first, so its own refusal wins. A numeric fill of a numeric cast is kept as given (the
-        ///     module's unconverted numeric fills). The result's mask is a COPY of this array's and its hard-mask flag is
-        ///     this array's; with <paramref name="copy"/> false and the same dtype the array itself is returned.
+        ///     (<c>_check_fill_value(self._fill_value, self.dtype)</c>): the result stores a converted COPY (an array cast,
+        ///     unsafe, never raising for numbers). A fill of 7.5 reads back <see cref="long"/> 7 after <c>astype(int64)</c>;
+        ///     a text fill follows a width change (<c>'qrs'</c> becomes <c>'q'</c> after <c>astype('U1')</c>, <c>b'qr'</c>
+        ///     after <c>astype('S2')</c>). A fill that was never set or read is not stored, so the result reads ITS OWN
+        ///     default — but a default that was READ is stored and converted: the float64 default 1e20 becomes
+        ///     <c>long.MinValue</c> after <c>astype(int64)</c> (MSVC's out-of-range float-to-int cast) and 0 after
+        ///     <c>astype(int8)</c>, exactly as in NumPy. The data is cast first, so its own refusal wins. The result's mask
+        ///     is a COPY of this array's and its hard-mask flag is this array's; with <paramref name="copy"/> false and the
+        ///     same dtype the array itself is returned.
         /// </remarks>
         public NDMaskedArray astype(DType dtype, bool copy = true)
         {
@@ -602,9 +656,10 @@ namespace NumSharp
             // ndarray.astype(copy=False) of the same dtype returns the array ITSELF.
             if (ReferenceEquals(data, _data))
                 return this;
-            var fill = _fill_value is not null && (data.typecode == NPTypeCode.String || _data.typecode == NPTypeCode.String)
-                ? MaskedArrayModule.StoreFill(_fill_value, data.dtype)
-                : _fill_value;
+            // `__array_finalize__`: `_check_fill_value(self._fill_value, self.dtype)` converts a stored fill to the new dtype
+            // (a copy: 7.5 becomes int64 7, the read default 1e20 becomes long.MinValue, 'qrs' becomes 'q' in <U1); an
+            // array with nothing stored passes None on, so the result materializes ITS default when read.
+            var fill = _fill_value is null ? null : MaskedArrayModule.StoreFill(_fill_value, data.dtype);
             // `__array_finalize__` over a NEW buffer: the mask is copied (`_mask.astype(...)`, so a masked write through
             // the result never reaches this array) and the hard-mask flag carries over (`_update_from(obj)`).
             return new NDMaskedArray(data, _mask?.copy(), fill) { _hardmask = _hardmask };
@@ -756,81 +811,122 @@ namespace NumSharp
         public NDMaskedArray anom(int? axis = null, DType dtype = null) => np.ma.anom(this, axis, dtype);
 
         // ── fill_value — the sentinel filled() substitutes for masked slots. Settable (NumPy parity):
-        //    the getter resolves the stored override or the dtype default; the setter mutates THIS instance
-        //    (so `set_fill_value`/`common_fill_value` observe the change), it does NOT return a new array. ──
+        //    the getter materializes and returns the stored 0-d array's element; the setter converts the value and writes
+        //    it into the stored array (so every array sharing that fill sees it), it does NOT return a new array. ──
         /// <summary>
         ///     The value <see cref="filled()"/> substitutes for masked elements (NumPy's settable
-        ///     <c>MaskedArray.fill_value</c>). Reading it resolves the stored override, else the dtype default
-        ///     (see <see cref="MaskedArrayModule.default_fill_value"/>) — so it is never null. Writing it stores
-        ///     the override on THIS instance in place (as NumPy mutates <c>a.fill_value = v</c>), after NumPy's
-        ///     <c>_check_fill_value</c> (<see cref="MaskedArrayModule.CheckFillValue"/>); a null restores the dtype default.
+        ///     <c>MaskedArray.fill_value</c>): the element of the stored fill array, NumPy's <c>self._fill_value[()]</c> — a
+        ///     boxed scalar of the STORED array's dtype (NumPy's NumPy scalar: an <see cref="sbyte"/> for an int8 fill, a
+        ///     <see cref="long"/> for the int64 default), or the array itself for NumPy's deprecated non-scalar fill. Never
+        ///     null.
         /// </summary>
         /// <exception cref="TypeError">Set: a <see cref="string"/> for a numeric array (<c>Cannot set fill value of string
-        ///     with array of dtype float64</c>), or text the array's class cannot encode or decode.</exception>
+        ///     with array of dtype float64</c>), a C# number the dtype cannot hold (<c>Cannot convert fill_value 300 to dtype
+        ///     int8</c>), a complex for a real dtype (Python's own <c>int()</c> / <c>float()</c> text), or text the array's
+        ///     class cannot encode or decode.</exception>
         /// <exception cref="StringComputationNotSupportedException">Set: a number for a text array, or text for a numeric
         ///     array that NumPy would parse (the next phase of the string support).</exception>
+        /// <exception cref="ValueError">Set: an array with dimensions written into a stored 0-d fill (NumPy's element
+        ///     assignment: <c>setting an array element with a sequence.</c>, even for one element; a bool fill takes a
+        ///     one-element array), or into a stored N-d fill it does not broadcast to.</exception>
+        /// <exception cref="AttributeError">Get or set on the <see cref="MaskedArrayModule.masked"/> singleton: NumPy's
+        ///     <c>attributes of masked are not writeable</c> (its getter's materialization is an attribute write).</exception>
         /// <remarks>
         ///     NumPy's method forms <c>get_fill_value()</c>/<c>set_fill_value()</c> are NOT offered as
         ///     instance methods: a C# property named <c>fill_value</c> already reserves those exact accessor names,
         ///     so use the property (<c>a.fill_value</c> / <c>a.fill_value = v</c>) or the module-level
         ///     <see cref="MaskedArrayModule.set_fill_value(object,object)"/>.
         ///     <para>
-        ///     <b>Text fills keep NumPy's state.</b> The getter of a text array with no fill yet MATERIALIZES the default, as
-        ///     NumPy's <c>self._fill_value = _check_fill_value(None, self.dtype)</c> does: the stored default is
-        ///     <c>np.array('N/A')</c> at its own width (<c>&lt;U3</c>), so the getter still reads <c>'N/A'</c> for
-        ///     <c>&lt;U2</c> data, while an array later DERIVED by conversion reads it truncated (<c>'N/'</c>; see
-        ///     <see cref="FinalizeFrom"/>). A set fill is converted to the data dtype (<c>'he'</c> after setting
-        ///     <c>'hello'</c> on <c>&lt;U2</c> data) and written INTO a stored fill (<c>_fill_value[()] = target</c>), so it
-        ///     takes the stored width: setting <c>'hello'</c> on <c>&lt;U5</c> data whose default was materialized reads back
-        ///     <c>'hel'</c>. Setting null writes the default <c>'N/A'</c> into a stored fill at that fill's width
-        ///     (<c>'N/'</c> after a fill set on <c>&lt;U2</c> data, <c>'N/A'</c> over the materialized default).
+        ///     <b>The state is NumPy's, for every dtype, and it depends on call history.</b> An array whose fill was never
+        ///     set or read stores nothing; the getter then MATERIALIZES the default (<c>self._fill_value =
+        ///     _check_fill_value(None, self.dtype)</c>, <see cref="MaskedArrayModule.DefaultFill"/>), which has the DEFAULT's
+        ///     own dtype: int64 999999 for an int8 array, uint64 for an unsigned one, float64 1e20 for float16 / float32,
+        ///     <c>np.array('N/A')</c> (<c>&lt;U3</c>) for text. A set value is converted to the DATA's dtype first
+        ///     (<see cref="MaskedArrayModule.CheckFillValue"/>: <c>5.7</c> on int8 is 5, <c>300</c> raises) and then stored
+        ///     when nothing is stored, or written INTO the stored array (<c>_fill_value[()] = target</c>, an unsafe cast at
+        ///     the stored dtype and width). So <c>x.fill_value = 5</c> on a fresh int8 array reads back <see cref="sbyte"/>
+        ///     5, but after a read of the default it reads back <see cref="long"/> 5; setting null after <c>fill_value = 5</c>
+        ///     writes 999999 into the int8 fill (63); text set into a materialized <c>'N/A'</c> is cut to three characters.
+        ///     The stored array may be SHARED with arrays derived from this one (views, the <c>_arraymethod</c> family, the
+        ///     masked ufuncs — NumPy's <c>_update_from</c>), and a set reaches all of them, as NumPy's does; constructors,
+        ///     <see cref="astype"/>, <see cref="view(DType,object)"/> and copies store a converted copy instead
+        ///     (<see cref="FinalizeFrom"/>, NumPy's <c>__array_finalize__</c>). Reading the getter (or printing the array,
+        ///     whose repr reads it) therefore changes what a later <see cref="astype"/> converts: the default 1e20 of a
+        ///     float64 array becomes <c>long.MinValue</c> in int64 once it was read, while an unread array's int64 copy
+        ///     starts from its own default 999999.
         ///     </para>
         /// </remarks>
         public object fill_value
         {
             get
             {
-                // `if self._fill_value is None: self._fill_value = _check_fill_value(None, self.dtype)` — for a text dtype
-                // that is `np.array('N/A')` / `np.array(b'N/A')` at the DEFAULT's own width, kept as the stored state. A
-                // numeric default is not materialized: the module stores numeric fills unconverted, so a stored default
-                // would change nothing NumSharp models.
-                if (_fill_value is null && _data.typecode == NPTypeCode.String)
-                    _fill_value = MaskedArrayModule.Own(NDArray.Scalar(np.ma.default_fill_value(_data.dtype)));
+                // `if self._fill_value is None: self._fill_value = _check_fill_value(None, self.dtype)` — the default at its
+                // OWN dtype and width, kept as the stored state.
+                if (_fill_value is null)
+                {
+                    // The masked singleton stores nothing, and NumPy's MaskedConstant.__setattr__ refuses the getter's
+                    // write: reading np.ma.masked.fill_value raises (so does masked.filled()), and no array derived from the
+                    // singleton can come to share a materialized fill of the process-wide object.
+                    if (this is NDMaskedConstant)
+                        throw new AttributeError("attributes of masked are not writeable");
+                    _fill_value = MaskedArrayModule.Own(MaskedArrayModule.DefaultFill(_data.dtype));
+                }
                 // `return self._fill_value[()]`: the element of a 0-d fill, an N-d (deprecated) fill as itself.
-                return MaskedArrayModule.FillScalar(_fill_value) ?? np.ma.default_fill_value(_data.dtype);
+                return MaskedArrayModule.FillScalar(_fill_value);
             }
-            set => _fill_value = ResolveFillAssignment(value);
+            set
+            {
+                // MaskedConstant.__setattr__: "attributes of masked are not writeable" (before the value is converted).
+                if (this is NDMaskedConstant)
+                    throw new AttributeError("attributes of masked are not writeable");
+                _fill_value = ResolveFillAssignment(value);
+            }
         }
 
         /// <summary>
-        ///     The value a <see cref="fill_value"/> assignment stores (NumPy's <c>fill_value.setter</c>):
+        ///     The array a <see cref="fill_value"/> assignment leaves stored (NumPy's <c>fill_value.setter</c>):
         ///     <c>target = _check_fill_value(value, self.dtype)</c>, then the target itself when no fill is stored, else the
-        ///     target written INTO the stored text fill (<c>_fill_value[()] = target</c>, at the stored width).
+        ///     stored array after <c>_fill_value[()] = target</c>.
         /// </summary>
-        /// <param name="value">The assigned fill, or null to restore the default.</param>
-        /// <returns>The object to store in <see cref="_fill_value"/>.</returns>
-        /// <exception cref="TypeError">See <see cref="MaskedArrayModule.CheckFillValue"/>.</exception>
+        /// <param name="value">The assigned fill, or null for NumPy's None (the default, <c>_check_fill_value(None, dtype)</c>,
+        ///     at the default's own dtype and width).</param>
+        /// <returns>The array to store in <see cref="_fill_value"/>: the converted target (detached from every scope) or the
+        ///     existing stored array, written in place.</returns>
+        /// <exception cref="TypeError">See <see cref="MaskedArrayModule.CheckFillValue"/>; also a complex array with
+        ///     dimensions written into a stored 0-d complex fill (<c>only 0-dimensional arrays can be converted to Python
+        ///     scalars</c>).</exception>
         /// <exception cref="StringComputationNotSupportedException">See <see cref="MaskedArrayModule.CheckFillValue"/>.</exception>
-        internal object ResolveFillAssignment(object value)
+        /// <exception cref="ValueError">An array with dimensions written into a stored 0-d fill (<c>setting an array element
+        ///     with a sequence.</c>; text: without the period), or one a stored N-d fill cannot broadcast.</exception>
+        internal NDArray ResolveFillAssignment(object value)
         {
-            bool text = _data.typecode == NPTypeCode.String;
-            // A numeric array keeps the module's numeric model: a value is stored unconverted, null clears to the default.
-            if (!text)
-                return value is null ? null : MaskedArrayModule.StoreFill(value, _data.dtype);
-            // `target = _check_fill_value(value, self.dtype)`: a value converted to the data dtype; for null, the default at
-            // its OWN width (`np.array('N/A')`, not cut to the data's).
-            object target = value is null
-                ? MaskedArrayModule.Own(NDArray.Scalar(np.ma.default_fill_value(_data.dtype)))
-                : MaskedArrayModule.StoreFill(value, _data.dtype);
-            // `if _fill_value is None: self._fill_value = target` — also over a stored value that is not NumPy's array
-            // representation (a raw string an internal constructor passed).
+            // `target = _check_fill_value(value, self.dtype)`: a value converted to the data dtype; for None, the default at
+            // its OWN dtype (int64 999999 for int8 data, `np.array('N/A')` at <U3 for <U2 data).
+            NDArray target = value is null
+                ? MaskedArrayModule.DefaultFill(_data.dtype)
+                : MaskedArrayModule.CheckFillValue(value, _data.dtype);
+            // `if _fill_value is None: self._fill_value = target` — the target becomes the stored state (ours: both branches
+            // above return a fresh array).
             if (_fill_value is not NDArray stored)
-                return target;
-            // `else: _fill_value[()] = target` — written into the stored array, so its width (not the data's) applies, and
-            // every array sharing that fill object sees the change, as NumPy's do. The target is ours (converted or
-            // created above); it only feeds the write.
-            using (var t = target as NDArray ?? NDArray.Scalar(target))
-                np.copyto(stored, t, casting: "unsafe");
+                return MaskedArrayModule.Own(target);
+            // `else: _fill_value[()] = target` — written INTO the stored array: its dtype and width (not the data's) apply,
+            // the cast is unsafe (NumPy's array assignment), and every array sharing the stored object sees the change, as
+            // NumPy's do. The target only feeds the write.
+            using (target)
+            {
+                // On a 0-d fill `[()] = ` is an ELEMENT assignment (PyArray_Pack of the target), which refuses an array with
+                // dimensions, even of size 1: bool takes a size-1 one by its truth, complex raises complex()'s TypeError and
+                // text a period-less text (probed 2.4.2). A stored N-d fill (the deprecated kind) is a broadcast copy instead.
+                if (stored.ndim == 0 && target.ndim > 0 && !(stored.typecode == NPTypeCode.Boolean && target.size == 1))
+                {
+                    if (stored.typecode == NPTypeCode.Complex)
+                        throw new TypeError("only 0-dimensional arrays can be converted to Python scalars");
+                    throw new ValueError(stored.typecode == NPTypeCode.String
+                        ? "setting an array element with a sequence"
+                        : "setting an array element with a sequence.");
+                }
+                np.copyto(stored, target, casting: "unsafe");
+            }
             return stored;
         }
 
@@ -1042,22 +1138,30 @@ namespace NumSharp
             => _data.searchsorted(v, side, sorter);
 
         /// <summary>
-        ///     Returns the array with each data element's bytes reversed (NumPy's <c>MaskedArray.byteswap</c>),
-        ///     carrying the mask through UNCHANGED (a byteswap is a pure data reinterpretation). With
-        ///     <paramref name="inplace"/> the existing data buffer is swapped and THIS instance is returned;
-        ///     otherwise a fresh masked array over swapped data is returned.
+        ///     Returns the array with each data element's bytes reversed (NumPy's <c>MaskedArray.byteswap</c>, which is
+        ///     <c>ndarray.byteswap</c>: the mask's VALUES ride through unchanged, a byteswap being a pure data
+        ///     reinterpretation). With <paramref name="inplace"/> the existing data buffer is swapped and THIS instance is
+        ///     returned; otherwise a fresh masked array over swapped data is returned.
         /// </summary>
         /// <param name="inplace">Swap the data buffer in place and return this instance (true), or return a new
         /// masked array over a swapped copy (false, the default).</param>
-        /// <returns>This instance when <paramref name="inplace"/>, else a new <see cref="NDMaskedArray"/> whose data
-        /// is byteswapped and whose mask/fill value are carried over (the result starts with a SOFT mask, per this
-        /// type's copy-result policy).</returns>
+        /// <returns>This instance when <paramref name="inplace"/>, else a new <see cref="NDMaskedArray"/> over the swapped
+        /// copy, built as NumPy's <c>__array_finalize__</c> builds it: a COPY of this array's mask, this array's hard-mask
+        /// flag, and a converted copy of its stored fill (never the shared objects: a write to either array's mask or fill
+        /// leaves the other's alone).</returns>
+        /// <remarks>Until 2026-10-08 the copy shared this array's mask (a mask write through it reached this array) and its
+        /// fill object, and came back soft.</remarks>
         public NDMaskedArray byteswap(bool inplace = false)
         {
             // In place: mutate the shared data buffer and hand back the same instance (mask + hardmask intact),
-            // matching NumPy's `byteswap(inplace=True)` returning self. Otherwise wrap the swapped copy.
+            // matching NumPy's `byteswap(inplace=True)` returning self.
             var swapped = _data.byteswap(inplace);
-            return inplace ? this : new NDMaskedArray(swapped, _mask, _fill_value);
+            if (inplace)
+                return this;
+            // A copy (`PyArray_NewCopy` of the subclass) runs `__array_finalize__` over a NEW buffer: the mask is copied
+            // (`_mask.astype(...)`), and `_update_from` + `_check_fill_value` give the hard-mask flag and a converted copy
+            // of the stored fill (FinalizeFrom).
+            return new NDMaskedArray(swapped, _mask?.copy()).FinalizeFrom(this);
         }
 
         /// <summary>
@@ -1090,17 +1194,31 @@ namespace NumSharp
         ///     (NumPy's <c>MaskedArray.argpartition</c>). <b>FOOTGUN — this IGNORES the mask</b> exactly as
         ///     <see cref="partition(int,int?,string,string)"/> does (NumPy warns and delegates to
         ///     <c>ndarray.argpartition</c>): the index permutation is computed from the raw data, and the result
-        ///     carries THIS array's mask UNMOVED (positionally), so a masked input position shows as masked in the
-        ///     result even though the result holds indices, not values. Reproduced for parity; prefer
-        ///     <see cref="argsort(int,bool,object)"/>.
+        ///     carries a COPY of THIS array's mask UNMOVED (positionally; flattened with <paramref name="axis"/> null), so a
+        ///     masked input position shows as masked in the result even though the result holds indices, not values.
+        ///     Reproduced for parity; prefer <see cref="argsort(int?,bool,object)"/>.
         /// </summary>
         /// <param name="kth">Index whose element lands in final sorted position; negatives count from the end.</param>
         /// <param name="axis">Axis to partition along; null flattens first. Default last axis.</param>
         /// <param name="kind">Selection algorithm — only "introselect".</param>
         /// <param name="order">Field order (unused).</param>
-        /// <returns>A masked array of int64 indices carrying this array's mask in its original positions.</returns>
+        /// <returns>A masked array of int64 indices, built as NumPy's <c>__array_finalize__</c> builds the subclass result:
+        ///     a copy of this array's mask in its original positions, this array's hard-mask flag, and its stored fill
+        ///     converted to int64 (7.5 reads back <see cref="long"/> 7).</returns>
+        /// <remarks>Until 2026-10-08 the result shared this array's mask (a mask write through it reached this array) and
+        ///     its fill object unconverted, came back soft, and kept the mask's N-D shape under <paramref name="axis"/> null.</remarks>
         public NDMaskedArray argpartition(int kth, int? axis = -1, string kind = "introselect", string order = null)
-            => new NDMaskedArray(np.argpartition(_data, kth, axis, kind, order), _mask, _fill_value);
+        {
+            var indices = np.argpartition(_data, kth, axis, kind, order);
+            // `__array_finalize__` over the new int64 buffer: the mask is copied and given the result's shape
+            // (`self._mask.shape = self.shape`: a flattening for axis=None), then `_update_from` + `_check_fill_value`.
+            var mask = _mask?.copy();
+            // The copy is a fresh C-ordered buffer, so the reshape is a relabel in place (a reshape VIEW would leave the
+            // copy's own NDArray holding the buffer).
+            if (mask is not null && !mask.Shape.dimensions.AsSpan().SequenceEqual(indices.Shape.dimensions))
+                mask.Storage.Reshape(Shape.Adopt((long[])indices.Shape.dimensions.Clone()));
+            return new NDMaskedArray(indices, mask).FinalizeFrom(this);
+        }
 
         // ── The indexer (NumPy's MaskedArray.__getitem__/__setitem__) — the keystone that makes element/slice
         //    access idiomatic and unblocks put/putmask/mask_rowcols. GET applies the SAME index to data and mask
@@ -1139,8 +1257,23 @@ namespace NumSharp
                 // _mask were built before the scope opened, so they are never handed to the caller's scope.
                 using var scope = NDScope.Open();
                 // Apply the identical index to data and (if present) mask — the two stay aligned by construction.
-                var subData = _data[indices];
-                var subMask = _mask is null ? null : _mask[indices];
+                NDArray subData, subMask;
+                if (indices.Length == 1 && indices[0] is string notation)
+                {
+                    // A lone slice string (`x["1:"]`) is parsed ONCE for both arrays. NDArray's single-string index is
+                    // exactly `GetView(Slice.ParseSlices(s))`, so these are the views the object path builds, without the
+                    // second parse (~0.8 µs, more than both views cost). GetView rewrites its ARRAY argument (a newaxis
+                    // entry becomes Slice.All once the axis is inserted), so the mask gets its own copy of the parsed array;
+                    // the Slice objects themselves are never written after parsing (ToSliceDef is pure).
+                    var slices = Slice.ParseSlices(notation);
+                    subData = _data[_mask is null ? slices : (Slice[])slices.Clone()];
+                    subMask = _mask is null ? null : _mask[slices];
+                }
+                else
+                {
+                    subData = _data[indices];
+                    subMask = _mask is null ? null : _mask[indices];
+                }
                 // Scalar-reducing index (x[0] on 1-D, x[i,j] on 2-D): return the value or the masked singleton.
                 if (subData.ndim == 0)
                 {
@@ -1399,45 +1532,46 @@ namespace NumSharp
         /// <param name="dtype">Target dtype; null ⇒ a same-dtype alias. Any dtype — the same one too — resets a stored fill
         ///     value to the dtype default (NumPy's <c>view</c>).</param>
         /// <param name="fill_value">A new fill value for the view (NumPy's <c>fill_value=</c>); it replaces a STORED fill
-        ///     only — on an array whose fill was never set or read it is ignored, as in NumPy.</param>
-        /// <returns>A masked array over the reinterpreted data, with this array's hard-mask flag; the mask is carried as a
-        /// view when the shape is preserved, and is absent (nomask) for an itemsize-changing view of an already-unmasked
-        /// array.</returns>
-        /// <exception cref="NotSupportedException">The target dtype has a different itemsize AND this array has an
-        /// active mask — a boolean (itemsize-1) mask has no sound reinterpretation to the new element count, so
-        /// the view is refused rather than silently dropping or misaligning it (fill or drop the mask first).</exception>
+        ///     only — on an array whose fill was never set or read it is ignored, as in NumPy — and is written into the
+        ///     view's own copy of the fill, at THIS array's dtype (a float64 array's <c>view(int64, fill_value: 3)</c> reads
+        ///     back <see cref="double"/> 3.0, as NumPy's does).</param>
+        /// <returns>A masked array over the reinterpreted data, with this array's hard-mask flag and a COPY of its stored
+        /// fill (NumPy's <c>__array_finalize__</c>, which runs before the new dtype is set); the mask is carried as a view
+        /// when the shape is preserved, and is absent (nomask) for an itemsize-changing view of an unmasked array.</returns>
+        /// <exception cref="IncorrectShapeException">The target dtype has a different itemsize AND this array has a mask:
+        /// NumPy's dtype setter reshapes the mask to the view's shape and raises <c>ValueError: cannot reshape array of
+        /// size 4 into shape (16,)</c> (NumSharp's house type for that ValueError). Until 2026-10-08 a
+        /// <see cref="NotSupportedException"/> with NumSharp's own text.</exception>
         public NDMaskedArray view(DType dtype = null, object fill_value = null)
         {
-            // Scoped by hand: the reinterpreted view is built BEFORE the mask check that may refuse it, so the
-            // refusal path must reclaim it; the success paths hand it back through Yield.
+            // Scoped by hand: the reinterpreted view is built BEFORE the mask reshape that may refuse it, so the
+            // refusal path must reclaim it; the success path hands it back through Yield.
             using var scope = NDScope.Open();
             var nd = _data.view(dtype);
-            NDMaskedArray r;
-            // Same element count ⇒ shape preserved (no-op alias or same-itemsize reinterpret): the bool mask
-            // still lines up element-for-element, so carry it as a VIEW (`output._mask = output._mask.view()`: the same
-            // memory, so a masked write through either array reaches the other, as NumPy's do).
-            if (nd.size == _data.size)
-                r = new NDMaskedArray(nd, _mask?.view(), _fill_value);
-            // Itemsize changed ⇒ the trailing axis was rescaled. With no mask the reinterpreted data stands
-            // alone; with a live mask there is no meaningful reinterpretation of the boolean mask, so refuse.
-            else if (_mask is null)
-                r = new NDMaskedArray(nd, null, _fill_value);
-            else
-                throw new NotSupportedException(
-                    "view() to a dtype of a different itemsize is not supported on a masked array with an active " +
-                    "mask: the boolean mask cannot be reinterpreted to the new element count. Fill or drop the mask first.");
-            // `__array_finalize__` -> `_update_from(self)`: the hard-mask flag carries over.
-            r._hardmask = _hardmask;
-            // `if output._fill_value is not None: if fill_value is None: if dtype is not None: output._fill_value = None
-            //  else: output.fill_value = fill_value` — a stored fill is RESET by any dtype argument (even the same dtype)
-            // and replaced by a given fill_value; an array with no stored fill ignores both.
-            if (r._fill_value is not null)
+            // `ndarray.view(self, dtype)` builds the view with THIS dtype and only then sets the new one, so
+            // `__array_finalize__` sees this dtype: `_update_from(self)` (the hard-mask flag) and a stored fill re-checked
+            // against this dtype — a converted COPY, never the shared object (a later set on the view leaves this array's
+            // fill alone). The re-check at this array's own dtype cannot fail, so the copy is not made when the reset below
+            // would drop it at once (a dtype and no fill_value: it was an orphaned pooled buffer).
+            bool storedFill = _fill_value is not null;
+            var fillCopy = storedFill && (dtype is null || fill_value is not null)
+                ? MaskedArrayModule.StoreFill(_fill_value, _data.dtype)
+                : null;
+            var r = new NDMaskedArray(nd, null, fillCopy) { _hardmask = _hardmask };
+            if (_mask is not null)
             {
-                if (fill_value is not null)
-                    r.fill_value = fill_value;
-                else if (dtype is not null)
-                    r._fill_value = null;
+                // The dtype setter: `self._mask.shape = self.shape`. A same-itemsize view keeps the shape; an itemsize change
+                // rescales the last axis, and reshaping the mask then raises NumPy's ValueError ("cannot reshape array of
+                // size 4 into shape (16,)", the house IncorrectShapeException). Then `output._mask = output._mask.view()`:
+                // the same memory, so a masked write through either array reaches the other, as NumPy's do.
+                r._mask = nd.size == _data.size ? _mask.view() : np.reshape(_mask, nd.Shape.dimensions);
             }
+            // `if output._fill_value is not None: if fill_value is None: if dtype is not None: output._fill_value = None
+            //  else: output.fill_value = fill_value` — a stored fill is RESET by any dtype argument (even the same dtype:
+            // the copy above was never made) and replaced by a given fill_value (the setter writes it into the copy, at
+            // this array's dtype); an array with no stored fill ignores both.
+            if (storedFill && fill_value is not null)
+                r.fill_value = fill_value;
             return MaskedArrayModule.Yield(scope, r);
         }
 
@@ -2201,23 +2335,57 @@ namespace NumSharp
         private static byte[] DefaultBytesFill() => new[] { (byte)'N', (byte)'/', (byte)'A' };
 
         /// <summary>
-        ///     NumPy's <c>_check_fill_value(fill_value, ndtype)</c>, the conversion every fill value goes through before a
-        ///     masked array stores or uses it (the constructor, the <see cref="NDMaskedArray.fill_value"/> setter,
-        ///     <see cref="set_fill_value"/>, an explicit <see cref="NDMaskedArray.filled(object)"/> argument), for the cases
-        ///     that involve TEXT. A numeric fill for a numeric dtype is returned as given.
+        ///     NumPy's <c>_check_fill_value(None, ndtype)</c>: the DEFAULT fill as the 0-d array NumPy stores, <c>np.array(
+        ///     default_fill_value(ndtype))</c> — of the DEFAULT's own dtype, not the data's: int64 999999 for every signed
+        ///     integer dtype, uint64 999999 for every unsigned one (NumPy's <c>np.uint(fill_value)</c> for kind <c>'u'</c>),
+        ///     float64 1e20 for every float dtype, complex128 (1e20+0j), bool True, and the text <c>'N/A'</c> /
+        ///     <c>b'N/A'</c> at its own width (<c>&lt;U3</c> / <c>|S3</c>).
         /// </summary>
-        /// <param name="fill_value">The fill value as the caller gave it; null keeps the dtype default.</param>
+        /// <param name="ndtype">The data dtype the default is for.</param>
+        /// <returns>A new 0-d array the caller owns.</returns>
+        /// <remarks>
+        ///     The dtype is observable: the getter of an int8 array returns <c>np.int64(999999)</c>, the repr prints
+        ///     <c>fill_value=np.int64(999999)</c>, a later <c>fill_value = 5</c> is written INTO this int64 array (so it reads
+        ///     back <c>np.int64(5)</c>, where the same assignment on an array whose default was never read stores an int8),
+        ///     and <see cref="NDMaskedArray.filled(object)"/> casts it into the data (999999 into int8 is 63). NumSharp's
+        ///     char dtype has kind <c>'u'</c> and decimal kind <c>'f'</c>, so they follow the unsigned and float rules.
+        /// </remarks>
+        internal static NDArray DefaultFill(DType ndtype)
+        {
+            // `if ndtype.kind == "u": fill_value = np.uint(fill_value)`: the unsigned default is a uint64 scalar, so it stays
+            // a same-kind cast into an unsigned array (NumPy 2.0's cast-safety change).
+            if (ndtype.typecode != NPTypeCode.String && ndtype.kind == 'u')
+                return NDArray.Scalar(999999UL);
+            // `return np.array(fill_value)`: True -> bool, 999999 -> int64, 1e20 -> float64, (1e20+0j) -> complex128, the
+            // text default at its own width.
+            return NDArray.Scalar(np.ma.default_fill_value(ndtype));
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_check_fill_value(fill_value, ndtype)</c> for a fill value the caller GAVE: the conversion every
+        ///     fill goes through before a masked array stores or uses it (the constructor, the
+        ///     <see cref="NDMaskedArray.fill_value"/> setter, <see cref="set_fill_value"/>, an explicit
+        ///     <see cref="NDMaskedArray.filled(object)"/> argument, and the re-check of an inherited fill in
+        ///     <see cref="NDMaskedArray.FinalizeFrom"/> / <see cref="NDMaskedArray.astype"/>):
+        ///     <c>np.array(np.asarray(fill_value, dtype=ndtype))</c>.
+        /// </summary>
+        /// <param name="fill_value">The fill value as the caller gave it; null passes through as null (callers that need
+        ///     NumPy's None branch use <see cref="DefaultFill"/>).</param>
         /// <param name="ndtype">The data dtype the fill is for.</param>
         /// <returns>
-        ///     Null for a null <paramref name="fill_value"/>; for a text dtype, the fill converted to the data dtype as a new
-        ///     array the caller owns (0-d for a scalar fill — NumPy's <c>np.array(fill)</c>, read through
-        ///     <see cref="FillScalar"/> — and the fill's own shape for NumPy's deprecated non-scalar fill); otherwise
-        ///     <paramref name="fill_value"/> itself.
+        ///     Null for a null <paramref name="fill_value"/>; otherwise a NEW array of <paramref name="ndtype"/> the caller
+        ///     owns: 0-d for a scalar fill, the fill's own shape for NumPy's deprecated non-scalar fill.
         /// </returns>
-        /// <exception cref="TypeError">A C# <see cref="string"/> fill for a dtype that is not text (NumPy's <c>Cannot set
-        ///     fill value of string with array of dtype float64</c>), or a text fill whose characters the target class
-        ///     cannot encode or decode (<c>Cannot convert fill_value é to dtype |S2</c>, NumPy's TypeError around the
-        ///     <c>UnicodeEncodeError</c>).</exception>
+        /// <exception cref="TypeError">
+        ///     A C# <see cref="string"/> fill for a dtype that is not text (NumPy's <c>Cannot set fill value of string with
+        ///     array of dtype float64</c>); a C# number (a Python scalar) that does not fit the dtype (<c>Cannot convert
+        ///     fill_value 300 to dtype int8</c>: an integer out of range, a float that is NaN, infinite or out of an
+        ///     integer's range — NumPy catches the OverflowError / ValueError of the conversion and raises this); a complex
+        ///     into a real or integer dtype (Python's own <c>int()</c> / <c>float()</c> TypeError, which NumPy does not
+        ///     catch: <c>int() argument must be a string, a bytes-like object or a real number, not 'complex'</c>); a text
+        ///     fill whose characters the target class cannot encode or decode (<c>Cannot convert fill_value é to dtype
+        ///     |S2</c>).
+        /// </exception>
         /// <exception cref="StringComputationNotSupportedException">The conversion formats a number as text (a numeric fill
         ///     for a text dtype, NumPy's <c>np.asarray(5, dtype='&lt;U2')</c> is <c>'5'</c>) or parses text as a number (a
         ///     bytes or text-array fill for a numeric dtype): the computing phase of the string dtypes.</exception>
@@ -2228,17 +2396,24 @@ namespace NumSharp
         ///     A bytes fill is not a <c>str</c>, so NumPy parses it (<c>b'1.5'</c> becomes <c>1.5</c> for float64).
         ///     </para>
         ///     <para>
-        ///     <b>Scope of the port.</b> NumPy converts EVERY fill to the data dtype (<c>fill_value=1.5</c> of an int64 array
-        ///     reads back <c>1</c>); NumSharp keeps a numeric fill of a numeric array as given, the module's documented
-        ///     simplification, so the existing numeric behavior (and <see cref="common_fill_value"/>'s comparison of raw
-        ///     fills) is unchanged. Only the text cases are converted.
+        ///     <b>The conversion is <c>PyArray_FromAny</c>'s</b> (<see cref="NDArray.AsStoreValue"/>, the store route of plan
+        ///     X27): a C# number — the boundary map's Python scalar — is packed with <c>PyArray_Pack</c>'s range checks
+        ///     (<c>5.7</c> into int8 truncates to 5, <c>300</c> raises, <c>True</c> is 1, anything into bool is its truth);
+        ///     a C# <see cref="Half"/> / <c>char</c> / <c>decimal</c> — a NumPy scalar — and any array are CAST like a 0-d
+        ///     array (<c>np.float16(300)</c> into int8 is 44, an int64 array of 1000 into int8 is -24): NumPy's
+        ///     <c>np.asarray</c> of a NumPy scalar never raises. A masked array contributes its data (NumPy's
+        ///     <c>np.asarray</c> drops the mask). A C# array or collection is an ndarray in the boundary map and is cast;
+        ///     an <c>object[]</c> (a Python list) is cast too, where NumPy packs each element (plan X28's coercion gap).
         ///     </para>
         ///     <para>
-        ///     <b>Ownership.</b> A converted array fill is a fresh array; a caller that stores it into a masked array's field
-        ///     must detach it from the ambient scope (<see cref="Own"/>), as for a mask.
+        ///     <b>Ownership.</b> The result is always fresh (NumPy's final <c>np.array(fill_value)</c> copies). A masked
+        ///     array being BUILT stores it as is (<see cref="StoreFill"/>: it stays in the ambient scope with the new data
+        ///     and mask, and <see cref="Yield(NDScope, NDMaskedArray)"/> hands it back with a result); an EXISTING array that
+        ///     stores it detaches it first (<see cref="Own"/>: the setter's replacement); a caller that only reads it
+        ///     disposes it.
         ///     </para>
         /// </remarks>
-        internal static object CheckFillValue(object fill_value, DType ndtype)
+        internal static NDArray CheckFillValue(object fill_value, DType ndtype)
         {
             if (fill_value is null)
                 return null;
@@ -2270,7 +2445,8 @@ namespace NumSharp
                     // Text into a number parses it, a number into text formats it: both compute on text.
                     if (textFill || textData)
                         throw NDStringCasting.TextConversion(nd.dtype, ndtype);
-                    return fill_value;
+                    // A C# literal's 0-d array is a Python scalar (packed, range-checked); any other array is cast.
+                    return ConvertNumericFill(nd, nd.WasPythonLiteral ? nd.Storage.GetAtIndex(0) : null, ndtype);
                 default:
                     // A C# number, bool, char, Half, decimal or Complex: into a text dtype NumPy formats it as text. A
                     // BigInteger (a Python int of any size) has no storage lane; the message names int64, NumPy's default
@@ -2278,32 +2454,67 @@ namespace NumSharp
                     if (textData)
                         throw NDStringCasting.TextConversion(
                             fill_value is BigInteger ? DType.From(NPTypeCode.Int64) : (DType)fill_value.GetType(), ndtype);
-                    return fill_value;
+                    return ConvertNumericFill(fill_value, NDArray.IsStoreScalar(fill_value) ? fill_value : null, ndtype);
             }
         }
 
         /// <summary>
-        ///     <see cref="CheckFillValue"/> for a fill a masked array STORES in its <see cref="NDMaskedArray._fill_value"/>
-        ///     field (the constructor, the <see cref="NDMaskedArray.fill_value"/> setter, <see cref="NDMaskedArray.astype"/>).
-        ///     A text conversion that produced an array (NumPy's deprecated non-scalar fill) is detached from every ambient
-        ///     scope, because the field outlives the method that converted it.
+        ///     The numeric half of <see cref="CheckFillValue"/>: <c>np.array(np.asarray(fill_value, dtype=ndtype))</c> for a
+        ///     numeric fill and a numeric dtype, with NumPy's <c>except (OverflowError, ValueError): raise TypeError(...)</c>
+        ///     around the conversion.
         /// </summary>
-        /// <param name="fill_value">The fill as given, or null for the dtype default.</param>
+        /// <param name="fill_value">The fill: a boxed C# scalar, an <see cref="NDArray"/>, or another array-like.</param>
+        /// <param name="pythonScalar">The fill's value when it is a Python or NumPy scalar (what the error text formats),
+        ///     else null.</param>
+        /// <param name="ndtype">The numeric data dtype.</param>
+        /// <returns>A NEW array of <paramref name="ndtype"/> the caller owns.</returns>
+        /// <exception cref="TypeError"><c>Cannot convert fill_value {fill} to dtype {ndtype}</c> for a Python scalar that
+        ///     does not fit, or Python's own complex-to-real TypeError (see <see cref="CheckFillValue"/>).</exception>
+        private static NDArray ConvertNumericFill(object fill_value, object pythonScalar, DType ndtype)
+        {
+            NDArray converted;
+            try
+            {
+                // `np.asarray(fill_value, dtype=ndtype)` is PyArray_FromAny with a forced cast: a Python scalar is packed
+                // into a new 0-d array of ndtype (raising for a value that does not fit), a NumPy scalar or an array comes
+                // back as an array for the cast below.
+                converted = NDArray.AsStoreValue(fill_value, ndtype.typecode);
+            }
+            catch (Exception e) when (e is OverflowException or ValueError)
+            {
+                // `except (OverflowError, ValueError) as e: raise TypeError(err_msg % (fill_value, ndtype)) from e`: the text
+                // formats the fill with Python's %s (str), the dtype with its str ("int8").
+                throw new TypeError($"Cannot convert fill_value {PolyIndexArgument.Format(pythonScalar ?? fill_value)} to dtype {ndtype}", e);
+            }
+            // `return np.array(fill_value)`: always a fresh array of ndtype. A packed scalar already is one; a caller's array
+            // (or the 0-d array of a cast NumPy scalar AsStoreValue returned as the caller's own) is cast, which copies.
+            if (converted.typecode == ndtype.typecode && !ReferenceEquals(converted, fill_value))
+                return converted;
+            var copy = converted.astype(ndtype, copy: true);
+            if (!ReferenceEquals(converted, fill_value))
+                converted.Dispose();
+            return copy;
+        }
+
+        /// <summary>
+        ///     <see cref="CheckFillValue"/> for a fill a NEW masked array stores in its <see cref="NDMaskedArray._fill_value"/>
+        ///     field (the constructor, <see cref="NDMaskedArray.astype"/>, <see cref="NDMaskedArray.FinalizeFrom"/>, the
+        ///     views and copies that re-check an inherited fill): the converted array, tracked by the ambient scope exactly
+        ///     like the new array's data and mask, so it is reclaimed with an intermediate and handed back with a result
+        ///     (<see cref="Yield(NDScope, NDMaskedArray)"/>).
+        /// </summary>
+        /// <param name="fill_value">The fill as given (or a source's stored fill array), or null for "no fill stored".</param>
         /// <param name="ndtype">The data dtype of the array that stores the fill.</param>
-        /// <returns>The object to store.</returns>
+        /// <returns>The array to store, or null for a null <paramref name="fill_value"/> (NumPy's None, which stays None:
+        ///     the default is only materialized when something reads it).</returns>
         /// <exception cref="TypeError">See <see cref="CheckFillValue"/>.</exception>
         /// <exception cref="StringComputationNotSupportedException">See <see cref="CheckFillValue"/>.</exception>
-        internal static object StoreFill(object fill_value, DType ndtype)
-        {
-            var checkedFill = CheckFillValue(fill_value, ndtype);
-            // For a text dtype the result always comes from TextFillToDType's fresh astype (0-d for a scalar fill), so it
-            // is ours to detach.
-            // A numeric fill is the caller's own object, stored as given and left in the caller's scope (detaching a
-            // caller's array would change its lifetime).
-            if (checkedFill is NDArray converted && ndtype.typecode == NPTypeCode.String)
-                return Own(converted);
-            return checkedFill;
-        }
+        /// <remarks>Footgun: only for an array being BUILT. A fill stored into an EXISTING array (the getter's
+        ///     materialized default, the setter's target) must be detached (<see cref="Own"/>): a scope reclaiming it would
+        ///     leave the longer-lived array holding a disposed fill. Detaching every new array's fill instead left an
+        ///     intermediate's fill to the finalizer (the leak gate counted <c>ma.trace</c>'s <c>astype</c> copy).</remarks>
+        internal static NDArray StoreFill(object fill_value, DType ndtype)
+            => fill_value is null ? null : CheckFillValue(fill_value, ndtype);
 
         /// <summary>
         ///     The string-to-string half of <see cref="CheckFillValue"/>: <c>np.asarray(fill, dtype=ndtype)</c> for a text
@@ -2316,7 +2527,7 @@ namespace NumSharp
         ///     <c>np.array(fill)</c>, whose width is part of the fill's state), the fill's shape otherwise.</returns>
         /// <exception cref="TypeError">The target class cannot encode or decode a character (NumPy catches the
         ///     <c>UnicodeError</c>, a <c>ValueError</c>, and raises <c>Cannot convert fill_value … to dtype …</c>).</exception>
-        private static object TextFillToDType(NDArray fill, DType ndtype, string display)
+        private static NDArray TextFillToDType(NDArray fill, DType ndtype, string display)
         {
             NDArray converted;
             try
@@ -2999,32 +3210,19 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     <c>_check_fill_value(fill, np.bool)</c> of an inherited fill value: <c>np.asarray(fill, dtype=bool)</c>, the
-        ///     truth of the value — a number is True unless it is zero (NaN is True), a complex unless both parts are zero,
-        ///     text unless it is empty (read through the text-to-bool cast, the next phase for non-empty text).
+        ///     <c>_check_fill_value(fill, np.bool)</c> of an inherited fill: <c>np.array(np.asarray(fill, dtype=bool))</c>, the
+        ///     truth of each element of the stored fill array — a number is True unless it is zero (NaN is True), a complex
+        ///     unless both parts are zero, text unless it is empty (read through the text-to-bool cast, the next phase for
+        ///     non-empty text).
         /// </summary>
-        /// <param name="fill">The stored fill value (a boxed C# scalar, <c>byte[]</c>, string, or 0-d array).</param>
-        /// <returns>The boxed bool fill.</returns>
+        /// <param name="fill">The stored fill array (0-d, or N-d for NumPy's deprecated non-scalar fill).</param>
+        /// <returns>A NEW bool array of <paramref name="fill"/>'s shape, tracked by the ambient scope like the new comparison
+        ///     result that stores it (the result's Yield hands it back).</returns>
         /// <exception cref="StringComputationNotSupportedException">A non-empty text fill (its truth reads the text).</exception>
-        private static object FillAsBool(object fill)
-        {
-            switch (fill)
-            {
-                case bool b:
-                    return b;
-                case NDArray arr:
-                    return arr.astype(np.@bool).GetBoolean();
-                case string str:
-                    return NDArray.Scalar(str).astype(np.@bool).GetBoolean();
-                case byte[] bytes:
-                    return np.array(new object[] { bytes }, dtype: "S").astype(np.@bool).GetAtIndex<bool>(0);
-                case Complex c:
-                    return c != Complex.Zero;
-                default:
-                    // Any C# number: `bool(x)` is `x != 0`, and NaN != 0.
-                    return NDArray.Scalar(fill).astype(np.@bool).GetBoolean();
-            }
-        }
+        /// <remarks>NumPy wraps the conversion in <c>except (TypeError, ValueError): fill = _check_fill_value(None, np.bool)</c>,
+        ///     but casting an array to bool raises for no dtype NumPy 2.4.2 has (text casts by its emptiness), so the
+        ///     fallback cannot run and is not ported.</remarks>
+        private static NDArray FillAsBool(NDArray fill) => fill.astype(np.@bool, copy: true);
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  The three ufunc-wrapper mechanisms (ports of NumPy's operation classes)
@@ -3265,8 +3463,8 @@ namespace NumSharp
         /// <param name="result">The masked array being returned; null (no result) passes through.</param>
         /// <returns><paramref name="result"/>, unchanged.</returns>
         /// <remarks>
-        ///     A masked array owns nothing itself — it aliases a data array and an optional mask — so its egress
-        ///     is the egress of those two buffers: each is handed back (re-tracked into the parent scope, which
+        ///     A masked array owns nothing itself — it aliases a data array, an optional mask and an optional stored
+        ///     fill — so its egress is the egress of those buffers: each is handed back (re-tracked into the parent scope, which
         ///     still reclaims them if the caller drops the result). An array this scope never tracked — an
         ///     operand's data or mask passed through untouched, or the process-wide
         ///     <see cref="NDMasked"/>/<see cref="nomask"/> singletons — is a no-op there, which is what makes
@@ -3283,6 +3481,10 @@ namespace NumSharp
             {
                 scope.Returns(result._data);
                 scope.Returns(result._mask);
+                // A stored fill created with the result (StoreFill's converted copy) is tracked like its data and leaves
+                // with it; a fill stored into an existing array (the getter's default, the setter) was detached, and a
+                // shared source's fill was never this scope's: both make this a no-op.
+                scope.Returns(result._fill_value);
             }
             return result;
         }
@@ -3357,12 +3559,21 @@ namespace NumSharp
         ///     <c>np.asarray(scalar)</c> (a STRONG array) rather than a weak NEP50 scalar, which is why
         ///     <c>ma.multiply(int32, 2)</c> is int64 while the plain-np <c>np.multiply(int32, 2)</c> is int32.
         ///     Returns null for a non-scalar operand (<see cref="NDArray"/>/<see cref="NDMaskedArray"/>/C# array/null),
-        ///     whose own dtype already applies.
+        ///     whose own dtype already applies — except the 0-d array of a C# LITERAL (<see cref="NDArray.WasPythonLiteral"/>),
+        ///     which is still the Python scalar it stands for.
         /// </summary>
         /// <param name="x">A binary-op operand.</param>
         /// <returns>The scalar's strong dtype, or null when <paramref name="x"/> is not a bare scalar.</returns>
+        /// <remarks>
+        ///     The literal case is the operators': <c>x + 1</c> binds <c>operator +(NDMaskedArray, NDArray)</c> (C# prefers
+        ///     the NDArray target over <c>object</c>), so the literal arrives as a marked int32 0-d array. numpy.ma's
+        ///     <c>getdata(1)</c> is <c>np.array(1)</c>, an int64, so an int8 / uint8 / int16 / uint16 / bool array plus 1 is
+        ///     int64 in NumPy; read as an int32 array it came back int32 (found 2026-10-08 by the ma_fill tier). A float or
+        ///     complex literal maps to float64 / complex128 either way.
+        /// </remarks>
         private static NPTypeCode? BareScalarStrongDtype(object x) => x switch
         {
+            NDArray literal when literal.WasPythonLiteral => BareScalarStrongDtype(literal.Storage.GetAtIndex(0)),
             NDArray => null,
             NDMaskedArray => null,
             Array => null,
@@ -4964,11 +5175,11 @@ namespace NumSharp
             if (np.any(invalid))
             {
                 rmask ??= invalid;
-                // result._data[invalid] = result.fill_value: the operand's fill value (real part), else float64's 1e20.
-                object fv = self._fill_value ?? 1e20;
-                if (fv is Complex c)
-                    fv = c.Real;
-                np.copyto(result, NDArray.Scalar(fv), casting: "unsafe", where: invalid);
+                // result._data[invalid] = result.fill_value: the absolute value's __array_finalize__ converted the operand's
+                // stored fill to float64 (np.asarray of a complex keeps the real part); with nothing stored, its getter
+                // materializes float64's default 1e20.
+                using var fv = self._fill_value is null ? NDArray.Scalar(1e20) : self._fill_value.astype(np.float64, copy: true);
+                np.copyto(result, fv, casting: "unsafe", where: invalid);
             }
             return new NDMaskedArray(result, rmask);
         }
@@ -5441,8 +5652,8 @@ namespace NumSharp
         public NDMaskedArray cumprod(object a, int? axis = null, DType dtype = null)
             => Scan(a, 1, (x, ax) => np.cumprod(x, ax, dtype), axis);
 
-        /// <summary>Shared scan (cumsum/cumprod): fill masked with the identity, scan, and carry the original
-        /// per-position mask (raveled to match when axis is null).</summary>
+        /// <summary>Shared scan (cumsum/cumprod): fill masked with the identity, scan, and carry a COPY of the original
+        /// per-position mask (flattened to match when axis is null), as NumPy's <c>__setmask__</c> copies it.</summary>
         /// <param name="a">Operand.</param>
         /// <param name="identity">The scan identity written at masked slots (0 cumsum, 1 cumprod).</param>
         /// <param name="fn">The underlying <c>np.*</c> scan (data, axis) → result.</param>
@@ -5465,8 +5676,11 @@ namespace NumSharp
                 throw deferral;
             if (mask is null)
                 return Yield(scope, new NDMaskedArray(result, null));
-            // axis=null flattens the result in C-order — ravel the mask to match.
-            var m = axis is null ? np.ravel(mask) : mask;
+            // `result = result.view(type(self)); result.__setmask__(self._mask)`: the view of the plain scan has nomask, so
+            // __setmask__ builds a FRESH mask (`make_mask_none(self.shape)`) and copies the source's in (`current_mask.flat =
+            // mask`, C order — the flattening axis=null needs). A mask write through the result never reaches the source:
+            // it used to share the source's mask object (an axis) or a ravel VIEW of it (axis=null).
+            var m = axis is null ? mask.flatten() : mask.copy();
             return Yield(scope, new NDMaskedArray(result, m));
         }
 

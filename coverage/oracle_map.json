@@ -104,6 +104,7 @@
       },
       "indices_sparse": {"ids": ["numpy.indices", "numsharp.np.indices_sparse"], "note": "np.indices(..., sparse=True); NumSharp spells the tuple-returning form indices_sparse."},
       "ma.flatten": {"ids": ["numpy.ma.MaskedArray.flatten", "numsharp.ma.flatten"], "note": "NumPy m.flatten() replayed through NumSharp's np.ma.flatten(m)."},
+      "ma.fill": {"ids": ["numpy.ma.MaskedArray.fill_value", "numpy.ma.MaskedArray.filled", "numpy.ma.set_fill_value", "numpy.ma.common_fill_value", "numpy.ma.MaskedArray.astype", "numpy.ma.MaskedArray.view", "numpy.ma.MaskedArray.byteswap"], "note": "ma_fill tier: call-history scripts over a masked array's fill value as NumPy stores it - the constructor's conversion and TypeErrors, the getter's materialized default, the setter writing into a stored fill (also through ma.set_fill_value), inheritance by every derive kind (shared through _update_from, a converted copy through __array_finalize__ in astype / view / byteswap), filled(), the repr's fill_value= line, common_fill_value."},
       "ma.masked_array": {"ids": ["numpy.ma.MaskedArray", "numsharp.ma.masked_array"], "note": "NumPy's ma.masked_array IS the MaskedArray class; NumSharp exposes the constructor as np.ma.masked_array."},
       "matmul_aat": {"ids": ["numpy.matmul"], "note": "a @ a.T - NumPy's syrk shortcut."},
       "matmul_ata": {"ids": ["numpy.matmul"], "note": "a.T @ a - NumPy's syrk shortcut."},

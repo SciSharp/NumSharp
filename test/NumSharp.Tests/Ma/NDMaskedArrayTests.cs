@@ -795,6 +795,51 @@ namespace NumSharp.Tests.Ma
             Assert.AreEqual(3.0, Convert.ToDouble(m2[1, 0]));            // unmasked element
         }
 
+        /// <summary>
+        ///     A lone slice string is parsed once and applied to the data and the mask. UnmanagedStorage.GetView rewrites
+        ///     its slice ARRAY (a newaxis entry becomes Slice.All once the axis is inserted), so the mask needs its own copy
+        ///     of the parsed array: reusing it gave the mask the data's shape without the new axes (same element count, so
+        ///     only the mask's SHAPE shows it) or, with two newaxis entries around an integer, a too-many-indices error.
+        ///     Every expected value is NumPy 2.4.2's.
+        /// </summary>
+        [TestMethod]
+        public void Indexer_Get_SliceString_ParsedOnce_KeepsMaskAligned()
+        {
+            var x = np.ma.array(np.array(new long[,] { { 1, 2, 3 }, { 4, 5, 6 } }),
+                                np.array(new bool[,] { { false, true, false }, { true, false, false } }), fill_value: 7);
+
+            // x[:, np.newaxis, ::-1]: shape (2, 1, 3), the fill object shared (`_update_from`).
+            var r = (NDMaskedArray)x[":, np.newaxis, ::-1"];
+            CollectionAssert.AreEqual(new long[] { 2, 1, 3 }, r.shape);
+            CollectionAssert.AreEqual(new long[] { 2, 1, 3 }, r._mask.shape);
+            CollectionAssert.AreEqual(new[] { false, true, false, false, false, true }, M(r));
+            CollectionAssert.AreEqual(new double[] { 3, 2, 1, 6, 5, 4 }, D(r));
+            Assert.IsTrue(ReferenceEquals(x._fill_value, r._fill_value));
+
+            // x[np.newaxis, 1, np.newaxis]: shape (1, 1, 3).
+            var r2 = (NDMaskedArray)x["np.newaxis, 1, newaxis"];
+            CollectionAssert.AreEqual(new long[] { 1, 1, 3 }, r2._mask.shape);
+            CollectionAssert.AreEqual(new[] { true, false, false }, M(r2));
+            CollectionAssert.AreEqual(new double[] { 4, 5, 6 }, D(r2));
+
+            // x[..., 1] and the two scalar forms.
+            var r3 = (NDMaskedArray)x["..., 1"];
+            CollectionAssert.AreEqual(new[] { true, false }, M(r3));
+            CollectionAssert.AreEqual(new double[] { 2, 5 }, D(r3));
+            Assert.IsTrue(ReferenceEquals(x["1, 0"], np.ma.NDMasked));
+            Assert.AreEqual(3L, x["0, 2"]);
+
+            // A text array takes the same views; a nomask array keeps nomask.
+            var s = np.ma.array(np.array(new[] { "ab", "cd", "ef" }), np.array(new[] { false, true, false }));
+            var rs = (NDMaskedArray)s["np.newaxis, ::2"];
+            CollectionAssert.AreEqual(new long[] { 1, 2 }, rs._mask.shape);
+            CollectionAssert.AreEqual(new[] { false, false }, M(rs));
+            CollectionAssert.AreEqual(new[] { "ab", "ef" }, NDArray.AsStringArray(rs._data));
+            var n = (NDMaskedArray)np.ma.array(np.array(new long[] { 1, 2, 3 }))["np.newaxis"];
+            CollectionAssert.AreEqual(new long[] { 1, 3 }, n.shape);
+            Assert.IsNull(n._mask);
+        }
+
         /// <summary>Indexer SET: a plain value writes+UNMASKS; <c>= masked</c> masks in place (data untouched);
         /// a masked-array value propagates its mask; masking a nomask array creates the mask.</summary>
         [TestMethod]
@@ -1261,7 +1306,8 @@ namespace NumSharp.Tests.Ma
         }
 
         /// <summary>view reinterprets the data dtype (same-itemsize keeps the shape, so the mask rides through and
-        /// the bytes round-trip); an itemsize-changing view of a MASKED array is refused.</summary>
+        /// the bytes round-trip); an itemsize-changing view of a MASKED array raises NumPy's error: its dtype setter
+        /// reshapes the mask to the view's shape (<c>ValueError: cannot reshape array of size 4 into shape (16,)</c>).</summary>
         [TestMethod]
         public void View_ReinterpretsDtype_MaskCarried()
         {
@@ -1270,8 +1316,11 @@ namespace NumSharp.Tests.Ma
             Assert.AreEqual(np.float32, vv.dtype);
             Assert.IsTrue(M(vv).SequenceEqual(new[] { false, true, false, true }));
             Assert.IsTrue(vv.data.view(np.int32).ToArray<int>().SequenceEqual(new[] { 1, 2, 3, 4 }));
-            // Itemsize change (int32 -> int8) with a live mask: refused (the bool mask can't be reinterpreted).
-            Assert.ThrowsException<NotSupportedException>(() => v.view(np.int8));
+            // Itemsize change (int32 -> int8) with a live mask: NumPy's mask reshape refuses it (probed 2.4.2).
+            var e = Assert.ThrowsException<IncorrectShapeException>(() => v.view(np.int8));
+            Assert.AreEqual("cannot reshape array of size 4 into shape (16,)", e.Message);
+            // Without a mask the view stands alone.
+            Assert.AreEqual(16L, np.ma.array(np.array(new int[] { 1, 2, 3, 4 })).view(np.int8).size);
         }
 
         /// <summary>iscontiguous reads the CONTIGUOUS flag (True for a fresh 1-D, False for a transpose); ids

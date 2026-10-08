@@ -110,6 +110,10 @@ namespace NumSharp.Tests.Fuzz
                         keep.Add(m._data);
                         if (m._mask is not null)
                             keep.Add(m._mask);
+                        // A fill an op materialized on the operand (its getter's default) is the operand's; a result
+                        // sharing it must not release it.
+                        if (m._fill_value is not null)
+                            keep.Add(m._fill_value);
                     }
                     return keep;
                 }
@@ -196,6 +200,8 @@ namespace NumSharp.Tests.Fuzz
                         built.Add(m._data);
                         if (m._mask is not null)
                             built.Add(m._mask);
+                        if (m._fill_value is not null)
+                            built.Add(m._fill_value);
                     }
                     DisposeDistinct(built);
                 }
@@ -357,7 +363,7 @@ namespace NumSharp.Tests.Fuzz
 
         /// <summary>
         ///     Disposes every <see cref="NDArray"/> a result object carries exactly once — bare arrays,
-        ///     array tuples, <see cref="NDMaskedArray"/> results (their data AND mask), masked tuples,
+        ///     array tuples, <see cref="NDMaskedArray"/> results (their data, mask AND stored fill), masked tuples,
         ///     C# tuples of any of those, and <see cref="IDisposable"/> result objects (iterators) —
         ///     skipping anything in <paramref name="keep"/> and the <see cref="NDMaskedConstant"/>
         ///     singleton. Non-array results (scalars, strings, dtypes) carry nothing and are ignored.
@@ -380,8 +386,8 @@ namespace NumSharp.Tests.Fuzz
 
         /// <summary>
         ///     Every distinct disposable object a result carries — each <see cref="NDArray"/> (bare, in
-        ///     array/tuple/<see cref="object"/>[] containers, or a <see cref="NDMaskedArray"/>'s data and
-        ///     mask) and each other <see cref="IDisposable"/> result object (iterators, archives) — in
+        ///     array/tuple/<see cref="object"/>[] containers, or a <see cref="NDMaskedArray"/>'s data, mask
+        ///     and stored fill) and each other <see cref="IDisposable"/> result object (iterators, archives) — in
         ///     first-visit order, WITHOUT disposing anything. The single walk every result consumer
         ///     shares (<see cref="DisposeAny"/>, the catalogue's freshness check, the read gate's
         ///     stable-part detection), so "what a result holds" means the same thing to all of them.
@@ -422,6 +428,9 @@ namespace NumSharp.Tests.Fuzz
                     case NDMaskedArray m:
                         One(m._data);
                         One(m._mask);
+                        // The stored fill is a pooled 0-d array the masked array owns (shared with the arrays derived
+                        // from it, which a keep set protects), part of the result like its data and mask.
+                        One(m._fill_value);
                         return;
                     case NDArray[] arr:
                         foreach (var a in arr)

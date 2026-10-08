@@ -197,6 +197,8 @@ namespace NumSharp.Tests.Fuzz
                 case "compress": return np.ma.compress(ops[0], ops[1], ParseAxis(p));   // ops[0]=condition, ops[1]=a
                 case "clip": return np.ma.clip(ops[0], p["min"].GetDouble(), p["max"].GetDouble());
                 case "where": return np.ma.where(ops[0], ops[1], ops[2]);
+                // ma_fill.jsonl: a call-history script over the operand's fill value (FillScript).
+                case "fill": return FillScript(p, ops[0]);
                 case "put":
                 {
                     // ma_put.jsonl says how NumPy received each operand: `plain` (the target was the plain data view: ma.put
@@ -362,6 +364,233 @@ namespace NumSharp.Tests.Fuzz
         /// <returns>The value, false when absent.</returns>
         private static bool Flag(IReadOnlyDictionary<string, JsonElement> p, string key)
             => p.TryGetValue(key, out var v) && v.ValueKind == JsonValueKind.True;
+
+        /// <summary>
+        ///     Runs one <c>ma_fill.jsonl</c> case: <c>np.ma.array(operand, fill_value: params.fill)</c>, then
+        ///     <c>params.steps</c> in order (<c>read</c> the getter, <c>set</c> / <c>setfn</c> a fill on the current array,
+        ///     <c>setparent</c> a fill on the previous one, <c>derive</c> a new current array — gen_ma_oracle.py's
+        ///     <c>_fill_derive</c> names each), then <c>params.observe</c>.
+        /// </summary>
+        /// <param name="p">The case params.</param>
+        /// <param name="operand">The reconstructed operand (data view + mask, no fill).</param>
+        /// <returns>The observation: a fresh 0-d array of the getter's scalar (or the getter's own array of a non-scalar
+        ///     fill), <c>filled()</c>'s result, the repr text, or <c>common_fill_value</c>'s answer (the text
+        ///     <c>"None"</c> when it is null).</returns>
+        /// <exception cref="NotSupportedException">An unknown step, derive kind or observation (a corpus/registry drift).</exception>
+        /// <remarks>
+        ///     NumPy's fill state depends on CALL HISTORY (the getter materializes the default; a set writes into a stored
+        ///     array that derived arrays may share), so a case is a script rather than one call. The masked arrays built
+        ///     along the way are released afterwards — their data, mask and stored fill, each distinct array once, never
+        ///     the operand's own — because the zero-leak gate replays this tier and counts every pooled buffer a case keeps.
+        ///     The observation never aliases a released array: a getter scalar and common_fill_value's are copied into a
+        ///     fresh array, and a <c>filled()</c> view keeps its buffer by its own reference.
+        /// </remarks>
+        private static object FillScript(IReadOnlyDictionary<string, JsonElement> p, NDMaskedArray operand)
+        {
+            // The arrays a value spec creates (np:<dtype> scalars, arr1: fills) are the case's own temporaries.
+            var temps = new List<NDArray>();
+            object fill = p.TryGetValue("fill", out var fs) ? FillSpecValue(fs, temps) : null;
+            NDMaskedArray x = null, parent = null;
+            var built = new List<NDMaskedArray>();
+            try
+            {
+                x = np.ma.array(operand, fill_value: fill);
+                built.Add(x);
+                foreach (var st in p["steps"].EnumerateArray())
+                {
+                    switch (st.GetProperty("s").GetString())
+                    {
+                        case "read":
+                            _ = x.fill_value;
+                            break;
+                        case "set":
+                            x.fill_value = FillSpecValue(st.GetProperty("v"), temps);
+                            break;
+                        case "setfn":
+                            np.ma.set_fill_value(x, FillSpecValue(st.GetProperty("v"), temps));
+                            break;
+                        case "setparent":
+                            parent.fill_value = FillSpecValue(st.GetProperty("v"), temps);
+                            break;
+                        case "derive":
+                            parent = x;
+                            x = DeriveFill(x, st.GetProperty("how").GetString(), temps);
+                            built.Add(x);
+                            break;
+                        case var s:
+                            throw new NotSupportedException($"ma.fill step '{s}'");
+                    }
+                }
+                string observe = p["observe"].GetString();
+                switch (observe)
+                {
+                    case "fill": return FillAsArray(x.fill_value);
+                    case "parentfill": return FillAsArray(parent.fill_value);
+                    case "filled": return x.filled();
+                    case "filled_arg": return x.filled(FillSpecValue(p["farg"], temps));
+                    case "repr": return x.ToString(true);
+                    case "common":
+                        var common = np.ma.common_fill_value(x, parent);
+                        // Both arms object: a conditional of string and NDArray is typed NDArray through the implicit
+                        // string -> NDArray conversion, which turns "None" into a text array.
+                        return common is null ? (object)"None" : FillAsArray(common);
+                    default:
+                        throw new NotSupportedException($"ma.fill observation '{observe}'");
+                }
+            }
+            finally
+            {
+                // Each distinct array once; the operand's data and mask (which x aliases or views) belong to the harness.
+                var seen = new HashSet<object>(ReferenceEqualityComparer.Instance) { operand._data };
+                if (operand._mask is not null)
+                    seen.Add(operand._mask);
+                foreach (var m in built)
+                {
+                    if (m is null || m is NDMaskedConstant)
+                        continue;
+                    foreach (var a in new[] { m._data, m._mask, m._fill_value })
+                        if (a is not null && seen.Add(a))
+                            a.Dispose();
+                }
+                foreach (var a in temps)
+                    if (seen.Add(a))
+                        a.Dispose();
+            }
+        }
+
+        /// <summary>The getter's value as an array: a boxed scalar becomes a fresh 0-d array of its CLR type's dtype (an
+        /// <see cref="sbyte"/> is int8, a <see cref="ulong"/> uint64 — NumPy's scalar type), a non-scalar fill's array is
+        /// copied (the caller releases the masked arrays that store it).</summary>
+        /// <param name="value">The getter's (or common_fill_value's) result.</param>
+        /// <returns>A fresh array the caller owns.</returns>
+        private static NDArray FillAsArray(object value) => value is NDArray nd ? nd.copy() : NDArray.Scalar(value);
+
+        /// <summary>
+        ///     The derived array an <c>ma_fill</c> step names, as the NumPy call of gen_ma_oracle.py's <c>_fill_derive</c>:
+        ///     <c>astype:&lt;dtype&gt;</c>, <c>view</c> / <c>view:&lt;dtype&gt;</c> / <c>viewfill</c> (<c>view(fill_value=3)</c>),
+        ///     <c>slice</c> (<c>x[1:]</c>), <c>fancy</c> (<c>x[[0, 1]]</c>), <c>copy</c>, <c>ravel</c>, <c>reshape</c>
+        ///     (<c>(-1, 1)</c>), <c>transpose</c>, <c>sqrt</c>, <c>negative</c>, <c>add1</c> (<c>x + 1</c>), <c>gt</c>
+        ///     (<c>x &gt; 1</c>), <c>array</c> / <c>arraycopy</c> (<c>ma.array(x[, copy=True])</c>), <c>byteswap</c>,
+        ///     <c>argpartition</c> (kth 0), <c>sort</c>, <c>cumsum</c>, <c>take</c> (<c>[0, 1]</c>), <c>clip</c> (0, 5),
+        ///     <c>masked_where</c> (<c>data &gt; 1</c>).
+        /// </summary>
+        /// <param name="x">The current array.</param>
+        /// <param name="how">The derive kind.</param>
+        /// <param name="temps">Collects the plain arrays the call needs (an index, a condition), for the caller to release.</param>
+        /// <returns>The derived masked array.</returns>
+        /// <exception cref="NotSupportedException">An unknown derive kind.</exception>
+        private static NDMaskedArray DeriveFill(NDMaskedArray x, string how, List<NDArray> temps)
+        {
+            NDArray Temp(NDArray a)
+            {
+                temps.Add(a);
+                return a;
+            }
+
+            if (how.StartsWith("astype:", StringComparison.Ordinal))
+                return x.astype(np.dtype(how.Substring(7)));
+            if (how.StartsWith("view:", StringComparison.Ordinal))
+                return x.view(np.dtype(how.Substring(5)));
+            return how switch
+            {
+                "view" => x.view(),
+                "viewfill" => x.view(fill_value: 3L),
+                "slice" => (NDMaskedArray)x["1:"],
+                "fancy" => (NDMaskedArray)x[Temp(np.array(new long[] { 0, 1 }))],
+                "copy" => x.copy(),
+                "ravel" => x.ravel(),
+                "reshape" => x.reshape(-1, 1),
+                "transpose" => x.T,
+                "sqrt" => np.ma.sqrt(x),
+                "negative" => -x,
+                "add1" => x + 1,
+                "gt" => x > 1,
+                "array" => np.ma.array(x),
+                "arraycopy" => np.ma.array(x, copy: true),
+                "byteswap" => x.byteswap(),
+                "argpartition" => x.argpartition(0),
+                "sort" => np.ma.sort(x),
+                "cumsum" => np.ma.cumsum(x),
+                "take" => np.ma.take(x, Temp(np.array(new long[] { 0, 1 }))),
+                "clip" => x.clip(0, 5),
+                "masked_where" => np.ma.masked_where(Temp(np.greater(x.data, 1)), x),
+                _ => throw new NotSupportedException($"ma.fill derive '{how}'"),
+            };
+        }
+
+        /// <summary>
+        ///     The C# value a <c>ma_fill</c> value spec stands for, under the boundary map: <c>int</c> a <see cref="long"/>
+        ///     (a <see cref="System.Numerics.BigInteger"/> past it — Python ints of any size), <c>float</c> a
+        ///     <see cref="double"/>, <c>complex</c> a <see cref="System.Numerics.Complex"/>, <c>bool</c>, <c>str</c> a
+        ///     <see cref="string"/>, <c>bytes</c> a <see cref="byte"/>[], <c>f16</c> a <see cref="Half"/> (NumPy's
+        ///     np.float16 scalar), <c>np:&lt;dtype&gt;</c> a STRONG 0-d array (any other NumPy scalar: cast, never
+        ///     range-checked), <c>arr1:&lt;dtype&gt;</c> a 1-D array, <c>none</c> null.
+        /// </summary>
+        /// <param name="spec">The spec object.</param>
+        /// <param name="temps">Collects every array the spec creates, for the caller to release.</param>
+        /// <returns>The value.</returns>
+        /// <exception cref="NotSupportedException">An unknown spec kind.</exception>
+        private static object FillSpecValue(JsonElement spec, List<NDArray> temps)
+        {
+            string t = spec.GetProperty("t").GetString();
+            spec.TryGetProperty("v", out var v);
+            static double Num(JsonElement e) => e.ValueKind == JsonValueKind.String
+                ? e.GetString() switch { "nan" => double.NaN, "inf" => double.PositiveInfinity, _ => double.NegativeInfinity }
+                : e.GetDouble();
+            static object PyInt(string digits)
+            {
+                var big = System.Numerics.BigInteger.Parse(digits, System.Globalization.CultureInfo.InvariantCulture);
+                return big >= long.MinValue && big <= long.MaxValue ? (object)(long)big : big;
+            }
+            switch (t)
+            {
+                case "none": return null;
+                case "int": return v.ValueKind == JsonValueKind.String ? PyInt(v.GetString()) : v.GetInt64();
+                case "float": return Num(v);
+                case "complex": return new System.Numerics.Complex(Num(v[0]), Num(v[1]));
+                case "bool": return v.GetBoolean();
+                case "str": return v.GetString();
+                case "bytes": return Convert.FromHexString(v.GetString());
+                case "f16": return (Half)Num(v);
+            }
+            if (t.StartsWith("np:", StringComparison.Ordinal))
+            {
+                var dt = np.dtype(t.Substring(3));
+                NDArray raw = dt.kind switch
+                {
+                    'c' => NDArray.Scalar(new System.Numerics.Complex(Num(v[0]), Num(v[1]))),
+                    'f' => NDArray.Scalar(Num(v)),
+                    'b' => NDArray.Scalar(v.GetBoolean()),
+                    'u' => NDArray.Scalar(ulong.Parse(v.GetString(), System.Globalization.CultureInfo.InvariantCulture)),
+                    _ => NDArray.Scalar(long.Parse(v.GetString(), System.Globalization.CultureInfo.InvariantCulture)),
+                };
+                // The exact value in the scalar's own dtype (a float32 0.1 is stored as its double value, exact in float32).
+                temps.Add(raw);
+                if (raw.dtype.Equals(dt))
+                    return raw;
+                var scalar = raw.astype(dt);
+                temps.Add(scalar);
+                return scalar;
+            }
+            if (t.StartsWith("arr1:", StringComparison.Ordinal))
+            {
+                var dt = np.dtype(t.Substring(5));
+                var items = v.EnumerateArray().ToArray();
+                NDArray raw = dt.kind switch
+                {
+                    'b' => np.array(items.Select(e => e.GetBoolean()).ToArray()),
+                    'f' or 'c' => np.array(items.Select(Num).ToArray()),
+                    _ => np.array(items.Select(e => e.GetInt64()).ToArray()),
+                };
+                temps.Add(raw);
+                if (raw.dtype.Equals(dt))
+                    return raw;
+                var arr = raw.astype(dt);
+                temps.Add(arr);
+                return arr;
+            }
+            throw new NotSupportedException($"ma.fill value spec '{t}'");
+        }
 
         /// <summary>
         ///     The values of a ma.put case as NumPy received them (the <c>vkind</c> param): an ndarray (<c>array</c>, the

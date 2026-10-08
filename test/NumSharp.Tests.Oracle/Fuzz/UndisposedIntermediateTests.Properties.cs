@@ -216,7 +216,7 @@ namespace NumSharp.Tests.Fuzz
                         }
                     }
                     // The target's own arrays are never a read's fresh part (a getter may return the target).
-                    var keep = new HashSet<object>(fx.Keep, ReferenceEqualityComparer.Instance);
+                    var keep = fx.KeepNow();
                     foreach (var own in CollectDisposables(t))
                         keep.Add(own);
                     DisposeFreshReadParts(v1, v2, keep);

@@ -146,6 +146,22 @@ namespace NumSharp.Tests.Fuzz
         public readonly HashSet<object> Keep = new(ReferenceEqualityComparer.Instance);
 
         /// <summary>
+        ///     <see cref="Keep"/> plus the stored fill of every fixture masked array as it is NOW: a catalogue entry that
+        ///     reads a fixture's fill value materializes it (NumPy's getter does), and an array later derived from that
+        ///     fixture SHARES the stored object (<c>_update_from</c>), so a result disposer that knew only the build-time
+        ///     set would release a fill the fixture still holds.
+        /// </summary>
+        /// <returns>A new set; the fixture's own sets are not changed.</returns>
+        public HashSet<object> KeepNow()
+        {
+            var keep = new HashSet<object>(Keep, ReferenceEqualityComparer.Instance);
+            foreach (var m in new[] { MA, MB, MAn, MV, MI, MI2, MV0_4, MV0_5, MV5_10, MV0_10, MV10_13, MV10_20, MBT })
+                if (m?._fill_value is not null)
+                    keep.Add(m._fill_value);
+            return keep;
+        }
+
+        /// <summary>
         ///     The base-buffer byte range of every non-empty array in <see cref="Keep"/>. A catalogue
         ///     result whose data pointer lands inside one is a VIEW of a fixture — it allocated nothing —
         ///     so the pool-bypass check must not read it as a fresh result that skipped the pool.

@@ -1227,6 +1227,34 @@ integer target, `params.islice`; uint64 is absent — put's 'safe' index cast re
 operands, and a second put into the first one's result reads its written values as indices (out of bounds under
 `raise`). The overlap bug turns 50 of them red.
 
+### numpy.ma's fill value (`ma_fill` tier) — 2026-10-08
+
+`ma_fill.jsonl` (`gen_ma_oracle.py fill`, 3,867 cases, 327 of them NumPy errors, floor 3,500) gates the fill value as
+NumPy stores it (`Ma/NDMaskedArray.cs`: `CheckFillValue` = `_check_fill_value`, `DefaultFill` = its None branch, the
+`fill_value` getter / setter, `UpdateFrom` = `_update_from`, `FinalizeFrom` = `__array_finalize__`). NumPy's answer
+depends on CALL HISTORY — the getter materializes the default at its own dtype, the setter writes into a stored array that
+derived arrays may share — so each case is a short SCRIPT the replay runs step by step (`OpRegistry.Ma` `FillScript`):
+
+**Params:** `fill` (the constructor's fill_value, a value spec), `steps` (`read`, `set` / `setfn` (`ma.set_fill_value`)
+with a value spec, `derive` with a kind — astype:<dtype>, view, view:<dtype>, viewfill, slice, fancy, copy, ravel,
+reshape, transpose, sqrt, negative, add1, gt, array, arraycopy, byteswap, argpartition, sort, cumsum, take, clip,
+masked_where — and `setparent`), `observe` (`fill` / `parentfill`: the getter as a 0-d array of its scalar's dtype;
+`filled` / `filled_arg`; `repr` (text); `common` (`common_fill_value(x, parent)`, the text `None` when null)). A value
+spec is `{"t": kind, "v": value}`: int (a decimal string past 2**53: `BigInteger` past long), float (NaN / inf as
+strings), complex, bool, str, bytes, f16 (`Half`, NumPy's float16 scalar), `np:<dtype>` (a NumPy scalar: a STRONG 0-d
+array in C#), `arr1:<dtype>` (the deprecated non-scalar fill), none.
+
+**Bit-exact, 0 excused, STRICT types** (valueclass `mafill`, as for `maput`). Not cases: text DATA (a number into text
+formats, bytes into a number parses: the string oracle's phase-2 work; and `describe()` serializes no text dtype), a
+`filled()` NumPy can only answer with its OBJECT-array fallback (unit-pinned: NumSharp raises NotSupportedException), and
+argpartition's repr (introselect's arrangement between pivots is no NumPy contract; its fill is observed).
+
+**Traps:** a C# conditional of a `string` arm and an `NDArray` arm is typed NDArray through the implicit string -> NDArray
+conversion (`common`'s `"None"` became a text array) — cast both arms to `object`; the replay releases every masked array
+a script built (data, mask, stored fill, each distinct array once, never the operand's), and the leak harness now counts
+a masked result's stored fill as part of the result (`CollectDisposables`) and keeps the operands' and fixtures' fills
+(`Keep()`, `LeakFixture.KeepNow`): a fill an entry materialized on a fixture is shared by every array later derived from it.
+
 ### numpy.ma's arraysetops (`ma_setops` tier) — 2026-10-08
 
 `ma_setops.jsonl` (`gen_ma_oracle.py setops`, 7,030 cases, floor 5,580) gates `np.ma.unique` (with `return_index` /

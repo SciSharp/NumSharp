@@ -130,6 +130,8 @@ namespace NumSharp
             {
                 scope.Returns(values?._data);
                 scope.Returns(values?._mask);
+                // A stored fill created with the values (FinalizeFrom's converted copy) leaves with them.
+                scope.Returns(values?._fill_value);
                 scope.Returns(indices);
                 scope.Returns(inverse_indices);
             }

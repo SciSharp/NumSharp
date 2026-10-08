@@ -119,6 +119,19 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void MaPut() => RunMaCorpus("ma_put.jsonl");
 
+        /// <summary>
+        ///     numpy.ma's fill value as NumPy STORES it (ma_fill.jsonl, gen_ma_oracle.py <c>fill</c>): call-history scripts
+        ///     over every dtype — the constructor's conversion of every fill kind (Python scalars range-checked, NumPy
+        ///     scalars and arrays cast, NumPy's TypeErrors), the getter's materialized default at its own dtype, the setter
+        ///     writing into a stored fill, inheritance by every derive kind (shared through <c>_update_from</c>, a converted
+        ///     copy through <c>__array_finalize__</c>, a default for the reductions), <c>filled()</c>, the repr's
+        ///     <c>fill_value=</c> line and <c>common_fill_value</c>. Held to ZERO excuses (valueclass <c>mafill</c>), with the
+        ///     exception TYPE checked strictly (<see cref="StrictErrorTypes"/>).
+        /// </summary>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void MaFill() => RunMaCorpus("ma_fill.jsonl");
+
         // Extras: small exact products (dot/inner/outer) + trace/vander(->array) + triangular-mask
         // (mask_rows/cols/rowcols, compress_rows/cols) + predicates (is_masked/allclose/allequal->scalar)
         // + mask helpers (make_mask/make_mask_none/mask_or/flatten_mask->array, make_mask_descr->dtype).
@@ -151,6 +164,7 @@ namespace NumSharp.Tests.Fuzz
             ["ma_setops.jsonl"] = 5580,
             // ~80% of the 3,660 committed cases (the put port, 2026-10-08).
             ["ma_put.jsonl"] = 2900,
+            ["ma_fill.jsonl"] = 3500,
         };
 
         /// <summary>
@@ -363,9 +377,9 @@ namespace NumSharp.Tests.Fuzz
             var empty = Array.Empty<BitDiff.Diff>();
             string at = slot == null ? "" : $" {slot}";
 
-            // ma_meanvar.jsonl, ma_surface.jsonl, ma_setops.jsonl and ma_put.jsonl are held to ZERO excuses: MisalignedRegistry
-            // returns null for their valueclasses, and none of this file's own excuses below run for them either.
-            bool strict = sc.Valueclass is "mameanvar" or "masurface" or "masetops" or "maput";
+            // The ZERO-excuse ma tiers (ma_meanvar, ma_surface, ma_setops, ma_put, ma_fill): MisalignedRegistry returns
+            // null for their valueclasses, and none of this file's own excuses below run for them either.
+            bool strict = sc.Valueclass is "mameanvar" or "masurface" or "masetops" or "maput" or "mafill";
 
             // FORM: the masked singleton, a scalar, an array with nomask or with a mask array. getmaskarray cannot tell
             // these apart (an all-False mask reads like nomask, the singleton like a masked 0-d array), so the object
@@ -591,7 +605,7 @@ namespace NumSharp.Tests.Fuzz
             string wantText = (sc.Error.Text ?? "").Trim();
             // An exception named after NumPy's (Exceptions/{ValueError,TypeError,AxisError}.cs) is the strongest match. The
             // strict tiers accept only NumPy's own type or the house type NumSharp documents for it (StrictErrorTypes).
-            bool typeOk = sc.Valueclass == "maput"
+            bool typeOk = sc.Valueclass is "maput" or "mafill"
                 ? gotType == sc.Error.Type || (StrictErrorTypes.TryGetValue(sc.Error.Type, out var strictAllowed)
                                                && strictAllowed.Contains(gotType))
                 : gotType == sc.Error.Type

@@ -210,7 +210,7 @@ namespace NumSharp.Tests.Fuzz
                 }
                 finally
                 {
-                    UndisposedIntermediateTests.DisposeAny(m, f.Keep);   // the entry's own copy — released on the throw
+                    UndisposedIntermediateTests.DisposeAny(m, f.KeepNow());   // the entry's own copy — released on the throw
                 }
             });
             E(l, "NDMaskedArray.round", "decimals", f => f.MA.round(1));

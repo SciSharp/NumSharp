@@ -351,9 +351,17 @@ namespace NumSharp.Backends.Printing
             /// the unquoted str() a 0-d string array prints.</summary>
             /// <param name="value">The boxed element value.</param>
             /// <returns>The element's object-array string form.</returns>
-            public string Format(object value) => _tc == NPTypeCode.String
-                ? (value is byte[] bytes ? PyRepr.Bytes(bytes) : PyRepr.Str((string)value))
-                : ScalarStr(value, _tc);
+            /// <remarks>A float16 or float32 element prints as the Python FLOAT it becomes: NumPy's <c>astype(object)</c>
+            /// converts it through <c>PyFloat_FromDouble</c>, so float16 1.732 prints <c>1.732421875</c> and float32 0.1
+            /// <c>0.10000000149011612</c> (the double's shortest repr), not the narrow type's shortest digits (they did until
+            /// 2026-10-08; found by the ma_fill tier's repr cases).</remarks>
+            public string Format(object value) => _tc switch
+            {
+                NPTypeCode.String => value is byte[] bytes ? PyRepr.Bytes(bytes) : PyRepr.Str((string)value),
+                NPTypeCode.Half => PythonFloatRepr((double)(Half)value, FloatKind.Double),
+                NPTypeCode.Single => PythonFloatRepr((double)(float)value, FloatKind.Double),
+                _ => ScalarStr(value, _tc),
+            };
         }
 
         // str() of a 0d array element (Python scalar str semantics).

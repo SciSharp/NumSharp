@@ -13,7 +13,7 @@ The C# harness (FuzzCorpusTests.Ma.RunMaCorpus) rebuilds np.ma.masked_array(data
 runs the ma.* op, and compares filled(0) bytes (NaN-tokenized) + getmaskarray bytes (bit-exact).
 Op keys are prefixed "ma." so they never collide with the np.* key of the same name.
 
-Run: python gen_ma_oracle.py [all|unary|binary|reduce|scan|manip|construct|select|sortsetops|extras]
+Run: python gen_ma_oracle.py [all|unary|binary|reduce|scan|manip|construct|select|sortsetops|extras|meanvar|setops|put|fill]
 Requires numpy==2.4.2.
 """
 import json
@@ -1921,6 +1921,293 @@ def gen_ma_put():
 
 
 # ---------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------
+# ma.fill (valueclass "mafill") — numpy.ma's fill value as NumPy STORES it (plan api-parameter-parity X33, the rundown's
+# bug 4). NumPy keeps MaskedArray._fill_value as a 0-d array (None until set or read): _check_fill_value converts a
+# given fill to the data dtype (np.asarray: a Python scalar range-checked, TypeError "Cannot convert fill_value 300 to
+# dtype int8"; a NumPy scalar or array cast), the getter MATERIALIZES the default at the DEFAULT's own dtype (int64 999999
+# for int8 data, uint64 for unsigned, float64 1e20 for float16 / float32), the setter writes INTO a stored array
+# (_fill_value[()] = target), _update_from SHARES the stored object (views, the _arraymethod family, the masked ufuncs: a
+# set reaches both arrays) and __array_finalize__ stores a converted COPY (constructors, astype, view, byteswap). So the
+# answer depends on CALL HISTORY, and each case is a short script the replay runs step by step:
+#
+#   params.fill    the constructor's fill_value (a value spec), or absent (None)
+#   params.steps   [{"s": "read"} | {"s": "set", "v": spec} | {"s": "setfn", "v": spec} | {"s": "derive", "how": ...}
+#                   | {"s": "setparent", "v": spec}], run in order; "derive" makes the derived array the current one and
+#                   keeps the previous as the parent
+#   params.observe "fill" (the getter, as a 0-d array of its scalar's dtype — or the array of a non-scalar fill),
+#                  "filled" / "filled_arg" (filled() / filled(params.farg)), "repr" (text), "parentfill" (the parent's
+#                  getter), "common" (common_fill_value(x, parent) — a 0-d array, or the text "None")
+#
+# A value spec is {"t": kind, "v": value}: int (a Python int; JSON number, or a decimal string past 2**53), float (NaN /
+# inf as strings), complex ([re, im]), bool, str, bytes (hex), f16 (np.float16, a C# Half), np:<dtype> (a NumPy scalar —
+# a strong 0-d array in C#), arr1:<dtype> (a 1-D array, NumPy's deprecated non-scalar fill), none. Text DATA is limited to
+# text fills (a number into text formats it, bytes into a number parses it: the string phase-2 work the string oracle
+# gates), and a filled() whose fill NumPy can only place through its OBJECT-array fallback is not a case (unit-pinned:
+# NumSharp refuses it).
+# ---------------------------------------------------------------------------------------------
+FILL_DTYPES = ["bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float16", "float32",
+               "float64", "complex128"]
+
+
+def _fill_spec(v):
+    """The JSON value spec of a fill value V (see the section header)."""
+    def num(x):
+        x = float(x)
+        if np.isnan(x):
+            return "nan"
+        if np.isinf(x):
+            return "inf" if x > 0 else "-inf"
+        return x
+    if v is None:
+        return {"t": "none"}
+    if isinstance(v, np.ndarray):
+        return {"t": f"arr1:{v.dtype.name}", "v": [num(x) if v.dtype.kind in "fc" else (bool(x) if v.dtype.kind == "b" else int(x))
+                                                  for x in v.tolist()]}
+    if isinstance(v, np.float16):
+        return {"t": "f16", "v": num(v)}
+    if isinstance(v, np.generic):
+        if v.dtype.kind == "c":
+            return {"t": f"np:{v.dtype.name}", "v": [num(v.real), num(v.imag)]}
+        if v.dtype.kind == "f":
+            return {"t": f"np:{v.dtype.name}", "v": num(v)}
+        if v.dtype.kind == "b":
+            return {"t": f"np:{v.dtype.name}", "v": bool(v)}
+        return {"t": f"np:{v.dtype.name}", "v": str(int(v))}
+    if isinstance(v, bool):
+        return {"t": "bool", "v": v}
+    if isinstance(v, int):
+        return {"t": "int", "v": v if -2**53 <= v <= 2**53 else str(v)}
+    if isinstance(v, float):
+        return {"t": "float", "v": num(v)}
+    if isinstance(v, complex):
+        return {"t": "complex", "v": [num(v.real), num(v.imag)]}
+    if isinstance(v, str):
+        return {"t": "str", "v": v}
+    if isinstance(v, bytes):
+        return {"t": "bytes", "v": v.hex()}
+    raise TypeError(f"no spec for {v!r}")
+
+
+def _fill_derive(x, how):
+    """NumPy's derived array for HOW (the replay's OpRegistry.Ma DeriveFill mirrors each)."""
+    ma = np.ma
+    if how.startswith("astype:"):
+        return x.astype(how[7:])
+    if how.startswith("view:"):
+        return x.view(np.dtype(how[5:]))
+    if how == "view":
+        return x.view()
+    if how == "viewfill":
+        return x.view(fill_value=3)
+    if how == "slice":
+        return x[1:]
+    if how == "fancy":
+        return x[[0, 1]]
+    if how == "copy":
+        return x.copy()
+    if how == "ravel":
+        return x.ravel()
+    if how == "reshape":
+        return x.reshape(-1, 1)
+    if how == "transpose":
+        return x.T
+    if how == "sqrt":
+        return ma.sqrt(x)
+    if how == "negative":
+        return -x
+    if how == "add1":
+        return x + 1
+    if how == "gt":
+        return x > 1
+    if how == "array":
+        return ma.array(x)
+    if how == "arraycopy":
+        return ma.array(x, copy=True)
+    if how == "byteswap":
+        return x.byteswap()
+    if how == "argpartition":
+        return x.argpartition(0)
+    if how == "sort":
+        return ma.sort(x)
+    if how == "cumsum":
+        return ma.cumsum(x)
+    if how == "take":
+        return ma.take(x, [0, 1])
+    if how == "clip":
+        return x.clip(0, 5)
+    if how == "masked_where":
+        return ma.masked_where(np.asarray(x.data) > 1, x)
+    raise ValueError(how)
+
+
+def _fill_value_of(v):
+    """The Python object a value spec stands for, built fresh (a NumPy array spec is a new array each call)."""
+    return v() if callable(v) else v
+
+
+def _fill_observe(x, parent, observe, farg):
+    """What the case records: the observed value as an expected dict (array / text)."""
+    if observe == "fill":
+        return _plain_expected(np.asarray(x.fill_value))
+    if observe == "parentfill":
+        return _plain_expected(np.asarray(parent.fill_value))
+    if observe == "filled":
+        return _plain_expected(x.filled())
+    if observe == "filled_arg":
+        return _plain_expected(x.filled(_fill_value_of(farg)))
+    if observe == "repr":
+        return {"kind": "text", "value": repr(x)}
+    if observe == "common":
+        c = np.ma.common_fill_value(x, parent)
+        return {"kind": "text", "value": "None"} if c is None else _plain_expected(np.asarray(c))
+    raise ValueError(observe)
+
+
+def _fill_run(view, mask, fill, steps, observe, farg):
+    """Runs one case's script on fresh NumPy objects; returns the expected dict, or raises NumPy's error."""
+    ma = np.ma
+    kw = {} if fill is None else {"fill_value": _fill_value_of(fill)}
+    x = ma.array(view, mask=(ma.nomask if mask is None else mask), **kw)
+    parent = None
+    for st in steps:
+        kind = st["s"]
+        if kind == "read":
+            _ = x.fill_value
+        elif kind == "set":
+            x.fill_value = _fill_value_of(st["v"])
+        elif kind == "setfn":
+            ma.set_fill_value(x, _fill_value_of(st["v"]))
+        elif kind == "setparent":
+            parent.fill_value = _fill_value_of(st["v"])
+        elif kind == "derive":
+            parent, x = x, _fill_derive(x, st["how"])
+        else:
+            raise ValueError(kind)
+    return _fill_observe(x, parent, observe, farg)
+
+
+def gen_ma_fill():
+    cases, n = [], _N()
+    stats = {"errors": 0, "object": 0}
+    rng = np.random.default_rng(20261008 + 11)
+
+    def operand_for(dt, shape=(4,)):
+        """A small operand of DT (values 0..k-1 cast, mask F T F F ...) and its description."""
+        k = int(np.prod(shape))
+        if dt == "bool":
+            vals = (np.arange(k) % 2 == 0)
+        else:
+            vals = np.arange(1, k + 1).astype(dt)
+        base = vals.copy().reshape(shape)
+        mask = (np.arange(k) % 4 == 1).reshape(shape)
+        return base, mask
+
+    def emit(tag, dt, fill, steps, observe, farg=None, shape=(4,), masked=True):
+        base, mask = operand_for(dt, shape)
+        mask = mask if masked else None
+        operand = _ma_operand(base, base, mask)
+        params = {"steps": [{k: (_fill_spec(_fill_value_of(v)) if k == "v" else v) for k, v in st.items()} for st in steps],
+                  "observe": observe}
+        if fill is not None:
+            params["fill"] = _fill_spec(_fill_value_of(fill))
+        if farg is not None:
+            params["farg"] = _fill_spec(_fill_value_of(farg))
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                exp = _fill_run(base.copy(), None if mask is None else mask.copy(), fill, steps, observe, farg)
+        except Exception as e:  # NumPy's error is the case
+            stats["errors"] += 1
+            cases.append({"id": f"ma.fill/{tag}/{dt}/{n.next()}", "op": "ma.fill", "params": params,
+                          "operands": [operand], "expects_throw": True,
+                          "error": {"type": type(e).__name__, "text": str(e)},
+                          "layout": tag, "valueclass": "mafill"})
+            return
+        if exp.get("dtype") == "object":
+            stats["object"] += 1
+            return
+        cases.append({"id": f"ma.fill/{tag}/{dt}/{n.next()}", "op": "ma.fill", "params": params,
+                      "operands": [operand], "expected": exp, "layout": tag, "valueclass": "mafill"})
+
+    # A. The constructor's conversion and the getter, every dtype x every fill kind.
+    fills = [None, 5, 5.7, -1, 0, 300, 70000, 2**40, 2**63, 2**64, -2**63 - 1, 1e20, -1e20, 0.1, float("nan"),
+             float("inf"), float("-inf"), True, False, 1 + 2j, 2.5 + 0j, np.float16(300), np.float16("nan"),
+             np.float16(0.1), lambda: np.int64(1000), lambda: np.uint64(2**63), lambda: np.float64(5.7),
+             lambda: np.float32(0.1), lambda: np.int8(-5), lambda: np.complex128(3 + 4j), lambda: np.bool_(True),
+             lambda: np.array([1, 2]), lambda: np.array([1.5, 2.5]), "x"]
+    for dt in FILL_DTYPES:
+        for f in fills:
+            emit("construct", dt, f, [], "fill")
+        # The repr after construction (the getter materializes the default for the repr).
+        for f in (None, 1, 2.5, 300, lambda: np.array([1, 2])):
+            emit("repr", dt, f, [], "repr")
+        for shape in ((2, 2), (1, 3)):
+            emit("repr2d", dt, None, [], "repr", shape=shape)
+
+    # B. Call history: the default read first or not, then set; set None after a fill; module set_fill_value.
+    for dt in FILL_DTYPES:
+        for v in (5, 7.5, 300, -1, True, 1e20, 1 + 2j, np.float16(300), lambda: np.int64(1000), None, "x"):
+            emit("set_unread", dt, None, [{"s": "set", "v": v}], "fill")
+            emit("set_read", dt, None, [{"s": "read"}, {"s": "set", "v": v}], "fill")
+            emit("set_after_fill", dt, 5, [{"s": "set", "v": v}], "fill")
+            emit("setfn", dt, None, [{"s": "setfn", "v": v}], "fill")
+        emit("set_none_after_fill", dt, 5, [{"s": "set", "v": None}], "fill")
+        emit("set_none_after_read", dt, None, [{"s": "read"}, {"s": "set", "v": None}], "fill")
+        emit("set_twice", dt, None, [{"s": "set", "v": 3}, {"s": "set", "v": 9}], "fill")
+        emit("set_nd_into_0d", dt, 5, [{"s": "set", "v": lambda: np.array([1, 2])}], "fill")
+        emit("repr_after_set", dt, None, [{"s": "read"}, {"s": "set", "v": 3}], "repr")
+        emit("repr_after_set_unread", dt, None, [{"s": "set", "v": 3}], "repr")
+
+    # C. Inheritance: every derive kind x (nothing stored / the default read / a fill set), the derived array's fill,
+    #    a set on the derived reaching the parent or not, a set on the parent reaching the derived or not.
+    derives = ["astype:int64", "astype:int8", "astype:uint8", "astype:float32", "astype:float16", "astype:bool",
+               "astype:complex128", "view", "view:int64", "viewfill", "slice", "fancy", "copy", "ravel", "reshape",
+               "transpose", "sqrt", "negative", "add1", "gt", "array", "arraycopy", "byteswap", "argpartition", "sort",
+               "cumsum", "take", "clip", "masked_where"]
+    for dt in ("int8", "uint8", "int64", "float32", "float64", "complex128", "bool", "float16"):
+        for how in derives:
+            # -bool is NumPy's TypeError and complex has no ordering (>, clip): errors of other ops, not of the fill.
+            if (dt == "bool" and how == "negative") or (dt == "complex128" and how in ("gt", "clip")):
+                continue
+            if how == "view:int64" and np.dtype(dt).itemsize != 8:
+                how = "view:" + {1: "uint8", 2: "uint16", 4: "uint32", 16: "complex128"}[np.dtype(dt).itemsize]
+            for pre_name, pre_fill, pre_steps in (("none", None, []), ("read", None, [{"s": "read"}]),
+                                                  ("fill", 7.5 if np.dtype(dt).kind in "fc" else 7, [])):
+                emit(f"derive_{pre_name}", dt, pre_fill, pre_steps + [{"s": "derive", "how": how}], "fill")
+                emit(f"derive_{pre_name}_setchild", dt, pre_fill,
+                     pre_steps + [{"s": "derive", "how": how}, {"s": "set", "v": 3}], "parentfill")
+                emit(f"derive_{pre_name}_setparent", dt, pre_fill,
+                     pre_steps + [{"s": "derive", "how": how}, {"s": "setparent", "v": 3}], "fill")
+            # argpartition's data between its pivots is introselect's own order (not a NumPy contract, as in the sort
+            # tiers): its fill is observed above, its repr is not.
+            if how != "argpartition":
+                emit("derive_repr", dt, 7, [{"s": "derive", "how": how}], "repr")
+
+    # D. filled(): the default per dtype (unread / read / after a set / after astype), an explicit fill per kind.
+    for dt in FILL_DTYPES:
+        emit("filled_default", dt, None, [], "filled")
+        emit("filled_read", dt, None, [{"s": "read"}], "filled")
+        emit("filled_set", dt, None, [{"s": "set", "v": 3}], "filled")
+        emit("filled_nomask", dt, None, [], "filled", masked=False)
+        for f in (0, 2.5, 300, -1, 1e20, float("nan"), True, 1 + 2j, np.float16(300), lambda: np.int64(1000), "x",
+                  lambda: np.array([7, 8, 9, 10])):
+            emit("filled_arg", dt, None, [], "filled_arg", farg=f)
+        for how in ("astype:int8", "astype:float32", "astype:uint8", "astype:int64"):
+            emit("filled_after_astype", dt, None, [{"s": "read"}, {"s": "derive", "how": how}], "filled")
+            emit("filled_after_astype_unread", dt, None, [{"s": "derive", "how": how}], "filled")
+
+    # E. common_fill_value between a derived array and its parent, and between independent arrays.
+    for dt in ("int8", "int64", "float32", "float64", "complex128", "bool"):
+        for how in ("astype:float64", "astype:int64", "slice", "sqrt", "copy"):
+            emit("common", dt, 5, [{"s": "derive", "how": how}], "common")
+            emit("common_unread", dt, None, [{"s": "derive", "how": how}], "common")
+            emit("common_setchild", dt, 5, [{"s": "derive", "how": how}, {"s": "set", "v": 4}], "common")
+
+    print(f"  (ma_fill: {stats['errors']} NumPy errors kept, {stats['object']} object-array cases dropped)")
+    return cases
+
+
 TIERS = {
     "unary": ("ma_unary.jsonl", gen_ma_unary),
     "binary": ("ma_binary.jsonl", gen_ma_binary),
@@ -1934,6 +2221,7 @@ TIERS = {
     "meanvar": ("ma_meanvar.jsonl", gen_ma_meanvar),
     "setops": ("ma_setops.jsonl", gen_ma_setops),
     "put": ("ma_put.jsonl", gen_ma_put),
+    "fill": ("ma_fill.jsonl", gen_ma_fill),
 }
 
 
