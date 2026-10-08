@@ -1079,7 +1079,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   - An `object[]` (Python list) store value is cast through `np.asanyarray`, not packed element by element (X28's
     coercion gap, seen from the store side).
 - [x] **X33 numpy.ma's numeric fill value was the caller's raw C# value: never converted to the data dtype, never
-  materialized, never refused.** Done 2026-10-08 (this commit; the rundown's bug 4).
+  materialized, never refused.** Done 2026-10-08 (commit de07ca81; the rundown's bug 4; the `ma.apply_along_axis` and
+  `default_fill_value(obj)` neighbours in the commit after it).
   - Proof: NumPy's `_check_fill_value` stores `np.array(np.asarray(fill_value, dtype=ndtype))`, a 0-d array of the
     data's dtype, and the getter returns `_fill_value[()]`. NumSharp kept the C# value as given: `astype(int64)` kept
     7.5 (NumPy: `np.int64(7)`), `fill_value=300` on int8 was accepted (NumPy: `TypeError: Cannot convert fill_value 300
@@ -1118,6 +1119,22 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     - The masked indexer parsed a lone slice string twice (once per array), ~0.8 µs each: `x["1:"]` took 2.84 µs, 1.33–
       1.40× NumPy. It parses once now (1.77 µs). `GetView` rewrites its slice ARRAY (a newaxis entry becomes
       `Slice.All`), so the mask indexes a copy of the parsed array (finding 45).
+    - `ma.apply_along_axis` skipped NumPy's closing statement `result.fill_value = ma.default_fill_value(result)`: the
+      result stores the default converted to ITS dtype, so an int8 / uint8 / int16 / uint16 result raises `Cannot convert
+      fill_value 999999 to dtype uint8` (after every `func1d` call) and every other result reads the default at its own
+      dtype (`np.int32(999999)`, `np.float16(inf)`, the repr's plain `fill_value=999999`). `ResultDefaultFill` stores it
+      through `StoreFill`, so it stays in the scope with the new data and mask (finding 43). journey4's surface tier
+      carved this as gap MS6 (`b08d0759`).
+    - `ma.default_fill_value(obj)` took only a dtype; NumPy's `_get_dtype_of` takes an array (its dtype), a masked array, a
+      scalar or a list (`np.asanyarray(obj).dtype`). A `default_fill_value(object)` overload does that (a `byte[]` is the
+      bytes scalar, a `List` / `object[]` a Python list), and None answers NumPy's `'?'` (`default_filler['O']`) in both
+      overloads (a `null` binds the `DType` one). A literal `0` binds the object overload (the two user-defined
+      conversions `0 → NPTypeCode → DType` and `0 → NPY_TYPES → DType` are ambiguous, so the `DType` overload is not
+      applicable), as NumPy's `default_fill_value(0)` is 999999.
+    - The other fill-value gaps journey4's surface tier carved (MS7 `masked_object` sets no fill, MS8 its range error,
+      MS9 its no-match shrink, MS12 `set_fill_value` stores the raw value, MS13 `common_fill_value` compares raw values,
+      MS14 `maximum_fill_value(bool)`) already match NumPy on this branch (this fix and 77b68d89); un-carve them and drop
+      their `OpenBugs.MaSurface.cs` pins when the branch is merged into journey4.
   - Divergence (documented): `filled()` whose stored fill cannot reach the data under `same_kind` (a complex fill shared
     with `ma.absolute`'s float result) is NumPy's object-array fallback; NumSharp raises NotSupportedException.
   - Not changed: the masked SETTER still parses a lone slice string twice (not measured).
@@ -1341,7 +1358,9 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   `_update_from` sharing and `__array_finalize__` converting; `byteswap` / `argpartition` / `cumsum` / `cumprod` own
   their masks; `view`'s reshape error; `x + 1`'s strong int64; the float16 masked print; the masked slice parsing its
   string once). The `ma_fill` tier (3,867 call-history scripts, zero excuses, strict types); 15 planted bugs killed.
-  Findings 42–45 recorded. Commit: this commit.
+  Findings 42–45 recorded. Commit: de07ca81. The commit after it adds two neighbours: `ma.apply_along_axis` stores the
+  default fill at its result's dtype (journey4's gap MS6) and `ma.default_fill_value` takes an array, a scalar or a list
+  (`_get_dtype_of`; None is `'?'`); 2 more planted bugs killed by the unit tests.
 
 - **2026-10-08**: X31 done (numpy.ma's put as NumPy's statements; np.put as `PyArray_PutTo`, np.take as
   `PyArray_TakeFrom`; one clip-mode converter; the selection kernels' order-'C' casts; the indexers' `prepare_index`

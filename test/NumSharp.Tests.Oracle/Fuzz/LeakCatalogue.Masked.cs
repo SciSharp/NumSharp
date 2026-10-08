@@ -101,6 +101,10 @@ namespace NumSharp.Tests.Fuzz
             // ---- fill values / predicates ----
             E(l, "np.ma.common_fill_value", "pair", f => np.ma.common_fill_value(f.MA, f.MB));
             E(l, "np.ma.default_fill_value", "dtype", f => np.ma.default_fill_value(np.float64));
+            // The object overload: an array's dtype, and a scalar / Python list, whose operand array it builds and releases.
+            E(l, "np.ma.default_fill_value", "array", f => np.ma.default_fill_value(f.M));
+            E(l, "np.ma.default_fill_value", "scalar", f => np.ma.default_fill_value(1.5));
+            E(l, "np.ma.default_fill_value", "list", f => np.ma.default_fill_value(new object[] { 1.5, 2 }));
             E(l, "np.ma.maximum_fill_value", "masked", f => np.ma.maximum_fill_value(f.MA));
             E(l, "np.ma.minimum_fill_value", "masked", f => np.ma.minimum_fill_value(f.MA));
             E(l, "np.ma.isMA", "masked", f => Box(np.ma.isMA(f.MA)));

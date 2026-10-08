@@ -1074,6 +1074,48 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(M(c1).SequenceEqual(new[] { false, true, false, false, false, true, false, false, false, true, false, false }));
         }
 
+        /// <summary>
+        ///     NumPy's last statement, <c>result.fill_value = ma.default_fill_value(result)</c>: the result STORES the
+        ///     dtype's default converted to its own dtype, so a narrow integer result raises (999999 does not fit) and
+        ///     every other result reads the default AT ITS DTYPE — np.int32(999999), np.float16(inf) — where a fresh array
+        ///     would read the int64 / float64 default. Expected values probed on NumPy 2.4.2 with
+        ///     <c>ma.apply_along_axis(ma.max, 0, ma.array([[1, 2], [3, 4]], mask=[[0, 1], [0, 0]]))</c>.
+        /// </summary>
+        [TestMethod]
+        public void ApplyAlongAxis_StoresTheDefaultFillAtTheResultDtype()
+        {
+            NDMaskedArray Apply(DType dt) => np.ma.apply_along_axis(m => np.ma.max(m), 0,
+                np.ma.array(np.array(new long[,] { { 1, 2 }, { 3, 4 } }).astype(dt),
+                            np.array(new bool[,] { { false, true }, { false, false } })));
+
+            foreach (var dt in new[] { np.uint8, np.int8, np.int16, np.uint16 })
+            {
+                var e = Assert.ThrowsException<TypeError>(() => Apply(dt));
+                Assert.AreEqual($"Cannot convert fill_value 999999 to dtype {dt}", e.Message);
+            }
+            var expected = new (DType dtype, object fill)[]
+            {
+                (np.int32, 999999), (np.uint32, 999999u), (np.int64, 999999L), (np.uint64, 999999UL),
+                (np.float16, Half.PositiveInfinity), (np.float32, 1e20f), (np.float64, 1e20), (np.@bool, true),
+                (np.complex128, new System.Numerics.Complex(1e20, 0)),
+            };
+            foreach (var (dtype, fill) in expected)
+            {
+                var r = Apply(dtype);
+                Assert.AreEqual(dtype, r.dtype);
+                var actual = r.fill_value;
+                Assert.AreEqual(fill.GetType(), actual.GetType(), $"{dtype}: NumPy's scalar type");
+                Assert.AreEqual(fill, actual, $"{dtype}");
+            }
+            // The stored fill has the data's dtype, so the repr prints its str, not the scalar repr.
+            StringAssert.Contains(Apply(np.int32).ToString(true), "fill_value=999999,");
+            // A plain array operand is made a masked array first (`array(arr, copy=False, subok=True)`), so the result is
+            // masked and stores its fill too.
+            var plain = np.ma.apply_along_axis(m => np.ma.max(m), 0, np.array(new long[,] { { 1, 2 }, { 3, 4 } }));
+            Assert.AreEqual(999999L, plain.fill_value);
+            Assert.IsNotNull(plain._fill_value);
+        }
+
         /// <summary>Per-slice masked median along an explicit axis (NumPy's <c>ma.median</c> axis branch): masked
         /// entries are sorted behind the valid ones, so the middle is taken over each slice's UNMASKED count; an
         /// all-masked slice → masked, an integer input promotes to float64, an unmasked NaN forces the slice's

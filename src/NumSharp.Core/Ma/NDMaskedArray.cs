@@ -2296,21 +2296,31 @@ namespace NumSharp
         ///     <see cref="NDMaskedArray.filled(object)"/> and the <see cref="NDMaskedArray.fill_value"/> getter when the
         ///     array holds no fill of its own.
         /// </summary>
-        /// <param name="dtype">The data dtype to pick a fill for.</param>
+        /// <param name="dtype">The data dtype to pick a fill for; null is NumPy's None (see remarks).</param>
         /// <returns>A boxed scalar of a type castable into <paramref name="dtype"/>: a <see cref="string"/> for a
         ///     <c>U</c> dtype and a fresh <see cref="byte"/>[] for an <c>S</c> dtype.</returns>
         /// <remarks>
         ///     An INSTANCE method (like <see cref="minimum_fill_value"/>/<see cref="maximum_fill_value"/>), so
-        ///     <c>np.ma.default_fill_value(dtype)</c> ports from NumPy verbatim.
+        ///     <c>np.ma.default_fill_value(dtype)</c> ports from NumPy verbatim. An array or a scalar takes the
+        ///     <see cref="default_fill_value(object)"/> overload.
         ///     <para>
         ///     The text default is NOT sized to the dtype: NumPy stores <c>np.array('N/A')</c> (a <c>&lt;U3</c>), so the fill
         ///     value of a <c>&lt;U1</c> array reads all three characters, and only <see cref="NDMaskedArray.filled(object)"/>
         ///     truncates it, when it copies the fill into the data's width (<c>'N/'</c> into <c>&lt;U2</c>). The bytes default
         ///     is a NEW array on every call, because a <see cref="byte"/>[] is mutable and the caller owns it.
         ///     </para>
+        ///     <para>
+        ///     A <c>null</c> argument binds THIS overload (a <see cref="DType"/> is the better conversion target than
+        ///     <see cref="object"/>) and is NumPy's <c>default_fill_value(None)</c>: <c>np.asanyarray(None)</c> is a 0-d
+        ///     OBJECT array, whose default is the string <c>'?'</c> (<c>default_filler['O']</c>). Footgun: a null
+        ///     <see cref="DType"/> variable therefore answers <c>"?"</c> rather than throwing.
+        ///     </para>
         /// </remarks>
         public object default_fill_value(DType dtype)
         {
+            // `default_filler['O'] = '?'`: None reaches NumPy's default_fill_value as an object (its 0-d object array).
+            if (dtype is null)
+                return "?";
             switch (dtype.typecode)
             {
                 case NPTypeCode.Boolean: return true;
@@ -2325,6 +2335,45 @@ namespace NumSharp
                 // default_filler['U'] = 'N/A', default_filler['S'] = b'N/A' (the dtype's kind picks the class).
                 case NPTypeCode.String: return dtype.kind == 'S' ? DefaultBytesFill() : "N/A";
                 default: return 999999L; // every integer kind (signed/unsigned/char)
+            }
+        }
+
+        /// <summary>
+        ///     NumPy's <c>default_fill_value(obj)</c> for an ARRAY or a SCALAR: the default of <c>_get_dtype_of(obj)</c> — a
+        ///     descriptor as is, a masked array's or array's own dtype, otherwise <c>np.asanyarray(obj).dtype</c>
+        ///     (<c>ma.default_fill_value(np.array([1], np.uint8))</c> is 999999, <c>ma.default_fill_value(1.5)</c> 1e20).
+        /// </summary>
+        /// <param name="obj">An <see cref="NDMaskedArray"/>, an <see cref="NDArray"/>, a <see cref="DType"/>, a C# scalar,
+        ///     a C# array, <c>List</c> or <c>object[]</c> (a Python list), or a <see cref="byte"/>[] (NumPy's <c>bytes</c>
+        ///     scalar, the house map).</param>
+        /// <returns>See <see cref="default_fill_value(DType)"/>.</returns>
+        /// <exception cref="NotSupportedException">An object <c>np.asanyarray</c> cannot make an array of (NumPy would make
+        ///     an object array of it, whose default is <c>'?'</c>).</exception>
+        /// <remarks>
+        ///     Only the dtype's KIND decides the value (every integer 999999, every float 1e20, bool True, complex
+        ///     <c>(1e20+0j)</c>, text <c>'N/A'</c> / <c>b'N/A'</c>), so a C# int literal answers like NumPy's Python int
+        ///     although its array would be int32 here and int64 in NumPy. A <see cref="string"/> argument binds the
+        ///     <see cref="DType"/> overload (the implicit dtype-string conversion: <c>"f8"</c> is float64), where NumPy reads
+        ///     a str as text (<c>'N/A'</c>); pass the string typed as <see cref="object"/>, or <c>np.array(s)</c>, for
+        ///     NumPy's reading. <c>null</c> binds the <see cref="DType"/> overload too (NumPy's <c>'?'</c>).
+        /// </remarks>
+        public object default_fill_value(object obj)
+        {
+            switch (obj)
+            {
+                // `default_filler['O']`: None is a 0-d object array, whose default is '?'.
+                case null: return "?";
+                // `isinstance(obj, np.dtype)`, then `hasattr(obj, 'dtype')`: the descriptor, or the array's own dtype.
+                case DType dtype: return default_fill_value(dtype);
+                case NDMaskedArray m: return default_fill_value(m.dtype);
+                case NDArray nd: return default_fill_value(nd.dtype);
+                default:
+                    // `np.asanyarray(obj).dtype`: the operand array is built here and only its dtype is read, so it is
+                    // released at once. A byte[] is NumPy's bytes scalar (the house map; np.asanyarray would read a uint8
+                    // array of values); a C# array, List or object[] is a Python list (np.asanyarray's sequence coercion:
+                    // `[1.5, 2]` is float64); a scalar is a 0-d array.
+                    using (var operand = obj is byte[] bytes ? NDArray.Scalar(bytes) : np.asanyarray(obj))
+                        return default_fill_value(operand.dtype);
             }
         }
 
@@ -5541,11 +5590,16 @@ namespace NumSharp
         /// <param name="func1d">The per-slice function; may return a scalar (0-d) or a 1-D masked array.</param>
         /// <param name="axis">The axis along which the 1-D slices are taken.</param>
         /// <param name="arr">Operand.</param>
-        /// <returns>The assembled masked array.</returns>
+        /// <returns>The assembled masked array, storing the default fill value at its own dtype (NumPy's
+        /// <c>result.fill_value = ma.default_fill_value(result)</c>, see <see cref="ResultDefaultFill"/>): an int32 result
+        /// reads <c>np.int32(999999)</c>, a float16 one <c>np.float16(inf)</c>.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         /// <exception cref="NotSupportedException"><paramref name="func1d"/> returns a result of rank ≥ 2 (NumSharp
         /// supports the scalar- and 1-D-result cases; a higher-rank per-slice result needs the object-array
         /// assembly NumSharp lacks).</exception>
+        /// <exception cref="TypeError">The result's dtype cannot hold the default fill (int8, uint8, int16, uint16:
+        /// <c>Cannot convert fill_value 999999 to dtype uint8</c>), raised after every <paramref name="func1d"/> call, as
+        /// NumPy raises it.</exception>
         /// <remarks>
         ///     <b>Ownership</b> — the same contract as <see cref="np.apply_along_axis"/>: every masked array
         ///     <paramref name="func1d"/> returns stays the CALLER's and is never disposed here (a callback may
@@ -5612,7 +5666,7 @@ namespace NumSharp
                     // Scalar per slice → output shape is exactly the outer shape.
                     var d = np.reshape(np.stack(datas, 0), Shape.Adopt(outerShape));
                     var m = np.reshape(np.stack(masks, 0), Shape.Adopt(outerShape));
-                    return Yield(scope, new NDMaskedArray(d, np.any(m) ? m : null));
+                    return Yield(scope, new NDMaskedArray(d, np.any(m) ? m : null, ResultDefaultFill(d)));
                 }
                 if (resNd == 1)
                 {
@@ -5622,7 +5676,7 @@ namespace NumSharp
                     var newShape = outerShape.Concat(new[] { resLen }).ToArray();
                     var d = np.moveaxis(np.reshape(np.stack(datas, 0), Shape.Adopt(newShape)), outerAxes.Length, ax);
                     var m = np.moveaxis(np.reshape(np.stack(masks, 0), Shape.Adopt(newShape)), outerAxes.Length, ax);
-                    return Yield(scope, new NDMaskedArray(d, np.any(m) ? m : null));
+                    return Yield(scope, new NDMaskedArray(d, np.any(m) ? m : null, ResultDefaultFill(d)));
                 }
                 throw new NotSupportedException(
                     "np.ma.apply_along_axis supports a scalar or 1-D per-slice result; a rank-{resNd} result needs the object-array assembly NumSharp lacks.".Replace("{resNd}", resNd.ToString()));
@@ -5638,6 +5692,27 @@ namespace NumSharp
                     ReleaseParts(a);
             }
         }
+
+        /// <summary>
+        ///     NumPy's closing statement of <c>ma.apply_along_axis</c>, <c>result.fill_value = ma.default_fill_value(result)</c>:
+        ///     the dtype's default (the Python int 999999, the Python float 1e20, ...) converted to the RESULT's dtype by the
+        ///     setter, which stores it because the new result has none.
+        /// </summary>
+        /// <param name="data">The assembled result data; its dtype decides the conversion.</param>
+        /// <returns>The fill array the result stores. It stays in the ambient scope with the result's data and mask
+        ///     (<see cref="StoreFill"/>), so the caller's <see cref="Yield(NDScope, NDMaskedArray)"/> hands it back with the
+        ///     result.</returns>
+        /// <exception cref="TypeError">The default does not fit the result's dtype: 999999 into int8, uint8, int16, uint16
+        ///     (or NumSharp's char) raises NumPy's <c>Cannot convert fill_value 999999 to dtype uint8</c>, after every
+        ///     <c>func1d</c> call, as in NumPy.</exception>
+        /// <remarks>
+        ///     Observable when it does not raise, too: the result reads <c>np.int32(999999)</c> for int32 data and
+        ///     <c>np.float16(inf)</c> for float16 (a fresh array reads the int64 / float64 default), and its repr prints
+        ///     <c>fill_value=999999</c> rather than the scalar repr. Unlike the getter's default (<see cref="DefaultFill"/>),
+        ///     the unsigned default here is not a uint64: <c>default_fill_value</c> returns the Python int, so a uint32
+        ///     result stores a uint32.
+        /// </remarks>
+        private NDArray ResultDefaultFill(NDArray data) => StoreFill(default_fill_value(data.dtype), data.dtype);
 
         /// <summary>Cumulative sum along the axis; masked slots contribute 0 to the running total but their
         /// POSITIONS stay masked in the result (NumPy semantics).</summary>

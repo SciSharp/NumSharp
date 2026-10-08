@@ -208,7 +208,10 @@ Neighbours fixed with it: `byteswap` / `argpartition` / `ma.cumsum` / `ma.cumpro
 `view(dtype)` of an array with a mask and another itemsize raises NumPy's text `cannot reshape array of size 4 into shape
 (16,)` (the house IncorrectShapeException, NumPy's ValueError; was NotSupportedException); the indexer parses a lone slice
 string once for the data and the mask (`x["1:"]` 2.84 → 1.77 µs; GetView rewrites its slice ARRAY, so the mask indexes a
-copy of it); `x + 1` on an int8 / uint8 / int16 / uint16 / bool masked array is numpy.ma's
+copy of it); `ma.apply_along_axis` stores the default fill at its result's dtype (NumPy's closing
+`result.fill_value = ma.default_fill_value(result)`: an int8 / uint8 / int16 / uint16 result raises `Cannot convert
+fill_value 999999 to dtype uint8`, an int32 one reads `np.int32(999999)`); `ma.default_fill_value(obj)` takes an array, a
+scalar or a list as well as a dtype (NumPy's `_get_dtype_of`; None is `'?'`); `x + 1` on an int8 / uint8 / int16 / uint16 / bool masked array is numpy.ma's
 strong int64 (the literal reaches `operator +(NDMaskedArray, NDArray)` as a marked int32 0-d array, which
 `BareScalarStrongDtype` now reads as the Python int); the masked print renders float16 / float32 elements as the Python
 floats `astype(object)` makes of them (`1.732421875`, not `1.732`).

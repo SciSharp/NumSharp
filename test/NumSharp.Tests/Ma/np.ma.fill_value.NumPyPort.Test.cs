@@ -213,6 +213,38 @@ namespace NumSharp.Tests.Ma
             np.ma.masked._fill_value.Should().BeNull();
         }
 
+        /// <summary>
+        ///     <c>ma.default_fill_value(obj)</c> takes an array or a scalar as well as a dtype (NumPy's <c>_get_dtype_of</c>:
+        ///     the descriptor, the array's dtype, else <c>np.asanyarray(obj).dtype</c>); only the kind decides the value.
+        ///     None is a 0-d object array, whose default is <c>'?'</c>. Every expected value is NumPy 2.4.2's.
+        /// </summary>
+        [TestMethod]
+        public void DefaultFillValue_OfAnArrayOrAScalar()
+        {
+            Exactly(np.ma.default_fill_value(np.array(new byte[] { 1 })), 999999L);
+            Exactly(np.ma.default_fill_value(np.ma.array(np.array(new[] { 1.5f }))), 1e20);
+            Exactly(np.ma.default_fill_value(np.array(new sbyte[0])), 999999L, "an empty int8 array keeps its dtype");
+            Exactly(np.ma.default_fill_value((sbyte)3), 999999L, "np.int8(3)");
+            Exactly(np.ma.default_fill_value(3), 999999L);
+            Exactly(np.ma.default_fill_value(1.5), 1e20);
+            Exactly(np.ma.default_fill_value(true), true);
+            Exactly(np.ma.default_fill_value((Half)1), 1e20, "np.float16(1.0)");
+            Exactly(np.ma.default_fill_value(new Complex(1, 2)), new Complex(1e20, 0));
+            Exactly(np.ma.default_fill_value(new[] { 1, 2 }), 999999L, "[1, 2]");
+            Exactly(np.ma.default_fill_value(new System.Collections.Generic.List<int> { 1, 2 }), 999999L, "a List is a Python list");
+            Exactly(np.ma.default_fill_value(new object[] { 1.5, 2 }), 1e20, "[1.5, 2] is float64");
+            Exactly(np.ma.default_fill_value(0), 999999L, "a literal 0 binds the object overload, not NPTypeCode.Empty");
+            Exactly(np.ma.default_fill_value(new double[0]), 1e20, "[] is float64");
+            Exactly(np.ma.default_fill_value(np.ma.masked), 1e20, "the masked singleton is float64");
+            Exactly(np.ma.default_fill_value((object)"x"), "N/A", "a str is text");
+            Exactly(np.ma.default_fill_value(np.array(new[] { "ab" })), "N/A");
+            ((byte[])np.ma.default_fill_value(new byte[] { (byte)'x' })).Should().Equal((byte)'N', (byte)'/', (byte)'A');
+            ((byte[])np.ma.default_fill_value(NDArray.Scalar(new byte[] { 97, 98 }))).Should().Equal((byte)'N', (byte)'/', (byte)'A');
+            Exactly(np.ma.default_fill_value((DType)null), "?", "None: default_filler['O']");
+            Exactly(np.ma.default_fill_value((object)null), "?");
+            Exactly(np.ma.default_fill_value(np.complex128), new Complex(1e20, 0));
+        }
+
         /// <summary>Neighbours of the inheritance rules: byteswap / argpartition / cumsum give the result its own mask
         /// (a mask write through it never reaches the source); argpartition converts the fill; a C# int literal added to
         /// a narrow masked array is numpy.ma's strong int64.</summary>
