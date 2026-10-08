@@ -551,6 +551,22 @@ namespace NumSharp.Tests.Backends
             src.GetInt64(0).Should().Be(0L, "np.resize copies the input before it reshapes");
         }
 
+        // ---- the index searches: NumPy's views of nonzero's buffers ---------------------------
+
+        /// <summary>
+        ///     <c>np.flatnonzero</c> and <c>np.argwhere</c> return NumPy's non-owning views of the composition temp
+        ///     (nonzero's <c>(k, 1)</c> buffer; the transposed <c>(ndim, k)</c> stack) since the open-bugs rundown's bug 8:
+        ///     <c>flags.num</c> 1283 (C|F|ALIGNED|WRITEABLE) and 1282 (F|ALIGNED|WRITEABLE), NumPy 2.4.2's values. They
+        ///     were pinned below as divergences (1287 / 1285, owned C copies) until then.
+        /// </summary>
+        [TestMethod]
+        public void IndexSearchResults_AreNumPysNonOwningViews()
+        {
+            NDArray ZS() => np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4) % (NDArray)3L;
+            np.flatnonzero(ZS()).flags.num.Should().Be(1283, "NumPy: a C- and F-contiguous column view of nonzero's (k, 1) buffer");
+            np.argwhere(ZS()).flags.num.Should().Be(1282, "NumPy: the F-contiguous transpose of the (ndim, k) stack");
+        }
+
         // ---- the intended op-level ownership divergences, pinned as known [Misaligned] ----------
 
         [TestMethod]
@@ -558,21 +574,19 @@ namespace NumSharp.Tests.Backends
         public void OwnDataDivergences_NumpyInternalRepresentations_Documented()
         {
             // Each op below returns a clean OWNED copy where NumPy returns a non-owning view of an
-            // internal composition temp (flatnonzero/argwhere, and the advanced-index
-            // "transpose-back" family — any fancy/boolean advanced index that is NOT a single leading
-            // block), or a fresh alias VIEW where NumPy returns SELF (a no-op np.squeeze; np.cov, which
-            // ends in np.squeeze(c)). Values are identical; only the ownership/layout flag observable
-            // differs. Pinning the CURRENT NumSharp num keeps the surface regression-gated: a change
-            // that alters these records (an accidental view leak, or a deliberate op fix) turns this red
-            // and must be re-evaluated. NumPy 2.4.2 values live-probed 2026-09-18.
+            // internal composition temp (the advanced-index "transpose-back" family — any
+            // fancy/boolean advanced index that is NOT a single leading block), or a fresh alias VIEW
+            // where NumPy returns SELF (a no-op np.squeeze; np.cov, which ends in np.squeeze(c)).
+            // Values are identical; only the ownership/layout flag observable differs. Pinning the
+            // CURRENT NumSharp num keeps the surface regression-gated: a change that alters these
+            // records (an accidental view leak, or a deliberate op fix) turns this red and must be
+            // re-evaluated. NumPy 2.4.2 values live-probed 2026-09-18. (flatnonzero / argwhere left
+            // this list with bug 8: IndexSearchResults_AreNumPysNonOwningViews.)
             NDArray M() => np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4);
             NDArray A3() => np.arange(24).astype(NPTypeCode.Int64).reshape(2, 3, 4);
-            NDArray ZS() => np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4) % (NDArray)3L;
 
             var cases = new (string name, Func<NDArray> build, int nsNum, int npNum)[]
             {
-                ("flatnonzero",              () => np.flatnonzero(ZS()),                                                1287, 1283),
-                ("argwhere",                 () => np.argwhere(ZS()),                                                   1285, 1282),
                 ("squeeze no-op owner 2-D",  () => np.squeeze(np.zeros(new Shape(3, 4), NPTypeCode.Int64)),             1281, 1285),
                 ("squeeze no-op owner 1-D",  () => np.squeeze(np.arange(6).astype(NPTypeCode.Int64)),                   1283, 1287),
                 ("cov (inherits squeeze)",   () => np.cov(M().astype(NPTypeCode.Double)),                               1281, 1285),

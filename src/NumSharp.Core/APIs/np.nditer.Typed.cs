@@ -337,18 +337,15 @@ namespace NumSharp.Backends.Iteration
                     "operand array with iterator write flag set is read-only", paramName);
         }
 
-        internal static NPY_ORDER ParseOrder(char order)
-        {
-            switch (order)
-            {
-                case 'C': return NPY_ORDER.NPY_CORDER;
-                case 'F': return NPY_ORDER.NPY_FORTRANORDER;
-                case 'A': return NPY_ORDER.NPY_ANYORDER;
-                case 'K': return NPY_ORDER.NPY_KEEPORDER;
-                default:
-                    throw new ArgumentException($"order must be one of 'C', 'F', 'A', or 'K' (got '{order}')");
-            }
-        }
+        /// <summary>
+        ///     The typed iterators' order argument, read as <c>np.nditer</c> reads it: NumPy's <c>PyArray_OrderConverter</c>,
+        ///     the four letters in either case.
+        /// </summary>
+        /// <param name="order">The order character.</param>
+        /// <returns>The order.</returns>
+        /// <exception cref="ValueError">Any other letter: <c>order must be one of 'C', 'F', 'A', or 'K' (got '…')</c>
+        ///     (an <see cref="ArgumentException"/>, the type it threw before; it also refused the lowercase letters).</exception>
+        internal static NPY_ORDER ParseOrder(char order) => OrderResolver.Convert(order);
 
         /// <summary>
         ///     The single-operand EXTERNAL_LOOP iterator both typed walks run on. Never buffered:

@@ -2401,7 +2401,7 @@ namespace NumSharp.Tests.Backends.Iterators
         {
             var a = np.arange(4).astype(np.float64);
             var ex = Assert.ThrowsException<ValueError>(() => np.evaluate((NDExpr)a + a, order: 'Q'));
-            StringAssert.Contains(ex.Message, "order must be one of 'C', 'F', 'A', 'K'");
+            Assert.AreEqual("order must be one of 'C', 'F', 'A', or 'K' (got 'Q')", ex.Message);
         }
 
         /// <summary>

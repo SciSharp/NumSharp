@@ -12,7 +12,8 @@ namespace NumSharp
         /// <param name="n">The row dimension of the arrays for which the returned indices will be valid.</param>
         /// <param name="k">Diagonal offset. <c>k = 0</c> (default) is the main diagonal.</param>
         /// <param name="m">The column dimension. By default <paramref name="m"/> is taken equal to <paramref name="n"/>.</param>
-        /// <returns>The row and column indices of the lower triangle, in C (row-major) order.</returns>
+        /// <returns>The row and column indices of the lower triangle, in C (row-major) order: two owning int64
+        ///     arrays (OWNDATA True, as NumPy's boolean-mask gathers are).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tril_indices.html</remarks>
         [NDScoped]
         public static NDArray<long>[] tril_indices(int n, int k = 0, int? m = null)
@@ -24,7 +25,8 @@ namespace NumSharp
         /// <param name="n">The size of the arrays for which the returned indices will be valid.</param>
         /// <param name="k">Diagonal offset. <c>k = 0</c> (default) is the main diagonal.</param>
         /// <param name="m">The column dimension. By default <paramref name="m"/> is taken equal to <paramref name="n"/>.</param>
-        /// <returns>The row and column indices of the upper triangle, in C (row-major) order.</returns>
+        /// <returns>The row and column indices of the upper triangle, in C (row-major) order: two owning int64
+        ///     arrays (OWNDATA True, as NumPy's boolean-mask gathers are).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.triu_indices.html</remarks>
         [NDScoped]
         public static NDArray<long>[] triu_indices(int n, int k = 0, int? m = null)
@@ -97,9 +99,11 @@ namespace NumSharp
             for (long i = 0; i < rows; i++)
                 total += RunLength(i, k, cols, lower);
 
-            var rowsResult = new NDArray(NPTypeCode.Int64, new Shape(total), false);
-            var colsResult = new NDArray(NPTypeCode.Int64, new Shape(total), false);
-            var result = new[] {rowsResult.MakeGeneric<long>(), colsResult.MakeGeneric<long>()};
+            // OWNING arrays, as NumPy's boolean-mask gathers are (they were MakeGeneric aliases of their own buffers,
+            // which reported OWNDATA False — the open-bugs rundown's bug 8 sweep).
+            var rowsResult = new NDArray<long>(new Shape(total), false);
+            var colsResult = new NDArray<long>(new Shape(total), false);
+            var result = new[] {rowsResult, colsResult};
 
             if (total == 0)
                 return result;

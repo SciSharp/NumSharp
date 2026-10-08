@@ -7,7 +7,12 @@ representations (the formerly-[Misaligned] set, fixed on journey3):
             layouts (F stays F, 3-D transpose keeps its stride order, broadcast -> F-ish)
   join      np.concatenate / np.stack output layout = PyArray_CreateMultiSortedStridePerm
   nonzero   columns of ONE shared (count, ndim) multi-index buffer (+ where/argwhere/
-            flatnonzero value twins)
+            flatnonzero: argwhere = the transposed (ndim, count) stack, F-ordered;
+            flatnonzero = the column view of a (count, 1) buffer)
+  unravel   np.unravel_index: column VIEWS of one interleaved indices.shape + (len(dims),)
+            buffer laid out along the index array's iteration order (KEEPORDER, no flips)
+  ravelmi   np.ravel_multi_index: the iterator's ALLOCATE output, KEEPORDER over the
+            coordinate arrays (F coordinates give an F result, mixed ones C)
   copyk     copy(order='K') / astype(order='K') true KEEPORDER allocation
   linspace  the in-place-mutated arange VIEW (owndata=False) vs owning astype copies
   reduce    full reductions return read-only numpy SCALARS (PyArray_Return, num=263)
@@ -18,8 +23,7 @@ SHAPE, byte STRIDES, OWNDATA/WRITEABLE, an exact shares-memory verdict against t
 source, and the result VALUES as base64(tobytes(order='C')) — so the C# replay
 (LayoutParityOracleTests) is bit-exact on values AND layout. Optional fields are null
 where a surface is knowingly not byte-comparable (partition's between-anchor arrangement)
-or where a PRE-EXISTING unrelated divergence would otherwise leak in (argwhere/flatnonzero
-report values only — their owndata/layout is the documented base-of-transpose residue).
+or where a PRE-EXISTING unrelated divergence would otherwise leak in.
 
 Regenerate:  python test/oracle/gen_layout_parity_oracle.py   (needs numpy==2.4.2)
 Twin:        test/NumSharp.Tests/Backends/LayoutParityOracleTests.cs (builders keyed 1:1)
@@ -63,6 +67,19 @@ def SRC(name, dt="int64"):
     if name == "zall":   return np.zeros((3, 4), dtype=dt)
     if name == "zneg":   return (np.arange(12) % 3).astype(dt).reshape(3, 4)[::-1]
     if name == "zbc":    return np.broadcast_to(np.array([0, 1, 0]).astype(dt), (4, 3))
+    if name == "z0t":    return np.array(5).astype(dt)
+    if name == "z0f":    return np.array(0).astype(dt)
+    # flat-index sources for np.unravel_index into (4, 6) (every value < 24)
+    if name == "uc1":    return np.array([1, 5, 7, 22, 0]).astype(dt)
+    if name == "uc2":    return (np.arange(6) * 3).astype(dt).reshape(2, 3)
+    if name == "uf2":    return np.asfortranarray((np.arange(6) * 3).astype(dt).reshape(2, 3))
+    if name == "ut3":    return np.transpose(np.arange(24).astype(dt).reshape(2, 3, 4), (2, 0, 1))
+    if name == "urev":   return (np.arange(6) * 4).astype(dt)[::-1]
+    if name == "urow":   return (np.arange(6) * 4).astype(dt).reshape(2, 3)[:, ::-1]
+    if name == "ubc":    return np.broadcast_to(np.array([1, 2, 3]).astype(dt), (2, 3))
+    if name == "ust":    return np.arange(12).astype(dt)[::2]
+    if name == "ue":     return np.zeros((0, 3), dtype=dt)
+    if name == "u11":    return np.array([[4]]).astype(dt)
     raise KeyError(name)
 
 
@@ -202,10 +219,55 @@ def main():
     w1 = np.where(SRC("c2z") > 0)
     cases.append(rec("where1", "c2z_0", "int64", w1[0]))
     cases.append(rec("where1", "c2z_1", "int64", w1[1]))
-    # argwhere/flatnonzero: VALUES only (their layout rides the documented
-    # base-of-transpose / owning-engine residue, deliberately not pinned here)
-    cases.append(rec("argwhere", "c2z", "int64", np.argwhere(SRC("c2z")), layout=False, w=None))
-    cases.append(rec("flatnonzero", "c2z", "int64", np.flatnonzero(SRC("c2z")), layout=False, w=None))
+    # argwhere / flatnonzero: values AND layout — argwhere is the transpose of the (ndim, count)
+    # stack np.asarray makes of nonzero's tuple (F-ordered, OWNDATA false), flatnonzero the column
+    # view of nonzero's (count, 1) buffer; a 0-d input is argwhere(atleast_1d(a))[:, :0].
+    for s in nz_cells + ["z0t", "z0f"]:
+        cases.append(rec("argwhere", s, "int64", np.argwhere(SRC(s))))
+        cases.append(rec("flatnonzero", s, "int64", np.flatnonzero(SRC(s))))
+    for dt in ["bool", "uint8", "float64"]:
+        cases.append(rec("argwhere", "c2z", f"src_{dt}", np.argwhere(SRC("c2z", dt))))
+        cases.append(rec("flatnonzero", "c2z", f"src_{dt}", np.flatnonzero(SRC("c2z", dt))))
+
+    # ---------------------------------------------------------------- unravel_index
+    # One record per coordinate view: key = {src}_{order}_{j}; samebase pins the ONE shared buffer.
+    # The 0-d form returns numpy scalars (no layout to pin; the unit tests cover it).
+    for s in ["uc1", "uc2", "uf2", "ut3", "urev", "urow", "ubc", "ust", "ue", "u11"]:
+        for order in ("C", "F"):
+            r = np.unravel_index(SRC(s), (4, 6), order=order)
+            for j in range(len(r)):
+                cases.append(rec("unravel", f"{s}_{order}_{j}", "int64", r[j],
+                                 samebase=1 if r[j].base is r[0].base else 0))
+    for dt in ["int32", "int16", "uint8"]:
+        for s in ["uc2", "uf2"]:
+            r = np.unravel_index(SRC(s, dt), (4, 6))
+            cases.append(rec("unravel", f"{s}_C_1", f"src_{dt}", r[1], samebase=1))
+    r = np.unravel_index(SRC("uc2"), (2, 3, 4))
+    for j in range(3):
+        cases.append(rec("unravel", f"uc2_C3_{j}", "int64", r[j], samebase=1))
+
+    # ---------------------------------------------------------------- ravel_multi_index
+    # key = the coordinate pair's layouts; dims (4, 6) (rows < 4, columns < 6).
+    def RV(name):
+        rows = np.array([[0, 1, 3], [2, 3, 1]], dtype=np.int64)
+        cols = np.array([[5, 0, 2], [1, 4, 3]], dtype=np.int64)
+        if name == "cc":   return (rows, cols)
+        if name == "ff":   return (np.asfortranarray(rows), np.asfortranarray(cols))
+        if name == "cf":   return (rows, np.asfortranarray(cols))
+        if name == "fc":   return (np.asfortranarray(rows), cols)
+        if name == "tt":   return (rows.T, cols.T)
+        if name == "rr":   return (rows[:, ::-1], cols[:, ::-1])
+        if name == "t3":   return (np.transpose(np.arange(24).reshape(2, 3, 4) % 4, (2, 0, 1)),
+                                   np.transpose(np.arange(24).reshape(2, 3, 4) % 6, (2, 0, 1)))
+        if name == "bcrow": return (np.array([[0], [3]], dtype=np.int64), np.array([1, 2, 5], dtype=np.int64))
+        if name == "bc0d": return (np.array(2, dtype=np.int64), np.array([1, 2, 5], dtype=np.int64))
+        if name == "i32f": return (np.asfortranarray(rows.astype(np.int32)), np.asfortranarray(cols.astype(np.int32)))
+        if name == "e":    return (np.zeros(0, np.int64), np.zeros(0, np.int64))
+        raise KeyError(name)
+    for name in ["cc", "ff", "cf", "fc", "tt", "rr", "t3", "bcrow", "bc0d", "i32f", "e"]:
+        for order in ("C", "F"):
+            cases.append(rec("ravelmi", f"{name}_{order}", "int64",
+                             np.ravel_multi_index(RV(name), (4, 6), order=order)))
 
     # ---------------------------------------------------------------- copy/astype K
     for s in ["t3d", "bc", "st", "negrow", "f2d"]:

@@ -800,22 +800,13 @@ namespace NumSharp
                 }
             }
 
-            /// <summary>NumPy's <c>PyArray_OrderConverter</c> for the iteration order.</summary>
+            /// <summary>NumPy's <c>PyArray_OrderConverter</c> for the iteration order: the four letters in EITHER case.</summary>
             /// <param name="order">The order character.</param>
             /// <returns>The order.</returns>
             /// <exception cref="ValueError"><c>order must be one of 'C', 'F', 'A', or 'K' (got '…')</c>.</exception>
-            private static NPY_ORDER ParseOrder(char order)
-            {
-                switch (order)
-                {
-                    case 'C': return NPY_ORDER.NPY_CORDER;
-                    case 'F': return NPY_ORDER.NPY_FORTRANORDER;
-                    case 'A': return NPY_ORDER.NPY_ANYORDER;
-                    case 'K': return NPY_ORDER.NPY_KEEPORDER;
-                    default:
-                        throw new ValueError($"order must be one of 'C', 'F', 'A', or 'K' (got '{order}')");
-                }
-            }
+            /// <remarks>It refused the lowercase letters, which NumPy's parser accepts (probed 2.4.2:
+            ///     <c>np.nditer(a, order='f')</c> iterates in F order).</remarks>
+            private static NPY_ORDER ParseOrder(char order) => OrderResolver.Convert(order);
 
             /// <summary>NumPy's <c>PyArray_CastingConverter</c> for the casting rule.</summary>
             /// <param name="casting">The casting string.</param>

@@ -292,12 +292,23 @@ namespace NumSharp.Tests.APIs
             sum.Should().Be(18);   // (0+1+2+3) * 3
         }
 
+        /// <summary>
+        ///     The typed iterators read the order as np.nditer does — NumPy's PyArray_OrderConverter: an unknown letter is its
+        ///     ValueError (an ArgumentException, the type it threw before), and the lowercase letters are accepted.
+        /// </summary>
         [TestMethod]
         public void Typed_BadOrder_Throws()
         {
-            var ex = Assert.ThrowsException<ArgumentException>(
+            var ex = Assert.ThrowsException<ValueError>(
                 () => { foreach (ref double _ in np.nditer<double>(np.arange(4).astype(np.float64), order: 'Q')) { } });
-            ex.Message.Should().Contain("order must be one of 'C', 'F', 'A', or 'K'");
+            ex.Message.Should().Be("order must be one of 'C', 'F', 'A', or 'K' (got 'Q')");
+
+            // 'f' is F order: a C (2, 3) array is visited down its columns.
+            var a = np.arange(6).astype(np.float64).reshape(2, 3);
+            var seen = new List<double>();
+            foreach (ref double x in np.nditer<double>(a, order: 'f'))
+                seen.Add(x);
+            seen.Should().Equal(0.0, 3.0, 1.0, 4.0, 2.0, 5.0);
         }
 
         [TestMethod]

@@ -185,11 +185,20 @@ namespace NumSharp.Tests.APIs
             Assert.AreEqual("00000000010000000200000003000000", b.data.hex()); // numpy: b.data.hex()
         }
 
+        /// <summary>
+        ///     <c>memoryview.tobytes</c> takes CPython's order argument (<c>memory_tobytes</c>): an unknown or lowercase string
+        ///     is CPython's ValueError, <c>order must be 'C', 'F' or 'A'</c> (an ArgumentException, the type it threw before),
+        ///     and <c>None</c> (null) means C order.
+        /// </summary>
         [TestMethod]
         public void Errors_BadOrder_And_Arity()
         {
             var b = np.arange(4).astype(np.int32);
-            Assert.ThrowsException<ArgumentException>(() => b.data.tobytes("Q"));
+            var ex = Assert.ThrowsException<ValueError>(() => b.data.tobytes("Q"));
+            Assert.AreEqual("order must be 'C', 'F' or 'A'", ex.Message);
+            Assert.AreEqual("order must be 'C', 'F' or 'A'", Assert.ThrowsException<ValueError>(() => b.data.tobytes("c")).Message);
+            Assert.AreEqual("order must be 'C', 'F' or 'A'", Assert.ThrowsException<ValueError>(() => b.data.tobytes("CC")).Message);
+            Assert.AreEqual("00000000010000000200000003000000", Hex(b.data.tobytes(null))); // numpy: b.data.tobytes(order=None)
             Assert.ThrowsException<ArgumentException>(() => { var _ = b.data[0, 1]; }); // 1-D indexed with 2 indices
         }
 

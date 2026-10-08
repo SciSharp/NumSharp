@@ -144,13 +144,18 @@ namespace NumSharp.Tests.Casting
             }
         }
 
+        /// <summary>
+        ///     An unknown order letter is NumPy's PyArray_OrderConverter ValueError (<c>order must be one of 'C', 'F', 'A',
+        ///     or 'K' (got 'X')</c>); <see cref="ValueError"/> is an ArgumentException, the type it threw before.
+        /// </summary>
         [TestMethod]
         public void InvalidOrder_Throws_ArgumentException()
         {
             foreach (char bad in new[] { 'X', 'Z', '1', 'G', ' ', '\0' })
             {
                 var a = np.arange(3).astype(NPTypeCode.Int32);
-                Assert.ThrowsException<ArgumentException>(() => a.tobytes(bad), $"order '{bad}' must throw");
+                var ex = Assert.ThrowsException<ValueError>(() => a.tobytes(bad), $"order '{bad}' must throw");
+                Assert.AreEqual($"order must be one of 'C', 'F', 'A', or 'K' (got '{bad}')", ex.Message);
             }
         }
 

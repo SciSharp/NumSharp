@@ -28,6 +28,10 @@ namespace NumSharp
         ///     A non-positive <paramref name="ndim"/> yields an empty array, mirroring Python's
         ///     <c>(idx,) * 0</c>; a negative <paramref name="n"/> yields empty index arrays.
         ///     </para>
+        ///     <para>
+        ///     The array OWNS its data (<c>flags.owndata</c> True), as NumPy's fresh <c>np.arange</c> does; it was an alias of
+        ///     its own buffer (<c>MakeGeneric</c>), which reported OWNDATA False (the open-bugs rundown's bug 8 sweep).
+        ///     </para>
         /// </remarks>
         [NDScoped]
         public static NDArray<long>[] diag_indices(int n, int ndim = 2)
@@ -35,7 +39,9 @@ namespace NumSharp
             if (ndim <= 0)
                 return Array.Empty<NDArray<long>>();
 
-            var idx = np.arange(n < 0 ? 0 : n).MakeGeneric<long>();
+            // AsGeneric wraps the fresh arange's own storage (OWNDATA kept, its own counted reference), so the scope's
+            // release of the untyped handle at exit leaves the buffer to the yielded typed one.
+            var idx = np.arange(n < 0 ? 0 : n).AsGeneric<long>();
 
             var result = new NDArray<long>[ndim];
             for (int d = 0; d < ndim; d++)

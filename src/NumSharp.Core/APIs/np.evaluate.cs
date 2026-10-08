@@ -137,7 +137,7 @@ namespace NumSharp
             // regardless of what the tree is); the engine then applies it only to a fresh elementwise result.
             char o = char.ToUpperInvariant(order);
             if (o != 'C' && o != 'F' && o != 'A' && o != 'K')
-                throw new ValueError($"order must be one of 'C', 'F', 'A', 'K' (got '{order}')");
+                throw new ValueError($"order must be one of 'C', 'F', 'A', or 'K' (got '{order}')");
 
             // ParseCasting raises NumPy's verbatim "casting must be one of …" for a bad string; null keeps
             // the same_kind default the struct supplies. The where= mask's boolean-ness (and its rejection

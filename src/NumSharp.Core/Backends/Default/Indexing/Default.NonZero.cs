@@ -23,7 +23,7 @@ namespace NumSharp.Backends
         ///     <b>Implementation:</b> three IL-emitted kernels keyed off the element type
         ///     (<see cref="DirectILKernelGenerator.GetArgwhereCountKernel"/>,
         ///     <see cref="DirectILKernelGenerator.GetArgwhereFlatKernel"/>,
-        ///     <see cref="DirectILKernelGenerator.GetNonZeroPerDimKernel"/>). The runtime call
+        ///     <see cref="DirectILKernelGenerator.GetArgwhereExpandKernel"/>). The runtime call
         ///     site has zero <c>typeof(T)</c> branches: it looks the kernels up in the
         ///     per-dtype <see cref="System.Collections.Concurrent.ConcurrentDictionary{Type,Object}"/>
         ///     cache and invokes them. Every loop (SIMD popcount, SIMD bit-scan, coord
@@ -33,9 +33,11 @@ namespace NumSharp.Backends
         ///     <para>
         ///     <b>Two-pass pre-size-then-fill:</b> the SIMD popcount sizes the result
         ///     exactly, the SIMD bit-scan writes flat indices either straight into the
-        ///     ndim==1 result buffer or into a temp <c>long[]</c> which the IL per-dim
-        ///     expand kernel walks once to emit the per-axis columns. Mirrors the design
-        ///     of <see cref="DefaultEngine.Argwhere"/>.
+        ///     ndim==1 result buffer or into a temp <c>long[]</c> which the IL row-expand
+        ///     kernel walks once to fill the shared <c>(count, ndim)</c> multi-index matrix
+        ///     whose columns are the result. Mirrors the design of
+        ///     <see cref="DefaultEngine.Argwhere"/>, which fills NumPy's transposed
+        ///     <c>(ndim, count)</c> stack instead.
         ///     </para>
         ///
         ///     <para>
@@ -175,6 +177,10 @@ namespace NumSharp.Backends
                 // keep `materialized` rooted until the call site here. For the contig
                 // fast path materialized is null and Dispose is skipped.
                 materialized?.Dispose();
+                // The contiguous route reads the CALLER's operand through basePtr; a temporary operand
+                // (`np.argwhere(a > 0)`) is referenced only by this parameter, which the JIT may treat as dead
+                // once the pointer is taken — keep it reachable until the kernels are done.
+                GC.KeepAlive(nd);
             }
         }
 

@@ -9,7 +9,9 @@ namespace NumSharp.Backends
         /// <summary>
         ///     <c>np.flatnonzero</c> — returns the int64 1-D array of flat indices of
         ///     non-zero elements in the raveled (C-order) input.
-        ///     Equivalent to <c>np.nonzero(np.ravel(a))[0]</c>.
+        ///     Equivalent to <c>np.nonzero(np.ravel(a))[0]</c>, and returned as NumPy returns it: the single
+        ///     column of nonzero's <c>(count, 1)</c> multi-index buffer — a unit-stride VIEW (OWNDATA false,
+        ///     C- and F-contiguous) of that buffer, which the view keeps alive.
         ///
         ///     <para>
         ///     <b>Implementation:</b> two IL-emitted kernels keyed off the element type
@@ -25,8 +27,8 @@ namespace NumSharp.Backends
         ///     <list type="bullet">
         ///       <item>0-d → promote via <c>atleast_1d</c>, recurse
         ///             (truthy→<c>[0]</c>, falsy→<c>[]</c>).</item>
-        ///       <item>size == 0 → empty int64 1-D array.</item>
-        ///       <item>Contiguous → IL count + IL flat-scan straight into the result buffer.</item>
+        ///       <item>size == 0 → empty int64 1-D view of a <c>(0, 1)</c> buffer.</item>
+        ///       <item>Contiguous → IL count + IL flat-scan straight into the <c>(count, 1)</c> buffer.</item>
         ///       <item>Non-contiguous → materialize via <c>ascontiguousarray</c> then
         ///             same path as contig (flat indices into the C-contig buffer ARE the
         ///             flat indices of the raveled non-contig input — that's what NumPy
@@ -42,9 +44,15 @@ namespace NumSharp.Backends
         ///     </para>
         /// </summary>
         /// <param name="nd">The array.</param>
-        /// <returns>The indices (int64).</returns>
+        /// <returns>The indices (int64): a view of the <c>(count, 1)</c> buffer.</returns>
         /// <exception cref="StringComputationNotSupportedException">A non-empty string array: NumPy reads the strings' truth
         ///     values (the next phase of NumSharp's string support); an empty one gives an empty int64 result.</exception>
+        /// <exception cref="NotSupportedException">The IL kernels cannot be emitted for the dtype.</exception>
+        /// <remarks>
+        ///     <b>BREAKING (NumPy parity):</b> the result used to be a separate owning array. As a view it reports
+        ///     OWNDATA false and <c>@base</c> is the <c>(count, 1)</c> buffer; its strides are the dense unit stride, so
+        ///     every reader that walks a C-contiguous array (take, fancy indexing, raw pointers) is unaffected.
+        /// </remarks>
         public override unsafe NDArray<long> FlatNonZero(NDArray nd)
         {
             // Text: NumPy's flatnonzero is nonzero(ravel(a))[0], the strings' truth values (the next phase). An empty input
@@ -68,9 +76,10 @@ namespace NumSharp.Backends
             long size = nd.size;
 
             // Empty input → empty int64 1-D result. Covers shape (0,), (0, 3), (2, 0, 4), …
-            // NumPy's np.flatnonzero(np.zeros((2, 0, 4))) returns array([], dtype=int64).
+            // NumPy's np.flatnonzero(np.zeros((2, 0, 4))) returns array([], dtype=int64) — the column view of an empty
+            // (0, 1) multi-index buffer, OWNDATA false like every other result.
             if (size == 0)
-                return new NDArray<long>(0);
+                return MakeEmptyNonZeroResult(1)[0];
 
             // Materialize non-contig to C-contig. Mirror the ARC pattern from NonZero /
             // Argwhere — the `materialized` local is the GC root we explicitly Dispose
@@ -97,14 +106,17 @@ namespace NumSharp.Backends
             {
                 long count = countKernel(basePtr, size);
                 if (count == 0)
-                    return new NDArray<long>(0);
+                    return MakeEmptyNonZeroResult(1)[0];
 
-                // Direct write into the result buffer — no temp, no expand step.
-                // The flat indices into the C-contig source ARE the flat indices into
-                // the raveled input (that's the definition of C-order ravel).
-                var result = new NDArray<long>(count);
-                flatKernel(basePtr, size, (long*)result.Address);
-                return result;
+                // NumPy's PyArray_Nonzero of the 1-D ravel fills ONE (count, 1) multi-index buffer and np.flatnonzero
+                // returns its column. Direct write into that buffer — no temp, no expand step: the flat indices into the
+                // C-contig source ARE the flat indices into the raveled input (that's the definition of C-order ravel).
+                var multiIndex = new NDArray(NPTypeCode.Int64, new Shape(count, 1), false);
+                flatKernel(basePtr, size, (long*)multiIndex.Storage.Address);
+                var column = MakeNonZeroColumnViews(multiIndex, count, 1)[0];
+                // The column view holds its own counted reference on the buffer; release the buffer's own handle.
+                multiIndex.Dispose();
+                return column;
             }
             finally
             {
@@ -116,6 +128,10 @@ namespace NumSharp.Backends
                 // (Release-mode AccessViolationException reproduced by the nonzero
                 // bench harness; this method shares the same fix preventively).
                 materialized?.Dispose();
+                // The contiguous route reads the CALLER's operand through basePtr; a temporary operand
+                // (`np.argwhere(a > 0)`) is referenced only by this parameter, which the JIT may treat as dead
+                // once the pointer is taken — keep it reachable until the kernels are done.
+                GC.KeepAlive(nd);
             }
         }
     }

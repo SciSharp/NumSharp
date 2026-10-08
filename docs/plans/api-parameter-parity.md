@@ -1151,7 +1151,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     unsigned default stored as int64, C#'s exponent format in the error text) were at first killed by the tier alone;
     the unit tests now catch them too (finding 42).
 - [x] **X34 np.linalg's factorisations threw on an empty operand without a backend; NumPy answers it without
-  arithmetic.** Done 2026-10-08 (this commit; the rundown's bug 5).
+  arithmetic.** Done 2026-10-08 (`2202cdac`; the rundown's bug 5).
   - Proof: with no backend, `qr` / `svd` / `svdvals` / `eig` / `eigvals` / `eigh` / `eigvalsh` / `cholesky` / `lstsq` of
     an empty matrix or a zero-size batch (`(0, 3)`, `(3, 0)`, `(2, 0, 0)`, `(0, 3, 3)`) raised
     `OpenBlasMissingBackendException`, and so did the composites over them (`pinv` / `matrix_rank` / `cond` / the SVD
@@ -1241,7 +1241,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     10,000 strings, 0.14× (the per-element NDArray view floor every `it[0]` loop pays, ~0.5 µs a view).
 
 - [x] **X36 Axis arguments raised .NET's argument exceptions, and several axis checks were not NumPy's.** Done 2026-10-08
-  (this commit; the rundown's bug 7).
+  (`768154c9`; the rundown's bug 7).
   - Proof: `np.expand_dims(a, 5)` and `np.stack([a, a], 3)` raised `ArgumentException` with NumPy's text, where NumPy
     raises `AxisError` (np.stack's test from `26f7e32c` pinned the base type). A first probe (346 calls: 54 function forms
     with every axis value of a 2-D operand, NumPy 2.4.2 against NumSharp) found 159 differences in 45 functions. 34 raised
@@ -1338,6 +1338,98 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     - quantile with a tuple 2.64x, argmax / cumsum / count_nonzero along an axis 2.1-2.3x;
     - the view functions 3.5-15.6x (squeeze / expand_dims / moveaxis / swapaxes / rollaxis / split / diagonal / trace);
     - average with a tuple 1.52x, the stack cells above.
+
+- [x] **X37 np.argwhere / np.flatnonzero / np.unravel_index returned new owning C arrays; NumPy returns views of one
+  buffer.** Done 2026-10-08 (this commit; the rundown's bug 8).
+  - Proof (NumPy 2.4.2): `np.flatnonzero(a)` is `np.nonzero(np.ravel(a))[0]`, the column of nonzero's `(k, 1)` buffer;
+    `np.argwhere(a)` is `np.transpose(np.nonzero(a))`, the transpose of the `(ndim, k)` stack `np.asarray` makes of the
+    tuple — F-contiguous, byte strides `(8, 8k)`; `np.unravel_index(indices, dims)` returns the columns of ONE
+    interleaved `indices.shape + (len(dims),)` buffer that `NpyIter_CreateCompatibleStrides` lays out along the index
+    array's iteration order (KEEPORDER, `DONT_NEGATE_STRIDES`): an F index array gives coordinates with strides
+    `(16, 32)`, a transposed 3-D one `(16, 192, 64)`, a broadcast or reversed one C. All three report OWNDATA false.
+    NumSharp's kernels wrote fresh owning C arrays (one per coordinate for unravel_index). Pinned in
+    `OpenBugs.IndexSearchLayout.cs` (4 tests), excused by the string oracle's `LayoutExcuse`, carved on journey4 as the
+    array-object oracle's VF18.
+  - Fix:
+    - unravel_index (`Indexing/np.unravel_index.cs`, `DirectILKernelGenerator.UnravelIndex.cs`): the buffer's layout is
+      `Shape.NpyIterOutputShape` over the index array (a broadcast or extent-1 axis abstains, C wins ties, no axis is
+      reversed: CreateCompatibleStrides for one operand); the indices are copied (and cast) into that layout unless an
+      int64 array already has it (every C-contiguous one is read in place), so the kernel's linear pass is NumPy's
+      iteration and writes element k's coordinates into row k; coordinate j is a `Storage.Alias` view at element offset
+      j. A 0-d index array returns NumPy's scalars: fresh read-only 0-d arrays (`MarkReductionScalar`).
+    - argwhere (`Default.Argwhere.cs`): the `(ndim, k)` stack, filled by the per-dim expand kernel IN PLACE (the flat
+      indices are scanned into its last row; the kernel reads flat[i] before it writes column i of any row, so the
+      temporary `long[]` is gone), returned as its transposed view; a 0-d input is `argwhere(atleast_1d(a))[:, :0]`, a
+      `(count, 0)` view of the promoted result.
+    - flatnonzero (`Default.FlatNonZero.cs`): the column view of a `(k, 1)` buffer, nonzero's own helper.
+  - Neighbours, found by the probes and fixed:
+    - unravel_index's errors are NumPy's, in NumPy's statement order: the order letter (the argument parse; both cases
+      accepted), the dims overflow, astype_anyint's TypeError, then an 'A' / 'K' order (`only 'C' or 'F' order is
+      permitted`, which NumSharp raised for every bad letter first); an out-of-range index is NumPy's ValueError (was
+      `ArgumentOutOfRangeException`), the FIRST one in the iteration order (`[1, 100, 2, 200][::-1]` reports 200, an F
+      `[[1, 100], [200, 2]]` 200); `shape=()` is legal (index 0 unravels to `()`; an index array of any rank is `multiple
+      indices are not supported for 0d arrays`, after its indices are checked).
+    - unravel_index ran at NumPy's speed (0.79–1.41×): RyuJIT emits one hardware divide for `val % m` and another for
+      `val / m` (NumPy's C compiler fuses them), two per peeled dimension. A second IL kernel divides by each positive
+      dimension with Granlund–Montgomery's invariant reciprocal (`FillUnravelDivisor`: `m' = floor(2^64 (2^l - d) / d)
+      + 1`, `q = (t + ((n - t) >> sh1)) >> sh2` with `t = mulhi(m', n)`; exact for every index, d = 1 included); a zero
+      or negative dimension keeps the divmod kernel.
+    - ravel_multi_index (`Indexing/np.ravel_multi_index.cs`) is `arr_ravel_multi_index`: the result is the iterator's
+      ALLOCATE output, KEEPORDER over the coordinate arrays (an F pair gives an F result, a transposed pair `(8, 24)`, a
+      permuted 3-D pair `(8, 96, 32)`, a mixed pair C) where it was always C; the coordinates are copied into that layout
+      unless an int64 one already has it and the broadcast dims. The checks run in NumPy's order — the order letter, the
+      modes, the ravel strides ('A' / 'K', the dims overflow), the coordinate count, each coordinate's dtype, the
+      broadcast (the iterator's text, every shape listed), the zero-dimension check, the folding — where the strides
+      were computed after the coordinates were read. `dims=()` gives `np.int64(0)` (was refused); a zero dimension is
+      `cannot unravel if shape has zero entries (is empty).` in every mode (wrap divided by it); the errors are
+      ValueError; an all-0-d result is NumPy's read-only scalar; a refused fold releases the result.
+    - The order converter. NumPy's `PyArray_OrderConverter` is one function; NumSharp had seven spellings: `Resolve`'s
+      `order must be one of 'C', 'F', 'A', 'K'` (no ", or") as an ArgumentException with " (Parameter 'order')", the
+      creation functions' 'A' / 'K' refusal with NumSharp's own explanation appended, np.evaluate's and np.asarray's
+      texts, and np.nditer / np.nditer<T> refusing the lowercase letters. `OrderResolver.Convert` is the port, and every
+      spelling raises NumPy's ValueError texts. A 21-API sweep (zeros / ones / empty / eye / copy / array /
+      asarray_chkfinite / ravel / flatten / reshape / astype / tobytes / the `*_like` four / nditer / ndarray /
+      unravel_index / ravel_multi_index × Q / c / f / a / k / A / K) matches NumPy 2.4.2 exactly.
+    - `memoryview.tobytes` takes CPython's order argument (`memory_tobytes`): None is C, only "C" / "F" / "A" (`order
+      must be 'C', 'F' or 'A'`; null was refused).
+    - np.diag_indices / np.tril_indices / np.triu_indices (and the `_from` forms) returned `MakeGeneric` aliases of their
+      own buffers (OWNDATA false, a base of the same shape); NumPy's are fresh arrays that own their data (journey4's
+      VF35). np.mask_indices is np.nonzero, whose views were already NumPy's.
+    - The caller's operand stays reachable until the kernels have read it: np.unravel_index and np.ravel_multi_index
+      (`GC.KeepAlive` after the in-place routes; the latent use-after-free `a075e03b` left in unravel_index when it removed
+      the `finally` blocks) and the nonzero family (argwhere / flatnonzero / nonzero read a contiguous operand through a raw
+      pointer, and a temporary operand such as `np.argwhere(a > 0)` is referenced only by the parameter).
+  - Not changed:
+    - an empty result's strides: NumPy zeroes the strides of an empty array it allocates (`OpenBugs.EmptyStrides.cs`);
+    - NumPy's limit of 63 dimensions for ravel_multi_index (`too many dimensions passed to ravel_multi_index`): NumSharp has
+      no dimension cap;
+    - the dims of unravel_index / ravel_multi_index are `int[]` (NumPy's intp: a dimension past 2^31 cannot be spelled);
+    - the divmod kernel (a negative dimension) keeps its old speed.
+  - Merge note: journey4's array-object oracle carves these functions' cells as VF18 (argwhere / flatnonzero /
+    unravel_index) and VF35 (diag_indices / tril_indices / triu_indices). After a merge their carved cases match NumPy:
+    regenerate `gen_viewflags_oracle.py` without the two gaps so they join the gate.
+  - Gates:
+    - the layout-parity oracle (305 cases, was 210): argwhere / flatnonzero with layout over every nonzero source (C, F,
+      1-D, 3-D, all-zero, empty, reversed, broadcast, 0-d truthy / falsy) and a source dtype sweep (13 each), the new
+      `unravel` family (49: C, F, transposed 3-D, reversed, row-reversed, broadcast, stepped, empty, unit, cast index
+      dtypes, a 3-D shape; the one shared buffer pinned by samebase) and `ravelmi` family (22);
+    - the string oracle with the argwhere / flatnonzero / unravel_index layout excuses removed;
+    - `Indexing/IndexSearchLayout.Test.cs` (21 tests: the four pins, untagged; the layouts, the cast paths, the shared
+      buffer, the scalars, `shape=()`, the error order, the reported index, the reciprocal kernel's exactness over 900
+      shapes, ravel_multi_index's layouts / scalars / zero dimension / error order, the generators, the order converter);
+      `OwnDataFlagTests.IndexSearchResults_AreNumPysNonOwningViews` (the two rows left the `[Misaligned]` pin); 15 tests
+      that asserted the old types and texts now assert NumPy's.
+    - Planted bugs: 31 for the port and the neighbours (the two unravel kernels 4, unravel_index 9, argwhere 3,
+      flatnonzero 2, ravel_multi_index 6, the order converter 3, np.nditer 1, the generators 2, memoryview.tobytes 1),
+      every one killed; 13 by the oracles too (the layout-parity families, the string oracle, the groupa / multioutput
+      tiers). One, a 0-d int64 coordinate read in place by ravel_multi_index, was caught only by the layout-parity
+      oracle until `RavelMultiIndex_AllocatesInKeepOrder` gained the 0-d coordinate (re-checked: killed).
+  - Perf (NPY/NS, two pinned P-cores, best of 15, results disposed; 36 cells at 1K / 100K / 1M; geomean 3.19×,
+    min 1.76×):
+    - flatnonzero 1.85–4.49× (int64 / bool / an F 2-D source);
+    - argwhere 3.43–6.57× (1-D / 2-D / 3-D; the in-place expand dropped the temporary);
+    - unravel_index 1.99–3.55× (C / int32 / F / a 3-D shape; it was 0.79–1.41× with the divmod kernel);
+    - ravel_multi_index 1.76–2.46× (C and F pairs).
 
 ## 6. Findings
 
@@ -1601,8 +1693,35 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    therefore still raised from the streamed route; only an EMPTY operand skips it and reaches the materialized check.
    The first mutation round left that route's mutant alive, and also the 0-d test that read only the first leaf (every
    tree had one leaf). Before adding a case for a route, find which inputs actually reach it.
+58. **A value tier cannot see a view** (X37). Every value tier compares (dtype, shape, C-order bytes), so a fresh owning
+   C array and NumPy's strided view of a shared buffer compare equal. The index searches stayed wrong through every value
+   tier; only the object gates (the layout-parity oracle, the string oracle's layout facet, journey4's array-object tiers)
+   saw them. A function that returns views, or allocates in an input's order, needs an object-level gate.
+59. **The iteration order decides which error is reported** (X37). unravel_index reports the first out-of-range index
+   NumPy's iterator VISITS: memory order for an F array, logical order for a reversed one (`DONT_NEGATE_STRIDES`), not
+   the first in C order. Running the kernel over the indices laid out in the iterator's order gives NumPy's error and
+   NumPy's result layout from one pass.
+60. **RyuJIT does not fuse `x % m` with `x / m`** (X37). The IL `rem` and `div` of the same operands are two hardware
+   divides (15–40 cycles each); the C compiler NumPy uses fuses them. For a divisor invariant across a loop, a
+   precomputed reciprocal (a multiply-high and two shifts) is exact and several times faster: unravel_index went from
+   0.79–1.41× to 1.9–3.5× NumPy.
+61. **One NumPy converter, one port** (X37). NumPy parses `order` in one function; NumSharp had seven spellings, and they
+   had drifted in text, in type and in the letters' case. A converter belongs in one place; each caller decides what the
+   converted value means for it (a creation function refuses 'A' / 'K', unravel_index refuses them later, after its own
+   checks).
+62. **A raw-pointer read of a caller's operand needs the whole layout test** (X37). The in-place routes read an int64
+   operand linearly only when its strides equal the result layout's on every axis with more than one element AND (for
+   ravel_multi_index) its dims are the broadcast dims: a 0-d operand passes any stride test, and read in place it would be
+   read past its one element.
 
 ## 7. State log
+
+- **2026-10-08**: X37 done (np.argwhere / np.flatnonzero / np.unravel_index return NumPy's views of one buffer; the
+  neighbours: unravel_index's error order and types, `shape=()` and a reciprocal-division kernel; ravel_multi_index's
+  KEEPORDER output, error order and `dims=()`; NumPy's order converter ported once; memoryview.tobytes' order;
+  diag_indices / tril_indices / triu_indices own their data). The layout-parity oracle's argwhere / flatnonzero /
+  `unravel` / `ravelmi` families, the string oracle without the layout excuses. Findings 58-62 recorded. Commit: this
+  commit.
 
 - **2026-10-08**: X36 done (axis arguments: NumPy's normalize_axis_index / normalize_axis_tuple ported once, every
   axis check routed through them, the house AxisError with NumPy's argument prefixes; the neighbours: wrap-then-test
@@ -1610,7 +1729,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   tuple branch, the quantile family, gradient's null spacing, the bool subtract / negative TypeError, np.pad's dict
   pad_width, np.evaluate's reduction axis rules, tensorsolve's axes). The `axis_args` tier (15,444 cases, zero excuses,
   strict types) and the evaluate tier's C10 block. The tuple-axis np.average order is pinned
-  (`OpenBugs.Reductions.cs` group 14). Findings 52-57 recorded. Commit: this commit.
+  (`OpenBugs.Reductions.cs` group 14). Findings 52-57 recorded. Commit: `768154c9`.
 
 - **2026-10-08**: X35 done (np.nditer over strings: the iterator carries descriptors — cast checks, copy routes,
   string buffers, nditer_pywrap's state contract, `np.nested_iters`' per-level split; the neighbours: the flat index
@@ -1623,7 +1742,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - **2026-10-08**: X34 done (np.linalg's factorisations of an empty matrix or a zero-size batch are NumPy's answer without
   a backend: `LinAlgEmpty`, taken before the backend; NDIter's write-operand reduction check is NumPy's shape test, with
   NumPy's ValueError and axis number; the empty reductions raise NumPy's ValueError). The portable `linalg_empty` tier
-  (5,075 cases, zero excuses, strict error types). Findings 46–48 recorded. Commit: this commit.
+  (5,075 cases, zero excuses, strict error types). Findings 46–48 recorded. Commit: `2202cdac`.
 
 - **2026-10-08**: X33 done (numpy.ma's fill value as NumPy stores it, for every dtype: `_check_fill_value`'s conversion
   and texts, the default materialized at its own dtype on the first read, the setter writing into a stored array,

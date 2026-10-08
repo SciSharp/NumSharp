@@ -118,13 +118,14 @@ namespace NumSharp.Tests.View
             OrderResolver.Resolve('f').Should().Be('F');
         }
 
+        /// <summary>NumPy: <c>np.empty((3,4), order='A')</c> raises <c>only 'C' or 'F' order is permitted</c> (ValueError,
+        ///     verbatim — NumSharp appended its own explanation and a parameter suffix).</summary>
         [TestMethod]
         public void OrderResolver_A_WithoutSource_Throws()
         {
-            // NumPy: np.empty((3,4), order='A') -> "only 'C' or 'F' order is permitted"
             Action act = () => OrderResolver.Resolve('A');
-            act.Should().Throw<ArgumentException>()
-               .WithMessage("*only 'C' or 'F'*");
+            act.Should().Throw<ValueError>()
+               .WithMessage("only 'C' or 'F' order is permitted");
         }
 
         [TestMethod]
@@ -164,12 +165,16 @@ namespace NumSharp.Tests.View
             OrderResolver.Resolve('K', fSource).Should().Be('F');
         }
 
+        /// <summary>
+        ///     An unknown order letter is NumPy's PyArray_OrderConverter ValueError, verbatim (it lacked the ", or" and
+        ///     carried .NET's parameter suffix); ValueError is an ArgumentException.
+        /// </summary>
         [TestMethod]
         public void OrderResolver_InvalidChar_Throws()
         {
             Action act = () => OrderResolver.Resolve('X');
-            act.Should().Throw<ArgumentException>()
-               .WithMessage("*'C', 'F', 'A', 'K'*");
+            act.Should().Throw<ValueError>()
+               .WithMessage("order must be one of 'C', 'F', 'A', or 'K' (got 'X')");
         }
 
         // ================================================================

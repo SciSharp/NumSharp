@@ -12,11 +12,12 @@ namespace NumSharp.Tests.Backends
 {
     /// <summary>
     ///     Differential replay of <c>test/oracle/gen_layout_parity_oracle.py</c> (NumPy 2.4.2):
-    ///     the 210-case corpus pinning the modelled numpy-internal representations — reshape's
+    ///     the 305-case corpus pinning the modelled numpy-internal representations — reshape's
     ///     nocopy-views/view-of-copy, sort/partition/copy/astype KEEPORDER layouts, the
-    ///     concatenate/stack stride vote, nonzero's shared multi-index buffer, linspace's
-    ///     owndata, the read-only reduction SCALARS, and broadcast writeable-override
-    ///     inheritance. Unlike the flags oracle (flags records only), every case here compares
+    ///     concatenate/stack stride vote, nonzero's shared multi-index buffer and the views
+    ///     argwhere / flatnonzero / unravel_index hand out of theirs, ravel_multi_index's
+    ///     KEEPORDER output, linspace's owndata, the read-only reduction SCALARS, and broadcast
+    ///     writeable-override inheritance. Unlike the flags oracle (flags records only), every case here compares
     ///     the result's SHAPE, byte STRIDES, flags.num/OWNDATA/WRITEABLE, an exact
     ///     shares-memory verdict against the case's source, and the VALUES bit-for-bit
     ///     (base64 of NumPy's <c>tobytes(order='C')</c> vs NumSharp's <c>tobytes('C')</c>) —
@@ -101,6 +102,19 @@ namespace NumSharp.Tests.Backends
                 case "zall": return np.zeros(new Shape(3, 4), tc);
                 case "zneg": return (np.arange(12) % 3).astype(tc).reshape(3, 4)["::-1"];
                 case "zbc": return np.broadcast_to(np.array(new long[] { 0, 1, 0 }).astype(tc), new Shape(4, 3));
+                case "z0t": return NDArray.Scalar(5L).astype(tc);
+                case "z0f": return NDArray.Scalar(0L).astype(tc);
+                // flat-index sources for np.unravel_index into (4, 6) (every value < 24)
+                case "uc1": return np.array(new long[] { 1, 5, 7, 22, 0 }).astype(tc);
+                case "uc2": return (np.arange(6) * 3).astype(tc).reshape(2, 3);
+                case "uf2": return np.asfortranarray((np.arange(6) * 3).astype(tc).reshape(2, 3));
+                case "ut3": return np.transpose(np.arange(24).astype(tc).reshape(2, 3, 4), new int[] { 2, 0, 1 });
+                case "urev": return (np.arange(6) * 4).astype(tc)["::-1"];
+                case "urow": return (np.arange(6) * 4).astype(tc).reshape(2, 3)[":, ::-1"];
+                case "ubc": return np.broadcast_to(np.array(new long[] { 1, 2, 3 }).astype(tc), new Shape(2, 3));
+                case "ust": return np.arange(12).astype(tc)["::2"];
+                case "ue": return np.zeros(new Shape(0, 3), tc);
+                case "u11": return np.array(new long[,] { { 4 } }).astype(tc);
                 default: throw new ArgumentException(name);
             }
         }
@@ -116,6 +130,35 @@ namespace NumSharp.Tests.Backends
             "24" => new Shape(24),
             _ => throw new ArgumentException(token),
         };
+
+        /// <summary>The coordinate pairs of the <c>ravelmi</c> family (twin of the generator's <c>RV</c>).</summary>
+        /// <param name="name">The pair's layout key.</param>
+        /// <returns>The (rows, columns) coordinate arrays for dims (4, 6).</returns>
+        /// <exception cref="ArgumentException">An unknown key.</exception>
+        private static NDArray[] RavelPair(string name)
+        {
+            NDArray Rows() => np.array(new long[,] { { 0, 1, 3 }, { 2, 3, 1 } });
+            NDArray Cols() => np.array(new long[,] { { 5, 0, 2 }, { 1, 4, 3 } });
+            return name switch
+            {
+                "cc" => new[] { Rows(), Cols() },
+                "ff" => new[] { np.asfortranarray(Rows()), np.asfortranarray(Cols()) },
+                "cf" => new[] { Rows(), np.asfortranarray(Cols()) },
+                "fc" => new[] { np.asfortranarray(Rows()), Cols() },
+                "tt" => new[] { Rows().T, Cols().T },
+                "rr" => new[] { Rows()[":, ::-1"], Cols()[":, ::-1"] },
+                "t3" => new[]
+                {
+                    np.transpose(np.arange(24).reshape(2, 3, 4) % 4, new int[] { 2, 0, 1 }),
+                    np.transpose(np.arange(24).reshape(2, 3, 4) % 6, new int[] { 2, 0, 1 }),
+                },
+                "bcrow" => new[] { np.array(new long[,] { { 0 }, { 3 } }), np.array(new long[] { 1, 2, 5 }) },
+                "bc0d" => new[] { NDArray.Scalar(2L), np.array(new long[] { 1, 2, 5 }) },
+                "i32f" => new[] { np.asfortranarray(Rows().astype(NPTypeCode.Int32)), np.asfortranarray(Cols().astype(NPTypeCode.Int32)) },
+                "e" => new[] { np.zeros(new Shape(0), NPTypeCode.Int64), np.zeros(new Shape(0), NPTypeCode.Int64) },
+                _ => throw new ArgumentException(name),
+            };
+        }
 
         private static NDArray BCW()
         {
@@ -230,8 +273,34 @@ namespace NumSharp.Tests.Backends
                     var w = np.where(Src("c2z", i64) > 0);
                     return (null, w[int.Parse(c.Key.Substring(c.Key.Length - 1))]);
                 }
-                case "argwhere": return (null, np.argwhere(Src("c2z", i64)));
-                case "flatnonzero": return (null, np.flatnonzero(Src("c2z", i64)));
+                case "argwhere":
+                case "flatnonzero":
+                {
+                    // key = the source; dtype "src_<dt>" carries the source dtype sweep
+                    var stc = c.Dtype.StartsWith("src_") ? FlagsOracleRecipes.Dtype(c.Dtype.Substring(4)) : i64;
+                    var src = Src(c.Key, stc);
+                    return (null, c.Fam == "argwhere" ? np.argwhere(src) : np.flatnonzero(src));
+                }
+                case "unravel":
+                {
+                    // key = {src}_{order}_{j} (unravel into (4, 6)) or {src}_C3_{j} (into (2, 3, 4)); src = coordinate 0,
+                    // so the samebase check pins the ONE interleaved buffer every coordinate views.
+                    var parts = c.Key.Split('_');
+                    int j = int.Parse(parts[parts.Length - 1]);
+                    string ord = parts[parts.Length - 2];
+                    string srcName = string.Join("_", parts, 0, parts.Length - 2);
+                    var stc = c.Dtype.StartsWith("src_") ? FlagsOracleRecipes.Dtype(c.Dtype.Substring(4)) : i64;
+                    var r = ord == "C3"
+                        ? np.unravel_index(Src(srcName, stc), new[] { 2, 3, 4 })
+                        : np.unravel_index(Src(srcName, stc), new[] { 4, 6 }, ord[0]);
+                    return (r[0], r[j]);
+                }
+                case "ravelmi":
+                {
+                    // key = {pair}_{order}; dims (4, 6) (rows < 4, columns < 6)
+                    int cut = c.Key.LastIndexOf('_');
+                    return (null, np.ravel_multi_index(RavelPair(c.Key.Substring(0, cut)), new[] { 4, 6 }, "raise", c.Key[cut + 1]));
+                }
                 case "copyk":
                 {
                     int cut = c.Key.LastIndexOf('_');
@@ -382,7 +451,8 @@ namespace NumSharp.Tests.Backends
             if (c.Vals != null)
             {
                 string expectDtype = c.RDtype ?? c.Dtype;
-                if (c.Fam == "nonzero" || c.Fam == "where1" || c.Fam == "argwhere" || c.Fam == "flatnonzero")
+                if (c.Fam == "nonzero" || c.Fam == "where1" || c.Fam == "argwhere" || c.Fam == "flatnonzero"
+                    || c.Fam == "unravel")
                     expectDtype = "int64";
                 Assert.AreEqual(FlagsOracleRecipes.Dtype(expectDtype), res.typecode, $"{c.Id}: result dtype");
                 Assert.AreEqual(c.Vals, Convert.ToBase64String(res.tobytes('C')), $"{c.Id}: values");
@@ -463,11 +533,25 @@ namespace NumSharp.Tests.Backends
         [TestMethod]
         public void WhereOneArg_MatchesNumpy() => RunFamily("where1", floor: 2);
 
+        /// <summary>np.argwhere: the transposed (ndim, count) stack — values, byte strides, flags and OWNDATA false over
+        ///     every nonzero source (C, F, 1-D, 3-D, all-zero, empty, reversed, broadcast, 0-d truthy / falsy) and a source
+        ///     dtype sweep.</summary>
         [TestMethod]
-        public void ArgwhereValues_MatchNumpy() => RunFamily("argwhere", floor: 1);
+        public void Argwhere_MatchesNumpy() => RunFamily("argwhere", floor: 13);
 
+        /// <summary>np.flatnonzero: the column view of nonzero's (count, 1) buffer over the same sources.</summary>
         [TestMethod]
-        public void FlatNonzeroValues_MatchNumpy() => RunFamily("flatnonzero", floor: 1);
+        public void FlatNonzero_MatchesNumpy() => RunFamily("flatnonzero", floor: 13);
+
+        /// <summary>np.unravel_index: column views of ONE interleaved buffer laid out along the index array's iteration
+        ///     order (C, F, transposed 3-D, reversed, broadcast, stepped, empty, unit, cast index dtypes, a 3-D shape).</summary>
+        [TestMethod]
+        public void UnravelIndex_MatchesNumpy() => RunFamily("unravel", floor: 49);
+
+        /// <summary>np.ravel_multi_index: the iterator's KEEPORDER output over the coordinate arrays (F pair → F, mixed →
+        ///     C, transposed, reversed, permuted 3-D, broadcast, cast, empty), in C and F ravel order.</summary>
+        [TestMethod]
+        public void RavelMultiIndex_MatchesNumpy() => RunFamily("ravelmi", floor: 22);
 
         [TestMethod]
         public void CopyAstypeKeepOrder_MatchesNumpy() => RunFamily("copyk", floor: 10);
@@ -484,12 +568,13 @@ namespace NumSharp.Tests.Backends
         [TestMethod]
         public void Corpus_Floor_AndEveryFamilyPresent()
         {
-            Assert.IsTrue(_cases.Count >= 205, $"corpus shrank: {_cases.Count} < 205");
+            Assert.IsTrue(_cases.Count >= 305, $"corpus shrank: {_cases.Count} < 305");
             var fams = _cases.Select(c => c.Fam).Distinct().ToArray();
             foreach (var f in new[]
                      {
                          "reshape", "sort", "argsort", "partition", "stack", "concat", "nonzero",
-                         "where1", "argwhere", "flatnonzero", "copyk", "linspace", "reduce", "bcastw",
+                         "where1", "argwhere", "flatnonzero", "unravel", "ravelmi", "copyk", "linspace", "reduce",
+                         "bcastw",
                      })
                 Assert.IsTrue(fams.Contains(f), $"family '{f}' missing from corpus");
         }

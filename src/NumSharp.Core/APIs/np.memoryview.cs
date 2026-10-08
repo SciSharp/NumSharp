@@ -239,8 +239,10 @@ namespace NumSharp
             ///     strided / reversed / transposed view is materialized in logical order — matching
             ///     <c>bytes(a.data)</c>.
             /// </summary>
-            /// <param name="order"><c>"C"</c> (default), <c>"F"</c>, or <c>"A"</c>.</param>
-            /// <exception cref="ArgumentException">If <paramref name="order"/> is not one of C/F/A.</exception>
+            /// <param name="order"><c>"C"</c> (default), <c>"F"</c>, or <c>"A"</c>, upper case only; <c>null</c> is Python's
+            ///     <c>None</c>, which means <c>"C"</c>.</param>
+            /// <exception cref="ValueError">If <paramref name="order"/> is anything else (CPython's
+            ///     <c>memory_tobytes</c> text: <c>order must be 'C', 'F' or 'A'</c>).</exception>
             /// <exception cref="NotSupportedException">If the byte count exceeds <see cref="int.MaxValue"/> (a <c>byte[]</c> limit, not a format one).</exception>
             public byte[] tobytes(string order = "C")
             {
@@ -276,14 +278,22 @@ namespace NumSharp
             /// </summary>
             public string hex() => Convert.ToHexString(tobytes("C")).ToLowerInvariant();
 
+            /// <summary>
+            ///     CPython's <c>memory_tobytes</c> order argument (<c>Objects/memoryobject.c</c>): <c>None</c> is C order,
+            ///     and only the upper-case strings <c>"C"</c>, <c>"F"</c> and <c>"A"</c> are accepted — the memoryview is
+            ///     Python's, not NumPy's, so the lowercase letters NumPy's order converter takes are refused here.
+            /// </summary>
+            /// <param name="order">The order string, or null.</param>
+            /// <returns>The order letter.</returns>
+            /// <exception cref="ValueError">Any other string (CPython's text, verbatim: <c>order must be 'C', 'F' or
+            ///     'A'</c>).</exception>
             private static char ResolveOrder(string order)
             {
-                if (order is null || order.Length != 1)
-                    throw new ArgumentException("order must be one of 'C', 'F', or 'A'");
-                char o = order[0];
-                if (o != 'C' && o != 'F' && o != 'A')
-                    throw new ArgumentException("order must be one of 'C', 'F', or 'A'");
-                return o;
+                if (order is null)
+                    return 'C';
+                if (order != "C" && order != "F" && order != "A")
+                    throw new ValueError("order must be 'C', 'F' or 'A'");
+                return order[0];
             }
 
             // NumPy's dtype -> struct format code (numpy/_core/src/multiarray/buffer.c). NPY_LONG emits

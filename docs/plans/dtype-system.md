@@ -491,11 +491,11 @@ oracle sections closed the gaps between "NumPy refuses" and "NumPy computes":
   widths and between `S` and `U` (ASCII; NumPy's Unicode errors otherwise), write-back at close, `np.nested_iters`'
   per-level split; the string oracle's `striter` section, the numeric `nditer_construct` / `nditer_protocol` tiers;
   a conversion between text and numbers is phase 2's `StringComputationNotSupportedException`, and a BUFFERED
-  reduction through `np.nditer` is wrong for every dtype, `OpenBugs.NditerBufferedReduce.cs`.) The result layout of
-  `argwhere` / `flatnonzero` / `unravel_index` (views in NumPy; `OpenBugs.IndexSearchLayout.cs`, the oracle excuses only
-  their layout). (An empty matrix's QR / SVD — every factorisation of an empty matrix or a zero-size batch — is NumPy's
-  answer without a backend since 2026-10-08: `Backends/Default/LinearAlgebra/LinAlgEmpty.cs`, the portable
-  `linalg_empty.jsonl` tier, plan `api-parameter-parity.md` X34.)
+  reduction through `np.nditer` is wrong for every dtype, `OpenBugs.NditerBufferedReduce.cs`.) (`argwhere` /
+  `flatnonzero` / `unravel_index` return NumPy's views since 2026-10-08 — the string oracle no longer excuses their layout;
+  plan `api-parameter-parity.md` X37. An empty matrix's QR / SVD — every factorisation of an empty matrix or a zero-size
+  batch — is NumPy's answer without a backend since 2026-10-08: `Backends/Default/LinearAlgebra/LinAlgEmpty.cs`, the
+  portable `linalg_empty.jsonl` tier, plan `api-parameter-parity.md` X34.)
 
 **Not yet:** datetime storage/kernels/NaT/ISO (C — `docs/plans/datetime64.md`); Stage D phase 2 (computing on text —
 comparisons, `np.strings`, sorting, `add`/`multiply` loops, text ↔ number casts, the gated corpus is ready) and NEP 55

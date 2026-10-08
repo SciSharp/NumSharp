@@ -231,9 +231,8 @@ namespace NumSharp
                 case 'k':
                     return true;
                 default:
-                    throw new ArgumentException(
-                        $"order must be one of 'C', 'F', 'A', 'K' (got '{order}')",
-                        nameof(order));
+                    // NumPy's PyArray_OrderConverter text, verbatim.
+                    throw new ValueError($"order must be one of 'C', 'F', 'A', or 'K' (got '{order}')");
             }
         }
     }

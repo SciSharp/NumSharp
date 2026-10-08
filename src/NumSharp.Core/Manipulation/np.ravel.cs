@@ -58,7 +58,7 @@ namespace NumSharp
                 default:
                     // The house error for an unknown order code.
                     OrderResolver.Resolve(order, s);
-                    throw new ArgumentException($"order must be one of 'C', 'F', 'A', or 'K' (got '{order}')", nameof(order));
+                    throw new ValueError($"order must be one of 'C', 'F', 'A', or 'K' (got '{order}')");
             }
 
             if (o == 'C' && s.IsContiguous)

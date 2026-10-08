@@ -126,55 +126,62 @@ public class IndexConversionTests
         res[1].size.Should().Be(0);
     }
 
+    /// <summary>
+    ///     A zero dimension leaves no valid index: with unravelSize == 0 every val ≥ 0 trips the kernel's bounds check, and
+    ///     NumPy's ValueError text names the index and the size (<c>index 0 is out of bounds for array with size 0</c>).
+    /// </summary>
     [TestMethod]
     public void UnravelIndex_NonEmpty_ZeroInShape_ThrowsOOB()
     {
-        // With unravelSize == 0, every val ≥ 0 trips the OOB check in the kernel
-        // and we throw "index N is out of bounds for array with size 0" — same
-        // diagnostic NumPy produces.
         var idx = np.array(new int[] { 0 });
         var act = () => np.unravel_index(idx, new[] { 0, 3 });
-        act.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*size 0*");
+        act.Should().Throw<ValueError>().WithMessage("index 0 is out of bounds for array with size 0");
     }
 
+    /// <summary>
+    ///     NumPy does not pre-validate negative dims: the product (-3) is the bound, so the index check refuses every index
+    ///     with NumPy's ValueError (<c>index 0 is out of bounds for array with size -3</c>).
+    /// </summary>
     [TestMethod]
     public void UnravelIndex_NegativeShape_ThrowsOOB()
     {
-        // NumPy doesn't pre-validate negative dims; the OOB check catches it.
-        // We follow the same approach so users see the same diagnostic.
         var idx = np.array(new int[] { 0 });
         var act = () => np.unravel_index(idx, new[] { -1, 3 });
-        act.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*size -3*");
+        act.Should().Throw<ValueError>().WithMessage("index 0 is out of bounds for array with size -3");
     }
 
+    /// <summary>An index past the product raises NumPy's ValueError (it raised ArgumentOutOfRangeException).</summary>
     [TestMethod]
     public void UnravelIndex_OOB_PositiveThrows()
     {
         var idx = np.array(new int[] { 50 });
         var act = () => np.unravel_index(idx, new[] { 7, 6 });
-        act.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*index 50*size 42*");
+        act.Should().Throw<ValueError>().WithMessage("index 50 is out of bounds for array with size 42");
     }
 
+    /// <summary>A negative index is out of bounds too: unravel_index never wraps (NumPy's ValueError).</summary>
     [TestMethod]
     public void UnravelIndex_OOB_NegativeThrows()
     {
         var idx = np.array(new int[] { -1 });
         var act = () => np.unravel_index(idx, new[] { 7, 6 });
-        act.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*index -1*size 42*");
+        act.Should().Throw<ValueError>().WithMessage("index -1 is out of bounds for array with size 42");
     }
 
+    /// <summary>The scalar overload raises the same ValueError as the array form.</summary>
     [TestMethod]
     public void UnravelIndex_Scalar_OOBThrows()
     {
         var act = () => np.unravel_index(42L, new[] { 7, 6 });  // unravel size is 42 → idx 42 OOB
-        act.Should().Throw<ArgumentOutOfRangeException>();
+        act.Should().Throw<ValueError>().WithMessage("index 42 is out of bounds for array with size 42");
     }
 
+    /// <summary>A letter NumPy's order converter does not know is its ValueError (an ArgumentException).</summary>
     [TestMethod]
     public void UnravelIndex_InvalidOrder_Throws()
     {
         var act = () => np.unravel_index(0L, new[] { 7, 6 }, 'X');
-        act.Should().Throw<ArgumentException>();
+        act.Should().Throw<ValueError>().WithMessage("order must be one of 'C', 'F', 'A', or 'K' (got 'X')");
     }
 
     [TestMethod]

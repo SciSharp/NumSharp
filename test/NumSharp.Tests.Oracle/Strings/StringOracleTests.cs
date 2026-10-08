@@ -328,27 +328,19 @@ namespace NumSharp.Tests.Strings
         ///       <item><description>an integer-array or boolean index BEHIND a slice / newaxis / ellipsis
         ///       (<c>a[:, [3, 1]]</c>) — NumPy returns its MapIter buffer as a transposed VIEW, NumSharp a fresh C-ordered
         ///       copy (pinned in <c>OpenBugs.FancyIndex.cs</c>; plan <c>docs/plans/view-shape-open-bugs.md</c>);</description></item>
-        ///       <item><description><c>np.argwhere</c> / <c>np.flatnonzero</c> — NumPy returns views of nonzero's index buffer
-        ///       (argwhere transposed), NumSharp fresh C arrays; reached here by an empty string array, whose index searches
-        ///       run the numeric path on a bool stand-in (pinned in <c>OpenBugs.IndexSearchLayout.cs</c>).</description></item>
-        ///       <item><description><c>np.unravel_index</c> — NumPy returns column views of one interleaved
-        ///       <c>indices.shape + (len(dims),)</c> buffer, NumSharp one fresh C array per coordinate (pinned in
-        ///       <c>OpenBugs.IndexSearchLayout.cs</c>).</description></item>
+        ///       <item><description><c>np.ma.compress_nd</c> / <c>compress_rowcols</c> / <c>compress_cols</c>, whose column
+        ///       selection is such an index.</description></item>
         ///     </list>
+        ///     <c>np.argwhere</c> / <c>np.flatnonzero</c> (reached by an empty string array, whose index searches run the
+        ///     numeric path on a bool stand-in) and <c>np.unravel_index</c> (section M's bool index array) were excused here
+        ///     until the open-bugs rundown's bug 8 made them return NumPy's views; their layout is compared now.
         /// </summary>
         /// <param name="c">The case.</param>
         /// <returns>The reason, or null when the layout must match.</returns>
         private static string LayoutExcuse(StringOracleCorpus.Case c)
         {
-            // An empty string array's argwhere / flatnonzero run the numeric path on a bool stand-in, whose results are
-            // fresh C arrays where NumPy's are views of nonzero's index buffer (argwhere transposed).
-            if (c.Op == "index_search" && c.Params is not null && c.Params.TryGetValue("name", out var search)
-                && search.GetString() is "argwhere" or "flatnonzero")
-                return "argwhere / flatnonzero: NumPy returns views of nonzero's index buffer (OpenBugs.IndexSearchLayout)";
-            // np.unravel_index's coordinates are NumPy's column views of one interleaved index buffer (section M reaches it
-            // with a bool index array, the one non-text unravel case that returns arrays).
-            if (c.Op == "unravel_ix")
-                return "unravel_index: NumPy returns column views of one interleaved index buffer (OpenBugs.IndexSearchLayout)";
+            // (argwhere / flatnonzero / unravel_index were excused here until the open-bugs rundown's bug 8: they now
+            // return NumPy's views of nonzero's / the interleaved index buffer, and their layout is compared.)
             // numpy.ma.compress_nd drops the masked columns of a 2-D array with `data[:, keep]`: a boolean index behind a
             // slice, which NumPy returns as its transposed MapIter VIEW and NumSharp as a fresh C-ordered copy.
             if (c.Op == "ma1" && c.Layout == "MU2" && c.Params is not null && c.Params.TryGetValue("name", out var maName)
