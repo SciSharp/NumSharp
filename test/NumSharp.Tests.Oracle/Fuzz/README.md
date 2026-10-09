@@ -263,6 +263,104 @@ call); and ANY new raw site — new file or count growth in an allowed file — 
 consciously allowlisted. A file whose count DROPS below its pin prints a "tighten the allowlist"
 note. Inconclusive (never false-green) without a source checkout.
 
+## Lifetime gate — operands freed mid-kernel (`Fuzz/Lifetime/`) — 2026-10-09
+
+**The bug class (a lost GC anchor, the GC-driven over-disposal).** A NumSharp method reads an
+operand's raw buffer pointer (`a.Address`, `a.Storage.Address + offset`) and runs its kernel over it,
+and neither it nor any caller frame uses the operand afterwards. In OPTIMIZED code the JIT stops
+reporting a parameter or local to the GC after its last use, so when the caller passed a temporary —
+`np.take(a, np.arange(n)[::-1])`, `Temp().ToMuliDimArray<double>()` — a collection during the kernel
+finds the operand unreachable, and its memory block's finalizer (`UnmanagedMemoryBlock.Disposer`)
+returns the buffer to the pool, or frees it, while the kernel still reads or writes it. A second
+thread allocating (any multi-threaded application) or the pool's own GC pacing supplies the
+collection. Seen: silently wrong results, spurious `IndexError` / `LinAlgError: Singular matrix` from
+poisoned operands, and fatal `AccessViolationException`s. **No other tier can see it**: every replay
+holds its operands in the harness for the whole call. The deterministic twin — an op disposing a
+caller's array — is already gated by the leak sweep's NEGATIVE balance (a return without a take).
+The fix pattern is `GC.KeepAlive(operand)` after the kernel call (np.nonzero, np.argwhere,
+np.flatnonzero, np.unravel_index and np.ravel_multi_index have it).
+
+**How it is replayed.** `test/oracle/gen_lifetime_oracle.py` writes cases whose operands are RECIPES
+(2–8 MB each, so a kernel lasts long enough for a collection to land inside it; bytes would cost
+~1 GB of corpus) and records NumPy 2.4.2's answer as (`dtype.str`, shape, SHA-256). The replay
+(`Fuzz/Lifetime/`) runs the Oracle assembly as a CHILD PROCESS (`LifetimeChildProgram.Main`,
+`--numsharp-lifetime`; the csproj sets `GenerateProgramFile=false`) with `DOTNET_TieredCompilation=0`:
+tier-0 code reports every local live for the whole method, so the window does not exist there, and a
+freed buffer can kill the process — in the child that ends one replay, and the parent
+(`LifetimeChildProcess`) records the case as crashed and resumes after it. Each case runs once over
+HELD operands (the reference, compared with NumPy; `parity: false` compares only dtype and shape for
+LAPACK-free LU / Gram / introselect results, `host: true` compares bytes only on win-amd64), then
+`reps` times with its `temp` operands built afresh inside the call expression (`LifetimeOps`: the
+makers are invoked inline, never stored in a local) while `LifetimeThief` collects — gen-0, a full
+collection every fourth cycle — drains finalizers and poisons the buffer each case bucket returned
+last, from its end toward its start. A repetition that differs from the reference, throws or kills
+the child is a lost anchor. A CONTROL (`ControlCopy`, the bug pattern written by hand) must be caught
+in the same run, or the test is inconclusive: such a run could not have seen a lost anchor.
+**Release only:** a Debug build of NumSharp.Core or of the Oracle assembly keeps every local live as
+well (its JIT optimizer is disabled whatever the tiering), so the tests are inconclusive there at
+once (`RequireOptimizedBuild`, before any child starts). CI runs Release; a local run needs
+`dotnet test -c Release`.
+
+**Gate versus gaps.** `Fuzz/Lifetime/corpus/` (its own directory: the generic sweeps of
+`Fuzz/corpus/` replay every top-level file through the ordinary schema) holds `lifetime.jsonl` — the
+`[FuzzMatrix]` gate `LifetimeOracleTests.Lifetime`, 240 calls with all operands temporary, held to
+ZERO divergences (8 repetitions; 14–19 s per framework; `Lifetime_CorpusContract` checks in-process
+that every op key has a C# body and every gap id its own test) — and `lifetime_gaps.jsonl`, the carved cases of
+27 documented gaps (`GAPS` in the generator; every variant of a gap call, each operand temporary
+alone, so a gap names its operand). `Lifetime_KnownGaps` and one `Lifetime_LT<nn>_*` test per gap
+(`LifetimeOracleTests.Gaps.cs`, all `[OpenBugs]`) replay them at 48 repetitions and fail while any
+diverges:
+
+| Gap | Call | Lost operand(s) — the method that reads them |
+|-----|------|----------------------------------------------|
+| LT01 | `np.take` (every mode / dtype, strings too) | source + indices — `ExecuteTakeKernel` |
+| LT02 | `np.put` | indices + values — `PutKernel` |
+| LT03 | `np.place` | mask + values — `ExecutePlace` |
+| LT04 | `np.putmask` | mask + values — `ExecutePutMask` |
+| LT05 | `np.take_along_axis` | source + indices |
+| LT06 | `np.put_along_axis` | indices + values — `PutAlongAxisCore` (crashes) |
+| LT07 | `np.where(c, x, y)` (numeric) | cond + x + y — `WhereKernelDispatch` |
+| LT08 | `np.copyto(where=)` | source + mask — `CopytoMaskedRaw` |
+| LT09 | `np.copyto` across dtypes | source — `NDIter.Copy`'s contiguous cast kernel (shared) |
+| LT10 | `np.max(initial=, where=)` | input — `RunMaxMin` |
+| LT11 | `np.max` of float16 | input — `HalfMinMaxReduce` |
+| LT12 | `np.cumsum` / `np.cumprod` (flat) | input — `ScanElementwiseFlat` |
+| LT13 | `np.nancumsum` | input — `NanReplace.ReplaceContiguousFloat` |
+| LT14 | `np.searchsorted` | a + v |
+| LT15 | `np.digitize` | x + bins |
+| LT16 | `np.bincount` | x + weights (crashes) |
+| LT17 | `np.reciprocal` of integers | input — `ReciprocalInteger` |
+| LT18 | `np.dot` / `np.inner` of vectors | both — `DotInner1D` |
+| LT19 | `np.dot(M, v)` / `np.matvec` / `np.vecmat` | the matrix (the vector is kept alive) |
+| LT20 | `np.dot(M, M)` | both — `DotNDMDSimdDouble` |
+| LT21 | `np.linalg.det` / `inv` / `solve` (no backend) | a + b — `ManagedLu` |
+| LT22 | `np.convolve` / `np.correlate` | data (+ correlate's kernel) — `SlidingCorrelate` |
+| LT23 | `polynomial.polyder` | series — `NDPolyCalc.TryDirectSource` |
+| LT24 | `polynomial.polyvander` | x — `NDPolyVander` |
+| LT25 | `!` of a bool array | operand — `NDArray.operator !` |
+| LT26 | `np.all` of a bool array (flat) | input — `NDIter.ReduceBool` |
+| LT27 | `NDArray.ToMuliDimArray<T>()` | the receiver |
+
+**How the carve was drawn — and why a red gate is never noise.** Detection is a race the stress
+thread wins most of the time, never a false positive: the thread only overwrites buffers it took from
+the pool, so a divergence can only come from a kernel touching freed memory. The carve came from
+uncarved replays (`python gen_lifetime_oracle.py --uncarved DIR [--bits 20]`, 2 MB and 8 MB operands,
+24–160 repetitions, ~600 cases) and a code read of every site: a variant is carved when an operand the
+site loses is temporary, whether or not a given replay caught it. Rare sites can still be in the gate
+(the sharper thread found LT26 and LT27 there) — when the gate turns red, it found one: carve it under
+a new gap id (and fix it). Planted-bug check (2026-10-09, clean worktree, the committed corpus, 8
+repetitions): removing the `GC.KeepAlive` of np.unravel_index, np.ravel_multi_index, np.argwhere,
+np.nonzero or np.flatnonzero turns the gate red — unravel_index and ravel_multi_index throw NumPy's
+range errors on poisoned coordinates, while argwhere, nonzero (through `np.where(cond)` too) and
+flatnonzero kill the child with an access violation. A draft corpus with smaller masks missed nonzero
+and flatnonzero, whose count-then-fill windows are short; the mask family is therefore `8 * N`
+(2 MiB of bools). A stress thread that never poisons makes the run INCONCLUSIVE (the control is not
+caught), not green.
+
+**Retiring a gap**: fix the site (`GC.KeepAlive` after the kernel), run its `Lifetime_LT<nn>_*` test
+twice in Release (a single clean run of a short-window gap proves little), drop its rule from
+`_gap_of`, regenerate, and run the gate.
+
 ## Regenerating the corpus
 
 ```bash
@@ -303,6 +401,7 @@ python test/oracle/gen_oracle.py products         # CBLAS product family values 
 python test/oracle/gen_oracle.py fft              # np.fft.* — 1-D/N-D/hermitian transforms + freq/shift helpers
 python test/oracle/gen_oracle.py random_parity    # seeded np.random stream bytes (portable + host-libm files)
 python test/oracle/gen_oracle.py polyeval         # np.polynomial.* evaluation family (module-qualified keys)
+python test/oracle/gen_lifetime_oracle.py         # the lifetime gate + its carved gaps (Fuzz/Lifetime/corpus/; --uncarved DIR [--bits 20] to re-classify)
 python test/oracle/gen_oracle.py polyseries       # np.polynomial.* additive family + polyutils + the module constants
 python test/oracle/gen_oracle.py polycalc         # np.polynomial.* calculus family ({p}der / {p}int, every parameter)
 python test/oracle/gen_oracle.py polyalgebra      # np.polynomial.* series algebra (+ the host-pinned polyalgebra_parity tier)

@@ -23,6 +23,10 @@
          default in ../../Directory.Build.props; the measured rationale is in ../NumSharp.Tests/NumSharp.Tests.csproj
          (this suite: 16.6 s -> 14.2 s summed on net10.0, 2026-09-24). -->
     <TieredPGO>false</TieredPGO>
+    <!-- The assembly's entry point is Fuzz/Lifetime/LifetimeChild.cs (LifetimeChildProgram.Main), not the empty Main
+         Microsoft.NET.Test.Sdk generates for an Exe test project: the lifetime oracle runs this assembly as a CHILD
+         process (tiered compilation off) to replay its cases. Any other invocation still does nothing. -->
+    <GenerateProgramFile>false</GenerateProgramFile>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
@@ -60,6 +64,11 @@
   <!-- Differential-fuzzer oracle corpus: committed JSONL replayed by MSTest (no Python in CI). -->
   <ItemGroup>
     <None Update="Fuzz\corpus\**\*.jsonl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- The lifetime oracle (test/oracle/gen_lifetime_oracle.py): its own directory, because the generic sweeps of
+         Fuzz/corpus replay every top-level file through the ordinary case schema, and these cases carry recipes. -->
+    <None Update="Fuzz\Lifetime\corpus\*.jsonl">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <!-- The NumPy string oracle (test/oracle/gen_strings_oracle.py), replayed by Strings/StringOracleTests.cs. -->
