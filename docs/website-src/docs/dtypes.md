@@ -36,7 +36,7 @@ NumSharp supports every numeric dtype NumPy defines, plus a few .NET-specific on
 
 **Decimal** and **Char** are NumSharp-specific types with no NumPy counterpart-see [NumSharp-Specific Types](#numsharp-specific-types-decimal-and-char) for how they behave and when to use them.
 
-**Fixed-width strings.** NumSharp also has NumPy's two fixed-width text dtypes: `str_` (`U`, 4 bytes per character) and `bytes_` (`S`, 1 byte per character). The width is part of the descriptor (`np.dtype("U5")` has `itemsize` 20, `np.dtype("S5")` has 5), so their storage lane, `NPTypeCode.String`, names no single dtype: read a string array's dtype from `arr.dtype`. Phase 1 covers storage, element access, conversion to and from C#, copies, casts between string dtypes, indexing and printing; computing on text is the next phase. See [Working with arrays of strings and bytes](fundamentals/strings-and-bytes.md).
+**Fixed-width strings.** NumSharp also has NumPy's two fixed-width text dtypes: `str_` (`U`, 4 bytes per character) and `bytes_` (`S`, 1 byte per character). The width is part of the descriptor (`np.dtype("U5")` has `itemsize` 20, `np.dtype("S5")` has 5), so their storage lane, `NPTypeCode.String`, names no single dtype: read a string array's dtype from `arr.dtype`. Phase 1 covers storage, element access, conversion to and from C#, copies, casts between string dtypes, indexing and printing. Computing on text arrives in stages: comparisons, truth values, concatenation and repetition compute now; sorting, searching and text-number conversion come next. See [Working with arrays of strings and bytes](fundamentals/strings-and-bytes.md).
 
 ---
 
@@ -603,7 +603,7 @@ On `NDArray` itself the key properties are `.dtype` (a `System.Type`) and `.type
 | Exception | When |
 |-----------|------|
 | `NotSupportedException` | dtype string unrecognized, or NumPy dtype NumSharp doesn't implement (`V`/`O`/`complex64`/…); an array of a descriptor with no storage yet (`M8`, `m8`); access to `np.complex64` / `np.csingle` class-level aliases |
-| `StringComputationNotSupportedException` | a call that computes on fixed-width text (comparison, concatenation, sorting, searching, text ↔ number conversion): the next phase of the string support |
+| `StringComputationNotSupportedException` | a call that computes on fixed-width text in a way not ported yet (sorting, searching, text ↔ number conversion, the other `np.strings` functions): a later stage of the string support |
 | `TypeError` | Complex → non-complex scalar cast (`(int)complexScalar`, etc.) |
 | `IncorrectShapeException` | NDArray → scalar cast on non-0-d array (matches NumPy 2.x's strict 0-d requirement) |
 | `ArgumentNullException` | `np.dtype(null)` |

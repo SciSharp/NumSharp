@@ -14,8 +14,8 @@ namespace NumSharp.Tests.Documentation
     ///     <c>docs/website-src/docs/fundamentals/strings-and-bytes.md</c> (the "Working with arrays of
     ///     strings and bytes" fundamentals article). Each test mirrors one documented snippet and
     ///     asserts the behaviour the page claims: NumPy's fixed-width <c>U</c> / <c>S</c> dtypes store, convert,
-    ///     move and print like NumPy 2.4.2, and computing on text is refused (NumPy's text) or deferred to the
-    ///     next phase.
+    ///     move and print like NumPy 2.4.2, and computing on text gives NumPy's results (comparisons, truth values,
+    ///     concatenation, repetition), NumPy's refusal (NumPy's text), or the next-phase exception.
     /// </summary>
     [TestClass]
     public class FundamentalsStringsBytesDocTests
@@ -183,17 +183,40 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>
-        ///     What the doc page still lists as a later phase: concatenation, sorting and the number-to-text cast refuse with
-        ///     <see cref="StringComputationNotSupportedException"/> (a <see cref="NotSupportedException"/>).
+        ///     The "Concatenation and repetition" snippets (strings phase 2, P2.3; every value probed against NumPy 2.4.2):
+        ///     <c>names + 's'</c> is <c>&lt;U5</c>, a string on the left stays the first operand, <c>np.strings.multiply</c>
+        ///     sizes its result to the longest repetition, and the <c>np.multiply</c> ufunc cuts at <c>out=</c>'s width and
+        ///     refuses without one.
+        /// </summary>
+        [TestMethod]
+        public void Computing_ConcatenationAndRepetition()
+        {
+            var names = Names();
+            (names + "s").ToString(true).Should().Be("array(['cats', 'dogs', 'birds'], dtype='<U5')");
+            ("a " + names).ToString(true).Should().Be("array(['a cat', 'a dog', 'a bird'], dtype='<U6')");
+            np.add(names, np.array(new[] { "!", "?", "" })).ToString(true).Should().Be("array(['cat!', 'dog?', 'bird'], dtype='<U5')");
+
+            np.strings.multiply(names, 2).ToString(true).Should().Be("array(['catcat', 'dogdog', 'birdbird'], dtype='<U8')");
+            np.strings.multiply(names, np.array(new long[] { 1, 0, -1 })).ToString(true)
+              .Should().Be("array(['cat', '', ''], dtype='<U3')");
+
+            np.multiply(names, 2, np.zeros(new Shape(3L), "U5")).ToString(true).Should().Be("array(['catca', 'dogdo', 'birdb'], dtype='<U5')");
+            Action noOut = () => { var _ = names * 2; };
+            noOut.Should().Throw<TypeError>().WithMessage("The 'out' kwarg is necessary when using the string multiply ufunc directly.*");
+        }
+
+        /// <summary>
+        ///     What the doc page still lists as a later phase: sorting, the unique values (a sort) and the number-to-text cast
+        ///     refuse with <see cref="StringComputationNotSupportedException"/> (a <see cref="NotSupportedException"/>).
         /// </summary>
         [TestMethod]
         public void Computing_NextPhase()
         {
             var names = Names();
-            Action concat = () => np.add(names, names);
-            concat.Should().Throw<StringComputationNotSupportedException>();
             Action sort = () => np.sort(names);
             sort.Should().Throw<StringComputationNotSupportedException>();
+            Action unique = () => np.unique(names);
+            unique.Should().Throw<StringComputationNotSupportedException>();
             Action request = () => np.add(np.array(new[] { 1.5 }), np.array(new[] { 1.5 }), dtype: "U");
             request.Should().Throw<StringComputationNotSupportedException>();
             // StringComputationNotSupportedException is a NotSupportedException.

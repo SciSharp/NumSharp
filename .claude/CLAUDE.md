@@ -65,16 +65,23 @@ byte[])` — a `byte[][]` is a NUMERIC jagged array), dtype integration (`String
 movement (every copy runs the numeric kernels through UNIT VIEWS `D + (chars,)`, `NDStringCopy`), string↔string
 `astype` (ASCII `S ↔ U` with Python's Unicode error texts), `.npy` (byte for byte, mmap too; **breaking:** a `<U1` file
 reads as a `<U1` string array, `Char` still WRITES `<U1`) and printing (CPython's `repr`, `PyRepr`) — all byte-identical
-to NumPy 2.4.2. Computing on text is phase 2: where NumPy REFUSES (no string loop) NumSharp raises NumPy's type + text;
-where NumPy COMPUTES (comparison, concatenation, truth tests, sort/search, text ↔ number parse) it throws
+to NumPy 2.4.2. Computing on text is phase 2 (`docs/plans/strings-phase2.md`, landing subphase by subphase): the
+comparisons and truth values (P2.1) and concatenation / repetition (P2.3: `np.add` / `+` over two strings of one class,
+`np.multiply(text, int, out=)`, `np.strings.add` / `np.strings.multiply`) compute byte-identical to NumPy through the IL
+text kernels (`Backends/Kernels/ILKernelGenerator.Text{,.Emit,.Concat}.cs`: element widths are emit-time constants, every
+element is fixed-size chunk loads / stores, so no per-element branch follows its length — NumPy's own repeat loop runs a
+variable-size memcpy per copy and loses to that 2–4×) driven by `Backends/Strings/NDString{Comparison,Truth,Arithmetic}.cs`.
+Where NumPy REFUSES (no string loop) NumSharp raises NumPy's type + text; where NumPy COMPUTES something not ported yet
+(sort/search, text ↔ number parse / format, the other `np.strings` functions) it throws
 `StringComputationNotSupportedException` — both AFTER NumPy's earlier checks in NumPy's order (`dtype=` class check,
 read-only `out=`, non-bool `where=`, the axis under one of three rules, the quantile q/axis/method/empty-axis order,
 a computing loop's output cast and broadcast; `Backends/Strings/NDStringUfuncs{,.Precedence}.cs`). Every engine ufunc
 member resolves its `dtype=` through `UfuncLoopCode(dtype, "<numpy name>", x1, x2, out, where)` so an unsized string
 request (`'U'`, `'S'`) gets NumPy's per-ufunc answer. Gate: the string oracle (`test/oracle/gen_strings_oracle.py` →
-`NumSharp.Tests.Oracle/Strings`, 21,552 cases; a phase-2 case passes as "deferred" only while NumSharp throws
-`StringComputationNotSupportedException`, so phase 2 is gated by the same corpus) + `Backends/Strings/StringCallOrderTests.cs`
-+ `StringShapeDecidedTests.cs`. **Validation pass (2026-10-07)** — the deferral rule is now exact: defer ONLY where NumPy
+`NumSharp.Tests.Oracle/Strings`, 38,150 cases in 21 sections; a phase-2 case passes as "deferred" only while NumSharp
+throws `StringComputationNotSupportedException`, so phase 2 is gated by the same corpus; `NUMSHARP_STRING_ORACLE_DEFERRED=1`
+lists every deferred case with its refusal) + `Backends/Strings/StringCallOrderTests.cs` + `StringShapeDecidedTests.cs`
++ `StringComparisonTruthTests.cs` + `StringArithmeticTests.cs`. **Validation pass (2026-10-07)** — the deferral rule is now exact: defer ONLY where NumPy
 reads the text (compares, concatenates, parses, formats into a result); where dtypes, sizes or shapes decide NumPy's
 answer, give that answer. So (1) an empty array, lines of one element, or a pair the comparison operators cannot compare
 are answered from the shape — truth tests, counts, the nonzero family, arg-reductions, sort / partition, `np.unique` and

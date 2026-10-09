@@ -447,7 +447,53 @@ compare primitives exist; P2.2's `sort_complex` and P2.4's int parser need P2.0'
 
 ## 7. State log
 
-- **2026-10-09 — P2.1's zero-excuse oracle section, and the four gaps it found** (this commit). `gen_strings_oracle.py`
+- **2026-10-09 — P2.3: concatenation and repetition** (this commit). Implemented, every statement probed against
+  NumPy 2.4.2:
+  1. **`np.add` over two strings of one class** (NumPy's `string_add`) and its spellings: the `+` operator with an array
+     or a C# string on either side (a string on the left stays the FIRST operand: Python's `__radd__` is
+     `np.add(s, a)`, unlike the comparisons' reflection), and `np.strings.add` (`is np.add`, plus `string` overloads).
+     The width is `w1 + w2`; trailing NULs never count, embedded ones do. NumPy's string add promoter ignores `dtype=`
+     for two strings of one class (`IsIgnoredStringRequest`). The TypeErrors: the bytes / str mix, a string with a
+     number, and "addition result string of length … is too large" (NumPy prints the length in BYTES for both classes:
+     `descr->type` is compared with `NPY_UNICODE`, a char against a type number). An `out=` of the loop's descriptor is
+     written in place; any other text `out=` receives NumPy's output cast (a loop-descriptor temporary copied in by
+     `np.copyto(…, 'same_kind', where)`: truncation, padding, the ASCII decode of S into U). `where=`, NumPy's output
+     layout, the trivial loop, NDIter with COPY_IF_OVERLAP.
+  2. **`np.multiply(text, int, out=)`** (NumPy's `string_multiply`): the count cast to int64 (a uint64 past 2^63 wraps
+     negative and repeats nothing), a one-unit text is a fill, a count below 1 or an empty text gives an empty element,
+     `reps * len` past 2^63 - 1 leaves that element as it was and raises "Overflow detected in string multiply" AFTER the
+     loop. The loop descriptor is `out=`'s read in the text's class (a float out reports `<U32` in the cast TypeError).
+     Without `out=` NumPy's TypeError ("The 'out' kwarg is necessary …"), for the ufunc and both `*` operator orders.
+  3. **`np.strings.multiply`**, the two-pass wrapper statement for statement: the integer check first ("unsupported type
+     float64 for operand 'i'"; bool is not an integer), `maximum(i, 0)`, `str_len`, the float64 overflow test
+     ("Overflow encountered in string multiply"), `buffersizes = len * i` (float64 after a uint64 count, so the
+     descriptor string is `'U6.0'` and NumPy 2.4.2 raises "data type 'U6.0' not understood" — reproduced), the max (a
+     zero-size result is the reduction ValueError), and `np.empty_like(a, shape=…)` (a's memory order).
+  4. **Kernels** (`Backends/Kernels/ILKernelGenerator.Text.Concat.cs`, managed fallbacks in
+     `Backends/Strings/NDStringArithmetic.cs`): concatenation (A's chunks copied and scanned for len(A) in one pass, the B
+     part zeroed, B stored at len(A)), `str_len`, and the repetition in two forms. The first repetition kernel called a
+     C# helper per element (NumPy's loop shape: variable-size copies, then a zero fill) and ran 0.70–1.16× NumPy: its
+     copies change size element to element, which the branch predictor cannot follow (30–40 ns per `<U8` element; the
+     length scan is 3.5 ns of it). The NARROW kernel (text ≤ 128 bytes, output ≤ 512 bytes) holds the text's chunks in
+     locals, stores them once per copy at `k * len` into a zeroed stack row one text width wider than the output, and
+     copies the row out at the output width — fixed-size stores only, 2.0–3.9× NumPy. Wider shapes keep the helper
+     (doubling copies, bandwidth-bound).
+  Oracle: section `strarith` (2,046 cases, zero excuses: values, widths, the operators, keyword forms, every
+  catalog layout, broadcasts, `out=` of every width / class, masks, overflow, special units); 171 phase-2 cases of the
+  other sections are now held strict (deferred 1,141 → 970); `strprec`'s out operands moved to `target()` (21 OWNDATA
+  facets; the operands are byte-identical). `NUMSHARP_STRING_ORACLE_DEFERRED=1` lists the deferred cases with their
+  refusal. Unit tests: `StringArithmeticTests` (32, incl. the kernels against a naive reference with the widths
+  straddling the narrow limits, the managed route end to end; 8 planted kernel bugs, all caught) and the doc tests
+  (`Computing_ConcatenationAndRepetition`). Benchmarks (two pinned P-cores, NPY/NS, 22 operations × 1K / 100K / 1M):
+  geomean 5.0×; concatenation 3.3–44× (`S8` 42–44×), repetition into `out=` 2.0–3.4×, `np.strings.multiply` 1.6–4.9×.
+  Under 1.5×: `add_U100` at 1M, a fresh 80 MB result (1.32–1.50×: both sides pay 12–14 ms of page faults; into a
+  reused `out=` 1.52×, the one-core bandwidth ceiling at ~27 GB/s), and `add_strided_U8` at 1K in the matrix run
+  (1.14–1.63×, measured before tier-1; 2.1–2.3× warmed). Open: `np.char.add` / `np.char.multiply` wait for the
+  `np.char` module (C-D1; `np.char.multiply` is NOT `np.strings.multiply`: a float count is its ValueError "Can only
+  multiply by integers"); `np.strings.str_len` goes public with P2.5; numbers formatted as text (`np.add(f8, f8,
+  dtype='U')`) and bool results into a text `out=` wait for P2.4. C# note: `u += v` rebinds `u` to the wider result;
+  NumPy's in-place form is `np.add(u, v, out: u)` (truncated to u's width, u returned).
+- **2026-10-09 — P2.1's zero-excuse oracle section, and the four gaps it found** (commit cc8b103f). `gen_strings_oracle.py`
   gained section `strcomp` (8,796 cases, 90 of them NumPy errors): the six comparisons over every catalog layout and
   five U / four S width pairs, every special unit pair through an outer broadcast (U on both sides of U+10FFFF and the
   BMP, S across 0x80), the C# operators with a string on either side, keyword ufuncs (`out=` of five dtypes, `where=`,
@@ -506,7 +552,7 @@ compare primitives exist; P2.2's `sort_complex` and P2.4's int parser need P2.0'
 |---|---|
 | P2.1 | `NDStringUfuncs.cs` compute answers for the comparisons and logical ufuncs; `NDStringUfuncs.Precedence.cs` computing loops (shared with P2.3); `np.array_equal`, `np.array_equiv`; the masks of `np.place` / `np.putmask`; `np.histogram` / `np.histogramdd` bin-order checks ("greater"); `np.trim_zeros`. |
 | P2.2 | `AxisSort` ("sort"), `AxisPartition` (×2), `NDArray.unique`, `np.isin` (×2), `np.intersect1d`, `np.setdiff1d` (×3), `np.setxor1d` (×3), `np.union1d`, `np.digitize`, `np.lexsort`, `np.nanargmax` family, `np.searchsorted`, `np.sort_complex`, `np.histogram` text data (×3), `np.histogramdd` searchsorted. |
-| P2.3 | `NDStringUfuncs.cs` `multiply` with `out=`; the `add` computing answer. |
+| P2.3 | Done (2026-10-09): `NDStringUfuncs.cs` `multiply` with `out=`; the `add` computing answer. (`np.add` of numbers with a string `dtype=` stays deferred: it formats numbers as text, P2.4.) |
 | P2.4 | All 29 `TextConversion` sites (`NDStringCasting`, `NDIterBufferManager`, `np.flatiter`, `NDStringArrays` ×2, `ToMuliDimArray` ×2, `np.concatenate.Strings` ×2, `np.vander`, `np.choose`, `np.place` ×2, `np.putmask`, `NDArray.fill`, `np.copyto(.Strings)` ×5, the indexing setter ×2, `NDMaskedArray` ×7); all 6 `NumberToText` sites; both `MixedKinds` sites; all 6 direct throws (`np.ones`, `StringDTypeMeta`, `NDStringArrays` ×2, `NDArray.Indexing.Strings`, `np.pad` with a number constant); `np.ones_like`; the implicit conversions; the parse-fed numerics (`linalg.norm`, `cov`, `i0`, `poly`, `roots`, `np.fft`). |
 | P2.7 | `np.evaluate` (×2), `np.pad` `linear_ramp`, `NDMaskedArray` median, anything left. |
 

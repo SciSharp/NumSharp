@@ -157,6 +157,21 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
+        ///     Whether a string <c>dtype=</c> request is one NumPy's string add promoter IGNORES: <c>add</c> of two strings of
+        ///     one class concatenates in their own class whatever class is requested (probed 2.4.2: <c>add(U3, U4,
+        ///     dtype='S')</c> is <c>U7</c>, as is <c>dtype='U'</c>). The call then proceeds exactly as if no <c>dtype=</c> was
+        ///     given, so the concatenation computes through <see cref="BinaryGuard"/> with NumPy's checks in NumPy's order.
+        /// </summary>
+        /// <param name="ufunc">NumPy's ufunc name.</param>
+        /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
+        /// <param name="x1">The first input.</param>
+        /// <param name="x2">The second input, or null for a unary ufunc.</param>
+        /// <returns>True for a string request of <c>add</c> over two strings of one class.</returns>
+        internal static bool IsIgnoredStringRequest(string ufunc, DType dtype, NDArray x1, NDArray x2)
+            => ufunc == "add" && x2 is not null && IsStringRequest(dtype) && IsString(x1) && IsString(x2)
+               && x1.dtype.Meta == x2.dtype.Meta;
+
+        /// <summary>
         ///     NumPy's answer for a ufunc called with a string <c>dtype=</c> request (the operands may be numbers or text).
         /// </summary>
         /// <param name="ufunc">NumPy's ufunc name.</param>
@@ -291,12 +306,24 @@ namespace NumSharp.Backends.Strings
         /// </summary>
         /// <param name="d1">The first input's descriptor in the loop's class.</param>
         /// <param name="d2">The second input's descriptor in the loop's class.</param>
-        /// <returns>The output descriptor, its length clamped to the class limit.</returns>
+        /// <returns>The output descriptor.</returns>
+        /// <exception cref="TypeError">The result's byte width exceeds 2^31 - 1: NumPy's
+        ///     <c>string_addition_resolve_descriptors</c> refuses with <c>addition result string of length N is too large to
+        ///     store inside array.</c>, N the width in BYTES for both classes (probed: <c>S2147483647 + S1</c> and
+        ///     <c>U536870911 + U1</c> both report 2147483648). NumPy raises it while resolving the loop — after <c>out=</c> /
+        ///     <c>where=</c> parsing, before the output cast and the broadcast — which is where every caller asks for the
+        ///     descriptor.</exception>
         internal static DType Concatenation(DType d1, DType d2)
         {
             var meta = (StringDTypeMeta)d1.Meta;
-            long chars = d1.itemsize / meta.UnitSize + d2.itemsize / meta.UnitSize;
-            return meta.Descr(Math.Min(chars, meta.MaxChars));
+            // In long: two widths near 2^31 - 1 overflow an int sum (S2147483647 + S1 would wrap negative).
+            long bytes = (long)d1.itemsize + d2.itemsize;
+            // NumPy: result_itemsize > NPY_MAX_INT. Its message means to report U lengths in characters
+            // (`if (given_descrs[0]->type == NPY_UNICODE) length /= 4;`), but `type` is the CHARACTER code 'U' (85) and
+            // NPY_UNICODE the type NUMBER (19), so the division never happens: the bytes are what NumPy prints.
+            if (bytes > int.MaxValue)
+                throw new TypeError($"addition result string of length {bytes} is too large to store inside array.");
+            return meta.Descr(bytes / meta.UnitSize);
         }
 
         /// <summary>

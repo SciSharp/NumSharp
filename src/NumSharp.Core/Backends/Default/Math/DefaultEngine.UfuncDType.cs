@@ -45,7 +45,8 @@ namespace NumSharp.Backends
         /// <param name="x2">The second input, or null for a unary ufunc.</param>
         /// <param name="out">The <c>out=</c> operand, or null.</param>
         /// <param name="where">The <c>where=</c> mask, or null.</param>
-        /// <returns>The storage lane of the requested class (null when no dtype was given); never the string lane.</returns>
+        /// <returns>The storage lane of the requested class (null when no dtype was given, or when NumPy's string add promoter
+        ///     ignores a string request for two strings of one class); never the string lane.</returns>
         /// <exception cref="TypeError">A descriptor with details beyond its class, or NumPy's refusal of a string request.</exception>
         /// <exception cref="ValueError">A string operand with a read-only <paramref name="out"/>.</exception>
         /// <exception cref="System.ArgumentException">A string operand with a non-bool <paramref name="where"/>, or a cast the
@@ -60,6 +61,10 @@ namespace NumSharp.Backends
             NDArray @out = null, NDArray where = null)
         {
             var code = UfuncLoopCode(dtype);
+            // NumPy's string add promoter ignores a string request for two strings of one class: no loop request at all,
+            // and the engine's string guard concatenates (its out= / where= checks run there, in NumPy's order).
+            if (Strings.NDStringUfuncs.IsIgnoredStringRequest(ufunc, dtype, x1, x2))
+                return null;
             Strings.NDStringUfuncs.ThrowIfStringCall(ufunc, dtype, x1, x2, @out, where);
             return code;
         }

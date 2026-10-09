@@ -1282,11 +1282,13 @@ def gen_text_precedence():
     u2 = operand("<U2", "c1", seed=3, ascii_only=True)
     i8 = num_operand(np.arange(6))
     f8 = num_operand(np.linspace(0, 1, 6))
-    outs = {"ro": (lambda: plain(np.zeros(6)), True), "f8": (lambda: plain(np.zeros(6)), False),
-            "i8": (lambda: plain(np.zeros(6, np.int64)), False), "b": (lambda: plain(np.zeros(6, bool)), False),
-            "U1": (lambda: plain(np.zeros(6, "<U1")), False), "U9": (lambda: plain(np.zeros(6, "<U9")), False),
-            "S9": (lambda: plain(np.zeros(6, "S9")), False), "f8x7": (lambda: plain(np.zeros(7)), False),
-            "U9x23": (lambda: plain(np.zeros((2, 3), "<U9")), False)}
+    # The out= operands go through ``target``: NumPy returns a computing call's out itself, so its OWNDATA is compared, and
+    # the replay rebuilds a 1-D string operand as its own base (a ``plain`` 1-D view would record OWNDATA False).
+    outs = {"ro": (lambda: target(np.zeros(6)), True), "f8": (lambda: target(np.zeros(6)), False),
+            "i8": (lambda: target(np.zeros(6, np.int64)), False), "b": (lambda: target(np.zeros(6, bool)), False),
+            "U1": (lambda: target(np.zeros(6, "<U1")), False), "U9": (lambda: target(np.zeros(6, "<U9")), False),
+            "S9": (lambda: target(np.zeros(6, "S9")), False), "f8x7": (lambda: target(np.zeros(7)), False),
+            "U9x23": (lambda: target(np.zeros((2, 3), "<U9")), False)}
     wheres = {"int": num_operand(np.array([1, 0, 1, 0, 1, 0])), "b7": num_operand(np.ones(7, bool))}
 
     def ro_view(pair):
@@ -1328,8 +1330,8 @@ def gen_text_precedence():
     # divmod / modf parse both outputs before the loop.
     for which in (0, 1):
         o1, o2 = plain(np.zeros(6)), plain(np.zeros(6))
-        target = o1 if which == 0 else o2
-        target[1].flags.writeable = False
+        read_only = o1 if which == 0 else o2
+        read_only[1].flags.writeable = False
         add("strprec", "divmod_out", params={"readonly": which}, operands=[u, u, o1, o2], layout=f"ro{which}",
             phase="compute", call=lambda x, y, q, r: np.divmod(x, y, out=(q, r)))
 
@@ -3241,7 +3243,202 @@ def _text_op(sym, text, a, side):
     """
     x, y = (a, text) if side == "right" else (text, a)
     return {"==": lambda: x == y, "!=": lambda: x != y, "<": lambda: x < y, "<=": lambda: x <= y,
-            ">": lambda: x > y, ">=": lambda: x >= y}[sym]()
+            ">": lambda: x > y, ">=": lambda: x >= y, "+": lambda: x + y, "*": lambda: x * y}[sym]()
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Section strarith: concatenation and repetition (strings phase 2, P2.3) — strict (phase 1: NumSharp computes them)
+# ----------------------------------------------------------------------------------------------------------------------
+
+def _count_operand(view, dtype, offset=-1):
+    """A per-element repeat-count operand of ``view``'s shape: counts cycling from ``offset`` (negative counts repeat
+    nothing), C-ordered, of integer ``dtype``.
+
+    Args:
+        view: the text operand the counts pair with (its shape).
+        dtype: the counts' dtype.
+        offset: the first count.
+
+    Returns:
+        The (base, view) pair of the counts.
+    """
+    counts = (np.arange(view.size, dtype=np.int64).reshape(view.shape) % 6 + offset).astype(dtype)
+    return plain(counts)
+
+
+def gen_strarith():
+    """Section strarith: np.add over two strings of one class, the string repeat (np.multiply into out=), the C#
+    operators + / * with a string operand, and np.strings.add / np.strings.multiply, strict."""
+    # A. add over every layout kind (same layout for both operands) and the cross pairs, every width pair.
+    for kind, pairs in CMP_WIDTHS.items():
+        for s1, s2 in pairs:
+            layouts = [(name, name) for name in LAYOUTS] + CMP_CROSS
+            for l1, l2 in layouts:
+                b1, v1 = _cmp_operand(s1, l1, seed=21)
+                like = [x.item() if hasattr(x, "item") else x for x in b1.tolist()] if b1.size else None
+                b2, v2 = _cmp_operand(s2, l2, seed=22, like=like if LAYOUTS[l1][0] == LAYOUTS[l2][0] else None)
+                add("strarith", "ufunc", params={"name": "add"}, operands=[(b1, v1), (b2, v2)],
+                    call=lambda x, y: np.add(x, y), layout=f"{s1}:{l1},{s2}:{l2}")
+
+    # B. Special code units through an outer broadcast: embedded / trailing NULs, U units above U+10FFFF (just
+    #    nonzero units here), S bytes on both sides of 0x80.
+    u_units = [0, 0x41, 0xFFFF, 0x1F600, 0x10FFFF, 0x110000, 0xFFFFFFFF]
+    add("strarith", "ufunc", params={"name": "add"},
+        operands=[_units_operand(u_units, 1, (len(u_units), 1)), _units_operand(u_units, 1, (1, len(u_units)))],
+        call=lambda x, y: np.add(x, y), layout="U1:units")
+    add("strarith", "ufunc", params={"name": "add"},
+        operands=[_units_operand([0x41, 0x110000, 0, 0x110000, 0x42, 0], 2, (3, 1)),
+                  _units_operand([0x41, 0, 0, 0x110000], 2, (1, 2))],
+        call=lambda x, y: np.add(x, y), layout="U2:units")
+    s_bytes = [b"", b"\x01", b"\x7f", b"\x80", b"\xff", b"\x00\x01", b"a\x00"]
+    add("strarith", "ufunc", params={"name": "add"},
+        operands=[plain(np.array(s_bytes, dtype="S2").reshape(-1, 1)), plain(np.array(s_bytes, dtype="S3").reshape(1, -1))],
+        call=lambda x, y: np.add(x, y), layout="S:bytes")
+
+    # C. The repeat into out=: text layouts x count forms (0-d counts, per-element counts, a broadcast column), widths
+    #    past one vector and past the unrolled plans, out widths that cut the repetition and that pad it, both operand
+    #    orders.
+    for spec in ["U3", "U8", "U70", "S3", "S9", "S300"]:
+        width = int(spec[1:])
+        for layout in LAYOUTS:
+            b, v = _cmp_operand(spec, layout, seed=23)
+            for count_form in ["scalar", "array"]:
+                for owidth in [width * 3, max(1, width * 2 - 1)]:
+                    if count_form == "scalar":
+                        counts = [plain(np.array(c)) for c in (2, 0, -1, 3)]
+                    else:
+                        counts = [_count_operand(v, np.int64)]
+                    for c in counts:
+                        out = target(np.zeros(np.broadcast_shapes(v.shape, c[1].shape), dtype=f"{spec[0]}{owidth}"))
+                        add("strarith", "ufunc_kw", params={"name": "multiply", "nin": 2, "out": 2, "dtype": None},
+                            operands=[(b, v), c, out], call=lambda x, y, o: np.multiply(x, y, out=o),
+                            layout=f"{spec}:{layout}:{count_form}:o{owidth}")
+            # the count first (NumPy's int-str loop)
+            if v.size:
+                c = _count_operand(v, np.int64, offset=0)
+                out = target(np.zeros(v.shape, dtype=f"{spec[0]}{width * 4}"))
+                add("strarith", "ufunc_kw", params={"name": "multiply", "nin": 2, "out": 2, "dtype": None},
+                    operands=[c, (b, v), out], call=lambda x, y, o: np.multiply(x, y, out=o), layout=f"{spec}:{layout}:intfirst")
+
+    # D. Count dtypes and the repeat's refusals: every integer width (a uint64 count past 2^63 wraps negative), an
+    #    int64 count whose repetition overflows (OverflowError after the loop), bool / float counts (no loop), no out=
+    #    (the required-out TypeError), a U loop into an S out / a numeric out (the output cast), an S loop into a U out
+    #    (the ASCII decode), where= masks.
+    b, v = _cmp_operand("U3", "c2", seed=24)
+    for dt in ["i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8"]:
+        c = plain(np.array([2], dtype=dt))
+        out = target(np.zeros(v.shape, dtype="U6"))
+        add("strarith", "ufunc_kw", params={"name": "multiply", "nin": 2, "out": 2, "dtype": None},
+            operands=[(b, v), c, out], call=lambda x, y, o: np.multiply(x, y, out=o), layout=f"count:{dt}")
+    for value, dt in [(2**63 + 5, "u8"), (2**62, "i8"), (2**61 + 1, "i8"), (-(2**63), "i8")]:
+        out = target(np.zeros(v.shape, dtype="U6"))
+        add("strarith", "ufunc_kw", params={"name": "multiply", "nin": 2, "out": 2, "dtype": None},
+            operands=[(b, v), plain(np.array(value, dtype=dt)), out], call=lambda x, y, o: np.multiply(x, y, out=o),
+            layout=f"count:{value}")
+    for c in [plain(np.array(True)), plain(np.array(2.0)), plain(np.array([[2.5]]))]:
+        out = target(np.zeros(v.shape, dtype="U6"))
+        add("strarith", "ufunc_kw", params={"name": "multiply", "nin": 2, "out": 2, "dtype": None},
+            operands=[(b, v), c, out], call=lambda x, y, o: np.multiply(x, y, out=o), layout="count:nonint")
+    add("strarith", "ufunc", params={"name": "multiply"}, operands=[(b, v), plain(np.array(2))],
+        call=lambda x, y: np.multiply(x, y), layout="noout")
+    for odt in ["S9", "f8", "?", "U2"]:
+        out = target(np.zeros(v.shape, dtype=odt))
+        add("strarith", "ufunc_kw", params={"name": "multiply", "nin": 2, "out": 2, "dtype": None},
+            operands=[(b, v), plain(np.array(3)), out], call=lambda x, y, o: np.multiply(x, y, out=o), layout=f"out:{odt}")
+    for spec, vals in [("S3", [b"ab", b"a\x00", b"", b"xyz"]), ("S3", [b"ab", b"\xff", b"", b"q"])]:
+        sb = plain(np.array(vals, dtype=spec))
+        out = target(np.zeros(4, dtype="U9"))
+        add("strarith", "ufunc_kw", params={"name": "multiply", "nin": 2, "out": 2, "dtype": None},
+            operands=[sb, plain(np.array(3)), out], call=lambda x, y, o: np.multiply(x, y, out=o), layout="S:into:U")
+    for mask in [np.array([[1, 0, 1, 0]], bool), np.eye(3, 4, dtype=bool), np.zeros((3, 4), bool)]:
+        out = target(np.array([["k"] * 4] * 3, dtype="U6"))
+        add("strarith", "ufunc_kw", params={"name": "multiply", "nin": 2, "out": 2, "where": 3, "dtype": None},
+            operands=[(b, v), plain(np.array(2)), out, plain(mask)],
+            call=lambda x, y, o, w: np.multiply(x, y, out=o, where=w), layout="where")
+
+    # E. add with out= (exact, narrower, wider, S into U, U into S, numeric), where=, dtype= (ignored by the string
+    #    add promoter), the bytes / str mix, a number operand, 0-d operands.
+    b1, v1 = _cmp_operand("U3", "c2", seed=25)
+    b2, v2 = _cmp_operand("U4", "bc", seed=26)
+    for odt in ["U7", "U3", "U1", "U12", "S7", "f8", "?"]:
+        out = target(np.zeros((3, 4), dtype=odt))
+        add("strarith", "ufunc_kw", params={"name": "add", "nin": 2, "out": 2, "dtype": None},
+            operands=[(b1, v1), (b2, v2), out], call=lambda x, y, o: np.add(x, y, out=o), layout=f"out:{odt}")
+    for vals in [[b"ab", b"a\x00", b""], [b"ab", b"\x80q", b""]]:
+        sa = plain(np.array(vals, dtype="S2"))
+        sb = plain(np.array([b"c", b"", b"de"], dtype="S2"))
+        out = target(np.zeros(3, dtype="U4"))
+        add("strarith", "ufunc_kw", params={"name": "add", "nin": 2, "out": 2, "dtype": None},
+            operands=[sa, sb, out], call=lambda x, y, o: np.add(x, y, out=o), layout="S:into:U")
+    for mask in [np.array([[1, 0, 1, 0]], bool), np.eye(3, 4, dtype=bool), np.zeros((3, 4), bool)]:
+        out = target(np.array([["k"] * 4] * 3, dtype="U7"))
+        add("strarith", "ufunc_kw", params={"name": "add", "nin": 2, "out": 2, "where": 3, "dtype": None},
+            operands=[(b1, v1), (b2, v2), out, plain(mask)],
+            call=lambda x, y, o, w: np.add(x, y, out=o, where=w), layout="where")
+    for dt in ["f8", "U", "S", "i4"]:
+        add("strarith", "ufunc_kw", params={"name": "add", "nin": 2, "dtype": dt}, operands=[(b1, v1), (b2, v2)],
+            call=lambda x, y, d=dt: np.add(x, y, dtype=d), layout=f"dtype:{dt}")
+    sx = _cmp_operand("S3", "c2", seed=27)
+    add("strarith", "ufunc", params={"name": "add"}, operands=[(b1, v1), sx], call=lambda x, y: np.add(x, y), layout="U+S")
+    add("strarith", "ufunc", params={"name": "add"}, operands=[sx, (b1, v1)], call=lambda x, y: np.add(x, y), layout="S+U")
+    for num in [np.array(1), np.array([[1.5]]), np.array(True)]:
+        add("strarith", "ufunc", params={"name": "add"}, operands=[(b1, v1), num_operand(num)],
+            call=lambda x, y: np.add(x, y), layout="U+num")
+        add("strarith", "ufunc", params={"name": "add"}, operands=[num_operand(num), (b1, v1)],
+            call=lambda x, y: np.add(x, y), layout="num+U")
+    add("strarith", "ufunc", params={"name": "add"}, operands=[plain(np.array("ab")), plain(np.array("c\x00d"))],
+        call=lambda x, y: np.add(x, y), layout="0d")
+
+    # F. The concatenation too wide for NumPy's byte limit (resolved before the out cast and the broadcast).
+    for s1, s2 in [("S2147483647", "S1"), ("U536870911", "U1"), ("S2147483646", "S1")]:
+        add("strarith", "ufunc", params={"name": "add"},
+            operands=[plain(np.zeros(0, dtype=s1)), plain(np.zeros(0, dtype=s2))], call=lambda x, y: np.add(x, y),
+            layout=f"limit:{s1}+{s2}")
+
+    # G. The C# operators with a string operand: concatenation on either side (the string stays first on the left:
+    #    Python's __radd__), bytes plus str, the repeat without out= (both orders), a string times a string.
+    for spec, layout in [("U3", "c2"), ("U8", "f2"), ("U3", "z0"), ("S3", "c2"), ("U3", "e2"), ("U3", "t3")]:
+        for sym in ["+", "*"]:
+            for text in ["", "a", "b\x00", "zzzz"]:
+                for side in ["right", "left"]:
+                    b, v = _cmp_operand(spec, layout, seed=28)
+                    add("strarith", "operator_text", params={"op": sym, "text": enc(text), "side": side},
+                        operands=[(b, v)], call=lambda a, s=sym, t=text, sd=side: _text_op(s, t, a, sd),
+                        layout=f"{spec}:{layout}")
+    b, v = _cmp_operand("U3", "c2", seed=29)
+    for order in ["text_first", "int_first"]:
+        add("strarith", "ufunc", params={"name": "multiply"},
+            operands=[(b, v), plain(np.array(2))] if order == "text_first" else [plain(np.array(2)), (b, v)],
+            call=lambda x, y: x * y, layout=f"operator:{order}")
+
+    # H. np.strings.add (the np.add ufunc itself) and np.strings.multiply (NumPy's two-pass wrapper: the count check,
+    #    max(i, 0), str_len, the overflow check, the output width from the largest repetition, empty_like's layout).
+    for l1, l2 in [("c2", "c2"), ("f2", "f2"), ("c2", "bc"), ("z0", "z0"), ("e2", "e2")]:
+        b1, v1 = _cmp_operand("U4", l1, seed=30)
+        b2, v2 = _cmp_operand("U3", l2, seed=31)
+        add("strarith", "strings_add", operands=[(b1, v1), (b2, v2)], call=lambda x, y: np.strings.add(x, y),
+            layout=f"{l1},{l2}")
+    for spec in ["U3", "S3", "U70"]:
+        for layout in ["c2", "f2", "t3", "r2", "s2", "bc", "z0", "e2", "one", "d5"]:
+            b, v = _cmp_operand(spec, layout, seed=32)
+            for c in [plain(np.array(2)), plain(np.array(0)), plain(np.array(-3)), _count_operand(v, np.int64)]:
+                add("strarith", "strings_multiply", operands=[(b, v), c], call=lambda a, i: np.strings.multiply(a, i),
+                    layout=f"{spec}:{layout}")
+    b, v = _cmp_operand("U3", "c2", seed=33)
+    for dt in ["i1", "u1", "i4", "u4", "i8", "u8"]:
+        add("strarith", "strings_multiply", operands=[(b, v), plain(np.array(2, dtype=dt))],
+            call=lambda a, i: np.strings.multiply(a, i), layout=f"count:{dt}")
+    for c in [plain(np.array(2.0)), plain(np.array(True)), plain(np.array("x")), plain(np.array(2**62)),
+              plain(np.array(2**63 + 1, dtype="u8")), plain(np.array([[1], [2], [3]])), plain(np.array([1, 2]))]:
+        add("strarith", "strings_multiply", operands=[(b, v), c], call=lambda a, i: np.strings.multiply(a, i),
+            layout="count:edge")
+    add("strarith", "strings_multiply", operands=[num_operand(np.array([1, 2])), plain(np.array(2))],
+        call=lambda a, i: np.strings.multiply(a, i), layout="a:numeric")
+    add("strarith", "strings_multiply", operands=[plain(np.zeros(0, "U3")), plain(np.array(2))],
+        call=lambda a, i: np.strings.multiply(a, i), layout="a:empty")
+    for text in ["ab", "", "x\x00y"]:
+        add("strarith", "strings_multiply_text", params={"text": enc(text)}, operands=[plain(np.array(3))],
+            call=lambda i, t=text: np.strings.multiply(t, i), layout="a:str")
 
 
 def main():
@@ -3262,6 +3459,7 @@ def main():
     gen_strma()
     gen_striter()
     gen_strcomp()
+    gen_strarith()
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with open(OUT, "wb") as f:
         for c in CASES:

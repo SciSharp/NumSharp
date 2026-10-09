@@ -140,9 +140,10 @@ operation accepts all 15 dtypes; support is tested and documented per operation.
 is the storage lane of NumPy's fixed-width string dtypes, `str_` (`U`) and `bytes_` (`S`), whose
 width lives in the descriptor (`np.dtype("U5")`). It is outside the 15-dtype numerical matrix:
 string arrays support storage, element access, conversion to and from C#, copies, casts between
-string dtypes, indexing and printing, byte-identical to NumPy 2.4.2; computing on text
-(comparison, concatenation, sorting, searching, text-number conversion) is the next phase and
-throws `StringComputationNotSupportedException`, while a call NumPy refuses raises NumPy's text.
+string dtypes, indexing, printing, comparisons, truth values, concatenation and repetition,
+byte-identical to NumPy 2.4.2; the rest of computing on text (sorting, searching, text-number
+conversion, the other `np.strings` functions) arrives in later stages and throws
+`StringComputationNotSupportedException` until then, while a call NumPy refuses raises NumPy's text.
 
 ### NumPy dtype families not represented natively
 
@@ -151,7 +152,8 @@ throws `StringComputationNotSupportedException`, while a call NumPy refuses rais
 - `datetime64` and `timedelta64`, including their unit metadata, are not implemented.
 - Object, structured, subarray, and void dtypes are not implemented.
 - NumPy 2.x's variable-width `StringDType` is not implemented. The fixed-width `S` and `U` dtypes
-  are (computing on them is the next phase).
+  are (computing on them arrives in stages: comparisons, truth values, concatenation and repetition
+  compute now).
 - `float128`/`longdouble` and `complex256`/`clongdouble` have no corresponding .NET storage type.
 
 See [Dtypes](dtypes.md) for scalar conversion, promotion, special-value, and casting details.

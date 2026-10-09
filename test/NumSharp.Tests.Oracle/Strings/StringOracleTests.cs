@@ -146,6 +146,16 @@ namespace NumSharp.Tests.Strings
         /// </summary>
         [TestMethod] public void TextComparisonsAndTruth() => Run("strcomp");
 
+        /// <summary>
+        ///     Section strarith (strings phase 2, P2.3): <c>np.add</c> over two strings of one class across every layout kind,
+        ///     cross-layout broadcasts and width pairs, special code units, <c>out=</c> (exact, narrower, wider, S into U,
+        ///     refused) / <c>where=</c> / <c>dtype=</c>, the byte-width limit; the string repeat (<c>np.multiply</c> into
+        ///     <c>out=</c>: every count dtype, both operand orders, cut and padded outputs, overflow, the refusals); the C#
+        ///     <c>+</c> / <c>*</c> operators with a string operand; <c>np.strings.add</c> and NumPy's two-pass
+        ///     <c>np.strings.multiply</c>. Every case is strict: NumSharp computes all of them.
+        /// </summary>
+        [TestMethod] public void TextConcatenationAndRepetition() => Run("strarith");
+
         /// <summary>The corpus is complete: every section has cases and every case belongs to a section above.</summary>
         [TestMethod]
         public void Corpus_EverySectionIsReplayed()
@@ -154,7 +164,7 @@ namespace NumSharp.Tests.Strings
             {
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
                 "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
-                "strcomp",
+                "strcomp", "strarith",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)
@@ -166,11 +176,20 @@ namespace NumSharp.Tests.Strings
 
         // ------------------------------------------------------------------------------------------------------------
 
+        /// <summary>
+        ///     The environment variable that lists every deferred case of a section on the test's standard output, with
+        ///     NumSharp's refusal text (any non-empty value but <c>0</c> turns it on). A development aid: a phase of the
+        ///     computational work reads it to see which NumPy answers are still refused, and that none of the calls it just
+        ///     implemented still is. Off by default, because a section can defer hundreds of cases.
+        /// </summary>
+        internal const string ListDeferredVariable = "NUMSHARP_STRING_ORACLE_DEFERRED";
+
         /// <summary>Replays every case of one section and fails with the list of divergences.</summary>
         /// <param name="section">The section prefix of the case ids.</param>
         private static void Run(string section)
         {
             var failures = new List<string>();
+            var deferredCases = new List<string>();
             int deferred = 0, total = 0;
             foreach (var c in Cases)
             {
@@ -179,13 +198,20 @@ namespace NumSharp.Tests.Strings
                 total++;
                 var outcome = ReplayOne(c, out var message);
                 if (outcome == Outcome.Deferred)
+                {
                     deferred++;
+                    deferredCases.Add($"{c.Id} [{c.Layout}]: {message}");
+                }
                 else if (outcome == Outcome.Failed)
                     failures.Add($"{c.Id} [{c.Layout}]: {message}");
             }
             int excused = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedLayouts.ContainsKey(c.Id));
             Console.WriteLine($"[strings/{section}] {total} cases, {deferred} deferred to the computational phase, " +
                               $"{excused} with an excused layout, {failures.Count} failed");
+            var listDeferred = Environment.GetEnvironmentVariable(ListDeferredVariable);
+            if (!string.IsNullOrEmpty(listDeferred) && listDeferred != "0")
+                foreach (var d in deferredCases)
+                    Console.WriteLine("  deferred " + d);
             // Every divergence goes to the test's standard output (the assertion message keeps the first 80).
             foreach (var f in failures)
                 Console.WriteLine("  " + f);
@@ -208,7 +234,8 @@ namespace NumSharp.Tests.Strings
 
         /// <summary>Replays one case and compares it.</summary>
         /// <param name="c">The case.</param>
-        /// <param name="message">The divergence, when the outcome is <see cref="Outcome.Failed"/>.</param>
+        /// <param name="message">The divergence, when the outcome is <see cref="Outcome.Failed"/>; NumSharp's refusal text,
+        ///     when it is <see cref="Outcome.Deferred"/>.</param>
         /// <returns>The verdict.</returns>
         private static Outcome ReplayOne(StringOracleCorpus.Case c, out string message)
         {
@@ -235,7 +262,10 @@ namespace NumSharp.Tests.Strings
             catch (Exception e)
             {
                 if (c.Phase == 2 && e is StringComputationNotSupportedException)
+                {
+                    message = Shorten(e.Message);
                     return Outcome.Deferred;
+                }
                 if (c.Error is null)
                 {
                     message = $"NumPy returned a result, NumSharp threw {e.GetType().Name}: {Shorten(e.Message)}";

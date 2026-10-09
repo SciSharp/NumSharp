@@ -43,7 +43,8 @@ namespace NumSharp
 
             // A string searched in a numeric array: NumPy's == has no loop for text against numbers and answers False
             // everywhere (its failed-comparison workaround), so the answer is False without building anything. (A fixed-
-            // width string array compares text, which is the next phase of the string support: the == below refuses.)
+            // width string array compares text: np.asanyarray reads the string as NumPy's 0-d str array and the == below
+            // runs the string comparison loop — a bytes array searched for a str is False everywhere, as in NumPy.)
             if (value is string && typecode != NPTypeCode.Char && typecode != NPTypeCode.String)
                 return false;
 

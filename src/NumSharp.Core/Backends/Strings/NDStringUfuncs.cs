@@ -127,11 +127,15 @@ namespace NumSharp.Backends.Strings
         /// <param name="where">The <c>where=</c> mask, or null.</param>
         /// <returns>Null when neither operand is text (the numeric path continues); otherwise the result NumPy's string loop
         ///     computes — the comparison of two strings of one class (<see cref="NDStringComparison"/>), a logical ufunc over
-        ///     the operands' truth values (<see cref="LogicalOverTruth"/>), the empty result (or <paramref name="out"/>) of a
-        ///     computing call whose broadcast result is empty.</returns>
+        ///     the operands' truth values (<see cref="LogicalOverTruth"/>), the concatenation of two strings of one class or
+        ///     the repeat of a string by an integer into <paramref name="out"/> (<see cref="NDStringArithmetic"/>), the empty
+        ///     result (or <paramref name="out"/>) of a computing call whose broadcast result is empty.</returns>
         /// <exception cref="Exception">Every exception <see cref="ThrowIfBinary"/> documents, for a call this phase does not
-        ///     compute yet (a concatenation, a repeat); <see cref="SystemError"/> for a logical ufunc over a <c>U</c> unit
-        ///     above U+10FFFF (NumPy's bool cast).</exception>
+        ///     compute yet (a text <paramref name="out"/> of a comparison, a number a string <c>dtype=</c> casts to text);
+        ///     <see cref="SystemError"/> for a logical ufunc over a lone <c>U</c> unit above U+10FFFF (NumPy's bool cast);
+        ///     <see cref="TypeError"/> for a concatenation wider than 2^31 - 1 bytes; <see cref="OverflowException"/> for a
+        ///     repeat whose <c>reps * len</c> exceeds 2^63 - 1; <see cref="UnicodeDecodeError"/> for an <c>S</c> result cast
+        ///     into a <c>U</c> <paramref name="out"/> that meets a byte ≥ 0x80.</exception>
         /// <remarks>Every caller must use the returned array: a non-null return means "this is the result", and the numeric
         ///     kernels behind the guard have no text lane.</remarks>
         internal static NDArray BinaryGuard(string ufunc, NDArray x1, NDArray x2, NDArray @out = null, NPTypeCode? loop = null,
@@ -154,6 +158,13 @@ namespace NumSharp.Backends.Strings
                     return NDStringComparison.Execute(ufunc, x1, x2, @out, where);
                 if (!textOut && s_logical.Contains(ufunc))
                     return LogicalOverTruth(ufunc, x1, x2, @out, where);
+                // The concatenation of two strings of one class, and the repeat of a string by an integer into its (text)
+                // out= — the guard's output cast already refused every non-text out for both. A numeric operand that a
+                // string dtype= request casts to text never gets here (that is the number-to-text cast, a later subphase).
+                if (ufunc == "add" && ComparesText(x1.dtype, x2.dtype))
+                    return NDStringArithmetic.Add(x1, x2, @out, where);
+                if (ufunc == "multiply" && textOut)
+                    return NDStringArithmetic.Multiply(x1, x2, @out, where);
             }
             throw error;
         }
@@ -821,8 +832,9 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     The refusal for a call NumPy answers by computing on text (comparisons, concatenation, truth tests, sorting,
-        ///     searching): string computation is the next phase of NumSharp's string support.
+        ///     The refusal for a call NumPy answers by computing on text that NumSharp does not compute yet (sorting,
+        ///     searching, conversion between text and numbers, the <c>np.strings</c> functions beyond <c>add</c> /
+        ///     <c>multiply</c>): those are the next phase of NumSharp's string support.
         /// </summary>
         /// <param name="op">The NumPy function or ufunc name.</param>
         /// <param name="a">A string operand of the call; its descriptor is named in the message.</param>
@@ -840,9 +852,9 @@ namespace NumSharp.Backends.Strings
         internal static StringComputationNotSupportedException NextPhase(string op, DType descr)
             => new StringComputationNotSupportedException(
                 $"{op} is not supported for fixed-width string arrays yet ({descr.ToString(true)}): NumSharp's string support " +
-                "covers storage, element access, conversion to and from C#, copying, casts between string dtypes, indexing and " +
-                "printing. String computation (comparisons, concatenation, truth tests, sorting and searching, conversion " +
-                "between text and numbers) is the next phase.");
+                "covers storage, element access, conversion to and from C#, copying, casts between string dtypes, indexing, " +
+                "printing, comparisons, truth tests, concatenation and repetition. The rest of string computation (sorting and " +
+                "searching, conversion between text and numbers, the np.strings functions) is the next phase.");
 
         /// <summary>
         ///     The comparison operators <c>==</c> / <c>!=</c> with a string operand and an operand of another class: NumPy's

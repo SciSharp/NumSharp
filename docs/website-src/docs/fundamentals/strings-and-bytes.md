@@ -2,7 +2,7 @@
 
 NumSharp has NumPy's two fixed-width text dtypes: `str_` (`U`, Unicode) and `bytes_` (`S`, bytes). It stores, reads, writes, converts, copies, casts and prints them byte for byte like NumPy 2.4.2.
 
-Computing on text arrives in stages. Comparisons and truth values compute now, with NumPy's results. Concatenation, sorting, searching, the `np.strings` functions and conversion between text and numbers throw `StringComputationNotSupportedException` until their stage lands. Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
+Computing on text arrives in stages. Comparisons, truth values, concatenation and repetition compute now, with NumPy's results. Sorting, searching, the other `np.strings` functions and conversion between text and numbers throw `StringComputationNotSupportedException` until their stage lands. Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
 
 NumPy's raw `void` (`V`), `object` (`O`) and variable-width `StringDType` dtypes stay unsupported.
 
@@ -13,7 +13,7 @@ NumPy's raw `void` (`V`), `object` (`O`) and variable-width `StringDType` dtypes
      Dtype integration → Dtypes_PromotionAndCasting
      Moving data → Moving_ViewsCopiesAndCasts, Moving_NonAsciiToBytes_Throws
      Printing → Printing_StrAndRepr
-     Computing on text → Computing_Comparisons, Computing_TruthValues, Computing_NumPyRefusals, Computing_NextPhase, Computing_NeverEqualToNumbers, Computing_ChecksInNumPysOrder
+     Computing on text → Computing_Comparisons, Computing_TruthValues, Computing_ConcatenationAndRepetition, Computing_NumPyRefusals, Computing_NextPhase, Computing_NeverEqualToNumbers, Computing_ChecksInNumPysOrder
      .npy files → Npy_RoundTrip, Npy_CharWritesAsU1
      The Char dtype → Char_IsTwoByteUtf16CodeUnit
      Byte streams via np.frombuffer → Bytes_ViaFrombuffer -->
@@ -156,6 +156,31 @@ np.array(new[] { "", "a", " " }).astype(np.@bool);   // [False  True  True]
 np.count_nonzero(names);                            // 3
 ```
 
+### Concatenation and repetition
+
+`np.add` and the `+` operator concatenate two text arrays of one class, element by element. The result is as wide as the two widths together. Trailing NULs never count, embedded NULs do. A C# `string` is NumPy's `str` scalar. A string on the left stays the first operand. `np.strings.add` is `np.add`:
+
+```csharp
+names + "s";                                      // ['cats' 'dogs' 'birds'], <U5
+"a " + names;                                     // ['a cat' 'a dog' 'a bird'], <U6
+np.add(names, np.array(new[] { "!", "?", "" }));  // ['cat!' 'dog?' 'bird'], <U5
+```
+
+`np.strings.multiply` repeats each string. The result is as wide as the longest repetition. A count less than 1 gives an empty string:
+
+```csharp
+np.strings.multiply(names, 2);                                  // ['catcat' 'dogdog' 'birdbird'], <U8
+np.strings.multiply(names, np.array(new long[] { 1, 0, -1 }));  // ['cat' '' ''], <U3
+```
+
+The `np.multiply` ufunc cannot size its result, so it needs `out=`. It writes each repetition cut to the width of `out`. Without `out=`, `np.multiply(names, 2)` and `names * 2` raise NumPy's `TypeError`, as in NumPy:
+
+```csharp
+np.multiply(names, 2, np.zeros(new Shape(3L), "U5"));   // ['catca' 'dogdo' 'birdb']
+```
+
+Broadcasting, every memory layout, `out=` (a narrower or wider text array receives the result cut or padded) and `where=` work as for numbers. A `bytes` array with a `str` array has no loop: `np.add` raises NumPy's `TypeError`. A repetition longer than 2^63 - 1 characters raises NumPy's `OverflowError` (as `OverflowException`).
+
 ### What is not computed yet
 
 NumPy answers a call that involves text in one of two ways, and NumSharp follows it.
@@ -170,8 +195,8 @@ np.sqrt(names);   // TypeError: ufunc 'sqrt' not supported for the input types, 
 **NumPy computes on the text in a later stage.** NumSharp throws `StringComputationNotSupportedException`, a `NotSupportedException`:
 
 ```csharp
-np.add(names, names);     // concatenation
 np.sort(names);           // sorting
+np.unique(names);         // sorting, to find the unique values
 ```
 
 A comparison of text with numbers is "never equal" in NumPy, and in NumSharp: `names == np.array(new[] { 1, 2, 3 })` is `[False False False]`.
@@ -292,6 +317,8 @@ This is NumPy's `np.frombuffer` on a bytestring, and the general interop bridge.
 | `arr.astype("U10")` | `arr.astype("U10")` |
 | `arr[0]` (a `numpy.str_`) | `arr.item(0)` (a C# `string`) |
 | `arr.tolist()` | `arr.tolist()` or `NDArray.AsStringArray(arr)` |
+| `a + b` / `np.char.add(a, b)` / `np.strings.add(a, b)` | `a + b` / `np.add(a, b)` / `np.strings.add(a, b)` |
+| `np.char.multiply(a, 3)` / `np.strings.multiply(a, 3)` | `np.strings.multiply(a, 3)` |
 | `np.char.upper(arr)` / `np.strings.upper(arr)` | a later stage: `NDArray.AsStringArray(arr).Select(s => s.ToUpper())` |
 | `StringDType()` array | not supported: `string[]` / `List<string>` |
 | `np.array(['a','b','c'])` (single characters, `<U1`) | `np.array(new[] { "a", "b", "c" })` (`<U1`); `np.array(new[] { 'a', 'b', 'c' })` is `Char` |
@@ -301,7 +328,7 @@ This is NumPy's `np.frombuffer` on a bytestring, and the general interop bridge.
 ## Troubleshooting
 
 ### "`StringComputationNotSupportedException`: ... is the next phase"
-NumPy computes this call on text, and NumSharp does not compute it yet (comparisons and truth values already compute). Convert the values to .NET (`NDArray.AsStringArray`, `item`) and use LINQ, or keep the computation in NumPy.
+NumPy computes this call on text, and NumSharp does not compute it yet (comparisons, truth values, concatenation and repetition already compute). Convert the values to .NET (`NDArray.AsStringArray`, `item`) and use LINQ, or keep the computation in NumPy.
 
 ### "My `byte[][]` became a `uint8` matrix"
 A jagged `byte[][]` is numeric data in C#. Pass an `object[]` of `byte[]` values to get an `S` array.
@@ -330,7 +357,9 @@ A `U` to `S` cast encodes ASCII only, as NumPy does. Keep non-ASCII text in a `U
 | `arr[i] = "text"` | Writes one element, cut to the width |
 | `arr.astype("S3")` / `arr.astype("U8")` | Casts between string dtypes, as NumPy does |
 | Comparisons (`==`, `<`, `np.equal`, ...) and truth values (`astype(bool)`, `np.any`, `np.nonzero`, ...) | NumPy's results |
-| Other computing calls (`np.add`, `np.sort`, ...) | `StringComputationNotSupportedException` (a later stage) |
+| `np.add(a, b)` / `a + b` / `np.strings.add(a, b)` over two text arrays of one class | The concatenation, as wide as the two widths together |
+| `np.strings.multiply(a, i)` / `np.multiply(a, i, out)` | The repetition, as wide as the longest one / cut to the width of `out` |
+| Other computing calls (`np.sort`, `np.unique`, ...) | `StringComputationNotSupportedException` (a later stage) |
 | NumPy's refusals (`np.sum`, `np.sqrt`, ...) | NumPy's exception and message |
 | `np.dtype("V7")` / `"O"` / `StringDType` | `NotSupportedException` |
 | `NPTypeCode.Char` | A 2-byte UTF-16 code unit dtype, written to `.npy` as `<U1` |
