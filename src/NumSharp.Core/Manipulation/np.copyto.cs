@@ -61,7 +61,13 @@ namespace NumSharp
         ///     runs, a hoisted value for a broadcast source, a branch-free select otherwise. A source of another dtype is
         ///     cast into the destination's dtype first (one element per distinct source element, laid out in the
         ///     destination's memory order). The unmasked copy is <see cref="NDIter.Copy(UnmanagedStorage, UnmanagedStorage)"/>.</para>
+        ///     <para><b>Operand roots.</b> <see cref="NDAnchoredAttribute"/>: the kernels read raw addresses and the copy runs
+        ///     storage to storage, so a caller's temporary <paramref name="src"/>, <paramref name="where"/> or even
+        ///     <paramref name="dst"/> (<c>np.copyto(np.zeros(n), x)</c>) would otherwise be collectable mid-copy and its
+        ///     buffer pooled under the kernel. The weaver roots all three until the call returns; no scope is opened (this
+        ///     is a hot internal primitive, and it builds no array it reads after its last use).</para>
         /// </remarks>
+        [NDAnchored]
         public static void copyto(NDArray dst, NDArray src, string casting = "same_kind", NDArray @where = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(dst, src, @where);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
@@ -119,7 +125,11 @@ namespace NumSharp
         ///     (<c>PyArray_Pack</c>: range-checked, never wrapped). The 0-d value is then assigned like any 0-d source.</para>
         ///     <para>NumSharp has one complex width, so a complex into a float32 destination is resolved (and reported) as
         ///     complex128 where NumPy says complex64.</para>
+        ///     <para><b>Operand roots.</b> <see cref="NDAnchoredAttribute"/>, as on
+        ///     <see cref="copyto(NDArray, NDArray, string, NDArray)"/>: the destination and the mask stay reachable while
+        ///     the fill kernel writes and reads them, even when the caller passed them as temporaries.</para>
         /// </remarks>
+        [NDAnchored]
         public static unsafe void copyto<T>(NDArray dst, T src, string casting = "same_kind", NDArray @where = null)
             where T : unmanaged
         {
@@ -176,6 +186,9 @@ namespace NumSharp
         /// <exception cref="ArgumentException">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</exception>
         /// <exception cref="InvalidCastException">See <see cref="copyto{T}(NDArray, T, string, NDArray)"/>.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="dst"/> is <c>null</c>.</exception>
+        /// <remarks><see cref="NDAnchoredAttribute"/>: the destination and the mask stay reachable while the fill kernel
+        ///     runs, as on <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</remarks>
+        [NDAnchored]
         public static void copyto(NDArray dst, BigInteger src, string casting = "same_kind", NDArray @where = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(dst, @where);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)

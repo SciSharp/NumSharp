@@ -20,6 +20,11 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentException">An empty reduction ("zero-size array to reduction operation minimum which has
         ///     no identity", NumPy's ValueError).</exception>
         /// <exception cref="StringComputationNotSupportedException">A string input NumPy computes on (the next phase).</exception>
+        /// <remarks><see cref="NDAnchoredAttribute"/>: the reduction engines read <paramref name="arr"/>'s raw address,
+        ///     and every front door — <c>np.min</c>, <c>np.amin</c>, <c>ndarray.min</c>, <see cref="AMin"/> — reaches them
+        ///     through this method, which opens no scope; the weaver roots <paramref name="arr"/> until it returns (see
+        ///     <see cref="ReduceAMax"/>).</remarks>
+        [NDAnchored]
         public override NDArray ReduceAMin(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null)
         {
             // Text, or a string dtype= request: NumPy's min checks its arguments first (the axis, and the dtype= class where

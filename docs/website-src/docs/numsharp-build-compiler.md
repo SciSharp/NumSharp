@@ -154,6 +154,60 @@ is **build error NDW015**, never a silent sweep.
 
 <!-- Tests: NDScopeTests.OutParameter_Egress_ViaReturns; NDScopeWeaveNestingTests -->
 
+## Operand roots - the caller's arrays stay alive during the call
+
+A scope roots the arrays it **tracks**, the ones built while it is open. An operand was built by the
+caller before the scope opened, so the scope never tracks it - which is what makes a passthrough safe,
+but it also means the scope does not keep the operand alive. In optimized code the JIT reports a
+parameter to the GC only up to its last use. A method that reads an operand's raw address
+(`a.Address`, `a.Storage.Address`) and then runs a kernel has no later use of `a`, so a caller that
+passes a temporary (`np.take(a, np.arange(n))`) leaves the operand reachable from nothing while the
+kernel runs. A collection then finalizes it, its buffer goes back to the pool, and the kernel reads
+or writes freed memory: wrong values, spurious errors, access violations. NumSharp's lifetime oracle
+found 28 such sites (`test/NumSharp.Tests.Oracle/Fuzz/Lifetime`).
+
+So the weaver also gives every method that opens a scope **operand roots**:
+
+```csharp
+// what the built assembly CARRIES for [NDScoped] NDArray take(NDArray a, NDArray indices, ...):
+object root0 = a, root1 = indices;   // 1. shadows, taken BEFORE the body runs
+var scope = NDScope.Open();
+try { /* ...the original body, ending in scope.Returns(result)... */ }
+finally { scope.Dispose(); }
+NDScope.Anchor(root0);               // 2. before every ret: GC.KeepAlive, no code emitted
+NDScope.Anchor(root1);
+return result;
+```
+
+- **Which parameters.** Every by-value parameter that can reach an NDArray: `NDArray` and its
+  subclasses, `object`, interfaces and delegates, arrays of references, a struct that carries an
+  NDArray (a tuple of arrays, an `INDArrayCarrier` result - boxed once), a generic `T` constrained to a
+  reference type - and `this` of a class instance method. Numbers, enums, `string`, `Type`, spans,
+  `long[]` shapes and `ref`/`out`/`in` parameters are left alone.
+- **Why shadows.** They are taken before the body runs, so a body that reassigns a parameter
+  (`x = x.astype(...)`) still roots the caller's original array; the reassigned value is built under
+  the scope and tracked anyway.
+- **Which methods.** Every `[NDScoped]` synchronous method, and every method that opens a scope **by
+  hand** (`using var scope = NDScope.Open();`), with or without the attribute: "a method that opens a
+  scope roots its parameters" holds however the scope was written. An iterator or `async` method
+  needs none: its parameters live in the compiler state machine, which the caller holds.
+- **Cost.** `NDScope.Anchor` inlines to `GC.KeepAlive`, a JIT intrinsic that emits no code; the
+  shadows only stay in registers or stack slots until the return.
+
+### `[NDAnchored]` - roots without a scope
+
+An entry point that opens no scope (a hot primitive such as `np.copyto`, an engine method such as
+`DefaultEngine.ReduceAMax`) but hands an operand's address to a kernel carries `[NDAnchored]`: the
+weaver gives it the same operand roots and nothing else - no scope, no tracking, no disposal. It does
+**not** root temporaries the method builds itself (no scope tracks them): a method that converts an
+operand and then reads the converted array's address needs `[NDScoped]`. Rejected shapes are build
+error **NDW019**: a method without a body, an `async` method or an iterator, a body with a tail call, a
+method that is also `[NDScoped]`/`[NDScopedAsync]` (its weave already roots), and a method with nothing
+to root. The attribute is not inherited; mark each override that needs it. Without the weaver it is
+inert, and the analyzer reports [`NDW013`](#ndw013).
+
+<!-- Tests: WeaverOperandRootTests (the IL, NDW019, idempotence); OperandRootsTests (every scope-opening method of NumSharp.Core roots its NDArray operands; the 28 fixed sites); LifetimeOracleTests.Lifetime (the run-time gate) -->
+
 ## Which members can carry the attribute
 
 `[NDScoped]`/`[NDScopedAsync]` target **methods and properties** (`AttributeTargets.Method |
@@ -570,9 +624,10 @@ its own build and carries `[NDBorrowed]` on its own borrowing types (`FlatIterat
 
 ### NDW013 - [NDScoped] used, but the weaver is not installed
 
-`[NDScoped]`/`[NDScopedAsync]` - and `[NDScopedExit]` on a parameter - are **inert without the
+`[NDScoped]`/`[NDScopedAsync]`/`[NDAnchored]` - and `[NDScopedExit]` on a parameter - are **inert without the
 `NumSharp.Build` package**: the method keeps its original body, no scope is injected, no argument is
-detached, and every transient it drops is left to the finalizer - a silent leak. NDW013 catches exactly
+detached, no operand is rooted, and every transient it drops is left to the finalizer - a silent leak
+(and, for `[NDAnchored]`, an operand a kernel can lose to the GC). NDW013 catches exactly
 that. NumSharp does not depend on or bundle the weaver (weaving is the explicit opt-in
 `dotnet add package NumSharp.Build`), so the guard ships in **NumSharp itself** - the attributes live
 there, which makes it present whenever they could be used and lets it fire when the weaver is
@@ -668,9 +723,9 @@ the rest post-compile.
 The analyzer covers **NDW002, NDW003, NDW005, NDW006, NDW009, NDW010, NDW011, NDW015** (the
 `[NDScoped]`-target gate) plus **NDW012** (the [leak warning](#ndw012), a separate always-on analyzer)
 and **NDW016 / NDW017** (the [type-level ownership warnings](#ndw016), a third always-on analyzer);
-the weaver covers the IL-only **NDW001, NDW004, NDW007, NDW008, NDW014** (a resolution failure, an
-unrecognized state machine, a tail-call, a NumSharp too old for the async seam, or a bad
-`[NDScopedExit]` parameter). **NDW013** also ships in NumSharp itself
+the weaver covers the IL-only **NDW001, NDW004, NDW007, NDW008, NDW014, NDW019** (a resolution failure, an
+unrecognized state machine, a tail-call, a NumSharp too old for the async seam, a bad
+`[NDScopedExit]` parameter, or an `[NDAnchored]` method it cannot root). **NDW013** also ships in NumSharp itself
 so it can warn when `[NDScoped]` is used [without the weaver installed](#ndw013).
 Same code, same fix, whichever layer fires.
 
@@ -699,9 +754,10 @@ Same code, same fix, whichever layer fires.
 | `NDW010` | a plain synchronous method or a **synchronous** iterator marked `[NDScopedAsync]` | mark it `[NDScoped]` (synchronous bodies and synchronous iterators are its job) |
 | `NDW011` | a method carries BOTH `[NDScoped]` and `[NDScopedAsync]` | keep only the one that matches the method's scoping model |
 | [`NDW012`](#ndw012) | an NDArray is created but never returned, out/ref'd, stored, disposed, or yielded to an `NDScope` - a transient left to the finalizer | mark the method `[NDScoped]`/`[NDScopedAsync]`, dispose it (`using`/`.Dispose()`), yield it via `scope.Returns(...)`, or hand it to an egress; tune via `.editorconfig` (`dotnet_diagnostic.NDW012.severity`) |
-| [`NDW013`](#ndw013) | `[NDScoped]`/`[NDScopedAsync]`/`[NDScopedExit]` used - carried by the member itself, or [inherited](#inheritance--virtual-abstract-and-interface-members) from a declaration in this or another assembly - but the `NumSharp.Build` package is not installed (or `-p:SkipNDScopeWeave=true`): the attributes are inert and the temporaries leak. Reported per member by the analyzer; project-wide by the MSBuild fallback scan when no analyzer runs | install `NumSharp.Build`, or remove the attributes (mark an inheriting override `[NDScopedCovered]`; detach a retained argument by hand with `NDScope.Detach`) and dispose by hand; suppress with `-p:NumSharpDisableWeaverMissingWarning=true` |
+| [`NDW013`](#ndw013) | `[NDScoped]`/`[NDScopedAsync]`/`[NDScopedExit]`/`[NDAnchored]` used - carried by the member itself, or [inherited](#inheritance--virtual-abstract-and-interface-members) from a declaration in this or another assembly - but the `NumSharp.Build` package is not installed (or `-p:SkipNDScopeWeave=true`): the attributes are inert and the temporaries leak. Reported per member by the analyzer; project-wide by the MSBuild fallback scan when no analyzer runs | install `NumSharp.Build`, or remove the attributes (mark an inheriting override `[NDScopedCovered]`; detach a retained argument by hand with `NDScope.Detach`) and dispose by hand; suppress with `-p:NumSharpDisableWeaverMissingWarning=true` |
 | `NDW014` | `[NDScopedExit]` on an unsupported parameter type (a `ref`/`out`/`in`, a scalar, a bare buffer, an `INDArrayCarrier` struct, or a tuple with an ND-carrying component `Detach` cannot see through) | hand-detach with `NDScope.Detach` |
 | `NDW015` | an `out` parameter whose NDArray-carrying shape the out-escape cannot yield (`out List<NDArray>`, `out Task<NDArray>`, `out NDArray[,]`, `out T` with `T : NDArray`) | [hand-scope](#hand-scoping) and yield the final value explicitly |
+| `NDW019` | an [`[NDAnchored]`](#ndanchored---roots-without-a-scope) method the weaver cannot or need not root: no body (abstract, interface, `extern`), an `async` method or an iterator, a tail call, a method that is also `[NDScoped]`/`[NDScopedAsync]` (or inherits one), nothing to root, or a NumSharp that predates `NDScope.Anchor` | mark the implementation that runs the kernel; remove the attribute from a state machine or a scoped method (their parameters are already rooted); update the `NumSharp` package |
 | [`NDW016`](#ndw016) | a class/struct stores NDArrays (a field or auto-property holding an NDArray, an array/tuple/collection/generic of them, a carrier struct, or another NDArray-owning type - ownership is contagious) but implements neither `IDisposable` nor `IAsyncDisposable` | implement `IDisposable`/`IAsyncDisposable` and dispose the members, make a transient result struct an `INDArrayCarrier`, give a `ref struct` a `Dispose()`, or mark a member / the type `[NDBorrowed]` when the arrays are owned elsewhere |
 | [`NDW017`](#ndw017) | a disposable type never disposes an NDArray-holding member on any path from its `Dispose`/`Dispose(bool)`/`DisposeAsync`/`DisposeAsyncCore` | dispose it there (directly, in a helper the path calls, in a `foreach`/`ForEach` over a collection, by handing it to a method), override an inherited `Dispose(bool)`, or mark it `[NDBorrowed]` |
 | [`NDW018`](#ndw018) | `dotnet pack` of a project whose reference to `NumSharp.Build` lacks `PrivateAssets="all"` - the weaver would ship as a **dependency** of your package and every consumer would restore it (a hand-written reference or Central Package Management; `dotnet add package` writes the metadata itself) | add `PrivateAssets="all"` to the `PackageReference`, restore and pack again; or `-p:NumSharpBuildAllowAsDependency=true` to ship it as a dependency on purpose (consumers are still never woven) |

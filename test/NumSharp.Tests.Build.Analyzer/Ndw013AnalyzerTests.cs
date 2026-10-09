@@ -267,5 +267,53 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.IsTrue(r.CompileErrors.IsEmpty, "snippet must compile");
             Assert.AreEqual(0, r.CountOf("NDW013"));
         }
+
+        // ---------------------------------------------------------------- [NDAnchored]
+
+        /// <summary>
+        ///     <c>[NDAnchored]</c> without the weaver: one NDW013 at the method, naming the attribute and the consequence
+        ///     (the operands are not rooted). Silent when the weaver is active.
+        /// </summary>
+        /// <returns>The asynchronous test.</returns>
+        /// <exception cref="AssertFailedException">The warning is missing, misplaced, or reported while weaving is active.</exception>
+        [TestMethod]
+        public async Task Anchored_Warns_WhenTheWeaverIsInactive_SilentWhenActive()
+        {
+            var src = "using NumSharp;\n" +
+                      "public static class A {\n" +
+                      "  [NDAnchored] public static double First(NDArray a) => a.GetDouble(0);\n" +
+                      "}\n";
+            var r = await Run(src, "n13_anchored.cs", Inactive);
+            Assert.IsTrue(r.CompileErrors.IsEmpty, "snippet must compile:\n" + string.Join("\n", r.CompileErrors));
+            Assert.AreEqual(1, r.CountOf("NDW013"));
+            var d = r.Ndw.Single(x => x.Id == "NDW013");
+            Assert.AreEqual(3, AnalyzerTestHarness.LineOf(d), "at the anchored method");
+            StringAssert.Contains(d.GetMessage(), "[NDAnchored] on 'A.First(NumSharp.NDArray)'");
+            StringAssert.Contains(d.GetMessage(), "operands are not rooted", "the consequence is named");
+
+            var active = await Run(src, "n13_anchored_active.cs", AnalyzerTestHarness.BuildProperties(("NumSharpBuildActive", "true")));
+            Assert.AreEqual(0, active.CountOf("NDW013"), "silent when the weaver runs");
+        }
+
+        /// <summary>
+        ///     A method carrying both <c>[NDScopedExit]</c> on a parameter and <c>[NDAnchored]</c> draws ONE NDW013 (the fix is
+        ///     the same package).
+        /// </summary>
+        /// <returns>The asynchronous test.</returns>
+        /// <exception cref="AssertFailedException">The method drew no warning, or two.</exception>
+        [TestMethod]
+        public async Task AnchoredAndExit_OnOneMethod_WarnOnce()
+        {
+            var src = "using NumSharp;\n" +
+                      "public class H : System.IDisposable {\n" +
+                      "  private NDArray _w;\n" +
+                      "  [NDAnchored] public void Adopt([NDScopedExit] NDArray w, NDArray probe) { _w = w; probe.GetDouble(0); }\n" +
+                      "  public void Dispose() => _w?.Dispose();\n" +
+                      "}\n";
+            var r = await Run(src, "n13_anchored_exit.cs", Inactive);
+            Assert.IsTrue(r.CompileErrors.IsEmpty, "snippet must compile");
+            Assert.AreEqual(1, r.CountOf("NDW013"), "one NDW013 per member, whichever attribute earned it");
+            StringAssert.Contains(r.Ndw.Single(x => x.Id == "NDW013").GetMessage(), "[NDScopedExit]", "the exit report comes first");
+        }
     }
 }

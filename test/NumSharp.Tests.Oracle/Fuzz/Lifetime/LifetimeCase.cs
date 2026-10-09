@@ -58,6 +58,13 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         /// <summary>The documented gap id of a carved case (<c>lifetime_gaps.jsonl</c>); null for a gate case.</summary>
         public string Gap { get; set; }
 
+        /// <summary>
+        ///     The FIXED gap id a gate case pins (<c>FIXED</c> in the generator: a site that once lost this call's operand and
+        ///     that the weaver's operand roots now cover), or null. A pinned call keeps every one-operand-at-a-time variant,
+        ///     so a regression's failure names the gap and the operand it loses again.
+        /// </summary>
+        public string Pin { get; set; }
+
         /// <summary>The case's line index in its file (set by the reader, not serialized).</summary>
         public int Index { get; set; }
 

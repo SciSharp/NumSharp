@@ -97,13 +97,13 @@ namespace NumSharp.Tests.Build.Analyzer
         [TestMethod]
         public void Ndw013_WeaverMissing_IsAWarning_LikeItsMsBuildTwin()
         {
-            // The analyzer's NDW013 — an own [NDScoped]/[NDScopedAsync], an inherited one, or an
-            // [NDScopedExit] parameter, while the build says the weaver is inactive — shares its id and
-            // severity with the fallback MSBuild warning in NumSharp's build/NumSharp.targets: a nudge
-            // about inert attributes, never a build error. Three descriptors carry the one id (three
-            // sentences for three shapes); every one of them is a default-on warning.
+            // The analyzer's NDW013 — an own [NDScoped]/[NDScopedAsync], an inherited one, an
+            // [NDScopedExit] parameter, or an [NDAnchored] method, while the build says the weaver is
+            // inactive — shares its id and severity with the fallback MSBuild warning in NumSharp's
+            // build/NumSharp.targets: a nudge about inert attributes, never a build error. Four descriptors
+            // carry the one id (four sentences for four shapes); every one of them is a default-on warning.
             var ds = new NDScopedTargetAnalyzer().SupportedDiagnostics.Where(x => x.Id == "NDW013").ToList();
-            Assert.AreEqual(3, ds.Count, "own attribute / inherited attribute / [NDScopedExit] — one NDW013 descriptor each");
+            Assert.AreEqual(4, ds.Count, "own attribute / inherited attribute / [NDScopedExit] / [NDAnchored] — one NDW013 descriptor each");
             foreach (var d in ds)
             {
                 Assert.AreEqual(DiagnosticSeverity.Warning, d.DefaultSeverity, $"NDW013 '{d.Title}' is a warning");

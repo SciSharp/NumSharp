@@ -11,6 +11,9 @@ namespace NumSharp.Build;
 ///     ...original body...
 ///     return scope.Returns(result);     // and out-NDArray params escape before each return
 ///     </code>
+///     It also gives OPERAND ROOTS (shadow locals passed to <c>NDScope.Anchor</c> before every return) to every method
+///     that opens a scope — woven or hand-written — and to every <c>[NDAnchored]</c> method, so an operand the caller
+///     passed as a temporary cannot be collected while a kernel inside the call still reads it.
 ///     Invoked by the <c>NDScopeWeave</c> target after CoreCompile, for each TargetFramework,
 ///     on the intermediate assembly — from NumSharp.Core.csproj for the library's self-weave,
 ///     and from the packaged <c>build/NumSharp.Build.targets</c> for any project that installs

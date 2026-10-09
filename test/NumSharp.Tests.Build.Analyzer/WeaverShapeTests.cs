@@ -155,8 +155,14 @@ public static class S
             CollectionAssert.AreEqual(expected, nd.ToArray<double>(), $"{Label(run)} — {what}: values");
         }
 
+        /// <summary>
+        ///     Every attributed member of the shape fixture is woven — the hand-scoped one included, which keeps its own scope
+        ///     and gains only its operand roots (until 2026-10-09 it was the one skipped body) — and each carries a scope
+        ///     local.
+        /// </summary>
+        /// <exception cref="AssertFailedException">A member was skipped, left unwoven, or carries no scope local.</exception>
         [TestMethod]
-        public void Fixture_WeavesEveryAttributedBody_AndSkipsTheHandScopedOne()
+        public void Fixture_WeavesEveryAttributedBody_TheHandScopedOneGainsOnlyRoots()
         {
             foreach (var run in Runs.Value)
             {
@@ -165,8 +171,10 @@ public static class S
                 int attributed = WeaveRun.AllMethods(asm.MainModule).Count(m =>
                     m.CustomAttributes.Any(a => a.AttributeType.Name is "NDScopedAttribute" or "NDScopedAsyncAttribute"))
                     + asm.MainModule.Types.SelectMany(t => t.Properties).Count(p => p.CustomAttributes.Any(a => a.AttributeType.Name == "NDScopedAttribute"));
-                Assert.AreEqual(1, run.Result.Skipped, $"{Label(run)}: exactly the hand-scoped body is skipped");
-                Assert.AreEqual(attributed, run.Result.Woven + run.Result.Skipped, $"{Label(run)}: every attributed member is either woven or skipped:\n{run.Report}");
+                Assert.AreEqual(0, run.Result.Skipped, $"{Label(run)}: no body is skipped — the hand-scoped one gains its operand roots");
+                Assert.AreEqual(1, run.CountScopeCalls("S", "Hand", "Open"), $"{Label(run)}: the hand-scoped body keeps its one scope");
+                Assert.IsTrue(run.CountScopeCalls("S", "Hand", "Anchor") >= 1, $"{Label(run)}: the hand-scoped body roots its operand");
+                Assert.AreEqual(attributed, run.Result.Woven, $"{Label(run)}: every attributed member is woven:\n{run.Report}");
                 Assert.IsTrue(run.Result.Woven >= 28, $"{Label(run)}: the fixture should carry 28+ woven shapes (got {run.Result.Woven})");
                 foreach (var m in WeaveRun.AllMethods(asm.MainModule))
                 {
@@ -396,8 +404,13 @@ public static class S
             }
         }
 
+        /// <summary>
+        ///     The hand-scoped body keeps its single, author-written scope (the weave adds only operand roots) and that scope
+        ///     still reclaims its temporary while the result survives.
+        /// </summary>
+        /// <exception cref="AssertFailedException">The scope was doubled, the result was reclaimed, or the temporary was not.</exception>
         [TestMethod]
-        public void HandScoped_IsSkipped_AndStillReclaims()
+        public void HandScoped_KeepsItsScope_AndStillReclaims()
         {
             foreach (var run in Runs.Value)
             {

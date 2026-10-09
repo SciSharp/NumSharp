@@ -69,6 +69,34 @@ NDArrays — nested tuples and `NDArray[]` components detach recursively — (a 
 build error (NDW014). A raw public-field store has no parameter to annotate — route it through a
 setter or call `NDScope.Detach` by hand.
 
+**The caller's arrays stay alive for the whole call: operand roots.** A scope roots only the arrays it
+tracks (those built while it is open); an operand the caller built is never tracked, and optimized code
+stops reporting a parameter to the GC at its last use — so a method that reads an operand's raw
+address and then runs a kernel could have the operand collected under the kernel when the caller
+passed a temporary. Every method that opens a scope (`[NDScoped]`, or a hand-written
+`NDScope.Open()`) therefore copies each NDArray-reaching parameter (and `this`) into a shadow local at
+entry and passes it to `NDScope.Anchor` (a no-code `GC.KeepAlive`) before every return. An unscoped
+entry point that hands an operand's address to a kernel carries `[NDAnchored]` for the same roots
+without a scope:
+
+```csharp
+[NDAnchored]
+public static unsafe double Sum(NDArray a)          // a stays reachable until Sum returns
+{
+    long n = a.size;                                // (a C-contiguous float64 operand)
+    double* p = a.Unsafe.Pointer<double>();         // a's last use: without the root, Sum(np.arange(n) * 1.0)
+    double s = 0;                                   // could lose its temporary operand here
+    for (long i = 0; i < n; i++) s += p[i];
+    return s;
+}
+```
+
+`[NDAnchored]` roots only the parameters (no temporaries: that is `[NDScoped]`'s job), is not
+inherited, and is refused on a body-less, `async`, iterator or scoped method (NDW019). NumSharp's own
+assembly is woven the same way, so its API keeps the operands you pass it alive whether or not your
+project installs this package; the package matters for the scopes and the unsafe code in *your*
+methods.
+
 **On a virtual, abstract or interface member the attributes are a contract the inheritors inherit.**
 Every override and implementation — class overrides through any number of levels, implicit and
 explicit interface implementations, generic instantiations, and overrides in *another* assembly of

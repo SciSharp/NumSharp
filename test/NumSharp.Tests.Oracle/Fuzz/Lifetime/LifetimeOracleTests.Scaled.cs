@@ -26,6 +26,11 @@ namespace NumSharp.Tests.Fuzz.Lifetime
     ///     the gate replays their op keys again. An op key whose call reaches the site through another path than the one
     ///     fixed turns the gate red at that point: <see cref="ScaledGap.Path"/> says which path the entry assumed.
     ///     </para>
+    ///     <para>
+    ///     <b>State (2026-10-09).</b> <see cref="KnownScaledGaps"/> is empty: the 21 op keys it carved (35 cases, reaching
+    ///     LT01, LT02, LT05, LT07, LT09, LT12, LT14, LT18, LT20, LT21, LT22 and LT28) went back into the gate when the
+    ///     weaver's operand roots fixed every lifetime gap, and replayed clean.
+    ///     </para>
     /// </remarks>
     public partial class LifetimeOracleTests
     {
@@ -40,7 +45,7 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         private const int ScaledGapReps = 24;
 
         /// <summary>
-        ///     The fewest gate cases that must scale (about 1,200 do: 936 ordinary, the rest masked): fewer means a selection
+        ///     The fewest gate cases that must scale (1,242 did on 2026-10-09, ordinary and masked): fewer means a selection
         ///     or scaling regression — a corpus copy that lost files, a strategy that raises everywhere — and a gate that
         ///     tests far less than it says.
         /// </summary>
@@ -59,54 +64,12 @@ namespace NumSharp.Tests.Fuzz.Lifetime
 
         /// <summary>
         ///     The op keys whose scaled cases lose an operand mid-kernel, each mapped to the open lifetime gap whose site
-        ///     its call reaches. Each mapping was checked by a code read and, where the call path was not obvious, by a
-        ///     standalone probe of the call with a temporary operand under the same stress (2026-10-09).
+        ///     its call reaches (map an entry only after a code read and, where the call path is not obvious, a standalone
+        ///     probe of the call with a temporary operand under the same stress). Empty: no lifetime gap is open, so every
+        ///     selected case is gated (the 21 op keys mapped here until 2026-10-09 are listed in the class remarks).
         /// </summary>
         internal static readonly Dictionary<string, ScaledGap> KnownScaledGaps = new(StringComparer.Ordinal)
         {
-            ["ndarray.take"] = new("LT01", "ndarray.take -> np.take -> ExecuteTakeKernel reads the temporary index buffer (its " +
-                                           "poisoned indices raise IndexError with 0x5A5A... values)"),
-            ["put_selfvals"] = new("LT02", "np.put(target, indices, view of target) -> PutKernel reads the temporary index array"),
-            ["ndarray.put"] = new("LT02", "ndarray.put -> np.put -> PutKernel reads the temporary index array (poisoned indices " +
-                                          "raise IndexError)"),
-            ["take_along_axis"] = new("LT05", "np.take_along_axis's gather reads the temporary source and index arrays"),
-            ["ma.where"] = new("LT07", "ma.where -> np.where(cond, x._data, y._data): WhereKernelDispatch reads the data of the " +
-                                       "temporary masked operands, which no frame uses after their getmaskarray"),
-            ["argpartition"] = new("LT05", "the replay gathers the partition with np.take_along_axis(operand, indices, axis), " +
-                                           "which reads the temporary operand; np.argpartition itself keeps it (NDIter holds its " +
-                                           "operands; probed: 0 of 24 runs lost it, the gather 24 of 24)",
-                c => !IsNullAxis(c)),
-            ["matrix_norm"] = new("LT09", "np.linalg.norm's ToFloating casts an integer operand with TensorEngine.Cast -> " +
-                                          "NDIter.CopyAs -> NDIter.Copy(NDArray, NDArray), which drops the source NDArray and " +
-                                          "copies storage to storage (probed: the bare Cast call loses its source too)"),
-            ["cumsum"] = new("LT12", "flat np.cumsum (decimal, float16) -> ReduceCumAdd -> ScanElementwiseFlat", IsNullAxis),
-            ["cumprod"] = new("LT12", "flat np.cumprod (decimal, float16) -> ReduceCumProd -> ScanElementwiseFlat", IsNullAxis),
-            ["out_scan"] = new("LT12", "np.cumsum / np.cumprod(a, out=) without an axis -> ScanElementwiseFlat, then the copy " +
-                                       "into out", IsNullAxis),
-            ["ndarray.searchsorted"] = new("LT14", "ndarray.searchsorted -> np.searchsorted's search kernel reads a and v"),
-            ["dot"] = new("LT18", "np.dot of two vectors -> DotInner1D (DotGeneric<decimal>)",
-                c => c.Operands.All(o => o.Shape.Length == 1)),
-            ["inner"] = new("LT18", "np.inner of two vectors -> np.dot -> DotInner1D",
-                c => c.Operands.All(o => o.Shape.Length == 1)),
-            ["dot_ata"] = new("LT20", "np.dot(a.T, a) -> MultiplyMatrix -> TryMatMulSimd -> SimdMatMul.MatMulFloat reads both " +
-                                      "operands' pointers"),
-            ["det"] = new("LT21", "np.linalg.det without a backend -> ManagedLu"),
-            ["slogdet"] = new("LT21", "np.linalg.slogdet without a backend -> ManagedLu"),
-            ["inv"] = new("LT21", "np.linalg.inv without a backend -> ManagedLu (a poisoned matrix raises LinAlgError: Singular matrix)"),
-            ["matrix_power"] = new("LT21", "np.linalg.matrix_power(a, n < 0) -> inv -> ManagedLu",
-                c => c.Params != null && c.Params.TryGetValue("n", out var n) && n.ValueKind == JsonValueKind.Number && n.GetInt32() < 0),
-            ["convolve"] = new("LT22", "np.convolve -> SlidingCorrelate reads the temporary data operand"),
-            ["correlate"] = new("LT22", "np.correlate -> SlidingCorrelate reads the temporary data and kernel"),
-            ["unique_counts"] = new("LT28", "np.unique_counts of an integer-family or complex array -> uniqueCountsFast -> " +
-                                            "UniqueHashSortedInt / UniqueHashSortedComplex -> ExtractKeysOnly (the float dtypes " +
-                                            "take the sort path, which keeps the receiver)",
-                c => c.Operands.Length > 0 && HashUniqueDtypes.Contains(c.Operands[0].Dtype)),
-        };
-
-        /// <summary>The corpus dtype names the unique family sends through its hash path (LT28's site).</summary>
-        private static readonly HashSet<string> HashUniqueDtypes = new(StringComparer.Ordinal)
-        {
-            "bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "char", "complex128",
         };
 
         /// <summary>
@@ -212,10 +175,13 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         private static string ScaledGapOf(FuzzCorpus.Case c)
             => KnownScaledGaps.TryGetValue(c.Op, out var g) && (g.Applies?.Invoke(c) ?? true) ? g.Gap : null;
 
-        /// <summary>True when a case has no <c>axis</c> parameter or a null one (a flat scan or reduction).</summary>
+        /// <summary>
+        ///     True when a case has no <c>axis</c> parameter or a null one (a flat scan or reduction) — the usual predicate of
+        ///     a <see cref="ScaledGap"/> whose site only the flat call reaches (LT12's scans were mapped with it).
+        /// </summary>
         /// <param name="c">The case.</param>
         /// <returns>Whether the call runs without an axis.</returns>
-        private static bool IsNullAxis(FuzzCorpus.Case c)
+        internal static bool IsNullAxis(FuzzCorpus.Case c)
             => c.Params == null || !c.Params.TryGetValue("axis", out var axis) || axis.ValueKind == JsonValueKind.Null;
 
         /// <summary>Renumbers a filtered selection so its indices are positions again (the child's resume key).</summary>

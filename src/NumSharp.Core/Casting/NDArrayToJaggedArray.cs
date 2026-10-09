@@ -126,7 +126,13 @@ namespace NumSharp
         ///     dynamic code fall back to a recursive descent with reflection-created levels and the same results.
         ///     The pointer follows the source's own strides, so every layout is read in place.
         ///     </para>
+        ///     <para>
+        ///     <see cref="NDAnchoredAttribute"/>: the fill reads this array's storage address, and the storage does not hold
+        ///     the buffer (this array's ARC reference does), so a receiver the caller built as a temporary could be collected
+        ///     mid-copy. The weaver roots <c>this</c> until the copy returns.
+        ///     </para>
         /// </remarks>
+        [NDAnchored]
         public unsafe Array ToJaggedArray<T>() where T : unmanaged
         {
             if (ndim == 0)

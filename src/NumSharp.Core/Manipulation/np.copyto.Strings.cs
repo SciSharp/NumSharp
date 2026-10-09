@@ -32,7 +32,10 @@ namespace NumSharp
         ///     A C# <see cref="string"/> would otherwise reach <see cref="copyto(NDArray, NDArray, string, NDArray)"/> through
         ///     NumSharp's implicit <c>string → NDArray</c> conversion, which still reads <c>"[1, 2]"</c>-shaped text as a numeric
         ///     matrix (a legacy NumSharp shorthand); this overload keeps every text a text, as NumPy does.
+        ///     <para><see cref="NDAnchoredAttribute"/>: the destination and the mask stay reachable while the copy runs, as on
+        ///     <see cref="copyto(NDArray, NDArray, string, NDArray)"/> (the text's own array is the <c>using</c> local).</para>
         /// </remarks>
+        [NDAnchored]
         public static void copyto(NDArray dst, string src, string casting = "same_kind", NDArray @where = null)
         {
             NPY_CASTING rule = CopytoCastingConverter(casting);

@@ -86,7 +86,14 @@ namespace NumSharp
         ///     arm) and fills the per-(T, source dtype) kernel cache (<see cref="ToArrayCastKernel{T}"/>) the conversion
         ///     frame reads.
         ///     </para>
+        ///     <para>
+        ///     <see cref="NDAnchoredAttribute"/>: every frame copies from this array's storage address, and the storage
+        ///     does not hold the buffer (this array's ARC reference does), so a receiver the caller built as a temporary
+        ///     (<c>np.arange(n).ToArray&lt;long&gt;()</c>) could be collected mid-copy. The weaver roots <c>this</c> until
+        ///     the copy returns; the root emits no code, so the hot frame keeps its shape.
+        ///     </para>
         /// </remarks>
+        [NDAnchored]
         public unsafe T[] ToArray<T>() where T : unmanaged
         {
             var storage = Storage;
@@ -2406,7 +2413,11 @@ namespace NumSharp
         ///     elements, an indexed scalar loop otherwise); a multi-element conversion is <see cref="ConvertInto{T}"/>
         ///     — astype's cast kernels, or <see cref="DecimalToDoubleKernel"/> for a contiguous decimal → double
         ///     where its probe proved it bit-identical.
+        ///     <para><see cref="NDAnchoredAttribute"/>: the fill reads <c>Storage.Address</c> with no later use of this
+        ///     array, so a receiver the caller built as a temporary could be collected (and its buffer pooled) mid-copy —
+        ///     the lifetime oracle's gap LT27. The weaver roots <c>this</c> until the copy returns.</para>
         /// </remarks>
+        [NDAnchored]
         public Array ToMuliDimArray<T>() where T : unmanaged
         {
             var target = InfoOf<T>.NPTypeCode;

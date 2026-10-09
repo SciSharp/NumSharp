@@ -26,6 +26,14 @@ internal readonly record struct WeaveResult(int Woven, int Skipped, int Errors, 
 ///     Existing try/using blocks in the body nest inside the new outer handler; the handler-table
 ///     append order (nested first) is exactly what <c>ExceptionHandlers.Add</c> produces.
 ///     <para>
+///     Then the OPERAND ROOTS (<see cref="InjectParameterAnchors"/>): every parameter that can reach an
+///     NDArray, and <c>this</c>, is copied into a shadow local at entry and passed to
+///     <c>NDScope.Anchor</c> before the epilogue's <c>ret</c>, so an operand the caller passed as a
+///     temporary stays reachable while a kernel inside the call reads it — the scope roots only what it
+///     tracks, and a caller's operand is never tracked. <c>[NDAnchored]</c> methods, which open no scope,
+///     get the roots alone (<see cref="CollectAnchorTargets"/>).
+///     </para>
+///     <para>
 ///     Async and iterator methods weave through their compiler STATE MACHINES instead (the
 ///     attributed method is a stub) — one scope per logical invocation held in a weaver-added
 ///     state-machine field, suspended before every continuation schedule and resumed at each
@@ -50,6 +58,14 @@ internal abstract class ScopeWeaver
     internal const string SyncAttributeFullName = "NumSharp.NDScopedAttribute";
     internal const string AsyncAttributeFullName = "NumSharp.NDScopedAsyncAttribute";
     internal const string ExitAttributeFullName = "NumSharp.NDScopedExitAttribute";
+
+    /// <summary>
+    ///     The operand-anchor attribute: a method that opens no scope but must root its NDArray-reaching parameters
+    ///     from entry to every return (<see cref="InjectParameterAnchors"/>). Collected by its own pass
+    ///     (<see cref="CollectAnchorTargets"/>); an <c>[NDScoped]</c> method needs no such mark, its weave anchors too.
+    /// </summary>
+    internal const string AnchorAttributeFullName = "NumSharp.NDAnchoredAttribute";
+
     private const string NDScopeFullName = "NumSharp.NDScope";
     private const string NDArrayFullName = "NumSharp.NDArray";
     private const string CarrierInterfaceFullName = "NumSharp.INDArrayCarrier";
@@ -129,6 +145,20 @@ internal abstract class ScopeWeaver
 
         /// <summary>Whether the referenced NumSharp carries the whole <c>Detach</c> overload set the parameter-detach weave emits.</summary>
         public bool HasExitSurface => DetachOne != null && DetachMany != null && DetachTuple != null;
+
+        // ---- The operand-anchor seam (parameter rooting) ---------------------------------------------
+
+        /// <summary>
+        ///     <c>static void NDScope.Anchor(object)</c> — <c>GC.KeepAlive</c> under the scope's name: the weaver passes
+        ///     each shadow of a rooted parameter to it before every return (<see cref="InjectParameterAnchors"/>).
+        ///     Resolved LENIENTLY: a NumSharp that predates it leaves this null, scope targets then weave without operand
+        ///     roots (the old behaviour), and only an <c>[NDAnchored]</c> target, which exists only to root, demands it
+        ///     (NDW019).
+        /// </summary>
+        public MethodReference Anchor;
+
+        /// <summary>Whether the referenced NumSharp carries <c>NDScope.Anchor(object)</c>, the call the operand roots emit.</summary>
+        public bool HasAnchorSurface => Anchor != null;
 
         // ---- Declaration-site inheritance ---------------------------------------------------------
         // The resolver that answers "which scope attribute / [NDScopedExit] parameters are in effect
@@ -307,11 +337,22 @@ internal abstract class ScopeWeaver
             }
         }
 
-        if (syncTargets.Count == 0 && asyncTargets.Count == 0 && exitTargets.Count == 0)
+        // [NDAnchored] — operand roots for a method that opens NO scope (an unscoped entry point that hands an
+        // operand's address to a kernel). Collected after the scope targets because a method that is ALSO a scope
+        // target (own or inherited) is refused here: its scope weave already roots its parameters.
+        var anchorTargets = CollectAnchorTargets(module, syncTargets, asyncTargets, stderr, ref errors);
+
+        // Hand-written scopes: a method that opens an NDScope itself (`using var scope = NDScope.Open();`) without a
+        // scope attribute is no weave target, but its scope roots only what it tracks exactly as a woven one does, so
+        // it gets the same operand roots. A scope or anchor target is excluded (its own pass roots it).
+        var handScoped = CollectHandScopedMethods(module, syncTargets, asyncTargets, anchorTargets);
+
+        if (syncTargets.Count == 0 && asyncTargets.Count == 0 && exitTargets.Count == 0 && anchorTargets.Count == 0 &&
+            handScoped.Count == 0)
         {
             if (errors > 0)
                 return new WeaveResult(0, 0, errors, false, false);
-            stdout.WriteLine($"NumSharp.Build: {Path.GetFileName(assemblyPath)} — no [NDScoped]/[NDScopedAsync]/[NDScopedExit] methods; nothing to do");
+            stdout.WriteLine($"NumSharp.Build: {Path.GetFileName(assemblyPath)} — no [NDScoped]/[NDScopedAsync]/[NDScopedExit]/[NDAnchored] methods; nothing to do");
             return new WeaveResult(0, 0, 0, false, false);
         }
 
@@ -321,7 +362,8 @@ internal abstract class ScopeWeaver
             // Attributed methods with no reachable NDScope is a CONFIGURATION error, not a no-op:
             // silently skipping would ship those methods unwoven while the build reads green.
             stderr.WriteLine(
-                $"NumSharp.Build : error NDW001: {syncTargets.Count + asyncTargets.Count} [NDScoped]/[NDScopedAsync] " +
+                $"NumSharp.Build : error NDW001: {syncTargets.Count + asyncTargets.Count + anchorTargets.Count} " +
+                "[NDScoped]/[NDScopedAsync]/[NDAnchored] " +
                 $"method(s) found but type '{NDScopeFullName}' could not be resolved from " +
                 $"'{Path.GetFileName(assemblyPath)}' or its references — ensure the project references NumSharp (the " +
                 "attributes and the scope live there) and that the invocation passed --refs with the compile's " +
@@ -349,6 +391,25 @@ internal abstract class ScopeWeaver
             if (!scopeTargets.Contains(m))
                 exitOnly.Add(m);
         ProcessExitOnly(exitOnly, refs, verbose, stdout, stderr, ref woven, ref skipped, ref errors);
+
+        // The operand roots of the unscoped [NDAnchored] entry points (the scope targets were anchored inside their
+        // own WeaveTarget). Runs after the exit-only pass so a method carrying both keeps its detaches at the top of
+        // the body and gains its shadows above them.
+        ProcessAnchorTargets(anchorTargets, refs, verbose, stdout, stderr, ref woven, ref skipped, ref errors);
+
+        // The hand-written scopes' operand roots. Nothing to validate: the body already compiles with its scope; a woven
+        // iterator/async body calls OpenOrResume (never Open) and is not collected, and a hand-written scope inside a
+        // compiler state machine's MoveNext roots at most the state machine itself (MoveNext has no parameters; a struct
+        // machine's `this` is a managed pointer and is never rooted); a method with nothing to root, or rooted by a
+        // previous pass, is left as it is and not counted.
+        foreach (var m in handScoped)
+        {
+            if (!InjectParameterAnchors(m, refs))
+                continue;
+            woven++;
+            if (verbose)
+                stdout.WriteLine($"NumSharp.Build: woven (operand roots of a hand-written NDScope): {m.FullName}");
+        }
 
         if (errors > 0)
             return new WeaveResult(woven, skipped, errors, false, false);
@@ -429,6 +490,80 @@ internal abstract class ScopeWeaver
                     stdout.WriteLine($"NumSharp.Build: skip (already detaches): {m.FullName}");
             }
         }
+    }
+
+    /// <summary>
+    ///     Roots the parameters of every <c>[NDAnchored]</c> method (<see cref="InjectParameterAnchors"/>) after
+    ///     validating it (<see cref="ValidateAnchorTarget"/>), and tallies the outcomes: a method woven, a method that
+    ///     already anchors (a previous pass over the same assembly — idempotence) skipped, a rejected shape an error.
+    /// </summary>
+    /// <param name="targets">The <c>[NDAnchored]</c> methods <see cref="CollectAnchorTargets"/> kept.</param>
+    /// <param name="refs">The resolved NDScope surface; its <see cref="Refs.Anchor"/> is the call the roots emit.</param>
+    /// <param name="verbose">Whether to log each woven/skipped method to <paramref name="stdout"/>.</param>
+    /// <param name="stdout">The log sink.</param>
+    /// <param name="stderr">The diagnostic sink (NDW019 lines).</param>
+    /// <param name="woven">Incremented per method that gained roots.</param>
+    /// <param name="skipped">Incremented per method left untouched because it already anchors.</param>
+    /// <param name="errors">Incremented per rejected method.</param>
+    private static void ProcessAnchorTargets(List<MethodDefinition> targets, Refs refs, bool verbose,
+                                             TextWriter stdout, TextWriter stderr,
+                                             ref int woven, ref int skipped, ref int errors)
+    {
+        foreach (var m in targets)
+        {
+            if (ValidateAnchorTarget(m, refs, stderr) == ValidationOutcome.Error)
+            {
+                errors++;
+                continue;
+            }
+
+            if (InjectParameterAnchors(m, refs))
+            {
+                woven++;
+                if (verbose)
+                    stdout.WriteLine($"NumSharp.Build: woven ([NDAnchored] operand roots): {m.FullName}");
+            }
+            else
+            {
+                skipped++;
+                if (verbose)
+                    stdout.WriteLine($"NumSharp.Build: skip (already anchors): {m.FullName}");
+            }
+        }
+    }
+
+    /// <summary>
+    ///     The weave-time gate for one <c>[NDAnchored]</c> method (build error NDW019). It refuses the shapes whose
+    ///     parameters the anchor transform cannot or need not root: no body (nothing to inject into), an async method
+    ///     or an iterator (the compiler hoists the parameters into the state machine, which the caller holds, so the
+    ///     stub's return is the wrong place to root them), a tail call (the anchors would sit between the call and its
+    ///     <c>ret</c>), a method with nothing to root (no NDArray-reaching parameter and no class instance), and a
+    ///     referenced NumSharp that predates <c>NDScope.Anchor</c>.
+    /// </summary>
+    /// <param name="m">The attributed method.</param>
+    /// <param name="refs">The resolved NDScope surface (only <see cref="Refs.HasAnchorSurface"/> is read).</param>
+    /// <param name="stderr">The diagnostic sink.</param>
+    /// <returns><see cref="ValidationOutcome.Ok"/>, or <see cref="ValidationOutcome.Error"/> after writing one NDW019 line.</returns>
+    private static ValidationOutcome ValidateAnchorTarget(MethodDefinition m, Refs refs, TextWriter stderr)
+    {
+        string problem = null;
+        if (!m.HasBody)
+            problem = "has no body (abstract, interface or extern) — mark the implementation that runs the kernel";
+        else if (!refs.HasAnchorSurface)
+            problem = "cannot be woven: the referenced NumSharp does not carry NDScope.Anchor(object) — update the NumSharp package";
+        else if (GetStateMachineKind(m, out _) != StateMachineKind.None)
+            problem = "is an async method or an iterator — the compiler hoists its parameters into the state machine, " +
+                      "which the caller holds while it runs; remove [NDAnchored]";
+        else if (m.Body.Instructions.Any(i => i.OpCode == OpCodes.Tail))
+            problem = "contains a tail call — the operand roots must run after the call, before the return";
+        else if (AnchorRoots(m).Count == 0)
+            problem = "has nothing to root — no parameter that can reach an NDArray, and no class instance; remove [NDAnchored]";
+
+        if (problem is null)
+            return ValidationOutcome.Ok;
+
+        stderr.WriteLine($"NumSharp.Build : error NDW019: [NDAnchored] method '{m.FullName}' {problem}");
+        return ValidationOutcome.Error;
     }
 
     // ----------------------------------------------------------------- target collection
@@ -541,6 +676,103 @@ internal abstract class ScopeWeaver
                 if (method.HasBody && inheritance.EffectiveExitParameters(method).Length > 0)
                     targets.Add(method);
         return targets;
+    }
+
+    /// <summary>
+    ///     Every method carrying its OWN <c>[NDAnchored]</c> attribute (the attribute is not inherited: an override
+    ///     that needs roots carries the mark itself). A method that is also a scope target — by its own
+    ///     <c>[NDScoped]</c>/<c>[NDScopedAsync]</c> or by inheritance — is refused with NDW019 and left to its scope
+    ///     weave, which roots a synchronous body's parameters already (an async body's are hoisted into its state
+    ///     machine).
+    /// </summary>
+    /// <param name="module">The module being woven.</param>
+    /// <param name="syncTargets">The <c>[NDScoped]</c> targets (own and inherited) — a conflict set.</param>
+    /// <param name="asyncTargets">The <c>[NDScopedAsync]</c> targets (own and inherited) — a conflict set.</param>
+    /// <param name="stderr">The diagnostic sink.</param>
+    /// <param name="errors">Incremented per refused method.</param>
+    /// <returns>The methods to anchor, in type then member order.</returns>
+    private static List<MethodDefinition> CollectAnchorTargets(ModuleDefinition module, List<MethodDefinition> syncTargets,
+                                                               List<MethodDefinition> asyncTargets, TextWriter stderr,
+                                                               ref int errors)
+    {
+        var scoped = new HashSet<MethodDefinition>(syncTargets);
+        scoped.UnionWith(asyncTargets);
+        var targets = new List<MethodDefinition>();
+        foreach (var type in AllTypes(module))
+        {
+            foreach (var method in type.Methods)
+            {
+                if (!HasAttribute(method.CustomAttributes, AnchorAttributeFullName))
+                    continue;
+
+                // The own-attribute checks catch a method the scope collection dropped (NDW011: both scope
+                // attributes) as well as an abstract scoped declaration, which is never itself a scope target.
+                if (scoped.Contains(method) ||
+                    HasAttribute(method.CustomAttributes, SyncAttributeFullName) ||
+                    HasAttribute(method.CustomAttributes, AsyncAttributeFullName))
+                {
+                    stderr.WriteLine(
+                        $"NumSharp.Build : error NDW019: [NDAnchored] method '{method.FullName}' is also an " +
+                        "[NDScoped]/[NDScopedAsync] target — a scoped method's weave already roots its parameters (an async " +
+                        "method's are hoisted into its state machine); remove [NDAnchored]");
+                    errors++;
+                    continue;
+                }
+
+                targets.Add(method);
+            }
+        }
+
+        return targets;
+    }
+
+    /// <summary>
+    ///     Every method whose body opens an NDScope BY HAND — a call to <c>NDScope.Open()</c> in a method that is neither a
+    ///     scope target nor an <c>[NDAnchored]</c> target (those passes root their own). A hand-written scope roots only the
+    ///     arrays it tracks, exactly as a woven one, so these methods get the same operand roots
+    ///     (<see cref="InjectParameterAnchors"/>): "a method that opens a scope roots its parameters" holds however the
+    ///     scope was written. The <c>NDScope</c> type itself is never rewritten.
+    /// </summary>
+    /// <param name="module">The module being woven.</param>
+    /// <param name="syncTargets">The <c>[NDScoped]</c> targets — excluded.</param>
+    /// <param name="asyncTargets">The <c>[NDScopedAsync]</c> targets — excluded (an async method's parameters are hoisted
+    ///     into its state machine; a non-async Task return's work may outlive the return the roots would guard).</param>
+    /// <param name="anchorTargets">The <c>[NDAnchored]</c> targets — excluded.</param>
+    /// <returns>The hand-scoped methods, in type then member order.</returns>
+    private static List<MethodDefinition> CollectHandScopedMethods(ModuleDefinition module, List<MethodDefinition> syncTargets,
+                                                                   List<MethodDefinition> asyncTargets,
+                                                                   List<MethodDefinition> anchorTargets)
+    {
+        var excluded = new HashSet<MethodDefinition>(syncTargets);
+        excluded.UnionWith(asyncTargets);
+        excluded.UnionWith(anchorTargets);
+
+        var methods = new List<MethodDefinition>();
+        foreach (var type in AllTypes(module))
+        {
+            if (type.FullName == NDScopeFullName)
+                continue;
+
+            foreach (var method in type.Methods)
+            {
+                if (!method.HasBody || excluded.Contains(method))
+                    continue;
+
+                foreach (var instr in method.Body.Instructions)
+                {
+                    if (instr.OpCode.FlowControl == FlowControl.Call &&
+                        instr.Operand is MethodReference mr &&
+                        mr.Name == "Open" &&
+                        mr.DeclaringType.FullName == NDScopeFullName)
+                    {
+                        methods.Add(method);
+                        break;
+                    }
+                }
+            }
+        }
+
+        return methods;
     }
 
     /// <summary>The <c>[NDScopedExit]</c> parameters in effect for <paramref name="m"/> (own, else inherited by position) — see <see cref="ScopeInheritance.EffectiveExitParameters"/>.</summary>
@@ -740,6 +972,14 @@ internal abstract class ScopeWeaver
                         refs.DetachMany = module.ImportReference(m);
                     else if (detachParam.FullName == ITupleFullName)
                         refs.DetachTuple = module.ImportReference(m);
+                    break;
+
+                // The operand-anchor seam — one static Anchor(object). Optional surface, like the async and
+                // detach seams: an older NumSharp leaves HasAnchorSurface false, scope targets weave without
+                // operand roots, and only an [NDAnchored] target demands it (NDW019).
+                case "Anchor" when m.IsStatic && m.Parameters.Count == 1 &&
+                                   m.Parameters[0].ParameterType.MetadataType == MetadataType.Object:
+                    refs.Anchor = module.ImportReference(m);
                     break;
             }
         }
@@ -1355,6 +1595,246 @@ internal abstract class ScopeWeaver
         }
 
         return injected;
+    }
+
+    // ----------------------------------------------------------------- operand roots (parameter anchors)
+
+    /// <summary>
+    ///     One operand root: the value a shadow local captures at method entry.
+    /// </summary>
+    /// <param name="Parameter">The rooted parameter, or null for <c>this</c> (loaded with <c>ldarg.0</c>).</param>
+    /// <param name="BoxType">
+    ///     The type to <c>box</c> before the shadow store, or null for a value that is already a reference. A struct
+    ///     that carries an NDArray (a tuple of arrays, a result carrier) is boxed once per call, a copy that holds the
+    ///     same references; a generic parameter constrained to a reference type is boxed too, which the JIT removes.
+    /// </param>
+    internal readonly record struct AnchorRoot(ParameterDefinition Parameter, TypeReference BoxType);
+
+    /// <summary>
+    ///     The operand roots of <paramref name="m"/>, in the order their shadows are stored: <c>this</c> for an instance
+    ///     method of a class (not a constructor, whose object the caller's <c>newobj</c> keeps alive across the call; not
+    ///     a struct, whose <c>this</c> is a managed pointer into the caller's frame), then every by-value parameter whose
+    ///     type can reach an NDArray (<see cref="TryGetAnchorKind"/>), in declaration order.
+    /// </summary>
+    /// <param name="m">The method to root.</param>
+    /// <returns>The roots; empty when nothing can reach an NDArray.</returns>
+    internal static List<AnchorRoot> AnchorRoots(MethodDefinition m)
+    {
+        var roots = new List<AnchorRoot>();
+        if (m.HasThis && !m.IsConstructor && !m.DeclaringType.IsValueType)
+            roots.Add(new AnchorRoot(null, null));
+
+        foreach (var p in m.Parameters)
+            if (TryGetAnchorKind(p.ParameterType, out var boxType))
+                roots.Add(new AnchorRoot(p, boxType));
+
+        return roots;
+    }
+
+    /// <summary>
+    ///     Whether a parameter of type <paramref name="t"/> can hold an NDArray the caller may have built as a temporary,
+    ///     and so needs a root. Rooting a value that cannot reach one is harmless but pure noise, so the test is precise
+    ///     where it is cheap: by-ref, pointer and function-pointer parameters are never rooted (they hold no GC
+    ///     reference of their own, or alias the caller's storage); numbers, enums, <c>string</c> and <c>System.Type</c>
+    ///     cannot hold an array; an array is rooted when its elements can reach one; a struct only when it carries an
+    ///     NDArray (<see cref="CarriesNDArray"/>) and is not by-ref-like (a span cannot be boxed); a generic parameter only
+    ///     when it is constrained to a reference type; and every other reference type (NDArray, <c>object</c>, interfaces,
+    ///     delegates, classes that may hold arrays) is rooted.
+    /// </summary>
+    /// <param name="t">The parameter type, possibly wrapped in modreq/modopt modifiers.</param>
+    /// <param name="boxType">The type to box before the shadow store, or null for a reference (see <see cref="AnchorRoot"/>).</param>
+    /// <returns>True when the parameter is rooted.</returns>
+    private static bool TryGetAnchorKind(TypeReference t, out TypeReference boxType)
+    {
+        boxType = null;
+        var core = StripModifiers(t);
+        switch (core)
+        {
+            case ByReferenceType:
+            case PointerType:
+            case FunctionPointerType:
+            case PinnedType:
+            case SentinelType:
+                return false;
+
+            case GenericParameter gp:
+                // `box !!T` on a T the constraint makes a reference type is a no-op the JIT removes; an unconstrained or
+                // struct-constrained T could be a value type, whose box would allocate on every call — not rooted.
+                if (!gp.HasReferenceTypeConstraint && !gp.Constraints.Any(c => IsNDArrayLike(c.ConstraintType)))
+                    return false;
+                boxType = core;
+                return true;
+
+            case ArrayType at:
+                return ArrayCanReachNDArray(at);
+        }
+
+        if (core.IsValueType)
+        {
+            if (!CarriesNDArray(core) || IsByRefLike(core))
+                return false;
+            boxType = core;
+            return true;
+        }
+
+        return core.MetadataType != MetadataType.String && core.FullName != "System.Type";
+    }
+
+    /// <summary>
+    ///     Whether an array (any rank, jagged included) can hold an NDArray: its innermost element type is a reference
+    ///     type other than <c>string</c>/<c>System.Type</c>, a struct that carries an NDArray, or a generic parameter
+    ///     constrained to a reference type. <c>long[]</c> shapes and <c>int[]</c> axes are not rooted.
+    /// </summary>
+    /// <param name="at">The array type.</param>
+    /// <returns>True when the array is rooted.</returns>
+    private static bool ArrayCanReachNDArray(ArrayType at)
+    {
+        var element = StripModifiers(at.ElementType);
+        if (element is ArrayType inner)
+            return ArrayCanReachNDArray(inner);
+        if (element is GenericParameter)
+            return TryGetAnchorKind(element, out _);
+        if (element.IsValueType)
+            return CarriesNDArray(element);
+        return element.MetadataType != MetadataType.String && element.FullName != "System.Type";
+    }
+
+    /// <summary>Unwraps the modreq/modopt modifiers around a type (an <c>in</c> parameter's <c>modreq(InAttribute)</c>, a <c>volatile</c>), returning the type they modify.</summary>
+    /// <param name="t">The possibly modified type.</param>
+    /// <returns>The underlying type.</returns>
+    private static TypeReference StripModifiers(TypeReference t)
+    {
+        while (t is IModifierType modified)
+            t = modified.ElementType;
+        return t;
+    }
+
+    /// <summary>
+    ///     Whether <paramref name="t"/> is a by-ref-like struct (<c>Span&lt;T&gt;</c>, <c>ReadOnlySpan&lt;T&gt;</c>, any
+    ///     <c>ref struct</c>): such a value cannot be boxed (the IL would fail at JIT time), so a parameter of that type is
+    ///     never rooted. The two span types are recognised by name without resolving the BCL; any other type is resolved
+    ///     and checked for <c>IsByRefLikeAttribute</c> (an unresolvable type counts as not by-ref-like, the classifier's
+    ///     usual conservatism being the CarriesNDArray test that precedes this one).
+    /// </summary>
+    /// <param name="t">A value type.</param>
+    /// <returns>True for a by-ref-like struct.</returns>
+    private static bool IsByRefLike(TypeReference t)
+    {
+        var name = (t is GenericInstanceType git ? git.ElementType : t).FullName;
+        if (name is "System.Span`1" or "System.ReadOnlySpan`1")
+            return true;
+
+        try
+        {
+            var def = t.Resolve();
+            if (def != null)
+                foreach (var a in def.CustomAttributes)
+                    if (a.AttributeType.FullName == "System.Runtime.CompilerServices.IsByRefLikeAttribute")
+                        return true;
+        }
+        catch
+        {
+            // not resolvable here: treat as an ordinary struct
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    ///     Roots <paramref name="m"/>'s operands (<see cref="AnchorRoots"/>) from entry to every return: each root is copied
+    ///     into a fresh <c>object</c> shadow local before the original first instruction, and every <c>ret</c> is rewritten
+    ///     IN PLACE into <c>ldloc shadow; call NDScope.Anchor</c> per shadow followed by a new <c>ret</c> (the ret
+    ///     instruction object becomes the first load, so every branch and exception-handler boundary that referenced it
+    ///     stays valid). Applied to a woven <c>[NDScoped]</c> body (its one epilogue <c>ret</c>), to a hand-scoped body, and
+    ///     to an <c>[NDAnchored]</c> method.
+    /// </summary>
+    /// <param name="m">A method with a body, not a state machine stub, without a tail call (the callers check).</param>
+    /// <param name="refs">The resolved NDScope surface; nothing is injected when it lacks <c>NDScope.Anchor</c>.</param>
+    /// <returns>True when roots were injected; false when there is nothing to root, the surface is missing, or the body
+    ///     already calls <c>NDScope.Anchor</c> (a previous pass — the idempotence signal).</returns>
+    /// <remarks>
+    ///     <para><b>Why the shadows, and why every return.</b> In optimized code the JIT reports a value to the GC only up
+    ///     to its last use. A use before every <c>ret</c> makes each shadow live across the whole body on every path that
+    ///     can return normally — which includes every point inside a kernel call, since the call may return — so an
+    ///     operand the caller passed as a temporary stays reachable until the method is done with it. The exceptional exit
+    ///     needs no use: once a kernel has thrown, nothing reads the operand any more. The shadow is taken BEFORE the body
+    ///     runs, so a body that reassigns a parameter (<c>x = x.astype(...)</c>) still roots the caller's original
+    ///     (anchoring the parameter itself would root the replacement).</para>
+    ///     <para><b>Cost.</b> <c>NDScope.Anchor</c> inlines to <c>GC.KeepAlive</c>, an intrinsic that emits no code; the
+    ///     only run-time cost is keeping the shadows in registers or stack slots, and one box per NDArray-carrying struct
+    ///     parameter.</para>
+    /// </remarks>
+    internal static bool InjectParameterAnchors(MethodDefinition m, Refs refs)
+    {
+        if (refs.Anchor is null || !m.HasBody)
+            return false;
+
+        var body = m.Body;
+
+        // Idempotence — an Anchor call already present means a previous pass rooted this body (or its author did by
+        // hand); a second set of shadows would be harmless but pointless churn.
+        foreach (var instr in body.Instructions)
+            if (instr.OpCode.FlowControl == FlowControl.Call &&
+                instr.Operand is MethodReference mr &&
+                mr.Name == "Anchor" &&
+                mr.DeclaringType.FullName == NDScopeFullName)
+                return false;
+
+        var roots = AnchorRoots(m);
+        if (roots.Count == 0)
+            return false;
+
+        body.SimplifyMacros(); // long-form branches so the inserted code cannot overflow a short offset
+        var il = body.GetILProcessor();
+        var objectType = m.Module.TypeSystem.Object;
+
+        // A body with no locals carries no `.locals init` flag, and adding the shadows without it makes the method
+        // unverifiable (ILVerify's InitLocals). Setting the flag there changes nothing at run time — it then governs only
+        // `localloc`, which such a body is checked not to have — while a body that already has locals keeps its own
+        // choice ([SkipLocalsInit] stays in force: the JIT zeroes the GC-reference shadows regardless).
+        if (body.Variables.Count == 0 && !body.Instructions.Any(i => i.OpCode == OpCodes.Localloc))
+            body.InitLocals = true;
+
+        // -- the shadows: stored before the original first instruction, outside every protected region the body has.
+        //    A branch that targeted the old first instruction (a loop at offset 0) still targets it, so the shadows are
+        //    stored exactly once.
+        var first = body.Instructions[0];
+        var shadows = new List<VariableDefinition>(roots.Count);
+        foreach (var root in roots)
+        {
+            var shadow = new VariableDefinition(objectType);
+            body.Variables.Add(shadow);
+            shadows.Add(shadow);
+
+            il.InsertBefore(first, root.Parameter is null ? il.Create(OpCodes.Ldarg_0) : il.Create(OpCodes.Ldarg, root.Parameter));
+            if (root.BoxType != null)
+                il.InsertBefore(first, il.Create(OpCodes.Box, root.BoxType));
+            il.InsertBefore(first, il.Create(OpCodes.Stloc, shadow));
+        }
+
+        // -- the anchors: before every ret. A return value stays on the evaluation stack underneath the loads, which
+        //    each Anchor call consumes, so the stack at the new ret is the original one.
+        var rets = new List<Instruction>();
+        foreach (var instr in body.Instructions)
+            if (instr.OpCode == OpCodes.Ret)
+                rets.Add(instr);
+
+        foreach (var ret in rets)
+        {
+            ret.OpCode = OpCodes.Ldloc;
+            ret.Operand = shadows[0];
+            var cursor = InsertAfter(il, ret, il.Create(OpCodes.Call, refs.Anchor));
+            for (int i = 1; i < shadows.Count; i++)
+            {
+                cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldloc, shadows[i]));
+                cursor = InsertAfter(il, cursor, il.Create(OpCodes.Call, refs.Anchor));
+            }
+
+            InsertAfter(il, cursor, il.Create(OpCodes.Ret));
+        }
+
+        body.OptimizeMacros();
+        return true;
     }
 
     internal static void WeaveMethod(MethodDefinition m, Refs refs)

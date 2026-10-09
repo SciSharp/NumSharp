@@ -463,9 +463,11 @@ jobs:
   # one (a key copy, a cast) only sometimes. THIS job runs 32 per case every night, on Linux (the per-push
   # Oracle legs run all three OSes at the CI depth), so a short window an edit opened is found within a day.
   # A red run is never noise — the stress thread only poisons buffers it took from the pool — but a real lost
-  # anchor: map the op key to the open lifetime gap whose site it reaches (KnownScaledGaps), or give the site
-  # a new gap with its own lifetime cases (Fuzz/README.md, "Scaled lifetime tier"). Release only: a Debug
-  # build keeps every local alive and the test is inconclusive. No Python, no OpenBLAS (the managed kernels).
+  # anchor: map the op key to the open lifetime gap whose site it reaches (KnownScaledGaps, empty since every
+  # gap was fixed on 2026-10-09), or give the site a new gap with its own lifetime cases, then fix it by
+  # scoping ([NDScoped]) or anchoring ([NDAnchored]) its entry point (Fuzz/README.md, "Scaled lifetime tier").
+  # Release only: a Debug build keeps every local alive and the test is inconclusive. No Python, no OpenBLAS
+  # (the managed kernels).
   lifetime-scaled:
     runs-on: ubuntu-latest
     timeout-minutes: 45

@@ -76,16 +76,25 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual(0, run.Result.Woven);
         }
 
+        /// <summary>
+        ///     A body that already opens an NDScope keeps its own scope (never double-wrapped) and gains only the operand
+        ///     roots: its scope roots what it tracks, never the caller's operand, so the weave adds the shadow and the
+        ///     <c>NDScope.Anchor</c> call and counts the method as woven (until 2026-10-09 such a body was skipped whole).
+        /// </summary>
+        /// <exception cref="AssertFailedException">The scope was doubled, the roots are missing, or the tallies are wrong.</exception>
         [TestMethod]
-        public void HandScoped_IsSkipped_NotDoubleWrapped()
+        public void HandScoped_KeepsItsScope_GainsOperandRoots()
         {
             var run = WeaverTestHarness.CompileAndWeave(Prelude +
                 "public static class H { [NDScoped] public static NDArray M(NDArray a) { using var s = NDScope.Open(); var t = a + 1.0; return s.Returns(t * 2.0); } }\n", "Hand");
             Assert.AreEqual(0, run.Result.Errors, run.Report);
-            Assert.AreEqual(0, run.Result.Woven);
-            Assert.AreEqual(1, run.Result.Skipped, "a body that already opens an NDScope is skipped");
-            Assert.IsFalse(run.Rewrote);
+            Assert.AreEqual(1, run.Result.Woven, "the hand-scoped body gains its operand roots:\n" + run.Report);
+            Assert.AreEqual(0, run.Result.Skipped, run.Report);
+            Assert.IsTrue(run.Rewrote, "the roots are a change to the assembly");
             Assert.AreEqual(1, run.CountScopeCalls("H", "M", "Open"), "the hand-written Open is the only one");
+            Assert.AreEqual(1, run.CountScopeCalls("H", "M", "Anchor"), "one root (the operand) before the one ret");
+            CollectionAssert.AreEqual(new[] { 2.0, 4.0, 6.0 },
+                ((NDArray)run.Invoke("H", "M", null, np.arange(3).astype(np.float64))).ToArray<double>(), "the body still runs");
         }
 
         [TestMethod]

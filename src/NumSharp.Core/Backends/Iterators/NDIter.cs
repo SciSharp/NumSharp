@@ -5140,7 +5140,17 @@ namespace NumSharp.Backends.Iteration
         /// matches its broadcast-src-to-dst-shape semantics and its cast-on-write
         /// behavior (read src as src.TypeCode, convert, write dst.TypeCode).
         /// </summary>
+        /// <param name="dst">The destination array (written in place).</param>
+        /// <param name="src">The source array; broadcast to <paramref name="dst"/>'s shape.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="dst"/> or <paramref name="src"/> is null.</exception>
         /// <exception cref="ValueError">If <paramref name="dst"/> is not writeable (e.g., broadcast view) — NumPy's "… is read-only".</exception>
+        /// <remarks>
+        ///     <see cref="NDAnchoredAttribute"/>: the copy runs storage to storage, and a storage does not hold its buffer
+        ///     (the NDArray's ARC reference does), so once <c>src.Storage</c> is read nothing in this frame keeps a
+        ///     caller's temporary source alive — the lifetime oracle's gap LT09 (every cross-dtype <c>TensorEngine.Cast</c>
+        ///     and <c>np.copyto</c> came through here). The weaver roots both arrays until the copy returns.
+        /// </remarks>
+        [NDAnchored]
         public static void Copy(NDArray dst, NDArray src)
         {
             if (dst is null) throw new ArgumentNullException(nameof(dst));
@@ -5168,6 +5178,12 @@ namespace NumSharp.Backends.Iteration
         /// <param name="engine">tensor engine assigned to the result; defaults to <paramref name="src"/>'s engine.</param>
         /// <returns>A freshly allocated, owning array of <paramref name="dstType"/> holding src's values.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="src"/> is null.</exception>
+        /// <remarks>
+        ///     <see cref="NDAnchoredAttribute"/>: the fill reads <paramref name="src"/>'s storage, so the weaver roots it until
+        ///     the copy returns — a caller that casts a temporary (<c>engine.Cast(np.arange(n), ...)</c>) cannot lose it
+        ///     mid-copy (see <see cref="Copy(NDArray, NDArray)"/>).
+        /// </remarks>
+        [NDAnchored]
         public static NDArray CopyAs(DType dstType, NDArray src, char order = 'K', TensorEngine engine = null)
         {
             if (src is null) throw new ArgumentNullException(nameof(src));

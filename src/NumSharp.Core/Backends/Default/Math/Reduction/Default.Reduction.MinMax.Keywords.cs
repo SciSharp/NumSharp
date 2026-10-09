@@ -1460,6 +1460,12 @@ namespace NumSharp.Backends
         /// <exception cref="IncorrectShapeException">The mask or out does not broadcast against <paramref name="a"/>.</exception>
         /// <exception cref="OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <exception cref="TypeError"><paramref name="initial"/> is a complex for a real loop, or of an unconvertible type.</exception>
+        /// <remarks><see cref="NDAnchoredAttribute"/>: the reduction iterator and the seeded exact engines read raw
+        ///     addresses, and the keyword front doors (<c>np.max(a, initial: …, where: …)</c>, <c>ndarray.max</c>, the
+        ///     nan variants) reach them through this method, which opens no scope; the weaver roots <paramref name="a"/>,
+        ///     <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> until it returns, so a
+        ///     caller's temporary operand or mask cannot be collected under the kernel.</remarks>
+        [NDAnchored]
         internal static unsafe NDArray MaxMinNumPy(NDArray a, int? axis, NDArray @out, bool keepdims, object initial, NDArray @where,
             MinMaxOp op)
         {

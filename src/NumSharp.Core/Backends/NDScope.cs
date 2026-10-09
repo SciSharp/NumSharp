@@ -342,6 +342,37 @@ namespace NumSharp
             s._tracked.Add(nd);
         }
 
+        /// <summary>
+        ///     Keeps <paramref name="reference"/> reachable up to the point of this call: the parameter root the IL weaver
+        ///     emits before every return of an <see cref="NDScopedAttribute"/> or <see cref="NDAnchoredAttribute"/>
+        ///     method, so an operand the CALLER passed as a temporary cannot be collected (and its buffer pooled or freed)
+        ///     while a kernel inside the call still reads it. Not meant to be called by hand: mark the method instead.
+        /// </summary>
+        /// <param name="reference">
+        ///     The value to keep reachable: a parameter (or <c>this</c>) the weaver copied into a shadow local at method
+        ///     entry. Null is allowed (an omitted optional operand) and does nothing.
+        /// </param>
+        /// <remarks>
+        ///     <para><b>Why a scope alone does not root an operand.</b> A scope roots only the arrays it TRACKS, the ones
+        ///     constructed while it is open; an operand was constructed by the caller before the scope opened, so it is
+        ///     never tracked (which is what makes a passthrough safe from the scope's disposal). In optimized code the JIT
+        ///     reports a parameter to the GC only up to its last use, and a method that reads an operand's raw address
+        ///     (<c>a.Address</c>, <c>Storage.Address</c>) and then runs a kernel has no later use: a caller that passed a
+        ///     temporary (<c>np.take(a, np.arange(n))</c>) leaves the operand reachable from nothing, so a collection
+        ///     during the kernel finalizes it, its ARC reference is abandoned, and the buffer returns to the pool under
+        ///     the kernel (wrong values, spurious errors, access violations). The weaver therefore copies every parameter
+        ///     that can reach an <see cref="NDArray"/> into a shadow local at entry and passes each shadow to this
+        ///     method before every <c>ret</c>: the shadows are live from entry to exit on every path, whatever the body
+        ///     does with the parameters (a reassigned parameter keeps its ORIGINAL value rooted).</para>
+        ///     <para><b>Cost.</b> None at run time beyond the shadow locals: the call inlines to
+        ///     <see cref="GC.KeepAlive(object)"/>, a JIT intrinsic that emits no code and only extends the reported
+        ///     lifetime of its argument.</para>
+        ///     <para><b>Idempotence marker.</b> The weaver leaves a method that already calls this method untouched, so a
+        ///     second weave over the same assembly adds nothing.</para>
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Anchor(object reference) => GC.KeepAlive(reference);
+
         /// <summary>Disposes every tracked non-yielded array and reinstates the parent scope.</summary>
         public void Dispose()
         {

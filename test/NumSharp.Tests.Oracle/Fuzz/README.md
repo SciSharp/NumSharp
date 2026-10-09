@@ -353,8 +353,17 @@ poisoned operands, and fatal `AccessViolationException`s. **No other tier can se
 holds its operands in the harness for the whole call. The deterministic twin — an op disposing,
 releasing or pooling a caller's array — is the ownership gate's (the section above); the leak
 sweep's pool balance cannot see it.
-The fix pattern is `GC.KeepAlive(operand)` after the kernel call (np.nonzero, np.argwhere,
-np.flatnonzero, np.unravel_index and np.ravel_multi_index have it).
+**The fix is structural (2026-10-09).** An `NDScope` roots the arrays it TRACKS (those built while it
+is open), never the caller's operands, so a scope alone could not prevent this. The NumSharp.Build
+weaver now gives every method that opens a scope — `[NDScoped]`, or a hand-written `NDScope.Open()` —
+**operand roots**: each parameter that can reach an NDArray (and `this`) is copied into a shadow local
+at entry and passed to `NDScope.Anchor` (a no-code `GC.KeepAlive`) before every return. An unscoped
+entry point that hands an operand's address to a kernel carries `[NDAnchored]`, which weaves the same
+roots without a scope (np.copyto, `NDIter.Copy` / `CopyAs`, `TensorEngine.Inner`,
+`DefaultEngine.ReduceAMax` / `ReduceAMin` / `MaxMinNumPy` / `All` / `Any`, `ToArray` /
+`ToJaggedArray` / `ToMuliDimArray`). That closed all 28 gaps below. A new site is fixed the same way —
+scope or anchor its entry point — never with a hand-placed `GC.KeepAlive` (np.nonzero, np.argwhere,
+np.flatnonzero, np.unravel_index and np.ravel_multi_index keep the ones they had before).
 
 **How it is replayed.** `test/oracle/gen_lifetime_oracle.py` writes cases whose operands are RECIPES
 (2–8 MB each, so a kernel lasts long enough for a collection to land inside it; bytes would cost
@@ -379,13 +388,15 @@ once (`RequireOptimizedBuild`, before any child starts). CI runs Release; a loca
 
 **Gate versus gaps.** `Fuzz/Lifetime/corpus/` (its own directory: the generic sweeps of
 `Fuzz/corpus/` replay every top-level file through the ordinary schema) holds `lifetime.jsonl` — the
-`[FuzzMatrix]` gate `LifetimeOracleTests.Lifetime`, 242 calls with all operands temporary, held to
-ZERO divergences (8 repetitions; 14–19 s per framework; `Lifetime_CorpusContract` checks in-process
-that every op key has a C# body and every gap id its own test) — and `lifetime_gaps.jsonl`, the carved cases of
-28 documented gaps (`GAPS` in the generator; every variant of a gap call, each operand temporary
-alone, so a gap names its operand). `Lifetime_KnownGaps` and one `Lifetime_LT<nn>_*` test per gap
-(`LifetimeOracleTests.Gaps.cs`, all `[OpenBugs]`) replay them at 48 repetitions and fail while any
-diverges:
+`[FuzzMatrix]` gate `LifetimeOracleTests.Lifetime`, 350 calls held to ZERO divergences (8
+repetitions; about 20 s per framework). 108 of them PIN a fixed gap (`pin` = its old id, `FIXED` in the
+generator): a call that reaches a fixed site keeps every variant (each operand temporary alone, then all
+of them), so a red gate names the gap and the operand it loses again (`FIXED gaps regressed: LT07, …`).
+`Lifetime_CorpusContract` checks in-process that every op key has a C# body, that every fixed gap
+LT01–LT28 still has pinned cases, and that every OPEN gap has its own test. `lifetime_gaps.jsonl`
+holds the carved cases of OPEN gaps (`GAPS`, empty since 2026-10-09); `Lifetime_KnownGaps`
+(`[OpenBugs]`) replays them at 48 repetitions and is inconclusive while none is open. The 28 fixed
+gaps, each with the method that lost the operand and what roots it now:
 
 | Gap | Call | Lost operand(s) — the method that reads them |
 |-----|------|----------------------------------------------|
@@ -418,14 +429,29 @@ diverges:
 | LT27 | `NDArray.ToMuliDimArray<T>()` | the receiver |
 | LT28 | `np.unique_values` / `np.unique_counts` (integer family, complex) | the receiver — the hash path's `ExtractKeysOnly` (`np.unique` keeps it) |
 
+**What roots them now.** The `[NDScoped]` weave of the entry point for LT01, LT02, LT05, LT06, LT12–LT17,
+LT19–LT21, LT23–LT25 and LT28 (np.take, np.put, the along-axis pair, the scans, nancumsum, searchsorted,
+digitize, bincount, reciprocal, np.dot / matvec / vecmat, det / inv / solve, the polynomial module
+methods, `operator !`, the unique family); `PlaceCore` / `PutMaskCore` / `where_internal` (LT03, LT04,
+LT07), scoped helpers the public overloads delegate to; `NDArray.convolve` / `NDArray.correlate`
+(LT22); np.copyto's `[NDAnchored]` (LT08, LT09), with `NDIter.Copy` / `CopyAs` (every cast) and
+np.linalg.norm's scope; `DefaultEngine.MaxMinNumPy` / `ReduceAMax` (LT10, LT11); np.dot's scope and
+`TensorEngine.Inner` (LT18); `DefaultEngine.All` (LT26); `ToMuliDimArray` (LT27). Two deterministic
+gates back the race-based one: `OperandRootsTests` (NumSharp.Tests) reads the woven IL — every method
+that opens a scope and takes an NDArray calls `NDScope.Anchor`, so does every `[NDAnchored]` method and
+the entry point of each fixed site — and `WeaverOperandRootTests` (Build.Analyzer) pins the transform.
+Planted-bug check (2026-10-09, the weaver's root injection switched off): the gate failed 90 cases and
+named 25 of the 28 fixed gaps (LT11, LT26 and LT27 are short windows the 8-repetition gate does not
+always hit); `OperandRootsTests` failed all 37 of its checks.
+
 **How the carve was drawn — and why a red gate is never noise.** Detection is a race the stress
 thread wins most of the time, never a false positive: the thread only overwrites buffers it took from
 the pool, so a divergence can only come from a kernel touching freed memory. The carve came from
 uncarved replays (`python gen_lifetime_oracle.py --uncarved DIR [--bits 20]`, 2 MB and 8 MB operands,
 24–160 repetitions, ~600 cases) and a code read of every site: a variant is carved when an operand the
 site loses is temporary, whether or not a given replay caught it. Rare sites can still be in the gate
-(the sharper thread found LT26 and LT27 there) — when the gate turns red, it found one: carve it under
-a new gap id (and fix it). Planted-bug check (2026-10-09, clean worktree, the committed corpus, 8
+(the sharper thread found LT26 and LT27 there) — when the gate turns red on an unpinned case, it found
+one: carve it under a new gap id (LT29 next), and fix it by scoping or anchoring its entry point. Planted-bug check (2026-10-09, clean worktree, the committed corpus, 8
 repetitions): removing the `GC.KeepAlive` of np.unravel_index, np.ravel_multi_index, np.argwhere,
 np.nonzero or np.flatnonzero turns the gate red — unravel_index and ravel_multi_index throw NumPy's
 range errors on poisoned coordinates, while argwhere, nonzero (through `np.where(cond)` too) and
@@ -434,10 +460,13 @@ and flatnonzero, whose count-then-fill windows are short; the mask family is the
 (2 MiB of bools). A stress thread that never poisons makes the run INCONCLUSIVE (the control is not
 caught), not green.
 
-**Retiring a gap**: fix the site (`GC.KeepAlive` after the kernel), run its `Lifetime_LT<nn>_*` test
-twice in Release (a single clean run of a short-window gap proves little), drop its rule from
-`_gap_of`, regenerate, and run the gate. Then remove the scaled tier's `KnownScaledGaps` entries that
-name the gap (`LifetimeScaled_KnownGapsContract` fails until you do) and run the scaled gate.
+**Retiring a gap**: fix the site (scope its entry point with `[NDScoped]`, or anchor it with
+`[NDAnchored]`), run its `Lifetime_LT<nn>_*` test twice in Release (a single clean run of a
+short-window gap proves little), move its id from `GAPS` to `FIXED` in the generator (the rule in
+`_site_of` stays: it now pins the cases in the gate), regenerate, add the id to the C# contract's
+`FixedGaps` and the site to `OperandRootsTests`, delete its `[OpenBugs]` test, and run the gate. Then
+remove the scaled tier's `KnownScaledGaps` entries that name the gap
+(`LifetimeScaled_KnownGapsContract` fails until you do) and run the scaled gate.
 
 ### Scaled lifetime tier — every op key with large temporary operands (`Fuzz/Lifetime/LifetimeScaled.cs`) — 2026-10-09
 
@@ -474,17 +503,20 @@ bytes of every array in the result, through tuples and masked arrays) differs fr
 that raises, or that kills the child is a lost anchor. The same control and Release-only rule apply.
 
 **Gate versus known gaps.** `LifetimeScaled_EveryOpKey` (`[FuzzMatrix]`, 4 stressed calls per case;
-1,320 cases over 700 op keys — 554 ordinary and 146 `ma.*` — 1,207 scaled, 113 skipped) holds every
-case outside `KnownScaledGaps` to zero divergences, and at least 1,100 cases must scale (a selection
-or scaling regression fails it). `KnownScaledGaps` maps each op key whose scaled cases lose
-an operand to the OPEN lifetime gap whose site its call reaches, with the path it takes and, where
-only some of its cases reach the site, a predicate (only flat scans, only vector dots, only hash-path
-dtypes, only negative powers): 21 op keys, 35 cases. `LifetimeScaled_KnownGapsContract` holds every
+1,355 cases over 719 op keys of the ordinary and `ma.*` tiers, 1,242 scaled) holds every case outside
+`KnownScaledGaps` to zero divergences, and at least 1,100 cases must scale (a selection or scaling
+regression fails it). `KnownScaledGaps` maps each op key whose scaled cases lose an operand to the
+OPEN lifetime gap whose site its call reaches, with the path it takes and, where only some of its
+cases reach the site, a predicate. It is EMPTY since 2026-10-09: the 21 op keys and 35 cases in the
+table below went back into the gate when the operand roots fixed every lifetime gap, and a 96-run
+pass over all of them came back clean (2026-10-09: 1,355 cases over 719 op keys, 1,242 scaled, 15 min 47 s). `LifetimeScaled_KnownGapsContract` holds every
 entry to a gap that is still open (its lifetime cases are still carved) and that still carves a
 selected case; `LifetimeScaled_KnownGaps` (`[OpenBugs]`, 24 stressed calls per case) fails while any
 carved case still loses an operand and prints the count per gap. The tier keeps no gap ids of its
 own: a site it finds that no gap names gets an LT id with dedicated lifetime cases, because a gap's
 pin must not depend on how far a corpus case happens to scale. LT28 came that way.
+
+Mapped until 2026-10-09 (now gate cases):
 
 | Op key | Gap | Path to the site |
 |--------|-----|------------------|

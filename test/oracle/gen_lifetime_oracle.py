@@ -37,11 +37,13 @@ VALUE NumSharp does not reproduce bit for bit (managed LU / Gram matrices, an in
 replay checks only the lifetime contract there. ``host: true`` marks values that depend on the platform libm or
 FFT twiddles; the replay checks them against NumPy only on win-amd64.
 
-Carving (house rule: real product bugs are carved and pinned, never excused): ``_gap_of`` names the documented
-lost-anchor gap a case hits (``GAPS``); a carved case goes to ``lifetime_gaps.jsonl`` with its gap id, and
-the [OpenBugs] replays in ``LifetimeOracleTests`` fail while a gap is open. Both files live in
-``Fuzz/Lifetime/corpus/`` (see ``CORPUS``). ``--uncarved DIR`` writes every case
-to one gate file in DIR (how the carve rules were drawn, and how to re-probe after a fix).
+Carving and pinning (house rule: real product bugs are carved and pinned, never excused): ``_site_of`` names the
+lost-anchor site a case reaches. A site that is an OPEN gap (``GAPS``) carves the case into ``lifetime_gaps.jsonl``
+with its gap id, and the [OpenBugs] replays in ``LifetimeOracleTests`` fail while the gap is open. A site that was a gap
+and is FIXED (``FIXED``: every one of the 28 gaps this tier found, closed 2026-10-09 by the weaver's operand roots) keeps
+its case in the gate with ``pin`` set to the old id, and keeps every one-operand-at-a-time variant, so a regression names
+the operand it loses. Both files live in ``Fuzz/Lifetime/corpus/`` (see ``CORPUS``). ``--uncarved DIR`` writes every
+case to one gate file in DIR, without carves or pins (how the rules were drawn, and how to re-probe a site).
 
 Run (needs numpy==2.4.2):
     python test/oracle/gen_lifetime_oracle.py [--uncarved DIR]
@@ -847,45 +849,55 @@ TARGET_OPS = {"put", "place", "putmask", "put_along_axis", "copyto", "copyto_whe
 # Carving
 # =============================================================================================================
 
-#: The documented lost-anchor gaps: id -> (the NumSharp method that reads an operand's buffer and then runs its kernel
-#: with no later use of the operand, the operands it loses). Drawn from three uncarved replays (2 MB operands at 48
-#: repetitions, 8 MB at 24, the uncertain cases at 160) and a code read of each site: a variant is carved when one of
-#: the operands the site loses is temporary, whether or not a given replay caught it (detection is a race; the code
-#: is not). The [OpenBugs] test named after each id in Fuzz/Lifetime/LifetimeOracleTests.cs replays its cases.
-GAPS = {
-    "LT01": "np.take: ExecuteTakeKernel reads the source and the int64/int32 index buffer (Indexing/np.take.cs)",
-    "LT02": "np.put: PutKernel reads the index and value buffers (Indexing/np.put.cs)",
-    "LT03": "np.place: ExecutePlace reads the mask and value buffers (Indexing/np.place.cs)",
-    "LT04": "np.putmask: ExecutePutMask reads the mask and value buffers (Indexing/np.putmask.cs)",
-    "LT05": "np.take_along_axis: the gather reads the source and index buffers (Indexing/np.take_along_axis.cs)",
-    "LT06": "np.put_along_axis: PutAlongAxisCore reads the index and value buffers (Indexing/np.put_along_axis.cs)",
-    "LT07": "np.where(c, x, y): WhereKernelDispatch reads cond, x and y (APIs/np.where.cs)",
-    "LT08": "np.copyto(where=): CopytoMaskedRaw reads the source and the mask (Manipulation/np.copyto.cs)",
-    "LT09": "np.copyto across dtypes, and every TensorEngine.Cast (NDIter.CopyAs) whose caller never uses the source "
-            "again (np.linalg.norm of an integer array): NDIter.Copy(NDArray, NDArray) drops the source NDArray and copies "
-            "storage to storage (Backends/Iterators/NDIter.cs)",
-    "LT10": "np.max(initial=, where=): RunMaxMin reads the input (Default.Reduction.MinMax.Keywords.cs)",
-    "LT11": "np.max of float16: HalfMinMaxReduce reads the input (Default.Reduction.MinMax.Half.cs)",
-    "LT12": "np.cumsum / np.cumprod (flat): ScanElementwiseFlat reads the input (Default.Reduction.CumAdd.cs)",
-    "LT13": "np.nancumsum: NanReplace.ReplaceContiguousFloat reads the input (Backends/Kernels/NanReplace.cs)",
-    "LT14": "np.searchsorted: the search kernel reads a and v (Sorting_Searching_Counting/np.searchsorted.cs)",
-    "LT15": "np.digitize: the monotonicity scan and the search read x and bins (np.digitize.cs, np.searchsorted.cs)",
-    "LT16": "np.bincount: MinMaxInt64 / BincountCount / BincountWeighted read x and the weights (np.bincount.cs)",
-    "LT17": "np.reciprocal of integers: ReciprocalInteger reads the input (Default.Reciprocal.cs)",
-    "LT18": "np.dot / np.inner of two vectors: DotInner1D reads both (Default.Dot.Fused.cs)",
-    "LT19": "np.dot(matrix, vector) / np.matvec / np.vecmat: the managed product reads the matrix (Backends/Default/Math/BLAS/)",
-    "LT20": "np.dot(matrix, matrix): MultiplyMatrix -> TryMatMulSimd hands both operands' pointers to "
-            "SimdMatMul.MatMulDouble / MatMulFloat (Default.MatMul.2D2D.cs)",
-    "LT21": "np.linalg.det / inv / solve: ManagedLu reads a and b (Backends/Default/LinearAlgebra/ManagedLu.cs)",
-    "LT22": "np.convolve / np.correlate: SlidingCorrelate reads the data and the kernel (Math/NDArray.SlidingDot.cs)",
-    "LT23": "numpy.polynomial polyder: NDPolyCalc.TryDirectSource reads the series in place (NDPolyCalc.cs)",
-    "LT24": "numpy.polynomial polyvander: NDPolyVander reads x (NDPolyVander.cs)",
-    "LT25": "the ! operator of a bool array: NDArray.operator! reads its operand (NDArray.NOT.cs)",
-    "LT26": "np.all of a bool array (flat): NDIter.ReduceBool reads the input (Default.All.cs, NDIter.cs)",
-    "LT27": "NDArray.ToMuliDimArray: the copy reads Storage.Address with no later use (NDArrayToMultiDimArray.cs)",
-    "LT28": "np.unique_values / np.unique_counts of integer-family and complex arrays: the hash path's ExtractKeysOnly "
-            "copies the keys out of the receiver, which no caller touches again (NDArray.unique.Hash.cs, "
-            "NDArray.unique.Kwargs.cs)",
+#: The OPEN lost-anchor gaps: id -> (the NumSharp method that reads an operand's buffer and then runs its kernel with no
+#: later use of the operand, the operands it loses). A variant is carved when one of the operands the site loses is
+#: temporary, whether or not a given replay caught it (detection is a race; the code is not). The [OpenBugs] test named
+#: after each id in Fuzz/Lifetime/LifetimeOracleTests.cs replays its cases. Empty since 2026-10-09: every gap below was
+#: fixed. A new site gets the next id (LT29), a rule in ``_site_of`` and an [OpenBugs] test.
+GAPS = {}
+
+#: The FIXED gaps: id -> (the site that lost its operand, what roots the operand now). The 28 sites were drawn from three
+#: uncarved replays (2 MB operands at 48 repetitions, 8 MB at 24, the uncertain cases at 160) and a code read of each
+#: site; all of them were closed on 2026-10-09 by the NumSharp.Build weaver's OPERAND ROOTS: every method that opens an
+#: NDScope ([NDScoped], or a hand-written scope) and every [NDAnchored] method copies its NDArray-reaching parameters
+#: into shadow locals at entry and passes them to NDScope.Anchor before every return. Their cases stay in the gate,
+#: every variant kept and marked ``pin``.
+FIXED = {
+    "LT01": "np.take: ExecuteTakeKernel reads the source and the index buffer — rooted by np.take's [NDScoped] weave",
+    "LT02": "np.put: PutKernel reads the index and value buffers — rooted by np.put's [NDScoped] weave",
+    "LT03": "np.place: ExecutePlace reads the mask and value buffers — rooted by PlaceCore's [NDScoped] weave",
+    "LT04": "np.putmask: ExecutePutMask reads the mask and value buffers — rooted by PutMaskCore's [NDScoped] weave",
+    "LT05": "np.take_along_axis: the gather reads the source and index buffers — rooted by its [NDScoped] weave",
+    "LT06": "np.put_along_axis: PutAlongAxisCore reads the index and value buffers — rooted by its [NDScoped] weave",
+    "LT07": "np.where(c, x, y): WhereKernelDispatch reads cond, x and y — rooted by where_internal's [NDScoped] weave",
+    "LT08": "np.copyto(where=): CopytoMaskedRaw reads the source and the mask — rooted by np.copyto's [NDAnchored]",
+    "LT09": "np.copyto across dtypes and every TensorEngine.Cast: NDIter.Copy(NDArray, NDArray) copies storage to storage "
+            "— rooted by np.copyto's, NDIter.Copy's and NDIter.CopyAs's [NDAnchored] (np.linalg.norm: its [NDScoped])",
+    "LT10": "np.max(initial=, where=): RunMaxMin reads the input — rooted by DefaultEngine.MaxMinNumPy's [NDAnchored]",
+    "LT11": "np.max of float16: HalfMinMaxReduce reads the input — rooted by DefaultEngine.ReduceAMax's [NDAnchored]",
+    "LT12": "np.cumsum / np.cumprod (flat): ScanElementwiseFlat reads the input — rooted by their [NDScoped] weave",
+    "LT13": "np.nancumsum: NanReplace.ReplaceContiguousFloat reads the input — rooted by its [NDScoped] weave",
+    "LT14": "np.searchsorted: the search kernel reads a and v — rooted by its [NDScoped] weave",
+    "LT15": "np.digitize: the monotonicity scan and the search read x and bins — rooted by its [NDScoped] weave",
+    "LT16": "np.bincount: MinMaxInt64 / BincountCount / BincountWeighted read x and the weights — rooted by its [NDScoped] "
+            "weave",
+    "LT17": "np.reciprocal of integers: ReciprocalInteger reads the input — rooted by its [NDScoped] weave",
+    "LT18": "np.dot / np.inner of two vectors: DotInner1D reads both — rooted by np.dot's [NDScoped] weave and "
+            "TensorEngine.Inner's [NDAnchored]",
+    "LT19": "np.dot(matrix, vector) / np.matvec / np.vecmat: the managed product reads the matrix — rooted by their "
+            "[NDScoped] weave",
+    "LT20": "np.dot(matrix, matrix): TryMatMulSimd hands both pointers to SimdMatMul — rooted by np.dot's [NDScoped] weave",
+    "LT21": "np.linalg.det / inv / solve: ManagedLu reads a and b — rooted by their [NDScoped] weave",
+    "LT22": "np.convolve / np.correlate: SlidingCorrelate reads the data and the kernel — rooted by NDArray.convolve's / "
+            "NDArray.correlate's [NDScoped] weave",
+    "LT23": "numpy.polynomial polyder: NDPolyCalc.TryDirectSource reads the series in place — rooted by the module "
+            "method's [NDScoped] weave",
+    "LT24": "numpy.polynomial polyvander: NDPolyVander reads x — rooted by the module method's [NDScoped] weave",
+    "LT25": "the ! operator of a bool array: NDArray.operator! reads its operand — rooted by its [NDScoped] weave",
+    "LT26": "np.all of a bool array (flat): NDIter.ReduceBool reads the input — rooted by DefaultEngine.All's [NDAnchored]",
+    "LT27": "NDArray.ToMuliDimArray: the copy reads Storage.Address — rooted by its [NDAnchored]",
+    "LT28": "np.unique_values / np.unique_counts of integer-family and complex arrays: ExtractKeysOnly copies the keys out "
+            "of the receiver — rooted by their [NDScoped] weave",
 }
 
 #: The dtypes np.unique_values and np.unique_counts send through the hash path (UniqueHashSortedInt /
@@ -899,8 +911,11 @@ def _temps(args):
     return {k for k, a in enumerate(args) if a["temp"]}
 
 
-def _gap_of(op, tag, args, params):
-    """Names the documented gap a case hits, or None for a gate case.
+def _site_of(op, tag, args, params):
+    """Names the lost-anchor site a case reaches with one of the operands that site lost temporary, or None.
+
+    The id is an OPEN gap (``GAPS``: the case is carved) or a FIXED one (``FIXED``: the case stays in the gate, pinned).
+    The rules are the ones the 28 gaps were carved by, kept for the pins.
 
     Parameters:
         op: the op key.
@@ -909,7 +924,7 @@ def _gap_of(op, tag, args, params):
         params: the call's parameters.
 
     Returns:
-        A gap id from ``GAPS``, or None.
+        A gap id from ``GAPS`` or ``FIXED``, or None.
     """
     t = _temps(args)
     dt0 = args[0]["dtype"]
@@ -971,9 +986,10 @@ def _materialize(args):
 def main():
     """Writes the gate file and the gap file (or, with ``--uncarved DIR``, every variant into one file in DIR).
 
-    Each call of ``_cases()`` is expanded into its variants; a variant is carved when ``_gap_of`` names a gap for it,
-    and its expected answer is NumPy's result over fresh operands. ``--bits`` changes the operand sizes (used by the
-    classification runs: bigger operands give a collection more time to land inside a kernel)."""
+    Each call of ``_cases()`` is expanded into its variants; a variant is carved when ``_site_of`` names an OPEN gap for
+    it, pinned (kept in the gate with ``pin``) when it names a FIXED one, and its expected answer is NumPy's result over
+    fresh operands. ``--bits`` changes the operand sizes (used by the classification runs: bigger operands give a
+    collection more time to land inside a kernel)."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--uncarved", metavar="DIR", help="write every case to DIR/lifetime.jsonl (no carve)")
     ap.add_argument("--bits", type=int, default=18,
@@ -992,18 +1008,23 @@ def main():
             counter[(op, tag)] = n + 1
             case = {"id": f"lifetime/{op}/{tag}/{vargs[0]['dtype']}/{n}", "op": op, "args": vargs, "params": params,
                     "parity": parity, "host": host}
-            built.append((case, None if ns.uncarved else _gap_of(op, tag, vargs, params)))
-        # A call no gap touches keeps only its all-temporary variant (it already makes every operand temporary; the
-        # one-at-a-time variants exist to attribute a gap to its operand). A call with a gap keeps every variant: the
-        # carved ones pin the lost operands, the others show which operands ARE kept alive.
-        if not ns.uncarved and all(g is None for _, g in built):
+            site = None if ns.uncarved else _site_of(op, tag, vargs, params)
+            assert site is None or site in GAPS or site in FIXED, f"site {site} is neither an open nor a fixed gap"
+            built.append((case, site))
+        # A call no site touches keeps only its all-temporary variant (it already makes every operand temporary; the
+        # one-at-a-time variants exist to attribute a site to its operand). A call that reaches a site keeps every
+        # variant: the open gap's carved ones pin the lost operands, a fixed gap's pinned ones name the operand a
+        # regression loses, and the others show which operands are kept alive.
+        if not ns.uncarved and all(s is None for _, s in built):
             built = built[:1]
-        for case, gap in built:
+        for case, site in built:
             case["expected"] = record(OPS[op](_materialize(case["args"]), params))
-            if gap:
-                case["gap"] = gap
+            if site in GAPS:
+                case["gap"] = site
                 gaps.append(case)
             else:
+                if site in FIXED:
+                    case["pin"] = site
                 gate.append(case)
 
     out_dir = ns.uncarved or CORPUS
@@ -1016,8 +1037,9 @@ def main():
         with open(os.path.join(GAP_DIR, "lifetime_gaps.jsonl"), "w", encoding="utf-8", newline="\n") as f:
             for c in gaps:
                 f.write(json.dumps(c, separators=(",", ":")) + "\n")
-    print(f"lifetime: {len(gate)} gate cases, {len(gaps)} carved under {len({c['gap'] for c in gaps})} gaps",
-          file=sys.stderr)
+    pinned = [c for c in gate if "pin" in c]
+    print(f"lifetime: {len(gate)} gate cases ({len(pinned)} pinned to {len({c['pin'] for c in pinned})} fixed gaps), "
+          f"{len(gaps)} carved under {len({c['gap'] for c in gaps})} open gaps", file=sys.stderr)
 
 
 if __name__ == "__main__":

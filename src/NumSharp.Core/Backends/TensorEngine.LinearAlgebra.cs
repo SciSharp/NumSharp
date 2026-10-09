@@ -43,7 +43,24 @@ namespace NumSharp
         ///     (when <c>a.ndim >= 1</c> and <c>b.ndim >= 2</c>) and hands the pair to the very same
         ///     <c>PyArray_MatrixProduct2</c> that backs <c>np.dot</c> — which is why an unaligned
         ///     <c>inner</c> reports <paramref name="b"/>'s shape ALREADY TRANSPOSED.
+        ///     <para><see cref="NDAnchoredAttribute"/>: the managed product reads both operands' raw addresses in
+        ///     <c>Dot</c>, an engine method that opens no scope, so the weaver roots <paramref name="a"/> and
+        ///     <paramref name="b"/> here until the product returns — a caller's temporary operand
+        ///     (<c>np.inner(a, np.arange(n))</c>) cannot be collected under the kernel. An override does not inherit
+        ///     the mark.</para>
         /// </remarks>
+        /// <param name="a">The first operand.</param>
+        /// <param name="b">The second operand; its last two axes are swapped (a view) before the product.</param>
+        /// <returns>The inner product, shape <c>a.shape[:-1] + b.shape[:-1]</c>.</returns>
+        /// <exception cref="IncorrectShapeException">The last axes do not align (NumPy's "shapes ... not aligned" text,
+        ///     with <paramref name="b"/>'s shape transposed).</exception>
+        /// <exception cref="ArgumentException">The same misalignment on the vector-times-matrix path of <c>Dot</c>, which
+        ///     raises the house type of that path with the same NumPy text.</exception>
+        /// <exception cref="TypeError">A fixed-width string operand beside a 0-d one: NumPy's no-loop refusal of the
+        ///     <c>multiply</c> it computes.</exception>
+        /// <exception cref="ValueError">A fixed-width string operand otherwise: "data type must provide an itemsize" (the
+        ///     string product has no item size to allocate).</exception>
+        [NDAnchored]
         public virtual NDArray Inner(NDArray a, NDArray b)
         {
             // inner of a 0-d operand is a multiply (its string loops answer); otherwise NumPy's dot checks run on the

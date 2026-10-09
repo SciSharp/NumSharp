@@ -20,6 +20,12 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentException">An empty reduction ("zero-size array to reduction operation maximum which has
         ///     no identity", NumPy's ValueError).</exception>
         /// <exception cref="StringComputationNotSupportedException">A string input NumPy computes on (the next phase).</exception>
+        /// <remarks><see cref="NDAnchoredAttribute"/>: the reduction engines read <paramref name="arr"/>'s raw address
+        ///     (the float16 walks and the exact schedules among them), and every front door — <c>np.max</c>,
+        ///     <c>np.amax</c>, <c>ndarray.max</c>, <see cref="AMax"/> — reaches them through this method, which opens no
+        ///     scope; the weaver roots <paramref name="arr"/> until it returns, so a caller's temporary cannot be collected
+        ///     under the kernel.</remarks>
+        [NDAnchored]
         public override NDArray ReduceAMax(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null)
         {
             // Text, or a string dtype= request: NumPy's max checks its arguments first (the axis, and the dtype= class where

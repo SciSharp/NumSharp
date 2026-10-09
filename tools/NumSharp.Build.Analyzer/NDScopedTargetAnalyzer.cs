@@ -40,7 +40,8 @@ namespace NumSharp.Build.Analyzer
     ///     <c>build_property.NumSharpDisableWeaverMissingWarning</c> not set — this analyzer reports NDW013,
     ///     a WARNING, at every member the weaver WOULD have woven: a member carrying <c>[NDScoped]</c>/
     ///     <c>[NDScopedAsync]</c> itself, an override/implementation inheriting one (from this assembly or
-    ///     another), and a method with an own or inherited <c>[NDScopedExit]</c> parameter. It is the
+    ///     another), a method with an own or inherited <c>[NDScopedExit]</c> parameter, and a method carrying
+    ///     <c>[NDAnchored]</c> (whose operands would go unrooted). It is the
     ///     PRIMARY reporter (per site, IDE-visible); the MSBuild text scan in NumSharp's targets is the
     ///     fallback for a compile the analyzer is not applied to, and yields when it is. Absent property =
     ///     unknown (a source-mode build importing neither targets file) = silent. A member the gate rejects
@@ -120,8 +121,17 @@ namespace NumSharp.Build.Analyzer
             "[NDScopedExit] used, but the weaver is not installed",
             "[NDScopedExit] on parameter {0} of '{1}'{2} has no effect: the NumSharp.Build package is not installed (or weaving is disabled), so the argument is NOT detached from the caller's NDScope and may be reclaimed while '{1}' still holds it. " + InstallHint + ", or detach the argument by hand with NDScope.Detach");
 
+        /// <summary>
+        ///     NDW013 at a method carrying <c>[NDAnchored]</c> (an unscoped entry point whose operands the weaver roots) that
+        ///     draws no other NDW013: without the weaver its parameters are not rooted, so an operand the caller passes as a
+        ///     temporary can be collected while a kernel inside the method still reads it.
+        /// </summary>
+        internal static readonly DiagnosticDescriptor Nw013Anchored = Warning013("NDW013",
+            "[NDAnchored] used, but the weaver is not installed",
+            "[NDAnchored] on '{0}' has no effect: the NumSharp.Build package is not installed (or weaving is disabled), so the attribute is INERT — the method's operands are not rooted, and an operand the caller passes as a temporary can be collected while a kernel in '{0}' still reads it. " + InstallHint + ", or keep the operands alive by hand");
+
         public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-            ImmutableArray.Create(Nw002, Nw003, Nw005, Nw006, Nw009, Nw010, Nw011, Nw013, Nw013Inherited, Nw013Exit, Nw015);
+            ImmutableArray.Create(Nw002, Nw003, Nw005, Nw006, Nw009, Nw010, Nw011, Nw013, Nw013Inherited, Nw013Exit, Nw013Anchored, Nw015);
 
         public override void Initialize(AnalysisContext context)
         {
@@ -227,6 +237,7 @@ namespace NumSharp.Build.Analyzer
                 if (ownExit.Length > 0)
                 {
                     report(Diagnostic.Create(Nw013Exit, Loc(m), ParameterNames(m, ownExit), Display(m), ""));
+                    inertReported = true;
                 }
                 else
                 {
@@ -236,9 +247,16 @@ namespace NumSharp.Build.Analyzer
                         var positions = ScopeInheritance.OwnExitParameters(source, k).Where(i => i < m.Parameters.Length).ToArray();
                         report(Diagnostic.Create(Nw013Exit, Loc(m), ParameterNames(m, positions), Display(m),
                             " (inherited from '" + Display(source) + "')"));
+                        inertReported = true;
                     }
                 }
             }
+
+            // NDW013 ([NDAnchored]): the operand-root mark of an unscoped entry point, own attribute only (it is not
+            // inherited). Reported only when no other NDW013 already named this method — the fix is the same package. A
+            // scoped method carrying it too is the weaver's NDW019, not a second warning here.
+            if (weaverInactive && !inertReported && hasBody && HasAttr(m, k.AnchoredAttr))
+                report(Diagnostic.Create(Nw013Anchored, Loc(m), Display(m)));
         }
 
         private static void AnalyzeProperty(IPropertySymbol p, KnownTypes k, bool weaverInactive, Action<Diagnostic> report)
