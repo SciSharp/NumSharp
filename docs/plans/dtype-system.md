@@ -498,5 +498,6 @@ oracle sections closed the gaps between "NumPy refuses" and "NumPy computes":
   portable `linalg_empty.jsonl` tier, plan `api-parameter-parity.md` X34.)
 
 **Not yet:** datetime storage/kernels/NaT/ISO (C — `docs/plans/datetime64.md`); Stage D phase 2 (computing on text —
-comparisons, `np.strings`, sorting, `add`/`multiply` loops, text ↔ number casts, the gated corpus is ready) and NEP 55
+comparisons, `np.strings`, sorting, `add`/`multiply` loops, text ↔ number casts, the gated corpus is ready; planned in
+`docs/plans/strings-phase2.md`: the techniques, measured against NumPy, and eight subphases P2.0–P2.7) and NEP 55
 `StringDType` (phase 3).
