@@ -1432,7 +1432,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     - ravel_multi_index 1.76–2.46× (C and F pairs).
 
 - [x] **X38 np.nditer's construction checks were not NumPy's: house shape errors, accepted inputs NumPy refuses, and the
-  refusals in another order.** Done 2026-10-09 (this commit; found by the np.nditer unit-test expansion, the request
+  refusals in another order.** Done 2026-10-09 (`6154a2e9`; found by the np.nditer unit-test expansion, the request
   "increase unit test coverage for np.nditer and np.nditer over strings").
   - Proof (NumPy 2.4.2; a 65-case construction differential replayed through both libraries):
     - `no_broadcast` raised `InvalidOperationException` "non-broadcastable operand with shape (3) …"; NumPy's ValueError
@@ -1818,7 +1818,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   itershape entries deduced, and the stride pass's refusals — `no_broadcast`, the explicit reduction length, the
   reduction rule — in one ordered loop). The unit suites `np.nditer.{Construction,Protocol,Strings}.Test.cs` (51 / 94 /
   59 tests) written by the coverage request that found it; `grow_inner`'s chunking pinned open
-  (`OpenBugs.NditerGrowInner.cs`). Findings 63-67 recorded. Commit: this commit.
+  (`OpenBugs.NditerGrowInner.cs`). Findings 63-67 recorded. Commit: `6154a2e9`.
 
 - **2026-10-08**: X37 done (np.argwhere / np.flatnonzero / np.unravel_index return NumPy's views of one buffer; the
   neighbours: unravel_index's error order and types, `shape=()` and a reciprocal-division kernel; ravel_multi_index's
