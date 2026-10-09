@@ -81,8 +81,11 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         public void Lifetime_LT08_CopytoWhere() => AssertGapsClosed("LT08");
 
         /// <summary>
-        ///     LT09 — <c>np.copyto</c> across dtypes: <c>NDIter.Copy</c>'s contiguous cast kernel reads the source storage
-        ///     with no later use (a shared path: assignments that cast run through it too). A short window — a rare hit.
+        ///     LT09 — <c>np.copyto</c> across dtypes, and every <c>TensorEngine.Cast</c> (<c>NDIter.CopyAs</c>) whose caller
+        ///     never uses the source again (<c>np.linalg.norm</c> of an integer array casts it with <c>ToFloating</c>):
+        ///     <c>NDIter.Copy(NDArray, NDArray)</c> drops the source NDArray and copies storage to storage, so the storage-level
+        ///     cast kernel runs over a buffer only that NDArray's counted reference kept alive. <c>astype</c> is not affected:
+        ///     it reads its receiver on a later branch, which the JIT reports live across the cast.
         /// </summary>
         /// <exception cref="AssertFailedException">A carved LT09 case still diverges (the gap is open).</exception>
         [TestMethod, TestCategory("OpenBugs")]
@@ -147,7 +150,11 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         [TestMethod, TestCategory("OpenBugs")]
         public void Lifetime_LT19_MatrixVector() => AssertGapsClosed("LT19");
 
-        /// <summary>LT20 — <c>np.dot(matrix, matrix)</c>: <c>DotNDMDSimdDouble</c> reads both operands.</summary>
+        /// <summary>
+        ///     LT20 — <c>np.dot(matrix, matrix)</c>: <c>MultiplyMatrix</c> → <c>TryMatMulSimd</c> hands both operands' raw
+        ///     pointers to <c>SimdMatMul.MatMulDouble</c> / <c>MatMulFloat</c> and neither is touched again (float32 too: the
+        ///     scaled tier's <c>dot_ata</c>).
+        /// </summary>
         /// <exception cref="AssertFailedException">A carved LT20 case still diverges (the gap is open).</exception>
         [TestMethod, TestCategory("OpenBugs")]
         public void Lifetime_LT20_DotMatrixMatrix() => AssertGapsClosed("LT20");
@@ -204,5 +211,18 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         /// <exception cref="AssertFailedException">A carved LT27 case still diverges (the gap is open).</exception>
         [TestMethod, TestCategory("OpenBugs")]
         public void Lifetime_LT27_ToMuliDimArray() => AssertGapsClosed("LT27");
+
+        /// <summary>
+        ///     LT28 — <c>np.unique_values</c> and <c>np.unique_counts</c> of an integer-family or complex array: the hash path
+        ///     (<c>UniqueHashSortedInt</c> / <c>UniqueHashSortedComplex</c>) copies the keys out of the receiver with
+        ///     <c>ExtractKeysOnly</c> and no caller touches the receiver again, so a temporary input can be freed during the
+        ///     copy. <c>np.unique</c> reaches the same path but keeps its receiver (the instance <c>unique</c> uses it after
+        ///     the flat call on its <c>return_inverse</c> path), and the float dtypes take the sort path, whose callers use
+        ///     the receiver after the copy: their cases are in the gate. Found by the scaled tier
+        ///     (<see cref="LifetimeScaled"/>: <c>unique_counts</c> of int32).
+        /// </summary>
+        /// <exception cref="AssertFailedException">A carved LT28 case still diverges (the gap is open).</exception>
+        [TestMethod, TestCategory("OpenBugs")]
+        public void Lifetime_LT28_UniqueHash() => AssertGapsClosed("LT28");
     }
 }

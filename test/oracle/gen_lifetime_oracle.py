@@ -71,8 +71,8 @@ GAP_DIR = CORPUS
 #: Elements of a 1-D operand: 2 MB of float64, so a kernel over it runs long enough (~0.2-2 ms) for a forced
 #: collection to land inside it; 2-D operands are SIDE x SIDE of the same size. Calls whose window is short take larger
 #: operands so a lost anchor is caught reliably: the bool-mask scans 8x elements (2 MB, a byte each), a cast, a mask
-#: scatter, a float16 reduction and a factorization's input copy 4x, and the two memcpy-fast sites (np.all's SIMD scan,
-#: ToMuliDimArray's copy) 16 MB. ``--bits`` changes both for a
+#: scatter, a float16 reduction and a factorization's input copy 4x, and the memcpy-fast sites (np.all's SIMD scan,
+#: ToMuliDimArray's copy, the unique hash path's key copy) 16 MB. ``--bits`` changes both for a
 #: classification run (a larger operand widens every window; the committed corpus uses the default).
 N = 1 << 18
 SIDE = 512
@@ -394,6 +394,9 @@ OPS = {
     "searchsorted": lambda a, p: np.searchsorted(a[0], a[1]),
     "unique": lambda a, p: np.unique(a[0]),
     "unique_counts": lambda a, p: tuple(np.unique_counts(a[0])),
+    # NumPy's unique_values returns integer and complex values in its hash table's bucket order (platform-specific);
+    # NumSharp returns the same set sorted ([Misaligned], identical as a set), so the answer is recorded sorted.
+    "unique_values": lambda a, p: np.sort(np.unique_values(a[0])),
     "isin": lambda a, p: np.isin(a[0], a[1]),
     "intersect1d": lambda a, p: np.intersect1d(a[0], a[1]),
     "union1d": lambda a, p: np.union1d(a[0], a[1]),
@@ -693,6 +696,13 @@ def _cases():
         ("searchsorted", [mod("float64", [N], N), _F(start=5, mod_=991)], {}, True, False),
         ("unique", [_F(start=5, mod_=991)], {}, True, False),
         ("unique_counts", [_F(start=5, mod_=991)], {}, True, False),
+        # The hash path (integer family, complex): its window is one memcpy of the keys, so 16 MB operands. np.unique
+        # reaches it too but keeps its receiver (gate cases); unique_counts / unique_values lose it (LT28).
+        ("unique", [mod("int64", [8 * N], 1000)], {}, True, False),
+        ("unique", [cmod([4 * N], 97, 89)], {}, True, False),
+        ("unique_counts", [mod("int64", [8 * N], 1000)], {}, True, False),
+        ("unique_counts", [cmod([4 * N], 97, 89)], {}, True, False),
+        ("unique_values", [mod("int32", [16 * N], 1000)], {}, True, False),
         ("isin", [_F(), mod("float64", [64], 64)], {}, True, False),
         ("isin", [mod("float64", [64], 64), _F()], {}, True, False),
         ("intersect1d", [_F(), _F(start=5, mod_=991)], {}, True, False),
@@ -724,6 +734,8 @@ def _cases():
         ("solve", [eye(512, 4096.0, 5), mod("float64", [512], 16)], {}, False, False),
         ("inv", [eye(512, 4096.0, 5)], {}, False, False),
         ("norm", [_F(**small16)], {}, True, False),
+        # An integer operand is cast to float64 first (ToFloating -> TensorEngine.Cast): the LT09 site, 8 MB.
+        ("norm", [mod("int64", [4 * N], 16)], {}, True, False),
         ("matrix_power", [mod("float64", [64, 64], 3)], {}, True, False),
         ("cov", [mod("float64", [8, N // 8], 16)], {}, False, False),
         ("corrcoef", [mod("float64", [8, N // 8], 16)], {}, False, False),
@@ -849,7 +861,9 @@ GAPS = {
     "LT06": "np.put_along_axis: PutAlongAxisCore reads the index and value buffers (Indexing/np.put_along_axis.cs)",
     "LT07": "np.where(c, x, y): WhereKernelDispatch reads cond, x and y (APIs/np.where.cs)",
     "LT08": "np.copyto(where=): CopytoMaskedRaw reads the source and the mask (Manipulation/np.copyto.cs)",
-    "LT09": "np.copyto across dtypes: NDIter.Copy's contiguous cast kernel reads the source (Backends/Iterators/NDIter.cs)",
+    "LT09": "np.copyto across dtypes, and every TensorEngine.Cast (NDIter.CopyAs) whose caller never uses the source "
+            "again (np.linalg.norm of an integer array): NDIter.Copy(NDArray, NDArray) drops the source NDArray and copies "
+            "storage to storage (Backends/Iterators/NDIter.cs)",
     "LT10": "np.max(initial=, where=): RunMaxMin reads the input (Default.Reduction.MinMax.Keywords.cs)",
     "LT11": "np.max of float16: HalfMinMaxReduce reads the input (Default.Reduction.MinMax.Half.cs)",
     "LT12": "np.cumsum / np.cumprod (flat): ScanElementwiseFlat reads the input (Default.Reduction.CumAdd.cs)",
@@ -860,7 +874,8 @@ GAPS = {
     "LT17": "np.reciprocal of integers: ReciprocalInteger reads the input (Default.Reciprocal.cs)",
     "LT18": "np.dot / np.inner of two vectors: DotInner1D reads both (Default.Dot.Fused.cs)",
     "LT19": "np.dot(matrix, vector) / np.matvec / np.vecmat: the managed product reads the matrix (Backends/Default/Math/BLAS/)",
-    "LT20": "np.dot(matrix, matrix): DotNDMDSimdDouble reads both operands (Default.Dot.NDMD.cs)",
+    "LT20": "np.dot(matrix, matrix): MultiplyMatrix -> TryMatMulSimd hands both operands' pointers to "
+            "SimdMatMul.MatMulDouble / MatMulFloat (Default.MatMul.2D2D.cs)",
     "LT21": "np.linalg.det / inv / solve: ManagedLu reads a and b (Backends/Default/LinearAlgebra/ManagedLu.cs)",
     "LT22": "np.convolve / np.correlate: SlidingCorrelate reads the data and the kernel (Math/NDArray.SlidingDot.cs)",
     "LT23": "numpy.polynomial polyder: NDPolyCalc.TryDirectSource reads the series in place (NDPolyCalc.cs)",
@@ -868,7 +883,15 @@ GAPS = {
     "LT25": "the ! operator of a bool array: NDArray.operator! reads its operand (NDArray.NOT.cs)",
     "LT26": "np.all of a bool array (flat): NDIter.ReduceBool reads the input (Default.All.cs, NDIter.cs)",
     "LT27": "NDArray.ToMuliDimArray: the copy reads Storage.Address with no later use (NDArrayToMultiDimArray.cs)",
+    "LT28": "np.unique_values / np.unique_counts of integer-family and complex arrays: the hash path's ExtractKeysOnly "
+            "copies the keys out of the receiver, which no caller touches again (NDArray.unique.Hash.cs, "
+            "NDArray.unique.Kwargs.cs)",
 }
+
+#: The dtypes np.unique_values and np.unique_counts send through the hash path (UniqueHashSortedInt /
+#: UniqueHashSortedComplex); float16 / float32 / float64 take the sort path, whose callers use the receiver after the
+#: key copy, so their cases stay in the gate.
+_HASH_UNIQUE_DTYPES = {"bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "complex128"}
 
 
 def _temps(args):
@@ -908,6 +931,8 @@ def _gap_of(op, tag, args, params):
         return "LT07" if args[1]["dtype"] != "U6" and t & {0, 1, 2} else None
     if op == "copyto":
         return "LT09" if args[1]["dtype"] != args[0]["dtype"] and 1 in t else None
+    if op == "norm":
+        return "LT09" if not dt0.startswith(("float", "complex")) and 0 in t else None
     if op == "max":
         return "LT11" if dt0 == "float16" and "axis" not in params and 0 in t else None
     if op in ("cumsum", "cumprod"):
@@ -926,6 +951,10 @@ def _gap_of(op, tag, args, params):
         return "LT22" if 0 in t else None      # the kernel is reversed into a copy convolve owns
     if op == "all":
         return "LT26" if "axis" not in params and dt0 == "bool" and 0 in t else None
+    if op in ("unique_counts", "unique_values"):
+        # np.unique itself reaches the same hash path but keeps its receiver: the instance unique uses it after the flat
+        # call on its return_inverse path, so the JIT reports it live across the call (its cases are in the gate).
+        return "LT28" if dt0 in _HASH_UNIQUE_DTYPES and 0 in t else None
     return None
 
 

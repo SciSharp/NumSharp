@@ -183,6 +183,9 @@ namespace NumSharp.Tests.Fuzz.Lifetime
             ["searchsorted"] = (a, c) => np.searchsorted(a[0](), a[1]()),
             ["unique"] = (a, c) => (NDArray)np.unique(a[0]()),
             ["unique_counts"] = (a, c) => (NDArray[])np.unique_counts(a[0]()),
+            // NumSharp returns unique_values sorted (NumPy's hash order is platform-specific); the generator records
+            // NumPy's values sorted, so the two compare byte for byte.
+            ["unique_values"] = (a, c) => np.unique_values(a[0]()),
             ["isin"] = (a, c) => np.isin(a[0](), a[1]()),
             ["intersect1d"] = (a, c) => np.intersect1d(a[0](), a[1]()),
             ["union1d"] = (a, c) => np.union1d(a[0](), a[1]()),

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 
 namespace NumSharp.Tests.Fuzz.Lifetime
 {
@@ -17,7 +18,8 @@ namespace NumSharp.Tests.Fuzz.Lifetime
     /// <param name="Wrong">Stressed repetitions whose bytes differed from the reference run.</param>
     /// <param name="Threw">Stressed repetitions that threw.</param>
     /// <param name="First">The first divergence or exception, for the report.</param>
-    /// <param name="Crashed">True when the child process died inside this case (a fatal access violation).</param>
+    /// <param name="Crashed">True when the child process died inside this case (a fatal access violation), or hung in it
+    ///     until the watchdog killed it (<see cref="LifetimeChildProcess.CaseTimeout"/>).</param>
     /// <param name="Collections">The collections forced while the case's repetitions ran.</param>
     internal sealed record LifetimeOutcome(int Index, string Id, string Gap, string Reference, int Wrong, int Threw,
         string First, bool Crashed, int Collections)
@@ -42,8 +44,16 @@ namespace NumSharp.Tests.Fuzz.Lifetime
     /// </summary>
     internal static class LifetimeChildProcess
     {
-        /// <summary>The longest one child process may run before it is killed and its current case reported as hung.</summary>
-        public static readonly TimeSpan ChildTimeout = TimeSpan.FromMinutes(10);
+        /// <summary>
+        ///     The longest one CASE may run — the child prints nothing new (its next <c>BEGIN</c> line) for this long — before
+        ///     the child is killed and the case reported as hung.
+        /// </summary>
+        /// <remarks>
+        ///     A limit per case, not per child: a discovery run (<c>NUMSHARP_LIFETIME_SCALED_REPS=96</c>) keeps one child busy
+        ///     for over ten minutes, and a whole-child limit killed it at whichever case it had reached, reporting that case
+        ///     as hung.
+        /// </remarks>
+        public static readonly TimeSpan CaseTimeout = TimeSpan.FromMinutes(5);
 
         /// <summary>
         ///     Replays a lifetime corpus file in child processes.
@@ -56,7 +66,46 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         ///     (the harness itself is broken, not a case).</exception>
         public static LifetimeReplay Run(string fileName, int reps, string gap = null)
         {
-            var cases = LifetimeCase.ReadAll(LifetimeCase.CorpusPath(fileName));
+            var cases = LifetimeCase.ReadAll(LifetimeCase.CorpusPath(fileName)).Select(c => (c.Index, c.Id, c.Gap)).ToList();
+            return RunCore(fileName, cases, reps, gap);
+        }
+
+        /// <summary>
+        ///     Replays a scaled-tier selection (<see cref="LifetimeScaled"/>) in child processes: the selection is written
+        ///     to a temporary file the children read, so a child restarted after a crash does not parse the corpus again.
+        /// </summary>
+        /// <param name="selection">The selected cases, already filtered (the gate's cases, or the known gaps'); their
+        ///     indices must be their positions (the child's resume key).</param>
+        /// <param name="reps">Stressed runs per case.</param>
+        /// <returns>The replay, in selection order.</returns>
+        /// <exception cref="InvalidOperationException">A child could not be started, or died before its first case.</exception>
+        /// <exception cref="IOException">The selection file cannot be written.</exception>
+        public static LifetimeReplay RunScaled(List<LifetimeScaled.ScaledCase> selection, int reps)
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"numsharp-lifetime-scaled-{Guid.NewGuid():N}.jsonl");
+            LifetimeScaled.WriteSelection(path, selection);
+            try
+            {
+                return RunCore(LifetimeScaled.ModePrefix + path, selection.Select(s => (s.Index, s.Id, s.Gap)).ToList(), reps, null);
+            }
+            finally
+            {
+                try { File.Delete(path); } catch (IOException) { }
+            }
+        }
+
+        /// <summary>
+        ///     The replay loop shared by both tiers: spawn a child from <c>start</c>, read its report, and after a crash
+        ///     record the case its last <c>BEGIN</c> line names and resume after it.
+        /// </summary>
+        /// <param name="fileArg">The child's file argument (a lifetime corpus file, or <c>scaled:&lt;selection&gt;</c>).</param>
+        /// <param name="cases">Every case's (index, id, gap), indexed by position (the index the child prints).</param>
+        /// <param name="reps">Stressed runs per case.</param>
+        /// <param name="gap">The gap filter, or null.</param>
+        /// <returns>The replay.</returns>
+        /// <exception cref="InvalidOperationException">A child could not be started, or died before its first case.</exception>
+        private static LifetimeReplay RunCore(string fileArg, IReadOnlyList<(int Index, string Id, string Gap)> cases, int reps, string gap)
+        {
             var outcomes = new Dictionary<int, LifetimeOutcome>();
             int controlHits = -1, controlReps = 0, runs = 0;
             int start = 0;
@@ -66,7 +115,7 @@ namespace NumSharp.Tests.Fuzz.Lifetime
                 string report = Path.Combine(Path.GetTempPath(), $"numsharp-lifetime-{Guid.NewGuid():N}.jsonl");
                 try
                 {
-                    var (exit, stdout, stderr, timedOut) = Spawn(fileName, start, reps, report, gap);
+                    var (exit, stdout, stderr, timedOut) = Spawn(fileArg, start, reps, report, gap);
                     bool done = false;
                     if (File.Exists(report))
                     {
@@ -107,7 +156,7 @@ namespace NumSharp.Tests.Fuzz.Lifetime
                         throw new InvalidOperationException(
                             $"the lifetime child died before its first case (exit {exit}{(timedOut ? ", timed out" : "")}):\n{Tail(stderr)}\n{Tail(stdout)}");
                     var c = cases[crashed];
-                    string why = timedOut ? $"timed out after {ChildTimeout}" : $"process died (exit 0x{exit:X8}): {FirstCrashLine(stderr, stdout)}";
+                    string why = timedOut ? $"hung: no progress for {CaseTimeout}" : $"process died (exit 0x{exit:X8}): {FirstCrashLine(stderr, stdout)}";
                     outcomes[crashed] = new LifetimeOutcome(c.Index, c.Id, c.Gap, "ok", 0, 0, why, true, 0);
                     start = crashed + 1;
                     if (start >= cases.Count)
@@ -122,15 +171,15 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         }
 
         /// <summary>Starts one child and waits for it.</summary>
-        /// <param name="fileName">The corpus file in <c>Fuzz/Lifetime/corpus/</c>.</param>
+        /// <param name="fileArg">The child's file argument: a corpus file in <c>Fuzz/Lifetime/corpus/</c>, or
+        ///     <c>scaled:&lt;selection file&gt;</c> for the scaled tier (<see cref="LifetimeScaled.ModePrefix"/>).</param>
         /// <param name="start">The first case index to replay.</param>
         /// <param name="reps">Stressed repetitions per case.</param>
         /// <param name="report">The report file the child appends to.</param>
         /// <param name="gap">The gap filter, or null.</param>
         /// <returns>The exit code (-1 when the timeout killed it), the captured stdout / stderr, and whether it timed out.</returns>
         /// <exception cref="InvalidOperationException">The child could not be started.</exception>
-        /// <exception cref="InvalidOperationException">The child could not be started.</exception>
-        private static (int exit, string stdout, string stderr, bool timedOut) Spawn(string fileName, int start, int reps, string report, string gap)
+        private static (int exit, string stdout, string stderr, bool timedOut) Spawn(string fileArg, int start, int reps, string report, string gap)
         {
             string dll = typeof(LifetimeChild).Assembly.Location;
             var psi = new ProcessStartInfo(DotnetHost())
@@ -144,7 +193,7 @@ namespace NumSharp.Tests.Fuzz.Lifetime
             psi.ArgumentList.Add("exec");
             psi.ArgumentList.Add(dll);
             psi.ArgumentList.Add(LifetimeChild.Flag);
-            psi.ArgumentList.Add(fileName);
+            psi.ArgumentList.Add(fileArg);
             psi.ArgumentList.Add(start.ToString());
             psi.ArgumentList.Add(reps.ToString());
             psi.ArgumentList.Add(report);
@@ -159,15 +208,28 @@ namespace NumSharp.Tests.Fuzz.Lifetime
             using var p = Process.Start(psi) ?? throw new InvalidOperationException("could not start the lifetime child");
             var stdout = new StringBuilder();
             var stderr = new StringBuilder();
-            p.OutputDataReceived += (_, e) => { if (e.Data != null) lock (stdout) stdout.AppendLine(e.Data); };
+            // The child prints a BEGIN line before each case, so the time since its last stdout line is the time the
+            // current case has run: the watchdog below kills only a case that hangs, however long the whole child runs.
+            long lastOutput = Stopwatch.GetTimestamp();
+            p.OutputDataReceived += (_, e) =>
+            {
+                if (e.Data == null)
+                    return;
+                lock (stdout) stdout.AppendLine(e.Data);
+                Interlocked.Exchange(ref lastOutput, Stopwatch.GetTimestamp());
+            };
             p.ErrorDataReceived += (_, e) => { if (e.Data != null) lock (stderr) stderr.AppendLine(e.Data); };
             p.BeginOutputReadLine();
             p.BeginErrorReadLine();
-            bool timedOut = !p.WaitForExit((int)ChildTimeout.TotalMilliseconds);
-            if (timedOut)
+            bool timedOut = false;
+            while (!p.WaitForExit(1000))
             {
+                if (Stopwatch.GetElapsedTime(Interlocked.Read(ref lastOutput)) <= CaseTimeout)
+                    continue;
+                timedOut = true;
                 try { p.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
                 p.WaitForExit();
+                break;
             }
             p.WaitForExit();   // drains the async readers
             lock (stdout) lock (stderr)

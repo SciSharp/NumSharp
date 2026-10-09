@@ -46,8 +46,9 @@ namespace NumSharp.Tests.Fuzz.Lifetime
     ///     <para>
     ///     <b>Protocol.</b> <c>--numsharp-lifetime &lt;file&gt; &lt;start&gt; &lt;reps&gt; &lt;report&gt; [gap]</c>: replay the
     ///     cases of <c>Fuzz/Lifetime/corpus/&lt;file&gt;</c> from line <c>start</c> (only gap <c>gap</c>'s, when given),
-    ///     each with <c>reps</c> stressed repetitions. Before each case the child prints <c>BEGIN &lt;index&gt;</c> on
-    ///     stdout (flushed), so a crash names its case; after it, one JSON line goes to the report (appended and flushed,
+    ///     each with <c>reps</c> stressed repetitions; a file argument <c>scaled:&lt;selection file&gt;</c> replays a
+    ///     scaled-tier selection instead (<see cref="LifetimeScaled.RunChild"/>), with the same report format. Before each
+    ///     case the child prints <c>BEGIN &lt;index&gt;</c> on stdout (flushed), so a crash names its case; after it, one JSON line goes to the report (appended and flushed,
     ///     so a later crash keeps it). The first report line is the CONTROL: <see cref="ControlCopy"/> — the bug pattern
     ///     written by hand — replayed under the same stress; zero corrupted repetitions means this run could not have
     ///     seen a lost anchor, and the parent reports the run inconclusive instead of passing it.
@@ -62,9 +63,11 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         public const int ControlReps = 40;
 
         /// <summary>Runs the child.</summary>
-        /// <param name="args"><c>--numsharp-lifetime file start reps report [gap]</c>.</param>
+        /// <param name="args"><c>--numsharp-lifetime file start reps report [gap]</c>; <c>file</c> is a lifetime corpus
+        ///     file, or <c>scaled:&lt;selection file&gt;</c> for the scaled tier.</param>
         /// <returns>0 when every requested case was replayed.</returns>
         /// <exception cref="ArgumentException">The command line is malformed.</exception>
+        /// <exception cref="IOException">The corpus, the selection or the report file cannot be accessed.</exception>
         public static int Run(string[] args)
         {
             if (args.Length < 5)
@@ -74,6 +77,10 @@ namespace NumSharp.Tests.Fuzz.Lifetime
             int reps = int.Parse(args[3]);
             string report = args[4];
             string gap = args.Length > 5 ? args[5] : null;
+
+            // The scaled tier names a selection file instead of a corpus file (see LifetimeScaled).
+            if (file.StartsWith(LifetimeScaled.ModePrefix, StringComparison.Ordinal))
+                return LifetimeScaled.RunChild(file.Substring(LifetimeScaled.ModePrefix.Length), start, reps, report, gap);
 
             var cases = LifetimeCase.ReadAll(LifetimeCase.CorpusPath(file));
             using var thief = new LifetimeThief();
@@ -186,7 +193,7 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         /// <summary>A one-line description of an exception (type and the first line of the message).</summary>
         /// <param name="e">The exception.</param>
         /// <returns>The description.</returns>
-        private static string Describe(Exception e) => e.GetType().Name + ": " + e.Message.Split('\n')[0];
+        internal static string Describe(Exception e) => e.GetType().Name + ": " + e.Message.Split('\n')[0];
 
         /// <summary>True on the host the corpus's host-dependent values were recorded on (win-amd64).</summary>
         public static bool IsPinnedHost =>
@@ -199,7 +206,7 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         /// <param name="thief">The stress thread.</param>
         /// <returns>How many of <see cref="ControlReps"/> repetitions came back corrupted (0 = no detection power).</returns>
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static int RunControl(LifetimeThief thief)
+        internal static int RunControl(LifetimeThief thief)
         {
             var operand = new LifetimeOperand
             {
@@ -245,7 +252,7 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         /// <param name="report">The report file the parent reads.</param>
         /// <param name="line">The object to serialize.</param>
         /// <exception cref="IOException">The report cannot be written.</exception>
-        private static void Append(string report, object line)
+        internal static void Append(string report, object line)
         {
             using var w = new StreamWriter(report, append: true);
             w.WriteLine(JsonSerializer.Serialize(line));

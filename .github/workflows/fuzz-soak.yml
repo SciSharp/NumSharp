@@ -25,8 +25,9 @@ name: Fuzz Soak
 # the job env below pins NumPy's CPU dispatch below AVX-512.
 #
 # Two more independent jobs (`random-api-lp64` + `random-api-soak`) replay the random-API oracle's families
-# under 10 fresh seeds (see their comment), and `collections-stress`, at the end, runs the concurrent-collection
-# storms at their golden budgets — the per-push CI runs them at the smaller CI budget (see that job's comment).
+# under 10 fresh seeds (see their comment), `collections-stress` runs the concurrent-collection storms at their
+# golden budgets — the per-push CI runs them at the smaller CI budget (see that job's comment) — and
+# `lifetime-scaled`, at the end, replays the scaled lifetime tier at 8x the per-push stress depth.
 
 on:
   schedule:
@@ -450,5 +451,52 @@ jobs:
       with:
         name: collections-stress-results
         path: test/NumSharp.Tests/TestResults/collections-stress.trx
+        if-no-files-found: warn
+        retention-days: 14
+
+  # ── The scaled lifetime tier at discovery depth ──────────────────────────────────────────────────
+  #
+  # test/NumSharp.Tests.Oracle/Fuzz/Lifetime/LifetimeScaled.cs replays every op key of the ordinary corpus with
+  # its operands enlarged into temporaries while a stress thread collects, drains finalizers and poisons the
+  # freed buffers (a lost GC anchor frees an operand under its kernel). Detection is a race: per-push CI runs 4
+  # stressed calls per case (about a minute per framework), which catches a long window at once and a short
+  # one (a key copy, a cast) only sometimes. THIS job runs 32 per case every night, on Linux (the per-push
+  # Oracle legs run all three OSes at the CI depth), so a short window an edit opened is found within a day.
+  # A red run is never noise — the stress thread only poisons buffers it took from the pool — but a real lost
+  # anchor: map the op key to the open lifetime gap whose site it reaches (KnownScaledGaps), or give the site
+  # a new gap with its own lifetime cases (Fuzz/README.md, "Scaled lifetime tier"). Release only: a Debug
+  # build keeps every local alive and the test is inconclusive. No Python, no OpenBLAS (the managed kernels).
+  lifetime-scaled:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      NUMSHARP_LIFETIME_SCALED_REPS: '32'
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: |
+          8.0.x
+          10.0.x
+
+    - name: Build Oracle
+      run: dotnet build test/NumSharp.Tests.Oracle/NumSharp.Tests.Oracle.csproj --configuration Release -p:NoWarn=CS1591
+
+    - name: Scaled lifetime tier at 32 stressed calls per case (net10.0)
+      shell: bash
+      run: |
+        dotnet test test/NumSharp.Tests.Oracle/NumSharp.Tests.Oracle.csproj \
+          --configuration Release --no-build --framework net10.0 \
+          --filter "Name=LifetimeScaled_EveryOpKey" \
+          --logger "trx;LogFileName=lifetime-scaled.trx"
+
+    - name: Upload lifetime results
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: lifetime-scaled-results
+        path: test/NumSharp.Tests.Oracle/TestResults/lifetime-scaled.trx
         if-no-files-found: warn
         retention-days: 14

@@ -379,10 +379,10 @@ once (`RequireOptimizedBuild`, before any child starts). CI runs Release; a loca
 
 **Gate versus gaps.** `Fuzz/Lifetime/corpus/` (its own directory: the generic sweeps of
 `Fuzz/corpus/` replay every top-level file through the ordinary schema) holds `lifetime.jsonl` — the
-`[FuzzMatrix]` gate `LifetimeOracleTests.Lifetime`, 240 calls with all operands temporary, held to
+`[FuzzMatrix]` gate `LifetimeOracleTests.Lifetime`, 242 calls with all operands temporary, held to
 ZERO divergences (8 repetitions; 14–19 s per framework; `Lifetime_CorpusContract` checks in-process
 that every op key has a C# body and every gap id its own test) — and `lifetime_gaps.jsonl`, the carved cases of
-27 documented gaps (`GAPS` in the generator; every variant of a gap call, each operand temporary
+28 documented gaps (`GAPS` in the generator; every variant of a gap call, each operand temporary
 alone, so a gap names its operand). `Lifetime_KnownGaps` and one `Lifetime_LT<nn>_*` test per gap
 (`LifetimeOracleTests.Gaps.cs`, all `[OpenBugs]`) replay them at 48 repetitions and fail while any
 diverges:
@@ -397,7 +397,7 @@ diverges:
 | LT06 | `np.put_along_axis` | indices + values — `PutAlongAxisCore` (crashes) |
 | LT07 | `np.where(c, x, y)` (numeric) | cond + x + y — `WhereKernelDispatch` |
 | LT08 | `np.copyto(where=)` | source + mask — `CopytoMaskedRaw` |
-| LT09 | `np.copyto` across dtypes | source — `NDIter.Copy`'s contiguous cast kernel (shared) |
+| LT09 | `np.copyto` across dtypes; `np.linalg.norm` of an integer array | source — `NDIter.Copy(NDArray, NDArray)` drops the source NDArray and copies storage to storage (shared: every `TensorEngine.Cast` → `NDIter.CopyAs` whose caller does not use the source again; `astype` reads its receiver later and is safe) |
 | LT10 | `np.max(initial=, where=)` | input — `RunMaxMin` |
 | LT11 | `np.max` of float16 | input — `HalfMinMaxReduce` |
 | LT12 | `np.cumsum` / `np.cumprod` (flat) | input — `ScanElementwiseFlat` |
@@ -408,7 +408,7 @@ diverges:
 | LT17 | `np.reciprocal` of integers | input — `ReciprocalInteger` |
 | LT18 | `np.dot` / `np.inner` of vectors | both — `DotInner1D` |
 | LT19 | `np.dot(M, v)` / `np.matvec` / `np.vecmat` | the matrix (the vector is kept alive) |
-| LT20 | `np.dot(M, M)` | both — `DotNDMDSimdDouble` |
+| LT20 | `np.dot(M, M)` | both — `MultiplyMatrix` → `TryMatMulSimd` → `SimdMatMul.MatMulDouble` / `MatMulFloat` |
 | LT21 | `np.linalg.det` / `inv` / `solve` (no backend) | a + b — `ManagedLu` |
 | LT22 | `np.convolve` / `np.correlate` | data (+ correlate's kernel) — `SlidingCorrelate` |
 | LT23 | `polynomial.polyder` | series — `NDPolyCalc.TryDirectSource` |
@@ -416,6 +416,7 @@ diverges:
 | LT25 | `!` of a bool array | operand — `NDArray.operator !` |
 | LT26 | `np.all` of a bool array (flat) | input — `NDIter.ReduceBool` |
 | LT27 | `NDArray.ToMuliDimArray<T>()` | the receiver |
+| LT28 | `np.unique_values` / `np.unique_counts` (integer family, complex) | the receiver — the hash path's `ExtractKeysOnly` (`np.unique` keeps it) |
 
 **How the carve was drawn — and why a red gate is never noise.** Detection is a race the stress
 thread wins most of the time, never a false positive: the thread only overwrites buffers it took from
@@ -435,7 +436,99 @@ caught), not green.
 
 **Retiring a gap**: fix the site (`GC.KeepAlive` after the kernel), run its `Lifetime_LT<nn>_*` test
 twice in Release (a single clean run of a short-window gap proves little), drop its rule from
-`_gap_of`, regenerate, and run the gate.
+`_gap_of`, regenerate, and run the gate. Then remove the scaled tier's `KnownScaledGaps` entries that
+name the gap (`LifetimeScaled_KnownGapsContract` fails until you do) and run the scaled gate.
+
+### Scaled lifetime tier — every op key with large temporary operands (`Fuzz/Lifetime/LifetimeScaled.cs`) — 2026-10-09
+
+**Why.** The lifetime corpus is hand-written: it covers the calls someone listed. The scaled tier
+needs no NumPy answer, so it reaches every op key the ordinary corpus reaches. For each op key it
+takes up to two success cases of distinct layouts (`LifetimeScaled.Select`; it skips the random,
+iterator, dtype/text, relayout, error, creation, surface and nditer tiers, whose calls are not
+reproducible run to run, return object traces, restate other tiers' calls or only raise; the index
+and masked-array tiers use other case schemas). It enlarges their operands and compares the call
+over temporaries with the same call over held operands — self-referential, like the leak sweep.
+
+**Scaling.** A corpus operand of a few dozen elements gives a collection nanoseconds. `TryScale`
+grows K by 4 from 1 until the call takes 2 ms (`TargetCallMs`) or the largest operand reaches 2 MiB
+(`TargetBytes`), with two strategies: a new leading axis of length K, each slice keeping the corpus
+layout (strides, offset, broadcast axes, the read-only flag); or, for ops that take one rank only,
+K C-ordered copies along axis 0. 0-d and empty operands stay as they are (rebuilt fresh). A strategy
+is not used when it raises or when the result grows faster than linearly (4x the scale may give at
+most 5x the elements plus 64: an outer product, a full convolution). The reference runs twice over
+held operands; two different answers (a random draw, an address) skip the case.
+
+**The verdict** is the lifetime tier's, in the same child process (`scaled:<selection file>`, the
+parent writes the selection once so a child restarted after a crash does not parse the corpus): the
+operand array is built inside the call expression (`InvokeTemporaries`), the stress thread poisons
+the operands' pool buckets, and a run whose fingerprint (dtype, shape and SHA-256 of the C-order
+bytes of every array in the result, through tuples and masked arrays) differs from the reference,
+that raises, or that kills the child is a lost anchor. The same control and Release-only rule apply.
+
+**Gate versus known gaps.** `LifetimeScaled_EveryOpKey` (`[FuzzMatrix]`, 4 stressed calls per case;
+1,045 cases over 554 op keys, 936 scaled, 109 skipped; 50–55 s per framework on Windows and Linux)
+holds every case outside `KnownScaledGaps` to zero divergences, and at least 850 cases must scale (a
+selection or scaling regression fails it). `KnownScaledGaps` maps each op key whose scaled cases lose
+an operand to the OPEN lifetime gap whose site its call reaches, with the path it takes and, where
+only some of its cases reach the site, a predicate (only flat scans, only vector dots, only hash-path
+dtypes, only negative powers): 20 op keys, 33 cases. `LifetimeScaled_KnownGapsContract` holds every
+entry to a gap that is still open (its lifetime cases are still carved) and that still carves a
+selected case; `LifetimeScaled_KnownGaps` (`[OpenBugs]`, 24 stressed calls per case) fails while any
+carved case still loses an operand and prints the count per gap. The tier keeps no gap ids of its
+own: a site it finds that no gap names gets an LT id with dedicated lifetime cases, because a gap's
+pin must not depend on how far a corpus case happens to scale. LT28 came that way.
+
+| Op key | Gap | Path to the site |
+|--------|-----|------------------|
+| `ndarray.take` | LT01 | `np.take` → `ExecuteTakeKernel` reads the index buffer (IndexError from poisoned indices) |
+| `ndarray.put`, `put_selfvals` | LT02 | `np.put` → `PutKernel` reads the index array |
+| `take_along_axis` | LT05 | the gather reads the source and the indices |
+| `argpartition` (with an axis) | LT05 | the replay's `np.take_along_axis(operand, …)`; argpartition itself keeps its operand (NDIter holds it) |
+| `matrix_norm` | LT09 | `ToFloating`'s `TensorEngine.Cast` of an integer matrix → `NDIter.CopyAs` → `NDIter.Copy(NDArray, NDArray)` |
+| `cumsum`, `cumprod`, `out_scan` (flat) | LT12 | `ScanElementwiseFlat` (decimal and float16 scans; `out=` included) |
+| `ndarray.searchsorted` | LT14 | the search kernel |
+| `dot`, `inner` (vectors) | LT18 | `DotInner1D` (`DotGeneric<decimal>`) |
+| `dot_ata` | LT20 | `MultiplyMatrix` → `TryMatMulSimd` → `SimdMatMul.MatMulFloat` |
+| `det`, `slogdet`, `inv`, `matrix_power` (n < 0) | LT21 | `ManagedLu` (no backend) |
+| `convolve`, `correlate` | LT22 | `SlidingCorrelate` |
+| `unique_counts` (integer family, complex) | LT28 | `uniqueCountsFast` → the hash path's `ExtractKeysOnly` |
+
+**What it found (2026-10-09).** Discovery runs at 24 and 96 stressed calls per case found the 20 op
+keys above. Most reach open gaps through paths the lifetime corpus did not exercise: decimal and
+float16 flat scans, decimal vector dots, a float32 `a.T @ a`, integer `np.linalg.norm`, the `ndarray`
+methods, `slogdet` and `matrix_power(n < 0)`, int32 sliding products. Three findings changed the
+lifetime tier: (1) LT28, a new site: `np.unique_values` / `np.unique_counts` of integer-family and
+complex arrays copy the keys out of the receiver (`ExtractKeysOnly`) after the last use of it;
+(2) LT09's site is wider than `np.copyto`: `NDIter.Copy(NDArray, NDArray)` passes only the two
+storages on, so every `TensorEngine.Cast` → `NDIter.CopyAs` whose caller does not read the source
+again loses it (a probe of the bare cast killed the process; `np.linalg.norm` of an int64 array now
+pins it); (3) LT20's site is `MultiplyMatrix` → `TryMatMulSimd`, not `DotNDMDSimdDouble` as the
+lifetime tier said (a 2-D·2-D `np.dot` never reaches `DotNDMD`).
+
+**Traps.**
+- **Liveness is decided per call site over every later path.** `astype` reads `this.Shape` on its
+  non-`'K'` branch, so the JIT reports its receiver live across the cast and `x.astype(np.float64)`
+  of a temporary is safe, while `x.TensorEngine.Cast(x, typeof(double), false)` — the same cast, the
+  call `np.linalg.norm` makes — loses `x` (probed: 0 of 24 runs against 17 of 24). `np.unique` keeps
+  its receiver the same way (its instance `unique` reads `this` on the `return_inverse` branch), so
+  its hash-path cases are gate cases while `np.unique_counts` loses the same receiver.
+- **A pass is not proof.** Decimal `np.take` / `np.put` / `np.place` / `np.putmask` / `np.where`
+  cases reach their gaps' sites but never diverged in 96 runs: at their scaled sizes the window is a
+  gather of a few rows, and the stress thread fills a freed buffer from its end. The lifetime
+  corpus's dedicated cases are what pin each gap.
+- **Attribute a finding before you map it.** The registry's paths were checked with a standalone
+  probe: build the operand inside the call (`F(Temp())`), run a stress thread that collects, drains
+  finalizers and poisons the operand's pool bucket, and set `DOTNET_TieredCompilation=0`. It split
+  `argpartition` (the gather loses the operand 24 of 24 times; argpartition itself 0 of 24) and
+  `matrix_norm` (the cast, not the reductions).
+- **The child watchdog is per case** (`LifetimeChildProcess.CaseTimeout`, 5 minutes without a new
+  `BEGIN` line). A per-child limit of 10 minutes killed a 96-run discovery in its middle and blamed
+  whatever case it had reached.
+
+**Depth.** `NUMSHARP_LIFETIME_SCALED_REPS=N` sets the stressed calls per case (local discovery:
+24 → 3 min, 96 → 11 min); `NUMSHARP_LIFETIME_SCALED_GAP=LTnn` narrows `LifetimeScaled_KnownGaps` to
+one gap. The nightly `lifetime-scaled` job of `fuzz-soak.yml` runs the gate at 32 on Linux, so a
+short window that an edit opens is found within a day.
 
 ## Regenerating the corpus
 
