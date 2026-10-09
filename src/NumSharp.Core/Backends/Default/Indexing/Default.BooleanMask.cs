@@ -122,6 +122,15 @@ namespace NumSharp.Backends
 
             int leadNdim = mask.ndim;
 
+            // NumPy has TWO assignment rules for a boolean index (mapping.c). A mask of the array's own shape is
+            // HAS_BOOL -> array_assign_boolean_subscript: the value must be 0-d or 1-d, and a 1-d value longer
+            // than one element must hold exactly one element per True. Every other mask (a leading prefix, a
+            // 0-d bool, an empty one) is a fancy index -> MapIter's value rule (NDArray.PrepareAssignedValue).
+            bool ownShapeMask = leadNdim == arr.ndim && mask.Shape.dimensions.AsSpan().SequenceEqual(arr.Shape.dimensions);
+            if (ownShapeMask && value.ndim > 1)
+                throw new TypeError("NumPy boolean array indexing assignment requires a 0 or 1-dimensional input, " +
+                                    $"input has {value.ndim} dimensions");
+
             // Trailing block size B = prod(arr.shape[leadNdim:]). An empty trailing block
             // (B == 0 — arr shaped (0,3), or a mask on an array whose last axis a prior basic
             // slice emptied) makes the selection (trueCount,)+trailing EMPTY regardless of the
@@ -131,6 +140,21 @@ namespace NumSharp.Backends
                 blockSize *= arr.Shape.dimensions[d];
 
             long trueCount = CountMaskTrue(mask.MakeGeneric<bool>());
+            if (ownShapeMask)
+            {
+                // array_assign_boolean_subscript: `if (PyArray_NDIM(v) > 0 && PyArray_DIMS(v)[0] != 1)` the length
+                // must equal the True count — also when that count is 0 (an all-False mask refuses a 3-vector).
+                if (value.ndim == 1 && value.Shape.dimensions[0] != 1 && value.Shape.dimensions[0] != trueCount)
+                    throw new ValueError("NumPy boolean array indexing assignment cannot assign " +
+                                         $"{value.Shape.dimensions[0]} input values to the {trueCount} output values where the mask is true");
+            }
+            else if (trueCount != 0 && blockSize != 0 && value.size != 1)
+            {
+                // A prefix mask is a fancy index: leading axes of the value beyond the result's rank are dropped
+                // and a value that still does not fit raises NumPy's "shape mismatch: value array ..." text.
+                value = NDArray.PrepareAssignedValue(value, BooleanMaskResultShape(trueCount, arr, leadNdim).dimensions);
+            }
+
             if (trueCount == 0 || blockSize == 0)
             {
                 // The selection is EMPTY ((trueCount,)+trailing carries a 0 axis). NumPy still
@@ -141,14 +165,8 @@ namespace NumSharp.Backends
                 // buffer when arr / the trailing block is empty — e.g. E03[True] = -7.)
                 if (value.size != 1)
                 {
-                    var emptySel = BooleanMaskResultShape(trueCount, arr, leadNdim);
-                    string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
-                    try { np.broadcast_to(value, emptySel); }
-                    catch (IncorrectShapeException ex)
-                    {
-                        throw new ValueError($"shape mismatch: value array of shape {Tup(value.Shape.dimensions)} " +
-                                             $"could not be broadcast to indexing result of shape {Tup(emptySel.dimensions)}", ex);
-                    }
+                    // MapIter's value rule against the empty selection (leading axes dropped, NumPy's text).
+                    NDArray.PrepareAssignedValue(value, BooleanMaskResultShape(trueCount, arr, leadNdim).dimensions);
                 }
                 return;
             }

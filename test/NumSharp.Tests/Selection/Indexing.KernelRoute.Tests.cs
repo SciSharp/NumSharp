@@ -228,7 +228,10 @@ namespace NumSharp.Tests.Selection
         {
             var a = np.zeros(new Shape(10), np.float64);
             Action act = () => a[np.array(new long[] { 1, 2, 3 })] = np.array(new[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
-            act.Should().Throw<ValueError>().WithMessage("could not broadcast input array from shape (5,) into shape (3,)");
+            // NumPy 2.4.2 (probed): every index-array assignment reports a value that does not fit through
+            // MapIter's broadcast_error, also for a 1-D destination.
+            act.Should().Throw<ValueError>().WithMessage(
+                "shape mismatch: value array of shape (5,) could not be broadcast to indexing result of shape (3,)");
         }
 
         [TestMethod]

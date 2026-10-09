@@ -189,10 +189,13 @@ namespace NumSharp
 
                 if (matrix)
                 {
+                    // NumPy: res = self.makemat(res), where makemat is the matrix CLASS — the result is an
+                    // NDMatrix, and for the 'c' directive the transpose is the matrix's own (.T of a row is a
+                    // column matrix). matrix() copies; the concatenation is fresh, so the matrix takes its
+                    // storage over instead of copying again (the scope reclaims the plain wrapper).
                     int oldndim = res.ndim;
-                    res = asmatrix(res);
-                    if (oldndim == 1 && col)
-                        res = res.T;
+                    NDMatrix mat = NDMatrix.From(res);
+                    res = oldndim == 1 && col ? mat.T : mat;
                 }
 
                 return res;

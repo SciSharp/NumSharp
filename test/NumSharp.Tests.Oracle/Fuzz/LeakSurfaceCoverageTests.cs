@@ -90,6 +90,9 @@ namespace NumSharp.Tests.Fuzz
             ("NDMaskedArray", typeof(NDMaskedArray), false),
             // NDArray<T>'s inherited NDArray surface is the ndarray module's; only its OWN members count.
             ("NDArray<T>", typeof(NumSharp.Generic.NDArray<>), true),
+            // NDMatrix (numpy.matrix): the members it declares — the matrix-only ones and every ndarray member it
+            // re-declares to return a matrix. What it merely inherits is the ndarray module's.
+            ("NDMatrix", typeof(NDMatrix), true),
         };
 
         /// <summary>
@@ -104,6 +107,7 @@ namespace NumSharp.Tests.Fuzz
             ("ndarray", typeof(NDArray)),
             ("NDArray<T>", typeof(NumSharp.Generic.NDArray<>)),
             ("NDMaskedArray", typeof(NDMaskedArray)),
+            ("NDMatrix", typeof(NDMatrix)),
             // Object owners with operators: DType's conversions and safe-cast ordering, the flags object's
             // equality, and poly1d's arithmetic (which allocates a new polynomial per call).
             ("DType", typeof(DType)),
@@ -280,6 +284,34 @@ namespace NumSharp.Tests.Fuzz
         };
 
         /// <summary>
+        ///     NDMatrix operator → the matrix tier's op keys whose cases invoke it (<c>OpRegistry.Matrix.cs</c> maps
+        ///     Python's dunder names onto the C# operators, so the corpus sweep measures them; every other owner's
+        ///     operators are catalogue-only). An operator is credited when ANY of its keys was measured.
+        /// </summary>
+        internal static readonly Dictionary<string, string[]> MatrixOperatorKeys = new(StringComparer.Ordinal)
+        {
+            ["op_Multiply"] = new[] { "matrix.__mul__", "matrix.__rmul__" },
+            ["op_Addition"] = new[] { "matrix.__add__", "matrix.__radd__" },
+            ["op_Subtraction"] = new[] { "matrix.__sub__", "matrix.__rsub__" },
+            ["op_Division"] = new[] { "matrix.__truediv__", "matrix.__rtruediv__" },
+            ["op_Modulus"] = new[] { "matrix.__mod__", "matrix.__rmod__" },
+            ["op_BitwiseAnd"] = new[] { "matrix.__and__", "matrix.__rand__" },
+            ["op_BitwiseOr"] = new[] { "matrix.__or__", "matrix.__ror__" },
+            ["op_ExclusiveOr"] = new[] { "matrix.__xor__", "matrix.__rxor__" },
+            ["op_LeftShift"] = new[] { "matrix.__lshift__" },
+            ["op_RightShift"] = new[] { "matrix.__rshift__" },
+            ["op_UnaryNegation"] = new[] { "matrix.__neg__" },
+            ["op_UnaryPlus"] = new[] { "matrix.__pos__" },
+            ["op_OnesComplement"] = new[] { "matrix.__invert__" },
+            ["op_Equality"] = new[] { "matrix.__eq__" },
+            ["op_Inequality"] = new[] { "matrix.__ne__" },
+            ["op_LessThan"] = new[] { "matrix.__lt__" },
+            ["op_GreaterThan"] = new[] { "matrix.__gt__" },
+            ["op_LessThanOrEqual"] = new[] { "matrix.__le__" },
+            ["op_GreaterThanOrEqual"] = new[] { "matrix.__ge__" },
+        };
+
+        /// <summary>
         ///     The completeness verdict: lists every surface member no measurement covers, then every
         ///     stale mapping/catalogue id and every object owner whose operators are not enumerated. See the
         ///     class remarks for the resolution order.
@@ -391,7 +423,14 @@ namespace NumSharp.Tests.Fuzz
                 return m.Owner == "ndarray" && Has("index.get") && Has("index.set") ? "corpus: index tiers" : null;
 
             if (m.Kind == SurfaceKind.Operator)
-                return null;   // operators are catalogue-only (the corpus drives np.* functions, never operators)
+            {
+                // Operators are catalogue-only (the corpus drives np.* functions) — except the matrix tier, whose
+                // registry calls the C# operators for Python's dunder methods.
+                if (m.Owner == "NDMatrix" && MatrixOperatorKeys.TryGetValue(m.Name, out var matrixKeys)
+                    && matrixKeys.Any(Has))
+                    return "corpus: matrix operators";
+                return null;
+            }
 
             switch (m.Owner)
             {
@@ -453,6 +492,9 @@ namespace NumSharp.Tests.Fuzz
                     // which the tier records under the class's own NumPy name — the key their constructor cases share,
                     // both replayed by the sweep (G2 proves each factory overload has cases of its own).
                     return Has("random_api:" + m.Name) ? "corpus: random_api" : null;
+                case "NDMatrix":
+                    // The matrix tier keys every member as matrix.<name> (gen_matrix_oracle.py).
+                    return Has("matrix." + m.Name) ? "corpus: matrix" : null;
                 case "Generator":
                     if (Has("grnd:" + m.Name))
                         return "corpus: grnd stream";

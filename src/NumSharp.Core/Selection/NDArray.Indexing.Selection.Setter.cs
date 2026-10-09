@@ -167,11 +167,13 @@ namespace NumSharp
 
             var mesh = np.broadcast_arrays(axisIndex);
 
-            // The value broadcasts to the advanced-index result (grid) shape, per NumPy.
-            NDArray v = values;
+            // The value broadcasts to the advanced-index result (grid) shape, per NumPy: leading axes it has
+            // beyond the result's rank are dropped first, and a value that still does not fit raises NumPy's
+            // "shape mismatch: value array ..." before anything is written (PrepareAssignedValue).
             var gridShape = mesh[0].Shape;
+            NDArray v = PrepareAssignedValue(values, gridShape.dimensions);
             if (!System.Linq.Enumerable.SequenceEqual(v.Shape.dimensions, gridShape.dimensions))
-                v = np.broadcast_to(values, gridShape);
+                v = np.broadcast_to(v, gridShape);
 
             SetIndices(this, mesh, v);
             return true;
@@ -322,10 +324,11 @@ namespace NumSharp
             // scatters the value (broadcast to the grid shape) in one pass.
             if (TryBuildMultiAdvancedGrid(indicesObjects, out var multiGrid))
             {
-                NDArray v = values;
+                // NumPy's MapIter value rule (leading axes dropped, its ValueError text): PrepareAssignedValue.
                 var gridShape = multiGrid[0].Shape;
+                NDArray v = PrepareAssignedValue(values, gridShape.dimensions);
                 if (!System.Linq.Enumerable.SequenceEqual(v.Shape.dimensions, gridShape.dimensions))
-                    v = np.broadcast_to(values, gridShape);
+                    v = np.broadcast_to(v, gridShape);
                 SetIndices(this, multiGrid, v);
                 return;
             }
@@ -739,6 +742,13 @@ namespace NumSharp
                         retShape = Arrays.Concat(indicesImpliedShape, subShape);
                 }
             }
+
+            // NumPy prepares the value against the indexing-result shape BEFORE its first store (MapIter's
+            // extra_op block): a value with more axes than the result loses its leading axes (they must hold
+            // one element in total: a (1, N) matrix row fits an (N,) selection), and one that still cannot
+            // broadcast raises "shape mismatch: value array of shape ... could not be broadcast to indexing
+            // result of shape ...". Every route below receives the prepared value.
+            values = PrepareAssignedValue(values, retShape);
 
             // Kernel route — ONE index array into a C-contiguous destination (a[idx] = v, m[ridx] = v,
             // m[ridx] = row): validate every index first (NumPy's mapiter_trivial_set does exactly that

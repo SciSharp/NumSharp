@@ -20,9 +20,19 @@ namespace NumSharp.Backends
         /// <param name="dtype">NumPy's <c>dtype=</c>: the loop of both sums (an integer or bool input defaults to
         /// float64, every other input to its own dtype), so it decides the result dtype.</param>
         /// <param name="takeSqrt">True for <c>np.std</c> (the square root of the variance, NumPy's <c>_std</c>).</param>
+        /// <param name="outDtype">The dtype of NumPy's <c>out=</c> array, or null when the call has none. NumPy hands
+        /// <c>out</c> to its LAST statement only, <c>umr_sum(x, axis, dtype, out, keepdims)</c>, where a reduction
+        /// without <c>dtype=</c> resolves its loop from <c>out</c> and the operand together: the sum of the squared
+        /// deviations then runs in <c>promote_types(out.dtype, x.dtype)</c>. So a float32 input with a float64
+        /// <c>out</c> sums float32 squares in float64. It has no effect with <paramref name="dtype"/> or for an
+        /// integer / bool input (their loop is fixed before).</param>
+        /// <param name="sumOnly">Return the sum of the squared deviations and stop: no division, no square root.
+        /// Use it with <paramref name="outDtype"/>, where NumPy stores that sum into <c>out</c> first and divides
+        /// <c>out</c> in place (so the division runs on the value as <c>out</c>'s dtype holds it).</param>
         /// <returns>The variance or standard deviation: a read-only 0-d scalar when the result has no dimensions,
         /// otherwise a fresh array. Its dtype is the deviation sum's — the input's float dtype, float64 for an integer,
-        /// bool or complex128 input, or <paramref name="dtype"/>.</returns>
+        /// bool or complex128 input, <paramref name="dtype"/>, or the promotion <paramref name="outDtype"/> causes.
+        /// With <paramref name="sumOnly"/>: that sum, as the reduction returned it.</returns>
         /// <exception cref="AxisError"><paramref name="axis_"/> is outside the operand, a 0-d operand included (NumPy
         /// normalizes the axis before any arithmetic, unlike <c>ufunc.reduce</c>).</exception>
         /// <exception cref="NotSupportedException">A bool input with <c>dtype=bool</c>: NumPy's boolean-subtract
@@ -60,7 +70,8 @@ namespace NumSharp.Backends
         ///     real part of the mean; <c>np.std(x, axis, dtype=np.int32)</c> raises while the flat form truncates.
         ///     </para>
         /// </remarks>
-        internal NDArray VarStdNumPy(NDArray arr, int? axis_, bool keepdims, int ddof, DType dtype, bool takeSqrt)
+        internal NDArray VarStdNumPy(NDArray arr, int? axis_, bool keepdims, int ddof, DType dtype, bool takeSqrt,
+            DType outDtype = null, bool sumOnly = false)
         {
             var shape = arr.Shape;
 
@@ -104,7 +115,18 @@ namespace NumSharp.Backends
                 : xT == NPTypeCode.Complex ? DeviationSquare.ComplexProduct
                 : DeviationSquare.Real;
             NPTypeCode sqT = square == DeviationSquare.Modulus ? NPTypeCode.Double : xT;
-            bool castFree = loop is null || loop.GetTypeCode() == sqT;
+
+            // The loop of the LAST sum, umr_sum(x, axis, dtype, out, keepdims). It is `loop` again, except that an
+            // out= without dtype= joins the resolution (reducelike_promote_and_resolve promotes out's dtype with the
+            // operand's): a wider out widens this one sum, a narrower or equal one changes nothing.
+            DType sumLoop = loop;
+            if (sumLoop is null && outDtype is not null)
+            {
+                DType promoted = np.promote_types(outDtype, (DType)sqT);
+                if (promoted.GetTypeCode() != sqT)
+                    sumLoop = promoted;
+            }
+            bool castFree = sumLoop is null || sumLoop.GetTypeCode() == sqT;
 
             // A flat reduction hoists the mean as a 0-d PARAMETER of the fused pass (read once, no stride-0 operand);
             // an axis reduction broadcasts the keepdims mean.
@@ -139,18 +161,22 @@ namespace NumSharp.Backends
                 if (x2Bytes >= chunkMin)
                 {
                     if (!flat && (castFree || CastLoopChunksExactly(layout, axis.Value)))
-                        ret = ChunkedDeviationSum(arr, meanOperand, layout, axis.Value, keepdims, loop, xT, sqT, square, eager, chunkBytes);
+                        ret = ChunkedDeviationSum(arr, meanOperand, layout, axis.Value, keepdims, sumLoop, xT, sqT, square, eager, chunkBytes);
                     else if (flat && !castFree && !eager && StreamsAsOneRun(arr)
-                             && loop.GetTypeCode() is NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex)
-                        ret = FlatFillDeviationSum(arr, meanOperand, keepdims, loop.GetTypeCode(), xT, sqT, square, chunkBytes);
+                             && sumLoop.GetTypeCode() is NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex)
+                        ret = FlatFillDeviationSum(arr, meanOperand, keepdims, sumLoop.GetTypeCode(), xT, sqT, square, chunkBytes);
                 }
                 if (ret is null)
                 {
                     var x2 = new NDArray(sqT, layout, false);
                     FillSquaredDeviations(arr, meanOperand, x2, xT, square, eager);
-                    ret = ReduceAdd(x2, axis, keepdims, loop, @out: null);
+                    ret = ReduceAdd(x2, axis, keepdims, sumLoop, @out: null);
                 }
             }
+
+            // out= callers store this sum into out and divide out in place, as NumPy's `out=ret` does.
+            if (sumOnly)
+                return ret;
 
             // ret / max(rcount - ddof, 0). A 0-d result is NumPy's scalar: computed on a writeable copy, handed out read-only.
             bool scalarResult = ret.ndim == 0;

@@ -37,7 +37,9 @@ namespace NumSharp.Backends.Printing
         /// <summary>Port of <c>array_repr</c> — the array with class/dtype/shape info (NumPy <c>repr</c>).</summary>
         public static string ArrayRepr(NDArray a, PrintOptions opts)
         {
-            const string prefix = "array(";
+            // NumPy: class_name = type(arr).__name__ for a subclass ("matrix"), "array" for an ndarray. The prefix
+            // length indents every continuation line, so a subclass name moves the whole layout.
+            string prefix = a.ReprClassName + "(";
             string lst = Array2String(a, opts, ", ", prefix, ")");
 
             var extras = new List<string>();

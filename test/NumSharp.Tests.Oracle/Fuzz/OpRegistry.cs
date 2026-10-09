@@ -26,6 +26,9 @@ namespace NumSharp.Tests.Fuzz
             // numpy.polynomial submodules (OpRegistry.Polynomial.cs): module-qualified keys, plan D5.
             if (IsPolynomialOp(op))
                 return ApplyPolynomial(op, p, ops);
+            // numpy.matrix (OpRegistry.Matrix.cs): the constructor key "matrix" and the member keys "matrix.<name>".
+            if (IsMatrixOp(op))
+                return ApplyMatrix(op, p, ops);
 
             switch (op)
             {
@@ -684,7 +687,14 @@ namespace NumSharp.Tests.Fuzz
                 case "ascontiguousarray": return np.ascontiguousarray(ops[0]);
                 case "asfortranarray": return np.asfortranarray(ops[0]);
                 case "asarray_chkfinite": return np.asarray_chkfinite(ops[0]);
-                case "asmatrix": return np.asmatrix(ops[0]);
+                // np.asmatrix(data, dtype): an operand, or (matrix tier) a literal in params.text.
+                case "asmatrix":
+                {
+                    DType asDtype = p.TryGetValue("dtype", out var asDt) ? FuzzCorpus.DtypeToTC(asDt.GetString()) : null;
+                    return p.TryGetValue("text", out var asText)
+                        ? np.asmatrix(asText.GetString(), asDtype)
+                        : np.asmatrix(ops[0], asDtype);
+                }
                 case "require": return np.require(ops[0], requirements:
                     p["requirements"].EnumerateArray().Select(x => x.GetString()).ToArray());
                 case "frombuffer": return np.frombuffer(FuzzCorpus.ResultBytes(ops[0]),

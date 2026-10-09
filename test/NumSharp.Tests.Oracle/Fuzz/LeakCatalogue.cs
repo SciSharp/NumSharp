@@ -274,7 +274,7 @@ namespace NumSharp.Tests.Fuzz
     ///     reaches (the inventory cross-reference's missing list), each as one direct invocation. Split
     ///     across partial files by owner: <c>LeakCatalogue.cs</c> (np, np.linalg, np.random and the
     ///     object surfaces), <c>LeakCatalogue.NDArray.cs</c> (ndarray, NDArray&lt;T&gt; and the operators),
-    ///     <c>LeakCatalogue.Masked.cs</c> (np.ma and NDMaskedArray).
+    ///     <c>LeakCatalogue.Masked.cs</c> (np.ma and NDMaskedArray), <c>LeakCatalogue.Matrix.cs</c> (NDMatrix).
     /// </summary>
     /// <remarks>
     ///     An entry is a COVERAGE claim, not a behaviour test: the arguments only need to drive the
@@ -303,6 +303,7 @@ namespace NumSharp.Tests.Fuzz
             AddOperators(list);
             AddMaskedModule(list);
             AddMaskedArray(list);
+            AddMatrix(list);
             return list;
         }
 

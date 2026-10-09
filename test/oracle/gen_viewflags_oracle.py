@@ -1817,7 +1817,6 @@ GAPS = {
     "VF13": "np.array(a, copy=False) returns a new view where NumPy returns the operand itself",
     "VF14": "copies of a read-only array stay READ-ONLY: np.array(ro, copy=True) and np.positive(ro) of a read-only "
             "owner or a same-shape broadcast",
-    "VF15": "np.asmatrix of a 2-D array returns the operand itself; NumPy always returns a new matrix view",
     "VF16": "ndarray.astype(same dtype, copy=False, order='C' or 'F') of a strided 1-D view returns the operand; "
             "NumPy copies to satisfy the requested order",
     "VF17": "np.broadcast_arrays returns new views where NumPy returns the operands themselves, and a read-only "
@@ -1956,8 +1955,6 @@ def _gap_of(tier, case):
             return "VF13"
         if lay in ("own_ro_2d", "view_bsame_2d") and ((fn == "array" and p.get("copy") is True) or fn == "positive"):
             return "VF14"
-        if fn == "asmatrix" and len(case["operands"][0]["shape"]) == 2:
-            return "VF15"
         if (fn == "ndarray.astype" and p.get("copy") is False and p.get("dtype") == "int64"
                 and p.get("order") in ("C", "F") and lay in ("view_step_1d", "view_rev_1d")):
             return "VF16"

@@ -223,7 +223,7 @@ namespace NumSharp.Tests.Creation
         public void Degenerate_EmptyThreeD_Raises() =>
             // (0,3,1) squeezes to (3,) but the element count (0) can't fill it — NumPy raises a reshape error.
             ((Action)(() => np.asmatrix(np.zeros(new Shape(0, 3, 1), NPTypeCode.Double))))
-                .Should().Throw<ValueError>();
+                .Should().Throw<IncorrectShapeException>().WithMessage("cannot reshape array of size 0 into shape (1,3)");
 
         [TestMethod]
         public void MultipleSingletonAxes_Squeeze()

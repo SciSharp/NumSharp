@@ -23,7 +23,9 @@ namespace NumSharp
                 // Using this comparison allows less restrictive semantics,
                 // like comparing a scalar to an array
                 // we can use unmanaged access because the result of == op is never a slice.
-                var results = (this == obj);
+                // The comparison array is this method's own temporary: released here, or every Equals call on two
+                // distinct arrays kept one pooled bool buffer until a finalizer ran.
+                using var results = (this == obj);
                 var len = results.size;
                 var addr = results.Address;
 

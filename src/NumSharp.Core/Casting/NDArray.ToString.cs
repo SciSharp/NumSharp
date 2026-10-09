@@ -39,6 +39,16 @@ namespace NumSharp
             return flat ? ArrayFormatter.ArrayRepr(this, opts) : ArrayFormatter.ArrayStr(this, opts);
         }
 
+        /// <summary>
+        ///     The class name NumPy's <c>repr()</c> prints before the opening parenthesis: <c>array</c> for an
+        ///     <c>ndarray</c>, the subclass name for a subclass (<c>type(arr).__name__</c> in
+        ///     <c>_array_repr_implementation</c>). Override it in a subclass that NumPy prints under another name;
+        ///     the continuation lines and a wrapped <c>dtype=</c> suffix are aligned to this name's length, so it
+        ///     changes the layout of the whole repr, not the first word alone.
+        /// </summary>
+        /// <returns>The name without the parenthesis. Never <c>null</c> or empty.</returns>
+        internal virtual string ReprClassName => "array";
+
         #region legacy char/string rendering
 
         private string LegacyCharToString(bool flat)

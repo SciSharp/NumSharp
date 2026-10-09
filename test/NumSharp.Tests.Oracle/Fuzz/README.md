@@ -671,7 +671,7 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | `gen_nanmean` section B, "pinned row longer than the buffer" | 5 cells: an inexact nanmean with `dtype=` (a cast loop) along the axis innermost in memory under `np.setbufsize(16 / 32)`, rows longer than the buffer (np.sum's X6 residual over the K-order copy) | `OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills` |
 | `gen_ma_oracle._mv_carved` (`ma_meanvar`), "finding5" | 38 cells: ma.mean / var / std / anom along an axis of a 2-D view with a reversed axis, without a mask or with an all-False one (`filled(0)` is the view itself then), whose mean's sum is not order-free (`_mv_order_free`: the elements as multiples of their lowest set bit, every partial sum exact) | `OpenBugsReductionTests.Sum_ReversedViewAxis_WalksTheLogicalOrder` |
 | `gen_ma_oracle._mv_carved` (`ma_meanvar`), "broadcast" | 127 cells: the same functions over a broadcast operand reduced flat or along its stride-0 axis, without a mask or with an all-False one, unless order-free (plan finding 10 and X12). Replaying the tier uncarved (`gen_ma_oracle.py meanvar --uncarved <path>`), 64 of the 165 carved cells differ, every one of them float32 / float64 / complex128 on those layouts | `OpenBugsReductionTests.Sum_BroadcastOperand_Flat_IsNumPysCallSchedule`, `Sum_BroadcastOperand_Axis_IsNumPysOrder` |
-| `gen_viewflags_oracle._gap_of` (view_flags / out_flags / shape_args / array_args) | 717 cells under 47 gap ids, written to `corpus/gaps/<tier>_gaps.jsonl` instead of the gate: the returned object's flags / strides / view-copy-identity facet where NumSharp differs (the other VF ids, VS01, VO01, VA02, VA04), and silent WRONG VALUES from C-contiguous views at a non-zero offset (VA01 searchsorted, VA03 where, VA05 ldexp, VF22 a[:, idx] throws, VF30 nansum / nanprod, VF39 repeat, VF40 unique + the set routines). The carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests` `*_KnownGaps` (per-gap open counts), `OpenBugs.ViewFlags.cs` (18 public-call repros) |
+| `gen_viewflags_oracle._gap_of` (view_flags / out_flags / shape_args / array_args) | 705 cells under 46 gap ids (VF15, np.asmatrix returning its operand, was fixed with NDMatrix on 2026-10-09), written to `corpus/gaps/<tier>_gaps.jsonl` instead of the gate: the returned object's flags / strides / view-copy-identity facet where NumSharp differs (the other VF ids, VS01, VO01, VA02, VA04), and silent WRONG VALUES from C-contiguous views at a non-zero offset (VA01 searchsorted, VA03 where, VA05 ldexp, VF22 a[:, idx] throws, VF30 nansum / nanprod, VF39 repeat, VF40 unique + the set routines). The carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests` `*_KnownGaps` (per-gap open counts), `OpenBugs.ViewFlags.cs` (18 public-call repros) |
 | `gen_relayout_oracle._gap_of` (relayout / relayout_host) | 179 cells under 7 gap ids, written to `corpus/gaps/relayout_gaps.jsonl`: the C-contiguous-offset misreads RL01 (searchsorted, digitize, complex / float16 isin), RL02 (where, float16 / complex nancumsum / nancumprod), RL03 (ldexp), RL04 (unique, unique_values, the set routines), RL05 (repeat of a 0-d offset view), and the empty-operand early returns RL06 (comparison operators) and RL07 (logaddexp / logaddexp2). Drawn by emulating each bug (the misread window, the early return), so the carve is exact; also DROPPED (not carved): ufunc / where variants whose answer depends on NEP50's weak 0-d promotion (the registry's NEP50 branches document that divergence in every other tier), and the flat np.mean of a broadcast float operand that is not order-free (the mean_loops tier owns that residual) | `FuzzCorpusTests.Relayout_KnownGaps` (both verdicts), `OpenBugs.Relayout.cs` (8 public-call repros) |
 | `gen_surface_oracle._gap_of` (surface) | 986 cells under 42 gap ids, written to `corpus/gaps/surface_gaps.jsonl`: error texts and refusals (SU1, SU2, SU4, SU8, SU10, SU11, SU15, SU16, SU22, SU28, SU29, SU32-SU35, SU40), silent wrong values (SU12-SU14 finfo, SU20 broadcast.iters, SU25 / SU31 nditer order, SU38 / SU39 cumsum / cumprod dtype=, SU6 / SU9 / SU18 / SU19 the float formatters), np.nditer's write-backs (SU41 an updateifcopy operand refused without buffering, SU42 the iteration protocol one element ahead: a buffered readwrite loop loses the last write of each buffer), crashes (SU5 apply_along_axis over a stride-0 offset view, SU30 nditer.remove_axis), reporting (SU3, SU17, SU21, SU23, SU24, SU26, SU27), the double-only float formatters (SU7) and the cumulative_* aliases (SU36 / SU37). Drawn by modelling each bug where it is not a fixed set (the float formatters on the widened double with NumSharp's Dragon4 carry and trim rules; np.nditer's C walk for an F + broadcast set via NumPy with order='C'; the edgeitems=0 format from the last element), so the carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests.Surface_KnownGaps`, `OpenBugs.Surface.cs` (41 public-call repros) |
 | `gen_ma_surface_oracle._gap_of` (ma_surface) | 10,123 cells under 37 gap ids, written to `corpus/gaps/ma_surface_gaps.jsonl`: the result FORM (MS1 an all-False result mask dropped to nomask, MS2 the _fromnxfunction wrappers' full mask, MS3 the *_like mask, MS4 a 0-d resize, MS5 apply_over_axes' plain ndarray, MS9 masked_object's kept all-False mask), silent wrong values (MS7 / MS12 / MS13 fill values never converted, MS11 / MS31 unsafe casts in putmask and the hard-masked setitem, MS14 the bool extremum fills, MS17 is_mask, MS34 corrcoef's masked-slot data, MS36 ids of a strided / reversed view, MS37 cov / corrcoef with a 1-D y under rowvar=False), crashes and refusals (MS15, MS22, MS26, MS33, MS35), NumPy's refusals and texts (MS6, MS8, MS21, MS23, MS24, MS25, MS27, MS28, MS30, MS32) and the API shape (MS10, MS16, MS18, MS19, MS20, MS29). Drawn by fixed predicates and two models (NumSharp's raw fill values for set_fill_value / common_fill_value; which ids views re-seat the storage address), so the carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests.MaSurface_KnownGaps`, `OpenBugs.MaSurface.cs` (30 public-call repros) |
@@ -1271,7 +1271,7 @@ difference can only mean a wrong element was read.
 
 | File | Op key | Gate + carved | Coverage |
 |---|---|---|---|
-| `view_flags.jsonl` | `viewflags` (`params.fn`: 194 APIs) | 7,282 + 622 | V1 reshape / transpose / flip / diagonal views over 21 source layouts (C and F owners, transposed, permuted, stepped, reversed, a C-contiguous view at an offset, read-only owner and view, broadcast, same-shape broadcast, 0-d owner and offset view, 1×1, a unit axis, empty); V2 complex parts; V3 conversions (`asarray` / `array` / `copy` / `require` / `astype` / `view` / `getfield` …, every order and copy flag); V4 a 13-dtype sweep; V5 indexing (basic, integer, fancy, mask); V6 tuple results (`split`, `unstack`, `nonzero`, `meshgrid`, `broadcast_arrays`, `unravel_index`); V7 creators; V8 einsum's view path; V9 the copy family; V10 `tril` / `triu` / `diagflat`, partitions, the nan-reductions, `count_nonzero`, the FFT family, `eye` / `identity` / `tri` / `mgrid` / `ogrid`, the index-tuple generators, ndarray methods; K1–K3 the layout of ufunc and reduction results |
+| `view_flags.jsonl` | `viewflags` (`params.fn`: 194 APIs) | 7,294 + 610 | V1 reshape / transpose / flip / diagonal views over 21 source layouts (C and F owners, transposed, permuted, stepped, reversed, a C-contiguous view at an offset, read-only owner and view, broadcast, same-shape broadcast, 0-d owner and offset view, 1×1, a unit axis, empty); V2 complex parts; V3 conversions (`asarray` / `array` / `copy` / `require` / `astype` / `view` / `getfield` …, every order and copy flag); V4 a 13-dtype sweep; V5 indexing (basic, integer, fancy, mask); V6 tuple results (`split`, `unstack`, `nonzero`, `meshgrid`, `broadcast_arrays`, `unravel_index`); V7 creators; V8 einsum's view path; V9 the copy family; V10 `tril` / `triu` / `diagflat`, partitions, the nan-reductions, `count_nonzero`, the FFT family, `eye` / `identity` / `tri` / `mgrid` / `ogrid`, the index-tuple generators, ndarray methods; K1–K3 the layout of ufunc and reduction results |
 | `out_flags.jsonl` | `outflags` (149 APIs) | 1,072 + 4 | `f(..., out=o)` for every ufunc, reduction, scan, product, FFT transform and ndarray method that takes `out=`, with `o` in six layouts (C and F owners, an offset view, a stepped view, a transposed view, a reversed view): slot 0 is the returned object (its `same` flag says it IS `o`), slot 1 the whole base buffer behind `o` after the call (prefilled with markers, so a write outside the view or a missed slot shows); NumPy's refusals are error cases |
 | `shape_args.jsonl` | `shapearg` (12 APIs) | 537 + 54 | the same dims in each C# shape form: `Shape`, `long[]`, `int[]`, `int`, and `view:<layout>` (a view's Shape of the same dims, built by `RandomApi/ViewSizeLayouts.cs`) — `zeros` / `ones` / `empty` / `full` / `reshape` / `ndarray.reshape` / `broadcast_to` / `resize` / `tile` / `indices` / `indices_sparse` / `empty_like`, NumPy's refusals included |
 | `array_args.jsonl` | existing op keys (`valueclass` `arrayarg`) | 335 + 37 | 55 SECONDARY operand positions (indices, condition, `v`, `sorter`, bins, weights, `xp` / `fp`, `b`, `x2`, values, `a_max`, `x` / `y`, the choice lists, `ar2`, `y` of cov …) in up to nine layouts: C, F, transposed, stepped, reversed, offset, read-only, broadcast, 0-d |
@@ -1285,7 +1285,7 @@ matrix and is exact: every carved case diverges, no kept case does. To redraw it
 `python gen_viewflags_oracle.py all --uncarved <dir>`, copy the files over the build output's corpus, run the four
 gates with `NUMSHARP_ORACLE_FAILURE_DUMP=<file>`, and compare the dump with `_gap_of`'s rules.
 
-**What it found** (47 ids; 717 carved cells):
+**What it found** (47 ids and 717 carved cells at delivery; 46 and 705 since VF15 was fixed on 2026-10-09):
 - *Silent wrong values* — a C-contiguous view at a non-zero offset (an `np.split` / `np.unstack` / `np.array_split`
   child) is read from its parent's start by `np.searchsorted` (`v`, `sorter`, the method too: VA01), `np.where`
   (condition, `x`, `y`: VA03), `np.ldexp` (`x2`: VA05), `np.nansum` / `np.nanprod` with `axis=None` (VF30),
@@ -1295,7 +1295,7 @@ gates with `NUMSHARP_ORACLE_FAILURE_DUMP=<file>`, and compare the dump with `_ga
 - *Read-only*: copies of a read-only array stay read-only (VF14), a basic index of a read-only broadcast through the
   `object[]` indexer is writeable (VF23), `np.broadcast_arrays` hands a read-only broadcast back writeable (VF17),
   `np.median` / `np.nanmedian` of a 0-d with keepdims is read-only (VF29).
-- *View, copy or the operand itself*: VF04, VF13, VF15, VF16, VF18, VF26, VF27, VF28, VF35, VF37, VA04; NumPy scalars
+- *View, copy or the operand itself*: VF04, VF13, VF16, VF18, VF26, VF27, VF28, VF35, VF37, VA04; NumPy scalars
   that come back as writeable 0-d arrays (VF01, VF02, VF03 — NumSharp has no scalar type).
 - *Result layout* (C where NumPy keeps the input's K order, or the reverse): VF05–VF12, VF19–VF21, VF31–VF34, VF36,
   VF38, VA02, VS01 (`np.zeros(view.Shape)` keeps the view's F layout).
@@ -1569,6 +1569,79 @@ describe.
 file over the build output's corpus, run `MaSurface` with `NUMSHARP_ORACLE_FAILURE_DUMP=<file>` (`RunMaCorpus` dumps
 every failure line), compare the dump with `_gap_of`, then regenerate; `MaSurface_KnownGaps` must report every carved
 case still open.
+
+### The matrix tier (`matrix`) — 2026-10-09
+
+`test/oracle/gen_matrix_oracle.py` writes NumPy 2.4.2's answers for `numpy.matrix`, which NumSharp implements as
+`NDMatrix` (`src/NumSharp.Core/Matrixlib/`). The cases ride the ordinary harness (`FuzzCorpusTests.Matrix`,
+`OpRegistry.Matrix.cs`), with three additions:
+
+- **Matrix operands.** An operand descriptor with `"matrix": true` rebuilds as an `NDMatrix` over the same storage
+  (`FuzzCorpus.ApplyWriteable`). The 14 source layouts are C, F, transposed, stepped, reversed, a C view at an offset,
+  read-only, broadcast, a row, a column, 1 x 1, two empty shapes and a square. An EMPTY source is an owning matrix:
+  a view of no element has no buffer the corpus could record.
+- **The result class.** `expected.cls` is `matrix`, `ndarray` or `scalar`, and `CompareArray` holds NumSharp to it
+  (`m.round(1)` of a float matrix is a plain array in NumPy, `m.round()` a matrix).
+- **The memory facet.** Every array result records the five flags, the byte strides and its relation to each
+  operand (shares memory, is the same object), as in the array-object oracle. So a matrix that owns where NumPy's
+  is a view of the hidden ufunc result fails the gate.
+
+Op keys are `matrix` (the constructor), `asmatrix` and `matrix.<member>`; Python's dunder names key the operators
+(`matrix.__mul__`, `matrix.__rmul__`, `matrix.__getitem__`), and `params.sym` / `params.via` say which C# form the
+replay calls (operator, `__mul__` method, the `object` overload). Sections: construction (arrays of every rank,
+matrices, 62 literals, nested sequences, dtype conversions and their errors), properties (T / H / A / A1 / I), getitem
+and setitem (integers, slices, new axes, ellipses, index arrays, masks, 0-d arrays; values of every shape), `*` (matrix
+/ array / sequence / Python scalar / NumPy scalar on either side), the elementwise operators, `**`, the reductions
+(axis, dtype=, out= of seven dtypes, ddof, error forms), the methods ndarray hands down, text and iteration.
+
+26,027 gate cases over 87 op keys, valueclass `matrix`, **zero excuses** (`MisalignedRegistry` returns null).
+
+**Three replays, one per float scaling route.** `NDMatrix.Scale` (`m * 2.0`) has three routes that must give the
+same bytes, and the corpus's small matrices reach only two of them in production:
+
+| Test | Hooks | What it holds to NumPy |
+|---|---|---|
+| `Matrix` | none | the production routes: the direct pass over a C-contiguous float operand (the test asserts `NDMatrix.DirectScaleRuns` moved), the two ufunc passes for the rest |
+| `Matrix_FusedScaling` | `DisableDirectScale`, `FusedScaleMinElementsTestOverride = 2` | the fused `np.evaluate` pass for every float and complex operand of two or more elements (in production: float views from 4,096 elements, complex matrices from 512) |
+| `Matrix_TwoPassScaling` | `DisableDirectScale`, `FusedScaleMinElementsTestOverride = long.MaxValue` | the multiply ufunc plus the in-place addition of zero, for the operands the single-pass routes normally take |
+
+The sizes past the thresholds are held by `NDMatrixTests.Scaling_EveryRoute_GivesTheUfuncBits` (70 × 70, the three
+routes against `np.add(np.multiply(x, s, dtype: loop), 0)`, bit for bit).
+
+**The gaps are below the class.** The first replay had 2,441 divergences. Fixes in `NDMatrix` and in the array library
+closed 2,269 of them (the library fixes: NumPy's value rule for index-array assignment, the boolean-mask assignment
+rules, owning results of `np.dot` / `np.matmul` with a 1-D operand, `np.dot`'s alignment text, a leak in
+`NDArray.Equals`). The 172 that remain are carved into `gaps/matrix_gaps.jsonl` under 11 ids, and each is an `NDArray`
+member or an `np.*` function that `NDMatrix` delegates to:
+
+| Gap | Cells | What differs |
+|---|---|---|
+| MX01 | 56 | `a[:, index_array]`: NumPy returns its transposed MapIter view (F-contiguous); NumSharp a C-ordered array |
+| MX02 | 36 | `np.cumsum` / `np.cumprod` result layout for an F, transposed or broadcast-bool operand |
+| MX03 | 15 | `ndarray.imag` of a real F-contiguous array is C-ordered (NumPy: Fortran order) |
+| MX04 | 5 | `ndarray.round` of a broadcast operand: result layout |
+| MX05 | 2 | `np.conjugate` of a transposed strided / reversed complex128 view writes C order (reached through `m.H`) |
+| MX06 | 16 | `reshape` with -1 on a broadcast view throws NotSupportedException |
+| MX07 | 8 | a two-entry fancy assignment into a C-contiguous view at an offset throws IndexOutOfRangeException |
+| MX08 | 15 | `np.prod` in a cast loop: flat `dtype=bool` throws, flat complex128 / float16 loops return NaN or garbage |
+| MX09 | 4 | complex128 `np.prod` over a reversed view: the sign of a zero part |
+| MX10 | 3 | `np.dot` of an N-D operand with an M-D one computes in float64: complex128 loses its imaginary parts |
+| MX11 | 12 | `np.repeat` of a C-contiguous view at an offset reads from the parent's start |
+
+Seven of them have repros through public calls in `NumSharp.Tests/OpenBugs.Matrix.cs`; MX01, MX06, MX09 and MX11 are
+pinned by older files (`OpenBugs.FancyIndex.cs`, `OpenBugs.ViewFlags.cs` VF24 / VF39, `OpenBugs.Reductions.cs`).
+
+**Generator rules worth keeping**: `argsort` is called with `kind="stable"` (NumPy's default sort orders equal elements
+by its SIMD kernel, NumSharp's argsort is always stable); the exact-inverse cases (`I`, negative powers) use diagonal
+and permutation matrices and no complex128 (the managed LU and LAPACK differ in the sign of a zero imaginary part);
+literal tokens hold no NAME (a name's error text carries a CPython object address, and the emitter skips any case whose
+error text does).
+
+**Redraw the carve after a change** (it must stay exact): `python gen_matrix_oracle.py --uncarved <dir>`, copy the
+file over the build output's corpus, run `Matrix` with `NUMSHARP_ORACLE_FAILURE_DUMP=<file>`, and compare the dump with
+`_gap_of` in BOTH directions (failing but not carved, carved but passing): a rule read off a failure summary carves
+error cases too, where NumSharp raises NumPy's text before it reaches the bug. Then regenerate; `Matrix_KnownGaps` must
+report every carved case still open.
 
 ### float16 selections (`half_minmax` tier + the selection contract) — 2026-10-03
 

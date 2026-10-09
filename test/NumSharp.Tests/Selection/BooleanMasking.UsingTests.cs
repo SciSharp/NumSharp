@@ -86,7 +86,8 @@ namespace NumSharp.Tests.Selection
             // (3,) value cannot broadcast to the (3, 4) selection → NumPy raises.
             var bad = np.arange(20).reshape(5, 4).astype(NPTypeCode.Int32);
             Action act = () => bad[mask] = np.array(new int[] { 100, 200, 300 });
-            act.Should().Throw<IncorrectShapeException>();
+            act.Should().Throw<ValueError>().WithMessage(
+                "shape mismatch: value array of shape (3,) could not be broadcast to indexing result of shape (3,4)");
 
             // (3, 1) broadcasts across the row → one value per selected row.
             var a = np.arange(20).reshape(5, 4).astype(NPTypeCode.Int32);

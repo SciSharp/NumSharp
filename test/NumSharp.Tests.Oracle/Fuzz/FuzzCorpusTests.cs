@@ -1113,7 +1113,7 @@ namespace NumSharp.Tests.Fuzz
             ["windows.jsonl"] = 200,
             // The array-object oracle (gen_viewflags_oracle.py, 2026-10-07): the returned object, its flags and its
             // view / copy / identity facet. Delivered counts (gate files; the carved gaps live in corpus/gaps/):
-            ["view_flags.jsonl"] = 7000,   // 7,282: 194 fns, sections V1-V10 + K1-K3 over 21 source layouts
+            ["view_flags.jsonl"] = 7000,   // 7,294: 194 fns, sections V1-V10 + K1-K3 over 21 source layouts
             ["out_flags.jsonl"] = 1000,    // 1,072: 149 out-capable fns x 6 out layouts
             ["shape_args.jsonl"] = 500,    // 537: 12 shape-taking fns x every C# shape form
             ["array_args.jsonl"] = 320,    // 335: 55 secondary-operand positions x up to 9 layouts
@@ -1125,6 +1125,9 @@ namespace NumSharp.Tests.Fuzz
             // The surface tier (gen_surface_oracle.py, 2026-10-08): the APIs the coverage inventory listed as available
             // but unproven. Delivered count (the 986 carved gaps live in corpus/gaps/surface_gaps.jsonl):
             ["surface.jsonl"] = 14700,     // 15,482 cases over 139 op keys
+            // The matrix tier (gen_matrix_oracle.py, 2026-10-09): numpy.matrix as NDMatrix. Delivered count (the 172
+            // carved gaps of the array library below the class live in corpus/gaps/matrix_gaps.jsonl):
+            ["matrix.jsonl"] = 24700,      // 26,027 cases over 87 op keys: values, result class, memory facet, errors
         };
 
         // Corpus tiers authored against the win-amd64 CRT libm (ucrtbase) and NumSharp's host SIMD

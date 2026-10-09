@@ -108,6 +108,14 @@ namespace NumSharp.Tests.Fuzz
             ///     not NumSharp's. Absent (null) or false means a view, which is how every older corpus row deserializes.
             /// </summary>
             public bool? Own { get; set; }
+
+            /// <summary>
+            ///     True when NumPy's operand was a <c>numpy.matrix</c>, emitted by <c>gen_matrix_oracle.desc</c> only.
+            ///     <see cref="Reconstruct"/> then returns an <see cref="NDMatrix"/> over the very storage the plain
+            ///     reconstruction builds (same layout, same ownership, same writeability), so the replay calls the
+            ///     matrix members on it. Absent (null) or false means a plain array, as on every other tier.
+            /// </summary>
+            public bool? Matrix { get; set; }
         }
 
         /// <summary>
@@ -247,6 +255,15 @@ namespace NumSharp.Tests.Fuzz
             ///     after the call, in the order of <c>params.watch</c>. Absent elsewhere.
             /// </summary>
             public JsonElement After { get; set; }
+
+            /// <summary>
+            ///     MATRIX corpus only (<c>gen_matrix_oracle.py</c>): the class of the object NumPy returned —
+            ///     <c>matrix</c> (a <c>numpy.matrix</c>), <c>ndarray</c> (a plain array) or <c>scalar</c> (a NumPy scalar).
+            ///     The values of a matrix and of the array it views are the same bytes, so only this field can tell
+            ///     <c>m.A</c> from <c>m</c> or a matrix result from one that lost the class. Null on every other tier,
+            ///     which then skips the comparison.
+            /// </summary>
+            public string Cls { get; set; }
 
             /// <summary>Normalized kind — legacy cases carry none and mean "array".</summary>
             public string KindOrArray => string.IsNullOrEmpty(Kind) ? "array" : Kind;
@@ -454,6 +471,14 @@ namespace NumSharp.Tests.Fuzz
         {
             if (o.Writeable == false)
                 nd.setflags(write: false);
+            // A numpy.matrix operand: the same storage object under the matrix class (the plain wrapper built above
+            // is released; the matrix holds its own counted reference on the buffer).
+            if (o.Matrix == true)
+            {
+                var matrix = new NDMatrix(nd.Storage);
+                nd.Dispose();
+                return matrix;
+            }
             return nd;
         }
 

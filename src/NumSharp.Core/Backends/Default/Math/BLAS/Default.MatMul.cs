@@ -52,9 +52,39 @@ namespace NumSharp.Backends
             // Remove the dimensions that were inserted for 1-D operands. NumPy order: drop the
             // prepended lhs dim (-2) first, then the appended rhs dim (-1) — recomputing ndim between
             // the two squeezes keeps the axis indices valid (both inserted dims have size 1).
-            if (lhsWas1D) result = np.squeeze(result, result.ndim - 2);
-            if (rhsWas1D) result = np.squeeze(result, result.ndim - 1);
+            if (lhsWas1D) result = DropInsertedAxis(result, result.ndim - 2);
+            if (rhsWas1D) result = DropInsertedAxis(result, result.ndim - 1);
 
+            return result;
+        }
+
+        /// <summary>
+        ///     Removes the length-1 axis that the promotion of a 1-D matmul operand inserted. The product is a
+        ///     fresh C-contiguous buffer, so the axis is dropped by relabelling the shape IN PLACE: the result
+        ///     stays the owner of its data, as NumPy's gufunc result is (it allocates the final shape), and no
+        ///     second array object is created. A product that is not such a buffer takes the squeeze view.
+        /// </summary>
+        /// <param name="result">The product with the inserted axis. Its storage is modified when it owns a
+        ///     C-contiguous buffer at offset 0; callers must not keep another wrapper of it.</param>
+        /// <param name="axis">The axis to remove; its extent is 1.</param>
+        /// <returns><paramref name="result"/> itself with one axis fewer, or a squeezed view of it.</returns>
+        private static NDArray DropInsertedAxis(NDArray result, int axis)
+        {
+            Shape shape = result.Shape;
+            // The last axis of a vector·vector product leaves a 0-d result: that keeps the squeeze route, whose
+            // scalar result the callers already expect.
+            if (shape.NDim < 2 || !result.Storage.OwnsData || !shape.IsContiguous || shape.offset != 0)
+                return np.squeeze(result, axis);
+
+            long[] dims = shape.dimensions;
+            var kept = new long[dims.Length - 1];
+            for (int i = 0, j = 0; i < dims.Length; i++)
+            {
+                if (i != axis)
+                    kept[j++] = dims[i];
+            }
+
+            result.Storage.Reshape(Shape.Adopt(kept));
             return result;
         }
 

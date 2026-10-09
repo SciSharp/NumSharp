@@ -90,9 +90,25 @@ class ObjectSurfaceTests(unittest.TestCase):
                        "numpy.random.SFC64.capsule", "numpy.random.BitGenerator.ctypes"):
             self.assertEqual("missing", self.by_id[row_id]["status"], row_id)
 
+    def test_matrix_members_map_to_ndmatrix(self):
+        # numpy.matrix is NumSharp.NDMatrix (src/NumSharp.Core/Matrixlib): its own members, the ndarray members
+        # it re-declares to return a matrix, and the ones it inherits unchanged all resolve on that owner.
+        expected = {
+            "numpy.matrix.T": "NumSharp.NDMatrix.T",
+            "numpy.matrix.H": "NumSharp.NDMatrix.H",
+            "numpy.matrix.I": "NumSharp.NDMatrix.I",
+            "numpy.matrix.A1": "NumSharp.NDMatrix.A1",
+            "numpy.matrix.getA": "NumSharp.NDMatrix.getA",
+            "numpy.matrix.sum": "NumSharp.NDMatrix.sum",
+            "numpy.matrix.reshape": "NumSharp.NDMatrix.reshape",
+        }
+        for row_id, target in expected.items():
+            self.assertEqual(target, self.by_id[row_id]["numsharp_target"], row_id)
+            self.assertEqual("available", self.by_id[row_id]["status"], row_id)
+
     def test_unrelated_top_level_or_ndarray_member_is_not_credited(self):
         for row_id in ("numpy.ufunc.outer", "numpy.add.reduce", "numpy.add.outer",
-                       "numpy.ma.MaskedArray.reshape", "numpy.matrix.reshape",
+                       "numpy.ma.MaskedArray.reshape",
                        "numpy.recarray.reshape", "numpy.random.PCG64.ctypes"):
             self.assertIsNone(self.by_id[row_id]["numsharp_target"], row_id)
         self.assertEqual("missing", self.by_id["numpy.lib.npyio.NpzFile.keys"]["status"])
@@ -133,7 +149,7 @@ class ObjectSurfaceTests(unittest.TestCase):
             "surface": "np", "category": "Types", "notes": "Existing namespace class row.",
         }
         excluded = [
-            {**flatiter, "id": "numpy.matrix"},
+            {**flatiter, "id": "numpy.recarray"},
             {**flatiter, "id": "numpy.dtype", "status": "unsupported", "support": "unsupported"},
             {**flatiter, "id": "numpy.flatiter.base", "kind": "property"},
         ]

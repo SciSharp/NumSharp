@@ -294,6 +294,12 @@ namespace NumSharp.Tests.Fuzz
                 return;
             }
 
+            // The class of the returned object (matrix tier): a numpy.matrix must come back as an NDMatrix and a
+            // plain array as a plain NDArray. A NumPy scalar is a 0-d array of either class in NumSharp.
+            if (exp.Cls is "matrix" or "ndarray" && (result is NDMatrix) != (exp.Cls == "matrix"))
+                failures.Add($"{c.Id} [{c.Layout}]{at}: returned a {(result is NDMatrix ? "matrix" : "plain array")}, " +
+                             $"NumPy returns a {(exp.Cls == "matrix" ? "matrix" : "plain array")}");
+
             // The memory facet (view-flags tiers): checked once dtype and shape agree, reported on its own line so a
             // value divergence of the same case stays visible beside it. No registry branch excuses a facet: the
             // tiers that record one are held to zero excuses.

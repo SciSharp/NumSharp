@@ -361,6 +361,13 @@ namespace NumSharp.Tests.Fuzz
             // would meet the plain ops' branches; the ma harness's own excuses skip the valueclass too (strict).
             if (c.Valueclass == "masurface")
                 return null;
+            // matrix.jsonl (gen_matrix_oracle.py: numpy.matrix as NDMatrix — the constructor, the row / column indexing
+            // rule, `*` as the matrix product, the reductions that keep two axes, the methods ndarray hands down, the
+            // class and the memory facet of every result) is held to ZERO excuses, its error cases included (every
+            // case carries valueclass "matrix"). Its member keys end in names other tiers excuse (sum, mean, std ...),
+            // and the cells NumSharp gets wrong are carved by the generator (_gap_of) and replayed under [OpenBugs].
+            if (c.Valueclass == "matrix")
+                return null;
 
             // reduce_start.jsonl (valueclass "negzero": every operand all -0.0, every result a signed zero) is held to
             // ZERO excuses as well. Its cells exist to show how a reduction STARTS, which only the sign of a zero

@@ -1,182 +1,103 @@
 using System;
-using System.Collections.Generic;
-using System.Globalization;
-using NumSharp.Backends;
 
 namespace NumSharp
 {
     public static partial class np
     {
         /// <summary>
-        ///     Interpret the input as a matrix — a 2-D array. Unlike a copy, <c>asmatrix</c> does not copy
-        ///     if the input is already an ndarray; it returns a 2-D view that shares memory.
+        ///     Interpret the input as a matrix. Unlike <see cref="matrix(NDArray, DType, bool)"/>,
+        ///     <c>asmatrix</c> does not copy an array: it returns an <see cref="NDMatrix"/> VIEW that shares
+        ///     memory, and a matrix argument is returned itself.
         /// </summary>
         /// <param name="data">Input array.</param>
-        /// <param name="dtype">Data-type of the output. <c>null</c> keeps the input dtype.</param>
+        /// <param name="dtype">Data-type of the output. <c>null</c> keeps the input dtype; another dtype
+        ///     converts, which copies.</param>
         /// <returns>
-        ///     <paramref name="data"/> interpreted as a 2-D array. A 0-D input becomes shape <c>(1, 1)</c>,
-        ///     a 1-D input of length N becomes <c>(1, N)</c>, and a 2-D input is returned unchanged.
+        ///     <paramref name="data"/> interpreted as a matrix. A 0-D input becomes shape <c>(1, 1)</c>,
+        ///     a 1-D input of length N becomes <c>(1, N)</c>, and a 2-D input keeps its shape.
         /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="data"/> is <c>null</c>.</exception>
+        /// <exception cref="ValueError">More than two axes of <paramref name="data"/> are longer than 1
+        ///     (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="data"/> has more than two axes and one of
+        ///     extent 0 (NumPy's <c>cannot reshape array of size 0 into shape (1,3)</c>).</exception>
         /// <remarks>
-        ///     Port of NumPy 2.x <c>numpy.asmatrix</c> ≙ <c>matrix(data, copy=False)</c>. NumSharp has no
-        ///     dedicated <c>matrix</c> subclass (NumPy's is pending-deprecated), so the result is a plain
-        ///     2-D <see cref="NDArray"/> — the special matrix operators (<c>*</c> as matmul, <c>**</c> as
-        ///     matrix power, <c>.H</c>, <c>.I</c>) are NOT provided. The dimensional coercion matches NumPy's
-        ///     <c>matrix.__array_finalize__</c> exactly, including the &gt;2-D behaviour: axes of length 1 are
-        ///     dropped and the result must then be 2-D, otherwise a <see cref="ValueError"/>
-        ///     ("shape too large to be a matrix.") is raised. The view is preserved for strided, transposed
-        ///     and reversed inputs (no copy). A dtype change casts (which copies), then coerces the copy.
+        ///     Port of NumPy 2.x <c>numpy.asmatrix</c> ≙ <c>matrix(data, dtype=dtype, copy=False)</c>. The
+        ///     dimensional coercion is NumPy's <c>matrix.__array_finalize__</c> (<see cref="Shape.AsMatrix"/>),
+        ///     including the &gt;2-D behaviour: axes of length 1 are dropped and the result must then be 2-D. The
+        ///     view is preserved for strided, transposed and reversed inputs (no copy), and it keeps the input's
+        ///     writeability. The result is an <see cref="NDMatrix"/>: <c>*</c> is the matrix product on it and it
+        ///     has <c>.T</c>, <c>.H</c>, <c>.I</c>, <c>.A</c>, <c>.A1</c>; seen through an <see cref="NDArray"/>
+        ///     reference it is a plain 2-D array.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.asmatrix.html
         /// </remarks>
-        public static NDArray asmatrix(NDArray data, DType dtype = null)
+        public static NDMatrix asmatrix(NDArray data, DType dtype = null)
         {
             if (data is null)
                 throw new ArgumentNullException(nameof(data));
-
-            var a = data;
-            // matrix(data, copy=False): an ndarray of a different dtype is cast (a copy), matching NumPy's
-            // `data.view(subtype).astype(intype)` before the 2-D finalize runs on the result.
-            if (dtype != null && a.typecode != dtype.GetTypeCode())
-                a = a.astype(dtype, copy: true);
-
-            return CoerceToMatrix(a);
+            return NDMatrix.Create(data, dtype, copy: false);
         }
 
         /// <summary>
-        ///     Interpret a matrix string as a 2-D array. Rows are separated by <c>';'</c> and columns by
+        ///     Interpret a matrix string as a matrix. Rows are separated by <c>';'</c> and columns by
         ///     commas and/or whitespace, e.g. <c>"1 2; 3 4"</c>. Surrounding brackets are ignored. The dtype
-        ///     is inferred (integer when every element is an integer, otherwise double) unless
+        ///     is NumPy's discovered dtype (bool, int64, float64 or complex128, by the tokens) unless
         ///     <paramref name="dtype"/> is given.
         /// </summary>
-        /// <param name="data">Matrix string such as <c>"1 2; 3 4"</c>.</param>
+        /// <param name="data">Matrix string such as <c>"1 2; 3 4"</c>. Each token is one Python literal.</param>
         /// <param name="dtype">Data-type of the output. <c>null</c> infers it from the values.</param>
-        /// <exception cref="ValueError">If the rows are not all the same length.</exception>
+        /// <returns>A new matrix of shape <c>(rows, columns)</c>; <c>(1, 0)</c> float64 for an empty string.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="data"/> is <c>null</c>.</exception>
+        /// <exception cref="ValueError">If the rows are not all the same length (<c>Rows not the same size.</c>),
+        ///     or a token is Python syntax but not a literal (a name such as <c>nan</c>).</exception>
+        /// <exception cref="SyntaxError">A token is not Python syntax.</exception>
+        /// <exception cref="NotSupportedException">A token is a string, <c>None</c> or <c>...</c>, or an integer
+        ///     beyond uint64.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asmatrix.html</remarks>
-        public static NDArray asmatrix(string data, DType dtype = null)
+        public static NDMatrix asmatrix(string data, DType dtype = null)
         {
             if (data is null)
                 throw new ArgumentNullException(nameof(data));
-
-            var mat = ParseMatrixString(data);
-            return dtype == null ? mat : mat.astype(dtype, copy: false);
+            return NDMatrix.Create(data, dtype);
         }
 
         /// <summary>
-        ///     Coerces <paramref name="a"/> to a 2-D view following NumPy's <c>matrix.__array_finalize__</c>:
-        ///     2-D is unchanged; &gt;2-D drops length-1 axes and must land on exactly 2-D; a squeezed/native
-        ///     1-D of length N becomes (1, N); 0-D becomes (1, 1). All reshapes are stride-preserving views.
+        ///     Interpret a C# array as a matrix: a typed array of a NumSharp dtype is converted like
+        ///     <c>np.array</c>, any other array is a Python list coerced by NumPy's sequence rules. A C# array is
+        ///     always copied into new memory (as NumPy copies a list).
         /// </summary>
-        private static NDArray CoerceToMatrix(NDArray a)
+        /// <param name="data">The array, with at most two axes after conversion.</param>
+        /// <param name="dtype">Data-type of the output, or <c>null</c> for the discovered one.</param>
+        /// <returns>A new matrix.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="data"/> is <c>null</c>.</exception>
+        /// <exception cref="ValueError">More than two axes (<c>matrix must be 2-dimensional</c>), or a ragged list.</exception>
+        /// <exception cref="NotSupportedException">A list holding strings, <c>null</c> or other objects.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asmatrix.html</remarks>
+        public static NDMatrix asmatrix(Array data, DType dtype = null)
         {
-            var s = a.Shape;
-            int nd = s.NDim;
-
-            if (nd == 2)
-                return a; // already a matrix — shared-memory view returned as-is
-
-            long[] dims = s.dimensions;
-            long[] strides = s.strides;
-
-            if (nd > 2)
-            {
-                // Keep only axes with length > 1 (NumPy: tuple(x for x in shape if x > 1)).
-                int keep = 0;
-                for (int i = 0; i < nd; i++)
-                    if (dims[i] > 1) keep++;
-
-                var kd = new long[keep];
-                var ks = new long[keep];
-                for (int i = 0, j = 0; i < nd; i++)
-                    if (dims[i] > 1) { kd[j] = dims[i]; ks[j] = strides[i]; j++; }
-
-                if (keep > 2)
-                    throw new ValueError("shape too large to be a matrix.");
-
-                // Dropping a length-0 axis would change the element count — NumPy surfaces this as a
-                // reshape failure. Guard it so the degenerate empty >2-D case raises rather than aliasing
-                // past the buffer.
-                long keptSize = 1;
-                for (int i = 0; i < keep; i++) keptSize *= kd[i];
-                if (keptSize != s.size)
-                    throw new ValueError($"cannot reshape array of size {s.size} into matrix shape");
-
-                if (keep == 2)
-                    return Alias(a, new Shape(kd, ks, s.offset, s.bufferSize));
-
-                // keep is 0 or 1 — fall through to the low-rank rules using the squeezed view.
-                dims = kd;
-                strides = ks;
-                nd = keep;
-            }
-
-            if (nd == 1)
-            {
-                // (N,) -> (1, N): prepend a length-1 axis, preserving the element stride (a view).
-                var oneD = new Shape((long[])dims.Clone(), (long[])strides.Clone(), s.offset, s.bufferSize);
-                return Alias(a, oneD.ExpandDimension(0));
-            }
-
-            // nd == 0 (scalar) -> (1, 1).
-            var scalarShape = new Shape(Array.Empty<long>(), Array.Empty<long>(), s.offset, s.bufferSize);
-            return Alias(a, scalarShape.ExpandDimension(0).ExpandDimension(0));
+            if (data is null)
+                throw new ArgumentNullException(nameof(data));
+            return NDMatrix.Create((object)data, dtype, copy: false);
         }
-
-        private static NDArray Alias(NDArray a, Shape shape)
-            => new NDArray(a.Storage.Alias(shape)) { TensorEngine = a.TensorEngine };
 
         /// <summary>
-        ///     Parses a NumPy matrix string ("1 2; 3 4") into a 2-D NDArray. Mirrors NumPy's
-        ///     <c>_convert_from_string</c>: strip brackets, split rows on ';', split each row on commas and
-        ///     whitespace, then integer-typed unless any element needs a floating-point representation.
+        ///     Interpret any other value as a matrix: a tuple or collection (a Python sequence), an array or string
+        ///     held in an <see cref="object"/> reference, or a boxed number.
         /// </summary>
-        private static NDArray ParseMatrixString(string data)
+        /// <param name="data">The value.</param>
+        /// <param name="dtype">Data-type of the output, or <c>null</c> for the discovered one.</param>
+        /// <returns>The matrix: a view for an <see cref="NDArray"/>, new memory for everything else.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="data"/> is <c>null</c>.</exception>
+        /// <exception cref="ValueError">More than two axes, a ragged sequence, or an array that cannot be a
+        ///     matrix.</exception>
+        /// <exception cref="SyntaxError">A matrix literal with a token that is not Python syntax.</exception>
+        /// <exception cref="NotSupportedException">Strings or other objects inside a sequence.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asmatrix.html</remarks>
+        public static NDMatrix asmatrix(object data, DType dtype = null)
         {
-            string cleaned = data.Replace("[", "").Replace("]", "");
-            string[] rows = cleaned.Split(';');
-            var separators = new[] { ',', ' ', '\t', '\n', '\r' };
-
-            var tokenRows = new List<string[]>(rows.Length);
-            int ncols = -1;
-            bool anyFloat = false;
-
-            foreach (var row in rows)
-            {
-                var toks = row.Split(separators, StringSplitOptions.RemoveEmptyEntries);
-                if (ncols == -1)
-                    ncols = toks.Length;
-                else if (toks.Length != ncols)
-                    throw new ValueError("Rows not the same size.");
-
-                foreach (var t in toks)
-                    if (!IsIntegerToken(t)) { anyFloat = true; }
-
-                tokenRows.Add(toks);
-            }
-
-            int nrows = tokenRows.Count;
-
-            // An element-free matrix (e.g. "" or "   ") has no tokens to infer an integer dtype from;
-            // NumPy's np.array([[]]) defaults such an empty array to float64, so match that.
-            if (anyFloat || (long)nrows * ncols == 0)
-            {
-                var buf = new double[nrows, ncols];
-                for (int r = 0; r < nrows; r++)
-                    for (int c = 0; c < ncols; c++)
-                        buf[r, c] = double.Parse(tokenRows[r][c], CultureInfo.InvariantCulture);
-                return np.array(buf);
-            }
-            else
-            {
-                var buf = new long[nrows, ncols];
-                for (int r = 0; r < nrows; r++)
-                    for (int c = 0; c < ncols; c++)
-                        buf[r, c] = long.Parse(tokenRows[r][c], CultureInfo.InvariantCulture);
-                return np.array(buf);
-            }
+            if (data is null)
+                throw new ArgumentNullException(nameof(data));
+            return NDMatrix.Create(data, dtype, copy: false);
         }
-
-        /// <summary>True when <paramref name="token"/> parses as an integer literal (no decimal point / exponent).</summary>
-        private static bool IsIntegerToken(string token)
-            => long.TryParse(token, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out _);
     }
 }

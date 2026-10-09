@@ -58,7 +58,7 @@ OBJECT_SURFACES = (
     ObjectSurface("polynomial.hermite_e.HermiteE", "Polynomial objects"),
     ObjectSurface("polynomial.laguerre.Laguerre", "Polynomial objects"),
     ObjectSurface("ma.MaskedArray", "Masked arrays", disposition="subsystem"),
-    ObjectSurface("matrix", "Matrix objects", disposition="subsystem"),
+    ObjectSurface("matrix", "Matrix objects", "NumSharp.NDMatrix"),
     ObjectSurface("recarray", "Record arrays", disposition="subsystem"),
     ObjectSurface("record", "Record arrays", disposition="subsystem"),
     ObjectSurface("char.chararray", "String array objects", disposition="subsystem"),

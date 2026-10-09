@@ -481,6 +481,7 @@ namespace NumSharp.Tests.Fuzz
                 },
                 "NpzFile" => new[] { new ReadTarget("load_npz(bytes)", f => Disposable(np.load_npz(f.NpzBytes))) },
                 "NDMaskedArray" => MaskedTargets,
+                "NDMatrix" => MatrixTargets,
                 "NDArray<T>" => new[]
                 {
                     new ReadTarget("NDArray<double> (3,4)", _ =>
@@ -566,6 +567,35 @@ namespace NumSharp.Tests.Fuzz
                 var d = np.ones(new Shape(3, 4));
                 var m = np.ma.masked_array(d);
                 return (m, () => DisposeMaskedTarget(m, d, null));
+            }),
+        };
+
+        /// <summary>
+        ///     NDMatrix targets: a float64 matrix that owns its data, a square complex128 one (the inverse and the
+        ///     conjugate transpose compute there) and a matrix VIEW of an array (the shape setters and the views).
+        /// </summary>
+        private static readonly IReadOnlyList<ReadTarget> MatrixTargets = new[]
+        {
+            // np.matrix copies its data, so the arrays the copies are made from are released at once: the target
+            // owns exactly one buffer.
+            new ReadTarget("float64 (3,4) owning", _ =>
+            {
+                using var a = np.ones(new Shape(3, 4));
+                var m = np.matrix(a);
+                return (m, m.Dispose);
+            }),
+            new ReadTarget("complex128 (2,2) owning", _ =>
+            {
+                using var eye = np.eye(2);
+                using var a = eye.astype(np.complex128);
+                var m = np.matrix(a);
+                return (m, m.Dispose);
+            }),
+            new ReadTarget("float64 (2,3) view", _ =>
+            {
+                var a = np.ones(new Shape(2, 3));
+                var m = np.asmatrix(a);
+                return (m, () => { m.Dispose(); a.Dispose(); });
             }),
         };
 
