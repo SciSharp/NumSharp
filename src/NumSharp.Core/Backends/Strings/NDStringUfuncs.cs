@@ -13,12 +13,13 @@ namespace NumSharp.Backends.Strings
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///     <b>Two kinds of answer.</b> Where NumPy itself refuses (no loop for the operand classes), the exception carries
-    ///     NumPy's exact text: that is final behavior, not a gap. Where NumPy computes (concatenation by <c>add</c>,
-    ///     comparisons, the <c>logical_*</c> truth tests, <c>argmax</c>, sorting and searching), the answer is
-    ///     <see cref="NextPhase(string, NDArray)"/>: a <see cref="NotSupportedException"/> that names the operation and says string
-    ///     computation is the next phase of the string support. Both are raised BEFORE broadcasting, as NumPy resolves the
-    ///     loop before it broadcasts.
+    ///     <b>Three kinds of answer.</b> Where NumPy itself refuses (no loop for the operand classes), the exception carries
+    ///     NumPy's exact text: that is final behavior, not a gap. The comparisons and the <c>logical_*</c> truth tests
+    ///     COMPUTE (strings phase 2, P2.1: <see cref="NDStringComparison"/>, <see cref="NDStringTruth"/>), after the same
+    ///     checks. Where NumPy computes in a way a later subphase implements (concatenation by <c>add</c>, the repeat,
+    ///     <c>argmax</c>, sorting and searching, a text <c>out=</c>), the answer is <see cref="NextPhase(string, NDArray)"/>: a
+    ///     <see cref="NotSupportedException"/> that names the operation. The refusals are raised BEFORE broadcasting, as
+    ///     NumPy resolves the loop before it broadcasts.
     ///     </para>
     ///     <para>
     ///     <b>Three NumPy texts, chosen by the ufunc's type resolver</b> (probed against 2.4.2, <c>probe_compute*.py</c>):
@@ -124,10 +125,13 @@ namespace NumSharp.Backends.Strings
         /// <param name="out">The <c>out=</c> operand, or null.</param>
         /// <param name="loop">The <c>dtype=</c> loop request, or null.</param>
         /// <param name="where">The <c>where=</c> mask, or null.</param>
-        /// <returns>Null when neither operand is text (the numeric path continues); the empty result (or
-        ///     <paramref name="out"/>) when NumPy computes on text but the broadcast result is empty.</returns>
-        /// <exception cref="Exception">Every exception <see cref="ThrowIfBinary"/> documents, for a call that is not an empty
-        ///     computation.</exception>
+        /// <returns>Null when neither operand is text (the numeric path continues); otherwise the result NumPy's string loop
+        ///     computes — the comparison of two strings of one class (<see cref="NDStringComparison"/>), a logical ufunc over
+        ///     the operands' truth values (<see cref="LogicalOverTruth"/>), the empty result (or <paramref name="out"/>) of a
+        ///     computing call whose broadcast result is empty.</returns>
+        /// <exception cref="Exception">Every exception <see cref="ThrowIfBinary"/> documents, for a call this phase does not
+        ///     compute yet (a concatenation, a repeat); <see cref="SystemError"/> for a logical ufunc over a <c>U</c> unit
+        ///     above U+10FFFF (NumPy's bool cast).</exception>
         /// <remarks>Every caller must use the returned array: a non-null return means "this is the result", and the numeric
         ///     kernels behind the guard have no text lane.</remarks>
         internal static NDArray BinaryGuard(string ufunc, NDArray x1, NDArray x2, NDArray @out = null, NPTypeCode? loop = null,
@@ -136,14 +140,60 @@ namespace NumSharp.Backends.Strings
             if (!IsString(x1) && !IsString(x2))
                 return null;
             var error = BinaryAnswer(ufunc, x1, x2, @out, loop, where, out DType computed);
-            // ComputeAnswer's refusal means every check passed and the loop would compute: an empty result computes nothing.
+            // ComputeAnswer's refusal means every check passed and the loop would compute: an empty result computes nothing,
+            // the comparisons and the logical ufuncs compute now, the concatenation / repeat loops are a later subphase.
             if (error is StringComputationNotSupportedException && computed is not null)
             {
                 var dims = BroadcastDims(x1, x2, @out, where);
                 if (ShapeSize(dims) == 0)
                     return @out ?? new NDArray(computed, dims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(dims), true);
+                // A text out= receives the bool results FORMATTED ('True' / 'False', truncated to its width): the
+                // number-to-text cast, a later subphase — so such a call stays deferred.
+                bool textOut = IsString(@out);
+                if (!textOut && s_comparisons.Contains(ufunc) && ComparesText(x1.dtype, x2.dtype))
+                    return NDStringComparison.Execute(ufunc, x1, x2, @out, where);
+                if (!textOut && s_logical.Contains(ufunc))
+                    return LogicalOverTruth(ufunc, x1, x2, @out, where);
             }
             throw error;
+        }
+
+        /// <summary>
+        ///     <c>logical_and</c> / <c>logical_or</c> / <c>logical_xor</c> with a string operand: NumPy's
+        ///     <c>logical_ufunc_promoter</c> resolves the bool loop and casts every operand to bool, so each string operand
+        ///     becomes its truth array (the cast route: a <c>U</c> unit above U+10FFFF raises) and the bool loop runs on the
+        ///     result through the numeric ufunc, with the call's own <c>out=</c> and <c>where=</c>.
+        /// </summary>
+        /// <param name="ufunc"><c>"logical_and"</c>, <c>"logical_or"</c> or <c>"logical_xor"</c>.</param>
+        /// <param name="x1">The first operand.</param>
+        /// <param name="x2">The second operand.</param>
+        /// <param name="out">The <c>out=</c> operand, or null (its cast was checked by the guard).</param>
+        /// <param name="where">The <c>where=</c> mask, or null.</param>
+        /// <returns>The ufunc's result.</returns>
+        /// <exception cref="SystemError">A <c>U</c> operand holds a unit above U+10FFFF.</exception>
+        private static NDArray LogicalOverTruth(string ufunc, NDArray x1, NDArray x2, NDArray @out, NDArray where)
+        {
+            NDArray t1 = null, t2 = null;
+            try
+            {
+                // The truth arrays keep the operands' memory order ('K'), so the bool loop's output layout follows them as
+                // NumPy's follows the cast operands.
+                t1 = IsString(x1) ? NDStringTruth.Truth(x1, NDStringTruth.Flavor.Cast) : null;
+                t2 = IsString(x2) ? NDStringTruth.Truth(x2, NDStringTruth.Flavor.Cast) : null;
+                NDArray a = t1 ?? x1, b = t2 ?? x2;
+                return ufunc switch
+                {
+                    "logical_and" => np.logical_and(a, b, @out, where),
+                    "logical_or" => np.logical_or(a, b, @out, where),
+                    _ => np.logical_xor(a, b, @out, where),
+                };
+            }
+            finally
+            {
+                // The truth arrays are temporaries: the result never aliases them (a fresh array or out=).
+                t1?.Dispose();
+                t2?.Dispose();
+            }
         }
 
         /// <summary>

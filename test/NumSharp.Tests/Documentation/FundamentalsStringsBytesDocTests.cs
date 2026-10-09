@@ -158,12 +158,38 @@ namespace NumSharp.Tests.Documentation
             sqrt.Should().Throw<TypeError>().WithMessage("ufunc 'sqrt' not supported for the input types, *");
         }
 
+        /// <summary>
+        ///     The comparisons compute on text (strings phase 2, P2.1): <c>names == names</c> is <c>[True, True, True]</c>,
+        ///     <c>names &lt; ['dog']</c> is <c>[True, False, True]</c> (probed against NumPy 2.4.2).
+        /// </summary>
+        [TestMethod]
+        public void Computing_Comparisons()
+        {
+            var names = Names();
+            (names == names).ToArray<bool>().Should().Equal(true, true, true);
+            (names < np.array(new[] { "dog" })).ToArray<bool>().Should().Equal(true, false, true);
+            (names > "cat").ToArray<bool>().Should().Equal(false, true, false);
+        }
+
+        /// <summary>
+        ///     A string is True when it is not empty (any code unit not NUL): <c>['', 'a', ' '].astype(bool)</c> is
+        ///     <c>[False, True, True]</c>, <c>count_nonzero(names)</c> is 3 (probed against NumPy 2.4.2).
+        /// </summary>
+        [TestMethod]
+        public void Computing_TruthValues()
+        {
+            np.array(new[] { "", "a", " " }).astype(np.@bool).ToArray<bool>().Should().Equal(false, true, true);
+            np.count_nonzero(Names()).Should().Be(3L);
+        }
+
+        /// <summary>
+        ///     What the doc page still lists as a later phase: concatenation, sorting and the number-to-text cast refuse with
+        ///     <see cref="StringComputationNotSupportedException"/> (a <see cref="NotSupportedException"/>).
+        /// </summary>
         [TestMethod]
         public void Computing_NextPhase()
         {
             var names = Names();
-            Action compare = () => { _ = names == names; };
-            compare.Should().Throw<StringComputationNotSupportedException>();
             Action concat = () => np.add(names, names);
             concat.Should().Throw<StringComputationNotSupportedException>();
             Action sort = () => np.sort(names);

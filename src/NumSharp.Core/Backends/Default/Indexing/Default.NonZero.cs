@@ -56,14 +56,14 @@ namespace NumSharp.Backends
         /// <returns>One int64 index array per dimension.</returns>
         /// <exception cref="ValueError">A 0-d string array (NumPy's <c>Calling nonzero on 0d arrays is not allowed</c>, raised
         ///     before the element is read).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty string array of at least one dimension: NumPy
-        ///     reads the strings' truth values (the next phase); an empty one gives empty index arrays.</exception>
+        /// <remarks>A string array of at least one dimension is searched by its truth values (a non-empty string is True;
+        ///     the nonzero route never raises).</remarks>
         [NDScoped]
         public override unsafe NDArray<long>[] NonZero(NDArray nd)
         {
             // Text: NumPy's nonzero refuses a 0-d array before it reads the element (its ValueError, which NumSharp's
-            // numeric 0-d promotion below deliberately keeps from the numeric dtypes), then reads the strings' truth values
-            // (the next phase); an empty input reads none, and the bool stand-in gives the tuple of empty index arrays.
+            // numeric 0-d promotion below deliberately keeps from the numeric dtypes), then reads the strings' truth values:
+            // the stand-in is the truth array, searched below.
             if (Strings.NDStringUfuncs.ReduceStandIn("nonzero", nd) is { } standIn)
             {
                 using (standIn)
@@ -220,15 +220,14 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="nd">The array.</param>
         /// <returns>The number of elements whose truth value is True.</returns>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty string array: NumPy reads the strings' truth
-        ///     values (the next phase of NumSharp's string support); an empty one counts 0.</exception>
+        /// <remarks>A string array is counted by its truth values (a non-empty string counts; never raises).</remarks>
         /// <remarks>
         /// NumPy-aligned: np.count_nonzero([0, 1, 0, 2]) = 2
         /// </remarks>
         [NDScoped]
         public override long CountNonZero(NDArray nd)
         {
-            // Text: NumPy's count_nonzero reads the strings' truth values (the next phase); an empty input reads none (0).
+            // Text: NumPy's count_nonzero reads the strings' truth values (the nonzero route): the stand-in is the truth array.
             if (Strings.NDStringUfuncs.ReduceStandIn("count_nonzero", nd) is { } standIn)
             {
                 using (standIn)
@@ -251,15 +250,12 @@ namespace NumSharp.Backends
         /// <returns>The int64 counts.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds — the sum's rule NumPy's count_nonzero
         ///     inherits (<c>a.astype(bool).sum(axis)</c>), so a 0-d input accepts 0 and -1 and nothing else.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty string array: NumPy compares every element with
-        ///     <c>''</c> (the next phase of NumSharp's string support); an empty one gives the zeros of the reduced
-        ///     shape.</exception>
+        /// <remarks>A string array is counted by its truth values: NumPy's <c>(a != '').sum(axis)</c> (never raises).</remarks>
         [NDScoped]
         public override NDArray CountNonZero(NDArray nd, int axis, bool keepdims = false)
         {
-            // Text: NumPy's count_nonzero is (a != '').sum(axis) — the strings' truth values (the next phase), after the
-            // sum's axis check (a 0-d input accepts 0 and -1). An empty input compares nothing: the bool stand-in of the same
-            // shape gives the zeros of the reduced shape.
+            // Text: NumPy's count_nonzero is (a != '').sum(axis) — the strings' truth values, after the sum's axis check (a
+            // 0-d input accepts 0 and -1): the stand-in is the truth array, summed below.
             if (Strings.NDStringUfuncs.ReduceStandIn("count_nonzero", nd, (int?)axis) is { } standIn)
             {
                 using (standIn)

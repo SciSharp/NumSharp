@@ -117,23 +117,48 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     <see cref="ThrowIfComputes"/>, then the stand-in: null for a numeric input (the caller's path continues with it),
-        ///     a <see cref="BoolStandIn"/> of a text input whose answer the shape decides (the caller runs its numeric path on
-        ///     it and disposes it).
+        ///     the TRUTH ARRAY of a text input to a truth test or index search (<see cref="TruthFlavorOf"/>: the caller's bool
+        ///     path then computes NumPy's answer, as NumPy runs its bool loop on the cast), a <see cref="BoolStandIn"/> of a
+        ///     text input whose answer the shape decides. The caller runs its numeric path on the stand-in and disposes it.
         /// </summary>
         /// <param name="op">The NumPy function name (see <see cref="ShapeDecides"/>).</param>
         /// <param name="a">The operand.</param>
         /// <param name="axis">The <c>axis</c> argument, or null.</param>
-        /// <returns>Null for a numeric input; the bool stand-in otherwise.</returns>
+        /// <returns>Null for a numeric input; the truth array or the bool stand-in otherwise.</returns>
         /// <exception cref="AxisError">The axis is out of bounds.</exception>
         /// <exception cref="ValueError">An arg-reduction over an empty line, or <c>nonzero</c> of a 0-d array.</exception>
-        /// <exception cref="StringComputationNotSupportedException">NumPy computes this call on text (the next phase).</exception>
+        /// <exception cref="SystemError"><c>any</c> / <c>all</c> (the bool cast route) over a <c>U</c> unit above U+10FFFF.</exception>
+        /// <exception cref="StringComputationNotSupportedException">NumPy computes this call on text in a way this phase does
+        ///     not yet (the sorts and arg-reductions).</exception>
         internal static NDArray ReduceStandIn(string op, NDArray a, int? axis = null)
         {
             if (!IsString(a))
                 return null;
+            if (TruthFlavorOf(op) is { } flavor)
+            {
+                // NumPy's checks before it reads an element (the axis, nonzero's 0-d refusal), then the truth of every element.
+                ValidateReduceAxis(op, a.ndim, axis);
+                if (op is "nonzero" && a.ndim == 0)
+                    throw new ValueError(NonZero0dMessage);
+                return NDStringTruth.Truth(a, flavor);
+            }
             ThrowIfComputes(op, a, axis);
             return BoolStandIn(a);
         }
+
+        /// <summary>
+        ///     The truth route of a NumPy function that reads a string's truth value, or null for any other function:
+        ///     <c>any</c> / <c>all</c> reduce with <c>logical_or</c> / <c>logical_and</c> over the bool CAST (a <c>U</c> unit
+        ///     above U+10FFFF raises), the index searches and counts use the dtype's NONZERO function (never raises).
+        /// </summary>
+        /// <param name="op">The NumPy function name.</param>
+        /// <returns>The route, or null.</returns>
+        internal static NDStringTruth.Flavor? TruthFlavorOf(string op) => op switch
+        {
+            "any" or "all" => NDStringTruth.Flavor.Cast,
+            "nonzero" or "count_nonzero" or "argwhere" or "flatnonzero" => NDStringTruth.Flavor.Nonzero,
+            _ => null,
+        };
 
         /// <summary>
         ///     <see cref="ReduceStandIn(string, NDArray, int?)"/> for a tuple <c>axis</c> (<c>any</c> / <c>all</c>): the tuple
@@ -143,15 +168,18 @@ namespace NumSharp.Backends.Strings
         /// <param name="op">The NumPy function name (<c>"any"</c> or <c>"all"</c>).</param>
         /// <param name="a">The operand.</param>
         /// <param name="axes">The axes, or null.</param>
-        /// <returns>Null for a numeric input; the bool stand-in otherwise.</returns>
+        /// <returns>Null for a numeric input; the truth array otherwise (the caller reduces it and disposes it).</returns>
         /// <exception cref="AxisError">An axis is out of bounds.</exception>
         /// <exception cref="ValueError">An axis appears twice (<c>duplicate value in 'axis'</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">NumPy reads the strings' truth values (the next phase).</exception>
+        /// <exception cref="SystemError">A <c>U</c> unit above U+10FFFF (the bool cast route of <c>any</c> / <c>all</c>).</exception>
+        /// <exception cref="StringComputationNotSupportedException"><paramref name="op"/> is not a truth test (no caller passes one).</exception>
         internal static NDArray ReduceStandIn(string op, NDArray a, int[] axes)
         {
             if (!IsString(a))
                 return null;
             ValidateReduceAxes(op, a.ndim, axes);
+            if (TruthFlavorOf(op) is { } flavor)
+                return NDStringTruth.Truth(a, flavor);
             if (a.size != 0)
                 throw ReduceAnswer(op, a, null, false);
             return BoolStandIn(a);

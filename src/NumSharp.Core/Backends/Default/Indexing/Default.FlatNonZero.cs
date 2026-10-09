@@ -45,8 +45,6 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="nd">The array.</param>
         /// <returns>The indices (int64): a view of the <c>(count, 1)</c> buffer.</returns>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty string array: NumPy reads the strings' truth
-        ///     values (the next phase of NumSharp's string support); an empty one gives an empty int64 result.</exception>
         /// <exception cref="NotSupportedException">The IL kernels cannot be emitted for the dtype.</exception>
         /// <remarks>
         ///     <b>BREAKING (NumPy parity):</b> the result used to be a separate owning array. As a view it reports
@@ -55,8 +53,8 @@ namespace NumSharp.Backends
         /// </remarks>
         public override unsafe NDArray<long> FlatNonZero(NDArray nd)
         {
-            // Text: NumPy's flatnonzero is nonzero(ravel(a))[0], the strings' truth values (the next phase). An empty input
-            // reads none: the bool stand-in gives the empty int64 result.
+            // Text: NumPy's flatnonzero is nonzero(ravel(a))[0], the strings' truth values through the nonzero route: the
+            // stand-in is the truth array, searched below.
             if (Strings.NDStringUfuncs.ReduceStandIn("flatnonzero", nd) is { } standIn)
             {
                 using (standIn)

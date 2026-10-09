@@ -271,14 +271,15 @@ namespace NumSharp.Backends.Strings
         ///     <paramref name="y"/> element. The selection runs on unit views — the condition gains a trailing axis of extent
         ///     1 so it broadcasts over each element's characters.
         /// </summary>
-        /// <param name="condition">The condition (bool, or numbers tested for truth; text truthiness is refused).</param>
+        /// <param name="condition">The condition (bool, numbers, or text — each read by its truth value; a non-empty string
+        ///     is True).</param>
         /// <param name="x">Values where the condition holds.</param>
         /// <param name="y">Values elsewhere.</param>
         /// <param name="dims">The broadcast dimensions of the three (the caller validated the broadcast); adopted.</param>
         /// <returns>The new string array.</returns>
-        /// <exception cref="StringComputationNotSupportedException">The result has elements and the condition is a string array
-        ///     (text truthiness), or one of <paramref name="x"/> / <paramref name="y"/> is numeric (number ↔ text is the
-        ///     computational phase).</exception>
+        /// <exception cref="StringComputationNotSupportedException">The result has elements and one of <paramref name="x"/> /
+        ///     <paramref name="y"/> is numeric (formatting numbers as text is a later subphase).</exception>
+        /// <exception cref="SystemError">A <c>U</c> condition holds a unit above U+10FFFF (NumPy's bool cast of it).</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S</c> value NumPy converts to the <c>U</c> result is not ASCII — the
         ///     element NumPy's loop converts first (see <see cref="ThrowIfWhereDecodeFails"/>).</exception>
         /// <remarks>
@@ -298,15 +299,15 @@ namespace NumSharp.Backends.Strings
             if (layout.size == 0)
                 return new NDArray(descr, layout, true);
 
-            if (condition.typecode == NPTypeCode.String)
-                throw new StringComputationNotSupportedException(
-                    $"np.where with a {condition.dtype.ToString(true)} condition tests text for truth, which NumSharp's fixed-width string storage does not do yet.");
+            // A text condition is read by its truth values: NumPy's iterator casts it to bool (a non-empty string is True; a
+            // U unit above U+10FFFF raises the cast's SystemError).
+            using var cond = condition.typecode == NPTypeCode.Boolean ? condition.view()
+                : condition.typecode == NPTypeCode.String ? NDStringTruth.Truth(condition, NDStringTruth.Flavor.Cast)
+                : condition.astype(NPTypeCode.Boolean);
             if (x.typecode != NPTypeCode.String)
                 throw NDStringCasting.TextConversion(x.dtype, descr);
             if (y.typecode != NPTypeCode.String)
                 throw NDStringCasting.TextConversion(y.dtype, descr);
-
-            using var cond = condition.typecode == NPTypeCode.Boolean ? condition.view() : condition.astype(NPTypeCode.Boolean);
             // S -> U decoding is the only conversion of a string where that can fail; NumPy's loop decides which element
             // it reports, so that is found first, and the conversions below skip the ASCII check they no longer need.
             bool decodes = descr.Meta == DTypeRegistry.Str && (!x.Storage.StringSlice.IsUnicode || !y.Storage.StringSlice.IsUnicode);

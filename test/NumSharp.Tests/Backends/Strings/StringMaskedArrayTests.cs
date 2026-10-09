@@ -179,9 +179,11 @@ namespace NumSharp.Tests.Backends.Strings
             empty.Length.Should().Be(1);
             empty[0].size.Should().Be(0);
             empty[0].dtype.Should().Be(np.int64);
-            // Non-empty text: the truth values are the strings' lengths — read the text.
-            Action text = () => np.ma.nonzero(np.ma.array(np.array(new[] { "a", "" }), mask: new[] { false, false }));
-            text.Should().Throw<StringComputationNotSupportedException>();
+            // Non-empty text: the truth values are read (a non-empty string is True): np.ma.nonzero(['a', '']) is
+            // (array([0]),) (probed against NumPy 2.4.2).
+            var text = np.ma.nonzero(np.ma.array(np.array(new[] { "a", "" }), mask: new[] { false, false }));
+            text.Length.Should().Be(1);
+            text[0].ToArray<long>().Should().Equal(0L);
         }
 
         [TestMethod]
@@ -213,12 +215,16 @@ namespace NumSharp.Tests.Backends.Strings
             text.Should().Throw<StringComputationNotSupportedException>();
         }
 
+        /// <summary>
+        ///     A text condition is read by its truth values (a non-empty string is True):
+        ///     <c>np.ma.compress(['a', ''], [1, 2])</c> is <c>masked_array(data=[1], mask=False)</c> (probed against NumPy 2.4.2).
+        /// </summary>
         [TestMethod]
-        public void Compress_WithATextCondition_Defers()
+        public void Compress_WithATextCondition_ReadsItsTruth()
         {
-            // The condition's truth values are the strings' lengths: ma.compress(['a', ''], [1, 2]) -> [1] reads them.
-            Action act = () => np.ma.compress(np.array(new[] { "a", "" }), np.array(new long[] { 1, 2 }));
-            act.Should().Throw<StringComputationNotSupportedException>();
+            var r = np.ma.compress(np.array(new[] { "a", "" }), np.array(new long[] { 1, 2 }));
+            np.ma.getdata(r).ToArray<long>().Should().Equal(1L);
+            np.ma.getmaskarray(r).ToArray<bool>().Should().Equal(false);
         }
 
         [TestMethod]

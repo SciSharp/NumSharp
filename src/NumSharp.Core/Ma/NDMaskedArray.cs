@@ -2896,12 +2896,21 @@ namespace NumSharp
             // `dtype1.names` of two dtype-less operands.
             if (d1 is null)
                 throw new AttributeError("'NoneType' object has no attribute 'names'");
-            // make_mask(umath.logical_or(m1, m2)): text operands are refused here unless empty; a masked operand's slots
-            // are masked in the ufunc's result and make_mask reads them as True.
+            // make_mask(umath.logical_or(m1, m2)): text operands are read by their truth values (non-empty is True); a
+            // masked operand's slots are masked in the ufunc's result and make_mask reads them as True.
             var r = np.logical_or(AsData(m1), AsData(m2));
             var operandMasks = Or((m1 as NDMaskedArray)?._mask, (m2 as NDMaskedArray)?._mask);
-            if (operandMasks is not null)
+            bool maskedOperand = m1 is NDMaskedArray || m2 is NDMaskedArray;
+            if (operandMasks is not null && np.any(operandMasks))
                 r = np.logical_or(r, operandMasks);
+            else if (maskedOperand)
+            {
+                // A masked operand makes umath.logical_or return a MaskedArray (__array_wrap__), whose mask is the shrunk
+                // mask_or of the operands' masks: nomask here. make_mask then reads it through filled(), which hands back
+                // the result's _data — a VIEW (OWNDATA False), not the ufunc's own buffer. (The scope reclaims the ufunc's
+                // array; the view holds its own counted reference on the buffer.)
+                r = r.view();
+            }
             return shrink && !np.any(r) ? nomask : r;
         }
 
@@ -2940,10 +2949,74 @@ namespace NumSharp
         /// <param name="mask">A mask array-like (<see cref="NDArray"/>, C# array, scalar, or the
         /// <see cref="nomask"/> sentinel). A 0-D input flattens to a length-1 array (matching NumPy).</param>
         /// <returns>A fresh 1-D boolean <see cref="NDArray"/> in C-order.</returns>
-        /// <remarks>Returns a fresh array (never a view), matching NumPy which builds a new <c>np.array</c>. Scoped
-        /// (<c>[NDScoped]</c>): the raveled intermediate (and a materialized array-like) are reclaimed.</remarks>
+        /// <exception cref="RuntimeError">A <c>U</c> array with a non-empty element (NumPy's RecursionError, see the remarks).</exception>
+        /// <exception cref="SystemError">A <c>U</c> element NumPy turns into a <c>str</c> holds a unit above U+10FFFF.</exception>
+        /// <remarks>
+        ///     <para>Returns a fresh array (never a view), matching NumPy which builds a new <c>np.array</c>. Scoped
+        ///     (<c>[NDScoped]</c>): the raveled intermediate (and a materialized array-like) are reclaimed.</para>
+        ///     <para><b>Text.</b> NumPy's <c>_flatsequence</c> recurses into every element that has <c>__iter__</c>, so over
+        ///     text it does not read truth values the way the numeric path does (see <see cref="FlattenTextMask"/>).</para>
+        /// </remarks>
         [NDScoped]
-        public NDArray flatten_mask(object mask) => np.ravel(AsData(mask)).astype(np.@bool);
+        public NDArray flatten_mask(object mask)
+        {
+            var data = AsData(mask);
+            if (data.typecode == NPTypeCode.String)
+                return FlattenTextMask(data);
+            return np.ravel(data).astype(np.@bool);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>flatten_mask</c> over text: <c>_flatsequence</c> iterates the array and recurses into every element
+        ///     with <c>__iter__</c>.
+        ///     <list type="bullet">
+        ///       <item><description>A 0-d array cannot be iterated (TypeError), so the array itself is the one element:
+        ///       <c>np.array([a], dtype=bool)</c>, its truth (the bool cast) in a length-1 array.</description></item>
+        ///       <item><description><c>U</c>: a non-empty <c>str</c> iterates to one-character <c>str</c>s, which iterate to
+        ///       themselves — infinite recursion, Python's RecursionError, at the FIRST non-empty element in C order (its
+        ///       <c>str</c> is built first, so a unit above U+10FFFF up to and including it raises SystemError instead). An
+        ///       array of only empty strings yields nothing: an empty bool array.</description></item>
+        ///       <item><description><c>S</c>: a <c>bytes</c> element iterates to ints, so each element contributes its bytes up
+        ///       to the last nonzero one (trailing NULs stripped, embedded ones kept), each read as a bool.</description></item>
+        ///     </list>
+        /// </summary>
+        /// <param name="data">The text array.</param>
+        /// <returns>The flattened bool array (fresh, 1-D).</returns>
+        /// <exception cref="RuntimeError"><c>U</c> with a non-empty element.</exception>
+        /// <exception cref="SystemError">The cast of a 0-d <c>U</c> array, or a <c>U</c> element up to the first non-empty one,
+        ///     holds a unit above U+10FFFF.</exception>
+        private static NDArray FlattenTextMask(NDArray data)
+        {
+            if (data.ndim == 0)
+            {
+                using var scalar = Backends.Strings.NDStringTruth.Truth(data, Backends.Strings.NDStringTruth.Flavor.Cast);
+                return scalar.reshape(1).copy();
+            }
+
+            var flat = np.ravel(data);
+            if (data.dtype.kind == 'U')
+            {
+                // The truth of each element is exactly "its str is non-empty" (trailing NULs stripped).
+                var nonEmpty = np.flatnonzero(Backends.Strings.NDStringTruth.Truth(flat, Backends.Strings.NDStringTruth.Flavor.Nonzero));
+                if (nonEmpty.size == 0)
+                    return np.empty(new Shape(0), NPTypeCode.Boolean);
+                // Python builds each element's str in order up to the recursing one: a bad code point there raises first.
+                long first = nonEmpty.GetInt64(0);
+                using (Backends.Strings.NDStringTruth.Truth(flat[$":{first + 1}"], Backends.Strings.NDStringTruth.Flavor.Cast)) { }
+                throw new RuntimeError("maximum recursion depth exceeded");
+            }
+
+            // S: every element's bytes up to its last nonzero byte, in C order, each as a bool. The byte grid (n, width)
+            // keeps the bytes before each row's stripped length.
+            var units = Backends.Strings.NDStringArrays.UnitArray(flat);                 // (n, width) uint8
+            var nonzero = units != (byte)0;                                              // (n, width) bool
+            long width = units.Shape.dimensions[1];
+            // The stripped length of a row: width - (first nonzero counted from the end), or 0 for an all-NUL row.
+            var fromEnd = np.argmax(nonzero[":, ::-1"], axis: 1);
+            var length = np.where(np.any(nonzero, axis: 1), width - fromEnd, (NDArray)0L);
+            var keep = np.arange(width).reshape(1, width) < length.reshape(-1, 1);       // (n, width)
+            return nonzero[keep];
+        }
 
         /// <summary>
         ///     The dtype of the mask for a data dtype (NumPy's <c>make_mask_descr</c>) — ALWAYS boolean here.

@@ -66,8 +66,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(x1, x2))
                 return NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => logical_and(s.x1, s.x2, s.@out, s.where, s.dtype), @out);
-            // logical_* read a string's truth value (non-empty is True) in NumPy: the next phase of the string support.
-            // (An empty broadcast reads no truth value: BinaryGuard returns NumPy's empty bool result, or out=.)
+            // logical_* read a string's truth value (non-empty is True) through NumPy's bool cast: the guard computes the
+            // call over the operands' truth arrays and returns it (an empty broadcast reads nothing: NumPy's empty bool
+            // result, or out=). A text out= stays deferred (it receives formatted 'True' / 'False').
             if (Backends.Strings.NDStringUfuncs.BinaryGuard("logical_and", x1, x2, @out, Backends.DefaultEngine.UfuncLoopCode(dtype, "logical_and", x1, x2, @out, where), where) is { } textResult)
                 return textResult;
             ValidateLogicalDtype(dtype, "logical_and");
@@ -98,8 +99,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(x1, x2))
                 return NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => logical_or(s.x1, s.x2, s.@out, s.where, s.dtype), @out);
-            // logical_* read a string's truth value (non-empty is True) in NumPy: the next phase of the string support.
-            // (An empty broadcast reads no truth value: BinaryGuard returns NumPy's empty bool result, or out=.)
+            // logical_* read a string's truth value (non-empty is True) through NumPy's bool cast: the guard computes the
+            // call over the operands' truth arrays and returns it (an empty broadcast reads nothing: NumPy's empty bool
+            // result, or out=). A text out= stays deferred (it receives formatted 'True' / 'False').
             if (Backends.Strings.NDStringUfuncs.BinaryGuard("logical_or", x1, x2, @out, Backends.DefaultEngine.UfuncLoopCode(dtype, "logical_or", x1, x2, @out, where), where) is { } textResult)
                 return textResult;
             ValidateLogicalDtype(dtype, "logical_or");
@@ -127,8 +129,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(x1, x2))
                 return NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => logical_xor(s.x1, s.x2, s.@out, s.where, s.dtype), @out);
-            // logical_* read a string's truth value (non-empty is True) in NumPy: the next phase of the string support.
-            // (An empty broadcast reads no truth value: BinaryGuard returns NumPy's empty bool result, or out=.)
+            // logical_* read a string's truth value (non-empty is True) through NumPy's bool cast: the guard computes the
+            // call over the operands' truth arrays and returns it (an empty broadcast reads nothing: NumPy's empty bool
+            // result, or out=). A text out= stays deferred (it receives formatted 'True' / 'False').
             if (Backends.Strings.NDStringUfuncs.BinaryGuard("logical_xor", x1, x2, @out, Backends.DefaultEngine.UfuncLoopCode(dtype, "logical_xor", x1, x2, @out, where), where) is { } textResult)
                 return textResult;
             ValidateLogicalDtype(dtype, "logical_xor");

@@ -445,6 +445,29 @@ compare primitives exist; P2.2's `sort_complex` and P2.4's int parser need P2.0'
 
 ---
 
+## 7. State log
+
+- **2026-10-09 — P2.0's kernels and the core of P2.1** (this commit). The text kernels are
+  `Backends/Kernels/ILKernelGenerator.Text{,.Emit}.cs`: one IL kernel per (operation, unit, widths, operand order), the
+  chunk plan of §3 D1 (unrolled up to 9 chunks, a loop beyond), broadcast-pattern stages that hoist a stride-0 comparand,
+  and the truth kernel with the cast flavor's U+10FFFF flag. `Backends/Strings/NDStringComparison.cs` runs the six
+  comparisons (NumPy's output layout, a trivial-loop bypass that takes any 1-D operand, NDIter for the rest, buffered
+  casts into a non-bool `out=`, masks); `Backends/Strings/NDStringTruth.cs` gives the two truth routes (the bool cast,
+  which raises SystemError for a U unit above U+10FFFF, and the nonzero function, which never raises). Wired: the
+  comparison guard, the C# operators with a `string` operand (text context only, D10's non-breaking half),
+  `astype(bool)`, `any` / `all` / `nonzero` / `count_nonzero` / `argwhere` / `flatnonzero` (their stand-ins are now the
+  truth arrays), the logical ufuncs, `np.where(c, x, y)` with a text condition, `np.copyto` into bool (NumPy's masked
+  conversion rule), `np.place` / `np.putmask` masks (cast before the size check, NumPy's order), `np.trim_zeros`,
+  `np.array_equal` / `np.array_equiv`, the histogram bin-order checks, `ma.flatten_mask` over text (NumPy's RecursionError
+  for non-empty U, byte iteration for S) and `ma.mask_or`'s data view. A text `out=` stays deferred (NumPy formats
+  `'True'` / `'False'`: P2.4). Results: the string oracle went from 3,342 deferred cases to 1,141, zero failures; IL
+  kernels checked against the managed reference over 4.5 M comparisons; NPY/NS over 78 benchmark cells (26 operations ×
+  1K / 100K / 1M, two pinned P-cores) min 1.56×, geomean 12.3× — comparisons 4–35×, the truth readers 100–220×, `nonzero`
+  2.4–3.1×, `count_nonzero` 1.6–2.2×. Deferral sites 91 → 83. Moved: the Unicode tables (P2.0) go to the subphase that
+  first reads them (P2.4's digits, P2.5's whitespace). Open in P2.1: `np.char`'s rstrip comparisons (with the `np.char`
+  module, P2.5), the numpy.ma members that fill text with `True` (`alltrue` …: the bool → text cast, P2.4), and a
+  zero-excuse oracle section for comparisons and truth over the relayout kinds.
+
 ## Appendix A — deferral sites by subphase (91)
 
 | Subphase | Sites |

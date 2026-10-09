@@ -2,7 +2,7 @@
 
 NumSharp has NumPy's two fixed-width text dtypes: `str_` (`U`, Unicode) and `bytes_` (`S`, bytes). It stores, reads, writes, converts, copies, casts and prints them byte for byte like NumPy 2.4.2.
 
-Computing on text is the next phase. That covers comparison, concatenation, sorting, searching, and conversion between text and numbers. Such a call throws `StringComputationNotSupportedException` until then. Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
+Computing on text arrives in stages. Comparisons and truth values compute now, with NumPy's results. Concatenation, sorting, searching, the `np.strings` functions and conversion between text and numbers throw `StringComputationNotSupportedException` until their stage lands. Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
 
 NumPy's raw `void` (`V`), `object` (`O`) and variable-width `StringDType` dtypes stay unsupported.
 
@@ -13,7 +13,7 @@ NumPy's raw `void` (`V`), `object` (`O`) and variable-width `StringDType` dtypes
      Dtype integration → Dtypes_PromotionAndCasting
      Moving data → Moving_ViewsCopiesAndCasts, Moving_NonAsciiToBytes_Throws
      Printing → Printing_StrAndRepr
-     Computing on text → Computing_NumPyRefusals, Computing_NextPhase, Computing_NeverEqualToNumbers, Computing_ChecksInNumPysOrder
+     Computing on text → Computing_Comparisons, Computing_TruthValues, Computing_NumPyRefusals, Computing_NextPhase, Computing_NeverEqualToNumbers, Computing_ChecksInNumPysOrder
      .npy files → Npy_RoundTrip, Npy_CharWritesAsU1
      The Char dtype → Char_IsTwoByteUtf16CodeUnit
      Byte streams via np.frombuffer → Bytes_ViaFrombuffer -->
@@ -133,7 +133,30 @@ np.array2string(np.array(new[] { "a'b", "c\"d" }));   // ["a'b" 'c"d']
 
 ---
 
-## Computing on text (the next phase)
+## Computing on text
+
+### Comparisons
+
+`==`, `!=`, `<`, `<=`, `>`, `>=` and the ufuncs `np.equal` … `np.greater_equal` compare two text arrays of one class (`U` with `U`, `S` with `S`), of any widths, as NumPy does. Strings compare code unit by code unit as unsigned values. Trailing NULs never count (`'a' == 'a\0'`), embedded NULs do. Broadcasting, every memory layout, `out=`, `where=` and `dtype=bool` work as for numbers. A C# `string` against a text array is NumPy's `str` scalar:
+
+```csharp
+names == names;                       // [ True  True  True]
+names < np.array(new[] { "dog" });    // [ True False  True]
+names > "cat";                        // [False  True False]
+```
+
+A `bytes` array against a `str` array has no comparison loop in NumPy: `==` is all `False`, `!=` all `True`, and `<` raises NumPy's `TypeError`.
+
+### Truth values
+
+A string is `True` when it is not empty, that is when any code unit is not NUL. A string of spaces and the text `'False'` are `True`. `astype(bool)`, `np.any`, `np.all`, `np.nonzero`, `np.count_nonzero`, `np.where`, `np.compress`, the logical ufuncs, `np.place` and `np.putmask` masks, and `np.trim_zeros` read it:
+
+```csharp
+np.array(new[] { "", "a", " " }).astype(np.@bool);   // [False  True  True]
+np.count_nonzero(names);                            // 3
+```
+
+### What is not computed yet
 
 NumPy answers a call that involves text in one of two ways, and NumSharp follows it.
 
@@ -144,10 +167,9 @@ np.sum(names);    // TypeError: the resolved dtypes are not compatible with add.
 np.sqrt(names);   // TypeError: ufunc 'sqrt' not supported for the input types, ...
 ```
 
-**NumPy computes on the text.** NumSharp throws `StringComputationNotSupportedException`, a `NotSupportedException`:
+**NumPy computes on the text in a later stage.** NumSharp throws `StringComputationNotSupportedException`, a `NotSupportedException`:
 
 ```csharp
-_ = names == names;       // comparison
 np.add(names, names);     // concatenation
 np.sort(names);           // sorting
 ```
@@ -165,7 +187,7 @@ NumSharp also reports the problems of a call in NumPy's order, before it answers
 np.sum(names, 9);   // AxisError: axis 9 is out of bounds for array of dimension 1
 ```
 
-An unsized string `dtype=` request (`"U"`, `"S"`) gets NumPy's answer too. `np.sqrt(x, dtype: "U")` names no loop. `np.add(x, x, dtype: "U")` is the next phase, because NumPy formats the numbers as text and concatenates them.
+An unsized string `dtype=` request (`"U"`, `"S"`) gets NumPy's answer too. `np.sqrt(x, dtype: "U")` names no loop. `np.add(x, x, dtype: "U")` waits for a later stage, because NumPy formats the numbers as text and concatenates them.
 
 ### When the shape decides the answer
 
@@ -183,7 +205,7 @@ np.isin(names, np.array(new[] { 1.5, 2.0 }));   // [False False False]
 np.array_equal(names, np.zeros(new Shape(3L))); // False
 ```
 
-The same calls over text that NumPy compares stay in the next phase.
+The same calls over text that NumPy sorts or searches stay in a later stage.
 
 `np.place` and `np.putmask` follow NumPy's two value forms. A C# array is a Python list: NumSharp converts it straight into the target's dtype. An `NDArray` must cast to the target's dtype under the `'safe'` rule, as in NumPy:
 
@@ -207,14 +229,14 @@ m.filled("zz");    // ['zz' 'c' 'de']
 np.ma.count(m);    // 2
 ```
 
-The rules for computing are the same as for plain arrays. A masked reduction refuses with NumPy's message. A call that must read or format text is the next phase:
+The rules for computing are the same as for plain arrays. A masked reduction refuses with NumPy's message. A call that must format numbers as text waits for a later stage:
 
 ```csharp
 np.ma.sum(m);      // TypeError: the resolved dtypes are not compatible with add.reduce. Resolved (dtype('<U2'), dtype('<U2'), dtype('<U4'))
 m.filled(5);       // StringComputationNotSupportedException: NumPy writes 5 as the text '5'
 ```
 
-Until the next phase, convert to .NET and compute there. For example, `NDArray.AsStringArray(names).Select(s => s.ToUpper())`.
+For what is not computed yet, convert to .NET and compute there. For example, `NDArray.AsStringArray(names).Select(s => s.ToUpper())`.
 
 ---
 
@@ -270,7 +292,7 @@ This is NumPy's `np.frombuffer` on a bytestring, and the general interop bridge.
 | `arr.astype("U10")` | `arr.astype("U10")` |
 | `arr[0]` (a `numpy.str_`) | `arr.item(0)` (a C# `string`) |
 | `arr.tolist()` | `arr.tolist()` or `NDArray.AsStringArray(arr)` |
-| `np.char.upper(arr)` / `np.strings.upper(arr)` | next phase: `NDArray.AsStringArray(arr).Select(s => s.ToUpper())` |
+| `np.char.upper(arr)` / `np.strings.upper(arr)` | a later stage: `NDArray.AsStringArray(arr).Select(s => s.ToUpper())` |
 | `StringDType()` array | not supported: `string[]` / `List<string>` |
 | `np.array(['a','b','c'])` (single characters, `<U1`) | `np.array(new[] { "a", "b", "c" })` (`<U1`); `np.array(new[] { 'a', 'b', 'c' })` is `Char` |
 
@@ -279,7 +301,7 @@ This is NumPy's `np.frombuffer` on a bytestring, and the general interop bridge.
 ## Troubleshooting
 
 ### "`StringComputationNotSupportedException`: ... is the next phase"
-NumPy computes this call on text, and NumSharp does not compute on text yet. Convert the values to .NET (`NDArray.AsStringArray`, `item`) and use LINQ, or keep the computation in NumPy.
+NumPy computes this call on text, and NumSharp does not compute it yet (comparisons and truth values already compute). Convert the values to .NET (`NDArray.AsStringArray`, `item`) and use LINQ, or keep the computation in NumPy.
 
 ### "My `byte[][]` became a `uint8` matrix"
 A jagged `byte[][]` is numeric data in C#. Pass an `object[]` of `byte[]` values to get an `S` array.
@@ -307,7 +329,8 @@ A `U` to `S` cast encodes ASCII only, as NumPy does. Keep non-ASCII text in a `U
 | `NDArray.AsStringArray(arr)` | Every element of a `U` array as a `string[]`, in C order |
 | `arr[i] = "text"` | Writes one element, cut to the width |
 | `arr.astype("S3")` / `arr.astype("U8")` | Casts between string dtypes, as NumPy does |
-| Computing calls (`==`, `np.add`, `np.sort`, ...) | `StringComputationNotSupportedException` (the next phase) |
+| Comparisons (`==`, `<`, `np.equal`, ...) and truth values (`astype(bool)`, `np.any`, `np.nonzero`, ...) | NumPy's results |
+| Other computing calls (`np.add`, `np.sort`, ...) | `StringComputationNotSupportedException` (a later stage) |
 | NumPy's refusals (`np.sum`, `np.sqrt`, ...) | NumPy's exception and message |
 | `np.dtype("V7")` / `"O"` / `StringDType` | `NotSupportedException` |
 | `NPTypeCode.Char` | A 2-byte UTF-16 code unit dtype, written to `.npy` as `<U1` |

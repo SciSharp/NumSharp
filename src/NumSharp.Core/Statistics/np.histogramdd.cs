@@ -246,11 +246,11 @@ namespace NumSharp
                 if (spec is NDArray earr && earr.ndim == 1)
                 {
                     edges[i] = earr;
-                    // Fewer than two text edges have nothing to compare; two or more are compared (string computation).
+                    // Fewer than two text edges have nothing to compare; two or more are compared by the string greater kernel.
                     if (Backends.Strings.NDStringUfuncs.IsString(earr))
                     {
-                        if (earr.size > 1)
-                            throw Backends.Strings.NDStringUfuncs.NextPhase("greater", earr);
+                        if (earr.size > 1 && TextEdgesDecrease(earr))
+                            throw new ValueError($"`bins[{i}]` must be monotonically increasing, when an array");
                     }
                     else if (AnyDecreasing(edges[i]))
                         throw new ValueError($"`bins[{i}]` must be monotonically increasing, when an array");

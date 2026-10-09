@@ -53,13 +53,18 @@ namespace NumSharp.Tests.Backends.Strings
             o.ToArray<bool>().Should().Equal(false, false, false);
         }
 
+        /// <summary>
+        ///     The truth tests read the strings (a non-empty string is True): <c>np.any(['ab', 'c', 'de'])</c> is True,
+        ///     <c>np.count_nonzero(…, 0)</c> is 3, <c>np.all(['a', ''])</c> is False, and a 2-D count along axis 1 is
+        ///     <c>[1, 1]</c> (probed against NumPy 2.4.2).
+        /// </summary>
         [TestMethod]
-        public void TruthTests_OfText_StillDefer()
+        public void TruthTests_OfText_ReadTheStrings()
         {
-            Action any = () => np.any(U());
-            any.Should().Throw<StringComputationNotSupportedException>().WithMessage("any is not supported*");
-            Action count = () => np.count_nonzero(U(), 0);
-            count.Should().Throw<StringComputationNotSupportedException>();
+            np.any(U()).Should().BeTrue();
+            np.count_nonzero(U(), 0).GetInt64().Should().Be(3L);
+            np.all(np.array(new[] { "a", "" })).Should().BeFalse();
+            np.count_nonzero(np.array(new[,] { { "a", "" }, { "", "b" } }), 1).ToArray<long>().Should().Equal(1L, 1L);
         }
 
         [TestMethod]
@@ -289,11 +294,17 @@ namespace NumSharp.Tests.Backends.Strings
             np.array_equal(u, u, true).Should().BeTrue();                          // a1 is a2
         }
 
+        /// <summary>
+        ///     <c>np.array_equal</c> of two strings of one class compares the text (<c>(a1 == a2).all()</c>): two equal arrays
+        ///     are True, one differing element makes it False; <c>equal_nan=True</c> with two different arrays still meets
+        ///     <c>isnan</c>, which has no string loop (probed against NumPy 2.4.2).
+        /// </summary>
         [TestMethod]
-        public void Equality_ThatComparesText_Defers_AndEqualNanMeetsIsnan()
+        public void Equality_ThatComparesText_ComparesIt_AndEqualNanMeetsIsnan()
         {
-            Action text = () => np.array_equal(U(), U());
-            text.Should().Throw<StringComputationNotSupportedException>();
+            np.array_equal(U(), U()).Should().BeTrue();
+            np.array_equal(U(), np.array(new[] { "ab", "c", "dx" })).Should().BeFalse();
+            np.array_equiv(U(), np.array(new[,] { { "ab", "c", "de" }, { "ab", "c", "de" } })).Should().BeTrue();
             Action nan = () => np.array_equal(U(), U(), true);
             nan.Should().Throw<TypeError>().WithMessage("ufunc 'isnan' not supported for the input types*");
         }

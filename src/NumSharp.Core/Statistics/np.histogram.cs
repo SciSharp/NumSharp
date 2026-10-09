@@ -600,11 +600,11 @@ namespace NumSharp
                     throw new ValueError("`bins` must be 1d, when an array");
                 binEdges = nd;
                 // `np.any(bin_edges[:-1] > bin_edges[1:])`: with fewer than two edges there is nothing to compare, so text
-                // edges pass as they are; two or more text edges are compared (string computation).
+                // edges pass as they are; two or more text edges are compared by the string greater kernel.
                 if (Backends.Strings.NDStringUfuncs.IsString(binEdges))
                 {
-                    if (binEdges.size > 1)
-                        throw Backends.Strings.NDStringUfuncs.NextPhase("greater", binEdges);
+                    if (binEdges.size > 1 && TextEdgesDecrease(binEdges))
+                        throw new ValueError("`bins` must increase monotonically, when an array");
                 }
                 else if (AnyDecreasing(binEdges))
                     throw new ValueError("`bins` must increase monotonically, when an array");
@@ -959,6 +959,21 @@ namespace NumSharp
 
         /// <summary>True when every element of the boolean mask is true (NumPy's <c>logical_and.reduce</c>).</summary>
         private static bool AllTrue(NDArray mask) => np.all(mask);
+
+        /// <summary>
+        ///     NumPy's <c>np.any(bin_edges[:-1] &gt; bin_edges[1:])</c> over 1-D TEXT edges (two or more): the string
+        ///     <c>greater</c> comparison of each edge with the next (unsigned code units, zero-padded), then <c>any</c>.
+        ///     Shared by <c>np.histogram</c> and <c>np.histogramdd</c>, whose monotonic checks are this statement.
+        /// </summary>
+        /// <param name="edges">The 1-D string edges (at least two).</param>
+        /// <returns>True when some edge is greater than the one after it (the edges do not increase monotonically).</returns>
+        internal static bool TextEdgesDecrease(NDArray edges)
+        {
+            using var lower = edges[":-1"];
+            using var upper = edges["1:"];
+            using var greater = lower > upper;
+            return np.any(greater);
+        }
 
         /// <summary>True when any adjacent pair strictly decreases (rejects non-monotonic explicit edges; equal is allowed).</summary>
         private static bool AnyDecreasing(NDArray edges)

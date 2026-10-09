@@ -41,9 +41,10 @@ namespace NumSharp.Backends.Strings
         ///     (<c>Cannot cast scalar from …</c> for a 0-d array).</exception>
         /// <exception cref="UnicodeEncodeError"><c>U → S</c> meets a code point at or above 128.</exception>
         /// <exception cref="UnicodeDecodeError"><c>S → U</c> meets a byte at or above <c>0x80</c>.</exception>
-        /// <exception cref="SystemError"><c>U → S</c> meets a unit above <c>U+10FFFF</c>.</exception>
+        /// <exception cref="SystemError"><c>U → S</c> or <c>U → bool</c> meets a unit above <c>U+10FFFF</c>.</exception>
         /// <exception cref="StringComputationNotSupportedException">The cast is allowed but converts between text and numbers / dates
-        ///     (the computational phase) and the array has elements; an empty array converts to an empty result.</exception>
+        ///     other than text → bool (the computational phase) and the array has elements; an empty array converts to an
+        ///     empty result.</exception>
         public static NDArray AsType(NDArray src, DType dtype, bool copy, char order, string casting)
         {
             // npy_parse_arguments: the casting and order converters run before the dtype is adapted. astype's converter
@@ -73,6 +74,11 @@ namespace NumSharp.Backends.Strings
 
             if (!DTypeCasting.CanCastTypeTo(from, to, rule))
                 throw InvalidCast(from, to, rule, src.ndim == 0);
+
+            // Text to bool is a string's truth value (NumPy's legacy string-to-bool cast: a non-empty string is True, a U
+            // unit above U+10FFFF raises its SystemError), laid out by the requested order like any astype result.
+            if (from.Meta is StringDTypeMeta && to.typecode == NPTypeCode.Boolean)
+                return NDStringTruth.Truth(src, NDStringTruth.Flavor.Cast, order);
 
             // Formatting numbers as text or parsing text as numbers is the computational phase — unless the array has no
             // element: NumPy then allocates the result and converts nothing (np.zeros(0, 'U2').astype(np.float64) is an

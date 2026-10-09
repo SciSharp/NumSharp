@@ -28,16 +28,14 @@ namespace NumSharp
         /// <param name="keepdims">If True, the axes which are reduced are left in the result as dimensions with size one.</param>
         /// <returns>Number of non-zero values along the specified axis.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds (a 0-d string array accepts 0 and -1).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty string array: NumPy compares every element
-        ///     with <c>''</c> (the next phase of NumSharp's string support). An empty one gives the zeros of the reduced
-        ///     shape.</exception>
+        /// <remarks>A string array is counted by its truth values: NumPy's <c>a != ''</c> then the sum (a non-empty string
+        ///     counts; never raises).</remarks>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.count_nonzero.html</remarks>
         public static NDArray count_nonzero(NDArray a, int axis, bool keepdims = false)
         {
             using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // Text: NumPy compares every element with '' (the next phase) and then sums with the axis, so an empty or
-            // non-empty string array reports a bad axis first (AxisError, probed). An empty input compares nothing: the
-            // bool stand-in of the same shape gives the zeros of the reduced shape.
+            // Text: NumPy compares every element with '' and then sums with the axis, so a string array reports a bad
+            // axis first (AxisError, probed); the stand-in is the strings' truth array, which the count below sums.
             if (Backends.Strings.NDStringUfuncs.ReduceStandIn("count_nonzero", a, axis) is { } standIn)
             {
                 using (standIn)

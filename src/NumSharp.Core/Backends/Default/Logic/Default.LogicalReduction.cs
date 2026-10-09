@@ -27,8 +27,8 @@ namespace NumSharp.Backends
             if (nd is null)
                 throw new ArgumentNullException(nameof(nd));
             // Text: NumPy's logical_and / logical_or.reduce validates the axis (a 0-d input accepts 0 and -1), then reads
-            // the strings' truth values — the next phase — except over an empty input, whose identity-filled result the
-            // bool stand-in of the same shape computes. No string reaches the bool kernels below.
+            // the strings' truth values through the bool cast: the stand-in is the truth array, so no string reaches the
+            // bool kernels below.
             if (Strings.NDStringUfuncs.ReduceStandIn(reduceAll ? "all" : "any", nd, (int?)axis) is { } standIn)
             {
                 using (standIn)
@@ -114,8 +114,8 @@ namespace NumSharp.Backends
             if (axis is null)
                 throw new ArgumentNullException(nameof(axis));
             // Text: the tuple is checked item by item, then for repeats ("duplicate value in 'axis'"), before NumPy reads
-            // the strings' truth values (the next phase) — an empty tuple included, which still casts text to bool. An
-            // empty input reads none: the bool stand-in of the same shape computes NumPy's result.
+            // the strings' truth values through the bool cast — an empty tuple included, which still casts text to bool:
+            // the stand-in is the truth array.
             if (Strings.NDStringUfuncs.ReduceStandIn(reduceAll ? "all" : "any", nd, axis) is { } standIn)
             {
                 using (standIn)

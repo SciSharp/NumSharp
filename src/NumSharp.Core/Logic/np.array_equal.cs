@@ -16,8 +16,6 @@ namespace NumSharp {
         /// <returns>NumPy's answer.</returns>
         /// <exception cref="TypeError"><paramref name="equal_nan"/> with two different arrays of one shape (<c>isnan</c> has
         ///     no string loop).</exception>
-        /// <exception cref="StringComputationNotSupportedException">Two non-empty strings of one class (NumPy compares the
-        ///     text: the next phase of NumSharp's string support).</exception>
         private static bool ArrayEqualText(NDArray a, NDArray b, bool equal_nan)
         {
             var da = a.Shape.dimensions;
@@ -31,7 +29,9 @@ namespace NumSharp {
             {
                 if (!Backends.Strings.NDStringUfuncs.ComparesText(a.dtype, b.dtype) || a.size == 0)
                     return a.size == 0;
-                throw Backends.Strings.NDStringUfuncs.NextPhase("array_equal", a);
+                // (a1 == a2).all(): two strings of one class compare their text (the equal kernel), then the bool all().
+                using var equal = a == b;
+                return np.all(equal);
             }
             if (ReferenceEquals(a, b))
                 return true;
@@ -57,10 +57,9 @@ namespace NumSharp {
         ///     https://numpy.org/doc/stable/reference/generated/numpy.array_equal.html
         /// </remarks>
         /// <exception cref="TypeError">A string operand with <paramref name="equal_nan"/> and two different arrays of one shape
-        ///     (NumPy's <c>isnan</c> has no string loop).</exception>
-        /// <exception cref="StringComputationNotSupportedException">Two non-empty strings of one class and one shape: NumPy
-        ///     compares the text (the next phase of NumSharp's string support). Other string pairs are answered from shape and
-        ///     dtype (a shape mismatch, or no <c>equal</c> loop, is False; empty arrays are True).</exception>
+        ///     (NumPy's <c>isnan</c> has no string loop). Without it, two strings of one class compare their text and other
+        ///     string pairs are answered from shape and dtype (a shape mismatch, or no <c>equal</c> loop, is False; empty
+        ///     arrays are True).</exception>
         public static bool array_equal(NDArray a, NDArray b, bool equal_nan = false)
         {
             using var plain = NDMatrixBoundary.PlainFor(a, b);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)

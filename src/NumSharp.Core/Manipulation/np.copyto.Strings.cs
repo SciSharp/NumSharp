@@ -180,6 +180,12 @@ namespace NumSharp
             // Text into numbers parses (can fail, so every parse NumPy runs is the computational phase); numbers into text
             // format (cannot fail, so only a write matters).
             bool parses = src.Storage.IsString;
+            // Text into bool is a string's truth value (NumPy's string-to-bool cast), computed now.
+            if (parses && dst.typecode == NPTypeCode.Boolean)
+            {
+                CopytoTextTruth(dst, src, @where);
+                return;
+            }
             if (src.ndim == 0)
             {
                 // AssignRawScalar: a destination of more than one element gets the scalar converted ONCE, before the mask.
@@ -218,6 +224,105 @@ namespace NumSharp
             if (dst.size == 0 || (@where is not null && !np.any(@where)))
                 return;
             throw NDStringCasting.TextConversion(from, to);
+        }
+
+        /// <summary>
+        ///     <see cref="CopytoTextNumber"/> for a bool destination: NumPy's string-to-bool cast assigns each string's truth
+        ///     value (non-empty is True), in NumPy's order — the scalar / overlap conversions that run before the mask, the
+        ///     broadcast checks, then the masked assignment, which converts only the elements the mask selects.
+        /// </summary>
+        /// <param name="dst">The bool destination (writeable; the cast rule allowed it).</param>
+        /// <param name="src">The text source.</param>
+        /// <param name="where">The validated bool mask, or <c>null</c>.</param>
+        /// <exception cref="ValueError">The source or the mask does not broadcast to <paramref name="dst"/>.</exception>
+        /// <exception cref="SystemError">A converted <c>U</c> element holds a unit above U+10FFFF (NumPy's
+        ///     <c>invalid maximum character passed to PyUnicode_New</c>); an element the mask leaves out is not converted, so
+        ///     it never raises.</exception>
+        private static unsafe void CopytoTextTruth(NDArray dst, NDArray src, NDArray @where)
+        {
+            NDArray truth = null;
+            try
+            {
+                if (src.ndim == 0)
+                {
+                    // AssignRawScalar: a destination of more than one element gets the scalar converted ONCE, before the mask.
+                    if (dst.size > 1)
+                        truth = NDStringTruth.Truth(src, NDStringTruth.Flavor.Cast);
+                    if (@where is not null)
+                        CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
+                            "where mask", stripLeadingUnitAxes: false);
+                    if (dst.size == 0 || (@where is not null && !np.any(@where)))
+                        return;
+                    // One element: converted inside the masked loop, i.e. only now that it is selected.
+                    truth ??= NDStringTruth.Truth(src, NDStringTruth.Flavor.Cast);
+                    np.copyto(dst, truth, "unsafe", @where);
+                    return;
+                }
+
+                // An overlapping source (one buffer read as text and as bool) is copied first by an UNMASKED conversion of
+                // every element — after its own broadcast check, so the broadcast error still comes first.
+                int dnd = dst.ndim;
+                bool overlapNeedsCopy =
+                    ((dnd == 1 && dst.Shape.strides[0] * src.Shape.strides[src.ndim - 1] < 0) || dnd > 1)
+                    && NDMemOverlap.SolveMayShareMemory(src, dst, 0) != MemOverlap.No;
+                CopytoBroadcastStrides(dst.Shape.dimensions, src.Shape.dimensions, src.Shape.strides, "input array",
+                    stripLeadingUnitAxes: true);
+                if (overlapNeedsCopy && dst.size > 0)
+                    truth = NDStringTruth.Truth(src, NDStringTruth.Flavor.Cast);
+                if (@where is not null && @where.ndim == 0)
+                {
+                    // "optimization: scalar boolean mask"
+                    if (!*(bool*)CopytoData(@where))
+                        return;
+                    @where = null;
+                }
+                if (@where is not null)
+                    CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides, "where mask",
+                        stripLeadingUnitAxes: false);
+                if (dst.size == 0 || (@where is not null && !np.any(@where)))
+                    return;
+
+                // The masked transfer converts only the selected elements: a bad code point raises only when the mask
+                // selects (a destination slot fed by) its element. Unmasked, every element is converted.
+                truth ??= @where is null
+                    ? NDStringTruth.Truth(src, NDStringTruth.Flavor.Cast)
+                    : MaskedTruth(dst, src, @where);
+                np.copyto(dst, truth, "unsafe", @where);
+            }
+            finally
+            {
+                truth?.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     The truth array of a text source assigned under a mask: the nonzero route (never raises), after checking that
+        ///     no element the mask selects holds a <c>U</c> unit above U+10FFFF — the elements NumPy's masked cast converts.
+        /// </summary>
+        /// <param name="dst">The destination (the broadcast target of the source and the mask).</param>
+        /// <param name="src">The text source.</param>
+        /// <param name="where">The mask (validated, broadcastable to <paramref name="dst"/>).</param>
+        /// <returns>The source's truth array (the caller owns it).</returns>
+        /// <exception cref="SystemError">A selected element holds a unit above U+10FFFF.</exception>
+        private static NDArray MaskedTruth(NDArray dst, NDArray src, NDArray @where)
+        {
+            if (src.dtype.kind == 'U')
+            {
+                using var units = NDStringArrays.UnitArray(src);                     // src.shape + (chars,), uint32
+                using var bad = np.any(units > 0x10FFFFu, axis: -1);                  // per element
+                // copyto strips the source's leading extent-1 axes beyond the destination's rank (the broadcast check
+                // already passed, so every extra leading axis has extent 1); the rest broadcasts as the assignment does.
+                var badDims = bad.shape;
+                using var badRanked = badDims.Length > dst.ndim
+                    ? bad.reshape(badDims[(badDims.Length - dst.ndim)..])
+                    : bad.view();
+                // A selected destination slot whose (broadcast) source element is bad means NumPy converts that element.
+                using var badView = np.broadcast_to(badRanked, dst.Shape);
+                using var selectedBad = np.logical_and(badView, @where);
+                if (np.any(selectedBad))
+                    throw new SystemError(NDStringTruth.InvalidCodePointMessage);
+            }
+            return NDStringTruth.Truth(src, NDStringTruth.Flavor.Nonzero);
         }
 
         /// <summary>

@@ -17,9 +17,8 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="trim"/> contains unexpected characters.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="filt"/> ("axis: axis … is
         ///     out of bounds for array of dimension …", NumPy names the argument).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty string array with an axis to trim: NumPy reads
-        ///     the strings' truth values (the next phase of NumSharp's string support).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html. A string array is trimmed by its
+        ///     truth values (an empty string is a zero), as NumPy's <c>argwhere</c> reads them.</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray trim_zeros(NDArray filt, string trim = "fb", int? axis = null)
             => NDMatrixBoundary.Sees(filt)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
@@ -50,10 +49,9 @@ namespace NumSharp
         ///     (NumPy's ValueError texts).</exception>
         /// <exception cref="AxisError">If an axis is out of bounds for <paramref name="filt"/> (checked for every axis before
         ///     the repeat check).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty string array with an axis to trim: NumPy reads
-        ///     the strings' truth values (the next phase of NumSharp's string support). An empty one collapses every trimmed
-        ///     axis to length 0, and a 0-d one (or an empty axis list) is returned as it is.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html. A string array is trimmed by its
+        ///     truth values (an empty string — all NULs — is a zero): NumPy's <c>_arg_trim_zeros</c> runs <c>np.argwhere</c>,
+        ///     the dtype's nonzero route, which never raises; the result is a view of the text itself.</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray trim_zeros(NDArray filt, string trim, int[] axis)
@@ -92,11 +90,13 @@ namespace NumSharp
             if (!anyAxis)
                 return filt;
 
-            // Text: NumPy's argwhere reads the strings' truth values (the next phase of NumSharp's string support) —
-            // after the trim and axis checks and the no-axis return above. An empty input reads none: every trimmed axis
-            // collapses to [0:0], which the path below computes (the empty-input nonzero / any answer from the shape).
-            if (Backends.Strings.NDStringUfuncs.IsString(filt) && filt.size != 0)
-                throw Backends.Strings.NDStringUfuncs.NextPhase("trim_zeros", filt);
+            // Text: NumPy's argwhere reads the strings' truth values through the dtype's nonzero function — after the trim
+            // and axis checks and the no-axis return above. The bounding box is found on that truth array (the probe), and
+            // the slices below cut `filt` itself, so the result stays a view of the text. (The probe is reclaimed with the
+            // scope; np.any over the truth array cannot raise, where np.any over the text would take the cast route.)
+            var probe = Backends.Strings.NDStringUfuncs.IsString(filt)
+                ? Backends.Strings.NDStringTruth.Truth(filt, Backends.Strings.NDStringTruth.Flavor.Nonzero)
+                : filt;
 
             bool trimFront = trim.IndexOf('f') >= 0;
             bool trimBack = trim.IndexOf('b') >= 0;
@@ -121,7 +121,7 @@ namespace NumSharp
                 NDArray positions;
                 if (ndim == 1)
                 {
-                    positions = np.nonzero(filt)[0];
+                    positions = np.nonzero(probe)[0];
                 }
                 else
                 {
@@ -129,7 +129,7 @@ namespace NumSharp
                     for (int k = 0; k < ndim; k++)
                         if (k != d)
                             others[oi++] = k;
-                    positions = np.nonzero(np.any(filt, others))[0];
+                    positions = np.nonzero(np.any(probe, others))[0];
                 }
 
                 long n = positions.size;

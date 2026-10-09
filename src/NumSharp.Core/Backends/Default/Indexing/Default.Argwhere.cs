@@ -46,8 +46,6 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="nd">The array.</param>
         /// <returns>The coordinates (int64): a <c>(N, ndim)</c> view of the stacked <c>(ndim, N)</c> array.</returns>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty string array: NumPy reads the strings' truth
-        ///     values (the next phase of NumSharp's string support); an empty one gives the (0, ndim) int64 result.</exception>
         /// <exception cref="NotSupportedException">The IL kernels cannot be emitted for the dtype.</exception>
         /// <remarks>
         ///     <b>BREAKING (NumPy parity):</b> the result used to be an owning C-contiguous <c>(N, ndim)</c> array. It is
@@ -57,9 +55,8 @@ namespace NumSharp.Backends
         /// </remarks>
         public override unsafe NDArray Argwhere(NDArray nd)
         {
-            // Text: NumPy's argwhere reads the strings' truth values (the next phase; a 0-d input is atleast_1d'd first,
-            // so its result shape depends on the value too). An empty input reads none: the bool stand-in gives the
-            // (0, ndim) int64 result.
+            // Text: NumPy's argwhere reads the strings' truth values through the nonzero route (a 0-d input is atleast_1d'd
+            // first, so its result shape depends on the value too): the stand-in is the truth array, searched below.
             if (Strings.NDStringUfuncs.ReduceStandIn("argwhere", nd) is { } standIn)
             {
                 using (standIn)

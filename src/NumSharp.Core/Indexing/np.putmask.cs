@@ -52,8 +52,11 @@ namespace NumSharp
         /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
         /// <exception cref="UnicodeDecodeError">Byte values that are not ASCII into a <c>U</c> array.</exception>
         /// <exception cref="StringComputationNotSupportedException">NumPy computes on text here: a text scalar parsed into a
-        ///     number, a text mask tested for truth by the loop, or numbers formatted into a text array where the mask
-        ///     selects an element (the computational phase of the string dtypes).</exception>
+        ///     number, or numbers formatted into a text array where the mask selects an element (the number-text casts of a
+        ///     later string subphase).</exception>
+        /// <exception cref="SystemError">A <c>U</c> mask holds a unit above U+10FFFF: NumPy's string-to-bool cast of the mask
+        ///     raises it, before the size check. (A text mask is otherwise read by its truth values: a non-empty string is
+        ///     True.)</exception>
         public static void putmask(NDArray a, NDArray mask, NDArray values)
             => PutMaskCore(a, mask, values, sequence: false);
 
@@ -113,6 +116,12 @@ namespace NumSharp
             // via np.copyto below.
             NumSharpException.ThrowIfNotWriteable(a.Shape, "putmask: output array");
 
+            // PyArray_FROM_OTF(mask, NPY_BOOL, CARRAY | FORCECAST) comes next, before the size check: a text mask becomes
+            // its truth values here (NumPy's string-to-bool cast; a U unit above U+10FFFF raises SystemError before any
+            // later error). The fresh truth array is reclaimed with the scope and never overlaps `a`.
+            if (mask.typecode == NPTypeCode.String)
+                mask = Backends.Strings.NDStringTruth.Truth(mask, Backends.Strings.NDStringTruth.Flavor.Cast, 'C');
+
             if (mask.size != a.size)
                 throw new ValueError("putmask: mask and data must be the same size");
 
@@ -160,11 +169,7 @@ namespace NumSharp
                 return;
             }
 
-            // A text mask is tested for truth by the loop (the computational phase).
-            if (mask.typecode == NPTypeCode.String)
-                throw Backends.Strings.NDStringUfuncs.NextPhase("putmask", mask);
-
-            // Cast mask to contig bool. It is raveled in C-order, aligning flat position i of the mask with flat
+            // Cast mask to contig bool (a text mask already is: its truth array, made above). It is raveled in C-order, aligning flat position i of the mask with flat
             // position i of a (shapes need not match, only sizes — NumPy checks size, not shape). A converted copy is
             // built inside the scope and released with it; an operand used as-is is the caller's and is never disposed.
             NDArray maskCast;
