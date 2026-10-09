@@ -15,6 +15,12 @@ PythonEngine.Initialize();
 > — twelve single-file `dotnet run` tutorials covering every feature below, written for reading (a `dynamic`
 > Python namespace, one `NDScope` per script, the outcome of each line in a comment); their asserted twins
 > live in [`test/NumSharp.Tests.Interop/Examples`](../../test/NumSharp.Tests.Interop/Examples).
+>
+> **Two projects to copy:** [`examples/NumSharpPythonnetLocalExample`](../../examples/NumSharpPythonnetLocalExample/README.md)
+> is a console app that finds the Python on your machine, starts the engine inside a virtual environment and runs
+> NumPy, pandas, SciPy, scikit-learn, Matplotlib and PyTorch over NumSharp arrays.
+> [`examples/NumSharpPythonnetGhActionsCicd`](../../examples/NumSharpPythonnetGhActionsCicd/README.md) is its
+> asserted twin: an MSTest project with the GitHub Actions workflow that runs it on Windows, Linux and macOS.
 
 ## The four verbs
 

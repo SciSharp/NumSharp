@@ -630,6 +630,12 @@ import route works uniformly across pythonnet 3.0.x.
   codec, GIL, PyTorch, Pandas, a custom adapter, application scenarios), written for reading, with a
   `dynamic` Python namespace and one `NDScope` per script; every script has an asserted twin under
   [`test/NumSharp.Tests.Interop/Examples`](https://github.com/SciSharp/NumSharp/tree/master/test/NumSharp.Tests.Interop/Examples)
+- [A local project](https://github.com/SciSharp/NumSharp/tree/master/examples/NumSharpPythonnetLocalExample)
+  and [a GitHub Actions project](https://github.com/SciSharp/NumSharp/tree/master/examples/NumSharpPythonnetGhActionsCicd)
+  - two projects to copy. The first is a console app that finds the Python on your machine, starts
+  the engine inside a virtual environment and runs NumPy, pandas, SciPy, scikit-learn, Matplotlib and
+  PyTorch over NumSharp arrays. The second runs the same six libraries as tests, with the workflow
+  that sets up Python on Windows, Linux and macOS runners
 - [Any library via np.frombuffer](np-frombuffer.md) - reaching consumers that want bytes, not numpy
   arrays: `ToMemoryView` + the buffer protocol, torch/Pillow/Arrow/OpenCV verified
 - [Numpy.NET](numpy-net.md) - driving these same buffers through SciSharp's `Numpy.Bare` C# API
