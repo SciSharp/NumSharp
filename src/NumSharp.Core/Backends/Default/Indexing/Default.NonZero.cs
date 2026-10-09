@@ -12,9 +12,6 @@ namespace NumSharp.Backends
         private static long CountNonZeroDispatch<T>(NDArray nd) where T : unmanaged
             => count_nonzero<T>(nd.MakeGeneric<T>());
 
-        private static void CountNonZeroAxisDispatch<T>(NDArray nd, NDArray result, int axis) where T : unmanaged
-            => count_nonzero_axis<T>(nd.MakeGeneric<T>(), result, axis);
-
         /// <summary>
         ///     <c>np.nonzero</c> — returns a tuple of <c>ndim</c> int64 arrays of length
         ///     <c>N</c>, containing the per-dim coordinates of non-zero elements in C-order.
@@ -261,9 +258,7 @@ namespace NumSharp.Backends
                 using (standIn)
                     return CountNonZero(standIn, axis, keepdims);
             }
-            // Boundary scope: reclaims the per-dispatch MakeGeneric alias; the result is yielded.
-
-            var shape = nd.Shape;
+            // Boundary scope: reclaims the cast copy of a failed call and the scalar path's temporaries; the result is yielded.
 
             // NumPy's count_nonzero(a, axis) is a.astype(bool).sum(axis=axis, dtype=intp), so the sum's axis rule holds: a
             // 0-d input accepts 0 and -1 (a reduction over no axis — the 0-d count of its one element), and every other
@@ -278,38 +273,23 @@ namespace NumSharp.Backends
 
             axis = check_and_adjust_axis(nd.ndim, axis);
 
-            // Compute output shape
-            var outputDims = new long[nd.ndim - 1];
-            for (int d = 0, od = 0; d < nd.ndim; d++)
-                if (d != axis) outputDims[od++] = shape.dimensions[d];
-
-            var outputShape = outputDims.Length > 0 ? Shape.Adopt(outputDims) : Shape.Scalar;
-            var result = new NDArray(NPTypeCode.Int64, outputShape, false);
-
-            if (nd.size == 0)
+            // NumPy's count_nonzero along an axis IS `a.astype(bool, copy=False).sum(axis=axis, dtype=np.intp,
+            // keepdims=keepdims)` (numeric.py): the bool cast (NaN and inf true, -0.0 false, a complex value true when
+            // either part is nonzero), then add.reduce in the int64 loop. Running exactly that gives NumPy's result
+            // layout — the reduce iterator's allocation in the input's memory order, F for an F input (plan
+            // api-parameter-parity X10) — and np.sum's bool axis-count routes; the per-output scalar loop it replaces
+            // wrote C order and ran 15-100x slower than these routes at 100K-1M elements.
+            NDArray truth = nd.typecode == NPTypeCode.Boolean ? nd : nd.astype(np.@bool, false);
+            try
             {
-                // Already zeros from allocation
-                if (keepdims)
-                {
-                    var ks = new long[nd.ndim];
-                    for (int d = 0, sd = 0; d < nd.ndim; d++)
-                        ks[d] = (d == axis) ? 1 : outputDims[sd++];
-                    result.Storage.Reshape(Shape.Adopt(ks));
-                }
-                return result;
+                return np.sum(truth, axis, keepdims, np.int64);
             }
-
-            NpFunc.Invoke(nd.typecode, CountNonZeroAxisDispatch<int>, nd, result, axis);
-
-            if (keepdims)
+            finally
             {
-                var ks = new long[nd.ndim];
-                for (int d = 0, sd = 0; d < nd.ndim; d++)
-                    ks[d] = (d == axis) ? 1 : (sd < outputDims.Length ? outputDims[sd++] : 1);
-                result.Storage.Reshape(Shape.Adopt(ks));
+                // The cast copy is this call's temporary; a bool input is the caller's array and stays alive.
+                if (!ReferenceEquals(truth, nd))
+                    truth.Dispose();
             }
-
-            return result;
         }
 
         /// <summary>
@@ -353,63 +333,6 @@ namespace NumSharp.Backends
             // Strided path: use NDIter for layout-aware traversal.
             using var iter = NDIterRef.New(x, NDIterGlobalFlags.EXTERNAL_LOOP);
             return iter.ExecuteReducing<CountNonZeroKernel<T>, long>(default, 0L);
-        }
-
-        /// <summary>
-        /// Count non-zero elements along an axis.
-        /// </summary>
-        private static unsafe void count_nonzero_axis<T>(NDArray<T> x, NDArray result, int axis) where T : unmanaged
-        {
-            var shape = x.Shape;
-            long axisSize = shape.dimensions[axis];
-            var outputSize = result.size;
-            T zero = default;
-
-            // Compute output dimension strides for coordinate calculation
-            int outputNdim = x.ndim - 1;
-            Span<long> outputDimStrides = stackalloc long[outputNdim > 0 ? outputNdim : 1];
-            if (outputNdim > 0)
-            {
-                outputDimStrides[outputNdim - 1] = 1;
-                for (int d = outputNdim - 2; d >= 0; d--)
-                {
-                    int inputDim = d >= axis ? d + 1 : d;
-                    int nextInputDim = (d + 1) >= axis ? d + 2 : d + 1;
-                    outputDimStrides[d] = outputDimStrides[d + 1] * shape.dimensions[nextInputDim];
-                }
-            }
-
-            long axisStride = shape.strides[axis];
-
-            // Use direct pointer access to result array (result is contiguous Int64)
-            long* resultPtr = (long*)result.Address;
-
-            for (long outIdx = 0; outIdx < outputSize; outIdx++)
-            {
-                // Convert linear output index to input coordinates
-                long remaining = outIdx;
-                long inputBaseOffset = 0;
-
-                for (int d = 0; d < outputNdim; d++)
-                {
-                    int inputDim = d >= axis ? d + 1 : d;
-                    long coord = remaining / outputDimStrides[d];
-                    remaining = remaining % outputDimStrides[d];
-                    inputBaseOffset += coord * shape.strides[inputDim];
-                }
-
-                // Count non-zeros along axis
-                long count = 0;
-                T* basePtr = (T*)x.Address + shape.offset + inputBaseOffset;
-                for (long i = 0; i < axisSize; i++)
-                {
-                    if (!EqualityComparer<T>.Default.Equals(basePtr[i * axisStride], zero))
-                        count++;
-                }
-
-                // Write directly to result buffer using linear index
-                resultPtr[outIdx] = count;
-            }
         }
 
     }

@@ -297,19 +297,28 @@ namespace NumSharp
 
         /// <summary>
         ///     The truth array of a text source assigned under a mask: the nonzero route (never raises), after checking that
-        ///     no element the mask selects holds a <c>U</c> unit above U+10FFFF — the elements NumPy's masked cast converts.
+        ///     no element the mask selects is a one-unit <c>U</c> string above U+10FFFF — the elements NumPy's masked cast
+        ///     converts, and the only strings CPython refuses to build (a longer string's maximum character is capped).
         /// </summary>
         /// <param name="dst">The destination (the broadcast target of the source and the mask).</param>
         /// <param name="src">The text source.</param>
         /// <param name="where">The mask (validated, broadcastable to <paramref name="dst"/>).</param>
         /// <returns>The source's truth array (the caller owns it).</returns>
-        /// <exception cref="SystemError">A selected element holds a unit above U+10FFFF.</exception>
+        /// <exception cref="SystemError">A selected element is one unit above U+10FFFF (its first unit above it, every later
+        ///     unit zero).</exception>
         private static NDArray MaskedTruth(NDArray dst, NDArray src, NDArray @where)
         {
-            if (src.dtype.kind == 'U')
+            if (src.dtype.kind == 'U' && src.dtype.itemsize > 0)
             {
                 using var units = NDStringArrays.UnitArray(src);                     // src.shape + (chars,), uint32
-                using var bad = np.any(units > 0x10FFFFu, axis: -1);                  // per element
+                long chars = units.Shape.dimensions[units.ndim - 1];
+                // Per element: the first unit above U+10FFFF and (for a wider element) every later unit zero.
+                using var first = units["..., 0"];
+                using var high = first > 0x10FFFFu;
+                using var later = chars > 1 ? units["..., 1:"] : null;
+                using var laterNonzero = later is null ? null : np.any(later, axis: -1);
+                using var laterEmpty = laterNonzero is null ? null : np.logical_not(laterNonzero);
+                using var bad = laterEmpty is null ? high.view() : np.logical_and(high, laterEmpty);
                 // copyto strips the source's leading extent-1 axes beyond the destination's rank (the broadcast check
                 // already passed, so every extra leading axis has extent 1); the rest broadcasts as the assignment does.
                 var badDims = bad.shape;

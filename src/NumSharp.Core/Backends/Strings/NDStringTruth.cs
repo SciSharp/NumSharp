@@ -14,27 +14,29 @@ namespace NumSharp.Backends.Strings
     ///       <item><description><b>The bool cast</b> (<see cref="Flavor.Cast"/>): <c>astype(bool)</c>,
     ///       <c>asarray(dtype=bool)</c>, <c>any</c> / <c>all</c> (<c>logical_or</c> / <c>logical_and.reduce</c>), the logical
     ///       ufuncs, <c>where(c, x, y)</c>, <c>place</c>, <c>putmask</c>, <c>copyto</c> into bool. NumPy's legacy
-    ///       string-to-bool cast builds a Python <c>str</c> per element, so a <c>U</c> unit above U+10FFFF makes
-    ///       <c>PyUnicode_New</c> raise <c>SystemError: invalid maximum character passed to PyUnicode_New</c>.</description></item>
+    ///       string-to-bool cast builds a Python <c>str</c> per element from its units minus the trailing NULs, and CPython
+    ///       refuses only a ONE-unit string above U+10FFFF (<c>PyUnicode_New(1, ch)</c> raises <c>SystemError: invalid
+    ///       maximum character passed to PyUnicode_New</c>); a longer string's maximum character is capped at U+10FFFF, so
+    ///       <c>[0x110000, 'A']</c> casts to True while <c>[0x110000, '\0']</c> raises (probed 2.4.2).</description></item>
     ///       <item><description><b>The nonzero function</b> (<see cref="Flavor.Nonzero"/>): <c>nonzero</c>,
     ///       <c>count_nonzero</c>, <c>argwhere</c>, <c>flatnonzero</c>, <c>where(c)</c>, <c>compress</c>, <c>extract</c>,
     ///       <c>trim_zeros</c>, <c>bool(0-d)</c>. <c>STRING_nonzero</c> / <c>UNICODE_nonzero</c> test the units directly and
     ///       never raise.</description></item>
     ///     </list>
     ///     Both are computed by one IL kernel (<see cref="ILKernelGenerator.GetTextTruthKernel"/>); the cast flavor also
-    ///     tests the units against U+10FFFF. The result is an ordinary bool array, so every caller then runs its existing
+    ///     tests for that lone unit. The result is an ordinary bool array, so every caller then runs its existing
     ///     bool machinery (SIMD nonzero, the any / all reductions with axis / keepdims / out / where, np.where, ...), which
     ///     is NumPy's own structure: a cast, then the bool loop.
     /// </summary>
     internal static class NDStringTruth
     {
-        /// <summary>NumPy's text for a <c>U</c> unit above U+10FFFF met by the string-to-bool cast (a SystemError).</summary>
+        /// <summary>NumPy's text for a one-unit <c>U</c> element above U+10FFFF met by the string-to-bool cast (a SystemError).</summary>
         internal const string InvalidCodePointMessage = "invalid maximum character passed to PyUnicode_New";
 
         /// <summary>The route a caller's NumPy function reads the truth through (see the type summary).</summary>
         internal enum Flavor
         {
-            /// <summary>The string-to-bool cast: raises SystemError for a <c>U</c> unit above U+10FFFF.</summary>
+            /// <summary>The string-to-bool cast: raises SystemError for a <c>U</c> element that is one unit above U+10FFFF.</summary>
             Cast,
 
             /// <summary>The dtype's nonzero function: never raises.</summary>
@@ -50,7 +52,8 @@ namespace NumSharp.Backends.Strings
         /// <param name="order">The result layout: <c>'K'</c> (default), <c>'A'</c>, <c>'C'</c> or <c>'F'</c>.</param>
         /// <returns>The bool array (owned by the caller).</returns>
         /// <exception cref="ArgumentException"><paramref name="text"/> is not a string array.</exception>
-        /// <exception cref="SystemError"><see cref="Flavor.Cast"/> over a <c>U</c> array holding a unit above U+10FFFF.</exception>
+        /// <exception cref="SystemError"><see cref="Flavor.Cast"/> over a <c>U</c> array with an element that is one unit
+        ///     above U+10FFFF (its first unit above it, every later unit zero).</exception>
         internal static NDArray Truth(NDArray text, Flavor flavor, char order = 'K')
         {
             if (!NDStringUfuncs.IsString(text))
@@ -75,7 +78,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="text">The string array.</param>
         /// <param name="result">A bool array of the same dimensions, not overlapping <paramref name="text"/>.</param>
         /// <param name="flavor">The route.</param>
-        /// <exception cref="SystemError">The cast flavor met a <c>U</c> unit above U+10FFFF.</exception>
+        /// <exception cref="SystemError">The cast flavor met a <c>U</c> element that is one unit above U+10FFFF.</exception>
         private static unsafe void Fill(NDArray text, NDArray result, Flavor flavor)
         {
             if (result.size == 0)
@@ -132,7 +135,8 @@ namespace NumSharp.Backends.Strings
         /// <summary>The truth kernel: the IL kernel, or the managed element loop where dynamic code is unavailable.</summary>
         /// <param name="unit">1 for <c>S</c>, 4 for <c>U</c>.</param>
         /// <param name="width">The element width in bytes.</param>
-        /// <param name="checkCodePoints">The cast flavor over <c>U</c>: also flag units above U+10FFFF.</param>
+        /// <param name="checkCodePoints">The cast flavor over <c>U</c>: also flag an element that is one unit above
+        ///     U+10FFFF.</param>
         /// <returns>The kernel (never null).</returns>
         internal static NDInnerLoopFunc GetKernel(int unit, int width, bool checkCodePoints)
             => ILKernelGenerator.GetTextTruthKernel(unit, width, checkCodePoints)
@@ -140,8 +144,9 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     The truth as a managed <see cref="NDInnerLoopFunc"/> (hosts without dynamic code; the IL kernel is tested
-        ///     against it): <c>out = any byte nonzero</c>, and for the cast flavor <c>*(int*)auxdata = 1</c> when a U unit is
-        ///     above U+10FFFF.
+        ///     against it): <c>out = any byte nonzero</c>, and for the cast flavor <c>*(int*)auxdata = 1</c> when a U element
+        ///     is one unit above U+10FFFF — its first unit above it and every later byte zero (the one-unit <c>str</c>
+        ///     CPython's <c>PyUnicode_New</c> refuses; a longer string builds with its maximum character capped).
         /// </summary>
         /// <param name="unit">1 for <c>S</c>, 4 for <c>U</c>.</param>
         /// <param name="width">The element width in bytes.</param>
@@ -158,9 +163,14 @@ namespace NumSharp.Backends.Strings
                     bool nonzero = false;
                     for (int o = 0; o < width; o++)
                         nonzero |= p[o] != 0;
-                    if (checkCodePoints && unit == 4)
-                        for (int o = 0; o < width; o += 4)
-                            invalid |= Unsafe.ReadUnaligned<uint>(p + o) > 0x10FFFF;
+                    if (checkCodePoints && unit == 4 && width >= 4 && Unsafe.ReadUnaligned<uint>(p) > 0x10FFFF)
+                    {
+                        // A first unit above U+10FFFF fails only when the string is that one unit: every later byte zero.
+                        bool restNonzero = false;
+                        for (int o = 4; o < width; o++)
+                            restNonzero |= p[o] != 0;
+                        invalid |= !restNonzero;
+                    }
                     *po = nonzero ? (byte)1 : (byte)0;
                 }
                 if (invalid)

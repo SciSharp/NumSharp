@@ -644,11 +644,21 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     innermost axis 1.20× and a flat int64 → int32 loop 1.43× at 10M; float64 → float32 along axis 1 1.34× at 10M.
     complex128 / float64 axis 0 at 100K swing between 0.8× and 1.2× on both builds (allocator regime, interleaved A/B).
   - Left open: B3 (`out=`, `where=`, the flat `dtype=` overload); X7's float loops; X10; finding 5; finding 10.
-- [ ] **X10 `np.any` / `np.all` along an axis of an F-ordered or permuted input return C order; NumPy keeps K order.**
+- [x] **X10 `np.any` / `np.all` along an axis of an F-ordered or permuted input return C order; NumPy keeps K order.**
   Probe (2026-10-05): `np.any(b.reshape(3, 5, 6).T, axis)` is F-contiguous in NumPy for every axis and C in NumSharp;
   a `(1, 0, 2)`-permuted float64 input along axis 2 gives NumPy strides `(1, 5)` (elements), NumSharp `(3, 1)`. The
   values are right, and the oracle compares C-order bytes, so only a flags or strides facet sees it. np.sum's bool
   loop (`dtype=bool`) and np.mean's bool loop are np.any and inherit it. Found by X9's probe.
+  - Done 2026-10-09 on the `strings` branch (strings phase 2 P2.1, where the string oracle's `strcomp` section — which
+    compares strides — needed it): the logical reductions allocate with `Shape.ReductionOutputShape`
+    (`DefaultEngine.LogicalReductionShape`), `NDAxisIter.ReduceBool` writes through the result's strides, keepdims uses
+    `ExpandDimension`, the tuple-axis chain drops its kept axes with their strides. `np.count_nonzero(a, axis)` became
+    NumPy's `a.astype(bool, copy=False).sum(axis, dtype=intp)` (it had the same C-order bug, and a 15–100× slower scalar
+    loop), and np.sum's bool count route stopped returning a reshaped keepdims view (OWNDATA). A bool C/F operand of
+    ≥ 16K elements now runs np.evaluate's Any / All axis stream (`TryStreamLogicalAxis`): 72-cell geomean 4.2× NumPy;
+    the F-slab "read every element" cells stay at 0.88–1.38× (L2-bound at 1M on both sides). Gate
+    `Logic/np.all_any.ResultLayout.Test.cs`. Merge note: journey4's array-object oracle carves these as gap VF08
+    (`gen_viewflags_oracle.py` `_gap_of`) — un-carve np.all / np.any / np.count_nonzero there when this branch merges.
 - [x] **X11 `np.copyto(dst, src, where=mask)` runs a branch per element (and a generic loop for float16 / complex).**
   Done with X16 (2026-10-06, `2dffb8d9`): the masked copy is a new bit-copy kernel per element width; the speed is in
   X16.

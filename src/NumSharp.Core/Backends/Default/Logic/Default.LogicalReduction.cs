@@ -45,17 +45,21 @@ namespace NumSharp.Backends
 
             axis = NormalizeAxis(axis, nd.ndim);
 
-            // Allocate the result in the *reduced* shape (axis dropped). keepdims is applied
-            // as a reshape at the end — matches Default.Reduction.Add.ExecuteAxisReduction and
-            // lets the axis kernels assume one fewer output dim than input.
+            if (TryStreamLogicalAxis(nd, axis, keepdims, reduceAll) is { } streamed)
+                return streamed;
+
+            // Allocate the result in the *reduced* shape (axis dropped), laid out as NumPy's reduce iterator allocates
+            // it (LogicalReductionShape: the input's memory order for an F or permuted input, plan api-parameter-parity
+            // X10). keepdims re-inserts the axis at the end with ExpandDimension, which keeps that order — a Reshape
+            // to C dims would copy an F result into C order. The axis kernels assume one fewer output dim than input.
             var reducedDims = Shape.GetAxis(nd.Shape, axis);
-            Shape reducedShape = reducedDims.Length == 0 ? Shape.Scalar : Shape.Adopt(reducedDims);
+            Shape reducedShape = LogicalReductionShape(reducedDims, nd.Shape, axis);
             NDArray<bool> result = CreateLogicalResult(reducedShape, reduceAll && nd.Shape.dimensions[axis] == 0);
 
             if (result.size == 0 || nd.Shape.dimensions[axis] == 0)
             {
                 if (keepdims)
-                    result.Storage.Reshape(BuildKeepdimsShape(nd.Shape, axis));
+                    result.Storage.ExpandDimension(axis);
                 return result;
             }
 
@@ -83,21 +87,93 @@ namespace NumSharp.Backends
             }
             else
             {
+                // NDAxisIter.ReduceBool writes each output through the result's own strides, so the K-ordered result of
+                // an F or permuted input is filled in place (no C buffer relabelled or copied afterwards).
                 NpFunc.Invoke(nd.GetTypeCode, ExecuteLogicalAxis<int>, nd, result, axis, reduceAll);
             }
 
             if (keepdims)
-                result.Storage.Reshape(BuildKeepdimsShape(nd.Shape, axis));
+                result.Storage.ExpandDimension(axis);
 
             return result;
         }
 
-        // Build the "keepdims" shape: input shape with the reduction axis set to size 1.
-        private static Shape BuildKeepdimsShape(Shape inputShape, int axis)
+        /// <summary>
+        ///     The smallest bool operand <see cref="TryStreamLogicalAxis"/> sends to np.evaluate's axis stream: 16K elements.
+        ///     Measured (NPY/NS, two pinned P-cores, (n/100, 100) operands, all-true / sparse / half-true data, C and F,
+        ///     both axes): at 1K the engine's per-row kernels win (1.5-9x NumPy, np.evaluate's fixed cost puts some cells
+        ///     at 1.0-1.2x), from 100K the stream wins every cell where the engine walked a strided row per output (an F
+        ///     operand along axis 1 at 1M: 806 us -> 31 us; a C operand along axis 0: 498 -> 87 us) and ties elsewhere.
+        /// </summary>
+        private const long LogicalAxisStreamMinElements = 16384;
+
+        /// <summary>
+        ///     The reduced-axis length from which a reduction along the operand's CONTIGUOUS axis stays on the engine: each
+        ///     output is then one long contiguous row the engine scans with one SIMD helper call, already at the read-bandwidth
+        ///     floor (measured: 100 rows of 10K bools, all true, <c>all</c> — engine 20 us, stream 23 us, NumPy 26 us), while
+        ///     short rows pay the engine's per-row overhead (10K rows of 100: engine 70 us, stream 37 us).
+        /// </summary>
+        private const long LogicalAxisLongRowElements = 4096;
+
+        /// <summary>
+        ///     <c>np.all</c> / <c>np.any</c> along one axis of a bool operand in one memory order (C or F), through np.evaluate's
+        ///     Any / All axis stream: a contiguous reduced axis folds whole rows with vectorized span scans, a strided one
+        ///     combines each output's slab into an accumulator row a vector at a time, both stopping once every output of
+        ///     the current block is decided. Exact by construction (logical OR / AND are order-free), and the result comes
+        ///     back in the operand's order (C for C, F for F) — NumPy's reduction layout.
+        /// </summary>
+        /// <param name="nd">The operand.</param>
+        /// <param name="axis">The reduced axis, already normalized.</param>
+        /// <param name="keepdims">Keep the reduced axis with extent 1.</param>
+        /// <param name="reduceAll">True for <c>all</c>, false for <c>any</c>.</param>
+        /// <returns>The result (owning; a kept axis re-inserted with ExpandDimension), or null when the operand is not bool,
+        ///     not C- or F-contiguous, 1-D (its 0-d result stays the engine's), smaller than
+        ///     <see cref="LogicalAxisStreamMinElements"/>, reduced along its contiguous axis with rows of at least
+        ///     <see cref="LogicalAxisLongRowElements"/>, or dynamic code is unavailable — the engine's kernels then run.</returns>
+        /// <exception cref="InvalidOperationException">The stream returned a non-bool array (an internal invariant).</exception>
+        private static NDArray<bool> TryStreamLogicalAxis(NDArray nd, int axis, bool keepdims, bool reduceAll)
         {
-            var dims = (long[])inputShape.dimensions.Clone();
-            dims[axis] = 1;
-            return Shape.Adopt(dims);
+            var shape = nd.Shape;
+            if (nd.typecode != NPTypeCode.Boolean || nd.ndim < 2 || shape.size < LogicalAxisStreamMinElements
+                || !(shape.IsContiguous || shape.IsFContiguous) || !DirectILKernelGenerator.Enabled)
+                return null;
+            // Long contiguous rows: the engine's one-call-per-row SIMD scan is at the bandwidth floor and slightly ahead.
+            bool contiguousAxis = shape.IsContiguous ? axis == nd.ndim - 1 : axis == 0;
+            if (contiguousAxis && shape.dimensions[axis] >= LogicalAxisLongRowElements)
+                return null;
+            var source = NDExpr.Arr(nd);
+            // Taken WITHOUT keepdims: np.evaluate's keepdims form is a reshaped view, where NumPy's reduction owns its result.
+            var result = np.evaluate(reduceAll ? NDExpr.All(source, axis) : NDExpr.Any(source, axis));
+            if (keepdims)
+                result.Storage.ExpandDimension(axis);
+            return result.AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
+        }
+
+        /// <summary>
+        ///     The layout of a single-axis logical reduction's result (axis dropped): NumPy's <c>logical_and</c> /
+        ///     <c>logical_or.reduce</c> allocates it with <c>npyiter_new_temp_array</c> over the reduce iterator — the input's
+        ///     axes in NpyIter's order with the reduced one dropped (<see cref="Shape.ReductionOutputShape"/>), the same rule
+        ///     <see cref="AllocateReductionResult"/> applies to the numeric reductions.
+        /// </summary>
+        /// <param name="reducedDims">The result's dims (the input's without <paramref name="axis"/>); adopted by the
+        ///     returned shape, so pass a fresh array.</param>
+        /// <param name="input">The reduced array's shape.</param>
+        /// <param name="axis">The reduced axis, already normalized.</param>
+        /// <returns>A dense, offset-0 shape: the scalar shape for a 1-D input, C for a C-contiguous input or a 1-D result,
+        ///     the input's memory order otherwise (F for an F-contiguous input; probed 2.4.2: <c>np.any(f, axis=0)</c> of an
+        ///     F <c>(3, 5, 4)</c> array has element strides (1, 5)).</returns>
+        /// <remarks>
+        ///     A strided input whose axes are in C memory order (a stepped slice) still gets a C result — NpyIter sorts by
+        ///     |stride|, and those strides are already descending.
+        /// </remarks>
+        internal static Shape LogicalReductionShape(long[] reducedDims, Shape input, int axis)
+        {
+            if (reducedDims.Length == 0)
+                return Shape.Scalar;
+            // A 1-D result has one layout, and a C-contiguous input's order is C's (NpyIter's sort keeps it).
+            if (reducedDims.Length == 1 || input.IsContiguous)
+                return Shape.Adopt(reducedDims);
+            return Shape.ReductionOutputShape(reducedDims, input, axis);
         }
 
         // Multi-axis reduction. Matches NumPy: reduces along all listed axes.
@@ -176,17 +252,27 @@ namespace NumSharp.Backends
 
             if (!keepdims)
             {
+                // Drop the kept extent-1 axes WITH their strides: each chained step laid its result out in its input's
+                // memory order (LogicalReductionShape), so the surviving axes keep NumPy's K order. A Reshape to fresh C
+                // dims would copy a non-C result into C order instead.
                 var newDims = new List<long>(ndim - normalized.Length);
+                var newStrides = new List<long>(ndim - normalized.Length);
                 var axesSet = new HashSet<int>(normalized);
-                long[] resultShape = chained.Shape.dimensions;
+                long[] resultDims = chained.Shape.dimensions;
+                long[] resultStrides = chained.Shape.strides;
                 for (int d = 0; d < ndim; d++)
                 {
                     if (!axesSet.Contains(d))
-                        newDims.Add(resultShape[d]);
+                    {
+                        newDims.Add(resultDims[d]);
+                        newStrides.Add(resultStrides[d]);
+                    }
                 }
 
-                Shape newShape = newDims.Count == 0 ? Shape.Scalar : Shape.Adopt(newDims.ToArray());
-                chained.Storage.Reshape(newShape);
+                // Removing extent-1 axes never moves an element (each is read at index 0 only), so the buffer is
+                // described exactly by the remaining dims and strides; the storage keeps its ownership (SetShapeUnsafe).
+                Shape newShape = newDims.Count == 0 ? Shape.Scalar : Shape.Adopt(newDims.ToArray(), newStrides.ToArray());
+                chained.Storage.SetShapeUnsafe(newShape);
             }
 
             return chained;

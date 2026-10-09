@@ -447,7 +447,39 @@ compare primitives exist; P2.2's `sort_complex` and P2.4's int parser need P2.0'
 
 ## 7. State log
 
-- **2026-10-09 — P2.0's kernels and the core of P2.1** (this commit). The text kernels are
+- **2026-10-09 — P2.1's zero-excuse oracle section, and the four gaps it found** (this commit). `gen_strings_oracle.py`
+  gained section `strcomp` (8,796 cases, 90 of them NumPy errors): the six comparisons over every catalog layout and
+  five U / four S width pairs, every special unit pair through an outer broadcast (U on both sides of U+10FFFF and the
+  BMP, S across 0x80), the C# operators with a string on either side, keyword ufuncs (`out=` of five dtypes, `where=`,
+  `dtype=`), and the truth readers (astype every order, any / all / count_nonzero / nonzero / flatnonzero / argwhere,
+  any / all / count_nonzero along every axis with keepdims, the logical ufuncs, units above U+10FFFF). It replays with
+  zero excuses after four fixes:
+  1. **A string on the LEFT is Python's reflection.** `"" < s` asks `str.__lt__` first, which declines, so Python runs
+     `s > ""` — NumPy's error names `greater` with the array's dtype first. The `(string, NDArray)` operators now evaluate
+     the reflected operator on the array (same values, NumPy's texts).
+  2. **The cast raises only for a LONE unit above U+10FFFF.** CPython's `_PyUnicode_FromUCS4` builds a one-unit string
+     through `unicode_char` → `PyUnicode_New(1, ch)` (SystemError), but caps a longer string's maximum character at
+     U+10FFFF (`find_max_char`) and builds it without an error: `[0x110000, 'A']` casts to True, `[0x110000, 0]` raises
+     (probed over 15 patterns). The truth kernel's cast flavor now tests "first unit above U+10FFFF and every later unit
+     zero" (one scalar compare per element, the rest re-read only on that rare branch); the managed kernel, `np.copyto`'s
+     masked conversion and `ma.flatten_mask` (whose recursion builds the first non-empty element's first character: a
+     first unit above U+10FFFF raises either way) follow.
+  3. **`np.any` / `np.all` / `np.count_nonzero` along an axis keep the input's memory order** (api-parameter-parity X10,
+     which the strides facet exposed through the truth stand-ins): the logical reductions allocate with
+     `Shape.ReductionOutputShape`, `NDAxisIter.ReduceBool` writes through the result's strides, keepdims uses
+     `ExpandDimension`; `count_nonzero(a, axis)` is NumPy's `a.astype(bool).sum(axis, dtype=intp)` (15–100× faster than
+     the scalar loop it replaced at 100K–1M); bool C/F operands of ≥ 16K elements run np.evaluate's Any / All axis
+     stream (72 cells geomean 4.2× NumPy; F-slab "read everything" cells 0.88–1.38×, L2-bound at 1M on both sides).
+  4. **np.sum's bool count route kept np.evaluate's keepdims view** (OWNDATA false; NumPy owns): it now re-inserts the
+     axis on the fresh counts.
+  The C# replay ops live in `StringOracleOps.Compute.cs` (`operator_text`, `truth_axis`). Tests:
+  `StringComparisonTruthTests` (+2: the lone-unit matrix, the reflected operators; the kernel-vs-reference test now
+  reaches the failing branch and asserts it did) and `Logic/np.all_any.ResultLayout.Test.cs` (6). The string oracle
+  is 36,104 cases (20 sections), zero failures, zero excuses in `strcomp`. Benchmarks (two pinned P-cores, NPY/NS): the
+  truth readers unchanged or faster after the new cast test (astype(bool) U8 145–221×, U40 42–107×), text
+  count_nonzero along an axis 7–18×. Open in P2.1: unchanged (np.char's rstrip comparisons, the numpy.ma members that
+  fill text with `True`).
+- **2026-10-09 — P2.0's kernels and the core of P2.1** (commit 7c817644). The text kernels are
   `Backends/Kernels/ILKernelGenerator.Text{,.Emit}.cs`: one IL kernel per (operation, unit, widths, operand order), the
   chunk plan of §3 D1 (unrolled up to 9 chunks, a loop beyond), broadcast-pattern stages that hoist a stride-0 comparand,
   and the truth kernel with the cast flavor's U+10FFFF flag. `Backends/Strings/NDStringComparison.cs` runs the six

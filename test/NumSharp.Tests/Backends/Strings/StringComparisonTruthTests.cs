@@ -34,6 +34,13 @@ namespace NumSharp.Tests.Backends.Strings
         /// <returns>A U1 array over the pinned unit buffer.</returns>
         private static NDArray Units(params uint[] units) => np.ndarray(new Shape(units.Length), "U1", buffer: units);
 
+        /// <summary>A 1-D <c>U{width}</c> array over raw code units, one row of <paramref name="width"/> units per element.</summary>
+        /// <param name="width">The element width in characters.</param>
+        /// <param name="rows">The elements' units (each row exactly <paramref name="width"/> long).</param>
+        /// <returns>The array over the pinned unit buffer.</returns>
+        private static NDArray UnitRows(int width, params uint[][] rows) =>
+            np.ndarray(new Shape(rows.Length), $"U{width}", buffer: rows.SelectMany(r => r).ToArray());
+
         // ---------------------------------------------------------------- the six comparisons
 
         /// <summary>The six comparisons over <c>U</c> of two widths: trailing NULs never count, embedded ones do, a nonzero tail unit decides.</summary>
@@ -135,6 +142,35 @@ namespace NumSharp.Tests.Backends.Strings
             (u == (string)null).GetBoolean().Should().BeFalse();
         }
 
+        /// <summary>
+        ///     A string on the LEFT is Python's reflection: <c>"b" &lt; a</c> runs <c>np.greater(a, "b")</c>, so the values match
+        ///     and the bytes-against-str error names the reflected ufunc with the array's dtype first (probed 2.4.2).
+        /// </summary>
+        [TestMethod]
+        public void Operators_AStringOnTheLeft_IsPythonsReflection()
+        {
+            var u = np.array(new[] { "a", "b", "c" });
+            ("b" < u).ToArray<bool>().Should().Equal(false, false, true);
+            ("b" <= u).ToArray<bool>().Should().Equal(false, true, true);
+            ("b" >= u).ToArray<bool>().Should().Equal(true, true, false);
+            ("b" == u).ToArray<bool>().Should().Equal(false, true, false);
+            ("b" != u).ToArray<bool>().Should().Equal(true, false, true);
+
+            var s = Bytes("S3", "a", "b");
+            ("a" == s).ToArray<bool>().Should().Equal(false, false);
+            ("a" != s).ToArray<bool>().Should().Equal(true, true);
+            const string types = " did not contain a loop with signature matching types (<class 'numpy.dtypes.BytesDType'>, " +
+                                 "<class 'numpy.dtypes.StrDType'>) -> None";
+            Action lt = () => _ = "" < s;
+            lt.Should().Throw<TypeError>().WithMessage("ufunc 'greater'" + types);
+            Action le = () => _ = "" <= s;
+            le.Should().Throw<TypeError>().WithMessage("ufunc 'greater_equal'" + types);
+            Action gt = () => _ = "" > s;
+            gt.Should().Throw<TypeError>().WithMessage("ufunc 'less'" + types);
+            Action ge = () => _ = "" >= s;
+            ge.Should().Throw<TypeError>().WithMessage("ufunc 'less_equal'" + types);
+        }
+
         // ---------------------------------------------------------------- truth values
 
         /// <summary>The truth operand: empty, NUL-only, whitespace, a leading NUL and the text 'False'.</summary>
@@ -185,6 +221,65 @@ namespace NumSharp.Tests.Backends.Strings
             np.nonzero(Units(0x110000, 0x41, 0xFFFFFFFF))[0].ToArray<long>().Should().Equal(0L, 1L, 2L);
             np.count_nonzero(Units(0x110000, 0x41, 0xFFFFFFFF)).Should().Be(3L);
             np.compress(Units(0x110000, 0x41, 0xFFFFFFFF), np.arange(3)).ToArray<long>().Should().Equal(0L, 1L, 2L);
+        }
+
+        /// <summary>
+        ///     The cast raises only for an element that is ONE unit above U+10FFFF once its trailing NULs are stripped (CPython's
+        ///     <c>unicode_char</c>); a longer string builds with its maximum character capped at U+10FFFF and is True. Every
+        ///     row below is a probe of NumPy 2.4.2's <c>astype(bool)</c> and <c>np.any</c>.
+        /// </summary>
+        [TestMethod]
+        public void Truth_TheCastRouteRaisesOnlyForALoneUnitAboveTheLastCodePoint()
+        {
+            const uint big = 0x110000;
+            const string message = "invalid maximum character passed to PyUnicode_New";
+            var raising = new (int width, uint[] units)[]
+            {
+                (1, new[] { big }), (2, new[] { big, 0u }), (3, new[] { big, 0u, 0u }), (1, new[] { 0xFFFFFFFFu }),
+                (2, new[] { 0xFFFFFFFFu, 0u }), (8, new[] { big, 0u, 0u, 0u, 0u, 0u, 0u, 0u }),
+            };
+            foreach (var (width, units) in raising)
+            {
+                Action astype = () => UnitRows(width, units).astype(np.@bool);
+                astype.Should().Throw<SystemError>().WithMessage(message, $"U{width} [{string.Join(",", units)}] is one unit");
+                Action any = () => np.any(UnitRows(width, units));
+                any.Should().Throw<SystemError>().WithMessage(message);
+                // The nonzero route never builds a str.
+                np.count_nonzero(UnitRows(width, units)).Should().Be(1L);
+            }
+
+            var castable = new (int width, uint[] units)[]
+            {
+                (2, new[] { 0u, big }), (2, new[] { big, 0x41u }), (2, new[] { 0x41u, big }), (2, new[] { big, big }),
+                (3, new[] { big, 0u, 0x41u }), (1, new[] { 0x10FFFFu }), (1, new[] { 0xD800u }),
+                (8, new[] { 0u, 0u, 0u, 0u, 0u, 0u, 0u, big }), (9, new[] { big, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 1u }),
+            };
+            foreach (var (width, units) in castable)
+            {
+                UnitRows(width, units).astype(np.@bool).ToArray<bool>().Should().Equal(new[] { true }, $"U{width} [{string.Join(",", units)}]");
+                np.any(UnitRows(width, units)).Should().BeTrue();
+            }
+
+            // The other cast readers follow the same rule: [big, 'A'] is True everywhere.
+            var two = UnitRows(2, new[] { big, 0x41u }, new[] { 0x41u, 0u });
+            np.logical_or(two, np.array(0L)).ToArray<bool>().Should().Equal(true, true);
+            np.where(two, np.array(1L), np.array(2L)).ToArray<long>().Should().Equal(1L, 1L);
+            var placed = np.zeros(new Shape(2L));
+            np.place(placed, two, np.array(new[] { 7.0 }));
+            placed.ToArray<double>().Should().Equal(7.0, 7.0);
+            var copied = np.zeros(new Shape(2L), NPTypeCode.Boolean);
+            np.copyto(copied, two, "unsafe", np.array(new[] { true, false }));
+            copied.ToArray<bool>().Should().Equal(true, false);
+            Action maskedLone = () => np.copyto(np.zeros(new Shape(2L), NPTypeCode.Boolean), UnitRows(2, new[] { big, 0u }, new[] { 0x41u, 0u }),
+                "unsafe", np.array(new[] { true, false }));
+            maskedLone.Should().Throw<SystemError>().WithMessage(message);
+
+            // ma.flatten_mask iterates the first non-empty str: a first unit above U+10FFFF fails (as the str or as its first
+            // character); a valid first character recurses.
+            Action flattenBig = () => np.ma.flatten_mask(UnitRows(2, new[] { 0u, 0u }, new[] { big, 0x41u }));
+            flattenBig.Should().Throw<SystemError>().WithMessage(message);
+            Action flattenRecursion = () => np.ma.flatten_mask(UnitRows(2, new[] { 0x41u, big }));
+            flattenRecursion.Should().Throw<RuntimeError>().WithMessage("maximum recursion depth exceeded");
         }
 
         /// <summary><c>np.copyto</c> into bool, <c>np.place</c> and <c>np.putmask</c> read a text source / mask through the bool cast, in NumPy's order (the mask cast before the size check; a masked copy converts only the selected elements).</summary>
@@ -293,7 +388,11 @@ namespace NumSharp.Tests.Backends.Strings
             mismatches.Should().Be(0);
         }
 
-        /// <summary>The truth kernels (both flavors) against <see cref="NDStringTruth.ManagedKernel"/>, flag included.</summary>
+        /// <summary>
+        ///     The truth kernels (both flavors) against <see cref="NDStringTruth.ManagedKernel"/>, flag included. The U
+        ///     elements mix the cases the cast flavor's lone-unit test branches on: a lone first unit above U+10FFFF (fails),
+        ///     such a first unit followed by a nonzero unit anywhere (builds), and an invalid unit past the first (builds).
+        /// </summary>
         [TestMethod]
         public unsafe void TruthKernels_MatchTheReference()
         {
@@ -303,6 +402,7 @@ namespace NumSharp.Tests.Backends.Strings
             void** p = stackalloc void*[2];
             long* st = stackalloc long[2];
             const int n = 29;
+            int failingCalls = 0;
             foreach (int unit in new[] { 1, 4 })
             foreach (int w in unit == 1 ? new[] { 1, 2, 7, 8, 17, 32, 33, 300 } : new[] { 4, 8, 12, 32, 36, 300 })
             foreach (bool check in new[] { false, true })
@@ -310,12 +410,28 @@ namespace NumSharp.Tests.Backends.Strings
             {
                 long s = w + 2;
                 var data = new byte[s * n];
+                // One U trial in four has no lone unit at all, so a call that must NOT set the flag is checked too.
+                bool lonesAllowed = unit == 4 && trial % 4 != 0;
                 for (int i = 0; i < n; i++)
                 {
-                    if (rng.Next(3) == 0) continue;
+                    int kind = rng.Next(8);
+                    if (kind == 0) continue;                                                     // empty
+                    if (unit == 4 && kind == 1 && lonesAllowed)
+                    {
+                        // A lone first unit above U+10FFFF: the one-unit str CPython refuses.
+                        BitConverter.GetBytes(0x110000u + (uint)rng.Next(9)).CopyTo(data, i * s);
+                        continue;
+                    }
                     data[i * s + rng.Next(w)] = (byte)rng.Next(1, 256);
-                    if (unit == 4 && rng.Next(8) == 0)
-                        BitConverter.GetBytes(0x110000u + (uint)rng.Next(9)).CopyTo(data, i * s + rng.Next(w / 4) * 4);
+                    if (unit == 4 && kind == 2)
+                    {
+                        // A first unit above U+10FFFF plus a nonzero unit after it: a longer str, which builds.
+                        BitConverter.GetBytes(0x110000u + (uint)rng.Next(9)).CopyTo(data, i * s);
+                        if (w > 4)
+                            data[i * s + 4 + rng.Next(w - 4)] = (byte)rng.Next(1, 256);
+                    }
+                    else if (unit == 4 && kind == 3 && w > 4)
+                        BitConverter.GetBytes(0x110000u + (uint)rng.Next(9)).CopyTo(data, i * s + (1 + rng.Next(w / 4 - 1)) * 4);
                 }
                 var o1 = new byte[n];
                 var o2 = new byte[n];
@@ -330,7 +446,10 @@ namespace NumSharp.Tests.Backends.Strings
                 }
                 o1.Should().Equal(o2);
                 f1.Should().Be(f2);
+                failingCalls += f1;
             }
+            // The data did reach the failing branch (a vacuous comparison would pass with every flag zero).
+            failingCalls.Should().BeGreaterThan(0);
         }
 
         /// <summary>

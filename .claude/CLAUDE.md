@@ -1855,6 +1855,23 @@ np.evaluate's `Min` / `Max`; `attempt to get argmax of an empty sequence` from `
 route already did, the engine routes raised the base `ArgumentException` (`ValueError` derives from it, so a handler for
 that still catches it).
 
+**`np.any` / `np.all` / `np.count_nonzero` along an axis are laid out like NumPy's reduction** (2026-10-09, plan
+api-parameter-parity X10, found by the string oracle's `strcomp` section). NumPy allocates the result with
+`npyiter_new_temp_array` over the reduce iterator, so an F input gives an F result and a permuted one keeps its memory
+order; NumSharp allocated C. The logical reductions now allocate with `Shape.ReductionOutputShape`
+(`DefaultEngine.LogicalReductionShape`), `NDAxisIter.ReduceBool` writes each output through the result's own strides,
+keepdims re-inserts the axis with `ExpandDimension` (a C `Reshape` copied an F result), and the tuple-axis chain drops its
+kept axes with their strides. `np.count_nonzero(a, axis)` is NumPy's own `a.astype(bool, copy=False).sum(axis,
+dtype=intp)` (the per-output scalar loop it replaced wrote C order and ran 15–100× slower at 100K–1M), and np.sum's bool
+count route (`TryCountBoolAxisSum`) no longer returns np.evaluate's reshaped keepdims VIEW (OWNDATA false; NumPy owns).
+A bool C/F operand of ≥ 16K elements reduced to rank ≥ 1 runs np.evaluate's Any / All axis stream (`TryStreamLogicalAxis`;
+long contiguous rows ≥ 4096 stay on the engine's per-row scan): 72 cells (C/F × axis × any/all × all-true / sparse /
+half-true × 1K / 100K / 1M) geomean 4.2× NumPy, where the engine's strided per-output walk was 0.03–0.09× on F operands
+along axis 1. Residuals: the "read every element" F-slab cells (an `all` of all-true data, an `any` of sparse data,
+along axis 1) at 0.88–0.92× at 1M — the 1 MB operand streams from L2 at ~38 GB/s on both sides — and 1.12–1.38× at
+100K; `all` along a long contiguous axis at 1M 1.25× (the same floor). Gate: `Logic/np.all_any.ResultLayout.Test.cs`
+(probed strides for bool / int32 / U inputs, F, permuted, stepped, tuple axes) + the string oracle's `strcomp` section.
+
 **`np.sum` / `np.mean` start from the add identity, and their FLAT float reductions are NumPy's add.reduce, bit for
 bit** (`Backends/Default/Math/Reduction/Default.Reduction.Add{,.Exact,.Identity}.cs`, 2026-10-04):
 - **The identity.** NumPy's `PyUFunc_ReduceWrapper` assigns the loop's identity (`+0.0` for every inexact loop) and
@@ -1977,8 +1994,9 @@ integer / bool loop threw on an empty input; the flat fallback summed a broadcas
   (1.0–1.35×, DRAM-bound at 10M), the float32 / float16 cast loops along axis 0 at 10M (int32 → float32 0.31×, float16
   0.80×: plan X7's open part, the blocked cast copy gathers columns), an int64 innermost axis 1.20×.
 - **Residuals:** an axis reduction over a view with a reversed axis walks memory order (np.sum's finding 5); the flat
-  sum of a broadcast float operand is not NumPy's per-row call schedule (finding 10); np.sum's X6 cast-loop rows; the
-  bool loop's result layout over a permuted input (np.any's, plan X10). The oracle holds np.mean strict in every tier
+  sum of a broadcast float operand is not NumPy's per-row call schedule (finding 10); np.sum's X6 cast-loop rows. (The
+  bool loop's result layout over a permuted input — np.any's, plan X10 — is NumPy's since 2026-10-09: the logical
+  reductions allocate in the input's memory order.) The oracle holds np.mean strict in every tier
   (`ByteExactArithmeticUnaryOps`, out of the reduction blankets; `ma.mean` too since A6) but for a narrow finding-5
   branch (`IsReversedAxisReduction`).
 - **Gates:** `mean_loops.jsonl` (6,550 cases, zero excuses), unit `Math/np.mean.NumPyPort.Test.cs` (9), the

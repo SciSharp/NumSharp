@@ -3022,6 +3022,228 @@ def gen_striter():
                     v, axes, flags=["buffered"], op_dtypes=[req]), layout=lname)
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Section strcomp: comparisons and truth values (strings phase 2, P2.1) — strict (phase 1: NumSharp computes them)
+# ----------------------------------------------------------------------------------------------------------------------
+
+CMP_OPS = ["equal", "not_equal", "less", "less_equal", "greater", "greater_equal"]
+
+# Element widths per class: equal widths, a longer second operand (its tail decides a zero-padded equal prefix), a
+# shorter one, widths past one Vector256 (U8 = 32 bytes, S33), and past the kernels' unrolled chunk plan (U70 = 280
+# bytes, S300), which switch to the loop form.
+CMP_WIDTHS = {
+    "U": [("U3", "U3"), ("U3", "U8"), ("U9", "U2"), ("U40", "U40"), ("U70", "U66")],
+    "S": [("S3", "S3"), ("S2", "S9"), ("S33", "S8"), ("S300", "S290")],
+}
+
+# The code units the values are built from: a common pair, a non-ASCII and a supplementary-plane character (U), bytes
+# on both sides of 0x80 (S, compared unsigned), and NUL (embedded NULs count, trailing ones do not).
+CMP_UNITS = {"U": ["a", "b", "\x00", "Ü", "\U0001F600", "z"], "S": [b"a", b"b", b"\x00", b"\x80", b"\xff", b"\x7f"]}
+
+# Same-layout pairs over every layout kind, then pairs of different layouts that broadcast (or must refuse to).
+CMP_CROSS = [("c2", "f2"), ("f2", "c2"), ("c2", "r2"), ("r2", "bc"), ("c2", "z0"), ("z0", "c2"), ("nx", "c2"),
+             ("one", "s1"), ("d5", "one"), ("e2", "z0"), ("e3", "one"), ("bcol", "f2"), ("col", "c2")]
+
+
+def _cmp_values(kind, width, n, seed, like=None):
+    """``n`` deterministic values of one class for a comparison operand, at most ``width`` code units each.
+
+    Without ``like``: lengths cycle 0..width over the units of CMP_UNITS (offset by ``seed``). With ``like`` (the other
+    operand's values): element i is, by ``(i + seed) % 5``, that value itself (equal), its prefix one unit shorter, the
+    value with one unit changed, the value with an extra nonzero unit appended (a tail difference), or the value with a
+    trailing NUL appended (equal again: a trailing NUL never counts).
+
+    Args:
+        kind: ``"U"`` (str values) or ``"S"`` (bytes values).
+        width: the most code units a value keeps (the dtype's width).
+        n: how many values.
+        seed: an offset that varies the cycle between operands.
+        like: the other operand's values to derive these from, or None.
+
+    Returns:
+        A list of ``n`` str / bytes values.
+    """
+    units = CMP_UNITS[kind]
+    join = "".join if kind == "U" else b"".join
+    out = []
+    for i in range(n):
+        if like is not None:
+            v = like[i % len(like)]
+            mode = (i + seed) % 5
+            if mode == 1:
+                v = v[:-1]
+            elif mode == 2 and len(v) > 0:
+                k = (i * 7 + seed) % len(v)
+                v = v[:k] + units[(i + seed + 1) % len(units)] + v[k + 1:]
+            elif mode == 3:
+                v = v + units[(i + seed + 3) % len(units)].replace("\x00" if kind == "U" else b"\x00",
+                                                                   "q" if kind == "U" else b"q")
+            elif mode == 4:
+                v = v + units[2]
+            out.append(v[:width])
+            continue
+        length = (i * 3 + seed) % (width + 1)
+        out.append(join(units[(i * 5 + k * 3 + seed) % len(units)] for k in range(length)))
+    return out
+
+
+def _cmp_operand(spec, layout, seed, like=None):
+    """A (base, view) comparison operand of dtype ``spec`` in one of LAYOUTS, its base built by ``_cmp_values``.
+
+    Args:
+        spec: the dtype, ``"U3"`` / ``"S9"`` (class and width).
+        layout: a LAYOUTS key (the base length and the view builder).
+        seed: passed to ``_cmp_values``.
+        like: the other operand's base values to derive these from (same base length), or None.
+
+    Returns:
+        The (base, view) pair ``describe`` serializes.
+    """
+    n, build = LAYOUTS[layout]
+    kind = spec[0]
+    width = int(spec[1:])
+    base = np.array(_cmp_values(kind, width, n, seed, like), dtype=spec) if n else np.zeros(0, dtype=spec)
+    return base, build(base)
+
+
+def _units_operand(units, chars, shape=None):
+    """A ``U{chars}`` operand over raw UCS-4 units (units above U+10FFFF are reachable only through such a view).
+
+    Args:
+        units: the code units, a multiple of ``chars`` of them.
+        chars: the width of each element in units.
+        shape: the view's shape, or None for the 1-D base itself.
+
+    Returns:
+        The (base, view) pair ``describe`` serializes.
+    """
+    base = np.array(units, dtype=np.uint32).view(f"U{chars}")
+    base = np.ascontiguousarray(base)
+    return base, (base if shape is None else base.reshape(shape))
+
+
+def gen_strcomp():
+    """Section strcomp: the six comparison ufuncs over two strings of one class and the truth readers, strict."""
+    # A. The six comparisons: every layout kind (same layout for both operands) and the cross pairs, every width pair.
+    for kind, pairs in CMP_WIDTHS.items():
+        for s1, s2 in pairs:
+            layouts = [(name, name) for name in LAYOUTS] + CMP_CROSS
+            for l1, l2 in layouts:
+                b1, v1 = _cmp_operand(s1, l1, seed=1)
+                like = [x.item() if hasattr(x, "item") else x for x in b1.tolist()] if b1.size else None
+                b2, v2 = _cmp_operand(s2, l2, seed=2, like=like if LAYOUTS[l1][0] == LAYOUTS[l2][0] else None)
+                for name in CMP_OPS:
+                    add("strcomp", "ufunc", params={"name": name}, operands=[(b1, v1), (b2, v2)],
+                        call=lambda x, y, f=getattr(np, name): f(x, y), layout=f"{s1}:{l1},{s2}:{l2}")
+
+    # B. Special code units, every pair through an outer broadcast: U units on both sides of U+10FFFF and of the BMP
+    #    (compared as unsigned 32-bit values, no error), S bytes on both sides of 0x80.
+    u_units = [0, 0x41, 0xFFFF, 0x1F600, 0x10FFFF, 0x110000, 0xFFFFFFFF]
+    s_bytes = [b"", b"\x01", b"\x7f", b"\x80", b"\xff", b"\x00\x01", b"a\x00"]
+    for name in CMP_OPS:
+        col = _units_operand(u_units, 1, (len(u_units), 1))
+        row = _units_operand(u_units, 1, (1, len(u_units)))
+        add("strcomp", "ufunc", params={"name": name}, operands=[col, row],
+            call=lambda x, y, f=getattr(np, name): f(x, y), layout="U1:units")
+        pairs = _units_operand([0x41, 0x110000, 0x42, 0x41, 0, 0x110000], 2, (3, 1))
+        rowp = _units_operand([0x41, 0x42, 0x110000, 0], 2, (1, 2))
+        add("strcomp", "ufunc", params={"name": name}, operands=[pairs, rowp],
+            call=lambda x, y, f=getattr(np, name): f(x, y), layout="U2:units")
+        cb = plain(np.array(s_bytes, dtype="S2").reshape(-1, 1))
+        rb = plain(np.array(s_bytes, dtype="S3").reshape(1, -1))
+        add("strcomp", "ufunc", params={"name": name}, operands=[cb, rb],
+            call=lambda x, y, f=getattr(np, name): f(x, y), layout="S:bytes")
+
+    # C. The C# operators with a string operand: NumPy's Python str (a U scalar) on either side; bytes against str.
+    for spec, layout in [("U3", "c2"), ("U8", "f2"), ("U3", "z0"), ("S3", "c2"), ("U3", "e2")]:
+        for sym in ["==", "!=", "<", "<=", ">", ">="]:
+            for text in ["", "a", "b\x00", "zzzz"]:
+                for side in ["right", "left"]:
+                    b, v = _cmp_operand(spec, layout, seed=3)
+                    add("strcomp", "operator_text", params={"op": sym, "text": enc(text), "side": side},
+                        operands=[(b, v)], call=lambda a, s=sym, t=text, sd=side: _text_op(s, t, a, sd),
+                        layout=f"{spec}:{layout}")
+
+    # D. out= (bool and numeric dtypes, a broadcast-absorbing out), where= masks, dtype=bool.
+    for name in CMP_OPS:
+        for odt in ["?", "i1", "f8", "c16", "u8"]:
+            b1, v1 = _cmp_operand("U4", "c2", seed=4)
+            b2, v2 = _cmp_operand("U6", "bc", seed=5, like=None)
+            out = target(np.zeros((3, 4), dtype=odt))
+            add("strcomp", "ufunc_kw", params={"name": name, "nin": 2, "out": 2, "dtype": None},
+                operands=[(b1, v1), (b2, v2), out], call=lambda x, y, o, f=getattr(np, name): f(x, y, out=o),
+                layout=f"out:{odt}")
+        for mask in [np.array([[1, 0, 1, 0]], bool), np.eye(3, 4, dtype=bool), np.zeros((3, 4), bool)]:
+            b1, v1 = _cmp_operand("S5", "f2", seed=6)
+            b2, v2 = _cmp_operand("S5", "c2", seed=7)
+            out = target(np.ones((3, 4), dtype=bool))
+            add("strcomp", "ufunc_kw", params={"name": name, "nin": 2, "out": 2, "where": 3, "dtype": None},
+                operands=[(b1, v1), (b2, v2), out, plain(mask)],
+                call=lambda x, y, o, w, f=getattr(np, name): f(x, y, out=o, where=w), layout="where")
+        b1, v1 = _cmp_operand("U3", "t3", seed=8)
+        b2, v2 = _cmp_operand("U3", "t3", seed=9)
+        add("strcomp", "ufunc_kw", params={"name": name, "nin": 2, "dtype": "?"}, operands=[(b1, v1), (b2, v2)],
+            call=lambda x, y, f=getattr(np, name): f(x, y, dtype="?"), layout="dtype:?")
+
+    # E. Truth values. The cast route (astype(bool), any / all, the logical ufuncs) and the nonzero route (nonzero,
+    #    count_nonzero, flatnonzero, argwhere) over every layout kind and width; units above U+10FFFF (the cast raises
+    #    SystemError, the nonzero route does not).
+    for kind, pairs in CMP_WIDTHS.items():
+        for spec in sorted({s for p in pairs for s in p}):
+            for layout in LAYOUTS:
+                b, v = _cmp_operand(spec, layout, seed=10)
+                for order in ["K", "C", "F", "A"]:
+                    add("strcomp", "astype", params={"dtype": "?", "casting": "unsafe", "order": order, "copy": True},
+                        operands=[(b, v)], call=lambda a, o=order: a.astype(bool, order=o, casting="unsafe", copy=True),
+                        layout=f"{spec}:{layout}")
+                for name in ["any", "all", "count_nonzero"] + ([] if v.ndim == 0 else ["nonzero", "flatnonzero",
+                                                                                        "argwhere"]):
+                    add("strcomp", "call", params={"name": name}, operands=[(b, v)],
+                        call=lambda a, f=getattr(np, name): f(a), layout=f"{spec}:{layout}")
+                if v.ndim >= 1:
+                    for name in ["any", "all", "count_nonzero"]:
+                        for axis in [0, -1]:
+                            for keepdims in [False, True]:
+                                add("strcomp", "truth_axis", params={"name": name, "axis": axis, "keepdims": keepdims},
+                                    operands=[(b, v)],
+                                    call=lambda a, f=getattr(np, name), ax=axis, kd=keepdims: f(a, axis=ax, keepdims=kd),
+                                    layout=f"{spec}:{layout}")
+    for name in ["logical_and", "logical_or", "logical_xor"]:
+        for (s1, l1), (s2, l2) in [(("U3", "c2"), ("U3", "f2")), (("S3", "r2"), ("S3", "bc")), (("U3", "c2"), (None, "num")),
+                                   (("U3", "z0"), ("S2", "c2"))]:
+            b1, v1 = _cmp_operand(s1, l1, seed=11)
+            o2 = num_operand(np.array([[0, 1, 2, 0]] * 3)) if s2 is None else _cmp_operand(s2, l2, seed=12)
+            add("strcomp", "ufunc", params={"name": name}, operands=[(b1, v1), o2],
+                call=lambda x, y, f=getattr(np, name): f(x, y), layout=f"{l1},{l2}")
+    big = [0x110000, 0x41, 0, 0x10FFFF]
+    for chars, shape in [(1, None), (2, (2,))]:
+        op = _units_operand(big, chars, shape)
+        add("strcomp", "astype", params={"dtype": "?", "casting": "unsafe", "order": "K", "copy": True}, operands=[op],
+            call=lambda a: a.astype(bool, order="K", casting="unsafe", copy=True), layout="units")
+        for name in ["any", "all", "count_nonzero", "nonzero", "flatnonzero", "argwhere"]:
+            add("strcomp", "call", params={"name": name}, operands=[op], call=lambda a, f=getattr(np, name): f(a),
+                layout="units")
+        add("strcomp", "ufunc", params={"name": "logical_or"}, operands=[op, num_operand(np.array(0))],
+            call=lambda x, y: np.logical_or(x, y), layout="units")
+
+
+def _text_op(sym, text, a, side):
+    """``a OP text`` or ``text OP a`` for a Python str operand (on the left, Python reflects it to the array's operator).
+
+    Args:
+        sym: the operator, ``"=="`` ``"!="`` ``"<"`` ``"<="`` ``">"`` ``">="``.
+        text: the Python str.
+        a: the array.
+        side: ``"right"`` for ``a OP text``, ``"left"`` for ``text OP a``.
+
+    Returns:
+        NumPy's result.
+    """
+    x, y = (a, text) if side == "right" else (text, a)
+    return {"==": lambda: x == y, "!=": lambda: x != y, "<": lambda: x < y, "<=": lambda: x <= y,
+            ">": lambda: x > y, ">=": lambda: x >= y}[sym]()
+
+
 def main():
     gen_dtypes()
     gen_creation()
@@ -3039,6 +3261,7 @@ def main():
     gen_surface()
     gen_strma()
     gen_striter()
+    gen_strcomp()
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with open(OUT, "wb") as f:
         for c in CASES:

@@ -44,8 +44,9 @@ using NumSharp.Backends.Iteration;
 //     one method per instruction stream keeps the JIT's inline budget for the vector helpers). Elements wider than
 //     TextHoistMaxBytes are not hoisted (their loop form reads by offset).
 //   * truth: (text, out bool) — any nonzero unit. The cast flavor (NumPy's string -> bool cast builds a Python str per
-//     element, and a unit above U+10FFFF makes PyUnicode_New raise SystemError) also ORs every U unit's "> 0x10FFFF"
-//     test into a flag it stores into auxdata (int*) when set; the caller raises.
+//     element from its units minus the trailing NULs; CPython's PyUnicode_New raises SystemError only for a ONE-unit
+//     string above U+10FFFF, because a longer string's maximum character is capped at U+10FFFF by find_max_char) also
+//     tests whether an element is such a lone unit and stores 1 into auxdata (int*) when one is; the caller raises.
 //
 // CONTRACT
 //   The kernels follow NDInnerLoopFunc: dataptrs / strides (BYTES) per operand, count elements per call, any strides
@@ -106,7 +107,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>The identity of a truth kernel.</summary>
         /// <param name="Unit">The code-unit size: 1 for <c>S</c>, 4 for <c>U</c>.</param>
         /// <param name="Width">The element width in bytes.</param>
-        /// <param name="CheckCodePoints">The cast flavor: also flag U units above U+10FFFF.</param>
+        /// <param name="CheckCodePoints">The cast flavor: also flag a U element that is one unit above U+10FFFF.</param>
         private readonly record struct TextTruthKey(int Unit, int Width, bool CheckCodePoints);
 
         /// <summary>
@@ -152,8 +153,9 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         /// <param name="unit">1 for <c>S</c>, 4 for <c>U</c>.</param>
         /// <param name="width">The element width in bytes.</param>
-        /// <param name="checkCodePoints">The cast flavor for <c>U</c>: the kernel also tests every unit against U+10FFFF
-        ///     and, when one is above it, stores 1 into the <c>int</c> auxdata points at (which must then be non-null).
+        /// <param name="checkCodePoints">The cast flavor for <c>U</c>: the kernel also tests whether an element is ONE unit
+        ///     above U+10FFFF (its first unit above it, every later unit zero — the one-unit <c>str</c> CPython refuses to
+        ///     build) and, when one is, stores 1 into the <c>int</c> auxdata points at (which must then be non-null).
         ///     Ignored for <c>S</c> (bytes never fail NumPy's bool cast).</param>
         /// <returns>The kernel, or null when dynamic code is unavailable or disabled.</returns>
         /// <exception cref="ArgumentOutOfRangeException">A unit size other than 1 or 4, or a width that is negative or not a

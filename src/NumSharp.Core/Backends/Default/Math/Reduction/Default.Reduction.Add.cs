@@ -312,14 +312,18 @@ namespace NumSharp.Backends
         /// <param name="keepdims">Keep the reduced axis with length 1.</param>
         /// <param name="loopType">Int64 (np.sum's default bool loop) or Double (a <c>dtype=float64</c> request).</param>
         /// <returns>The sums, a read-only 0-d scalar when every axis is reduced without keepdims; null when the operand is
-        /// neither C- nor F-contiguous or dynamic code is unavailable (the caller's routes then run).</returns>
+        /// neither C- nor F-contiguous or dynamic code is unavailable (the caller's routes then run). A keepdims result
+        /// owns its data, as NumPy's reduction result does.</returns>
         private static NDArray TryCountBoolAxisSum(NDArray arr, int axis, bool keepdims, NPTypeCode loopType)
         {
             var shape = arr.Shape;
             if (!DirectILKernelGenerator.Enabled || shape.size == 0 || !(shape.IsContiguous || shape.IsFContiguous))
                 return null;
 
-            var counts = np.evaluate(NDExpr.CountNonzero(NDExpr.Arr(arr), axis, keepdims));
+            // The counts are taken WITHOUT keepdims: np.evaluate's keepdims form is a reshaped view of its counts, where
+            // NumPy's np.sum(..., keepdims=True) owns its result (OWNDATA). The axis is re-inserted below on the fresh
+            // counts instead.
+            var counts = np.evaluate(NDExpr.CountNonzero(NDExpr.Arr(arr), axis, false));
             if (loopType == NPTypeCode.Double)
             {
                 // Exact: a count is an integer below 2^53. astype keeps the counts' layout (order 'K').
@@ -328,6 +332,12 @@ namespace NumSharp.Backends
                 counts = wide;
             }
 
+            if (keepdims)
+            {
+                // ExpandDimension relabels the owning counts in place: their order (C for C, F for F) and OWNDATA stay.
+                counts.Storage.ExpandDimension(axis);
+                return counts;
+            }
             return counts.ndim == 0 ? counts.MarkReductionScalar() : counts;
         }
 

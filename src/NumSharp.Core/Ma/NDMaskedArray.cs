@@ -2973,8 +2973,11 @@ namespace NumSharp
         ///       <item><description>A 0-d array cannot be iterated (TypeError), so the array itself is the one element:
         ///       <c>np.array([a], dtype=bool)</c>, its truth (the bool cast) in a length-1 array.</description></item>
         ///       <item><description><c>U</c>: a non-empty <c>str</c> iterates to one-character <c>str</c>s, which iterate to
-        ///       themselves — infinite recursion, Python's RecursionError, at the FIRST non-empty element in C order (its
-        ///       <c>str</c> is built first, so a unit above U+10FFFF up to and including it raises SystemError instead). An
+        ///       themselves — infinite recursion, Python's RecursionError, at the FIRST non-empty element in C order. The
+        ///       elements before it are empty strings, so only that element can fail first: its <c>str</c> is built, then its
+        ///       first character — and when its FIRST unit is above U+10FFFF one of the two is a one-unit <c>str</c> CPython
+        ///       refuses (the element itself when every later unit is zero, else its first character), so it raises
+        ///       SystemError instead (probed 2.4.2: <c>[0x110000, 'A']</c> raises, <c>['A', 0x110000]</c> recurses). An
         ///       array of only empty strings yields nothing: an empty bool array.</description></item>
         ///       <item><description><c>S</c>: a <c>bytes</c> element iterates to ints, so each element contributes its bytes up
         ///       to the last nonzero one (trailing NULs stripped, embedded ones kept), each read as a bool.</description></item>
@@ -2982,9 +2985,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="data">The text array.</param>
         /// <returns>The flattened bool array (fresh, 1-D).</returns>
-        /// <exception cref="RuntimeError"><c>U</c> with a non-empty element.</exception>
-        /// <exception cref="SystemError">The cast of a 0-d <c>U</c> array, or a <c>U</c> element up to the first non-empty one,
-        ///     holds a unit above U+10FFFF.</exception>
+        /// <exception cref="RuntimeError"><c>U</c> with a non-empty element whose first unit is a valid code point.</exception>
+        /// <exception cref="SystemError">The cast of a 0-d <c>U</c> array is one unit above U+10FFFF, or the first non-empty
+        ///     element of a <c>U</c> array starts with a unit above U+10FFFF.</exception>
         private static NDArray FlattenTextMask(NDArray data)
         {
             if (data.ndim == 0)
@@ -3000,9 +3003,12 @@ namespace NumSharp
                 var nonEmpty = np.flatnonzero(Backends.Strings.NDStringTruth.Truth(flat, Backends.Strings.NDStringTruth.Flavor.Nonzero));
                 if (nonEmpty.size == 0)
                     return np.empty(new Shape(0), NPTypeCode.Boolean);
-                // Python builds each element's str in order up to the recursing one: a bad code point there raises first.
+                // Python builds the recursing element's str and then its first character's: a first unit above U+10FFFF
+                // makes one of them a one-unit str CPython refuses, so it raises before the recursion can start.
                 long first = nonEmpty.GetInt64(0);
-                using (Backends.Strings.NDStringTruth.Truth(flat[$":{first + 1}"], Backends.Strings.NDStringTruth.Flavor.Cast)) { }
+                using var firstUnits = Backends.Strings.NDStringArrays.UnitArray(flat[$"{first}:{first + 1}"]);   // (1, chars) uint32
+                if (firstUnits.GetAtIndex<uint>(0) > Backends.Strings.NDStringCodec.MaxCodePoint)
+                    throw new SystemError(Backends.Strings.NDStringTruth.InvalidCodePointMessage);
                 throw new RuntimeError("maximum recursion depth exceeded");
             }
 

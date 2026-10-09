@@ -137,6 +137,15 @@ namespace NumSharp.Tests.Strings
         /// </summary>
         [TestMethod] public void TextIteration() => Run("striter");
 
+        /// <summary>
+        ///     Section strcomp (strings phase 2, P2.1): the six comparison ufuncs over two strings of one class across every
+        ///     layout kind, cross-layout broadcasts and width pairs (past one vector and past the kernels' unrolled chunk plan),
+        ///     special code units (bytes on both sides of 0x80, U units above U+10FFFF), the C# operators with a string operand,
+        ///     <c>out=</c> / <c>where=</c> / <c>dtype=</c>, and the truth readers (the bool cast and the nonzero route, along
+        ///     axes too). Every case is strict: NumSharp computes all of them.
+        /// </summary>
+        [TestMethod] public void TextComparisonsAndTruth() => Run("strcomp");
+
         /// <summary>The corpus is complete: every section has cases and every case belongs to a section above.</summary>
         [TestMethod]
         public void Corpus_EverySectionIsReplayed()
@@ -145,6 +154,7 @@ namespace NumSharp.Tests.Strings
             {
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
                 "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
+                "strcomp",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)

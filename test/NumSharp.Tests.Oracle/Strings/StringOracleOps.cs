@@ -231,6 +231,9 @@ namespace NumSharp.Tests.Strings
             // Section striter (np.nditer / np.nested_iters over text, recorded as traces) lives in its own partial.
             if (TryInvokeNditer(c.Op, p, ops, out var iterated))
                 return iterated;
+            // Section strcomp's own ops (the C# string operators, the truth reductions along an axis) live in their partial.
+            if (TryInvokeCompute(c.Op, p, ops, out var computed))
+                return computed;
             throw new InvalidOperationException($"the string oracle has no op '{c.Op}'");
         }
 

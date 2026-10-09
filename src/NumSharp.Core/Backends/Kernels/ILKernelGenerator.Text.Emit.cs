@@ -21,7 +21,8 @@ using NumSharp.Backends.Iteration;
 //     diff:
 //       result = A.unit(off) < B.unit(off)          (unsigned; the units differ there)
 //   truth:
-//       acc = 0;  for each chunk c: acc |= X[c]  (cast flavor: inv |= units of X[c] above U+10FFFF);  nonzero = acc != 0
+//       acc = 0;  for each chunk c: acc |= X[c];  nonzero = acc != 0
+//       (cast flavor: if (X.unit(0) > U+10FFFF && every later unit of X is 0) inv = 1 — the one-unit str CPython refuses)
 // =============================================================================
 
 namespace NumSharp.Backends.Kernels
@@ -107,45 +108,45 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        ///     Emits a truth kernel: <c>out[i] = any unit of text[i] != 0</c>, plus (cast flavor) the U+10FFFF test whose
-        ///     result is stored into <c>*(int*)auxdata</c> after the loop when any unit failed it.
+        ///     Emits a truth kernel: <c>out[i] = any unit of text[i] != 0</c>, plus (cast flavor) the lone-unit test whose
+        ///     result is stored into <c>*(int*)auxdata</c> after the loop when an element failed it.
         /// </summary>
         /// <param name="key">The kernel identity.</param>
         /// <returns>The compiled kernel.</returns>
+        /// <remarks>
+        ///     <para>
+        ///     <b>The cast flavor's rule.</b> NumPy's string-to-bool cast builds a Python <c>str</c> from each element with its
+        ///     trailing NULs stripped (<c>PyArray_Scalar</c> → <c>PyUnicode_FromKindAndData</c>). CPython raises only for a
+        ///     string of exactly ONE code unit above U+10FFFF (<c>unicode_char</c> → <c>PyUnicode_New(1, ch)</c>): a longer
+        ///     string's maximum character comes from <c>find_max_char</c>, which caps it at U+10FFFF, so it builds without an
+        ///     error (probed 2.4.2: <c>[0x110000, 'A']</c> casts to True, <c>[0x110000, 0]</c> raises SystemError). An element
+        ///     fails exactly when its FIRST unit is above U+10FFFF and every later unit is zero.
+        ///     </para>
+        ///     <para>
+        ///     <b>Cost.</b> The common path pays one scalar load, one unsigned compare and one well-predicted branch per
+        ///     element; only a first unit above U+10FFFF reads the rest of the element again.
+        ///     </para>
+        /// </remarks>
         private static NDInnerLoopFunc GenerateTextTruthKernel(TextTruthKey key)
         {
             var dm = NewTextKernelMethod($"NDTextTruth_u{key.Unit}_{key.Width}{(key.CheckCodePoints ? "_cast" : "")}");
             var il = dm.GetILGenerator();
             var frame = EmitTextFrame(il, new[] { 0, 1 });
             var plan = PlanTextRange(0, key.Width, key.Unit);
-            // uint lanes for the code-point test (an unsigned lane compare); for the plain OR the lane type is irrelevant.
-            var lane = key.CheckCodePoints ? typeof(uint) : typeof(byte);
+            // The truth is a plain OR of the units, so the vector lane type is irrelevant: byte lanes.
+            var lane = typeof(byte);
 
-            // The cast flavor's "some unit is above U+10FFFF" accumulator spans the whole call: NumPy raises for the
-            // first such element, and the caller raises once after the loop (the partial output is discarded).
-            LocalBuilder invalid = null, limit = null, chunk = null;
-            if (key.CheckCodePoints && plan.Count > 0)
+            // The cast flavor's flag spans the whole call: NumPy raises at the first failing element, and the caller raises
+            // once after the loop (the partial output is discarded). An empty element (width 0) is '' and never fails.
+            LocalBuilder invalid = null;
+            TextChunkPlan rest = default;
+            if (key.CheckCodePoints && key.Width > 0)
             {
-                if (IsVectorChunk(plan.Kind))
-                {
-                    int bits = TextChunkBytes(plan.Kind) * 8;
-                    invalid = il.DeclareLocal(VectorMethodCache.V(bits, lane));
-                    il.Emit(OpCodes.Call, VectorMethodCache.Zero(bits, lane));
-                    il.Emit(OpCodes.Stloc, invalid);
-                    // The limit vector is built once per call, not per chunk.
-                    limit = il.DeclareLocal(VectorMethodCache.V(bits, lane));
-                    il.Emit(OpCodes.Ldc_I4, MaxUnicodeCodePoint);
-                    il.Emit(OpCodes.Call, VectorMethodCache.CreateBroadcast(bits, lane));
-                    il.Emit(OpCodes.Stloc, limit);
-                    chunk = il.DeclareLocal(VectorMethodCache.V(bits, lane));
-                }
-                else
-                {
-                    invalid = il.DeclareLocal(typeof(int));
-                    il.Emit(OpCodes.Ldc_I4_0);
-                    il.Emit(OpCodes.Stloc, invalid);
-                    chunk = il.DeclareLocal(typeof(ulong));
-                }
+                invalid = il.DeclareLocal(typeof(int));
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Stloc, invalid);
+                // The units after the first: all zero is what makes a first unit above U+10FFFF a one-unit string.
+                rest = PlanTextRange(4, key.Width - 4, 4);
             }
 
             var acc = new TextAccumulators(il);
@@ -155,53 +156,10 @@ namespace NumSharp.Backends.Kernels
                 acc.ZeroAll();
                 ForEachTextChunk(il, plan, site =>
                 {
-                    if (invalid is null)
-                    {
-                        acc.LoadFor(plan.Kind);
-                        EmitTextChunkLoad(il, frame.Pointers[0], site, plan.Kind, lane);
-                        EmitTextOr(il, plan.Kind, lane);
-                        acc.StoreFor(plan.Kind);
-                        return;
-                    }
-
-                    // The chunk is read once and used twice: OR-ed into the truth and tested against U+10FFFF.
-                    EmitTextChunkLoad(il, frame.Pointers[0], site, plan.Kind, lane);
-                    il.Emit(OpCodes.Stloc, chunk);
                     acc.LoadFor(plan.Kind);
-                    il.Emit(OpCodes.Ldloc, chunk);
+                    EmitTextChunkLoad(il, frame.Pointers[0], site, plan.Kind, lane);
                     EmitTextOr(il, plan.Kind, lane);
                     acc.StoreFor(plan.Kind);
-                    if (IsVectorChunk(plan.Kind))
-                    {
-                        int bits = TextChunkBytes(plan.Kind) * 8;
-                        il.Emit(OpCodes.Ldloc, invalid);
-                        il.Emit(OpCodes.Ldloc, chunk);
-                        il.Emit(OpCodes.Ldloc, limit);
-                        il.Emit(OpCodes.Call, VectorMethodCache.GreaterThan(bits, lane));   // unsigned lane compare
-                        il.Emit(OpCodes.Call, VectorMethodCache.Operator(bits, lane, "op_BitwiseOr"));
-                        il.Emit(OpCodes.Stloc, invalid);
-                    }
-                    else
-                    {
-                        // A U scalar chunk holds one (4 bytes) or two (8 bytes) units: test each 32-bit half unsigned.
-                        il.Emit(OpCodes.Ldloc, invalid);
-                        il.Emit(OpCodes.Ldloc, chunk);
-                        il.Emit(OpCodes.Conv_U4);
-                        il.Emit(OpCodes.Ldc_I4, MaxUnicodeCodePoint);
-                        il.Emit(OpCodes.Cgt_Un);
-                        il.Emit(OpCodes.Or);
-                        if (plan.Kind == TextChunkKind.UInt64)
-                        {
-                            il.Emit(OpCodes.Ldloc, chunk);
-                            il.Emit(OpCodes.Ldc_I4, 32);
-                            il.Emit(OpCodes.Shr_Un);
-                            il.Emit(OpCodes.Conv_U4);
-                            il.Emit(OpCodes.Ldc_I4, MaxUnicodeCodePoint);
-                            il.Emit(OpCodes.Cgt_Un);
-                            il.Emit(OpCodes.Or);
-                        }
-                        il.Emit(OpCodes.Stloc, invalid);
-                    }
                 });
 
                 // out = (any chunk nonzero)
@@ -210,25 +168,17 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Ldc_I4_0);
                 il.Emit(OpCodes.Ceq);
                 il.Emit(OpCodes.Stind_I1);
+
+                if (invalid is not null)
+                    EmitTextLoneUnitCheck(il, frame.Pointers[0], rest, invalid);
             });
 
             if (invalid is not null)
             {
-                // *(int*)auxdata = 1 when any unit of the call was above U+10FFFF.
+                // *(int*)auxdata = 1 when an element of the call is one unit above U+10FFFF.
                 var clean = il.DefineLabel();
-                if (IsVectorChunk(plan.Kind))
-                {
-                    int bits = TextChunkBytes(plan.Kind) * 8;
-                    il.Emit(OpCodes.Ldloc, invalid);
-                    il.Emit(OpCodes.Call, VectorMethodCache.Zero(bits, lane));
-                    il.Emit(OpCodes.Call, VectorMethodCache.EqualsAll(bits, lane));
-                    il.Emit(OpCodes.Brtrue, clean);
-                }
-                else
-                {
-                    il.Emit(OpCodes.Ldloc, invalid);
-                    il.Emit(OpCodes.Brfalse, clean);
-                }
+                il.Emit(OpCodes.Ldloc, invalid);
+                il.Emit(OpCodes.Brfalse, clean);
                 il.Emit(OpCodes.Ldarg_3);
                 il.Emit(OpCodes.Ldc_I4_1);
                 il.Emit(OpCodes.Stind_I4);
@@ -237,6 +187,34 @@ namespace NumSharp.Backends.Kernels
 
             il.Emit(OpCodes.Ret);
             return (NDInnerLoopFunc)dm.CreateDelegate(typeof(NDInnerLoopFunc));
+        }
+
+        /// <summary>
+        ///     Emits the cast flavor's per-element test: sets <paramref name="invalid"/> to 1 when the element's first unit is
+        ///     above U+10FFFF and every later unit is zero (the element is a one-unit Python <c>str</c> CPython cannot build).
+        /// </summary>
+        /// <param name="il">The generator.</param>
+        /// <param name="pointer">The element pointer local (a <c>U</c> element at least one unit wide).</param>
+        /// <param name="rest">The plan of the units after the first (empty for a one-unit element).</param>
+        /// <param name="invalid">The int flag local.</param>
+        private static void EmitTextLoneUnitCheck(ILGenerator il, LocalBuilder pointer, TextChunkPlan rest, LocalBuilder invalid)
+        {
+            var next = il.DefineLabel();
+            // The first unit, read unaligned (a U view can sit at any byte), compared unsigned.
+            il.Emit(OpCodes.Ldloc, pointer);
+            il.Emit(OpCodes.Unaligned, (byte)1);
+            il.Emit(OpCodes.Ldind_U4);
+            il.Emit(OpCodes.Ldc_I4, MaxUnicodeCodePoint);
+            il.Emit(OpCodes.Ble_Un, next);
+            // Rare path: a nonzero unit after the first makes the string longer than one unit, which CPython builds.
+            if (rest.Count > 0)
+            {
+                EmitTextRangeNonzero(il, pointer, rest, typeof(byte));
+                il.Emit(OpCodes.Brtrue, next);
+            }
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Stloc, invalid);
+            il.MarkLabel(next);
         }
 
         // =============================================================================================================
