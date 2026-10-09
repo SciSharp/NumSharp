@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Interop.OpenBLAS;
+using NumSharp.Tests.Fuzz.Ownership;
 
 namespace NumSharp.Tests.Fuzz
 {
@@ -108,38 +109,56 @@ namespace NumSharp.Tests.Fuzz
             var skipped = new HashSet<string>(StringComparer.Ordinal);
             string backendSkip = null;
 
-            using var fx = new LeakFixture();
-            ScopeAudit.Settle();   // drain the finalizer backlog earlier (undisposing) tests left behind
-
-            foreach (var entry in LeakCatalogue.All.Where(e => !e.RequiresBackend))
-                MeasureCatalogueEntry(entry, fx, acc, errors);
-
-            var backendEntries = LeakCatalogue.All.Where(e => e.RequiresBackend).ToList();
-            if (backendEntries.Count > 0)
+            var fx = new LeakFixture();
+            try
             {
-                backendSkip = TryEnableLeakBackend();
-                if (backendSkip == null)
+                ScopeAudit.Settle();   // drain the finalizer backlog earlier (undisposing) tests left behind
+
+                // An entry that damaged a fixture array (an over-disposal, recorded by the entry's ownership check) would
+                // hand every later entry a disposed or freed operand, so the fixture is rebuilt before the next entry runs.
+                void Measure(LeakCase entry)
                 {
-                    try
+                    if (MeasureCatalogueEntry(entry, fx, acc, errors))
+                    {
+                        fx.Dispose();
+                        fx = new LeakFixture();
+                    }
+                }
+
+                foreach (var entry in LeakCatalogue.All.Where(e => !e.RequiresBackend))
+                    Measure(entry);
+
+                var backendEntries = LeakCatalogue.All.Where(e => e.RequiresBackend).ToList();
+                if (backendEntries.Count > 0)
+                {
+                    backendSkip = TryEnableLeakBackend();
+                    if (backendSkip == null)
+                    {
+                        try
+                        {
+                            foreach (var entry in backendEntries)
+                                Measure(entry);
+                        }
+                        finally
+                        {
+                            // Every other test in this assembly asserts the managed kernels — never leave the
+                            // backend installed past this block.
+                            OpenBlasEngine.Disable();
+                        }
+                    }
+                    else
                     {
                         foreach (var entry in backendEntries)
-                            MeasureCatalogueEntry(entry, fx, acc, errors);
-                    }
-                    finally
-                    {
-                        // Every other test in this assembly asserts the managed kernels — never leave the
-                        // backend installed past this block.
-                        OpenBlasEngine.Disable();
+                            skipped.Add(entry.Api);
                     }
                 }
-                else
-                {
-                    foreach (var entry in backendEntries)
-                        skipped.Add(entry.Api);
-                }
-            }
 
-            return new DirectRunResult(acc.ToResult(0), errors, backendSkip, skipped);
+                return new DirectRunResult(acc.ToResult(0), errors, backendSkip, skipped);
+            }
+            finally
+            {
+                fx.Dispose();
+            }
         }
 
         /// <summary>
@@ -151,8 +170,14 @@ namespace NumSharp.Tests.Fuzz
         /// <param name="fx">The shared fixture (never disposed by the region — see <see cref="LeakFixture.Keep"/>).</param>
         /// <param name="acc">The run's tallies.</param>
         /// <param name="errors">Where an unrunnable entry is reported.</param>
-        private static void MeasureCatalogueEntry(LeakCase entry, LeakFixture fx, SweepAccumulator acc, List<string> errors)
+        /// <returns>True when the entry damaged a fixture array (an over-disposal was recorded): the caller rebuilds the
+        ///     fixture before the next entry.</returns>
+        /// <exception cref="InvalidOperationException">The ARC probe cannot read a fixture's slice.</exception>
+        private static bool MeasureCatalogueEntry(LeakCase entry, LeakFixture fx, SweepAccumulator acc, List<string> errors)
         {
+            // The fixture's arrays as they are before THIS entry: an earlier entry may legitimately have materialized a
+            // masked fixture's fill, so each entry is judged on its own changes.
+            var ledger = OwnershipLedger.Of(fx.Owned());
             long freshBytes = 0;
             void Region()
             {
@@ -181,11 +206,14 @@ namespace NumSharp.Tests.Fuzz
                 {
                     threw = true;
                 }
+                // A raising member must not have damaged a fixture array on the way out either.
+                if (acc.CheckOwnership(entry.Api, ledger, entry.Label, "catalogue", threw ? "error path" : "warm"))
+                    return true;
                 if (!threw)
                 {
                     errors.Add($"{entry.Api} [{entry.Label}]: flagged Throws but returned — the member now succeeds; " +
                                "turn the entry into an ordinary E(...) so its success path is measured");
-                    return;
+                    return false;
                 }
 
                 void ErrorRegion()
@@ -201,13 +229,14 @@ namespace NumSharp.Tests.Fuzz
                 }
 
                 var errTraffic = ScopeAudit.MeasureConfirmedTraffic(ErrorRegion);
+                bool damaged = acc.CheckOwnership(entry.Api, ledger, entry.Label, "catalogue", "error path, measured");
                 if (errTraffic == null)
                 {
                     acc.Inconclusive(entry.Api, errorPath: true);
-                    return;
+                    return damaged;
                 }
                 acc.Record(entry.Api, null, entry.Label, errTraffic.Value, 0, errorPath: true, entry.Label, "catalogue");
-                return;
+                return damaged;
             }
 
             try
@@ -217,18 +246,25 @@ namespace NumSharp.Tests.Fuzz
             catch (Exception e)
             {
                 errors.Add($"{entry.Api} [{entry.Label}]: {e.GetType().Name}: {FirstLine(e.Message)}");
-                return;
+                return acc.CheckOwnership(entry.Api, ledger, entry.Label, "catalogue", "threw");
             }
 
+            // The warm run is where an over-disposal shows (the pool balance cannot see it, see OwnershipLedger); a
+            // damaged fixture ends the entry before the measured runs replay over it.
+            if (acc.CheckOwnership(entry.Api, ledger, entry.Label, "catalogue", "warm"))
+                return true;
+
             var traffic = ScopeAudit.MeasureConfirmedTraffic(Region);
+            bool damagedLater = acc.CheckOwnership(entry.Api, ledger, entry.Label, "catalogue", "measured");
             if (traffic == null)
             {
                 acc.Inconclusive(entry.Api, errorPath: false);   // a GC landed inside every attempt — indistinguishable, never red
-                return;
+                return damagedLater;
             }
 
             acc.Direct++;
             acc.Record(entry.Api, null, entry.Label, traffic.Value, freshBytes, errorPath: false, entry.Label, "catalogue");
+            return damagedLater;
         }
 
         /// <summary>

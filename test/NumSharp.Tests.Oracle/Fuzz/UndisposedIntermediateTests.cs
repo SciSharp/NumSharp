@@ -5,6 +5,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends.Unmanaged.Pooling;
+using NumSharp.Tests.Fuzz.Ownership;
 
 namespace NumSharp.Tests.Fuzz
 {
@@ -644,6 +645,11 @@ namespace NumSharp.Tests.Fuzz
         /// unaudited success path), while the direct runners credit either.</param>
         /// <param name="DirectMeasured">Success-path DIRECT measurements — catalogue entries and property/field
         /// reads, keyed by surface id rather than a corpus op key (0 for a corpus sweep).</param>
+        /// <param name="OverDisposals">Over-disposal families keyed (op, kind): the call disposed, released, under-counted
+        /// or swapped an array it does not own (see <see cref="OwnershipLedger"/>); null for a runner that checks none.</param>
+        /// <param name="Retentions">Retention families keyed by op: a counted reference to a caller's memory outlived the
+        /// call (not an over-disposal; reported apart); null for a runner that checks none.</param>
+        /// <param name="OwnershipCases">Cases (or entries) whose caller arrays were checked.</param>
         internal sealed record SweepResult(
             long OrdinaryMeasured, long MaskedMeasured, long IndexMeasured, long ErrorPathsMeasured,
             long GcInconclusive, long ThrewSkipped, int Files,
@@ -654,7 +660,10 @@ namespace NumSharp.Tests.Fuzz
             Dictionary<string, long> ThrewByOp,
             IReadOnlySet<string> InconclusiveIds,
             IReadOnlySet<string> ErrorInconclusiveIds,
-            long DirectMeasured = 0)
+            long DirectMeasured = 0,
+            Dictionary<(string op, OwnershipViolation kind), (long count, string sampleId, string file, string detail)> OverDisposals = null,
+            Dictionary<string, (long count, string sampleId, string file, string detail)> Retentions = null,
+            long OwnershipCases = 0)
         {
             /// <summary>All success-path cases measured, across every family and the direct runners.</summary>
             public long Measured => OrdinaryMeasured + MaskedMeasured + IndexMeasured + DirectMeasured;
@@ -705,6 +714,96 @@ namespace NumSharp.Tests.Fuzz
             /// <summary>Total measurements (success + error), for the periodic hygiene quiesce.</summary>
             private long _measurements;
 
+            /// <summary>Over-disposal families: (op, kind) → (count, first case id, its file, the first finding).</summary>
+            public readonly Dictionary<(string op, OwnershipViolation kind), (long count, string sampleId, string file, string detail)> OverDisposals = new();
+
+            /// <summary>Retention families: op → (count, first case id, its file, the first finding).</summary>
+            public readonly Dictionary<string, (long count, string sampleId, string file, string detail)> Retentions = new(StringComparer.Ordinal);
+
+            /// <summary>Distinct cases whose caller arrays were checked.</summary>
+            public long OwnershipCases;
+
+            /// <summary>The case the last ownership check belonged to (one case is checked after several regions).</summary>
+            private string _ownershipCase;
+
+            /// <summary>Whether the current case already recorded a retention (each case counts once per family).</summary>
+            private bool _ownershipRetainedRecorded;
+
+            /// <summary>
+            ///     Checks a case's caller arrays — and the process-wide shared arrays (<see cref="SharedArrays"/>) — after one
+            ///     region of the case ran, and records what it finds.
+            /// </summary>
+            /// <param name="op">The case's op key or the entry's surface id (the family key).</param>
+            /// <param name="ledger">The case's snapshot of the arrays it does not own.</param>
+            /// <param name="sampleId">The case id (the first one of a family is kept as its sample).</param>
+            /// <param name="file">The corpus file, or the runner's name.</param>
+            /// <param name="stage">The region that just ran (<c>warm</c>, <c>measured</c>, <c>error path</c>, …), part of the
+            ///     report.</param>
+            /// <returns>
+            ///     True when an over-disposal was found. The caller must then stop replaying the case: its arrays may already
+            ///     be back in the pool, and a further run would read or write memory another allocation now owns.
+            /// </returns>
+            /// <exception cref="InvalidOperationException">The ARC probe cannot read a slice (see <see cref="ArcProbe.Read"/>).</exception>
+            /// <remarks>
+            ///     Runs OUTSIDE every measured window: a clean check allocates nothing, but a finding builds strings, and a
+            ///     collection inside a window would make that window's leak measurement inconclusive.
+            /// </remarks>
+            public bool CheckOwnership(string op, OwnershipLedger ledger, string sampleId, string file, string stage)
+            {
+                bool firstCheckOfCase = !string.Equals(sampleId, _ownershipCase, StringComparison.Ordinal);
+                if (firstCheckOfCase)
+                {
+                    _ownershipCase = sampleId;
+                    _ownershipRetainedRecorded = false;
+                    OwnershipCases++;
+                }
+
+                // The pool scan walks every bucket, so it runs once per case: on its first check, right after the warm run
+                // (a call that parked a caller's memory in the pool has done so by then).
+                OwnershipFinding overDisposal = null, retained = null;
+                foreach (var f in ledger.Check(scanPool: firstCheckOfCase))
+                {
+                    if (f.IsOverDisposal)
+                    {
+                        overDisposal ??= f;
+                    }
+                    else
+                    {
+                        retained ??= f;
+                    }
+                }
+
+                // The shared arrays: only their over-disposals count (a transient extra reference to one, an op's view of
+                // np.ma.nomask awaiting disposal, is ordinary). A damaged shared array stays damaged, so after one finding
+                // the shared snapshot is re-taken: the cases after this one are judged on what THEY do.
+                var shared = SharedArrays.CheckOverDisposal();
+                if (shared is not null)
+                {
+                    overDisposal ??= shared;
+                    SharedArrays.Rebase();
+                }
+
+                if (overDisposal is not null)
+                {
+                    var key = (op, overDisposal.Kind);
+                    string detail = $"[{stage}] {overDisposal}";
+                    OverDisposals[key] = OverDisposals.TryGetValue(key, out var g)
+                        ? (g.count + 1, g.sampleId, g.file, g.detail)
+                        : (1, sampleId, file, detail);
+                    return true;
+                }
+
+                if (retained is not null && !_ownershipRetainedRecorded)
+                {
+                    _ownershipRetainedRecorded = true;
+                    string detail = $"[{stage}] {retained}";
+                    Retentions[op] = Retentions.TryGetValue(op, out var g)
+                        ? (g.count + 1, g.sampleId, g.file, g.detail)
+                        : (1, sampleId, file, detail);
+                }
+                return false;
+            }
+
             /// <summary>Records one threw-skipped success-path case.</summary>
             /// <param name="op">The case's op key.</param>
             public void Threw(string op)
@@ -735,7 +834,7 @@ namespace NumSharp.Tests.Fuzz
             public SweepResult ToResult(int files)
                 => new(Ordinary, Masked, Index, ErrorPaths, GcInconclusive, ThrewSkipped, files,
                        Groups, Bypasses, MeasuredByOp, ErrorMeasuredByOp, ThrewByOp,
-                       InconclusiveIds, ErrorInconclusiveIds, Direct);
+                       InconclusiveIds, ErrorInconclusiveIds, Direct, OverDisposals, Retentions, OwnershipCases);
 
             /// <summary>
             ///     Records a confirmed measurement and classifies it: a non-zero balance joins an
@@ -924,6 +1023,10 @@ namespace NumSharp.Tests.Fuzz
                 if (c.Alias && operands.Length == 1)
                     operands = new[] { operands[0], operands[0] };
 
+                // The arrays this call does not own: every operand. Checked after each region (OwnershipLedger: the
+                // pool balance cannot see an op disposing them, because the warm run absorbs it).
+                var ledger = OwnershipLedger.OfPositional(operands);
+
                 try
                 {
                     if (c.Expects_Throw)
@@ -946,7 +1049,12 @@ namespace NumSharp.Tests.Fuzz
                         }
 
                         ErrorRegion();   // warm: exception machinery + any one-time validation caches
+                        // A raising op must not have disposed its operands on the way out either; a damaged operand
+                        // ends the case (another run would read memory the pool may already have handed out).
+                        if (acc.CheckOwnership(c.Op, ledger, c.Id, file, "error path"))
+                            continue;
                         var errTraffic = ScopeAudit.MeasureConfirmedTraffic(ErrorRegion);
+                        acc.CheckOwnership(c.Op, ledger, c.Id, file, "error path, measured");
                         if (errTraffic == null)
                         {
                             acc.Inconclusive(c.Op, errorPath: true);
@@ -967,8 +1075,14 @@ namespace NumSharp.Tests.Fuzz
                     catch
                     {
                         acc.Threw(c.Op);   // value/throw divergences are FuzzCorpusTests' verdict, not ours
+                        acc.CheckOwnership(c.Op, ledger, c.Id, file, "threw");
                         continue;
                     }
+
+                    // The warm run is where an over-disposal shows: the measured runs below would replay over the
+                    // damaged operands (and balance the pool regardless), so a finding ends the case here.
+                    if (acc.CheckOwnership(c.Op, ledger, c.Id, file, "warm"))
+                        continue;
 
                     // SCREEN, then CONFIRM (ScopeAudit.MeasureConfirmedTraffic). The sweep may run over a
                     // library with leaks, so escaped buffers accumulate; pacing/natural GCs collect them
@@ -988,6 +1102,9 @@ namespace NumSharp.Tests.Fuzz
                         DisposeResult(res, operands);
                     }
                     var traffic = ScopeAudit.MeasureConfirmedTraffic(Region);
+                    // A finding that only the second or later run shows (an op whose damage depends on the state its
+                    // first run left) is still recorded; the case is complete after this either way.
+                    acc.CheckOwnership(c.Op, ledger, c.Id, file, "measured");
                     if (traffic == null)
                     {
                         // A GC landed inside every attempt — indistinguishable, never red. Recorded under the
@@ -1173,11 +1290,21 @@ namespace NumSharp.Tests.Fuzz
             }
         }
 
+        /// <summary>
+        ///     Disposes a result array unless the call does not own it: an operand handed back as the result, or a
+        ///     process-wide shared array (a numpy.polynomial module constant read AS the result).
+        /// </summary>
+        /// <param name="nd">A result array.</param>
+        /// <param name="operands">The case's operands.</param>
+        /// <remarks>Disposing a shared array here was a harness over-disposal the ownership gate found
+        ///     (<c>polynomial.polydomain</c> and its 23 siblings: the sweep disposed the module constant it read).</remarks>
         private static void DisposeUnlessOperand(NumSharp.NDArray nd, NumSharp.NDArray[] operands)
         {
             foreach (var op in operands)
                 if (ReferenceEquals(op, nd))
                     return;
+            if (SharedArrays.Contains(nd))
+                return;
             nd.Dispose();
         }
 

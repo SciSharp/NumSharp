@@ -263,6 +263,81 @@ call); and ANY new raw site — new file or count growth in an allowed file — 
 consciously allowlisted. A file whose count DROPS below its pin prints a "tighten the allowlist"
 note. Inconclusive (never false-green) without a source checkout.
 
+## Ownership gate — arrays a call does not own (`Fuzz/Ownership/`) — 2026-10-09
+
+**The bug class (the deterministic over-disposal).** A call disposes, releases, under-counts,
+swaps or pools memory it does not own: its caller's operands, masks, index and value arrays, `out=`
+targets, the leak fixtures, or a process-wide shared array (`np.ma.nomask`, the masked constant,
+the 24 `numpy.polynomial` module constants). The caller's next read then lands in a buffer the pool
+may already have handed to another allocation.
+
+**The leak sweep cannot see it.** `NDArray.Dispose` is idempotent and every sweep family runs one
+unmeasured warm call before it measures. An op that disposes its operand returns the operand's
+buffer during the warm call; the measured calls balance their own takes and returns over the
+disposed operand, and the harness's own `Dispose` of the operand does nothing. The pool balance
+never moves (`PoolBalance_CannotSeeADisposedOperand` proves it).
+
+**How it is checked.** `OwnershipLedger` snapshots each array a call does not own and compares it
+after the call:
+
+| Violation | What changed |
+|-----------|--------------|
+| `Disposed` | the caller's array object was disposed |
+| `Released` | its memory was freed, pooled, unpinned or unmapped while the caller holds it |
+| `ReferenceDropped` | its counted references fell below the snapshot (freed early when the caller drops its own) |
+| `StorageReplaced` | the array now refers to other memory |
+| `PooledWhileHeld` | the buffer pool parks a buffer inside the caller's memory (`PoolScan`: the most recent 64 buffers of the caller memory's bucket sizes, once per case) |
+| `ReferenceRetained` | a counted reference to the caller's memory outlived the call (the opposite direction; printed, not judged) |
+
+`ArcProbe` reads each memory block's ARC state (kind, counted references, freed flag) through
+compiled accessors on the private `Disposer`; a renamed field fails loudly. `SharedArrays` watches
+the process-wide arrays (only over-disposals count, and the snapshot is re-taken after a finding).
+The checks run in every runner, after every region of every case, outside the measured windows:
+
+| Gate | Checked (2026-10-09) |
+|------|-----------------------|
+| `Corpus_AllOps_LeaveTheCallersArraysIntact` (`SharedSweep`: ordinary, masked and index tiers, success and error paths) | 669,232 cases |
+| `Corpus_BackendOps_LeaveTheCallersArraysIntact` (`SharedBackendSweep`, OpenBLAS installed; Inconclusive without a library) | 547,010 cases |
+| `Catalogue_EveryEntry_LeavesTheFixturesIntact` (`SharedCatalogue`; a damaged fixture is rebuilt before the next entry) | 438 entries |
+| `EveryPropertyAndField_Read_LeavesTheFixturesIntact` (`SharedPropertyReads`) | 614 reads |
+
+The corpus sweep takes 46–49 s with the checks and 48 s without them (run-to-run noise).
+
+**Memory NumSharp never allocated** (`Corpus_ForeignOperands_StayTheCallers`). The corpus rebuilds
+every operand as a pinned managed copy that NumSharp itself made, so the gates above see one kind
+of memory. This gate replays one case per (op, layout, operand-0 dtype) of every ordinary tier —
+74,378 cases — with each operand rebuilt (same bytes, shape, strides, offset) over each
+`ForeignKind`, 446,268 runs in about 6 s:
+
+| Kind | Memory | What a bug would do |
+|------|--------|---------------------|
+| `Pooled` | NumSharp's own pooled buffer (`np.empty`) | return the caller's buffer to the pool |
+| `PinnedArray` | a caller's `T[]` wrapped without a copy (`new NDArray(T[], Shape)`) | unpin early (the GC may move the array) |
+| `ByteBuffer` | a caller's `byte[]` under `np.ndarray(shape, dtype, buffer:)` | run the unpin action early |
+| `FromBuffer` | a caller's `byte[]` under `np.frombuffer` | the same |
+| `RawPointer` | a caller's unmanaged memory, non-owning block | free, pool or adopt memory nobody gave it |
+| `ExternalRelease` | a caller's unmanaged memory with a release action | call the caller's release action early or twice |
+
+Each run applies the ledger and the pool scan after the call, counts the caller's release action
+after the operands are disposed (at most once), and scans the pool again before the harness frees
+the caller's unmanaged memory (a parked caller buffer is leaked rather than freed under the pool).
+`ForeignMemory_EveryKindIsTheMemoryItNames` proves each kind builds the memory it names.
+
+**Findings.** No library over-disposal in any runner. Two HARNESS over-disposals, fixed: the
+ordinary sweep's result disposer disposed the numpy.polynomial module constants that
+`polynomial.polydomain` and its 23 siblings return (results are now never disposed when they are
+shared arrays), and the masked `axis_arg` replay released its result's parts with an empty keep set,
+disposing the case's own operand 0 (`ma.mask_rowcols` returns its input). Retentions (not judged,
+35 families in the corpus, 24 in the catalogue): for example `array_str` / `array_repr` leave 8
+undisposed views of their operand, char `min` / `max` / `argmax` an undisposed `uint16` alias, `split`
+two views — each delays the release of the caller's memory to the GC.
+
+**Planted-bug check** (2026-10-09, clean worktree): `square` disposing its input, `flip` releasing a
+reference it never took, `ma.getdata` disposing the masked operand's data, and the object indexer
+setter disposing the assigned value each turn the ownership gate red (144 / 366 / 408 / 898 cases);
+the leak gate stays green for the first three. The `Ownership_Detects_*` and `ForeignMemory_*`
+tests plant each violation kind directly.
+
 ## Lifetime gate — operands freed mid-kernel (`Fuzz/Lifetime/`) — 2026-10-09
 
 **The bug class (a lost GC anchor, the GC-driven over-disposal).** A NumSharp method reads an
@@ -275,8 +350,9 @@ returns the buffer to the pool, or frees it, while the kernel still reads or wri
 thread allocating (any multi-threaded application) or the pool's own GC pacing supplies the
 collection. Seen: silently wrong results, spurious `IndexError` / `LinAlgError: Singular matrix` from
 poisoned operands, and fatal `AccessViolationException`s. **No other tier can see it**: every replay
-holds its operands in the harness for the whole call. The deterministic twin — an op disposing a
-caller's array — is already gated by the leak sweep's NEGATIVE balance (a return without a take).
+holds its operands in the harness for the whole call. The deterministic twin — an op disposing,
+releasing or pooling a caller's array — is the ownership gate's (the section above); the leak
+sweep's pool balance cannot see it.
 The fix pattern is `GC.KeepAlive(operand)` after the kernel call (np.nonzero, np.argwhere,
 np.flatnonzero, np.unravel_index and np.ravel_multi_index have it).
 

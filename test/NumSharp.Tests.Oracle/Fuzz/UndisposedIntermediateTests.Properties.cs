@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Runtime.ExceptionServices;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Interop.OpenBLAS;
+using NumSharp.Tests.Fuzz.Ownership;
 
 namespace NumSharp.Tests.Fuzz
 {
@@ -107,45 +108,63 @@ namespace NumSharp.Tests.Fuzz
             var backendRetry = new List<(SurfaceMember member, ReadTarget target)>();
             string backendSkip = null;
 
-            using var fx = new LeakFixture();
-            ScopeAudit.Settle();
-
-            foreach (var member in LeakSurface.Enumerate().Where(m => m.Kind is SurfaceKind.Property or SurfaceKind.Field))
+            var fx = new LeakFixture();
+            try
             {
-                var targets = ReadTargetsFor(member);
-                if (targets == null)
-                {
-                    errors.Add($"{member.Id}: no read target is defined for instance members of owner '{member.Owner}' " +
-                               "(add one to ReadTargetsFor)");
-                    continue;
-                }
-                foreach (var target in targets)
-                    MeasureRead(member, target, fx, acc, errors, backendRetry);
-            }
+                ScopeAudit.Settle();
 
-            if (backendRetry.Count > 0)
-            {
-                backendSkip = TryEnableLeakBackend();
-                if (backendSkip == null)
+                // A read that damaged a fixture array (an over-disposal, recorded by its ownership check) would hand every
+                // later read a disposed or freed target, so the fixture is rebuilt before the next read runs.
+                void Measure(SurfaceMember member, ReadTarget target, List<(SurfaceMember, ReadTarget)> retry)
                 {
-                    try
+                    if (MeasureRead(member, target, fx, acc, errors, retry))
                     {
-                        foreach (var (member, target) in backendRetry)
-                            MeasureRead(member, target, fx, acc, errors, backendRetry: null);
-                    }
-                    finally
-                    {
-                        OpenBlasEngine.Disable();
+                        fx.Dispose();
+                        fx = new LeakFixture();
                     }
                 }
-                else
-                {
-                    foreach (var (member, _) in backendRetry)
-                        skipped.Add(member.Id);
-                }
-            }
 
-            return new DirectRunResult(acc.ToResult(0), errors, backendSkip, skipped);
+                foreach (var member in LeakSurface.Enumerate().Where(m => m.Kind is SurfaceKind.Property or SurfaceKind.Field))
+                {
+                    var targets = ReadTargetsFor(member);
+                    if (targets == null)
+                    {
+                        errors.Add($"{member.Id}: no read target is defined for instance members of owner '{member.Owner}' " +
+                                   "(add one to ReadTargetsFor)");
+                        continue;
+                    }
+                    foreach (var target in targets)
+                        Measure(member, target, backendRetry);
+                }
+
+                if (backendRetry.Count > 0)
+                {
+                    backendSkip = TryEnableLeakBackend();
+                    if (backendSkip == null)
+                    {
+                        try
+                        {
+                            foreach (var (member, target) in backendRetry)
+                                Measure(member, target, null);
+                        }
+                        finally
+                        {
+                            OpenBlasEngine.Disable();
+                        }
+                    }
+                    else
+                    {
+                        foreach (var (member, _) in backendRetry)
+                            skipped.Add(member.Id);
+                    }
+                }
+
+                return new DirectRunResult(acc.ToResult(0), errors, backendSkip, skipped);
+            }
+            finally
+            {
+                fx.Dispose();
+            }
         }
 
         /// <summary>
@@ -160,9 +179,17 @@ namespace NumSharp.Tests.Fuzz
         /// <param name="errors">Where set-up defects (unconstructible target, unresolvable accessor) are reported.</param>
         /// <param name="backendRetry">Where a backend-needing read is deferred; null during the backend pass
         /// itself, where a backend miss is simply an error path.</param>
-        private static void MeasureRead(SurfaceMember member, ReadTarget target, LeakFixture fx, SweepAccumulator acc,
+        /// <returns>True when the read damaged a fixture array (an over-disposal was recorded): the caller rebuilds the
+        ///     fixture before the next read.</returns>
+        /// <exception cref="InvalidOperationException">The ARC probe cannot read a fixture's slice.</exception>
+        private static bool MeasureRead(SurfaceMember member, ReadTarget target, LeakFixture fx, SweepAccumulator acc,
                                         List<string> errors, List<(SurfaceMember, ReadTarget)> backendRetry)
         {
+            // The fixture's arrays as they are before THIS read (a getter must never dispose or release one, and a
+            // round-trip setter writes values, never a fixture's lifetime).
+            var ledger = OwnershipLedger.Of(fx.Owned());
+            string sample = $"{member.Id}@{target.Label}";
+
             // Set-up validation, OUTSIDE any measurement: a target that cannot be built, or an accessor that
             // cannot be resolved against it, is a harness defect — never a property error path.
             Func<object, object> get;
@@ -182,7 +209,7 @@ namespace NumSharp.Tests.Fuzz
             catch (Exception e)
             {
                 errors.Add($"{member.Id} @ {target.Label}: set-up failed — {e.GetType().Name}: {FirstLine(e.Message)}");
-                return;
+                return acc.CheckOwnership(member.Id, ledger, sample, "property-read", "set-up");
             }
 
             void Body()
@@ -234,10 +261,15 @@ namespace NumSharp.Tests.Fuzz
                 if (e is MissingBackendException && backendRetry != null)
                 {
                     backendRetry.Add((member, target));
-                    return;
+                    return acc.CheckOwnership(member.Id, ledger, sample, "property-read", "deferred to the backend pass");
                 }
                 errorPath = true;
             }
+
+            // The warm read is where an over-disposal shows (the pool balance cannot see it, see OwnershipLedger); a
+            // damaged fixture ends the read before the measured runs replay over it.
+            if (acc.CheckOwnership(member.Id, ledger, sample, "property-read", errorPath ? "error path" : "warm"))
+                return true;
 
             void ErrorBody()
             {
@@ -252,14 +284,16 @@ namespace NumSharp.Tests.Fuzz
             }
 
             var traffic = ScopeAudit.MeasureConfirmedTraffic(errorPath ? ErrorBody : Body);
+            bool damaged = acc.CheckOwnership(member.Id, ledger, sample, "property-read", "measured");
             if (traffic == null)
             {
                 acc.Inconclusive(member.Id, errorPath);
-                return;
+                return damaged;
             }
             if (!errorPath)
                 acc.Direct++;
-            acc.Record(member.Id, null, target.Label, traffic.Value, 0, errorPath, $"{member.Id}@{target.Label}", "property-read");
+            acc.Record(member.Id, null, target.Label, traffic.Value, 0, errorPath, sample, "property-read");
+            return damaged;
         }
 
         /// <summary>
@@ -281,7 +315,7 @@ namespace NumSharp.Tests.Fuzz
 
             var done = new HashSet<object>(ReferenceEqualityComparer.Instance);
             foreach (var o in r1.Concat(r2))
-                if (done.Add(o) && !held.Contains(o) && !keep.Contains(o))
+                if (done.Add(o) && !held.Contains(o) && !keep.Contains(o) && !SharedArrays.Contains(o))
                     ((IDisposable)o).Dispose();
         }
 

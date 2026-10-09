@@ -322,7 +322,7 @@ namespace NumSharp.Tests.Fuzz
             var m = np.ma.array(a, mask);
             try
             {
-                return AxisArgMaskedCall(fn, m, ax);
+                return AxisArgMaskedCall(fn, m, ax, a);
             }
             finally
             {
@@ -336,42 +336,50 @@ namespace NumSharp.Tests.Fuzz
         /// <param name="fn">The <c>ma.</c> function name.</param>
         /// <param name="m">The masked operand.</param>
         /// <param name="ax">The axis.</param>
+        /// <param name="a">The data operand <paramref name="m"/> was built over (the case's operand 0).</param>
         /// <returns>The result through its data.</returns>
         /// <exception cref="NotSupportedException">The fn key has no masked replay here.</exception>
-        private static NDArray AxisArgMaskedCall(string fn, NDMaskedArray m, int ax)
+        /// <remarks>
+        ///     A result may SHARE the masked operand's arrays: NumPy's <c>mask_rowcols</c> returns its input itself when it
+        ///     masks nothing more, and <c>np.ma.array(a, mask)</c> keeps <paramref name="a"/> as its data. The result's parts
+        ///     are therefore released with the operand's arrays kept; releasing them with an empty keep set disposed the
+        ///     case's operand 0 itself (found by the ownership gate: <c>axis_arg/ma.mask_rowcols</c>, three cases).
+        /// </remarks>
+        private static NDArray AxisArgMaskedCall(string fn, NDMaskedArray m, int ax, NDArray a)
         {
+            var keep = new[] { a, m._data, m._mask, m._fill_value };
             switch (fn)
             {
-                case "ma.sum": return AxisArgMaData(np.ma.sum(m, ax), Array.Empty<NDArray>());
-                case "ma.prod": return AxisArgMaData(np.ma.prod(m, ax), Array.Empty<NDArray>());
-                case "ma.mean": return AxisArgMaData(np.ma.mean(m, ax), Array.Empty<NDArray>());
-                case "ma.min": return AxisArgMaData(np.ma.min(m, ax), Array.Empty<NDArray>());
-                case "ma.max": return AxisArgMaData(np.ma.max(m, ax), Array.Empty<NDArray>());
-                case "ma.ptp": return AxisArgMaData(np.ma.ptp(m, ax), Array.Empty<NDArray>());
-                case "ma.std": return AxisArgMaData(np.ma.std(m, ax), Array.Empty<NDArray>());
-                case "ma.var": return AxisArgMaData(np.ma.var(m, ax), Array.Empty<NDArray>());
+                case "ma.sum": return AxisArgMaData(np.ma.sum(m, ax), keep);
+                case "ma.prod": return AxisArgMaData(np.ma.prod(m, ax), keep);
+                case "ma.mean": return AxisArgMaData(np.ma.mean(m, ax), keep);
+                case "ma.min": return AxisArgMaData(np.ma.min(m, ax), keep);
+                case "ma.max": return AxisArgMaData(np.ma.max(m, ax), keep);
+                case "ma.ptp": return AxisArgMaData(np.ma.ptp(m, ax), keep);
+                case "ma.std": return AxisArgMaData(np.ma.std(m, ax), keep);
+                case "ma.var": return AxisArgMaData(np.ma.var(m, ax), keep);
                 case "ma.count": return np.ma.count(m, ax);
-                case "ma.cumsum": return AxisArgMaData(np.ma.cumsum(m, ax), Array.Empty<NDArray>());
-                case "ma.cumprod": return AxisArgMaData(np.ma.cumprod(m, ax), Array.Empty<NDArray>());
+                case "ma.cumsum": return AxisArgMaData(np.ma.cumsum(m, ax), keep);
+                case "ma.cumprod": return AxisArgMaData(np.ma.cumprod(m, ax), keep);
                 case "ma.argmin": return np.ma.argmin(m, ax);
                 case "ma.argmax": return np.ma.argmax(m, ax);
-                case "ma.all": return AxisArgMaData(np.ma.all(m, ax), Array.Empty<NDArray>());
-                case "ma.any": return AxisArgMaData(np.ma.any(m, ax), Array.Empty<NDArray>());
-                case "ma.anom": return AxisArgMaData(np.ma.anom(m, ax), Array.Empty<NDArray>());
-                case "ma.repeat": return AxisArgMaData(np.ma.repeat(m, 2, ax), Array.Empty<NDArray>());
-                case "ma.sort": return AxisArgMaData(np.ma.sort(m, ax), Array.Empty<NDArray>());
+                case "ma.all": return AxisArgMaData(np.ma.all(m, ax), keep);
+                case "ma.any": return AxisArgMaData(np.ma.any(m, ax), keep);
+                case "ma.anom": return AxisArgMaData(np.ma.anom(m, ax), keep);
+                case "ma.repeat": return AxisArgMaData(np.ma.repeat(m, 2, ax), keep);
+                case "ma.sort": return AxisArgMaData(np.ma.sort(m, ax), keep);
                 case "ma.argsort": return np.ma.argsort(m, ax);
-                case "ma.concatenate": return AxisArgMaData(np.ma.concatenate(new object[] { m, m }, ax), Array.Empty<NDArray>());
-                case "ma.diff": return AxisArgMaData(np.ma.diff(m, 1, ax), Array.Empty<NDArray>());
-                case "ma.append": return AxisArgMaData(np.ma.append(m, m, ax), Array.Empty<NDArray>());
+                case "ma.concatenate": return AxisArgMaData(np.ma.concatenate(new object[] { m, m }, ax), keep);
+                case "ma.diff": return AxisArgMaData(np.ma.diff(m, 1, ax), keep);
+                case "ma.append": return AxisArgMaData(np.ma.append(m, m, ax), keep);
                 case "ma.count_masked": return np.ma.count_masked(m, ax);
-                case "ma.average": return AxisArgMaData(np.ma.average(m, ax), Array.Empty<NDArray>());
-                case "ma.median": return AxisArgMaData(np.ma.median(m, ax), Array.Empty<NDArray>());
+                case "ma.average": return AxisArgMaData(np.ma.average(m, ax), keep);
+                case "ma.median": return AxisArgMaData(np.ma.median(m, ax), keep);
                 case "ma.apply_along_axis":
                     return WithCallbackResults(made =>
-                        AxisArgMaData(np.ma.apply_along_axis(x => made.KeepMasked(np.ma.sum(x)), ax, m), Array.Empty<NDArray>()));
+                        AxisArgMaData(np.ma.apply_along_axis(x => made.KeepMasked(np.ma.sum(x)), ax, m), keep));
                 case "ma.compress_nd": return np.ma.compress_nd(m, ax);
-                case "ma.mask_rowcols": return AxisArgMaData(np.ma.mask_rowcols(m, ax), Array.Empty<NDArray>());
+                case "ma.mask_rowcols": return AxisArgMaData(np.ma.mask_rowcols(m, ax), keep);
                 case "ma.compress_rowcols": return np.ma.compress_rowcols(m, ax);
                 default:
                     throw new NotSupportedException($"axis_arg masked fn '{fn}' not wired in OpRegistry.AxisArgs");

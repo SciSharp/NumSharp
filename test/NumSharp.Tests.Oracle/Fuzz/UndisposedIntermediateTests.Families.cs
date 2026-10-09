@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using NumSharp.Tests.Fuzz.Ownership;
 
 namespace NumSharp.Tests.Fuzz
 {
@@ -61,6 +62,9 @@ namespace NumSharp.Tests.Fuzz
                 // Every array the harness built for this case (data views, masks, and whatever
                 // masked_array wraps them in) — disposed once, after the case, never inside the region.
                 var built = new List<NDArray>();
+                // The same arrays with their roles: what the op does not own (an NDMaskedArray does not own its arrays
+                // either), snapshotted for the ownership checks.
+                var owned = new List<(NDArray, string)>();
                 NDMaskedArray[] ops;
                 try
                 {
@@ -69,13 +73,21 @@ namespace NumSharp.Tests.Fuzz
                     {
                         var data = FuzzCorpus.Reconstruct(c.Operands[i]);
                         built.Add(data);
+                        owned.Add((data, $"data {i}"));
                         var mask = FuzzCorpus.ReconstructMask(c.Operands[i].Shape, c.Operands[i].Mask);
                         if (mask is not null)
+                        {
                             built.Add(mask);
+                            owned.Add((mask, $"mask {i}"));
+                        }
                         ops[i] = np.ma.masked_array(data, mask);
                         built.Add(ops[i]._data);
+                        owned.Add((ops[i]._data, $"masked {i} _data"));
                         if (ops[i]._mask is not null)
+                        {
                             built.Add(ops[i]._mask);
+                            owned.Add((ops[i]._mask, $"masked {i} _mask"));
+                        }
                     }
                 }
                 catch
@@ -84,6 +96,8 @@ namespace NumSharp.Tests.Fuzz
                     DisposeDistinct(built);
                     continue;
                 }
+
+                var ledger = OwnershipLedger.Of(owned);
 
                 // The dispatcher of the case's result kind (an error case keeps its kind in ma_surface.jsonl): the text
                 // and plain-array tuple ops of the numpy.ma surface tier are not registered in ApplyMasked.
@@ -141,7 +155,11 @@ namespace NumSharp.Tests.Fuzz
                         }
 
                         ErrorRegion();   // warm
+                        // A damaged operand array ends the case (see SweepOrdinaryFile).
+                        if (acc.CheckOwnership(c.Op, ledger, c.Id, file, "error path"))
+                            continue;
                         var errTraffic = ScopeAudit.MeasureConfirmedTraffic(ErrorRegion);
+                        acc.CheckOwnership(c.Op, ledger, c.Id, file, "error path, measured");
                         if (errTraffic == null)
                         {
                             acc.Inconclusive(c.Op, errorPath: true);
@@ -158,8 +176,12 @@ namespace NumSharp.Tests.Fuzz
                     catch
                     {
                         acc.Threw(c.Op);
+                        acc.CheckOwnership(c.Op, ledger, c.Id, file, "threw");
                         continue;
                     }
+
+                    if (acc.CheckOwnership(c.Op, ledger, c.Id, file, "warm"))
+                        continue;
 
                     // A mutator's measured runs start from the state its warm run left, not the case's: the warm ma.put of
                     // masked values into a nomask hard-masked target creates a mask, so the next run takes NumPy's
@@ -178,6 +200,7 @@ namespace NumSharp.Tests.Fuzz
                     }
 
                     var traffic = ScopeAudit.MeasureConfirmedTraffic(MutatorRegion);
+                    acc.CheckOwnership(c.Op, ledger, c.Id, file, "measured");
                     if (traffic == null)
                     {
                         acc.Inconclusive(c.Op, errorPath: false);
@@ -287,6 +310,16 @@ namespace NumSharp.Tests.Fuzz
                 }
 
                 var keep = new HashSet<object>(built, ReferenceEqualityComparer.Instance);
+                // What the indexer does not own: the target (a setter writes its values, never its lifetime), the
+                // assigned value and every index array.
+                var owned = new List<(NDArray, string)> { (target, "target") };
+                if (value is not null)
+                    owned.Add((value, "value"));
+                for (int t = 0; t < idx.Length; t++)
+                    if (idx[t] is NDArray ind)
+                        owned.Add((ind, $"index {t}"));
+                var ledger = OwnershipLedger.Of(owned);
+
                 void Region()
                 {
                     if (op == "set")
@@ -318,7 +351,11 @@ namespace NumSharp.Tests.Fuzz
                         }
 
                         ErrorRegion();   // warm
+                        // A damaged target, value or index ends the case (see SweepOrdinaryFile).
+                        if (acc.CheckOwnership(key, ledger, id, file, "error path"))
+                            continue;
                         var errTraffic = ScopeAudit.MeasureConfirmedTraffic(ErrorRegion);
+                        acc.CheckOwnership(key, ledger, id, file, "error path, measured");
                         if (errTraffic == null)
                         {
                             acc.Inconclusive(key, errorPath: true);
@@ -335,10 +372,15 @@ namespace NumSharp.Tests.Fuzz
                     catch
                     {
                         acc.Threw(key);  // an index divergence is IndexOracleTests' verdict, not ours
+                        acc.CheckOwnership(key, ledger, id, file, "threw");
                         continue;
                     }
 
+                    if (acc.CheckOwnership(key, ledger, id, file, "warm"))
+                        continue;
+
                     var traffic = ScopeAudit.MeasureConfirmedTraffic(Region);
+                    acc.CheckOwnership(key, ledger, id, file, "measured");
                     if (traffic == null)
                     {
                         acc.Inconclusive(key, errorPath: false);
@@ -365,8 +407,9 @@ namespace NumSharp.Tests.Fuzz
         ///     Disposes every <see cref="NDArray"/> a result object carries exactly once — bare arrays,
         ///     array tuples, <see cref="NDMaskedArray"/> results (their data, mask AND stored fill), masked tuples,
         ///     C# tuples of any of those, and <see cref="IDisposable"/> result objects (iterators) —
-        ///     skipping anything in <paramref name="keep"/> and the <see cref="NDMaskedConstant"/>
-        ///     singleton. Non-array results (scalars, strings, dtypes) carry nothing and are ignored.
+        ///     skipping anything in <paramref name="keep"/>, the <see cref="NDMaskedConstant"/>
+        ///     singleton and every process-wide shared array (<see cref="SharedArrays"/>). Non-array results
+        ///     (scalars, strings, dtypes) carry nothing and are ignored.
         /// </summary>
         /// <remarks>
         ///     A result may legitimately CONTAIN kept arrays — a masked result sharing an operand's
@@ -379,8 +422,10 @@ namespace NumSharp.Tests.Fuzz
         /// <param name="keep">Arrays that must survive (operands, fixtures), compared by reference.</param>
         internal static void DisposeAny(object result, HashSet<object> keep)
         {
+            // The process-wide shared arrays (np.ma's singletons, the numpy.polynomial constants) are never a result's to
+            // dispose, whatever the caller's keep set lists: no caller owns them.
             foreach (var o in CollectDisposables(result))
-                if (!keep.Contains(o))
+                if (!keep.Contains(o) && !SharedArrays.Contains(o))
                     ((IDisposable)o).Dispose();
         }
 

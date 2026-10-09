@@ -250,6 +250,41 @@ namespace NumSharp.Tests.Fuzz
                     Ranges.Add(UndisposedIntermediateTests.BaseRange(nd));
         }
 
+        /// <summary>
+        ///     Every array the fixture owns, with its field name: the arrays an entry does NOT own, which an ownership check
+        ///     snapshots before the entry and compares after it (see <c>OwnershipLedger</c>).
+        /// </summary>
+        /// <returns>The arrays and their roles (<c>fixture M</c>, <c>fixture MA._mask</c>, <c>fixture Typed[Int32]</c>, …),
+        ///     the masked fixtures' stored fills included as they are NOW (an entry may have materialized one).</returns>
+        /// <remarks>
+        ///     The np.ma process-wide singletons ride in <see cref="Keep"/> but are not the fixture's; the shared-array ledger
+        ///     watches them. Reflection over the public fields keeps the list complete when a fixture array is added: a new
+        ///     field is watched without an edit here.
+        /// </remarks>
+        public IEnumerable<(NDArray Array, string Role)> Owned()
+        {
+            foreach (var f in typeof(LeakFixture).GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public))
+            {
+                switch (f.GetValue(this))
+                {
+                    case NDArray nd:
+                        yield return (nd, "fixture " + f.Name);
+                        break;
+                    case NDMaskedArray m:
+                        yield return (m._data, $"fixture {f.Name}._data");
+                        if (m._mask is not null)
+                            yield return (m._mask, $"fixture {f.Name}._mask");
+                        if (m._fill_value is not null)
+                            yield return (m._fill_value, $"fixture {f.Name}._fill_value");
+                        break;
+                }
+            }
+
+            foreach (var kv in Typed)
+                yield return (kv.Value, $"fixture Typed[{kv.Key}]");
+            yield return (P.coeffs, "fixture P.coeffs");
+        }
+
         /// <summary>Yields a fixture array out of the construction scope and registers it as kept.</summary>
         /// <param name="scope">The construction scope.</param>
         /// <param name="nd">The array to keep.</param>
