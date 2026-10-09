@@ -8,8 +8,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace NumSharp.Tests.Fuzz.Lifetime
 {
     /// <summary>
-    ///     The scaled lifetime gate (<see cref="LifetimeScaled"/>): every op key of the ordinary corpus, its operands
-    ///     enlarged temporaries, replayed under the stress thread against the same call over held operands.
+    ///     The scaled lifetime gate (<see cref="LifetimeScaled"/>): every op key of the ordinary and masked-array corpus,
+    ///     its operands enlarged temporaries, replayed under the stress thread against the same call over held operands.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -40,10 +40,11 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         private const int ScaledGapReps = 24;
 
         /// <summary>
-        ///     The fewest gate cases that must scale (about 940 do): fewer means a selection or scaling regression — a
-        ///     corpus copy that lost files, a strategy that raises everywhere — and a gate that tests far less than it says.
+        ///     The fewest gate cases that must scale (about 1,200 do: 936 ordinary, the rest masked): fewer means a selection
+        ///     or scaling regression — a corpus copy that lost files, a strategy that raises everywhere — and a gate that
+        ///     tests far less than it says.
         /// </summary>
-        private const int MinScaledGateCases = 850;
+        private const int MinScaledGateCases = 1100;
 
         /// <summary>
         ///     A known scaled gap: the open lifetime gap whose site an op key's scaled cases reach.
@@ -69,6 +70,8 @@ namespace NumSharp.Tests.Fuzz.Lifetime
             ["ndarray.put"] = new("LT02", "ndarray.put -> np.put -> PutKernel reads the temporary index array (poisoned indices " +
                                           "raise IndexError)"),
             ["take_along_axis"] = new("LT05", "np.take_along_axis's gather reads the temporary source and index arrays"),
+            ["ma.where"] = new("LT07", "ma.where -> np.where(cond, x._data, y._data): WhereKernelDispatch reads the data of the " +
+                                       "temporary masked operands, which no frame uses after their getmaskarray"),
             ["argpartition"] = new("LT05", "the replay gathers the partition with np.take_along_axis(operand, indices, axis), " +
                                            "which reads the temporary operand; np.argpartition itself keeps it (NDIter holds its " +
                                            "operands; probed: 0 of 24 runs lost it, the gather 24 of 24)",

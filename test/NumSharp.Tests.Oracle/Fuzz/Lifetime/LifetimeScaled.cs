@@ -12,10 +12,10 @@ using NumSharp.Backends;
 namespace NumSharp.Tests.Fuzz.Lifetime
 {
     /// <summary>
-    ///     The SCALED lifetime tier: every op key of the ordinary corpus replayed with its operands as large temporaries
-    ///     under the lifetime stress thread, compared with the same call over held operands. It needs no NumPy answer, so
-    ///     it reaches every op key the ordinary corpus reaches (554 at 2026-10-09), where the hand-written lifetime corpus
-    ///     reaches 229.
+    ///     The SCALED lifetime tier: every op key of the ordinary and masked-array corpus replayed with its operands as large
+    ///     temporaries under the lifetime stress thread, compared with the same call over held operands. It needs no NumPy
+    ///     answer, so it reaches every op key those tiers reach (554 ordinary and 150 <c>ma.*</c> at 2026-10-09), where
+    ///     the hand-written lifetime corpus reaches 229.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -39,6 +39,13 @@ namespace NumSharp.Tests.Fuzz.Lifetime
     ///     <b>Where it runs.</b> In the lifetime child (<see cref="LifetimeChild"/>): optimized code, crash isolation. The
     ///     parent selects the cases (<see cref="Select"/>) and hands the child a selection file, so a child that restarts
     ///     after a crash does not parse the corpus again.
+    ///     </para>
+    ///     <para>
+    ///     <b>Masked arrays.</b> A case of an <c>ma_*</c> tier builds each operand as an <see cref="NDMaskedArray"/> over the
+    ///     scaled data and the scaled mask (K copies of the mask's C-order bytes, the shape the data takes), exactly as the
+    ///     masked replay builds it (<c>np.ma.masked_array(data, mask)</c>), and runs through
+    ///     <see cref="OpRegistry.ApplyMasked"/> / <see cref="OpRegistry.ApplyMaskedTuple"/>. The masked array is a temporary
+    ///     too: its data, its mask and the arrays numpy.ma derives from them can all be lost mid-kernel.
     ///     </para>
     /// </remarks>
     internal static class LifetimeScaled
@@ -89,8 +96,8 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         internal sealed record ScaledCase(int Index, string Id, string Op, string File, FuzzCorpus.Case Case, string Gap);
 
         /// <summary>
-        ///     Selects the cases: per op key of the ordinary tiers, up to <see cref="CasesPerOp"/> success cases of distinct
-        ///     layouts with at least one operand that holds memory.
+        ///     Selects the cases: per op key of the ordinary and masked-array tiers (the index tiers use another case schema),
+        ///     up to <see cref="CasesPerOp"/> success cases of distinct layouts with at least one operand that holds memory.
         /// </summary>
         /// <param name="gapOf">Names the known gap a case belongs to (null for a gate case). It is called while the corpus
         ///     stream still holds the case's line, so it may read the case's parameters and operands.</param>
@@ -102,7 +109,7 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         {
             var dir = Path.Combine(AppContext.BaseDirectory, "Fuzz", "corpus");
             var files = Directory.GetFiles(dir, "*.jsonl").Select(Path.GetFileName)
-                .Where(f => !f.StartsWith("index_", StringComparison.Ordinal) && !f.StartsWith("ma_", StringComparison.Ordinal))
+                .Where(f => !f.StartsWith("index_", StringComparison.Ordinal))
                 .Where(f => !f.EndsWith(".host.jsonl", StringComparison.Ordinal))
                 .Where(f => !ExcludedFilePrefixes.Any(p => f.StartsWith(p, StringComparison.Ordinal)))
                 .OrderBy(f => f, StringComparer.Ordinal).ToList();
@@ -266,14 +273,15 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         private static object RunCase(ScaledCase sc, int reps, LifetimeThief thief)
         {
             var c = sc.Case;
-            if (!TryScale(c, out var strategy, out int k, out string why))
+            bool masked = IsMaskedFile(sc.File);
+            if (!TryScale(c, masked, out var strategy, out int k, out string why))
                 return Outcome(sc, "skipped: " + why, 0, 0, null, 0, k, null);
 
             string reference, again;
             try
             {
-                reference = HeldRun(c, strategy, k);
-                again = HeldRun(c, strategy, k);
+                reference = HeldRun(c, masked, strategy, k);
+                again = HeldRun(c, masked, strategy, k);
             }
             catch (Exception e)
             {
@@ -282,7 +290,12 @@ namespace NumSharp.Tests.Fuzz.Lifetime
             if (reference != again)
                 return Outcome(sc, "skipped: not deterministic (two held runs differ)", 0, 0, null, 0, k, strategy);
 
-            var sizes = c.Operands.Where(HoldsMemory).Select(o => ScaledBytes(o, strategy, k)).Distinct().ToArray();
+            // The buckets the operands take: the data and, for a masked case, the scaled masks (they can be lost too).
+            var sizes = c.Operands.Where(HoldsMemory)
+                .SelectMany(o => masked && o.Mask != null
+                    ? new[] { ScaledBytes(o, strategy, k), MaskBytes(o, strategy, k) }
+                    : new[] { ScaledBytes(o, strategy, k) })
+                .Distinct().ToArray();
             thief.SetCaseSizes(sizes);
             int wrong = 0, threw = 0;
             string first = null;
@@ -293,7 +306,7 @@ namespace NumSharp.Tests.Fuzz.Lifetime
                 thief.Enter();
                 try
                 {
-                    res = InvokeTemporaries(c, strategy, k);
+                    res = InvokeTemporaries(c, masked, strategy, k);
                 }
                 catch (Exception e)
                 {
@@ -334,11 +347,12 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         ///     <see cref="TargetBytes"/>.
         /// </summary>
         /// <param name="c">The case.</param>
+        /// <param name="masked">The case is a masked-array tier's (its operands are masked arrays).</param>
         /// <param name="strategy">The chosen strategy.</param>
         /// <param name="k">The chosen scale factor (the last tried, for the report, when none works).</param>
         /// <param name="why">Why no strategy works, when the method returns false.</param>
         /// <returns>True when a scale was found.</returns>
-        private static bool TryScale(FuzzCorpus.Case c, out Strategy strategy, out int k, out string why)
+        private static bool TryScale(FuzzCorpus.Case c, bool masked, out Strategy strategy, out int k, out string why)
         {
             why = null;
             k = 1;
@@ -348,7 +362,7 @@ namespace NumSharp.Tests.Fuzz.Lifetime
                 long size1;
                 try
                 {
-                    size1 = TimedHeldSize(c, s, 1, out _);
+                    size1 = TimedHeldSize(c, masked, s, 1, out _);
                 }
                 catch (Exception e)
                 {
@@ -366,7 +380,7 @@ namespace NumSharp.Tests.Fuzz.Lifetime
                     double ms;
                     try
                     {
-                        sizeNext = TimedHeldSize(c, s, next, out ms);
+                        sizeNext = TimedHeldSize(c, masked, s, next, out ms);
                     }
                     catch (Exception e)
                     {
@@ -399,58 +413,117 @@ namespace NumSharp.Tests.Fuzz.Lifetime
 
         /// <summary>Runs the case once over held operands at scale <paramref name="k"/> and measures it.</summary>
         /// <param name="c">The case.</param>
+        /// <param name="masked">The case is a masked-array tier's.</param>
         /// <param name="s">The strategy.</param>
         /// <param name="k">The scale.</param>
         /// <param name="ms">The call's wall time in milliseconds.</param>
         /// <returns>The result's total element count (1 for a non-array result).</returns>
         /// <exception cref="Exception">Whatever the op raises.</exception>
-        private static long TimedHeldSize(FuzzCorpus.Case c, Strategy s, int k, out double ms)
+        private static long TimedHeldSize(FuzzCorpus.Case c, bool masked, Strategy s, int k, out double ms)
         {
-            var held = BuildAll(c, s, k);
-            try
-            {
-                var sw = Stopwatch.StartNew();
-                var res = OpRegistry.Invoke(c.Expected.KindOrArray, c.Op, c.Params, held);
-                ms = sw.Elapsed.TotalMilliseconds;
-                long size = ResultSize(res);
-                DisposeResult(res, held);
-                return size;
-            }
-            finally
-            {
-                foreach (var h in held.Distinct<NDArray>(ReferenceEqualityComparer.Instance))
-                    h.Dispose();
-            }
+            using var held = HeldOperands.Build(c, masked, s, k);
+            var sw = Stopwatch.StartNew();
+            var res = Invoke(c, held.Operands);
+            ms = sw.Elapsed.TotalMilliseconds;
+            long size = ResultSize(res);
+            DisposeResult(res, held.Owned);
+            return size;
         }
 
         /// <summary>Runs the case over held operands and fingerprints its answer.</summary>
         /// <param name="c">The case.</param>
+        /// <param name="masked">The case is a masked-array tier's.</param>
         /// <param name="s">The strategy.</param>
         /// <param name="k">The scale.</param>
         /// <returns>The fingerprint.</returns>
         /// <exception cref="Exception">Whatever the op raises.</exception>
-        private static string HeldRun(FuzzCorpus.Case c, Strategy s, int k)
+        private static string HeldRun(FuzzCorpus.Case c, bool masked, Strategy s, int k)
         {
-            var held = BuildAll(c, s, k);
-            try
+            using var held = HeldOperands.Build(c, masked, s, k);
+            var res = Invoke(c, held.Operands);
+            string fp = Fingerprint(res);
+            DisposeResult(res, held.Owned);
+            return fp;
+        }
+
+        /// <summary>
+        ///     A case's operands built for a HELD run (the reference, the scaling probes): this object keeps them reachable
+        ///     for the whole call, and <see cref="Dispose"/> releases every array the harness built for them.
+        /// </summary>
+        private sealed class HeldOperands : IDisposable
+        {
+            /// <summary>The operand array the registry takes: <c>NDArray[]</c>, or <c>NDMaskedArray[]</c> for a masked case.</summary>
+            public object Operands { get; private init; }
+
+            /// <summary>
+            ///     Every array built for the operands (data, masks, and the arrays a masked array wraps them in): what the
+            ///     result disposer must keep, and what <see cref="Dispose"/> releases. The np.ma singletons are never listed.
+            /// </summary>
+            public List<NDArray> Owned { get; } = new();
+
+            /// <summary>Builds a case's operands at scale <paramref name="k"/>, holding them.</summary>
+            /// <param name="c">The case.</param>
+            /// <param name="masked">Build masked arrays (a masked-array tier's case).</param>
+            /// <param name="s">The strategy.</param>
+            /// <param name="k">The scale.</param>
+            /// <returns>The held operands; dispose them after the call.</returns>
+            public static HeldOperands Build(FuzzCorpus.Case c, bool masked, Strategy s, int k)
             {
-                var res = OpRegistry.Invoke(c.Expected.KindOrArray, c.Op, c.Params, held);
-                string fp = Fingerprint(res);
-                DisposeResult(res, held);
-                return fp;
+                if (masked)
+                {
+                    var owned = new List<NDArray>();
+                    var ops = BuildAllMasked(c, s, k, owned);
+                    var held = new HeldOperands { Operands = ops };
+                    held.Owned.AddRange(owned);
+                    return held;
+                }
+                var arrays = BuildAll(c, s, k);
+                var plain = new HeldOperands { Operands = arrays };
+                plain.Owned.AddRange(arrays);
+                return plain;
             }
-            finally
+
+            /// <summary>Disposes every array built for the operands, once each (an alias case lists one array twice).</summary>
+            public void Dispose()
             {
-                foreach (var h in held.Distinct<NDArray>(ReferenceEqualityComparer.Instance))
-                    h.Dispose();
+                foreach (var a in Owned.Distinct<NDArray>(ReferenceEqualityComparer.Instance))
+                    a.Dispose();
             }
         }
+
+        /// <summary>Runs the case's op over built operands through the registry entry its tier uses.</summary>
+        /// <param name="c">The case.</param>
+        /// <param name="operands"><c>NDArray[]</c> for an ordinary case, <c>NDMaskedArray[]</c> for a masked one.</param>
+        /// <returns>The op's result.</returns>
+        /// <exception cref="Exception">Whatever the op raises.</exception>
+        private static object Invoke(FuzzCorpus.Case c, object operands)
+            => operands is NDMaskedArray[] masked
+                ? InvokeMasked(c, masked)
+                : OpRegistry.Invoke(c.Expected.KindOrArray, c.Op, c.Params, (NDArray[])operands);
+
+        /// <summary>Runs a masked-array case's op: a <c>masked_tuple</c> case through the tuple entry, any other through
+        ///     <see cref="OpRegistry.ApplyMasked"/> (as the masked replay does).</summary>
+        /// <param name="c">The case.</param>
+        /// <param name="operands">The masked operands.</param>
+        /// <returns>The op's result.</returns>
+        /// <exception cref="Exception">Whatever the op raises.</exception>
+        private static object InvokeMasked(FuzzCorpus.Case c, NDMaskedArray[] operands)
+            => c.Expected.KindOrArray == "masked_tuple"
+                ? OpRegistry.ApplyMaskedTuple(c.Op, c.Params, operands)
+                : OpRegistry.ApplyMasked(c.Op, c.Params, operands);
+
+        /// <summary>True for a case of a masked-array tier (its operands are built as <see cref="NDMaskedArray"/>s).</summary>
+        /// <param name="file">The corpus file the case came from.</param>
+        /// <returns>Whether the file is an <c>ma_*</c> tier.</returns>
+        private static bool IsMaskedFile(string file) => file.StartsWith("ma_", StringComparison.Ordinal);
 
         /// <summary>
         ///     Runs the case with every operand built inside the call expression: the operand array is a temporary passed
         ///     straight into the registry, and nothing in this frame references an operand.
         /// </summary>
         /// <param name="c">The case.</param>
+        /// <param name="masked">Build masked arrays (a masked-array tier's case): the masked arrays, their data and their
+        ///     masks are all temporaries then.</param>
         /// <param name="s">The strategy.</param>
         /// <param name="k">The scale.</param>
         /// <returns>The op's result.</returns>
@@ -458,8 +531,10 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         /// <remarks><c>NoInlining</c> keeps the temporary out of the caller's frame (an inlined copy could let the caller's
         ///     locals hold the array).</remarks>
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static object InvokeTemporaries(FuzzCorpus.Case c, Strategy s, int k)
-            => OpRegistry.Invoke(c.Expected.KindOrArray, c.Op, c.Params, BuildAll(c, s, k));
+        private static object InvokeTemporaries(FuzzCorpus.Case c, bool masked, Strategy s, int k)
+            => masked
+                ? InvokeMasked(c, BuildAllMasked(c, s, k, null))
+                : OpRegistry.Invoke(c.Expected.KindOrArray, c.Op, c.Params, BuildAll(c, s, k));
 
         /// <summary>Builds every operand of a case at scale <paramref name="k"/> (an alias case repeats one array).</summary>
         /// <param name="c">The case.</param>
@@ -473,6 +548,92 @@ namespace NumSharp.Tests.Fuzz.Lifetime
             for (int i = 0; i < ops.Length; i++)
                 ops[i] = Build(c.Operands[i], s, k);
             return c.Alias && ops.Length == 1 ? new[] { ops[0], ops[0] } : ops;
+        }
+
+        /// <summary>
+        ///     Builds every operand of a masked-array case at scale <paramref name="k"/>: the scaled data and the scaled mask
+        ///     wrapped by <c>np.ma.masked_array(data, mask)</c>, as the masked replay builds them.
+        /// </summary>
+        /// <param name="c">The case (its operands carry the mask as <see cref="FuzzCorpus.Operand.Mask"/>).</param>
+        /// <param name="s">The strategy.</param>
+        /// <param name="k">The scale.</param>
+        /// <param name="owned">Collects every array built (for a held run to keep and dispose), or null for a stressed run,
+        ///     whose operands must be referenced by nothing but the call.</param>
+        /// <returns>A fresh masked operand array.</returns>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static NDMaskedArray[] BuildAllMasked(FuzzCorpus.Case c, Strategy s, int k, List<NDArray> owned)
+        {
+            var ops = new NDMaskedArray[c.Operands.Length];
+            for (int i = 0; i < ops.Length; i++)
+            {
+                var data = Build(c.Operands[i], s, k);
+                var mask = BuildMask(c.Operands[i], s, k);
+                var m = np.ma.masked_array(data, mask);
+                if (owned != null)
+                {
+                    // The masked array may wrap the data and the mask in arrays of its own; all of them are the harness's.
+                    // np.ma.nomask is shared by the whole process: never listed (so never disposed).
+                    foreach (var a in new[] { data, mask, m._data, m._mask })
+                        if (a is not null && !Ownership.SharedArrays.Contains(a))
+                            owned.Add(a);
+                }
+                ops[i] = m;
+            }
+            return c.Alias && ops.Length == 1 ? new[] { ops[0], ops[0] } : ops;
+        }
+
+        /// <summary>
+        ///     Builds one operand's mask at scale <paramref name="k"/>, matching <see cref="Build"/>'s data: K copies of the
+        ///     mask's C-order bytes, under a new leading axis (<see cref="Strategy.LeadingAxis"/>) or along axis 0
+        ///     (<see cref="Strategy.Tile"/>). The result is pooled memory, so the stress thread can poison it when it is lost.
+        /// </summary>
+        /// <param name="o">The corpus operand.</param>
+        /// <param name="s">The strategy.</param>
+        /// <param name="k">The scale.</param>
+        /// <returns>The scaled mask, or null for <c>nomask</c> (the operand carries none).</returns>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static unsafe NDArray BuildMask(FuzzCorpus.Operand o, Strategy s, int k)
+        {
+            var small = FuzzCorpus.ReconstructMask(o.Shape, o.Mask);
+            // nomask, an empty or 0-d operand, and the unscaled tile keep the corpus mask (Build keeps their data too).
+            if (small is null || !HoldsMemory(o) || o.Shape.Length == 0 || k == 1 && s == Strategy.Tile)
+                return small;
+
+            long one = small.size;   // one byte per element, C order (ReconstructMask builds a fresh C-ordered mask)
+            long[] dims;
+            if (s == Strategy.LeadingAxis)
+            {
+                dims = new long[o.Shape.Length + 1];
+                dims[0] = k;
+                Array.Copy(o.Shape, 0, dims, 1, o.Shape.Length);
+            }
+            else
+            {
+                dims = (long[])o.Shape.Clone();
+                dims[0] *= k;
+            }
+            try
+            {
+                var big = np.empty(new Shape(dims), np.@bool);
+                for (long t = 0; t < k; t++)
+                    Buffer.MemoryCopy(small.Address, (byte*)big.Address + t * one, one, one);
+                return big;
+            }
+            finally
+            {
+                small.Dispose();
+            }
+        }
+
+        /// <summary>The byte size an operand's mask has at scale <paramref name="k"/> (its pooled buffer's size).</summary>
+        /// <param name="o">The operand (it carries a mask).</param>
+        /// <param name="s">The strategy.</param>
+        /// <param name="k">The scale.</param>
+        /// <returns>The bytes: one per logical element, K times unless the operand stays as it is.</returns>
+        private static long MaskBytes(FuzzCorpus.Operand o, Strategy s, int k)
+        {
+            long logical = o.Shape.Aggregate(1L, (a, d) => a * d);
+            return !HoldsMemory(o) || o.Shape.Length == 0 || k == 1 && s == Strategy.Tile ? logical : k * logical;
         }
 
         /// <summary>
@@ -574,13 +735,40 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         /// <summary>
         ///     A content fingerprint of a result, for comparing a stressed run with the held run: every array's dtype,
         ///     shape and C-order bytes (hashed), recursively through tuples, arrays of arrays and masked arrays; any other
-        ///     value through its text.
+        ///     value through its text. A masked array contributes its mask and its data at the UNMASKED slots only.
         /// </summary>
         /// <param name="res">The result.</param>
         /// <returns>The fingerprint.</returns>
+        /// <remarks>
+        ///     The data under a mask is undefined by numpy.ma's contract: <c>ma.masked_all_like</c> hands out
+        ///     <c>np.empty_like</c> memory, so a held run and a stressed run (whose pool buffers the stress thread has
+        ///     poisoned) differ there with no lost anchor at all. Hashing those slots made it fail 24 of 24 runs.
+        /// </remarks>
         private static string Fingerprint(object res)
         {
             var sb = new StringBuilder();
+
+            // The data of a masked array with its masked slots zeroed (a full mask of the data's size), or the whole data
+            // when the mask is nomask or of another size (numpy.ma's masks match their data; anything else is hashed as is).
+            void AddMaskedData(NDMaskedArray m)
+            {
+                var data = m._data;
+                var mask = m._mask;
+                if (data is null || mask is null || Ownership.SharedArrays.Contains(mask) || mask.size != data.size || data.size == 0)
+                {
+                    Add(data, 1);
+                    return;
+                }
+                byte[] bytes = data.tobytes();
+                byte[] flags = mask.tobytes();   // one byte per element, C order (a bool array)
+                int item = (int)(bytes.Length / data.size);
+                for (long i = 0; i < flags.Length; i++)
+                    if (flags[i] != 0)
+                        Array.Clear(bytes, (int)(i * item), item);
+                sb.Append(data.dtype.str).Append('(').Append(string.Join(",", data.shape)).Append(")m")
+                  .Append(Convert.ToHexString(SHA256.HashData(bytes))).Append(';');
+            }
+
             void Add(object o, int depth)
             {
                 if (depth > 8)
@@ -596,7 +784,7 @@ namespace NumSharp.Tests.Fuzz.Lifetime
                         return;
                     case NDMaskedArray m:
                         sb.Append("ma[");
-                        Add(m._data, depth + 1);
+                        AddMaskedData(m);
                         Add(m._mask, depth + 1);
                         sb.Append("];");
                         return;

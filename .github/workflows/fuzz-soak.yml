@@ -456,8 +456,8 @@ jobs:
 
   # ── The scaled lifetime tier at discovery depth ──────────────────────────────────────────────────
   #
-  # test/NumSharp.Tests.Oracle/Fuzz/Lifetime/LifetimeScaled.cs replays every op key of the ordinary corpus with
-  # its operands enlarged into temporaries while a stress thread collects, drains finalizers and poisons the
+  # test/NumSharp.Tests.Oracle/Fuzz/Lifetime/LifetimeScaled.cs replays every op key of the ordinary and masked-array
+  # corpus with its operands enlarged into temporaries while a stress thread collects, drains finalizers and poisons the
   # freed buffers (a lost GC anchor frees an operand under its kernel). Detection is a race: per-push CI runs 4
   # stressed calls per case (about a minute per framework), which catches a long window at once and a short
   # one (a key copy, a cast) only sometimes. THIS job runs 32 per case every night, on Linux (the per-push

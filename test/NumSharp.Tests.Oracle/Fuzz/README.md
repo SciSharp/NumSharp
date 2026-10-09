@@ -442,12 +442,12 @@ name the gap (`LifetimeScaled_KnownGapsContract` fails until you do) and run the
 ### Scaled lifetime tier — every op key with large temporary operands (`Fuzz/Lifetime/LifetimeScaled.cs`) — 2026-10-09
 
 **Why.** The lifetime corpus is hand-written: it covers the calls someone listed. The scaled tier
-needs no NumPy answer, so it reaches every op key the ordinary corpus reaches. For each op key it
-takes up to two success cases of distinct layouts (`LifetimeScaled.Select`; it skips the random,
-iterator, dtype/text, relayout, error, creation, surface and nditer tiers, whose calls are not
-reproducible run to run, return object traces, restate other tiers' calls or only raise; the index
-and masked-array tiers use other case schemas). It enlarges their operands and compares the call
-over temporaries with the same call over held operands — self-referential, like the leak sweep.
+needs no NumPy answer, so it reaches every op key the ordinary and masked-array corpus reaches. For
+each op key it takes up to two success cases of distinct layouts (`LifetimeScaled.Select`; it skips
+the random, iterator, dtype/text, relayout, error, creation, surface and nditer tiers, whose calls
+are not reproducible run to run, return object traces, restate other tiers' calls or only raise; the
+index tiers use another case schema). It enlarges their operands and compares the call over
+temporaries with the same call over held operands — self-referential, like the leak sweep.
 
 **Scaling.** A corpus operand of a few dozen elements gives a collection nanoseconds. `TryScale`
 grows K by 4 from 1 until the call takes 2 ms (`TargetCallMs`) or the largest operand reaches 2 MiB
@@ -458,6 +458,14 @@ is not used when it raises or when the result grows faster than linearly (4x the
 most 5x the elements plus 64: an outer product, a full convolution). The reference runs twice over
 held operands; two different answers (a random draw, an address) skip the case.
 
+**Masked arrays.** A case of an `ma_*` tier builds each operand the way the masked replay does,
+`np.ma.masked_array(data, mask)`, over the scaled data and K copies of the mask's C-order bytes (the
+shape the data takes), and runs through `OpRegistry.ApplyMasked` / `ApplyMaskedTuple`; the masked
+array, its data and its mask are all temporaries. A masked result is fingerprinted by its mask and by
+its data at the UNMASKED slots only: numpy.ma leaves the data under a mask undefined
+(`ma.masked_all_like` returns `np.empty_like` memory, which differed in 24 of 24 stressed runs once
+the stress thread had poisoned the pool — no lost anchor at all).
+
 **The verdict** is the lifetime tier's, in the same child process (`scaled:<selection file>`, the
 parent writes the selection once so a child restarted after a crash does not parse the corpus): the
 operand array is built inside the call expression (`InvokeTemporaries`), the stress thread poisons
@@ -466,12 +474,12 @@ bytes of every array in the result, through tuples and masked arrays) differs fr
 that raises, or that kills the child is a lost anchor. The same control and Release-only rule apply.
 
 **Gate versus known gaps.** `LifetimeScaled_EveryOpKey` (`[FuzzMatrix]`, 4 stressed calls per case;
-1,045 cases over 554 op keys, 936 scaled, 109 skipped; 50–55 s per framework on Windows and Linux)
-holds every case outside `KnownScaledGaps` to zero divergences, and at least 850 cases must scale (a
-selection or scaling regression fails it). `KnownScaledGaps` maps each op key whose scaled cases lose
+1,320 cases over 700 op keys — 554 ordinary and 146 `ma.*` — 1,207 scaled, 113 skipped) holds every
+case outside `KnownScaledGaps` to zero divergences, and at least 1,100 cases must scale (a selection
+or scaling regression fails it). `KnownScaledGaps` maps each op key whose scaled cases lose
 an operand to the OPEN lifetime gap whose site its call reaches, with the path it takes and, where
 only some of its cases reach the site, a predicate (only flat scans, only vector dots, only hash-path
-dtypes, only negative powers): 20 op keys, 33 cases. `LifetimeScaled_KnownGapsContract` holds every
+dtypes, only negative powers): 21 op keys, 35 cases. `LifetimeScaled_KnownGapsContract` holds every
 entry to a gap that is still open (its lifetime cases are still carved) and that still carves a
 selected case; `LifetimeScaled_KnownGaps` (`[OpenBugs]`, 24 stressed calls per case) fails while any
 carved case still loses an operand and prints the count per gap. The tier keeps no gap ids of its
@@ -483,6 +491,7 @@ pin must not depend on how far a corpus case happens to scale. LT28 came that wa
 | `ndarray.take` | LT01 | `np.take` → `ExecuteTakeKernel` reads the index buffer (IndexError from poisoned indices) |
 | `ndarray.put`, `put_selfvals` | LT02 | `np.put` → `PutKernel` reads the index array |
 | `take_along_axis` | LT05 | the gather reads the source and the indices |
+| `ma.where` | LT07 | `np.where(cond, x._data, y._data)`: the temporary masked operands' data (no frame uses `x` or `y` after their `getmaskarray`) |
 | `argpartition` (with an axis) | LT05 | the replay's `np.take_along_axis(operand, …)`; argpartition itself keeps its operand (NDIter holds it) |
 | `matrix_norm` | LT09 | `ToFloating`'s `TensorEngine.Cast` of an integer matrix → `NDIter.CopyAs` → `NDIter.Copy(NDArray, NDArray)` |
 | `cumsum`, `cumprod`, `out_scan` (flat) | LT12 | `ScanElementwiseFlat` (decimal and float16 scans; `out=` included) |
@@ -493,8 +502,9 @@ pin must not depend on how far a corpus case happens to scale. LT28 came that wa
 | `convolve`, `correlate` | LT22 | `SlidingCorrelate` |
 | `unique_counts` (integer family, complex) | LT28 | `uniqueCountsFast` → the hash path's `ExtractKeysOnly` |
 
-**What it found (2026-10-09).** Discovery runs at 24 and 96 stressed calls per case found the 20 op
-keys above. Most reach open gaps through paths the lifetime corpus did not exercise: decimal and
+**What it found (2026-10-09).** Discovery runs at 24 and 96 stressed calls per case found the 21 op
+keys above (`ma.where` once the masked tiers joined; a 96-run pass over all 1,320 gate cases is
+clean). Most reach open gaps through paths the lifetime corpus did not exercise: decimal and
 float16 flat scans, decimal vector dots, a float32 `a.T @ a`, integer `np.linalg.norm`, the `ndarray`
 methods, `slogdet` and `matrix_power(n < 0)`, int32 sliding products. Three findings changed the
 lifetime tier: (1) LT28, a new site: `np.unique_values` / `np.unique_counts` of integer-family and
@@ -521,6 +531,8 @@ lifetime tier said (a 2-D·2-D `np.dot` never reaches `DotNDMD`).
   finalizers and poisons the operand's pool bucket, and set `DOTNET_TieredCompilation=0`. It split
   `argpartition` (the gather loses the operand 24 of 24 times; argpartition itself 0 of 24) and
   `matrix_norm` (the cast, not the reductions).
+- **numpy.ma's data under a mask is undefined.** Compare a masked result by its mask and its
+  unmasked data only; hashing the whole `_data` turned `ma.masked_all_like` red every run.
 - **The child watchdog is per case** (`LifetimeChildProcess.CaseTimeout`, 5 minutes without a new
   `BEGIN` line). A per-child limit of 10 minutes killed a 96-run discovery in its middle and blamed
   whatever case it had reached.
