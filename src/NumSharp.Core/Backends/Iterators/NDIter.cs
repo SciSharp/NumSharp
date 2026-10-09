@@ -160,6 +160,51 @@ namespace NumSharp.Backends.Iteration
             long[]? iterShape = null,
             long bufferSize = 0,
             DType[]? opDescrs = null)
+            => AdvancedNew(nop, op, flags, order, casting, opFlags, opDtypes, opAxesNDim, opAxes, iterShape, bufferSize, opDescrs,
+                           shapeValidated: false);
+
+        /// <summary>
+        ///     <see cref="AdvancedNew(int, NDArray[], NDIterGlobalFlags, NPY_ORDER, NPY_CASTING, NDIterPerOpFlags[],
+        ///     NPTypeCode[], int, int[][], long[], long, DType[])"/> for a caller that has ALREADY run NumPy's shape and stride
+        ///     passes over these operands (np.nditer's wrapper) and hands in the broadcast shape they produced.
+        /// </summary>
+        /// <param name="nop">The number of operands.</param>
+        /// <param name="op">The operands; a null entry is allocated (ALLOCATE / VIRTUAL).</param>
+        /// <param name="flags">The global flags.</param>
+        /// <param name="order">The iteration order.</param>
+        /// <param name="casting">The casting rule every operand's cast must satisfy.</param>
+        /// <param name="opFlags">The per-operand flags.</param>
+        /// <param name="opDtypes">The per-operand iteration type codes (<see cref="NPTypeCode.Empty"/> or null = the operand's).</param>
+        /// <param name="opAxesNDim">The op_axes rank, or -1 when <paramref name="opAxes"/> is unused.</param>
+        /// <param name="opAxes">The per-operand axis maps.</param>
+        /// <param name="iterShape">The iteration shape; with <paramref name="shapeValidated"/> the broadcast shape the caller's
+        ///     passes produced, which the iterator takes over (the caller must not reuse the array).</param>
+        /// <param name="bufferSize">The buffer size in elements (0 = <c>np.getbufsize()</c>).</param>
+        /// <param name="opDescrs">The per-operand iteration descriptors (see the public overload).</param>
+        /// <param name="shapeValidated">True when the caller ran NumPy's shape pass (which computed
+        ///     <paramref name="iterShape"/>) and stride-pass refusals: the engine's own broadcast computation and its
+        ///     compatibility / stride-pass checks are then skipped. They would repeat the same work — np.nditer paid for both
+        ///     (+30–170 ns a construction) — and can no longer fail.</param>
+        /// <returns>The iterator (owns its state; dispose it).</returns>
+        /// <exception cref="TypeError">With <paramref name="opDescrs"/>: an operand's cast violates <paramref name="casting"/>,
+        ///     or a cast operand is neither buffered nor copied.</exception>
+        /// <exception cref="ArgumentException">Inconsistent arguments, a broadcast mismatch or a refused reduction (only when
+        ///     <paramref name="shapeValidated"/> is false), or (without <paramref name="opDescrs"/>) a cast without
+        ///     <see cref="NDIterGlobalFlags.BUFFERED"/>.</exception>
+        internal static NDIterRef AdvancedNew(
+            int nop,
+            NDArray[] op,
+            NDIterGlobalFlags flags,
+            NPY_ORDER order,
+            NPY_CASTING casting,
+            NDIterPerOpFlags[] opFlags,
+            NPTypeCode[]? opDtypes,
+            int opAxesNDim,
+            int[][]? opAxes,
+            long[]? iterShape,
+            long bufferSize,
+            DType[]? opDescrs,
+            bool shapeValidated)
         {
             if (nop < 1)
                 throw new ArgumentOutOfRangeException(nameof(nop), "At least one operand is required");
@@ -183,7 +228,8 @@ namespace NumSharp.Backends.Iteration
             };
             try
             {
-                iter.Initialize(nop, op, flags, order, casting, opFlags, opDtypes, opAxesNDim, opAxes, iterShape, bufferSize, opDescrs);
+                iter.Initialize(nop, op, flags, order, casting, opFlags, opDtypes, opAxesNDim, opAxes, iterShape, bufferSize, opDescrs,
+                                shapeValidated);
                 // The allocated operands now belong to the caller (it reads them from the operand array).
                 iter._allocatedSlots = null;
                 return iter;
@@ -276,6 +322,28 @@ namespace NumSharp.Backends.Iteration
         /// <summary>Blocks currently parked in the calling thread's cache (diagnostics/tests).</summary>
         internal static int CachedStateBlockCount => t_stateBlocks?.Count ?? 0;
 
+        /// <summary>
+        ///     The construction body of <see cref="AdvancedNew(int, NDArray[], NDIterGlobalFlags, NPY_ORDER, NPY_CASTING,
+        ///     NDIterPerOpFlags[], NPTypeCode[], int, int[][], long[], long, DType[], bool)"/>: the shapes, the operands, the
+        ///     casts and copy routes, the axis order, the allocation and the buffers.
+        /// </summary>
+        /// <param name="nop">The number of operands.</param>
+        /// <param name="op">The operands (null entries are allocated).</param>
+        /// <param name="flags">The global flags.</param>
+        /// <param name="order">The iteration order.</param>
+        /// <param name="casting">The casting rule.</param>
+        /// <param name="opFlags">The per-operand flags.</param>
+        /// <param name="opDtypes">The per-operand iteration type codes, or null.</param>
+        /// <param name="opAxesNDim">The op_axes rank, or -1.</param>
+        /// <param name="opAxes">The per-operand axis maps, or null.</param>
+        /// <param name="iterShape">An explicit iteration shape, or null to broadcast the operands.</param>
+        /// <param name="bufferSize">The buffer size in elements (0 = <c>np.getbufsize()</c>).</param>
+        /// <param name="opDescrs">The per-operand iteration descriptors, or null for the type-code construction.</param>
+        /// <param name="shapeValidated">The caller ran NumPy's shape and stride passes and <paramref name="iterShape"/> is
+        ///     their broadcast shape: it is taken over as is and <see cref="ValidateIterShape"/> is skipped.</param>
+        /// <exception cref="ValueError">A refused construction (shapes, reductions, flags; NumPy's texts where ported).</exception>
+        /// <exception cref="TypeError">A refused cast (descriptor construction).</exception>
+        /// <exception cref="IncorrectShapeException">A shape the operands cannot take (house texts).</exception>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private void Initialize(
             int nop,
@@ -289,7 +357,8 @@ namespace NumSharp.Backends.Iteration
             int[][]? opAxes,
             long[]? iterShape,
             long bufferSize,
-            DType[]? opDescrs = null)
+            DType[]? opDescrs = null,
+            bool shapeValidated = false)
         {
             _state->MaskOp = -1;
             _state->IterStart = 0;
@@ -304,20 +373,26 @@ namespace NumSharp.Backends.Iteration
             // Dimensions are long (NumPy npy_intp parity) so large axes (> int.MaxValue
             // elements) survive iterator construction without narrowing.
             long[] broadcastShape;
-            if (iterShape != null && iterShape.Length > 0)
+            if (shapeValidated && iterShape != null && iterShape.Length > 0)
+            {
+                // np.nditer's wrapper ran NumPy's shape pass (which produced this shape, an array of its own) and the stride
+                // pass's refusals: the broadcast and the validation below would repeat them and cannot fail.
+                broadcastShape = iterShape;
+            }
+            else if (iterShape != null && iterShape.Length > 0)
             {
                 // Use explicit iterShape - allows specifying iteration shape different from broadcast
                 // NumPy's NDIter_AdvancedNew() uses this for reductions and custom iteration patterns
                 broadcastShape = (long[])iterShape.Clone();
                 // Validate that operands are compatible with the specified shape
                 // Pass opAxes so validation accounts for -1 entries (broadcast/reduce axes)
-                ValidateIterShape(nop, op, opFlags, broadcastShape, opAxesNDim, opAxes);
+                ValidateIterShape(nop, op, opFlags, flags, broadcastShape, opAxesNDim, opAxes);
             }
             else
             {
                 broadcastShape = CalculateBroadcastShape(nop, op, opFlags, opAxesNDim, opAxes);
                 // Validate NO_BROADCAST operands match without stretching
-                ValidateIterShape(nop, op, opFlags, broadcastShape, opAxesNDim, opAxes);
+                ValidateIterShape(nop, op, opFlags, flags, broadcastShape, opAxesNDim, opAxes);
             }
 
             // COPY_IF_OVERLAP: if any write operand may share memory with any
@@ -1454,12 +1529,31 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Validate that operands are compatible with the specified iterShape.
-        /// Each operand dimension must either equal the iterShape or be 1 (broadcastable).
-        /// When opAxes is provided, -1 entries indicate dimensions that don't need validation.
+        ///     Validates the operands against the iteration shape in two passes: first the compatibility checks the
+        ///     construction needs (an <c>op_axes</c> entry naming an axis the operand has, extents that broadcast), then the
+        ///     refusals of NumPy's stride pass (<see cref="ThrowStridePassRefusals"/>: <c>no_broadcast</c>, an explicit
+        ///     reduction axis of length other than 1, the reduction rule), in NumPy's order and with NumPy's texts.
         /// </summary>
+        /// <param name="nop">The operand count.</param>
+        /// <param name="op">The operands; a null entry is an output the iterator allocates and is not shape-checked.</param>
+        /// <param name="opFlags">The per-operand flags (<c>NO_BROADCAST</c>, <c>ARRAYMASK</c> and the read/write mode are
+        ///     read).</param>
+        /// <param name="globalFlags">The construction flags (<c>REDUCE_OK</c> is read).</param>
+        /// <param name="iterShape">The iteration shape (the broadcast shape, or the caller's <c>itershape</c>).</param>
+        /// <param name="opAxesNDim">The <c>op_axes</c> rank (unused: each map's own length bounds its walk).</param>
+        /// <param name="opAxes">The per-operand axis maps, or null for natural broadcasting.</param>
+        /// <exception cref="IncorrectShapeException">An <c>op_axes</c> entry naming an axis the operand does not have, an
+        ///     operand extent that cannot broadcast to the iteration's, or an operand with more axes than the iteration (the
+        ///     house texts: np.nditer raises NumPy's shape-pass errors before it calls the engine).</exception>
+        /// <exception cref="ValueError">A stride-pass refusal (<see cref="ThrowStridePassRefusals"/>).</exception>
+        /// <remarks>
+        ///     The stride-pass refusals run only after every compatibility check passed, as NumPy's stride pass follows its
+        ///     shape pass. The <c>no_broadcast</c> check used to be interleaved with the compatibility checks and raised
+        ///     <see cref="InvalidOperationException"/> with the shape printed as <c>(3)</c> (NumPy: a ValueError naming
+        ///     <c>(3,)</c>), and the explicit reduction length was checked here, before the extents of later operands.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static void ValidateIterShape(int nop, NDArray[] op, NDIterPerOpFlags[] opFlags,
+        private static void ValidateIterShape(int nop, NDArray[] op, NDIterPerOpFlags[] opFlags, NDIterGlobalFlags globalFlags,
             long[] iterShape, int opAxesNDim, int[][]? opAxes)
         {
             for (int opIdx = 0; opIdx < nop; opIdx++)
@@ -1468,7 +1562,6 @@ namespace NumSharp.Backends.Iteration
                 if (op[opIdx] is null)
                     continue;
 
-                bool noBroadcast = (opFlags[opIdx] & NDIterPerOpFlags.NO_BROADCAST) != 0;
                 var opShape = op[opIdx].Shape.dimensions;
 
                 // When opAxes is provided for this operand, use it for validation
@@ -1490,11 +1583,10 @@ namespace NumSharp.Backends.Iteration
                         if (opAxis >= opShape.Length)
                             throw new IncorrectShapeException($"Operand {opIdx} op_axes refers to non-existent axis {opAxis}");
 
-                        // Explicit reduction axis must have length 1 on the operand (NumPy's ValueError, npyiter_fill_axisdata).
-                        if (isReduction && opShape[opAxis] != 1)
-                            throw new ValueError(
-                                $"operand was set up as a reduction along axis {opAxis}, but the length of the axis is " +
-                                $"{opShape[opAxis]} (it has to be 1)");
+                        // An explicit reduction axis must have length 1 on the operand; that is a STRIDE-pass refusal in NumPy,
+                        // raised after every shape check, so it is ThrowStridePassRefusals' (in NumPy's axis order), not this
+                        // loop's. A reduction axis whose extent breaks the broadcast is still the shape error below, as in NumPy.
+                        _ = isReduction;
 
                         long opDim = opShape[opAxis];
                         long iterDim = iterShape[iterAxis];
@@ -1502,12 +1594,6 @@ namespace NumSharp.Backends.Iteration
                         // opDim must equal iterDim or be 1 (broadcastable)
                         if (opDim != iterDim && opDim != 1)
                             throw new IncorrectShapeException($"Operand {opIdx} shape incompatible with iterShape at axis {iterAxis}");
-
-                        // NO_BROADCAST: dim of 1 that needs stretching is forbidden
-                        if (noBroadcast && opDim == 1 && iterDim != 1)
-                            throw new InvalidOperationException(
-                                $"non-broadcastable operand with shape ({string.Join(",", opShape)}) " +
-                                $"doesn't match the broadcast shape ({string.Join(",", iterShape)})");
                     }
                 }
                 else
@@ -1519,12 +1605,6 @@ namespace NumSharp.Backends.Iteration
                     if (offset < 0)
                         throw new IncorrectShapeException($"Operand {opIdx} has more dimensions than iterShape");
 
-                    // NO_BROADCAST: operand must match iterShape ndim (no prepending of size-1)
-                    if (noBroadcast && offset > 0)
-                        throw new InvalidOperationException(
-                            $"non-broadcastable operand with shape ({string.Join(",", opShape)}) " +
-                            $"doesn't match the broadcast shape ({string.Join(",", iterShape)})");
-
                     for (int d = 0; d < opShape.Length; d++)
                     {
                         long opDim = opShape[d];
@@ -1533,15 +1613,284 @@ namespace NumSharp.Backends.Iteration
                         // opDim must equal iterDim or be 1 (broadcastable)
                         if (opDim != iterDim && opDim != 1)
                             throw new IncorrectShapeException($"Operand {opIdx} shape incompatible with iterShape at axis {d}");
-
-                        // NO_BROADCAST: dim of 1 that needs stretching is forbidden
-                        if (noBroadcast && opDim == 1 && iterDim != 1)
-                            throw new InvalidOperationException(
-                                $"non-broadcastable operand with shape ({string.Join(",", opShape)}) " +
-                                $"doesn't match the broadcast shape ({string.Join(",", iterShape)})");
                     }
                 }
             }
+
+            ThrowStridePassRefusals(nop, op, opFlags, globalFlags, iterShape, opAxes);
+        }
+
+        /// <summary>
+        ///     The refusals of NumPy's stride pass (<c>npyiter_fill_axisdata</c> after its shape pass), in NumPy's ONE loop:
+        ///     a <c>no_broadcast</c> operand the iteration stretches, an explicit reduction axis whose operand extent is not 1,
+        ///     and a written operand stretched without <c>reduce_ok</c>, written but not read, or the ARRAYMASK
+        ///     (<c>npyiter_check_reduce_ok_and_set_flags</c>).
+        /// </summary>
+        /// <param name="nop">The operand count.</param>
+        /// <param name="op">The operands; a null entry is an output to allocate (checked only through a newaxis map entry,
+        ///     as NumPy checks it).</param>
+        /// <param name="opFlags">The per-operand flags (the read/write mode, <c>NO_BROADCAST</c>, <c>ARRAYMASK</c>).</param>
+        /// <param name="globalFlags">The construction flags (<c>REDUCE_OK</c>).</param>
+        /// <param name="iterShape">The broadcast iteration shape, outermost axis first.</param>
+        /// <param name="opAxes">The per-operand axis maps, or null for natural broadcasting.</param>
+        /// <exception cref="ValueError">The FIRST refusal in NumPy's order, with NumPy's text:
+        ///     <c>operand_different_than_broadcast</c>'s "non-broadcastable [output] operand with shape … [remapped to …]
+        ///     doesn't match the broadcast shape …"; "operand was set up as a reduction along axis {i}, but the length of the
+        ///     axis is {n} (it has to be 1)"; "output operand requires a reduction along dimension {d}, but the reduction is
+        ///     not enabled. …"; "output operand requires a reduction, but is flagged as write-only, not read-write";
+        ///     "output operand requires a reduction, but is flagged as the ARRAYMASK operand which is not permitted to be the
+        ///     result of a reduction".</exception>
+        /// <remarks>
+        ///     <para>
+        ///     <b>Why one pass.</b> NumPy raises all of these from one loop — iteration axes INNERMOST first, every operand in
+        ///     order within an axis — so which refusal it reports depends on the axis and the operand, not on the kind. Two
+        ///     stretched operands report the one stretched along the inner axis, whatever its position, and a written
+        ///     operand stretched along the inner axis is reported before a <c>no_broadcast</c> operand stretched along an
+        ///     outer one. NumSharp used to check <c>no_broadcast</c> in one pass, the explicit reduction length in the
+        ///     compatibility pass, and the reduction rule per operand during the operand setup and again in
+        ///     <see cref="ApplyOpAxes"/>, which reported other operands than NumPy when several were refused. Those later
+        ///     checks still set the REDUCE flags and keep their throws; this pass refuses everything they would, first.
+        ///     </para>
+        ///     <para>
+        ///     <b>What counts as stretched</b> (NumPy's branches). Without an axis map: an operand that LACKS the axis
+        ///     (<c>no_broadcast</c> refuses it even where the iteration's extent is 1), or whose extent is 1 under an
+        ///     iteration extent other than 1 — a ZERO-length iteration axis stretches too, so a written <c>(1, 3)</c> operand
+        ///     next to <c>(0, 3)</c> is a refused reduction (the setup's own check tests <c>extent &gt; 1</c> and let it pass).
+        ///     With an axis map: an explicit reduction entry is only length-checked; under an iteration extent of 1 nothing
+        ///     is checked; a real operand axis of extent 1 is stretched; a newaxis (any negative) entry is checked for a
+        ///     reduction even on an operand still to be allocated, and is named <c>dimension -1</c>.
+        ///     </para>
+        ///     <para>
+        ///     <b>Dimensions named.</b> The natural branch names <c>idim</c>, the axis counted from the INNERMOST (an out of
+        ///     shape <c>(1, 3)</c> against <c>(2, 3)</c> is "dimension 1"); the mapped branch names the OPERAND axis.
+        ///     </para>
+        ///     <para>
+        ///     <b>How it is walked.</b> Each (axis, operand) check depends only on that operand, the axis and the global flags
+        ///     (NumPy's loop sets the REDUCE flags but never reads them back), so the first refusal of NumPy's axis-major loop
+        ///     is the lexicographically smallest (axis, operand) among the operands' own first refusals. The walk is therefore
+        ///     operand-major — each operand's shape read once, and an operand that can never be refused (read-only, without
+        ///     <c>no_broadcast</c>, without an explicit reduction entry) skipped outright, which is every operand of a
+        ///     plain read-only iteration — and a later operand replaces the best refusal only with a strictly inner axis. The
+        ///     axis-major form read every operand's shape at every axis, twice per np.nditer call (the wrapper and the engine):
+        ///     +30–170 ns a construction.
+        ///     </para>
+        /// </remarks>
+        internal static void ThrowStridePassRefusals(int nop, NDArray[] op, NDIterPerOpFlags[] opFlags,
+                                                     NDIterGlobalFlags globalFlags, ReadOnlySpan<long> iterShape, int[][]? opAxes)
+        {
+            int ndim = iterShape.Length;
+            if (ndim == 0)
+                return;
+
+            bool reduceOk = (globalFlags & NDIterGlobalFlags.REDUCE_OK) != 0;
+            // npyiter_prepare_operands settled the single ARRAYMASK operand before the stride pass; the flags name it.
+            int maskOp = -1;
+            for (int i = 0; i < nop; i++)
+            {
+                if ((opFlags[i] & NDIterPerOpFlags.ARRAYMASK) != 0)
+                {
+                    maskOp = i;
+                    break;
+                }
+            }
+
+            ValueError? first = null;
+            int firstIdim = ndim;
+            for (int opIdx = 0; opIdx < nop; opIdx++)
+            {
+                var flags = opFlags[opIdx];
+                bool noBroadcast = (flags & NDIterPerOpFlags.NO_BROADCAST) != 0;
+                bool written = (TranslateOpFlags(flags) & NDIterOpFlags.WRITE) != 0;
+                int[]? map = opAxes != null && opIdx < opAxes.Length ? opAxes[opIdx] : null;
+                if (!noBroadcast && !written && (map == null || !HasExplicitReductionEntry(map)))
+                    continue;
+
+                var operand = op[opIdx];
+                long[]? dims = operand?.Shape.dimensions;
+                // Only a strictly inner axis can beat an earlier operand's refusal: on the same axis NumPy reaches the earlier
+                // operand first.
+                for (int idim = 0; idim < firstIdim; idim++)
+                {
+                    var refusal = StridePassRefusal(operand, dims, flags, noBroadcast, opIdx == maskOp, reduceOk, map, iterShape,
+                                                    idim);
+                    if (refusal is not null)
+                    {
+                        first = refusal;
+                        firstIdim = idim;
+                        break;
+                    }
+                }
+            }
+
+            if (first is not null)
+                throw first;
+        }
+
+        /// <summary>Whether an <c>op_axes</c> map holds an explicit reduction entry naming an operand axis.</summary>
+        /// <param name="map">The operand's axis map.</param>
+        /// <returns>True when some entry decodes (<see cref="NDIterUtils.GetOpAxis"/>) to a reduction of a real axis — the
+        ///     only entry a read-only operand without <c>no_broadcast</c> can be refused for (its length).</returns>
+        private static bool HasExplicitReductionEntry(int[] map)
+        {
+            foreach (int entry in map)
+            {
+                if (NDIterUtils.GetOpAxis(entry, out bool explicitReduction) >= 0 && explicitReduction)
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        ///     The refusal NumPy's stride pass raises for one operand at one iteration axis, if any — one iteration of the
+        ///     loop body of <c>npyiter_fill_axisdata</c>'s stride pass, both branches (unmapped and mapped).
+        /// </summary>
+        /// <param name="operand">The operand, or null for one the iterator allocates.</param>
+        /// <param name="dims">The operand's dimensions (null with <paramref name="operand"/>).</param>
+        /// <param name="flags">The operand's per-operand flags.</param>
+        /// <param name="noBroadcast">Whether the operand carries <c>NO_BROADCAST</c>.</param>
+        /// <param name="isMask">Whether the operand is the ARRAYMASK.</param>
+        /// <param name="reduceOk">Whether the construction set <c>reduce_ok</c>.</param>
+        /// <param name="map">The operand's axis map, or null for natural broadcasting.</param>
+        /// <param name="iterShape">The iteration shape, outermost axis first.</param>
+        /// <param name="idim">The iteration axis, counted from the INNERMOST as NumPy counts it.</param>
+        /// <returns>The error NumPy raises there, or null when the operand passes this axis.</returns>
+        private static ValueError? StridePassRefusal(NDArray? operand, long[]? dims, NDIterPerOpFlags flags, bool noBroadcast,
+                                                     bool isMask, bool reduceOk, int[]? map, ReadOnlySpan<long> iterShape,
+                                                     int idim)
+        {
+            int ndim = iterShape.Length;
+            int iterAxis = ndim - 1 - idim;
+            long bshape = iterShape[iterAxis];
+            if (map == null)
+            {
+                if (operand is null || dims is null)
+                    return null;
+
+                // Right-aligned: idim indexes the operand's own axes from its last one.
+                int ondim = dims.Length;
+                if (bshape == 1)
+                    return idim >= ondim && noBroadcast ? NonBroadcastableOperand(operand, flags, map, iterShape) : null;
+                if (idim >= ondim || dims[ondim - 1 - idim] == 1)
+                    return noBroadcast
+                        ? NonBroadcastableOperand(operand, flags, map, iterShape)
+                        : ReductionRefusal(flags, isMask, reduceOk, idim);
+                return null;
+            }
+
+            // An engine caller may pass a map shorter than the iteration (ApplyOpAxes skips the rest too); NumPy's maps
+            // always span it.
+            if (iterAxis >= map.Length)
+                return null;
+
+            int axis = NDIterUtils.GetOpAxis(map[iterAxis], out bool explicitReduction);
+            if (explicitReduction)
+            {
+                // Marked a reduction without a reduce_ok check (ApplyOpAxes); only its length is refused.
+                return axis >= 0 && dims is not null && axis < dims.Length && dims[axis] != 1
+                    ? new ValueError(
+                        $"operand was set up as a reduction along axis {axis}, but the length of the axis is {dims[axis]} " +
+                        "(it has to be 1)")
+                    : null;
+            }
+
+            // An iteration extent of 1 broadcasts anything, a missing axis included.
+            if (bshape == 1)
+                return null;
+
+            if (axis >= 0)
+            {
+                // An allocated operand takes the iteration's extent; a given one is stretched along an axis of 1. The
+                // compatibility pass already refused an axis the operand does not have; the bound keeps a malformed map from
+                // indexing past the shape.
+                if (operand is null || dims is null || axis >= dims.Length || dims[axis] != 1)
+                    return null;
+                return noBroadcast
+                    ? NonBroadcastableOperand(operand, flags, map, iterShape)
+                    : ReductionRefusal(flags, isMask, reduceOk, axis);
+            }
+
+            // A newaxis entry under a longer iteration axis: a written operand there is a reduction, even an operand still
+            // to be allocated (NumPy calls the check whatever op_cur is).
+            return ReductionRefusal(flags, isMask, reduceOk, axis);
+        }
+
+        /// <summary>
+        ///     The refusals of NumPy's <c>npyiter_check_reduce_ok_and_set_flags</c> for an operand the iteration stretches: a
+        ///     WRITTEN operand there is a reduction, which needs <c>reduce_ok</c>, a readable operand and not the ARRAYMASK; a
+        ///     read-only operand is a broadcast and passes.
+        /// </summary>
+        /// <param name="flags">The operand's per-operand flags (its read/write mode, through <see cref="TranslateOpFlags"/>).</param>
+        /// <param name="isMask">Whether the operand is the ARRAYMASK.</param>
+        /// <param name="reduceOk">Whether the construction set <c>reduce_ok</c>.</param>
+        /// <param name="dim">The dimension NumPy names: the innermost-counted iteration axis for an unmapped operand, the
+        ///     operand axis (negative for a newaxis entry) for a mapped one.</param>
+        /// <returns>NumPy's error for the first of its three refusals that applies, or null (a read-only operand, or a
+        ///     reduction NumPy accepts).</returns>
+        private static ValueError? ReductionRefusal(NDIterPerOpFlags flags, bool isMask, bool reduceOk, int dim)
+        {
+            var opFlag = TranslateOpFlags(flags);
+            if ((opFlag & NDIterOpFlags.WRITE) == 0)
+                return null;
+            if (!reduceOk)
+                return new ValueError(
+                    $"output operand requires a reduction along dimension {dim}, " +
+                    "but the reduction is not enabled. The dimension size of 1 " +
+                    "does not match the expected output shape.");
+            if ((opFlag & NDIterOpFlags.READ) == 0)
+                return new ValueError(
+                    "output operand requires a reduction, but is flagged as " +
+                    "write-only, not read-write");
+            // A slot could be written while the mask reads True, then the reduction turn the mask False — retroactively
+            // invalidating the write — so the ARRAYMASK may never be the result of a reduction.
+            if (isMask)
+                return new ValueError(
+                    "output operand requires a " +
+                    "reduction, but is flagged as " +
+                    "the ARRAYMASK operand which " +
+                    "is not permitted to be the " +
+                    "result of a reduction");
+            return null;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>operand_different_than_broadcast</c> ValueError: "non-broadcastable operand" for a read-only operand,
+        ///     "non-broadcastable output operand" otherwise, and for an operand with an axis map the remapped shape too.
+        /// </summary>
+        /// <param name="operand">The stretched operand.</param>
+        /// <param name="flags">Its flags (<c>READONLY</c> picks the wording).</param>
+        /// <param name="map">Its axis map, or null.</param>
+        /// <param name="iterShape">The iteration shape.</param>
+        /// <returns>The error to throw (the shapes printed by <see cref="NumSharp.Shape.ConvertShapeToString"/>, NumPy's
+        ///     <c>convert_shape_to_string</c>: <c>(3,)</c>, <c>(2,3)</c>, <c>()</c>).</returns>
+        /// <remarks>
+        ///     NumPy fills the remapped shape as <c>remdims[idim] = shape[axes[ndim - idim - 1]]</c> and prints it in that
+        ///     order, so it comes out with the iteration axes REVERSED: a <c>(1, 3)</c> operand mapped <c>[0, 1]</c> reads
+        ///     "[remapped to (3,1)]". The text is reproduced as NumPy prints it, not corrected. An entry that names no operand
+        ///     axis (a newaxis, an encoded reduction axis) prints as NumPy's unknown dimension: dropped when leading,
+        ///     <c>newaxis</c> after (<c>(1,newaxis)</c>).
+        /// </remarks>
+        private static ValueError NonBroadcastableOperand(NDArray operand, NDIterPerOpFlags flags, int[]? map, ReadOnlySpan<long> iterShape)
+        {
+            var dims = operand.Shape.dimensions;
+            string shape1 = NumSharp.Shape.ConvertShapeToString(dims);
+            string shape2 = NumSharp.Shape.ConvertShapeToString(iterShape.ToArray());
+            string kind = (flags & NDIterPerOpFlags.READONLY) != 0 ? "operand" : "output operand";
+            if (map == null)
+                return new ValueError($"non-broadcastable {kind} with shape {shape1} doesn't match the broadcast shape {shape2}");
+
+            int ndim = iterShape.Length;
+            var remapped = new long[ndim];
+            for (int idim = 0; idim < ndim; idim++)
+            {
+                int entry = ndim - idim - 1;
+                // The RAW entry, as NumPy reads it: an encoded reduction axis is a large positive value, not an axis.
+                int raw = entry < map.Length ? map[entry] : -1;
+                remapped[idim] = raw >= 0 && raw < dims.Length ? dims[raw] : -1;
+            }
+
+            return new ValueError($"non-broadcastable {kind} with shape {shape1} [remapped to " +
+                                  $"{NumSharp.Shape.ConvertShapeToString(remapped)}] doesn't match the broadcast shape {shape2}");
         }
 
         /// <summary>

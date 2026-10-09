@@ -1431,6 +1431,82 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     - unravel_index 1.99–3.55× (C / int32 / F / a 3-D shape; it was 0.79–1.41× with the divmod kernel);
     - ravel_multi_index 1.76–2.46× (C and F pairs).
 
+- [x] **X38 np.nditer's construction checks were not NumPy's: house shape errors, accepted inputs NumPy refuses, and the
+  refusals in another order.** Done 2026-10-09 (this commit; found by the np.nditer unit-test expansion, the request
+  "increase unit test coverage for np.nditer and np.nditer over strings").
+  - Proof (NumPy 2.4.2; a 65-case construction differential replayed through both libraries):
+    - `no_broadcast` raised `InvalidOperationException` "non-broadcastable operand with shape (3) …"; NumPy's ValueError
+      prints `(3,)`, says "output operand" for a written operand, and with `op_axes` adds "[remapped to (3,1)]" (the
+      remapped shape printed with the iteration axes reversed);
+    - with `op_axes` or `itershape` a broadcast mismatch was the engine's `IncorrectShapeException` ("shape mismatch:
+      objects cannot be broadcast to a single shape", "Operand 0 shape incompatible with iterShape at axis 0"); NumPy's
+      remapped text lists `original->remapped` per operand and then the requested shape;
+    - an `op_axes` entry naming a missing axis ("op_axes refers to non-existent axis") and an unmapped operand with more
+      axes than the remapping were house texts too;
+    - a NEGATIVE `itershape` entry was refused; NumPy deduces it from the operands;
+    - `op_axes` and `itershape` of different lengths were ACCEPTED (NumPy: ValueError), and a duplicate `op_axes` axis was
+      accepted and iterated a (3, 3) grid that read one column;
+    - NumPy raises `no_broadcast`, the explicit reduction length and the reduction rule from ONE loop (iteration axes
+      innermost first, operands in order). NumSharp checked them in four passes (`no_broadcast` first, the length with
+      the shapes, the reduction rule operand by operand during the setup and again in `ApplyOpAxes`), so with two
+      refusals it named the other operand (4 of 11 probe cases), and a zero-length iteration axis did not stretch a
+      written operand of extent 1 (NumPy refuses that reduction; the setup tested an extent `> 1`).
+  - Fix:
+    - the wrapper (`np.nditer.cs`) ports `npyiter_init`'s itershape rule (`ApplyItershapeRank`), `npyiter_check_op_axes`
+      before the flag checks (`CheckOpAxes`: a duplicate; an axis past NumPy's 64-dimension limit that the operand
+      lacks — NumSharp has no cap, so an axis the operand has is accepted) and `npyiter_fill_axisdata`'s shape pass
+      (`FillAxisDataShapePass` and `BroadcastError`, which replace the plain-only `CheckBroadcast`): the three broadcast
+      texts, the invalid-axis text with NumPy's reversed entry index, the extra-dimension text, an itershape entry of 1
+      the operands stretch. The broadcast shape it computes, negative entries deduced, is what the engine iterates;
+    - the engine (`NDIter.cs`) has ONE ordered pass for the stride pass's refusals, `NDIterRef.ThrowStridePassRefusals`
+      — `no_broadcast`, the explicit reduction length (moved out of the compatibility pass), the reduction rule with
+      NumPy's `extent != 1` — called by the wrapper before the common dtype (NumPy's position: `ResolveCommonDtype` can
+      raise) and by the engine's `ValidateIterShape` for its internal callers. It walks operand-major (each operand's
+      shape read once; an operand that can never be refused — read-only, no `no_broadcast`, no explicit reduction entry —
+      skipped) and keeps the lexicographically first (axis, operand) refusal, which IS NumPy's axis-major order because
+      each check depends only on its own operand. The later checks (the operand setup, `ApplyOpAxes`) keep setting the
+      REDUCE flags and keep their throws, which the ordered pass now always precedes;
+    - the handover: the wrapper passes its broadcast shape to an internal `AdvancedNew(..., shapeValidated: true)`
+      overload, and the engine skips its own broadcast computation and `ValidateIterShape` (the public overload is
+      unchanged). The first version ran both the wrapper's passes and the engine's, +30–170 ns a construction (one
+      operand 1.83× → 1.58× NumPy); with the handover a construction is at parity or faster than before the item.
+  - Not changed:
+    - `grow_inner` does not grow an uncast operand past the buffer size (NumPy walks `arange(10)` with a buffer of 3 as
+      one chunk of 10, NumSharp as 3, 3, 3, 1; a contiguous `(100, 100)` as one chunk of 10,000, NumSharp as 8192 and
+      1808). Values are right; only the chunking differs. Pinned in `OpenBugs.NditerGrowInner.cs` (2 tests). The fix is
+      `npyiter_find_buffering_setup`'s core-size search in the general iterator's window sizing, which changes the
+      chunking every buffered caller sees — its own item;
+    - the buffered reduction (X35, `OpenBugs.NditerBufferedReduce.cs`);
+    - NumPy's texts reachable only from its C API (`oa_ndim == 0` without op_axes; the plain "shapes … and requested
+      shape" form: np.nditer always passes op_axes with an itershape).
+  - Gates:
+    - the unit suites written in this pass: `APIs/np.nditer.Construction.Test.cs` (51 tests: the flag, argument, shape-pass,
+      stride-pass and casting checks, allocation, op_axes, itershape, the reduction idiom, overlap),
+      `APIs/np.nditer.Protocol.Test.cs` (94: the end of a walk, reset, the three seeks and their checks, ranges, the operand
+      views and setters, copies, the closed state, the properties, 0-d / empty / broadcast, buffering, axis removal, and
+      three DataRow sweeps over all 15 dtypes), `APIs/np.nditer.Strings.Test.cs` (59: `U` and `S` over every order and
+      layout, the indices, external-loop chunks, width and class casts with every casting rule, the codec errors, the
+      refusals, writes through views / buffers / the setter, the copy routes, allocation, pairs, 0-d and empty, the
+      protocol, ranges, `remove_axis`, op_axes / itershape and `nested_iters`). Every expected value and text was probed
+      against NumPy 2.4.2;
+    - `np.nested_iters.Test.cs` (its out-of-range axis asserts NumPy's ValueError now) and `NDIterParityFixTests`
+      (`no_broadcast`'s type);
+    - the 65-case construction differential (`diff_construct.py` / `.cs`), byte-identical outcome lines;
+    - planted bugs: 22, every one killed by the unit tests — 10 in the wrapper (the itershape rule, the duplicate check
+      and its position before the flag checks, negative itershape entries, the reversed invalid-axis index, the remapped
+      shape's order, the itershape-1 check, the requested shape, NumPy's axis limit, the extra-dimension check), 8 in the
+      final engine pass (the tie rule, the skip predicate, the explicit-entry detection, zero-length axes, the
+      `reduce_ok` / write-only order, the ARRAYMASK rule, the dimension each branch names) and 4 in its first,
+      axis-major form. The ARRAYMASK mutant first SURVIVED: the setup's own per-operand check raises the same text for a
+      lone mask, so only a case where the mask must be reported before an EARLIER operand's refusal (stretched along an
+      outer axis) can see the ordered pass's version — now in `ReductionRefusals_AreNumPysThreeChecksInOrder`.
+  - Perf (ns a construction + close, two pinned P-cores, best of 21 × 20,000; before → after | NumPy 2.4.2; NPY/NS
+    after): one operand 316 → 321 | 573 (1.78×); `c_index` 333–345 → 327–335 | 829 (2.5×); three broadcast operands
+    886–905 → 852–860 | 895 (1.05×); an `op_axes` reduction 968–976 → 608–615 | 1,963 (3.2×; the engine's own
+    `op_axes` broadcast pass allocated per operand); `itershape` 562 → 531–540 | 1,189 (2.2×). Under the 1.5× bar:
+    three broadcast operands, ~1.0× before the item too — the engine's general multi-operand setup (per-operand
+    broadcast shapes, the axis sort, coalescing), not these checks; its own item.
+
 ## 6. Findings
 
 1. **One reduce prologue serves every reduction** (A1). NumPy checks a reduction's arguments in one fixed order
@@ -1713,8 +1789,36 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    operand linearly only when its strides equal the result layout's on every axis with more than one element AND (for
    ravel_multi_index) its dims are the broadcast dims: a 0-d operand passes any stride test, and read in place it would be
    read past its one element.
+63. **One NumPy loop that raises several errors must stay one loop** (X38). NumPy's stride pass raises `no_broadcast`,
+   the explicit reduction length and the reduction rule from one loop (iteration axes innermost first, operands in
+   order), so WHICH error it reports depends on the axis and the operand, not on the kind. NumSharp had split the three
+   into four passes, each correct alone, and named the other operand whenever two refusals met. Port a C loop's
+   refusals as one ordered loop, even when its side effects (here the REDUCE flags) stay where they are.
+64. **NumPy's error texts carry its index arithmetic, quirks included** (X38). `operand_different_than_broadcast` fills
+   the remapped shape as `shape[axes[ndim - idim - 1]]` and prints it in fill order, so it reads reversed ("[remapped to
+   (3,1)]" for a `(1, 3)` operand mapped `[0, 1]`); the invalid-axis text prints entry `idim` as `op_axes[i][ndim - idim
+   - 1]`. Reproduce them: a "corrected" text fails every caller that matches on NumPy's.
+65. **Probe what NumSharp ACCEPTS, not only what it raises** (X38). A duplicate `op_axes` axis and `op_axes` /
+   `itershape` of different lengths were accepted and iterated a wrong grid; a differential that only compares error
+   texts never sees them. For every refusal NumPy has, run the same input through NumSharp and require the refusal.
+66. **A buffer cap applies only when something is buffered** (X38, open). NumPy's `npyiter_find_buffering_setup` caps the
+   transfer at the buffer size only when an operand must be buffered or `grow_inner` is off, so `grow_inner` walks an
+   uncast contiguous operand in one chunk past the buffer size. NumSharp's general iterator always caps. The values are
+   right, so only a chunk-length check sees it — the value tiers concatenate the chunks.
+67. **A check duplicated by a later fallback is invisible to single-refusal tests** (X38). The ordered stride pass
+   refuses an ARRAYMASK reduction, and so does the operand setup later, with the same text. A planted bug that dropped
+   the ordered pass's check survived every test with one refused operand; only a case where the mask must be reported
+   BEFORE another operand's refusal (the order decides) killed it. When a port adds an ordered check in front of an old
+   one, test the cases where the old one would answer differently.
 
 ## 7. State log
+
+- **2026-10-09**: X38 done (np.nditer's construction checks are NumPy's: the itershape rule, `npyiter_check_op_axes`,
+  `npyiter_fill_axisdata`'s shape pass with NumPy's broadcast / invalid-axis / extra-dimension texts and negative
+  itershape entries deduced, and the stride pass's refusals — `no_broadcast`, the explicit reduction length, the
+  reduction rule — in one ordered loop). The unit suites `np.nditer.{Construction,Protocol,Strings}.Test.cs` (51 / 94 /
+  59 tests) written by the coverage request that found it; `grow_inner`'s chunking pinned open
+  (`OpenBugs.NditerGrowInner.cs`). Findings 63-67 recorded. Commit: this commit.
 
 - **2026-10-08**: X37 done (np.argwhere / np.flatnonzero / np.unravel_index return NumPy's views of one buffer; the
   neighbours: unravel_index's error order and types, `shape=()` and a reciprocal-division kernel; ravel_multi_index's

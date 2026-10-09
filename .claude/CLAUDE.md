@@ -3067,11 +3067,41 @@ order); **`remove_multi_index` only coalesces** (a forced C / F order keeps walk
 path the K-order sort is NumPy's `npyiter_find_best_axis_ordering` (`NDIterCoalescing.FindBestAxisOrderingNumPy`: a
 zero stride is ambiguous, C order wins a conflict — no broadcast fallback to C); the internal callers keep the
 min-stride sort. The op_axes reduction checks are `npyiter_check_reduce_ok_and_set_flags` (innermost axis first; an
-explicit reduction axis needs no `reduce_ok`). **Open:** a BUFFERED reduction computes wrong values for every dtype
-(the legacy double loop; `OpenBugs.NditerBufferedReduce.cs`) — a port of NumPy's buffered-reduce design is the fix.
+explicit reduction axis needs no `reduce_ok`). **The construction checks are NumPy's, in NumPy's order** (2026-10-09,
+plan X38; they were house `IncorrectShapeException`s, accepted inputs NumPy refuses, or NumPy's texts in another order):
+the wrapper runs `npyiter_init`'s `itershape` rule ("'op_axes' and 'itershape' must have the same number of entries equal
+to the iterator ndim" — it was accepted), `npyiter_check_op_axes` BEFORE the flag checks (a duplicate axis "contained
+duplicate value 0" — it was accepted and iterated a wrong grid; an axis past NumPy's 64-dimension limit that the operand
+lacks is "contained invalid values"), then `npyiter_fill_axisdata`'s shape pass (`FillAxisDataShapePass`): the plain
+"operands could not be broadcast together with shapes (2,) (3,) ", the remapped "… [original->remapped]: (2,3)->(2,3)
+(4,3) " and "… (2,3)  and requested shape (4,3)" texts, "Iterator input op_axes[0][0] (==5) is not a valid axis of
+op[0], which has 2 dimensions " (NumPy prints the entry's index REVERSED; reproduced), "input operand has more dimensions
+than allowed by the axis remapping", an `itershape` entry of 1 the operands stretch — and a NEGATIVE `itershape` entry is
+deduced from the operands (it was refused; the engine takes the deduced shape). The stride pass's refusals are ONE loop,
+`NDIterRef.ThrowStridePassRefusals` (the wrapper calls it before the common dtype, the engine for its internal callers):
+iteration axes INNERMOST first, operands in order — `no_broadcast` (NumPy's `operand_different_than_broadcast` ValueError,
+"non-broadcastable [output] operand with shape (3,) …", with `op_axes` "… [remapped to (3,1)] …", the remapped shape
+printed reversed as NumPy prints it; it was an `InvalidOperationException` naming `(3)`), an explicit reduction axis of
+extent other than 1, and the reduction rule (a ZERO-length iteration axis stretches an operand of extent 1 too). NumSharp
+checked `no_broadcast`, the reduction length and the reduction rule in four separate passes, so with two refusals it
+named the other operand. The wrapper hands the shape it computed to the engine (the internal
+`NDIterRef.AdvancedNew(..., shapeValidated: true)` overload), which then skips its own broadcast computation and
+`ValidateIterShape` — running both cost +30–170 ns a construction. **Open:** a BUFFERED reduction computes wrong values
+for every dtype (the legacy double loop; `OpenBugs.NditerBufferedReduce.cs`) — a port of NumPy's buffered-reduce design
+is the fix; and
+`grow_inner` does not grow an uncast operand past the buffer size (NumPy walks `arange(10)` with a buffer of 3 as one
+chunk of 10, NumSharp as 3, 3, 3, 1; values are right, only the chunking differs; `OpenBugs.NditerGrowInner.cs`) — the
+fix is `npyiter_find_buffering_setup`'s core-size search in the general iterator's window sizing.
 Gates: `nditer_construct.jsonl` (9,574), `nditer_protocol.jsonl` (1,219), the string oracle's `striter` section,
-`APIs/np.nditer.NumPyParity.Test.cs`. Perf (NPY/NS): construction 1.67–1.90×, index walks ~13×; a construction that
-allocates an output 0.96× (the `np.zeros` floor), a per-element string walk 0.14× (the per-element view floor below).
+`APIs/np.nditer.NumPyParity.Test.cs`, and the unit suites `APIs/np.nditer.{Construction,Protocol,Strings}.Test.cs`
+(2026-10-09; 51 / 94 / 59 tests from probed NumPy 2.4.2 output — the flag, argument, shape-pass, stride-pass and casting
+checks, allocation, op_axes, itershape, seeks, ranges, setters, copies, buffering, axis removal and all 15 dtypes;
+strings in `U` and `S` over every order and layout, width and class casts, the codec errors, the write-back routes,
+allocation, op_axes / itershape and `nested_iters`).
+Perf (NPY/NS): construction 1.78× (one operand, 321 ns), 2.5× (`c_index`), 3.2× (an `op_axes` reduction: 611 ns, 972
+before the handover), 2.2× (`itershape`), index walks ~13×; under the bar: three broadcast operands 1.05× (850–860 ns,
+~1.0× before X38 too — the engine's general multi-operand setup), a construction that allocates an output 0.96× (the
+`np.zeros` floor), a per-element string walk 0.14× (the per-element view floor below).
 
 **`np.nested_iters(op, axes, flags=null, op_flags=null, op_dtypes=null, order='K', casting="safe",
 buffersize=0)` → `NDIterator[]`** — the port of NumPy's `NpyIter_NestedIters` (`nditer_pywrap.c`).
@@ -3407,10 +3437,13 @@ future cache added there re-breaks it silently. That is the core-wide change, an
 The NumSharp-idiomatic fast paths — the typed iterators below, `np.evaluate`, vectorized ops — avoid
 the per-element view entirely instead.
 
-**Gate:** unit tests only (`Indexing/np.ndindex.Test.cs`, `Indexing/np.ndenumerate.Test.cs`,
-`APIs/np.nditer.Test.cs` — 83 tests from probed NumPy 2.4.2 output). These are iteration PROTOCOLS,
-not value-producing ops, so they have no `(dtype, shape, bytes)` result for the differential-fuzz
-corpus to bit-compare and are deliberately absent from `gen_oracle.py`/`OpRegistry.cs`.
+**Gates:** unit tests from probed NumPy 2.4.2 output — `Indexing/np.ndindex.Test.cs` (22),
+`Indexing/np.ndenumerate.Test.cs` (26), `APIs/np.nditer.Test.cs` (47), `APIs/np.nditer.NumPyParity.Test.cs` (24) and
+`APIs/np.nditer.{Construction,Protocol,Strings}.Test.cs` (51 / 94 / 59, 2026-10-09) — and the oracle tiers that
+materialize the protocols into comparable results: `iter.jsonl` (value streams, multi_index, c_index / f_index and
+external-loop chunk lengths), `nditer_construct.jsonl` and `nditer_protocol.jsonl` (state traces as text). The unit
+suites hold what a trace does not reach: the setters, copies, closed-state errors, buffered write-back and the
+`no_broadcast` / `grow_inner` rules.
 
 ### Typed iteration — `np.nditer<T>` / `np.nditer_chunks<T>` (NumSharp extension)
 

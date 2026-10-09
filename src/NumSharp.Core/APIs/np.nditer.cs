@@ -39,7 +39,8 @@ namespace NumSharp
         ///     <c>"safe"</c> (default), <c>"same_kind"</c>, <c>"unsafe"</c>.
         /// </param>
         /// <param name="op_axes">Per-operand list of axes, mapping iterator dimensions to operand dimensions (-1 = newaxis).</param>
-        /// <param name="itershape">The desired shape of the iterator.</param>
+        /// <param name="itershape">The desired shape of the iterator; a negative entry is deduced from the operands, and its
+        ///     length must equal the <paramref name="op_axes"/> entries' (without <paramref name="op_axes"/> it sets the rank).</param>
         /// <param name="buffersize">Buffer size to use when buffering is enabled; 0 selects the default.</param>
         /// <returns>The iterator (dispose it: <see cref="NDIterator.close"/> resolves its write-backs).</returns>
         /// <exception cref="ValueError">NumPy's argument and flag errors (verbatim texts).</exception>
@@ -214,11 +215,13 @@ namespace NumSharp
             /// <summary>
             ///     The port of NumPy's <c>npyiter_init</c> (<c>nditer_pywrap.c</c>) and of the descriptor half of
             ///     <c>NpyIter_AdvancedNew</c>: the arguments are converted in NumPy's order (flags, order, casting, op_flags,
-            ///     op_dtypes, op_axes), the global flags are checked, every operand is prepared in turn
+            ///     op_dtypes, op_axes) and the itershape rank rule applied, the op_axes entries checked
+            ///     (<c>npyiter_check_op_axes</c>), the global flags checked, every operand prepared in turn
             ///     (<c>npyiter_prepare_operands</c>: its flags, its writeability, its size, its requested dtype adapted to it),
-            ///     the dtypes an allocation or <c>common_dtype</c> needs are resolved (<c>npyiter_get_common_dtype</c>), and the
-            ///     iterator is built over the resulting DESCRIPTORS — which is what lets it iterate fixed-width strings and run
-            ///     NumPy's cast checks and copy routes.
+            ///     the iteration shape broadcast and checked (<c>npyiter_fill_axisdata</c>'s shape pass, then its stride pass's
+            ///     refusals), the dtypes an allocation or <c>common_dtype</c> needs resolved (<c>npyiter_get_common_dtype</c>),
+            ///     and the iterator built over the resulting DESCRIPTORS and the broadcast shape — which is what lets it iterate
+            ///     fixed-width strings and run NumPy's cast checks and copy routes.
             /// </summary>
             /// <param name="op">The operands; a null entry is an output for the iterator to allocate.</param>
             /// <param name="flags">The global flags.</param>
@@ -227,9 +230,12 @@ namespace NumSharp
             /// <param name="order">The iteration order.</param>
             /// <param name="casting">The casting rule.</param>
             /// <param name="op_axes">The per-operand axis maps (null entries for natural broadcasting).</param>
-            /// <param name="itershape">The iteration shape (with <paramref name="op_axes"/>).</param>
+            /// <param name="itershape">The iteration shape, or null: a negative entry is deduced from the operands; without
+            ///     <paramref name="op_axes"/> it sets the rank and every operand is right-aligned into it.</param>
             /// <param name="buffersize">The buffer size (0 = <c>np.getbufsize()</c>).</param>
-            /// <exception cref="ValueError">NumPy's argument and flag errors (verbatim texts).</exception>
+            /// <exception cref="ValueError">NumPy's argument, flag, op_axes, shape-pass and stride-pass errors (verbatim
+            ///     texts: a broadcast mismatch, an invalid or duplicate axis, a stretched no_broadcast operand, a refused
+            ///     reduction).</exception>
             /// <exception cref="TypeError">A malformed <paramref name="op_dtypes"/> sequence, a refused cast, or a cast
             ///     operand neither copied nor buffered.</exception>
             /// <exception cref="StringComputationNotSupportedException">A conversion between text and numbers that NumPy
@@ -262,12 +268,22 @@ namespace NumSharp
                 var perOpFlags = ParseOpFlags(op_flags, op, nop);
                 var requests = ConvertDtypes(op_dtypes, nop);
                 int oaNDim = ConvertOpAxes(op_axes, nop);
+                // npyiter_init's itershape rule: an itershape alone fixes the iterator rank (every operand unmapped); with
+                // op_axes the two ranks must agree. The engine keeps the caller's op_axes rank (it ignores it without maps).
+                int shapeNDim = ApplyItershapeRank(oaNDim, itershape);
 
-                // NpyIter_AdvancedNew: npyiter_check_global_flags, then each operand in turn, then the common dtype.
+                // NpyIter_AdvancedNew: npyiter_check_op_axes, npyiter_check_global_flags, then each operand in turn, then
+                // npyiter_fill_axisdata (its shape pass, then its stride pass's refusals), then the common dtype.
+                CheckOpAxes(op_axes, op, nop, shapeNDim);
                 CheckGlobalFlags(globalFlags);
                 var descrs = PrepareOperands(op, perOpFlags, requests, globalFlags, nop);
-                if (op_axes == null && itershape == null)
-                    CheckBroadcast(op, nop);
+                // The broadcast shape is computed ONCE, here, by NumPy's shape pass (negative itershape entries deduced), and
+                // handed to the engine, which then skips its own broadcast and validation (they repeated this work: +30–170 ns
+                // a construction). A 0-d iteration hands over nothing; the engine's own pass is trivial there.
+                int maxRank = shapeNDim >= 0 ? shapeNDim : MaxOperandRank(op, nop);
+                long[] broadcast = maxRank == 0 ? Array.Empty<long>() : new long[maxRank];
+                FillAxisDataShapePass(op, nop, op_axes, itershape, broadcast);
+                NDIterRef.ThrowStridePassRefusals(nop, op, perOpFlags, globalFlags, broadcast, op_axes);
                 ResolveCommonDtype(op, perOpFlags, descrs, requests, globalFlags, nop);
 
                 // The engine still takes the type codes (its allocation fallback); the descriptors carry the widths.
@@ -277,7 +293,7 @@ namespace NumSharp
 
                 var iter = NDIterRef.AdvancedNew(
                     nop, op, globalFlags, npyOrder, npyCasting, perOpFlags, op_typecodes,
-                    oaNDim, op_axes, itershape, buffersize, descrs);
+                    oaNDim, op_axes, broadcast, buffersize, descrs, shapeValidated: true);
 
                 _state = iter.Detach(out var detachedOperands, out var detachedWritebacks, out var detachedReleaseOnly);
                 _operands = detachedOperands;
@@ -482,6 +498,98 @@ namespace NumSharp
                 return oaNDim;
             }
 
+            /// <summary>
+            ///     NumPy's <c>itershape</c> rule at the end of <c>npyiter_init</c>: an <c>itershape</c> without <c>op_axes</c> sets
+            ///     the iterator rank to its length with every operand unmapped; with <c>op_axes</c> the two ranks must agree.
+            /// </summary>
+            /// <param name="oaNDim">The op_axes rank from <see cref="ConvertOpAxes"/>, or -1 when op_axes was not given.</param>
+            /// <param name="itershape">The requested iteration shape, or null.</param>
+            /// <returns>The rank NumPy's construction works with: the op_axes rank, else the itershape length, else -1 (the
+            ///     operands decide).</returns>
+            /// <exception cref="ValueError">"'op_axes' and 'itershape' must have the same number of entries equal to the
+            ///     iterator ndim" when both are given with different lengths (it was accepted, and the engine iterated the
+            ///     itershape's rank).</exception>
+            private static int ApplyItershapeRank(int oaNDim, long[] itershape)
+            {
+                if (itershape is null)
+                    return oaNDim;
+                if (oaNDim == -1)
+                    return itershape.Length;
+                if (oaNDim != itershape.Length)
+                    throw new ValueError(
+                        "'op_axes' and 'itershape' must have the same number of entries equal to the iterator ndim");
+                return oaNDim;
+            }
+
+            /// <summary>
+            ///     NumPy's <c>NPY_MAXDIMS</c>, used ONLY to reproduce <c>npyiter_check_op_axes</c>' "contained invalid values"
+            ///     refusal for an axis no NumPy operand can have. NumSharp has no dimension cap, so an axis past it that the
+            ///     operand does have is accepted.
+            /// </summary>
+            private const int NumPyMaxDims = 64;
+
+            /// <summary>
+            ///     NumPy's <c>npyiter_check_op_axes</c>, run before the global flags are checked: per mapped operand, an axis past
+            ///     NumPy's dimension limit and an axis named twice are refused. Newaxis (negative) entries may repeat, and an
+            ///     explicit reduction entry counts as the axis it encodes.
+            /// </summary>
+            /// <param name="op_axes">The per-operand axis maps, or null.</param>
+            /// <param name="op">The operands (an axis past NumPy's limit is refused only when the operand lacks it).</param>
+            /// <param name="nop">The operand count.</param>
+            /// <param name="shapeNDim">The iterator rank (the rank an operand to be allocated gets).</param>
+            /// <exception cref="ValueError">NumPy's texts: "The 'op_axes' provided to the iterator constructor for operand {i}
+            ///     contained invalid values {axis}" and "... contained duplicate value {axis}".</exception>
+            /// <remarks>
+            ///     A duplicate used to be accepted: <c>op_axes=[[0, 0]]</c> over a <c>(3, 3)</c> array iterated a (3, 3) grid
+            ///     reading only the first column's values. The scan compares each entry with the earlier ones (a map is a few
+            ///     entries long), so no table sized by the largest axis is allocated.
+            /// </remarks>
+            private static void CheckOpAxes(int[][] op_axes, NDArray[] op, int nop, int shapeNDim)
+            {
+                if (op_axes is null)
+                    return;
+                for (int iop = 0; iop < nop; iop++)
+                {
+                    var axes = op_axes[iop];
+                    if (axes is null)
+                        continue;
+                    int operandRank = op[iop]?.ndim ?? shapeNDim;
+                    for (int idim = 0; idim < axes.Length; idim++)
+                    {
+                        int i = NDIterUtils.GetOpAxis(axes[idim], out _);
+                        if (i < 0)
+                            continue;
+                        if (i >= NumPyMaxDims && i >= operandRank)
+                            throw new ValueError(
+                                $"The 'op_axes' provided to the iterator constructor for operand {iop} contained invalid values {i}");
+                        for (int prev = 0; prev < idim; prev++)
+                        {
+                            if (NDIterUtils.GetOpAxis(axes[prev], out _) == i)
+                                throw new ValueError(
+                                    $"The 'op_axes' provided to the iterator constructor for operand {iop} contained duplicate value {i}");
+                        }
+                    }
+                }
+            }
+
+            /// <summary>NumPy's <c>npyiter_calculate_ndim</c> without op_axes: the largest operand rank (0 when none).</summary>
+            /// <param name="op">The operands (null entries are outputs to allocate and take no part).</param>
+            /// <param name="nop">The operand count.</param>
+            /// <returns>The largest rank among the given operands.</returns>
+            private static int MaxOperandRank(NDArray[] op, int nop)
+            {
+                int ndim = 0;
+                for (int i = 0; i < nop; i++)
+                {
+                    // ndim reads the storage's Shape (a struct copy): once per operand.
+                    int rank = op[i]?.ndim ?? 0;
+                    if (rank > ndim)
+                        ndim = rank;
+                }
+
+                return ndim;
+            }
+
             /// <summary>NumPy's <c>npyiter_check_global_flags</c>: the global flag combinations it refuses.</summary>
             /// <param name="flags">The global flags.</param>
             /// <exception cref="ValueError">Both indices; an external loop with a tracked index; <c>ranged</c> with an
@@ -592,57 +700,154 @@ namespace NumSharp
             }
 
             /// <summary>
-            ///     The broadcast check of NumPy's <c>npyiter_fill_axisdata</c> for the plain form (no <c>op_axes</c>, no
-            ///     <c>itershape</c>): the operands' shapes, right-aligned, must agree wherever neither extent is 1 — raised with
-            ///     NumPy's text, which lists every operand's shape followed by a space.
+            ///     The shape pass of NumPy's <c>npyiter_fill_axisdata</c>: the operands broadcast together, each through its
+            ///     <c>op_axes</c> map when it has one, into the iteration shape — which starts as the <c>itershape</c> (a negative
+            ///     entry deduced from the operands) — and every refusal raised with NumPy's text, in NumPy's order (operands in
+            ///     order, each operand's axes outermost first).
             /// </summary>
             /// <param name="op">The operands (null entries are outputs to allocate and take no part).</param>
             /// <param name="nop">The operand count.</param>
-            /// <exception cref="ValueError"><c>operands could not be broadcast together with shapes (3,) (4,) </c>.</exception>
+            /// <param name="op_axes">The per-operand axis maps, or null.</param>
+            /// <param name="itershape">The requested iteration shape, or null.</param>
+            /// <param name="broadcast">Receives the broadcast iteration shape. Its length IS the iterator rank (NumPy's
+            ///     <c>npyiter_calculate_ndim</c>: the rank from <see cref="ApplyItershapeRank"/>, else the operands' largest).</param>
+            /// <exception cref="ValueError">NumPy's shape-pass texts: "input operand has more dimensions than allowed by the
+            ///     axis remapping" (an unmapped operand of a higher rank); "Iterator input op_axes[{i}][{j}] (=={axis}) is not a
+            ///     valid axis of op[{i}], which has {n} dimensions " (trailing space; NumPy prints the entry's index REVERSED,
+            ///     <c>ndim - j - 1</c>, which is reproduced); and the broadcast error of <see cref="BroadcastError"/>.</exception>
             /// <remarks>
-            ///     The engine checks the same broadcast again with its own (house) wording; this check runs first, at NumPy's
-            ///     point in the construction — after every per-operand check, before the common dtype.
+            ///     <para>
+            ///     This is where np.nditer first knows the iteration shape, so it is also what lets an <c>itershape</c> carry
+            ///     negative ("deduce it") entries: the engine takes the shape computed here. The engine checks the same broadcast
+            ///     again with its own (house) wording, which np.nditer never reaches: this pass runs first, at NumPy's point in
+            ///     the construction — after every per-operand check, before the common dtype.
+            ///     </para>
+            ///     <para>
+            ///     An <c>itershape</c> entry of 1 must stay 1: an operand extent that broadcasts it to more is a broadcast error
+            ///     (<c>itershape=(1, 3)</c> over a <c>(2, 3)</c> operand), checked after every operand, as NumPy checks it.
+            ///     </para>
             /// </remarks>
-            private static void CheckBroadcast(NDArray[] op, int nop)
+            private static void FillAxisDataShapePass(NDArray[] op, int nop, int[][] op_axes, long[] itershape,
+                                                      Span<long> broadcast)
             {
-                int nd = 0;
-                for (int i = 0; i < nop; i++)
-                    if (op[i] is not null && op[i].ndim > nd)
-                        nd = op[i].ndim;
+                int ndim = broadcast.Length;
+                for (int idim = 0; idim < ndim; idim++)
+                    broadcast[idim] = itershape is null || itershape[idim] < 0 ? 1 : itershape[idim];
 
-                // The running broadcast extents; on the stack for any common rank (no NPY_MAXDIMS cap, so the heap past it).
-                Span<long> b = nd <= 32 ? stackalloc long[nd] : new long[nd];
-                for (int d = 0; d < nd; d++)
-                    b[d] = 1;
-                bool ok = true;
-                for (int i = 0; i < nop && ok; i++)
+                for (int iop = 0; iop < nop; iop++)
                 {
-                    if (op[i] is null)
+                    var operand = op[iop];
+                    if (operand is null)
                         continue;
-                    var dims = op[i].Shape.dimensions;
-                    int shift = nd - dims.Length;
-                    for (int k = 0; k < dims.Length; k++)
+                    var dims = operand.Shape.dimensions;
+                    int ondim = dims.Length;
+                    var axes = op_axes?[iop];
+                    if (axes is null)
                     {
-                        long e = dims[k];
-                        if (e == 1)
-                            continue;
-                        if (b[shift + k] == 1)
-                            b[shift + k] = e;
-                        else if (b[shift + k] != e)
+                        // Unmapped (also every operand of an itershape-only call): right-aligned against the iterator rank.
+                        if (ondim > ndim)
+                            throw new ValueError("input operand has more dimensions than allowed by the axis remapping");
+                        for (int idim = 0; idim < ondim; idim++)
                         {
-                            ok = false;
-                            break;
+                            ref long bshape = ref broadcast[idim + ndim - ondim];
+                            long extent = dims[idim];
+                            if (bshape == 1)
+                                bshape = extent;
+                            else if (bshape != extent && extent != 1)
+                                throw BroadcastError(op, nop, ndim, op_axes, itershape);
+                        }
+                    }
+                    else
+                    {
+                        for (int idim = 0; idim < ndim; idim++)
+                        {
+                            // A reduction entry broadcasts as the axis it encodes here (its length is the stride pass's).
+                            int i = NDIterUtils.GetOpAxis(axes[idim], out _);
+                            if (i < 0)
+                                continue;
+                            if (i >= ondim)
+                                throw new ValueError(
+                                    $"Iterator input op_axes[{iop}][{ndim - idim - 1}] (=={i}) is not a valid axis of op[{iop}], " +
+                                    $"which has {ondim} dimensions ");
+                            ref long bshape = ref broadcast[idim];
+                            long extent = dims[i];
+                            if (bshape == 1)
+                                bshape = extent;
+                            else if (bshape != extent && extent != 1)
+                                throw BroadcastError(op, nop, ndim, op_axes, itershape);
                         }
                     }
                 }
-                if (ok)
-                    return;
 
-                var sb = new System.Text.StringBuilder("operands could not be broadcast together with shapes ");
-                for (int i = 0; i < nop; i++)
-                    if (op[i] is not null)
-                        sb.Append(op[i].Shape.ToPythonTuple()).Append(' ');
-                throw new ValueError(sb.ToString());
+                if (itershape is not null)
+                {
+                    for (int idim = 0; idim < ndim; idim++)
+                    {
+                        if (itershape[idim] == 1 && broadcast[idim] != 1)
+                            throw BroadcastError(op, nop, ndim, op_axes, itershape);
+                    }
+                }
+            }
+
+            /// <summary>
+            ///     NumPy's <c>broadcast_error</c> text: every given operand's shape, followed by a space — or, once
+            ///     <c>op_axes</c> or <c>itershape</c> is given, "remapped shapes [original->remapped]" with each mapped operand
+            ///     as <c>original->remapped</c> and the requested shape after.
+            /// </summary>
+            /// <param name="op">The operands (null entries are skipped).</param>
+            /// <param name="nop">The operand count.</param>
+            /// <param name="ndim">The iterator rank.</param>
+            /// <param name="op_axes">The per-operand axis maps, or null.</param>
+            /// <param name="itershape">The requested iteration shape, or null.</param>
+            /// <returns>The error to throw.</returns>
+            /// <remarks>
+            ///     The texts, as NumPy 2.4.2 prints them: "operands could not be broadcast together with shapes (2,) (3,) ";
+            ///     "operands could not be broadcast together with remapped shapes [original->remapped]: (2,3)->(2,3) (4,3) "
+            ///     (an unmapped operand prints only its shape); "... [original->remapped]: (2,3)  and requested shape (4,3)"
+            ///     (the requested shape after the separator's space, so two spaces). A remapped shape lists the operand extent of
+            ///     each map entry in order, an entry naming no operand axis as NumPy's unknown dimension (dropped when leading,
+            ///     <c>newaxis</c> after), and a negative itershape entry prints the same way. An itershape always arrives with
+            ///     op_axes from np.nditer (NumPy's wrapper fills op_axes with None entries), so NumPy's plain "shapes ... and
+            ///     requested shape" form, reachable only from its C API, does not occur.
+            /// </remarks>
+            private static ValueError BroadcastError(NDArray[] op, int nop, int ndim, int[][] op_axes, long[] itershape)
+            {
+                var sb = new System.Text.StringBuilder();
+                if (op_axes is null && itershape is null)
+                {
+                    sb.Append("operands could not be broadcast together with shapes ");
+                    for (int iop = 0; iop < nop; iop++)
+                    {
+                        if (op[iop] is not null)
+                            sb.Append(NumSharp.Shape.ConvertShapeToString(op[iop].Shape.dimensions)).Append(' ');
+                    }
+
+                    return new ValueError(sb.ToString());
+                }
+
+                sb.Append("operands could not be broadcast together with remapped shapes [original->remapped]: ");
+                var remdims = new long[ndim];
+                for (int iop = 0; iop < nop; iop++)
+                {
+                    if (op[iop] is null)
+                        continue;
+                    var dims = op[iop].Shape.dimensions;
+                    var axes = op_axes?[iop];
+                    sb.Append(NumSharp.Shape.ConvertShapeToString(dims)).Append(axes is null ? " " : "->");
+                    if (axes is null)
+                        continue;
+                    for (int idim = 0; idim < ndim; idim++)
+                    {
+                        int i = NDIterUtils.GetOpAxis(axes[idim], out _);
+                        remdims[idim] = i >= 0 && i < dims.Length ? dims[i] : -1;
+                    }
+
+                    sb.Append(NumSharp.Shape.ConvertShapeToString(remdims)).Append(' ');
+                }
+
+                if (itershape is not null)
+                    sb.Append(" and requested shape ").Append(NumSharp.Shape.ConvertShapeToString(itershape));
+                return new ValueError(sb.ToString());
             }
 
             /// <summary>NumPy's <c>npyiter_check_per_op_flags</c>, in its order and with its texts.</summary>

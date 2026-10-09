@@ -191,8 +191,12 @@ namespace NumSharp.Tests.Backends.Iterators
         // NumPy behavior: ValueError with message about non-broadcastable operand
         // =====================================================================
 
+        /// <summary>
+        ///     The engine raises NumPy's ValueError, text verbatim, for a stretched <c>no_broadcast</c> operand. It raised
+        ///     <see cref="InvalidOperationException"/> naming the shape <c>(3)</c> until 2026-10-09; this test pinned that type
+        ///     while its own comment quoted NumPy's ValueError.
+        /// </summary>
         [TestMethod]
-        [ExpectedException(typeof(InvalidOperationException))]
         public void NoBroadcast_ShapeMismatch_Throws()
         {
             // NumPy 2.4.2:
@@ -203,15 +207,20 @@ namespace NumSharp.Tests.Backends.Iterators
             var a = np.arange(3);
             var b = np.arange(6).reshape(2, 3);
 
-            using var it = NDIterRef.MultiNew(
-                2, new[] { a, b },
-                NDIterGlobalFlags.None,
-                NPY_ORDER.NPY_KEEPORDER,
-                NPY_CASTING.NPY_NO_CASTING,
-                new[] {
-                    NDIterPerOpFlags.READONLY | NDIterPerOpFlags.NO_BROADCAST,
-                    NDIterPerOpFlags.READONLY
-                });
+            Action act = () =>
+            {
+                using var it = NDIterRef.MultiNew(
+                    2, new[] { a, b },
+                    NDIterGlobalFlags.None,
+                    NPY_ORDER.NPY_KEEPORDER,
+                    NPY_CASTING.NPY_NO_CASTING,
+                    new[] {
+                        NDIterPerOpFlags.READONLY | NDIterPerOpFlags.NO_BROADCAST,
+                        NDIterPerOpFlags.READONLY
+                    });
+            };
+            act.Should().Throw<ValueError>()
+               .WithMessage("non-broadcastable operand with shape (3,) doesn't match the broadcast shape (2,3)");
         }
 
         [TestMethod]

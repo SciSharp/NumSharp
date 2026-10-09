@@ -101,14 +101,18 @@ namespace NumSharp.Tests.APIs
             StringAssert.Contains(e3.Message, "An axis is out of bounds");
         }
 
+        /// <summary>
+        ///     An axis past the operand's rank is refused when that level's iterator is built, with NumPy's shape-pass
+        ///     ValueError (<c>npyiter_fill_axisdata</c>, trailing space included). It used to be the engine's
+        ///     IncorrectShapeException with a house text; np.nditer's wrapper now runs NumPy's shape pass first.
+        /// </summary>
         [TestMethod]
         public void OutOfRangeAxis_Rejected()
         {
-            // Axis past the operand's ndim: NumSharp rejects at iterator construction (IncorrectShapeException)
-            // where NumPy raises ValueError("...is not a valid axis of op[0]..."). Both refuse; text/type differ.
             var a = np.arange(12).reshape(2, 3, 2);
-            Assert.ThrowsException<IncorrectShapeException>(
+            var e = Assert.ThrowsException<ValueError>(
                 () => np.nested_iters(a, new[] { new[] { 0 }, new[] { 9 } }));
+            Assert.AreEqual("Iterator input op_axes[0][0] (==9) is not a valid axis of op[0], which has 3 dimensions ", e.Message);
         }
 
         [TestMethod]
