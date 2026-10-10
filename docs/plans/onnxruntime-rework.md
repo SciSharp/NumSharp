@@ -1,0 +1,254 @@
+# `NumSharp.Interop.OnnxRuntime`: rework plan after the 2026-10-09 review
+
+**Written:** 2026-10-10 · **Branch:** `strings` (the work commits directly on it; no rebase onto `journey4` now) ·
+**Review base:** `journey4` `0e88dd53` (the bridge files are identical on `strings` `cd9c53e6`) ·
+**Package state:** unreleased, so **no backward compatibility is kept** (owner's decision).
+
+This plan holds the owner's decision for every item of the review, the design that follows from the decisions,
+the work packages, and the items that are deferred with the owner's design notes. It replaces the recommended
+order of `onnxruntime-gap-review.md` (2026-09-23), whose gap ids (G1–G13) appear here in parentheses.
+
+## 1. Evidence the review produced
+
+| Check | Result |
+|---|---|
+| Suite at the review base | 209 / 209 on net8.0 and net10.0 with ORT 1.16.0 (the floor); 209 / 209 with 1.29.0 and 1.31.0 |
+| Coverage (coverlet, Debug, net10.0) | 89.2 % lines (1,027 / 1,151), 83.3 % branches (490 / 588) |
+| Mutation sample | 24 planted bugs, 20 caught, 4 survive (T1 below) |
+| Probes | about 150 checks in real sessions on ORT 1.31.0, 13 scratch models |
+
+How to repeat it without the live tree: `git archive HEAD src tools test/NumSharp.Tests.Interop.OnnxRuntime
+test/NumSharp.Tests/Utilities/GcQuiescence.cs Directory.Build.props Open.snk LICENSE global.json .editorconfig
+docs/website-src/images/numsharp.icon128.png | tar -x -C <scratch>` builds standalone. Coverage: add
+`coverlet.collector` to the snapshot's test project and collect with `<Include>[NumSharp.Interop.OnnxRuntime]*</Include>`.
+A mutant that removes a `GC.KeepAlive` kills the test host: the run then reports "Failed: 0" over fewer tests,
+which is a kill, not a survival.
+
+## 2. Decisions
+
+Status: `todo`, `done` (with the commit), `deferred`, `closed` (no change by decision).
+
+### 2.1 Validity
+
+| ID | Item | Decision | Status |
+|---|---|---|---|
+| V1 (G1) | Fortran-order `AsDenseTensor<T>`: ORT refuses it through `NamedOnnxValue` and reads it transposed through `Memory` | The export verbs and `Run` get the three modes of the pythonnet codec as `OnnxCodecMode` (`Auto`, `View`, `Copy`). `Auto` shares when ORT can read the buffer and copies otherwise. The `reverseStride` share is removed. Design in §3.1. | todo |
+| V2 | `Postprocess.Softmax` / `LogSoftmax` / `Sigmoid` wrap for integer input (`Softmax(uint8 [1,3])` = `[NaN, 0]`) | Promote bool and integer input to NumPy's exp tier before the computation (bool, int8, uint8 → float16; int16, uint16, char → float32; wider → float64). Result dtypes do not change. Tests check values. | todo |
+| V2b | `LogSoftmax([inf, 1])` = `[NaN, NaN]`; SciPy gives `[nan, -inf]` | Follow `scipy.special.log_softmax`: a non-finite row maximum is replaced by 0 before the shift. | todo |
+| V3 | `nd.AsOrtValue().Value.AsNDArray()` reads another array's memory after the handle and the source are disposed | A view of an `OrtValue` that the package made is a counted NumSharp alias of the buffer (as `Tensor.AsNDArray()` already is). | todo |
+| V4 | The read-only flag is lost through `Value.AsNDArray()` and `Tensor.AsNDArray()` | Those views inherit the source's read-only flag. A read-only array stays a legal model input; the documents say that ORT has no read-only tensors. | todo |
+| V5 | A repeated output name loses one array until a collection | Accepted as it is. | closed |
+| V6 | `casting` is checked only when a cast is necessary; `"no"` still converts Decimal | `Run` always validates the string. Decimal and Char follow NumSharp's `can_cast` table: the default `"safe"` refuses a Decimal input (`"same_kind"` permits it); Char → UInt16 stays permitted under `"safe"` and stays zero-copy. | todo |
+| V7 | `TryToTensorElementType` / `ToTensorElementClrType` throw for a datetime64 / timedelta64 descriptor | The `Try` form returns `false`, `ToTensorElementClrType` returns `null`, `ToTensorElementType` throws the package's own message. A non-native descriptor keeps mapping as native. | todo |
+| V8a | A sparse-tensor model input passes the checks of `Run` and fails inside ORT | Deferred. | deferred |
+| V8b (G7) | `Run` refuses an `optional(tensor)` input with a wrong hint | `Run` unwraps the declaration and feeds a plain tensor. | todo |
+| V9 | A pre-allocated output that overlaps an input gives wrong values (MatMul 64×64: 3,072 of 4,096 elements) | `Auto`: `RunInto` feeds a copy of the overlapping input, as NumPy does for `out=`. `View`: it throws. Two outputs in one array always throw. | todo |
+| V10a | `AsNDArray(value, ownsValue: true)` can dispose `value` when it throws | The code follows the docs: a throw never disposes `value`. | todo |
+| V10b | Every view adds full-size GC memory pressure | Only a view that owns its `OrtValue` adds pressure, once. A copy needs none from the bridge (Core's allocator reports it). | todo |
+| V11a | `session.Run(inputs, null)` is CS0121 | The pre-allocated-outputs overload becomes `RunInto`. | todo |
+| V11b | `NamedOnnxValue.ToNDArray` refuses `DenseTensor<char>` and `DenseTensor<Half>` | Accept both. | todo |
+| V11c | `Postprocess` exists 2 times (ONNX bridge, ML.NET bridge) | One source file compiled into both bridges; the 2 public names stay; a caller with both bridges uses a `using` alias. | todo |
+| V11d | `Postprocess.Argmax(x2d, axis: -3)` returns a result | `Postprocess.Argmax` checks its axis, as `TopK` does. | todo |
+| V11e | Unused internal members | Kept: each one was checked and is correct. | closed |
+
+### 2.2 Completeness
+
+| ID | Item | Decision | Status |
+|---|---|---|---|
+| C1 (G3) | No owner for the pins of `OrtIoBinding`, `AddInitializer`, `CreateSequence` | Deferred. Owner's note: consider wrapping `Run` (overloads) so that the wrapper holds the references. | deferred |
+| C2a (G4, G11) | `Run` cannot return non-tensor outputs; the dictionary result is not disposable | Deferred. Owner's note: consider overloads and typed struct support. Text outputs are covered by S1. | deferred |
+| C2b (G5) | String-keyed maps are refused | Covered by S1: the keys come back as a text `NDArray`. | todo (S1) |
+| C2c (G6) | The `Run` tier accepts only `NDArray` inputs | Deferred. Owner's note: a `Run<T>(T inputs) where T : struct` with an interface that yields the `Dictionary<string, OnnxInput>` from the struct values; the default implementation is reflection with statically cached getters (expression trees or IL generation). Text inputs are covered by S1. | deferred |
+| C2d (G7) | `Run` refuses an overridable initializer | Accept: look a name up in `InputMetadata`, then in `OverridableInitializerMetadata`. | todo |
+| C3a (G8) | No `RunAsync` | Add it on ORT's own native async, for ORT 1.30.0 and newer only (older versions do not pin their argument arrays). Design in §3.6. | todo |
+| C3b (G9) | The non-tensor readers copy each element 2 times | Each result becomes a view that owns ORT's copy. | todo |
+| C3c (G10) | `IsCpuAccessible` refuses `QnnHtpShared` and `CpuAligned4K` | Ask ORT for the device memory kind when the loaded ORT has `GetDeviceMemoryType`; the name list stays as the fallback. | todo |
+| C3e (G12) | BFloat16 is refused | Kept. | closed |
+| S1 (new) | Text crossing, possible because `strings` gives `NDArray` a text dtype | Build all of it now on the fixed-width `S` / `U` dtypes, as a copy: `ToNDArray`, the map readers, `ToOrtValue`, `AsOrtValue` and `Run` take and return text. Leave a prominent TODO for the variable-width `StringDType` (phase 3 of the string plan). | todo |
+
+### 2.3 Tests, documents, CI
+
+| ID | Item | Decision | Status |
+|---|---|---|---|
+| T1 | 4 planted bugs pass the suite | Add all 4 tests: a `WeakReference` test for the rooting, an end-to-end device-memory refusal, and 2 disposal tests that read ORT's private `_handle` by reflection (Inconclusive if a future ORT renames it). | todo |
+| T2 | Reachable behaviour without a test | Add a test for each listed path; `gen_onnx_models.py` gets the models they need. | todo |
+| D1 | Stale test counts in the README and the docs page | Remove the counts there. `CLAUDE.md` keeps the one number. | todo |
+| D2 (G13) | "Current" ORT is 1.29.0 in CI and the documents; NuGet has 1.31.0 | 1.31.0 everywhere: CI, README, docs page, `CLAUDE.md`, and the `refs/onnxruntime` submodule at `v1.31.0`. | todo |
+| D3 (G13) | The csproj comment promises `FileLoadException` for an older ORT | Correct it: the 1.16.0 assembly has AssemblyVersion 0.0.0.0, so only the NuGet range sets the floor. | todo |
+| D4 | 9 XML-doc warnings that CI hides | Skipped as an item. Doc comments that this work rewrites are written correctly. | closed |
+| D5 | Public methods without `<param>` / `<returns>` text | Skipped as an item. Code that this work writes or edits is documented in full (the standing rule). | closed |
+
+## 3. Design
+
+### 3.1 `OnnxCodecMode` (V1)
+
+```csharp
+public enum OnnxCodecMode
+{
+    Auto = 0,   // a zero-copy view when the dtype and the layout permit it, otherwise an independent copy
+    View = 1,   // always a zero-copy view; a crossing that needs a copy throws
+    Copy = 2,   // always an independent copy
+}
+```
+
+Same member names and meanings as pythonnet's `NumpyCodecMode`. One enum serves both directions.
+
+**A view is possible** when ORT can read the caller's buffer as the tensor: the dtype crosses bit for bit (the 12
+numeric dtypes and Char → UInt16) and the array is C-contiguous. A read-only array qualifies.
+
+| Source | `Auto` | `View` | `Copy` |
+|---|---|---|---|
+| C-contiguous, bit-exact dtype | view | view | copy |
+| not C-contiguous (Fortran, stepped, reversed, transposed, broadcast) | C-order copy | throws | copy |
+| Decimal (no ONNX type) | float64 copy | throws | float64 copy |
+| text (`S` / `U`, see §3.5) | ORT string tensor (a copy) | throws | ORT string tensor |
+| Complex | throws in every mode (no ONNX type; a copy cannot repair it) | | |
+| more elements than a `DenseTensor` holds (`AsDenseTensor` only) | throws in every mode | | |
+| released buffer | `ObjectDisposedException` in every mode | | |
+
+Entry points that take `mode` (default `Auto`):
+
+```csharp
+OrtTensor      AsOrtValue(this NDArray source, OnnxCodecMode mode = OnnxCodecMode.Auto)
+OrtTensor<T>   AsDenseTensor<T>(this NDArray source, OnnxCodecMode mode = OnnxCodecMode.Auto)
+NDArray        AsNDArray(this OrtValue value, bool ownsValue = false, OnnxCodecMode mode = OnnxCodecMode.Auto)
+NDArray        AsNDArray<T>(this DenseTensor<T> tensor, OnnxCodecMode mode = OnnxCodecMode.Auto)
+session.Run(…, OnnxCodecMode mode = OnnxCodecMode.Auto)        // every Run / RunInto / RunAsync form: the INPUT mode
+```
+
+- A copy that an export verb makes lives in a temporary that the handle owns (the existing Decimal mechanism).
+  ORT's writes then land in the temporary. `OrtTensor.IsView` / `OrtTensor<T>.IsView` say which case a handle is.
+- `ToOrtValue` and `ToDenseTensor<T>` stay: the plain copy verbs that return a bare value with no handle.
+- The `reverseStride` export is removed: no ORT route consumes it. The import of a column-major tensor that a
+  caller built stays.
+- Import verbs: a copy helps only for a text tensor (`Auto` copies it, `View` throws). Device memory, tensors of
+  2 GB or more and non-tensor values stay refused in every mode.
+- `Run` inputs: `Auto` is today's behaviour. `View` throws when an input needs a cast, a conversion or a C-order
+  copy, so a hot loop can prove that it copies nothing. `Copy` feeds a copy of every input.
+
+### 3.2 The `Run` tier (V6, V8b, V9, V11a, C2d)
+
+```csharp
+NDArray Run(this InferenceSession session, NDArray input, RunOptions runOptions = null,
+            string casting = "safe", OnnxCodecMode mode = OnnxCodecMode.Auto)
+NDArray Run(this InferenceSession session, string inputName, NDArray input, string outputName,
+            RunOptions runOptions = null, string casting = "safe", OnnxCodecMode mode = OnnxCodecMode.Auto)
+IReadOnlyDictionary<string, NDArray> Run(this InferenceSession session, IReadOnlyDictionary<string, NDArray> inputs,
+            IReadOnlyCollection<string> outputNames = null, RunOptions runOptions = null, string casting = "safe",
+            bool zeroCopyOutputs = false, OnnxCodecMode mode = OnnxCodecMode.Auto)
+void RunInto(this InferenceSession session, IReadOnlyDictionary<string, NDArray> inputs,
+            IReadOnlyDictionary<string, NDArray> outputs, RunOptions runOptions = null, string casting = "safe",
+            OnnxCodecMode mode = OnnxCodecMode.Auto)
+```
+
+- `casting` is validated first, on every call, with NumSharp's own `ValueError` text.
+- An input name is looked up in `InputMetadata`, then in `OverridableInitializerMetadata` (C2d).
+- An `optional(tensor)` declaration is unwrapped to its element declaration; dtype and shape checks use it (V8b).
+- Dtype rule: equal dtype → no cast. Otherwise `np.can_cast(have, want, casting)` decides. Char → UInt16 is a
+  zero-copy reinterpretation when the rule permits it; every other conversion is a copy, which `View` refuses.
+- `RunInto` overlap rule (V9): the memory range of each output is compared with every input and every other
+  output. Output against output always throws. Output against input: `Auto` and `Copy` feed a copy of that input;
+  `View` throws.
+
+### 3.3 Import side (V3, V4, V10a, V10b, V11b, C3b, C3c)
+
+- `OrtTensor.ValueOwners` already maps each package-made `OrtValue` to its handle. `AsNDArray(value)` uses it: the
+  result is a counted alias of the handle's buffer (`ArraySlice.WrapShared`), read-only when the source is.
+  With `ownsValue: true` the handle is disposed once the alias exists, because the alias keeps the buffer.
+- `UnmanagedMemoryManager<T>` records the source's writeable flag, so `Tensor.AsNDArray()` can apply it.
+- A foreign `OrtValue` keeps the lease route. The release action disposes the value only after the view was
+  returned (V10a). Memory pressure is added only for an owning lease (V10b).
+- The non-tensor readers return `element.AsNDArray(ownsValue: true)` (C3b). Their results report
+  `owndata == False` and count as live imports.
+- `IsCpuAccessible` asks ORT through a cached delegate over `OrtMemoryInfo.GetDeviceMemoryType()` when that member
+  exists (ORT 1.2x and newer; the package compiles against 1.16.0, so the member is found by reflection once):
+  `HOST_ACCESSIBLE` is readable. Otherwise the existing name and memory-type checks decide.
+
+### 3.4 `Postprocess` (V2, V2b, V11c, V11d)
+
+- One source file, `src/NumSharp.Interop.Shared/Postprocess.cs`, compiled into both bridges. The namespace is
+  chosen by a compilation symbol that each project defines.
+- `Softmax`, `LogSoftmax`, `Sigmoid`: a bool or integer input is cast to its float tier first, then the same
+  formulas run. `LogSoftmax` replaces a non-finite maximum by 0.
+- `Argmax` validates its axis against `[-ndim, ndim)`.
+
+### 3.5 Text crossing (S1)
+
+Everything here is a copy: ORT keeps each string as a separate native object, so no layout can share it.
+
+- dtype maps: `NPTypeCode.String` ↔ `TensorElementType.String`.
+- Import: `ToNDArray` reads a string tensor into a fixed-width `U` array (width = the longest string, as
+  `np.array(list_of_str)`), with the tensor's shape. `ReadStringTensor` stays for callers that want `string[]`.
+  The map readers return string keys (and string values) as text arrays. `ToNDArrays` reads a sequence of strings.
+- Export: `ToOrtValue` makes a string tensor from a `U` or `S` array (`S` bytes are passed as UTF-8, which is what
+  Python `onnxruntime` does). `AsOrtValue` does the same under `Auto` and `Copy` and throws under `View`.
+  `AsDenseTensor<T>` refuses text (its `T` is unmanaged).
+- `Run`: a text array feeds a string model input; text outputs come back as text arrays. With zero-copy outputs a
+  text output is a copy.
+- **TODO (prominent, in the code):** when NumSharp gets the variable-width `StringDType` (NEP 55, phase 3 of
+  `strings-phase2.md`), map ORT strings to it. The fixed-width form pads with NUL, so a string that ends in NUL
+  characters loses them, and one long string widens every element.
+
+### 3.6 `RunAsync` (C3a)
+
+ORT's C# `RunAsync` schedules the run on ORT's intra-op thread pool and completes a task from a native callback.
+It is a real async: no .NET thread waits. Three limits come from ORT:
+
+1. It reads `.Handle` of every output value, so it needs outputs that already exist.
+2. It is memory-safe only from 1.30.0 (commit `8239590229`, #32015); 1.29.0 does not pin its argument arrays.
+3. The intra-op pool needs 2 or more threads (`IntraOpNumThreads = 1` makes ORT refuse the call).
+
+```csharp
+Task RunIntoAsync(this InferenceSession session, IReadOnlyDictionary<string, NDArray> inputs,
+                  IReadOnlyDictionary<string, NDArray> outputs, RunOptions runOptions = null,
+                  string casting = "safe", OnnxCodecMode mode = OnnxCodecMode.Auto)
+Task<IReadOnlyDictionary<string, NDArray>> RunAsync(this InferenceSession session,
+                  IReadOnlyDictionary<string, NDArray> inputs, IReadOnlyCollection<string> outputNames = null,
+                  RunOptions runOptions = null, string casting = "safe", OnnxCodecMode mode = OnnxCodecMode.Auto)
+```
+
+- `RunIntoAsync` is the real async for every model. The bridge holds the input and output handles until the task
+  completes, then disposes them.
+- `RunAsync` allocates each output from the model's declared shape, so it works only when every fetched output
+  declares a fixed shape and a numeric dtype; otherwise it throws `NotSupportedException` that names `RunIntoAsync`.
+- On an ORT older than 1.30.0 both throw `NotSupportedException` with the reason. The loaded version is read
+  once from the managed assembly (1.16.0 reports 0.0.0.0, which counts as older).
+
+## 4. Work packages
+
+Each package is one commit on `strings`, limited to the bridge files, with its tests. Gate for every package: the
+ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, and the ML.NET suite when the shared
+`Postprocess` changes.
+
+| WP | Content | Items | Status |
+|---|---|---|---|
+| 0 | This plan | | done |
+| 1 | `Postprocess`: shared source, float promotion, SciPy `log_softmax`, axis check | V2, V2b, V11c, V11d | todo |
+| 2 | `OnnxCodecMode` on the export verbs; `IsView`; `reverseStride` export removed | V1 | todo |
+| 3 | Import side: counted alias, read-only, ownership on failure, memory pressure, legacy types, readers, device kind | V3, V4, V10a, V10b, V11b, C3b, C3c | todo |
+| 4 | `Run` tier: `mode`, `RunInto`, casting rule, optional inputs, overridable initializers, overlap | V1, V6, V8b, V9, V11a, C2d | todo |
+| 5 | dtype maps over descriptors without storage | V7 | todo |
+| 6 | Text crossing | S1, C2b | todo |
+| 7 | `RunIntoAsync` / `RunAsync` | C3a | todo |
+| 8 | Remaining tests and models | T1, T2 | todo |
+| 9 | Documents and CI: README, docs page, `CLAUDE.md`, csproj comment, ORT 1.31.0, API approval list | D1, D2, D3 | todo |
+
+## 5. Deferred, with the owner's design notes
+
+- **V8a, sparse tensors.** ORT's C# API has no method that creates or reads one (only `IsSparseTensor` and the raw
+  native function table). A clear refusal up front was the alternative on the table.
+- **C1, owners for bindings, initializers and sequences.** Note: consider wrapping `Run` (overloads) so that the
+  wrapper is where the references are maintained.
+- **C2a, non-tensor outputs and a disposable result.** Note: consider overloads and the typed struct support of C2c.
+- **C2c, inputs that are not `NDArray`.** Note: a `Run<T>(T inputs) where T : struct`; an interface that yields the
+  `Dictionary<string, OnnxInput>` from the struct's values; the default implementation is a reflection-built getter,
+  cached statically per `T`, made with expression trees or IL generation.
+- **Rebase of `strings` onto `journey4`.** Not now. A trial merge on 2026-10-10 showed conflicts in 13 files (4 in
+  Core: `np.asarray`, `np.asmatrix`, `np.all`, `np.any`; 6 oracle test files; the coverage map and its test;
+  `CLAUDE.md`; 1 matrix test). The bridge files are identical on the two branches.
+
+## 6. Execution log
+
+| Date | WP | Commit | Result |
+|---|---|---|---|
+| 2026-10-10 | 0 | (this commit) | plan written |
