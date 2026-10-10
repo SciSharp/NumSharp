@@ -38,7 +38,8 @@ Python object, and `X_train` is a NumSharp array whose memory scikit-learn reads
 is typed: the compiler checks each call, and an editor completes it.
 
 [`PYTHONIC_SPEC.md`](PYTHONIC_SPEC.md) is the specification: each rule of a port and of the tree, with
-the measurement behind it. This page is the tour.
+the measurement behind it. It also has the plan: six libraries and 39 pairs, chosen by how many Python
+files on GitHub use each library and each feature. This page is the tour.
 
 [`NumSharpPythonnetLocalExample`](../NumSharpPythonnetLocalExample/README.md) shows the other way to
 call Python, `dynamic` and a codec. It needs no classes, and the compiler checks nothing.
@@ -48,6 +49,9 @@ call Python, `dynamic` and a codec. It needs no classes, and the compiler checks
 | Python program | C# port | Library | Feature |
 |---|---|---|---|
 | [`ScikitLearn/classification.py`](ScikitLearn/classification.py) | [`ScikitLearn/Classification.cs`](ScikitLearn/Classification.cs) | scikit-learn 1.9.1 | Supervised learning: split a table, scale it, fit a classifier, predict, score. |
+
+This is the first pair of the plan (`SK-1`). The other 38 pairs, for scikit-learn, SciPy, Matplotlib,
+Pillow, OpenCV and TensorFlow, are in [section 13 of the specification](PYTHONIC_SPEC.md#13-the-pairs).
 
 ## Run it
 
@@ -235,7 +239,7 @@ the Python objects and then the arrays. Three things make sure that nothing stay
 | [`Program.cs`](Program.cs) | The command line and the check at the end. |
 | [`verify.py`](verify.py) | Compares each Python program with its port. |
 | [`requirements.txt`](requirements.txt) | The pinned Python libraries. |
-| [`PYTHONIC_SPEC.md`](PYTHONIC_SPEC.md) | The specification. |
+| [`PYTHONIC_SPEC.md`](PYTHONIC_SPEC.md) | The specification, and the plan of the next pairs. |
 
 The project file is what these two commands write, and nothing more:
 
