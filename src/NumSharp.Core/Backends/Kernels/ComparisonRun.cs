@@ -44,6 +44,18 @@ using NumSharp.Backends.Iteration;
 //   starts off a vector boundary gets a short first kernel call, so that the rest
 //   starts on one (AlignmentPeel).
 //
+//   Two forms belong to a whole iteration of rows (RunRows), not to one chunk:
+//
+//     tiled      an operand whose successive ROWS are adjacent elements (an F-ordered
+//                matrix beside a C-ordered one). One of its rows is a run with a
+//                stride of one column, which a row-by-row staging reads one element
+//                per cache line. RunTiles copies a tile of several rows at a time
+//                (DirectILKernelGenerator.TransposeTile reads each column's rows as
+//                one contiguous piece) and compares the tile;
+//     repeated   a matrix against ONE short row: the row is repeated in a stack
+//                block and several matrix rows are compared per kernel call
+//                (RunRepeatedRow), instead of one call a row.
+//
 // WHO CALLS IT
 //   DefaultEngine.TryTrivialContiguousComparisonOp   Run: two contiguous arrays of
 //                                                    one shape, or an array and one
@@ -125,6 +137,45 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private const long OverlapTailMinElements = 8;
 
+        /// <summary>
+        ///     Bytes of one row up to which <see cref="RunRows"/> compares a matrix against ONE row by repeating the
+        ///     row in a stack block and comparing several matrix rows per kernel call. A kernel call costs about 8 ns
+        ///     whatever it compares, which is most of a short row (400 one-byte elements take 10 ns). Measured, kernel
+        ///     time of the repeated form against a call per row: 0.31x for (25, 40) of one byte, 0.52x for (250, 400)
+        ///     of one byte, 0.86x for (1000, 100) of eight bytes (800 bytes a row), 0.95x for (250, 400) of four
+        ///     bytes (1,600), and 1.05x for (250, 400) of eight bytes (3,200), where the block's copy costs more than
+        ///     the calls it saves.
+        /// </summary>
+        private const long RepeatedRowMaxBytes = 2048;
+
+        /// <summary>
+        ///     Fewest rows from which <see cref="RunRows"/> repeats a row: with fewer rows the block's copy saves at
+        ///     most two kernel calls.
+        /// </summary>
+        private const long RepeatedRowMinRows = 16;
+
+        /// <summary>
+        ///     Fewest rows of one tile of <see cref="RunTiles"/> (when the operand has that many, and never less than
+        ///     one vector group of the transposition). More rows per tile give more contiguous bytes for every cache
+        ///     line and page the tile touches, but fewer columns per tile, and so more kernel calls a row once a row
+        ///     no longer fits a tile. Measured (a C-ordered (250, 400) matrix against an F-ordered one, us a call,
+        ///     for 4 / 8 / 16 rows): float64 40.5 / 35.3 / 43.2, float32 19.2 / 21.2 / 27.0; and for (1000, 1000):
+        ///     float64 791 / 641 / 753, float32 414 / 340 / 334. Eight rows make the row pieces of a tile 128 to 512
+        ///     elements long, about twice the cost of the kernel call that compares them.
+        /// </summary>
+        private const long TileMinRows = 8;
+
+        /// <summary>
+        ///     Bytes one row of a tiled operand spans in memory (elements a row times the column stride) from which
+        ///     <see cref="RunTiles"/> makes its tiles taller (<see cref="TallTileRows"/>). From about this span each
+        ///     column piece is a cache miss and, further up, a TLB miss, which more rows a piece pay for better than
+        ///     longer row pieces do. Measured (us a call for 8 / 16 / 32 rows): (1448, 1448) float32 1550 / 1355 /
+        ///     1456, int16 625 / 449 / 514; (3162, 3162) float64 17330 / 15261 / 17221, float32 11993 / 8726 / 8855,
+        ///     int16 9350 / 5545 / 4686, uint8 (16 / 32 / 64 rows) 3557 / 2926 / 2643. At (1000, 1000) float64, a span
+        ///     of 8 MB, 16 rows cost 6 % (796 against 751).
+        /// </summary>
+        private const long TileTallSpanBytes = 4 << 20;
+
         // ---------------------------------------------------------------------------------------------------------
         //  Cache
         // ---------------------------------------------------------------------------------------------------------
@@ -149,6 +200,33 @@ namespace NumSharp.Backends.Kernels
         ///     restore it in a <c>finally</c>.
         /// </summary>
         internal static bool Disabled;
+
+        /// <summary>
+        ///     Test and measurement hook: when true, <see cref="RunRows"/> stages a tiled operand one row at a time,
+        ///     as it did before <see cref="RunTiles"/> existed. The results are the same bytes. Process-wide; set it
+        ///     only from single-threaded test code and restore it in a <c>finally</c>.
+        /// </summary>
+        internal static bool TilesDisabled;
+
+        /// <summary>
+        ///     Test and measurement hook: when true, <see cref="RunRows"/> compares a matrix against one row with one
+        ///     kernel call a row (and <see cref="RepeatsRow"/> answers false). The results are the same bytes.
+        ///     Process-wide; set it only from single-threaded test code and restore it in a <c>finally</c>.
+        /// </summary>
+        internal static bool RepeatedRowDisabled;
+
+        /// <summary>
+        ///     Test hook: calls of <see cref="RunRows"/> that ran tile by tile (<see cref="RunTiles"/>) since the
+        ///     process started. A plain counter, not synchronized: tests read the difference around calls they make
+        ///     on one thread, and a lost increment under concurrent comparisons changes nothing else.
+        /// </summary>
+        internal static long TileRuns;
+
+        /// <summary>
+        ///     Test hook: calls of <see cref="RunRows"/> that compared a matrix against one repeated row
+        ///     (<see cref="RunRepeatedRow"/>). See <see cref="TileRuns"/> for its limits.
+        /// </summary>
+        internal static long RepeatedRowRuns;
 
         /// <summary>
         ///     The run for <paramref name="op"/> over the dtype pair, or null when this host cannot serve it (runtime
@@ -650,9 +728,11 @@ namespace NumSharp.Backends.Kernels
         ///     the last elements of a run twice; its caller hands it a fresh result.</para>
         ///     <para>When every run has one of the three in-place forms, the kernel and the stride tests are resolved
         ///     once and each run costs one kernel call (7.8 ns for 40 float64 values, against 23 ns through the
-        ///     iterator's per-chunk driver). Runs that go backwards in the kernel dtype (reversed columns) are turned
-        ///     around once: each costs one kernel call into a stack block and one reversed byte store. Every other
-        ///     layout is one <see cref="Chunk"/> per run.</para>
+        ///     iterator's per-chunk driver); a matrix against one short row shares kernel calls between rows
+        ///     (<see cref="RunRepeatedRow"/>). Runs that go backwards in the kernel dtype (reversed columns) are turned
+        ///     around once: each costs one kernel call into a stack block and one reversed byte store. An operand whose
+        ///     successive runs are adjacent elements (an F-ordered matrix) is staged a tile of several runs at a time
+        ///     (<see cref="RunTiles"/>). Every other layout is one <see cref="Chunk"/> per run.</para>
         ///     <para>[SkipLocalsInit]: the result block of the backward form is written by the kernel before it is
         ///     read.</para>
         /// </remarks>
@@ -684,6 +764,16 @@ namespace NumSharp.Backends.Kernels
 
                 if (kernel is not null)
                 {
+                    // A matrix whose rows follow each other against ONE short row: several rows per kernel call.
+                    if (RepeatsRow(lInner, lOuter, rInner, rOuter, oOuter, rows, count))
+                    {
+                        if (lOuter == 0)
+                            RunRepeatedRow(l, r, rowIsLeft: true, o, rows, count);
+                        else
+                            RunRepeatedRow(r, l, rowIsLeft: false, o, rows, count);
+                        return;
+                    }
+
                     // Rows of one-byte elements that end in a partial vector: the kernel would compare those last
                     // 8 to 31 elements one at a time, which for a row of a few hundred bytes is half of its cost
                     // (400 bool: 31 ns a row). Instead the row's whole vectors are compared, and then its LAST
@@ -746,6 +836,11 @@ namespace NumSharp.Backends.Kernels
                     }
                     return;
                 }
+
+                // An operand whose successive ROWS are adjacent elements (an F-ordered matrix beside a C-ordered one):
+                // staged a tile of several rows at a time instead of one strided row at a time.
+                if (RunTiles(l, lInner, lOuter, r, rInner, rOuter, o, oOuter, rows, count))
+                    return;
             }
 
             void** ptrs = stackalloc void*[3];
@@ -763,6 +858,325 @@ namespace NumSharp.Backends.Kernels
                 r += rOuter;
                 o += oOuter;
             }
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        //  A matrix against one row
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     Whether <see cref="RunRows"/> compares these rows through <see cref="RunRepeatedRow"/>: one operand is
+        ///     the SAME short contiguous row for every run, the other operand's rows and the output's rows follow
+        ///     each other in memory, and neither operand is converted.
+        /// </summary>
+        /// <param name="lInner">Left byte stride inside a run.</param>
+        /// <param name="lOuter">Left byte stride between runs (0: the same run every time).</param>
+        /// <param name="rInner">Right byte stride inside a run.</param>
+        /// <param name="rOuter">Right byte stride between runs.</param>
+        /// <param name="oOuter">Output byte stride between runs (the output's inner stride must be 1).</param>
+        /// <param name="rows">Number of runs.</param>
+        /// <param name="count">Elements per run.</param>
+        /// <returns>True for the repeated-row form.</returns>
+        /// <remarks>
+        ///     The caller of <see cref="RunRows"/> uses it too: rows of fewer than
+        ///     <see cref="DirectRowMinElements"/> elements are worth a call of <see cref="RunRows"/> only in this
+        ///     form, where they share kernel calls.
+        /// </remarks>
+        internal bool RepeatsRow(long lInner, long lOuter, long rInner, long rOuter, long oOuter, long rows, long count)
+        {
+            if (RepeatedRowDisabled || rows < RepeatedRowMinRows || oOuter != count || _convertLhs || _convertRhs)
+                return false;
+            if (lInner != _lhsSize || rInner != _rhsSize || count * _kernelUnit > RepeatedRowMaxBytes)
+                return false;
+            return (lOuter == 0 && rOuter == count * _rhsSize) || (rOuter == 0 && lOuter == count * _lhsSize);
+        }
+
+        /// <summary>
+        ///     Compares <paramref name="rows"/> rows of a matrix, which follow each other in memory, against ONE row:
+        ///     the row is repeated in a stack block and several matrix rows are compared per kernel call.
+        /// </summary>
+        /// <param name="row">The row: <paramref name="count"/> contiguous elements of the kernel dtype.</param>
+        /// <param name="matrix">First element of the matrix: <paramref name="rows"/> x <paramref name="count"/>
+        ///     contiguous elements of the kernel dtype.</param>
+        /// <param name="rowIsLeft">True when the row is the comparison's left operand.</param>
+        /// <param name="o">First output byte: <paramref name="rows"/> x <paramref name="count"/> contiguous bytes.</param>
+        /// <param name="rows">Number of rows (positive).</param>
+        /// <param name="count">Elements per row (positive; a row is at most <see cref="RepeatedRowMaxBytes"/> bytes).</param>
+        /// <remarks>
+        ///     <para><b>Call it only after <see cref="RepeatsRow"/> answered true.</b> The block is
+        ///     <see cref="BlockBytes"/> long; a row longer than that would be copied past its end. The limit of
+        ///     <see cref="RepeatedRowMaxBytes"/> keeps every row a quarter of a block or less.</para>
+        ///     <para>The block is filled by doubling (the row once, then the filled part again and again), so a row of
+        ///     two elements costs 12 copies for a block of 8 KB, not 4,096.</para>
+        ///     <para>[SkipLocalsInit]: every byte of the block that a kernel reads is written by those copies.</para>
+        /// </remarks>
+        [SkipLocalsInit]
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void RunRepeatedRow(byte* row, byte* matrix, bool rowIsLeft, byte* o, long rows, long count)
+        {
+            int rowItem = rowIsLeft ? _lhsSize : _rhsSize, matrixItem = rowIsLeft ? _rhsSize : _lhsSize;
+            long rowBytes = count * rowItem;
+            long copies = Math.Min(rows, BlockBytes / rowBytes);
+            RepeatedRowRuns++;
+
+            byte* scratch = stackalloc byte[BlockBytes + 64];
+            byte* block = (byte*)(((nuint)scratch + 63) & ~(nuint)63);
+            long total = copies * rowBytes, filled = rowBytes;
+            Buffer.MemoryCopy(row, block, rowBytes, rowBytes);
+            while (filled < total)
+            {
+                long step = Math.Min(filled, total - filled);
+                Buffer.MemoryCopy(block, block + filled, step, step);
+                filled += step;
+            }
+
+            ComparisonKernel kernel = _full;
+            long matrixStep = copies * count * matrixItem, outStep = copies * count;
+            for (long left = rows; left > 0; left -= copies)
+            {
+                long n = Math.Min(copies, left) * count;
+                if (rowIsLeft)
+                    kernel(block, matrix, (bool*)o, null, null, null, 1, n);
+                else
+                    kernel(matrix, block, (bool*)o, null, null, null, 1, n);
+                matrix += matrixStep;
+                o += outStep;
+            }
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        //  Tiles: an operand whose successive rows are adjacent elements
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     Whether an operand of a two-level iteration has its successive RUNS one element apart (in either
+        ///     direction) while the elements of one run are further apart: the layout of an F-ordered matrix read in
+        ///     C order. The <c>outer</c> elements of one column are then contiguous, which is what a tile reads.
+        /// </summary>
+        /// <param name="inner">Byte stride inside a run.</param>
+        /// <param name="outer">Byte stride between runs.</param>
+        /// <param name="size">Item size of the operand.</param>
+        /// <returns>True for the tiled layout.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsTiled(long inner, long outer, int size)
+            => (outer == size || outer == -size) && inner != 0 && inner != size && inner != -size;
+
+        /// <summary>
+        ///     Fewest rows of a tile of an operand whose rows span <see cref="TileTallSpanBytes"/> or more: 64 bytes
+        ///     of each column, and between 16 and 32 rows (the measurements are at <see cref="TileTallSpanBytes"/>).
+        /// </summary>
+        /// <param name="size">Item size of the tiled operand.</param>
+        /// <returns>16 for elements of 4 bytes or more, 32 for elements of 1 or 2 bytes.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static long TallTileRows(int size) => Math.Clamp(64 / size, 16, 32);
+
+        /// <summary>
+        ///     Runs the rows of <see cref="RunRows"/> tile by tile when an operand has the tiled layout
+        ///     (<see cref="IsTiled"/>): the operand's part of each tile is copied into a stack block with contiguous
+        ///     rows by <see cref="DirectILKernelGenerator.TransposeTile"/>, and the kernel compares the block.
+        /// </summary>
+        /// <param name="l">First left element of the first run.</param>
+        /// <param name="lInner">Left byte stride inside a run.</param>
+        /// <param name="lOuter">Left byte stride between runs.</param>
+        /// <param name="r">First right element of the first run.</param>
+        /// <param name="rInner">Right byte stride inside a run.</param>
+        /// <param name="rOuter">Right byte stride between runs.</param>
+        /// <param name="o">First output byte of the first run (the output's inner stride is 1).</param>
+        /// <param name="oOuter">Output byte stride between runs.</param>
+        /// <param name="rows">Number of runs.</param>
+        /// <param name="count">Elements per run.</param>
+        /// <returns>False, having read and written nothing, when no operand is tiled or the operand beside the tiled
+        ///     one has a form this method does not serve (the caller's row-by-row loop then runs).</returns>
+        /// <remarks>
+        ///     <para><b>Why.</b> A row of a tiled operand is a run with a stride of one column. Staging it row by row
+        ///     reads one element for each cache line it touches (and for each page, once a column is 4 KB long):
+        ///     0.3 to 0.6 ns an element for a (250, 400) matrix, 4 to 8 ns for a (3162, 3162) one. A tile of B rows
+        ///     reads B adjacent elements of each column instead.</para>
+        ///     <para><b>The tile.</b> One tile is at most <see cref="BlockBytes"/> of the kernel dtype. It is a whole
+        ///     row wide when <see cref="TileMinRows"/> rows of that width fit, and then as many rows high as fit;
+        ///     otherwise the row is cut evenly into pieces that fit <see cref="TileMinRows"/> rows. Widths and heights
+        ///     are multiples of the vector group of the transposition where the operand allows it. The LAST tile of
+        ///     each direction is moved back to end on the operand's edge, so its first rows or columns are computed a
+        ///     second time; that is correct because the output is not an input (the contract of
+        ///     <see cref="RunRows"/>).</para>
+        ///     <para><b>The other operand.</b> Rows of contiguous elements are read in place, or converted into the
+        ///     other block when their dtype is not the kernel's; one value of the kernel dtype per row is read in
+        ///     place; a second tiled operand gets its own block. Any other form declines.</para>
+        ///     <para><b>Kernel calls.</b> One call for the whole tile when each operand's rows of the tile follow each
+        ///     other in memory (a staged block always; rows read in place when the tile is a row wide and the rows are
+        ///     adjacent) and the output's rows do; otherwise one call a row.</para>
+        ///     <para>[SkipLocalsInit]: the blocks are written by the transposition or the conversion before a kernel
+        ///     reads them.</para>
+        /// </remarks>
+        [SkipLocalsInit]
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private bool RunTiles(byte* l, long lInner, long lOuter, byte* r, long rInner, long rOuter, byte* o, long oOuter, long rows,
+            long count)
+        {
+            bool lTiled = IsTiled(lInner, lOuter, _lhsSize), rTiled = IsTiled(rInner, rOuter, _rhsSize);
+            if (!(lTiled || rTiled) || TilesDisabled || rows < 2 || rows * count < StagedMinElements)
+                return false;
+
+            // The operand beside a tiled one: contiguous rows (of any dtype), or one value of the kernel dtype a row.
+            bool lValue = !lTiled && lInner == 0, rValue = !rTiled && rInner == 0;
+            if (!lTiled && lInner != _lhsSize && !(lValue && !_convertLhs))
+                return false;
+            if (!rTiled && rInner != _rhsSize && !(rValue && !_convertRhs))
+                return false;
+
+            int unit = _kernelUnit;
+            // A 16-byte element is moved one at a time whatever the route, so a tile of them only saves the calls
+            // of the row-by-row loop: worth it for rows too short to be staged (measured 1.4x to 2.9x for rows of 3
+            // to 40 complex128 elements), a loss for longer ones (0.93x at 400 elements a row). And a conversion
+            // TO complex128 is slower through the house cast than through the per-element kernel (0.70x).
+            if (unit == 16 && (count > StagedMinElements || _convertLhs || _convertRhs))
+                return false;
+            TileRuns++;
+
+            // The vector group of the transposition (of both, when both operands are tiled), the memory one row of
+            // a tiled operand spans, and the item size the tile's height is chosen for.
+            int rowGroup = 1, columnGroup = 1, tiledSize = unit;
+            long span = 0;
+            if (lTiled)
+            {
+                rowGroup = DirectILKernelGenerator.TransposeTileRowGroup(_lhsSize);
+                columnGroup = DirectILKernelGenerator.TransposeTileColumnGroup(_lhsSize);
+                span = count * Math.Abs(lInner);
+                tiledSize = _lhsSize;
+            }
+            if (rTiled)
+            {
+                rowGroup = Math.Max(rowGroup, DirectILKernelGenerator.TransposeTileRowGroup(_rhsSize));
+                columnGroup = Math.Max(columnGroup, DirectILKernelGenerator.TransposeTileColumnGroup(_rhsSize));
+                span = Math.Max(span, count * Math.Abs(rInner));
+                tiledSize = Math.Min(tiledSize, _rhsSize);
+            }
+
+            // Width: the whole row when the fewest rows of a tile fit one block at that width, else an even cut of
+            // the row.
+            long minRows = Math.Max(rowGroup, span >= TileTallSpanBytes ? TallTileRows(tiledSize) : TileMinRows);
+            long widest = Math.Max(columnGroup, BlockBytes / (minRows * unit) / columnGroup * columnGroup);
+            long width = count;
+            if (count > widest)
+            {
+                long pieces = (count + widest - 1) / widest;
+                width = Math.Min(widest, ((count + pieces - 1) / pieces + columnGroup - 1) / columnGroup * columnGroup);
+            }
+            // Height: what the block leaves; when that is not every row, an even cut in multiples of the row group.
+            long height = Math.Min(rows, BlockBytes / (width * unit));
+            if (height < rows)
+            {
+                height = height / rowGroup * rowGroup;
+                long tiles = (rows + height - 1) / height;
+                height = Math.Min(height, ((rows + tiles - 1) / tiles + rowGroup - 1) / rowGroup * rowGroup);
+            }
+
+            byte* scratch = stackalloc byte[3 * BlockBytes + 64];
+            scratch = (byte*)(((nuint)scratch + 63) & ~(nuint)63);
+            byte* lBlock = scratch, rBlock = scratch + BlockBytes, temp = scratch + 2 * BlockBytes;
+
+            ComparisonKernel kernel = lValue ? _scalarLeft : rValue ? _scalarRight : _full;
+            // Whether an operand's rows of one tile follow each other in memory (see "Kernel calls" in the remarks).
+            bool lJoined = lTiled || (lValue ? lOuter == 0 : _convertLhs || (width == count && lOuter == count * _lhsSize));
+            bool rJoined = rTiled || (rValue ? rOuter == 0 : _convertRhs || (width == count && rOuter == count * _rhsSize));
+            bool joined = lJoined && rJoined && oOuter == width;
+
+            for (long row0 = 0; row0 < rows; row0 += height)
+            {
+                if (row0 > rows - height)
+                    row0 = rows - height;
+                for (long col0 = 0; col0 < count; col0 += width)
+                {
+                    if (col0 > count - width)
+                        col0 = count - width;
+
+                    byte* lp = TileOperand(l, lInner, lOuter, lTiled, _convertLhs, LhsType, _lhsKernelType, _lhsSize, row0, col0,
+                        height, width, count, lBlock, temp, out long lStep);
+                    byte* rp = TileOperand(r, rInner, rOuter, rTiled, _convertRhs, RhsType, _rhsKernelType, _rhsSize, row0, col0,
+                        height, width, count, rBlock, temp, out long rStep);
+                    byte* op = o + row0 * oOuter + col0;
+
+                    if (joined)
+                    {
+                        kernel(lp, rp, (bool*)op, null, null, null, 1, height * width);
+                        continue;
+                    }
+                    for (long b = 0; b < height; b++)
+                    {
+                        kernel(lp, rp, (bool*)op, null, null, null, 1, width);
+                        lp += lStep;
+                        rp += rStep;
+                        op += oOuter;
+                    }
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        ///     Brings one operand's part of a tile into the form the kernel reads, and returns its first element.
+        /// </summary>
+        /// <param name="p">First element of the operand's first run.</param>
+        /// <param name="inner">Byte stride inside a run (0: one value a run).</param>
+        /// <param name="outer">Byte stride between runs.</param>
+        /// <param name="tiled">The operand has the tiled layout (<see cref="IsTiled"/>).</param>
+        /// <param name="convert">The operand's stored dtype is not the dtype the kernel reads.</param>
+        /// <param name="type">Stored dtype.</param>
+        /// <param name="kernelType">The dtype the kernel reads.</param>
+        /// <param name="size">Item size of the stored dtype.</param>
+        /// <param name="row0">First run of the tile.</param>
+        /// <param name="col0">First element of the tile inside a run.</param>
+        /// <param name="height">Runs in the tile.</param>
+        /// <param name="width">Elements of a run in the tile.</param>
+        /// <param name="count">Elements of a whole run.</param>
+        /// <param name="block">This operand's block (at least height x width elements of the kernel dtype).</param>
+        /// <param name="temp">Scratch of the same size, for a tiled operand that is also converted.</param>
+        /// <param name="step">Receives the byte distance between two successive rows at the returned address.</param>
+        /// <returns>The address the kernel reads the tile's first row from: the block, or the operand itself.</returns>
+        /// <remarks>
+        ///     A tiled operand whose runs go DOWNWARDS in memory (<paramref name="outer"/> negative) is read from the
+        ///     tile's last run, which has the lowest address, and its rows are stored from the block's last row
+        ///     upwards, so the block holds the runs in iteration order either way.
+        /// </remarks>
+        private byte* TileOperand(byte* p, long inner, long outer, bool tiled, bool convert, NPTypeCode type, NPTypeCode kernelType,
+            int size, long row0, long col0, long height, long width, long count, byte* block, byte* temp, out long step)
+        {
+            byte* first = p + row0 * outer + col0 * inner;
+            long blockRow = width * _kernelUnit;
+            if (tiled)
+            {
+                byte* into = convert ? temp : block;
+                long rowBytes = width * size;
+                if (outer > 0)
+                    DirectILKernelGenerator.TransposeTile(first, inner, into, rowBytes, height, width, size);
+                else
+                    DirectILKernelGenerator.TransposeTile(first + (height - 1) * outer, inner, into + (height - 1) * rowBytes, -rowBytes,
+                        height, width, size);
+                if (convert)
+                    NDPolySeries.CopyInto(PolySeriesView.Raw(temp, height * width, type), height * width, kernelType, block);
+                step = blockRow;
+                return block;
+            }
+
+            if (inner == 0 || !convert)
+            {
+                // One value a run, or rows of the kernel dtype: read where they are.
+                step = outer;
+                return first;
+            }
+
+            // Contiguous rows of another dtype: converted into the block, in one call when they follow each other.
+            if (width == count && outer == count * size)
+            {
+                NDPolySeries.CopyInto(PolySeriesView.Raw(first, height * width, type), height * width, kernelType, block);
+            }
+            else
+            {
+                for (long b = 0; b < height; b++)
+                    NDPolySeries.CopyInto(PolySeriesView.Raw(first + b * outer, width, type), width, kernelType, block + b * blockRow);
+            }
+            step = blockRow;
+            return block;
         }
 
         /// <summary>

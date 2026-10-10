@@ -2011,6 +2011,11 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
   - *scattered*: a bool output that is not contiguous receives each block through a strided byte store;
   - *adopted*: an array of another dtype against ONE value is compared in the array's own dtype (below);
   - a chunk under 64 elements runs the per-element kernel the iterator routes always used.
+
+  Two more forms belong to a whole iteration of rows (`RunRows`), not to one chunk (both below):
+  - *tiled*: an operand whose successive ROWS are adjacent elements (an F-ordered matrix beside a C-ordered one, a
+    matrix against its transpose) is copied a tile of several rows at a time;
+  - *repeated*: a matrix against ONE short row compares several rows per kernel call.
 - **Three callers.**
   - `TryTrivialContiguousComparisonOp` → `Run`: two contiguous arrays of one shape, or an array and one value, of any
     two dtypes; also two one-element operands of different rank (they used to build an iterator for one element).
@@ -2019,8 +2024,9 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
     (`stride[d] == stride[d+1] * extent[d+1]`): a matrix against a row or a column, an outer product, a stepped or
     reversed view. It declines (the iterator route serves): a result NumPy lays out in F order, an iteration of three
     or more levels, and many rows under 16 elements whose inputs are contiguous or one value (the iterator's 2-D block
-    kernel loops such rows inside one call). An iterator costs 428 ns to build and dispose and 23 ns for each chunk it
-    hands out (40 float64 values); a kernel call per run costs 7.8 ns.
+    kernel loops such rows inside one call), unless they are a matrix against one row (`ComparisonRun.RepeatsRow`).
+    An iterator costs 428 ns to build and dispose and 23 ns for each chunk it hands out (40 float64 values); a
+    kernel call per run costs 7.8 ns.
   - `NDIterRef.TryExecuteComparisonRun` → one `Chunk` call per inner-loop chunk: every other iteration, and every
     `out=` call (`ExecuteComparisonUfuncInto`; an out of another dtype is filled through the iterator's Boolean
     buffer). `where=` keeps its masked route (1.5–11× NumPy already).
@@ -2036,6 +2042,45 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
   - a NaN value decides the chunk (False; True for `!=`).
 
   Not adopted (they keep the staged conversion): a 64-bit integer array against a float, complex, decimal, char.
+- **Tiles: an operand whose rows are adjacent elements** (`ComparisonRun.RunTiles`; the commit after the pool's).
+  An F-ordered matrix read in C order has rows whose elements are one COLUMN apart: a row of N elements touches N
+  cache lines, and N pages once a column is 4 KB long. The rows route staged such a row with one strided move a
+  row: 0.3–0.6 ns an element for a (250, 400) matrix, 0.65–1.3 for (1000, 1000), 3.8–8.6 for (3162, 3162); NumPy's
+  scalar loop pays the same. The elements of one column ARE adjacent, so a tile of B rows reads B contiguous
+  elements of each column and deals them out to B rows of a stack block.
+  - **The kernel** (`Direct/DirectILKernelGenerator.TransposeTile.cs`): AVX2 groups of 2 × 4 elements of 8 bytes,
+    4 × 8 of 4 bytes, 8 × 16 of 2 bytes, 16 × 32 of one byte. Each 256-bit register is built from two columns (the
+    second one through `vinserti128` with a memory operand, which uses no shuffle port), so the in-lane
+    transposition gives rows of twice the columns and needs no lane-crossing shuffle. Integer unpacks for every
+    width: current Intel cores run them on two ports, the floating-point ones on one (the 2-byte group runs at 0.13
+    cycles an element where its 24 shuffles on one port would take 0.19; the 4-byte kernel went 0.13 → 0.08 ns an
+    element with them, the 8-byte one 0.18 → 0.13 with two row groups a loop step).
+    In L1: 0.13 / 0.08 / 0.05 / 0.03 ns an element for 8 / 4 / 2 / 1 bytes (a strided move: 0.2). A tile that is
+    not a whole number of groups ends with a group that OVERLAPS the one before it, so there is no scalar tail.
+    Below one group, for 16-byte elements and without AVX2 the tile is moved by the strided move kernel along
+    its longer side.
+  - **The tile**: at most 8 KB of the kernel dtype (16 KB is slower for 1- and 2-byte elements: (400, 250) uint8
+    8.9 against 13.6 µs, (250, 400) int16 11.7 against 14.4). A whole row wide when 8 rows of it fit, else the row
+    is cut evenly (8 rows against 4: (250, 400) float64 35.3 against 40.5 µs, (1000, 1000) 641 against 791); then as
+    many rows high as fit. From a row SPAN of 4 MB (elements a row × the column stride) the fewest rows are 16
+    (4- and 8-byte elements) or 32: each column piece is then a cache miss and further up a TLB miss, which more
+    rows a piece pay for better than longer row pieces do ((3162, 3162) float32: 12.0 → 8.7 ms, int16 9.4 → 4.7).
+    The last tile of each direction is moved back to end on the operand's edge and computes some results twice;
+    `RunRows` never has an output that is an input.
+  - **The operand beside it**: contiguous rows are read in place (or converted into the other block), one value a
+    row is read in place, a second tiled operand gets its own block. One kernel call a tile when every operand's
+    rows of the tile follow each other and the output's do; else one call a row.
+  - **Not tiled**: 16-byte elements with rows over 64 elements (a 16-byte element is one move whatever the route:
+    0.93× at 400 complex128 elements a row; rows of 3 to 40 gain 1.4–2.9× from the saved calls) and conversions to
+    complex128 (the house cast is slower than the per-element kernel: 0.70×); two F operands (the result is
+    F-ordered: the iterator route); `out=` calls (they arrive as chunks).
+- **A matrix against one row** (`ComparisonRun.RunRepeatedRow`). A kernel call costs about 8 ns and a row that ends
+  in a partial vector pays a scalar tail, which is most of a short row. When the matrix's rows follow each other,
+  there are 16 rows or more and a row is at most 2,048 bytes, the row is repeated in an 8 KB stack block (filled by
+  doubling) and a block of rows is compared per call. Rows under 16 elements used to go to the iterator's 2-D block
+  kernel (1.5 ns a row plus 1 ns an element); as a matrix against one row they take this route
+  (`RepeatsRow`, also asked by `TryRowsComparisonOp`). Above 2,048 bytes a row the block's copy costs more than
+  the calls it saves (1.05× the time at 3,200 bytes), and with fewer than 16 rows too (1.1× at 7 rows).
 - **Kernels added** (`Direct/`):
   - complex128 (`DirectILKernelGenerator.Comparison.Complex.cs`): four elements a step. Two loads are split into
     real and imaginary lanes (`vunpcklpd` / `vunpckhpd`), compared by NumPy's `CLT` rule (a NaN in an imaginary part
@@ -2045,7 +2090,8 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
   - int64 against uint64, either order (`.Comparison.MixedSign.cs`): NumPy's exact loops as machine compares. A
     negative lane is decided by its sign, the others compare unsigned; eight elements a step. The emitted loop
     compared in `System.Decimal`;
-  - the strided move (`.StridedMove.cs`): four typed moves a pass at any two byte strides.
+  - the strided move (`.StridedMove.cs`): four typed moves a pass at any two byte strides;
+  - the tile transposition (`.TransposeTile.cs`, C# with AVX2 intrinsics): see "Tiles" above.
 - **Fixed on the way.**
   - `np.less(int64, uint64, out=o)` compared in float64 (inexact past 2^53); every route is exact now.
   - Two one-element operands of different rank (`(1,) < 0-d`) took 1.03 µs through an iterator; 0.44 µs now
@@ -2066,6 +2112,21 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
   - A scratch sweep against an independent reference (15 × 15 dtype pairs × 6 operators × layouts × `out=` forms ×
     2-D and 3-D broadcasts): 373,543,380 checks, 0 failures, with AVX2, with AVX2 off and with hardware intrinsics off.
   - The unit suite, the oracle replay, and both again under `NUMSHARP_DEBUG_GUARD_PAGES=1`.
+  - **The tile and repeated-row routes** (5 more tests in `ComparisonRunTests.cs`, 24 in all, and
+    `Backends/Kernels/TransposeTileTests.cs`, 3 tests): an F-ordered operand on either side, with reversed rows or
+    columns, two F slices, a column against an F operand, and a matrix against one row, held to the element
+    reference over 19 dtype pairs; the routes against the row-by-row loop and against C-ordered copies up to
+    4.4 million elements (the taller tiles), with counters that prove which route ran
+    (`ComparisonRun.TileRuns` / `RepeatedRowRuns`; switches `TilesDisabled` / `RepeatedRowDisabled`); `RunRows` on
+    raw memory with a tiled operand on either side and every operand against inaccessible pages; the kernel over
+    285 tile shapes × 5 widths × 3 column strides × both row directions, with sentinel margins and against
+    inaccessible pages. A mutation pass of 32 planted defects: 31 fail (26 by an assertion, 5 by ending the test
+    host: they read or write outside a buffer); the survivor gives the same results (a condition that the
+    output's stride already implies). The sweep, with a section for these forms over all 225 dtype pairs:
+    453,687,480 checks, 0 failures in the same three configurations.
+  - **Trap of the mutation script:** a test host that ends in the middle of a run still prints a summary line for
+    the tests that had finished ("Passed! - Failed: 0, Passed: 1, Total: 1"). Five out-of-bounds mutants first read
+    as survivors that way. Compare the summary's total with a clean run's, or look for "aborted".
 - **Perf** (NPY/NS, two pinned P-cores, tier-up forced with `DOTNET_TC_CallCountingDelayMs=0`, per-cell minimum over
   three NumSharp runs and two NumPy runs; 1,279 cells: A contiguous 13 dtypes × 6 operators × array / value forms ×
   1K / 100K / 10M, B 20 layouts, C 12 dtype pairs, D `out=` and `where=` forms, E C# literal operands, F tiny and
@@ -2089,6 +2150,21 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
     `int32 > 50.5` 59.4 | 70.4 → 8.1 (7.3×), `float16 > 50.5` 261.8 | 275.2 → 15.7 (16.7×), `uint64 > 50`
     34.2 | 89.1 → 19.6 (1.74×).
   - The numpy.matrix benchmark (97 cells) reads geomean 2.30×; `m > 0.75` 1.99× / 1.29× / 1.20× at 4 / 64 / 512.
+  - **With the tile and repeated-row routes** (the same protocol and cells): geomean **2.12×**; under 1.5×: 425;
+    under 1.0×: 22; the lowest cell 0.87×; section B 2.27× (2.16× without them). NumPy µs | routes off → on, one
+    executable (`CMP_OLD_ROUTES=1` switches them off):
+    - C against F at 1K: float64 2.28 | 1.65 → 0.84 (1.38× → 2.72×), bool 1.87 | 2.11 → 0.67 (0.89× → 2.80×);
+      at 100K: float64 78.2 | 63.5 → 35.3 (1.23× → 2.21×), float32 51.4 | 50.3 → 21.2 (1.02× → 2.42×), int32
+      54.0 | 52.7 → 23.8 (2.27×), int64 83.1 | 67.1 → 39.6 (2.10×), uint8 46.5 | 32.9 → 9.3 (1.41× → 5.01×).
+    - A matrix against a row at 100K: uint8 8.97 | 7.23 → 3.84 (1.24× → 2.33×), bool 8.95 | 7.09 → 3.71 (2.41×),
+      float32 20.3 | 8.46 → 6.82 (2.97×); float64 (3,200 bytes a row) keeps its call a row (2.81×).
+    - New cells (section G, 54 cells: 3.61× in the geometric mean, none under 1.5×; 1.17× and 48 under 1.5× with
+      the routes off). C against F at 1M: float64 1281 | 1290 → 680 (0.99× → 1.88×), uint8 616 | 656 → 151
+      (4.08×). A matrix against its transpose, 316 × 316: float64 74.2 | 63.7 → 36.6 (2.03×), uint8
+      46.8 | 35.1 → 8.5 (5.50×); 1000 × 1000: float64 1104 | 1111 → 548 (2.02×). A (25000, 4) matrix against a
+      row: float64 140 | 85.1 → 12.8 (1.65× → 10.99×), uint8 122 | 64.5 → 3.95 (30.8×); (250, 4): 3.6–4.8×.
+    - The other cells did not move: geomean 0.981 of the earlier build's time over the 1,279 cells, 4 cells read
+      10 % slower, and those read 0.97–1.02 in interleaved runs of the two builds.
 - **The pool aligns its buffers (2026-10-10, the commit after the engine).** The engine left the contiguous
   two-array cells at 100K elements between 0.81× and 1.3×, and the reason was the buffer's ADDRESS. Kernel only, ns
   an element (input offset / output offset in bytes past a 64-byte boundary): float64 two arrays 0.141 at 0 / 0 and
@@ -2120,26 +2196,35 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
     one-byte dtypes by 1–6 %.
   - Gates: `Backends/Unmanaged/PoolBufferAlignmentTests.cs` (4 tests); the unit suite in a Debug build, where the
     `Debug.Assert` on the returned size is live (18,478 passed, no assertion).
-- **Floors** (with the aligned pool every cell under 1.0× is between 0.86× and 1.00×; 23 cells):
-  - *Two stepped float64 / int64 operands at 100K* (8 cells, 0.88–0.99×): 3.2 MB of source, above this CPU's 2 MB
+- **Floors** (with the aligned pool and the two row routes every cell under 1.0× is between 0.87× and 1.00×;
+  22 cells of the 1,279):
+  - *Two stepped float64 / int64 operands at 100K* (8 cells, 0.89–0.98×): 3.2 MB of source, above this CPU's 2 MB
     L2. NumPy's scalar loop overlaps its work with the memory latency.
-  - *A C# literal operand at 100K* (9 cells, 0.90–1.00×): the literal's 0-d temporary costs about 1 µs of a 4.6 µs
+  - *A C# literal operand at 100K* (9 cells, 0.88–1.00×): the literal's 0-d temporary costs about 1 µs of a 4.6 µs
     call (plan X26). The same comparison with a held 0-d operand is 1.07× or more (`uint8`: 3.6 µs, NumPy 5.6).
-  - *Four 1K cells at parity*: bool C against F (0.89×), two stepped int64 operands (0.98–0.99×; two staging passes
-    of 0.2 ns an element each).
-  - *`np.less(a, b)` of two float64 arrays at 100K* (0.98×): both libraries take 15.3–15.6 µs, the transfer bound for
-    1.7 MB of operands and result in a 2 MB L2.
-  - *The empty result `(0,3) < (3,)`* (0.86×): branch `strings` has an empty-result guard that arrives with the merge.
-  - *Between 1.0× and 1.5×* (428 cells): contiguous operands at 100K (both libraries run a vector loop at the L2
-    transfer bound: 1.05–1.5×), contiguous at 1K and tiny operands (the NDArray allocation floor: about 0.35 µs of
-    a 0.45–0.55 µs call; 1.2–1.5×), C against F (1.05–1.5×, were 0.31–1.1×; the F operand is gathered a row at a
-    time), literal operands at 1K (1.25–1.7×: plan X26).
+  - *Three 1K cells at parity*: two stepped float64 / int64 operands (0.96–0.98×). Probed: the two staging copies
+    are 0.42–0.48 µs of the 0.61 µs the run takes (0.2 ns an element for each stream; a direct two-load
+    deinterleave written for the probe measured 0.18), and the call's fixed part is 0.65 µs where contiguous
+    operands take 0.43. No cheap lever was found.
+  - *`np.less(a, b, out)` of two float64 arrays at 100K* (0.97×): both libraries take 14.8–15.6 µs, the transfer
+    bound for 1.7 MB of operands and result in a 2 MB L2.
+  - *The empty result `(0,3) < (3,)`* (0.87×): branch `strings` has an empty-result guard that arrives with the merge.
+  - *Between 1.0× and 1.5×* (403 cells): contiguous operands at 100K, in C order, F order, as a transposed pair or
+    at an offset (both libraries run a vector loop at the L2 transfer bound: 1.05–1.5×), contiguous at 1K and tiny
+    operands (the NDArray allocation floor: about 0.35 µs of a 0.45–0.55 µs call; 1.2–1.5×), two stepped operands
+    of 4 bytes or more at 1K (1.3–1.5×), a one-byte matrix against a column at 100K (1.3×: 250 calls with a
+    value each), literal operands at 1K (1.25–1.7×: plan X26).
+  - *No longer floors:* C against F (2.1–5.0×, were 0.89–1.54×) and a one-byte matrix against a row (2.3–2.9×,
+    were 1.2–2.0×).
 - **Measurements worth keeping.** Staging, ns an element: uint8 at a step of two or reversed 0.04, any other stride
   0.2 through the strided move (the house generic strided copy takes 0.7 for a one- or two-byte dtype); float64 at a
   step of two 0.2. A reversed byte store of 1,024 results: 33 ns through the uint8 shuffle copy, 418 ns one byte at
   a time (bool has no shuffle kernel of its own, so results and bool inputs are copied as uint8). This host's clock
   held at about 3.4 GHz during these runs (a two-load vector loop takes 0.59 ns an iteration): do not estimate
-  cycles at the nominal 5.5 GHz.
+  cycles at the nominal 5.5 GHz. During the tile work it read 2.8 GHz (a chain of dependent 64-bit multiplies, 3
+  cycles each, took 1.06 ns a step): measure the clock before a port or latency argument. The host was also not
+  quiet then (about 17 % background load): two routes were timed in one process, in turn, five passes, the minimum
+  of each (`ComparisonRun.TilesDisabled` / `RepeatedRowDisabled`), and effects under 1.3× were not acted on.
 - **Merging `strings`.** The edits stay out of the hunks `strings` changed in `DefaultEngine.CompareOp.cs` (the top
   of `ExecuteComparisonOp`, the general fallback, the six overrides, the result allocation of the iterator route) and
   repeat its comparison-type lines of `DefaultEngine.UfuncOut.cs` byte for byte. `git merge-tree` reports the same
@@ -4668,7 +4753,7 @@ non-structured subset would only re-expose `loadtxt`.
 | unique family | `Manipulation/NDArray.unique.cs` + `NDArray.unique.Kwargs.cs` (sort+mask core + axis path), `Manipulation/np.unique.cs` (`np.unique`), `Manipulation/np.unique_values.cs` (Array-API `unique_values`/`unique_counts`/`unique_inverse`/`unique_all` + result structs), `Manipulation/NDArray.unique.Hash.cs` (int + complex hash fast path, splitmix64). Design + measured perf decisions: `docs/UNIQUE_DESIGN.md` |
 | Selection family | `Indexing/np.{take,take_along_axis,put,put_along_axis,place,putmask,select}.cs`; IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,TakeAlongAxis,Put,PutAlongAxis,Place,PutMask,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain; `TakeAlongAxis` = whole-array strided-odometer gather, byte-width-keyed; `PutAlongAxis` = the scatter mirror — a dtype-agnostic validate pass + a bounds-free scatter pass for NumPy's all-or-nothing assignment; `PutMask` = Place's typed-MOV scatter with a by-position cursor + `nv==1` scalar fast path) |
 | numpy.matrix (`NDMatrix`) | `Matrixlib/NDMatrix.cs` (class, result forms, scalar conversions, T / H / I / A / A1), `.Construction.cs` (`matrix.__new__`, the literal parser), `.Indexing.cs`, `.Operators.cs`, `.Reductions.cs`, `.Methods.cs`, `Matrixlib/np.matrix.cs`, `Creation/np.{asmatrix,bmat}.cs`, `View/Shape.Matrix.cs` (the finalize rule), `Selection/NDArray.Indexing.AssignedValue.cs` (NumPy's value rule for index-array assignment) |
-| Comparison engine (`==` … `>=`) | `Backends/Default/Math/DefaultEngine.CompareOp.cs` (dispatch, the trivial route), `DefaultEngine.CompareOp.Rows.cs` (the two-level route without an iterator), `DefaultEngine.UfuncOut.cs` (`out=` / `where=`), `Backends/Kernels/ComparisonRun.cs` (one chunk of any layout and dtype pair through the vector kernels; scalar adoption), `Backends/Iterators/NDIter.Execution.ComparisonRun.cs` (the iterator hook), `Backends/Kernels/Direct/DirectILKernelGenerator.Comparison.cs` (the IL vector kernels), `.Comparison.Half.cs`, `.Comparison.Complex.cs`, `.Comparison.MixedSign.cs`, `.StridedMove.cs`. Tests `Backends/Kernels/ComparisonRunTests.cs`, `ComparisonBroadcastKernelTests.cs`; fenced memory `test/NumSharp.Tests/Utilities/FencedMemory.cs` |
+| Comparison engine (`==` … `>=`) | `Backends/Default/Math/DefaultEngine.CompareOp.cs` (dispatch, the trivial route), `DefaultEngine.CompareOp.Rows.cs` (the two-level route without an iterator), `DefaultEngine.UfuncOut.cs` (`out=` / `where=`), `Backends/Kernels/ComparisonRun.cs` (one chunk of any layout and dtype pair through the vector kernels; scalar adoption; the tile and repeated-row routes of a rows iteration), `Backends/Iterators/NDIter.Execution.ComparisonRun.cs` (the iterator hook), `Backends/Kernels/Direct/DirectILKernelGenerator.Comparison.cs` (the IL vector kernels), `.Comparison.Half.cs`, `.Comparison.Complex.cs`, `.Comparison.MixedSign.cs`, `.StridedMove.cs`, `.TransposeTile.cs` (a tile of an F-ordered operand into contiguous rows). Tests `Backends/Kernels/ComparisonRunTests.cs`, `TransposeTileTests.cs`, `ComparisonBroadcastKernelTests.cs`; fenced memory `test/NumSharp.Tests/Utilities/FencedMemory.cs` |
 | BLAS/LAPACK seam | `Backends/IBlasBackend.cs` + `IBlasBackend.LinearAlgebra.cs` (15 default `Try*`), `Backends/TensorEngine.LinearAlgebra.cs` (virtuals + `LinAlgHelper`); managed LU fallback (`det`/`slogdet`/`solve`/`inv`) in `Backends/Default/LinearAlgebra/ManagedLu.cs`; `Backends/ISlidingDotBackend.cs` (optional level-1 `?dot` seam for `correlate`/`convolve`, `OpenBlasEngine.SlidingDot`) |
 | ONNX Runtime interop (package) | `src/NumSharp.Interop.OnnxRuntime/NDArrayOnnxInterop.{cs,Export.cs,Import.cs}` (dtype maps, `AsOrtValue`/`ToOrtValue`/`AsDenseTensor`/`ToDenseTensor`, `ToNDArray`/`AsNDArray`), `OrtTensor.cs` (the `OrtTensor`/`OrtTensor<T>` handles + `ImportLease`), `UnmanagedMemoryManager.cs` (`Memory<T>` over the unmanaged buffer), `InferenceSessionExtensions.cs` (`session.Run(NDArray…)`), `Postprocess.cs`; ORT C# source for reference at `refs/onnxruntime/csharp/` (sparse submodule) + the official samples at `refs/onnxruntime-inference-examples/c_sharp/` |
 | ML.NET interop (package) | `src/NumSharp.Interop.MLNet/NDArrayMLNetInterop.{cs,Export.cs,Import.cs}` (dtype maps, `AsDataView`/`ToDataView`/`ToVBuffer`, `ToNDArray`, zero-copy `VBuffer.AsNDArray<T>` + `WrapExternal`/`Pin`/`Live{Exports,Imports}`), `NDArrayDataView.cs` (the NDArray-backed `IDataView` + strided lazy cursor + ARC-pin lifetime), `VBufferAccessor.cs` (compiled-expression getter for the private `VBuffer<T>._values`), `ImportLease.cs` (the last-view-releases GCHandle pin lease), `Postprocess.cs` (shared with ONNX). Depends on `Microsoft.ML.DataView` only |

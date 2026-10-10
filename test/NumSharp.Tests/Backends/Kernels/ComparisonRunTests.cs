@@ -19,6 +19,10 @@ namespace NumSharp.Tests.Backends.Kernels
     ///     (<c>result_type</c> of the pair), complex by NumPy's <c>CLT</c> / <c>CEQ</c> macros, decimal by value.</para>
     ///     <para>The tests that drive <see cref="ComparisonRun.Run"/> and <see cref="ComparisonRun.RunRows"/> on raw
     ///     memory surround every buffer with sentinel bytes, so a store outside the result slots fails the test.</para>
+    ///     <para>The two forms of a whole rows iteration have tests of their own: an operand whose rows are adjacent
+    ///     elements (an F-ordered matrix, staged tile by tile) and a matrix against one short row (compared several
+    ///     rows per kernel call). The counters <see cref="ComparisonRun.TileRuns"/> and
+    ///     <see cref="ComparisonRun.RepeatedRowRuns"/> prove that those routes ran.</para>
     /// </remarks>
     [TestClass]
     public unsafe class ComparisonRunTests : TestClass
@@ -1019,6 +1023,339 @@ namespace NumSharp.Tests.Backends.Kernels
         }
 
         // =====================================================================================================
+        //  Tiles (an operand whose successive rows are adjacent elements) and a matrix against one row
+        // =====================================================================================================
+
+        /// <summary>The dtype pairs whose tiled layouts are held to the element reference at every shape.</summary>
+        private static readonly (NPTypeCode, NPTypeCode)[] TileCorePairs =
+        {
+            (NPTypeCode.Double, NPTypeCode.Double), (NPTypeCode.Single, NPTypeCode.Single), (NPTypeCode.Byte, NPTypeCode.Byte),
+            (NPTypeCode.Int16, NPTypeCode.Int16), (NPTypeCode.Boolean, NPTypeCode.Boolean), (NPTypeCode.Int64, NPTypeCode.UInt64),
+            (NPTypeCode.Int32, NPTypeCode.Double),
+        };
+
+        /// <summary>More pairs, at the shorter shapes: other widths, conversions on either side, 16-byte elements.</summary>
+        private static readonly (NPTypeCode, NPTypeCode)[] TileMorePairs =
+        {
+            (NPTypeCode.Int32, NPTypeCode.Int32), (NPTypeCode.Half, NPTypeCode.Half), (NPTypeCode.Complex, NPTypeCode.Complex),
+            (NPTypeCode.Decimal, NPTypeCode.Decimal), (NPTypeCode.UInt64, NPTypeCode.Int64), (NPTypeCode.Double, NPTypeCode.Int32),
+            (NPTypeCode.Byte, NPTypeCode.Single), (NPTypeCode.Boolean, NPTypeCode.Int32), (NPTypeCode.Single, NPTypeCode.Complex),
+            (NPTypeCode.Char, NPTypeCode.Int16), (NPTypeCode.SByte, NPTypeCode.Byte), (NPTypeCode.Int16, NPTypeCode.Int64),
+        };
+
+        /// <summary>
+        ///     A C-ordered operand against an F-ordered one, in every form the tile route serves: the F operand on
+        ///     either side, with its rows or its columns reversed, two F-ordered slices, and a column (one value a row)
+        ///     against an F operand. Shapes on both sides of the vector groups of the transposition, of the staging
+        ///     threshold and of one tile's width.
+        /// </summary>
+        /// <remarks>
+        ///     The expected values come from <see cref="Reference"/> through <see cref="AssertCompared"/>, which reads
+        ///     both operands element by element in logical order: it does not depend on the route under test.
+        /// </remarks>
+        [TestMethod]
+        public void TiledOperands_MatchAnElementReference()
+        {
+            var shortShapes = new[] { (2, 2), (3, 5), (17, 33), (40, 25), (300, 3) };
+            var allShapes = new[] { (2, 2), (3, 5), (17, 33), (25, 40), (40, 25), (7, 150), (300, 3), (9, 600) };
+            long tilesBefore = ComparisonRun.TileRuns;
+            foreach (var (pairs, shapes) in new[] { (TileCorePairs, allShapes), (TileMorePairs, shortShapes) })
+            foreach (var (ta, tb) in pairs)
+            foreach (var (rows, cols) in shapes)
+            {
+                long n = (long)rows * cols;
+                using var aFlat = Make(ta, tb, n, 2);
+                using var bFlat = Make(tb, ta, n, 4);
+                NDArray a = aFlat.reshape(rows, cols), b = bFlat.reshape(rows, cols);
+                using var aF = a.copy('F');
+                using var bF = b.copy('F');
+                using var colFlat = Make(ta, tb, rows, 1);
+                NDArray col = colFlat.reshape(rows, 1);
+                // Two operators a shape: < always, and one that changes with the shape and the dtype.
+                foreach (var op in new[] { ComparisonOp.Less, Ops[(rows + cols + (int)ta) % Ops.Length] })
+                {
+                    string tag = $"{op} {ta} x {tb} ({rows},{cols})";
+                    using (var g = Compare(op, a, bF)) AssertCompared(tag + " C / F", g, a, ta, bF, tb, op);
+                    using (var g = Compare(op, aF, b)) AssertCompared(tag + " F / C", g, aF, ta, b, tb, op);
+                    using (var g = Compare(op, a, bF["::-1"])) AssertCompared(tag + " C / F with reversed rows", g, a, ta, bF["::-1"], tb, op);
+                    using (var g = Compare(op, a, bF[":, ::-1"])) AssertCompared(tag + " C / F with reversed columns", g, a, ta, bF[":, ::-1"], tb, op);
+                    using (var g = Compare(op, aF["1:, 1:"], bF[":-1, :-1"])) AssertCompared(tag + " two F slices", g, aF["1:, 1:"], ta, bF[":-1, :-1"], tb, op);
+                    using (var g = Compare(op, col, bF)) AssertCompared(tag + " column / F", g, col, ta, bF, tb, op);
+                }
+            }
+            if (DirectILKernelGenerator.Enabled)
+                (ComparisonRun.TileRuns - tilesBefore).Should().BeGreaterThan(500, "most of these layouts run tile by tile");
+        }
+
+        /// <summary>
+        ///     The tile route, the repeated-row route and the row-by-row loop they replace give the same bytes, which
+        ///     are also the bytes of the comparison of two C-ordered copies; and the routes are taken for the layouts
+        ///     they are meant for, and declined for the ones they are not.
+        /// </summary>
+        /// <remarks>
+        ///     The large shapes reach what the reference test cannot afford: rows cut into several tiles, the overlapped
+        ///     last tile of both directions, and the taller tiles of an operand whose rows span 4 MB or more.
+        /// </remarks>
+        [TestMethod]
+        public void TilesAndRepeatedRows_AgreeWithTheRowByRowRoute()
+        {
+            if (!DirectILKernelGenerator.Enabled)
+                Assert.Inconclusive("Runtime IL generation is off: there is no comparison run.");
+
+            // (dtype, rows, cols, whether the tile route serves C / F of that shape)
+            var cases = new (NPTypeCode Type, int Rows, int Cols)[]
+            {
+                (NPTypeCode.Double, 250, 400), (NPTypeCode.Byte, 250, 400), (NPTypeCode.Boolean, 251, 397), (NPTypeCode.Single, 64, 4096),
+                (NPTypeCode.Int16, 33, 1000), (NPTypeCode.Int64, 400, 250), (NPTypeCode.UInt32, 129, 513),
+                // Rows that span 4 MB or more: the taller tiles.
+                (NPTypeCode.Double, 700, 800), (NPTypeCode.Byte, 2100, 2100), (NPTypeCode.Int16, 1100, 2000), (NPTypeCode.Single, 1100, 1000),
+            };
+            foreach (var (type, rows, cols) in cases)
+            {
+                long n = (long)rows * cols;
+                using var aFlat = ((np.arange(n) * 7) % 251).astype(type);
+                using var bFlat = ((np.arange(n) * 13) % 251).astype(type);
+                NDArray a = aFlat.reshape(rows, cols), b = bFlat.reshape(rows, cols);
+                using var bF = b.copy('F');
+                using var aF = a.copy('F');
+                using var row = ((np.arange(cols) * 5) % 251).astype(type);
+                using var rowAsMatrix = np.broadcast_to(row, a.Shape).copy();
+                string tag = $"{type} ({rows},{cols})";
+
+                using var expected = a < b;
+                long before = ComparisonRun.TileRuns;
+                using (var g = a < bF) np.array_equal(g, expected).Should().BeTrue(tag + " C < F");
+                using (var g = aF < b) np.array_equal(g, expected).Should().BeTrue(tag + " F < C");
+                (ComparisonRun.TileRuns - before).Should().Be(2, tag + ": both calls run tile by tile");
+
+                using var expectedRow = a <= rowAsMatrix;
+                long rowsBefore = ComparisonRun.RepeatedRowRuns;
+                using (var g = a <= row) np.array_equal(g, expectedRow).Should().BeTrue(tag + " matrix <= row");
+                bool repeats = (long)cols * a.dtypesize <= 2048;
+                (ComparisonRun.RepeatedRowRuns - rowsBefore).Should().Be(repeats ? 1 : 0, tag + ": a row of " + (long)cols * a.dtypesize + " bytes");
+
+                ComparisonRun.TilesDisabled = true;
+                ComparisonRun.RepeatedRowDisabled = true;
+                try
+                {
+                    before = ComparisonRun.TileRuns;
+                    rowsBefore = ComparisonRun.RepeatedRowRuns;
+                    using (var g = a < bF) np.array_equal(g, expected).Should().BeTrue(tag + " C < F, row by row");
+                    using (var g = aF < b) np.array_equal(g, expected).Should().BeTrue(tag + " F < C, row by row");
+                    using (var g = a <= row) np.array_equal(g, expectedRow).Should().BeTrue(tag + " matrix <= row, a call a row");
+                    (ComparisonRun.TileRuns - before).Should().Be(0);
+                    (ComparisonRun.RepeatedRowRuns - rowsBefore).Should().Be(0);
+                }
+                finally
+                {
+                    ComparisonRun.TilesDisabled = false;
+                    ComparisonRun.RepeatedRowDisabled = false;
+                }
+            }
+
+            // Declined: long rows of 16-byte elements, a conversion to complex128, and two F operands (an F-ordered
+            // result, which the iterator route computes).
+            {
+                using var c = (np.arange(1000).astype(NPTypeCode.Complex)).reshape(10, 100);
+                using var cF = c.copy('F');
+                using var f32 = (np.arange(1000) % 97).astype(NPTypeCode.Single).reshape(25, 40);
+                using var c2540 = (np.arange(1000) % 89).astype(NPTypeCode.Complex).reshape(25, 40);
+                using var c2540F = c2540.copy('F');
+                using var f32F = f32.copy('F');
+                long before = ComparisonRun.TileRuns;
+                using (var g = c < cF) np.array_equal(g, c < c).Should().BeTrue();
+                using (var g = f32 < c2540F) np.array_equal(g, f32 < c2540).Should().BeTrue();
+                using (var g = f32F < c2540F) g.Shape.IsFContiguous.Should().BeTrue();
+                (ComparisonRun.TileRuns - before).Should().Be(0, "none of the three is served by tiles");
+
+                // Short rows of 16-byte elements are.
+                using (var g = c2540 <= c2540F) np.array_equal(g, c2540 <= c2540).Should().BeTrue();
+                (ComparisonRun.TileRuns - before).Should().Be(1);
+            }
+        }
+
+        /// <summary>
+        ///     A matrix against one row (and one row against a matrix) at row lengths from 2 elements up, with enough
+        ///     rows for the repeated-row route: the values are the element reference's.
+        /// </summary>
+        [TestMethod]
+        public void MatrixAgainstOneRow_MatchesAnElementReference()
+        {
+            var pairs = new (NPTypeCode, NPTypeCode)[]
+            {
+                (NPTypeCode.Byte, NPTypeCode.Byte), (NPTypeCode.Boolean, NPTypeCode.Boolean), (NPTypeCode.Int16, NPTypeCode.Int16),
+                (NPTypeCode.Single, NPTypeCode.Single), (NPTypeCode.Double, NPTypeCode.Double), (NPTypeCode.Complex, NPTypeCode.Complex),
+                (NPTypeCode.Int64, NPTypeCode.UInt64), (NPTypeCode.Half, NPTypeCode.Half),
+            };
+            long before = ComparisonRun.RepeatedRowRuns;
+            foreach (var (ta, tb) in pairs)
+            foreach (var (rows, cols) in new[] { (16, 2), (17, 3), (40, 33), (300, 3), (16, 100), (21, 40), (64, 16), (15, 40) })
+            {
+                long n = (long)rows * cols;
+                using var aFlat = Make(ta, tb, n, 2);
+                using var bFlat = Make(tb, ta, n, 5);
+                NDArray a = aFlat.reshape(rows, cols), b = bFlat.reshape(rows, cols);
+                using var rowB = Make(tb, ta, cols, 6);
+                using var rowA = Make(ta, tb, cols, 3);
+                foreach (var op in new[] { ComparisonOp.Less, Ops[(rows + cols) % Ops.Length] })
+                {
+                    string tag = $"{op} {ta} x {tb} ({rows},{cols})";
+                    using (var g = Compare(op, a, rowB)) AssertCompared(tag + " matrix / row", g, a, ta, rowB, tb, op);
+                    using (var g = Compare(op, rowA, b)) AssertCompared(tag + " row / matrix", g, rowA, ta, b, tb, op);
+                    // Rows that do NOT follow each other in memory (every second row, the rows in reverse) must
+                    // not be compared as one block.
+                    using (var g = Compare(op, a["::2"], rowB)) AssertCompared(tag + " every second row / row", g, a["::2"], ta, rowB, tb, op);
+                    using (var g = Compare(op, rowA, b["::-1"])) AssertCompared(tag + " row / reversed rows", g, rowA, ta, b["::-1"], tb, op);
+                }
+            }
+            if (DirectILKernelGenerator.Enabled)
+                (ComparisonRun.RepeatedRowRuns - before).Should().BeGreaterThan(150, "every shape of 16 rows or more takes the repeated-row route");
+        }
+
+        /// <summary>
+        ///     <see cref="ComparisonRun.RunRows"/> on raw memory with a tiled operand on either side, in every form of
+        ///     the operand beside it (rows that follow each other, rows that do not, one value a row, a second tiled
+        ///     operand), with all operands and the output against inaccessible pages. The values are right, the bytes
+        ///     around the output are untouched, and no byte outside an operand is read.
+        /// </summary>
+        /// <remarks>
+        ///     The tiled operand's columns have a gap after each column piece in half of the cases, and its rows or
+        ///     its columns run downwards in memory in turn, so the tile's edges are the buffer's edges in every
+        ///     direction. On a host without <see cref="FencedMemory"/> the operands are heap blocks and the margins of
+        ///     the output are checked only.
+        /// </remarks>
+        [TestMethod]
+        public void RunRows_Tiles_OnRawMemory_TouchNoByteOutsideTheirOperands()
+        {
+            var pairs = new (NPTypeCode, NPTypeCode)[]
+            {
+                (NPTypeCode.Byte, NPTypeCode.Byte), (NPTypeCode.Boolean, NPTypeCode.Boolean), (NPTypeCode.Int16, NPTypeCode.Int16),
+                (NPTypeCode.Single, NPTypeCode.Single), (NPTypeCode.Double, NPTypeCode.Double), (NPTypeCode.Int32, NPTypeCode.Double),
+                (NPTypeCode.Double, NPTypeCode.Int16), (NPTypeCode.Int64, NPTypeCode.UInt64), (NPTypeCode.Complex, NPTypeCode.Complex),
+            };
+            bool fenced = FencedMemory.IsSupported;
+            using var lFence = fenced ? new FencedMemory(pages: 80) : null;
+            using var rFence = fenced ? new FencedMemory(pages: 80) : null;
+            using var oFence = fenced ? new FencedMemory(pages: 8) : null;
+            int position = 0;
+            long tilesBefore = ComparisonRun.TileRuns;
+            foreach (var (ta, tb) in pairs)
+            foreach (long rows in new long[] { 2, 9, 16, 17, 33 })
+            foreach (long count in new long[] { 4, 31, 33, 64, 70, 300, 600 })
+            foreach (int form in new[] { 0, 1, 2, 3 })
+            foreach (bool tiledOnLeft in new[] { true, false })
+            {
+                if (rows * count < ComparisonRun.StagedMinElements)
+                    continue;
+                position++;
+                // The variations each case takes in turn: a gap after each column piece, downward rows, downward columns,
+                // and the edge of the fences the operands lie against.
+                long gap = (position & 1) == 0 ? 0 : 3;
+                bool downRows = (position & 2) != 0, downColumns = (position & 4) != 0, atEnd = (position & 8) != 0;
+                var op = Ops[position % Ops.Length];
+                NPTypeCode tiledType = tiledOnLeft ? ta : tb, otherType = tiledOnLeft ? tb : ta;
+                FencedMemory tiledFence = tiledOnLeft ? lFence : rFence, otherFence = tiledOnLeft ? rFence : lFence;
+                // The operand beside the tiled one is checked at the largest gap any of its forms has.
+                if (fenced && (!RawTiled.Fits(tiledFence, tiledType, rows, count, gap) || !RawTiled.Fits(otherFence, otherType, rows, count, 3)
+                               || rows * count > oFence.Bytes))
+                    continue;
+
+                using var tiled = new RawTiled(tiledType, otherType, rows, count, gap, downRows, downColumns, phase: 1, tiledFence, atEnd);
+                // The operand beside it: 0 rows that follow each other, 1 rows laid out downwards (a kernel call a
+                // row), 2 one value a row, 3 a second tiled operand.
+                using var otherRows = form <= 2
+                    ? new RawMatrix(otherType, tiledType, rows, count, inner: form == 2 ? 0 : 1, backwardRows: form == 1, phase: 4, otherFence, !atEnd)
+                    : null;
+                using var otherTiled = form == 3
+                    ? new RawTiled(otherType, tiledType, rows, count, gap == 0 ? 2 : 0, !downRows, downColumns, phase: 4, otherFence, !atEnd)
+                    : null;
+                int otherSize = DirectILKernelGenerator.GetTypeSize(otherType);
+                byte* otherFirst = form == 3 ? otherTiled.First : otherRows.First;
+                long otherInner = form == 3 ? otherTiled.InnerStride : (form == 2 ? 0 : otherSize);
+                long otherOuter = form == 3 ? otherTiled.OuterStride : otherRows.OuterStride;
+
+                using var result = new RawOutput(rows * count, 1, oFence, atEnd);
+                var run = ComparisonRun.Get(op, ta, tb);
+                if (tiledOnLeft)
+                    run.RunRows(tiled.First, tiled.InnerStride, tiled.OuterStride, otherFirst, otherInner, otherOuter, result.First, 1, count, rows, count);
+                else
+                    run.RunRows(otherFirst, otherInner, otherOuter, tiled.First, tiled.InnerStride, tiled.OuterStride, result.First, 1, count, rows, count);
+
+                string what = $"{op} {ta} x {tb} rows={rows} count={count} form={form} tiledOnLeft={tiledOnLeft} gap={gap} downRows={downRows} downColumns={downColumns} atEnd={atEnd}";
+                for (long i = 0; i < rows; i++)
+                for (long j = 0; j < count; j++)
+                {
+                    object other = form == 3 ? otherTiled.Value(i, j) : otherRows.Value(i, j);
+                    object x = tiledOnLeft ? tiled.Value(i, j) : other, y = tiledOnLeft ? other : tiled.Value(i, j);
+                    bool want = Reference(op, x, ta, y, tb);
+                    if (result.First[i * count + j] != (want ? 1 : 0))
+                        Assert.Fail($"{what} [{i},{j}]: {x} {op} {y} should be {want}, slot holds {result.First[i * count + j]}");
+                }
+                result.AssertOnlySlotsWritten(what);
+            }
+            if (DirectILKernelGenerator.Enabled)
+                (ComparisonRun.TileRuns - tilesBefore).Should().BeGreaterThan(position / 2, "most of these calls run tile by tile");
+        }
+
+        /// <summary>
+        ///     <see cref="ComparisonRun.RunRows"/> on raw memory for a matrix against one row, the row on either side,
+        ///     with the operands and the output against inaccessible pages: the repeated block is compared against
+        ///     exactly the matrix's rows, and the last, shorter batch of rows reads and writes nothing beyond them.
+        /// </summary>
+        [TestMethod]
+        public void RunRows_RepeatedRow_OnRawMemory_TouchesNoByteOutsideItsOperands()
+        {
+            var pairs = new (NPTypeCode, NPTypeCode)[]
+            {
+                (NPTypeCode.Byte, NPTypeCode.Byte), (NPTypeCode.Boolean, NPTypeCode.Boolean), (NPTypeCode.Int16, NPTypeCode.Int16),
+                (NPTypeCode.Single, NPTypeCode.Single), (NPTypeCode.Double, NPTypeCode.Double), (NPTypeCode.Int64, NPTypeCode.UInt64),
+                (NPTypeCode.Complex, NPTypeCode.Complex),
+            };
+            bool fenced = FencedMemory.IsSupported;
+            using var matrixFence = fenced ? new FencedMemory(pages: 80) : null;
+            using var rowFence = fenced ? new FencedMemory(pages: 2) : null;
+            using var oFence = fenced ? new FencedMemory(pages: 8) : null;
+            int position = 0;
+            long before = ComparisonRun.RepeatedRowRuns, expectedRuns = 0;
+            foreach (var (ta, tb) in pairs)
+            foreach (long rows in new long[] { 15, 16, 17, 40, 257 })
+            foreach (long count in new long[] { 1, 3, 16, 33, 40, 100, 130 })
+            foreach (bool rowOnLeft in new[] { false, true })
+            {
+                position++;
+                bool atEnd = (position & 1) != 0;
+                var op = Ops[position % Ops.Length];
+                NPTypeCode matrixType = rowOnLeft ? tb : ta, rowType = rowOnLeft ? ta : tb;
+                int matrixSize = DirectILKernelGenerator.GetTypeSize(matrixType), rowSize = DirectILKernelGenerator.GetTypeSize(rowType);
+                if (fenced && (rows * count * matrixSize > matrixFence.Bytes || rows * count > oFence.Bytes))
+                    continue;
+                using var matrix = new RawMatrix(matrixType, rowType, rows, count, inner: 1, backwardRows: false, phase: 2, matrixFence, atEnd);
+                using var row = new RawRun(rowType, matrixType, count, 1, phase: 5, rowFence, !atEnd);
+                using var result = new RawOutput(rows * count, 1, oFence, atEnd);
+                var run = ComparisonRun.Get(op, ta, tb);
+                if (rows >= 16 && count * System.Math.Max(matrixSize, rowSize) <= 2048)
+                    expectedRuns++;
+                if (rowOnLeft)
+                    run.RunRows(row.First, rowSize, 0, matrix.First, matrixSize, matrix.OuterStride, result.First, 1, count, rows, count);
+                else
+                    run.RunRows(matrix.First, matrixSize, matrix.OuterStride, row.First, rowSize, 0, result.First, 1, count, rows, count);
+
+                string what = $"{op} {ta} x {tb} rows={rows} count={count} rowOnLeft={rowOnLeft} atEnd={atEnd}";
+                for (long i = 0; i < rows; i++)
+                for (long j = 0; j < count; j++)
+                {
+                    object x = rowOnLeft ? row.Value(j) : matrix.Value(i, j), y = rowOnLeft ? matrix.Value(i, j) : row.Value(j);
+                    bool want = Reference(op, x, ta, y, tb);
+                    if (result.First[i * count + j] != (want ? 1 : 0))
+                        Assert.Fail($"{what} [{i},{j}]: {x} {op} {y} should be {want}, slot holds {result.First[i * count + j]}");
+                }
+                result.AssertOnlySlotsWritten(what);
+            }
+            if (DirectILKernelGenerator.Enabled)
+                (ComparisonRun.RepeatedRowRuns - before).Should().Be(expectedRuns, "rows of at most 2,048 bytes, 16 of them or more, are repeated");
+        }
+
+        // =====================================================================================================
         //  Kernels
         // =====================================================================================================
 
@@ -1361,6 +1698,90 @@ namespace NumSharp.Tests.Backends.Kernels
             /// <param name="j">Position in the row.</param>
             /// <returns>The boxed value.</returns>
             public object Value(long i, long j) => _values[i, _inner == 0 ? 0 : j];
+
+            /// <summary>Frees the operand's own block (a fenced operand owns no memory).</summary>
+            public void Dispose() => NativeMemory.Free(_block);
+        }
+
+        /// <summary>
+        ///     One input operand of a rows-of-runs iteration stored COLUMN by column in native memory (the layout of an
+        ///     F-ordered matrix): the <c>rows</c> elements of one column are adjacent, the columns are
+        ///     <c>rows + gap</c> elements apart. The rows and the columns can each run downwards in memory. The memory
+        ///     is the operand's own heap block, or a place against a fence of a <see cref="FencedMemory"/>.
+        /// </summary>
+        private sealed class RawTiled : IDisposable
+        {
+            /// <summary>The operand's own heap block; null when it lives in a fence.</summary>
+            private readonly byte* _block;
+            private readonly object[,] _values;
+
+            /// <summary>Address of element (row 0, position 0).</summary>
+            public readonly byte* First;
+
+            /// <summary>Byte stride between two elements of one row: one column, of either sign.</summary>
+            public readonly long InnerStride;
+
+            /// <summary>Byte stride between two rows: one element, of either sign.</summary>
+            public readonly long OuterStride;
+
+            /// <summary>Bytes from the operand's lowest byte to its highest.</summary>
+            /// <param name="t">The dtype.</param>
+            /// <param name="rows">Number of rows.</param>
+            /// <param name="count">Elements per row.</param>
+            /// <param name="gap">Unused elements after each column piece.</param>
+            /// <returns>The span in bytes.</returns>
+            private static long Span(NPTypeCode t, long rows, long count, long gap)
+                => ((count - 1) * (rows + gap) + rows) * DirectILKernelGenerator.GetTypeSize(t);
+
+            /// <summary>Whether an operand of this form fits the accessible bytes of <paramref name="fence"/>.</summary>
+            /// <param name="fence">The fenced memory.</param>
+            /// <param name="t">The dtype.</param>
+            /// <param name="rows">Number of rows.</param>
+            /// <param name="count">Elements per row.</param>
+            /// <param name="gap">Unused elements after each column piece.</param>
+            /// <returns>True when it fits.</returns>
+            public static bool Fits(FencedMemory fence, NPTypeCode t, long rows, long count, long gap) => Span(t, rows, count, gap) <= fence.Bytes;
+
+            /// <summary>Allocates (or places) and fills the operand.</summary>
+            /// <param name="t">The dtype.</param>
+            /// <param name="other">The other operand's dtype (selects the value pool).</param>
+            /// <param name="rows">Number of rows.</param>
+            /// <param name="count">Elements per row.</param>
+            /// <param name="gap">Unused elements after each column piece (0: the columns follow each other).</param>
+            /// <param name="downRows">Row 0 is the highest element of each column piece.</param>
+            /// <param name="downColumns">Position 0 is the column at the highest address.</param>
+            /// <param name="phase">Selects the sequence of pool entries.</param>
+            /// <param name="fence">Fenced memory to place the operand in; null for a heap block of its own.</param>
+            /// <param name="atEnd">In a fence: the operand's highest byte is the last accessible one (else its lowest
+            ///     byte is the first accessible one).</param>
+            public RawTiled(NPTypeCode t, NPTypeCode other, long rows, long count, long gap, bool downRows, bool downColumns, int phase,
+                FencedMemory fence = null, bool atEnd = false)
+            {
+                int size = DirectILKernelGenerator.GetTypeSize(t);
+                long span = Span(t, rows, count, gap), column = (rows + gap) * size;
+                byte* low;
+                if (fence is null)
+                    low = _block = (byte*)NativeMemory.AllocZeroed((nuint)(span + 64));
+                else
+                    low = fence.Place(span, atEnd);
+                InnerStride = downColumns ? -column : column;
+                OuterStride = downRows ? -size : size;
+                First = low + (downColumns ? (count - 1) * column : 0) + (downRows ? (rows - 1) * size : 0);
+                var pool = PoolFor(t, other);
+                _values = new object[rows, count];
+                for (long i = 0; i < rows; i++)
+                for (long j = 0; j < count; j++)
+                {
+                    _values[i, j] = pool[PoolIndex(i * count + j, phase, pool.Length)];
+                    WriteElement(First + i * OuterStride + j * InnerStride, t, _values[i, j]);
+                }
+            }
+
+            /// <summary>The value at row <paramref name="i"/>, position <paramref name="j"/>.</summary>
+            /// <param name="i">Row.</param>
+            /// <param name="j">Position in the row.</param>
+            /// <returns>The boxed value.</returns>
+            public object Value(long i, long j) => _values[i, j];
 
             /// <summary>Frees the operand's own block (a fenced operand owns no memory).</summary>
             public void Dispose() => NativeMemory.Free(_block);

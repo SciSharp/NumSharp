@@ -21,8 +21,13 @@ using NumSharp.Generic;
 // executes: one vector-kernel call per run, no iterator.
 //
 // An iteration with more levels (a 3-D operand whose rows of rows are stepped),
-// an F-ordered result, narrow rows and every out= / where= call keep the
-// iterator route.
+// an F-ordered result, narrow rows (other than a matrix against one row) and
+// every out= / where= call keep the iterator route.
+//
+// RunRows has two forms of its own for whole iterations: an operand whose rows
+// are adjacent elements (an F-ordered matrix beside a C-ordered one) is copied
+// a tile of several rows at a time, and a matrix against one short row compares
+// several rows per kernel call. Both are described in ComparisonRun.cs.
 // =============================================================================
 
 namespace NumSharp.Backends
@@ -55,7 +60,8 @@ namespace NumSharp.Backends
         ///     error), an empty result, a result NumPy lays out in F order (every array operand F-contiguous, see
         ///     <see cref="ShouldProduceFContigOutput(NDArray, NDArray, Shape)"/>), more levels than two, and many rows
         ///     of fewer than <see cref="ComparisonRun.DirectRowMinElements"/> elements whose inputs are contiguous or
-        ///     one value each (the iterator's 2-D block kernel loops such rows inside one call).</para>
+        ///     one value each (the iterator's 2-D block kernel loops such rows inside one call), unless they are a
+        ///     matrix against one row (<see cref="ComparisonRun.RepeatsRow"/>).</para>
         ///     <para>The result is fresh, so no operand overlaps it and the order of the runs cannot be observed.</para>
         /// </remarks>
         private unsafe NDArray<bool>? TryRowsComparisonOp(NDArray lhs, NDArray rhs, ComparisonOp op, NPTypeCode lhsType, NPTypeCode rhsType)
@@ -147,9 +153,11 @@ namespace NumSharp.Backends
             // Many NARROW rows whose inputs are contiguous or one value each: the iterator's 2-D block kernel loops
             // them inside one call (about 1.5 ns a row plus 1 ns an element), which a kernel call per row (8 ns)
             // does not beat under DirectRowMinElements elements. Every other layout is faster here: its rows cost
-            // the same per element on both routes, and this one builds no iterator.
+            // the same per element on both routes, and this one builds no iterator. So is a matrix against ONE
+            // row, however narrow: RunRows compares many of its rows per kernel call.
             if (rows > 1 && count < ComparisonRun.DirectRowMinElements
-                && (lInner == lItem || lInner == 0) && (rInner == rItem || rInner == 0))
+                && (lInner == lItem || lInner == 0) && (rInner == rItem || rInner == 0)
+                && !run.RepeatsRow(lInner, lOuter, rInner, rOuter, count, rows, count))
                 return null;
 
             // An operand that already has the result's dims lends its Shape when that Shape is a clean C layout
