@@ -52,6 +52,12 @@ One optional companion package ships for the first time, co-versioned with **Num
   - `as_series`, `trimseq`, `trimcoef`, `getdomain`, `mapparms`, `mapdomain` - `polyutils`.
   - Speed - x4.65-x37.8 NumPy's speed by benchmark geomean per family (evaluation x7.5, additive x8.5, calculus x7.6, series algebra x37.8, Vandermonde x10.2, roots x4.65).
   - Still to come: fitting, Gauss quadrature, `chebpts` / `chebinterpolate`, `polyvalfromroots`, `format_float` and the six series classes.
+- `np.matrix` - NumPy's `numpy.matrix` as the type `NDMatrix` (80 of its 83 members), held to NumPy 2.4.2's values, class and shape by two generated oracles (26,761 and 4,645 cases) - `201e9c7b`, `51bd91f8` (+ `daa58824`).
+  - `np.matrix`, `np.asmatrix`, `np.bmat` - construction from arrays, sequences and `"1 2; 3 4"` literals.
+  - `T`, `H`, `I`, `A`, `A1` - the transposes, the inverse and the plain-array views.
+  - `*`, `**` - the matrix product and the matrix power; an index keeps rows and columns two-dimensional.
+  - `sum`, `prod`, `mean`, `var`, `std`, `any`, `all`, `max`, `min`, `argmax`, `argmin`, `ptp` - reductions that keep two axes.
+  - `np.*` functions return NumPy's class and shape for a matrix operand: `np.sum(m, 0)` is a 1 x N matrix, `np.linalg.inv(m)` a matrix, `np.ravel(m)` a plain array, and `np.stack` raises as in NumPy.
 - `np.random` bit-generator family - NumPy's engines, seeding and stream splitting, byte-identical to NumPy 2.4.2 and replayed overload by overload (493 members, 5 engines x 10 seeds) - `c1e0feb5`, `65bdea7b` (+ `0e39714b`, `eebe85a6`).
   - `PCG64DXSM`, `Philox`, `SFC64` - new bit generators; `PCG64.advance`, `jumped`, `random_raw`, `state` - engine controls; `MT19937` is now a NumPy `BitGenerator` too.
   - `SeedSequence.spawn`, `spawn_key`, `pool_size`, `state`, `BitGenerator.spawn`, `Generator.spawn`, `ISeedSequence` - seeding and independent streams.
@@ -187,5 +193,8 @@ One optional companion package ships for the first time, co-versioned with **Num
 - Legacy integers are NumPy's LP64 C `long`: `randint` defaults to int64 (was int32), `random_integers` / `permutation` / `choice` / `multinomial` return int64, `NumPyRandom.Seed` is a `uint` (was `int`), and `SeedSequence.generate_state` returns an `NDArray` (was `Array`) - `eebe85a6`.
 - NumPy's parameter names: `Generator(bit_generator)` (was `bitGenerator`), `PCG64(seed)` and the other bit generators (was `seedSeq`, now any `ISeedSequence`), and `default_rng(seed)` (was `bitGenerator` / `generator`) - named-argument calls must be renamed - `eebe85a6`, `1c7ac693`.
 - The non-NumPy `NumPyRandom.uniform(NDArray low, NDArray high, DType dtype)` is removed; two-array calls bind NumPy's broadcasting overload (float64; `.astype()` the result for another dtype) - `39d446e0`.
+- `np.asmatrix` / `np.bmat` return `NDMatrix` (was a plain 2-D `NDArray`): `*` is the matrix product, an index keeps two axes, and `np.*` functions return NumPy's matrix results for it (`np.sum(m, 0)` has shape `(1, N)`); take `.A` for the plain array - `201e9c7b`, `51bd91f8`.
+- An index-array assignment follows NumPy's value rule: a value that does not fit raises `ValueError` "shape mismatch: value array of shape (1,4) could not be broadcast to indexing result of shape (2,)" before anything is written (was `IncorrectShapeException`), and a `(1, N)` value now fits an `(N,)` selection - `201e9c7b`.
+- A boolean-mask assignment takes a 0-d or 1-d value: a 2-d value raises NumPy's `TypeError`, and a 1-d value whose length is neither 1 nor the number of true elements raises NumPy's `ValueError` - `201e9c7b`.
 
 </details>
