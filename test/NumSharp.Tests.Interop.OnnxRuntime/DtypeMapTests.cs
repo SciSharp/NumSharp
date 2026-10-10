@@ -83,17 +83,23 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             NDArrayOnnxInterop.ToTensorElementClrType(NPTypeCode.Complex).Should().BeNull();
         }
 
+        /// <summary>
+        ///     The element types with no NumSharp dtype are refused on import (BFloat16, the two complex types). String is
+        ///     no longer one of them: it maps to the string storage lane, and its descriptor is the unsized <c>U</c>.
+        /// </summary>
         [TestMethod]
-        public void String_BFloat16_Complex_AreRefusedOnImport()
+        public void BFloat16_Complex_AreRefusedOnImport_AndStringMapsToText()
         {
-            new Action(() => NDArrayOnnxInterop.FromTensorElementType(TensorElementType.String)).Should().Throw<NotSupportedException>()
-                .WithMessage("*GetStringTensorAsArray*");
             new Action(() => NDArrayOnnxInterop.FromTensorElementType(TensorElementType.BFloat16)).Should().Throw<NotSupportedException>()
                 .WithMessage("*bfloat16*");
             new Action(() => NDArrayOnnxInterop.FromTensorElementType(TensorElementType.Complex64)).Should().Throw<NotSupportedException>();
             new Action(() => NDArrayOnnxInterop.FromTensorElementType(TensorElementType.Complex128)).Should().Throw<NotSupportedException>();
-            NDArrayOnnxInterop.TryFromTensorElementType(TensorElementType.String, out _).Should().BeFalse();
             NDArrayOnnxInterop.TryFromTensorElementType(TensorElementType.BFloat16, out _).Should().BeFalse();
+
+            NDArrayOnnxInterop.FromTensorElementType(TensorElementType.String).Should().Be(NPTypeCode.String);
+            NDArrayOnnxInterop.TryFromTensorElementType(TensorElementType.String, out DType text).Should().BeTrue();
+            text.kind.Should().Be('U', "an ORT string reads back as fixed-width Unicode");
+            text.itemsize.Should().Be(0, "the descriptor is unsized: the width comes from the strings read");
         }
 
         [TestMethod]

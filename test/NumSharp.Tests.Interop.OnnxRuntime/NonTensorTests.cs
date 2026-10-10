@@ -176,8 +176,9 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
 
             y.ReadStringTensor().Should().Equal("héllo", "wörld", "");
 
-            // a string tensor is refused by the numeric verbs; a numeric tensor is refused by ReadStringTensor
-            new Action(() => y.ToNDArray()).Should().Throw<NotSupportedException>().WithMessage("*ReadStringTensor*");
+            // the same tensor as a text array; a numeric tensor is refused by ReadStringTensor
+            using (NDArray text = y.ToNDArray())
+                NDArray.AsStringArray(text).Should().Equal("héllo", "wörld", "");
             using NDArray num = np.array(new[] { 1f, 2f });
             using OrtTensor numT = num.AsOrtValue();
             new Action(() => numT.Value.ReadStringTensor()).Should().Throw<NotSupportedException>().WithMessage("*STRING tensors only*");
@@ -194,13 +195,19 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             new Action(() => none.GetMapKeys()).Should().Throw<ArgumentNullException>();
         }
 
+        /// <summary>
+        ///     A string model input takes a text array and refuses a numeric one: NumSharp does not convert numbers to
+        ///     text yet, so no casting rule admits the pair. (Every array used to be refused here, because NumSharp had no
+        ///     text dtype.)
+        /// </summary>
         [TestMethod]
-        public void StringTypedModelInput_IsRefused_WithTheReadStringsHint()
+        public void StringTypedModelInput_RefusesANumericArray_UnderEveryCastingRule()
         {
             using InferenceSession session = OpenSession("string_io");
             using NDArray nd = np.array(new[] { 1f, 2f });
-            new Action(() => session.Run(nd)).Should().Throw<NotSupportedException>()
-                .WithMessage("*'X'*String*ReadStringTensor*", "the model's input dtype has no NumSharp analog");
+            foreach (string casting in new[] { "safe", "same_kind", "unsafe" })
+                new Action(() => session.Run(nd, casting: casting)).Should().Throw<InvalidCastException>(casting)
+                    .WithMessage("*'X'*string tensor*Single*text array*");
             NDArrayOnnxInterop.LiveExports.Should().Be(0);
         }
 

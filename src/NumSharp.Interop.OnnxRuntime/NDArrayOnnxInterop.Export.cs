@@ -31,6 +31,9 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     <see cref="NPTypeCode.Half"/> crosses as <see cref="TensorElementType.Float16"/> (bit-identical,
         ///     NaN payloads included); <see cref="NPTypeCode.Char"/> as <see cref="TensorElementType.UInt16"/>.
         ///     <see cref="NPTypeCode.Decimal"/> has no ONNX type and always crosses as a float64 copy.
+        ///     A text array (the fixed-width <c>U</c> / <c>S</c> dtypes) crosses as an ORT string tensor, always a
+        ///     copy that ONNX Runtime owns (so <see cref="OnnxCodecMode.View"/> refuses it, and the handle's
+        ///     <see cref="OrtTensor.Source"/> is the array itself).
         ///     <see cref="NPTypeCode.Complex"/> throws in every mode: a copy cannot give it an ONNX type.</para>
         ///
         ///     <para><b>Lifetime:</b> the handle takes its own atomic reference on the buffer ORT reads, so the
@@ -53,8 +56,8 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <returns>A disposable handle owning the <see cref="OrtValue"/> (<see cref="OrtTensor.Value"/>), the buffer reference and any temporary copy.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
-        /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and the array is not C-contiguous or is Decimal.</exception>
-        /// <exception cref="NotSupportedException">The dtype has no ONNX tensor element type (Complex).</exception>
+        /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and the array is not C-contiguous, is Decimal or is text.</exception>
+        /// <exception cref="NotSupportedException">The dtype has no ONNX tensor element type (Complex), or a text array holds more strings than ORT can index.</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         public static OrtTensor AsOrtValue(this NDArray source, OnnxCodecMode mode = OnnxCodecMode.Auto) => AsOrtValueCore(source, ownsSource: false, mode);
 
@@ -81,6 +84,11 @@ namespace NumSharp.Interop.OnnxRuntime
             if (source is null)
                 throw new ArgumentNullException(nameof(source));
             EnsureDefined(mode);
+
+            // Text first: a string tensor is a different object (ORT owns every string), and the numeric path below
+            // cannot even name the dtype of a text array (NPTypeCode.String does not convert to a DType).
+            if (IsText(source))
+                return TextAsOrtValue(source, ownsSource, mode);
 
             // The dtype is decided from the source alone, before anything is read: Complex has no ONNX element type
             // in any mode, so it must not cost a copy first. Decimal is fed as float64 (FeedTypeCode); the low-level
@@ -199,7 +207,7 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     Copy a NumSharp array into an independent ORT-allocated tensor (no shared memory, no lifetime
         ///     coupling — dispose the <see cref="OrtValue"/> when done, as with any ORT value). Any layout: a
         ///     sliced / transposed / broadcast view is copied in its logical (C) order. Same dtype rules as
-        ///     <see cref="AsOrtValue"/> (Decimal → float64; Complex throws).
+        ///     <see cref="AsOrtValue"/> (Decimal → float64; a text array → a string tensor; Complex throws).
         ///
         ///     <para>The difference from <c>AsOrtValue(mode: OnnxCodecMode.Copy)</c> is who owns the copy: here ORT's
         ///     allocator does and the result is a bare <see cref="OrtValue"/> with no handle to keep alive; there a
@@ -220,6 +228,10 @@ namespace NumSharp.Interop.OnnxRuntime
         {
             if (source is null)
                 throw new ArgumentNullException(nameof(source));
+
+            // Text crosses as a string tensor (a copy of every string; see NDArrayOnnxInterop.Text.cs).
+            if (IsText(source))
+                return TextToOrtValue(source, nameof(ToOrtValue));
 
             // Decide everything the dtype and the shape alone decide BEFORE the source is read. The 2 GB check used
             // to run after the source had been converted and densified and ORT had allocated the tensor, so a large
@@ -332,7 +344,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
         /// <exception cref="ArgumentException"><typeparamref name="T"/> is not the element type ORT uses for the array's dtype.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and the array is not C-contiguous or is Decimal.</exception>
-        /// <exception cref="NotSupportedException">The dtype has no ONNX element type (Complex), or the array has more elements than a <see cref="Memory{T}"/> can index (in every mode: the copy lives behind a <see cref="Memory{T}"/> too).</exception>
+        /// <exception cref="NotSupportedException">The dtype has no ONNX element type (Complex); the array is text (a string is not an unmanaged <typeparamref name="T"/>: use <see cref="AsOrtValue"/>); or the array has more elements than a <see cref="Memory{T}"/> can index (in every mode: the copy lives behind a <see cref="Memory{T}"/> too).</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         public static OrtTensor<T> AsDenseTensor<T>(this NDArray source, OnnxCodecMode mode = OnnxCodecMode.Auto) where T : unmanaged
             => AsDenseTensorCore<T>(source, ownsSource: false, mode);
@@ -362,6 +374,8 @@ namespace NumSharp.Interop.OnnxRuntime
             if (source is null)
                 throw new ArgumentNullException(nameof(source));
             EnsureDefined(mode);
+            if (IsText(source))
+                throw new NotSupportedException(TextDenseTensorMessage(nameof(AsDenseTensor)));
 
             // Decide everything the dtype and the shape alone decide BEFORE anything is converted or copied: the element
             // type is that of the FED dtype (Decimal is fed as float64), and neither the conversion nor the C-order copy
@@ -422,15 +436,18 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
         /// <exception cref="ArgumentException"><typeparamref name="T"/> is not the element type ORT uses for the array's dtype.</exception>
         /// <exception cref="NotSupportedException">
-        ///     The dtype has no ONNX element type (Complex); the array has more elements than a managed <c>T[]</c> can
-        ///     hold (<see cref="Array.MaxLength"/>, 2,147,483,591 — a little below <see cref="int.MaxValue"/>); or an
-        ///     axis is longer than <see cref="DenseTensor{T}"/>'s <see cref="int"/> dimensions allow.
+        ///     The dtype has no ONNX element type (Complex); the array is text (use <see cref="ToOrtValue"/>); the array has
+        ///     more elements than a managed <c>T[]</c> can hold (<see cref="Array.MaxLength"/>, 2,147,483,591 — a little
+        ///     below <see cref="int.MaxValue"/>); or an axis is longer than <see cref="DenseTensor{T}"/>'s <see cref="int"/>
+        ///     dimensions allow.
         /// </exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         public static unsafe DenseTensor<T> ToDenseTensor<T>(this NDArray source) where T : unmanaged
         {
             if (source is null)
                 throw new ArgumentNullException(nameof(source));
+            if (IsText(source))
+                throw new NotSupportedException(TextDenseTensorMessage(nameof(ToDenseTensor)));
 
             // Decide everything the dtype and the shape alone decide BEFORE the source is read: the element type is
             // that of the FED dtype (Decimal is fed as float64), and the conversion and the copy never change the

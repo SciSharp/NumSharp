@@ -13,7 +13,7 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
     ///     Edge coverage of the dtype seam that <see cref="DtypeMapTests"/> leaves: the FULL
     ///     <see cref="NDArrayOnnxInterop.ToTensorElementClrType"/> map, the generic <c>TypeCodeOf&lt;T&gt;</c>
     ///     (including the three throwing T's and the catch-all), <c>EnsureElementType&lt;T&gt;</c>'s three
-    ///     outcomes, and a string <see cref="OrtValue"/> refused at the <c>IsString</c> gate of both import verbs.
+    ///     outcomes, and a string <see cref="OrtValue"/> read as a text array by both import verbs.
     /// </summary>
     [TestClass]
     public class DtypeMapEdgeTests : OnnxTestBase
@@ -125,16 +125,28 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                 .Should().Throw<NotSupportedException>().WithMessage("*complex*");
         }
 
+        /// <summary>
+        ///     A string <see cref="OrtValue"/> takes the string branch of both import verbs: a text array (fixed-width
+        ///     <c>U</c>), a copy under the default mode, and a refusal only under <see cref="OnnxCodecMode.View"/>. Both
+        ///     verbs used to refuse it at this gate, because NumSharp had no text dtype.
+        /// </summary>
         [TestMethod]
-        public void StringTensor_IsRefused_AtTheIsStringGate_OfBothImportVerbs()
+        public void StringTensor_TakesTheTextBranch_OfBothImportVerbs()
         {
             using OrtValue strings = OrtValue.CreateTensorWithEmptyStrings(OrtAllocator.DefaultInstance, new long[] { 2 });
             strings.OnnxType.Should().Be(OnnxValueType.ONNX_TYPE_TENSOR);
             strings.GetTensorTypeAndShape().IsString.Should().BeTrue();
+            strings.StringTensorSetElementAt("ab".AsSpan(), 1);
 
-            new Action(() => strings.ToNDArray()).Should().Throw<NotSupportedException>().WithMessage("*GetStringTensorAsArray*");
-            new Action(() => strings.AsNDArray()).Should().Throw<NotSupportedException>().WithMessage("*GetStringTensorAsArray*");
-            NDArrayOnnxInterop.LiveImports.Should().Be(0, "a refused import leases nothing");
+            using (NDArray copy = strings.ToNDArray())
+            {
+                copy.typecode.Should().Be(NPTypeCode.String);
+                NDArray.AsStringArray(copy).Should().Equal("", "ab");
+            }
+            using (NDArray auto = strings.AsNDArray())
+                NDArray.AsStringArray(auto).Should().Equal("", "ab");
+            new Action(() => strings.AsNDArray(mode: OnnxCodecMode.View)).Should().Throw<InvalidOperationException>().WithMessage("*text*only as a copy*");
+            NDArrayOnnxInterop.LiveImports.Should().Be(0, "a text import is a copy: it leases nothing");
         }
     }
 }

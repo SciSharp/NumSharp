@@ -112,12 +112,28 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             NDArrayOnnxInterop.LiveImports.Should().Be(0, "a refused import leases nothing");
         }
 
+        /// <summary>
+        ///     A string tensor inside a <see cref="NamedOnnxValue"/> reads back as a text array of the tensor's shape, in
+        ///     the tensor's LOGICAL order (a column-major tensor is read through its own indexer), and a null entry of a
+        ///     caller's own tensor counts as empty. It used to be refused.
+        /// </summary>
         [TestMethod]
-        public void NamedOnnxValue_StringTensor_IsRefused_WithTheReadStringsHint()
+        public void NamedOnnxValue_StringTensor_ReadsAsATextArray_InLogicalOrder()
         {
-            var t = new DenseTensor<string>(new[] { "a", "b" }, new[] { 2 });
-            var value = NamedOnnxValue.CreateFromTensor("s", t);
-            new Action(() => value.ToNDArray()).Should().Throw<NotSupportedException>().WithMessage("*GetStringTensorAsArray*");
+            var t = new DenseTensor<string>(new[] { "a", "bb", null, "dddd", "e", "ff" }, new[] { 2, 3 });
+            using (NDArray text = NamedOnnxValue.CreateFromTensor("s", t).ToNDArray())
+            {
+                text.shape.Should().Equal(2, 3);
+                text.dtype.kind.Should().Be('U');
+                text.dtype.itemsize.Should().Be(16, "<U4: the longest string has 4 code points");
+                NDArray.AsStringArray(text).Should().Equal("a", "bb", "", "dddd", "e", "ff");
+                text.flags.owndata.Should().BeTrue();
+            }
+
+            // memory order a b c d e f read column-major as (2,3): [[a, c, e], [b, d, f]]
+            var columnMajor = new DenseTensor<string>(new[] { "a", "b", "c", "d", "e", "f" }, new[] { 2, 3 }, reverseStride: true);
+            using (NDArray text = NamedOnnxValue.CreateFromTensor("f", columnMajor).ToNDArray())
+                NDArray.AsStringArray(text).Should().Equal("a", "c", "e", "b", "d", "f");
         }
 
         [TestMethod]

@@ -9,16 +9,18 @@ namespace NumSharp.Interop.OnnxRuntime
         //
         // A model output is not always a dense tensor. scikit-learn classifiers exported through skl2onnx
         // emit a ZipMap — a SEQUENCE of MAPs (probability keyed by class label); other graphs emit a plain
-        // sequence of tensors, and STRING tensors carry labels/text. NumSharp has no map/sequence/string
-        // dtype, so these come back as NumSharp-shaped pieces (NDArrays for the tensor parts, string[] for
-        // strings) through the readers below rather than through ToNDArray, which needs a dense tensor.
+        // sequence of tensors. NumSharp has no map or sequence type, so these come back as NumSharp-shaped
+        // pieces (one NDArray per tensor part) through the readers below rather than through ToNDArray, which
+        // needs a dense tensor. A STRING part (string class labels, a sequence of string tensors) comes back as
+        // a text array (fixed-width U, a copy; see NDArrayOnnxInterop.Text.cs).
         //
         // ONE copy per element, made by ORT: GetValue(i, allocator) hands out a COPY of the element in the allocator's
         // memory, and each array a reader returns is a view that OWNS that copy (AsNDArray(ownsValue: true)); it disposes
         // the element when the last NumSharp view over it dies. The readers used to copy that copy again and dispose the
         // element at once (two copies per element). Consequences for a caller: the arrays report flags.owndata == False,
         // they count in LiveImports until they are disposed (or collected), and the source OrtValue may still be disposed
-        // the moment the reader returns, because the elements do not point into it.
+        // the moment the reader returns, because the elements do not point into it. A text part is the exception: it
+        // cannot be viewed, so it is an ordinary owning array and ORT's copy of it is disposed at once.
 
         /// <summary>
         ///     Read a SEQUENCE <see cref="OrtValue"/> whose elements are dense tensors into one <see cref="NDArray"/> per
@@ -83,22 +85,18 @@ namespace NumSharp.Interop.OnnxRuntime
 
         /// <summary>
         ///     Read a MAP <see cref="OrtValue"/> as two parallel arrays: <c>keys</c> and the <c>values</c> at the same
-        ///     positions (ORT stores a map as a keys tensor + a values tensor). Each array is a 1-D view that owns ORT's
-        ///     copy of its tensor, so the map can be disposed as soon as this returns. Key dtype follows the map (int64
-        ///     or — for a string-keyed map — refused, since NumSharp has no string dtype: read those with
-        ///     <see cref="ReadStringTensor"/> on <see cref="GetMapKeys"/>).
+        ///     positions (ORT stores a map as a keys tensor + a values tensor). The map can be disposed as soon as this
+        ///     returns. The dtypes follow the map: an int64 side is a 1-D view that owns ORT's copy of its tensor; a
+        ///     STRING side (string class labels as keys, or string values) is a text array (fixed-width <c>U</c>).
         /// </summary>
-        /// <param name="map">A map OrtValue with numeric keys and numeric values.</param>
-        /// <returns>The keys and the values, each a 1-D array; dispose both to free ORT's copies.</returns>
+        /// <param name="map">A map OrtValue.</param>
+        /// <returns>The keys and the values, each a 1-D array; dispose both.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="map"/> is null.</exception>
-        /// <exception cref="NotSupportedException">
-        ///     Not a map, or its keys or its values are strings (no NumSharp dtype) or another type NumSharp lacks; the
-        ///     message names the reader to use instead.
-        /// </exception>
+        /// <exception cref="NotSupportedException">Not a map, or its keys or its values are of a type NumSharp lacks (BFloat16).</exception>
         /// <remarks>
-        ///     Both refusals for string keys and string values are decided before anything is converted. Any other failure
-        ///     converting the values disposes the keys array already made, so a refused map leaves no array behind (it used
-        ///     to drop the keys array on the floor for every string-valued map), and ORT's copies of both tensors are freed.
+        ///     A failure converting the values disposes the keys array already made, so a refused map leaves no array
+        ///     behind, and ORT's copies of both tensors are freed. String-keyed and string-valued maps used to be refused
+        ///     (NumSharp had no text dtype); they are read now.
         /// </remarks>
         public static (NDArray keys, NDArray values) ToMap(this OrtValue map)
         {
@@ -117,16 +115,9 @@ namespace NumSharp.Interop.OnnxRuntime
             {
                 keys = map.GetValue(0, allocator);     // element 0 = keys tensor (ORT's copy)
                 values = map.GetValue(1, allocator);   // element 1 = values tensor (ORT's copy)
-                if (keys.GetTensorTypeAndShape().IsString)
-                    throw new NotSupportedException(
-                        "ToMap: this map has STRING keys, which have no NumSharp dtype. Read the keys with " +
-                        "GetMapKeys(map).ReadStringTensor() and the values with map.GetValue(1, OrtAllocator.DefaultInstance).ToNDArray(), " +
-                        "or use the OrtValue API directly.");
-                if (values.GetTensorTypeAndShape().IsString)
-                    throw new NotSupportedException(
-                        "ToMap: this map has STRING values, which have no NumSharp dtype. Read the values with " +
-                        "map.GetValue(1, OrtAllocator.DefaultInstance).ReadStringTensor() and the keys with GetMapKeys(map).ToNDArray().");
 
+                // Owning either way: a numeric tensor becomes a view that owns ORT's copy, a string tensor becomes a text
+                // array and ORT's copy is disposed at once (AsNDArray's default mode copies what it cannot view).
                 keyArray = keys.AsNDArray(ownsValue: true);
                 keys = null;
                 NDArray valueArray = values.AsNDArray(ownsValue: true);
@@ -192,7 +183,14 @@ namespace NumSharp.Interop.OnnxRuntime
             }
         }
 
-        /// <summary>The keys tensor of a MAP <see cref="OrtValue"/> as a standalone value — for a string-keyed map, feed it to <see cref="ReadStringTensor"/>.</summary>
+        /// <summary>
+        ///     The keys tensor of a MAP <see cref="OrtValue"/> as a standalone value, for a caller that wants ORT's own
+        ///     value (for a string-keyed map, <see cref="ReadStringTensor"/> gives the keys as a <c>string[]</c>;
+        ///     <see cref="ToMap"/> gives them as a text array).
+        /// </summary>
+        /// <param name="map">A map OrtValue.</param>
+        /// <returns>ORT's copy of the keys tensor; the caller disposes it.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="map"/> is null.</exception>
         /// <exception cref="NotSupportedException">Not a map.</exception>
         public static OrtValue GetMapKeys(this OrtValue map)
         {
@@ -204,11 +202,14 @@ namespace NumSharp.Interop.OnnxRuntime
         }
 
         /// <summary>
-        ///     Read a STRING tensor <see cref="OrtValue"/> as a flat <see cref="string"/>[] in row-major order —
-        ///     NumSharp has no string/object dtype, so string outputs (label heads, tokenizers) come back as a
-        ///     managed array rather than an <see cref="NDArray"/>. Reshape it yourself against the tensor's shape
-        ///     if it is multi-dimensional (<c>value.GetTensorTypeAndShape().Shape</c>).
+        ///     Read a STRING tensor <see cref="OrtValue"/> as a flat <see cref="string"/>[] in row-major order: the
+        ///     strings exactly as ONNX Runtime decodes them, with no fixed width (a string that ends in NUL characters
+        ///     keeps them, which the text array <see cref="ToNDArray(OrtValue)"/> returns cannot). The tensor's shape is
+        ///     <c>value.GetTensorTypeAndShape().Shape</c>.
         /// </summary>
+        /// <param name="tensor">A string tensor.</param>
+        /// <returns>The strings in row-major order.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="tensor"/> is null.</exception>
         /// <exception cref="NotSupportedException">Not a tensor, or not a string tensor (a numeric tensor reads with <see cref="ToNDArray(OrtValue)"/>).</exception>
         public static string[] ReadStringTensor(this OrtValue tensor)
         {

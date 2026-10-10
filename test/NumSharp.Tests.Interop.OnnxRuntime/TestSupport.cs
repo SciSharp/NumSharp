@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
@@ -253,6 +254,33 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
         /// <param name="index">The multi-index.</param>
         /// <returns>The same index as <c>int</c>s.</returns>
         internal static int[] Ints(long[] index) => Array.ConvertAll(index, i => (int)i);
+    }
+
+    /// <summary>
+    ///     ONNX Runtime's own record of whether an <see cref="OrtValue"/> was disposed, read by reflection: the managed API
+    ///     has no public "is disposed" member, and calling into a disposed value is not a safe way to ask. The bridge
+    ///     promises to dispose a value in several places (an owning import of a tensor it copies, a copied run output), and
+    ///     nothing else observes whether it did: a value that is merely dropped is freed later by ORT's finalizer, so the
+    ///     suite's leak counters stay balanced either way.
+    /// </summary>
+    internal static class OrtProbe
+    {
+        /// <summary>The native handle field of <see cref="OrtValue"/>, which its <c>Dispose</c> sets to zero.</summary>
+        private static readonly FieldInfo Handle = typeof(OrtValue).GetField("_handle", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        /// <summary>
+        ///     Has <paramref name="value"/> been disposed? The calling test is Inconclusive when the loaded ONNX Runtime no
+        ///     longer has the field this reads (a rename in a future version), instead of failing or passing wrongly.
+        /// </summary>
+        /// <param name="value">The value to ask about.</param>
+        /// <returns><c>true</c> when ORT released the native value.</returns>
+        /// <exception cref="AssertInconclusiveException">ORT's <c>OrtValue</c> has no <c>IntPtr _handle</c> field.</exception>
+        internal static bool IsDisposed(OrtValue value)
+        {
+            if (Handle is null || Handle.FieldType != typeof(IntPtr))
+                Assert.Inconclusive("this ONNX Runtime's OrtValue has no private IntPtr _handle field; the disposal checks cannot read it.");
+            return (IntPtr)Handle.GetValue(value) == IntPtr.Zero;
+        }
     }
 
     /// <summary>

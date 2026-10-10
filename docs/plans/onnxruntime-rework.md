@@ -57,14 +57,14 @@ Status: `todo`, `done` (with the commit), `deferred`, `closed` (no change by dec
 |---|---|---|---|
 | C1 (G3) | No owner for the pins of `OrtIoBinding`, `AddInitializer`, `CreateSequence` | Deferred. Owner's note: consider wrapping `Run` (overloads) so that the wrapper holds the references. | deferred |
 | C2a (G4, G11) | `Run` cannot return non-tensor outputs; the dictionary result is not disposable | Deferred. Owner's note: consider overloads and typed struct support. Text outputs are covered by S1. | deferred |
-| C2b (G5) | String-keyed maps are refused | Covered by S1: the keys come back as a text `NDArray`. | todo (S1) |
+| C2b (G5) | String-keyed maps are refused | Covered by S1: the keys come back as a text `NDArray`. | done (WP 6) |
 | C2c (G6) | The `Run` tier accepts only `NDArray` inputs | Deferred. Owner's note: a `Run<T>(T inputs) where T : struct` with an interface that yields the `Dictionary<string, OnnxInput>` from the struct values; the default implementation is reflection with statically cached getters (expression trees or IL generation). Text inputs are covered by S1. | deferred |
 | C2d (G7) | `Run` refuses an overridable initializer | Accept: look a name up in `InputMetadata`, then in `OverridableInitializerMetadata`. | done (WP 4) |
 | C3a (G8) | No `RunAsync` | Add it on ORT's own native async, for ORT 1.30.0 and newer only (older versions do not pin their argument arrays). Design in §3.6. | todo |
 | C3b (G9) | The non-tensor readers copy each element 2 times | Each result becomes a view that owns ORT's copy. | done (WP 3) |
 | C3c (G10) | `IsCpuAccessible` refuses `QnnHtpShared` and `CpuAligned4K` | Ask ORT for the device memory kind when the loaded ORT has `GetDeviceMemoryType`; the name list stays as the fallback. | done (WP 3) |
 | C3e (G12) | BFloat16 is refused | Kept. | closed |
-| S1 (new) | Text crossing, possible because `strings` gives `NDArray` a text dtype | Build all of it now on the fixed-width `S` / `U` dtypes, as a copy: `ToNDArray`, the map readers, `ToOrtValue`, `AsOrtValue` and `Run` take and return text. Leave a prominent TODO for the variable-width `StringDType` (phase 3 of the string plan). | todo |
+| S1 (new) | Text crossing, possible because `strings` gives `NDArray` a text dtype | Build all of it now on the fixed-width `S` / `U` dtypes, as a copy: `ToNDArray`, the map readers, `ToOrtValue`, `AsOrtValue` and `Run` take and return text. Leave a prominent TODO for the variable-width `StringDType` (phase 3 of the string plan). | done (WP 6) |
 
 ### 2.3 Tests, documents, CI
 
@@ -184,7 +184,14 @@ Everything here is a copy: ORT keeps each string as a separate native object, so
   Python `onnxruntime` does). `AsOrtValue` does the same under `Auto` and `Copy` and throws under `View`.
   `AsDenseTensor<T>` refuses text (its `T` is unmanaged).
 - `Run`: a text array feeds a string model input; text outputs come back as text arrays. With zero-copy outputs a
-  text output is a copy.
+  text output is a copy. `mode: View` refuses a text input, because it cannot be a view.
+- Text and numbers do not convert: NumSharp cannot cast between a string dtype and a numeric one yet. A numeric
+  array for a string input, and a text array for a numeric input, are refused under every casting rule, with a
+  message that names the two dtypes. This is a second TODO in the code.
+- `RunInto` refuses a text output array: ORT cannot write its strings into a fixed-width buffer. `Run` returns
+  text outputs.
+- Handles: a text `OrtTensor` holds no NumSharp buffer (`IsView` is `false`). The import verbs therefore read it
+  as a string tensor and never alias it.
 - **TODO (prominent, in the code):** when NumSharp gets the variable-width `StringDType` (NEP 55, phase 3 of
   `strings-phase2.md`), map ORT strings to it. The fixed-width form pads with NUL, so a string that ends in NUL
   characters loses them, and one long string widens every element.
@@ -228,7 +235,7 @@ ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, an
 | 3 | Import side: counted alias, read-only, ownership on failure, memory pressure, legacy types, readers, device kind | V3, V4, V10a, V10b, V11b, C3b, C3c | done |
 | 4 | `Run` tier: `mode`, `RunInto`, casting rule, optional inputs, overridable initializers, overlap | V1, V6, V8b, V9, V11a, C2d | done |
 | 5 | dtype maps over descriptors without storage | V7 | done |
-| 6 | Text crossing | S1, C2b | todo |
+| 6 | Text crossing | S1, C2b | done |
 | 7 | `RunIntoAsync` / `RunAsync` | C3a | todo |
 | 8 | Remaining tests and models | T1, T2 | todo |
 | 9 | Documents and CI: README, docs page, `CLAUDE.md`, csproj comment, ORT 1.31.0, API approval list | D1, D2, D3 | todo |
@@ -256,4 +263,5 @@ ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, an
 | 2026-10-10 | 2 | `40d546aa` | `OnnxCodecMode` on `AsOrtValue` / `AsDenseTensor<T>`, `IsView`, row-major tensors only; ONNX suite 216 / 216 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0 |
 | 2026-10-10 | 3 | `eade99a5` | import side: counted alias, read-only inheritance, ownership on failure, memory pressure, legacy `char` / `Half` tensors, owning reader results, device kind from ORT; ONNX suite 232 / 232 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 16 of 18 (1 equivalent, 1 closed by a new test) |
 | 2026-10-10 | 4 | `3139d111` | `Run` tier: input mode on every form, `RunInto`, the cast table for every dtype pair, optional inputs, overridable initializers, the overlap rule; ONNX suite 241 / 241 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 18 of 18 |
-| 2026-10-10 | 5 | (this commit) | dtype maps answer false / null for a datetime64 / timedelta64 descriptor; ONNX suite 242 / 242 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0 |
+| 2026-10-10 | 5 | `09248ea1` | dtype maps answer false / null for a datetime64 / timedelta64 descriptor; ONNX suite 242 / 242 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0 |
+| 2026-10-10 | 6 | (this commit) | text crossing on the fixed-width `U` / `S` dtypes, as a copy: the dtype maps, `ToOrtValue` / `AsOrtValue`, `ToNDArray` / `AsNDArray`, the legacy `Tensor<string>`, the sequence and map readers, and `Run`; 3 new models (string labels, a string-keyed ZipMap, text next to numbers); ONNX suite 257 / 257 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 21 of 21 |

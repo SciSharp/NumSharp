@@ -63,11 +63,14 @@ namespace NumSharp.Interop.OnnxRuntime
         private int _disposed;
 
         /// <summary>Takes ownership of <paramref name="value"/> and of the reference <paramref name="slice"/> carries.</summary>
-        /// <param name="value">The OrtValue over the buffer (created by the caller; owned by the handle from here on).</param>
-        /// <param name="source">The array ORT reads (the caller's, or a temporary the handle owns).</param>
-        /// <param name="slice">The buffer, on which the caller already took the reference this handle now owns.</param>
-        /// <param name="data">The address of the tensor's first element inside <paramref name="slice"/> (the pointer the OrtValue was created over).</param>
-        /// <param name="byteLength">The byte length of the tensor's elements, starting at <paramref name="data"/>.</param>
+        /// <param name="value">The OrtValue (created by the caller; owned by the handle from here on).</param>
+        /// <param name="source">The array ORT reads (the caller's, or a temporary the handle owns); for a text tensor, the array the strings were copied from.</param>
+        /// <param name="slice">
+        ///     The buffer, on which the caller already took the reference this handle now owns; <c>null</c> for a TEXT tensor,
+        ///     whose strings live in ONNX Runtime's own memory, so there is no NumSharp buffer to keep alive.
+        /// </param>
+        /// <param name="data">The address of the tensor's first element inside <paramref name="slice"/> (the pointer the OrtValue was created over); zero for a text tensor.</param>
+        /// <param name="byteLength">The byte length of the tensor's elements, starting at <paramref name="data"/>; 0 for a text tensor.</param>
         /// <param name="ownsSource"><c>true</c> when <paramref name="source"/> is a temporary the handle must dispose.</param>
         /// <param name="isView"><c>true</c> when <paramref name="source"/> is the array the export verb was given (shared memory); <c>false</c> when it is a copy the verb made.</param>
         /// <param name="elementType">The ONNX element type the value was created with.</param>
@@ -120,6 +123,11 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     ORT land in this array, so for a copy this is where a caller reads them. The temporary is disposed
         ///     with the handle.
         /// </summary>
+        /// <remarks>
+        ///     A TEXT tensor is the exception: ONNX Runtime keeps its own copy of every string, so there is no NumSharp
+        ///     array that ORT reads. <see cref="Source"/> is then the array the strings were copied from; it never
+        ///     changes through ORT and it is not disposed with the handle.
+        /// </remarks>
         public NDArray Source => _source;
 
         /// <summary>
@@ -149,8 +157,18 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <returns><c>true</c> when <paramref name="owner"/> was found.</returns>
         internal static bool TryGetOwner(OrtValue value, out OrtTensor owner) => ValueOwners.TryGetValue(value, out owner);
 
-        /// <summary>The buffer the tensor lies in; the handle holds one counted reference on it until it is disposed.</summary>
+        /// <summary>
+        ///     The buffer the tensor lies in; the handle holds one counted reference on it until it is disposed. <c>null</c>
+        ///     for a text tensor (see <see cref="IsNumSharpMemory"/>).
+        /// </summary>
         internal IArraySlice Slice => _slice;
+
+        /// <summary>
+        ///     <c>true</c> when the tensor's memory is a NumSharp buffer (every numeric tensor); <c>false</c> for a text
+        ///     tensor, whose strings ONNX Runtime owns. The import verbs alias the buffer only when this is <c>true</c>;
+        ///     a text tensor is read through ORT like any string tensor.
+        /// </summary>
+        internal bool IsNumSharpMemory => _slice is not null;
 
         /// <summary>The address of the tensor's first element inside <see cref="Slice"/>.</summary>
         internal unsafe byte* Data => (byte*)_data;
@@ -189,7 +207,7 @@ namespace NumSharp.Interop.OnnxRuntime
             {
                 // The disposed value no longer needs to keep the handle alive.
                 ValueOwners.Remove(_value);
-                _slice.Release();
+                _slice?.Release();   // a text tensor holds no NumSharp buffer
                 NDArrayOnnxInterop.ExportClosed();
                 if (_ownsSource)
                     _source.Dispose();   // the temporary (a copy, a conversion, a caller's hand-over) nobody else can dispose
@@ -220,7 +238,7 @@ namespace NumSharp.Interop.OnnxRuntime
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
                 return;
-            _slice.Abandon();
+            _slice?.Abandon();   // a text tensor holds no NumSharp buffer
             NDArrayOnnxInterop.ExportClosed();
         }
 

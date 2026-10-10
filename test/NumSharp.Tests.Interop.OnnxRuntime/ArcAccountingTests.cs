@@ -261,19 +261,36 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
         }
 
         /// <summary>
-        ///     Fault injection on the map reader: a map whose VALUES are strings converts its keys first and then fails on the
-        ///     values. The keys array it had already allocated used to be dropped (a pool leak on every such call); it is now
-        ///     released, and the refusal says how to read string values.
+        ///     The map reader over the two text shapes (string values, string keys): each side comes back as the right kind
+        ///     of array, and once both arrays are disposed the read has given back every buffer and every lease it took.
+        ///     A string-valued map used to be refused AFTER its keys were converted, and before that fix it dropped the keys
+        ///     array on the floor on every call.
         /// </summary>
         [TestMethod]
-        public void ToMap_WithStringValues_ReleasesWhatItAllocated_AndSaysHowToReadThem()
+        public void ToMap_WithStringValuesOrKeys_ReadsBothSides_AndGivesEverythingBack()
         {
-            using OrtValue map = OrtValue.CreateMapWithStringValues(new long[] { 1, 2, 3 }, new[] { "a", "b", "c" });
-            NotSupportedException refusal = null;
-            long balance = Pool.Balance(() => refusal = Assert.ThrowsException<NotSupportedException>(() => map.ToMap()));
-            Assert.AreEqual(0L, balance, "the keys array converted before the failure was not released");
-            StringAssert.Contains(refusal.Message, "STRING values");
-            StringAssert.Contains(refusal.Message, "ReadStringTensor");
+            using OrtValue stringValues = OrtValue.CreateMapWithStringValues(new long[] { 1, 2, 3 }, new[] { "a", "bb", "c" });
+            using OrtValue stringKeys = OrtValue.CreateMapWithStringKeys(new[] { "x", "yy" }, new[] { 0.5f, 1.5f });
+            long balance = Pool.Balance(() =>
+            {
+                (NDArray keys, NDArray values) = stringValues.ToMap();
+                using (keys)
+                using (values)
+                {
+                    CollectionAssert.AreEqual(new long[] { 1, 2, 3 }, keys.ToArray<long>());
+                    CollectionAssert.AreEqual(new[] { "a", "bb", "c" }, NDArray.AsStringArray(values));
+                }
+
+                (NDArray textKeys, NDArray numbers) = stringKeys.ToMap();
+                using (textKeys)
+                using (numbers)
+                {
+                    CollectionAssert.AreEqual(new[] { "x", "yy" }, NDArray.AsStringArray(textKeys));
+                    CollectionAssert.AreEqual(new[] { 0.5f, 1.5f }, numbers.ToArray<float>());
+                }
+            });
+            Assert.AreEqual(0L, balance, "a map read left a buffer behind");
+            Assert.AreEqual(0, NDArrayOnnxInterop.LiveImports, "a map read left a lease behind");
         }
 
         /// <summary>

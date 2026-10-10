@@ -19,7 +19,9 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     this returns, and the result has no lifetime coupling to ORT.
         ///
         ///     <para>The dtype follows <see cref="FromTensorElementType"/> (Float16 → Half; UInt16 → UInt16, never
-        ///     Char), the shape is the tensor's row-major shape (0-d and empty tensors included). The tensor
+        ///     Char), the shape is the tensor's row-major shape (0-d and empty tensors included). A STRING tensor
+        ///     comes back as a text array: fixed-width Unicode (<c>U</c>), as wide as its longest string, so a string
+        ///     that ends in NUL characters loses them (NumSharp has no variable-width string dtype yet). The tensor
         ///     must be a dense tensor in CPU-addressable memory: sequences / maps / sparse tensors and
         ///     device-resident (CUDA / DirectML) outputs are refused with a message naming the alternative.</para>
         /// </summary>
@@ -34,7 +36,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="value">A dense tensor OrtValue in CPU-accessible memory; it stays the caller's to dispose.</param>
         /// <returns>A new owning C-contiguous array holding a copy of the tensor's elements.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
-        /// <exception cref="NotSupportedException">Not a dense tensor; a String / BFloat16 element type; or a tensor of more than 2 GB.</exception>
+        /// <exception cref="NotSupportedException">Not a dense tensor; a BFloat16 element type; or a tensor of more than 2 GB.</exception>
         /// <exception cref="ArgumentException">The tensor's shape has a negative (symbolic) dimension.</exception>
         /// <exception cref="InvalidOperationException">The tensor lives in device memory the CPU cannot address, or ORT reports a byte count its shape contradicts.</exception>
         /// <exception cref="ObjectDisposedException">The value is one this package made and its handle was disposed while it was read.</exception>
@@ -43,14 +45,15 @@ namespace NumSharp.Interop.OnnxRuntime
             if (value is null)
                 throw new ArgumentNullException(nameof(value));
             // A value this package made over a NumSharp buffer: copy from the buffer itself. No span is involved, so the
-            // 2 GB limit of ORT's managed data API does not apply, and no native call is made.
-            if (OrtTensor.TryGetOwner(value, out OrtTensor owner))
+            // 2 GB limit of ORT's managed data API does not apply, and no native call is made. (A TEXT value the package
+            // made is a string tensor ORT owns: it takes the string path below like any other.)
+            if (OrtTensor.TryGetOwner(value, out OrtTensor owner) && owner.IsNumSharpMemory)
                 return CopyExportedValue(owner);
 
             EnsureTensor(value, nameof(ToNDArray));
             OrtTensorTypeAndShapeInfo info = value.GetTensorTypeAndShape();
             if (info.IsString)
-                throw new NotSupportedException(UnsupportedImportMessage(TensorElementType.String));
+                return TextToNDArray(value, info.Shape);   // a new U array; string tensors are always CPU memory
             NPTypeCode tc = FromTensorElementType(info.ElementDataType);
             Shape shape = ShapeFrom(info.Shape);
             EnsureCpuAccessible(value, nameof(ToNDArray));
@@ -117,10 +120,12 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     <para>Every refusal and every failure leaves <paramref name="value"/> untouched and still the caller's, even
         ///     with <paramref name="ownsValue"/> = <c>true</c>: ownership transfers only with a returned array.</para>
         ///     <para><b>Modes.</b> A dense numeric tensor in CPU memory can always be viewed, so
-        ///     <see cref="OnnxCodecMode.Auto"/> and <see cref="OnnxCodecMode.View"/> do the same here.
+        ///     <see cref="OnnxCodecMode.Auto"/> and <see cref="OnnxCodecMode.View"/> do the same for it.
         ///     <see cref="OnnxCodecMode.Copy"/> returns an independent copy (what <see cref="ToNDArray(OrtValue)"/>
         ///     returns, with its refusals) and, with <paramref name="ownsValue"/> = <c>true</c>, disposes the value once
-        ///     the copy exists. No mode makes a tensor in device memory or a non-tensor value readable.</para>
+        ///     the copy exists. A STRING tensor is the one case where the modes differ: it cannot be viewed, so
+        ///     <see cref="OnnxCodecMode.Auto"/> returns the copy (a text array) and <see cref="OnnxCodecMode.View"/>
+        ///     throws. No mode makes a tensor in device memory or a non-tensor value readable.</para>
         ///     <para><b>Memory pressure.</b> A view that owns an ORT buffer reports the buffer's size to the GC for its
         ///     lifetime. A non-owning view reports nothing: the caller's OrtValue owns that memory.</para>
         /// </remarks>
@@ -130,9 +135,9 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <returns>A NumSharp view over the tensor's buffer (an empty array for an empty tensor, which has nothing to share), or a copy under <see cref="OnnxCodecMode.Copy"/>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
-        /// <exception cref="NotSupportedException">Not a dense tensor; a String / BFloat16 element type; or a tensor of more than 2 GB that ORT owns.</exception>
+        /// <exception cref="NotSupportedException">Not a dense tensor; a BFloat16 element type; or a tensor of more than 2 GB that ORT owns.</exception>
         /// <exception cref="ArgumentException">The tensor's shape has a negative (symbolic) dimension.</exception>
-        /// <exception cref="InvalidOperationException">The tensor lives in device memory the CPU cannot address.</exception>
+        /// <exception cref="InvalidOperationException">The tensor lives in device memory the CPU cannot address; or it is a string tensor and <paramref name="mode"/> is <see cref="OnnxCodecMode.View"/>.</exception>
         /// <exception cref="ObjectDisposedException">The value is one this package made and its handle was disposed while the view was built.</exception>
         public static unsafe NDArray AsNDArray(this OrtValue value, bool ownsValue = false, OnnxCodecMode mode = OnnxCodecMode.Auto)
         {
@@ -155,13 +160,22 @@ namespace NumSharp.Interop.OnnxRuntime
             // counted alias of the buffer. It used to be leased like an ORT buffer, so the view rooted only the OrtValue,
             // which owns nothing: once the handle and the source were disposed the buffer went back to the pool under
             // the view (a probe read another array's 777s through it).
-            if (OrtTensor.TryGetOwner(value, out OrtTensor owner))
+            if (OrtTensor.TryGetOwner(value, out OrtTensor owner) && owner.IsNumSharpMemory)
                 return AliasExportedValue(owner, ownsValue);
 
             EnsureTensor(value, nameof(AsNDArray));
             OrtTensorTypeAndShapeInfo info = value.GetTensorTypeAndShape();
             if (info.IsString)
-                throw new NotSupportedException(UnsupportedImportMessage(TensorElementType.String));
+            {
+                // Text cannot be viewed: ORT's strings are separate UTF-8 objects, NumSharp's are fixed-width code
+                // points. Auto falls back to the copy; the strict mode says so.
+                if (mode == OnnxCodecMode.View)
+                    throw new InvalidOperationException(TextViewMessage(nameof(AsNDArray)));
+                NDArray text = TextToNDArray(value, info.Shape);
+                if (ownsValue)
+                    DisposeValue(value);   // the copy needs nothing from the value; owning it means freeing it
+                return text;
+            }
             NPTypeCode tc = FromTensorElementType(info.ElementDataType);
             Shape shape = ShapeFrom(info.Shape);
             EnsureCpuAccessible(value, nameof(AsNDArray));
@@ -567,7 +581,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="value">A named value that holds a tensor.</param>
         /// <returns>A new owning C-contiguous array holding the tensor's elements in logical (row-major) order.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
-        /// <exception cref="NotSupportedException">The value is a sequence / map, or a string / BFloat16 tensor, or a tensor of a type with no NumSharp dtype.</exception>
+        /// <exception cref="NotSupportedException">The value is a sequence / map, or a BFloat16 tensor, or a tensor of a type with no NumSharp dtype.</exception>
         /// <exception cref="InvalidOperationException">The named value holds no value.</exception>
         public static NDArray ToNDArray(this NamedOnnxValue value)
         {
@@ -594,7 +608,7 @@ namespace NumSharp.Interop.OnnxRuntime
                 case DenseTensor<Half> t: return t.ToNDArray();
                 case DenseTensor<char> t: return t.ToNDArray();
                 case DenseTensor<BFloat16>: throw new NotSupportedException(UnsupportedImportMessage(TensorElementType.BFloat16));
-                case Tensor<string>: throw new NotSupportedException(UnsupportedImportMessage(TensorElementType.String));
+                case Tensor<string> t: return TextTensorToNDArray(t);   // a new U array, in the tensor's logical order
                 // a non-dense Tensor<T> (a caller's own subclass): densify through ORT's own copy
                 case Tensor<float> t: return t.ToDenseTensor().ToNDArray();
                 case Tensor<double> t: return t.ToDenseTensor().ToNDArray();

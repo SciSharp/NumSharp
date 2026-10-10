@@ -36,9 +36,10 @@ namespace NumSharp.Interop.OnnxRuntime
     ///     as a bit-identical reinterpret, float, double); <see cref="NPTypeCode.Char"/> exports as
     ///     <see cref="TensorElementType.UInt16"/> (UTF-16 code units); <see cref="NPTypeCode.Decimal"/> has
     ///     no ONNX type and is converted to Double by the array-producing verbs (the low-level maps refuse
-    ///     it); <see cref="NPTypeCode.Complex"/>, BFloat16 and String are genuine mutual gaps and are
-    ///     refused with a message naming the workaround. See <see cref="ToTensorElementType"/> /
-    ///     <see cref="FromTensorElementType"/>.</para>
+    ///     it); text (NumSharp's fixed-width <c>U</c> / <c>S</c> arrays) crosses as an ORT string tensor, always
+    ///     as a copy (<c>NDArrayOnnxInterop.Text.cs</c>); <see cref="NPTypeCode.Complex"/> and BFloat16 are
+    ///     genuine mutual gaps and are refused with a message naming the workaround. See
+    ///     <see cref="ToTensorElementType"/> / <see cref="FromTensorElementType"/>.</para>
     /// </summary>
     public static partial class NDArrayOnnxInterop
     {
@@ -147,6 +148,7 @@ namespace NumSharp.Interop.OnnxRuntime
                 case NPTypeCode.Half: type = TensorElementType.Float16; return true;    // bit-identical reinterpret
                 case NPTypeCode.Single: type = TensorElementType.Float; return true;
                 case NPTypeCode.Double: type = TensorElementType.Double; return true;
+                case NPTypeCode.String: type = TensorElementType.String; return true;   // both fixed-width classes, U and S (a copy, never a view)
                 default: type = default; return false;                                   // Decimal, Complex, a class without storage
             }
         }
@@ -163,8 +165,15 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     <see cref="TensorElementType.UInt16"/> comes back as <see cref="NPTypeCode.UInt16"/>, never
         ///     <see cref="NPTypeCode.Char"/> (an ORT tensor carries no "these are characters" bit).
         /// </summary>
+        /// <remarks>
+        ///     <see cref="TensorElementType.String"/> reads back as <see cref="NPTypeCode.String"/>, the storage lane of
+        ///     NumSharp's fixed-width string arrays. That code names neither the class (<c>U</c> / <c>S</c>) nor the width,
+        ///     so it cannot be converted to a <see cref="DType"/>; <see cref="TryFromTensorElementType"/> gives the
+        ///     descriptor (the unsized <c>U</c>).
+        /// </remarks>
+        /// <param name="type">The ONNX tensor element type.</param>
+        /// <returns>The NumSharp storage type code.</returns>
         /// <exception cref="NotSupportedException">
-        ///     <see cref="TensorElementType.String"/> (read with <see cref="OrtValue.GetStringTensorAsArray"/>),
         ///     <see cref="TensorElementType.BFloat16"/> (NumSharp has no bfloat16), Complex64/Complex128.
         /// </exception>
         public static NPTypeCode FromTensorElementType(TensorElementType type)
@@ -174,11 +183,21 @@ namespace NumSharp.Interop.OnnxRuntime
             return dtype.GetTypeCode();
         }
 
-        /// <summary><see cref="FromTensorElementType"/> without the throw.</summary>
+        /// <summary>
+        ///     <see cref="FromTensorElementType"/> without the throw, and with the full descriptor.
+        /// </summary>
+        /// <param name="type">The ONNX tensor element type.</param>
+        /// <param name="dtype">
+        ///     The NumSharp dtype when the result is <c>true</c>, else <c>null</c>. For
+        ///     <see cref="TensorElementType.String"/> it is the UNSIZED Unicode descriptor (<c>np.dtype("U")</c>): an ORT
+        ///     string tensor has no width, and an array read from one takes the width of its longest string.
+        /// </param>
+        /// <returns><c>true</c> when NumSharp has a dtype for the element type.</returns>
         public static bool TryFromTensorElementType(TensorElementType type, out DType dtype)
         {
             switch (type)
             {
+                case TensorElementType.String: dtype = TextDType; return true;
                 case TensorElementType.Bool: dtype = NPTypeCode.Boolean; return true;
                 case TensorElementType.UInt8: dtype = NPTypeCode.Byte; return true;
                 case TensorElementType.Int8: dtype = NPTypeCode.SByte; return true;
@@ -191,7 +210,7 @@ namespace NumSharp.Interop.OnnxRuntime
                 case TensorElementType.Float16: dtype = NPTypeCode.Half; return true;
                 case TensorElementType.Float: dtype = NPTypeCode.Single; return true;
                 case TensorElementType.Double: dtype = NPTypeCode.Double; return true;
-                default: dtype = null; return false;                                     // String, BFloat16, Complex64/128, DataTypeMax
+                default: dtype = null; return false;                                     // BFloat16, Complex64/128, DataTypeMax
             }
         }
 
@@ -224,6 +243,7 @@ namespace NumSharp.Interop.OnnxRuntime
                 case NPTypeCode.Half: return typeof(Float16);
                 case NPTypeCode.Single: return typeof(float);
                 case NPTypeCode.Double: return typeof(double);
+                case NPTypeCode.String: return typeof(string);   // ORT's DenseTensor<string>; the unmanaged-generic dense verbs cannot build one
                 default: return null;
             }
         }
@@ -296,8 +316,8 @@ namespace NumSharp.Interop.OnnxRuntime
             switch (type)
             {
                 case TensorElementType.String:
-                    return "ORT string tensors have no NumSharp dtype (NumSharp has no string/object arrays). Read them with " +
-                           "ortValue.ReadStringTensor() (or OrtValue.GetStringTensorAsArray() / GetStringElement(i)).";
+                    return "an ORT string tensor reads back as a NumSharp text array (fixed-width U) through ToNDArray, or as a " +
+                           "string[] through ortValue.ReadStringTensor() (or OrtValue.GetStringTensorAsArray() / GetStringElement(i)).";
                 case TensorElementType.BFloat16:
                     return "ORT BFloat16 has no NumSharp dtype (NumSharp has no bfloat16). Cast the tensor to float32 or float16 " +
                            "inside the model graph, or read the raw 16-bit patterns with GetTensorDataAsSpan<BFloat16>().";

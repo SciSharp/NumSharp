@@ -22,8 +22,9 @@ namespace NumSharp.Interop.OnnxRuntime
     ///     to it</b> when the cast is allowed under <c>casting</c> — NumPy's rule words, default <c>"safe"</c>, so an
     ///     int32 array into an int64 BERT input or a float32 array into a float64 input just works, while a lossy
     ///     float64 → float16 or a Decimal → float64 needs an explicit <c>casting: "same_kind"</c> (or an
-    ///     <c>astype</c> at the call site). An input whose declared rank or fixed extents disagree with the array is
-    ///     rejected with a message naming the input, before ORT ever sees it.</para>
+    ///     <c>astype</c> at the call site). A string input takes a text array (NumSharp's fixed-width <c>U</c> / <c>S</c>
+    ///     dtypes) and a string output comes back as one; text is always copied. An input whose declared rank or fixed
+    ///     extents disagree with the array is rejected with a message naming the input, before ORT ever sees it.</para>
     ///
     ///     <para><b>The input mode.</b> Every form takes an <see cref="OnnxCodecMode"/> for its INPUTS.
     ///     <see cref="OnnxCodecMode.Auto"/> (the default) shares an input that is C-contiguous and of the declared
@@ -432,8 +433,8 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="array"/> is null.</exception>
         /// <exception cref="ArgumentException">The model has no input named <paramref name="name"/>, or the array's shape contradicts the declared one.</exception>
         /// <exception cref="NotSupportedException">The input is not a tensor, or its declared element type has no NumSharp dtype.</exception>
-        /// <exception cref="InvalidCastException">The array's dtype does not cast to the declared one under <paramref name="rule"/>.</exception>
-        /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and the array needs a conversion or a C-order copy.</exception>
+        /// <exception cref="InvalidCastException">The array's dtype does not cast to the declared one under <paramref name="rule"/>, or one of the two is text and the other is not.</exception>
+        /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and the array needs a conversion or a C-order copy, or is text.</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         internal static OrtTensor PrepareInput(InferenceSession session, string name, NDArray array, NPY_CASTING rule, string casting, OnnxCodecMode mode)
         {
@@ -448,6 +449,13 @@ namespace NumSharp.Interop.OnnxRuntime
                 throw new NotSupportedException($"input '{name}' is declared {meta.ElementDataType}: {NDArrayOnnxInterop.UnsupportedImportMessage(meta.ElementDataType)}");
             NPTypeCode want = wantDtype.GetTypeCode();
             NPTypeCode have = array.typecode;
+
+            // Text is decided before the numeric rule: NumSharp cannot convert between text and numbers yet (astype
+            // throws for those pairs although np.can_cast admits some of them), and NPTypeCode.String does not convert to
+            // the DType np.can_cast takes. So a string input takes a text array (U or S, under every casting rule: it is
+            // the same text in another encoding) and nothing else, and a text array goes into a string input only.
+            if (have == NPTypeCode.String || want == NPTypeCode.String)
+                return PrepareTextInput(name, array, meta, have, want, mode);
 
             if (have != want && !np.can_cast(have, want, rule))
                 throw new InvalidCastException(
@@ -506,6 +514,40 @@ namespace NumSharp.Interop.OnnxRuntime
         }
 
         /// <summary>
+        ///     The text half of <see cref="PrepareInput"/>: a string model input fed from a text array, as a new ORT
+        ///     string tensor (always a copy), and the refusal of every mixed pair.
+        /// </summary>
+        /// <param name="name">The model input's name.</param>
+        /// <param name="array">The array to feed.</param>
+        /// <param name="meta">The input's tensor declaration.</param>
+        /// <param name="have">The array's storage type code.</param>
+        /// <param name="want">The declared storage type code.</param>
+        /// <param name="mode">The input mode; <see cref="OnnxCodecMode.View"/> refuses text.</param>
+        /// <returns>A handle owning the string tensor.</returns>
+        /// <exception cref="InvalidCastException">One side is text and the other is not: NumSharp does not convert between text and numbers yet.</exception>
+        /// <exception cref="ArgumentException">The array's shape contradicts the declared one.</exception>
+        /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/>: text is always a copy.</exception>
+        /// <exception cref="NotSupportedException">The array holds more strings than ORT's string tensor API can index.</exception>
+        /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
+        private static OrtTensor PrepareTextInput(string name, NDArray array, NodeMetadata meta, NPTypeCode have, NPTypeCode want, OnnxCodecMode mode)
+        {
+            if (have != want)
+                throw new InvalidCastException(
+                    want == NPTypeCode.String
+                        ? $"input '{name}' is declared a string tensor but the array holds {have}. NumSharp does not convert numbers to text yet: " +
+                          "feed a text array, for example np.array(new[] { \"a\", \"b\" })."
+                        : $"input '{name}' is declared {want} ({meta.ElementDataType}) but the array holds text ({array.dtype}). NumSharp does not convert " +
+                          "text to numbers yet: parse the values and feed a numeric array.");
+            ValidateShape(name, "input", meta, array.Shape);
+            if (mode == OnnxCodecMode.View)
+                throw new InvalidOperationException(
+                    $"Run(mode: OnnxCodecMode.View): input '{name}' cannot be fed as a view: it is text, and ONNX Runtime keeps every string as a " +
+                    "separate object in its own memory. Pass OnnxCodecMode.Auto.");
+            // Auto and Copy do the same for text: the string tensor is a copy either way.
+            return NDArrayOnnxInterop.AsOrtValueCore(array, ownsSource: false, mode);
+        }
+
+        /// <summary>
         ///     Resolve one PRE-ALLOCATED model output to a zero-copy <see cref="OrtTensor"/> ORT writes into:
         ///     the array must be writeable, C-contiguous and of the declared output dtype (no cast is possible —
         ///     ORT writes the bytes in place); a declared fixed shape is checked up front.
@@ -517,7 +559,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="array"/> is null.</exception>
         /// <exception cref="ArgumentException">The model has no output named <paramref name="name"/>, or the array's shape contradicts the declared one.</exception>
         /// <exception cref="NotSupportedException">The output is not a tensor.</exception>
-        /// <exception cref="InvalidOperationException">The array is not of the declared dtype, is read-only, or is not C-contiguous.</exception>
+        /// <exception cref="InvalidOperationException">The array is not of the declared dtype, is read-only, or is not C-contiguous; or the output (or the array) is text.</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         internal static OrtTensor PrepareOutput(InferenceSession session, string name, NDArray array)
         {
@@ -529,6 +571,13 @@ namespace NumSharp.Interop.OnnxRuntime
                 throw new ArgumentException($"the model has no output named '{name}'; its outputs are [{string.Join(", ", session.OutputNames)}].", nameof(name));
             if (!meta.IsTensor)
                 throw new NotSupportedException($"output '{name}' is {meta.OnnxValueType}, not a tensor; it cannot be written into an NDArray.");
+            // Text first (the dtype map below cannot take a text array's type code): ORT writes a string output into its
+            // own string objects, never into fixed-width NumSharp memory, so no array can be pre-allocated for one.
+            if (meta.ElementDataType == TensorElementType.String || NDArrayOnnxInterop.IsText(array))
+                throw new InvalidOperationException(
+                    meta.ElementDataType == TensorElementType.String
+                        ? $"output '{name}' is a string tensor: ONNX Runtime cannot write strings into a pre-allocated NumSharp array. Fetch it with Run, which returns it as a text array."
+                        : $"output '{name}' is declared {meta.ElementDataType} but the pre-allocated array holds text ({array.dtype}); allocate the array with the model's dtype.");
             if (!NDArrayOnnxInterop.TryToTensorElementType(array.typecode, out TensorElementType have) || have != meta.ElementDataType)
                 throw new InvalidOperationException(
                     $"output '{name}' is declared {meta.ElementDataType} but the pre-allocated array is {array.typecode}; outputs are written in place " +

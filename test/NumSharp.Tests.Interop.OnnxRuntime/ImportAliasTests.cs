@@ -234,18 +234,18 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
 
         /// <summary>
         ///     A refused <c>AsNDArray(ownsValue: true)</c> leaves the value alive and the caller's: ownership transfers only
-        ///     with a returned array. Checked for the refusals a caller can reach (a string tensor, a sequence), for both
-        ///     modes that can own.
+        ///     with a returned array. Checked for the refusals a caller can reach (a BFloat16 tensor, which has no NumSharp
+        ///     dtype, and a sequence), in every mode.
         /// </summary>
         [TestMethod]
         public void RefusedOwningImport_LeavesTheValueAliveAndTheCallers()
         {
-            using OrtValue strings = OrtValue.CreateTensorWithEmptyStrings(OrtAllocator.DefaultInstance, new long[] { 2 });
-            strings.StringTensorSetElementAt("a".AsSpan(), 0);
-            foreach (OnnxCodecMode mode in new[] { OnnxCodecMode.Auto, OnnxCodecMode.Copy })
+            using OrtValue bfloat = OrtValue.CreateTensorValueFromMemory(new[] { new BFloat16(0x3f80), new BFloat16(0x4000) }, new long[] { 2 });
+            foreach (OnnxCodecMode mode in new[] { OnnxCodecMode.Auto, OnnxCodecMode.View, OnnxCodecMode.Copy })
             {
-                new Action(() => strings.AsNDArray(ownsValue: true, mode: mode)).Should().Throw<NotSupportedException>($"{mode}");
-                strings.GetStringElement(0).Should().Be("a", $"{mode}: the refused import must not dispose the value");
+                new Action(() => bfloat.AsNDArray(ownsValue: true, mode: mode)).Should().Throw<NotSupportedException>($"{mode}").WithMessage("*bfloat16*");
+                OrtProbe.IsDisposed(bfloat).Should().BeFalse($"{mode}: the refused import must not dispose the value");
+                bfloat.GetTensorTypeAndShape().ElementCount.Should().Be(2, $"{mode}: the value still answers");
             }
 
             using NDArray element = Arange(NPTypeCode.Single, 3);
