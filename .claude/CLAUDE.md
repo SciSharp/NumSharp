@@ -708,14 +708,54 @@ reporting the original axis). `num<0` → `ValueError("Number of samples, {num},
   four rounds): geomean 2.26×; construction 2.6–18×, `m[i]` / `m[:, j]` 5×, `m + m` 1.8–5×, `m * 2.0`
   2.6× / 1.9× / 25×, `m.sum()` 2.9–6.2×, `m * m` at 4×4 6.6×, `m.I` at 4×4 8.6×, literals 8–13×. The 31 cells
   under 1.5× are costs of the array library, not of the class: two index arrays (`m[rows, cols]` 0.33–0.69×, its
-  assignment 0.18–0.27×: the fancy delegate route); `m > scalar` (0.25–0.52× from 4,096 elements: the scalar
-  comparison is a scalar loop on journey4, vectorized on branch `strings`, plan X24 / X25); products at 64×64
+  assignment 0.18–0.27×: the fancy delegate route); `m > scalar` at 64×64 and 512×512 (1.2× and 1.0× since
+  2026-10-10, were 0.52× and 0.25×: the next paragraph); products at 64×64
   without the OpenBLAS backend (`m * m` 0.58×, `m ** 3` 0.50×, `m.I` 1.12×); axis reductions (`m.sum(0)`
   1.1–1.4×, `m.mean(0)` and `m.argmax(1)` at 512 1.0–1.1×, `m.cumsum(0)` 1.2–1.3×); `m[mask]` (0.84× at 512);
   and members at the NDArray allocation floor (`m.copy()` 1.1–1.3×, `m[i, j]` and `m.A` 1.4–1.5×).
   **A C# literal operand costs 0.2–1.2 µs more than a held 0-d operand** (`m * 2.0` at 256 elements: 1.5 µs
   against 0.58 with `NDMatrix two = 2.0` held): the conversion's 0-d temporary is left to the finalizer, the same
-  cost `a * 2.0` has on a plain array (plan X26, open).
+  cost `a * 2.0` has on a plain array (plan X26, open). Measured over one second of calls (not best-of-rounds):
+  `(a > 0.75)` at 4×4 takes 1.75 µs against 0.47 with a held operand, and a dropped `NDArray s = 0.75` alone
+  1.13 µs against 0.32 when it is disposed (a dropped object with an empty finalizer: 0.18 µs). A scope around
+  the call does not make it cheap either (`m > 0.75` at 64×64: 2.27 µs in an `NDScope`, 2.43 without, 1.45 held).
+  **`m > scalar` runs the vectorized array-against-scalar comparison kernels (2026-10-10).** The two kernel files
+  of branch `strings`' commit `d0a6f4c8` were brought to journey4 unchanged
+  (`Direct/DirectILKernelGenerator.Comparison.cs`, `.Unary.Predicate.cs`, and their test
+  `Backends/Kernels/ComparisonBroadcastKernelTests.cs`: the same bytes on both branches, so the merge is clean).
+  - **What they do.** `array op scalar` / `scalar op array` (`SimdScalarRight` / `Left`) compare a vector per step
+    with the scalar broadcast once, when the array already has the comparison dtype
+    (`EmitComparisonBroadcastSimdLoop`; they were scalar loops: 0.7 ns an element for float64, 0.36 for the
+    integers, 1.4 for bool). Four masks are stored packed on AVX2 hosts (`EmitMasksToBools`, NumPy's
+    `npyv_pack_b8_*`).
+  - **The loop bound they also fix (silent memory corruption on journey4 until now).** The comparison `SimdFull`
+    kernel and the contiguous predicate kernel (isnan / isinf / isfinite / isposinf / isneginf / signbit) ran one
+    body too many when `n % step == step - 1`: one element read past the inputs and one bool written past the
+    result (`a == b` over 31 bool elements, `np.isnan` over 7 float32; an `out=` view's next parent slot). The
+    three sentinel tests of the test file fail on the old kernels.
+  - **What stays on `strings`.** The NEP 50 weak-scalar pack of the same commit (plan X24 / X2 / X21, a breaking
+    change, with its `weak_scalar` tier). The vector loop needs the array to have the comparison dtype already,
+    and journey4 still promotes a 0-d operand strongly. So a literal that promotes the comparison stays in the
+    scalar loop until that merge (100K elements): `float32 > 50.5` 72 µs against 7.9 for `50.5f`, `uint8 > 50`
+    39 µs against 3.9 for `(byte)50`, `int16 > 50` 37 against 4.7 for `(short)50`, `int32 > 50L` 39. A literal
+    that does not promote takes the vector loop: an `int`, `float` or `double` against float64, an `int` against
+    int32 / int64.
+  - **Perf (NPY/NS; before).** `m > 0.75` 2.0× / 1.2× / 1.0× at 4 / 64 / 512 square (1.39× / 0.52× / 0.25×); a
+    float64 array against a held 0-d operand 2.0× / 1.4× / 1.0× (1.9× / 0.40× / 0.22×); every SIMD dtype against
+    a 0-d operand of its own dtype 1.9–2.4× at 1K, 0.86–1.9× at 100K, 1.4–4.0× at 10M (0.03–1.6× before). A
+    re-run of the 97 cells reads geomean 2.35× with 29 cells under 1.5×.
+  - **Two floors hold the 64 and 512 cells under 1.5×.** (1) At 64×64 the literal's 0-d temporary is 0.9 µs of
+    the 2.1 µs call (`m > held` is 2.1×): plan X26. (2) The kernel already runs at the cost of READING its input:
+    called directly it takes 0.36 µs for 4,096 float64 elements and 18.5 µs for 196,608, and a loop that only
+    loads and compares takes 0.37 and 17.7. A 512×512 float64 matrix is 2 MB, the size of this CPU's L2: the
+    read-only loop takes 30 µs there, the kernel 39, NumPy 40–48. So 1.5× is not reachable at that size.
+  - **Finding, not acted on: buffer alignment is a 20–35 % lottery for every SIMD kernel.** A buffer whose address
+    is 16 mod 32 makes every second 32-byte load cross a cache line. Kernel-only at 100K elements: float32 4.8 µs
+    aligned and 6.4 µs not, float64 9.3 and 12.5, int32 6.0 and 8.2; for 1- and 2-byte lanes the RESULT's
+    alignment costs as much (int16 at 262,144: 9.0 and 12.8 µs). Pooled buffers are 16-byte aligned, so each
+    array wins or loses by its address. Through the public operator, the same 100K float64 values take 10.1 µs
+    in a view that starts on a 32-byte boundary and 13.3 µs in a view 16 bytes later (float32: 5.8 and 7.3). A
+    64-byte aligned allocation would remove it library-wide.
   **Benchmark trap:** a harness that warms a cell once read 4.3 µs for a call that takes 1.4 at tier 1, and that
   number first put the fused threshold 4× too high. Warm every route twice with a pause, and time two routes in
   one process with interleaved rounds.

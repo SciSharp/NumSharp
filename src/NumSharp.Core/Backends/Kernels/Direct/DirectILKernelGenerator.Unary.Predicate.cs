@@ -334,15 +334,18 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Stloc, locInf);
             }
 
-            // unrollEnd = totalSize - unrollStep + 1
+            // unrollEnd = totalSize - unrollStep: the LAST start of four whole vectors (the loop runs while i <= it, so
+            // i + unrollStep <= totalSize). It was totalSize - unrollStep + 1, which ran one body too many whenever
+            // totalSize % unrollStep == unrollStep - 1: one element read past the input and one bool written past the
+            // result (the comparison kernel's same off-by-one).
             il.Emit(OpCodes.Ldarg_S, (byte)5); // totalSize
-            il.Emit(OpCodes.Ldc_I8, unrollStep - 1);
+            il.Emit(OpCodes.Ldc_I8, unrollStep);
             il.Emit(OpCodes.Sub);
             il.Emit(OpCodes.Stloc, locUnrollEnd);
 
-            // vectorEnd = totalSize - vectorCount + 1
+            // vectorEnd = totalSize - vectorCount: the last start of one whole vector.
             il.Emit(OpCodes.Ldarg_S, (byte)5); // totalSize
-            il.Emit(OpCodes.Ldc_I8, vectorCount - 1);
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
             il.Emit(OpCodes.Sub);
             il.Emit(OpCodes.Stloc, locVectorEnd);
 
