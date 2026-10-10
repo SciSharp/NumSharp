@@ -329,7 +329,7 @@ ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, an
 | 2026-10-10 | 10 | `944817d4` | outputs that are fed inputs: `RunInto` writes them, the zero-copy form returns a counted alias of the fed buffer, the copy form copies from it; 3 new models (`passthrough`, `overridable_out`, `passthrough_text`); ONNX suite 266 / 266 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 6 of 9 (2 equivalent: a zero-byte copy, and the copy form below 2 GB; 1 not observable from outside: the early dispose of the value ORT returned) |
 | 2026-10-10 | 7 | `da9b1be8` | `RunIntoAsync`, `RunAsync`, `IsRunAsyncSupported` on ORT's native asynchronous run; 1 new model (`cast_fanout`); ONNX suite 286 / 286 in Release on net10.0 and net8.0 with ORT 1.31.0, and 267 passed + 19 Inconclusive (the async behaviour tests) on both with ORT 1.16.0, where the refusal is tested; mutation sample 18 of 18 (run with ORT 1.31.0), the three deadlock guards included |
 | 2026-10-10 | 8 | `3fe73ff7` | 21 tests for the review's 3 surviving planted bugs and for the reachable paths without a test (the list came from a new coverage run); 6 new models (`tensor_then_seq`, `anon_dim`, `bf16_out`, `bf16_in`, `seq_two`, `two_dtypes`); the disposed-handle guard (V13); ONNX suite 307 / 307 in Release on net10.0 and net8.0 with ORT 1.31.0, and 288 passed + 19 Inconclusive on both with ORT 1.16.0; mutation sample 22 of 22 (the review's M07, M09 and M23 among them; 3 mutants of the guard end the test host, which is the crash the guard prevents) |
-| 2026-10-10 | 9 | (this commit) | the README and the docs page rewritten for the reworked surface, without test counts; ORT 1.31.0 in CI, the documents, `CLAUDE.md`, the project comments and the `refs/onnxruntime` pointer (`402979ac`); the csproj comment about `FileLoadException` corrected; 4 tests that run the documents' snippets as written; ONNX suite 311 / 311 in Release on net10.0 and net8.0 with ORT 1.31.0, and 291 passed + 20 Inconclusive on both with ORT 1.16.0; coverage 94.3 % lines, 93.6 % branches |
+| 2026-10-10 | 9 | `34247ff6` | the README and the docs page rewritten for the reworked surface, without test counts; ORT 1.31.0 in CI, the documents, `CLAUDE.md`, the project comments and the `refs/onnxruntime` pointer (`402979ac`); the csproj comment about `FileLoadException` corrected; 4 tests that run the documents' snippets as written; ONNX suite 311 / 311 in Release on net10.0 and net8.0 with ORT 1.31.0, and 291 passed + 20 Inconclusive on both with ORT 1.16.0; coverage 94.3 % lines, 93.6 % branches |
 
 ## 7. State after execution (2026-10-10)
 
@@ -343,6 +343,7 @@ Every item with a decision to act on is done. The work is 11 commits on `strings
 | Branch coverage | 83.3 % of 588 | 93.6 % of 939 |
 | The review's planted bugs that pass the suite | 4 of 24 | 0 |
 | Mutation samples of the rework | | 6 samples, 106 planted bugs, 102 killed; 3 of the others are equivalent, 1 is not observable from outside |
+| Platforms the suite ran on | Windows | Windows, and Linux x64 (WSL, Ubuntu 24.04): CI's three ONNX steps from a fresh clone of `34247ff6`, with the same totals (291 passed + 20 Inconclusive at the floor on net8.0 and net10.0; 311 / 311 with ORT 1.31.0 on net10.0) |
 
 What the rework found that the review had not (each measured, fixed and recorded above):
 
@@ -362,5 +363,7 @@ What stays open:
   `NDArrayOnnxInterop.Text.cs`), and feed a string input from numbers once text and number casts exist.
 - The uncovered lines are cleanup blocks that need a failure inside ONNX Runtime or the allocator to run, and
   branches that no ORT value can reach (a `char` or `Complex` element type on import).
+- macOS was not run anywhere. CI's macOS leg will be the first run of the asynchronous, text and pass-through
+  tests on Apple silicon.
 
 The package is still unreleased and hidden: `IsPackable` is `false`, its docs page is excluded from the site.
