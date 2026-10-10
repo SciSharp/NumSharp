@@ -32,20 +32,20 @@ Status: `todo`, `done` (with the commit), `deferred`, `closed` (no change by dec
 
 | ID | Item | Decision | Status |
 |---|---|---|---|
-| V1 (G1) | Fortran-order `AsDenseTensor<T>`: ORT refuses it through `NamedOnnxValue` and reads it transposed through `Memory` | The export verbs and `Run` get the three modes of the pythonnet codec as `OnnxCodecMode` (`Auto`, `View`, `Copy`). `Auto` shares when ORT can read the buffer and copies otherwise. The `reverseStride` share is removed. Design in §3.1. | export verbs done (WP 2); `Run` in WP 4 |
+| V1 (G1) | Fortran-order `AsDenseTensor<T>`: ORT refuses it through `NamedOnnxValue` and reads it transposed through `Memory` | The export verbs and `Run` get the three modes of the pythonnet codec as `OnnxCodecMode` (`Auto`, `View`, `Copy`). `Auto` shares when ORT can read the buffer and copies otherwise. The `reverseStride` share is removed. Design in §3.1. | done (WP 2 export verbs, WP 4 `Run`) |
 | V2 | `Postprocess.Softmax` / `LogSoftmax` / `Sigmoid` wrap for integer input (`Softmax(uint8 [1,3])` = `[NaN, 0]`) | Promote bool and integer input to NumPy's exp tier before the computation (bool, int8, uint8 → float16; int16, uint16, char → float32; wider → float64). Result dtypes do not change. Tests check values. | done (WP 1) |
 | V2b | `LogSoftmax([inf, 1])` = `[NaN, NaN]`; SciPy gives `[nan, -inf]` | Follow `scipy.special.log_softmax`: a non-finite row maximum is replaced by 0 before the shift. | done (WP 1) |
 | V3 | `nd.AsOrtValue().Value.AsNDArray()` reads another array's memory after the handle and the source are disposed | A view of an `OrtValue` that the package made is a counted NumSharp alias of the buffer (as `Tensor.AsNDArray()` already is). | done (WP 3) |
 | V4 | The read-only flag is lost through `Value.AsNDArray()` and `Tensor.AsNDArray()` | Those views inherit the source's read-only flag. A read-only array stays a legal model input; the documents say that ORT has no read-only tensors. | done (WP 3; documents in WP 9) |
 | V5 | A repeated output name loses one array until a collection | Accepted as it is. | closed |
-| V6 | `casting` is checked only when a cast is necessary; `"no"` still converts Decimal | `Run` always validates the string. Decimal and Char follow NumSharp's `can_cast` table: the default `"safe"` refuses a Decimal input (`"same_kind"` permits it); Char → UInt16 stays permitted under `"safe"` and stays zero-copy. | todo |
+| V6 | `casting` is checked only when a cast is necessary; `"no"` still converts Decimal | `Run` always validates the string. Decimal and Char follow NumSharp's `can_cast` table: the default `"safe"` refuses a Decimal input (`"same_kind"` permits it); Char → UInt16 stays permitted under `"safe"` and stays zero-copy. | done (WP 4) |
 | V7 | `TryToTensorElementType` / `ToTensorElementClrType` throw for a datetime64 / timedelta64 descriptor | The `Try` form returns `false`, `ToTensorElementClrType` returns `null`, `ToTensorElementType` throws the package's own message. A non-native descriptor keeps mapping as native. | todo |
 | V8a | A sparse-tensor model input passes the checks of `Run` and fails inside ORT | Deferred. | deferred |
-| V8b (G7) | `Run` refuses an `optional(tensor)` input with a wrong hint | `Run` unwraps the declaration and feeds a plain tensor. | todo |
-| V9 | A pre-allocated output that overlaps an input gives wrong values (MatMul 64×64: 3,072 of 4,096 elements) | `Auto`: `RunInto` feeds a copy of the overlapping input, as NumPy does for `out=`. `View`: it throws. Two outputs in one array always throw. | todo |
+| V8b (G7) | `Run` refuses an `optional(tensor)` input with a wrong hint | `Run` unwraps the declaration and feeds a plain tensor. | done (WP 4) |
+| V9 | A pre-allocated output that overlaps an input gives wrong values (MatMul 64×64: 3,072 of 4,096 elements) | `Auto`: `RunInto` feeds a copy of the overlapping input, as NumPy does for `out=`. `View`: it throws. Two outputs in one array always throw. | done (WP 4) |
 | V10a | `AsNDArray(value, ownsValue: true)` can dispose `value` when it throws | The code follows the docs: a throw never disposes `value`. | done (WP 3) |
 | V10b | Every view adds full-size GC memory pressure | Only a view that owns its `OrtValue` adds pressure, once. A copy needs none from the bridge (Core's allocator reports it). | done (WP 3) |
-| V11a | `session.Run(inputs, null)` is CS0121 | The pre-allocated-outputs overload becomes `RunInto`. | todo |
+| V11a | `session.Run(inputs, null)` is CS0121 | The pre-allocated-outputs overload becomes `RunInto`. | done (WP 4) |
 | V11b | `NamedOnnxValue.ToNDArray` refuses `DenseTensor<char>` and `DenseTensor<Half>` | Accept both. | done (WP 3) |
 | V11c | `Postprocess` exists 2 times (ONNX bridge, ML.NET bridge) | One source file compiled into both bridges; the 2 public names stay; a caller with both bridges uses a `using` alias. | done (WP 1) |
 | V11d | `Postprocess.Argmax(x2d, axis: -3)` returns a result | `Postprocess.Argmax` checks its axis, as `TopK` does. | done (WP 1) |
@@ -59,7 +59,7 @@ Status: `todo`, `done` (with the commit), `deferred`, `closed` (no change by dec
 | C2a (G4, G11) | `Run` cannot return non-tensor outputs; the dictionary result is not disposable | Deferred. Owner's note: consider overloads and typed struct support. Text outputs are covered by S1. | deferred |
 | C2b (G5) | String-keyed maps are refused | Covered by S1: the keys come back as a text `NDArray`. | todo (S1) |
 | C2c (G6) | The `Run` tier accepts only `NDArray` inputs | Deferred. Owner's note: a `Run<T>(T inputs) where T : struct` with an interface that yields the `Dictionary<string, OnnxInput>` from the struct values; the default implementation is reflection with statically cached getters (expression trees or IL generation). Text inputs are covered by S1. | deferred |
-| C2d (G7) | `Run` refuses an overridable initializer | Accept: look a name up in `InputMetadata`, then in `OverridableInitializerMetadata`. | todo |
+| C2d (G7) | `Run` refuses an overridable initializer | Accept: look a name up in `InputMetadata`, then in `OverridableInitializerMetadata`. | done (WP 4) |
 | C3a (G8) | No `RunAsync` | Add it on ORT's own native async, for ORT 1.30.0 and newer only (older versions do not pin their argument arrays). Design in §3.6. | todo |
 | C3b (G9) | The non-tensor readers copy each element 2 times | Each result becomes a view that owns ORT's copy. | done (WP 3) |
 | C3c (G10) | `IsCpuAccessible` refuses `QnnHtpShared` and `CpuAligned4K` | Ask ORT for the device memory kind when the loaded ORT has `GetDeviceMemoryType`; the name list stays as the fallback. | done (WP 3) |
@@ -226,7 +226,7 @@ ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, an
 | 1 | `Postprocess`: shared source, float promotion, SciPy `log_softmax`, axis check | V2, V2b, V11c, V11d | done |
 | 2 | `OnnxCodecMode` on the export verbs; `IsView`; `reverseStride` export removed | V1 | done |
 | 3 | Import side: counted alias, read-only, ownership on failure, memory pressure, legacy types, readers, device kind | V3, V4, V10a, V10b, V11b, C3b, C3c | done |
-| 4 | `Run` tier: `mode`, `RunInto`, casting rule, optional inputs, overridable initializers, overlap | V1, V6, V8b, V9, V11a, C2d | todo |
+| 4 | `Run` tier: `mode`, `RunInto`, casting rule, optional inputs, overridable initializers, overlap | V1, V6, V8b, V9, V11a, C2d | done |
 | 5 | dtype maps over descriptors without storage | V7 | todo |
 | 6 | Text crossing | S1, C2b | todo |
 | 7 | `RunIntoAsync` / `RunAsync` | C3a | todo |
@@ -254,4 +254,5 @@ ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, an
 | 2026-10-10 | 0 | `32d47557` | plan written |
 | 2026-10-10 | 1 | `720d81cb` | shared `Postprocess`; ONNX suite 212 / 212 on net10.0 and net8.0 (ORT 1.16.0), ML.NET post-processing and API-surface classes 24 / 24 on both |
 | 2026-10-10 | 2 | `40d546aa` | `OnnxCodecMode` on `AsOrtValue` / `AsDenseTensor<T>`, `IsView`, row-major tensors only; ONNX suite 216 / 216 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0 |
-| 2026-10-10 | 3 | (this commit) | import side: counted alias, read-only inheritance, ownership on failure, memory pressure, legacy `char` / `Half` tensors, owning reader results, device kind from ORT; ONNX suite 232 / 232 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 16 of 18 (1 equivalent, 1 closed by a new test) |
+| 2026-10-10 | 3 | `eade99a5` | import side: counted alias, read-only inheritance, ownership on failure, memory pressure, legacy `char` / `Half` tensors, owning reader results, device kind from ORT; ONNX suite 232 / 232 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 16 of 18 (1 equivalent, 1 closed by a new test) |
+| 2026-10-10 | 4 | (this commit) | `Run` tier: input mode on every form, `RunInto`, the cast table for every dtype pair, optional inputs, overridable initializers, the overlap rule; ONNX suite 241 / 241 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 18 of 18 |

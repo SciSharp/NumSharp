@@ -195,6 +195,16 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             _ => code,
         };
 
+        /// <summary>
+        ///     The <c>casting</c> rule a sweep passes to <c>session.Run</c> so that an array of <paramref name="code"/> is
+        ///     accepted by the identity model of its crossed dtype: the default <c>"safe"</c> for every dtype that crosses as
+        ///     itself (and for Char, whose reinterpretation as UInt16 is a safe cast), <c>"same_kind"</c> for Decimal, whose
+        ///     conversion to float64 loses digits and is therefore refused under <c>"safe"</c>.
+        /// </summary>
+        /// <param name="code">The source dtype.</param>
+        /// <returns>The weakest rule that lets the array in.</returns>
+        internal static string RunCasting(NPTypeCode code) => code == NPTypeCode.Decimal ? "same_kind" : "safe";
+
         /// <summary>The ONNX element type an array of <paramref name="code"/> crosses as (written out, not read from the bridge).</summary>
         /// <param name="code">The source dtype (not Complex).</param>
         /// <returns>The ONNX element type.</returns>

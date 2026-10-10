@@ -41,7 +41,7 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             using NDArray x = Arange(NPTypeCode.Single, 3, 4);
             using NDArray big = np.full(new Shape(10, 4), -1f);
             using NDArray window = big["2:5"];
-            session.Run(new Dictionary<string, NDArray> { { "X", x } }, new Dictionary<string, NDArray> { { "Y", window } });
+            session.RunInto(new Dictionary<string, NDArray> { { "X", x } }, new Dictionary<string, NDArray> { { "Y", window } });
 
             Assert.IsTrue(np.array_equal(window, x), "the window holds the result");
             using NDArray before = big["0:2"];
@@ -53,7 +53,7 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             using NDArray flatBig = np.full(new Shape(20), -1f);
             using NDArray flatWindow = flatBig["3:15"];
             using NDArray flatX = x.flatten();
-            session.Run(new Dictionary<string, NDArray> { { "X", flatX } }, new Dictionary<string, NDArray> { { "Y", flatWindow } });
+            session.RunInto(new Dictionary<string, NDArray> { { "X", flatX } }, new Dictionary<string, NDArray> { { "Y", flatWindow } });
             Assert.IsTrue(np.array_equal(flatWindow, flatX), "the 1-D window holds the result");
             Assert.AreEqual(-1f, flatBig.GetSingle(2), "the element before the window");
             Assert.AreEqual(-1f, flatBig.GetSingle(15), "the element after the window");
@@ -159,7 +159,7 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
 
                     _failures.Check($"{cell} / session.Run(NDArray)", () =>
                     {
-                        using NDArray y = session.Run(view);
+                        using NDArray y = session.Run(view, casting: Oracle.RunCasting(code));
                         return ExportContract.Imported(y, backCode, dims, bytes);
                     });
 
@@ -202,7 +202,8 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
 
                     _failures.Check($"{cell} / session.Run(dict, zeroCopyOutputs)", () =>
                     {
-                        IReadOnlyDictionary<string, NDArray> outputs = session.Run(new Dictionary<string, NDArray> { { "X", view } }, zeroCopyOutputs: true);
+                        IReadOnlyDictionary<string, NDArray> outputs = session.Run(new Dictionary<string, NDArray> { { "X", view } },
+                            casting: Oracle.RunCasting(code), zeroCopyOutputs: true);
                         using NDArray y = outputs["Y"];
                         return ExportContract.Imported(y, backCode, dims, bytes);
                     });

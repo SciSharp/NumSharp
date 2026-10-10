@@ -69,8 +69,8 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                 if (!Oracle.SameBytes(Raw(viaCopy), Raw(shared.Value)))
                     return "AsOrtValue(v.copy()) differs from ToOrtValue(v)";
                 using InferenceSession session = OpenSession(IdentityModel(code));
-                using NDArray fromView = session.Run(view);
-                using NDArray fromCopy = session.Run(copy);
+                using NDArray fromView = session.Run(view, casting: Oracle.RunCasting(code));
+                using NDArray fromCopy = session.Run(copy, casting: Oracle.RunCasting(code));
                 return Oracle.SameBytes(Oracle.LogicalBytes(fromView), Oracle.LogicalBytes(fromCopy)) ? null : "the model's output for v differs from its output for v.copy()";
             }));
             failures.AssertNone("copy relation");

@@ -54,6 +54,7 @@ namespace NumSharp.Interop.OnnxRuntime
         private readonly NDArray _source;
         private readonly IArraySlice _slice;
         private readonly IntPtr _data;
+        private readonly long _byteLength;
         private readonly bool _sourceWriteable;
         private readonly bool _ownsSource;
         private readonly bool _isView;
@@ -66,17 +67,19 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="source">The array ORT reads (the caller's, or a temporary the handle owns).</param>
         /// <param name="slice">The buffer, on which the caller already took the reference this handle now owns.</param>
         /// <param name="data">The address of the tensor's first element inside <paramref name="slice"/> (the pointer the OrtValue was created over).</param>
+        /// <param name="byteLength">The byte length of the tensor's elements, starting at <paramref name="data"/>.</param>
         /// <param name="ownsSource"><c>true</c> when <paramref name="source"/> is a temporary the handle must dispose.</param>
         /// <param name="isView"><c>true</c> when <paramref name="source"/> is the array the export verb was given (shared memory); <c>false</c> when it is a copy the verb made.</param>
         /// <param name="elementType">The ONNX element type the value was created with.</param>
         /// <param name="shape">The value's row-major shape.</param>
         /// <exception cref="OutOfMemoryException">The value could not be registered (the handle is then left unconstructed: its finalizer is suppressed, and the caller still owns the value and the reference).</exception>
-        internal OrtTensor(OrtValue value, NDArray source, IArraySlice slice, IntPtr data, bool ownsSource, bool isView, TensorElementType elementType, long[] shape)
+        internal OrtTensor(OrtValue value, NDArray source, IArraySlice slice, IntPtr data, long byteLength, bool ownsSource, bool isView, TensorElementType elementType, long[] shape)
         {
             _value = value;
             _source = source;
             _slice = slice;
             _data = data;
+            _byteLength = byteLength;
             // Read now, while the source is certainly alive: the caller may dispose its array before it asks for a view of
             // the value, and a view must still know whether the array it came from was read-only.
             _sourceWriteable = source.Shape.IsWriteable;
@@ -151,6 +154,13 @@ namespace NumSharp.Interop.OnnxRuntime
 
         /// <summary>The address of the tensor's first element inside <see cref="Slice"/>.</summary>
         internal unsafe byte* Data => (byte*)_data;
+
+        /// <summary>
+        ///     The byte length of the memory ONNX Runtime reads or writes through this tensor: <c>[Data, Data + ByteLength)</c>.
+        ///     Two tensors whose ranges intersect share memory, which is what the pre-allocated-output run checks before it
+        ///     lets ORT write one of them while it reads the other.
+        /// </summary>
+        internal long ByteLength => _byteLength;
 
         /// <summary>
         ///     Whether the array ORT reads was writeable when it was exported. A NumSharp view of the value inherits it, so

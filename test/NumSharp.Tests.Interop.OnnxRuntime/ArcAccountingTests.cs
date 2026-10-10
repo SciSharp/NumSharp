@@ -46,6 +46,8 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                 ("ToOrtValue of Complex", NPTypeCode.Complex, b => b.T, v => v.ToOrtValue()),
                 ("Run refuses an int32 -> int64 cast under 'no'", NPTypeCode.Int32, b => b.T, v => session.Run(v, casting: "no")),
                 ("Run refuses a float64 -> int64 cast under 'safe'", NPTypeCode.Double, b => b.T, v => session.Run(v)),
+                ("Run(View) refuses an input that needs a cast", NPTypeCode.Int32, b => b["::1"], v => session.Run(v, mode: OnnxCodecMode.View)),
+                ("Run(View) refuses a transposed input", NPTypeCode.Int64, b => b.T, v => session.Run(v, mode: OnnxCodecMode.View)),
             };
 
             foreach (var (name, code, makeView, refuse) in cases)
@@ -177,7 +179,7 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                 {
                     using NDArray b = Arange(code, 4, 3);
                     using NDArray view = makeView(b);
-                    using NDArray output = session.Run(view);
+                    using NDArray output = session.Run(view, casting: Oracle.RunCasting(code));
                     Assert.AreEqual(view.size, output.size, name);
                 });
                 Assert.AreEqual(0L, balance, $"{name}: {balance} buffer(s) taken and never returned");

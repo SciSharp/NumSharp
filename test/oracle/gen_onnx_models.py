@@ -9,6 +9,9 @@ same offline-corpus philosophy as test/oracle/gen_oracle.py). Re-run this script
 changes; it self-checks every file by executing it through onnxruntime.
 
     python test/oracle/gen_onnx_models.py            # writes test/NumSharp.Tests.Interop.OnnxRuntime/Models/*.onnx
+    python test/oracle/gen_onnx_models.py NAME ...   # writes only the named models (a new model is added
+                                                     # without rewriting the committed ones, whose bytes
+                                                     # depend on the installed onnx version)
 
 Requires: onnx, onnxruntime, numpy (pip install onnx onnxruntime numpy).
 
@@ -40,6 +43,12 @@ string_io.onnx          X string -> Identity -> Y string. The ReadStringTensor r
                         and the refusal of a string model INPUT.
 sequence_input.onnx     seq sequence<tensor(float)> -> SequenceLength -> len int64. A NON-tensor model
                         INPUT: Tier-2 Run must refuse feeding it an NDArray.
+optional_input.onnx     X optional(tensor(float)) -> OptionalGetElement -> Y float32. An input declared
+                        OPTIONAL: Tier-2 Run unwraps the declaration and feeds a plain tensor.
+overridable_init.onnx   x [3] float32, w [3] float32 (an initializer that is ALSO a graph input, value
+                        [10, 20, 30]) -> Add -> y. An OVERRIDABLE INITIALIZER: ORT lists w in
+                        OverridableInitializerMetadata, not in InputMetadata; Tier-2 Run accepts a value
+                        for it and runs with the default when none is fed.
 """
 from __future__ import annotations
 
@@ -73,8 +82,8 @@ DTYPES = {
 }
 
 
-def _model(name, nodes, inputs, outputs, value_info=(), check=True, opset_imports=None):
-    graph = helper.make_graph(nodes, name, inputs, outputs, value_info=list(value_info))
+def _model(name, nodes, inputs, outputs, value_info=(), check=True, opset_imports=None, initializer=()):
+    graph = helper.make_graph(nodes, name, inputs, outputs, value_info=list(value_info), initializer=list(initializer))
     model = helper.make_model(graph, producer_name="NumSharp.Interop.OnnxRuntime tests",
                               opset_imports=opset_imports or [helper.make_opsetid("", OPSET)])
     model.ir_version = IR_VERSION
@@ -175,6 +184,24 @@ def build_all():
         [helper.make_node("SequenceLength", ["seq"], ["len"])],
         [seq_in], [_tensor("len", TensorProto.INT64, [])], check=False)
 
+    # An OPTIONAL model input: optional(tensor(float)) -> OptionalGetElement -> the tensor. ONNX Runtime
+    # takes a plain tensor where an optional is declared; Tier-2 Run must unwrap the declaration.
+    optional_float = onnx.TypeProto()
+    optional_float.optional_type.elem_type.tensor_type.elem_type = TensorProto.FLOAT
+    models["optional_input"] = _model(
+        "optional_input",
+        [helper.make_node("OptionalGetElement", ["X"], ["Y"])],
+        [helper.make_value_info("X", optional_float)], [_tensor("Y", TensorProto.FLOAT)], check=False)
+
+    # An OVERRIDABLE INITIALIZER: w is an initializer that is also listed as a graph input (legal from IR 4
+    # on), so a caller may replace its value for one run. ORT reports it in OverridableInitializerMetadata.
+    weight = helper.make_tensor("w", TensorProto.FLOAT, [3], [10.0, 20.0, 30.0])
+    models["overridable_init"] = _model(
+        "overridable_init",
+        [helper.make_node("Add", ["x", "w"], ["y"])],
+        [_tensor("x", TensorProto.FLOAT, [3]), _tensor("w", TensorProto.FLOAT, [3])],
+        [_tensor("y", TensorProto.FLOAT, [3])], initializer=[weight])
+
     return models
 
 
@@ -232,6 +259,17 @@ def self_check(path: str, name: str) -> None:
     elif name == "sequence_input":
         n, = sess.run(None, {"seq": [np.arange(3, dtype=np.float32), np.arange(2, dtype=np.float32)]})
         assert int(n) == 2, name
+    elif name == "optional_input":
+        y, = sess.run(None, {"X": np.arange(4, dtype=np.float32)})   # a plain tensor for the optional
+        assert np.array_equal(y, np.arange(4, dtype=np.float32)), name
+    elif name == "overridable_init":
+        assert [i.name for i in sess.get_inputs()] == ["x"], name
+        assert [i.name for i in sess.get_overridable_initializers()] == ["w"], name
+        x = np.array([1, 2, 3], np.float32)
+        y, = sess.run(None, {"x": x})                                # the default weight
+        assert np.array_equal(y, np.array([11, 22, 33], np.float32)), name
+        y, = sess.run(None, {"x": x, "w": np.array([1, 1, 1], np.float32)})   # the weight replaced
+        assert np.array_equal(y, np.array([2, 3, 4], np.float32)), name
     else:
         raise AssertionError(f"no self-check for {name}")
 
@@ -239,6 +277,13 @@ def self_check(path: str, name: str) -> None:
 def main() -> int:
     os.makedirs(OUT_DIR, exist_ok=True)
     models = build_all()
+    wanted = sys.argv[1:]
+    unknown = [name for name in wanted if name not in models]
+    if unknown:
+        print(f"unknown model name(s): {', '.join(unknown)}; known: {', '.join(models)}")
+        return 2
+    if wanted:
+        models = {name: models[name] for name in wanted}
     for name, model in models.items():
         path = os.path.join(OUT_DIR, f"{name}.onnx")
         onnx.save(model, path)

@@ -137,7 +137,7 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             y.flags.c_contiguous.Should().BeTrue();
             y.flags.writeable.Should().BeFalse();
 
-            new Action(() => session.Run(new Dictionary<string, NDArray> { { "X", x } },
+            new Action(() => session.RunInto(new Dictionary<string, NDArray> { { "X", x } },
                     new Dictionary<string, NDArray> { { "Y1", y } }))
                 .Should().Throw<InvalidOperationException>().WithMessage("*'Y1'*read-only*");
             NDArrayOnnxInterop.LiveExports.Should().Be(0);

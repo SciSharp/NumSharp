@@ -74,7 +74,9 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             foreach (string layout in Layouts)
             {
                 NDArray released = Released(layout, code);
-                new Action(() => session.Run(released)).Should().Throw<ObjectDisposedException>($"Run on a released {code} {layout} input");
+                // "same_kind": the rule that admits all three (the Decimal conversion loses digits, so "safe" refuses it
+                // before the array is read, which is a different refusal from the one this test pins).
+                new Action(() => session.Run(released, casting: "same_kind")).Should().Throw<ObjectDisposedException>($"Run on a released {code} {layout} input");
             }
         }
 

@@ -26,13 +26,13 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             new Action(() => none.Run(nd)).Should().Throw<ArgumentNullException>();
             new Action(() => none.Run("X", nd, "Y")).Should().Throw<ArgumentNullException>();
             new Action(() => none.Run(inputs)).Should().Throw<ArgumentNullException>();
-            new Action(() => none.Run(inputs, inputs)).Should().Throw<ArgumentNullException>();
+            new Action(() => none.RunInto(inputs, inputs)).Should().Throw<ArgumentNullException>();
 
             using InferenceSession session = OpenSession("identity_int32");
             new Action(() => session.Run(null, nd, "Y")).Should().Throw<ArgumentNullException>("inputName is null");
             new Action(() => session.Run("X", nd, null)).Should().Throw<ArgumentNullException>("outputName is null");
             new Action(() => session.Run((IReadOnlyDictionary<string, NDArray>)null)).Should().Throw<ArgumentNullException>();
-            new Action(() => session.Run(inputs, (IReadOnlyDictionary<string, NDArray>)null)).Should().Throw<ArgumentNullException>("outputs is null");
+            new Action(() => session.RunInto(inputs, (IReadOnlyDictionary<string, NDArray>)null)).Should().Throw<ArgumentNullException>("outputs is null");
         }
 
         [TestMethod]
@@ -65,7 +65,7 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             using NDArray transposed = big.T;   // (2,3) but F-contiguous / non-C-contiguous
             transposed.Shape.IsContiguous.Should().BeFalse();
 
-            new Action(() => session.Run(new Dictionary<string, NDArray> { { "X", x } },
+            new Action(() => session.RunInto(new Dictionary<string, NDArray> { { "X", x } },
                     new Dictionary<string, NDArray> { { "Y1", transposed } }))
                 .Should().Throw<InvalidOperationException>().WithMessage("*'Y1'*not C-contiguous*");
             NDArrayOnnxInterop.LiveExports.Should().Be(0, "the refused output pinned nothing");
@@ -78,7 +78,7 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             using NDArray x = Arange(NPTypeCode.Single, 2, 3);
             using NDArray wrong = np.zeros(new Shape(2, 4), typeof(float));   // identity output is (2,3)
 
-            new Action(() => session.Run(new Dictionary<string, NDArray> { { "X", x } },
+            new Action(() => session.RunInto(new Dictionary<string, NDArray> { { "X", x } },
                     new Dictionary<string, NDArray> { { "Y1", wrong } }))
                 .Should().Throw<Exception>("ORT checks the pre-allocated output shape itself");
             // the finally in Run disposed both the input and output handles despite the throw

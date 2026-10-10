@@ -116,7 +116,6 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                         long[] dims = view.shape;
                         NPTypeCode back = Oracle.CrossedCode(code);
                         string cell = $"{code} #{i} n={n} {layout}";
-                        bool contiguous = view.Shape.IsContiguous;
 
                         _failures.Check($"{cell} / ToOrtValue->ToNDArray", () =>
                         {
@@ -124,28 +123,27 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                             using NDArray b = v.ToNDArray();
                             return ExportContract.Imported(b, back, dims, want);
                         });
-                        if (contiguous)
-                            _failures.Check($"{cell} / AsOrtValue->AsNDArray", () =>
-                            {
-                                using OrtTensor h = view.AsOrtValue();
-                                using NDArray b = h.Value.AsNDArray();
-                                return ExportContract.Imported(b, back, dims, want);
-                            });
+                        // Every layout: a view ORT cannot read in place crosses as a copy under the default mode.
+                        _failures.Check($"{cell} / AsOrtValue->AsNDArray", () =>
+                        {
+                            using OrtTensor h = view.AsOrtValue();
+                            using NDArray b = h.Value.AsNDArray();
+                            return ExportContract.Imported(b, back, dims, want);
+                        });
                         _failures.Check($"{cell} / ToDenseTensor->ToNDArray", () =>
                         {
                             using NDArray b = view.ToDenseTensor<X>().ToNDArray();
                             return ExportContract.Imported(b, back, dims, want);
                         });
-                        if (contiguous)
-                            _failures.Check($"{cell} / AsDenseTensor->AsNDArray", () =>
-                            {
-                                using OrtTensor<X> h = view.AsDenseTensor<X>();
-                                using NDArray b = h.Tensor.AsNDArray();
-                                return ExportContract.Imported(b, back, dims, want);
-                            });
+                        _failures.Check($"{cell} / AsDenseTensor->AsNDArray", () =>
+                        {
+                            using OrtTensor<X> h = view.AsDenseTensor<X>();
+                            using NDArray b = h.Tensor.AsNDArray();
+                            return ExportContract.Imported(b, back, dims, want);
+                        });
                         _failures.Check($"{cell} / ORT Identity", () =>
                         {
-                            using NDArray b = session.Run(view);
+                            using NDArray b = session.Run(view, casting: Oracle.RunCasting(code));
                             return ExportContract.Imported(b, back, dims, want);
                         });
                     }

@@ -101,7 +101,7 @@ namespace NumSharp.Interop.OnnxRuntime
                     // Does NOT own or free the memory; the handle's ARC reference guarantees validity for as long
                     // as the OrtValue exists. Row-major, no strides — which is why the fed array is C-contiguous.
                     value = OrtValue.CreateTensorValueWithData(OrtMemoryInfo.DefaultInstance, elementType, dims, (IntPtr)data, nbytes);
-                    var handle = new OrtTensor(value, fed, slice, (IntPtr)data, ownsSource: temporary is not null || ownsSource, isView, elementType, dims);
+                    var handle = new OrtTensor(value, fed, slice, (IntPtr)data, nbytes, ownsSource: temporary is not null || ownsSource, isView, elementType, dims);
                     if (temporary is not null && ownsSource)
                         source.Dispose();   // the caller's temporary is superseded by the copy the handle now owns
                     temporary = null;       // ownership moved to the handle
