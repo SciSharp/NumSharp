@@ -44,6 +44,16 @@
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>
 
+  <!-- Post-processing (softmax, argmax, top-k) is ONE source file that every inference bridge compiles, so a fix
+       lands once. The symbol selects this bridge's namespace inside the shared file; without it the file stops the
+       build with an #error, so a new bridge cannot link it and silently land in the wrong namespace. -->
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);NUMSHARP_INTEROP_MLNET</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\NumSharp.Interop.Shared\Postprocess.cs" Link="Postprocess.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- In-repo: ProjectReference (packs as a NuGet dependency on "NumSharp" $(Version)). -->
     <ProjectReference Include="../NumSharp.Core/NumSharp.Core.csproj" />

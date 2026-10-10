@@ -44,6 +44,34 @@ namespace NumSharp.Tests.Interop.MLNet
             Assert.AreEqual(NPTypeCode.Double, si.typecode, "int32 lands on NumPy's float64 tier for exp");
         }
 
+        /// <summary>
+        ///     An unsigned-integer input gives the mathematical value, not the wrapped one. This bridge compiles the
+        ///     same post-processing source file as the other inference bridge, so this test proves that THIS
+        ///     assembly holds the corrected code: before, <c>1 - 3</c> ran in uint8 (254) and Softmax returned
+        ///     <c>[NaN, 0]</c>, and the uint8 negation made Sigmoid return 0 for every non-zero score.
+        /// </summary>
+        [TestMethod]
+        public void IntegerInputs_GiveTheMathematicalResult_NotTheWrappedOne()
+        {
+            using NDArray u8 = np.array(new byte[] { 1, 3 });
+
+            using NDArray softmax = Postprocess.Softmax(u8);
+            Assert.AreEqual(NPTypeCode.Half, softmax.typecode, "uint8 is computed in float16, NumPy's exp tier");
+            using NDArray softmaxWide = softmax.astype(NPTypeCode.Double);
+            Assert.AreEqual(0.11920292, softmaxWide.GetDouble(0), 2e-3, "softmax([1, 3])[0]");
+            Assert.AreEqual(0.88079708, softmaxWide.GetDouble(1), 2e-3, "softmax([1, 3])[1]");
+
+            using NDArray logSoftmax = Postprocess.LogSoftmax(u8);
+            using NDArray logSoftmaxWide = logSoftmax.astype(NPTypeCode.Double);
+            Assert.AreEqual(-2.12692801, logSoftmaxWide.GetDouble(0), 5e-3, "log_softmax([1, 3])[0]");
+            Assert.AreEqual(-0.12692801, logSoftmaxWide.GetDouble(1), 5e-3, "log_softmax([1, 3])[1]");
+
+            using NDArray sigmoid = Postprocess.Sigmoid(u8);
+            using NDArray sigmoidWide = sigmoid.astype(NPTypeCode.Double);
+            Assert.AreEqual(0.73105858, sigmoidWide.GetDouble(0), 2e-3, "sigmoid(1)");
+            Assert.AreEqual(0.95257413, sigmoidWide.GetDouble(1), 2e-3, "sigmoid(3)");
+        }
+
         [TestMethod]
         public void Softmax_OnANonContiguousView_MatchesTheContiguousResult()
         {

@@ -33,8 +33,8 @@ Status: `todo`, `done` (with the commit), `deferred`, `closed` (no change by dec
 | ID | Item | Decision | Status |
 |---|---|---|---|
 | V1 (G1) | Fortran-order `AsDenseTensor<T>`: ORT refuses it through `NamedOnnxValue` and reads it transposed through `Memory` | The export verbs and `Run` get the three modes of the pythonnet codec as `OnnxCodecMode` (`Auto`, `View`, `Copy`). `Auto` shares when ORT can read the buffer and copies otherwise. The `reverseStride` share is removed. Design in §3.1. | todo |
-| V2 | `Postprocess.Softmax` / `LogSoftmax` / `Sigmoid` wrap for integer input (`Softmax(uint8 [1,3])` = `[NaN, 0]`) | Promote bool and integer input to NumPy's exp tier before the computation (bool, int8, uint8 → float16; int16, uint16, char → float32; wider → float64). Result dtypes do not change. Tests check values. | todo |
-| V2b | `LogSoftmax([inf, 1])` = `[NaN, NaN]`; SciPy gives `[nan, -inf]` | Follow `scipy.special.log_softmax`: a non-finite row maximum is replaced by 0 before the shift. | todo |
+| V2 | `Postprocess.Softmax` / `LogSoftmax` / `Sigmoid` wrap for integer input (`Softmax(uint8 [1,3])` = `[NaN, 0]`) | Promote bool and integer input to NumPy's exp tier before the computation (bool, int8, uint8 → float16; int16, uint16, char → float32; wider → float64). Result dtypes do not change. Tests check values. | done (WP 1) |
+| V2b | `LogSoftmax([inf, 1])` = `[NaN, NaN]`; SciPy gives `[nan, -inf]` | Follow `scipy.special.log_softmax`: a non-finite row maximum is replaced by 0 before the shift. | done (WP 1) |
 | V3 | `nd.AsOrtValue().Value.AsNDArray()` reads another array's memory after the handle and the source are disposed | A view of an `OrtValue` that the package made is a counted NumSharp alias of the buffer (as `Tensor.AsNDArray()` already is). | todo |
 | V4 | The read-only flag is lost through `Value.AsNDArray()` and `Tensor.AsNDArray()` | Those views inherit the source's read-only flag. A read-only array stays a legal model input; the documents say that ORT has no read-only tensors. | todo |
 | V5 | A repeated output name loses one array until a collection | Accepted as it is. | closed |
@@ -47,8 +47,8 @@ Status: `todo`, `done` (with the commit), `deferred`, `closed` (no change by dec
 | V10b | Every view adds full-size GC memory pressure | Only a view that owns its `OrtValue` adds pressure, once. A copy needs none from the bridge (Core's allocator reports it). | todo |
 | V11a | `session.Run(inputs, null)` is CS0121 | The pre-allocated-outputs overload becomes `RunInto`. | todo |
 | V11b | `NamedOnnxValue.ToNDArray` refuses `DenseTensor<char>` and `DenseTensor<Half>` | Accept both. | todo |
-| V11c | `Postprocess` exists 2 times (ONNX bridge, ML.NET bridge) | One source file compiled into both bridges; the 2 public names stay; a caller with both bridges uses a `using` alias. | todo |
-| V11d | `Postprocess.Argmax(x2d, axis: -3)` returns a result | `Postprocess.Argmax` checks its axis, as `TopK` does. | todo |
+| V11c | `Postprocess` exists 2 times (ONNX bridge, ML.NET bridge) | One source file compiled into both bridges; the 2 public names stay; a caller with both bridges uses a `using` alias. | done (WP 1) |
+| V11d | `Postprocess.Argmax(x2d, axis: -3)` returns a result | `Postprocess.Argmax` checks its axis, as `TopK` does. | done (WP 1) |
 | V11e | Unused internal members | Kept: each one was checked and is correct. | closed |
 
 ### 2.2 Completeness
@@ -223,7 +223,7 @@ ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, an
 | WP | Content | Items | Status |
 |---|---|---|---|
 | 0 | This plan | | done |
-| 1 | `Postprocess`: shared source, float promotion, SciPy `log_softmax`, axis check | V2, V2b, V11c, V11d | todo |
+| 1 | `Postprocess`: shared source, float promotion, SciPy `log_softmax`, axis check | V2, V2b, V11c, V11d | done |
 | 2 | `OnnxCodecMode` on the export verbs; `IsView`; `reverseStride` export removed | V1 | todo |
 | 3 | Import side: counted alias, read-only, ownership on failure, memory pressure, legacy types, readers, device kind | V3, V4, V10a, V10b, V11b, C3b, C3c | todo |
 | 4 | `Run` tier: `mode`, `RunInto`, casting rule, optional inputs, overridable initializers, overlap | V1, V6, V8b, V9, V11a, C2d | todo |
@@ -251,4 +251,5 @@ ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, an
 
 | Date | WP | Commit | Result |
 |---|---|---|---|
-| 2026-10-10 | 0 | (this commit) | plan written |
+| 2026-10-10 | 0 | `32d47557` | plan written |
+| 2026-10-10 | 1 | (this commit) | shared `Postprocess`; ONNX suite 212 / 212 on net10.0 and net8.0 (ORT 1.16.0), ML.NET post-processing and API-surface classes 24 / 24 on both |
