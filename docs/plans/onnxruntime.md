@@ -9,6 +9,10 @@ dependency**; the seam lives entirely in the optional package.
   per-pixel scalar loop to fill a `DenseTensor<float>` for inference, asking "Is there a faster way?".
   The answer this package gives: **yes — build the tensor directly on an `NDArray`'s buffer (no copy,
   no loop), and do the pixel math as vectorized NDArray ops.**
+- **Reworked 2026-10-10** after a review: `OnnxCodecMode` on every entry that could share memory, `RunInto`,
+  text, asynchronous runs, ORT 1.31.0, and the defects the review and the rework found. The decisions, the
+  design and the record are in `onnxruntime-rework.md`; where this document and that one differ, that one
+  is current.
 - **Status:** IMPLEMENTED (2026-09-08, branch `onnxruntime` on top of `journey3`) — package
   `src/NumSharp.Interop.OnnxRuntime/`, gate `test/NumSharp.Tests.Interop.OnnxRuntime/` (148 tests over 23
   committed `.onnx` models from `test/oracle/gen_onnx_models.py`, green on net8.0/net10.0 against ORT 1.16.0

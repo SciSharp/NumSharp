@@ -550,6 +550,11 @@ jobs:
     # changes the restore, so this run re-restores and rebuilds the suite IN PLACE (same obj/bin — the
     # test csproj does not redirect them) against that version; it runs after both floor steps, which
     # have already consumed the floor build.
+    #
+    # This leg is also the ONLY one that runs the tests of the asynchronous forms (RunIntoAsync /
+    # RunAsync): they need ONNX Runtime 1.30.0 (the first whose managed RunAsync pins the arrays the
+    # native run keeps reading), so at the floor those tests report Inconclusive and only the test of
+    # the refusal runs. Never set this version below 1.30.0.
     - name: "ONNX Runtime: Test current (net10.0)"
       if: ${{ !cancelled() && steps.ort_build.outcome == 'success' }}
       timeout-minutes: 15
@@ -557,7 +562,7 @@ jobs:
       run: |
         dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
           --configuration Release --framework net10.0 --logger "trx;LogFileName=onnxruntime-current-net10.0.trx" \
-          -p:OnnxRuntimeVersion=1.29.0 -p:NoWarn=${{ env.DOTNET_NOWARN }}
+          -p:OnnxRuntimeVersion=1.31.0 -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     # ── ML.NET interop (NumSharp.Interop.MLNet) ────────────────────────────────────────────────────
     #

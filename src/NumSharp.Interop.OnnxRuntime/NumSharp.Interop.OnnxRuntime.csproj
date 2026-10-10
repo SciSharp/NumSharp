@@ -69,22 +69,31 @@
 
          The range is BOTH knobs at once (the same lesson as NumSharp.Interop.pythonnet's pythonnet pin):
 
-         (a) FLOOR = what we compile against. The managed assembly is strong-named and bumps its
-             AssemblyVersion every release; .NET rolls FORWARD to a newer one but a consumer whose
-             resolved version is OLDER than the one we compiled against gets a hard FileLoadException.
-             So the compiled reference IS the real minimum, and it is the OLDEST release exposing every
-             member this package uses: 1.16.0 (Sept 2023) — the release that "expose[d] OrtValue API as
-             the new preferred API to run inference in C#" and made Float16/BFloat16 full-featured. Every
-             member used here (CreateTensorValueWithData, CreateAllocatedTensorValue, GetTensorMutableRawData,
+         (a) FLOOR = what we compile against: the OLDEST release exposing every member this package
+             uses, 1.16.0 (Sept 2023) — the release that "expose[d] OrtValue API as the new preferred API
+             to run inference in C#" and made Float16/BFloat16 full-featured. Every member used here
+             (CreateTensorValueWithData, CreateAllocatedTensorValue, CreateTensorWithEmptyStrings,
+             StringTensorSetElementAt, GetStringTensorAsArray, GetTensorMutableRawData,
              GetTensorTypeAndShape, GetTensorMemoryInfo, the OrtValue Run overloads incl. pre-allocated
-             outputs, NodeMetadata.ElementDataType) was verified present at the v1.16.0 tag (refs/onnxruntime).
+             outputs, RunAsync, NodeMetadata.ElementDataType / AsOptionalMetadata,
+             OverridableInitializerMetadata) is present there: the test suite runs against 1.16.0.
+             ONLY THIS NUGET RANGE ENFORCES THE FLOOR. This comment used to say that the runtime refuses
+             an older ORT with a FileLoadException, because the managed assembly "bumps its
+             AssemblyVersion every release". It does not at the floor: the 1.16.0 assembly carries
+             AssemblyVersion 0.0.0.0 (1.29.0 carries 1.29.0.0, 1.30.0 1.30.0.0, 1.31.0 1.31.0.0; read
+             from the packages), so the reference this package is compiled with binds to ANY ONNX
+             Runtime assembly. An ORT below the floor that got past NuGet would fail later, with
+             MissingMethodException at the first member it lacks.
+             One feature has a higher floor, checked at run time: RunIntoAsync / RunAsync read the loaded
+             assembly's version and refuse one older than 1.30.0, the first whose managed RunAsync pins
+             the arrays the native run keeps reading (0.0.0.0 counts as older).
          (b) FLOOR = what a bare consumer installs. NuGet resolves LOWEST-applicable, never latest — but a
-             consumer's native flavour reference (e.g. Microsoft.ML.OnnxRuntime 1.29.0) carries its own
+             consumer's native flavour reference (e.g. Microsoft.ML.OnnxRuntime 1.31.0) carries its own
              `.Managed` dependency at the same version, so NuGet unifies upward to THAT. In practice the
              consumer's ORT version wins; this floor only stops an ancient one from sneaking in.
 
          The upper bound keeps a future ORT 2.x (free to break the API) from being resolved automatically.
-         Verified against 1.16.0 (the floor) and 1.29.0 (current) by the test project's OnnxRuntimeVersion
+         Verified against 1.16.0 (the floor) and 1.31.0 (current) by the test project's OnnxRuntimeVersion
          matrix. -->
     <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="[1.16.0,2.0.0)" />
   </ItemGroup>
