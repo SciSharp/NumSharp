@@ -715,10 +715,16 @@ reporting the original axis). `num<0` → `ValueError("Number of samples, {num},
   and members at the NDArray allocation floor (`m.copy()` 1.1–1.3×, `m[i, j]` and `m.A` 1.4–1.5×).
   **A C# literal operand costs 0.2–1.2 µs more than a held 0-d operand** (`m * 2.0` at 256 elements: 1.5 µs
   against 0.58 with `NDMatrix two = 2.0` held): the conversion's 0-d temporary is left to the finalizer, the same
-  cost `a * 2.0` has on a plain array (plan X26, open). Measured over one second of calls (not best-of-rounds):
-  `(a > 0.75)` at 4×4 takes 1.75 µs against 0.47 with a held operand, and a dropped `NDArray s = 0.75` alone
-  1.13 µs against 0.32 when it is disposed (a dropped object with an empty finalizer: 0.18 µs). A scope around
-  the call does not make it cheap either (`m > 0.75` at 64×64: 2.27 µs in an `NDScope`, 2.43 without, 1.45 held).
+  cost `a * 2.0` has on a plain array (plan X26, open). Measured over one second of calls (the mean, not
+  best-of-rounds, which reads this cost 0.2–0.9 µs low; two runs): `(a > 0.75)` at 4×4 takes 1.7 µs against 0.47
+  with a held operand, and a dropped `NDArray s = 0.75` alone 1.13 µs against 0.32–0.34 when it is disposed (a
+  dropped object with an empty finalizer: 0.18–0.25 µs). The cost is the garbage collector, not a lock: with the
+  dropped scalar the collections pause the thread for 0.45 s of each second (26 collections of ~17 ms, each one
+  generation 1, because every finalizable temporary is promoted with what it references), against 0.08–0.11 s
+  with a held or disposed operand (~1.4 ms a collection); `Monitor.LockContentionCount` moves by 0–11. The
+  scalar pool runs dry meanwhile (~25,000 extra slots a second), which is a symptom. A scope around the call
+  removes the pauses but not the scalar: `m > 0.75` at 64×64 takes 1.86–2.27 µs in an `NDScope`, 2.30–2.43
+  without, 1.38–1.45 with a held operand.
   **`m > scalar` runs the vectorized array-against-scalar comparison kernels (2026-10-10).** The two kernel files
   of branch `strings`' commit `d0a6f4c8` were brought to journey4 unchanged
   (`Direct/DirectILKernelGenerator.Comparison.cs`, `.Unary.Predicate.cs`, and their test
