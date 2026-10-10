@@ -320,6 +320,7 @@ Packaging contract: `MatmulParityBackendTests` (30 tests).
 | Decision | Rationale |
 |----------|-----------|
 | Unmanaged memory | Benchmarked fastest; optimized for performance |
+| Buffers of one page or more start on a cache line | `SizeBucketedBufferPool.AlignedMinBytes` (4096) / `BufferAlignment` (64), since 2026-10-10. The C allocator aligns to 16 bytes, so half of all buffers started in the middle of a 32-byte vector and every second vector load of a SIMD kernel crossed a cache line: two-array kernels lost 12–25 % at L2 sizes by the buffer's address. A kernel can align one stream with a prefix; only the allocator aligns all of them. See "The pool aligns its buffers" under Comparison & Logic. |
 | Order-aware layout | Row-major (C-order) remains the default. `Shape` also tracks F-contiguity, and APIs with an `order` parameter resolve NumPy `C`/`F`/`A`/`K` modes through `OrderResolver`. |
 | TensorEngine abstract | Pluggable computation backend behind one contract (`DefaultEngine` = pure C#) |
 | View semantics | Slicing returns views (shared memory), not copies |
@@ -794,13 +795,14 @@ reporting the original axis). `num<0` → `ValueError("Number of samples, {num},
     called directly it takes 0.36 µs for 4,096 float64 elements and 18.5 µs for 196,608, and a loop that only
     loads and compares takes 0.37 and 17.7. A 512×512 float64 matrix is 2 MB, the size of this CPU's L2: the
     read-only loop takes 30 µs there, the kernel 39, NumPy 40–48. So 1.5× is not reachable at that size.
-  - **Finding, not acted on: buffer alignment is a 20–35 % lottery for every SIMD kernel.** A buffer whose address
+  - **Finding (acted on the same day, see "The pool aligns its buffers" under Comparison & Logic): buffer alignment
+    was a 20–35 % lottery for every SIMD kernel.** A buffer whose address
     is 16 mod 32 makes every second 32-byte load cross a cache line. Kernel-only at 100K elements: float32 4.8 µs
     aligned and 6.4 µs not, float64 9.3 and 12.5, int32 6.0 and 8.2; for 1- and 2-byte lanes the RESULT's
     alignment costs as much (int16 at 262,144: 9.0 and 12.8 µs). Pooled buffers are 16-byte aligned, so each
     array wins or loses by its address. Through the public operator, the same 100K float64 values take 10.1 µs
     in a view that starts on a 32-byte boundary and 13.3 µs in a view 16 bytes later (float32: 5.8 and 7.3). A
-    64-byte aligned allocation would remove it library-wide.
+    64-byte aligned allocation would remove it library-wide: the pool does that now for buffers of one page or more.
   **Benchmark trap:** a harness that warms a cell once read 4.3 µs for a call that takes 1.4 at tier 1, and that
   number first put the fused threshold 4× too high. Warm every route twice with a pause, and time two routes in
   one process with interleaved rounds.
@@ -2054,9 +2056,10 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
   three NumSharp runs and two NumPy runs; 1,279 cells: A contiguous 13 dtypes × 6 operators × array / value forms ×
   1K / 100K / 10M, B 20 layouts, C 12 dtype pairs, D `out=` and `where=` forms, E C# literal operands, F tiny and
   edge operands). In brackets: the build before this work, measured the same way.
-  - All cells: geomean **2.05×** (1.15×); under 1.5×: 463 (904); under 1.0×: 43 (445); under 0.5×: 0 (88); the
-    lowest cell 0.81× (0.03×).
-  - By section: A 1.81× (1.62×), B 2.12× (0.75×), C 3.06× (1.20×), D 2.24× (1.75×), E 1.47× (0.73×), F 1.43× (1.37×).
+  - All cells: geomean **2.08×** (1.15×); under 1.5×: 451 (904); under 1.0×: 23 (445); under 0.5×: 0 (88); the
+    lowest cell 0.86× (0.03×). The engine alone, before the pool aligned its buffers: 2.05×, 463, 43, 0.81×.
+  - By section: A 1.85× (1.62×; no cell under 1.05×), B 2.16× (0.75×), C 3.09× (1.20×), D 2.25× (1.75×),
+    E 1.47× (0.73×), F 1.43× (1.37×).
   - float64 at 100K elements, NumPy µs | before → after: a matrix against a row 37.1 | 75.8 → 14.6 (2.55×), against a
     column 38.1 | 107.6 → 11.2 (3.41×), an outer product 58.3 | 107.9 → 10.6 (5.49×), reversed columns
     133.2 | 113.1 → 25.4 (5.25×), a reversed 1-D pair 63.4 | 107.6 → 18.5 (3.42×), a stepped array against a value
@@ -2066,31 +2069,57 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
     158.1 | 273.6 → 73.6 (2.15×).
   - Two dtypes at 100K: a float32 array against a float64 value 58.1 | 70.0 → 5.95 (9.77×), an int32 array against a
     float64 array 63.8 | 70.4 → 24.0 (2.65×), a uint8 array against an int32 value 45.5 | 35.3 → 3.7 (12.2×);
-    int64 against uint64 at 1K 1.21 | 4.36 → 0.71 (1.72×).
+    int64 against uint64 62.1 | 387.7 → 28.0 (2.22×; at 1K 1.21 | 4.36 → 0.71, 1.72×).
   - `out=` at 100K: a stepped bool out 63.7 | 104.7 → 38.1 (1.67×), a float64 out 107.1 | 95.2 → 56.9 (1.88×).
   - C# literals at 100K: `float32 > 50.5` 6.8 | 70.3 → 7.1 (0.95×), `uint8 > 50` 4.5 | 45.3 → 4.7 (0.96×),
     `int32 > 50.5` 59.4 | 70.4 → 8.1 (7.3×), `float16 > 50.5` 261.8 | 275.2 → 15.7 (16.7×), `uint64 > 50`
     34.2 | 89.1 → 19.6 (1.74×).
   - The numpy.matrix benchmark (97 cells) reads geomean 2.30×; `m > 0.75` 1.99× / 1.29× / 1.20× at 4 / 64 / 512.
-- **Floors** (every cell under 1.0× is between 0.81× and 0.99×):
-  - *Contiguous operands of one dtype at 100K elements* (also their literal, F-ordered and offset forms: 26 of the 43
-    cells, and most of the 163 contiguous 100K cells under 1.5×). Both libraries run a vector loop at the L2 transfer
-    bound, and the buffer's address decides the rest. Kernel only, ns an element (input offset / output offset in
-    bytes past a 64-byte boundary): float64 two arrays 0.141 at 0 / 0 and 0.250 at 16 / 0; float32 0.074 and 0.126;
-    uint8 against a value 0.026 and 0.036 at 16 / 16. A prefix aligns ONE stream. Pooled buffers are 16-byte aligned,
-    so each array wins or loses by its address. NumPy's are too: `ctypes.data % 64` is uniform over 0 / 16 / 32 / 48
-    up to 800 KB. **Open lever:** 64-byte aligned pool buffers from one page up
-    (`SizeBucketedBufferPool`; over-allocate and keep the raw pointer in a header, so `calloc` stays lazy). Every
-    Native block comes from the pool's `Take` / `TakeZeroed`, so the change is contained there.
-  - *Two stepped float64 / int64 operands, and complex128 `==` / `!=`, at 100K* (0.85–0.97×, 10 cells): 3.2 MB of source,
-    above this CPU's 2 MB L2. NumPy's scalar loop overlaps its work with the memory latency.
-  - *Six 1K cells at parity* (0.90–0.99×): two stepped float64 / int64 operands (two staging passes of 0.2 ns an
-    element each), and bool C against F.
-  - *The empty result `(0,3) < (3,)`* (0.85×): branch `strings` has an empty-result guard that arrives with the merge.
-  - *Between 1.0× and 1.5×* (420 cells): contiguous at 100K (the same transfer bound), contiguous at 1K (the NDArray
-    allocation floor: about 0.35 µs of a 0.45–0.55 µs call), tiny operands (1.2–1.45×), C against F (1.05–1.5×, were
-    0.31–1.1×; the F operand is gathered a row at a time), literal operands at 1K (1.25–1.7×: the literal's 0-d
-    temporary, plan X26).
+- **The pool aligns its buffers (2026-10-10, the commit after the engine).** The engine left the contiguous
+  two-array cells at 100K elements between 0.81× and 1.3×, and the reason was the buffer's ADDRESS. Kernel only, ns
+  an element (input offset / output offset in bytes past a 64-byte boundary): float64 two arrays 0.141 at 0 / 0 and
+  0.250 at 16 / 0; float32 0.074 and 0.126; uint8 against a value 0.026 at 0 / 0 and 0.036 at 16 / 16. A prefix
+  (`AlignmentPeel`) aligns ONE stream; pooled buffers were 16-byte aligned, so each array won or lost by its address.
+  NumPy's are too: `ctypes.data % 64` is uniform over 0 / 16 / 32 / 48 up to 800 KB.
+  - **What changed** (`Backends/Unmanaged/Pooling/SizeBucketedBufferPool.cs`): a buffer of one page or more
+    (`AlignedMinBytes` = 4096) starts on a 64-byte boundary (`BufferAlignment`), whether it is fresh, zeroed, reused
+    from a bucket or outside the pooled window. The pool allocates a block 80 bytes larger, hands out the first
+    boundary a header past its start, and keeps the block's own pointer and the requested size in that header.
+    A header, not `NativeMemory.AlignedAlloc`: the zeroed path must stay `calloc` (lazily zeroed pages for a large
+    `np.zeros`), and with the header both paths end in the same `NativeMemory.Free` on every operating system.
+    Every Native block comes from the pool's `Take` / `TakeZeroed` (two sites in `UnmanagedMemoryBlock`), so the
+    change is contained in the pool.
+  - **Rule it adds:** `Return(ptr, bytes)` must get the size the buffer was taken with. The size selects the bucket
+    AND tells whether the buffer has a header (a `Debug.Assert` compares it with the header's). Never free a pool
+    pointer directly.
+  - **A cache line, not a page.** A page boundary was not tried: it costs up to 4 KB a buffer, and buffers that all
+    start at one page offset put every stream of a many-operand kernel (`np.evaluate`, `np.where`) in the same
+    cache set at each step. A cache line is enough for the kernels measured: the distance between an output's and
+    an input's offset inside a page does not change their speed (`bool == value` over 100,000 elements takes
+    2.55–2.70 µs at twelve distances from 0 to 4032 bytes, `uint8 < uint8` 3.23–3.40).
+  - **Measured** (the comparison benchmark, per-cell minimum of three runs of each build; the 10M cells again in
+    interleaved runs): at 100K elements geomean 0.967 of the unaligned time, 82 of 614 cells 10 % or more faster,
+    4 slower by 10 % or more (two one-byte offset views, `bool == True` with its literal's temporary, complex128 `>`
+    against a value); at 1K 0.997; at 10M 0.986 (no cell moves 10 %). Two arrays at 100K, µs: float64 20.0 → 15.1
+    (0.98× → 1.30× NumPy), float32 10.6 → 8.5 (1.01× → 1.25×), int32 11.4 → 9.4 (1.19× → 1.43×), int16 6.4 → 5.7
+    (1.14× → 1.29×). An array against a value moved by 0–4 % (the prefix aligned its one stream already) and
+    one-byte dtypes by 1–6 %.
+  - Gates: `Backends/Unmanaged/PoolBufferAlignmentTests.cs` (4 tests); the unit suite in a Debug build, where the
+    `Debug.Assert` on the returned size is live (18,478 passed, no assertion).
+- **Floors** (with the aligned pool every cell under 1.0× is between 0.86× and 1.00×; 23 cells):
+  - *Two stepped float64 / int64 operands at 100K* (8 cells, 0.88–0.99×): 3.2 MB of source, above this CPU's 2 MB
+    L2. NumPy's scalar loop overlaps its work with the memory latency.
+  - *A C# literal operand at 100K* (9 cells, 0.90–1.00×): the literal's 0-d temporary costs about 1 µs of a 4.6 µs
+    call (plan X26). The same comparison with a held 0-d operand is 1.07× or more (`uint8`: 3.6 µs, NumPy 5.6).
+  - *Four 1K cells at parity*: bool C against F (0.89×), two stepped int64 operands (0.98–0.99×; two staging passes
+    of 0.2 ns an element each).
+  - *`np.less(a, b)` of two float64 arrays at 100K* (0.98×): both libraries take 15.3–15.6 µs, the transfer bound for
+    1.7 MB of operands and result in a 2 MB L2.
+  - *The empty result `(0,3) < (3,)`* (0.86×): branch `strings` has an empty-result guard that arrives with the merge.
+  - *Between 1.0× and 1.5×* (428 cells): contiguous operands at 100K (both libraries run a vector loop at the L2
+    transfer bound: 1.05–1.5×), contiguous at 1K and tiny operands (the NDArray allocation floor: about 0.35 µs of
+    a 0.45–0.55 µs call; 1.2–1.5×), C against F (1.05–1.5×, were 0.31–1.1×; the F operand is gathered a row at a
+    time), literal operands at 1K (1.25–1.7×: plan X26).
 - **Measurements worth keeping.** Staging, ns an element: uint8 at a step of two or reversed 0.04, any other stride
   0.2 through the strided move (the house generic strided copy takes 0.7 for a one- or two-byte dtype); float64 at a
   step of two 0.2. A reversed byte store of 1,024 results: 33 ns through the uint8 shuffle copy, 418 ns one byte at

@@ -564,10 +564,9 @@ namespace NumSharp.Backends.Kernels
         /// <param name="n">Element count.</param>
         /// <returns>The element count of the prefix.</returns>
         /// <remarks>
-        ///     <para>A buffer from the allocator is 16-byte aligned, so half of them start in the middle of a 32-byte
-        ///     vector: every second vector load or store of such a run crosses a cache line. Measured on the kernels,
-        ///     in ns an element with the operands in the L2 cache (100,000 elements; input offset / output offset in
-        ///     bytes past a 64-byte boundary):</para>
+        ///     <para>A run that starts in the middle of a 32-byte vector makes every second vector load or store cross
+        ///     a cache line. Measured on the kernels, in ns an element with the operands in the L2 cache (100,000
+        ///     elements; input offset / output offset in bytes past a 64-byte boundary):</para>
         ///     <code>
         ///                          0/0     16/0    0/16    16/16
         ///     float64  two arrays  0.141   0.250   0.141   0.222
@@ -581,10 +580,12 @@ namespace NumSharp.Backends.Kernels
         ///     vector, against one split store in 2 to 8 input vectors), and for one-byte elements it is the OUTPUT
         ///     (as many stores as loads, and a split store costs more than a split load). There is no difference
         ///     once the operands are in DRAM, and under <see cref="AlignMinBytes"/> the gain is less than the extra
-        ///     kernel call. NumPy's large arrays are 64-byte aligned on Windows (the heap's large blocks), which is
-        ///     where its comparison loops got ahead of these kernels at L2 sizes.</para>
-        ///     <para>A prefix aligns ONE stream. The others are aligned too only when they started at the same
-        ///     offset; aligning every buffer is the allocator's job.</para>
+        ///     kernel call.</para>
+        ///     <para>A prefix aligns ONE stream. Aligning every stream is the allocator's job, and the buffer pool
+        ///     does it: a buffer of one page or more starts on a 64-byte boundary
+        ///     (<c>SizeBucketedBufferPool.AlignedMinBytes</c>), so for whole arrays the prefix is zero. It still
+        ///     serves a view that starts inside its buffer (<c>a[1:]</c>, a row of a matrix whose width is not a
+        ///     multiple of the vector) and memory the pool did not allocate.</para>
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static long AlignmentPeel(byte* run, int itemSize, byte* o, long n)
