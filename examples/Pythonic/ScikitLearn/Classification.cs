@@ -1,104 +1,69 @@
-using NumSharp;
-using NumSharp.Interop.PythonNet;
-using Python.Runtime;
-
 namespace Pythonic;
 
+using NumSharp;                                    // import numpy as np
+using static Python.builtins;                      // print needs no import in Python
+using static Python.sklearn.datasets;              // from sklearn.datasets import load_breast_cancer
+using static Python.sklearn.linear_model;          // from sklearn.linear_model import LogisticRegression
+using static Python.sklearn.metrics;               // from sklearn.metrics import accuracy_score, confusion_matrix, roc_auc_score
+using static Python.sklearn.model_selection;       // from sklearn.model_selection import train_test_split
+using static Python.sklearn.preprocessing;         // from sklearn.preprocessing import StandardScaler
+
 /// <summary>
-///     The C# port of <c>ScikitLearn/classification.py</c>: train a classifier on the breast cancer table,
-///     then measure it on patients that it did not see. It is the feature that scikit-learn is used for
-///     most: split, scale, fit, predict, score.
+///     Breast cancer screening: train a classifier, then measure it on patients that it did not see. It is
+///     the feature that scikit-learn is used for most: split, scale, fit, predict, score.
 /// </summary>
 /// <remarks>
-///     <para>Read it beside the Python program. The comment above a group of lines is the Python that the
-///     group ports, and the two programs print the same lines.</para>
-///     <list type="bullet">
-///       <item>A scikit-learn call is a member of <see cref="Python.sklearn"/> with the same name.</item>
-///       <item>A NumPy line is a NumSharp line with the same operators: <c>y_test == 0</c>, <c>a &amp; b</c>,
-///         <c>~mask</c>, <c>p[mask]</c>. Only a slice is spelled as a string: <c>X[:, :10]</c> is <c>X[":, :10"]</c>.</item>
-///       <item>An array changes sides in one visible call. A name that ends in <c>_np</c> is NumPy's side of
-///         the array that NumSharp holds under the name without the ending.</item>
-///     </list>
+///     <para>This is the C# port of <c>ScikitLearn/classification.py</c>. Put the two files side by side:
+///     they have the same statements in the same order, and they print the same lines.</para>
+///     <para>What C# writes in another way: <c>var</c> in front of a new name, <c>new</c> in front of a
+///     class, <c>:</c> for the <c>=</c> of a keyword argument, <c>$</c> for the <c>f</c> of an f-string, and a
+///     slice as a string (<c>X[":, :10"]</c>). The one line that Python does not have is the scope.</para>
 /// </remarks>
 static class Classification
 {
     /// <summary>Runs the program and prints its seven lines to the console.</summary>
     /// <exception cref="PythonInteropException">No usable Python was found, or scikit-learn is not installed in it. The message says what to do.</exception>
-    /// <exception cref="PythonException">A scikit-learn call raised a Python error.</exception>
+    /// <exception cref="global::Python.Runtime.PythonException">A scikit-learn call raised a Python error.</exception>
     public static void Run()
     {
-        using var scope = NDScope.Open();                    // every NDArray below is released when the method returns
+        using var scope = new PythonScope(NDScope.Open());     // releases every array and every Python object of this method when it returns
 
-        // X, y = load_breast_cancer(return_X_y=True)
-        (NDArray X, NDArray y) = PythonRuntime.Run(() =>
-        {
-            using PyObject table = Python.sklearn.datasets.load_breast_cancer(return_X_y: true);
-            using PyObject X_np = table[0], y_np = table[1];
-            return (X_np.ToNDArray(), y_np.ToNDArray());     // one copy each: from here on NumSharp owns the table
-        });
+        // 569 tumors with 30 numbers each. The label is 0 for a malignant tumor and 1 for a benign one.
+        var (X, y) = load_breast_cancer(return_X_y: true);
+        print($"tumors     {X.shape[0]} with {X.shape[1]} numbers each: {np.count_nonzero(y == 0)} malignant, {np.count_nonzero(y == 1)} benign");
 
-        // print(f"tumors     {X.shape[0]} with {X.shape[1]} numbers each: {np.count_nonzero(y == 0)} malignant, {np.count_nonzero(y == 1)} benign")
-        Console.WriteLine($"tumors     {X.shape[0]} with {X.shape[1]} numbers each: {np.count_nonzero(y == 0)} malignant, {np.count_nonzero(y == 1)} benign");
+        // The table holds ten measurements of the cell nuclei three times: the mean, the standard error and the
+        // worst value. This model uses the ten means, which are the first ten columns.
+        var means = X[":, :10"];
 
-        // means = X[:, :10]
-        NDArray means = X[":, :10"];                         // a view of X: ten of every thirty numbers, nothing copied
+        // Keep one quarter of the patients apart. The model does not see them before the test.
+        var (X_train, X_test, y_train, y_test) = train_test_split(means, y, test_size: 0.25, stratify: y, random_state: 0);
 
-        var (y_test, y_pred, p_benign, accuracy, roc_auc, confusion) = PythonRuntime.Run(() =>
-        {
-            using PyObject means_np = means.ToNumpy(), y_np = y.ToNumpy();   // NumPy views NumSharp's memory, the strided columns included
+        // An area is near 650 and a smoothness near 0.1. Bring each column to mean 0 and deviation 1.
+        // The scaler learns the two numbers of a column from the training patients only.
+        var scaler = new StandardScaler();
+        var X_train_scaled = scaler.fit_transform(X_train);
+        var X_test_scaled = scaler.transform(X_test);
 
-            // X_train, X_test, y_train, y_test = train_test_split(means, y, test_size=0.25, stratify=y, random_state=0)
-            using PyObject parts = Python.sklearn.model_selection.train_test_split(means_np, y_np, test_size: 0.25, stratify: y_np, random_state: 0);
-            using PyObject X_train = parts[0], X_test = parts[1], y_train = parts[2], y_test_np = parts[3];
+        var model = new LogisticRegression(max_iter: 1000);
+        model.fit(X_train_scaled, y_train);
 
-            // scaler = StandardScaler()
-            // X_train_scaled = scaler.fit_transform(X_train)
-            // X_test_scaled = scaler.transform(X_test)
-            using PyObject scaler = Python.sklearn.preprocessing.StandardScaler.New();
-            using PyObject X_train_scaled = Python.sklearn.preprocessing.StandardScaler.fit_transform(scaler, X_train);
-            using PyObject X_test_scaled = Python.sklearn.preprocessing.StandardScaler.transform(scaler, X_test);
+        var y_pred = model.predict(X_test_scaled);
+        var proba = model.predict_proba(X_test_scaled);
+        var p_benign = proba[":, 1"];
 
-            // model = LogisticRegression(max_iter=1000)
-            // model.fit(X_train_scaled, y_train)
-            using PyObject model = Python.sklearn.linear_model.LogisticRegression.New(max_iter: 1000);
-            Python.sklearn.linear_model.LogisticRegression.fit(model, X_train_scaled, y_train);
+        print($"accuracy   {accuracy_score(y_test, y_pred):.4f}");
+        print($"roc auc    {roc_auc_score(y_test, p_benign):.4f}");
+        print(confusion_matrix(y_test, y_pred));
 
-            // y_pred = model.predict(X_test_scaled)
-            // proba = model.predict_proba(X_test_scaled)
-            // p_benign = proba[:, 1]
-            using PyObject y_pred_np = Python.sklearn.linear_model.LogisticRegression.predict(model, X_test_scaled);
-            using PyObject proba_np = Python.sklearn.linear_model.LogisticRegression.predict_proba(model, X_test_scaled);
-            NDArray proba = proba_np.ToNDArray();            // (143, 2): the probabilities are NumSharp's now
-            NDArray p_benign = proba[":, 1"];                // NumSharp slices as NumPy does: a view, every second number
-
-            // accuracy_score(y_test, y_pred), roc_auc_score(y_test, p_benign), confusion_matrix(y_test, y_pred)
-            using PyObject p_benign_np = p_benign.ToNumpy(); // that view returns to scikit-learn without a copy
-            double accuracy = Python.sklearn.metrics.accuracy_score_t(y_test_np, y_pred_np);
-            double roc_auc = Python.sklearn.metrics.roc_auc_score_t(y_test_np, p_benign_np);
-            using PyObject confusion_np = Python.sklearn.metrics.confusion_matrix(y_test_np, y_pred_np);
-
-            return (y_test_np.ToNDArray(), y_pred_np.ToNDArray(), p_benign, accuracy, roc_auc, confusion_np.ToNDArray());
-        });
-
-        // print(f"accuracy   {accuracy_score(y_test, y_pred):.4f}")
-        // print(f"roc auc    {roc_auc_score(y_test, p_benign):.4f}")
-        // print(confusion_matrix(y_test, y_pred))
-        Console.WriteLine($"accuracy   {accuracy:F4}");
-        Console.WriteLine($"roc auc    {roc_auc:F4}");
-        Console.WriteLine(confusion);                        // NumSharp prints an array as NumPy does
-
-        // malignant = y_test == 0
-        // missed = np.count_nonzero(malignant & (y_pred == 1))
-        // limit = p_benign[malignant].max()
-        // referred = p_benign <= limit
-        NDArray malignant = y_test == 0;
-        long missed = np.count_nonzero(malignant & (y_pred == 1));
-        double limit = (double)p_benign[malignant].max();
-        NDArray referred = p_benign <= limit;
-
-        // print(f"missed     {missed} of {np.count_nonzero(malignant)} malignant tumors at the limit 0.5")
-        // print(f"limit      {limit:.4f} finds all of them and refers {np.count_nonzero(referred & ~malignant)} of {np.count_nonzero(~malignant)} benign tumors")
-        Console.WriteLine($"missed     {missed} of {np.count_nonzero(malignant)} malignant tumors at the limit 0.5");
-        Console.WriteLine($"limit      {limit:F4} finds all of them and refers {np.count_nonzero(referred & ~malignant)} of {np.count_nonzero(~malignant)} benign tumors");
+        // A malignant tumor that the model calls benign is the error that costs most. The model calls a tumor
+        // benign when p_benign is above 0.5. Which limit finds every malignant tumor of the test, and how many
+        // benign tumors does that limit send to a biopsy?
+        var malignant = y_test == 0;
+        var missed = np.count_nonzero(malignant & (y_pred == 1));
+        var limit = p_benign[malignant].max();
+        var referred = p_benign <= limit;
+        print($"missed     {missed} of {np.count_nonzero(malignant)} malignant tumors at the limit 0.5");
+        print($"limit      {limit:.4f} finds all of them and refers {np.count_nonzero(referred & ~malignant)} of {np.count_nonzero(~malignant)} benign tumors");
     }
 }

@@ -1,7 +1,7 @@
 """Breast cancer screening: train a classifier, then measure it on patients that it did not see.
 
-This is the reference program. Classification.cs is its C# port: the scikit-learn calls go through the
-Python.sklearn tree, and the NumPy lines are NumSharp lines. Both programs print the same lines.
+This is the reference program. Classification.cs is its C# port: the same statements in the same order,
+with NumSharp in the place of NumPy. Both programs print the same lines.
 
     python ScikitLearn/classification.py
     dotnet run -- classification

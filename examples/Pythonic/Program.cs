@@ -1,8 +1,9 @@
 // Pythonic
 //
-// Python programs that use a data science library, and their C# ports. A port calls the library through
-// the Python.* tree of this project (Python.cs), keeps the NumPy lines as NumSharp lines, and prints what
-// the Python program prints. Set it up once, from this folder:
+// Python programs that use a data science library, and their C# ports. A port has the statements of its
+// Python program: the Python.* tree of this project (Python.cs) gives it the functions and the classes of
+// the library, its NumPy lines are NumSharp lines, and it prints what the Python program prints. Set it up
+// once, from this folder:
 //
 //     python -m venv .venv
 //     .venv\Scripts\python -m pip install -r requirements.txt        (Linux, macOS: .venv/bin/python)
@@ -40,11 +41,16 @@ try
         else if (name != only)
             continue;
 
-        port();                                      // the engine starts with the first PythonRuntime.Run of the first port
+        port();                                      // the engine starts with the first Python call of the first port
     }
 
-    // The lifetime check of the pythonic approach. Each port disposed every Python object it made, so no
-    // NumPy array views NumSharp memory any more, and no NumSharp array views Python memory.
+    // The lifetime check of the pythonic approach. Each port closed its PythonScope, so no NumPy array
+    // views NumSharp memory any more, and no NumSharp array holds memory that Python allocated.
+    // The wait is for the second half: when a scope closes, NumSharp hands the Python memory back at once,
+    // and Python frees it on a thread-pool thread a moment later.
+    SpinWait.SpinUntil(
+        () => NDArrayPythonInterop.LiveExports == 0 && NDArrayPythonInterop.LiveImports == 0,
+        TimeSpan.FromSeconds(5));
     if (NDArrayPythonInterop.LiveExports != 0 || NDArrayPythonInterop.LiveImports != 0)
     {
         Console.Error.WriteLine($"A port left memory shared with Python: {NDArrayPythonInterop.LiveExports} NumSharp buffers, {NDArrayPythonInterop.LiveImports} Python buffers.");

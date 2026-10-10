@@ -5,26 +5,26 @@ namespace Pythonic;
 
 /// <summary>
 ///     The backend under the <see cref="Python"/> tree. It starts CPython one time for the process, it is
-///     the one place that takes the GIL (<see cref="Run(Action)"/>), and it keeps each imported module
+///     the one place that takes the GIL (<see cref="GIL"/>), and it keeps each imported module
 ///     (<see cref="Import"/>). It knows no library: the tree adds those.
 /// </summary>
 /// <remarks>
-///     <para><b>The GIL.</b> Every use of a <see cref="PyObject"/>, its <c>Dispose</c> included, must run
-///     inside a <see cref="Run(Action)"/> body. Give a <c>Run</c> body .NET values to return (a number, an
-///     <c>NDArray</c>), never a <see cref="PyObject"/>: outside the body nothing holds the GIL for it.</para>
+///     <para><b>The GIL.</b> Every use of a <see cref="PyObject"/>, its <c>Dispose</c> included, must happen
+///     while the thread holds the GIL. Each member of the tree takes it for the length of its own call, so
+///     the code that calls the tree never sees it.</para>
 ///     <para><b>One engine for each process.</b> CPython and NumPy cannot be initialized a second time
 ///     after a shutdown. <see cref="Initialize"/> starts the engine when it is first needed, and
 ///     <see cref="Shutdown"/> is for the end of the process only.</para>
 ///     <para>NumSharp.Interop.pythonnet never starts an engine. It attaches to the one that this class
-///     started, and its conversion calls take the GIL again inside a <c>Run</c> body without harm, because
-///     the GIL is re-entrant.</para>
+///     started, and its conversion calls take the GIL again inside a member without harm, because the GIL
+///     is re-entrant.</para>
 /// </remarks>
 static class PythonRuntime
 {
     /// <summary>The engine was not started yet.</summary>
     private const int Idle = 0;
 
-    /// <summary>The engine runs and <see cref="Run(Action)"/> can be called.</summary>
+    /// <summary>The engine runs and <see cref="GIL"/> can be taken.</summary>
     private const int Running = 1;
 
     /// <summary><see cref="Shutdown"/> ran. The engine cannot start again in this process.</summary>
@@ -81,30 +81,28 @@ static class PythonRuntime
         }
     }
 
-    /// <summary>Runs an action under the GIL. The engine starts first when it does not run yet.</summary>
-    /// <param name="body">The Python work. Dispose every <see cref="PyObject"/> it creates before it returns.</param>
-    /// <exception cref="PythonInteropException">The engine cannot start (see <see cref="Initialize"/>), or a module that the body imports is missing.</exception>
-    /// <exception cref="PythonException">A Python call of the body raised an error. The GIL is released before the exception leaves this method.</exception>
-    /// <exception cref="InvalidOperationException"><see cref="Shutdown"/> already ran in this process.</exception>
-    public static void Run(Action body)
-    {
-        Initialize();
-        using (Py.GIL())
-            body();
-    }
+    /// <summary>
+    ///     True from the first call that needed the engine until <see cref="Shutdown"/>. Code that releases
+    ///     Python objects reads it first: after the shutdown there is nothing left to release, and the GIL
+    ///     cannot be taken any more.
+    /// </summary>
+    public static bool IsRunning => Volatile.Read(ref _state) == Running;
 
-    /// <summary>Runs a function under the GIL and returns its result. The engine starts first when it does not run yet.</summary>
-    /// <typeparam name="T">A .NET value that needs no GIL afterwards: a number, a string, an <c>NDArray</c>, or a tuple of those. Never a <see cref="PyObject"/>.</typeparam>
-    /// <param name="body">The Python work. Dispose every <see cref="PyObject"/> it creates before it returns.</param>
-    /// <returns>What <paramref name="body"/> returned.</returns>
-    /// <exception cref="PythonInteropException">The engine cannot start (see <see cref="Initialize"/>), or a module that the body imports is missing.</exception>
-    /// <exception cref="PythonException">A Python call of the body raised an error. The GIL is released before the exception leaves this method.</exception>
+    /// <summary>
+    ///     Takes the GIL for the calling thread. The engine starts first when it does not run yet. Hold the
+    ///     result in a <c>using</c>: every <see cref="PyObject"/> of the block, its <c>Dispose</c> included,
+    ///     must be used before the GIL is released.
+    /// </summary>
+    /// <returns>
+    ///     The held GIL. Dispose it on the thread that took it. The GIL is re-entrant, so a thread that holds
+    ///     it can take it again: a member of the tree can call another one.
+    /// </returns>
+    /// <exception cref="PythonInteropException">The engine cannot start (see <see cref="Initialize"/>).</exception>
     /// <exception cref="InvalidOperationException"><see cref="Shutdown"/> already ran in this process.</exception>
-    public static T Run<T>(Func<T> body)
+    public static Py.GILState GIL()
     {
         Initialize();
-        using (Py.GIL())
-            return body();
+        return Py.GIL();
     }
 
     /// <summary>
@@ -113,7 +111,7 @@ static class PythonRuntime
     ///     (<c>GetAttr</c>, <c>Invoke</c>) is yours to dispose.
     /// </summary>
     /// <param name="moduleName">The import name with its dots, for example <c>sklearn.model_selection</c>.</param>
-    /// <returns>The module. Call this method, and use the handle, inside a <see cref="Run(Action)"/> body.</returns>
+    /// <returns>The module. Call this method, and use the handle, while the thread holds the GIL (<see cref="GIL"/>).</returns>
     /// <exception cref="PythonInteropException">
     ///     Python cannot import the module. The message names the interpreter in use and the command that
     ///     installs the libraries of this project.
@@ -150,10 +148,10 @@ static class PythonRuntime
 
     /// <summary>
     ///     Shuts the engine down at the end of the process. After this call no Python object may be used and
-    ///     no <see cref="Run(Action)"/> call may be made. NumSharp arrays that viewed Python memory must not
-    ///     be read afterwards (disposing them stays safe); arrays that NumSharp owns are not affected.
-    ///     The call does nothing when the engine never started, when other code started it, or when it was
-    ///     shut down already.
+    ///     no member of the tree may be called. NumSharp arrays that viewed Python memory must not be read
+    ///     afterwards, so close every <see cref="PythonScope"/> first; arrays that NumSharp owns are not
+    ///     affected. The call does nothing when the engine never started, when other code started it, or
+    ///     when it was shut down already.
     /// </summary>
     /// <exception cref="InvalidOperationException">pythonnet refuses to shut down while a Python error is pending on the calling thread.</exception>
     public static void Shutdown()
