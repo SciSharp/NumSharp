@@ -21,6 +21,7 @@ namespace NumSharp
         /// np.isreal(a)  // [True, True, True]
         /// </code>
         /// </example>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // reclaims the np.imag view and the Scalar(0) temp the complex branch hands to np.equal
         public static NDArray isreal(NDArray a)
         {
@@ -60,6 +61,7 @@ namespace NumSharp
         /// np.iscomplex(a)  // [False, False, False]
         /// </code>
         /// </example>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // reclaims the np.imag view and the Scalar(0) temp the complex branch hands to np.not_equal
         public static NDArray iscomplex(NDArray a)
         {

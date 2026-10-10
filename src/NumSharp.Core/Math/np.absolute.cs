@@ -13,6 +13,7 @@ namespace NumSharp
         /// <param name="a">Input value.</param>
         /// <returns>An ndarray containing the absolute value of each element in x.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.absolute.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray absolute(NDArray a) => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped(a, static s => absolute(s))
             : a.TensorEngine.Abs(a);
@@ -26,6 +27,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the input must be same_kind-castable to it; for complex input it selects the magnitude dtype (float kinds only).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.absolute.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray absolute(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, @out, where, dtype), static s => absolute(s.a, s.@out, s.where, s.dtype), @out)
@@ -38,6 +40,7 @@ namespace NumSharp
         /// <param name="a">Input value.</param>
         /// <returns>An ndarray containing the absolute value of each element in x.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.absolute.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray abs(NDArray a) => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped(a, static s => abs(s))
             : a.TensorEngine.Abs(a);
@@ -51,6 +54,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the input must be same_kind-castable to it; for complex input it selects the magnitude dtype (float kinds only).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.absolute.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray abs(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, @out, where, dtype), static s => abs(s.a, s.@out, s.where, s.dtype), @out)

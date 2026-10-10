@@ -42,6 +42,7 @@ namespace NumSharp
         ///     absent here too. See <see cref="vecdot"/>.
         ///     </para>
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray vecmat(NDArray x1, NDArray x2, NDArray @out = null, int[][] axes = null,
             int? axis = null, bool keepdims = false, DType dtype = null)

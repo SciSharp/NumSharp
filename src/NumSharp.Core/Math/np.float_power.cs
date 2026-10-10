@@ -28,6 +28,7 @@ namespace NumSharp
         /// <returns>The bases in x1 raised to the exponents in x2 at float64/complex128 precision (or
         ///     <paramref name="@out"/>). A scalar NDArray if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.float_power.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray float_power(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => float_power(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
@@ -41,6 +42,7 @@ namespace NumSharp
         /// <param name="x2">The exponents (scalar or array-like).</param>
         /// <returns>The bases in x1 raised to the exponents in x2 at float64/complex128 precision.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.float_power.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         // Scope: the object overload mints an np.asanyarray(x2) temp for a scalar/array-like exponent
         // (the same leftover the power(x1, object) overload carries); [NDScoped] reclaims it while an
         // NDArray-input passthrough stays untracked. The (NDArray, NDArray) overload above owns no

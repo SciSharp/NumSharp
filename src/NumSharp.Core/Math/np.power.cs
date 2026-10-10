@@ -25,6 +25,7 @@ namespace NumSharp
         /// <param name="x2">The exponents (scalar or array-like).</param>
         /// <returns>The bases in x1 raised to the exponents in x2. This is a scalar NDArray if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray power(NDArray x1, object x2) => NDMatrixBoundary.Sees(x1)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2), static s => power(s.x1, s.x2))
@@ -38,6 +39,7 @@ namespace NumSharp
         /// <param name="x2">The exponents (array).</param>
         /// <returns>The bases in x1 raised to the exponents in x2.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray power(NDArray x1, NDArray x2) => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2), static s => power(s.x1, s.x2))
             : x1.TensorEngine.Power(x1, x2, (Type)null);
@@ -52,6 +54,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the computation runs in this dtype (power(2, -1, dtype: float64) = 0.5; inputs must be same_kind-castable to it).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray power(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => power(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
@@ -76,6 +79,7 @@ namespace NumSharp
         /// <param name="x">Input data.</param>
         /// <returns>Element-wise x*x, of the same shape and dtype as x. Returns scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray square(NDArray x) => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped(x, static s => square(s))
             : x.TensorEngine.Square(x, (Type)null);
@@ -89,6 +93,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the input must be same_kind-castable to it.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.square.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray square(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => square(s.x, s.@out, s.where, s.dtype), @out)

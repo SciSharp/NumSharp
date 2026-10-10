@@ -25,6 +25,7 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the loop computes in this dtype.</param>
         /// <returns>(quotient, remainder). Both are scalars if x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.divmod.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static (NDArray Quotient, NDArray Remainder) divmod(NDArray x1, NDArray x2,
             (NDArray Quotient, NDArray Remainder) @out = default, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand: both outputs come back as matrices, as from NumPy
@@ -36,6 +37,7 @@ namespace NumSharp
         /// Scalar / array-like divisor convenience: <c>np.divmod(a, 3)</c>. The divisor is coerced via
         /// <see cref="asanyarray"/> (the a // obj / a % obj analog).
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         // Scope: reclaims the np.asanyarray(x2) temp; the two result arrays are detached through the
         // tuple carrier (same as np.modf's [NDScoped] two-array return).
         [NDScoped]

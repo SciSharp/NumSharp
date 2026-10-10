@@ -55,6 +55,7 @@ namespace NumSharp
         ///     <c>a.real</c> — writing through the returned view writes through to <paramref name="a"/>.
         ///     </para>
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray real_if_close(NDArray a, double tol = 100)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)

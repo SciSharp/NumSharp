@@ -90,6 +90,7 @@ namespace NumSharp
         /// </exception>
         /// <exception cref="IndexError"><paramref name="condlist"/> is empty (NumPy accesses condlist[0]).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.piecewise.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray piecewise(NDArray x, NDArray[] condlist, object[] funclist, params object[] args)
         {
             // a numpy.matrix operand: NumPy fills zeros_like(x), a matrix of x's shape
@@ -115,6 +116,7 @@ namespace NumSharp
         ///     <paramref name="x"/> is not 0-d, or split element-by-element when <paramref name="x"/> IS
         ///     0-d (matching NumPy's <c>condlist[0]</c> inspection exactly).
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray piecewise(NDArray x, NDArray condlist, object[] funclist, params object[] args)
         {
             // a numpy.matrix operand: NumPy fills zeros_like(x), a matrix of x's shape
@@ -147,6 +149,7 @@ namespace NumSharp
         ///     to all of <paramref name="x"/> when <paramref name="condlist"/> is true, and nowhere when
         ///     it is false.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray piecewise(NDArray x, bool condlist, object[] funclist, params object[] args)
         {
             // a numpy.matrix operand: NumPy fills zeros_like(x), a matrix of x's shape

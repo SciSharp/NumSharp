@@ -26,6 +26,7 @@ namespace NumSharp
         /// parameters (NumPy's <c>fix</c> signature is only <c>fix(x, out=None)</c>).
         /// </para>
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray fix(NDArray x, NDArray @out = null)
             => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x, @out), static s => fix(s.x, s.@out), @out)

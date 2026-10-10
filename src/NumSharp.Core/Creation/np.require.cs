@@ -35,6 +35,7 @@ namespace NumSharp
         ///     no ndarray subclasses to demote.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.require.html
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray require(NDArray a, DType dtype = null, string[] requirements = null, NDArray like = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
@@ -87,6 +88,7 @@ namespace NumSharp
         ///     (<c>new[]{ "F_CONTIGUOUS" }</c>) to use the full alias.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.require.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray require(NDArray a, DType dtype, string requirements)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, dtype, requirements), static s => require(s.a, s.dtype, s.requirements))

@@ -13,6 +13,7 @@ namespace NumSharp
         ///     (e.g. <c>ptp(uint8[0,255]) == 255</c>, <c>ptp(int8[-128,127]) == -1</c>).
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ptp.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray ptp(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {

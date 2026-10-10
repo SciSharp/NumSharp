@@ -11,6 +11,7 @@ namespace NumSharp
         /// <param name="tup">The arrays must have the same shape along all but the first axis. 1-D arrays must have the same length.</param>
         /// <returns>The array formed by stacking the given arrays, will be at least 2-D.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.vstack.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray vstack(params NDArray[] tup)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)

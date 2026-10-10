@@ -68,6 +68,7 @@ namespace NumSharp
         ///     for ...", larger ones say "Python int too large to convert to C long".
         ///     </para>
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         // No [NDScoped] here: this entry point creates no array of its own (it validates the keyword rule and
         // forwards), and the engine's ClipNDArray is the [NDScoped] boundary that owns every intermediate. A second,
         // empty scope cost an NDScope, its list and the argument capture on every call (~0.2 KB, measured).

@@ -13,6 +13,7 @@ namespace NumSharp
         /// <param name="axis">The axis in the result array along which the input arrays are stacked.</param>
         /// <returns>The stacked array has one more dimension than the input arrays.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.stack.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray stack(NDArray[] arrays, int axis = 0)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)

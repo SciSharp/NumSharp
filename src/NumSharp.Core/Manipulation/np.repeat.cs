@@ -15,6 +15,7 @@ namespace NumSharp
         /// <param name="axis">Axis along which to repeat values. <c>null</c> (NumPy <c>None</c>) flattens the input and returns a flat array.</param>
         /// <returns>Output array which has the same shape as <paramref name="a"/>, except along <paramref name="axis"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray repeat(NDArray a, int repeats, int? axis = null)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis))
@@ -28,6 +29,7 @@ namespace NumSharp
         /// <param name="axis">Axis along which to repeat values. <c>null</c> (NumPy <c>None</c>) flattens the input.</param>
         /// <returns>Output array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // calculating overload: reclaims the ravel/ascontiguousarray/reshape temps
         public static NDArray repeat(NDArray a, long repeats, int? axis = null)
         {
@@ -55,6 +57,7 @@ namespace NumSharp
         /// <param name="axis">Axis along which to repeat. <c>null</c> flattens the input.</param>
         /// <returns>A new array with elements repeated according to <paramref name="repeats"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // calculating overload: reclaims the ravel temps
         public static NDArray repeat(NDArray a, NDArray repeats, int? axis = null)
         {

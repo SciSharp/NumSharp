@@ -68,6 +68,7 @@ namespace NumSharp
         ///     GC — run the call inside an <see cref="NDScope"/> (yielding the result) when deterministic
         ///     release matters. This method's own buffer and views are released before it returns.</para>
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray apply_along_axis(Func<NDArray, NDArray> func1d, int axis, NDArray arr)
         {
             // a numpy.matrix operand: NumPy wraps the assembled result in the operand's class (conv.wrap). func1d gets a
@@ -186,6 +187,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="arr"/>'s rank.</exception>
         /// <exception cref="ValueError">Any iteration dimension is zero.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.apply_along_axis.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray apply_along_axis(Func<NDArray, object[], NDArray> func1d, int axis, NDArray arr, params object[] args)
         {
             // a numpy.matrix operand: NumPy wraps the assembled result in the operand's class (conv.wrap). func1d gets a

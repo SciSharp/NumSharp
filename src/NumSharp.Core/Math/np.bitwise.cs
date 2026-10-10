@@ -15,6 +15,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <returns>Result. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_and.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray bitwise_and(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => bitwise_and(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
@@ -30,6 +31,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <returns>Result. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_or.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray bitwise_or(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => bitwise_or(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
@@ -45,6 +47,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <returns>Result. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_xor.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray bitwise_xor(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => bitwise_xor(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
@@ -63,6 +66,7 @@ namespace NumSharp
         /// <param name="dtype">Output dtype request; only uint8 (or null) is a valid loop.</param>
         /// <returns>A uint8 array of set-bit counts. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_count.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray bitwise_count(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => bitwise_count(s.x, s.@out, s.where, s.dtype), @out)

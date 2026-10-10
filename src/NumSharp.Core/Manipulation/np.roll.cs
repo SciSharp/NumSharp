@@ -18,6 +18,7 @@ namespace NumSharp
         /// Matches NumPy's algorithm: empty_like + slice-copy pairs.
         /// https://numpy.org/doc/stable/reference/generated/numpy.roll.html
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray roll(NDArray a, long shift, int? axis = null)
         {
@@ -77,6 +78,7 @@ namespace NumSharp
         }
 
         /// <inheritdoc cref="roll(NDArray, long, int?)"/>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray roll(NDArray a, int shift, int? axis = null)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, shift, axis), static s => roll(s.a, s.shift, s.axis))

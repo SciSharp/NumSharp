@@ -15,6 +15,7 @@ namespace NumSharp
         /// </param>
         /// <returns>The 2-D array formed by stacking the given arrays.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.column_stack.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray column_stack(params NDArray[] tup)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)

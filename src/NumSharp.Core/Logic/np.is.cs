@@ -63,6 +63,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
         /// <param name="dtype">Validate-only (NumPy parity): the predicate has bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isfinite.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray isfinite(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, @out, where, dtype), static s => isfinite(s.a, s.@out, s.where, s.dtype), @out)
@@ -78,6 +79,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
         /// <param name="dtype">Validate-only (NumPy parity): the predicate has bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isnan.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray isnan(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, @out, where, dtype), static s => isnan(s.a, s.@out, s.where, s.dtype), @out)
@@ -98,6 +100,7 @@ namespace NumSharp
         /// - Integer types: Always False (integers cannot be Inf)
         /// - NaN: Returns False (NaN is not infinity)
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray isinf(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, @out, where, dtype), static s => isinf(s.a, s.@out, s.where, s.dtype), @out)
@@ -126,6 +129,7 @@ namespace NumSharp
         /// / <c>isinf(x) &amp; signbit(x)</c>).
         /// </para>
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray signbit(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => signbit(s.x, s.@out, s.where, s.dtype), @out)

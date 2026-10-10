@@ -20,6 +20,7 @@ namespace NumSharp
         /// <param name="dtype">the type expected as a return, null will remain the same dtype.</param>
         /// <returns>Maximum of a. If axis is None, the result is a scalar value. If axis is given, the result is an array of dimension a.ndim - 1.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amax.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static NDArray amax(NDArray a, int? axis = null, bool keepdims = false, DType dtype = null)
         {
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
@@ -37,6 +38,7 @@ namespace NumSharp
         /// <param name="dtype">the type expected as a return, null will remain the same dtype.</param>
         /// <returns>Maximum of a. If axis is None, the result is a scalar value. If axis is given, the result is an array of dimension a.ndim - 1.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amax.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static NDArray max(NDArray a, int? axis = null, bool keepdims = false, DType dtype = null)
         {
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns

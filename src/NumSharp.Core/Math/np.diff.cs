@@ -61,6 +61,7 @@ namespace NumSharp
         ///     preserved (boolean input yields boolean output via not_equal).
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.diff.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray diff(NDArray a, int n = 1, int axis = -1,
                                    object prepend = null, object append = null)

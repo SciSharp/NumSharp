@@ -64,6 +64,7 @@ namespace NumSharp
         ///     cast's buffer out of the pool. The caller's arrays were built before the scope opened, so the scope
         ///     never disposes them.</para>
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray choose(NDArray a, object[] choices, NDArray @out = null, string mode = "raise")
         {
@@ -91,6 +92,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="a"/> cannot be safe-cast to int64, or <paramref name="out"/>
         ///     has the wrong shape.</exception>
         /// <remarks>Scoped by <c>[NDScoped]</c>, with the same reclaimed set as the <see cref="object"/>[] overload.</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray choose(NDArray a, NDArray[] choices, NDArray @out = null, string mode = "raise")
         {
@@ -123,6 +125,7 @@ namespace NumSharp
         /// <remarks>Scoped by <c>[NDScoped]</c>, with the same reclaimed set as the <see cref="object"/>[] overload,
         ///     plus the views along axis 0 this overload builds (each held a reference on the caller's buffer until
         ///     the finalizer ran).</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray choose(NDArray a, NDArray choices, NDArray @out = null, string mode = "raise")
         {

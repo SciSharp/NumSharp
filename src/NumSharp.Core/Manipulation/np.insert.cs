@@ -40,6 +40,7 @@ namespace NumSharp
         ///     before the position <paramref name="obj"/>. Scalar-obj path.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.insert.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray insert(NDArray arr, int obj, NDArray values, int? axis = null)
             => NDMatrixBoundary.Sees(arr)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis))
@@ -48,6 +49,7 @@ namespace NumSharp
         /// <summary>
         ///     Long-index overload of <see cref="insert(NDArray, int, NDArray, int?)"/>.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // reclaims PrepareAxisContext's ravel work array and the pre-order intermediate WithSourceOrder supersedes (np.delete's exact pattern)
         public static NDArray insert(NDArray arr, long obj, NDArray values, int? axis = null)
         {
@@ -81,6 +83,7 @@ namespace NumSharp
         ///     the scope opened, so it is never disposed. (The hand-written version disposed the conversion
         ///     unconditionally, which released the caller's own array.)
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray insert(NDArray arr, long obj, object value, int? axis = null)
         {
@@ -95,6 +98,7 @@ namespace NumSharp
         /// <summary>
         ///     int-overload accepting a scalar value.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray insert(NDArray arr, int obj, object value, int? axis = null)
             => NDMatrixBoundary.Sees(arr)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((arr, obj, value, axis), static s => insert(s.arr, s.obj, s.value, s.axis))
@@ -105,6 +109,7 @@ namespace NumSharp
         ///     Python <c>slice.indices(N)</c> into an indices array, then the
         ///     multi-index branch runs.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // same transient set as the long-obj overload
         public static NDArray insert(NDArray arr, Slice obj, NDArray values, int? axis = null)
         {
@@ -143,6 +148,7 @@ namespace NumSharp
         ///     the scope opened, so it is never disposed. (The hand-written version disposed the conversion
         ///     unconditionally, which released the caller's own array.)
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray insert(NDArray arr, Slice obj, object value, int? axis = null)
         {
@@ -159,6 +165,7 @@ namespace NumSharp
         ///     (NumPy parity: <c>np.insert(arr, [1], v) != np.insert(arr, 1, v)</c>
         ///     when v has multiple axes, even though both have one insertion point).
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // same transient set as the long-obj overload
         public static NDArray insert(NDArray arr, int[] obj, NDArray values, int? axis = null)
         {
@@ -195,6 +202,7 @@ namespace NumSharp
         ///     the scope opened, so it is never disposed. (The hand-written version disposed the conversion
         ///     unconditionally, which released the caller's own array.)
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray insert(NDArray arr, int[] obj, object value, int? axis = null)
         {
@@ -209,6 +217,7 @@ namespace NumSharp
         /// <summary>
         ///     long[]-obj overload.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // same transient set as the long-obj overload
         public static NDArray insert(NDArray arr, long[] obj, NDArray values, int? axis = null)
         {
@@ -242,6 +251,7 @@ namespace NumSharp
         ///     the scope opened, so it is never disposed. (The hand-written version disposed the conversion
         ///     unconditionally, which released the caller's own array.)
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray insert(NDArray arr, long[] obj, object value, int? axis = null)
         {
@@ -274,6 +284,7 @@ namespace NumSharp
         ///     the scope opened, so it is never disposed. (The hand-written version disposed the conversion
         ///     unconditionally, which released the caller's own array.)
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray insert(NDArray arr, NDArray obj, object value, int? axis = null)
         {
@@ -307,6 +318,7 @@ namespace NumSharp
         /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
         /// <remarks>Scoped by <c>[NDScoped]</c>: the same transient set as the long-obj overload, plus the
         ///     bool-mask flatnonzero temp, is released on return.</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // same transient set as the long-obj overload, plus the bool-mask flatnonzero temp
         public static NDArray insert(NDArray arr, NDArray obj, NDArray values, int? axis = null)
         {

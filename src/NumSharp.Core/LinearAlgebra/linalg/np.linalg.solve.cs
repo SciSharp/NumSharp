@@ -21,6 +21,7 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             // Scope: solve casts BOTH operands via ToCommon (two potential dtype-cast temps) before
             // the engine call — [NDScoped] reclaims whichever were minted (a passthrough operand
             // already at the common type is never tracked), yielding the engine's fresh solution.
@@ -67,6 +68,7 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             [NDScoped]
             public static NDArray tensorsolve(NDArray a, NDArray b, int[] axes = null)
             {

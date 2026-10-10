@@ -14,6 +14,7 @@ namespace NumSharp
         /// <param name="trim">'f' trims from the front, 'b' from the back; "fb" (default) trims both. Case-insensitive.</param>
         /// <param name="axis">The single dimension to trim; <c>null</c> trims the whole-array bounding box.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray trim_zeros(NDArray filt, string trim = "fb", int? axis = null)
             => NDMatrixBoundary.Sees(filt)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((filt, trim, axis), static s => trim_zeros(s.filt, s.trim, s.axis))
@@ -42,6 +43,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException">If <paramref name="trim"/> contains unexpected characters, or an axis is repeated.</exception>
         /// <exception cref="AxisOutOfRangeException">If an axis is out of bounds for <paramref name="filt"/>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray trim_zeros(NDArray filt, string trim, int[] axis)
         {

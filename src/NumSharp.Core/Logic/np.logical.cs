@@ -59,6 +59,7 @@ namespace NumSharp
         /// any non-bool request raises the no-loop TypeError.</param>
         /// <returns>The element-wise AND of the operands' truth values (bool, or <paramref name="out"/>).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logical_and.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray logical_and(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
@@ -86,6 +87,7 @@ namespace NumSharp
         /// <param name="dtype">Validate-only (NumPy parity): non-bool raises the no-loop TypeError.</param>
         /// <returns>The element-wise OR of the operands' truth values (bool, or <paramref name="out"/>).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logical_or.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray logical_or(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
@@ -110,6 +112,7 @@ namespace NumSharp
         /// <param name="dtype">Validate-only (NumPy parity): non-bool raises the no-loop TypeError.</param>
         /// <returns>The element-wise XOR of the operands' truth values (bool, or <paramref name="out"/>).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logical_xor.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray logical_xor(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
@@ -134,6 +137,7 @@ namespace NumSharp
         /// <param name="dtype">Validate-only (NumPy parity): non-bool raises the no-loop TypeError.</param>
         /// <returns>The element-wise NOT of <paramref name="x"/>'s truth values (bool, or <paramref name="out"/>).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logical_not.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray logical_not(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
         {

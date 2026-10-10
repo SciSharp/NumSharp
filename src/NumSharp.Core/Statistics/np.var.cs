@@ -15,6 +15,7 @@ namespace NumSharp
         /// <param name="dtype">The <see cref="DType"/> the computation/result should use (a C# <see cref="System.Type"/>, an <see cref="NPTypeCode"/> or a NumPy dtype string all convert implicitly).</param>
         /// <returns>A new array containing the variance values, or a reference to the output array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.var.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static NDArray var(NDArray a, bool keepdims = false, int? ddof = null, DType dtype = null)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             ? NDMatrixBoundary.Reduced((a, keepdims, ddof, dtype), static s => var(s.a, s.keepdims, s.ddof, s.dtype), null, keepdims, "var")
@@ -30,6 +31,7 @@ namespace NumSharp
         /// <param name="dtype">The <see cref="DType"/> the computation/result should use (implicit from <see cref="System.Type"/> / <see cref="NPTypeCode"/> / NumPy dtype string).</param>
         /// <returns>A new array containing the variance values, or a reference to the output array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.var.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static NDArray var(NDArray a, int axis, bool keepdims = false, int? ddof = null, DType dtype = null)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             ? NDMatrixBoundary.Reduced((a, axis, keepdims, ddof, dtype), static s => var(s.a, s.axis, s.keepdims, s.ddof, s.dtype), axis, keepdims, "var")

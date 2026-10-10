@@ -18,6 +18,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tile.html</remarks>
         /// <exception cref="ArgumentNullException">If <paramref name="A"/> or <paramref name="reps"/> is null.</exception>
         /// <exception cref="ArgumentException">If any element of <paramref name="reps"/> is negative.</exception>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray tile(NDArray A, params int[] reps)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
@@ -45,6 +46,7 @@ namespace NumSharp
         ///     released too; it was left to the finalizer before. The <c>int[]</c> overload delegates here, so it
         ///     needs no scope of its own.
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray tile(NDArray A, long[] reps)
         {

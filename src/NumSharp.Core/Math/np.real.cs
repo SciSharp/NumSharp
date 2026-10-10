@@ -19,6 +19,7 @@ namespace NumSharp
         ///     real number is the number), so the input is returned unchanged with its dtype preserved.
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.real.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray real(NDArray val)
         {
             // Complex: a strided float64 view onto the real lane (writes through, shares memory) — the

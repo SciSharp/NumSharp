@@ -46,6 +46,7 @@ namespace NumSharp
         ///     faithful <c>copyto</c> composition.
         ///     </para>
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray nan_to_num(NDArray x, bool copy = true, object nan = null, object posinf = null, object neginf = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)

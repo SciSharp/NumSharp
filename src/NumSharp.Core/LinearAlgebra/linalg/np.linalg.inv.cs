@@ -19,6 +19,7 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             // Scope: ToCommon mints a dtype-cast temp when `a` is not already the common type
             // (a.typecode == common ? a : Cast(...)) — a leftover otherwise dropped to the finalizer.
             // [NDScoped] reclaims it while leaving a passthrough input untouched (rule R2); the
@@ -50,6 +51,7 @@ namespace NumSharp
             /// </param>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.pinv.html</remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             [NDScoped]
             public static NDArray pinv(NDArray a, double? rcond = null, bool hermitian = false, double? rtol = null)
             {

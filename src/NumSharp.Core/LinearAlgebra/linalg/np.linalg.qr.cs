@@ -21,6 +21,7 @@ namespace NumSharp
             /// </returns>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.qr.html</remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             [NDScoped] // reclaims the ToCommon cast temp; the (Q, R) tuple is yielded component-wise
             public static (NDArray Q, NDArray R) qr(NDArray a, string mode = "reduced")
             {

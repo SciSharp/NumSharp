@@ -49,6 +49,7 @@ namespace NumSharp
         ///     empty — for instance <c>[[a, b], []]</c>.
         /// </exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.block.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray block(object arrays)
         {
             // A numpy.matrix block: NumPy's result class follows its ROUTE. Repeated concatenation returns a matrix

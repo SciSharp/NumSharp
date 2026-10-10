@@ -44,6 +44,7 @@ namespace NumSharp
         /// <exception cref="System.ArgumentException">The reduction is empty — NumPy's text, <c>zero-size array to reduction
         /// operation fmin which has no identity</c>.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="a"/>'s rank.</exception>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         [System.Runtime.CompilerServices.OverloadResolutionPriority(1)]
         public static NDArray nanmin(NDArray a, int? axis, bool keepdims)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns

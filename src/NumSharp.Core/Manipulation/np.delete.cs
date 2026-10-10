@@ -37,6 +37,7 @@ namespace NumSharp
         /// <returns>A C-contiguous copy of <paramref name="arr"/> with one
         ///     sub-array removed along <paramref name="axis"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.delete.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray delete(NDArray arr, int obj, int? axis = null)
             => NDMatrixBoundary.Sees(arr)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis))
@@ -61,6 +62,7 @@ namespace NumSharp
         /// <summary>
         ///     Long-index overload of <see cref="delete(NDArray, int, int?)"/>.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         // Scope: delete is a composition that owns transients — PrepareAxisContext mints a ravel
         // `work` copy for axis=None on an N-D input, the DeleteXxx helpers build concatenated chunks,
         // and WithSourceOrder mints an asfortranarray copy for an F-contiguous source (orphaning the
@@ -84,6 +86,7 @@ namespace NumSharp
         ///     Slice-index overload. <paramref name="obj"/> is interpreted via
         ///     Python <c>slice.indices(N)</c> against the axis length.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray delete(NDArray arr, Slice obj, int? axis = null)
         {
@@ -101,6 +104,7 @@ namespace NumSharp
         ///     Array-of-indices overload. Negative indices are normalized; duplicates
         ///     are silently collapsed (each axis position is removed at most once).
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray delete(NDArray arr, int[] obj, int? axis = null)
         {
@@ -120,6 +124,7 @@ namespace NumSharp
         /// <summary>
         ///     Long-array-of-indices overload.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray delete(NDArray arr, long[] obj, int? axis = null)
         {
@@ -146,6 +151,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException"><paramref name="obj"/>'s length differs from the axis length.</exception>
         /// <remarks>Scoped by <c>[NDScoped]</c>: the ravel work array, the keep mask and the C-order result that an
         ///     F-ordered relabel supersedes are released on return.</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray delete(NDArray arr, bool[] obj, int? axis = null)
         {
@@ -188,6 +194,7 @@ namespace NumSharp
         /// <exception cref="IndexOutOfRangeException">An index is outside <c>[-N, N)</c>.</exception>
         /// <remarks>Scoped by <c>[NDScoped]</c>: the ravel work array, the keep mask, the helpers' chunk views and
         ///     the C-order result that an F-ordered relabel supersedes are released on return.</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray delete(NDArray arr, NDArray obj, int? axis = null)
         {

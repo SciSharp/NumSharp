@@ -36,6 +36,7 @@ namespace NumSharp
         ///     when <paramref name="out"/> is supplied).
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.take.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // reclaims the 0-d reshape alias and the natural-result temp on the out= path
         public static NDArray take(NDArray a, NDArray indices, int? axis = null, NDArray @out = null, string mode = "raise")
         {
@@ -106,6 +107,7 @@ namespace NumSharp
         /// <summary>
         ///     Scalar convenience overload — take a single element by flat index.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // the 0-d index wrapper is built in THIS frame, before the array overload's scope opens
         public static NDArray take(NDArray a, long index, int? axis = null, NDArray @out = null, string mode = "raise")
         {

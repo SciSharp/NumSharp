@@ -156,6 +156,7 @@ namespace NumSharp
         ///     carry a lower <c>OverloadResolutionPriority</c> for exactly that literal.
         ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.all.html</para>
         /// </remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         [NDScoped] // reclaims the where-mask effective array and the reduced temp on the out= path
         public static NDArray all(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, NDArray @where = null)
         {

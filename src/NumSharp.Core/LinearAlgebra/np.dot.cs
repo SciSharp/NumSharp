@@ -27,6 +27,7 @@
         ///         - If a is an N-D array and b is an M-D array(where M>=2), it is a sum product over the last axis of a and the second-to-last axis of b:<br></br>
         ///           dot(a, b)[i,j,k,m] = sum(a[i,j,:] * b[k,:,m])
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray dot(NDArray a, NDArray b, NDArray @out = null)
         {

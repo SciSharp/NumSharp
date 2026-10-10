@@ -16,6 +16,7 @@ namespace NumSharp
         /// <param name="shape">Overrides the shape of the result.</param>
         /// <returns>Array of uninitialized (arbitrary) data with the same shape and type as prototype.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.empty_like.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray empty_like(NDArray prototype, DType dtype = null, Shape shape = default, string device = null)
             => NDMatrixBoundary.Sees(prototype)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((prototype, dtype, shape, device), static s => empty_like(s.prototype, s.dtype, s.shape, s.device))
@@ -31,6 +32,7 @@ namespace NumSharp
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array of uninitialized (arbitrary) data with the same shape and type as prototype.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.empty_like.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray empty_like(NDArray prototype, DType dtype, Shape shape, char order, string device = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)

@@ -26,6 +26,7 @@ namespace NumSharp
         /// <exception cref="TypeError">The inputs (or <paramref name="dtype"/>) name no integer gcd loop.</exception>
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is non-boolean, an input is not same_kind-castable to <paramref name="dtype"/>, or <paramref name="out"/> is incompatible.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.gcd.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray gcd(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => gcd(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
@@ -51,6 +52,7 @@ namespace NumSharp
         /// <exception cref="TypeError">The inputs (or <paramref name="dtype"/>) name no integer lcm loop.</exception>
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is non-boolean, an input is not same_kind-castable to <paramref name="dtype"/>, or <paramref name="out"/> is incompatible.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.lcm.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray lcm(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => lcm(s.x1, s.x2, s.@out, s.where, s.dtype), @out)

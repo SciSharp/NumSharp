@@ -18,6 +18,7 @@ namespace NumSharp
         /// Array must have ndim >= 2.
         /// https://numpy.org/doc/stable/reference/generated/numpy.vsplit.html
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray[] vsplit(NDArray ary, int indices_or_sections)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
@@ -43,6 +44,7 @@ namespace NumSharp
         /// Array must have ndim >= 2.
         /// https://numpy.org/doc/stable/reference/generated/numpy.vsplit.html
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray[] vsplit(NDArray ary, int[] indices)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)

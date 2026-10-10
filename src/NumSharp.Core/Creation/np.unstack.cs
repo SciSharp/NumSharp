@@ -32,6 +32,7 @@ namespace NumSharp
         ///     by dropping <c>axis</c> from dims/strides and advancing the offset
         ///     by <c>i * strides[axis]</c>; no iterator or data movement anywhere.
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray[] unstack(NDArray x, int axis = 0)
         {
             // A numpy.matrix operand: NumPy iterates np.moveaxis(x, axis, 0), and iterating a matrix yields 1 x N

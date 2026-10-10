@@ -38,6 +38,7 @@ namespace NumSharp
             ///     behave like <c>np.dot</c>'s.
             ///     </para>
             /// </remarks>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             [NDScoped]
             public static NDArray multi_dot(NDArray[] arrays, NDArray @out = null)
             {
@@ -94,6 +95,7 @@ namespace NumSharp
             }
 
             /// <inheritdoc cref="multi_dot(NDArray[], NDArray)"/>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             public static NDArray multi_dot(params NDArray[] arrays) => NDMatrixBoundary.Sees(arrays)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
                 ? NDMatrixBoundary.Wrapped(arrays, static s => multi_dot(s))
                 : multi_dot(arrays, null);

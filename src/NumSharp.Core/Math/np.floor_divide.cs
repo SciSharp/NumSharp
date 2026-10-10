@@ -16,6 +16,7 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the computation runs in this dtype; inputs must be same_kind-castable to it.</param>
         /// <returns>y = floor(x1/x2). This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.floor_divide.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray floor_divide(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => floor_divide(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
@@ -28,6 +29,7 @@ namespace NumSharp
         /// <param name="x1">Dividend array.</param>
         /// <param name="x2">Scalar or array-like divisor.</param>
         /// <returns>y = floor(x1/x2).</returns>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         // Scope: reclaims the np.asanyarray(x2) temp minted for a scalar/array-like divisor (the
         // a//obj operator analog); an NDArray-input passthrough stays untracked.
         [NDScoped]

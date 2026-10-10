@@ -18,6 +18,7 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (float-family only; int/bool/complex raise NumPy's "No loop matching" error).</param>
         /// <returns><c>log(exp(x1) + exp(x2))</c>. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logaddexp.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray logaddexp(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => logaddexp(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
@@ -37,6 +38,7 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (float-family only).</param>
         /// <returns><c>log2(2**x1 + 2**x2)</c>. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logaddexp2.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray logaddexp2(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => logaddexp2(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
@@ -53,6 +55,7 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (float-family only).</param>
         /// <returns>The next representable values of x1 in the direction of x2. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nextafter.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray nextafter(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => nextafter(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
@@ -71,6 +74,7 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (float-family only).</param>
         /// <returns>The values of x1 with the sign of x2. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.copysign.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray copysign(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => copysign(s.x1, s.x2, s.@out, s.where, s.dtype), @out)

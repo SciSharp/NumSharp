@@ -33,6 +33,7 @@ namespace NumSharp
         ///     the C <c>ldexp</c>, including the IEEE special values (<c>ldexp(±inf, n) = ±inf</c>,
         ///     <c>ldexp(NaN, n) = NaN</c>, <c>ldexp(±0, n) = ±0</c>).</para>
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray ldexp(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)

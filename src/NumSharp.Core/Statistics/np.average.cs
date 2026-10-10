@@ -15,6 +15,8 @@ namespace NumSharp
         ///     is null this reduces to <see cref="mean(NDArray)"/> over the same axes.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.average.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static NDArray average(NDArray a, int? axis = null, NDArray weights = null, bool keepdims = false)
         {
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
@@ -30,6 +32,8 @@ namespace NumSharp
         ///     <c>np.average(a, axis, weights, keepdims)</c> in NumPy with a tuple axis.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.average.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static NDArray average(NDArray a, int[] axis, NDArray weights = null, bool keepdims = false)
         {
             // a numpy.matrix operand: the matrix with every reduced axis kept, as NumPy's matrix method returns
@@ -136,6 +140,8 @@ namespace NumSharp
         ///     (broadcast to the average's shape).
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.average.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static (NDArray avg, NDArray sumOfWeights) average_returned(NDArray a, int? axis = null, NDArray weights = null, bool keepdims = false)
         {
             if (NDMatrixBoundary.Sees(a))   // a numpy.matrix operand: np.average's matrix rule, then NumPy's sum of weights
@@ -149,6 +155,8 @@ namespace NumSharp
         ///     Tuple-axis overload of <see cref="average_returned(NDArray, int?, NDArray, bool)"/>.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.average.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static (NDArray avg, NDArray sumOfWeights) average_returned(NDArray a, int[] axis, NDArray weights = null, bool keepdims = false)
         {
             if (NDMatrixBoundary.Sees(a))   // a numpy.matrix operand: np.average's matrix rule, then NumPy's sum of weights

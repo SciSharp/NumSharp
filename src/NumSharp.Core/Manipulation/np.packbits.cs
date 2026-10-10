@@ -39,6 +39,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="a"/> is not a boolean/integer dtype.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="a"/>'s rank.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.packbits.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // reclaims the ravel/ascontiguousarray/asfortranarray normalisation temps
         public static unsafe NDArray packbits(NDArray a, int? axis = null, string bitorder = "big")
         {
@@ -110,6 +111,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="a"/> is not uint8.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="a"/>'s rank.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unpackbits.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // reclaims the ravel/ascontiguousarray/asfortranarray normalisation temps
         public static unsafe NDArray unpackbits(NDArray a, int? axis = null, long? count = null, string bitorder = "big")
         {

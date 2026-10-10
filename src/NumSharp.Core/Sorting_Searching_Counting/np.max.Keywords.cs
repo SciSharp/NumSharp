@@ -64,6 +64,7 @@ namespace NumSharp
         ///     1000 out of bounds for int8").</exception>
         /// <exception cref="TypeError"><paramref name="initial"/> is complex for a real loop, or of an unconvertible type.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.max.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         [OverloadResolutionPriority(1)]
         public static NDArray max(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
@@ -83,6 +84,7 @@ namespace NumSharp
         /// <returns>The maximum (0-d for a flat reduction without keepdims).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="System.ArgumentException">An empty reduced axis (NumPy's "zero-size array" text).</exception>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         [OverloadResolutionPriority(1)]
         public static NDArray max(NDArray a, int? axis, bool keepdims)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
@@ -107,6 +109,7 @@ namespace NumSharp
         /// <exception cref="System.OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <exception cref="TypeError"><paramref name="initial"/> is complex for a real loop, or of an unconvertible type.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amax.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         [OverloadResolutionPriority(1)]
         public static NDArray amax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
@@ -121,6 +124,7 @@ namespace NumSharp
         /// <returns>The maximum.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="System.ArgumentException">An empty reduced axis.</exception>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         [OverloadResolutionPriority(1)]
         public static NDArray amax(NDArray a, int? axis, bool keepdims)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
@@ -147,6 +151,7 @@ namespace NumSharp
         /// <exception cref="System.OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <exception cref="TypeError"><paramref name="initial"/> is complex for a real loop, or of an unconvertible type.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.min.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         [OverloadResolutionPriority(1)]
         public static NDArray min(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
@@ -163,6 +168,7 @@ namespace NumSharp
         /// <returns>The minimum.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="System.ArgumentException">An empty reduced axis.</exception>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         [OverloadResolutionPriority(1)]
         public static NDArray min(NDArray a, int? axis, bool keepdims)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
@@ -187,6 +193,7 @@ namespace NumSharp
         /// <exception cref="System.OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <exception cref="TypeError"><paramref name="initial"/> is complex for a real loop, or of an unconvertible type.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         [OverloadResolutionPriority(1)]
         public static NDArray amin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
@@ -201,6 +208,7 @@ namespace NumSharp
         /// <returns>The minimum.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="System.ArgumentException">An empty reduced axis.</exception>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         [OverloadResolutionPriority(1)]
         public static NDArray amin(NDArray a, int? axis, bool keepdims)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
@@ -230,6 +238,7 @@ namespace NumSharp
         /// <exception cref="System.OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <exception cref="TypeError"><paramref name="initial"/> is complex for a real loop, or of an unconvertible type.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanmax.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         [OverloadResolutionPriority(1)]
         public static NDArray nanmax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
@@ -257,6 +266,7 @@ namespace NumSharp
         /// <exception cref="System.OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <exception cref="TypeError"><paramref name="initial"/> is complex for a real loop, or of an unconvertible type.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanmin.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         [OverloadResolutionPriority(1)]
         public static NDArray nanmin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)

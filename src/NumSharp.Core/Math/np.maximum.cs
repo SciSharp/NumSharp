@@ -27,6 +27,7 @@ namespace NumSharp
         /// either a positional <paramref name="@out"/> or the <c>dtype:</c> keyword.
         /// </para>
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray maximum(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => maximum(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
@@ -47,6 +48,7 @@ namespace NumSharp
         /// <returns>The element-wise NaN-ignoring maximum (or <paramref name="@out"/> when supplied). A scalar if both inputs are scalars.</returns>
         /// <exception cref="ArgumentException"><paramref name="@out"/> is not same_kind-castable, <paramref name="where"/> is not bool, or the shapes do not broadcast (NumPy-verbatim texts).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fmax.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray fmax(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => fmax(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
