@@ -31,6 +31,7 @@ namespace NumSharp.Interop.OnnxRuntime
         private readonly T* _pointer;
         private readonly int _length;
         private readonly IArraySlice _owner;
+        private readonly bool _writeable;
         private object _lifetimeOwner;
         private int _disposed;
 
@@ -41,16 +42,28 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     The NumSharp buffer the elements belong to; each pin takes a reference on it. The caller (the export handle)
         ///     holds its own reference for as long as this manager hands out new spans or pins.
         /// </param>
+        /// <param name="writeable">
+        ///     Whether the NumSharp array the memory was exported from is writeable. It does not protect the
+        ///     <see cref="Memory{T}"/> (a span is always writeable); a NumSharp view built over a tensor of this memory
+        ///     reads it and stays read-only when the array is.
+        /// </param>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is negative.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="owner"/> is null.</exception>
-        internal UnmanagedMemoryManager(T* pointer, int length, IArraySlice owner)
+        internal UnmanagedMemoryManager(T* pointer, int length, IArraySlice owner, bool writeable)
         {
             if (length < 0)
                 throw new ArgumentOutOfRangeException(nameof(length));
             _pointer = pointer;
             _length = length;
             _owner = owner ?? throw new ArgumentNullException(nameof(owner));
+            _writeable = writeable;
         }
+
+        /// <summary>
+        ///     Whether the NumSharp array this memory was exported from is writeable; a NumSharp view of a tensor over this
+        ///     memory inherits it (<see cref="NDArrayOnnxInterop.AsNDArray{T}(DenseTensor{T}, OnnxCodecMode)"/>).
+        /// </summary>
+        internal bool Writeable => _writeable;
 
         /// <summary>The element pointer this manager fronts (stable — unmanaged memory never moves).</summary>
         internal T* Pointer => _pointer;
@@ -60,7 +73,7 @@ namespace NumSharp.Interop.OnnxRuntime
 
         /// <summary>
         ///     The NumSharp buffer the memory lies in — what a NumSharp view over a tensor of this memory forwards its
-        ///     reference counting to (<see cref="NDArrayOnnxInterop.AsNDArray{T}(DenseTensor{T})"/>), so the view is an
+        ///     reference counting to (<see cref="NDArrayOnnxInterop.AsNDArray{T}(DenseTensor{T}, OnnxCodecMode)"/>), so the view is an
         ///     ordinary NumSharp alias of the buffer rather than a foreign lease on it.
         /// </summary>
         internal IArraySlice Owner => _owner;

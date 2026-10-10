@@ -29,7 +29,7 @@ namespace NumSharp.Interop.OnnxRuntime
     ///         <item><term><see cref="ToOrtValue"/></term><description>NumSharp → ORT, an ORT-allocated copy (any layout, no handle, no lifetime coupling)</description></item>
     ///         <item><term><see cref="AsDenseTensor{T}"/> / <see cref="ToDenseTensor{T}"/></term><description>the legacy <see cref="DenseTensor{T}"/> twins</description></item>
     ///         <item><term><see cref="ToNDArray(OrtValue)"/></term><description>ORT → NumSharp, a fresh owning C-contiguous copy (the safe default)</description></item>
-    ///         <item><term><see cref="AsNDArray(OrtValue, bool)"/></term><description>ORT → NumSharp, a zero-copy view over ORT's buffer (CPU tensors only), optionally taking ownership of the OrtValue</description></item>
+    ///         <item><term><see cref="AsNDArray(OrtValue, bool, OnnxCodecMode)"/></term><description>ORT → NumSharp, a zero-copy view over the tensor's buffer (CPU tensors only), optionally taking ownership of the OrtValue; a counted alias of the NumSharp buffer for a value this package made</description></item>
     ///     </list>
     ///
     ///     <para><b>Dtype map</b> — 12 NumSharp dtypes cross zero-copy (bool, the 8 integers, Half ↔ Float16
@@ -53,17 +53,39 @@ namespace NumSharp.Interop.OnnxRuntime
         public static int LiveExports => Volatile.Read(ref _liveExports);
 
         /// <summary>
-        ///     Number of live import leases — NumSharp views (<see cref="Import.AsNDArray(OrtValue, bool)"/> /
-        ///     <see cref="Import.AsNDArray{T}(DenseTensor{T})"/>) currently holding ORT (or pinned managed)
+        ///     Number of live import leases — NumSharp views (<see cref="AsNDArray(OrtValue, bool, OnnxCodecMode)"/> /
+        ///     <see cref="AsNDArray{T}(DenseTensor{T}, OnnxCodecMode)"/>, the arrays of the non-tensor readers) currently holding ORT (or pinned managed)
         ///     memory. Released when the LAST NumSharp view over the memory — derived slices included — is
         ///     disposed or collected.
         /// </summary>
         public static int LiveImports => Volatile.Read(ref _liveImports);
 
+        /// <summary>Counts one new export handle in <see cref="LiveExports"/>.</summary>
         internal static void ExportOpened() => Interlocked.Increment(ref _liveExports);
+
+        /// <summary>Counts one export handle gone (disposed or finalized) in <see cref="LiveExports"/>.</summary>
         internal static void ExportClosed() => Interlocked.Decrement(ref _liveExports);
+
+        /// <summary>Counts one new import lease in <see cref="LiveImports"/>.</summary>
         internal static void ImportOpened() => Interlocked.Increment(ref _liveImports);
+
+        /// <summary>Counts one import lease ended (released or disarmed) in <see cref="LiveImports"/>.</summary>
         internal static void ImportClosed() => Interlocked.Decrement(ref _liveImports);
+
+        private static long _importPressureBytes;
+
+        /// <summary>
+        ///     The bytes of ORT memory currently reported to the GC as memory pressure (<c>GC.AddMemoryPressure</c>) by
+        ///     import views that OWN their <see cref="OrtValue"/>. A diagnostic for the tests: the GC offers no way to read
+        ///     back what was reported, and the rule "only an owning view reports, once, and takes it back when it dies"
+        ///     has no other observable effect. A steady non-zero value with no live owning view is a pressure leak (the GC
+        ///     then collects more often for the life of the process).
+        /// </summary>
+        internal static long ImportPressureBytes => Interlocked.Read(ref _importPressureBytes);
+
+        /// <summary>Records memory pressure added (positive) or removed (negative) by an import lease.</summary>
+        /// <param name="delta">The byte count just passed to <c>GC.AddMemoryPressure</c>, or minus the count just passed to <c>GC.RemoveMemoryPressure</c>.</param>
+        internal static void ImportPressureChanged(long delta) => Interlocked.Add(ref _importPressureBytes, delta);
 
         // ===================================  the dtype map  ===================================
 
@@ -291,14 +313,105 @@ namespace NumSharp.Interop.OnnxRuntime
                 "first, then convert; ToNDArray / AsNDArray only read CPU-accessible tensors.");
         }
 
+        /// <summary>
+        ///     Can the CPU read (and write) the memory a tensor lives in? Decided by ORT's own description of the memory,
+        ///     in the order of how direct the evidence is.
+        /// </summary>
+        /// <remarks>
+        ///     <para>1. The allocator's memory type is <see cref="OrtMemType.CpuInput"/> / <see cref="OrtMemType.CpuOutput"/>:
+        ///     host memory of a device provider (how the CUDA provider registers <c>CudaPinned</c>).</para>
+        ///     <para>2. ORT says the device memory is <c>HOST_ACCESSIBLE</c> (<see cref="HostAccessibleProbe"/>, ONNX Runtime
+        ///     versions that have <c>OrtMemoryInfo.GetDeviceMemoryType</c>): shared or pinned memory the CPU addresses,
+        ///     whatever the device — <c>CudaPinned</c>, <c>HipPinned</c>, <c>QnnHtpShared</c>.</para>
+        ///     <para>3. The allocator NAME is one of ORT's CPU-device allocators (<see cref="CpuAllocatorNames"/>). The
+        ///     device memory type cannot decide these: it is <c>DEFAULT</c> for the CPU's own memory and for a GPU's alike,
+        ///     and the managed API of the supported versions does not expose the device type. On an ONNX Runtime too old for
+        ///     rule 2 the host-accessible names (<see cref="HostAccessibleAllocatorNames"/>) are accepted here too.</para>
+        ///     <para>4. The memory info equals ORT's default CPU instance.</para>
+        ///     <para>Everything else (a GPU / NPU provider's default memory: <c>Cuda</c>, <c>DML</c>, <c>Hip</c>,
+        ///     <c>OpenVINO_GPU</c>, …) is refused: reading it through a CPU pointer faults.</para>
+        /// </remarks>
+        /// <param name="memInfo">The tensor's memory info.</param>
+        /// <returns><c>true</c> when a CPU pointer into the memory is valid.</returns>
         internal static bool IsCpuAccessible(OrtMemoryInfo memInfo)
         {
             OrtMemType memType = memInfo.GetMemoryType();
             if (memType == OrtMemType.CpuInput || memType == OrtMemType.CpuOutput)
                 return true;   // host-accessible memory of a device EP (e.g. CudaPinned)
-            if (string.Equals(memInfo.Name, "Cpu", StringComparison.OrdinalIgnoreCase))
-                return true;   // the CPU EP's device OR arena allocator
+            if (HostAccessibleProbe.Value is { } isHostAccessible)
+            {
+                if (isHostAccessible(memInfo))
+                    return true;   // ORT's own answer: shared / pinned memory the CPU addresses
+            }
+            string name = memInfo.Name;
+            if (IsOneOf(name, CpuAllocatorNames))
+                return true;   // a CPU device's own memory (the CPU EP's device or arena allocator, the 4 KB-aligned one)
+            if (HostAccessibleProbe.Value is null && IsOneOf(name, HostAccessibleAllocatorNames))
+                return true;   // an ORT without GetDeviceMemoryType: the names ORT itself maps to host-accessible memory
             return memInfo.Equals(OrtMemoryInfo.DefaultInstance);
+        }
+
+        /// <summary>
+        ///     ORT's allocator names for a CPU device's own memory (<c>onnxruntime::CPU</c>, <c>onnxruntime::CPU_ALIGNED_4K</c>
+        ///     in <c>core/framework/allocator.h</c>; <c>CreateMemoryInfo</c> maps both to <c>OrtDevice::CPU</c> with default
+        ///     memory). <c>CpuAligned4K</c> was refused before: only the exact name <c>Cpu</c> was accepted.
+        /// </summary>
+        private static readonly string[] CpuAllocatorNames = { "Cpu", "CpuAligned4K" };
+
+        /// <summary>
+        ///     ORT's allocator names for memory a device shares with the host (<c>CreateMemoryInfo</c> maps each to
+        ///     <c>OrtDevice::MemType::HOST_ACCESSIBLE</c>). Used only when the loaded ONNX Runtime cannot be asked
+        ///     (<see cref="HostAccessibleProbe"/> is null); a newer ORT answers for itself, including for names added later.
+        /// </summary>
+        private static readonly string[] HostAccessibleAllocatorNames = { "CudaPinned", "HipPinned", "QnnHtpShared" };
+
+        /// <summary>Is <paramref name="name"/> one of <paramref name="names"/>, ignoring case (ORT compares its names exactly; a caller's spelling may differ in case)?</summary>
+        /// <param name="name">An allocator name.</param>
+        /// <param name="names">The names to look for.</param>
+        /// <returns><c>true</c> on a match.</returns>
+        private static bool IsOneOf(string name, string[] names)
+        {
+            foreach (string candidate in names)
+                if (string.Equals(name, candidate, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            return false;
+        }
+
+        /// <summary>
+        ///     "Is this memory <c>HOST_ACCESSIBLE</c>?", asked of ONNX Runtime itself through
+        ///     <c>OrtMemoryInfo.GetDeviceMemoryType()</c> — or <c>null</c> when the loaded ONNX Runtime does not have that
+        ///     member. The package compiles against ORT 1.16.0, which lacks both the method and its enum, so the member is
+        ///     found by reflection once and compiled into a delegate (a reflection call per tensor would cost about a
+        ///     microsecond on every import).
+        /// </summary>
+        /// <remarks>
+        ///     The enum value is looked up by NAME (<c>HOST_ACCESSIBLE</c>), not assumed to be 5: if a future ORT renames or
+        ///     removes it, the probe is null and the name lists decide, instead of a wrong number deciding silently.
+        ///     Building the delegate cannot be allowed to fail a caller: any reflection or compilation error leaves the
+        ///     probe null.
+        /// </remarks>
+        private static readonly Lazy<Func<OrtMemoryInfo, bool>> HostAccessibleProbe = new Lazy<Func<OrtMemoryInfo, bool>>(BuildHostAccessibleProbe);
+
+        /// <summary>Builds <see cref="HostAccessibleProbe"/>'s delegate, or returns <c>null</c> when the loaded ONNX Runtime has no <c>GetDeviceMemoryType</c>.</summary>
+        /// <returns>The compiled test, or <c>null</c>.</returns>
+        private static Func<OrtMemoryInfo, bool> BuildHostAccessibleProbe()
+        {
+            try
+            {
+                System.Reflection.MethodInfo method = typeof(OrtMemoryInfo).GetMethod("GetDeviceMemoryType", Type.EmptyTypes);
+                if (method is null || !method.ReturnType.IsEnum || !Enum.IsDefined(method.ReturnType, "HOST_ACCESSIBLE"))
+                    return null;
+                object hostAccessible = Enum.Parse(method.ReturnType, "HOST_ACCESSIBLE");
+                var info = System.Linq.Expressions.Expression.Parameter(typeof(OrtMemoryInfo), "info");
+                var test = System.Linq.Expressions.Expression.Equal(
+                    System.Linq.Expressions.Expression.Call(info, method),
+                    System.Linq.Expressions.Expression.Constant(hostAccessible, method.ReturnType));
+                return System.Linq.Expressions.Expression.Lambda<Func<OrtMemoryInfo, bool>>(test, info).Compile();
+            }
+            catch (Exception)
+            {
+                return null;   // an unexpected ORT shape: fall back to the name lists rather than fail every import
+            }
         }
 
         /// <summary>ORT's <c>long[]</c> shape → a NumSharp <see cref="Shape"/> (an empty array is the 0-d scalar).</summary>

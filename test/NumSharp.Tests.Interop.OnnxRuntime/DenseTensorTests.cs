@@ -237,6 +237,111 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             BytesOf(back).Should().Equal(BytesOf(nd));
         }
 
+        /// <summary>
+        ///     The runtime dispatch of <c>NamedOnnxValue.ToNDArray</c> takes every element type the generic
+        ///     <c>DenseTensor&lt;T&gt;.ToNDArray</c> takes. A <see cref="char"/> tensor and a <see cref="Half"/> tensor (a
+        ///     caller's own; ORT's outputs use <see cref="Float16"/>) were refused here with "no NumSharp dtype".
+        /// </summary>
+        [TestMethod]
+        public void NamedOnnxValue_WithACharOrHalfTensor_ReadsBack_LikeTheGenericVerb()
+        {
+            var chars = new DenseTensor<char>(new[] { 'h', 'é', 'y' }, new[] { 3 });
+            using (NDArray nd = NamedOnnxValue.CreateFromTensor("c", chars).ToNDArray())
+            {
+                nd.typecode.Should().Be(NPTypeCode.Char);
+                nd.ToArray<char>().Should().Equal('h', 'é', 'y');
+            }
+
+            var halves = new DenseTensor<Half>(new[] { (Half)1.5f, (Half)(-2f), Half.NaN }, new[] { 3 });
+            using (NDArray nd = NamedOnnxValue.CreateFromTensor("h", halves).ToNDArray())
+            {
+                nd.typecode.Should().Be(NPTypeCode.Half);
+                ((float)nd.GetHalf(0)).Should().Be(1.5f);
+                ((float)nd.GetHalf(1)).Should().Be(-2f);
+                Half.IsNaN(nd.GetHalf(2)).Should().BeTrue();
+            }
+
+            // column-major: the dispatch goes through the same transposing copy as the generic verb
+            var columnMajor = new DenseTensor<char>(new[] { 'a', 'b', 'c', 'd', 'e', 'f' }, new[] { 2, 3 }, reverseStride: true);
+            using (NDArray nd = NamedOnnxValue.CreateFromTensor("f", columnMajor).ToNDArray())
+                nd.ToArray<char>().Should().Equal('a', 'c', 'e', 'b', 'd', 'f');
+        }
+
+        /// <summary>
+        ///     A tensor that is NOT a <see cref="DenseTensor{T}"/> (a caller's own <see cref="Tensor{T}"/> subclass) inside
+        ///     a <see cref="NamedOnnxValue"/>: the dispatch densifies it through ORT's own <c>ToDenseTensor</c> and copies
+        ///     that, for the element types an ORT output has and for the two only a caller's tensor has (char, Half).
+        /// </summary>
+        [TestMethod]
+        public void NamedOnnxValue_WithANonDenseTensor_IsDensifiedAndRead()
+        {
+            using (NDArray nd = NamedOnnxValue.CreateFromTensor("f", new ArrayTensor<float>(new[] { 1f, 2f, 3f, 4f, 5f, 6f }, new[] { 2, 3 })).ToNDArray())
+            {
+                nd.typecode.Should().Be(NPTypeCode.Single);
+                nd.shape.Should().Equal(2, 3);
+                nd.ToArray<float>().Should().Equal(1f, 2f, 3f, 4f, 5f, 6f);
+            }
+            using (NDArray nd = NamedOnnxValue.CreateFromTensor("l", new ArrayTensor<long>(new[] { -1L, long.MaxValue }, new[] { 2 })).ToNDArray())
+                nd.ToArray<long>().Should().Equal(-1L, long.MaxValue);
+            using (NDArray nd = NamedOnnxValue.CreateFromTensor("c", new ArrayTensor<char>(new[] { 'o', 'k' }, new[] { 2 })).ToNDArray())
+            {
+                nd.typecode.Should().Be(NPTypeCode.Char);
+                nd.ToArray<char>().Should().Equal('o', 'k');
+            }
+            using (NDArray nd = NamedOnnxValue.CreateFromTensor("h", new ArrayTensor<Half>(new[] { (Half)0.5f, (Half)(-4f) }, new[] { 2 })).ToNDArray())
+            {
+                nd.typecode.Should().Be(NPTypeCode.Half);
+                ((float)nd.GetHalf(1)).Should().Be(-4f);
+            }
+        }
+
+        /// <summary>
+        ///     A minimal tensor that is not dense as far as its type says: a row-major <see cref="Tensor{T}"/> subclass over
+        ///     an array, the shape of "a caller's own tensor class". Only what ORT's <c>ToDenseTensor</c> and the test need
+        ///     is given real behaviour.
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        private sealed class ArrayTensor<T> : Tensor<T>
+        {
+            private readonly T[] _values;
+
+            /// <summary>Wraps <paramref name="values"/> (row-major) as a tensor of the given dimensions.</summary>
+            /// <param name="values">The elements; not copied.</param>
+            /// <param name="dimensions">The dimensions, whose product is the element count.</param>
+            internal ArrayTensor(T[] values, int[] dimensions) : base(dimensions, reverseStride: false) => _values = values;
+
+            /// <summary>A tensor over a copy of the elements.</summary>
+            /// <returns>The copy.</returns>
+            public override Tensor<T> Clone() => new ArrayTensor<T>((T[])_values.Clone(), Dimensions.ToArray());
+
+            /// <summary>A zero-filled tensor of another element type and the given dimensions.</summary>
+            /// <typeparam name="TResult">The new element type.</typeparam>
+            /// <param name="dimensions">The new dimensions.</param>
+            /// <returns>The empty tensor.</returns>
+            public override Tensor<TResult> CloneEmpty<TResult>(ReadOnlySpan<int> dimensions)
+            {
+                int length = 1;
+                foreach (int d in dimensions)
+                    length *= d;
+                return new ArrayTensor<TResult>(new TResult[length], dimensions.ToArray());
+            }
+
+            /// <summary>The element at a flat row-major index.</summary>
+            /// <param name="index">The flat index.</param>
+            /// <returns>The element.</returns>
+            public override T GetValue(int index) => _values[index];
+
+            /// <summary>Stores an element at a flat row-major index.</summary>
+            /// <param name="index">The flat index.</param>
+            /// <param name="value">The element.</param>
+            public override void SetValue(int index, T value) => _values[index] = value;
+
+            /// <summary>The same elements under other dimensions.</summary>
+            /// <param name="dimensions">The new dimensions (same element count).</param>
+            /// <returns>A tensor sharing this one's array.</returns>
+            public override Tensor<T> Reshape(ReadOnlySpan<int> dimensions) => new ArrayTensor<T>(_values, dimensions.ToArray());
+        }
+
         [TestMethod]
         public void NamedOnnxValue_NonTensor_IsRefused()
         {

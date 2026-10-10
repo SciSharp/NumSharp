@@ -53,6 +53,8 @@ namespace NumSharp.Interop.OnnxRuntime
         private readonly OrtValue _value;
         private readonly NDArray _source;
         private readonly IArraySlice _slice;
+        private readonly IntPtr _data;
+        private readonly bool _sourceWriteable;
         private readonly bool _ownsSource;
         private readonly bool _isView;
         private readonly TensorElementType _elementType;
@@ -63,16 +65,21 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="value">The OrtValue over the buffer (created by the caller; owned by the handle from here on).</param>
         /// <param name="source">The array ORT reads (the caller's, or a temporary the handle owns).</param>
         /// <param name="slice">The buffer, on which the caller already took the reference this handle now owns.</param>
+        /// <param name="data">The address of the tensor's first element inside <paramref name="slice"/> (the pointer the OrtValue was created over).</param>
         /// <param name="ownsSource"><c>true</c> when <paramref name="source"/> is a temporary the handle must dispose.</param>
         /// <param name="isView"><c>true</c> when <paramref name="source"/> is the array the export verb was given (shared memory); <c>false</c> when it is a copy the verb made.</param>
         /// <param name="elementType">The ONNX element type the value was created with.</param>
         /// <param name="shape">The value's row-major shape.</param>
         /// <exception cref="OutOfMemoryException">The value could not be registered (the handle is then left unconstructed: its finalizer is suppressed, and the caller still owns the value and the reference).</exception>
-        internal OrtTensor(OrtValue value, NDArray source, IArraySlice slice, bool ownsSource, bool isView, TensorElementType elementType, long[] shape)
+        internal OrtTensor(OrtValue value, NDArray source, IArraySlice slice, IntPtr data, bool ownsSource, bool isView, TensorElementType elementType, long[] shape)
         {
             _value = value;
             _source = source;
             _slice = slice;
+            _data = data;
+            // Read now, while the source is certainly alive: the caller may dispose its array before it asks for a view of
+            // the value, and a view must still know whether the array it came from was read-only.
+            _sourceWriteable = source.Shape.IsWriteable;
             _ownsSource = ownsSource;
             _isView = isView;
             _elementType = elementType;
@@ -128,6 +135,31 @@ namespace NumSharp.Interop.OnnxRuntime
 
         /// <summary><c>true</c> once <see cref="Dispose"/> ran; <see cref="Value"/> then throws.</summary>
         public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
+
+        /// <summary>
+        ///     The handle that owns <paramref name="value"/>, when this package made the value over a NumSharp buffer
+        ///     (<see cref="NDArrayOnnxInterop.AsOrtValue"/>) and the handle is not disposed yet. The import verbs use it to
+        ///     treat such a value as NumSharp memory (a counted alias of the buffer) instead of leasing it like foreign memory.
+        /// </summary>
+        /// <param name="value">Any OrtValue.</param>
+        /// <param name="owner">The value's handle, or <c>null</c> for a value this package did not make (or whose handle was disposed).</param>
+        /// <returns><c>true</c> when <paramref name="owner"/> was found.</returns>
+        internal static bool TryGetOwner(OrtValue value, out OrtTensor owner) => ValueOwners.TryGetValue(value, out owner);
+
+        /// <summary>The buffer the tensor lies in; the handle holds one counted reference on it until it is disposed.</summary>
+        internal IArraySlice Slice => _slice;
+
+        /// <summary>The address of the tensor's first element inside <see cref="Slice"/>.</summary>
+        internal unsafe byte* Data => (byte*)_data;
+
+        /// <summary>
+        ///     Whether the array ORT reads was writeable when it was exported. A NumSharp view of the value inherits it, so
+        ///     a read-only array cannot be written through a round trip.
+        /// </summary>
+        internal bool SourceWriteable => _sourceWriteable;
+
+        /// <summary>The tensor's row-major shape, NOT copied: callers must not write into it.</summary>
+        internal long[] ShapeNoCopy => _shape;
 
         /// <summary>
         ///     Dispose the <see cref="OrtValue"/> and release this handle's reference on the NumSharp buffer
@@ -356,17 +388,34 @@ namespace NumSharp.Interop.OnnxRuntime
         private readonly long _bytes;
         private int _released;
 
-        internal ImportLease(Action release, long bytes)
+        /// <summary>Opens a lease and counts it in <see cref="NDArrayOnnxInterop.LiveImports"/>.</summary>
+        /// <param name="release">What to run when the last NumSharp view over the memory is gone (dispose the OrtValue, release a pin, or only keep an object reachable until then).</param>
+        /// <param name="ownedBytes">
+        ///     The native bytes this lease OWNS, reported to the GC as memory pressure for the lease's lifetime; 0 when the
+        ///     lease owns none. Only a view that owns its OrtValue passes a count: its ORT buffer lives exactly as long as
+        ///     the view, and the GC cannot see it. A non-owning view (the caller owns the value), a pinned managed array (the
+        ///     GC already counts it) and a legacy output tensor (its results collection owns the memory) pass 0; reporting
+        ///     their bytes for every view made the GC collect more often for memory no collection can free.
+        /// </param>
+        internal ImportLease(Action release, long ownedBytes)
         {
             _release = release;
-            _bytes = bytes;
+            _bytes = ownedBytes;
             if (_bytes > 0)
+            {
                 GC.AddMemoryPressure(_bytes);
+                NDArrayOnnxInterop.ImportPressureChanged(_bytes);
+            }
             NDArrayOnnxInterop.ImportOpened();
         }
 
+        /// <summary><c>true</c> once the lease was released or disarmed.</summary>
         internal bool IsReleased => Volatile.Read(ref _released) != 0;
 
+        /// <summary>
+        ///     Ends the lease and runs its release action, once: the dispose hook of the memory block calls it when the last
+        ///     NumSharp view over the memory is gone. Later calls do nothing.
+        /// </summary>
         internal void Release()
         {
             if (Interlocked.Exchange(ref _released, 1) != 0)
@@ -378,10 +427,36 @@ namespace NumSharp.Interop.OnnxRuntime
             }
             finally
             {
-                if (_bytes > 0)
-                    GC.RemoveMemoryPressure(_bytes);
+                RemovePressure();
                 NDArrayOnnxInterop.ImportClosed();
             }
+        }
+
+        /// <summary>
+        ///     Ends the lease WITHOUT running its release action: for a view that could not be built. The caller keeps what
+        ///     the action would have disposed (an OrtValue handed over with <c>ownsValue: true</c> is still the caller's when
+        ///     the import throws), and the memory block that already carries <see cref="Release"/> as its dispose hook finds
+        ///     the lease ended when its finalizer runs, so it disposes nothing later either.
+        /// </summary>
+        internal void Disarm()
+        {
+            if (Interlocked.Exchange(ref _released, 1) != 0)
+                return;
+            Interlocked.Exchange(ref _release, null);
+            RemovePressure();
+            NDArrayOnnxInterop.ImportClosed();
+        }
+
+        /// <summary>
+        ///     Takes back the memory pressure the constructor reported, if it reported any. Called exactly once, by whichever
+        ///     of <see cref="Release"/> and <see cref="Disarm"/> wins the lease's released flag.
+        /// </summary>
+        private void RemovePressure()
+        {
+            if (_bytes <= 0)
+                return;
+            GC.RemoveMemoryPressure(_bytes);
+            NDArrayOnnxInterop.ImportPressureChanged(-_bytes);
         }
     }
 }

@@ -22,6 +22,11 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             return session.Run(options, new[] { inName }, new[] { input }, new[] { outName });
         }
 
+        /// <summary>
+        ///     A sequence of tensors: each element comes back as a view that OWNS ORT's copy of the element (one copy per
+        ///     element, where the reader used to copy ORT's copy again), so it reports <c>owndata == False</c>, counts as a
+        ///     live import until it is disposed, and frees ORT's copy then.
+        /// </summary>
         [TestMethod]
         public void SequenceOfTensors_ReadWith_ToNDArrays()
         {
@@ -31,6 +36,7 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             using IDisposableReadOnlyCollection<OrtValue> outputs = Run(session, "X", t.Value, "seq");
             OrtValue seq = outputs[0];
             seq.OnnxType.Should().Be(OnnxValueType.ONNX_TYPE_SEQUENCE);
+            long pressure = NDArrayOnnxInterop.ImportPressureBytes;
 
             NDArray[] tensors = seq.ToNDArrays();
             tensors.Length.Should().Be(1);
@@ -39,15 +45,65 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                 tensors[0].shape.Should().Equal(3);
                 tensors[0].typecode.Should().Be(NPTypeCode.Single);
                 tensors[0].GetSingle(2).Should().Be(3f);
-                tensors[0].flags.owndata.Should().BeTrue("sequence elements are read as owning copies");
+                tensors[0].flags.owndata.Should().BeFalse("the array is a view over ORT's copy of the element");
+                tensors[0].flags.writeable.Should().BeTrue("the copy is the array's alone");
+                NDArrayOnnxInterop.LiveImports.Should().Be(1, "the view owns the element until it is disposed");
+                NDArrayOnnxInterop.ImportPressureBytes.Should().Be(pressure + 12, "an owning view reports ORT's 3 floats to the GC");
             }
+            NDArrayOnnxInterop.LiveImports.Should().Be(0, "disposing the array freed ORT's copy of the element");
+            NDArrayOnnxInterop.ImportPressureBytes.Should().Be(pressure, "and took the report back");
 
             // a sequence is not a dense tensor / not a sequence-of-maps
             new Action(() => seq.ToNDArray()).Should().Throw<NotSupportedException>().WithMessage("*SEQUENCE*ToNDArrays*");
             new Action(() => seq.ToMaps()).Should().Throw<NotSupportedException>().WithMessage("*element 0 is ONNX_TYPE_TENSOR*ToNDArrays*");
-            NDArrayOnnxInterop.LiveImports.Should().Be(0, "the readers copy — no lease");
+            NDArrayOnnxInterop.LiveImports.Should().Be(0, "a refused reader leaves no lease behind");
         }
 
+        /// <summary>
+        ///     The arrays a reader returns do not point into the sequence or the map they were read from: with the run's
+        ///     outputs disposed first, the values are still there (and after more runs reuse ORT's memory).
+        /// </summary>
+        [TestMethod]
+        public void ReaderResults_OutliveTheValueTheyWereReadFrom()
+        {
+            using InferenceSession sequenceSession = OpenSession("sequence_out");
+            using InferenceSession mapSession = OpenSession("zipmap_int64");
+            using NDArray x = np.array(new[] { 1f, 2f, 3f });
+            using NDArray probs = np.array(new[,] { { 0.1f, 0.7f, 0.2f } });
+
+            NDArray[] tensors;
+            (NDArray keys, NDArray values)[] maps;
+            using (OrtTensor t = x.AsOrtValue())
+            using (IDisposableReadOnlyCollection<OrtValue> outputs = Run(sequenceSession, "X", t.Value, "seq"))
+                tensors = outputs[0].ToNDArrays();
+            using (OrtTensor t = probs.AsOrtValue())
+            using (IDisposableReadOnlyCollection<OrtValue> outputs = Run(mapSession, "X", t.Value, "Z"))
+                maps = outputs[0].ToMaps();
+
+            // More runs of the same shapes: ORT reuses the memory the disposed outputs gave back.
+            using (NDArray other = np.array(new[] { -7f, -7f, -7f }))
+            using (OrtTensor t = other.AsOrtValue())
+                for (int k = 0; k < 4; k++)
+                    using (IDisposableReadOnlyCollection<OrtValue> again = Run(sequenceSession, "X", t.Value, "seq"))
+                    {
+                    }
+
+            using (tensors[0])
+            using (maps[0].keys)
+            using (maps[0].values)
+            {
+                tensors[0].ToArray<float>().Should().Equal(1f, 2f, 3f);
+                maps[0].keys.ToArray<long>().Should().Equal(10L, 20L, 30L);
+                maps[0].values.GetSingle(1).Should().BeApproximately(0.7f, 1e-6f);
+                NDArrayOnnxInterop.LiveImports.Should().Be(3);
+            }
+            NDArrayOnnxInterop.LiveImports.Should().Be(0);
+        }
+
+        /// <summary>
+        ///     The scikit-learn ZipMap shape, a sequence of maps: one (keys, values) pair per row, each array a view that
+        ///     owns ORT's copy of its tensor.
+        /// </summary>
         [TestMethod]
         public void ZipMap_SequenceOfMaps_ReadWith_ToMaps()
         {
@@ -71,6 +127,8 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                 maps[0].values.typecode.Should().Be(NPTypeCode.Single);
                 maps[0].values.GetSingle(1).Should().BeApproximately(0.7f, 1e-6f, "class 20's probability, row 0");
                 maps[1].values.GetSingle(0).Should().BeApproximately(0.5f, 1e-6f);
+                maps[0].keys.flags.owndata.Should().BeFalse("each array is a view over ORT's copy");
+                NDArrayOnnxInterop.LiveImports.Should().Be(4, "two maps, a keys and a values array each");
             }
             NDArrayOnnxInterop.LiveImports.Should().Be(0);
         }

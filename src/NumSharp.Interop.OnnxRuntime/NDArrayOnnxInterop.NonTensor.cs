@@ -13,17 +13,21 @@ namespace NumSharp.Interop.OnnxRuntime
         // dtype, so these come back as NumSharp-shaped pieces (NDArrays for the tensor parts, string[] for
         // strings) through the readers below rather than through ToNDArray, which needs a dense tensor.
         //
-        // All readers COPY (like ToNDArray): the intermediate element OrtValues that GetValue(i, allocator)
-        // hands out are disposed inside, so nothing here holds an ORT lease — the returned NDArrays own
-        // their buffers and the source OrtValue may be disposed the moment the reader returns.
+        // ONE copy per element, made by ORT: GetValue(i, allocator) hands out a COPY of the element in the allocator's
+        // memory, and each array a reader returns is a view that OWNS that copy (AsNDArray(ownsValue: true)); it disposes
+        // the element when the last NumSharp view over it dies. The readers used to copy that copy again and dispose the
+        // element at once (two copies per element). Consequences for a caller: the arrays report flags.owndata == False,
+        // they count in LiveImports until they are disposed (or collected), and the source OrtValue may still be disposed
+        // the moment the reader returns, because the elements do not point into it.
 
         /// <summary>
-        ///     Read a SEQUENCE <see cref="OrtValue"/> whose elements are dense tensors into owning
-        ///     <see cref="NDArray"/> copies — e.g. a <c>SequenceConstruct</c> / <c>SplitToSequence</c> output.
-        ///     Each element follows <see cref="ToNDArray(OrtValue)"/> (dtype from the tensor, C-contiguous copy).
+        ///     Read a SEQUENCE <see cref="OrtValue"/> whose elements are dense tensors into one <see cref="NDArray"/> per
+        ///     element — e.g. a <c>SequenceConstruct</c> / <c>SplitToSequence</c> output. Each array is a C-contiguous
+        ///     view that owns ORT's copy of its element (dtype from the tensor, as <see cref="ToNDArray(OrtValue)"/>
+        ///     maps it), so the sequence can be disposed as soon as this returns.
         /// </summary>
         /// <param name="sequence">A sequence OrtValue whose elements are dense tensors.</param>
-        /// <returns>One owning array per element, in sequence order.</returns>
+        /// <returns>One array per element, in sequence order; dispose each one to free ORT's copy of its element.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="sequence"/> is null.</exception>
         /// <exception cref="NotSupportedException">
         ///     Not a sequence, or an element is not a dense tensor (a sequence of MAPs — the ZipMap shape — is
@@ -49,12 +53,22 @@ namespace NumSharp.Interop.OnnxRuntime
             {
                 for (int i = 0; i < count; i++)
                 {
-                    using OrtValue element = sequence.GetValue(i, allocator);
-                    if (element.OnnxType != OnnxValueType.ONNX_TYPE_TENSOR)
-                        throw new NotSupportedException(
-                            $"ToNDArrays: sequence element {i} is {element.OnnxType}, not a dense tensor. A sequence of maps " +
-                            "(e.g. a scikit-learn ZipMap output) is read with ToMaps.");
-                    result[i] = element.ToNDArray();
+                    OrtValue element = sequence.GetValue(i, allocator);
+                    try
+                    {
+                        if (element.OnnxType != OnnxValueType.ONNX_TYPE_TENSOR)
+                            throw new NotSupportedException(
+                                $"ToNDArrays: sequence element {i} is {element.OnnxType}, not a dense tensor. A sequence of maps " +
+                                "(e.g. a scikit-learn ZipMap output) is read with ToMaps.");
+                        result[i] = element.AsNDArray(ownsValue: true);   // the array owns ORT's copy from here on
+                    }
+                    catch
+                    {
+                        // A throw never transfers ownership (AsNDArray leaves the value untouched), so the element is
+                        // still this method's to free.
+                        element.Dispose();
+                        throw;
+                    }
                 }
                 return result;
             }
@@ -68,13 +82,14 @@ namespace NumSharp.Interop.OnnxRuntime
         }
 
         /// <summary>
-        ///     Read a MAP <see cref="OrtValue"/> as two parallel owning arrays: <c>keys</c> and the
-        ///     <c>values</c> at the same positions (ORT stores a map as a keys tensor + a values
-        ///     tensor). Key dtype follows the map (int64 or — for a string-keyed map — refused, since NumSharp
-        ///     has no string dtype: read those with <see cref="ReadStringTensor"/> on <see cref="GetMapKeys"/>).
+        ///     Read a MAP <see cref="OrtValue"/> as two parallel arrays: <c>keys</c> and the <c>values</c> at the same
+        ///     positions (ORT stores a map as a keys tensor + a values tensor). Each array is a 1-D view that owns ORT's
+        ///     copy of its tensor, so the map can be disposed as soon as this returns. Key dtype follows the map (int64
+        ///     or — for a string-keyed map — refused, since NumSharp has no string dtype: read those with
+        ///     <see cref="ReadStringTensor"/> on <see cref="GetMapKeys"/>).
         /// </summary>
         /// <param name="map">A map OrtValue with numeric keys and numeric values.</param>
-        /// <returns>The keys and the values, each a fresh owning 1-D array.</returns>
+        /// <returns>The keys and the values, each a 1-D array; dispose both to free ORT's copies.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="map"/> is null.</exception>
         /// <exception cref="NotSupportedException">
         ///     Not a map, or its keys or its values are strings (no NumSharp dtype) or another type NumSharp lacks; the
@@ -82,8 +97,8 @@ namespace NumSharp.Interop.OnnxRuntime
         /// </exception>
         /// <remarks>
         ///     Both refusals for string keys and string values are decided before anything is converted. Any other failure
-        ///     converting the values disposes the keys already converted, so a refused map leaves no array behind (it used to
-        ///     drop the keys array on the floor for every string-valued map).
+        ///     converting the values disposes the keys array already made, so a refused map leaves no array behind (it used
+        ///     to drop the keys array on the floor for every string-valued map), and ORT's copies of both tensors are freed.
         /// </remarks>
         public static (NDArray keys, NDArray values) ToMap(this OrtValue map)
         {
@@ -93,28 +108,42 @@ namespace NumSharp.Interop.OnnxRuntime
                 throw new NotSupportedException($"ToMap needs a map OrtValue, but this value is {map.OnnxType}.");
 
             OrtAllocator allocator = OrtAllocator.DefaultInstance;
-            using OrtValue keys = map.GetValue(0, allocator);     // element 0 = keys tensor
-            using OrtValue values = map.GetValue(1, allocator);   // element 1 = values tensor
-            if (keys.GetTensorTypeAndShape().IsString)
-                throw new NotSupportedException(
-                    "ToMap: this map has STRING keys, which have no NumSharp dtype. Read the keys with " +
-                    "GetMapKeys(map).ReadStringTensor() and the values with map.GetValue(1, OrtAllocator.DefaultInstance).ToNDArray(), " +
-                    "or use the OrtValue API directly.");
-            if (values.GetTensorTypeAndShape().IsString)
-                throw new NotSupportedException(
-                    "ToMap: this map has STRING values, which have no NumSharp dtype. Read the values with " +
-                    "map.GetValue(1, OrtAllocator.DefaultInstance).ReadStringTensor() and the keys with GetMapKeys(map).ToNDArray().");
-
-            NDArray keyArray = keys.ToNDArray();
+            // Each local is set to null once an array owns the value, so the finally below disposes exactly the values
+            // whose ownership did not transfer (a refusal, a failure half-way).
+            OrtValue keys = null;
+            OrtValue values = null;
+            NDArray keyArray = null;
             try
             {
-                return (keyArray, values.ToNDArray());
+                keys = map.GetValue(0, allocator);     // element 0 = keys tensor (ORT's copy)
+                values = map.GetValue(1, allocator);   // element 1 = values tensor (ORT's copy)
+                if (keys.GetTensorTypeAndShape().IsString)
+                    throw new NotSupportedException(
+                        "ToMap: this map has STRING keys, which have no NumSharp dtype. Read the keys with " +
+                        "GetMapKeys(map).ReadStringTensor() and the values with map.GetValue(1, OrtAllocator.DefaultInstance).ToNDArray(), " +
+                        "or use the OrtValue API directly.");
+                if (values.GetTensorTypeAndShape().IsString)
+                    throw new NotSupportedException(
+                        "ToMap: this map has STRING values, which have no NumSharp dtype. Read the values with " +
+                        "map.GetValue(1, OrtAllocator.DefaultInstance).ReadStringTensor() and the keys with GetMapKeys(map).ToNDArray().");
+
+                keyArray = keys.AsNDArray(ownsValue: true);
+                keys = null;
+                NDArray valueArray = values.AsNDArray(ownsValue: true);
+                values = null;
+                return (keyArray, valueArray);
             }
             catch
             {
                 // The keys were converted first; a values failure (e.g. a BFloat16 value tensor) must not strand them.
-                keyArray.Dispose();
+                // Disposing the array disposes the keys value it owns.
+                keyArray?.Dispose();
                 throw;
+            }
+            finally
+            {
+                keys?.Dispose();
+                values?.Dispose();
             }
         }
 

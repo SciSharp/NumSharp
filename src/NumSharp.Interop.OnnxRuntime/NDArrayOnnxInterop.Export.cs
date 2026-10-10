@@ -101,7 +101,7 @@ namespace NumSharp.Interop.OnnxRuntime
                     // Does NOT own or free the memory; the handle's ARC reference guarantees validity for as long
                     // as the OrtValue exists. Row-major, no strides — which is why the fed array is C-contiguous.
                     value = OrtValue.CreateTensorValueWithData(OrtMemoryInfo.DefaultInstance, elementType, dims, (IntPtr)data, nbytes);
-                    var handle = new OrtTensor(value, fed, slice, ownsSource: temporary is not null || ownsSource, isView, elementType, dims);
+                    var handle = new OrtTensor(value, fed, slice, (IntPtr)data, ownsSource: temporary is not null || ownsSource, isView, elementType, dims);
                     if (temporary is not null && ownsSource)
                         source.Dispose();   // the caller's temporary is superseded by the copy the handle now owns
                     temporary = null;       // ownership moved to the handle
@@ -384,7 +384,9 @@ namespace NumSharp.Interop.OnnxRuntime
                 {
                     // The manager gets the buffer too: each pin of the tensor's Memory takes its own reference on it, so a
                     // consumer that pins (ORT's CreateTensorValueFromMemory, tensor.AsNDArray()) outlives this handle safely.
-                    var manager = new UnmanagedMemoryManager<T>((T*)data, (int)sourceShape.Size, slice);
+                    // It also records whether the fed array is writeable, so a NumSharp view of the tensor stays read-only
+                    // when the array is (the tensor itself cannot be protected: ORT has no read-only tensors).
+                    var manager = new UnmanagedMemoryManager<T>((T*)data, (int)sourceShape.Size, slice, fed.Shape.IsWriteable);
                     // Row-major always: the fed array is C-contiguous, and no ORT route reads a column-major tensor right.
                     var tensor = new DenseTensor<T>(manager.Memory, dims);
                     var handle = new OrtTensor<T>(tensor, manager, fed, slice, ownsSource: temporary is not null || ownsSource, isView);
@@ -504,7 +506,7 @@ namespace NumSharp.Interop.OnnxRuntime
 
         /// <summary>
         ///     The refusal for reading a tensor past 2 GB out of an <see cref="OrtValue"/> (<see cref="ToNDArray(OrtValue)"/>,
-        ///     <see cref="AsNDArray(OrtValue, bool)"/>). ORT's managed API exposes a tensor's memory only as a
+        ///     <see cref="AsNDArray(OrtValue, bool, OnnxCodecMode)"/>). ORT's managed API exposes a tensor's memory only as a
         ///     <see cref="Span{T}"/> of bytes (<c>GetTensorMutableRawData</c> and every typed or <c>TensorSpan</c> variant go
         ///     through it), whose length it computes with an unchecked <c>int</c> cast; there is no other public route to the
         ///     pointer. So such a tensor can be neither copied nor viewed — but ORT can WRITE one into NumSharp's memory, which

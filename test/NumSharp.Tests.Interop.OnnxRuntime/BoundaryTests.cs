@@ -32,18 +32,22 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
         private const long VirtualTestMemory = 8L << 30;
 
         /// <summary>
-        ///     A tensor of 2 GB or more cannot be read out of an <see cref="OrtValue"/>: ORT exposes the memory only as a
-        ///     <see cref="Span{T}"/> of bytes whose length it casts to <c>int</c> unchecked. Both imports refuse it up
-        ///     front with <see cref="NotSupportedException"/> naming the route that works (a pre-allocated output), take
-        ///     nothing from the pool, and leave the value alive and the caller's (even when asked to own it). Before:
-        ///     <c>ToNDArray</c> allocated the whole result first and abandoned it to the finalizer when ORT's span failed
-        ///     (ArgumentOutOfRangeException at exactly 2 GB and at 2 GB + 16; an "ORT reports 16 tensor bytes"
-        ///     InvalidOperationException at 4 GB + 16), and <c>AsNDArray</c> threw at 2 GB + 16 but returned a working view
-        ///     at 4 GB + 16, where the truncated span happened to start at the right address — the outcome depended on bit
-        ///     31 of the byte count.
+        ///     A tensor of 2 GB or more that ORT owns cannot be read out of an <see cref="OrtValue"/>: ORT exposes the
+        ///     memory only as a <see cref="Span{T}"/> of bytes whose length it casts to <c>int</c> unchecked. Both imports
+        ///     refuse it up front with <see cref="NotSupportedException"/> naming the route that works (a pre-allocated
+        ///     output), take nothing from the pool, and leave the value alive and the caller's (even when asked to own it,
+        ///     in either mode that can own). Before: <c>ToNDArray</c> allocated the whole result first and abandoned it to
+        ///     the finalizer when ORT's span failed (ArgumentOutOfRangeException at exactly 2 GB and at 2 GB + 16; an "ORT
+        ///     reports 16 tensor bytes" InvalidOperationException at 4 GB + 16), and <c>AsNDArray</c> threw at 2 GB + 16
+        ///     but returned a working view at 4 GB + 16, where the truncated span happened to start at the right address —
+        ///     the outcome depended on bit 31 of the byte count.
         /// </summary>
+        /// <remarks>
+        ///     The values are made with ORT's own factory over reserved NumSharp memory, not with <c>AsOrtValue</c>: a value
+        ///     the package made is NumSharp memory to the import verbs and is viewed at any size (the next test).
+        /// </remarks>
         [TestMethod]
-        public void OrtValueImports_OfTwoGigabytesOrMore_AreRefusedBeforeAnythingIsAllocated()
+        public unsafe void OrtValueImports_OfTwoGigabytesOrMore_AreRefusedBeforeAnythingIsAllocated()
         {
             RequireMemory(VirtualTestMemory);
             var sizes = new (NPTypeCode Code, long Count, string What)[]
@@ -56,8 +60,9 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             {
                 // Never written: the source and the tensor over it are address space only.
                 using var source = new NDArray(code, new Shape(count), fillZeros: false);
-                using OrtTensor h = source.AsOrtValue();
-                foreach (string verb in new[] { "ToNDArray", "AsNDArray", "AsNDArray(ownsValue)" })
+                using OrtValue foreign = OrtValue.CreateTensorValueWithData(OrtMemoryInfo.DefaultInstance, Oracle.ElementType(code),
+                    new[] { count }, (IntPtr)source.Storage.InternalArray.Address, count * code.SizeOf());
+                foreach (string verb in new[] { "ToNDArray", "AsNDArray", "AsNDArray(ownsValue)", "AsNDArray(ownsValue, Copy)" })
                 {
                     long takes = Pool.Takes(() =>
                     {
@@ -65,19 +70,49 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                         {
                             using NDArray made = verb switch
                             {
-                                "ToNDArray" => h.Value.ToNDArray(),
-                                "AsNDArray" => h.Value.AsNDArray(),
-                                _ => h.Value.AsNDArray(ownsValue: true),
+                                "ToNDArray" => foreign.ToNDArray(),
+                                "AsNDArray" => foreign.AsNDArray(),
+                                "AsNDArray(ownsValue)" => foreign.AsNDArray(ownsValue: true),
+                                _ => foreign.AsNDArray(ownsValue: true, mode: OnnxCodecMode.Copy),
                             };
                         }, $"{what}: {verb}");
                         StringAssert.Contains(e.Message, "2 GB", $"{what}: {verb}");
                         StringAssert.Contains(e.Message, "pre-allocate", $"{what}: {verb} must name the route that works");
                     });
                     Assert.AreEqual(0L, takes, $"{what}: {verb} allocated before refusing");
-                    // The refusal leaves the value alive and the caller's: it still answers, and is disposed by the handle.
-                    Assert.AreEqual(count, h.Value.GetTensorTypeAndShape().ElementCount, $"{what}: {verb} disposed the value");
+                    // The refusal leaves the value alive and the caller's: it still answers.
+                    Assert.AreEqual(count, foreign.GetTensorTypeAndShape().ElementCount, $"{what}: {verb} disposed the value");
                 }
+                GC.KeepAlive(source);
             }
+        }
+
+        /// <summary>
+        ///     A value the package exported is NumSharp memory, so a view of it needs no span: at 4 GB + 16 bytes the view
+        ///     is the buffer itself (same address, same element count), takes nothing from the pool, and outlives the
+        ///     handle. Such a value was refused like an ORT-owned one, although nothing about it needs ORT's managed
+        ///     data API.
+        /// </summary>
+        [TestMethod]
+        public unsafe void ExportedValue_PastTwoGigabytes_IsViewedAsNumSharpMemory_WithoutAllocating()
+        {
+            RequireMemory(VirtualTestMemory);
+            long count = (1L << 32) + 16;
+            // Never written: address space only.
+            using var source = new NDArray(NPTypeCode.Byte, new Shape(count), fillZeros: false);
+            OrtTensor h = source.AsOrtValue();
+            NDArray view = null;
+            long takes = Pool.Takes(() => view = h.Value.AsNDArray());
+            using (view)
+            {
+                Assert.AreEqual(0L, takes, "a view allocates no buffer");
+                Assert.AreEqual(count, view.size);
+                Assert.AreEqual((IntPtr)source.Storage.InternalArray.Address, (IntPtr)view.Storage.InternalArray.Address, "the view is the exported buffer");
+                Assert.IsFalse(view.flags.owndata);
+                h.Dispose();
+                Assert.IsFalse(source.Storage.InternalArray.IsUniquelyReferenced, "the view holds its own reference past the handle");
+            }
+            Assert.IsTrue(source.Storage.InternalArray.IsUniquelyReferenced, "disposing the view released its reference");
         }
 
         /// <summary>
