@@ -33,11 +33,14 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             using InferenceSession session = OpenSession("identity_int64");
             var cases = new (string Name, NPTypeCode Code, Func<NDArray, NDArray> MakeView, Action<NDArray> Refuse)[]
             {
-                ("AsOrtValue of a transposed view", NPTypeCode.Single, b => b.T, v => v.AsOrtValue()),
+                ("AsOrtValue(View) of a transposed view", NPTypeCode.Single, b => b.T, v => v.AsOrtValue(OnnxCodecMode.View)),
                 ("AsOrtValue of Complex", NPTypeCode.Complex, b => b["::1"], v => v.AsOrtValue()),
-                ("AsOrtValue of a transposed Decimal (converted, then refused)", NPTypeCode.Decimal, b => b.T, v => v.AsOrtValue()),
-                ("AsDenseTensor of a stepped view", NPTypeCode.Single, b => b["::2"], v => v.AsDenseTensor<float>()),
-                ("AsDenseTensor<float> of Decimal (converted, then refused)", NPTypeCode.Decimal, b => b["::2"], v => v.AsDenseTensor<float>()),
+                ("AsOrtValue(Copy) of Complex (a copy cannot give it an ONNX type)", NPTypeCode.Complex, b => b.T, v => v.AsOrtValue(OnnxCodecMode.Copy)),
+                ("AsOrtValue(View) of a transposed Decimal", NPTypeCode.Decimal, b => b.T, v => v.AsOrtValue(OnnxCodecMode.View)),
+                ("AsOrtValue(View) of a contiguous Decimal", NPTypeCode.Decimal, b => b["::1"], v => v.AsOrtValue(OnnxCodecMode.View)),
+                ("AsDenseTensor(View) of a stepped view", NPTypeCode.Single, b => b["::2"], v => v.AsDenseTensor<float>(OnnxCodecMode.View)),
+                ("AsDenseTensor<float> of Decimal (fed as float64)", NPTypeCode.Decimal, b => b["::2"], v => v.AsDenseTensor<float>()),
+                ("AsDenseTensor<double>(View) of Decimal", NPTypeCode.Decimal, b => b["::2"], v => v.AsDenseTensor<double>(OnnxCodecMode.View)),
                 ("AsDenseTensor with the wrong T", NPTypeCode.Single, b => b["::1"], v => v.AsDenseTensor<double>()),
                 ("ToDenseTensor with the wrong T", NPTypeCode.Single, b => b.T, v => v.ToDenseTensor<int>()),
                 ("ToOrtValue of Complex", NPTypeCode.Complex, b => b.T, v => v.ToOrtValue()),
@@ -92,6 +95,41 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                 h.Dispose();
                 Assert.IsTrue(slice.IsUniquelyReferenced, $"{name}: a second Dispose changed the count");
                 Assert.IsFalse(slice.IsReleased, $"{name}: a second Dispose released the owner's own reference");
+            }
+        }
+
+        /// <summary>
+        ///     A handle over a COPY (<see cref="OnnxCodecMode.Auto"/> for an array ORT cannot read in place,
+        ///     <see cref="OnnxCodecMode.Copy"/> for any array) holds no reference on the caller's buffer and owns its
+        ///     temporary: while the handle lives the source is uniquely referenced once its view is gone, and after the
+        ///     handle is disposed the whole export has given back every buffer it took (for a non-contiguous Decimal view
+        ///     that is two temporaries: the conversion and its C-order copy).
+        /// </summary>
+        [TestMethod]
+        public void CopyHandles_TakeNoReferenceOnTheSource_AndReleaseTheirTemporaries()
+        {
+            var exports = new (string Name, NPTypeCode Code, Func<NDArray, NDArray> MakeView, Func<NDArray, IDisposable> Export)[]
+            {
+                ("AsOrtValue (Auto) of a transposed view", NPTypeCode.Single, b => b.T, v => v.AsOrtValue()),
+                ("AsOrtValue (Auto) of a transposed Decimal", NPTypeCode.Decimal, b => b.T, v => v.AsOrtValue()),
+                ("AsOrtValue (Copy) of a contiguous array", NPTypeCode.Single, b => b["::1"], v => v.AsOrtValue(OnnxCodecMode.Copy)),
+                ("AsOrtValue (Copy) of a contiguous Decimal", NPTypeCode.Decimal, b => b["::1"], v => v.AsOrtValue(OnnxCodecMode.Copy)),
+                ("AsDenseTensor (Auto) of a stepped view", NPTypeCode.Single, b => b["::2"], v => v.AsDenseTensor<float>()),
+                ("AsDenseTensor (Auto) of a transposed Decimal", NPTypeCode.Decimal, b => b.T, v => v.AsDenseTensor<double>()),
+                ("AsDenseTensor (Copy) of a contiguous array", NPTypeCode.Single, b => b["::1"], v => v.AsDenseTensor<float>(OnnxCodecMode.Copy)),
+            };
+            foreach (var (name, code, makeView, export) in exports)
+            {
+                long balance = Pool.Balance(() =>
+                {
+                    using NDArray b = Arange(code, 6, 4);
+                    NDArray view = makeView(b);
+                    IDisposable h = export(view);
+                    view.Dispose();
+                    Assert.IsTrue(b.Storage.InternalArray.IsUniquelyReferenced, $"{name}: a handle over a copy holds a reference on the source");
+                    h.Dispose();
+                });
+                Assert.AreEqual(0L, balance, $"{name}: {balance} buffer(s) taken and never returned");
             }
         }
 
@@ -312,6 +350,13 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                     ("ToDenseTensor<float> of Decimal", () => Assert.ThrowsException<ArgumentException>(() => dec.ToDenseTensor<float>())),
                     ("AsDenseTensor<double> of float32", () => Assert.ThrowsException<ArgumentException>(() => floats.AsDenseTensor<double>())),
                     ("AsDenseTensor of Complex", () => Assert.ThrowsException<NotSupportedException>(() => complex.AsDenseTensor<double>())),
+                    // The mode's own refusals are decided from the dtype and the layout too: the strict mode must not convert
+                    // or copy an array before it refuses it, and Copy must not copy an array that has no ONNX type.
+                    ("AsOrtValue(View) of a transposed Decimal", () => Assert.ThrowsException<InvalidOperationException>(() => decT.AsOrtValue(OnnxCodecMode.View))),
+                    ("AsOrtValue(View) of Decimal", () => Assert.ThrowsException<InvalidOperationException>(() => dec.AsOrtValue(OnnxCodecMode.View))),
+                    ("AsDenseTensor<double>(View) of a transposed Decimal", () => Assert.ThrowsException<InvalidOperationException>(() => decT.AsDenseTensor<double>(OnnxCodecMode.View))),
+                    ("AsOrtValue(Copy) of Complex", () => Assert.ThrowsException<NotSupportedException>(() => complex.AsOrtValue(OnnxCodecMode.Copy))),
+                    ("AsDenseTensor(Copy) of Complex", () => Assert.ThrowsException<NotSupportedException>(() => complex.AsDenseTensor<double>(OnnxCodecMode.Copy))),
                 };
                 foreach (var (name, refuse) in cases)
                 {

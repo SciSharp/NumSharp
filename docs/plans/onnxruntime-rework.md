@@ -32,7 +32,7 @@ Status: `todo`, `done` (with the commit), `deferred`, `closed` (no change by dec
 
 | ID | Item | Decision | Status |
 |---|---|---|---|
-| V1 (G1) | Fortran-order `AsDenseTensor<T>`: ORT refuses it through `NamedOnnxValue` and reads it transposed through `Memory` | The export verbs and `Run` get the three modes of the pythonnet codec as `OnnxCodecMode` (`Auto`, `View`, `Copy`). `Auto` shares when ORT can read the buffer and copies otherwise. The `reverseStride` share is removed. Design in §3.1. | todo |
+| V1 (G1) | Fortran-order `AsDenseTensor<T>`: ORT refuses it through `NamedOnnxValue` and reads it transposed through `Memory` | The export verbs and `Run` get the three modes of the pythonnet codec as `OnnxCodecMode` (`Auto`, `View`, `Copy`). `Auto` shares when ORT can read the buffer and copies otherwise. The `reverseStride` share is removed. Design in §3.1. | export verbs done (WP 2); `Run` in WP 4 |
 | V2 | `Postprocess.Softmax` / `LogSoftmax` / `Sigmoid` wrap for integer input (`Softmax(uint8 [1,3])` = `[NaN, 0]`) | Promote bool and integer input to NumPy's exp tier before the computation (bool, int8, uint8 → float16; int16, uint16, char → float32; wider → float64). Result dtypes do not change. Tests check values. | done (WP 1) |
 | V2b | `LogSoftmax([inf, 1])` = `[NaN, NaN]`; SciPy gives `[nan, -inf]` | Follow `scipy.special.log_softmax`: a non-finite row maximum is replaced by 0 before the shift. | done (WP 1) |
 | V3 | `nd.AsOrtValue().Value.AsNDArray()` reads another array's memory after the handle and the source are disposed | A view of an `OrtValue` that the package made is a counted NumSharp alias of the buffer (as `Tensor.AsNDArray()` already is). | todo |
@@ -224,7 +224,7 @@ ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, an
 |---|---|---|---|
 | 0 | This plan | | done |
 | 1 | `Postprocess`: shared source, float promotion, SciPy `log_softmax`, axis check | V2, V2b, V11c, V11d | done |
-| 2 | `OnnxCodecMode` on the export verbs; `IsView`; `reverseStride` export removed | V1 | todo |
+| 2 | `OnnxCodecMode` on the export verbs; `IsView`; `reverseStride` export removed | V1 | done |
 | 3 | Import side: counted alias, read-only, ownership on failure, memory pressure, legacy types, readers, device kind | V3, V4, V10a, V10b, V11b, C3b, C3c | todo |
 | 4 | `Run` tier: `mode`, `RunInto`, casting rule, optional inputs, overridable initializers, overlap | V1, V6, V8b, V9, V11a, C2d | todo |
 | 5 | dtype maps over descriptors without storage | V7 | todo |
@@ -252,4 +252,5 @@ ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, an
 | Date | WP | Commit | Result |
 |---|---|---|---|
 | 2026-10-10 | 0 | `32d47557` | plan written |
-| 2026-10-10 | 1 | (this commit) | shared `Postprocess`; ONNX suite 212 / 212 on net10.0 and net8.0 (ORT 1.16.0), ML.NET post-processing and API-surface classes 24 / 24 on both |
+| 2026-10-10 | 1 | `720d81cb` | shared `Postprocess`; ONNX suite 212 / 212 on net10.0 and net8.0 (ORT 1.16.0), ML.NET post-processing and API-surface classes 24 / 24 on both |
+| 2026-10-10 | 2 | (this commit) | `OnnxCodecMode` on `AsOrtValue` / `AsDenseTensor<T>`, `IsView`, row-major tensors only; ONNX suite 216 / 216 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0 |

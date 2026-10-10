@@ -282,7 +282,9 @@ namespace NumSharp.Interop.OnnxRuntime
                     owned = true;
                 }
 
-                OrtTensor handle = NDArrayOnnxInterop.AsOrtValueCore(fed, ownsSource: owned);
+                // The array is C-contiguous by now, so Auto shares it; the one copy Auto still makes here is the
+                // Decimal → float64 conversion of an input declared float64.
+                OrtTensor handle = NDArrayOnnxInterop.AsOrtValueCore(fed, ownsSource: owned, OnnxCodecMode.Auto);
                 owned = false;   // the handle owns the temporary now
                 return handle;
             }
@@ -317,7 +319,8 @@ namespace NumSharp.Interop.OnnxRuntime
             if (!array.Shape.IsContiguous)
                 throw new InvalidOperationException($"output '{name}': {NDArrayOnnxInterop.NotCContiguousMessage}");
             ValidateShape(name, "output", meta, array.Shape);
-            return NDArrayOnnxInterop.AsOrtValueCore(array, ownsSource: false);
+            // View, never Auto: ORT must write the caller's own memory, and a copy would absorb the result silently.
+            return NDArrayOnnxInterop.AsOrtValueCore(array, ownsSource: false, OnnxCodecMode.View);
         }
 
         /// <summary>

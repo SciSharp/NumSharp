@@ -13,6 +13,10 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
     [TestClass]
     public class DenseTensorTests : OnnxTestBase
     {
+        /// <summary>
+        ///     The default mode shares a C-contiguous array through a row-major tensor: the handle reports a view, and a
+        ///     write on either side is visible on the other.
+        /// </summary>
         [TestMethod]
         public void AsDenseTensor_SharesTheBuffer_MutationsBothWays()
         {
@@ -23,6 +27,8 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             t.Dimensions.ToArray().Should().Equal(2, 3);
             t.IsReversedStride.Should().BeFalse();
             t[1, 2].Should().Be(5f);
+            h.IsView.Should().BeTrue("a C-contiguous array of a bit-exact dtype is shared under the default mode");
+            h.Source.Should().BeSameAs(nd);
 
             t[0, 1] = 42f;
             nd.GetSingle(0, 1).Should().Be(42f, "the tensor writes NumSharp's memory");
@@ -31,22 +37,49 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             h.Memory.Length.Should().Be(6);
         }
 
+        /// <summary>
+        ///     A Fortran-ordered array crosses as a ROW-major tensor over a C-order copy. The column-major share this verb
+        ///     used to make (<c>reverseStride: true</c>) could not be fed to a session: a run that got it through
+        ///     <c>NamedOnnxValue</c> threw, and an <c>OrtValue</c> built over its <c>Memory</c> read the elements in memory
+        ///     order (0, 4, 8, 1, … for this array). Both ORT routes now read the array's logical elements, and the strict
+        ///     mode refuses instead of copying.
+        /// </summary>
         [TestMethod]
-        public void AsDenseTensor_FortranOrder_SharesColumnMajor_WithReverseStride()
+        public void AsDenseTensor_FortranOrder_IsARowMajorCopy_ThatBothOrtRoutesReadCorrectly()
         {
-            using NDArray c = Arange(NPTypeCode.Int32, 3, 4);
+            using NDArray c = Arange(NPTypeCode.Single, 3, 4);
             using NDArray f = np.asfortranarray(c);
             f.Shape.IsFContiguous.Should().BeTrue();
             f.Shape.IsContiguous.Should().BeFalse();
 
-            using OrtTensor<int> h = f.AsDenseTensor<int>();
-            h.Tensor.IsReversedStride.Should().BeTrue("column-major memory is read in place with reversed strides");
+            new Action(() => f.AsDenseTensor<float>(OnnxCodecMode.View)).Should().Throw<InvalidOperationException>()
+                .WithMessage("*OnnxCodecMode.View*not C-contiguous*");
+            NDArrayOnnxInterop.LiveExports.Should().Be(0, "a refused export pins nothing");
+
+            using OrtTensor<float> h = f.AsDenseTensor<float>();
+            h.IsView.Should().BeFalse("ORT cannot read column-major memory in place");
+            h.Source.Should().NotBeSameAs(f);
+            h.Tensor.IsReversedStride.Should().BeFalse("the tensor is always row-major");
             for (int i = 0; i < 3; i++)
             for (int j = 0; j < 4; j++)
-                h.Tensor[i, j].Should().Be(c.GetInt32(i, j), $"[{i},{j}]");
+                h.Tensor[i, j].Should().Be(c.GetSingle(i, j), $"[{i},{j}]");
+
+            // Route 1: the legacy NamedOnnxValue run, which refused the column-major tensor outright.
+            using InferenceSession session = OpenSession("identity_float32");
+            using (IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results = session.Run(new[] { NamedOnnxValue.CreateFromTensor("X", h.Tensor) }))
+            using (NDArray back = results[0].ToNDArray())
+            {
+                back.shape.Should().Equal(3, 4);
+                BytesOf(back).Should().Equal(BytesOf(c), "the model received the array's logical elements");
+            }
+
+            // Route 2: an OrtValue over the tensor's Memory, which read the column-major buffer as if it were row-major.
+            using (OrtValue overMemory = OrtValue.CreateTensorValueFromMemory(OrtMemoryInfo.DefaultInstance, h.Memory, new long[] { 3, 4 }))
+                overMemory.GetTensorDataAsSpan<float>().ToArray().Should().Equal(c.ToArray<float>());
 
             h.Tensor[2, 1] = 99;
-            f.GetInt32(2, 1).Should().Be(99);
+            f.GetSingle(2, 1).Should().Be(c.GetSingle(2, 1), "a write through the tensor lands in the copy, not in the source");
+            h.Source.GetSingle(2, 1).Should().Be(99f, "the write is readable through Source");
         }
 
         [TestMethod]
@@ -67,12 +100,37 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             asUnits.Tensor[1].Should().Be((ushort)'y');
         }
 
+        /// <summary>
+        ///     A stepped view: the strict mode refuses it; the default mode gives a row-major tensor over a C-order copy
+        ///     with the view's elements; <see cref="OnnxCodecMode.Copy"/> copies even the contiguous base.
+        /// </summary>
         [TestMethod]
-        public void AsDenseTensor_StridedView_IsRefused()
+        public void AsDenseTensor_StridedView_IsCopiedUnderAuto_AndRefusedUnderView()
         {
             using NDArray m = Arange(NPTypeCode.Double, 4, 4);
-            using NDArray stepped = m["::2"];
-            new Action(() => stepped.AsDenseTensor<double>()).Should().Throw<InvalidOperationException>().WithMessage("*ToDenseTensor*");
+            using NDArray stepped = m["::2"];   // rows 0 and 2
+            new Action(() => stepped.AsDenseTensor<double>(OnnxCodecMode.View)).Should().Throw<InvalidOperationException>()
+                .WithMessage("*OnnxCodecMode.View*not C-contiguous*OnnxCodecMode.Auto*OnnxCodecMode.Copy*");
+            NDArrayOnnxInterop.LiveExports.Should().Be(0);
+
+            using (OrtTensor<double> h = stepped.AsDenseTensor<double>())
+            {
+                h.IsView.Should().BeFalse();
+                h.Tensor.Dimensions.ToArray().Should().Equal(2, 4);
+                h.Tensor.Buffer.ToArray().Should().Equal(0.0, 1, 2, 3, 8, 9, 10, 11);
+                h.Tensor[1, 0] = -1;
+                m.GetDouble(2, 0).Should().Be(8.0, "the tensor is a copy");
+            }
+
+            using (OrtTensor<double> h = m.AsDenseTensor<double>(OnnxCodecMode.Copy))
+            {
+                h.IsView.Should().BeFalse("Copy copies even an array ORT could share");
+                h.Tensor[0, 0] = -1;
+                m.GetDouble(0, 0).Should().Be(0.0);
+            }
+
+            // The reference state of the source is checked in ArcAccountingTests.CopyHandles_…: here the stepped view is
+            // still alive and holds its own reference, so "uniquely referenced" cannot be asserted.
             NDArrayOnnxInterop.LiveExports.Should().Be(0);
         }
 
@@ -89,6 +147,10 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             NDArrayOnnxInterop.LiveExports.Should().Be(0, "a copy pins nothing");
         }
 
+        /// <summary>
+        ///     Decimal crosses as float64 through both dense-tensor verbs; the handle verb's result is a copy, and its
+        ///     strict mode refuses the conversion.
+        /// </summary>
         [TestMethod]
         public void Decimal_ConvertsToDouble_ForBothDenseTensorVerbs()
         {
@@ -96,7 +158,11 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             using OrtTensor<double> h = dec.AsDenseTensor<double>();
             h.Tensor.Buffer.ToArray().Should().Equal(1.25, 2.0);
             h.Source.typecode.Should().Be(NPTypeCode.Double);
+            h.IsView.Should().BeFalse("a conversion is a copy");
             dec.ToDenseTensor<double>().Buffer.ToArray().Should().Equal(1.25, 2.0);
+
+            new Action(() => dec.AsDenseTensor<double>(OnnxCodecMode.View)).Should().Throw<InvalidOperationException>()
+                .WithMessage("*OnnxCodecMode.View*Decimal*");
         }
 
         [TestMethod]

@@ -8,11 +8,14 @@ using NumSharp.Backends.Unmanaged;
 namespace NumSharp.Interop.OnnxRuntime
 {
     /// <summary>
-    ///     A zero-copy ONNX Runtime tensor over a NumSharp buffer — the handle
-    ///     <see cref="NDArrayOnnxInterop.AsOrtValue"/> returns. It owns BOTH the <see cref="OrtValue"/>
-    ///     (which does not own the memory it points at) and an ARC reference on the NumSharp buffer, so the
-    ///     memory stays valid for ORT even if the source <see cref="NDArray"/> is disposed or collected
-    ///     while the tensor is in use; disposing the handle disposes the OrtValue and releases the pin.
+    ///     An ONNX Runtime tensor over a NumSharp buffer — the handle
+    ///     <see cref="NDArrayOnnxInterop.AsOrtValue"/> returns. The buffer is the caller's array (a zero-copy
+    ///     view, <see cref="IsView"/> is <c>true</c>) or a temporary copy this handle owns (<see cref="IsView"/>
+    ///     is <c>false</c>), as the <see cref="OnnxCodecMode"/> of the export decided. The handle owns BOTH the
+    ///     <see cref="OrtValue"/> (which does not own the memory it points at) and an ARC reference on the buffer,
+    ///     so the memory stays valid for ORT even if the source <see cref="NDArray"/> is disposed or collected
+    ///     while the tensor is in use; disposing the handle disposes the OrtValue, releases the reference and
+    ///     frees the temporary copy, if there is one.
     ///
     ///     <para><b>Reachable means valid.</b> The handle and its <see cref="Value"/> keep each other alive: holding
     ///     either one keeps the buffer referenced, so a caller that keeps only the <see cref="OrtValue"/> (in an input
@@ -51,6 +54,7 @@ namespace NumSharp.Interop.OnnxRuntime
         private readonly NDArray _source;
         private readonly IArraySlice _slice;
         private readonly bool _ownsSource;
+        private readonly bool _isView;
         private readonly TensorElementType _elementType;
         private readonly long[] _shape;
         private int _disposed;
@@ -60,15 +64,17 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="source">The array ORT reads (the caller's, or a temporary the handle owns).</param>
         /// <param name="slice">The buffer, on which the caller already took the reference this handle now owns.</param>
         /// <param name="ownsSource"><c>true</c> when <paramref name="source"/> is a temporary the handle must dispose.</param>
+        /// <param name="isView"><c>true</c> when <paramref name="source"/> is the array the export verb was given (shared memory); <c>false</c> when it is a copy the verb made.</param>
         /// <param name="elementType">The ONNX element type the value was created with.</param>
         /// <param name="shape">The value's row-major shape.</param>
         /// <exception cref="OutOfMemoryException">The value could not be registered (the handle is then left unconstructed: its finalizer is suppressed, and the caller still owns the value and the reference).</exception>
-        internal OrtTensor(OrtValue value, NDArray source, IArraySlice slice, bool ownsSource, TensorElementType elementType, long[] shape)
+        internal OrtTensor(OrtValue value, NDArray source, IArraySlice slice, bool ownsSource, bool isView, TensorElementType elementType, long[] shape)
         {
             _value = value;
             _source = source;
             _slice = slice;
             _ownsSource = ownsSource;
+            _isView = isView;
             _elementType = elementType;
             _shape = shape;
             try
@@ -98,11 +104,21 @@ namespace NumSharp.Interop.OnnxRuntime
         }
 
         /// <summary>
-        ///     The NumSharp array ORT reads — the array passed to <see cref="NDArrayOnnxInterop.AsOrtValue"/>,
-        ///     or, for a <see cref="NPTypeCode.Decimal"/> source, the float64 conversion temporary this handle
-        ///     owns (mutations through ORT land in the temporary, not in the Decimal source).
+        ///     The NumSharp array ORT reads: the array passed to <see cref="NDArrayOnnxInterop.AsOrtValue"/> when
+        ///     <see cref="IsView"/> is <c>true</c>, otherwise the temporary copy this handle owns (a C-order copy of a
+        ///     non-contiguous view, or the float64 conversion of a <see cref="NPTypeCode.Decimal"/> array). Writes by
+        ///     ORT land in this array, so for a copy this is where a caller reads them. The temporary is disposed
+        ///     with the handle.
         /// </summary>
         public NDArray Source => _source;
+
+        /// <summary>
+        ///     <c>true</c> when the tensor shares the memory of the array the export verb was given (zero-copy: a write
+        ///     on either side is visible on the other); <c>false</c> when the tensor is over a copy this handle owns
+        ///     (<see cref="OnnxCodecMode.Copy"/>, or <see cref="OnnxCodecMode.Auto"/> for an array ONNX Runtime cannot
+        ///     read in place). Check it before relying on ORT writing into the caller's array.
+        /// </summary>
+        public bool IsView => _isView;
 
         /// <summary>The ONNX element type the tensor was created with.</summary>
         public TensorElementType ElementType => _elementType;
@@ -115,7 +131,7 @@ namespace NumSharp.Interop.OnnxRuntime
 
         /// <summary>
         ///     Dispose the <see cref="OrtValue"/> and release this handle's reference on the NumSharp buffer
-        ///     (freeing the memory if it was the last one), then the owned Decimal conversion temporary, if any.
+        ///     (freeing the memory if it was the last one), then the owned temporary copy, if any.
         ///     Idempotent.
         /// </summary>
         public void Dispose()
@@ -134,7 +150,7 @@ namespace NumSharp.Interop.OnnxRuntime
                 _slice.Release();
                 NDArrayOnnxInterop.ExportClosed();
                 if (_ownsSource)
-                    _source.Dispose();   // the Decimal→Double conversion temporary nobody else can dispose
+                    _source.Dispose();   // the temporary (a copy, a conversion, a caller's hand-over) nobody else can dispose
                 else
                     GC.KeepAlive(_source);
             }
@@ -174,11 +190,14 @@ namespace NumSharp.Interop.OnnxRuntime
     }
 
     /// <summary>
-    ///     A zero-copy <see cref="DenseTensor{T}"/> over a NumSharp buffer — the handle
-    ///     <see cref="NDArrayOnnxInterop.AsDenseTensor{T}"/> returns. The tensor's <see cref="DenseTensor{T}.Buffer"/>
+    ///     A row-major <see cref="DenseTensor{T}"/> over a NumSharp buffer — the handle
+    ///     <see cref="NDArrayOnnxInterop.AsDenseTensor{T}"/> returns. The buffer is the caller's array (a zero-copy
+    ///     view, <see cref="IsView"/> is <c>true</c>) or a temporary copy this handle owns, as the
+    ///     <see cref="OnnxCodecMode"/> of the export decided. The tensor's <see cref="DenseTensor{T}.Buffer"/>
     ///     is a <see cref="Memory{T}"/> fronting NumSharp's unmanaged memory (through an internal
     ///     <see cref="System.Buffers.MemoryManager{T}"/>), and the handle holds the ARC reference that keeps
-    ///     that memory alive; disposing it releases the reference and invalidates the Memory.
+    ///     that memory alive; disposing it releases the reference, invalidates the Memory and frees the temporary
+    ///     copy, if there is one.
     ///
     ///     <para>Feed <see cref="Tensor"/> to the legacy <c>NamedOnnxValue.CreateFromTensor</c> /
     ///     <c>session.Run(IReadOnlyCollection&lt;NamedOnnxValue&gt;)</c> API, or wrap <see cref="Memory"/> with
@@ -206,6 +225,7 @@ namespace NumSharp.Interop.OnnxRuntime
         private readonly NDArray _source;
         private readonly IArraySlice _slice;
         private readonly bool _ownsSource;
+        private readonly bool _isView;
         private int _disposed;
 
         /// <summary>Takes ownership of the reference <paramref name="slice"/> carries and ties the manager's lifetime to this handle.</summary>
@@ -214,13 +234,15 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="source">The array the tensor reads (the caller's, or a temporary the handle owns).</param>
         /// <param name="slice">The buffer, on which the caller already took the reference this handle now owns.</param>
         /// <param name="ownsSource"><c>true</c> when <paramref name="source"/> is a temporary the handle must dispose.</param>
-        internal OrtTensor(DenseTensor<T> tensor, UnmanagedMemoryManager<T> manager, NDArray source, IArraySlice slice, bool ownsSource)
+        /// <param name="isView"><c>true</c> when <paramref name="source"/> is the array the export verb was given (shared memory); <c>false</c> when it is a copy the verb made.</param>
+        internal OrtTensor(DenseTensor<T> tensor, UnmanagedMemoryManager<T> manager, NDArray source, IArraySlice slice, bool ownsSource, bool isView)
         {
             _tensor = tensor;
             _manager = manager;
             _source = source;
             _slice = slice;
             _ownsSource = ownsSource;
+            _isView = isView;
             // The memory keeps the handle reachable: while the caller holds the tensor or its Memory, the handle's
             // reference stays counted and its finalizer cannot run (see AttachLifetimeOwner).
             manager.AttachLifetimeOwner(this);
@@ -253,17 +275,27 @@ namespace NumSharp.Interop.OnnxRuntime
         }
 
         /// <summary>
-        ///     The NumSharp array the tensor reads — the array passed to <see cref="NDArrayOnnxInterop.AsDenseTensor{T}"/>,
-        ///     or the float64 conversion temporary this handle owns for a <see cref="NPTypeCode.Decimal"/> source.
+        ///     The NumSharp array the tensor reads: the array passed to <see cref="NDArrayOnnxInterop.AsDenseTensor{T}"/>
+        ///     when <see cref="IsView"/> is <c>true</c>, otherwise the temporary copy this handle owns (a C-order copy of
+        ///     a non-contiguous view, or the float64 conversion of a <see cref="NPTypeCode.Decimal"/> array). Writes
+        ///     through the tensor land in this array. The temporary is disposed with the handle.
         /// </summary>
         public NDArray Source => _source;
+
+        /// <summary>
+        ///     <c>true</c> when the tensor shares the memory of the array the export verb was given (zero-copy: a write
+        ///     on either side is visible on the other); <c>false</c> when the tensor is over a copy this handle owns
+        ///     (<see cref="OnnxCodecMode.Copy"/>, or <see cref="OnnxCodecMode.Auto"/> for an array ONNX Runtime cannot
+        ///     read in place).
+        /// </summary>
+        public bool IsView => _isView;
 
         /// <summary><c>true</c> once <see cref="Dispose"/> ran.</summary>
         public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
 
         /// <summary>
         ///     Invalidate the Memory (new spans and pins are refused from now on; pins taken before stay valid), release
-        ///     this handle's reference on the NumSharp buffer, then the owned Decimal conversion temporary, if any.
+        ///     this handle's reference on the NumSharp buffer, then the owned temporary copy, if any.
         ///     Idempotent.
         /// </summary>
         public void Dispose()

@@ -20,14 +20,16 @@ namespace NumSharp.Interop.OnnxRuntime
     ///     <c>[ModuleInitializer]</c>, and referencing the package changes nothing until a verb is
     ///     called.</para>
     ///
-    ///     <para><b>The verbs</b> follow the house convention: <c>As…</c> shares memory (zero-copy view),
-    ///     <c>To…</c> copies.</para>
+    ///     <para><b>The verbs</b> follow the house convention: <c>As…</c> shares memory when it can (a zero-copy view),
+    ///     <c>To…</c> always copies. An export <c>As…</c> verb takes an <see cref="OnnxCodecMode"/>: the default,
+    ///     <see cref="OnnxCodecMode.Auto"/>, shares a C-contiguous array and copies any other layout;
+    ///     <see cref="OnnxCodecMode.View"/> throws instead of copying; <see cref="OnnxCodecMode.Copy"/> always copies.</para>
     ///     <list type="table">
-    ///         <item><term><see cref="Export.AsOrtValue"/></term><description>NumSharp → ORT, zero-copy <see cref="OrtValue"/> over the NDArray's buffer (C-contiguous only; the buffer is ARC-rooted for the handle's lifetime)</description></item>
-    ///         <item><term><see cref="Export.ToOrtValue"/></term><description>NumSharp → ORT, an ORT-allocated copy (any layout, no lifetime coupling)</description></item>
-    ///         <item><term><see cref="Export.AsDenseTensor{T}"/> / <see cref="Export.ToDenseTensor{T}"/></term><description>the legacy <see cref="DenseTensor{T}"/> twins</description></item>
-    ///         <item><term><see cref="Import.ToNDArray(OrtValue)"/></term><description>ORT → NumSharp, a fresh owning C-contiguous copy (the safe default)</description></item>
-    ///         <item><term><see cref="Import.AsNDArray(OrtValue, bool)"/></term><description>ORT → NumSharp, a zero-copy view over ORT's buffer (CPU tensors only), optionally taking ownership of the OrtValue</description></item>
+    ///         <item><term><see cref="AsOrtValue"/></term><description>NumSharp → ORT, an <see cref="OrtValue"/> over a NumSharp buffer behind an <see cref="OrtTensor"/> handle: the NDArray's own buffer when ORT can read it in place, a handle-owned copy otherwise (the buffer is ARC-rooted for the handle's lifetime)</description></item>
+    ///         <item><term><see cref="ToOrtValue"/></term><description>NumSharp → ORT, an ORT-allocated copy (any layout, no handle, no lifetime coupling)</description></item>
+    ///         <item><term><see cref="AsDenseTensor{T}"/> / <see cref="ToDenseTensor{T}"/></term><description>the legacy <see cref="DenseTensor{T}"/> twins</description></item>
+    ///         <item><term><see cref="ToNDArray(OrtValue)"/></term><description>ORT → NumSharp, a fresh owning C-contiguous copy (the safe default)</description></item>
+    ///         <item><term><see cref="AsNDArray(OrtValue, bool)"/></term><description>ORT → NumSharp, a zero-copy view over ORT's buffer (CPU tensors only), optionally taking ownership of the OrtValue</description></item>
     ///     </list>
     ///
     ///     <para><b>Dtype map</b> — 12 NumSharp dtypes cross zero-copy (bool, the 8 integers, Half ↔ Float16

@@ -143,14 +143,25 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             NDArrayOnnxInterop.LiveExports.Should().Be(0);
         }
 
+        /// <summary>
+        ///     An F-contiguous array is not C-contiguous, so ORT cannot read it in place: the strict mode refuses it, and
+        ///     the default mode gives ORT a copy whose flags are those of a fresh C-contiguous array.
+        /// </summary>
         [TestMethod]
-        public void FContiguousInput_IsRefusedByAsOrtValue()
+        public void FContiguousInput_IsRefusedAsAView_AndCopiedInCOrderUnderAuto()
         {
             using NDArray m = Arange(NPTypeCode.Single, 2, 3);
             using NDArray f = np.asfortranarray(m);
             f.flags.f_contiguous.Should().BeTrue();
             f.flags.c_contiguous.Should().BeFalse();
-            new Action(() => f.AsOrtValue()).Should().Throw<InvalidOperationException>().WithMessage("*not C-contiguous*");
+            new Action(() => f.AsOrtValue(OnnxCodecMode.View)).Should().Throw<InvalidOperationException>().WithMessage("*not C-contiguous*");
+
+            using OrtTensor t = f.AsOrtValue();
+            t.IsView.Should().BeFalse();
+            t.Source.flags.c_contiguous.Should().BeTrue("the array ORT reads is the C-order copy");
+            t.Source.flags.owndata.Should().BeTrue("the copy owns its buffer");
+            t.Value.GetTensorDataAsSpan<float>().ToArray().Should().Equal(0f, 1f, 2f, 3f, 4f, 5f);
+            f.flags.f_contiguous.Should().BeTrue("exporting does not change the source");
         }
 
         [TestMethod]

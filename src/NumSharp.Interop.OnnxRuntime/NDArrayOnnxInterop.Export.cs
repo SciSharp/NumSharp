@@ -11,88 +11,100 @@ namespace NumSharp.Interop.OnnxRuntime
         // ===========================  NumSharp  ->  ONNX Runtime  ===========================
 
         /// <summary>
-        ///     Wrap a NumSharp array as an ONNX Runtime <see cref="OrtValue"/> tensor that SHARES its unmanaged
-        ///     buffer — no copy, no per-element fill loop. The tensor is built over the array's own pointer
-        ///     (<c>OrtValue.CreateTensorValueWithData</c>), so ORT reads (and, for a pre-allocated output,
-        ///     writes) NumSharp's memory directly.
+        ///     Give a NumSharp array to ONNX Runtime as an <see cref="OrtValue"/> tensor built over a NumSharp buffer
+        ///     (<c>OrtValue.CreateTensorValueWithData</c>, so there is no per-element fill loop). <paramref name="mode"/>
+        ///     decides which buffer: the array's own (a zero-copy view, ORT reads and writes the array's memory) or a
+        ///     temporary copy the returned handle owns.
         ///
-        ///     <para><b>Layout:</b> ORT tensors are dense row-major and carry no strides, so only a
-        ///     <b>C-contiguous</b> array can be shared. A sliced / transposed / negative-stride / broadcast /
-        ///     Fortran-order view throws — materialize it first (<c>np.ascontiguousarray(nd)</c>,
-        ///     <c>nd.copy()</c>) or use <see cref="ToOrtValue"/>, which copies any layout. Contiguous views at a
-        ///     non-zero offset (<c>np.split</c> / <c>np.unstack</c> children) share exactly their window. Scalars
-        ///     become 0-d tensors; empty arrays become empty tensors.</para>
+        ///     <para><b>Modes.</b> ORT tensors are dense row-major and carry no strides, so ORT can read the array in
+        ///     place only when it is <b>C-contiguous</b> and its dtype crosses bit for bit. With
+        ///     <see cref="OnnxCodecMode.Auto"/> (the default) such an array is shared, and every other array crosses as
+        ///     a copy with the same values: a sliced / transposed / negative-stride / broadcast / Fortran-order view as
+        ///     a C-order copy, a <see cref="NPTypeCode.Decimal"/> array as a float64 conversion. With
+        ///     <see cref="OnnxCodecMode.View"/> those arrays throw, so a caller that depends on shared memory (ORT
+        ///     writing into the array) fails loudly. With <see cref="OnnxCodecMode.Copy"/> every array is copied.
+        ///     <see cref="OrtTensor.IsView"/> reports which one the handle holds. Contiguous views at a non-zero
+        ///     offset (<c>np.split</c> / <c>np.unstack</c> children) share exactly their window. Scalars become 0-d
+        ///     tensors; empty arrays become empty tensors.</para>
         ///
         ///     <para><b>Dtypes:</b> bool, the eight integers, float and double cross as themselves;
         ///     <see cref="NPTypeCode.Half"/> crosses as <see cref="TensorElementType.Float16"/> (bit-identical,
         ///     NaN payloads included); <see cref="NPTypeCode.Char"/> as <see cref="TensorElementType.UInt16"/>.
-        ///     <see cref="NPTypeCode.Decimal"/> has no ONNX type: it is converted to a float64 temporary the
-        ///     returned handle owns (mutations by ORT land in the temporary). <see cref="NPTypeCode.Complex"/>
-        ///     throws.</para>
+        ///     <see cref="NPTypeCode.Decimal"/> has no ONNX type and always crosses as a float64 copy.
+        ///     <see cref="NPTypeCode.Complex"/> throws in every mode: a copy cannot give it an ONNX type.</para>
         ///
-        ///     <para><b>Lifetime:</b> the handle takes its own atomic reference on the NumSharp buffer, so the
+        ///     <para><b>Lifetime:</b> the handle takes its own atomic reference on the buffer ORT reads, so the
         ///     memory survives even if <paramref name="source"/> is disposed or collected while ORT holds the
-        ///     tensor; disposing the handle disposes the <see cref="OrtValue"/> and releases the reference.
-        ///     <b>Keep the handle alive across <c>session.Run</c></b> (a <c>using</c> around the run is the
-        ///     idiom). While exported, <c>ndarray.resize(refcheck: true)</c> on the source refuses to reallocate,
-        ///     exactly as NumPy refuses for a referenced buffer.</para>
+        ///     tensor; disposing the handle disposes the <see cref="OrtValue"/>, releases the reference and frees
+        ///     the temporary copy, if there is one. <b>Keep the handle alive across <c>session.Run</c></b> (a
+        ///     <c>using</c> around the run is the idiom). While a view is exported,
+        ///     <c>ndarray.resize(refcheck: true)</c> on the source refuses to reallocate, exactly as NumPy refuses
+        ///     for a referenced buffer.</para>
         /// </summary>
-        /// <param name="source">The NumSharp array to share.</param>
-        /// <returns>A disposable handle owning the <see cref="OrtValue"/> (<see cref="OrtTensor.Value"/>) and the buffer pin.</returns>
-        /// <exception cref="InvalidOperationException">The array is not C-contiguous.</exception>
+        /// <remarks>
+        ///     <b>Footgun: a copy absorbs ORT's writes.</b> When the handle holds a copy (<see cref="OrtTensor.IsView"/>
+        ///     is <c>false</c>), a model that writes into the tensor (a pre-allocated output, an <c>OrtIoBinding</c>
+        ///     output) writes the temporary, and <paramref name="source"/> does not change. Pass
+        ///     <see cref="OnnxCodecMode.View"/> for a tensor ORT must write, or read the result from
+        ///     <see cref="OrtTensor.Source"/>.
+        /// </remarks>
+        /// <param name="source">The NumSharp array to give to ORT; any layout under <see cref="OnnxCodecMode.Auto"/> and <see cref="OnnxCodecMode.Copy"/>.</param>
+        /// <param name="mode">View, copy, or view-when-possible (the default); see <see cref="OnnxCodecMode"/>.</param>
+        /// <returns>A disposable handle owning the <see cref="OrtValue"/> (<see cref="OrtTensor.Value"/>), the buffer reference and any temporary copy.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
+        /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and the array is not C-contiguous or is Decimal.</exception>
         /// <exception cref="NotSupportedException">The dtype has no ONNX tensor element type (Complex).</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
-        public static OrtTensor AsOrtValue(this NDArray source) => AsOrtValueCore(source, ownsSource: false);
+        public static OrtTensor AsOrtValue(this NDArray source, OnnxCodecMode mode = OnnxCodecMode.Auto) => AsOrtValueCore(source, ownsSource: false, mode);
 
         /// <summary>
         ///     <see cref="AsOrtValue"/> whose returned handle also owns <paramref name="source"/> when
         ///     <paramref name="ownsSource"/> is <c>true</c> (a temporary the caller wants disposed with the
         ///     handle). Ownership transfers only on success; on failure the caller still owns its array.
         /// </summary>
-        /// <param name="source">The array to share (a Decimal array is converted to a float64 temporary the handle owns).</param>
+        /// <remarks>
+        ///     When the array crosses as a copy and <paramref name="ownsSource"/> is <c>true</c>, the copy supersedes
+        ///     the caller's temporary: <paramref name="source"/> is disposed at once and the handle owns only the copy.
+        /// </remarks>
+        /// <param name="source">The array to give to ORT.</param>
         /// <param name="ownsSource"><c>true</c> when <paramref name="source"/> is a temporary the handle should dispose.</param>
-        /// <returns>A handle owning the <see cref="OrtValue"/>, the buffer pin and any temporary.</returns>
+        /// <param name="mode">View, copy, or view-when-possible; see <see cref="OnnxCodecMode"/>.</param>
+        /// <returns>A handle owning the <see cref="OrtValue"/>, the buffer reference and any temporary.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
-        /// <exception cref="InvalidOperationException">The array (after any Decimal conversion) is not C-contiguous.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
+        /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and the array is not C-contiguous or is Decimal.</exception>
         /// <exception cref="NotSupportedException">The dtype has no ONNX tensor element type (Complex).</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
-        internal static unsafe OrtTensor AsOrtValueCore(NDArray source, bool ownsSource)
+        internal static unsafe OrtTensor AsOrtValueCore(NDArray source, bool ownsSource, OnnxCodecMode mode)
         {
             if (source is null)
                 throw new ArgumentNullException(nameof(source));
+            EnsureDefined(mode);
 
-            // Decimal has no ONNX element type (16-byte, non-IEEE), so no zero-copy view is possible; convert it
-            // to float64 — the exact conversion this package's own guidance recommends (astype(Double), lossy
-            // beyond ~16 significant digits). The converted array is a TEMPORARY nobody but this export can ever
-            // dispose, so the handle takes ownership of it and disposes it when the handle dies. The low-level
-            // dtype maps stay honest and still refuse Decimal; only the array-producing verbs convert.
-            // The conversion is the first read of the source, so it runs under a reference on the source's buffer
-            // (ConvertPinned): a bare astype read a RELEASED buffer silently, and the Pin below then succeeded on
-            // the fresh conversion, so the tensor carried whatever the pool had put in the freed memory.
-            NDArray converted = null;
-            NDArray fed = source;
-            if (source.typecode == NPTypeCode.Decimal)
-                fed = converted = ConvertPinned(source, NPTypeCode.Double);
+            // The dtype is decided from the source alone, before anything is read: Complex has no ONNX element type
+            // in any mode, so it must not cost a copy first. Decimal is fed as float64 (FeedTypeCode); the low-level
+            // dtype maps stay honest and still refuse Decimal, only the array-producing verbs convert.
+            TensorElementType elementType = ToTensorElementType(FeedTypeCode(source.typecode));
 
+            // The view / copy decision, and the copy itself. A copy is a TEMPORARY nobody but this export can ever
+            // dispose, so the handle takes ownership of it and disposes it when the handle dies.
+            NDArray fed = MaterializeForExport(source, mode, nameof(AsOrtValue), out bool isView);
+            NDArray temporary = isView ? null : fed;
             try
             {
-                TensorElementType elementType = ToTensorElementType(fed.typecode);
-                Shape shape = fed.Shape;
-                if (!shape.IsContiguous)
-                    throw new InvalidOperationException(NotCContiguousMessage);
-
-                long[] dims = LongDims(shape);
+                long[] dims = LongDims(fed.Shape);
                 IArraySlice slice = Pin(fed, out byte* data, out long nbytes);
                 OrtValue value = null;
                 try
                 {
                     // Does NOT own or free the memory; the handle's ARC reference guarantees validity for as long
-                    // as the OrtValue exists. Row-major, no strides — which is why C-contiguity was required above.
+                    // as the OrtValue exists. Row-major, no strides — which is why the fed array is C-contiguous.
                     value = OrtValue.CreateTensorValueWithData(OrtMemoryInfo.DefaultInstance, elementType, dims, (IntPtr)data, nbytes);
-                    var handle = new OrtTensor(value, fed, slice, ownsSource: converted is not null || ownsSource, elementType, dims);
-                    if (converted is not null && ownsSource)
-                        source.Dispose();   // the caller's temporary is superseded by the conversion the handle now owns
-                    converted = null;       // ownership moved to the handle
+                    var handle = new OrtTensor(value, fed, slice, ownsSource: temporary is not null || ownsSource, isView, elementType, dims);
+                    if (temporary is not null && ownsSource)
+                        source.Dispose();   // the caller's temporary is superseded by the copy the handle now owns
+                    temporary = null;       // ownership moved to the handle
                     return handle;
                 }
                 catch
@@ -104,15 +116,94 @@ namespace NumSharp.Interop.OnnxRuntime
             }
             finally
             {
-                converted?.Dispose();   // only reached on failure — the success path nulled it
+                temporary?.Dispose();   // only reached on failure — the success path nulled it
             }
         }
+
+        /// <summary>
+        ///     The view / copy decision every mode-taking export verb shares: returns the array ONNX Runtime reads, which
+        ///     is <paramref name="source"/> itself for a view and a new C-contiguous array of the fed dtype for a copy.
+        /// </summary>
+        /// <remarks>
+        ///     <para>A view is possible when the dtype crosses bit for bit (every supported dtype except Decimal) and the
+        ///     array is C-contiguous. The caller has already refused a dtype with no ONNX element type, so this method
+        ///     never sees Complex.</para>
+        ///     <para>Every read of the caller's array (the conversion, the copy) runs under a reference on its buffer
+        ///     (<see cref="ConvertPinned"/>, <see cref="CopyPinned"/>), so a released buffer is refused instead of being
+        ///     copied from freed memory. A view is not read here: the caller's <see cref="Pin(NDArray)"/> checks it.</para>
+        ///     <para>A Decimal view that is not C-contiguous is converted first and laid out in C order second: the second
+        ///     pass then moves 8-byte elements, where a copy before the conversion would move 16-byte ones.</para>
+        /// </remarks>
+        /// <param name="source">The caller's array; any layout.</param>
+        /// <param name="mode">The requested mode (already validated by <see cref="EnsureDefined"/>).</param>
+        /// <param name="verb">The public verb, named in the refusal.</param>
+        /// <param name="isView"><c>true</c> when the result is <paramref name="source"/> itself; <c>false</c> when it is a temporary the caller must dispose (or hand to a handle).</param>
+        /// <returns><paramref name="source"/>, or a new C-contiguous array the caller owns.</returns>
+        /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and the array needs a copy.</exception>
+        /// <exception cref="ObjectDisposedException">A copy was needed and the array's buffer has already been released.</exception>
+        internal static NDArray MaterializeForExport(NDArray source, OnnxCodecMode mode, string verb, out bool isView)
+        {
+            bool decimalSource = source.typecode == NPTypeCode.Decimal;
+            bool viewPossible = !decimalSource && source.Shape.IsContiguous;
+            if (mode == OnnxCodecMode.View && !viewPossible)
+                throw new InvalidOperationException(ViewImpossibleMessage(verb, decimalSource));
+            if (viewPossible && mode != OnnxCodecMode.Copy)
+            {
+                isView = true;
+                return source;
+            }
+
+            isView = false;
+            if (!decimalSource)
+                return CopyPinned(source);   // a C-order copy; 0-d stays 0-d
+
+            // Decimal has no ONNX element type (16-byte, non-IEEE): convert it to float64, the conversion this
+            // package's own guidance recommends (astype(Double), lossy beyond ~16 significant digits). astype lays its
+            // result out in order 'K', so a transposed source converts to a Fortran-ordered array that still needs the
+            // C-order pass.
+            NDArray converted = ConvertPinned(source, NPTypeCode.Double);
+            if (converted.Shape.IsContiguous)
+                return converted;
+            try
+            {
+                return converted.copy();
+            }
+            finally
+            {
+                converted.Dispose();   // the 'K'-ordered intermediate, on success and on failure alike
+            }
+        }
+
+        /// <summary>Refuses a <see cref="OnnxCodecMode"/> value that is not one of the three members (a cast from an integer).</summary>
+        /// <param name="mode">The mode a caller passed.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not <see cref="OnnxCodecMode.Auto"/>, <see cref="OnnxCodecMode.View"/> or <see cref="OnnxCodecMode.Copy"/>.</exception>
+        internal static void EnsureDefined(OnnxCodecMode mode)
+        {
+            if (mode != OnnxCodecMode.Auto && mode != OnnxCodecMode.View && mode != OnnxCodecMode.Copy)
+                throw new ArgumentOutOfRangeException(nameof(mode), mode, "mode must be OnnxCodecMode.Auto, OnnxCodecMode.View or OnnxCodecMode.Copy.");
+        }
+
+        /// <summary>The refusal of <see cref="OnnxCodecMode.View"/> for an array ONNX Runtime cannot read in place.</summary>
+        /// <param name="verb">The verb refusing (named in the message).</param>
+        /// <param name="decimalSource"><c>true</c> when the dtype (Decimal) prevents the view; <c>false</c> when the layout does.</param>
+        /// <returns>The message, naming the two modes that accept the array.</returns>
+        internal static string ViewImpossibleMessage(string verb, bool decimalSource) =>
+            $"{verb}(mode: OnnxCodecMode.View): " +
+            (decimalSource
+                ? "a NumSharp Decimal array has no ONNX tensor element type, so it crosses as a float64 conversion, which is a copy."
+                : "the array is not C-contiguous; ONNX Runtime tensors are dense row-major and carry no strides, so a sliced / " +
+                  "transposed / negative-stride / broadcast / Fortran-order view cannot be shared.") +
+            " Pass OnnxCodecMode.Auto (a copy when a view is impossible) or OnnxCodecMode.Copy.";
 
         /// <summary>
         ///     Copy a NumSharp array into an independent ORT-allocated tensor (no shared memory, no lifetime
         ///     coupling — dispose the <see cref="OrtValue"/> when done, as with any ORT value). Any layout: a
         ///     sliced / transposed / broadcast view is copied in its logical (C) order. Same dtype rules as
         ///     <see cref="AsOrtValue"/> (Decimal → float64; Complex throws).
+        ///
+        ///     <para>The difference from <c>AsOrtValue(mode: OnnxCodecMode.Copy)</c> is who owns the copy: here ORT's
+        ///     allocator does and the result is a bare <see cref="OrtValue"/> with no handle to keep alive; there a
+        ///     NumSharp temporary does, behind an <see cref="OrtTensor"/> handle, with no 2 GB limit.</para>
         /// </summary>
         /// <remarks>
         ///     Refusals come in the order of what they cost to decide: the dtype and the 2 GB limit first (they need
@@ -199,100 +290,107 @@ namespace NumSharp.Interop.OnnxRuntime
         }
 
         /// <summary>
-        ///     Wrap a NumSharp array as an ORT <see cref="DenseTensor{T}"/> that SHARES its buffer — the legacy
-        ///     tensor surface behind <c>NamedOnnxValue.CreateFromTensor</c> and the
+        ///     Give a NumSharp array to ONNX Runtime as a row-major <see cref="DenseTensor{T}"/> over a NumSharp
+        ///     buffer — the legacy tensor surface behind <c>NamedOnnxValue.CreateFromTensor</c> and the
         ///     <c>session.Run(IReadOnlyCollection&lt;NamedOnnxValue&gt;)</c> overloads. The tensor's
-        ///     <see cref="DenseTensor{T}.Buffer"/> is a <see cref="Memory{T}"/> over NumSharp's unmanaged memory
-        ///     (an internal <see cref="System.Buffers.MemoryManager{T}"/>); the returned handle holds the buffer
-        ///     pin and must outlive every use of the tensor.
+        ///     <see cref="DenseTensor{T}.Buffer"/> is a <see cref="Memory{T}"/> over unmanaged memory (an internal
+        ///     <see cref="System.Buffers.MemoryManager{T}"/>); the returned handle holds the buffer reference and
+        ///     must outlive every use of the tensor. <paramref name="mode"/> decides which buffer: the array's own (a
+        ///     zero-copy view) or a temporary copy the handle owns.
         ///
         ///     <para><typeparamref name="T"/> must be the C# type ORT uses for the array's dtype
         ///     (<see cref="ToTensorElementClrType"/>): <see cref="Float16"/> for <see cref="NPTypeCode.Half"/>,
-        ///     <see cref="ushort"/> for <see cref="NPTypeCode.Char"/>, otherwise the dtype's own type — a
-        ///     mismatch throws rather than silently reinterpreting the bytes. A C-contiguous array shares
-        ///     row-major; a Fortran-contiguous array shares column-major (<c>reverseStride: true</c> — the one
-        ///     non-C layout ORT's tensor can express); any other view throws. <see cref="NPTypeCode.Decimal"/>
-        ///     converts to an owned float64 temporary (request <c>AsDenseTensor&lt;double&gt;</c>).</para>
+        ///     <see cref="ushort"/> for <see cref="NPTypeCode.Char"/>, <see cref="double"/> for
+        ///     <see cref="NPTypeCode.Decimal"/>, otherwise the dtype's own type — a mismatch throws rather than
+        ///     silently reinterpreting the bytes.</para>
+        ///
+        ///     <para><b>Modes.</b> As for <see cref="AsOrtValue"/>: under <see cref="OnnxCodecMode.Auto"/> (the default)
+        ///     a C-contiguous array of a bit-exact dtype is shared, and every other array (a sliced / transposed /
+        ///     negative-stride / broadcast / Fortran-order view, a Decimal array) crosses as a C-order copy;
+        ///     <see cref="OnnxCodecMode.View"/> throws for those; <see cref="OnnxCodecMode.Copy"/> always copies.
+        ///     <see cref="OrtTensor{T}.IsView"/> reports which one the handle holds.</para>
         /// </summary>
         /// <remarks>
-        ///     Refusals come in the order of what they cost to decide: the element type, the element count and the
-        ///     <see cref="int"/> dimensions first (they need only the dtype and the shape, so a Decimal array that cannot
-        ///     cross is not converted), then the layout and the buffer's liveness (a Decimal array's liveness is checked
-        ///     by its conversion, which comes before the layout of the converted array is known).
+        ///     <para>Refusals come in the order of what they cost to decide: the element type, the element count and the
+        ///     <see cref="int"/> dimensions first (they need only the dtype and the shape, so an array that cannot cross
+        ///     is neither converted nor copied), then the mode against the layout, then the buffer's liveness.</para>
+        ///     <para><b>The tensor is always row-major.</b> A Fortran-contiguous array used to be shared as a column-major
+        ///     tensor (<c>reverseStride: true</c>). No ONNX Runtime route reads such a tensor correctly: a run that
+        ///     receives it through <c>NamedOnnxValue.CreateFromTensor</c> throws, and
+        ///     <c>OrtValue.CreateTensorValueFromMemory</c> over its <see cref="Memory{T}"/> reads the buffer in memory
+        ///     order as if it were row-major, so the model gets the elements at the wrong indices (a (3,4) arange was
+        ///     read as <c>0, 4, 8, 1, …</c>). A Fortran-ordered array now crosses as a C-order copy (or throws under
+        ///     <see cref="OnnxCodecMode.View"/>).</para>
+        ///     <para><b>Footgun: a copy absorbs writes.</b> When the handle holds a copy, writes through the tensor land in
+        ///     the temporary (readable through <see cref="OrtTensor{T}.Source"/>), not in <paramref name="source"/>.</para>
         /// </remarks>
         /// <typeparam name="T">The C# element type ORT uses for the array's dtype (<see cref="ToTensorElementClrType"/>); anything else is refused.</typeparam>
-        /// <param name="source">The array to share; C- or Fortran-contiguous (any layout once Decimal is converted).</param>
-        /// <returns>A disposable handle owning the tensor and the buffer pin; keep it alive while the tensor is used.</returns>
+        /// <param name="source">The array to give to ORT; any layout under <see cref="OnnxCodecMode.Auto"/> and <see cref="OnnxCodecMode.Copy"/>.</param>
+        /// <param name="mode">View, copy, or view-when-possible (the default); see <see cref="OnnxCodecMode"/>.</param>
+        /// <returns>A disposable handle owning the tensor, the buffer reference and any temporary copy; keep it alive while the tensor is used.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
         /// <exception cref="ArgumentException"><typeparamref name="T"/> is not the element type ORT uses for the array's dtype.</exception>
-        /// <exception cref="InvalidOperationException">The array is neither C- nor Fortran-contiguous.</exception>
-        /// <exception cref="NotSupportedException">The dtype has no ONNX element type (Complex), or the array has more elements than a <see cref="Memory{T}"/> can index.</exception>
+        /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and the array is not C-contiguous or is Decimal.</exception>
+        /// <exception cref="NotSupportedException">The dtype has no ONNX element type (Complex), or the array has more elements than a <see cref="Memory{T}"/> can index (in every mode: the copy lives behind a <see cref="Memory{T}"/> too).</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
-        public static OrtTensor<T> AsDenseTensor<T>(this NDArray source) where T : unmanaged => AsDenseTensorCore<T>(source, ownsSource: false);
+        public static OrtTensor<T> AsDenseTensor<T>(this NDArray source, OnnxCodecMode mode = OnnxCodecMode.Auto) where T : unmanaged
+            => AsDenseTensorCore<T>(source, ownsSource: false, mode);
 
         /// <summary>
         ///     <see cref="AsDenseTensor{T}"/> whose returned handle also owns <paramref name="source"/> when
         ///     <paramref name="ownsSource"/> is <c>true</c>. Ownership transfers only on success; on failure the caller
         ///     still owns its array.
         /// </summary>
-        /// <typeparam name="T">The C# element type ORT uses for the (converted) array's dtype.</typeparam>
-        /// <param name="source">The array to share (a Decimal array is converted to a float64 temporary the handle owns).</param>
+        /// <remarks>
+        ///     When the array crosses as a copy and <paramref name="ownsSource"/> is <c>true</c>, the copy supersedes
+        ///     the caller's temporary: <paramref name="source"/> is disposed at once and the handle owns only the copy.
+        /// </remarks>
+        /// <typeparam name="T">The C# element type ORT uses for the fed dtype (float64 for a Decimal array).</typeparam>
+        /// <param name="source">The array to give to ORT.</param>
         /// <param name="ownsSource"><c>true</c> when <paramref name="source"/> is a temporary the handle should dispose.</param>
-        /// <returns>A handle owning the tensor, the buffer pin and any temporary.</returns>
+        /// <param name="mode">View, copy, or view-when-possible; see <see cref="OnnxCodecMode"/>.</param>
+        /// <returns>A handle owning the tensor, the buffer reference and any temporary.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
         /// <exception cref="ArgumentException"><typeparamref name="T"/> is not the element type ORT uses for the array's dtype.</exception>
-        /// <exception cref="InvalidOperationException">The array is neither C- nor Fortran-contiguous.</exception>
+        /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and the array is not C-contiguous or is Decimal.</exception>
         /// <exception cref="NotSupportedException">The dtype has no ONNX element type (Complex), or the array has more elements than a <see cref="Memory{T}"/> can index.</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
-        internal static unsafe OrtTensor<T> AsDenseTensorCore<T>(NDArray source, bool ownsSource) where T : unmanaged
+        internal static unsafe OrtTensor<T> AsDenseTensorCore<T>(NDArray source, bool ownsSource, OnnxCodecMode mode) where T : unmanaged
         {
             if (source is null)
                 throw new ArgumentNullException(nameof(source));
+            EnsureDefined(mode);
 
-            // Decide everything the dtype and the shape alone decide BEFORE the Decimal conversion: the element type is
-            // that of the FED dtype (Decimal is fed as float64), and the conversion never changes the shape, so the
-            // source's shape is the tensor's. These ran after the conversion, so a refused call still converted the whole
-            // array first — for a broadcast view, a full-size float64 temporary of every element it addresses.
+            // Decide everything the dtype and the shape alone decide BEFORE anything is converted or copied: the element
+            // type is that of the FED dtype (Decimal is fed as float64), and neither the conversion nor the C-order copy
+            // changes the shape, so the source's shape is the tensor's. These ran after the conversion once, so a refused
+            // call still converted the whole array first — for a broadcast view, a full-size float64 temporary of every
+            // element it addresses. The element limit holds in every mode: a copy is fronted by a Memory<T> as well.
             EnsureElementType<T>(FeedTypeCode(source.typecode), nameof(AsDenseTensor));
             Shape sourceShape = source.Shape;
             if (sourceShape.Size > int.MaxValue)
                 throw new NotSupportedException($"AsDenseTensor: Memory<T> holds at most {int.MaxValue} elements, the array has {sourceShape.Size}. Use AsOrtValue (a native pointer, no such limit).");
             int[] dims = IntDims(sourceShape, nameof(AsDenseTensor));
 
-            // The Decimal → float64 conversion is the first read of the source, so it runs under a reference on the
-            // source's buffer (ConvertPinned, see AsOrtValueCore): a bare astype read a released buffer silently.
-            NDArray converted = null;
-            NDArray fed = source;
-            if (source.typecode == NPTypeCode.Decimal)
-                fed = converted = ConvertPinned(source, NPTypeCode.Double);
-
+            // The view / copy decision, and the copy itself (see AsOrtValueCore): a copy is a temporary the handle owns.
+            NDArray fed = MaterializeForExport(source, mode, nameof(AsDenseTensor), out bool isView);
+            NDArray temporary = isView ? null : fed;
             try
             {
-                // The layout is the one decision that waits for the conversion: astype lays its result out in order 'K',
-                // so a Decimal view that is neither C- nor F-contiguous converts to one that is.
-                Shape shape = fed.Shape;
-                bool reverseStride;
-                if (shape.IsContiguous)
-                    reverseStride = false;
-                else if (shape.IsFContiguous)
-                    reverseStride = true;   // column-major memory: DenseTensor reads it in place with reversed strides
-                else
-                    throw new InvalidOperationException(
-                        "the array is neither C- nor Fortran-contiguous; DenseTensor is dense (row- or column-major) and cannot " +
-                        "express a sliced / transposed / negative-stride / broadcast view. Materialize first (np.ascontiguousarray(nd) " +
-                        "or nd.copy()) or call ToDenseTensor(nd) for a managed copy.");
-
                 IArraySlice slice = Pin(fed, out byte* data, out _);
                 try
                 {
                     // The manager gets the buffer too: each pin of the tensor's Memory takes its own reference on it, so a
                     // consumer that pins (ORT's CreateTensorValueFromMemory, tensor.AsNDArray()) outlives this handle safely.
-                    var manager = new UnmanagedMemoryManager<T>((T*)data, (int)shape.Size, slice);
-                    var tensor = new DenseTensor<T>(manager.Memory, dims, reverseStride);
-                    var handle = new OrtTensor<T>(tensor, manager, fed, slice, ownsSource: converted is not null || ownsSource);
-                    if (converted is not null && ownsSource)
-                        source.Dispose();
-                    converted = null;
+                    var manager = new UnmanagedMemoryManager<T>((T*)data, (int)sourceShape.Size, slice);
+                    // Row-major always: the fed array is C-contiguous, and no ORT route reads a column-major tensor right.
+                    var tensor = new DenseTensor<T>(manager.Memory, dims);
+                    var handle = new OrtTensor<T>(tensor, manager, fed, slice, ownsSource: temporary is not null || ownsSource, isView);
+                    if (temporary is not null && ownsSource)
+                        source.Dispose();   // the caller's temporary is superseded by the copy the handle now owns
+                    temporary = null;       // ownership moved to the handle
                     return handle;
                 }
                 catch
@@ -303,7 +401,7 @@ namespace NumSharp.Interop.OnnxRuntime
             }
             finally
             {
-                converted?.Dispose();
+                temporary?.Dispose();   // only reached on failure — the success path nulled it
             }
         }
 

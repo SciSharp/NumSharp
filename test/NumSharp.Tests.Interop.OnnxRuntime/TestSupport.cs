@@ -484,17 +484,21 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
     /// <summary>
     ///     The bridge's export contract for ONE NumSharp view, checked against NumSharp's own reads and ONNX Runtime's own
     ///     reads: the matrix test runs it over every catalogued layout of every dtype, the property tests over random views.
-    ///     Each verb is a cell of its own; a verb the contract says must refuse the view is checked for that refusal.
+    ///     Each verb is a cell of its own, and each mode-taking verb has a cell per <see cref="OnnxCodecMode"/>; a call the
+    ///     contract says must refuse the view is checked for that refusal.
     /// </summary>
     internal static class ExportContract
     {
         /// <summary>The most elements whose writes are checked one by one per view.</summary>
         private const int MaxIndividualWrites = 16;
 
+        /// <summary>The three modes, for the cells that must hold in every one of them.</summary>
+        private static readonly OnnxCodecMode[] Modes = { OnnxCodecMode.Auto, OnnxCodecMode.View, OnnxCodecMode.Copy };
+
         /// <summary>
-        ///     Runs every export check over <paramref name="view"/>. Complex has no ONNX type, so every verb must refuse it;
-        ///     every other dtype is checked through its crossed element type (Char as <see cref="ushort"/>, Half as ORT's
-        ///     <see cref="Float16"/>, Decimal converted to <see cref="double"/>).
+        ///     Runs every export check over <paramref name="view"/>. Complex has no ONNX type, so every verb must refuse it
+        ///     in every mode (a copy cannot give it one); every other dtype is checked through its crossed element type
+        ///     (Char as <see cref="ushort"/>, Half as ORT's <see cref="Float16"/>, Decimal converted to <see cref="double"/>).
         /// </summary>
         /// <typeparam name="T">The view's element type.</typeparam>
         /// <param name="failures">Where failing cells go.</param>
@@ -506,9 +510,12 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             switch (view.typecode)
             {
                 case NPTypeCode.Complex:
-                    failures.Check($"{cell} / AsOrtValue", () => Failures.Refused<NotSupportedException>(() => view.AsOrtValue(), "complex"));
+                    foreach (OnnxCodecMode mode in Modes)
+                    {
+                        failures.Check($"{cell} / AsOrtValue({mode})", () => Failures.Refused<NotSupportedException>(() => view.AsOrtValue(mode), "complex"));
+                        failures.Check($"{cell} / AsDenseTensor({mode})", () => Failures.Refused<NotSupportedException>(() => view.AsDenseTensor<double>(mode), "complex"));
+                    }
                     failures.Check($"{cell} / ToOrtValue", () => Failures.Refused<NotSupportedException>(() => view.ToOrtValue(), "complex"));
-                    failures.Check($"{cell} / AsDenseTensor", () => Failures.Refused<NotSupportedException>(() => view.AsDenseTensor<double>(), "complex"));
                     failures.Check($"{cell} / ToDenseTensor", () => Failures.Refused<NotSupportedException>(() => view.ToDenseTensor<double>(), "complex"));
                     return;
                 case NPTypeCode.Char:
@@ -544,48 +551,74 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             TensorElementType elementType = Oracle.ElementType(code);
             NPTypeCode backCode = Oracle.CrossedCode(code);
 
-            // The layout the bridge actually shares: the source's own, or for Decimal that of NumSharp's float64
-            // conversion (astype keeps the memory order, so a transposed Decimal converts to a Fortran-ordered array).
-            bool feedC, feedF;
-            if (converted)
-            {
-                using NDArray conversion = view.astype(NPTypeCode.Double);
-                feedC = conversion.Shape.IsContiguous;
-                feedF = conversion.Shape.IsFContiguous;
-            }
-            else
-            {
-                feedC = view.Shape.IsContiguous;
-                feedF = view.Shape.IsFContiguous;
-            }
-            bool writeThrough = !converted && view.Shape.IsWriteable && want.Length > 0 && !Oracle.HasZeroStride(dims, view.Shape.strides);
+            // When ONNX Runtime can read the view's own buffer: the dtype crosses bit for bit (every dtype here except
+            // Decimal, which is converted) and the view is C-contiguous. Then Auto and View share it; every other view
+            // crosses as a copy under Auto and Copy and is refused under View. (This is the test's own statement of the
+            // rule, computed from NumSharp's flags, not read from the bridge.)
+            bool viewPossible = !converted && view.Shape.IsContiguous;
+            bool writeThrough = viewPossible && view.Shape.IsWriteable && want.Length > 0 && !Oracle.HasZeroStride(dims, view.Shape.strides);
+            string refusal = converted ? "Decimal" : "not C-contiguous";
 
             failures.Check($"{cell} / AsOrtValue", () =>
             {
-                if (!feedC)
-                    return Failures.Refused<InvalidOperationException>(() => view.AsOrtValue(), "C-contiguous");
                 using OrtTensor h = view.AsOrtValue();
-                return OrtTensorHolds(h.Value, elementType, dims, crossedBytes)
+                return HandleIs(h.IsView, h.Source, view, viewPossible)
+                       ?? OrtTensorHolds(h.Value, elementType, dims, crossedBytes)
+                       ?? (viewPossible
+                           ? (writeThrough ? WritesThroughOrt(h.Value, view, want, value) : null)
+                           : IndependentOfSource(h.Value, view, want));
+            });
+
+            failures.Check($"{cell} / AsOrtValue(View)", () =>
+            {
+                if (!viewPossible)
+                    return Failures.Refused<InvalidOperationException>(() => view.AsOrtValue(OnnxCodecMode.View), refusal);
+                using OrtTensor h = view.AsOrtValue(OnnxCodecMode.View);
+                return HandleIs(h.IsView, h.Source, view, expectedView: true)
+                       ?? OrtTensorHolds(h.Value, elementType, dims, crossedBytes)
                        ?? (writeThrough ? WritesThroughOrt(h.Value, view, want, value) : null);
+            });
+
+            failures.Check($"{cell} / AsOrtValue(Copy)", () =>
+            {
+                using OrtTensor h = view.AsOrtValue(OnnxCodecMode.Copy);
+                return HandleIs(h.IsView, h.Source, view, expectedView: false)
+                       ?? OrtTensorHolds(h.Value, elementType, dims, crossedBytes)
+                       ?? IndependentOfSource(h.Value, view, want);
             });
 
             failures.Check($"{cell} / ToOrtValue", () =>
             {
                 using OrtValue v = view.ToOrtValue();
-                string problem = OrtTensorHolds(v, elementType, dims, crossedBytes);
-                if (problem != null || want.Length == 0)
-                    return problem;
-                v.GetTensorMutableRawData().Fill(0xA5);   // an independent copy: scribbling on it must not reach NumSharp
-                return Oracle.Bytes(Oracle.Elements<T>(view)).AsSpan().SequenceEqual(Oracle.Bytes(want)) ? null : "ToOrtValue's tensor shares memory with the source";
+                return OrtTensorHolds(v, elementType, dims, crossedBytes) ?? IndependentOfSource(v, view, want);
             });
 
             failures.Check($"{cell} / AsDenseTensor", () =>
             {
-                if (!feedC && !feedF)
-                    return Failures.Refused<InvalidOperationException>(() => view.AsDenseTensor<X>(), "neither C- nor Fortran-contiguous");
                 using OrtTensor<X> h = view.AsDenseTensor<X>();
-                return DenseHolds(h.Tensor, dims, crossed, reversed: !feedC)
+                return HandleIs(h.IsView, h.Source, view, viewPossible)
+                       ?? DenseHolds(h.Tensor, dims, crossed, reversed: false)
+                       ?? (viewPossible
+                           ? (writeThrough ? WritesThroughDense(h.Tensor, view, want, value, dims) : null)
+                           : IndependentOfSource(h.Tensor, view, want));
+            });
+
+            failures.Check($"{cell} / AsDenseTensor(View)", () =>
+            {
+                if (!viewPossible)
+                    return Failures.Refused<InvalidOperationException>(() => view.AsDenseTensor<X>(OnnxCodecMode.View), refusal);
+                using OrtTensor<X> h = view.AsDenseTensor<X>(OnnxCodecMode.View);
+                return HandleIs(h.IsView, h.Source, view, expectedView: true)
+                       ?? DenseHolds(h.Tensor, dims, crossed, reversed: false)
                        ?? (writeThrough ? WritesThroughDense(h.Tensor, view, want, value, dims) : null);
+            });
+
+            failures.Check($"{cell} / AsDenseTensor(Copy)", () =>
+            {
+                using OrtTensor<X> h = view.AsDenseTensor<X>(OnnxCodecMode.Copy);
+                return HandleIs(h.IsView, h.Source, view, expectedView: false)
+                       ?? DenseHolds(h.Tensor, dims, crossed, reversed: false)
+                       ?? IndependentOfSource(h.Tensor, view, want);
             });
 
             failures.Check($"{cell} / ToDenseTensor", () => DenseHolds(view.ToDenseTensor<X>(), dims, crossed, reversed: false));
@@ -604,13 +637,13 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                 return Imported(back, backCode, dims, crossedBytes);
             });
 
-            if (feedC)
-                failures.Check($"{cell} / AsOrtValue->AsNDArray", () =>
-                {
-                    using OrtTensor h = view.AsOrtValue();
-                    using NDArray back = h.Value.AsNDArray();
-                    return Imported(back, backCode, dims, crossedBytes);
-                });
+            // Every layout round-trips through the handle verbs now: a view that cannot be shared crosses as a copy.
+            failures.Check($"{cell} / AsOrtValue->AsNDArray", () =>
+            {
+                using OrtTensor h = view.AsOrtValue();
+                using NDArray back = h.Value.AsNDArray();
+                return Imported(back, backCode, dims, crossedBytes);
+            });
 
             failures.Check($"{cell} / ToDenseTensor->ToNDArray", () =>
             {
@@ -624,21 +657,75 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                 return Imported(back, backCode, dims, crossedBytes);
             });
 
-            if (feedC || feedF)
+            failures.Check($"{cell} / AsDenseTensor->ToNDArray", () =>
             {
-                failures.Check($"{cell} / AsDenseTensor->ToNDArray", () =>
-                {
-                    using OrtTensor<X> h = view.AsDenseTensor<X>();
-                    using NDArray back = h.Tensor.ToNDArray();
-                    return Imported(back, backCode, dims, crossedBytes);
-                });
-                failures.Check($"{cell} / AsDenseTensor->AsNDArray", () =>
-                {
-                    using OrtTensor<X> h = view.AsDenseTensor<X>();
-                    using NDArray back = h.Tensor.AsNDArray();
-                    return Imported(back, backCode, dims, crossedBytes);
-                });
-            }
+                using OrtTensor<X> h = view.AsDenseTensor<X>();
+                using NDArray back = h.Tensor.ToNDArray();
+                return Imported(back, backCode, dims, crossedBytes);
+            });
+
+            failures.Check($"{cell} / AsDenseTensor->AsNDArray", () =>
+            {
+                using OrtTensor<X> h = view.AsDenseTensor<X>();
+                using NDArray back = h.Tensor.AsNDArray();
+                return Imported(back, backCode, dims, crossedBytes);
+            });
+        }
+
+        /// <summary>
+        ///     Checks what an export handle says about itself: <c>IsView</c> must be what the layout rule predicts, and
+        ///     <c>Source</c> must be the caller's array exactly when the handle is a view (a copy's <c>Source</c> is the
+        ///     C-contiguous temporary ORT reads).
+        /// </summary>
+        /// <param name="isView">The handle's <c>IsView</c>.</param>
+        /// <param name="source">The handle's <c>Source</c>.</param>
+        /// <param name="view">The array that was exported.</param>
+        /// <param name="expectedView">Whether the handle must be a view.</param>
+        /// <returns><c>null</c> when all hold, else the problem.</returns>
+        private static string HandleIs(bool isView, NDArray source, NDArray view, bool expectedView)
+        {
+            if (isView != expectedView)
+                return $"IsView {isView}, expected {expectedView}";
+            if (ReferenceEquals(source, view) != expectedView)
+                return expectedView ? "a view's Source is not the exported array" : "a copy's Source is the exported array itself";
+            if (!source.Shape.IsContiguous)
+                return "the array ORT reads (Source) is not C-contiguous";
+            return null;
+        }
+
+        /// <summary>
+        ///     Checks that an ORT tensor is an independent copy: every byte of it is overwritten, and NumSharp's view must
+        ///     still hold its own elements.
+        /// </summary>
+        /// <typeparam name="T">The view's element type.</typeparam>
+        /// <param name="v">The tensor that must not share memory with <paramref name="view"/>.</param>
+        /// <param name="view">The NumSharp view it was made from.</param>
+        /// <param name="want">The view's elements before the overwrite.</param>
+        /// <returns><c>null</c> when the view is unchanged (or empty), else the problem.</returns>
+        private static string IndependentOfSource<T>(OrtValue v, NDArray view, T[] want) where T : unmanaged
+        {
+            if (want.Length == 0)
+                return null;
+            v.GetTensorMutableRawData().Fill(0xA5);
+            return Oracle.Bytes(Oracle.Elements<T>(view)).AsSpan().SequenceEqual(Oracle.Bytes(want)) ? null : "the tensor shares memory with the source, an independent copy was expected";
+        }
+
+        /// <summary>
+        ///     Checks that a <see cref="DenseTensor{T}"/> is an independent copy: every byte of its buffer is overwritten,
+        ///     and NumSharp's view must still hold its own elements.
+        /// </summary>
+        /// <typeparam name="T">The view's element type.</typeparam>
+        /// <typeparam name="X">The tensor's element type.</typeparam>
+        /// <param name="t">The tensor that must not share memory with <paramref name="view"/>.</param>
+        /// <param name="view">The NumSharp view it was made from.</param>
+        /// <param name="want">The view's elements before the overwrite.</param>
+        /// <returns><c>null</c> when the view is unchanged (or empty), else the problem.</returns>
+        private static string IndependentOfSource<T, X>(DenseTensor<X> t, NDArray view, T[] want) where T : unmanaged where X : unmanaged
+        {
+            if (want.Length == 0)
+                return null;
+            MemoryMarshal.AsBytes(t.Buffer.Span).Fill(0xA5);
+            return Oracle.Bytes(Oracle.Elements<T>(view)).AsSpan().SequenceEqual(Oracle.Bytes(want)) ? null : "the tensor shares memory with the source, an independent copy was expected";
         }
 
         /// <summary>Checks an ORT tensor's element type, shape, element count and bytes (read through ORT's own API).</summary>

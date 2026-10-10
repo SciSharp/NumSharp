@@ -152,16 +152,9 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                     X[] crossed = Oracle.Cross<T, X>(want);
                     byte[] bytes = Oracle.Bytes(crossed);
                     long[] dims = view.shape;
-                    bool shareable;   // can AsOrtValue / AsDenseTensor (row-major) share it?
-                    if (code == NPTypeCode.Decimal)
-                    {
-                        using NDArray conversion = view.astype(NPTypeCode.Double);
-                        shareable = conversion.Shape.IsContiguous;
-                    }
-                    else
-                    {
-                        shareable = view.Shape.IsContiguous;
-                    }
+                    // Can ORT read the view's own buffer? Then AsOrtValue / AsDenseTensor share it, else they hand ORT a
+                    // copy (the default mode). Every layout is fed either way; the flag only says which one a handle must be.
+                    bool shareable = code != NPTypeCode.Decimal && view.Shape.IsContiguous;
                     string cell = $"{code} / {name}";
 
                     _failures.Check($"{cell} / session.Run(NDArray)", () =>
@@ -176,24 +169,36 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                         return RawRun(session, runOptions, x, backCode, dims, bytes);
                     });
 
-                    if (shareable)
-                        _failures.Check($"{cell} / raw Run(AsOrtValue)", () =>
-                        {
-                            using OrtTensor h = view.AsOrtValue();
-                            return RawRun(session, runOptions, h.Value, backCode, dims, bytes);
-                        });
+                    _failures.Check($"{cell} / raw Run(AsOrtValue)", () =>
+                    {
+                        using OrtTensor h = view.AsOrtValue();
+                        return h.IsView != shareable
+                            ? $"IsView {h.IsView}, expected {shareable}"
+                            : RawRun(session, runOptions, h.Value, backCode, dims, bytes);
+                    });
 
                     _failures.Check($"{cell} / NamedOnnxValue(ToDenseTensor)", () =>
                         LegacyRun(session, NamedOnnxValue.CreateFromTensor("X", view.ToDenseTensor<X>()), backCode, dims, bytes));
 
-                    // A column-major (Fortran) AsDenseTensor cannot be fed through NamedOnnxValue at all (ORT refuses a
-                    // reverseStride tensor) — the known gap G1 in docs/plans/onnxruntime-gap-review.md — so only row-major shares.
-                    if (shareable)
-                        _failures.Check($"{cell} / NamedOnnxValue(AsDenseTensor)", () =>
-                        {
-                            using OrtTensor<X> h = view.AsDenseTensor<X>();
-                            return LegacyRun(session, NamedOnnxValue.CreateFromTensor("X", h.Tensor), backCode, dims, bytes);
-                        });
+                    // Every layout: the tensor is always row-major (a view ORT cannot read in place crosses as a C-order
+                    // copy), so ORT's NamedOnnxValue route, which refuses a column-major tensor, accepts all of them. This
+                    // was gap G1 of docs/plans/onnxruntime-gap-review.md: a Fortran-ordered array could not be fed at all.
+                    _failures.Check($"{cell} / NamedOnnxValue(AsDenseTensor)", () =>
+                    {
+                        using OrtTensor<X> h = view.AsDenseTensor<X>();
+                        return h.IsView != shareable
+                            ? $"IsView {h.IsView}, expected {shareable}"
+                            : LegacyRun(session, NamedOnnxValue.CreateFromTensor("X", h.Tensor), backCode, dims, bytes);
+                    });
+
+                    // The tensor's Memory as an OrtValue (the route the README names for a DenseTensor handle): it read a
+                    // column-major share at the wrong indices, so it is checked for every layout too.
+                    _failures.Check($"{cell} / raw Run(CreateTensorValueFromMemory(AsDenseTensor.Memory))", () =>
+                    {
+                        using OrtTensor<X> h = view.AsDenseTensor<X>();
+                        using OrtValue x = OrtValue.CreateTensorValueFromMemory(OrtMemoryInfo.DefaultInstance, h.Memory, dims);
+                        return RawRun(session, runOptions, x, backCode, dims, bytes);
+                    });
 
                     _failures.Check($"{cell} / session.Run(dict, zeroCopyOutputs)", () =>
                     {

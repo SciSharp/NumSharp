@@ -56,18 +56,31 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             NDArrayOnnxInterop.LiveExports.Should().Be(0);
         }
 
+        /// <summary>
+        ///     A broadcast (stride-0) view through the three export routes: <see cref="OnnxCodecMode.View"/> refuses it,
+        ///     the default mode hands ORT a copy of its logical elements, and <c>session.Run</c> feeds it the same way.
+        ///     A regression here means a repeated row reaches the model as one row, or the export throws for a layout
+        ///     the default mode must accept.
+        /// </summary>
         [TestMethod]
-        public void BroadcastInput_IsRefusedZeroCopy_ButTier2RunCopiesIt()
+        public void BroadcastInput_IsRefusedAsAView_CopiedUnderAuto_AndTier2RunCopiesIt()
         {
             using NDArray row = np.array(new[] { 1.0, 2.0, 3.0 });
             using NDArray bcast = np.broadcast_to(row, new Shape(4, 3));
             bcast.flags.c_contiguous.Should().BeFalse();
             bcast.flags.writeable.Should().BeFalse("a broadcast view is read-only");
 
-            // low-level zero-copy export refuses a broadcast (stride-0) view outright
-            new Action(() => bcast.AsOrtValue()).Should().Throw<InvalidOperationException>().WithMessage("*not C-contiguous*");
+            // the strict mode refuses a broadcast (stride-0) view: ORT has no strides to repeat the row with
+            new Action(() => bcast.AsOrtValue(OnnxCodecMode.View)).Should().Throw<InvalidOperationException>().WithMessage("*not C-contiguous*");
 
-            // but the ergonomic Tier-2 Run materializes it in logical order and runs
+            // the default mode materializes the 12 logical elements in a copy the handle owns
+            using (OrtTensor t = bcast.AsOrtValue())
+            {
+                t.IsView.Should().BeFalse();
+                t.Value.GetTensorDataAsSpan<double>().ToArray().Should().Equal(1.0, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3);
+            }
+
+            // and the ergonomic Tier-2 Run materializes it in logical order and runs
             using InferenceSession session = OpenSession("identity_float64");
             using NDArray y = session.Run(bcast);
             y.shape.Should().Equal(4, 3);
