@@ -20,9 +20,12 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
         private static readonly string[] Approved =
         {
             "static class NumSharp.Interop.OnnxRuntime.InferenceSessionExtensions",
+            "  static Boolean IsRunAsyncSupported { get; }",
             "  static IReadOnlyDictionary<String, NDArray> Run(this InferenceSession session, IReadOnlyDictionary<String, NDArray> inputs, IReadOnlyCollection<String> outputNames = null, RunOptions runOptions = null, String casting = \"safe\", Boolean zeroCopyOutputs = false, OnnxCodecMode mode = Auto)",
             "  static NDArray Run(this InferenceSession session, NDArray input, RunOptions runOptions = null, String casting = \"safe\", OnnxCodecMode mode = Auto)",
             "  static NDArray Run(this InferenceSession session, String inputName, NDArray input, String outputName, RunOptions runOptions = null, String casting = \"safe\", OnnxCodecMode mode = Auto)",
+            "  static Task RunIntoAsync(this InferenceSession session, IReadOnlyDictionary<String, NDArray> inputs, IReadOnlyDictionary<String, NDArray> outputs, RunOptions runOptions = null, String casting = \"safe\", OnnxCodecMode mode = Auto)",
+            "  static Task<IReadOnlyDictionary<String, NDArray>> RunAsync(this InferenceSession session, IReadOnlyDictionary<String, NDArray> inputs, IReadOnlyCollection<String> outputNames = null, RunOptions runOptions = null, String casting = \"safe\", OnnxCodecMode mode = Auto)",
             "  static Void RunInto(this InferenceSession session, IReadOnlyDictionary<String, NDArray> inputs, IReadOnlyDictionary<String, NDArray> outputs, RunOptions runOptions = null, String casting = \"safe\", OnnxCodecMode mode = Auto)",
             "static class NumSharp.Interop.OnnxRuntime.NDArrayOnnxInterop",
             "  static Boolean TryFromTensorElementType(TensorElementType type, out DType dtype)",

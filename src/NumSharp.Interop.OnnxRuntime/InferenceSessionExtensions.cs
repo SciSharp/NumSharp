@@ -32,7 +32,7 @@ namespace NumSharp.Interop.OnnxRuntime
     ///     <see cref="OnnxCodecMode.View"/> throws for an input that would need such a copy, so a hot loop can prove
     ///     that it copies nothing. <see cref="OnnxCodecMode.Copy"/> feeds a copy of every input.</para>
     /// </summary>
-    public static class InferenceSessionExtensions
+    public static partial class InferenceSessionExtensions
     {
         /// <summary>
         ///     Run a single-input, single-output model on one array: the input and output names come from the
@@ -250,7 +250,7 @@ namespace NumSharp.Interop.OnnxRuntime
 
                 // Decided on the memory ORT will really read and write (the handles' ranges), so an input that is
                 // already fed as a temporary copy never counts as an overlap.
-                SeparateInputsFromOutputs(inNames, inHandles, outNames, outHandles, mode);
+                SeparateInputsFromOutputs(inNames, inHandles, outNames, outHandles, mode, nameof(RunInto));
                 for (int k = 0; k < inHandles.Length; k++)
                     inValues[k] = inHandles[k].Value;
                 // After the overlap pass, which may have replaced an input handle: the source of an output that is a
@@ -382,10 +382,12 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="outNames">The output names, for messages.</param>
         /// <param name="outHandles">The prepared outputs (always views of the caller's arrays).</param>
         /// <param name="mode">The input mode of the run.</param>
+        /// <param name="verb">The public verb that runs (<c>RunInto</c> or <c>RunIntoAsync</c>), named in the refusal.</param>
         /// <exception cref="ArgumentException">Two outputs overlap in memory.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and an input overlaps an output.</exception>
         /// <exception cref="ObjectDisposedException">An overlapped input's buffer was released before it could be copied.</exception>
-        private static void SeparateInputsFromOutputs(string[] inNames, OrtTensor[] inHandles, string[] outNames, OrtTensor[] outHandles, OnnxCodecMode mode)
+        private static void SeparateInputsFromOutputs(string[] inNames, OrtTensor[] inHandles, string[] outNames, OrtTensor[] outHandles, OnnxCodecMode mode,
+            string verb)
         {
             for (int j = 0; j < outHandles.Length; j++)
             {
@@ -403,7 +405,7 @@ namespace NumSharp.Interop.OnnxRuntime
                         continue;
                     if (mode == OnnxCodecMode.View)
                         throw new InvalidOperationException(
-                            $"RunInto(mode: OnnxCodecMode.View): input '{inNames[i]}' and output '{outNames[j]}' overlap in memory, and ONNX Runtime may write the " +
+                            $"{verb}(mode: OnnxCodecMode.View): input '{inNames[i]}' and output '{outNames[j]}' overlap in memory, and ONNX Runtime may write the " +
                             "output while it still reads the input. Pass OnnxCodecMode.Auto (the input is then fed as a copy) or give the output its own array.");
 
                     // The handle reads the caller's own memory (a temporary cannot overlap a caller's array). Feed a copy

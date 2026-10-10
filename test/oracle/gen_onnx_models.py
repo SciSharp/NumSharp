@@ -67,6 +67,9 @@ overridable_out.onnx    x [3] float32, w [3] float32 (an overridable initializer
 passthrough_text.onnx   text ['N'] string is a graph input AND a graph output ; x ['N'] float32 -> Neg -> y.
                         A TEXT input passed through: the value ORT returns for it is the string tensor
                         the bridge built, which is ORT's own memory, not NumSharp's.
+cast_fanout.onnx        X [2,3] float32 -> Cast -> as_<dtype> [2,3], one output per element type. Every
+                        dtype with a FIXED declared output shape: what RunAsync can allocate before the
+                        run (an asynchronous run writes into memory that exists before it starts).
 """
 from __future__ import annotations
 
@@ -275,6 +278,13 @@ def build_all():
         [_tensor("text", TensorProto.STRING, ["N"]), _tensor("x", TensorProto.FLOAT, ["N"])],
         [_tensor("text", TensorProto.STRING, ["N"]), _tensor("y", TensorProto.FLOAT, ["N"])])
 
+    # One output per element type, each with a FIXED shape: the outputs RunAsync can allocate before the run.
+    models["cast_fanout"] = _model(
+        "cast_fanout",
+        [helper.make_node("Cast", ["X"], [f"as_{dt_name}"], to=dt) for dt_name, dt in DTYPES.items()],
+        [_tensor("X", TensorProto.FLOAT, [2, 3])],
+        [_tensor(f"as_{dt_name}", dt, [2, 3]) for dt_name, dt in DTYPES.items()])
+
     return models
 
 
@@ -369,6 +379,13 @@ def self_check(path: str, name: str) -> None:
     elif name == "passthrough_text":
         echo, y = sess.run(None, {"text": np.array(["a", "bb"], dtype=object), "x": np.array([1, 2], np.float32)})
         assert list(echo) == ["a", "bb"] and np.array_equal(y, np.array([-1, -2], np.float32)), name
+    elif name == "cast_fanout":
+        x = np.arange(6, dtype=np.float32).reshape(2, 3)
+        outs = sess.run(None, {"X": x})
+        assert len(outs) == len(DTYPES), name
+        for (dt_name, _), out in zip(DTYPES.items(), outs):
+            np_dt = {"float16": np.float16, "bool": np.bool_}.get(dt_name, getattr(np, dt_name, None))
+            assert out.dtype == np_dt and out.shape == (2, 3) and np.array_equal(out, x.astype(np_dt)), (name, dt_name)
     else:
         raise AssertionError(f"no self-check for {name}")
 

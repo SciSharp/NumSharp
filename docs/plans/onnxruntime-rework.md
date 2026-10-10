@@ -61,7 +61,7 @@ Status: `todo`, `done` (with the commit), `deferred`, `closed` (no change by dec
 | C2b (G5) | String-keyed maps are refused | Covered by S1: the keys come back as a text `NDArray`. | done (WP 6) |
 | C2c (G6) | The `Run` tier accepts only `NDArray` inputs | Deferred. Owner's note: a `Run<T>(T inputs) where T : struct` with an interface that yields the `Dictionary<string, OnnxInput>` from the struct values; the default implementation is reflection with statically cached getters (expression trees or IL generation). Text inputs are covered by S1. | deferred |
 | C2d (G7) | `Run` refuses an overridable initializer | Accept: look a name up in `InputMetadata`, then in `OverridableInitializerMetadata`. | done (WP 4) |
-| C3a (G8) | No `RunAsync` | Add it on ORT's own native async, for ORT 1.30.0 and newer only (older versions do not pin their argument arrays). Design in §3.6. | todo |
+| C3a (G8) | No `RunAsync` | Add it on ORT's own native async, for ORT 1.30.0 and newer only (older versions do not pin their argument arrays). Design in §3.6. | done (WP 7) |
 | C3b (G9) | The non-tensor readers copy each element 2 times | Each result becomes a view that owns ORT's copy. | done (WP 3) |
 | C3c (G10) | `IsCpuAccessible` refuses `QnnHtpShared` and `CpuAligned4K` | Ask ORT for the device memory kind when the loaded ORT has `GetDeviceMemoryType`; the name list stays as the fallback. | done (WP 3) |
 | C3e (G12) | BFloat16 is refused | Kept. | closed |
@@ -222,6 +222,29 @@ Task<IReadOnlyDictionary<string, NDArray>> RunAsync(this InferenceSession sessio
 - On an ORT older than 1.30.0 both throw `NotSupportedException` with the reason. The loaded version is read
   once from the managed assembly (1.16.0 reports 0.0.0.0, which counts as older).
 
+As built (WP 7), with what the probes on ORT 1.31.0 added:
+
+- `InferenceSessionExtensions.IsRunAsyncSupported` tells a caller which case applies. On an older ORT both forms
+  throw from the call, before every check of the arguments but the null checks.
+- ORT completes its task on its own intra-op thread, and `session.Dispose()` called there never returns
+  (measured). So the bridge's task runs a caller's continuation off that thread
+  (`TaskCreationOptions.RunContinuationsAsynchronously`). The handles are released first, on ORT's thread, and
+  then the task completes; a thread that blocks on the task is released with no thread-pool hop.
+- ORT awaits without `ConfigureAwait(false)`: it captures the caller's synchronization context, or else the
+  caller's task scheduler. A thread that owned a context and blocked on the task waited forever (measured:
+  `Wait(2 s)` false, then true once the context was pumped). The bridge hides the context for the call, and makes
+  the call from the default scheduler when the caller runs in a task of another one.
+- Argument errors throw from the call. ORT's errors fault the task: a wrong output shape, `RunOptions.Terminate`
+  (the way to cancel), a session with 1 intra-op thread.
+- `RunAsync` refuses, before it reads an input: a dimension fixed only at run time, a declaration without
+  dimensions (a scalar or an unknown rank: the metadata reports both as `dims=[]`, measured, so the bridge does
+  not guess), a string tensor, a sequence or a map. An output that is a fed input is allocated from the fed
+  tensor. A name asked 2 times is fetched once. A failed run disposes the arrays it allocated.
+- The overlap rule (V9) and the pass-through rule (V12) hold for the async forms: they use the same code.
+- While a run is in flight, ORT reads the shared inputs and writes the outputs. The caller must not write an
+  input before the task completes; `OnnxCodecMode.Copy` feeds a snapshot. To DISPOSE an array in flight is safe:
+  the run holds a reference on every buffer.
+
 ### 3.7 Outputs that are fed inputs (V12)
 
 ONNX permits a graph output that no node produces. ONNX Runtime's execution frame fills its value slots with the
@@ -259,7 +282,7 @@ ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, an
 | 4 | `Run` tier: `mode`, `RunInto`, casting rule, optional inputs, overridable initializers, overlap | V1, V6, V8b, V9, V11a, C2d | done |
 | 5 | dtype maps over descriptors without storage | V7 | done |
 | 6 | Text crossing | S1, C2b | done |
-| 7 | `RunIntoAsync` / `RunAsync` | C3a | todo |
+| 7 | `RunIntoAsync` / `RunAsync` | C3a | done |
 | 8 | Remaining tests and models | T1, T2 | todo |
 | 9 | Documents and CI: README, docs page, `CLAUDE.md`, csproj comment, ORT 1.31.0, API approval list | D1, D2, D3 | todo |
 | 10 | Outputs that are fed inputs. Run before WP 7, whose forms share the code. | V12 | done |
@@ -302,4 +325,5 @@ ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, an
 | 2026-10-10 | 4 | `3139d111` | `Run` tier: input mode on every form, `RunInto`, the cast table for every dtype pair, optional inputs, overridable initializers, the overlap rule; ONNX suite 241 / 241 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 18 of 18 |
 | 2026-10-10 | 5 | `09248ea1` | dtype maps answer false / null for a datetime64 / timedelta64 descriptor; ONNX suite 242 / 242 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0 |
 | 2026-10-10 | 6 | `17231da9` | text crossing on the fixed-width `U` / `S` dtypes, as a copy: the dtype maps, `ToOrtValue` / `AsOrtValue`, `ToNDArray` / `AsNDArray`, the legacy `Tensor<string>`, the sequence and map readers, and `Run`; 3 new models (string labels, a string-keyed ZipMap, text next to numbers); ONNX suite 257 / 257 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 21 of 21 |
-| 2026-10-10 | 10 | (this commit) | outputs that are fed inputs: `RunInto` writes them, the zero-copy form returns a counted alias of the fed buffer, the copy form copies from it; 3 new models (`passthrough`, `overridable_out`, `passthrough_text`); ONNX suite 266 / 266 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 6 of 9 (2 equivalent: a zero-byte copy, and the copy form below 2 GB; 1 not observable from outside: the early dispose of the value ORT returned) |
+| 2026-10-10 | 10 | `944817d4` | outputs that are fed inputs: `RunInto` writes them, the zero-copy form returns a counted alias of the fed buffer, the copy form copies from it; 3 new models (`passthrough`, `overridable_out`, `passthrough_text`); ONNX suite 266 / 266 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 6 of 9 (2 equivalent: a zero-byte copy, and the copy form below 2 GB; 1 not observable from outside: the early dispose of the value ORT returned) |
+| 2026-10-10 | 7 | (this commit) | `RunIntoAsync`, `RunAsync`, `IsRunAsyncSupported` on ORT's native asynchronous run; 1 new model (`cast_fanout`); ONNX suite 286 / 286 in Release on net10.0 and net8.0 with ORT 1.31.0, and 267 passed + 19 Inconclusive (the async behaviour tests) on both with ORT 1.16.0, where the refusal is tested; mutation sample 18 of 18 (run with ORT 1.31.0), the three deadlock guards included |
