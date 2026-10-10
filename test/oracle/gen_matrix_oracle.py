@@ -31,6 +31,9 @@ or an OWNER (``np.matrix(a)``). Values are gen_viewflags_oracle._vals: small int
 so a value difference can only mean a wrong element, a wrong dtype or a wrong operation, never rounding.
 
 Scalars. A NumPy scalar operand (``m * np.int8(2)``) is recorded as a 0-d operand and replayed as a 0-d NDArray.
+An explicit 0-d ARRAY operand (``m * np.array(2)``, an ndarray to ``matrix.__mul__``: the product with a 1 x 1
+matrix) is recorded the same way, and ``params.array0d`` lists its positions: the replay marks those operands as
+np.array / np.asarray would (NDArray.IsExplicitZeroDimArray).
 A Python scalar (``m * 2``) is recorded in ``params.py`` and replayed as the C# literal of the same kind (long,
 double, bool, Complex), which converts implicitly to a 0-d NDMatrix.
 
@@ -809,6 +812,41 @@ def gen_mul(em):
                     lambda o, v=v: o[0] * v, f"*py:{kind}:{v}", dt)
             em.call("matrix.__rmul__", dict(star, py=_py(kind, v), side="left"), [mown((2, 3), dt)],
                     lambda o, v=v: v * o[0], f"py:{kind}:{v}*", dt)
+
+    # An explicit 0-d ARRAY operand (np.array(2)), which is NOT a scalar to matrix.__mul__: isinstance(other,
+    # ndarray) is tested first, so m * a0 is N.dot(m, asmatrix(a0)), the product with a 1 x 1 matrix (it raises
+    # unless m has one column), and a0 * m is N.dot(a0, m), np.dot's scalar route. params.array0d lists the operand
+    # positions the replay marks as explicit 0-d arrays (NDArray.IsExplicitZeroDimArray); a 0-d operand without it
+    # is a NumPy scalar, as in the block above. The values are non-zero, so no product depends on the sign of a
+    # zero (np.dot's size-1 branch is a known gap of the array library, pinned in OpenBugs.Reductions.cs).
+    for dt in ALL_DTYPES:
+        for sdt in dict.fromkeys((dt, "bool", "int64", "float64", "complex128")):
+            a0 = np.array(_vals(4, sdt)[3])
+            for shape in ((2, 3), (3, 1), (1, 3), (1, 1)):
+                label = f"{shape[0]}x{shape[1]}:{sdt}"
+                em.call("matrix.__mul__", dict(star, array0d=[1]), [mown(shape, dt), a0],
+                        lambda o: o[0] * o[1], f"*arr0d:{label}", dt)
+                em.call("matrix.__rmul__", dict(star, array0d=[0]), [a0, mown(shape, dt)],
+                        lambda o: o[0] * o[1], f"arr0d*:{label}", dt)
+        a0 = np.array(_vals(4, dt)[3])
+        for src in ("f", "t", "step", "rev", "off", "ro", "bcast"):
+            em.call("matrix.__rmul__", dict(star, array0d=[0]), [a0, mview(src, dt)], lambda o: o[0] * o[1],
+                    f"arr0d*:{src}", dt)
+            em.call("matrix.__mul__", dict(star, array0d=[1]), [mview(src, dt), a0], lambda o: o[0] * o[1],
+                    f"*arr0d:{src}", dt)
+        for via in ("object", "method"):
+            em.call("matrix.__mul__", dict(star, array0d=[1], via=via), [mown((3, 1), dt), a0],
+                    (lambda o: o[0] * o[1]) if via == "object" else (lambda o: o[0].__mul__(o[1])),
+                    f"*arr0d:{via}", dt)
+            em.call("matrix.__rmul__", dict(star, array0d=[0], via=via), [a0, mown((2, 3), dt)],
+                    (lambda o: o[0] * o[1]) if via == "object" else (lambda o: o[1].__rmul__(o[0])),
+                    f"arr0d*:{via}", dt)
+    # The sign of a zero through the left route: N.dot(a0, m) accumulates into zeros, so -0.0 products are +0.0.
+    for dt in ("float32", "float64", "complex128"):
+        zeros = np.matrix(np.array([[0.0, -0.0, 1.5], [-2.5, 0.0, -0.0]], dtype=dt))
+        for factor in (-0.5, 0.5, -0.0, 0.0):
+            em.call("matrix.__rmul__", dict(star, array0d=[0]), [np.array(factor, dtype=dt), zeros],
+                    lambda o: o[0] * o[1], f"arr0d*:zeros:{factor}", dt)
 
     # In place: self[:] = self * other.
     def imul(o):

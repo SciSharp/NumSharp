@@ -815,7 +815,7 @@ namespace NumSharp
             if (double.IsNegativeInfinity(v)) return "-inf";
             // A finite bound goes through NumSharp's 0-d scalar str, which is a byte-exact port of NumPy's
             // float repr (verified to equal Python's str(float) across whole/decimal/scientific magnitudes).
-            using NDArray scalar = np.array(v);
+            using NDArray scalar = NDArray.Scalar(v);
             return scalar.ToString(false);
         }
 

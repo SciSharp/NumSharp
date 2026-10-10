@@ -43,6 +43,14 @@ namespace NumSharp.Tests.Fuzz
             if (op == "matrix")
                 return MatrixConstruct(p, ops);
 
+            // params.array0d: the operands NumPy received as explicit 0-d ARRAYS (np.array(2)), which
+            // matrix.__mul__ reads as arrays, not scalars. The replay rebuilds every 0-d operand the same way,
+            // so the mark np.array / np.asarray would set is applied here. A 0-d operand without it stands for
+            // a NumPy scalar.
+            if (p.TryGetValue("array0d", out var explicitArrays))
+                foreach (JsonElement position in explicitArrays.EnumerateArray())
+                    ops[position.GetInt32()].MarkExplicitZeroDimArray();
+
             string name = op.Substring("matrix.".Length);
             // The binary operators: the key names the Python method NumPy dispatched to, params.sym the operator.
             if (p.TryGetValue("sym", out var sym) && name is not ("__neg__" or "__pos__" or "__invert__"))

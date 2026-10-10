@@ -1127,7 +1127,7 @@ namespace NumSharp.Tests.Fuzz
             ["surface.jsonl"] = 14700,     // 15,482 cases over 139 op keys
             // The matrix tier (gen_matrix_oracle.py, 2026-10-09): numpy.matrix as NDMatrix. Delivered count (the 172
             // carved gaps of the array library below the class live in corpus/gaps/matrix_gaps.jsonl):
-            ["matrix.jsonl"] = 24700,      // 26,027 cases over 87 op keys: values, result class, memory facet, errors
+            ["matrix.jsonl"] = 25400,      // 26,761 cases over 87 op keys: values, result class, memory facet, errors
         };
 
         // Corpus tiers authored against the win-amd64 CRT libm (ucrtbase) and NumSharp's host SIMD

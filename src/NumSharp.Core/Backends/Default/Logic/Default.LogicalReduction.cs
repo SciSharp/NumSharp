@@ -30,7 +30,7 @@ namespace NumSharp.Backends
             if (nd.ndim == 0)
             {
                 if (axis == 0 || axis == -1)
-                    return np.array(reduceAll ? All(nd) : Any(nd)).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
+                    return NDArray.Scalar(reduceAll ? All(nd) : Any(nd)).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
 
                 throw new AxisError(axis, 0);
             }
@@ -117,7 +117,7 @@ namespace NumSharp.Backends
                 if (axis.Length != 1 || (axis[0] != 0 && axis[0] != -1))
                     throw new AxisError(axis.Length > 0 ? axis[0] : 0, 0);
 
-                return np.array(reduceAll ? All(nd) : Any(nd)).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
+                return NDArray.Scalar(reduceAll ? All(nd) : Any(nd)).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
             }
 
             int ndim = nd.ndim;
@@ -129,7 +129,7 @@ namespace NumSharp.Backends
             if (normalized.Length == ndim)
             {
                 bool scalar = reduceAll ? All(nd) : Any(nd);
-                var result = np.array(scalar).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
+                var result = NDArray.Scalar(scalar).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
                 if (keepdims)
                 {
                     var dims = new long[ndim];

@@ -603,6 +603,69 @@ namespace NumSharp.Tests.Matrixlib
             }
         }
 
+        /// <summary>
+        ///     An explicit 0-d ARRAY (<c>np.array(2)</c>, <c>np.asarray(2)</c>) is an ndarray to
+        ///     <c>matrix.__mul__</c>, not a scalar: on the right it is the product with a 1 x 1 matrix, which raises
+        ///     unless the matrix has one column; on the left it is <c>np.dot</c>'s scalar route. Every other 0-d
+        ///     value (a C# number, <c>NDArray.Scalar</c>, a reduction result, an element, a norm) still scales.
+        ///     NumPy 2.4.2: <c>np.matrix(np.arange(6.).reshape(2, 3)) * np.array(2.0)</c> raises
+        ///     <c>ValueError: shapes (2,3) and (1,1) not aligned: 3 (dim 1) != 1 (dim 0)</c>.
+        /// </summary>
+        [TestMethod]
+        public void ExplicitZeroDimArray_IsAnArrayOperand_NotAScalar()
+        {
+            NDArray a = np.arange(6.0).reshape(2, 3);
+            NDMatrix m = np.matrix(a);
+            const string notAligned = "shapes (2,3) and (1,1) not aligned: 3 (dim 1) != 1 (dim 0)";
+
+            Action viaArray = () => { var _ = m * np.array(2.0); };
+            viaArray.Should().Throw<Exception>().WithMessage(notAligned);
+            Action viaAsarray = () => { var _ = m * np.asarray(2.0); };
+            viaAsarray.Should().Throw<Exception>().WithMessage(notAligned);
+            // np.array(nd) of an explicit 0-d array is an explicit 0-d array again.
+            Action viaCopy = () => { var _ = m * np.array(np.array(2.0)); };
+            viaCopy.Should().Throw<Exception>().WithMessage(notAligned);
+            Action viaObject = () => { var _ = m * (object)np.array(2.0); };
+            viaObject.Should().Throw<Exception>().WithMessage(notAligned);
+
+            // One column: the product with [[2]] exists.
+            NDMatrix column = np.matrix(np.array(new double[,] { { 1 }, { 2 }, { 3 } }));
+            NDMatrix product = column * np.array(2.0);
+            product.shape.Should().Equal(3L, 1L);
+            product.Should().BeOfValues(2.0, 4.0, 6.0);
+
+            // On the left: N.dot(a0, m), which accumulates into zeros. A product of -0.0 comes out +0.0, and the
+            // result is a new owner (a NumPy scalar on the left gives the elementwise view, see the next test).
+            NDMatrix zeros = np.matrix(np.zeros(new Shape(2, 2), np.float64));
+            NDMatrix left = np.array(-0.5) * zeros;
+            left.flags.owndata.Should().BeTrue();
+            for (int i = 0; i < 4; i++)
+                double.IsNegative(left.GetAtIndex<double>(i)).Should().BeFalse();
+
+            // Every other 0-d value scales, as before.
+            NDMatrix[] scaled =
+            {
+                m * 2.0,
+                m * NDArray.Scalar(2.0),
+                m * np.sum(np.array(new[] { 0.5, 1.5 })),                                   // a reduction result
+                m * a[0, 2],                                                                // an element (2.0)
+                m * np.linalg.norm(np.array(new[] { 2.0 })),                                // a norm
+                m * np.dot(np.array(new[] { 1.0, 1.0 }), np.array(new[] { 1.0, 1.0 })),     // a vector dot
+            };
+            foreach (NDMatrix result in scaled)
+            {
+                result.shape.Should().Equal(2L, 3L);
+                result.Should().BeOfValues(0.0, 2.0, 4.0, 6.0, 8.0, 10.0);
+            }
+
+            // The mark belongs to the object np.array returned: a copy made another way is a plain 0-d value.
+            np.array(2.0).IsExplicitZeroDimArray.Should().BeTrue();
+            np.asarray(2.0).IsExplicitZeroDimArray.Should().BeTrue();
+            np.array(2.0).copy().IsExplicitZeroDimArray.Should().BeFalse();
+            NDArray.Scalar(2.0).IsExplicitZeroDimArray.Should().BeFalse();
+            np.array(new[] { 2.0 }).IsExplicitZeroDimArray.Should().BeFalse("the mark is for 0-d arrays only");
+        }
+
         /// <summary>A plain 0-d array on the LEFT is a NumPy scalar: the elementwise product, which keeps the sign
         ///     of a zero and is wrapped as a view.</summary>
         [TestMethod]

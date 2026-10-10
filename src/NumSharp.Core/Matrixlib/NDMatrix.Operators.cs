@@ -77,17 +77,33 @@ namespace NumSharp
 
             if (left.ndim == 0 || right.ndim == 0)
             {
-                // A plain 0-d array on the LEFT stands for a NumPy scalar (m.sum() * m, np.float64(2) * m). Python
-                // asks the scalar first, and a NumPy scalar does not defer to matrix.__rmul__: it runs the multiply
-                // ufunc and the matrix wraps the result. So this is the elementwise product (no np.dot zero-sign
-                // rule, the operand's memory order, a view of the hidden result), in the dtype two NumPy scalars
-                // promote to.
+                // An explicit 0-d ARRAY (np.array(2), np.asarray(2): NDArray.IsExplicitZeroDimArray) is an ndarray
+                // to NumPy, and matrix.__mul__ tests isinstance(other, ndarray) before isscalar(other).
+                if (right.ndim == 0 && left.ndim != 0 && right is not NDMatrix && right.IsExplicitZeroDimArray)
+                {
+                    // __mul__: N.dot(self, asmatrix(other)). asmatrix makes the 0-d array a 1 x 1 matrix, so this
+                    // is a matrix product: "shapes (2,3) and (1,1) not aligned" unless self has one column.
+                    return From(np.dot(left, ViewOf(right)), left, right);
+                }
+                if (left.ndim == 0 && right.ndim != 0 && left is not NDMatrix && left.IsExplicitZeroDimArray)
+                {
+                    // __rmul__: N.dot(other, self), where np.dot takes a 0-d array as a scalar. It is the scalar
+                    // route below (0 + scalar * x into a new C-contiguous owner), not the elementwise ufunc a
+                    // NumPy scalar on the left runs.
+                    return Scale(left, right);
+                }
+
+                // A plain 0-d array on the LEFT that is not such an array stands for a NumPy scalar
+                // (m.sum() * m, np.float64(2) * m). Python asks the scalar first, and a NumPy scalar does not defer
+                // to matrix.__rmul__: it runs the multiply ufunc and the matrix wraps the result. So this is the
+                // elementwise product (no np.dot zero-sign rule, the operand's memory order, a view of the hidden
+                // result), in the dtype two NumPy scalars promote to.
                 if (left.ndim == 0 && left is not NDMatrix && right.ndim != 0)
                     return FromWrapped(np.multiply(left, right, dtype: np.promote_types(left.dtype, right.dtype)), left, right);
 
                 // Every other 0-d operand is N.dot(self, scalar) / N.dot(scalar, self): a C# number on either side
-                // (the 0-d matrix stand-in), or a 0-d array on the right. NumPy raises for an explicit 0-d ndarray
-                // on the right (asmatrix makes it (1, 1)); NumSharp cannot tell it from a NumPy scalar and scales.
+                // (the 0-d matrix stand-in), or a 0-d result of a computation on the right (m * m.sum(),
+                // m * np.linalg.norm(a)), which NumPy holds as a scalar.
                 return Scale(left, right);
             }
 

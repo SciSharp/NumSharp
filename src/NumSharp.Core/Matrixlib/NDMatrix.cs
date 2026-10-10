@@ -78,7 +78,12 @@ namespace NumSharp
     ///     is always a scalar (<c>m[0, 0]</c>, <c>m.sum()</c>) and a 0-d <see cref="NDMatrix"/> when it depends on the
     ///     arguments (<c>m["0, 0"]</c>). A C# number converts implicitly to a 0-d <see cref="NDMatrix"/>, so
     ///     <c>m * 2</c>, <c>m + 1.5</c> and <c>m[mask] = 0</c> compile. A 0-d matrix is a scalar: <c>*</c> scales by
-    ///     it. NumPy raises for <c>m * np.array(2)</c>; NumSharp cannot tell that 0-d array from a number and scales.
+    ///     it, and so does every 0-d <see cref="NDArray"/> that a computation returned (<c>m * m.sum()</c>,
+    ///     <c>m * np.linalg.norm(a)</c>, <c>m * a[0, 0]</c>). The exception is NumPy's: an explicit 0-d ARRAY
+    ///     (<c>np.array(2)</c>, <c>np.asarray(2)</c>; <see cref="NDArray.IsExplicitZeroDimArray"/>) is an ndarray to
+    ///     <c>matrix.__mul__</c>, so <c>m * np.array(2)</c> is the product with a 1 x 1 matrix and raises
+    ///     <c>shapes (2,3) and (1,1) not aligned</c> unless <c>m</c> has one column. A 0-d array built another way
+    ///     (<c>np.zeros(())</c>, <c>x.reshape(())</c>) still scales, where NumPy raises.
     ///     </para>
     ///     <para>
     ///     <b>Lifetime.</b> A matrix is an <see cref="NDArray"/>: it holds one counted reference on its buffer and

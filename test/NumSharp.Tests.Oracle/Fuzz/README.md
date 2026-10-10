@@ -1580,6 +1580,10 @@ case still open.
   (`FuzzCorpus.ApplyWriteable`). The 14 source layouts are C, F, transposed, stepped, reversed, a C view at an offset,
   read-only, broadcast, a row, a column, 1 x 1, two empty shapes and a square. An EMPTY source is an owning matrix:
   a view of no element has no buffer the corpus could record.
+- **Explicit 0-d arrays.** A 0-d operand stands for a NumPy scalar (`m * np.int8(2)` scales). `params.array0d` lists
+  the operand positions that NumPy received as 0-d ARRAYS (`m * np.array(2)`: the product with a 1 x 1 matrix, which
+  raises unless the matrix has one column; `np.array(2) * m`: `np.dot`'s scalar route). The replay marks those
+  operands as `np.array` / `np.asarray` would (`NDArray.IsExplicitZeroDimArray`); 735 cases.
 - **The result class.** `expected.cls` is `matrix`, `ndarray` or `scalar`, and `CompareArray` holds NumSharp to it
   (`m.round(1)` of a float matrix is a plain array in NumPy, `m.round()` a matrix).
 - **The memory facet.** Every array result records the five flags, the byte strides and its relation to each
@@ -1594,7 +1598,7 @@ and setitem (integers, slices, new axes, ellipses, index arrays, masks, 0-d arra
 / array / sequence / Python scalar / NumPy scalar on either side), the elementwise operators, `**`, the reductions
 (axis, dtype=, out= of seven dtypes, ddof, error forms), the methods ndarray hands down, text and iteration.
 
-26,027 gate cases over 87 op keys, valueclass `matrix`, **zero excuses** (`MisalignedRegistry` returns null).
+26,761 gate cases over 87 op keys, valueclass `matrix`, **zero excuses** (`MisalignedRegistry` returns null).
 
 **Three replays, one per float scaling route.** `NDMatrix.Scale` (`m * 2.0`) has three routes that must give the
 same bytes, and the corpus's small matrices reach only two of them in production:

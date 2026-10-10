@@ -117,11 +117,11 @@ namespace NumSharp
 
             bool scalar = any(nd);
             if (!keepdims || nd.ndim == 0)
-                return np.array(scalar).MakeGeneric<bool>();
+                return NDArray.Scalar(scalar).MakeGeneric<bool>();
 
             var dims = new long[nd.ndim];
             for (int i = 0; i < dims.Length; i++) dims[i] = 1;
-            var result = np.array(scalar).MakeGeneric<bool>();
+            var result = NDArray.Scalar(scalar).MakeGeneric<bool>();
             result.Storage.Reshape(Shape.Adopt(dims));
             return result;
         }
