@@ -51,6 +51,7 @@ Status: `todo`, `done` (with the commit), `deferred`, `closed` (no change by dec
 | V11d | `Postprocess.Argmax(x2d, axis: -3)` returns a result | `Postprocess.Argmax` checks its axis, as `TopK` does. | done (WP 1) |
 | V11e | Unused internal members | Kept: each one was checked and is correct. | closed |
 | V12 (new, found by the probes for WP 7) | A model output that no node produces and that the caller feeds (an output that is a model input, or a fed overridable initializer). `RunInto` leaves the pre-allocated array unwritten (`[-777, -777, -777]` stays), or gives it the initializer's DEFAULT while the run uses the fed value; no error. `Run(zeroCopyOutputs: true)` returns a view of the fed memory that holds no reference on it: with an input fed as a temporary, the view read `[555, 555, 555]` from the next array that took the temporary's block. | Not an owner decision: a defect found during execution, fixed by the precedents V9 and V3. `RunInto` writes the fed values into the array after the run and checks the array's shape before it. The zero-copy form returns a counted NumSharp alias of the fed buffer; the copy form copies from the fed buffer. The criterion is the output's name among the fed names, which is ORT's own rule. Design in §3.7. The low-level `AsNDArray(OrtValue)` stays open (§5.1). | done (WP 10) |
+| V13 (new, found by a test of WP 8) | An import verb given the value of a DISPOSED export handle (`v = h.Value; h.Dispose(); v.AsNDArray()`) ended the process: the handle forgets its value on dispose, so the verbs took the value for one of ONNX Runtime's own and called into it, and ORT does not guard a released value (access violation `0xC0000005` in `OrtValue.GetTensorTypeAndShape`). | Not an owner decision: a defect found during execution. The handle records its value as disposed (a weak table that keeps nothing alive), and the 7 verbs that take an `OrtValue` throw `ObjectDisposedException` for it before the first native call. A value of ONNX Runtime's own that the caller disposed cannot be recognized through the public API. | done (WP 8) |
 
 ### 2.2 Completeness
 
@@ -71,8 +72,8 @@ Status: `todo`, `done` (with the commit), `deferred`, `closed` (no change by dec
 
 | ID | Item | Decision | Status |
 |---|---|---|---|
-| T1 | 4 planted bugs pass the suite | Add all 4 tests: a `WeakReference` test for the rooting, an end-to-end device-memory refusal, and 2 disposal tests that read ORT's private `_handle` by reflection (Inconclusive if a future ORT renames it). | todo |
-| T2 | Reachable behaviour without a test | Add a test for each listed path; `gen_onnx_models.py` gets the models they need. | todo |
+| T1 | 4 planted bugs pass the suite | Add all 4 tests: a `WeakReference` test for the rooting, an end-to-end device-memory refusal, and 2 disposal tests that read ORT's private `_handle` by reflection (Inconclusive if a future ORT renames it). | done (WP 3: device memory; WP 8: the other 3) |
+| T2 | Reachable behaviour without a test | Add a test for each listed path; `gen_onnx_models.py` gets the models they need. | done (WP 8) |
 | D1 | Stale test counts in the README and the docs page | Remove the counts there. `CLAUDE.md` keeps the one number. | todo |
 | D2 (G13) | "Current" ORT is 1.29.0 in CI and the documents; NuGet has 1.31.0 | 1.31.0 everywhere: CI, README, docs page, `CLAUDE.md`, and the `refs/onnxruntime` submodule at `v1.31.0`. | todo |
 | D3 (G13) | The csproj comment promises `FileLoadException` for an older ORT | Correct it: the 1.16.0 assembly has AssemblyVersion 0.0.0.0, so only the NuGet range sets the floor. | todo |
@@ -283,7 +284,7 @@ ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, an
 | 5 | dtype maps over descriptors without storage | V7 | done |
 | 6 | Text crossing | S1, C2b | done |
 | 7 | `RunIntoAsync` / `RunAsync` | C3a | done |
-| 8 | Remaining tests and models | T1, T2 | todo |
+| 8 | Remaining tests and models; the disposed-handle guard they found | T1, T2, V13 | done |
 | 9 | Documents and CI: README, docs page, `CLAUDE.md`, csproj comment, ORT 1.31.0, API approval list | D1, D2, D3 | todo |
 | 10 | Outputs that are fed inputs. Run before WP 7, whose forms share the code. | V12 | done |
 
@@ -326,4 +327,5 @@ ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, an
 | 2026-10-10 | 5 | `09248ea1` | dtype maps answer false / null for a datetime64 / timedelta64 descriptor; ONNX suite 242 / 242 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0 |
 | 2026-10-10 | 6 | `17231da9` | text crossing on the fixed-width `U` / `S` dtypes, as a copy: the dtype maps, `ToOrtValue` / `AsOrtValue`, `ToNDArray` / `AsNDArray`, the legacy `Tensor<string>`, the sequence and map readers, and `Run`; 3 new models (string labels, a string-keyed ZipMap, text next to numbers); ONNX suite 257 / 257 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 21 of 21 |
 | 2026-10-10 | 10 | `944817d4` | outputs that are fed inputs: `RunInto` writes them, the zero-copy form returns a counted alias of the fed buffer, the copy form copies from it; 3 new models (`passthrough`, `overridable_out`, `passthrough_text`); ONNX suite 266 / 266 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 6 of 9 (2 equivalent: a zero-byte copy, and the copy form below 2 GB; 1 not observable from outside: the early dispose of the value ORT returned) |
-| 2026-10-10 | 7 | (this commit) | `RunIntoAsync`, `RunAsync`, `IsRunAsyncSupported` on ORT's native asynchronous run; 1 new model (`cast_fanout`); ONNX suite 286 / 286 in Release on net10.0 and net8.0 with ORT 1.31.0, and 267 passed + 19 Inconclusive (the async behaviour tests) on both with ORT 1.16.0, where the refusal is tested; mutation sample 18 of 18 (run with ORT 1.31.0), the three deadlock guards included |
+| 2026-10-10 | 7 | `da9b1be8` | `RunIntoAsync`, `RunAsync`, `IsRunAsyncSupported` on ORT's native asynchronous run; 1 new model (`cast_fanout`); ONNX suite 286 / 286 in Release on net10.0 and net8.0 with ORT 1.31.0, and 267 passed + 19 Inconclusive (the async behaviour tests) on both with ORT 1.16.0, where the refusal is tested; mutation sample 18 of 18 (run with ORT 1.31.0), the three deadlock guards included |
+| 2026-10-10 | 8 | (this commit) | 21 tests for the review's 3 surviving planted bugs and for the reachable paths without a test (the list came from a new coverage run); 6 new models (`tensor_then_seq`, `anon_dim`, `bf16_out`, `bf16_in`, `seq_two`, `two_dtypes`); the disposed-handle guard (V13); ONNX suite 307 / 307 in Release on net10.0 and net8.0 with ORT 1.31.0, and 288 passed + 19 Inconclusive on both with ORT 1.16.0; mutation sample 22 of 22 (the review's M07, M09 and M23 among them; 3 mutants of the guard end the test host, which is the crash the guard prevents) |

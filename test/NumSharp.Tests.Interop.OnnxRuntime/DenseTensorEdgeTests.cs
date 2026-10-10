@@ -173,5 +173,32 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             using NDArray back = managedCopy.ToNDArray();
             BytesOf(back).Should().Equal(BytesOf(nd), $"{code} ToDenseTensor->NDArray bytes");
         }
+
+        /// <summary>
+        ///     A <see cref="Memory{T}"/> indexes at most <see cref="int.MaxValue"/> elements, so <c>AsDenseTensor</c>
+        ///     refuses an array with more, in every mode (a copy lives behind a <see cref="Memory{T}"/> too), and
+        ///     names the verb without that limit. The refusal is decided from the shape alone: nothing is converted or
+        ///     copied first. The array here is a broadcast of one element, so the test needs no memory either.
+        /// </summary>
+        [TestMethod]
+        public void AsDenseTensor_OfMoreElementsThanAMemoryCanIndex_IsRefused_BeforeAnythingIsCopied()
+        {
+            using NDArray one = np.zeros(new Shape(1), typeof(byte));
+            using NDArray huge = np.broadcast_to(one, new Shape((long)int.MaxValue + 1));
+            huge.size.Should().Be(2147483648L);
+
+            foreach (OnnxCodecMode mode in new[] { OnnxCodecMode.Auto, OnnxCodecMode.View, OnnxCodecMode.Copy })
+            {
+                new Action(() => huge.AsDenseTensor<byte>(mode)).Should().Throw<NotSupportedException>($"{mode}")
+                    .WithMessage("AsDenseTensor: Memory<T> holds at most 2147483647 elements, the array has 2147483648*AsOrtValue*");
+                Pool.Takes(() =>
+                {
+                    try { huge.AsDenseTensor<byte>(mode); }
+                    catch (NotSupportedException) { }
+                }).Should().Be(0, $"{mode}: the shape alone decides, so no buffer is taken");
+            }
+
+            NDArrayOnnxInterop.LiveExports.Should().Be(0);
+        }
     }
 }

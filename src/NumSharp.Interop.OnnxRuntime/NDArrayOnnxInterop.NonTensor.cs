@@ -43,6 +43,7 @@ namespace NumSharp.Interop.OnnxRuntime
         {
             if (sequence is null)
                 throw new ArgumentNullException(nameof(sequence));
+            EnsureNotOfADisposedHandle(sequence, nameof(ToNDArrays));
             if (sequence.OnnxType != OnnxValueType.ONNX_TYPE_SEQUENCE)
                 throw new NotSupportedException(
                     $"ToNDArrays needs a sequence OrtValue, but this value is {sequence.OnnxType}. A dense tensor is read with " +
@@ -102,6 +103,7 @@ namespace NumSharp.Interop.OnnxRuntime
         {
             if (map is null)
                 throw new ArgumentNullException(nameof(map));
+            EnsureNotOfADisposedHandle(map, nameof(ToMap));
             if (map.OnnxType != OnnxValueType.ONNX_TYPE_MAP)
                 throw new NotSupportedException($"ToMap needs a map OrtValue, but this value is {map.OnnxType}.");
 
@@ -153,6 +155,7 @@ namespace NumSharp.Interop.OnnxRuntime
         {
             if (sequenceOfMaps is null)
                 throw new ArgumentNullException(nameof(sequenceOfMaps));
+            EnsureNotOfADisposedHandle(sequenceOfMaps, nameof(ToMaps));
             if (sequenceOfMaps.OnnxType != OnnxValueType.ONNX_TYPE_SEQUENCE)
                 throw new NotSupportedException($"ToMaps needs a sequence OrtValue, but this value is {sequenceOfMaps.OnnxType}.");
 
@@ -196,6 +199,7 @@ namespace NumSharp.Interop.OnnxRuntime
         {
             if (map is null)
                 throw new ArgumentNullException(nameof(map));
+            EnsureNotOfADisposedHandle(map, nameof(GetMapKeys));
             if (map.OnnxType != OnnxValueType.ONNX_TYPE_MAP)
                 throw new NotSupportedException($"GetMapKeys needs a map OrtValue, but this value is {map.OnnxType}.");
             return map.GetValue(0, OrtAllocator.DefaultInstance);
@@ -215,6 +219,7 @@ namespace NumSharp.Interop.OnnxRuntime
         {
             if (tensor is null)
                 throw new ArgumentNullException(nameof(tensor));
+            EnsureNotOfADisposedHandle(tensor, nameof(ReadStringTensor));
             if (tensor.OnnxType != OnnxValueType.ONNX_TYPE_TENSOR)
                 throw new NotSupportedException($"ReadStringTensor needs a tensor OrtValue, but this value is {tensor.OnnxType}.");
             if (!tensor.GetTensorTypeAndShape().IsString)

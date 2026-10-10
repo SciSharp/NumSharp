@@ -437,6 +437,9 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     An output that is a fed input passed through (<see cref="FedTensor"/>) is copied from the fed handle's
         ///     NumSharp memory, not through the value ORT returned for it: the bytes are the same, but the handle's memory
         ///     needs no span, so such an output crosses at any size.
+        ///     <para>Internal, not private: whether the values ORT returned are DISPOSED here is visible to no caller of
+        ///     <c>Run</c> (a value that is only dropped is freed later by ORT's finalizer), so the suite calls this
+        ///     method with values it holds.</para>
         /// </remarks>
         /// <param name="outputs">The run's outputs, in the order of <paramref name="outputNames"/>; disposed here.</param>
         /// <param name="outputNames">The fetched names.</param>
@@ -445,7 +448,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <returns>The copies by name. A name fetched more than once keeps its last copy.</returns>
         /// <exception cref="NotSupportedException">An output is not a dense tensor of a dtype NumSharp has (the copies already made are disposed).</exception>
         /// <exception cref="InvalidOperationException">An output lives in device memory the CPU cannot address.</exception>
-        private static IReadOnlyDictionary<string, NDArray> CopyOutputs(IDisposableReadOnlyCollection<OrtValue> outputs, IReadOnlyCollection<string> outputNames,
+        internal static IReadOnlyDictionary<string, NDArray> CopyOutputs(IDisposableReadOnlyCollection<OrtValue> outputs, IReadOnlyCollection<string> outputNames,
             string[] inNames, OrtTensor[] inHandles)
         {
             var result = new Dictionary<string, NDArray>(outputs.Count);
@@ -484,6 +487,7 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     valid after the handle is disposed, and the value ORT returned is disposed at once. Leased like the others,
         ///     the view kept only that value alive: a probe fed a float64 array into a float32 input (a temporary), and
         ///     the returned view read <c>[555, 555, 555]</c> from the next array that took the temporary's block.
+        ///     <para>Internal for the same reason as <see cref="CopyOutputs"/>.</para>
         /// </remarks>
         /// <param name="outputs">The run's outputs, in the order of <paramref name="outputNames"/>.</param>
         /// <param name="outputNames">The fetched names.</param>
@@ -492,7 +496,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <returns>The owning views by name.</returns>
         /// <exception cref="NotSupportedException">An output is not a dense tensor of a dtype NumSharp has (the views already made and the remaining values are disposed).</exception>
         /// <exception cref="InvalidOperationException">An output lives in device memory the CPU cannot address.</exception>
-        private static IReadOnlyDictionary<string, NDArray> ViewOutputs(IDisposableReadOnlyCollection<OrtValue> outputs, IReadOnlyCollection<string> outputNames,
+        internal static IReadOnlyDictionary<string, NDArray> ViewOutputs(IDisposableReadOnlyCollection<OrtValue> outputs, IReadOnlyCollection<string> outputNames,
             string[] inNames, OrtTensor[] inHandles)
         {
             var result = new Dictionary<string, NDArray>(outputs.Count);

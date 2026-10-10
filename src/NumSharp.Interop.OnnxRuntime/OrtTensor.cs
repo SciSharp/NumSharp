@@ -50,6 +50,23 @@ namespace NumSharp.Interop.OnnxRuntime
         /// </remarks>
         private static readonly ConditionalWeakTable<OrtValue, OrtTensor> ValueOwners = new ConditionalWeakTable<OrtValue, OrtTensor>();
 
+        /// <summary>
+        ///     Every <see cref="OrtValue"/> whose handle has been DISPOSED and that a caller can still reach. The table
+        ///     keeps nothing alive: its keys are weak and its one value is a shared marker.
+        /// </summary>
+        /// <remarks>
+        ///     A caller can keep <see cref="Value"/> past the handle (<c>v = h.Value; h.Dispose();</c>). ONNX Runtime has
+        ///     released that value, and its managed API does not guard a released value: the next native call on it is an
+        ///     access violation that ends the process (measured: <c>value.AsNDArray()</c> after the handle's dispose). The
+        ///     value leaves <see cref="ValueOwners"/> on dispose (it must not keep the handle, and through it the source
+        ///     array, reachable), so without this table the import verbs could not tell it from a live value of ONNX
+        ///     Runtime's own and passed it on. With it they throw <see cref="ObjectDisposedException"/>.
+        /// </remarks>
+        private static readonly ConditionalWeakTable<OrtValue, object> DisposedValues = new ConditionalWeakTable<OrtValue, object>();
+
+        /// <summary>The one value of <see cref="DisposedValues"/>: the table records membership only.</summary>
+        private static readonly object DisposedMarker = new object();
+
         private readonly OrtValue _value;
         private readonly NDArray _source;
         private readonly IArraySlice _slice;
@@ -158,6 +175,14 @@ namespace NumSharp.Interop.OnnxRuntime
         internal static bool TryGetOwner(OrtValue value, out OrtTensor owner) => ValueOwners.TryGetValue(value, out owner);
 
         /// <summary>
+        ///     Is <paramref name="value"/> the value of an export handle that has been disposed? ONNX Runtime has released
+        ///     such a value, so nothing may call into it (see <see cref="DisposedValues"/>).
+        /// </summary>
+        /// <param name="value">Any OrtValue.</param>
+        /// <returns><c>true</c> for a value this package made and has since disposed.</returns>
+        internal static bool IsValueOfDisposedHandle(OrtValue value) => DisposedValues.TryGetValue(value, out _);
+
+        /// <summary>
         ///     The buffer the tensor lies in; the handle holds one counted reference on it until it is disposed. <c>null</c>
         ///     for a text tensor (see <see cref="IsNumSharpMemory"/>).
         /// </summary>
@@ -205,8 +230,10 @@ namespace NumSharp.Interop.OnnxRuntime
             }
             finally
             {
-                // The disposed value no longer needs to keep the handle alive.
+                // The disposed value no longer needs to keep the handle alive. It is remembered as disposed instead, so
+                // an import verb refuses it rather than call ONNX Runtime with a released value (a process crash).
                 ValueOwners.Remove(_value);
+                DisposedValues.AddOrUpdate(_value, DisposedMarker);
                 _slice?.Release();   // a text tensor holds no NumSharp buffer
                 NDArrayOnnxInterop.ExportClosed();
                 if (_ownsSource)

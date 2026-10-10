@@ -39,7 +39,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="NotSupportedException">Not a dense tensor; a BFloat16 element type; or a tensor of more than 2 GB.</exception>
         /// <exception cref="ArgumentException">The tensor's shape has a negative (symbolic) dimension.</exception>
         /// <exception cref="InvalidOperationException">The tensor lives in device memory the CPU cannot address, or ORT reports a byte count its shape contradicts.</exception>
-        /// <exception cref="ObjectDisposedException">The value is one this package made and its handle was disposed while it was read.</exception>
+        /// <exception cref="ObjectDisposedException">The value is one this package made and its handle has been disposed (before the call, or while the value was read).</exception>
         public static unsafe NDArray ToNDArray(this OrtValue value)
         {
             if (value is null)
@@ -50,6 +50,7 @@ namespace NumSharp.Interop.OnnxRuntime
             if (OrtTensor.TryGetOwner(value, out OrtTensor owner) && owner.IsNumSharpMemory)
                 return CopyExportedValue(owner);
 
+            EnsureNotOfADisposedHandle(value, nameof(ToNDArray));   // before the first native call on the value
             EnsureTensor(value, nameof(ToNDArray));
             OrtTensorTypeAndShapeInfo info = value.GetTensorTypeAndShape();
             if (info.IsString)
@@ -145,7 +146,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="NotSupportedException">Not a dense tensor; a BFloat16 element type; or a tensor of more than 2 GB that ORT owns.</exception>
         /// <exception cref="ArgumentException">The tensor's shape has a negative (symbolic) dimension.</exception>
         /// <exception cref="InvalidOperationException">The tensor lives in device memory the CPU cannot address; or it is a string tensor and <paramref name="mode"/> is <see cref="OnnxCodecMode.View"/>.</exception>
-        /// <exception cref="ObjectDisposedException">The value is one this package made and its handle was disposed while the view was built.</exception>
+        /// <exception cref="ObjectDisposedException">The value is one this package made and its handle has been disposed (before the call, or while the view was built).</exception>
         public static unsafe NDArray AsNDArray(this OrtValue value, bool ownsValue = false, OnnxCodecMode mode = OnnxCodecMode.Auto)
         {
             if (value is null)
@@ -170,6 +171,7 @@ namespace NumSharp.Interop.OnnxRuntime
             if (OrtTensor.TryGetOwner(value, out OrtTensor owner) && owner.IsNumSharpMemory)
                 return AliasExportedValue(owner, ownsValue);
 
+            EnsureNotOfADisposedHandle(value, nameof(AsNDArray));   // before the first native call on the value
             EnsureTensor(value, nameof(AsNDArray));
             OrtTensorTypeAndShapeInfo info = value.GetTensorTypeAndShape();
             if (info.IsString)

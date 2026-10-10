@@ -348,5 +348,92 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             var seq = NamedOnnxValue.CreateFromSequence("s", new List<float> { 1f });
             new Action(() => seq.ToNDArray()).Should().Throw<NotSupportedException>().WithMessage("*not a tensor*");
         }
+
+        /// <summary>
+        ///     The runtime dispatch of <c>NamedOnnxValue.ToNDArray</c> has one branch per element type for a
+        ///     <see cref="DenseTensor{T}"/> and one for any other <see cref="Tensor{T}"/>. Every one of the 14 element
+        ///     types is read through both, and comes back with its dtype, its shape and its bytes. Only 4 of the 28
+        ///     branches had a test.
+        /// </summary>
+        [TestMethod]
+        public void NamedOnnxValue_EveryElementType_DenseAndNot_ReadsBackBitForBit()
+        {
+            NamedSweep(new float[] { 1.5f, -2f, float.NaN, 0f }, NPTypeCode.Single);
+            NamedSweep(new double[] { 1.5, -2, double.NegativeInfinity, 0 }, NPTypeCode.Double);
+            NamedSweep(new sbyte[] { -128, -1, 0, 127 }, NPTypeCode.SByte);
+            NamedSweep(new byte[] { 0, 1, 254, 255 }, NPTypeCode.Byte);
+            NamedSweep(new short[] { short.MinValue, -1, 0, short.MaxValue }, NPTypeCode.Int16);
+            NamedSweep(new ushort[] { 0, 1, 65534, ushort.MaxValue }, NPTypeCode.UInt16);
+            NamedSweep(new int[] { int.MinValue, -1, 0, int.MaxValue }, NPTypeCode.Int32);
+            NamedSweep(new uint[] { 0, 1, uint.MaxValue - 1, uint.MaxValue }, NPTypeCode.UInt32);
+            NamedSweep(new long[] { long.MinValue, -1, 0, long.MaxValue }, NPTypeCode.Int64);
+            NamedSweep(new ulong[] { 0, 1, ulong.MaxValue - 1, ulong.MaxValue }, NPTypeCode.UInt64);
+            NamedSweep(new bool[] { true, false, false, true }, NPTypeCode.Boolean);
+            NamedSweep(new Float16[] { new Float16(0x3E00), new Float16(0xC000), new Float16(0x7E00), new Float16(0) }, NPTypeCode.Half);
+            NamedSweep(new Half[] { (Half)1.5f, (Half)(-2f), Half.NaN, (Half)0f }, NPTypeCode.Half);
+            NamedSweep(new char[] { 'a', 'é', '日', '\0' }, NPTypeCode.Char);
+        }
+
+        /// <summary>Reads one <c>[2, 2]</c> tensor of <typeparamref name="T"/> through the dispatch, as a dense tensor and as a tensor that is not dense.</summary>
+        /// <typeparam name="T">The tensor's element type.</typeparam>
+        /// <param name="values">Four elements, row-major.</param>
+        /// <param name="expected">The NumSharp dtype the dispatch must return.</param>
+        private static void NamedSweep<T>(T[] values, NPTypeCode expected) where T : unmanaged
+        {
+            byte[] want = Oracle.Bytes(values);
+            foreach (bool dense in new[] { true, false })
+            {
+                Tensor<T> tensor = dense
+                    ? new DenseTensor<T>((T[])values.Clone(), new[] { 2, 2 })
+                    : new ArrayTensor<T>((T[])values.Clone(), new[] { 2, 2 });
+                string cell = $"{typeof(T).Name}, {(dense ? "DenseTensor" : "another Tensor<T>")}";
+                using NDArray nd = NamedOnnxValue.CreateFromTensor("t", tensor).ToNDArray();
+                nd.typecode.Should().Be(expected, cell);
+                nd.shape.Should().Equal(new long[] { 2, 2 }, cell);
+                nd.flags.owndata.Should().BeTrue(cell);
+                BytesOfArray(nd).Should().Equal(want, cell);
+            }
+        }
+
+        /// <summary>The bytes of a C-contiguous owning array, read from its buffer.</summary>
+        /// <param name="nd">The array.</param>
+        /// <returns>A copy of its bytes.</returns>
+        private static unsafe byte[] BytesOfArray(NDArray nd) =>
+            new ReadOnlySpan<byte>((byte*)nd.Storage.InternalArray.Address, checked((int)(nd.size * nd.dtypesize))).ToArray();
+
+        /// <summary>
+        ///     What the dispatch refuses, each with a message that says why: a null named value, a named tensor that
+        ///     holds no tensor, a BFloat16 tensor, and a tensor of an element type NumSharp has no dtype for.
+        /// </summary>
+        [TestMethod]
+        public void NamedOnnxValue_NullEmptyBFloat16AndUnknownElementType_AreRefused()
+        {
+            NamedOnnxValue none = null;
+            new Action(() => none.ToNDArray()).Should().Throw<ArgumentNullException>();
+
+            NamedOnnxValue empty = NamedOnnxValue.CreateFromTensor<float>("empty", null);
+            new Action(() => empty.ToNDArray()).Should().Throw<InvalidOperationException>().WithMessage("NamedOnnxValue 'empty' holds no value.");
+
+            // The BFloat16 refusal is the one that says what to do, not the generic "holds a <type>" one (whose text
+            // would name BFloat16 too, through the tensor's type name).
+            NamedOnnxValue bfloat = NamedOnnxValue.CreateFromTensor("b", new DenseTensor<BFloat16>(new[] { new BFloat16(0x3FC0) }, new[] { 1 }));
+            new Action(() => bfloat.ToNDArray()).Should().Throw<NotSupportedException>()
+                .WithMessage("ORT BFloat16 has no NumSharp dtype*Cast the tensor to float32 or float16*");
+
+            NamedOnnxValue guid = NamedOnnxValue.CreateFromTensor("g", new DenseTensor<Guid>(new[] { Guid.Empty }, new[] { 1 }));
+            new Action(() => guid.ToNDArray()).Should().Throw<NotSupportedException>().WithMessage("NamedOnnxValue 'g' holds a *which has no NumSharp dtype.");
+        }
+
+        /// <summary>The four generic verbs of the legacy surface refuse a null argument by name.</summary>
+        [TestMethod]
+        public void DenseVerbs_NullArguments_Throw()
+        {
+            NDArray noArray = null;
+            DenseTensor<float> noTensor = null;
+            new Action(() => noArray.AsDenseTensor<float>()).Should().Throw<ArgumentNullException>().WithParameterName("source");
+            new Action(() => noArray.ToDenseTensor<float>()).Should().Throw<ArgumentNullException>().WithParameterName("source");
+            new Action(() => noTensor.ToNDArray()).Should().Throw<ArgumentNullException>().WithParameterName("tensor");
+            new Action(() => noTensor.AsNDArray()).Should().Throw<ArgumentNullException>().WithParameterName("tensor");
+        }
     }
 }

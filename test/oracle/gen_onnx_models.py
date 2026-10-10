@@ -70,6 +70,17 @@ passthrough_text.onnx   text ['N'] string is a graph input AND a graph output ; 
 cast_fanout.onnx        X [2,3] float32 -> Cast -> as_<dtype> [2,3], one output per element type. Every
                         dtype with a FIXED declared output shape: what RunAsync can allocate before the
                         run (an asynchronous run writes into memory that exists before it starts).
+tensor_then_seq.onnx    X float32 -> Identity -> Y ; X -> SequenceConstruct -> S. A TENSOR output followed
+                        by a SEQUENCE output: the Run tier converts Y, then refuses S, and must release
+                        what it made for Y.
+anon_dim.onnx           X [?, 3] float32 -> Identity -> Y. A dimension with neither a value nor a name: a
+                        shape error must still print the declaration.
+bf16_out.onnx           X ['N'] float32 -> Cast -> Y bfloat16. An OUTPUT of an element type NumSharp lacks.
+bf16_in.onnx            X ['N'] bfloat16 -> Cast -> Y float32. An INPUT of an element type NumSharp lacks.
+seq_two.onnx            A, B float32 (any rank) -> SequenceConstruct -> S. A sequence of TWO tensors of
+                        different shapes: the reader's order and per-element shapes.
+two_dtypes.onnx         X ['N'] float32 -> Identity -> Yf ; X -> Cast -> Yi int32. Two outputs of two dtypes:
+                        the pre-allocated output checks name the right output.
 """
 from __future__ import annotations
 
@@ -285,6 +296,47 @@ def build_all():
         [_tensor("X", TensorProto.FLOAT, [2, 3])],
         [_tensor(f"as_{dt_name}", dt, [2, 3]) for dt_name, dt in DTYPES.items()])
 
+    # A tensor output FOLLOWED by a sequence output: the cleanup path of the Run tier (the tensor is converted
+    # before the sequence is refused).
+    float_seq = onnx.TypeProto()
+    float_seq.sequence_type.elem_type.tensor_type.elem_type = TensorProto.FLOAT
+    models["tensor_then_seq"] = _model(
+        "tensor_then_seq",
+        [helper.make_node("Identity", ["X"], ["Y"]), helper.make_node("SequenceConstruct", ["X"], ["S"])],
+        [_tensor("X", TensorProto.FLOAT)], [_tensor("Y", TensorProto.FLOAT), helper.make_value_info("S", float_seq)],
+        check=False)
+
+    # An ANONYMOUS dynamic dimension: neither dim_value nor dim_param.
+    models["anon_dim"] = _model(
+        "anon_dim",
+        [helper.make_node("Identity", ["X"], ["Y"])],
+        [_tensor("X", TensorProto.FLOAT, [None, 3])], [_tensor("Y", TensorProto.FLOAT, [None, 3])])
+
+    # BFloat16, the one tensor element type of ONNX Runtime's C# API that NumSharp has no dtype for: as an output
+    # and as an input. numpy has no bfloat16 either, so the self-check only loads these two.
+    models["bf16_out"] = _model(
+        "bf16_out",
+        [helper.make_node("Cast", ["X"], ["Y"], to=TensorProto.BFLOAT16)],
+        [_tensor("X", TensorProto.FLOAT, ["N"])], [_tensor("Y", TensorProto.BFLOAT16, ["N"])])
+    models["bf16_in"] = _model(
+        "bf16_in",
+        [helper.make_node("Cast", ["X"], ["Y"], to=TensorProto.FLOAT)],
+        [_tensor("X", TensorProto.BFLOAT16, ["N"])], [_tensor("Y", TensorProto.FLOAT, ["N"])])
+
+    # A sequence of TWO tensors, which may have different shapes: the order and the shapes ToNDArrays returns.
+    models["seq_two"] = _model(
+        "seq_two",
+        [helper.make_node("SequenceConstruct", ["A", "B"], ["S"])],
+        [_tensor("A", TensorProto.FLOAT), _tensor("B", TensorProto.FLOAT)], [helper.make_value_info("S", float_seq)],
+        check=False)
+
+    # Two outputs of two dtypes from one input.
+    models["two_dtypes"] = _model(
+        "two_dtypes",
+        [helper.make_node("Identity", ["X"], ["Yf"]), helper.make_node("Cast", ["X"], ["Yi"], to=TensorProto.INT32)],
+        [_tensor("X", TensorProto.FLOAT, ["N"])],
+        [_tensor("Yf", TensorProto.FLOAT, ["N"]), _tensor("Yi", TensorProto.INT32, ["N"])])
+
     return models
 
 
@@ -386,6 +438,29 @@ def self_check(path: str, name: str) -> None:
         for (dt_name, _), out in zip(DTYPES.items(), outs):
             np_dt = {"float16": np.float16, "bool": np.bool_}.get(dt_name, getattr(np, dt_name, None))
             assert out.dtype == np_dt and out.shape == (2, 3) and np.array_equal(out, x.astype(np_dt)), (name, dt_name)
+    elif name == "tensor_then_seq":
+        x = np.arange(3, dtype=np.float32)
+        y, s = sess.run(None, {"X": x})
+        assert np.array_equal(y, x) and isinstance(s, list) and len(s) == 1 and np.array_equal(s[0], x), name
+    elif name == "anon_dim":
+        assert sess.get_inputs()[0].shape[1] == 3 and not isinstance(sess.get_inputs()[0].shape[0], int), name
+        x = np.arange(6, dtype=np.float32).reshape(2, 3)
+        y, = sess.run(None, {"X": x})
+        assert np.array_equal(y, x), name
+    elif name == "bf16_out":
+        assert sess.get_outputs()[0].type == "tensor(bfloat16)", name   # not run: numpy has no bfloat16
+    elif name == "bf16_in":
+        assert sess.get_inputs()[0].type == "tensor(bfloat16)", name
+    elif name == "seq_two":
+        a = np.arange(6, dtype=np.float32).reshape(2, 3)
+        b = np.arange(4, dtype=np.float32)
+        s, = sess.run(None, {"A": a, "B": b})
+        assert [e.shape for e in s] == [(2, 3), (4,)] and np.array_equal(s[0], a) and np.array_equal(s[1], b), name
+    elif name == "two_dtypes":
+        x = np.array([1.5, -2.5, 3.0], np.float32)
+        yf, yi = sess.run(None, {"X": x})
+        assert yf.dtype == np.float32 and np.array_equal(yf, x), name
+        assert yi.dtype == np.int32 and np.array_equal(yi, x.astype(np.int32)), name
     else:
         raise AssertionError(f"no self-check for {name}")
 

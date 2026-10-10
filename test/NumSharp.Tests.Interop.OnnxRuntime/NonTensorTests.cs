@@ -220,5 +220,105 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                 .WithMessage("*'seq'*SEQUENCE*not a tensor*OrtValue*");
             NDArrayOnnxInterop.LiveExports.Should().Be(0);
         }
+
+        /// <summary>
+        ///     <c>GetMapKeys</c> hands out ONNX Runtime's own copy of a map's keys tensor: the int64 class labels of a
+        ///     ZipMap, and the string labels of a string-keyed one (read with <c>ReadStringTensor</c>). The caller owns
+        ///     the value; a value that is not a map is refused.
+        /// </summary>
+        [TestMethod]
+        public void GetMapKeys_ReturnsTheKeysTensor_OfAnIntKeyedAndAStringKeyedMap()
+        {
+            using NDArray probs = np.array(new[,] { { 0.25f, 0.25f, 0.5f } });
+            using OrtTensor t = probs.AsOrtValue();
+
+            using (InferenceSession session = OpenSession("zipmap_int64"))
+            using (IDisposableReadOnlyCollection<OrtValue> outputs = Run(session, "X", t.Value, "Z"))
+            using (OrtValue map = outputs[0].GetValue(0, OrtAllocator.DefaultInstance))
+            {
+                using (OrtValue keys = map.GetMapKeys())
+                {
+                    keys.OnnxType.Should().Be(OnnxValueType.ONNX_TYPE_TENSOR);
+                    keys.GetTensorDataAsSpan<long>().ToArray().Should().Equal(10L, 20L, 30L);
+                    using NDArray asArray = keys.ToNDArray();
+                    asArray.ToArray<long>().Should().Equal(10L, 20L, 30L);
+                }
+
+                // not a map: the sequence itself, and a tensor
+                new Action(() => outputs[0].GetMapKeys()).Should().Throw<NotSupportedException>().WithMessage("GetMapKeys needs a map*SEQUENCE*");
+                new Action(() => t.Value.GetMapKeys()).Should().Throw<NotSupportedException>().WithMessage("GetMapKeys needs a map*TENSOR*");
+            }
+
+            // The model's labels are cat, dog, bird. ONNX Runtime keeps a map ordered by key, so the keys of a
+            // string-keyed map come back sorted, not in the order of the labels.
+            using (InferenceSession session = OpenSession("zipmap_string"))
+            using (IDisposableReadOnlyCollection<OrtValue> outputs = Run(session, "X", t.Value, "Z"))
+            using (OrtValue map = outputs[0].GetValue(0, OrtAllocator.DefaultInstance))
+            using (OrtValue keys = map.GetMapKeys())
+                keys.ReadStringTensor().Should().Equal("bird", "cat", "dog");
+
+            NDArrayOnnxInterop.LiveImports.Should().Be(0, "GetMapKeys returns a bare value: no lease");
+        }
+
+        /// <summary>
+        ///     Each reader names what it needs when it is given another kind of value: a sequence of MAPS to the
+        ///     tensor-sequence reader (with the reader that takes it), a tensor or a map to the map-sequence reader, a
+        ///     sequence to the string reader. A refused call leaves no array and no lease behind.
+        /// </summary>
+        [TestMethod]
+        public void Readers_GivenAnotherKindOfValue_RefuseAndNameTheRightReader()
+        {
+            using InferenceSession session = OpenSession("zipmap_int64");
+            using NDArray probs = np.array(new[,] { { 0.1f, 0.7f, 0.2f }, { 0.5f, 0.3f, 0.2f } });
+            using OrtTensor t = probs.AsOrtValue();
+            using IDisposableReadOnlyCollection<OrtValue> outputs = Run(session, "X", t.Value, "Z");
+            OrtValue sequenceOfMaps = outputs[0];
+            using OrtValue map = sequenceOfMaps.GetValue(0, OrtAllocator.DefaultInstance);
+
+            new Action(() => sequenceOfMaps.ToNDArrays()).Should().Throw<NotSupportedException>()
+                .WithMessage("ToNDArrays: sequence element 0 is ONNX_TYPE_MAP*ToMaps*");
+            new Action(() => t.Value.ToNDArrays()).Should().Throw<NotSupportedException>().WithMessage("ToNDArrays needs a sequence*TENSOR*");
+            new Action(() => t.Value.ToMaps()).Should().Throw<NotSupportedException>().WithMessage("ToMaps needs a sequence*TENSOR*");
+            new Action(() => map.ToMaps()).Should().Throw<NotSupportedException>().WithMessage("ToMaps needs a sequence*MAP*");
+            new Action(() => sequenceOfMaps.ReadStringTensor()).Should().Throw<NotSupportedException>().WithMessage("ReadStringTensor needs a tensor*SEQUENCE*");
+            new Action(() => map.ReadStringTensor()).Should().Throw<NotSupportedException>().WithMessage("ReadStringTensor needs a tensor*MAP*");
+
+            NDArrayOnnxInterop.LiveImports.Should().Be(0, "a refused read leaves no lease");
+        }
+
+        /// <summary>
+        ///     A sequence of tensors of DIFFERENT shapes: <c>ToNDArrays</c> returns one array per element, in sequence
+        ///     order, each with its own shape. And a sequence of tensors given to the map reader is refused with the
+        ///     reader that takes it.
+        /// </summary>
+        [TestMethod]
+        public void SequenceOfTwoTensors_ReadsInOrder_EachWithItsOwnShape()
+        {
+            using InferenceSession session = OpenSession("seq_two");
+            using NDArray a = Arange(NPTypeCode.Single, 2, 3);
+            using NDArray b = np.array(new float[] { 7, 8, 9, 10 });
+            using OrtTensor ta = a.AsOrtValue();
+            using OrtTensor tb = b.AsOrtValue();
+            using var options = new RunOptions();
+            using IDisposableReadOnlyCollection<OrtValue> outputs = session.Run(options, new[] { "A", "B" }, new[] { ta.Value, tb.Value }, new[] { "S" });
+            OrtValue sequence = outputs[0];
+            sequence.GetValueCount().Should().Be(2);
+
+            NDArray[] elements = sequence.ToNDArrays();
+            using (elements[0])
+            using (elements[1])
+            {
+                elements.Length.Should().Be(2);
+                elements[0].shape.Should().Equal(2, 3);
+                elements[0].ToArray<float>().Should().Equal(0f, 1f, 2f, 3f, 4f, 5f);
+                elements[1].shape.Should().Equal(4);
+                elements[1].ToArray<float>().Should().Equal(7f, 8f, 9f, 10f);
+                NDArrayOnnxInterop.LiveImports.Should().Be(2, "each element is a view that owns ORT's copy of it");
+            }
+
+            new Action(() => sequence.ToMaps()).Should().Throw<NotSupportedException>()
+                .WithMessage("ToMaps: sequence element 0 is ONNX_TYPE_TENSOR*ToNDArrays*");
+            NDArrayOnnxInterop.LiveImports.Should().Be(0);
+        }
     }
 }

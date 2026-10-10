@@ -336,7 +336,31 @@ namespace NumSharp.Interop.OnnxRuntime
             "transposed / negative-stride / broadcast / Fortran-order view cannot be shared. Materialize first — " +
             "np.ascontiguousarray(nd) or nd.copy() — or call ToOrtValue(nd) for an ORT-owned copy.";
 
+        /// <summary>
+        ///     Refuses the value of an export handle that has been disposed, before anything calls into ONNX Runtime with
+        ///     it. ONNX Runtime does not guard a released value: a native call on one is an access violation that ends the
+        ///     process, where a .NET caller expects <see cref="ObjectDisposedException"/>.
+        /// </summary>
+        /// <remarks>
+        ///     Only values THIS package made are known to it. A value of ONNX Runtime's own that the caller disposed cannot
+        ///     be recognized through the public API, and using it fails as it does anywhere in ONNX Runtime.
+        /// </remarks>
+        /// <param name="value">The value an import verb was given (not null).</param>
+        /// <param name="verb">The public verb, named in the message.</param>
+        /// <exception cref="ObjectDisposedException">The value belongs to an <see cref="OrtTensor"/> handle that has been disposed.</exception>
+        internal static void EnsureNotOfADisposedHandle(OrtValue value, string verb)
+        {
+            if (OrtTensor.IsValueOfDisposedHandle(value))
+                throw new ObjectDisposedException(nameof(OrtTensor),
+                    $"{verb}: this OrtValue belongs to an OrtTensor handle that has been disposed. ONNX Runtime has released the value, and the " +
+                    "NumSharp buffer behind it is no longer pinned. Read or view the value before the handle is disposed.");
+        }
+
         /// <summary>The OrtValue must hold a dense tensor for any NDArray verb to apply.</summary>
+        /// <param name="value">The value an import verb was given.</param>
+        /// <param name="verb">The public verb, named in the refusal.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
+        /// <exception cref="NotSupportedException">The value is a sequence, a map, a sparse tensor or an optional; the message names the reader that takes it.</exception>
         internal static void EnsureTensor(OrtValue value, string verb)
         {
             if (value is null)
