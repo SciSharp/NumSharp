@@ -564,10 +564,11 @@ namespace NumSharp.Backends
 
             // Comparison computes at the NumPy common dtype inside the kernel
             // (probed A3: greater(i8 2^53+1, f8 2^53) → False, equal → True —
-            // both operands cast to f64 first).
-            var comparisonType = lhsType == rhsType
-                ? lhsType
-                : np._FindCommonScalarType(lhsType, rhsType);
+            // both operands cast to f64 first). The rule is the bare route's, so an
+            // int64 / uint64 pair compares EXACTLY at Decimal here too (NumPy's qQ / Qq
+            // loops): the plain promotion compared it at float64, so
+            // equal(int64 2^53+1, uint64 2^53, out=o) was True where NumPy says False.
+            var comparisonType = ComparisonKernelKey.GetComparisonType(lhsType, rhsType);
 
             NPTypeCode capLhs = lhsType, capRhs = rhsType, capCmp = comparisonType;
             ComparisonOp capOp = op;
@@ -618,6 +619,18 @@ namespace NumSharp.Backends
                     globalFlags, NPY_ORDER.NPY_CORDER, casting,
                     s_ufuncBinaryOutFlags,
                     opDtypes);
+
+                // Chunks long enough for a vector loop go through the comparison run
+                // (Backends/Kernels/ComparisonRun.cs): contiguous and one-value operands are read in
+                // place, stepped / reversed / other-dtype inputs are staged 8 KB at a time, a strided
+                // bool out receives each block through a strided store, and an out of another dtype
+                // is filled through the iterator's Boolean buffer. Before it, every one of these ran
+                // the per-element kernel below or — same-dtype stepped inputs into a contiguous out —
+                // the whole-array kernel's coordinate loop (np.less(f64, f64, out=strided bool) at
+                // 100K: 105 us, NumPy 65). Narrow rows and tiny arrays are declined and keep the
+                // routes below.
+                if (iter.TryExecuteComparisonRun(ComparisonRun.Get(op, lhsType, rhsType)))
+                    return target;
 
                 // Same-dtype inputs into a bool out that is contiguous in iteration order:
                 // run the whole-array SIMD comparison kernel (Vector.Compare + mask packing —

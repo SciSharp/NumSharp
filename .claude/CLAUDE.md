@@ -1973,6 +1973,136 @@ allocation would. See `Manipulation/np.isin.cs`; gate: `Manipulation/np.isin.Tes
 
 The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped overload each** — `f(x[, x2], NDArray out = null, NDArray where = null, NPTypeCode? dtype = null)` (no bare/out split). It returns plain `NDArray` — NumPy's `np.less(a, b, out=f64)` returns the f64 out itself; `True→1` at any numeric out dtype since bool casts same_kind to all of them. A plain call still returns an `NDArray<bool>` *instance* (TensorEngine contract), so the typed wrapper is one zero-alloc cast away and the C# comparison operators (`==`, `<`, …) keep the `NDArray<bool>` static type via `AsGeneric<bool>()`. `dtype=` is validate-only (probed 2.4.2): bool loops only — `dtype: Boolean` is a no-op, anything else raises `No loop matching the specified signature and casting was found for ufunc <name>`. Comparisons compare at `result_type(lhs, rhs)` inside the kernel (probed: `greater(i8 2^53+1, f8 2^53)` → False, `equal` → True). Engine members follow the house order `(inputs, typeCode, out, where)`.
 
+**The comparison engine: every operand layout and dtype pair runs the vector kernels (2026-10-10).** `==`, `!=`, `<`,
+`<=`, `>`, `>=` as operators and as `np.equal` … `np.greater_equal`, with and without `out=`.
+- **What NumPy does** (`loops_comparison.dispatch.c.src`, `PyUFunc_SimpleBinaryComparisonTypeResolver`). Its loops
+  are vectorized for three operand forms only: two contiguous inputs, or one input a single value, each with a
+  contiguous bool output. A stepped or reversed input, an input of another dtype (NumPy casts it through a buffer
+  first) and a stepped output run its scalar loop at 0.6–1 ns an element; so do complex128 and float16. int64
+  against uint64 has exact loops.
+- **`ComparisonRun`** (`Backends/Kernels/ComparisonRun.cs`): one cached instance per (operator, left dtype, right
+  dtype). It takes one inner-loop chunk (three pointers, three byte strides, a count) and runs it through the three
+  contiguous vector kernels (`SimdFull`, `SimdScalarRight`, `SimdScalarLeft`), whatever the strides and dtypes:
+  - *direct*: an input that already is a contiguous run of the dtype the kernel compares in, or one value, is read
+    in place. A long run that starts off a vector boundary gets a short first kernel call (`AlignmentPeel`: the
+    input stream for lanes of two bytes or more, the output for one-byte lanes; from 4 KB);
+  - *staged*: any other input is copied and converted 8 KB at a time into a stack block, and the kernel reads the
+    block while it is in L1. The house SIMD copy removes a step of two or a reversal, the unrolled strided move
+    (`Direct/DirectILKernelGenerator.StridedMove.cs`, IL, 1 / 2 / 4 / 8 / 16 bytes) any other stride, the house SIMD
+    cast converts;
+  - *flipped*: inputs that run backwards in the kernel's dtype are read forwards from their last element and the
+    bool results are stored reversed (one byte an element moved, not 8 or 16);
+  - *scattered*: a bool output that is not contiguous receives each block through a strided byte store;
+  - *adopted*: an array of another dtype against ONE value is compared in the array's own dtype (below);
+  - a chunk under 64 elements runs the per-element kernel the iterator routes always used.
+- **Three callers.**
+  - `TryTrivialContiguousComparisonOp` → `Run`: two contiguous arrays of one shape, or an array and one value, of any
+    two dtypes; also two one-element operands of different rank (they used to build an iterator for one element).
+  - `TryRowsComparisonOp` (`DefaultEngine.CompareOp.Rows.cs`) → `RunRows`: an iteration of R runs of N elements,
+    without an iterator. It reads the structure from the strides with NumPy's coalescing rule
+    (`stride[d] == stride[d+1] * extent[d+1]`): a matrix against a row or a column, an outer product, a stepped or
+    reversed view. It declines (the iterator route serves): a result NumPy lays out in F order, an iteration of three
+    or more levels, and many rows under 16 elements whose inputs are contiguous or one value (the iterator's 2-D block
+    kernel loops such rows inside one call). An iterator costs 428 ns to build and dispose and 23 ns for each chunk it
+    hands out (40 float64 values); a kernel call per run costs 7.8 ns.
+  - `NDIterRef.TryExecuteComparisonRun` → one `Chunk` call per inner-loop chunk: every other iteration, and every
+    `out=` call (`ExecuteComparisonUfuncInto`; an out of another dtype is filled through the iterator's Boolean
+    buffer). `where=` keeps its masked route (1.5–11× NumPy already).
+- **Scalar adoption is exact, never a cast** (`ComparisonRun.ScalarAdoption`). The comparison NumPy defines is
+  `convert(a) op convert(v)` in the promoted dtype. It has the same answer as `a op a'` for ONE value `a'` of the
+  array's dtype, or the same answer for every element:
+  - integer array, integer value: `a' = v` inside the array dtype's range; outside it the chunk is decided;
+  - integer array of at most 32 bits, float value `t`: `a > t` is `a > floor(t)`, `a >= t` is `a >= ceil(t)`,
+    `a < t` is `a < ceil(t)`, `a <= t` is `a <= floor(t)`; `==` can hold only for an integral `t` in range;
+  - float16 / float32 array, wider value `t`: `>` and `<=` use the largest array-dtype value not above `t`, `>=` and
+    `<` the smallest not below it (one step on the stored bit pattern from the rounded value); `==` can hold only
+    when `t` is an array-dtype value. So `float32_array > 0.1` still compares against the double 0.1;
+  - a NaN value decides the chunk (False; True for `!=`).
+
+  Not adopted (they keep the staged conversion): a 64-bit integer array against a float, complex, decimal, char.
+- **Kernels added** (`Direct/`):
+  - complex128 (`DirectILKernelGenerator.Comparison.Complex.cs`): four elements a step. Two loads are split into
+    real and imaginary lanes (`vunpcklpd` / `vunpckhpd`), compared by NumPy's `CLT` rule (a NaN in an imaginary part
+    makes the ordered operators False), and the mask bits become bytes (`pdep`, or integer arithmetic without BMI2).
+    `>` is `<` with the operands exchanged, `!=` the complement of `==`. 0.66 ns an element for `<`, against
+    NumPy's 0.8–1.45;
+  - int64 against uint64, either order (`.Comparison.MixedSign.cs`): NumPy's exact loops as machine compares. A
+    negative lane is decided by its sign, the others compare unsigned; eight elements a step. The emitted loop
+    compared in `System.Decimal`;
+  - the strided move (`.StridedMove.cs`): four typed moves a pass at any two byte strides.
+- **Fixed on the way.**
+  - `np.less(int64, uint64, out=o)` compared in float64 (inexact past 2^53); every route is exact now.
+  - Two one-element operands of different rank (`(1,) < 0-d`) took 1.03 µs through an iterator; 0.44 µs now
+    (NumPy 0.57).
+  - Two library defects that the tests of this work exposed, each with its own commit: "A strided copy or cast never
+    reads outside its view" and "`NDArray<T>.reshape(Shape)` reads the DIMENSIONS of its argument".
+- **Gates.**
+  - `Backends/Kernels/ComparisonRunTests.cs` (19 tests): every dtype pair × operator × 1-D layout against an element
+    reference written from NumPy's rules; two- and three-dimensional layouts; the four `out=` forms (a stepped out's
+    skipped slots are not written); long runs off a vector boundary; scalar adoption over every uint8 / int8 value,
+    every float16 bit pattern and the float32 values around each threshold; int64 against uint64 on every route; an
+    out that is an input; `Run` and `RunRows` on raw memory with sentinel margins, and against inaccessible pages
+    (`FencedMemory`); the complex, mixed-sign and strided-move kernels; the run against the routes it replaced
+    (`ComparisonRun.Disabled`).
+  - A mutation pass of 35 planted defects (kernels, adoption, staging, stores, the rows route, dispatch): 33 fail
+    one test or more. The two survivors give the same results (a range test at the boundary, where the restated
+    comparison is all-False as well; a branch of the bit-pattern step its caller never reaches).
+  - A scratch sweep against an independent reference (15 × 15 dtype pairs × 6 operators × layouts × `out=` forms ×
+    2-D and 3-D broadcasts): 373,543,380 checks, 0 failures, with AVX2, with AVX2 off and with hardware intrinsics off.
+  - The unit suite, the oracle replay, and both again under `NUMSHARP_DEBUG_GUARD_PAGES=1`.
+- **Perf** (NPY/NS, two pinned P-cores, tier-up forced with `DOTNET_TC_CallCountingDelayMs=0`, per-cell minimum over
+  three NumSharp runs and two NumPy runs; 1,279 cells: A contiguous 13 dtypes × 6 operators × array / value forms ×
+  1K / 100K / 10M, B 20 layouts, C 12 dtype pairs, D `out=` and `where=` forms, E C# literal operands, F tiny and
+  edge operands). In brackets: the build before this work, measured the same way.
+  - All cells: geomean **2.05×** (1.15×); under 1.5×: 463 (904); under 1.0×: 43 (445); under 0.5×: 0 (88); the
+    lowest cell 0.81× (0.03×).
+  - By section: A 1.81× (1.62×), B 2.12× (0.75×), C 3.06× (1.20×), D 2.24× (1.75×), E 1.47× (0.73×), F 1.43× (1.37×).
+  - float64 at 100K elements, NumPy µs | before → after: a matrix against a row 37.1 | 75.8 → 14.6 (2.55×), against a
+    column 38.1 | 107.6 → 11.2 (3.41×), an outer product 58.3 | 107.9 → 10.6 (5.49×), reversed columns
+    133.2 | 113.1 → 25.4 (5.25×), a reversed 1-D pair 63.4 | 107.6 → 18.5 (3.42×), a stepped array against a value
+    63.9 | 109.5 → 30.9 (2.06×), a fully broadcast operand 11.6 | 107.7 → 10.5 (1.10×).
+  - Other dtypes at 100K: int32 against a column 20.6 | 108.5 → 8.0 (2.58×), uint8 reversed columns
+    85.0 | 112.1 → 12.5 (6.79×), complex128 `<` 143.1 | 256.0 → 90.7 (1.58×) and against a value
+    158.1 | 273.6 → 73.6 (2.15×).
+  - Two dtypes at 100K: a float32 array against a float64 value 58.1 | 70.0 → 5.95 (9.77×), an int32 array against a
+    float64 array 63.8 | 70.4 → 24.0 (2.65×), a uint8 array against an int32 value 45.5 | 35.3 → 3.7 (12.2×);
+    int64 against uint64 at 1K 1.21 | 4.36 → 0.71 (1.72×).
+  - `out=` at 100K: a stepped bool out 63.7 | 104.7 → 38.1 (1.67×), a float64 out 107.1 | 95.2 → 56.9 (1.88×).
+  - C# literals at 100K: `float32 > 50.5` 6.8 | 70.3 → 7.1 (0.95×), `uint8 > 50` 4.5 | 45.3 → 4.7 (0.96×),
+    `int32 > 50.5` 59.4 | 70.4 → 8.1 (7.3×), `float16 > 50.5` 261.8 | 275.2 → 15.7 (16.7×), `uint64 > 50`
+    34.2 | 89.1 → 19.6 (1.74×).
+  - The numpy.matrix benchmark (97 cells) reads geomean 2.30×; `m > 0.75` 1.99× / 1.29× / 1.20× at 4 / 64 / 512.
+- **Floors** (every cell under 1.0× is between 0.81× and 0.99×):
+  - *Contiguous operands of one dtype at 100K elements* (also their literal, F-ordered and offset forms: 26 of the 43
+    cells, and most of the 163 contiguous 100K cells under 1.5×). Both libraries run a vector loop at the L2 transfer
+    bound, and the buffer's address decides the rest. Kernel only, ns an element (input offset / output offset in
+    bytes past a 64-byte boundary): float64 two arrays 0.141 at 0 / 0 and 0.250 at 16 / 0; float32 0.074 and 0.126;
+    uint8 against a value 0.026 and 0.036 at 16 / 16. A prefix aligns ONE stream. Pooled buffers are 16-byte aligned,
+    so each array wins or loses by its address. NumPy's are too: `ctypes.data % 64` is uniform over 0 / 16 / 32 / 48
+    up to 800 KB. **Open lever:** 64-byte aligned pool buffers from one page up
+    (`SizeBucketedBufferPool`; over-allocate and keep the raw pointer in a header, so `calloc` stays lazy). Every
+    Native block comes from the pool's `Take` / `TakeZeroed`, so the change is contained there.
+  - *Two stepped float64 / int64 operands, and complex128 `==` / `!=`, at 100K* (0.85–0.97×, 10 cells): 3.2 MB of source,
+    above this CPU's 2 MB L2. NumPy's scalar loop overlaps its work with the memory latency.
+  - *Six 1K cells at parity* (0.90–0.99×): two stepped float64 / int64 operands (two staging passes of 0.2 ns an
+    element each), and bool C against F.
+  - *The empty result `(0,3) < (3,)`* (0.85×): branch `strings` has an empty-result guard that arrives with the merge.
+  - *Between 1.0× and 1.5×* (420 cells): contiguous at 100K (the same transfer bound), contiguous at 1K (the NDArray
+    allocation floor: about 0.35 µs of a 0.45–0.55 µs call), tiny operands (1.2–1.45×), C against F (1.05–1.5×, were
+    0.31–1.1×; the F operand is gathered a row at a time), literal operands at 1K (1.25–1.7×: the literal's 0-d
+    temporary, plan X26).
+- **Measurements worth keeping.** Staging, ns an element: uint8 at a step of two or reversed 0.04, any other stride
+  0.2 through the strided move (the house generic strided copy takes 0.7 for a one- or two-byte dtype); float64 at a
+  step of two 0.2. A reversed byte store of 1,024 results: 33 ns through the uint8 shuffle copy, 418 ns one byte at
+  a time (bool has no shuffle kernel of its own, so results and bool inputs are copied as uint8). This host's clock
+  held at about 3.4 GHz during these runs (a two-load vector loop takes 0.59 ns an iteration): do not estimate
+  cycles at the nominal 5.5 GHz.
+- **Merging `strings`.** The edits stay out of the hunks `strings` changed in `DefaultEngine.CompareOp.cs` (the top
+  of `ExecuteComparisonOp`, the general fallback, the six overrides, the result allocation of the iterator route) and
+  repeat its comparison-type lines of `DefaultEngine.UfuncOut.cs` byte for byte. `git merge-tree` reports the same
+  conflict list with and without this work. After that merge an operand that NEP 50 treats as weak arrives in the
+  array's dtype already, so adoption then serves the strong 0-d operands.
+
 ### Type Promotion & Dtype
 `can_cast`, `common_type`, `datetime_data`, `dtype`, `dtypes` (the `np.dtypes` class module), `find_common_type`, `finfo`, `iinfo`, `isdtype`, `issubdtype`, `min_scalar_type`, `mintypecode`, `promote_types`, `result_type`
 
@@ -4495,6 +4625,7 @@ non-structured subset would only re-expose `loadtxt`.
 | unique family | `Manipulation/NDArray.unique.cs` + `NDArray.unique.Kwargs.cs` (sort+mask core + axis path), `Manipulation/np.unique.cs` (`np.unique`), `Manipulation/np.unique_values.cs` (Array-API `unique_values`/`unique_counts`/`unique_inverse`/`unique_all` + result structs), `Manipulation/NDArray.unique.Hash.cs` (int + complex hash fast path, splitmix64). Design + measured perf decisions: `docs/UNIQUE_DESIGN.md` |
 | Selection family | `Indexing/np.{take,take_along_axis,put,put_along_axis,place,putmask,select}.cs`; IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,TakeAlongAxis,Put,PutAlongAxis,Place,PutMask,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain; `TakeAlongAxis` = whole-array strided-odometer gather, byte-width-keyed; `PutAlongAxis` = the scatter mirror — a dtype-agnostic validate pass + a bounds-free scatter pass for NumPy's all-or-nothing assignment; `PutMask` = Place's typed-MOV scatter with a by-position cursor + `nv==1` scalar fast path) |
 | numpy.matrix (`NDMatrix`) | `Matrixlib/NDMatrix.cs` (class, result forms, scalar conversions, T / H / I / A / A1), `.Construction.cs` (`matrix.__new__`, the literal parser), `.Indexing.cs`, `.Operators.cs`, `.Reductions.cs`, `.Methods.cs`, `Matrixlib/np.matrix.cs`, `Creation/np.{asmatrix,bmat}.cs`, `View/Shape.Matrix.cs` (the finalize rule), `Selection/NDArray.Indexing.AssignedValue.cs` (NumPy's value rule for index-array assignment) |
+| Comparison engine (`==` … `>=`) | `Backends/Default/Math/DefaultEngine.CompareOp.cs` (dispatch, the trivial route), `DefaultEngine.CompareOp.Rows.cs` (the two-level route without an iterator), `DefaultEngine.UfuncOut.cs` (`out=` / `where=`), `Backends/Kernels/ComparisonRun.cs` (one chunk of any layout and dtype pair through the vector kernels; scalar adoption), `Backends/Iterators/NDIter.Execution.ComparisonRun.cs` (the iterator hook), `Backends/Kernels/Direct/DirectILKernelGenerator.Comparison.cs` (the IL vector kernels), `.Comparison.Half.cs`, `.Comparison.Complex.cs`, `.Comparison.MixedSign.cs`, `.StridedMove.cs`. Tests `Backends/Kernels/ComparisonRunTests.cs`, `ComparisonBroadcastKernelTests.cs`; fenced memory `test/NumSharp.Tests/Utilities/FencedMemory.cs` |
 | BLAS/LAPACK seam | `Backends/IBlasBackend.cs` + `IBlasBackend.LinearAlgebra.cs` (15 default `Try*`), `Backends/TensorEngine.LinearAlgebra.cs` (virtuals + `LinAlgHelper`); managed LU fallback (`det`/`slogdet`/`solve`/`inv`) in `Backends/Default/LinearAlgebra/ManagedLu.cs`; `Backends/ISlidingDotBackend.cs` (optional level-1 `?dot` seam for `correlate`/`convolve`, `OpenBlasEngine.SlidingDot`) |
 | ONNX Runtime interop (package) | `src/NumSharp.Interop.OnnxRuntime/NDArrayOnnxInterop.{cs,Export.cs,Import.cs}` (dtype maps, `AsOrtValue`/`ToOrtValue`/`AsDenseTensor`/`ToDenseTensor`, `ToNDArray`/`AsNDArray`), `OrtTensor.cs` (the `OrtTensor`/`OrtTensor<T>` handles + `ImportLease`), `UnmanagedMemoryManager.cs` (`Memory<T>` over the unmanaged buffer), `InferenceSessionExtensions.cs` (`session.Run(NDArray…)`), `Postprocess.cs`; ORT C# source for reference at `refs/onnxruntime/csharp/` (sparse submodule) + the official samples at `refs/onnxruntime-inference-examples/c_sharp/` |
 | ML.NET interop (package) | `src/NumSharp.Interop.MLNet/NDArrayMLNetInterop.{cs,Export.cs,Import.cs}` (dtype maps, `AsDataView`/`ToDataView`/`ToVBuffer`, `ToNDArray`, zero-copy `VBuffer.AsNDArray<T>` + `WrapExternal`/`Pin`/`Live{Exports,Imports}`), `NDArrayDataView.cs` (the NDArray-backed `IDataView` + strided lazy cursor + ARC-pin lifetime), `VBufferAccessor.cs` (compiled-expression getter for the private `VBuffer<T>._values`), `ImportLease.cs` (the last-view-releases GCHandle pin lease), `Postprocess.cs` (shared with ONNX). Depends on `Microsoft.ML.DataView` only |
@@ -4764,6 +4895,45 @@ of finding them (the diagnosis, per-test numbers and mutation checks are in comm
   `dotnet-dump collect -p <pid>`, then `analyze` with `clrthreads` (the Cooperative thread is the spinner),
   `setthread <n>` + `clrstack`, and `dso` → `dumpobj` on the `FuzzCorpus+Case` for its `Id`. A zombie
   testhost also LOCKS its build output (`bin/Debug`): build Release until it is gone.
+
+### Memory-safety gates: fenced memory and guard pages (2026-10-10)
+
+A kernel that READS past its operand gives right values (the extra bytes are discarded), and a sentinel margin shows
+writes only. So a value test, an oracle case and a sentinel test all pass over such a read. It is a crash waiting for
+the one buffer that ends where mapped memory ends. Two tools make it fail a test run:
+
+- **`FencedMemory`** (`test/NumSharp.Tests/Utilities/FencedMemory.cs`; Windows, Inconclusive elsewhere). Native memory
+  with an inaccessible page directly below its first byte and directly above its last one (the region is reserved
+  whole, only the data pages are committed).
+  - `fence.Place(bytes, atEnd)` gives the address of a block against the low or the high page.
+  - `np.frombuffer((IntPtr)p, bytes, dtype)` makes that block an array, so the public API runs over it.
+  - A violation is not a failed assertion: the test host ends ("Test host process crashed") with the stack of the
+    kernel that left its operand.
+- **`NUMSHARP_DEBUG_GUARD_PAGES=1`** (the pool's diagnostic mode). Every pooled buffer ends at an inaccessible page;
+  there is no page below it. Run a test class, the whole unit suite or the oracle replay with it after you write
+  pointer code:
+  `NUMSHARP_DEBUG_GUARD_PAGES=1 dotnet test --no-build -c Release --framework net10.0 --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory"`.
+  The tests that count pool takes and returns fail in this mode, because it bypasses the pool: four in
+  `NumSharp.Tests` (`NoOperationDefersItsBufferRelease`, `EightThreads_MixedOps_ZeroErrors_ZeroStrandSlope`,
+  `ScopedSurface_ZeroStrandsPerCall`, `TupleCarrier_Polydiv_ZeroStrands`) and five in the oracle project (the
+  `…LeaveNoUndisposedIntermediates` gates and `OperatorNot_ReclaimsUntypedMakeGenericWrapper`). A CRASH is the
+  finding. The unit suite takes 1 m 44 s this way and the oracle replay 3 m 37 s.
+
+Rules these tools gave:
+- **A stride kernel is visible only on a view that ENDS at its buffer's last element.** `a[::2]` of an even-length
+  buffer leaves one element behind the view, which absorbs a one-element over-read. Test `a[1::2]`, `a[2::3]` and the
+  reversed forms that START at the last element as well.
+- **A vector load of N elements reads N elements.** A deinterleave of two loads covers one element more than the
+  group needs (see "A strided copy or cast never reads outside its view"); a gather with a full mask does not.
+- **A test whose two sides share a wrong operand proves nothing.** `Where_NarrowRows_3D_LeadingAxisWalkedPerBlock`
+  compared `np.add(..., where: mask)` with `np.where(mask, ...)` over a mask that addressed memory outside its buffer
+  (the typed reshape above). Both sides read the same wrong mask, and the test passed from 2026-09-03 on.
+
+What the tools found on their first day (all fixed, each with its own gate): the sub-word deinterleave
+(`StridedCastFenceTests`), `NDArray<T>.reshape(Shape)` (`TypedReshapeViewShapeTests`), and no read or write outside an
+operand in the comparison engine (`ComparisonRunTests`: `Run_BetweenInaccessiblePages_…`,
+`RunRows_BetweenInaccessiblePages_…`). After the two fixes the whole unit suite and the whole oracle replay (every
+corpus case of every operation and layout) run under guard pages without a crash.
 
 ## Test Categories
 

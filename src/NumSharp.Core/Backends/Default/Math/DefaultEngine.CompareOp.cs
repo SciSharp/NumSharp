@@ -47,6 +47,19 @@ namespace NumSharp.Backends
                 if (trivial is not null) return trivial;
             }
 
+            // -------- Two-level iterations, without an iterator ---------------
+            // A matrix against a row or a column, an outer product, a stepped or
+            // reversed view: R runs of N elements whose operands are a fixed
+            // stride apart. DefaultEngine.CompareOp.Rows.cs finds that structure
+            // in the strides and runs one vector-kernel call per run; the
+            // iterator below costs 0.45 us to build and 15 ns per chunk it hands
+            // out. Declines (null) for deeper iterations, F-ordered results and
+            // narrow rows, which the iterator route serves.
+            {
+                var rows = TryRowsComparisonOp(lhs, rhs, op, lhsType, rhsType);
+                if (rows is not null) return rows;
+            }
+
             // -------- NDIter Tier 3B fast path (all comparison ops) -----------
             // Mirrors the binary-op routing pattern. The iterator coalesces
             // dimensions, normalizes negative strides, and resolves stride=0
@@ -157,6 +170,16 @@ namespace NumSharp.Backends
                     return null;   // strided/transposed array operand → NDIter
                 path = rhsScalarLike ? ExecutionPath.SimdScalarRight : ExecutionPath.SimdScalarLeft;
             }
+            else if (lhsScalarLike && rhsScalarLike)
+            {
+                // Two one-element operands, of any two ranks ((1,) against a 0-d array, (1,1) against (1,)): one
+                // compare, and the result has the dims of the higher-rank operand (all 1), as NumPy's broadcast gives.
+                // Operands of DIFFERENT rank used to fall through to the iterator route, which built an iterator for
+                // one element (1.0 us, against 0.47 us for the same pair of equal rank). A one-element array is
+                // contiguous whatever its strides, so the kernel reads each operand at its first element.
+                path = ExecutionPath.SimdFull;
+                arrShape = ls.NDim >= rs.NDim ? ls : rs;
+            }
             else
             {
                 // Equal-shape (both arrays, or both size-1). Same dims, one shared
@@ -171,6 +194,33 @@ namespace NumSharp.Backends
                     return null;
                 path = ExecutionPath.SimdFull;
                 arrShape = bothF ? rs : ls;
+            }
+
+            // The comparison run (Backends/Kernels/ComparisonRun.cs) executes the pair, each operand read as one
+            // linear run of its memory (or as one value):
+            //   - operands of one dtype: the same vector kernel the key below names, started on a vector boundary
+            //     (a buffer that begins in the middle of a 32-byte vector makes every second load cross a cache
+            //     line: 100,000 float64 against a value, 12.5 us instead of 9.3);
+            //   - operands of two dtypes: the operand that already has the comparison dtype is read in place, the
+            //     other is converted 8 KB at a time with the SIMD cast kernels, and an array against ONE value of
+            //     another dtype is compared in the array's own dtype. The kernel of the mixed key below converts
+            //     both operands element by element instead (a float32 array against a float64 value: 70 us for
+            //     100,000 elements where NumPy takes 7).
+            // It is null only where runtime IL generation is unavailable or the run is switched off by its test hook
+            // (ComparisonRun.Disabled); the kernel lookup below then decides.
+            if (ComparisonRun.Get(op, lhsType, rhsType) is { } run)
+            {
+                bool runIsF = arrShape.IsFContiguous && !arrShape.IsContiguous;
+                var ran = new NDArray<bool>(CanonicalResultShape(arrShape, runIsF), false);
+                if (ran.size != 0)
+                {
+                    int lhsItem = lhs.dtypesize, rhsItem = rhs.dtypesize;
+                    run.Run(
+                        (byte*)lhs.Address + ls.offset * lhsItem, lhsScalarLike ? 0 : lhsItem,
+                        (byte*)rhs.Address + rs.offset * rhsItem, rhsScalarLike ? 0 : rhsItem,
+                        (byte*)ran.Address, 1, ran.size);
+                }
+                return ran;
             }
 
             var key = new ComparisonKernelKey(lhsType, rhsType, op, path);
@@ -496,7 +546,13 @@ namespace NumSharp.Backends
                         NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
                     });
 
-                iter.ExecuteElementWiseBinary(lhsType, rhsType, NPTypeCode.Boolean, scalarBody, null, cacheKey);
+                // Chunks long enough for a vector loop go through the comparison run: it reads contiguous and
+                // one-value operands in place and stages stepped, reversed or other-dtype ones 8 KB at a time
+                // (Backends/Kernels/ComparisonRun.cs). The per-element kernel below ran every one of these layouts
+                // at about 1 ns an element (a float64 (250,400) array against a column: 108 us, NumPy 41). Narrow
+                // rows and tiny arrays are declined by the run and keep that kernel (and its 2-D block form).
+                if (!iter.TryExecuteComparisonRun(ComparisonRun.Get(op, lhsType, rhsType)))
+                    iter.ExecuteElementWiseBinary(lhsType, rhsType, NPTypeCode.Boolean, scalarBody, null, cacheKey);
             }
             catch (NotSupportedException)
             {

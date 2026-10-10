@@ -148,6 +148,26 @@ namespace NumSharp.Backends.Kernels
                     return halfCmp;
             }
 
+            // complex128 pairs compare two elements per 256-bit vector with NumPy's CLT / CLE / CGT / CGE / CEQ / CNE
+            // rule (Comparison.Complex.cs); the emitted loop below takes one element at a time through
+            // System.Numerics.Complex. The strided forms keep the emitted loop.
+            if (key.LhsType == NPTypeCode.Complex && key.RhsType == NPTypeCode.Complex)
+            {
+                var complexCmp = TryGetComplexComparisonKernel(key.Op, key.Path);
+                if (complexCmp != null)
+                    return complexCmp;
+            }
+
+            // int64 against uint64, either order: NumPy's exact qQ / Qq loops as machine compares
+            // (Comparison.MixedSign.cs). The emitted loop below is exact too, but it compares in System.Decimal.
+            if ((key.LhsType == NPTypeCode.Int64 && key.RhsType == NPTypeCode.UInt64)
+                || (key.LhsType == NPTypeCode.UInt64 && key.RhsType == NPTypeCode.Int64))
+            {
+                var mixedSignCmp = TryGetMixedSignComparisonKernel(key.LhsType == NPTypeCode.Int64, key.Op, key.Path);
+                if (mixedSignCmp != null)
+                    return mixedSignCmp;
+            }
+
             return key.Path switch
             {
                 ExecutionPath.SimdFull => GenerateComparisonSimdFullKernel(key),

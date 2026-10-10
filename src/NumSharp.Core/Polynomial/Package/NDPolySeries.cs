@@ -157,6 +157,20 @@ namespace NumSharp
             => new PolySeriesView(null, p, n, DirectILKernelGenerator.GetTypeSize(t), t, 1, n, false);
 
         /// <summary>
+        ///     A 1-D run in raw memory that no NDArray owns, read at ANY byte stride: one inner-loop chunk an iterator
+        ///     hands out (a stepped, reversed or gathered run). <see cref="Source"/> is null; the caller keeps the memory
+        ///     alive for as long as the view is used. The comparison engine stages such a run into a contiguous block
+        ///     with <see cref="NDPolySeries.CopyInto"/>.
+        /// </summary>
+        /// <param name="p">Element 0.</param>
+        /// <param name="n">Element count.</param>
+        /// <param name="byteStride">Signed byte stride between elements (a whole number of elements; not checked).</param>
+        /// <param name="t">The elements' dtype.</param>
+        /// <returns>The view.</returns>
+        public static PolySeriesView RawStrided(byte* p, long n, long byteStride, NPTypeCode t)
+            => new PolySeriesView(null, p, n, byteStride, t, 1, n, false);
+
+        /// <summary>
         ///     The same series starting at element <paramref name="start"/> (<c>v[start:start+length]</c>): same dtype
         ///     and stride, the address advanced along axis 0. Used to walk a long series in blocks.
         /// </summary>
