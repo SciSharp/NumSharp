@@ -39,7 +39,7 @@ Status: `todo`, `done` (with the commit), `deferred`, `closed` (no change by dec
 | V4 | The read-only flag is lost through `Value.AsNDArray()` and `Tensor.AsNDArray()` | Those views inherit the source's read-only flag. A read-only array stays a legal model input; the documents say that ORT has no read-only tensors. | done (WP 3; documents in WP 9) |
 | V5 | A repeated output name loses one array until a collection | Accepted as it is. | closed |
 | V6 | `casting` is checked only when a cast is necessary; `"no"` still converts Decimal | `Run` always validates the string. Decimal and Char follow NumSharp's `can_cast` table: the default `"safe"` refuses a Decimal input (`"same_kind"` permits it); Char → UInt16 stays permitted under `"safe"` and stays zero-copy. | done (WP 4) |
-| V7 | `TryToTensorElementType` / `ToTensorElementClrType` throw for a datetime64 / timedelta64 descriptor | The `Try` form returns `false`, `ToTensorElementClrType` returns `null`, `ToTensorElementType` throws the package's own message. A non-native descriptor keeps mapping as native. | todo |
+| V7 | `TryToTensorElementType` / `ToTensorElementClrType` throw for a datetime64 / timedelta64 descriptor | The `Try` form returns `false`, `ToTensorElementClrType` returns `null`, `ToTensorElementType` throws the package's own message. A non-native descriptor keeps mapping as native. | done (WP 5) |
 | V8a | A sparse-tensor model input passes the checks of `Run` and fails inside ORT | Deferred. | deferred |
 | V8b (G7) | `Run` refuses an `optional(tensor)` input with a wrong hint | `Run` unwraps the declaration and feeds a plain tensor. | done (WP 4) |
 | V9 | A pre-allocated output that overlaps an input gives wrong values (MatMul 64×64: 3,072 of 4,096 elements) | `Auto`: `RunInto` feeds a copy of the overlapping input, as NumPy does for `out=`. `View`: it throws. Two outputs in one array always throw. | done (WP 4) |
@@ -227,7 +227,7 @@ ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, an
 | 2 | `OnnxCodecMode` on the export verbs; `IsView`; `reverseStride` export removed | V1 | done |
 | 3 | Import side: counted alias, read-only, ownership on failure, memory pressure, legacy types, readers, device kind | V3, V4, V10a, V10b, V11b, C3b, C3c | done |
 | 4 | `Run` tier: `mode`, `RunInto`, casting rule, optional inputs, overridable initializers, overlap | V1, V6, V8b, V9, V11a, C2d | done |
-| 5 | dtype maps over descriptors without storage | V7 | todo |
+| 5 | dtype maps over descriptors without storage | V7 | done |
 | 6 | Text crossing | S1, C2b | todo |
 | 7 | `RunIntoAsync` / `RunAsync` | C3a | todo |
 | 8 | Remaining tests and models | T1, T2 | todo |
@@ -255,4 +255,5 @@ ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, an
 | 2026-10-10 | 1 | `720d81cb` | shared `Postprocess`; ONNX suite 212 / 212 on net10.0 and net8.0 (ORT 1.16.0), ML.NET post-processing and API-surface classes 24 / 24 on both |
 | 2026-10-10 | 2 | `40d546aa` | `OnnxCodecMode` on `AsOrtValue` / `AsDenseTensor<T>`, `IsView`, row-major tensors only; ONNX suite 216 / 216 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0 |
 | 2026-10-10 | 3 | `eade99a5` | import side: counted alias, read-only inheritance, ownership on failure, memory pressure, legacy `char` / `Half` tensors, owning reader results, device kind from ORT; ONNX suite 232 / 232 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 16 of 18 (1 equivalent, 1 closed by a new test) |
-| 2026-10-10 | 4 | (this commit) | `Run` tier: input mode on every form, `RunInto`, the cast table for every dtype pair, optional inputs, overridable initializers, the overlap rule; ONNX suite 241 / 241 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 18 of 18 |
+| 2026-10-10 | 4 | `3139d111` | `Run` tier: input mode on every form, `RunInto`, the cast table for every dtype pair, optional inputs, overridable initializers, the overlap rule; ONNX suite 241 / 241 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 18 of 18 |
+| 2026-10-10 | 5 | (this commit) | dtype maps answer false / null for a datetime64 / timedelta64 descriptor; ONNX suite 242 / 242 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0 |

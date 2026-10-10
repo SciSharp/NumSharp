@@ -96,22 +96,43 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     <see cref="System.Half"/>) and <see cref="NPTypeCode.Char"/> → <see cref="TensorElementType.UInt16"/>
         ///     (UTF-16 code units, the rule the pythonnet bridge also uses).
         /// </summary>
+        /// <remarks>
+        ///     The map reads the descriptor's STORAGE class (<c>dtype.Meta.TypeCode</c>), so a non-native descriptor
+        ///     (<c>&gt;i4</c>) maps like its native twin: an array of it holds native values. A descriptor whose class has no
+        ///     storage in NumSharp yet (datetime64 / timedelta64) has no element type either; it is refused here with this
+        ///     package's own message. It used to surface NumSharp's "has no NumSharp storage yet" error, also from the
+        ///     <c>Try</c> form, which must never throw for a dtype it does not map.
+        /// </remarks>
+        /// <param name="dtype">The NumSharp dtype (a <see cref="DType"/>, or anything that converts to one: an <see cref="NPTypeCode"/>, a <see cref="Type"/>, a dtype string).</param>
+        /// <returns>The ONNX tensor element type.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
         /// <exception cref="NotSupportedException">
         ///     <see cref="NPTypeCode.Decimal"/> (no ONNX type — convert to Double first; the array-producing
-        ///     verbs do so automatically) or <see cref="NPTypeCode.Complex"/> (ORT accepts no complex tensors).
+        ///     verbs do so automatically), <see cref="NPTypeCode.Complex"/> (ORT accepts no complex tensors), or a
+        ///     datetime64 / timedelta64 descriptor (ONNX has no date or duration tensors).
         /// </exception>
         public static TensorElementType ToTensorElementType(DType dtype)
         {
-            NPTypeCode code = (dtype ?? throw new ArgumentNullException(nameof(dtype))).GetTypeCode();
+            if (dtype is null)
+                throw new ArgumentNullException(nameof(dtype));
             if (!TryToTensorElementType(dtype, out TensorElementType type))
-                throw new NotSupportedException(UnsupportedExportMessage(code));
+                throw new NotSupportedException(dtype.Meta.TypeCode == NPTypeCode.Empty ? NoStorageDtypeMessage(dtype) : UnsupportedExportMessage(dtype.Meta.TypeCode));
             return type;
         }
 
-        /// <summary><see cref="ToTensorElementType"/> without the throw; <c>false</c> for Decimal / Complex.</summary>
+        /// <summary>
+        ///     <see cref="ToTensorElementType"/> without the throw: <c>false</c> for every dtype that has no ONNX tensor
+        ///     element type — Decimal, Complex, a datetime64 / timedelta64 descriptor — and for <c>null</c>.
+        /// </summary>
+        /// <param name="dtype">The NumSharp dtype, or null.</param>
+        /// <param name="type">The ONNX element type when the result is <c>true</c>; <c>default</c> otherwise.</param>
+        /// <returns><c>true</c> when the dtype crosses to ONNX Runtime.</returns>
         public static bool TryToTensorElementType(DType dtype, out TensorElementType type)
         {
-            switch (dtype?.GetTypeCode())
+            // Meta.TypeCode, not GetTypeCode(): the latter THROWS for a descriptor whose class has no storage yet
+            // (datetime64 / timedelta64), and a Try method must answer false for those. It is NPTypeCode.Empty there,
+            // which the default case refuses.
+            switch (dtype?.Meta.TypeCode)
             {
                 case NPTypeCode.Boolean: type = TensorElementType.Bool; return true;
                 case NPTypeCode.Byte: type = TensorElementType.UInt8; return true;
@@ -126,9 +147,16 @@ namespace NumSharp.Interop.OnnxRuntime
                 case NPTypeCode.Half: type = TensorElementType.Float16; return true;    // bit-identical reinterpret
                 case NPTypeCode.Single: type = TensorElementType.Float; return true;
                 case NPTypeCode.Double: type = TensorElementType.Double; return true;
-                default: type = default; return false;                                   // Decimal, Complex
+                default: type = default; return false;                                   // Decimal, Complex, a class without storage
             }
         }
+
+        /// <summary>The refusal for a descriptor whose class has no NumSharp storage (datetime64, timedelta64).</summary>
+        /// <param name="dtype">The descriptor.</param>
+        /// <returns>The message: what the dtype is, why it cannot cross, and what to feed instead.</returns>
+        internal static string NoStorageDtypeMessage(DType dtype) =>
+            $"NumSharp dtype {dtype.name} has no ONNX tensor element type: ONNX has no date, time or duration tensors " +
+            "(and NumSharp has no arrays of this dtype yet). Feed the values as an integer count, for example int64.";
 
         /// <summary>
         ///     The NumSharp dtype an ONNX tensor element type reads back as. Directional on purpose:
@@ -170,11 +198,17 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <summary>
         ///     The C# element type ORT's <see cref="DenseTensor{T}"/> uses for a NumSharp dtype —
         ///     <see cref="System.Half"/> becomes ORT's <see cref="Float16"/>, <see cref="char"/> becomes
-        ///     <see cref="ushort"/>; <c>null</c> for Decimal / Complex.
+        ///     <see cref="ushort"/>; <c>null</c> for a dtype with no ONNX element type (Decimal, Complex, a
+        ///     datetime64 / timedelta64 descriptor).
         /// </summary>
+        /// <param name="dtype">The NumSharp dtype.</param>
+        /// <returns>The element type of the tensor the dtype crosses as, or <c>null</c>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
         public static Type ToTensorElementClrType(DType dtype)
         {
-            NPTypeCode code = (dtype ?? throw new ArgumentNullException(nameof(dtype))).GetTypeCode();
+            // Meta.TypeCode: a descriptor without storage answers null like every other unmapped dtype (GetTypeCode()
+            // threw NumSharp's "no storage yet" error for it).
+            NPTypeCode code = (dtype ?? throw new ArgumentNullException(nameof(dtype))).Meta.TypeCode;
             switch (code)
             {
                 case NPTypeCode.Boolean: return typeof(bool);
