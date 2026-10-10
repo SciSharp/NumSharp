@@ -21,11 +21,27 @@ namespace NumSharp.Generic
         /// </summary>
         /// <param name="newShape">The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</param>
         /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
+        /// <exception cref="IncorrectShapeException">The size does not match: NumPy's
+        ///     <c>cannot reshape array of size {n} into shape {s}</c>.</exception>
+        /// <remarks>
+        ///     <para>Only the DIMENSIONS of <paramref name="newShape"/> are a request, as in NumPy, whose reshape takes a
+        ///     shape tuple. A <see cref="Shape"/> taken from a view (<c>x[":, :, :4"].Shape</c>), a transposed or a
+        ///     broadcast array also carries that array's strides, offset and buffer size. Until 2026-10-10 this
+        ///     overload installed them over THIS array's buffer, so the result addressed elements outside it:
+        ///     <c>np.zeros(40, bool).AsGeneric&lt;bool&gt;().reshape(np.arange(80).reshape(5, 2, 8)[":, :, :4"].Shape)</c>
+        ///     had strides (16, 8, 1) over 40 elements and read up to element 75 (other heap memory; an access
+        ///     violation when the buffer ends where mapped memory ends). The untyped
+        ///     <see cref="NDArray.reshape(Shape)"/> never did. <see cref="Shape.AsClean"/> keeps a shape that already
+        ///     is a plain dimension list as it is, so <c>a.reshape(2, 3)</c> and <c>a.reshape(new Shape(2, 3))</c> cost
+        ///     what they did.</para>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</para>
+        /// </remarks>
         public new NDArray<TDType> reshape(ref Shape newShape)
         {
+            // Dimensions only (see the remarks): the layout of the result comes from this array, never from the argument.
+            var requested = newShape.AsClean();
             var ret = Storage.Alias();
-            ret.Reshape(ref newShape, false);
+            ret.Reshape(ref requested, false);
             return new NDArray<TDType>(ret) { TensorEngine = TensorEngine };
         }
 

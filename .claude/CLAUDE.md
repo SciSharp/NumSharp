@@ -542,6 +542,26 @@ indexer has no setter (removed 2026-10-05; it wrote into a dimension array that 
 `FuzzCorpusTests.RandomApiSizeLayouts` (every random overload taking a `Shape`, its size handed over as a view's layout
 of the same dimensions, against NumPy).
 
+**`NDArray<T>.reshape(Shape)` reads the DIMENSIONS of its argument (fixed 2026-10-10).** NumPy's reshape takes a shape
+tuple, and the untyped `NDArray.reshape(Shape)` (`ReshapeCore`) always used the dimensions only. The typed overload
+`NDArray<T>.reshape(Shape)` / `reshape(ref Shape)` relabelled its storage with the Shape AS GIVEN
+(`UnmanagedStorage.Reshape` → `Shape.Reshape(Shape)`, which keeps the argument's strides):
+- **The consequence.** A Shape taken from a view, a transposed or a broadcast array carried that array's strides over
+  THIS array's buffer. `np.zeros(40, bool).AsGeneric<bool>().reshape(np.arange(80).reshape(5, 2, 8)[":, :, :4"].Shape)`
+  had strides (16, 8, 1) over 40 elements: it read up to element 75, which is other heap memory (wrong values, and an
+  access violation when the buffer ends where mapped memory ends). A comparison returns `NDArray<bool>`, so the natural
+  port of `(a % 3 == 0).reshape(x.shape)` hit it. An existing test built its `where=` mask that way
+  (`Indexing_KernelRoute_Tests.Where_NarrowRows_3D_LeadingAxisWalkedPerBlock`); its assertion read the same wrong mask
+  on both sides, so it passed.
+- **The fix.** The typed overload passes `newShape.AsClean()` on: a plain dimension list is kept as it is
+  (`a.reshape(2, 3)`, `new Shape(2, 3)`: no extra allocation), any other layout is re-laid out in C order.
+- **Not changed:** `reshape_unsafe(Shape)` (typed and untyped) still installs the Shape it is given; it is the
+  unchecked relabel that broadcasting uses. The typed overloads also still COPY a non-contiguous source where the
+  untyped route returns NumPy's strided view (`_attempt_nocopy_reshape`): a view / copy difference, not an addressing
+  error.
+- **Gate.** `Manipulation/TypedReshapeViewShapeTests.cs` (the Shapes of a stepped view, a column view, a reversed view,
+  a transposed array and a broadcast array; write-through; NumPy's values).
+
 ## Slicing Syntax
 
 ```csharp
