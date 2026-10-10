@@ -50,6 +50,7 @@ Status: `todo`, `done` (with the commit), `deferred`, `closed` (no change by dec
 | V11c | `Postprocess` exists 2 times (ONNX bridge, ML.NET bridge) | One source file compiled into both bridges; the 2 public names stay; a caller with both bridges uses a `using` alias. | done (WP 1) |
 | V11d | `Postprocess.Argmax(x2d, axis: -3)` returns a result | `Postprocess.Argmax` checks its axis, as `TopK` does. | done (WP 1) |
 | V11e | Unused internal members | Kept: each one was checked and is correct. | closed |
+| V12 (new, found by the probes for WP 7) | A model output that no node produces and that the caller feeds (an output that is a model input, or a fed overridable initializer). `RunInto` leaves the pre-allocated array unwritten (`[-777, -777, -777]` stays), or gives it the initializer's DEFAULT while the run uses the fed value; no error. `Run(zeroCopyOutputs: true)` returns a view of the fed memory that holds no reference on it: with an input fed as a temporary, the view read `[555, 555, 555]` from the next array that took the temporary's block. | Not an owner decision: a defect found during execution, fixed by the precedents V9 and V3. `RunInto` writes the fed values into the array after the run and checks the array's shape before it. The zero-copy form returns a counted NumSharp alias of the fed buffer; the copy form copies from the fed buffer. The criterion is the output's name among the fed names, which is ORT's own rule. Design in §3.7. The low-level `AsNDArray(OrtValue)` stays open (§5.1). | done (WP 10) |
 
 ### 2.2 Completeness
 
@@ -221,6 +222,28 @@ Task<IReadOnlyDictionary<string, NDArray>> RunAsync(this InferenceSession sessio
 - On an ORT older than 1.30.0 both throw `NotSupportedException` with the reason. The loaded version is read
   once from the managed assembly (1.16.0 reports 0.0.0.0, which counts as older).
 
+### 3.7 Outputs that are fed inputs (V12)
+
+ONNX permits a graph output that no node produces. ONNX Runtime's execution frame fills its value slots with the
+fetch buffers, then with the initializers, then with the feeds, each by name. So a feed replaces what the slot of
+the same name held. Measured on ORT 1.16.0 and 1.31.0:
+
+| Output | Pre-allocated buffer | Value ORT returns when it allocates |
+|---|---|---|
+| A node's output | written | ORT's own buffer |
+| An initializer that is not fed | written (ORT copies the initializer) | ORT's own copy (a write through it does not reach the weight) |
+| A model input, or an overridable initializer that IS fed | NOT written with the fed value | a value at the FED tensor's address |
+
+The bridge therefore treats an output whose name is among the fed names (`FedTensor`) apart:
+
+- `RunInto` (and `RunIntoAsync`): before the run it checks that the array has the fed input's shape (ORT checks
+  nothing for this buffer); after a successful run it copies the fed handle's bytes into the array.
+- `Run`, copy form: the output is copied from the fed handle's NumSharp memory (no span, so any size).
+- `Run`, zero-copy form: the output is a counted NumSharp alias of the fed buffer (`AliasExportedValue`). It is a
+  view of the caller's input array when the input was shared, and of the temporary when the input needed a cast or
+  a C-order copy; the temporary then lives as long as the view. It is read-only when the fed array was.
+- A fed TEXT input is not this case: its string tensor is ORT's own object, and the ordinary text copy reads it.
+
 ## 4. Work packages
 
 Each package is one commit on `strings`, limited to the bridge files, with its tests. Gate for every package: the
@@ -239,6 +262,7 @@ ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, an
 | 7 | `RunIntoAsync` / `RunAsync` | C3a | todo |
 | 8 | Remaining tests and models | T1, T2 | todo |
 | 9 | Documents and CI: README, docs page, `CLAUDE.md`, csproj comment, ORT 1.31.0, API approval list | D1, D2, D3 | todo |
+| 10 | Outputs that are fed inputs. Run before WP 7, whose forms share the code. | V12 | done |
 
 ## 5. Deferred, with the owner's design notes
 
@@ -254,6 +278,19 @@ ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, an
   Core: `np.asarray`, `np.asmatrix`, `np.all`, `np.any`; 6 oracle test files; the coverage map and its test;
   `CLAUDE.md`; 1 matrix test). The bridge files are identical on the two branches.
 
+### 5.1 Open items found during execution (not decided by the owner)
+
+- **V12b, a pass-through output through the low-level verb.** A caller who runs the session with ORT's own
+  `session.Run` and feeds an `AsOrtValue` handle gets, for an output that is a fed input, a value over the handle's
+  NumSharp memory. `value.AsNDArray(ownsValue: true)` then returns a view that holds no reference on that memory:
+  it dangles when the handle is disposed and the handle owned a temporary. The `Run` tier is fixed because it knows
+  what it fed. The low-level verb would need a registry of the live export handles by address (a lock, several
+  handles for one address, entries that do not root their handle). The remarks of `AsNDArray` state the limit.
+  Recommended: build the registry when the low-level tier gets a caller that returns owning views.
+- **ORT's `RunAsync` on a session whose task continues on ORT's thread.** Measured on 1.31.0: ORT completes its
+  task on its intra-op thread, and `session.Dispose()` called there never returns. The bridge's async forms
+  complete their task off that thread (§3.6). A caller of ORT's own `RunAsync` must do the same.
+
 ## 6. Execution log
 
 | Date | WP | Commit | Result |
@@ -264,4 +301,5 @@ ONNX suite on net10.0 at the floor; at milestones also net8.0 and ORT 1.31.0, an
 | 2026-10-10 | 3 | `eade99a5` | import side: counted alias, read-only inheritance, ownership on failure, memory pressure, legacy `char` / `Half` tensors, owning reader results, device kind from ORT; ONNX suite 232 / 232 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 16 of 18 (1 equivalent, 1 closed by a new test) |
 | 2026-10-10 | 4 | `3139d111` | `Run` tier: input mode on every form, `RunInto`, the cast table for every dtype pair, optional inputs, overridable initializers, the overlap rule; ONNX suite 241 / 241 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 18 of 18 |
 | 2026-10-10 | 5 | `09248ea1` | dtype maps answer false / null for a datetime64 / timedelta64 descriptor; ONNX suite 242 / 242 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0 |
-| 2026-10-10 | 6 | (this commit) | text crossing on the fixed-width `U` / `S` dtypes, as a copy: the dtype maps, `ToOrtValue` / `AsOrtValue`, `ToNDArray` / `AsNDArray`, the legacy `Tensor<string>`, the sequence and map readers, and `Run`; 3 new models (string labels, a string-keyed ZipMap, text next to numbers); ONNX suite 257 / 257 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 21 of 21 |
+| 2026-10-10 | 6 | `17231da9` | text crossing on the fixed-width `U` / `S` dtypes, as a copy: the dtype maps, `ToOrtValue` / `AsOrtValue`, `ToNDArray` / `AsNDArray`, the legacy `Tensor<string>`, the sequence and map readers, and `Run`; 3 new models (string labels, a string-keyed ZipMap, text next to numbers); ONNX suite 257 / 257 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 21 of 21 |
+| 2026-10-10 | 10 | (this commit) | outputs that are fed inputs: `RunInto` writes them, the zero-copy form returns a counted alias of the fed buffer, the copy form copies from it; 3 new models (`passthrough`, `overridable_out`, `passthrough_text`); ONNX suite 266 / 266 in Release on net10.0 and net8.0 (ORT 1.16.0) and on net10.0 with ORT 1.31.0; mutation sample 6 of 9 (2 equivalent: a zero-byte copy, and the copy form below 2 GB; 1 not observable from outside: the early dispose of the value ORT returned) |

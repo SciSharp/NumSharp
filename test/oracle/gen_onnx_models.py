@@ -57,6 +57,16 @@ classifier_str.onnx     X [N,3] float32 -> ArgMax -> LabelEncoder(int64 -> strin
                         outputs with string labels: a text output next to a non-tensor output.
 mixed_string_float.onnx text ['N'] string, x ['N'] float32 -> Identity each -> echo, y. A TEXT input next
                         to a numeric one in one run, and a text output next to a numeric one.
+passthrough.onnx        X ['N'] float32 is a graph input AND a graph output (no node produces it) ;
+                        X -> Neg -> Y. An OUTPUT THAT IS A FED INPUT: ONNX Runtime returns the fed tensor
+                        itself for it and never writes a pre-allocated buffer, so the bridge must.
+overridable_out.onnx    x [3] float32, w [3] float32 (an overridable initializer, value [10, 20, 30]) ->
+                        Add -> y ; w is ALSO a graph output. Not fed, the output w is the default value
+                        (ORT copies it); fed, it is the fed value and a pre-allocated buffer receives the
+                        DEFAULT instead.
+passthrough_text.onnx   text ['N'] string is a graph input AND a graph output ; x ['N'] float32 -> Neg -> y.
+                        A TEXT input passed through: the value ORT returns for it is the string tensor
+                        the bridge built, which is ORT's own memory, not NumSharp's.
 """
 from __future__ import annotations
 
@@ -240,6 +250,31 @@ def build_all():
         [_tensor("text", TensorProto.STRING, ["N"]), _tensor("x", TensorProto.FLOAT, ["N"])],
         [_tensor("y", TensorProto.FLOAT, ["N"]), _tensor("echo", TensorProto.STRING, ["N"])])
 
+    # An OUTPUT that no node produces: X is a graph input and a graph output (legal ONNX). ONNX Runtime puts the
+    # fed tensor into the output slot, so the value it returns for X lies in the CALLER's memory, and a buffer the
+    # caller pre-allocates for X is never written. Y = Neg(X) is an ordinary output next to it.
+    models["passthrough"] = _model(
+        "passthrough",
+        [helper.make_node("Neg", ["X"], ["Y"])],
+        [_tensor("X", TensorProto.FLOAT, ["N"])],
+        [_tensor("X", TensorProto.FLOAT, ["N"]), _tensor("Y", TensorProto.FLOAT, ["N"])])
+
+    # An output that is an OVERRIDABLE INITIALIZER: w is an initializer, a graph input and a graph output.
+    weight_out = helper.make_tensor("w", TensorProto.FLOAT, [3], [10.0, 20.0, 30.0])
+    models["overridable_out"] = _model(
+        "overridable_out",
+        [helper.make_node("Add", ["x", "w"], ["y"])],
+        [_tensor("x", TensorProto.FLOAT, [3]), _tensor("w", TensorProto.FLOAT, [3])],
+        [_tensor("w", TensorProto.FLOAT, [3]), _tensor("y", TensorProto.FLOAT, [3])], initializer=[weight_out])
+
+    # A TEXT input passed through to an output. The fed string tensor is ONNX Runtime's own object (text never
+    # shares NumSharp memory), so this output must take the ordinary text copy, not the fed-memory route.
+    models["passthrough_text"] = _model(
+        "passthrough_text",
+        [helper.make_node("Neg", ["x"], ["y"])],
+        [_tensor("text", TensorProto.STRING, ["N"]), _tensor("x", TensorProto.FLOAT, ["N"])],
+        [_tensor("text", TensorProto.STRING, ["N"]), _tensor("y", TensorProto.FLOAT, ["N"])])
+
     return models
 
 
@@ -318,6 +353,22 @@ def self_check(path: str, name: str) -> None:
     elif name == "mixed_string_float":
         y, echo = sess.run(None, {"text": np.array(["a", "bb"], dtype=object), "x": np.array([1, 2], np.float32)})
         assert list(echo) == ["a", "bb"] and np.array_equal(y, np.array([1, 2], np.float32)), name
+    elif name == "passthrough":
+        assert [o.name for o in sess.get_outputs()] == ["X", "Y"], name
+        x = np.array([1, 2, 3], np.float32)
+        x_out, y = sess.run(None, {"X": x})
+        assert np.array_equal(x_out, x) and np.array_equal(y, -x), name
+    elif name == "overridable_out":
+        assert [i.name for i in sess.get_overridable_initializers()] == ["w"], name
+        x = np.array([1, 2, 3], np.float32)
+        w, y = sess.run(None, {"x": x})                              # the default weight comes out
+        assert np.array_equal(w, np.array([10, 20, 30], np.float32)) and np.array_equal(y, x + w), name
+        fed = np.array([100, 200, 300], np.float32)
+        w, y = sess.run(None, {"x": x, "w": fed})                    # the fed weight comes out
+        assert np.array_equal(w, fed) and np.array_equal(y, x + fed), name
+    elif name == "passthrough_text":
+        echo, y = sess.run(None, {"text": np.array(["a", "bb"], dtype=object), "x": np.array([1, 2], np.float32)})
+        assert list(echo) == ["a", "bb"] and np.array_equal(y, np.array([-1, -2], np.float32)), name
     else:
         raise AssertionError(f"no self-check for {name}")
 

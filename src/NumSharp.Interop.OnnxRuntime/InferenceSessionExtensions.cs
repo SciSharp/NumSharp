@@ -94,6 +94,16 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     Run with named inputs; returns the requested outputs (all of the model's outputs when
         ///     <paramref name="outputNames"/> is <c>null</c>) keyed by name.
         /// </summary>
+        /// <remarks>
+        ///     <b>An output that is a fed input.</b> ONNX allows a model output that no node produces: it carries the name
+        ///     of a model input (or of an overridable initializer the caller feeds), and its value is the fed value. ONNX
+        ///     Runtime returns such an output as a value over the FED tensor's memory, which is NumSharp's. So the copy
+        ///     form copies it from that memory, and with <paramref name="zeroCopyOutputs"/> it comes back as an ordinary
+        ///     NumSharp view of the fed memory that holds its own reference: the caller's input array when the input was
+        ///     shared (the two then show each other's writes), the temporary when the input needed a cast or a C-order
+        ///     copy. It used to be leased like a buffer ORT owns, so it held no reference: with a temporary it read freed
+        ///     memory as soon as the call returned.
+        /// </remarks>
         /// <param name="session">The session.</param>
         /// <param name="inputs">Model input name → array. Each array is fed zero-copy when it is C-contiguous and of the declared dtype; otherwise a cast / C-order copy is made for the duration of the run (or refused, under <see cref="OnnxCodecMode.View"/>).</param>
         /// <param name="outputNames">Outputs to fetch; <c>null</c> = <see cref="InferenceSession.OutputNames"/>.</param>
@@ -146,7 +156,9 @@ namespace NumSharp.Interop.OnnxRuntime
 
                 using RunOptions owned = runOptions is null ? new RunOptions() : null;
                 IDisposableReadOnlyCollection<OrtValue> outputs = session.Run(runOptions ?? owned, names, values, outputNames);
-                return zeroCopyOutputs ? ViewOutputs(outputs, outputNames) : CopyOutputs(outputs, outputNames);
+                // The collectors run before the finally below disposes the input handles: an output that is a fed input
+                // is read from (or aliased over) a handle's memory, which must still be referenced then.
+                return zeroCopyOutputs ? ViewOutputs(outputs, outputNames, names, handles) : CopyOutputs(outputs, outputNames, names, handles);
             }
             finally
             {
@@ -172,6 +184,12 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     that overlap each other are refused in every mode: no copy can make that well defined.</para>
         ///     <para>It was an overload of <c>Run</c>. It has its own name because <c>session.Run(inputs, null)</c> was
         ///     ambiguous between the two dictionary forms (CS0121), and because it returns nothing.</para>
+        ///     <para><b>An output that is a fed input.</b> ONNX allows a model output that no node produces: it carries the
+        ///     name of a model input (or of an overridable initializer the caller feeds), and its value is the fed value.
+        ///     ONNX Runtime does NOT write a pre-allocated array for such an output: the array kept what it held before the
+        ///     run (or received the initializer's default value while the run used the fed one), with no error. The call
+        ///     now writes the fed values into the array itself, after the run. The array must have the fed input's
+        ///     shape.</para>
         /// </remarks>
         /// <param name="session">The session.</param>
         /// <param name="inputs">Model input name → array, fed as in <see cref="Run(InferenceSession, IReadOnlyDictionary{string, NDArray}, IReadOnlyCollection{string}, RunOptions, string, bool, OnnxCodecMode)"/>.</param>
@@ -180,7 +198,10 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="casting">NumPy casting rule for dtype coercion of INPUTS (default <c>"safe"</c>); outputs are never cast.</param>
         /// <param name="mode">How the INPUTS are fed; see <see cref="OnnxCodecMode"/>. The outputs are always shared.</param>
         /// <exception cref="ArgumentNullException"><paramref name="session"/>, <paramref name="inputs"/> or <paramref name="outputs"/> is null, or a name or array in them is null.</exception>
-        /// <exception cref="ArgumentException">The model has no input or output of a given name; a shape contradicts the declared one; or two outputs overlap in memory.</exception>
+        /// <exception cref="ArgumentException">
+        ///     The model has no input or output of a given name; a shape contradicts the declared one; two outputs overlap
+        ///     in memory; or the array for an output that is a fed input does not have that input's shape.
+        /// </exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not one of the five rule names.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
         /// <exception cref="InvalidCastException">An input's dtype does not cast to the declared one under <paramref name="casting"/>.</exception>
@@ -232,9 +253,14 @@ namespace NumSharp.Interop.OnnxRuntime
                 SeparateInputsFromOutputs(inNames, inHandles, outNames, outHandles, mode);
                 for (int k = 0; k < inHandles.Length; k++)
                     inValues[k] = inHandles[k].Value;
+                // After the overlap pass, which may have replaced an input handle: the source of an output that is a
+                // fed input must be the handle that is really fed (the replaced one is disposed).
+                OrtTensor[] passedThrough = PassThroughSources(inNames, inHandles, outNames, outHandles);
 
                 using RunOptions owned = runOptions is null ? new RunOptions() : null;
                 session.Run(runOptions ?? owned, inNames, inValues, outNames, outValues);
+                // Only after a successful run, so a failed run leaves these arrays as ORT leaves every other output.
+                CopyPassThrough(passedThrough, outHandles);
             }
             finally
             {
@@ -242,6 +268,102 @@ namespace NumSharp.Interop.OnnxRuntime
                     handle?.Dispose();
                 foreach (OrtTensor handle in outHandles)
                     handle?.Dispose();
+            }
+        }
+
+        // ---- outputs that no node produces ---------------------------------------------------------
+
+        /// <summary>
+        ///     The fed tensor a model OUTPUT takes its value from, when the output is not produced by a node but is a FED
+        ///     INPUT passed through: the output's name is the name of an input (or of an overridable initializer) the
+        ///     caller feeds in this run. <c>null</c> for every other output, which is what a node or an initializer
+        ///     produces and ONNX Runtime allocates or writes itself.
+        /// </summary>
+        /// <remarks>
+        ///     <para>The name is the whole criterion, because it is ONNX Runtime's own: its execution frame fills its value
+        ///     slots with the fetch buffers, then with the initializers, then with the FEEDS, each by name. A feed therefore
+        ///     replaces whatever the slot of the same name held, and at the end of the run the output of that name IS the
+        ///     fed value. Measured on ORT 1.16.0 and 1.31.0 with an output that is a model input and one that is an
+        ///     overridable initializer:</para>
+        ///     <para>- a pre-allocated buffer for it is never written with the fed value (it keeps its contents, or holds
+        ///     the initializer's default);</para>
+        ///     <para>- a value ORT returns for it lies at the fed tensor's address, so it is memory this package's handle
+        ///     pins, not memory ORT owns.</para>
+        ///     <para>An initializer that is NOT fed is no such case: ORT copies it into the output, pre-allocated or not.
+        ///     A fed TEXT input is no such case either: its string tensor is ORT's own object, which the ordinary text
+        ///     copy reads.</para>
+        /// </remarks>
+        /// <param name="outputName">The model output's name.</param>
+        /// <param name="inNames">The names fed in this run.</param>
+        /// <param name="inHandles">The prepared inputs, in the order of <paramref name="inNames"/>.</param>
+        /// <returns>The handle whose NumSharp memory holds the output's value, or <c>null</c>.</returns>
+        private static OrtTensor FedTensor(string outputName, string[] inNames, OrtTensor[] inHandles)
+        {
+            for (int i = 0; i < inNames.Length; i++)
+            {
+                if (string.Equals(inNames[i], outputName, StringComparison.Ordinal))
+                    return inHandles[i].IsNumSharpMemory ? inHandles[i] : null;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        ///     For a run into pre-allocated outputs: finds every output that is a fed input passed through (see
+        ///     <see cref="FedTensor"/>) and checks that its array can receive the fed values, before the run starts.
+        /// </summary>
+        /// <param name="inNames">The names fed in this run.</param>
+        /// <param name="inHandles">The prepared inputs, after the overlap pass.</param>
+        /// <param name="outNames">The output names.</param>
+        /// <param name="outHandles">The prepared outputs.</param>
+        /// <returns>Per output, the fed handle to copy from after the run, or <c>null</c>; <c>null</c> as a whole when the run has no such output (the usual case, which then allocates nothing).</returns>
+        /// <exception cref="ArgumentException">The pre-allocated array's shape differs from the fed input's.</exception>
+        /// <exception cref="InvalidOperationException">The pre-allocated array's element type differs from the fed input's (the model declares one name with two types; ORT does not load such a model).</exception>
+        private static OrtTensor[] PassThroughSources(string[] inNames, OrtTensor[] inHandles, string[] outNames, OrtTensor[] outHandles)
+        {
+            OrtTensor[] sources = null;
+            for (int j = 0; j < outNames.Length; j++)
+            {
+                OrtTensor fed = FedTensor(outNames[j], inNames, inHandles);
+                if (fed is null)
+                    continue;
+                OrtTensor target = outHandles[j];
+                if (fed.ElementType != target.ElementType)
+                    throw new InvalidOperationException(
+                        $"output '{outNames[j]}' is the fed input of the same name passed through, which is {fed.ElementType}, but the pre-allocated array is {target.ElementType}.");
+                // ORT checks no shape here (it never touches this buffer with the fed value), so the bridge must: the
+                // copy below needs equal byte counts, and a caller's array of another shape is a caller's mistake.
+                if (!fed.ShapeNoCopy.AsSpan().SequenceEqual(target.ShapeNoCopy))
+                    throw new ArgumentException(
+                        $"output '{outNames[j]}' is the fed input of the same name passed through (no node of the model produces it), so its shape is the " +
+                        $"input's, ({string.Join(", ", fed.ShapeNoCopy)}); the pre-allocated array has shape ({string.Join(", ", target.ShapeNoCopy)}).");
+                (sources ??= new OrtTensor[outNames.Length])[j] = fed;
+            }
+
+            return sources;
+        }
+
+        /// <summary>
+        ///     Writes the fed values into the pre-allocated arrays of the outputs that are fed inputs passed through:
+        ///     the part of a run into pre-allocated outputs that ONNX Runtime does not do.
+        /// </summary>
+        /// <remarks>
+        ///     The handles are still alive here (the caller disposes them afterwards), so both memory ranges are
+        ///     referenced. <see cref="Buffer.MemoryCopy(void*, void*, long, long)"/> moves the bytes as <c>memmove</c>
+        ///     does, so overlapping ranges would be correct too; the overlap pass already rules them out.
+        /// </remarks>
+        /// <param name="sources">What <see cref="PassThroughSources"/> returned (<c>null</c> = nothing to do).</param>
+        /// <param name="outHandles">The prepared outputs.</param>
+        private static unsafe void CopyPassThrough(OrtTensor[] sources, OrtTensor[] outHandles)
+        {
+            if (sources is null)
+                return;
+            for (int j = 0; j < sources.Length; j++)
+            {
+                OrtTensor fed = sources[j];
+                if (fed is null || fed.ByteLength == 0)
+                    continue;   // an empty tensor has no byte to move
+                Buffer.MemoryCopy(fed.Data, outHandles[j].Data, outHandles[j].ByteLength, fed.ByteLength);
             }
         }
 
@@ -309,12 +431,20 @@ namespace NumSharp.Interop.OnnxRuntime
         // ---- output collection ------------------------------------------------------------------------
 
         /// <summary>Copy every output into an owning NDArray, then dispose the ORT values (the collection owns them).</summary>
+        /// <remarks>
+        ///     An output that is a fed input passed through (<see cref="FedTensor"/>) is copied from the fed handle's
+        ///     NumSharp memory, not through the value ORT returned for it: the bytes are the same, but the handle's memory
+        ///     needs no span, so such an output crosses at any size.
+        /// </remarks>
         /// <param name="outputs">The run's outputs, in the order of <paramref name="outputNames"/>; disposed here.</param>
         /// <param name="outputNames">The fetched names.</param>
+        /// <param name="inNames">The names fed in this run.</param>
+        /// <param name="inHandles">The prepared inputs, in the order of <paramref name="inNames"/>; still alive.</param>
         /// <returns>The copies by name. A name fetched more than once keeps its last copy.</returns>
         /// <exception cref="NotSupportedException">An output is not a dense tensor of a dtype NumSharp has (the copies already made are disposed).</exception>
         /// <exception cref="InvalidOperationException">An output lives in device memory the CPU cannot address.</exception>
-        private static IReadOnlyDictionary<string, NDArray> CopyOutputs(IDisposableReadOnlyCollection<OrtValue> outputs, IReadOnlyCollection<string> outputNames)
+        private static IReadOnlyDictionary<string, NDArray> CopyOutputs(IDisposableReadOnlyCollection<OrtValue> outputs, IReadOnlyCollection<string> outputNames,
+            string[] inNames, OrtTensor[] inHandles)
         {
             var result = new Dictionary<string, NDArray>(outputs.Count);
             try
@@ -323,7 +453,11 @@ namespace NumSharp.Interop.OnnxRuntime
                 {
                     int j = 0;
                     foreach (string name in outputNames)
-                        result[name] = outputs[j++].ToNDArray();
+                    {
+                        OrtTensor fed = FedTensor(name, inNames, inHandles);
+                        result[name] = fed is null ? outputs[j].ToNDArray() : NDArrayOnnxInterop.CopyExportedValue(fed);
+                        j++;
+                    }
                 }
 
                 return result;
@@ -341,12 +475,23 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     returned is deliberately NOT disposed — that would free the buffers under the views; it is a
         ///     plain list with no finalizer, and each OrtValue is now released by the view's lease instead.
         /// </summary>
+        /// <remarks>
+        ///     An output that is a fed input passed through (<see cref="FedTensor"/>) is the exception: the value ORT
+        ///     returns for it owns nothing, its memory is the fed handle's NumSharp buffer. Its view is therefore an
+        ///     ordinary counted alias of that buffer (<see cref="NDArrayOnnxInterop.AliasExportedValue"/>), which stays
+        ///     valid after the handle is disposed, and the value ORT returned is disposed at once. Leased like the others,
+        ///     the view kept only that value alive: a probe fed a float64 array into a float32 input (a temporary), and
+        ///     the returned view read <c>[555, 555, 555]</c> from the next array that took the temporary's block.
+        /// </remarks>
         /// <param name="outputs">The run's outputs, in the order of <paramref name="outputNames"/>.</param>
         /// <param name="outputNames">The fetched names.</param>
+        /// <param name="inNames">The names fed in this run.</param>
+        /// <param name="inHandles">The prepared inputs, in the order of <paramref name="inNames"/>; still alive.</param>
         /// <returns>The owning views by name.</returns>
         /// <exception cref="NotSupportedException">An output is not a dense tensor of a dtype NumSharp has (the views already made and the remaining values are disposed).</exception>
         /// <exception cref="InvalidOperationException">An output lives in device memory the CPU cannot address.</exception>
-        private static IReadOnlyDictionary<string, NDArray> ViewOutputs(IDisposableReadOnlyCollection<OrtValue> outputs, IReadOnlyCollection<string> outputNames)
+        private static IReadOnlyDictionary<string, NDArray> ViewOutputs(IDisposableReadOnlyCollection<OrtValue> outputs, IReadOnlyCollection<string> outputNames,
+            string[] inNames, OrtTensor[] inHandles)
         {
             var result = new Dictionary<string, NDArray>(outputs.Count);
             int j = 0;
@@ -354,7 +499,18 @@ namespace NumSharp.Interop.OnnxRuntime
             {
                 foreach (string name in outputNames)
                 {
-                    result[name] = outputs[j].AsNDArray(ownsValue: true);
+                    OrtTensor fed = FedTensor(name, inNames, inHandles);
+                    if (fed is null)
+                    {
+                        result[name] = outputs[j].AsNDArray(ownsValue: true);
+                    }
+                    else
+                    {
+                        // The view takes its own reference on the fed buffer; the handle stays the run's to dispose.
+                        result[name] = NDArrayOnnxInterop.AliasExportedValue(fed, ownsValue: false);
+                        outputs[j].Dispose();   // a second wrapper of the fed tensor: nothing reads it any more
+                    }
+
                     j++;
                 }
 

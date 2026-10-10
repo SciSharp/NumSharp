@@ -128,6 +128,13 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     throws. No mode makes a tensor in device memory or a non-tensor value readable.</para>
         ///     <para><b>Memory pressure.</b> A view that owns an ORT buffer reports the buffer's size to the GC for its
         ///     lifetime. A non-owning view reports nothing: the caller's OrtValue owns that memory.</para>
+        ///     <para><b>A value ORT returned over memory that is not ORT's.</b> For a model output that is a FED INPUT
+        ///     passed through (no node produces it), ONNX Runtime returns a value over the fed tensor's memory. When you
+        ///     ran the session yourself and fed an <see cref="AsOrtValue"/> handle, that memory is the handle's NumSharp
+        ///     buffer, and this verb cannot know it (the returned value is another object than the handle's): the view is
+        ///     then valid only while the handle, or the array you fed, is alive, even with <paramref name="ownsValue"/> =
+        ///     <c>true</c>. The <c>Run</c> tier of this package knows what it fed and returns a counted view for such an
+        ///     output.</para>
         /// </remarks>
         /// <param name="value">A dense tensor OrtValue in CPU-accessible memory.</param>
         /// <param name="ownsValue"><c>true</c> to dispose the OrtValue when the last view dies; <c>false</c> (default) to leave it the caller's.</param>
@@ -253,12 +260,15 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     any tensor.</para>
         ///     <para>The view is read-only when the exported array was: a round trip through ORT must not hand out a
         ///     writeable view of read-only memory (a broadcast, a read-only memory map).</para>
+        ///     <para>The Run tier calls this too, for a model output that is a FED INPUT passed through: ONNX Runtime
+        ///     returns such an output as a value over the fed tensor's memory, which is the handle's NumSharp buffer
+        ///     (see <c>InferenceSessionExtensions.FedTensor</c>).</para>
         /// </remarks>
-        /// <param name="owner">The value's export handle.</param>
+        /// <param name="owner">The value's export handle; it must be over a NumSharp buffer (<see cref="OrtTensor.IsNumSharpMemory"/>).</param>
         /// <param name="ownsValue"><c>true</c> to dispose the handle (and with it the OrtValue) once the view exists.</param>
         /// <returns>A view sharing the buffer, holding its own reference on it (an empty array for an empty tensor).</returns>
         /// <exception cref="ObjectDisposedException">The handle has been disposed, or the buffer is already released.</exception>
-        private static unsafe NDArray AliasExportedValue(OrtTensor owner, bool ownsValue)
+        internal static unsafe NDArray AliasExportedValue(OrtTensor owner, bool ownsValue)
         {
             // A temporary reference: the liveness check, and what keeps the buffer alive until the view holds its own
             // (the NDArray constructor takes the view's reference without checking that it succeeded).
@@ -301,10 +311,14 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     The copy <see cref="ToNDArray(OrtValue)"/> returns for a value this package made over a NumSharp buffer: read
         ///     from the buffer itself, under a reference on it, with the byte count in a <see cref="long"/>.
         /// </summary>
-        /// <param name="owner">The value's export handle.</param>
+        /// <remarks>
+        ///     The Run tier calls this too, for a model output that is a fed input passed through (see
+        ///     <see cref="AliasExportedValue"/>): the copy then needs no span, so it works past 2 GB as well.
+        /// </remarks>
+        /// <param name="owner">The value's export handle; it must be over a NumSharp buffer (<see cref="OrtTensor.IsNumSharpMemory"/>).</param>
         /// <returns>A new owning C-contiguous array of the crossed dtype holding the tensor's elements.</returns>
         /// <exception cref="ObjectDisposedException">The handle has been disposed, or the buffer is already released.</exception>
-        private static unsafe NDArray CopyExportedValue(OrtTensor owner)
+        internal static unsafe NDArray CopyExportedValue(OrtTensor owner)
         {
             IArraySlice buffer = owner.Slice;
             if (owner.IsDisposed || !buffer.TryAddRef())
