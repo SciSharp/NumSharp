@@ -1,33 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- NumSharpPythonnetLocalExample: a console app that embeds the Python on YOUR machine and runs six
-       data science libraries (NumPy, pandas, SciPy, scikit-learn, Matplotlib, PyTorch) over NumSharp
-       arrays through NumSharp.Interop.pythonnet. README.md has the two setup commands. -->
-
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
-    <!-- An example is not part of the signed NumSharp assembly set; this also keeps the project
-         independent of the repository's Directory.Build.props when the folder is copied elsewhere. -->
-    <SignAssembly>false</SignAssembly>
-
-    <!-- The one NuGet package this example needs. It brings NumSharp and pythonnet with it. -->
-    <NumSharpInteropVersion>0.70.0</NumSharpInteropVersion>
-    <NumSharpInteropProject>$(MSBuildThisFileDirectory)..\..\src\NumSharp.Interop.pythonnet\NumSharp.Interop.pythonnet.csproj</NumSharpInteropProject>
   </PropertyGroup>
 
-  <!-- Inside the NumSharp repository the example builds against the source next to it. Copy this
-       folder anywhere else and the same file restores the published package instead: nothing to edit.
-       pythonnet 3.0.5, the version the package resolves by default, drives Python 3.7 to 3.13. For a
-       newer Python add your own reference: <PackageReference Include="pythonnet" Version="3.1.0" />. -->
-  <ItemGroup Condition="Exists('$(NumSharpInteropProject)')">
-    <ProjectReference Include="$(NumSharpInteropProject)" />
-  </ItemGroup>
-  <ItemGroup Condition="!Exists('$(NumSharpInteropProject)')">
-    <PackageReference Include="NumSharp.Interop.pythonnet" Version="$(NumSharpInteropVersion)" />
+  <ItemGroup>
+    <PackageReference Include="NumSharp.Interop.pythonnet" Version="0.70.0" />
   </ItemGroup>
 
 </Project>

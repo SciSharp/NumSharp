@@ -90,12 +90,11 @@ Without the variable, each test reports Inconclusive and says what to set.
 
 ## Copy it to your repository
 
-1. Copy this folder. The project file refers to the NumSharp source when it finds it in this
-   repository, and restores the NuGet package `NumSharp.Interop.pythonnet` when it does not. The
-   copied project was built and tested against the published package 0.70.0.
+1. Copy this folder. The project file is a plain MSTest project with one more line, the one that
+   `dotnet add package NumSharp.Interop.pythonnet` writes. That package brings NumSharp and
+   pythonnet with it.
 2. Copy the workflow to `.github/workflows/` and change the paths: `working-directory`,
    `cache-dependency-path`, the `path` of the upload step, and the `paths` filters.
-3. Remove `-p:WarningLevel=0` from the build step. It only silences the build of NumSharp itself.
 
 On a **self-hosted runner**, the interpreter stays on the machine between jobs. Install into a
 virtual environment there, and name the interpreter of the environment:

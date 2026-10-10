@@ -118,12 +118,17 @@ cover every member of the package in this style: layouts, dtypes, lifetime, the 
 
 ## Use it in your own project
 
-Copy this folder anywhere. The project file refers to the source in this repository when it finds
-it, and restores the NuGet package `NumSharp.Interop.pythonnet` when it does not. Nothing needs an
-edit. The copied project was built and run against the published package 0.70.0.
+Copy this folder anywhere. The project file is what these two commands write, and nothing more:
 
-To add Python to an existing application, copy `PythonHost.cs`, call `PythonHost.Start()` once, and
-dispose the host when the process ends.
+```bash
+dotnet new console
+dotnet add package NumSharp.Interop.pythonnet
+```
+
+That one package brings NumSharp and pythonnet with it.
+
+To add Python to an existing application, run the second command in its project, copy
+`PythonHost.cs`, call `PythonHost.Start()` once, and dispose the host when the process ends.
 
 ## Good to know
 

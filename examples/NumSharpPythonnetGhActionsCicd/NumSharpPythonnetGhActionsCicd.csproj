@@ -1,39 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- NumSharpPythonnetGhActionsCicd: an MSTest project that embeds the Python a GitHub Actions job
-       installed and asserts that six data science libraries (NumPy, pandas, SciPy, scikit-learn,
-       Matplotlib, PyTorch) interoperate with NumSharp through NumSharp.Interop.pythonnet.
-       The workflow that runs it is .github/workflows/example-pythonnet.yml; README.md explains both. -->
-
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
-    <!-- An example is not part of the signed NumSharp assembly set; this also keeps the project
-         independent of the repository's Directory.Build.props when the folder is copied elsewhere. -->
-    <SignAssembly>false</SignAssembly>
-
-    <!-- The one NuGet package under test. It brings NumSharp and pythonnet with it. -->
-    <NumSharpInteropVersion>0.70.0</NumSharpInteropVersion>
-    <NumSharpInteropProject>$(MSBuildThisFileDirectory)..\..\src\NumSharp.Interop.pythonnet\NumSharp.Interop.pythonnet.csproj</NumSharpInteropProject>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="MSTest" Version="3.8.3" />
-    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+    <PackageReference Include="NumSharp.Interop.pythonnet" Version="0.70.0" />
   </ItemGroup>
 
-  <!-- Inside the NumSharp repository the tests build against the source next to them, so a change to
-       the interop package is tested before it is released. Copy this folder to your own repository
-       and the same file restores the published package instead: nothing to edit.
-       pythonnet 3.0.5, the version the package resolves by default, drives Python 3.7 to 3.13. For a
-       newer Python add your own reference: <PackageReference Include="pythonnet" Version="3.1.0" />. -->
-  <ItemGroup Condition="Exists('$(NumSharpInteropProject)')">
-    <ProjectReference Include="$(NumSharpInteropProject)" />
-  </ItemGroup>
-  <ItemGroup Condition="!Exists('$(NumSharpInteropProject)')">
-    <PackageReference Include="NumSharp.Interop.pythonnet" Version="$(NumSharpInteropVersion)" />
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
   </ItemGroup>
 
 </Project>

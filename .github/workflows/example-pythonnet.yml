@@ -5,22 +5,20 @@ name: "Example: NumSharp with Python"
 # NumSharp arrays, on the three operating systems GitHub hosts. The README of that folder explains
 # each step and what to change when you copy this file to your own repository.
 
-# The `paths` filters start a run only when the example, the interop package or this file changes.
-# NumSharp.Core is not in the list on purpose: it changes with almost every commit, and the interop
-# test suite of the main workflow covers it.
+# The `paths` filters start a run only when the example or this file changes. The project restores
+# the published NuGet package, as your project does, so a change to the source of NumSharp cannot
+# change its result. The interop test suite of the main workflow covers the source.
 on:
   workflow_dispatch:
   push:
     branches: [ "master", "main" ]
     paths:
       - "examples/NumSharpPythonnetGhActionsCicd/**"
-      - "src/NumSharp.Interop.pythonnet/**"
       - ".github/workflows/example-pythonnet.yml"
   pull_request:
     branches: [ "master", "main" ]
     paths:
       - "examples/NumSharpPythonnetGhActionsCicd/**"
-      - "src/NumSharp.Interop.pythonnet/**"
       - ".github/workflows/example-pythonnet.yml"
 
 # The job only reads the repository.
@@ -72,10 +70,9 @@ jobs:
       - name: Install the Python libraries
         run: python -m pip install --disable-pip-version-check -r requirements.txt
 
-      # -p:WarningLevel=0 is for this repository only: here the project builds NumSharp from source,
-      # and the warnings of that build are not the subject of this job. Remove it in your repository.
+      # A step of its own, so that a compile error fails here, before Python starts.
       - name: Build
-        run: dotnet build --configuration Release -p:WarningLevel=0
+        run: dotnet build --configuration Release
 
       # The tests embed exactly the interpreter that the steps above installed into: its path is an
       # output of setup-python. Nothing searches PATH, and a missing interpreter fails the run.
