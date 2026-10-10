@@ -39,6 +39,8 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         public static NDArray fabs(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.Fabs(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => fabs(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.Fabs(x, dtype, @out, where);
     }
 }

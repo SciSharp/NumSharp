@@ -28,6 +28,8 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         public static NDArray inner(NDArray a, NDArray b)
-            => a.TensorEngine.Inner(a, b);
+            => NDMatrixBoundary.Sees(a, b)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, b), static s => inner(s.a, s.b))
+            : a.TensorEngine.Inner(a, b);
     }
 }

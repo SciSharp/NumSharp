@@ -21,6 +21,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray conjugate(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(x))
+                return NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => conjugate(s.x, s.@out, s.where, s.dtype), @out);
             // NumPy's `conjugate` ufunc has NO bool loop: a plain bool input resolves to the smallest
             // matching loop — int8 — so the result is int8 (values 0/1), NOT bool (probed against
             // NumPy 2.4.2). Promote here to match. An explicit dtype= selects the loop instead, exactly
@@ -40,6 +43,8 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): selects the loop and its output dtype.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.conj.html</remarks>
         public static NDArray conj(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => conjugate(x, @out, where, dtype);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => conj(s.x, s.@out, s.where, s.dtype), @out)
+            : conjugate(x, @out, where, dtype);
     }
 }

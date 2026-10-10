@@ -21,6 +21,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray roll(NDArray a, long shift, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, shift, axis), static s => roll(s.a, s.shift, s.axis));
             if (axis == null)
                 return roll(a.ravel(), shift, 0).reshape(Shape.Adopt(a.Shape.dimensions));
 
@@ -75,6 +78,8 @@ namespace NumSharp
 
         /// <inheritdoc cref="roll(NDArray, long, int?)"/>
         public static NDArray roll(NDArray a, int shift, int? axis = null)
-            => roll(a, (long)shift, axis);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, shift, axis), static s => roll(s.a, s.shift, s.axis))
+            : roll(a, (long)shift, axis);
     }
 }

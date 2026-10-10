@@ -15,6 +15,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.matrix_transpose.html</remarks>
         public static NDArray matrix_transpose(NDArray x)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(x))
+                return NDMatrixBoundary.Wrapped(x, static s => matrix_transpose(s));
             if (x.ndim < 2)
                 throw new ArgumentException($"Input array must be at least 2-dimensional, but it is {x.ndim}");
 

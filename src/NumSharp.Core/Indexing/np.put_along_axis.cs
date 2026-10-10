@@ -59,6 +59,7 @@ namespace NumSharp
         [NDScoped]
         public static unsafe void put_along_axis(NDArray arr, NDArray indices, NDArray values, int? axis)
         {
+            using var plain = NDMatrixBoundary.PlainFor(arr, indices, values);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
             if (values is null) throw new ArgumentNullException(nameof(values));

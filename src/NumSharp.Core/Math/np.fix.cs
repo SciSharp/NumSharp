@@ -27,6 +27,8 @@ namespace NumSharp
         /// </para>
         /// </remarks>
         public static NDArray fix(NDArray x, NDArray @out = null)
-            => trunc(x, @out);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out), static s => fix(s.x, s.@out), @out)
+            : trunc(x, @out);
     }
 }

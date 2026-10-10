@@ -22,6 +22,9 @@ namespace NumSharp
         /// </remarks>
         public static NDArray[] split(NDArray ary, int indices_or_sections, int axis = 0)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(ary))
+                return NDMatrixBoundary.WrappedAll((ary, indices_or_sections, axis), static s => split(s.ary, s.indices_or_sections, s.axis));
             if (ary is null) throw new ArgumentNullException(nameof(ary));
 
             // array_split's argument validation handles section<=0; we validate first
@@ -44,13 +47,17 @@ namespace NumSharp
         /// Split an array into multiple sub-arrays as views into ary.
         /// </summary>
         public static NDArray[] split(NDArray ary, long[] indices, int axis = 0)
-            => array_split(ary, indices, axis);
+            => NDMatrixBoundary.Sees(ary)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.WrappedAll((ary, indices, axis), static s => split(s.ary, s.indices, s.axis))
+            : array_split(ary, indices, axis);
 
         /// <summary>
         /// Split an array into multiple sub-arrays as views into ary.
         /// </summary>
         public static NDArray[] split(NDArray ary, int[] indices, int axis = 0)
-            => array_split(ary, indices, axis);
+            => NDMatrixBoundary.Sees(ary)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.WrappedAll((ary, indices, axis), static s => split(s.ary, s.indices, s.axis))
+            : array_split(ary, indices, axis);
 
         /// <summary>
         /// Split an array into multiple sub-arrays.
@@ -62,6 +69,9 @@ namespace NumSharp
         /// </remarks>
         public static NDArray[] array_split(NDArray ary, int indices_or_sections, int axis = 0)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(ary))
+                return NDMatrixBoundary.WrappedAll((ary, indices_or_sections, axis), static s => array_split(s.ary, s.indices_or_sections, s.axis));
             if (ary is null) throw new ArgumentNullException(nameof(ary));
             if (indices_or_sections <= 0)
                 throw new ArgumentException("number sections must be larger than 0.");
@@ -75,6 +85,9 @@ namespace NumSharp
         /// </summary>
         public static NDArray[] array_split(NDArray ary, long[] indices, int axis = 0)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(ary))
+                return NDMatrixBoundary.WrappedAll((ary, indices, axis), static s => array_split(s.ary, s.indices, s.axis));
             if (ary is null) throw new ArgumentNullException(nameof(ary));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
 
@@ -87,6 +100,9 @@ namespace NumSharp
         /// </summary>
         public static NDArray[] array_split(NDArray ary, int[] indices, int axis = 0)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(ary))
+                return NDMatrixBoundary.WrappedAll((ary, indices, axis), static s => array_split(s.ary, s.indices, s.axis));
             if (ary is null) throw new ArgumentNullException(nameof(ary));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
 

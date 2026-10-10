@@ -154,6 +154,13 @@ namespace NumSharp
         [NDScoped]
         public static NDArray trapezoid(NDArray y, NDArray x = null, double dx = 1.0, int axis = -1)
         {
+            // A numpy.matrix operand. NumPy ends in `(d * (y[1:] + y[:-1]) / 2.0).sum(axis)`: for a matrix y that
+            // is the matrix method's sum, a row or a column. For a matrix x the product of the two matrices
+            // raises inside NumPy, which then repeats the statement on plain arrays, so the result is plain.
+            if (NDMatrixBoundary.Sees(y, x))
+                return NDMatrixBoundary.IsMatrix(x)
+                    ? NDMatrixBoundary.Plain((y, x, dx, axis), static s => trapezoid(s.y, s.x, s.dx, s.axis))
+                    : NDMatrixBoundary.Reduced((y, x, dx, axis), static s => trapezoid(s.y, s.x, s.dx, s.axis), axis, false, null);
             if (y is null) throw new ArgumentNullException(nameof(y));
 
             int nd = y.ndim;

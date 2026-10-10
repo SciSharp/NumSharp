@@ -172,6 +172,7 @@ namespace NumSharp
         [NDScoped]
         public NDArray sum(int? axis = null, DType dtype = null, NDMatrix @out = null)
         {
+            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (@out is null)
             {
                 if (axis is null)
@@ -207,6 +208,7 @@ namespace NumSharp
         [NDScoped]
         public NDArray prod(int? axis = null, DType dtype = null, NDMatrix @out = null)
         {
+            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (@out is null)
             {
                 if (axis is null)
@@ -244,6 +246,7 @@ namespace NumSharp
         [NDScoped]
         public NDArray mean(int? axis = null, DType dtype = null, NDMatrix @out = null)
         {
+            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (@out is null)
             {
                 // Always the array form (keepdims), see the file header: a float16 mean rounds twice there.
@@ -310,6 +313,7 @@ namespace NumSharp
         [NDScoped]
         public NDArray var(int? axis = null, DType dtype = null, NDMatrix @out = null, int ddof = 0)
         {
+            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (@out is null)
             {
                 NDArray kept = TensorEngine.ReduceVar(this, axis, keepdims: true, ddof, dtype);
@@ -354,6 +358,7 @@ namespace NumSharp
         [NDScoped]
         public NDArray std(int? axis = null, DType dtype = null, NDMatrix @out = null, int ddof = 0)
         {
+            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (@out is null)
             {
                 NDArray kept = TensorEngine.ReduceStd(this, axis, keepdims: true, ddof, dtype);
@@ -417,6 +422,7 @@ namespace NumSharp
         [NDScoped]
         public NDArray any(int? axis = null, NDArray @out = null)
         {
+            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (@out is not null)
                 throw new TypeError("Cannot construct a dtype from an array");
             if (axis is null)
@@ -443,6 +449,7 @@ namespace NumSharp
         [NDScoped]
         public NDArray all(int? axis = null, NDArray @out = null)
         {
+            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (@out is not null)
                 throw new TypeError("Cannot construct a dtype from an array");
             if (axis is null)
@@ -474,6 +481,7 @@ namespace NumSharp
         [NDScoped]
         public NDArray max(int? axis = null, NDMatrix @out = null)
         {
+            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (@out is null)
             {
                 if (axis is null)
@@ -504,6 +512,7 @@ namespace NumSharp
         [NDScoped]
         public NDArray min(int? axis = null, NDMatrix @out = null)
         {
+            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (@out is null)
             {
                 if (axis is null)
@@ -560,6 +569,7 @@ namespace NumSharp
         [NDScopedCovered]
         private NDMatrix ArgReduce(int axis, NDArray @out, bool max)
         {
+            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             // The plain reduction validates the axis first; only then does _align reject -1 / -2.
             DefaultEngine.NormalizeAxis(axis, ndim);
             NDArray indices = max ? np.argmax((NDArray)this, axis) : np.argmin((NDArray)this, axis);
@@ -599,6 +609,7 @@ namespace NumSharp
         [NDScoped]
         public NDArray ptp(int? axis = null, NDArray @out = null)
         {
+            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (axis is not null)
                 DefaultEngine.NormalizeAxis(axis.Value, ndim);
 

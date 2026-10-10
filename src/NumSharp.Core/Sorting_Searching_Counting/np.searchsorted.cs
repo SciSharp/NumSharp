@@ -18,6 +18,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html</remarks>
         public static long searchsorted(NDArray a, int v, string side = "left", NDArray sorter = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a, sorter);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             ValidateSearchSorted(a, side, sorter);
             // NumPy searches in result_type(a, v), NEVER casts the key down to a's dtype
             // (see the NDArray overload below). A C# int literal is a strong int32 scalar.
@@ -31,6 +32,7 @@ namespace NumSharp
         /// </summary>
         public static long searchsorted(NDArray a, double v, string side = "left", NDArray sorter = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a, sorter);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             ValidateSearchSorted(a, side, sorter);
             // A C# double is a strong float64 scalar; NumPy searches a float32 array for a
             // Python float in float64 too (probed 2.4.2), so promote_types(a, Double) matches.
@@ -54,6 +56,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray searchsorted(NDArray a, NDArray v, string side = "left", NDArray sorter = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a, v, sorter);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             ValidateSearchSorted(a, side, sorter);
             bool leftSide = side == "left";
 

@@ -44,6 +44,9 @@ namespace NumSharp
         public static NDArray cross(NDArray a, NDArray b, int axisa = -1, int axisb = -1, int axisc = -1,
             int? axis = null)
         {
+            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            if (NDMatrixBoundary.Sees(a, b))
+                return NDMatrixBoundary.Plain((a, b, axisa, axisb, axisc, axis), static s => cross(s.a, s.b, s.axisa, s.axisb, s.axisc, s.axis));
             if (axis is not null)
                 axisa = axisb = axisc = axis.Value;
 

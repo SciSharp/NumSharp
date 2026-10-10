@@ -38,6 +38,7 @@ namespace NumSharp
         public static PolyfitResult polyfit(NDArray x, NDArray y, int deg, double? rcond = null,
             bool full = false, NDArray w = null, object cov = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(x, y, w);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             int order = deg + 1;
             x = np.asarray(x) + 0.0;   // to floating (float32 stays float32; int/bool -> float64)
             y = np.asarray(y) + 0.0;

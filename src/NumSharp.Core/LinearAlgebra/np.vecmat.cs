@@ -46,6 +46,9 @@ namespace NumSharp
         public static NDArray vecmat(NDArray x1, NDArray x2, NDArray @out = null, int[][] axes = null,
             int? axis = null, bool keepdims = false, DType dtype = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(x1, x2))
+                return NDMatrixBoundary.Wrapped((x1, x2, @out, axes, axis, keepdims, dtype), static s => vecmat(s.x1, s.x2, s.@out, s.axes, s.axis, s.keepdims, s.dtype), @out);
             GufuncGuard.RejectAxisWithAxes(axes, axis);
             GufuncGuard.RejectAxisAndKeepdims("vecmat", VecmatSignature, axis, keepdims, 2);
 

@@ -116,6 +116,7 @@ namespace NumSharp
         /// </exception>
         public static NDArray sinc(NDArray x)
         {
+            using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's implicit `asanyarray(None)` failure, given a clear identity here.
             if (x is null)
                 throw new ArgumentNullException(nameof(x));

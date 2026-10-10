@@ -41,6 +41,9 @@ namespace NumSharp
             [NDScoped]
             public static NDArray multi_dot(NDArray[] arrays, NDArray @out = null)
             {
+                // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+                if (NDMatrixBoundary.Sees(arrays))
+                    return NDMatrixBoundary.Wrapped((arrays, @out), static s => multi_dot(s.arrays, s.@out), @out);
                 if (arrays is null || arrays.Length < 2)
                     throw new ValueError("Expecting at least two arrays.");
 
@@ -91,7 +94,9 @@ namespace NumSharp
             }
 
             /// <inheritdoc cref="multi_dot(NDArray[], NDArray)"/>
-            public static NDArray multi_dot(params NDArray[] arrays) => multi_dot(arrays, null);
+            public static NDArray multi_dot(params NDArray[] arrays) => NDMatrixBoundary.Sees(arrays)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+                ? NDMatrixBoundary.Wrapped(arrays, static s => multi_dot(s))
+                : multi_dot(arrays, null);
 
             private static NDArray Deliver(NDArray result, NDArray @out)
             {

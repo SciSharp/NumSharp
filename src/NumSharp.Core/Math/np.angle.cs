@@ -26,6 +26,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray angle(NDArray z, bool deg = false)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(z))
+                return NDMatrixBoundary.Wrapped((z, deg), static s => angle(s.z, s.deg));
             NDArray a;
             if (z.typecode == NPTypeCode.Complex)
             {

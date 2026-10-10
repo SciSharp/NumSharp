@@ -18,6 +18,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray polyint(NDArray p, int m = 1, NDArray k = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(p, k);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (m < 0)
                 throw new ValueError("Order of integral must be positive (see polyder)");
 
@@ -58,6 +59,9 @@ namespace NumSharp
         /// <summary>Convenience overload — <c>polyint</c> with a single scalar integration constant.</summary>
         [NDScoped] // the 0-d k wrapper is built in THIS frame, before the main overload's scope opens
         public static NDArray polyint(NDArray p, int m, double k)
-            => polyint(p, m, NDArray.Scalar(k));
+        {
+            using var plain = NDMatrixBoundary.PlainFor(p);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return polyint(p, m, NDArray.Scalar(k));
+        }
     }
 }

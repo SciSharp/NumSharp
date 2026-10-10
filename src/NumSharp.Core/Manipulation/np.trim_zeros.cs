@@ -15,7 +15,9 @@ namespace NumSharp
         /// <param name="axis">The single dimension to trim; <c>null</c> trims the whole-array bounding box.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html</remarks>
         public static NDArray trim_zeros(NDArray filt, string trim = "fb", int? axis = null)
-            => trim_zeros(filt, trim, axis.HasValue ? new[] {axis.Value} : null);
+            => NDMatrixBoundary.Sees(filt)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((filt, trim, axis), static s => trim_zeros(s.filt, s.trim, s.axis))
+            : trim_zeros(filt, trim, axis.HasValue ? new[] {axis.Value} : null);
 
         /// <summary>
         ///     Remove values which are zero along all other dimensions, trimming the given sequence of axes.
@@ -43,6 +45,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray trim_zeros(NDArray filt, string trim, int[] axis)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(filt))
+                return NDMatrixBoundary.Wrapped((filt, trim, axis), static s => trim_zeros(s.filt, s.trim, s.axis));
             // NumPy lower-cases and validates the trim spec against the four accepted spellings.
             trim = (trim ?? string.Empty).ToLowerInvariant();
             if (trim != "fb" && trim != "bf" && trim != "f" && trim != "b")

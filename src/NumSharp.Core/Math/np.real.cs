@@ -24,7 +24,13 @@ namespace NumSharp
             // Complex: a strided float64 view onto the real lane (writes through, shares memory) — the
             // same strided complex->real lane read the FFT driver relies on, exposed as a view.
             if (val.typecode == NPTypeCode.Complex)
+            {
+                // a complex numpy.matrix: NumPy's val.real is a matrix over the real lane (a real matrix is
+                // returned itself below, which is the matrix already)
+                if (NDMatrixBoundary.Sees(val))
+                    return NDMatrixBoundary.Wrapped(val, static s => real(s));
                 return new NDArray(val.Storage.AliasComplexLane(imaginary: false));
+            }
 
             // Real / int / bool: NumPy's `val.real` IS `val` for a real array (same object, shared memory,
             // dtype preserved). Return it unchanged.

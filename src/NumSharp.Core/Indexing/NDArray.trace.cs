@@ -16,6 +16,9 @@ namespace NumSharp
         /// <returns>The sum along the diagonals. For a 2-D array this is a 0-d scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.trace.html</remarks>
         public NDArray trace(int offset = 0, int axis1 = 0, int axis2 = 1, DType dtype = null, NDArray @out = null)
-            => np.trace(this, offset, axis1, axis2, dtype, @out);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.trace(this, offset, axis1, axis2, dtype, @out);
+        }
     }
 }

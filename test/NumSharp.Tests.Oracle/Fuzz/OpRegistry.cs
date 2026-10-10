@@ -29,6 +29,10 @@ namespace NumSharp.Tests.Fuzz
             // numpy.matrix (OpRegistry.Matrix.cs): the constructor key "matrix" and the member keys "matrix.<name>".
             if (IsMatrixOp(op))
                 return ApplyMatrix(op, p, ops);
+            // A numpy.matrix operand of an ordinary key (the matrix-operand tiers): the keys whose entry below is
+            // a C# operator go through the np.* function, which is what follows the run-time class.
+            if (HasMatrixOperand(ops) && TryApplyFunctionForm(op, p, ops, out NDArray viaFunction))
+                return viaFunction;
 
             switch (op)
             {

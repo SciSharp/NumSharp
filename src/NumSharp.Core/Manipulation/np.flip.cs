@@ -33,6 +33,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.flip.html</remarks>
         public static NDArray flip(NDArray m, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(m))
+                return NDMatrixBoundary.Wrapped((m, axis), static s => flip(s.m, s.axis));
             if (m is null)
                 throw new ArgumentNullException(nameof(m));
 
@@ -68,6 +71,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.flip.html</remarks>
         public static NDArray flip(NDArray m, int[] axis)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(m))
+                return NDMatrixBoundary.Wrapped((m, axis), static s => flip(s.m, s.axis));
             if (m is null)
                 throw new ArgumentNullException(nameof(m));
 
@@ -110,6 +116,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fliplr.html</remarks>
         public static NDArray fliplr(NDArray m)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(m))
+                return NDMatrixBoundary.Wrapped(m, static s => fliplr(s));
             if (m is null)
                 throw new ArgumentNullException(nameof(m));
 
@@ -133,6 +142,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.flipud.html</remarks>
         public static NDArray flipud(NDArray m)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(m))
+                return NDMatrixBoundary.Wrapped(m, static s => flipud(s));
             if (m is null)
                 throw new ArgumentNullException(nameof(m));
 

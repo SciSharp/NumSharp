@@ -92,6 +92,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.piecewise.html</remarks>
         public static NDArray piecewise(NDArray x, NDArray[] condlist, object[] funclist, params object[] args)
         {
+            // a numpy.matrix operand: NumPy fills zeros_like(x), a matrix of x's shape
+            if (NDMatrixBoundary.Sees(x))
+                return NDMatrixBoundary.Wrapped((x, condlist, funclist, args), static s => piecewise(s.x, s.condlist, s.funclist, s.args));
             if (x is null) throw new ArgumentNullException(nameof(x));
             if (condlist is null) throw new ArgumentNullException(nameof(condlist));
             if (funclist is null) throw new ArgumentNullException(nameof(funclist));
@@ -114,6 +117,9 @@ namespace NumSharp
         /// </summary>
         public static NDArray piecewise(NDArray x, NDArray condlist, object[] funclist, params object[] args)
         {
+            // a numpy.matrix operand: NumPy fills zeros_like(x), a matrix of x's shape
+            if (NDMatrixBoundary.Sees(x))
+                return NDMatrixBoundary.Wrapped((x, condlist, funclist, args), static s => piecewise(s.x, s.condlist, s.funclist, s.args));
             if (x is null) throw new ArgumentNullException(nameof(x));
             if (condlist is null) throw new ArgumentNullException(nameof(condlist));
             if (funclist is null) throw new ArgumentNullException(nameof(funclist));
@@ -143,6 +149,9 @@ namespace NumSharp
         /// </summary>
         public static NDArray piecewise(NDArray x, bool condlist, object[] funclist, params object[] args)
         {
+            // a numpy.matrix operand: NumPy fills zeros_like(x), a matrix of x's shape
+            if (NDMatrixBoundary.Sees(x))
+                return NDMatrixBoundary.Wrapped((x, condlist, funclist, args), static s => piecewise(s.x, s.condlist, s.funclist, s.args));
             if (x is null) throw new ArgumentNullException(nameof(x));
             if (funclist is null) throw new ArgumentNullException(nameof(funclist));
 

@@ -108,6 +108,9 @@ namespace NumSharp
             [NDScoped] // reclaims the moveaxis views, the six component products and the pre-moveaxis stack
             public static NDArray cross(NDArray x1, NDArray x2, int axis = -1)
             {
+                // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+                if (NDMatrixBoundary.Sees(x1, x2))
+                    return NDMatrixBoundary.Plain((x1, x2, axis), static s => cross(s.x1, s.x2, s.axis));
                 int a1 = NormalizeAxis(axis, x1.ndim);
                 int a2 = NormalizeAxis(axis, x2.ndim);
 

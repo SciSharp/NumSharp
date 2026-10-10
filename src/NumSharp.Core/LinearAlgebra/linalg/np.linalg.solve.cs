@@ -27,6 +27,12 @@ namespace NumSharp
             [NDScoped]
             public static NDArray solve(NDArray a, NDArray b)
             {
+                // NumPy takes its wrap from b (`a, _ = _makearray(a); b, wrap = _makearray(b)`): a numpy.matrix b
+                // gives a matrix, a matrix a with a plain b a plain array (probed 2.4.2).
+                if (NDMatrixBoundary.Sees(a, b))
+                    return NDMatrixBoundary.IsMatrix(b)
+                        ? NDMatrixBoundary.Wrapped((a, b), static s => solve(s.a, s.b))
+                        : NDMatrixBoundary.Plain((a, b), static s => solve(s.a, s.b));
                 AssertStackedSquare(a);
 
                 bool oneDimensional = b.ndim == 1;
@@ -64,6 +70,9 @@ namespace NumSharp
             [NDScoped]
             public static NDArray tensorsolve(NDArray a, NDArray b, int[] axes = null)
             {
+                // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+                if (NDMatrixBoundary.Sees(a))
+                    return NDMatrixBoundary.Wrapped((a, b, axes), static s => tensorsolve(s.a, s.b, s.axes));
                 var work = a;
                 if (axes is not null)
                 {

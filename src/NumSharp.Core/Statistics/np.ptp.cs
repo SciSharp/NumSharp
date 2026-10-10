@@ -16,6 +16,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray ptp(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, axis, @out, keepdims), static s => ptp(s.a, s.axis, s.@out, s.keepdims), @out);
             if (a is null) throw new ArgumentNullException(nameof(a));
 
             var maxRes = np.amax(a, axis, keepdims);
@@ -29,6 +32,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray ptp(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, axis, @out, keepdims), static s => ptp(s.a, s.axis, s.@out, s.keepdims), @out);
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (axis is null) return ptp(a, (int?)null, @out, keepdims);
             if (axis.Length == 1) return ptp(a, (int?)axis[0], @out, keepdims);

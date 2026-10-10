@@ -25,6 +25,10 @@ namespace NumSharp
             public static (NDArray Q, NDArray R) qr(NDArray a, string mode = "reduced")
             {
                 string resolved = ResolveQrMode(mode);
+                // A numpy.matrix operand: NumPy returns wrap(q), wrap(r) (wrap(r) alone for mode 'r'); for mode 'raw'
+                // it is wrap(h) and the plain tau.
+                if (NDMatrixBoundary.Sees(a))
+                    return NDMatrixBoundary.WrappedPair((a, mode), static s => qr(s.a, s.mode), wrapFirst: true, wrapSecond: resolved != "raw");
                 AssertStacked2d(a);
                 var common = CommonType(a);
                 return a.TensorEngine.Qr(ToCommon(a, common), resolved);

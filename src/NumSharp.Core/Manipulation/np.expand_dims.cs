@@ -8,6 +8,7 @@ namespace NumSharp
     {
         public static NDArray expand_dims(NDArray a, int axis)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // Only the uninitialized-shape sentinel is passed through. A genuine empty array
             // (size == 0 but with real dimensions, e.g. (0, 3)) MUST still gain the new axis —
             // NumPy: expand_dims((0, 3), 0) -> (1, 0, 3). Guarding on a.size == 0 here made
@@ -51,6 +52,7 @@ namespace NumSharp
         /// </remarks>
         public static NDArray expand_dims(NDArray a, int[] axis)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (axis == null || axis.Length == 0)
                 return a;
 
@@ -67,6 +69,7 @@ namespace NumSharp
         /// </summary>
         public static NDArray expand_dims(NDArray a, IEnumerable<int> axis)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (axis == null)
                 return a;
 

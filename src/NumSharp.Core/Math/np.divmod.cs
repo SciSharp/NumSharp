@@ -27,7 +27,10 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.divmod.html</remarks>
         public static (NDArray Quotient, NDArray Remainder) divmod(NDArray x1, NDArray x2,
             (NDArray Quotient, NDArray Remainder) @out = default, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.DivMod(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand: both outputs come back as matrices, as from NumPy
+                ? NDMatrixBoundary.WrappedPair((x1, x2, @out, where, dtype),
+                    static s => divmod(s.x1, s.x2, s.@out, s.where, s.dtype), @out.Quotient, @out.Remainder)
+                : x1.TensorEngine.DivMod(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Scalar / array-like divisor convenience: <c>np.divmod(a, 3)</c>. The divisor is coerced via
@@ -37,6 +40,8 @@ namespace NumSharp
         // tuple carrier (same as np.modf's [NDScoped] two-array return).
         [NDScoped]
         public static (NDArray Quotient, NDArray Remainder) divmod(NDArray x1, object x2)
-            => x1.TensorEngine.DivMod(x1, np.asanyarray(x2));
+            => NDMatrixBoundary.Sees(x1)   // a numpy.matrix operand: both outputs come back as matrices, as from NumPy
+                ? NDMatrixBoundary.WrappedPair((x1, x2), static s => divmod(s.x1, s.x2))
+                : x1.TensorEngine.DivMod(x1, np.asanyarray(x2));
     }
 }

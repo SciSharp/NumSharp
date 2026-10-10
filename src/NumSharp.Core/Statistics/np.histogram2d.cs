@@ -49,7 +49,10 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.histogram2d.html <para>Scoped (<c>[NDScoped]</c>; <see cref="Histogram2dResult"/> is an <see cref="INDArrayCarrier"/>): the shared-edge conversions, the promoted coordinate columns and every per-dimension binning intermediate are reclaimed; only <c>H</c> and the two edge arrays leave.</para></remarks>
         [NDScoped]
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, int bins = 10, (double, double)?[] range = null, bool density = false, NDArray weights = null)
-            => Histogram2dImpl(x, y, bins, range, density, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return Histogram2dImpl(x, y, bins, range, density, weights);
+        }
 
         /// <summary>2-D histogram with a per-dimension bin count <c>[nx, ny]</c>.</summary>
         /// <param name="x">The x coordinates, shape <c>(N,)</c>.</param>
@@ -62,7 +65,10 @@ namespace NumSharp
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="Histogram2dResult"/> is an <see cref="INDArrayCarrier"/>): the shared-edge conversions, the promoted coordinate columns and every per-dimension binning intermediate are reclaimed; only <c>H</c> and the two edge arrays leave.</remarks>
         [NDScoped]
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, int[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
-            => Histogram2dImpl(x, y, bins, range, density, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return Histogram2dImpl(x, y, bins, range, density, weights);
+        }
 
         /// <summary>2-D histogram with a single edge array shared by both dimensions (<c>x_edges = y_edges = bins</c>).</summary>
         /// <param name="x">The x coordinates, shape <c>(N,)</c>.</param>
@@ -75,7 +81,10 @@ namespace NumSharp
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="Histogram2dResult"/> is an <see cref="INDArrayCarrier"/>): the shared-edge conversions, the promoted coordinate columns and every per-dimension binning intermediate are reclaimed; only <c>H</c> and the two edge arrays leave.</remarks>
         [NDScoped]
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, NDArray bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
-            => Histogram2dImpl(x, y, bins, range, density, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(x, y, bins);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return Histogram2dImpl(x, y, bins, range, density, weights);
+        }
 
         /// <summary>2-D histogram with explicit per-dimension edge arrays <c>[x_edges, y_edges]</c> (or a mixed <c>[int, array]</c>).</summary>
         /// <param name="x">The x coordinates, shape <c>(N,)</c>.</param>
@@ -88,7 +97,11 @@ namespace NumSharp
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="Histogram2dResult"/> is an <see cref="INDArrayCarrier"/>): the shared-edge conversions, the promoted coordinate columns and every per-dimension binning intermediate are reclaimed; only <c>H</c> and the two edge arrays leave.</remarks>
         [NDScoped]
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, NDArray[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
-            => Histogram2dImpl(x, y, bins, range, density, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            using var plain2 = NDMatrixBoundary.PlainFor(bins);
+            return Histogram2dImpl(x, y, bins, range, density, weights);
+        }
 
         /// <summary>2-D histogram with a mixed per-dimension bin spec <c>[nx, y_edges]</c> or <c>[x_edges, ny]</c>.</summary>
         /// <param name="x">The x coordinates, shape <c>(N,)</c>.</param>
@@ -101,7 +114,10 @@ namespace NumSharp
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="Histogram2dResult"/> is an <see cref="INDArrayCarrier"/>): the shared-edge conversions, the promoted coordinate columns and every per-dimension binning intermediate are reclaimed; only <c>H</c> and the two edge arrays leave.</remarks>
         [NDScoped]
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, object[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
-            => Histogram2dImpl(x, y, bins, range, density, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return Histogram2dImpl(x, y, bins, range, density, weights);
+        }
 
         /// <summary>2-D histogram with a single edge array (C# <c>double[]</c>) shared by both dimensions.</summary>
         /// <param name="x">The x coordinates, shape <c>(N,)</c>.</param>
@@ -114,7 +130,10 @@ namespace NumSharp
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="Histogram2dResult"/> is an <see cref="INDArrayCarrier"/>): the shared-edge conversions, the promoted coordinate columns and every per-dimension binning intermediate are reclaimed; only <c>H</c> and the two edge arrays leave.</remarks>
         [NDScoped]
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, double[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
-            => Histogram2dImpl(x, y, bins, range, density, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return Histogram2dImpl(x, y, bins, range, density, weights);
+        }
 
         /// <summary>
         ///     Shared core: reproduce NumPy's <c>len(bins)</c> dispatch — a bin spec that is not a 1- or 2-element

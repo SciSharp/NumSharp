@@ -48,6 +48,7 @@ namespace NumSharp
         [NDScoped]
         public static void fill_diagonal(NDArray a, object val, bool wrap = false)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (a is null) throw new ArgumentNullException(nameof(a));
 
             int ndim = a.ndim;

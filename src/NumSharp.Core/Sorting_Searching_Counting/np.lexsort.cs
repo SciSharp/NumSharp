@@ -29,6 +29,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray lexsort(NDArray[] keys, int axis = -1)
         {
+            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            if (NDMatrixBoundary.Sees(keys))
+                return NDMatrixBoundary.Plain((keys, axis), static s => lexsort(s.keys, s.axis));
             if (keys is null || keys.Length == 0)
                 throw new TypeError("need sequence of keys with len > 0 in lexsort");
             for (int i = 0; i < keys.Length; i++)
@@ -84,6 +87,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.lexsort.html</remarks>
         public static NDArray lexsort(NDArray keys, int axis = -1)
         {
+            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            if (NDMatrixBoundary.Sees(keys))
+                return NDMatrixBoundary.Plain((keys, axis), static s => lexsort(s.keys, s.axis));
             if (keys is null)
                 throw new ArgumentNullException(nameof(keys));
             // a 0-d array is not a sequence; an empty first axis is a zero-length key sequence

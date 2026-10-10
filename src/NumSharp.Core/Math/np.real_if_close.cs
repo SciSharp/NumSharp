@@ -57,6 +57,9 @@ namespace NumSharp
         /// </remarks>
         public static NDArray real_if_close(NDArray a, double tol = 100)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, tol), static s => real_if_close(s.a, s.tol));
             // NumPy's `asanyarray(a)` is already satisfied by the NDArray parameter. A non-complex dtype
             // is returned unchanged (the real part of a real number is itself) — the same instance, as
             // NumPy returns `a` untouched for a non-complexfloating type.

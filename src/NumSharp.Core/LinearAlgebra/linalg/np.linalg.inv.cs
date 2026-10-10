@@ -26,6 +26,9 @@ namespace NumSharp
             [NDScoped]
             public static NDArray inv(NDArray a)
             {
+                // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+                if (NDMatrixBoundary.Sees(a))
+                    return NDMatrixBoundary.Wrapped(a, static s => inv(s));
                 AssertStackedSquare(a);
                 var common = CommonType(a);
                 return a.TensorEngine.Inv(ToCommon(a, common));
@@ -50,6 +53,9 @@ namespace NumSharp
             [NDScoped]
             public static NDArray pinv(NDArray a, double? rcond = null, bool hermitian = false, double? rtol = null)
             {
+                // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+                if (NDMatrixBoundary.Sees(a))
+                    return NDMatrixBoundary.Wrapped((a, rcond, hermitian, rtol), static s => pinv(s.a, s.rcond, s.hermitian, s.rtol));
                 if (rcond is not null && rtol is not null)
                     throw new ValueError("`rtol` and `rcond` can't be both set.");
 
@@ -99,6 +105,7 @@ namespace NumSharp
             [NDScoped]
             public static NDArray tensorinv(NDArray a, int ind = 2)
             {
+                using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 if (ind <= 0)
                     throw new ValueError("Invalid ind argument.");
 

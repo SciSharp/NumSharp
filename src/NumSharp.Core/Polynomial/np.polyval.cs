@@ -16,6 +16,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray polyval(NDArray p, NDArray x)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(x))
+                return NDMatrixBoundary.Wrapped((p, x), static s => polyval(s.p, s.x));
             p = np.asarray(p);
 
             // A poly1d `x` composes the two polynomials — handled by the poly1d overload below.

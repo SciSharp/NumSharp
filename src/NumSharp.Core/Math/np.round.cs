@@ -15,7 +15,12 @@ namespace NumSharp
         /// <returns>An array of the same type as a, containing the rounded values. Unless out was specified, a new array is created. A reference to the result is returned. The real and imaginary parts of complex numbers are rounded separately. The result of rounding a float is a float.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
         public static NDArray round_(NDArray x, int decimals = 0, NDArray @out = null, DType dtype = null)
-            => x.TensorEngine.Round(x, decimals, dtype, @out);
+            => !NDMatrixBoundary.Sees(x) ? x.TensorEngine.Round(x, decimals, dtype, @out)
+            // a numpy.matrix operand: decimals=0 is the rint ufunc (a matrix comes back); any other decimals is
+            // ndarray.round's multiply / rint / divide route, which NumPy returns as a plain array
+            : decimals == 0
+                ? NDMatrixBoundary.Wrapped((x, decimals, @out, dtype), static s => round_(s.x, s.decimals, s.@out, s.dtype), @out)
+                : NDMatrixBoundary.Plain((x, decimals, @out, dtype), static s => round_(s.x, s.decimals, s.@out, s.dtype));
 
         /// <summary>
         ///     Evenly round to the given number of decimals (alias of <see cref="round_"/>; NumPy: <c>np.around is np.round</c>).
@@ -27,6 +32,11 @@ namespace NumSharp
         /// <returns>An array of the same type as a, containing the rounded values. Unless out was specified, a new array is created. A reference to the result is returned. The real and imaginary parts of complex numbers are rounded separately. The result of rounding a float is a float.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
         public static NDArray around(NDArray x, int decimals = 0, NDArray @out = null, DType dtype = null)
-            => x.TensorEngine.Round(x, decimals, dtype, @out);
+            => !NDMatrixBoundary.Sees(x) ? x.TensorEngine.Round(x, decimals, dtype, @out)
+            // a numpy.matrix operand: decimals=0 is the rint ufunc (a matrix comes back); any other decimals is
+            // ndarray.round's multiply / rint / divide route, which NumPy returns as a plain array
+            : decimals == 0
+                ? NDMatrixBoundary.Wrapped((x, decimals, @out, dtype), static s => around(s.x, s.decimals, s.@out, s.dtype), @out)
+                : NDMatrixBoundary.Plain((x, decimals, @out, dtype), static s => around(s.x, s.decimals, s.@out, s.dtype));
     }
 }

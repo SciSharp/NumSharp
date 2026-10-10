@@ -19,6 +19,8 @@
         ///     (default last; <c>null</c> flattens). Returns int64 indices. NumPy <c>np.argsort</c>.
         /// </summary>
         public static NDArray argsort(NDArray nd, int? axis = -1)
-            => nd.argsort(axis);
+            => NDMatrixBoundary.Sees(nd)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((nd, axis), static s => argsort(s.nd, s.axis))
+            : nd.argsort(axis);
     }
 }

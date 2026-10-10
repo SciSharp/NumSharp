@@ -16,7 +16,9 @@ namespace NumSharp
         /// <returns>Output array which has the same shape as <paramref name="a"/>, except along <paramref name="axis"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
         public static NDArray repeat(NDArray a, int repeats, int? axis = null)
-            => repeat(a, (long)repeats, axis);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis))
+            : repeat(a, (long)repeats, axis);
 
         /// <summary>
         ///     Repeat each element of an array after themselves.
@@ -29,6 +31,9 @@ namespace NumSharp
         [NDScoped] // calculating overload: reclaims the ravel/ascontiguousarray/reshape temps
         public static NDArray repeat(NDArray a, long repeats, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
             if (repeats < 0)
@@ -53,6 +58,9 @@ namespace NumSharp
         [NDScoped] // calculating overload: reclaims the ravel temps
         public static NDArray repeat(NDArray a, NDArray repeats, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
             if (repeats is null)

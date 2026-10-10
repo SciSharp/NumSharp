@@ -1647,6 +1647,96 @@ file over the build output's corpus, run `Matrix` with `NUMSHARP_ORACLE_FAILURE_
 error cases too, where NumSharp raises NumPy's text before it reaches the bug. Then regenerate; `Matrix_KnownGaps` must
 report every carved case still open.
 
+### The matrix-operand tier (`matrix_operand` / `matrix_operand_host`) — 2026-10-10
+
+`test/oracle/gen_matrix_operand_oracle.py` writes what NumPy 2.4.2 returns when a public `np.*` function receives a
+`numpy.matrix` OPERAND. The matrix tier above holds the matrix CLASS (its members and operators); this tier holds
+the functions, which NumSharp answers at run time through `NDMatrixBoundary` (`src/NumSharp.Core/Matrixlib/`): the
+object's class decides, and the result is an `NDMatrix` typed `NDArray`.
+
+**How the cases are made.** Run the generator AFTER every other one: its sources are their files. A source case
+qualifies when a plain NumPy call reproduces its recorded answer byte for byte. Each two-dimensional operand
+position then gives a variant: that operand is marked `"matrix": true` (layout `matrix@<position>`), NumPy is called
+again, and the answer is recorded: class (`expected.cls`), dtype, shape and values, or the error type and text. The
+budget is 2 cases per (op, position, dtype class, param keys, axis / keepdims values) and 8 per (op, position,
+axis / keepdims values), which gives 4,645 answers over 260 functions, 680 of them errors.
+
+| File | Cases | Replay |
+|---|---|---|
+| `matrix_operand.jsonl` | 3,885 | `FuzzCorpusTests.MatrixOperand` |
+| `matrix_operand_host.jsonl` | 420 | `MatrixOperandHost` (`RunHostLibmCorpus`: strict on win-amd64) |
+| `gaps/matrix_operand_gaps.jsonl` | 330 | `MatrixOperand_KnownGaps` (`[OpenBugs]`) |
+| `gaps/matrix_operand_host_gaps.jsonl` | 10 | `MatrixOperandHost_KnownGaps` (`[OpenBugs]`) |
+
+**What is compared.** The class has no registry call: a matrix where NumPy returns a plain array, or the reverse,
+always fails. `MisalignedRegistry.Classify` returns null for a shape, threw, error-text or expected-error divergence
+of a case whose layout starts with `matrix@`, and the two NEP50 0-d blankets skip the tier. A VALUE excuse of the
+source tier still applies (the variant keeps its source's op key, params and valueclass). Ownership is not compared:
+a boundary result is always a matrix view of the plain result.
+
+**The rules NumPy applies** (one per function, each read from the truth table):
+
+- a ufunc, and every function that ends in one or allocates through the operand's class, returns a matrix; a 1-d
+  result becomes a 1 x N row, and a result with more than two long axes raises `shape too large to be a matrix.`
+  (`np.stack`, `np.dstack`);
+- a `fromnumeric` wrapper calls the operand's own method: `np.sum(m, 0)` is a 1 x N matrix, `np.sum(m, 1)` an N x 1
+  matrix, `np.sum(m)` a scalar, and `keepdims=True` raises `TypeError: matrix.sum() got an unexpected keyword
+  argument 'keepdims'`;
+- a function that converts with `asarray` returns a plain array (`np.ravel`, `np.diagonal`, `np.where`,
+  `np.expand_dims`, `np.cross`, `np.tensordot`, the whole `np.fft`).
+
+**The carved gaps** (340 cells; exact: every carved case diverges and no kept case does):
+
+| Gap | Cells | Divergence |
+|---|---|---|
+| MO01 | 24 | `np.isclose` returns `NDArray<bool>`, a type that cannot be a matrix object; NumPy returns a matrix |
+| MO02 | 32 | `np.count_nonzero` with an axis: NumPy hands `keepdims` to `matrix.sum` and raises; NumSharp counts |
+| MO03 | 211 | the median / percentile / quantile family: NumPy's `keepdims` and `ravel` paths meet matrix methods (errors, rows where a column is expected, float16 / float32 dtypes of the matrix product) |
+| MO04 | 46 | `np.roll`, `np.ediff1d`, `np.vdot`, `np.union1d`, a refused `np.append`: `ravel()` of a matrix stays 1 x N inside NumPy |
+| MO05 | 27 | `np.polyval`, `np.i0`, narrow-float `np.sinc`, `np.trapezoid` with a matrix x: `*` is the matrix product inside NumPy |
+
+MO02 to MO05 are NumPy ARTIFACTS: matrix semantics leak into NumPy's own Python code. NumSharp returns the plain
+result shaped by the function's matrix rule. Two more gaps cannot be tier cases, because their results are structs
+of arrays: MO06 (`np.gradient`) and MO07 (`np.meshgrid`) return plain arrays where NumPy returns matrices; their
+repros are in `NumSharp.Tests/OpenBugs.MatrixOperand.cs`.
+
+**The caller audit** (`MatrixOperand_LibraryNeverReachesAMatrixRule`). The boundary rests on one contract: no method
+of the library reaches the matrix rule of a public function at depth zero (library code is written for plain
+results; a 1 x N row where it expects N elements would break it). The test turns the contract into a measurement.
+It replays every corpus case that has a two-dimensional operand, with those operands typed as matrices, while
+`NDMatrixBoundary.AuditInternalCallers` is on: 311,725 cases from the ordinary tiers (`ReplayOne`), the numpy.ma
+tiers (`ReplayMaOne`, masked operands built from matrix data) and the index tiers (a matrix base, matrix index
+arrays, a matrix value). Outcomes are not compared; the set of library callers the audit records must be empty. It
+found 57 call paths when it was written. A finding is closed by a region (`NDMatrixBoundary.PlainFor` / `Inside`), by
+a rule for the calling function, or, for an object that keeps the array, by storing its plain view (`PlainOf`).
+
+**Outside the truth table.** A function the generator cannot derive (tuple results, nested operands, non-deterministic
+arrangements, LAPACK) took its rule from NumPy's source and two direct probes of NumPy 2.4.2. Those rules are pinned
+by unit tests with the probed class and shape: `NumSharp.Tests/Matrixlib/NDMatrixBoundary.Tests.cs` (24) and
+`NumSharp.Tests.Interop/MatrixOperandLapackTests.cs` (5: `np.linalg.qr`, `eig`, `eigh`, `svd`, `lstsq`, `pinv`,
+`cholesky`).
+
+**Generator rules worth keeping**:
+
+- NumPy 2.4.2's `np.stack` / `np.dstack` with a matrix operand raise `shape too large to be a matrix.` and CORRUPT
+  NumPy's heap. Every matrix call runs in a worker process, which is retired after such an error.
+- A `keepdims=False` of the source case is not passed to NumPy (C# cannot tell an explicit `false` from the
+  default, and NumPy's matrix methods refuse the keyword whatever its value).
+- A source case with a 0-d operand is skipped (the NEP50 0-d divergence would decide the answer).
+
+**Harness facts**:
+
+- `CheckError` reports "NumPy raises but NumSharp produced a result" as a VALUE divergence, so a value excuse of the
+  source tier hid error-parity gaps. Expected-error cases are strict for this tier (`c.Expects_Throw`).
+- Operator keys (`add`, `multiply`, the comparisons) replay through the FUNCTION form for a matrix operand
+  (`OpRegistry.MatrixOperand.cs`): the operators of an `NDArray` reference keep the plain meaning by design.
+
+**Redraw the carve after a change** (it must stay exact): `python gen_matrix_operand_oracle.py --uncarved <dir>`,
+copy both files over the build output's corpus, run `MatrixOperand` and `MatrixOperandHost` with
+`NUMSHARP_ORACLE_FAILURE_DUMP=<file>`, and compare the dump with `_gap_of` in BOTH directions. Then copy the CARVED
+files back: the uncarved copies in `bin/.../Fuzz/corpus` are newer than the repository's, so a build does not
+replace them and the gate would replay the uncarved table.
+
 ### float16 selections (`half_minmax` tier + the selection contract) — 2026-10-03
 
 `half_minmax.jsonl` (5,900 cases, 1,180 per op, `gen_oracle.py half_minmax`) runs `max` / `min` / `nanmax` / `nanmin`

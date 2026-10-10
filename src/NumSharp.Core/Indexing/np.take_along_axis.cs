@@ -35,6 +35,12 @@ namespace NumSharp
         [NDScoped]
         public static unsafe NDArray take_along_axis(NDArray arr, NDArray indices, int? axis = -1)
         {
+            // a numpy.matrix arr: NumPy indexes the matrix itself along an axis (a matrix comes back) and its
+            // flat iterator without one (a plain 1-d array)
+            if (NDMatrixBoundary.Sees(arr))
+                return axis is null
+                    ? NDMatrixBoundary.Plain((arr, indices, axis), static s => take_along_axis(s.arr, s.indices, s.axis))
+                    : NDMatrixBoundary.Wrapped((arr, indices, axis), static s => take_along_axis(s.arr, s.indices, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
 

@@ -17,13 +17,17 @@ namespace NumSharp
         /// <returns>Array of the same shape as x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arctanh.html</remarks>
         public static NDArray arctanh(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.ATanh(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => arctanh(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.ATanh(x, dtype, @out, where);
 
         /// <summary>
         ///     Inverse hyperbolic tangent, element-wise (Array-API alias of <see cref="arctanh(NDArray, NDArray, NDArray, NPTypeCode?)"/>, added in NumPy 2.0).
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atanh.html</remarks>
         public static NDArray atanh(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.ATanh(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => atanh(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.ATanh(x, dtype, @out, where);
     }
 }

@@ -21,6 +21,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.imag.html</remarks>
         public static NDArray imag(NDArray val)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(val))
+                return NDMatrixBoundary.Wrapped(val, static s => imag(s));
             // Complex: a strided float64 view onto the imaginary lane (writes through, shares memory).
             if (val.typecode == NPTypeCode.Complex)
                 return new NDArray(val.Storage.AliasComplexLane(imaginary: true));

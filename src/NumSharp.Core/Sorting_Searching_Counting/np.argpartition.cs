@@ -24,7 +24,9 @@ namespace NumSharp
         ///     order, the same policy as argsort's NaN tail).
         /// </remarks>
         public static NDArray argpartition(NDArray a, int kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.ArgPartition(a, new[] { kth }, axis, kind, order);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order))
+            : AxisPartition.ArgPartition(a, new[] { kth }, axis, kind, order);
 
         /// <summary>
         ///     Indirect partition around EVERY index in <paramref name="kth"/> at once (NumPy
@@ -33,7 +35,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argpartition.html</remarks>
         [NDScoped]
         public static NDArray argpartition(NDArray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.ArgPartition(a, kth, axis, kind, order);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order))
+            : AxisPartition.ArgPartition(a, kth, axis, kind, order);
 
         /// <summary>
         ///     Indirect partition with the kth indices given as an ARRAY — NumPy's array-kth form
@@ -43,7 +47,9 @@ namespace NumSharp
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argpartition.html</remarks>
         public static NDArray argpartition(NDArray a, NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.ArgPartition(a, kth, axis, kind, order);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order))
+            : AxisPartition.ArgPartition(a, kth, axis, kind, order);
     }
 
     public partial class NDArray

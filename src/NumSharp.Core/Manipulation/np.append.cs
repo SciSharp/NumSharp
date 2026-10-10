@@ -45,6 +45,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray append(NDArray arr, NDArray values, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr, values))
+                return NDMatrixBoundary.Wrapped((arr, values, axis), static s => append(s.arr, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (values is null) throw new ArgumentNullException(nameof(values));
 
@@ -83,6 +86,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray append(NDArray arr, object values, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, values, axis), static s => append(s.arr, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (values is null) throw new ArgumentNullException(nameof(values));
 

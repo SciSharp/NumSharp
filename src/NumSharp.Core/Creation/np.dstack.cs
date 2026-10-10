@@ -15,6 +15,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.dstack.html</remarks>
         public static NDArray dstack(params NDArray[] tup)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(tup))
+                return NDMatrixBoundary.Wrapped(tup, static s => dstack(s));
             if (tup == null)
                 throw new ArgumentNullException(nameof(tup));
 

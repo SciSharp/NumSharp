@@ -41,6 +41,7 @@ namespace NumSharp
         public static NDArray cov(NDArray m, NDArray y = null, bool rowvar = true, bool bias = false,
             int? ddof = null, NDArray fweights = null, NDArray aweights = null, DType dtype = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(m, y, fweights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (m is null) throw new ArgumentNullException(nameof(m));
 
             // --- Check inputs. NumPy's "ddof must be integer" ValueError is enforced by the int? type. ---

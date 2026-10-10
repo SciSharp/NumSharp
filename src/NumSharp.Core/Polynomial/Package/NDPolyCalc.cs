@@ -602,7 +602,9 @@ namespace NumSharp
             // strong), which ClassifyScale already proved casts back into the series same_kind.
             using NDArray built = scl.Kind == PolyNumberKind.Array ? null : scl.AsArrayOf(scl.Dtype);
             NPTypeCode loop = PolyTyping.Promote(t, scl.Dtype);
-            np.multiply(win, built ?? scl.Array, @out: win, dtype: loop);
+            NDArray operand = built ?? scl.Array;
+            using var plain = NDMatrixBoundary.PlainFor(operand);   // a caller's numpy.matrix scale: no matrix rule in np.multiply
+            np.multiply(win, operand, @out: win, dtype: loop);
         }
 
         /// <summary>

@@ -38,7 +38,9 @@ namespace NumSharp
         ///     sub-array removed along <paramref name="axis"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.delete.html</remarks>
         public static NDArray delete(NDArray arr, int obj, int? axis = null)
-            => delete(arr, (long)obj, axis);
+            => NDMatrixBoundary.Sees(arr)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis))
+            : delete(arr, (long)obj, axis);
 
         /// <summary>
         ///     NumPy's <c>delete</c>/<c>insert</c> allocate their output in the SOURCE's memory order —
@@ -69,6 +71,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray delete(NDArray arr, long obj, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
 
             var ctx = PrepareAxisContext(arr, axis);
@@ -82,6 +87,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray delete(NDArray arr, Slice obj, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
@@ -96,6 +104,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray delete(NDArray arr, int[] obj, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
@@ -112,6 +123,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray delete(NDArray arr, long[] obj, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
@@ -135,6 +149,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray delete(NDArray arr, bool[] obj, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
@@ -174,6 +191,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray delete(NDArray arr, NDArray obj, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 

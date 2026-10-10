@@ -7,8 +7,9 @@ namespace NumSharp.Tests.Matrixlib
     /// <summary>
     ///     Unit tests of <see cref="NDMatrix"/> (NumPy's <c>numpy.matrix</c>). The first half ports NumPy 2.4.2's
     ///     own <c>numpy/matrixlib/tests/test_defmatrix.py</c>; the second half pins what is specific to NumSharp's
-    ///     design: the matrix semantics follow the STATIC type, a C# number is a 0-d matrix scalar, and every
-    ///     result has NumPy's class, shape and ownership. Every expected value is NumPy 2.4.2's answer for the
+    ///     design: members and operators follow the STATIC type while the <c>np.*</c> functions follow the object
+    ///     (<c>NDMatrixBoundaryTests</c> holds the function rules), a C# number is a 0-d matrix scalar, and every
+    ///     member result has NumPy's class, shape and ownership. Every expected value is NumPy 2.4.2's answer for the
     ///     same call. The differential gate with 26,000 cases is <c>FuzzCorpusTests.Matrix</c>.
     /// </summary>
     [TestClass]
@@ -426,12 +427,13 @@ namespace NumSharp.Tests.Matrixlib
         // ================================================================================================
 
         /// <summary>
-        ///     The same object is a matrix through an <see cref="NDMatrix"/> reference and a plain 2-D array
-        ///     through an <see cref="NDArray"/> one: <c>*</c> is the matrix product only for the former, and an
-        ///     <c>np.*</c> function returns a plain array.
+        ///     The operators and the members follow the STATIC type: the same object is a matrix through an
+        ///     <see cref="NDMatrix"/> reference and a plain 2-D array through an <see cref="NDArray"/> one. The
+        ///     public <c>np.*</c> functions follow the OBJECT: they return what NumPy returns for a matrix
+        ///     operand, typed <see cref="NDArray"/> (<see cref="NDMatrixBoundary"/>).
         /// </summary>
         [TestMethod]
-        public void Semantics_FollowTheStaticType()
+        public void Semantics_OperatorsAndMembersFollowTheStaticType_FunctionsFollowTheObject()
         {
             NDMatrix m = np.matrix(A22());
             NDArray a = m;
@@ -440,14 +442,21 @@ namespace NumSharp.Tests.Matrixlib
             (a * a).Should().BeOfValues(1L, 4L, 9L, 16L);
             ReferenceEquals(m, a).Should().BeTrue();
 
-            NDArray reduced = np.sum(m, 0);
-            IsMatrix(reduced).Should().BeFalse();
-            reduced.shape.Should().Equal(2L);
+            // An operator and a member of the NDArray reference keep the plain-array meaning.
+            IsMatrix(a + a).Should().BeFalse();
+            NDArray member = a.sum(0);
+            IsMatrix(member).Should().BeFalse();
+            member.shape.Should().Equal(2L);
 
-            // A view brings a function's result back as a matrix without a copy.
-            NDMatrix back = np.asmatrix(reduced);
-            back.shape.Should().Equal(1L, 2L);
-            np.may_share_memory(back, reduced).Should().BeTrue();
+            // The function looks at the object: NumPy's np.sum(m, 0) is m.sum(0), a 1 x 2 matrix.
+            NDArray reduced = np.sum(a, 0);
+            IsMatrix(reduced).Should().BeTrue();
+            reduced.shape.Should().Equal(1L, 2L);
+            reduced.Should().BeOfValues(4L, 6L);
+
+            // The upcast result is the matrix object: a cast gives the matrix members back without a copy.
+            NDMatrix back = (NDMatrix)reduced;
+            back.T.shape.Should().Equal(2L, 1L);
 
             // A is the plain array of the same memory.
             IsMatrix(m.A).Should().BeFalse();

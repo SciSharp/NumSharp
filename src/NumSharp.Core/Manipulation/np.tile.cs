@@ -20,6 +20,9 @@ namespace NumSharp
         /// <exception cref="ArgumentException">If any element of <paramref name="reps"/> is negative.</exception>
         public static NDArray tile(NDArray A, params int[] reps)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(A))
+                return NDMatrixBoundary.Wrapped((A, reps), static s => tile(s.A, s.reps));
             if (A is null) throw new ArgumentNullException(nameof(A));
             if (reps is null) throw new ArgumentNullException(nameof(reps));
 
@@ -45,6 +48,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray tile(NDArray A, long[] reps)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(A))
+                return NDMatrixBoundary.Wrapped((A, reps), static s => tile(s.A, s.reps));
             if (A is null) throw new ArgumentNullException(nameof(A));
             if (reps is null) throw new ArgumentNullException(nameof(reps));
 

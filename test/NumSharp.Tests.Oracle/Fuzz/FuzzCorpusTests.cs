@@ -1128,6 +1128,11 @@ namespace NumSharp.Tests.Fuzz
             // The matrix tier (gen_matrix_oracle.py, 2026-10-09): numpy.matrix as NDMatrix. Delivered count (the 172
             // carved gaps of the array library below the class live in corpus/gaps/matrix_gaps.jsonl):
             ["matrix.jsonl"] = 25400,      // 26,761 cases over 87 op keys: values, result class, memory facet, errors
+            // The matrix-operand tiers (gen_matrix_operand_oracle.py, 2026-10-10): cases of the other tiers with one
+            // 2-D operand typed as a numpy.matrix, for the class and shape the public np.* functions return.
+            // Delivered counts (the 340 carved gaps live in corpus/gaps/matrix_operand*_gaps.jsonl):
+            ["matrix_operand.jsonl"] = 3700,      // 3,885 variants of the portable tiers over 260 op keys
+            ["matrix_operand_host.jsonl"] = 400,  // 420 variants of the host-libm tiers
         };
 
         // Corpus tiers authored against the win-amd64 CRT libm (ucrtbase) and NumSharp's host SIMD

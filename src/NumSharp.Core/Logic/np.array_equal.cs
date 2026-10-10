@@ -22,6 +22,7 @@ namespace NumSharp {
         /// </remarks>
         public static bool array_equal(NDArray a, NDArray b, bool equal_nan = false)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a, b);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // A null "array" cannot equal a real one; two nulls are trivially equal (mirrors the
             // NDArray == null convention). Guarding here also keeps a.array_equal(...) from throwing.
             if (a is null)

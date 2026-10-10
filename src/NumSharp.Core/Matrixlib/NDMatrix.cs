@@ -20,12 +20,17 @@ using NumSharp.Backends;
 //
 // The reason is safety. Every kernel and helper of this library is written against NDArray, where `x * y` is the
 // elementwise product and `x[i]` drops an axis. A run-time dispatch (virtual members, a dynamic `*`) would change
-// the meaning of that code for a caller who passed a matrix in. With static binding a matrix passed to an np.*
-// function is an ordinary 2-D array there, which is also what NumPy's own C code sees.
+// the meaning of that code for a caller who passed a matrix in. With static binding a matrix inside the library
+// is an ordinary 2-D array, which is also what NumPy's own C code sees.
 //
-// The consequence: np.* functions return NDArray, where NumPy's would hand a matrix back (np.sum(m, 0),
-// np.transpose(m), np.linalg.inv(m)). Use the members (m.sum(0), m.T, m.I) or np.asmatrix(result), which is an
-// O(1) view.
+// THE FUNCTIONS FOLLOW THE OBJECT. The public np.* functions are the one place where the run-time class counts:
+// a function that receives a matrix OBJECT through its NDArray parameter returns what NumPy returns for a
+// numpy.matrix operand (np.sum(m, 0) is a 1 x N matrix, np.transpose(m) and np.linalg.inv(m) are matrices,
+// np.ravel(m) and np.where(m > 0, m, 0) are plain arrays, np.stack((m, m)) raises). The result is an NDMatrix
+// typed NDArray; cast it to use the matrix members. The functions compute with plain-array semantics and shape
+// only their RESULT (NDMatrixBoundary), so nothing below the public surface changes meaning. The operators, the
+// indexers and the members of an NDArray reference stay static: `a * a`, `a[0]` and `a.sum(0)` are the plain-array
+// operations for a matrix object too.
 //
 // THE THREE RESULT FORMS. Every member that returns a matrix builds it through From / FromWrapped / ViewOf:
 //   ViewOf(a)        NumPy's a.view(matrix): a new array object over a's memory, never an owner.
@@ -59,12 +64,21 @@ namespace NumSharp
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///     <b>The matrix semantics follow the static type.</b> The members and operators of this class are chosen by
-    ///     the compiler when the expression is typed <see cref="NDMatrix"/>. The same object seen through an
-    ///     <see cref="NDArray"/> reference (a parameter of an <c>np.*</c> function, a cast, <see cref="A"/>) is a
-    ///     plain 2-D array: <c>*</c> is elementwise there and an integer index drops an axis. Therefore the
-    ///     <c>np.*</c> functions return <see cref="NDArray"/>; wrap a result with <see cref="np.asmatrix(NDArray, DType)"/>
-    ///     (a view, no copy) or use the member (<c>m.sum(0)</c>, <c>m.T</c>, <c>m.I</c>).
+    ///     <b>Members and operators follow the static type.</b> The members and operators of this class are chosen
+    ///     by the compiler when the expression is typed <see cref="NDMatrix"/>. The same object seen through an
+    ///     <see cref="NDArray"/> reference (a cast, a variable typed <see cref="NDArray"/>) is a plain 2-D array to
+    ///     the operators, the indexers and the <see cref="NDArray"/> members: <c>*</c> is elementwise there, an
+    ///     integer index drops an axis and <c>a.sum(0)</c> has N elements.
+    ///     </para>
+    ///     <para>
+    ///     <b>The <c>np.*</c> functions follow the object.</b> A public function that receives a matrix object
+    ///     returns the class and the shape NumPy returns for a <c>numpy.matrix</c> operand: <c>np.sum(m, 0)</c> is a
+    ///     1 x N matrix, <c>np.negative(m)</c>, <c>np.transpose(m)</c> and <c>np.linalg.inv(m)</c> are matrices,
+    ///     <c>np.ravel(m)</c> is a plain array, <c>np.stack</c> raises <c>shape too large to be a matrix.</c>. The
+    ///     result is typed <see cref="NDArray"/>; cast it (<c>(NDMatrix)np.sum(m, 0)</c>) to reach the matrix
+    ///     members, no copy is made. A function whose C# return type is a typed array
+    ///     (<see cref="np.isclose"/>) or a struct of arrays (<c>np.gradient</c>, <c>np.meshgrid</c>) returns plain
+    ///     arrays. The rules live in <see cref="NDMatrixBoundary"/>.
     ///     </para>
     ///     <para>
     ///     <b>Always two-dimensional.</b> Every matrix result goes through NumPy's finalize rule
@@ -410,6 +424,7 @@ namespace NumSharp
                 if (dims.Length > 2)
                     throw new ValueError("too many values to unpack (expected 2)");
 
+                using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
                 NDArray inverse = dims[0] == dims[1] ? np.linalg.inv(this) : np.linalg.pinv(this);
                 return FromWrapped(inverse, this);
             }
@@ -446,8 +461,8 @@ namespace NumSharp
         /// <summary>
         ///     A deep copy that is a matrix again. It HIDES <see cref="NDArray.Clone"/> and does not override it,
         ///     on purpose: library code that clones an array it holds as <see cref="NDArray"/> must get a plain
-        ///     array back, or the <c>np.*</c> functions that happen to clone their operand would return matrices
-        ///     and the others would not.
+        ///     array back. Which <c>np.*</c> function returns a matrix is decided by its rule
+        ///     (<see cref="NDMatrixBoundary"/>), never by whether its body happens to clone the operand.
         /// </summary>
         /// <returns>A new matrix owning a copy of the data.</returns>
         public new NDMatrix Clone() => new NDMatrix(Storage.Clone()) { TensorEngine = TensorEngine };

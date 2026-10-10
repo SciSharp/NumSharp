@@ -38,6 +38,9 @@ namespace NumSharp
         [NDScoped] // reclaims the inner expand_dims alias of the 1-D arm; the ndim>=3 passthrough is an untracked input
         public static NDArray atleast_3d(NDArray arr)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped(arr, static s => atleast_3d(s), keepRank: true);
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
 
@@ -102,6 +105,9 @@ namespace NumSharp
         [NDScoped] // per-element inner expand_dims aliases are reclaimed; input passthroughs stay untracked
         public static NDArray[] atleast_3d(params NDArray[] arys)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arys))
+                return NDMatrixBoundary.WrappedAll(arys, static s => atleast_3d(s));
             if (arys == null)
                 throw new ArgumentNullException(nameof(arys));
 

@@ -11,7 +11,9 @@
         /// <returns>Array of indices into the array. It has the same shape as a.shape with the dimension along axis removed (unless keepdims is True).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmax.html</remarks>
         public static NDArray argmax(NDArray a, int axis, bool keepdims = false)
-            => a.TensorEngine.ArgMax(a, axis: axis, keepdims: keepdims);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, keepdims), static s => argmax(s.a, s.axis, s.keepdims), axis, keepdims, null)
+            : a.TensorEngine.ArgMax(a, axis: axis, keepdims: keepdims);
 
         /// <summary>
         ///     Returns the index of the maximum value.
@@ -31,7 +33,9 @@
         /// <returns>Array of indices into the array. It has the same shape as a.shape with the dimension along axis removed (unless keepdims is True).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmin.html</remarks>
         public static NDArray argmin(NDArray a, int axis, bool keepdims = false)
-            => a.TensorEngine.ArgMin(a, axis: axis, keepdims: keepdims);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, keepdims), static s => argmin(s.a, s.axis, s.keepdims), axis, keepdims, null)
+            : a.TensorEngine.ArgMin(a, axis: axis, keepdims: keepdims);
 
         /// <summary>
         ///     Returns the index of the minimum value.

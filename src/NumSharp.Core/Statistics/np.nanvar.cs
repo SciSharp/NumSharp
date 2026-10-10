@@ -37,6 +37,8 @@ namespace NumSharp
         /// </remarks>
         [NDScoped]
         public static NDArray nanvar(NDArray a, int? axis = null, bool keepdims = false, int ddof = 0, DType dtype = null)
-            => DefaultEngine.NanVarStdNumPy(a, axis, keepdims, ddof, dtype, takeSqrt: false);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, keepdims, ddof, dtype), static s => nanvar(s.a, s.axis, s.keepdims, s.ddof, s.dtype), axis, keepdims, (a.typecode is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex) ? "sum" : "var")
+            : DefaultEngine.NanVarStdNumPy(a, axis, keepdims, ddof, dtype, takeSqrt: false);
     }
 }

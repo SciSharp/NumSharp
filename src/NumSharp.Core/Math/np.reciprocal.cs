@@ -14,6 +14,8 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reciprocal.html</remarks>
         [NDScoped]
         public static NDArray reciprocal(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.Reciprocal(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => reciprocal(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.Reciprocal(x, dtype, @out, where);
     }
 }

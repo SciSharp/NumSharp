@@ -29,6 +29,9 @@ namespace NumSharp
             [NDScoped]
             public static NDArray matrix_power(NDArray a, int n)
             {
+                // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+                if (NDMatrixBoundary.Sees(a))
+                    return NDMatrixBoundary.Wrapped((a, n), static s => matrix_power(s.a, s.n));
                 AssertStackedSquare(a);
 
                 var work = a;

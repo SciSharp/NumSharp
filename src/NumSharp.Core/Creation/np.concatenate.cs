@@ -42,6 +42,9 @@ namespace NumSharp
             DType dtype = null,
             string casting = "same_kind")
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arrays))
+                return NDMatrixBoundary.Wrapped((arrays, axis, @out, dtype, casting), static s => concatenate(s.arrays, s.axis, s.@out, s.dtype, s.casting), @out);
             if (arrays == null)
                 throw new ArgumentNullException(nameof(arrays));
             if (arrays.Length == 0)

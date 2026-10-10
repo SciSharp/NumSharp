@@ -24,6 +24,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
         public static NDArray amin(NDArray a, int? axis = null, bool keepdims = false, DType dtype = null)
         {
+            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Reduced((a, axis, keepdims, dtype), static s => amin(s.a, s.axis, s.keepdims, s.dtype), axis, keepdims, "min");
             // Delegate to TensorEngine which handles keepdims for axis=null
             return a.TensorEngine.ReduceAMin(a, axis, keepdims, dtype);
         }
@@ -39,6 +42,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
         public static NDArray min(NDArray a, int? axis = null, bool keepdims = false, DType dtype = null)
         {
+            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Reduced((a, axis, keepdims, dtype), static s => min(s.a, s.axis, s.keepdims, s.dtype), axis, keepdims, "min");
             // Delegate to TensorEngine which handles keepdims for axis=null
             return a.TensorEngine.ReduceAMin(a, axis, keepdims, dtype);
         }

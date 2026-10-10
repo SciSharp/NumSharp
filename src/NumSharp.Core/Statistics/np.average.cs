@@ -17,6 +17,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.average.html</remarks>
         public static NDArray average(NDArray a, int? axis = null, NDArray weights = null, bool keepdims = false)
         {
+            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            if (NDMatrixBoundary.Sees(a))
+                return AverageOfMatrix(a, axis, weights, keepdims);
             if (a is null) throw new ArgumentNullException(nameof(a));
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             return AverageCore(a, axisArr, weights, keepdims, returned: false).avg;
@@ -29,8 +32,101 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.average.html</remarks>
         public static NDArray average(NDArray a, int[] axis, NDArray weights = null, bool keepdims = false)
         {
+            // a numpy.matrix operand: the matrix with every reduced axis kept, as NumPy's matrix method returns
+            if (NDMatrixBoundary.Sees(a))
+                return AverageOfMatrix(a, axis, weights, keepdims);
             if (a is null) throw new ArgumentNullException(nameof(a));
             return AverageCore(a, axis, weights, keepdims, returned: false).avg;
+        }
+
+        /// <summary>
+        ///     <c>np.average</c> of a <c>numpy.matrix</c> along one axis or none: NumPy calls <c>a.mean(axis)</c>
+        ///     (<c>np.multiply(a, w).sum(axis)</c> with weights), the matrix method, so the result is the scalar
+        ///     without an axis, a 1 x N row for axis 0 and an N x 1 column for axis 1.
+        /// </summary>
+        /// <param name="a">The matrix operand.</param>
+        /// <param name="axis">The axis, or <c>null</c>.</param>
+        /// <param name="weights">The weights, or <c>null</c>.</param>
+        /// <param name="keepdims">The caller's keepdims; <c>true</c> is refused as NumPy's matrix method refuses it.</param>
+        /// <returns>The average with NumPy's class and shape.</returns>
+        /// <exception cref="TypeError"><paramref name="keepdims"/> is <c>true</c>: <c>matrix.mean() got an
+        ///     unexpected keyword argument 'keepdims'</c> (<c>matrix.sum()</c> with weights).</exception>
+        private static NDArray AverageOfMatrix(NDArray a, int? axis, NDArray weights, bool keepdims)
+            => NDMatrixBoundary.Reduced((a, axis, weights, keepdims), static s => average(s.a, s.axis, s.weights, s.keepdims),
+                axis, keepdims, weights is null ? "mean" : "sum");
+
+        /// <summary>
+        ///     <c>np.average</c> of a <c>numpy.matrix</c> over a tuple of axes: a matrix reduction over a TUPLE
+        ///     keeps every reduced axis with length 1 (<c>matrix._collapse</c> returns the kept result for any axis
+        ///     that is not None; probed 2.4.2: <c>np.average(m, axis=(0, 1))</c> is a 1 x 1 matrix). Without axes
+        ///     it is the scalar of the single-axis form.
+        /// </summary>
+        /// <param name="a">The matrix operand.</param>
+        /// <param name="axis">The axes, or <c>null</c>.</param>
+        /// <param name="weights">The weights, or <c>null</c>.</param>
+        /// <param name="keepdims">The caller's keepdims; <c>true</c> is refused as NumPy's matrix method refuses it.</param>
+        /// <returns>The average with NumPy's class and shape.</returns>
+        /// <exception cref="TypeError"><paramref name="keepdims"/> is <c>true</c>: <c>matrix.mean() got an
+        ///     unexpected keyword argument 'keepdims'</c> (<c>matrix.sum()</c> with weights).</exception>
+        private static NDArray AverageOfMatrix(NDArray a, int[] axis, NDArray weights, bool keepdims)
+        {
+            string method = weights is null ? "mean" : "sum";
+            if (axis is null)
+                return NDMatrixBoundary.Reduced((a, weights, keepdims), static s => average(s.a, (int[])null, s.weights, s.keepdims), null, keepdims, method);
+            if (keepdims)
+                throw NDMatrixBoundary.KeywordError(method, "keepdims");
+            return NDMatrixBoundary.Wrapped((a, axis, weights), static s => average(s.a, s.axis, s.weights, keepdims: true));
+        }
+
+        /// <summary>
+        ///     The pair <c>np.average(m, ..., returned=True)</c> gives for a <c>numpy.matrix</c> operand: the average
+        ///     NumPy's matrix rule returned, and the sum of weights as a PLAIN array of the average's shape
+        ///     (NumPy: <c>if scl.shape != avg.shape: scl = np.broadcast_to(scl, avg.shape).copy()</c>; probed
+        ///     2.4.2: <c>np.average(m, axis=0, returned=True)</c> is a 1 x N matrix and a 1 x N ndarray).
+        /// </summary>
+        /// <param name="avg">The average, already computed through <c>np.average</c>'s matrix rule (a matrix, or a
+        ///     0-d scalar without an axis). Returned as it is.</param>
+        /// <param name="a">The matrix operand.</param>
+        /// <param name="axis">The axes, or <c>null</c>.</param>
+        /// <param name="weights">The weights, or <c>null</c>.</param>
+        /// <returns>The average and the sum of weights.</returns>
+        /// <remarks>
+        ///     The sum of weights comes from a second, plain computation (the matrix path pays one extra pass; the
+        ///     plain path is untouched). A matrix <paramref name="weights"/> makes NumPy's sum of weights a matrix
+        ///     as well; here it is always a plain array.
+        /// </remarks>
+        private static (NDArray avg, NDArray sumOfWeights) AverageReturnedOfMatrix(NDArray avg, NDArray a, int[] axis, NDArray weights)
+        {
+            using var plain = NDMatrixBoundary.Inside();   // the calls below compute plain: this method shapes the pair itself
+            var (plainAvg, scl) = AverageCore(a, axis, weights, keepdims: false, returned: true);
+            plainAvg.Dispose();   // only the sum of weights is wanted from this pass
+            if (scl.Shape.Equals(avg.Shape) || SameDimensions(scl.Shape, avg.Shape))
+                return (avg, scl);
+
+            // Same elements in the average's shape: a reshape when the counts agree (a row or a column of sums),
+            // else NumPy's broadcast (the element count repeated for every output cell).
+            Shape target = Shape.Adopt((long[])avg.Shape.dimensions.Clone());
+            NDArray view = scl.size == avg.size ? scl.reshape(target) : np.broadcast_to(scl, target);
+            NDArray shaped = view.copy();
+            if (!ReferenceEquals(view, scl))
+                view.Dispose();
+            scl.Dispose();
+            return (avg, shaped);
+        }
+
+        /// <summary>Whether two shapes have the same dimensions (layout and flags apart).</summary>
+        /// <param name="x">The first shape.</param>
+        /// <param name="y">The second shape.</param>
+        /// <returns>True when rank and every extent agree.</returns>
+        private static bool SameDimensions(Shape x, Shape y)
+        {
+            long[] dx = x.dimensions ?? Array.Empty<long>(), dy = y.dimensions ?? Array.Empty<long>();
+            if (dx.Length != dy.Length)
+                return false;
+            for (int i = 0; i < dx.Length; i++)
+                if (dx[i] != dy[i])
+                    return false;
+            return true;
         }
 
         /// <summary>
@@ -42,6 +138,8 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.average.html</remarks>
         public static (NDArray avg, NDArray sumOfWeights) average_returned(NDArray a, int? axis = null, NDArray weights = null, bool keepdims = false)
         {
+            if (NDMatrixBoundary.Sees(a))   // a numpy.matrix operand: np.average's matrix rule, then NumPy's sum of weights
+                return AverageReturnedOfMatrix(AverageOfMatrix(a, axis, weights, keepdims), a, axis.HasValue ? new[] { axis.Value } : null, weights);
             if (a is null) throw new ArgumentNullException(nameof(a));
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             return AverageCore(a, axisArr, weights, keepdims, returned: true);
@@ -53,6 +151,8 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.average.html</remarks>
         public static (NDArray avg, NDArray sumOfWeights) average_returned(NDArray a, int[] axis, NDArray weights = null, bool keepdims = false)
         {
+            if (NDMatrixBoundary.Sees(a))   // a numpy.matrix operand: np.average's matrix rule, then NumPy's sum of weights
+                return AverageReturnedOfMatrix(AverageOfMatrix(a, axis, weights, keepdims), a, axis, weights);
             if (a is null) throw new ArgumentNullException(nameof(a));
             return AverageCore(a, axis, weights, keepdims, returned: true);
         }

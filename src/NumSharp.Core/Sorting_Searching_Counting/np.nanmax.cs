@@ -45,6 +45,8 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="a"/>'s rank.</exception>
         [System.Runtime.CompilerServices.OverloadResolutionPriority(1)]
         public static NDArray nanmax(NDArray a, int? axis, bool keepdims)
-            => a.TensorEngine.NanMax(a, axis, keepdims);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, keepdims), static s => nanmax(s.a, s.axis, s.keepdims), axis, keepdims, "max")
+            : a.TensorEngine.NanMax(a, axis, keepdims);
     }
 }

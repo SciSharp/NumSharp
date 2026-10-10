@@ -19,7 +19,9 @@ namespace NumSharp
         ///     any-NaN-part last — matching NumPy 2.4.2.
         /// </remarks>
         public static NDArray sort(NDArray a, int? axis = -1, string kind = null)
-            => AxisSort.Sort(a, axis);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, axis, kind), static s => sort(s.a, s.axis, s.kind))
+            : AxisSort.Sort(a, axis);
     }
 
     public partial class NDArray

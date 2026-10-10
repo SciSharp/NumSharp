@@ -39,6 +39,9 @@ namespace NumSharp
         [NDScoped] // reclaims the 0-d reshape alias and the natural-result temp on the out= path
         public static NDArray take(NDArray a, NDArray indices, int? axis = null, NDArray @out = null, string mode = "raise")
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, indices, axis, @out, mode), static s => take(s.a, s.indices, s.axis, s.@out, s.mode), @out);
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
 
@@ -106,6 +109,9 @@ namespace NumSharp
         [NDScoped] // the 0-d index wrapper is built in THIS frame, before the array overload's scope opens
         public static NDArray take(NDArray a, long index, int? axis = null, NDArray @out = null, string mode = "raise")
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, index, axis, @out, mode), static s => take(s.a, s.index, s.axis, s.@out, s.mode), @out);
             // Wrap the scalar in a 0-d NDArray so the array overload's shape-preserving
             // logic emits a 0-d result (NumPy semantic for scalar input).
             var idxArr = NDArray.Scalar(index);

@@ -16,6 +16,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray cumprod(NDArray arr, int? axis = null, DType typeCode = null, NDArray @out = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, axis, typeCode, @out), static s => cumprod(s.arr, s.axis, s.typeCode, s.@out), @out);
             NDArray result = arr.TensorEngine.ReduceCumMul(arr, axis, typeCode);
             return WriteScanToOut(result, @out);
         }

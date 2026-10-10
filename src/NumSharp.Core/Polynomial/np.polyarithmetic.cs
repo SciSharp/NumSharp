@@ -8,13 +8,21 @@ namespace NumSharp
         ///     Find the sum of two polynomials. The shorter input is zero-extended on the high-degree side.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polyadd.html</remarks>
-        public static NDArray polyadd(NDArray a1, NDArray a2) => PolyAddSub(a1, a2, subtract: false);
+        public static NDArray polyadd(NDArray a1, NDArray a2)
+        {
+            using var plain = NDMatrixBoundary.PlainFor(a1, a2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PolyAddSub(a1, a2, subtract: false);
+        }
 
         /// <summary>
         ///     Difference (subtraction) of two polynomials, <c>a1 - a2</c>.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polysub.html</remarks>
-        public static NDArray polysub(NDArray a1, NDArray a2) => PolyAddSub(a1, a2, subtract: true);
+        public static NDArray polysub(NDArray a1, NDArray a2)
+        {
+            using var plain = NDMatrixBoundary.PlainFor(a1, a2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PolyAddSub(a1, a2, subtract: true);
+        }
 
         [NDScoped]
         private static NDArray PolyAddSub(NDArray a1, NDArray a2, bool subtract)
@@ -39,6 +47,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray polymul(NDArray a1, NDArray a2)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a1, a2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // poly1d normalisation trims leading zeros (and maps an all-zero input to [0]). The polynomials
             // own their coefficient arrays (field egress — no ambient scope reclaims them), so they are
             // disposed here; the convolution is a fresh array, yielded by the [NDScoped] weaver.
@@ -65,6 +74,7 @@ namespace NumSharp
         [NDScoped]
         public static (NDArray q, NDArray r) polydiv(NDArray u, NDArray v)
         {
+            using var plain = NDMatrixBoundary.PlainFor(u, v);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             u = np.atleast_1d(u) + 0.0;   // floated, exactly like NumPy's `+ 0.0`
             v = np.atleast_1d(v) + 0.0;
 

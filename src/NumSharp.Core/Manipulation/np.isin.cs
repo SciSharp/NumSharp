@@ -30,6 +30,7 @@ namespace NumSharp
         public static NDArray isin(NDArray element, NDArray test_elements,
             bool assume_unique = false, bool invert = false, string kind = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(element, test_elements);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (kind != null && kind != "sort" && kind != "table")
                 throw new ValueError($"Invalid kind: '{kind}'. Please use None, 'sort' or 'table'.");
 

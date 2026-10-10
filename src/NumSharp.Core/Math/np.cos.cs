@@ -16,7 +16,9 @@ namespace NumSharp
         /// <returns>The cosine of each element of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cos.html</remarks>
         public static NDArray cos(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.Cos(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => cos(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.Cos(x, dtype, @out, where);
 
         /// <summary>
         ///     Hyperbolic cosine, element-wise. <br></br>
@@ -27,7 +29,9 @@ namespace NumSharp
         /// <returns>Output array of same shape as x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cosh.html</remarks>
         public static NDArray cosh(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.Cosh(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => cosh(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.Cosh(x, dtype, @out, where);
 
         /// <summary>
         ///     Trigonometric inverse cosine, element-wise. <br></br>
@@ -38,6 +42,8 @@ namespace NumSharp
         /// <returns>The angle of the ray intersecting the unit circle at the given x-coordinate in radians [0, pi]. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arccos.html</remarks>
         public static NDArray arccos(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.ACos(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => arccos(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.ACos(x, dtype, @out, where);
     }
 }

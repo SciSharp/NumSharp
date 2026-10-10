@@ -41,7 +41,9 @@ namespace NumSharp
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.insert.html</remarks>
         public static NDArray insert(NDArray arr, int obj, NDArray values, int? axis = null)
-            => insert(arr, (long)obj, values, axis);
+            => NDMatrixBoundary.Sees(arr)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis))
+            : insert(arr, (long)obj, values, axis);
 
         /// <summary>
         ///     Long-index overload of <see cref="insert(NDArray, int, NDArray, int?)"/>.
@@ -49,6 +51,9 @@ namespace NumSharp
         [NDScoped] // reclaims PrepareAxisContext's ravel work array and the pre-order intermediate WithSourceOrder supersedes (np.delete's exact pattern)
         public static NDArray insert(NDArray arr, long obj, NDArray values, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (values is null) throw new ArgumentNullException(nameof(values));
 
@@ -79,6 +84,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray insert(NDArray arr, long obj, object value, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, value, axis), static s => insert(s.arr, s.obj, s.value, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             var asArr = ScalarValueAsArray(value, arr.dtype);
             return insert(arr, obj, asArr, axis);
@@ -88,7 +96,9 @@ namespace NumSharp
         ///     int-overload accepting a scalar value.
         /// </summary>
         public static NDArray insert(NDArray arr, int obj, object value, int? axis = null)
-            => insert(arr, (long)obj, value, axis);
+            => NDMatrixBoundary.Sees(arr)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((arr, obj, value, axis), static s => insert(s.arr, s.obj, s.value, s.axis))
+            : insert(arr, (long)obj, value, axis);
 
         /// <summary>
         ///     Slice-obj overload. <paramref name="obj"/> is expanded via
@@ -98,6 +108,9 @@ namespace NumSharp
         [NDScoped] // same transient set as the long-obj overload
         public static NDArray insert(NDArray arr, Slice obj, NDArray values, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             if (values is null) throw new ArgumentNullException(nameof(values));
@@ -133,6 +146,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray insert(NDArray arr, Slice obj, object value, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, value, axis), static s => insert(s.arr, s.obj, s.value, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             var asArr = ScalarValueAsArray(value, arr.dtype);
             return insert(arr, obj, asArr, axis);
@@ -146,6 +162,9 @@ namespace NumSharp
         [NDScoped] // same transient set as the long-obj overload
         public static NDArray insert(NDArray arr, int[] obj, NDArray values, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             if (values is null) throw new ArgumentNullException(nameof(values));
@@ -179,6 +198,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray insert(NDArray arr, int[] obj, object value, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, value, axis), static s => insert(s.arr, s.obj, s.value, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             var asArr = ScalarValueAsArray(value, arr.dtype);
             return insert(arr, obj, asArr, axis);
@@ -190,6 +212,9 @@ namespace NumSharp
         [NDScoped] // same transient set as the long-obj overload
         public static NDArray insert(NDArray arr, long[] obj, NDArray values, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             if (values is null) throw new ArgumentNullException(nameof(values));
@@ -220,6 +245,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray insert(NDArray arr, long[] obj, object value, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, value, axis), static s => insert(s.arr, s.obj, s.value, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             var asArr = ScalarValueAsArray(value, arr.dtype);
             return insert(arr, obj, asArr, axis);
@@ -249,6 +277,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray insert(NDArray arr, NDArray obj, object value, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, value, axis), static s => insert(s.arr, s.obj, s.value, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             var asArr = ScalarValueAsArray(value, arr.dtype);
             return insert(arr, obj, asArr, axis);
@@ -279,6 +310,9 @@ namespace NumSharp
         [NDScoped] // same transient set as the long-obj overload, plus the bool-mask flatnonzero temp
         public static NDArray insert(NDArray arr, NDArray obj, NDArray values, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             if (values is null) throw new ArgumentNullException(nameof(values));

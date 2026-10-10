@@ -10,6 +10,8 @@
         /// <returns>a with its axes permuted. A view is returned whenever possible.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.transpose.html</remarks>
         public static NDArray transpose(NDArray a, int[] premute = null)
-            => a.TensorEngine.Transpose(a, premute);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, premute), static s => transpose(s.a, s.premute))
+            : a.TensorEngine.Transpose(a, premute);
     }
 }

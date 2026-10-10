@@ -32,6 +32,10 @@ namespace NumSharp
             public static (NDArray U, NDArray S, NDArray Vh) svd(NDArray a, bool full_matrices = true,
                 bool compute_uv = true, bool hermitian = false)
             {
+                // a numpy.matrix operand: NumPy returns wrap(u), the plain singular values and wrap(vh)
+                if (NDMatrixBoundary.Sees(a))
+                    return NDMatrixBoundary.WrappedTriple((a, full_matrices, compute_uv, hermitian),
+                        static s => svd(s.a, s.full_matrices, s.compute_uv, s.hermitian), wrap0: true, wrap1: false, wrap2: true);
                 AssertStacked2d(a);
                 var common = CommonType(a);
                 return a.TensorEngine.Svd(ToCommon(a, common), full_matrices, compute_uv);
@@ -46,6 +50,7 @@ namespace NumSharp
             [NDScoped] // reclaims the ToCommon cast temp (U/Vh are null under compute_uv: false)
             public static NDArray svdvals(NDArray x)
             {
+                using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 AssertStacked2d(x);
                 var common = CommonType(x);
                 return x.TensorEngine.Svd(ToCommon(x, common), fullMatrices: false, computeUv: false).S;
@@ -65,6 +70,7 @@ namespace NumSharp
             public static NDArray matrix_rank(NDArray A, double? tol = null, bool hermitian = false,
                 double? rtol = null)
             {
+                using var plain = NDMatrixBoundary.PlainFor(A);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 if (tol is not null && rtol is not null)
                     throw new ValueError("`tol` and `rtol` can't be both set.");
 
@@ -120,6 +126,7 @@ namespace NumSharp
             [NDScoped]
             public static NDArray cond(NDArray x, object p = null)
             {
+                using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 if (IsEmpty2d(x))
                     throw new LinAlgError("cond is not defined on empty arrays");
 

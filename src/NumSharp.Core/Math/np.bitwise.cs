@@ -16,7 +16,9 @@ namespace NumSharp
         /// <returns>Result. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_and.html</remarks>
         public static NDArray bitwise_and(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.BitwiseAnd(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => bitwise_and(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : x1.TensorEngine.BitwiseAnd(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Compute the bit-wise OR of two arrays element-wise.
@@ -29,7 +31,9 @@ namespace NumSharp
         /// <returns>Result. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_or.html</remarks>
         public static NDArray bitwise_or(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.BitwiseOr(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => bitwise_or(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : x1.TensorEngine.BitwiseOr(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Compute the bit-wise XOR of two arrays element-wise.
@@ -42,7 +46,9 @@ namespace NumSharp
         /// <returns>Result. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_xor.html</remarks>
         public static NDArray bitwise_xor(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.BitwiseXor(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => bitwise_xor(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : x1.TensorEngine.BitwiseXor(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Compute the number of 1-bits in the absolute value of each element (NumPy 2.0's np.bitwise_count).
@@ -58,6 +64,8 @@ namespace NumSharp
         /// <returns>A uint8 array of set-bit counts. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_count.html</remarks>
         public static NDArray bitwise_count(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.BitwiseCount(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => bitwise_count(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.BitwiseCount(x, dtype, @out, where);
     }
 }

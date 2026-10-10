@@ -37,6 +37,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray diag(NDArray v, int k = 0)
         {
+            using var plain = NDMatrixBoundary.PlainFor(v);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (v is null) throw new ArgumentNullException(nameof(v));
 
             switch (v.ndim)
@@ -77,6 +78,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray diagflat(NDArray v, int k = 0)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(v))
+                return NDMatrixBoundary.Wrapped((v, k), static s => diagflat(s.v, s.k));
             if (v is null) throw new ArgumentNullException(nameof(v));
             return DiagonalEmbed(v.ravel(), k);
         }

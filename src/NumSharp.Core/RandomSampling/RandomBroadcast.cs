@@ -851,7 +851,14 @@ namespace NumSharp
         private static RandomParam Convert(NDArray x, NPTypeCode to)
         {
             if (x.typecode == to && (x.Shape.IsContiguous || x.Shape.IsFContiguous))
+            {
+                // A numpy.matrix parameter is kept as its plain view: the samplers run ufunc steps on their
+                // parameters (np.subtract(high, low), np.sqrt(n)) and read them as plain arrays, and NumPy's draws
+                // are plain arrays for matrix parameters too. The view is this value's own and is disposed with it.
+                if (NDMatrixBoundary.IsMatrix(x))
+                    return new RandomParam(NDMatrixBoundary.PlainOf(x), owned: true, isNone: false, complexScalar: false);
                 return new RandomParam(x, owned: false, isNone: false, complexScalar: false);
+            }
             return new RandomParam(x.astype(to), owned: true, isNone: false, complexScalar: false);
         }
 

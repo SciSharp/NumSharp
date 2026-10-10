@@ -70,6 +70,7 @@ namespace NumSharp
         [NDScopedCovered]
         private static NDMatrix Product(NDArray left, NDArray right)
         {
+            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (left is null)
                 throw new ArgumentNullException(nameof(left));
             if (right is null)
@@ -157,6 +158,7 @@ namespace NumSharp
         [NDScopedCovered]
         private static NDMatrix Scale(NDArray left, NDArray right)
         {
+            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             DType loop = np.promote_types(left.dtype, right.dtype);
             NPTypeCode code = loop.GetTypeCode();
             if (code != NPTypeCode.Single && code != NPTypeCode.Double && code != NPTypeCode.Complex)
@@ -519,6 +521,7 @@ namespace NumSharp
         [NDScoped]
         public NDMatrix __pow__(int n)
         {
+            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             np.linalg.AssertStackedSquare(this);
             if (n == 1)
                 return this;
@@ -580,6 +583,7 @@ namespace NumSharp
         [NDScoped]
         public NDMatrix __rpow__(object other)
         {
+            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (other is NDArray array)
                 return Elementwise(np.power(array, (NDArray)this), array, this);
 
@@ -719,7 +723,11 @@ namespace NumSharp
         /// <exception cref="TypeError">The matrix is bool: <c>np.positive</c> has no bool loop, as in NumPy
         ///     (<c>ufunc 'positive' did not contain a loop with signature matching types ...</c>).</exception>
         [NDScoped]
-        public static NDMatrix operator +(NDMatrix operand) => Elementwise(np.positive(operand), operand);
+        public static NDMatrix operator +(NDMatrix operand)
+        {
+            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
+            return Elementwise(np.positive(operand), operand);
+        }
 
         #endregion
 

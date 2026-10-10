@@ -48,6 +48,9 @@ namespace NumSharp
         /// </remarks>
         public static NDArray nan_to_num(NDArray x, bool copy = true, object nan = null, object posinf = null, object neginf = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(x))
+                return NDMatrixBoundary.Wrapped((x, copy, nan, posinf, neginf), static s => nan_to_num(s.x, s.copy, s.nan, s.posinf, s.neginf));
             if (x is null)
                 throw new ArgumentNullException(nameof(x));
 

@@ -39,6 +39,7 @@ namespace NumSharp
                 }
             }
 
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.delete(this, list.ToArray(), axis: null);
         }
     }

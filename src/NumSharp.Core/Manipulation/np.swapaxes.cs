@@ -10,6 +10,8 @@
         /// <param name="axis2">Second axis.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.swapaxes.html</remarks>
         public static NDArray swapaxes(NDArray a, int axis1, int axis2)
-            => a.TensorEngine.SwapAxes(a, axis1, axis2);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, axis1, axis2), static s => swapaxes(s.a, s.axis1, s.axis2))
+            : a.TensorEngine.SwapAxes(a, axis1, axis2);
     }
 }

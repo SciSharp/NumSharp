@@ -49,7 +49,10 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.histogramdd.html <para>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</para></remarks>
         [NDScoped]
         public static HistogramddResult histogramdd(NDArray sample, int bins = 10, (double, double)?[] range = null, bool density = false, NDArray weights = null)
-            => HistogramddImpl(SampleColumns(sample), bins, range, density, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(sample, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return HistogramddImpl(SampleColumns(sample), bins, range, density, weights);
+        }
 
         /// <summary>Compute the D-dimensional histogram with a per-dimension bin count.</summary>
         /// <param name="sample">An <c>(N, D)</c> array of N points in D-dimensional space.</param>
@@ -61,7 +64,10 @@ namespace NumSharp
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</remarks>
         [NDScoped]
         public static HistogramddResult histogramdd(NDArray sample, int[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
-            => HistogramddImpl(SampleColumns(sample), bins, range, density, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(sample, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return HistogramddImpl(SampleColumns(sample), bins, range, density, weights);
+        }
 
         /// <summary>Compute the D-dimensional histogram with explicit per-dimension bin edges.</summary>
         /// <param name="sample">An <c>(N, D)</c> array of N points in D-dimensional space.</param>
@@ -73,7 +79,11 @@ namespace NumSharp
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</remarks>
         [NDScoped]
         public static HistogramddResult histogramdd(NDArray sample, NDArray[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
-            => HistogramddImpl(SampleColumns(sample), bins, range, density, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(sample, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            using var plain2 = NDMatrixBoundary.PlainFor(bins);
+            return HistogramddImpl(SampleColumns(sample), bins, range, density, weights);
+        }
 
         /// <summary>Compute the D-dimensional histogram with a mixed per-dimension bin spec (each entry an int count or an edge array).</summary>
         /// <param name="sample">An <c>(N, D)</c> array of N points in D-dimensional space.</param>
@@ -85,7 +95,10 @@ namespace NumSharp
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</remarks>
         [NDScoped]
         public static HistogramddResult histogramdd(NDArray sample, object[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
-            => HistogramddImpl(SampleColumns(sample), bins, range, density, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(sample, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return HistogramddImpl(SampleColumns(sample), bins, range, density, weights);
+        }
 
         // ---------------------------------------------------------------------
         //  histogramdd — sample given as a sequence of D column arrays
@@ -104,7 +117,11 @@ namespace NumSharp
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</remarks>
         [NDScoped]
         public static HistogramddResult histogramdd(NDArray[] sample, int bins = 10, (double, double)?[] range = null, bool density = false, NDArray weights = null)
-            => HistogramddImpl(ColumnsFromSequence(sample), bins, range, density, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            using var plain2 = NDMatrixBoundary.PlainFor(sample);
+            return HistogramddImpl(ColumnsFromSequence(sample), bins, range, density, weights);
+        }
 
         /// <summary>Sequence-of-columns form with a per-dimension bin count.</summary>
         /// <param name="sample">D coordinate arrays, each of length N.</param>
@@ -116,7 +133,11 @@ namespace NumSharp
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</remarks>
         [NDScoped]
         public static HistogramddResult histogramdd(NDArray[] sample, int[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
-            => HistogramddImpl(ColumnsFromSequence(sample), bins, range, density, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            using var plain2 = NDMatrixBoundary.PlainFor(sample);
+            return HistogramddImpl(ColumnsFromSequence(sample), bins, range, density, weights);
+        }
 
         /// <summary>Sequence-of-columns form with explicit per-dimension edge arrays.</summary>
         /// <param name="sample">D coordinate arrays, each of length N.</param>
@@ -128,7 +149,12 @@ namespace NumSharp
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</remarks>
         [NDScoped]
         public static HistogramddResult histogramdd(NDArray[] sample, NDArray[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
-            => HistogramddImpl(ColumnsFromSequence(sample), bins, range, density, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            using var plain2 = NDMatrixBoundary.PlainFor(sample);
+            using var plain3 = NDMatrixBoundary.PlainFor(bins);
+            return HistogramddImpl(ColumnsFromSequence(sample), bins, range, density, weights);
+        }
 
         /// <summary>Sequence-of-columns form with a mixed per-dimension bin spec.</summary>
         /// <param name="sample">D coordinate arrays, each of length N.</param>
@@ -140,7 +166,11 @@ namespace NumSharp
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</remarks>
         [NDScoped]
         public static HistogramddResult histogramdd(NDArray[] sample, object[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
-            => HistogramddImpl(ColumnsFromSequence(sample), bins, range, density, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            using var plain2 = NDMatrixBoundary.PlainFor(sample);
+            return HistogramddImpl(ColumnsFromSequence(sample), bins, range, density, weights);
+        }
 
         // ---------------------------------------------------------------------
         //  Core

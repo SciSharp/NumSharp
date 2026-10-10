@@ -72,6 +72,7 @@ namespace NumSharp.Backends
             if (child.Bound is InputNode && ops.Length == 1 && ops[0].typecode == child.ResultType)
             {
                 var leaf = ops[0];
+                using var plain = NDMatrixBoundary.PlainFor(leaf);   // np.evaluate computes plain: no matrix rule in np.argmax / np.argmin
                 int lnd = leaf.ndim;
                 if (leaf.size == 0)
                     return null;   // the materialize route raises NumPy's empty-sequence error

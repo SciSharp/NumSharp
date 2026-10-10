@@ -14,7 +14,10 @@ namespace NumSharp
         /// <returns>Lower triangle of <paramref name="m"/>, of the same dtype. Always a fresh, writeable, C-contiguous array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tril.html</remarks>
         public static NDArray tril(NDArray m, int k = 0)
-            => Triangle(m, k, lower: true);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(m);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return Triangle(m, k, lower: true);
+        }
 
         /// <summary>
         ///     Upper triangle of an array — a copy of <paramref name="m"/> with all elements
@@ -25,7 +28,10 @@ namespace NumSharp
         /// <returns>Upper triangle of <paramref name="m"/>, of the same dtype. Always a fresh, writeable, C-contiguous array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.triu.html</remarks>
         public static NDArray triu(NDArray m, int k = 0)
-            => Triangle(m, k, lower: false);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(m);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return Triangle(m, k, lower: false);
+        }
 
         /// <summary>
         ///     Shared implementation of <see cref="tril"/> / <see cref="triu"/>.

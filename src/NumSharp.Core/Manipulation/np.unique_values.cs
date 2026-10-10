@@ -222,6 +222,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray unique_values(NDArray x)
         {
+            using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return x.uniqueValuesFast();
         }
 
@@ -239,6 +240,7 @@ namespace NumSharp
         [NDScoped]
         public static UniqueCountsResult unique_counts(NDArray x)
         {
+            using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             var r = x.uniqueCountsFast();
             return new UniqueCountsResult(r[0], r[1]);
         }
@@ -261,6 +263,7 @@ namespace NumSharp
         [NDScoped]
         public static UniqueInverseResult unique_inverse(NDArray x)
         {
+            using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             var r = x.unique(return_index: false, return_inverse: true, return_counts: false,
                              axis: null, equal_nan: false);
             return new UniqueInverseResult(r[0], ReshapeInverseToInput(r[1], x));
@@ -282,6 +285,7 @@ namespace NumSharp
         [NDScoped]
         public static UniqueAllResult unique_all(NDArray x)
         {
+            using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             var r = x.unique(return_index: true, return_inverse: true, return_counts: true,
                              axis: null, equal_nan: false);
             return new UniqueAllResult(r[0], r[1], ReshapeInverseToInput(r[2], x), r[3]);

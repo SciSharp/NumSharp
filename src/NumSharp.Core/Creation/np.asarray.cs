@@ -62,6 +62,9 @@ namespace NumSharp
             NDArray like = null,
             string device = null)
         {
+            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Plain((a, dtype, order, copy, like, device), static s => asarray(s.a, s.dtype, s.order, s.copy, s.like, s.device));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
 
@@ -130,6 +133,9 @@ namespace NumSharp
             NDArray like = null,
             string device = null)
         {
+            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            if (NDMatrixBoundary.Sees(like))
+                return NDMatrixBoundary.Plain((buffer, dtype, order, copy, like, device), static s => asarray(s.buffer, s.dtype, s.order, s.copy, s.like, s.device));
             if (buffer is null)
                 throw new ArgumentNullException(nameof(buffer));
             return asarray(buffer.obj, dtype, order, copy, like, device);
@@ -149,6 +155,9 @@ namespace NumSharp
             NDArray like = null,
             string device = null)
         {
+            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            if (NDMatrixBoundary.Sees(like))
+                return NDMatrixBoundary.Plain((buffer, dtype, order, copy, like, device), static s => asarray(s.buffer, s.dtype, s.order, s.copy, s.like, s.device));
             if (buffer is null)
                 throw new ArgumentNullException(nameof(buffer));
             return asarray(buffer.obj, dtype, order, copy, like, device);

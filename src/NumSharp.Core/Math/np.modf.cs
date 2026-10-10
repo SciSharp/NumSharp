@@ -37,7 +37,10 @@ namespace NumSharp
             // Fresh outputs follow the input's F-contiguity (PreserveFContig, shared with np.frexp); a
             // provided out owns its own layout so it is never relabelled (its reference identity is
             // returned untouched). Mirrors frexp's out-vs-fresh split.
-            => (outFrac is null && outIntegral is null)
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: both outputs come back as matrices, as from NumPy
+                ? NDMatrixBoundary.WrappedPair((x, outFrac, outIntegral, where, dtype),
+                    static s => modf(s.x, s.outFrac, s.outIntegral, s.where, s.dtype), outFrac, outIntegral)
+                : (outFrac is null && outIntegral is null)
                 ? PreserveFContig(x, x.TensorEngine.ModF(x, dtype, null, null, where))
                 : x.TensorEngine.ModF(x, dtype, outFrac, outIntegral, where);
 

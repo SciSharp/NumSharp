@@ -22,6 +22,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amax.html</remarks>
         public static NDArray amax(NDArray a, int? axis = null, bool keepdims = false, DType dtype = null)
         {
+            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Reduced((a, axis, keepdims, dtype), static s => amax(s.a, s.axis, s.keepdims, s.dtype), axis, keepdims, "max");
             // Delegate to TensorEngine which handles keepdims for axis=null
             return a.TensorEngine.ReduceAMax(a, axis, keepdims, dtype);
         }
@@ -36,6 +39,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amax.html</remarks>
         public static NDArray max(NDArray a, int? axis = null, bool keepdims = false, DType dtype = null)
         {
+            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Reduced((a, axis, keepdims, dtype), static s => max(s.a, s.axis, s.keepdims, s.dtype), axis, keepdims, "max");
             // Delegate to TensorEngine which handles keepdims for axis=null
             return a.TensorEngine.ReduceAMax(a, axis, keepdims, dtype);
         }

@@ -41,6 +41,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray<long>[] unravel_index(NDArray indices, int[] shape, char order = 'C')
         {
+            using var plain = NDMatrixBoundary.PlainFor(indices);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             ValidateOrder(order, nameof(order));
             ValidateShapeForUnravel(shape, out long unravelSize);
 

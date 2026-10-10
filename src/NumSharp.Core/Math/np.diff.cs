@@ -65,6 +65,9 @@ namespace NumSharp
         public static NDArray diff(NDArray a, int n = 1, int axis = -1,
                                    object prepend = null, object append = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, n, axis, prepend, append), static s => diff(s.a, s.n, s.axis, s.prepend, s.append));
             if (a is null) throw new ArgumentNullException(nameof(a));
 
             // n == 0 returns the input unchanged (NumPy returns the same object).

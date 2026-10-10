@@ -40,7 +40,9 @@ namespace NumSharp
             // The engine returns C-contiguous outputs (or the supplied out1/out2); PreserveFContig (shared with
             // np.modf) relabels a fresh result column-major when the input was F-contiguous — but ONLY when no out
             // was supplied (a caller's out array owns its own layout), matching NumPy's layout propagation.
-            => (out1 is null && out2 is null)
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: both outputs come back as matrices, as from NumPy
+                ? NDMatrixBoundary.WrappedPair((x, out1, out2, where), static s => frexp(s.x, s.out1, s.out2, s.where), out1, out2)
+                : (out1 is null && out2 is null)
                 ? PreserveFContig(x, x.TensorEngine.Frexp(x, null, null, where))
                 : x.TensorEngine.Frexp(x, out1, out2, where);
     }

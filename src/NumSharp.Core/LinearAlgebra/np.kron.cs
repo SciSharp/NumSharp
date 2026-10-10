@@ -32,6 +32,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray kron(NDArray a, NDArray b)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a, b))
+                return NDMatrixBoundary.Wrapped((a, b), static s => kron(s.a, s.b));
             int nda = a.ndim, ndb = b.ndim;
 
             // NumPy promotes a to ndmin=b.ndim, so post-promotion nda >= ndb and the scalar shortcut

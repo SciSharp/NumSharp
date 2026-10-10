@@ -65,6 +65,9 @@ namespace NumSharp
         /// </remarks>
         public static NDArray compress(NDArray condition, NDArray a, int? axis = null, NDArray @out = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((condition, a, axis, @out), static s => compress(s.condition, s.a, s.axis, s.@out), @out);
             if (condition is null) throw new ArgumentNullException(nameof(condition));
             if (a is null) throw new ArgumentNullException(nameof(a));
 

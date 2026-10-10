@@ -69,6 +69,7 @@ namespace NumSharp.Backends
             NDArray source = nd;
             if (!nd.Shape.IsContiguous)
             {
+                using var plain = NDMatrixBoundary.PlainFor(nd);   // an engine method computes plain: np.ascontiguousarray below must not apply its matrix rule
                 materialized = np.ascontiguousarray(nd);
                 source = materialized;
             }

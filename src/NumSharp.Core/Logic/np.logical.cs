@@ -62,6 +62,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray logical_and(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(x1, x2))
+                return NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => logical_and(s.x1, s.x2, s.@out, s.where, s.dtype), @out);
             ValidateLogicalDtype(dtype, "logical_and");
             // Reduce both operands to bool truth values, then AND them through the bitwise engine's
             // out=/where= path (bool & bool == logical and; the masked write + same_kind out cast are
@@ -86,6 +89,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray logical_or(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(x1, x2))
+                return NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => logical_or(s.x1, s.x2, s.@out, s.where, s.dtype), @out);
             ValidateLogicalDtype(dtype, "logical_or");
             var b1 = AsTruthOperand(x1);
             var b2 = AsTruthOperand(x2);
@@ -107,6 +113,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray logical_xor(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(x1, x2))
+                return NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => logical_xor(s.x1, s.x2, s.@out, s.where, s.dtype), @out);
             ValidateLogicalDtype(dtype, "logical_xor");
             var b1 = AsTruthOperand(x1);
             var b2 = AsTruthOperand(x2);
@@ -128,6 +137,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray logical_not(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(x))
+                return NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => logical_not(s.x, s.@out, s.where, s.dtype), @out);
             ValidateLogicalDtype(dtype, "logical_not");
             // A bool input's logical NOT is exactly its bitwise invert (~True == False); route through the
             // invert ufunc so the bool→bool loop is used (np.negative(bool) is a TypeError, so Invert, not

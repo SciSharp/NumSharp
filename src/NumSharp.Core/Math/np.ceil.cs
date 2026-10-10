@@ -14,6 +14,8 @@ namespace NumSharp
         /// <returns>The ceiling of each element in x, with float dtype. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ceil.html</remarks>
         public static NDArray ceil(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.Ceil(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => ceil(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.Ceil(x, dtype, @out, where);
     }
 }

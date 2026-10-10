@@ -43,43 +43,73 @@ namespace NumSharp
         public static NDArray pad(NDArray array, int pad_width, string mode = "constant",
             object constant_values = null, object end_values = null,
             object stat_length = null, string reflect_type = "even")
-            => PadImpl(array, (object)pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadImpl(array, (object)pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        }
 
         public static NDArray pad(NDArray array, int[] pad_width, string mode = "constant",
             object constant_values = null, object end_values = null,
             object stat_length = null, string reflect_type = "even")
-            => PadImpl(array, pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadImpl(array, pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        }
 
         public static NDArray pad(NDArray array, int[,] pad_width, string mode = "constant",
             object constant_values = null, object end_values = null,
             object stat_length = null, string reflect_type = "even")
-            => PadImpl(array, pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadImpl(array, pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        }
 
         public static NDArray pad(NDArray array, (int before, int after) pad_width, string mode = "constant",
             object constant_values = null, object end_values = null,
             object stat_length = null, string reflect_type = "even")
-            => PadImpl(array, pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadImpl(array, pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        }
 
         public static NDArray pad(NDArray array, IDictionary<int, object> pad_width, string mode = "constant",
             object constant_values = null, object end_values = null,
             object stat_length = null, string reflect_type = "even")
-            => PadImpl(array, pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadImpl(array, pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        }
 
         // Callable mode (overloads matching each pad_width shape).
         public static NDArray pad(NDArray array, int pad_width, PadFunc mode, object kwargs = null)
-            => PadCallableImpl(array, (object)pad_width, mode, kwargs);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadCallableImpl(array, (object)pad_width, mode, kwargs);
+        }
 
         public static NDArray pad(NDArray array, int[] pad_width, PadFunc mode, object kwargs = null)
-            => PadCallableImpl(array, pad_width, mode, kwargs);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadCallableImpl(array, pad_width, mode, kwargs);
+        }
 
         public static NDArray pad(NDArray array, int[,] pad_width, PadFunc mode, object kwargs = null)
-            => PadCallableImpl(array, pad_width, mode, kwargs);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadCallableImpl(array, pad_width, mode, kwargs);
+        }
 
         public static NDArray pad(NDArray array, (int before, int after) pad_width, PadFunc mode, object kwargs = null)
-            => PadCallableImpl(array, pad_width, mode, kwargs);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadCallableImpl(array, pad_width, mode, kwargs);
+        }
 
         public static NDArray pad(NDArray array, IDictionary<int, object> pad_width, PadFunc mode, object kwargs = null)
-            => PadCallableImpl(array, pad_width, mode, kwargs);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadCallableImpl(array, pad_width, mode, kwargs);
+        }
 
         // ---------------------------- top-level dispatcher ----------------------------
 

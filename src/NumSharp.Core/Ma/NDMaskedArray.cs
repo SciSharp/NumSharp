@@ -90,8 +90,14 @@ namespace NumSharp
         internal NDMaskedArray(NDArray data, NDArray mask, object fill_value = null)
         {
             // Data is the one invariant that must always hold — every property and the printer dereference it.
-            _data = data ?? throw new ArgumentNullException(nameof(data));
-            _mask = mask;
+            if (data is null)
+                throw new ArgumentNullException(nameof(data));
+            // A numpy.matrix is stored as a plain view of its buffer. numpy.ma keeps the matrix class
+            // (_baseclass, a "masked_matrix" whose reductions stay two-dimensional); that has no model here, and
+            // every member computes with np.* calls written for plain arrays, long after this constructor
+            // returned. The view belongs to this masked array, so no scope may dispose it (Own).
+            _data = NDMatrixBoundary.IsMatrix(data) ? MaskedArrayModule.Own(NDMatrixBoundary.PlainOf(data)) : data;
+            _mask = NDMatrixBoundary.IsMatrix(mask) ? MaskedArrayModule.Own(NDMatrixBoundary.PlainOf(mask)) : mask;
             _fill_value = fill_value;
         }
 
@@ -1971,6 +1977,7 @@ namespace NumSharp
                 case NDArray nd:
                     // The 0-D nomask sentinel (or any 0-D False) means "no mask".
                     if (ReferenceEquals(nd, nomask)) return null;
+                    nd = NDMatrixBoundary.PlainOf(nd);   // a numpy.matrix mask is read as its plain view (AsData)
                     if (nd.ndim == 0 && !np.any(nd)) return null;
                     return nd.typecode == NPTypeCode.Boolean ? nd : np.not_equal(nd, NDArray.Scalar(0));
                 default:
@@ -2348,7 +2355,9 @@ namespace NumSharp
             {
                 case null: throw new ArgumentNullException(nameof(a));
                 case NDMaskedArray m: return m._data;
-                case NDArray nd: return nd;
+                // A numpy.matrix operand is read as its plain view: numpy.ma's matrix base class is not modelled
+                // (NDMaskedArray's constructor), so the module computes with plain-array semantics throughout.
+                case NDArray nd: return NDMatrixBoundary.PlainOf(nd);
                 case Array arr: return np.array(arr); // C# array-like (double[], int[,], …)
                 default: return NDArray.Scalar(a);    // boxed C# scalar (int/double/bool/…)
             }

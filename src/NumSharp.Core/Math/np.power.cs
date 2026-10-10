@@ -26,7 +26,9 @@ namespace NumSharp
         /// <returns>The bases in x1 raised to the exponents in x2. This is a scalar NDArray if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
         [NDScoped]
-        public static NDArray power(NDArray x1, object x2) => x1.TensorEngine.Power(x1, np.asanyarray(x2), (Type)null);
+        public static NDArray power(NDArray x1, object x2) => NDMatrixBoundary.Sees(x1)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2), static s => power(s.x1, s.x2))
+            : x1.TensorEngine.Power(x1, np.asanyarray(x2), (Type)null);
 
         /// <summary>
         ///     First array elements raised to powers from second array, element-wise.
@@ -36,7 +38,9 @@ namespace NumSharp
         /// <param name="x2">The exponents (array).</param>
         /// <returns>The bases in x1 raised to the exponents in x2.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
-        public static NDArray power(NDArray x1, NDArray x2) => x1.TensorEngine.Power(x1, x2, (Type)null);
+        public static NDArray power(NDArray x1, NDArray x2) => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2), static s => power(s.x1, s.x2))
+            : x1.TensorEngine.Power(x1, x2, (Type)null);
 
         /// <summary>
         ///     First array elements raised to powers from second array, element-wise.
@@ -49,7 +53,9 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the computation runs in this dtype (power(2, -1, dtype: float64) = 0.5; inputs must be same_kind-castable to it).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
         public static NDArray power(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.Power(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => power(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : x1.TensorEngine.Power(x1, x2, dtype, @out, where);
 
         /// <summary>
         ///     First array elements raised to powers from second array, element-wise.
@@ -59,7 +65,10 @@ namespace NumSharp
         /// <param name="x2">The exponents (array).</param>
         /// <returns>The bases in x1 raised to the exponents in x2.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.power.html</remarks>
-        public static NDArray power(in NDArray x1, in NDArray x2) => x1.TensorEngine.Power(x1, x2, (Type)null);
+        public static NDArray power(in NDArray x1, in NDArray x2)
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix: the by-value overload's rule
+            ? power(x1, x2, null, null, null)
+            : x1.TensorEngine.Power(x1, x2, (Type)null);
 
         /// <summary>
         ///     Return the element-wise square of the input.
@@ -67,7 +76,9 @@ namespace NumSharp
         /// <param name="x">Input data.</param>
         /// <returns>Element-wise x*x, of the same shape and dtype as x. Returns scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
-        public static NDArray square(NDArray x) => x.TensorEngine.Square(x, (Type)null);
+        public static NDArray square(NDArray x) => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped(x, static s => square(s))
+            : x.TensorEngine.Square(x, (Type)null);
 
         /// <summary>
         ///     Return the element-wise square of the input.
@@ -79,6 +90,8 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the input must be same_kind-castable to it.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.square.html</remarks>
         public static NDArray square(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.Square(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => square(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.Square(x, dtype, @out, where);
     }
 }

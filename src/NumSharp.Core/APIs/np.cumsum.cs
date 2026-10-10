@@ -16,6 +16,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray cumsum(NDArray arr, int? axis = null, DType typeCode = null, NDArray @out = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, axis, typeCode, @out), static s => cumsum(s.arr, s.axis, s.typeCode, s.@out), @out);
             // np.cumsum == np.add.accumulate. With an axis argument it preserves the source
             // memory layout (KEEPORDER); ReduceCumAdd now allocates the output in that layout
             // directly (no post-hoc copy needed). axis=None ravels in C-order to a 1-D result.

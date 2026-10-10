@@ -16,6 +16,8 @@ namespace NumSharp
         /// <returns><paramref name="a"/> with its axes permuted. A view is returned whenever possible.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.permute_dims.html</remarks>
         public static NDArray permute_dims(NDArray a, int[] axes = null)
-            => a.TensorEngine.Transpose(a, axes);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, axes), static s => permute_dims(s.a, s.axes))
+            : a.TensorEngine.Transpose(a, axes);
     }
 }

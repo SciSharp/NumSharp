@@ -13,6 +13,8 @@ namespace NumSharp
         /// <returns>The truncated value of each element in x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trunc.html</remarks>
         public static NDArray trunc(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.Truncate(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => trunc(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.Truncate(x, dtype, @out, where);
     }
 }

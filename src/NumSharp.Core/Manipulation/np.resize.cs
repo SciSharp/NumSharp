@@ -34,6 +34,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException">If any element of <paramref name="new_shape"/> is negative.</exception>
         public static unsafe NDArray resize(NDArray a, Shape new_shape)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (a is null) throw new ArgumentNullException(nameof(a));
 
             // Validate dimensions and compute the target element count. NumPy's np.resize

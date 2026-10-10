@@ -30,6 +30,9 @@
         [NDScoped]
         public static NDArray dot(NDArray a, NDArray b, NDArray @out = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a, b))
+                return NDMatrixBoundary.Wrapped((a, b, @out), static s => dot(s.a, s.b, s.@out), @out);
             var result = a.TensorEngine.Dot(a, b);
             if (@out is null)
                 return result;

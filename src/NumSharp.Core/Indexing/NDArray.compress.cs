@@ -12,6 +12,9 @@ namespace NumSharp
         /// <returns>A copy of the selected slices along the given axis.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.compress.html</remarks>
         public NDArray compress(NDArray condition, int? axis = null, NDArray @out = null)
-            => np.compress(condition, this, axis, @out);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.compress(condition, this, axis, @out);
+        }
     }
 }

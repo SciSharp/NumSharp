@@ -17,7 +17,9 @@ namespace NumSharp
         /// <returns>Array of uninitialized (arbitrary) data with the same shape and type as prototype.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.empty_like.html</remarks>
         public static NDArray empty_like(NDArray prototype, DType dtype = null, Shape shape = default, string device = null)
-            => empty_like(prototype, dtype, shape, 'K', device);
+            => NDMatrixBoundary.Sees(prototype)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((prototype, dtype, shape, device), static s => empty_like(s.prototype, s.dtype, s.shape, s.device))
+            : empty_like(prototype, dtype, shape, 'K', device);
 
         /// <summary>
         ///     Return a new array with the same shape and type as a given array.
@@ -31,6 +33,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.empty_like.html</remarks>
         public static NDArray empty_like(NDArray prototype, DType dtype, Shape shape, char order, string device = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(prototype))
+                return NDMatrixBoundary.Wrapped((prototype, dtype, shape, order, device), static s => empty_like(s.prototype, s.dtype, s.shape, s.order, s.device));
             ValidateDevice(device);
             char physical = OrderResolver.Resolve(order, prototype.Shape);
             var dims = shape.IsEmpty ? (long[])prototype.Shape.dimensions.Clone() : (long[])shape;

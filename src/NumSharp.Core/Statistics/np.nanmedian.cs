@@ -15,6 +15,9 @@ namespace NumSharp
         public static NDArray nanmedian(NDArray a,
             int? axis = null, NDArray @out = null, bool overwrite_input = false, bool keepdims = false)
         {
+            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Reduced((a, axis, @out, overwrite_input, keepdims), static s => nanmedian(s.a, s.axis, s.@out, s.overwrite_input, s.keepdims), axis, keepdims, null);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             return QuantileEngine.Compute(a, new[] { 0.5 }, axisArr, @out, overwrite_input,
                 QuantileMethod.Linear, keepdims, qIsScalar: true, emptyReturnsNaN: true, ignoreNaN: true,

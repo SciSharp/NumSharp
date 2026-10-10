@@ -50,6 +50,7 @@ namespace NumSharp
             NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1,
             DType dtype = null, NDArray @out = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (a is null) throw new ArgumentNullException(nameof(a));
 
             // Fast path: 2-D or 3-D source + no explicit dtype + kernel-eligible

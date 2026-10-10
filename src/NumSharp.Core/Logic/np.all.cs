@@ -159,6 +159,9 @@ namespace NumSharp
         [NDScoped] // reclaims the where-mask effective array and the reduced temp on the out= path
         public static NDArray all(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, NDArray @where = null)
         {
+            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Reduced((a, axis, @out, keepdims, @where), static s => all(s.a, s.axis, s.@out, s.keepdims, s.@where), axis, keepdims, "all");
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
 

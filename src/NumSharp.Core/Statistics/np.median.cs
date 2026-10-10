@@ -17,6 +17,9 @@ namespace NumSharp
         public static NDArray median(NDArray a,
             int? axis = null, NDArray @out = null, bool overwrite_input = false, bool keepdims = false)
         {
+            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Reduced((a, axis, @out, overwrite_input, keepdims), static s => median(s.a, s.axis, s.@out, s.overwrite_input, s.keepdims), axis, keepdims, null);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             // NumPy's np.median returns nan for an empty slice (np.quantile/percentile raise);
             // emptyReturnsNaN routes the empty-axis case to a nan fill instead. medianMean selects

@@ -368,6 +368,21 @@ namespace NumSharp.Tests.Fuzz
             // and the cells NumSharp gets wrong are carved by the generator (_gap_of) and replayed under [OpenBugs].
             if (c.Valueclass == "matrix")
                 return null;
+            // matrix_operand*.jsonl (gen_matrix_operand_oracle.py: a case of another tier with one 2-D operand typed
+            // as a numpy.matrix). The SHAPE NumPy gives the result of a matrix operand is the tier's subject (a row,
+            // a column, a scalar, or the plain shape), so no branch below may excuse a shape divergence there: the
+            // source tier's shape excuses describe plain operands. The class has no registry call at all. Values,
+            // and dtypes keep the source tier's rules (the variant keeps its valueclass), except the NEP50 0-d
+            // blankets, which IsMatrixOperandCase switches off where they are tested.
+            // An ERROR is never excused either: every source of the tier is a case NumPy answers with a value, so
+            // an exception on either side comes from the matrix operand (NumPy's "shape too large to be a
+            // matrix.", a matrix method without the keepdims keyword), which no rule written for plain operands
+            // describes. Without this the nan-family's error blankets passed the nanmedian cases NumPy refuses.
+            // (A result where NumPy raises reaches this method as kind Value with no bytes, hence Expects_Throw.)
+            if ((kind == DivergenceKind.Shape || kind == DivergenceKind.Threw || kind == DivergenceKind.ErrorText
+                 || c.Expects_Throw)
+                && IsMatrixOperandCase(c))
+                return null;
 
             // reduce_start.jsonl (valueclass "negzero": every operand all -0.0, every result a signed zero) is held to
             // ZERO excuses as well. Its cells exist to show how a reduction STARTS, which only the sign of a zero
@@ -425,7 +440,7 @@ namespace NumSharp.Tests.Fuzz
             //     matches ANY dtype difference of such a case, and it hid np.logaddexp returning its empty int32
             //     operand where NumPy returns float64 (gap RL07).
             if (kind == DivergenceKind.Dtype && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0)
-                && !IsRelayoutCase(c))
+                && !IsRelayoutCase(c) && !IsMatrixOperandCase(c))
                 return "NEP50 weak-scalar: 0-D operand promoted weakly (NumPy promotes 0-D arrays fully)";
 
             // (2) Complex true-division is now BIT-EXACT vs NumPy (no excuse). ComplexDivideNumPy is a
@@ -1325,7 +1340,7 @@ namespace NumSharp.Tests.Fuzz
                 && (c.Op == null || !c.Op.StartsWith("out_"))
                 && c.Op != "clip_pyint" && c.Op != "clip_ufunc" && c.Op != "trapezoid"
                 && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0)
-                && !IsRelayoutCase(c))
+                && !IsRelayoutCase(c) && !IsMatrixOperandCase(c))
                 return "NEP50 weak-scalar (error path): a 0-D operand promotes weakly, so a pairing "
                      + "NumPy refuses succeeds instead";
 
@@ -1413,6 +1428,18 @@ namespace NumSharp.Tests.Fuzz
         /// <returns>True for a relayout variant.</returns>
         private static bool IsRelayoutCase(FuzzCorpus.Case c)
             => c.Layout != null && c.Layout.StartsWith("relayout:", StringComparison.Ordinal);
+
+        /// <summary>
+        ///     Whether case <paramref name="c"/> belongs to a matrix-operand tier
+        ///     (<c>gen_matrix_operand_oracle.py</c>: layout tag <c>matrix@&lt;position&gt;</c> or <c>matrix@all</c>).
+        ///     Its generator drops every source case with a 0-d operand next to another operand, so the NEP50 0-d
+        ///     blankets have nothing to document there; with them on, an error NumPy raises only for a matrix
+        ///     operand (<c>shape too large to be a matrix.</c>) would read as the documented weak-scalar divergence.
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>True for a matrix-operand variant.</returns>
+        private static bool IsMatrixOperandCase(FuzzCorpus.Case c)
+            => c.Layout != null && c.Layout.StartsWith("matrix@", StringComparison.Ordinal);
 
         /// <summary>
         ///     Whether case <paramref name="c"/> reduces along an axis (an <c>axis</c> param that is not null) of an operand

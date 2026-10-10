@@ -107,6 +107,7 @@ namespace NumSharp
         /// <exception cref="OverflowException"><paramref name="x"/> is Decimal and I₀ overflows the decimal range (double→decimal bridge limit).</exception>
         public static NDArray i0(NDArray x)
         {
+            using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (x is null) throw new ArgumentNullException(nameof(x));
 
             // Dispatch by PRECISION DOMAIN, not per-dtype: the cephes recurrence is bit-exact only

@@ -29,6 +29,9 @@ namespace NumSharp
         ///     <c>max</c> are the only bound parameters.</para>
         /// </remarks>
         public NDArray clip(NDArray min = null, NDArray max = null, NDArray @out = null, DType dtype = null, NDArray where = null)
-            => np.clip(this, a_min: min, a_max: max, @out: @out, dtype: dtype, where: where);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.clip(this, a_min: min, a_max: max, @out: @out, dtype: dtype, where: where);
+        }
     }
 }

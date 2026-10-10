@@ -16,7 +16,9 @@ namespace NumSharp
         /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sin.html</remarks>
         public static NDArray sin(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.Sin(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => sin(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.Sin(x, dtype, @out, where);
 
         /// <summary>
         ///     Hyperbolic sine, element-wise. <br></br>
@@ -27,7 +29,9 @@ namespace NumSharp
         /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sinh.html</remarks>
         public static NDArray sinh(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.Sinh(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => sinh(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.Sinh(x, dtype, @out, where);
 
         /// <summary>
         ///     Inverse sine, element-wise. <br></br>
@@ -38,6 +42,8 @@ namespace NumSharp
         /// <returns>The inverse sine of each element in x, in radians and in the closed interval [-pi/2, pi/2]. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arcsin.html</remarks>
         public static NDArray arcsin(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.ASin(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => arcsin(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.ASin(x, dtype, @out, where);
     }
 }

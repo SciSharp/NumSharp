@@ -17,13 +17,17 @@ namespace NumSharp
         /// <returns>Array of the same shape as x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arcsinh.html</remarks>
         public static NDArray arcsinh(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.ASinh(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => arcsinh(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.ASinh(x, dtype, @out, where);
 
         /// <summary>
         ///     Inverse hyperbolic sine, element-wise (Array-API alias of <see cref="arcsinh(NDArray, NDArray, NDArray, NPTypeCode?)"/>, added in NumPy 2.0).
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asinh.html</remarks>
         public static NDArray asinh(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.ASinh(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => asinh(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.ASinh(x, dtype, @out, where);
     }
 }

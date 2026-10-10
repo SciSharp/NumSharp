@@ -36,6 +36,7 @@ namespace NumSharp
         [NDScoped]
         public static void place(NDArray arr, NDArray mask, NDArray vals)
         {
+            using var plain = NDMatrixBoundary.PlainFor(arr, mask, vals);   // in place: the helpers below see a matrix as a plain array
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (mask is null) throw new ArgumentNullException(nameof(mask));
             if (vals is null) throw new ArgumentNullException(nameof(vals));

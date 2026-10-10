@@ -16,7 +16,9 @@ namespace NumSharp
         /// <returns>Array of fill_value with the same shape and type as a.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full_like.html</remarks>
         public static NDArray full_like(NDArray a, object fill_value, DType dtype = null, string device = null)
-            => full_like(a, fill_value, dtype, 'K', device);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, fill_value, dtype, device), static s => full_like(s.a, s.fill_value, s.dtype, s.device))
+            : full_like(a, fill_value, dtype, 'K', device);
 
         /// <summary>
         ///     Return a full array with the same shape and type as a given array.
@@ -30,6 +32,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full_like.html</remarks>
         public static NDArray full_like(NDArray a, object fill_value, DType dtype, char order, string device = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, fill_value, dtype, order, device), static s => full_like(s.a, s.fill_value, s.dtype, s.order, s.device));
             ValidateDevice(device);
             // NumPy's *_like contract preserves a.dtype unless dtype= is explicitly supplied.
             // fill_value is CAST into that dtype; its CLR type never selects the result dtype.

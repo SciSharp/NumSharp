@@ -751,6 +751,7 @@ namespace NumSharp.Backends
         /// <param name="square">How the deviation is squared.</param>
         private static void SquaredDeviationsEager(NDArray arr, NDArray mean, NDArray x2, NPTypeCode xT, DeviationSquare square)
         {
+            using var plain = NDMatrixBoundary.PlainFor(arr, mean, x2);   // an engine method computes plain: np.subtract / np.multiply below must not apply its matrix rule
             if (square == DeviationSquare.Modulus)
             {
                 var x = new NDArray(NPTypeCode.Complex, x2.Shape, false);
@@ -779,6 +780,7 @@ namespace NumSharp.Backends
         /// <param name="count">The divisor (the element count, or <c>max(n - ddof, 0)</c>); 0 gives NumPy's NaN / ±inf.</param>
         internal static void DivideByCountLikeNumPy(NDArray a, long count)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a);   // an engine method computes plain: np.true_divide (a is a caller's out= matrix) below must not apply its matrix rule
             // The divisor and the integer branch's quotient are this method's own temporaries: disposed here, because
             // np.mean's route (MeanLikeNumPy) runs outside any [NDScoped] member (np.var / np.std's scopes disposed them
             // before; Dispose is idempotent, so those scopes are unaffected). The out= calls return `a` itself.

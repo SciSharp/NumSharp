@@ -27,6 +27,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray digitize(NDArray x, NDArray bins, bool right = false)
         {
+            using var plain = NDMatrixBoundary.PlainFor(x, bins);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (x is null) throw new ArgumentNullException(nameof(x));
             if (bins is null) throw new ArgumentNullException(nameof(bins));
 

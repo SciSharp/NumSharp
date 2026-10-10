@@ -75,7 +75,13 @@ namespace NumSharp
             ///     Slice-expression strings, special-directive strings, <see cref="Slice"/> objects,
             ///     <see cref="NDArray"/>s, C# scalars, arrays and collections — in any mix.
             /// </param>
-            public NDArray this[params object[] key] => Build(key);
+            public NDArray this[params object[] key]
+                // A numpy.matrix entry: the joined result comes back as a matrix, as np.concatenate returns it in
+                // NumPy. The function name is spelled out for the caller audit (an indexer's caller name is "Item",
+                // its frame is get_Item).
+                => NDMatrixBoundary.SeesNested(key, "get_Item")
+                ? NDMatrixBoundary.Wrapped((self: this, key), static s => s.self[s.key])
+                : Build(key);
 
             /// <summary>NumPy's <c>__len__</c>, which is 0 for these objects.</summary>
             public int Count => 0;
@@ -274,7 +280,9 @@ namespace NumSharp
                 NDArray arr = item as NDArray ?? asanyarray(item);
                 int itemNdim = arr.ndim;
 
-                NDArray newobj = AtLeastNdmin(arr, ndmin);
+                // NumPy: array(item, subok=True, ndmin=ndmin) cannot give a numpy.matrix another axis (probed 2.4.2:
+                // np.r_['0,3', m, m] joins the two matrices as they are, a (4, 3) matrix).
+                NDArray newobj = NDMatrixBoundary.IsMatrix(arr) ? arr : AtLeastNdmin(arr, ndmin);
                 if (trans1d != -1 && itemNdim < ndmin)
                 {
                     int k2 = ndmin - itemNdim;
@@ -510,7 +518,12 @@ namespace NumSharp
                     NDArray arr;
                     if (_array is not null)
                     {
+                        // A numpy.matrix entry keeps its two axes here too (FromArrayLike); astype gives a plain
+                        // array, so the class is read before the cast.
+                        bool keepsRank = NDMatrixBoundary.IsMatrix(_array);
                         arr = _array.typecode == final ? _array : _array.astype(final);
+                        if (keepsRank)
+                            return arr;
                     }
                     else
                     {

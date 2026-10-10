@@ -42,7 +42,9 @@ namespace NumSharp
             NDArray @out = null,
             DType dtype = null,
             string casting = "same_kind")
-            => concatenate(arrays, axis, @out, dtype, casting);
+            => NDMatrixBoundary.Sees(arrays)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((arrays, axis, @out, dtype, casting), static s => concat(s.arrays, s.axis, s.@out, s.dtype, s.casting), @out)
+            : concatenate(arrays, axis, @out, dtype, casting);
 
         public static NDArray concat((NDArray, NDArray) arrays, int axis = 0)
             => concatenate(new[] { arrays.Item1, arrays.Item2 }, axis);

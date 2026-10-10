@@ -703,6 +703,7 @@ namespace NumSharp
         private static PolyNumber ArrayBinary(BinaryOp op, in PolyNumber a, in PolyNumber b, NPTypeCode t)
         {
             NDArray x = a.AsArrayOf(t), y = b.AsArrayOf(t);
+            using var plain = NDMatrixBoundary.PlainFor(x, y);   // the package computes with plain arrays: no matrix rule in the ufuncs below
             if (op == BinaryOp.Multiply && t == NPTypeCode.Complex && a.IsNdArray && b.IsNdArray
                 && x.ndim != y.ndim && x.size == 1 && y.size == 1)
             {

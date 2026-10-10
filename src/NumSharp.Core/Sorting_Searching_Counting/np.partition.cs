@@ -26,7 +26,9 @@ namespace NumSharp
         ///     np.sort convention — NumPy's copy(order='K') keeps F-order for F-inputs; values identical).
         /// </remarks>
         public static NDArray partition(NDArray a, int kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.Partition(a, new[] { kth }, axis, kind, order);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => partition(s.a, s.kth, s.axis, s.kind, s.order))
+            : AxisPartition.Partition(a, new[] { kth }, axis, kind, order);
 
         /// <summary>
         ///     Return a partitioned copy of an array, partitioning around EVERY index in
@@ -43,7 +45,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.partition.html</remarks>
         [NDScoped]
         public static NDArray partition(NDArray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.Partition(a, kth, axis, kind, order);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => partition(s.a, s.kth, s.axis, s.kind, s.order))
+            : AxisPartition.Partition(a, kth, axis, kind, order);
 
         /// <summary>
         ///     Return a partitioned copy with the kth indices given as an ARRAY — NumPy's array-kth
@@ -55,7 +59,9 @@ namespace NumSharp
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.partition.html</remarks>
         public static NDArray partition(NDArray a, NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.Partition(a, kth, axis, kind, order);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => partition(s.a, s.kth, s.axis, s.kind, s.order))
+            : AxisPartition.Partition(a, kth, axis, kind, order);
     }
 
     public partial class NDArray

@@ -17,13 +17,17 @@ namespace NumSharp
         /// <returns>Array of the same shape as x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arccosh.html</remarks>
         public static NDArray arccosh(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.ACosh(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => arccosh(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.ACosh(x, dtype, @out, where);
 
         /// <summary>
         ///     Inverse hyperbolic cosine, element-wise (Array-API alias of <see cref="arccosh(NDArray, NDArray, NDArray, NPTypeCode?)"/>, added in NumPy 2.0).
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.acosh.html</remarks>
         public static NDArray acosh(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.ACosh(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => acosh(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.ACosh(x, dtype, @out, where);
     }
 }

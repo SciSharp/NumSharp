@@ -58,6 +58,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray ediff1d(NDArray ary, object to_end = null, object to_begin = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(ary);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (ary is null) throw new ArgumentNullException(nameof(ary));
 
             // ravel() always returns a fresh wrapper (it may share the caller's storage);

@@ -13,7 +13,9 @@ namespace NumSharp
         /// <param name="a">Input value.</param>
         /// <returns>An ndarray containing the absolute value of each element in x.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.absolute.html</remarks>
-        public static NDArray absolute(NDArray a) => a.TensorEngine.Abs(a);
+        public static NDArray absolute(NDArray a) => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped(a, static s => absolute(s))
+            : a.TensorEngine.Abs(a);
 
         /// <summary>
         ///     Calculate the absolute value element-wise.
@@ -25,7 +27,9 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the input must be same_kind-castable to it; for complex input it selects the magnitude dtype (float kinds only).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.absolute.html</remarks>
         public static NDArray absolute(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => a.TensorEngine.Abs(a, dtype, @out, where);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, @out, where, dtype), static s => absolute(s.a, s.@out, s.where, s.dtype), @out)
+            : a.TensorEngine.Abs(a, dtype, @out, where);
 
         /// <summary>
         ///     Calculate the absolute value element-wise. <br></br>
@@ -34,7 +38,9 @@ namespace NumSharp
         /// <param name="a">Input value.</param>
         /// <returns>An ndarray containing the absolute value of each element in x.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.absolute.html</remarks>
-        public static NDArray abs(NDArray a) => a.TensorEngine.Abs(a);
+        public static NDArray abs(NDArray a) => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped(a, static s => abs(s))
+            : a.TensorEngine.Abs(a);
 
         /// <summary>
         ///     Calculate the absolute value element-wise (alias of <see cref="absolute(NDArray, NDArray, NDArray, NPTypeCode?)"/>).
@@ -46,6 +52,8 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the input must be same_kind-castable to it; for complex input it selects the magnitude dtype (float kinds only).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.absolute.html</remarks>
         public static NDArray abs(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => a.TensorEngine.Abs(a, dtype, @out, where);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, @out, where, dtype), static s => abs(s.a, s.@out, s.where, s.dtype), @out)
+            : a.TensorEngine.Abs(a, dtype, @out, where);
     }
 }

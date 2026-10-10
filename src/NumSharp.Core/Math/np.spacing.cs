@@ -27,6 +27,8 @@ namespace NumSharp
         ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.spacing.html</para>
         /// </remarks>
         public static NDArray spacing(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.Spacing(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => spacing(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.Spacing(x, dtype, @out, where);
     }
 }

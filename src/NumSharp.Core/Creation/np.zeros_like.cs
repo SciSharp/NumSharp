@@ -11,7 +11,9 @@ namespace NumSharp
         ///  <param name="dtype">Overrides the data type of the result.</param>
         ///  <returns>Array of zeros with the same shape and type as `nd`.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros_like.html</remarks>
-        public static NDArray zeros_like(NDArray a, DType dtype = null, string device = null) => zeros_like(a, dtype, 'K', device);
+        public static NDArray zeros_like(NDArray a, DType dtype = null, string device = null) => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, dtype, device), static s => zeros_like(s.a, s.dtype, s.device))
+            : zeros_like(a, dtype, 'K', device);
 
         ///  <summary>
         ///     Return an array of zeros with the same shape and type as a given array.
@@ -24,6 +26,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros_like.html</remarks>
         public static NDArray zeros_like(NDArray a, DType dtype, char order, string device = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, dtype, order, device), static s => zeros_like(s.a, s.dtype, s.order, s.device));
             ValidateDevice(device);
             char physical = OrderResolver.Resolve(order, a.Shape);
             var resolvedShape = Shape.Adopt((long[])a.Shape.dimensions.Clone(), physical);

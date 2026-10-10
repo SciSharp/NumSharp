@@ -31,7 +31,10 @@ namespace NumSharp
         /// </remarks>
         [OverloadResolutionPriority(1)]
         public NDArray max(int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
-            => np.max(this, axis, @out, keepdims, initial, @where);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.max(this, axis, @out, keepdims, initial, @where);
+        }
 
         /// <summary>
         ///     <c>a.max(axis, keepdims)</c> with keepdims in the second position — the positional form NumSharp callers wrote
@@ -44,7 +47,10 @@ namespace NumSharp
         /// <exception cref="System.ArgumentException">An empty reduced axis (NumPy's "zero-size array" text).</exception>
         [OverloadResolutionPriority(1)]
         public NDArray max(int? axis, bool keepdims)
-            => np.max(this, axis, keepdims);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.max(this, axis, keepdims);
+        }
 
         /// <summary>
         ///     Return the minimum along an axis — NumPy's <c>ndarray.min(axis=None, out=None, keepdims=False, initial=&lt;no
@@ -71,7 +77,10 @@ namespace NumSharp
         /// </remarks>
         [OverloadResolutionPriority(1)]
         public NDArray min(int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
-            => np.min(this, axis, @out, keepdims, initial, @where);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.min(this, axis, @out, keepdims, initial, @where);
+        }
 
         /// <summary><c>a.min(axis, keepdims)</c> — the positional keepdims form (see <see cref="max(int?, bool)"/>).</summary>
         /// <param name="axis">The axis to reduce, or <c>null</c> for every axis.</param>
@@ -81,6 +90,9 @@ namespace NumSharp
         /// <exception cref="System.ArgumentException">An empty reduced axis.</exception>
         [OverloadResolutionPriority(1)]
         public NDArray min(int? axis, bool keepdims)
-            => np.min(this, axis, keepdims);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.min(this, axis, keepdims);
+        }
     }
 }

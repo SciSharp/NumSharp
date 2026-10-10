@@ -81,6 +81,11 @@ namespace NumSharp
             NDArray max = null,
             NDArray where = null)
         {
+            // A numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary). np.clip is a ufunc call
+            // there, so a matrix BOUND decides too (probed 2.4.2: np.clip(ndarray, matrix, None) is a matrix); a matrix
+            // out is returned itself by the plain path, and a matrix where= does not change the class.
+            if (NDMatrixBoundary.Sees(a, a_min, a_max) || NDMatrixBoundary.Sees(min, max))
+                return NDMatrixBoundary.Wrapped((a, a_min, a_max, @out, dtype, min, max, where), static s => clip(s.a, s.a_min, s.a_max, s.@out, s.dtype, s.min, s.max, s.where), @out);
             // ---- numpy/_core/fromnumeric.py::clip, the argument rule. NumPy runs it in Python before the
             //      ufunc sees any argument, so its TypeError / ValueError win over every ufunc error (the
             //      read-only out included). A keyword alias makes a null positional "omitted" (see remarks).

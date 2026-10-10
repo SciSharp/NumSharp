@@ -22,6 +22,9 @@ namespace NumSharp
         /// </remarks>
         public static NDArray squeeze(NDArray a)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped(a, static s => squeeze(s));
             var dims = a.Shape.dimensions;
             int keep = 0;
             for (int i = 0; i < dims.Length; i++)
@@ -43,6 +46,9 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">If axis is not None, and an axis being squeezed is not of length 1</exception>
         public static NDArray squeeze(NDArray a, int axis)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, axis), static s => squeeze(s.a, s.axis));
             while (axis < 0)
                 axis = a.ndim + axis; //handle negative axis
 

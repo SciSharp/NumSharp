@@ -24,6 +24,9 @@ namespace NumSharp
         [NDScoped] // reclaims the np.imag view and the Scalar(0) temp the complex branch hands to np.equal
         public static NDArray isreal(NDArray a)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped(a, static s => isreal(s));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
 
@@ -60,6 +63,12 @@ namespace NumSharp
         [NDScoped] // reclaims the np.imag view and the Scalar(0) temp the complex branch hands to np.not_equal
         public static NDArray iscomplex(NDArray a)
         {
+            // A numpy.matrix operand: a complex one is `ax.imag != 0`, a ufunc (a matrix comes back); any other
+            // dtype is a new zeros array, which is plain.
+            if (NDMatrixBoundary.Sees(a))
+                return a.GetTypeCode == NPTypeCode.Complex
+                    ? NDMatrixBoundary.Wrapped(a, static s => iscomplex(s))
+                    : NDMatrixBoundary.Plain(a, static s => iscomplex(s));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
 

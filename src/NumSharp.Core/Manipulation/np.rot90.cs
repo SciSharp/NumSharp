@@ -28,6 +28,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray rot90(NDArray m, int k = 1, int[] axes = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(m))
+                return NDMatrixBoundary.Wrapped((m, k, axes), static s => rot90(s.m, s.k, s.axes));
             axes ??= new[] {0, 1};
 
             if (axes.Length != 2)

@@ -27,7 +27,9 @@ namespace NumSharp
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is non-boolean, an input is not same_kind-castable to <paramref name="dtype"/>, or <paramref name="out"/> is incompatible.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.gcd.html</remarks>
         public static NDArray gcd(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.Gcd(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => gcd(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : x1.TensorEngine.Gcd(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Returns the element-wise lowest common multiple of the absolute values of <paramref name="x1"/>
@@ -50,6 +52,8 @@ namespace NumSharp
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is non-boolean, an input is not same_kind-castable to <paramref name="dtype"/>, or <paramref name="out"/> is incompatible.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.lcm.html</remarks>
         public static NDArray lcm(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.Lcm(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => lcm(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : x1.TensorEngine.Lcm(x1, x2, dtype, @out, where);
     }
 }

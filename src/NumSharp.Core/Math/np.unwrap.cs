@@ -110,7 +110,9 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/generated/numpy.unwrap.html
         /// </remarks>
         public static NDArray unwrap(NDArray p, double? discont = null, int axis = -1, double period = 2 * Math.PI)
-            => UnwrapImpl(p, discont, axis, period, periodIsInteger: false, periodInt: 0);
+            => NDMatrixBoundary.Sees(p)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            ? NDMatrixBoundary.Plain((p, discont, axis, period), static s => unwrap(s.p, s.discont, s.axis, s.period))
+            : UnwrapImpl(p, discont, axis, period, periodIsInteger: false, periodInt: 0);
 
         /// <summary>
         ///     Unwrap <paramref name="p"/> with an INTEGER-typed <paramref name="period"/>,
@@ -153,7 +155,9 @@ namespace NumSharp
         /// </exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unwrap.html</remarks>
         public static NDArray unwrap(NDArray p, long period, double? discont = null, int axis = -1)
-            => UnwrapImpl(p, discont, axis, period, periodIsInteger: true, periodInt: period);
+            => NDMatrixBoundary.Sees(p)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            ? NDMatrixBoundary.Plain((p, period, discont, axis), static s => unwrap(s.p, s.period, s.discont, s.axis))
+            : UnwrapImpl(p, discont, axis, period, periodIsInteger: true, periodInt: period);
 
         /// <summary>
         ///     Shared core for both <see cref="unwrap(NDArray,System.Nullable{double},int,double)"/>

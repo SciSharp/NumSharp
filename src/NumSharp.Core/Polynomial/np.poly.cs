@@ -18,6 +18,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray poly(NDArray seq_of_zeros)
         {
+            using var plain = NDMatrixBoundary.PlainFor(seq_of_zeros);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             seq_of_zeros = np.atleast_1d(seq_of_zeros);
             int nd = seq_of_zeros.ndim;
 

@@ -63,6 +63,7 @@ namespace NumSharp
         /// </remarks>
         public static NDArray select(NDArray[] condlist, object[] choicelist, object @default = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(condlist);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (condlist is null) throw new ArgumentNullException(nameof(condlist));
             if (choicelist is null) throw new ArgumentNullException(nameof(choicelist));
 

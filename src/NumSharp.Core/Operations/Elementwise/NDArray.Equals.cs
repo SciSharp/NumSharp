@@ -166,6 +166,7 @@ namespace NumSharp
             }
 
             // NaN-aware path: NaN must occur at the SAME positions in both operands...
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             var a1nan = np.isnan(this);
             var a2nan = np.isnan(rhs);
             var nanPositionsEq = a1nan == a2nan;

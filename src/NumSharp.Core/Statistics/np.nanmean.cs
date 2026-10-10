@@ -32,6 +32,8 @@ namespace NumSharp
         /// </remarks>
         [NDScoped]
         public static NDArray nanmean(NDArray a, int? axis = null, bool keepdims = false, DType dtype = null)
-            => DefaultEngine.NanMeanNumPy(a, axis, keepdims, dtype);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, keepdims, dtype), static s => nanmean(s.a, s.axis, s.keepdims, s.dtype), axis, keepdims, (a.typecode is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex) ? "sum" : "mean")
+            : DefaultEngine.NanMeanNumPy(a, axis, keepdims, dtype);
     }
 }

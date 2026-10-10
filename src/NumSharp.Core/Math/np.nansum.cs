@@ -15,6 +15,8 @@ namespace NumSharp
         /// For integer arrays, this is equivalent to np.sum (no NaN values possible).
         /// </remarks>
         public static NDArray nansum(NDArray a, int? axis = null, bool keepdims = false)
-            => a.TensorEngine.NanSum(a, axis, keepdims);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, keepdims), static s => nansum(s.a, s.axis, s.keepdims), axis, keepdims, "sum")
+            : a.TensorEngine.NanSum(a, axis, keepdims);
     }
 }

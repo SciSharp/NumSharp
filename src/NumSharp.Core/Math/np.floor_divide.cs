@@ -17,7 +17,9 @@ namespace NumSharp
         /// <returns>y = floor(x1/x2). This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.floor_divide.html</remarks>
         public static NDArray floor_divide(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.FloorDivide(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => floor_divide(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : x1.TensorEngine.FloorDivide(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Return the largest integer smaller or equal to the division of the inputs.
@@ -30,7 +32,9 @@ namespace NumSharp
         // a//obj operator analog); an NDArray-input passthrough stays untracked.
         [NDScoped]
         public static NDArray floor_divide(NDArray x1, object x2)
-            => x1.TensorEngine.FloorDivide(x1, np.asanyarray(x2));
+            => NDMatrixBoundary.Sees(x1)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2), static s => floor_divide(s.x1, s.x2))
+            : x1.TensorEngine.FloorDivide(x1, np.asanyarray(x2));
     }
 }
 

@@ -27,6 +27,9 @@ namespace NumSharp
             [NDScoped] // reclaims the ToCommon cast temp
             public static NDArray cholesky(NDArray a, bool upper = false)
             {
+                // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+                if (NDMatrixBoundary.Sees(a))
+                    return NDMatrixBoundary.Wrapped((a, upper), static s => cholesky(s.a, s.upper));
                 AssertStackedSquare(a);
                 var common = CommonType(a);
                 return a.TensorEngine.Cholesky(ToCommon(a, common), upper);

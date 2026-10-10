@@ -238,6 +238,7 @@ namespace NumSharp
         /// </summary>
         private static NDArray BmatConcat(NDArray[] blocks, int axis)
         {
+            using var plain = NDMatrixBoundary.Inside();   // np.bmat builds its matrix itself from the plain join
             if (blocks.Length == 0)
                 throw new ValueError("need at least one array to concatenate");
 

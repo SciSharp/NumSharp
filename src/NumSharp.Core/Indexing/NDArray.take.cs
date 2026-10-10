@@ -13,7 +13,10 @@ namespace NumSharp
         /// <returns>The returned array has the same type as this array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.take.html</remarks>
         public NDArray take(NDArray indices, int? axis = null, NDArray @out = null, string mode = "raise")
-            => np.take(this, indices, axis, @out, mode);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.take(this, indices, axis, @out, mode);
+        }
 
         /// <summary>
         ///     Return the element (or sub-array) at a single index taken along an axis. Refer to
@@ -26,6 +29,9 @@ namespace NumSharp
         /// <returns>The returned array has the same type as this array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.take.html</remarks>
         public NDArray take(long index, int? axis = null, NDArray @out = null, string mode = "raise")
-            => np.take(this, index, axis, @out, mode);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.take(this, index, axis, @out, mode);
+        }
     }
 }

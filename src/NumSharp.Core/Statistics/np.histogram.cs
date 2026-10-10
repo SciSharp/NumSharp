@@ -91,7 +91,10 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.histogram_bin_edges.html <para>Scoped (<c>[NDScoped]</c>): the raveled input, any weights ravel and every estimator/linspace intermediate are reclaimed; only the edge array leaves (an explicit edge array the caller passed through unchanged stays the caller's).</para></remarks>
         [NDScoped]
         public static NDArray histogram_bin_edges(NDArray a, int bins = 10, (double, double)? range = null, NDArray weights = null)
-            => HistogramBinEdgesImpl(a, bins, range, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(a, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return HistogramBinEdgesImpl(a, bins, range, weights);
+        }
 
         /// <summary>
         ///     Compute the bin edges chosen by an automatic estimator (<c>"auto"</c>, <c>"fd"</c>,
@@ -108,7 +111,10 @@ namespace NumSharp
         /// <remarks>Scoped (<c>[NDScoped]</c>): the raveled input, any weights ravel and every estimator/linspace intermediate are reclaimed; only the edge array leaves (an explicit edge array the caller passed through unchanged stays the caller's).</remarks>
         [NDScoped]
         public static NDArray histogram_bin_edges(NDArray a, string bins, (double, double)? range = null, NDArray weights = null)
-            => HistogramBinEdgesImpl(a, bins, range, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(a, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return HistogramBinEdgesImpl(a, bins, range, weights);
+        }
 
         /// <summary>
         ///     Pass a pre-computed, monotonically-increasing edge array through unmodified (after a
@@ -124,7 +130,10 @@ namespace NumSharp
         /// <remarks>Scoped (<c>[NDScoped]</c>): the raveled input, any weights ravel and every estimator/linspace intermediate are reclaimed; only the edge array leaves (an explicit edge array the caller passed through unchanged stays the caller's).</remarks>
         [NDScoped]
         public static NDArray histogram_bin_edges(NDArray a, NDArray bins, (double, double)? range = null, NDArray weights = null)
-            => HistogramBinEdgesImpl(a, bins, range, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(a, bins, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return HistogramBinEdgesImpl(a, bins, range, weights);
+        }
 
         /// <summary>
         ///     Convenience overload accepting explicit edges as a C# <c>double[]</c> — equivalent to
@@ -139,7 +148,10 @@ namespace NumSharp
         /// <remarks>Scoped (<c>[NDScoped]</c>): the raveled input, any weights ravel and every estimator/linspace intermediate are reclaimed; only the edge array leaves (an explicit edge array the caller passed through unchanged stays the caller's).</remarks>
         [NDScoped]
         public static NDArray histogram_bin_edges(NDArray a, double[] bins, (double, double)? range = null, NDArray weights = null)
-            => HistogramBinEdgesImpl(a, (NDArray)np.array(bins), range, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(a, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return HistogramBinEdgesImpl(a, (NDArray)np.array(bins), range, weights);
+        }
 
         private static NDArray HistogramBinEdgesImpl(NDArray a, object bins, (double, double)? range, NDArray weights)
         {
@@ -172,7 +184,10 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.histogram.html <para>Scoped (<c>[NDScoped]</c>; <see cref="HistogramResult"/> is an <see cref="INDArrayCarrier"/>): the raveled input and weights, the per-sample bin indices, the bincount/cumulative scratch and the density quotients are reclaimed; only the histogram and its edges leave.</para></remarks>
         [NDScoped]
         public static HistogramResult histogram(NDArray a, int bins = 10, (double, double)? range = null, bool density = false, NDArray weights = null)
-            => HistogramImpl(a, bins, range, density, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(a, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return HistogramImpl(a, bins, range, density, weights);
+        }
 
         /// <summary>
         ///     Compute the histogram using an automatic bin-count estimator (see
@@ -188,7 +203,10 @@ namespace NumSharp
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramResult"/> is an <see cref="INDArrayCarrier"/>): the raveled input and weights, the per-sample bin indices, the bincount/cumulative scratch and the density quotients are reclaimed; only the histogram and its edges leave.</remarks>
         [NDScoped]
         public static HistogramResult histogram(NDArray a, string bins, (double, double)? range = null, bool density = false, NDArray weights = null)
-            => HistogramImpl(a, bins, range, density, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(a, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return HistogramImpl(a, bins, range, density, weights);
+        }
 
         /// <summary>
         ///     Compute the histogram over explicit, possibly non-uniform, monotonically-increasing bin edges.
@@ -203,7 +221,10 @@ namespace NumSharp
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramResult"/> is an <see cref="INDArrayCarrier"/>): the raveled input and weights, the per-sample bin indices, the bincount/cumulative scratch and the density quotients are reclaimed; only the histogram and its edges leave.</remarks>
         [NDScoped]
         public static HistogramResult histogram(NDArray a, NDArray bins, (double, double)? range = null, bool density = false, NDArray weights = null)
-            => HistogramImpl(a, bins, range, density, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(a, bins, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return HistogramImpl(a, bins, range, density, weights);
+        }
 
         /// <summary>
         ///     Convenience overload accepting explicit edges as a C# <c>double[]</c>.
@@ -217,7 +238,10 @@ namespace NumSharp
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramResult"/> is an <see cref="INDArrayCarrier"/>): the raveled input and weights, the per-sample bin indices, the bincount/cumulative scratch and the density quotients are reclaimed; only the histogram and its edges leave.</remarks>
         [NDScoped]
         public static HistogramResult histogram(NDArray a, double[] bins, (double, double)? range = null, bool density = false, NDArray weights = null)
-            => HistogramImpl(a, (NDArray)np.array(bins), range, density, weights);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(a, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return HistogramImpl(a, (NDArray)np.array(bins), range, density, weights);
+        }
 
         private static HistogramResult HistogramImpl(NDArray a, object bins, (double, double)? range, bool density, NDArray weights)
         {

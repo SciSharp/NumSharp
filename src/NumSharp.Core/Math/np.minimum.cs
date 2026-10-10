@@ -28,7 +28,9 @@ namespace NumSharp
         /// </para>
         /// </remarks>
         public static NDArray minimum(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.Minimum(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => minimum(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : x1.TensorEngine.Minimum(x1, x2, dtype, @out, where);
 
         /// <summary>
         ///     Element-wise minimum of array elements, IGNORING NaNs.
@@ -46,6 +48,8 @@ namespace NumSharp
         /// <exception cref="ArgumentException"><paramref name="@out"/> is not same_kind-castable, <paramref name="where"/> is not bool, or the shapes do not broadcast (NumPy-verbatim texts).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fmin.html</remarks>
         public static NDArray fmin(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.FMin(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => fmin(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : x1.TensorEngine.FMin(x1, x2, dtype, @out, where);
     }
 }

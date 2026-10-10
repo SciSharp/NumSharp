@@ -11,7 +11,10 @@ namespace NumSharp
         /// <returns>Sorted 1-D array of common, unique elements.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.intersect1d.html</remarks>
         public static NDArray intersect1d(NDArray ar1, NDArray ar2)
-            => IntersectCore(ar1, ar2, false, false)[0];
+        {
+            using var plain = NDMatrixBoundary.PlainFor(ar1, ar2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return IntersectCore(ar1, ar2, false, false)[0];
+        }
 
         /// <summary>
         ///     Find the intersection of two arrays (bare-return, with the <c>assume_unique</c> speed hint).<br></br>
@@ -24,7 +27,10 @@ namespace NumSharp
         /// <returns>Sorted 1-D array of common, unique elements.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.intersect1d.html</remarks>
         public static NDArray intersect1d(NDArray ar1, NDArray ar2, bool assume_unique)
-            => IntersectCore(ar1, ar2, assume_unique, false)[0];
+        {
+            using var plain = NDMatrixBoundary.PlainFor(ar1, ar2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return IntersectCore(ar1, ar2, assume_unique, false)[0];
+        }
 
         /// <summary>
         ///     Find the intersection of two arrays, returning the indices of the common values.<br></br>
@@ -42,7 +48,10 @@ namespace NumSharp
         ///     <c>[values, comm1, comm2]</c>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.intersect1d.html</remarks>
         public static NDArray[] intersect1d(NDArray ar1, NDArray ar2, bool assume_unique = false, bool return_indices = false)
-            => IntersectCore(ar1, ar2, assume_unique, return_indices);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(ar1, ar2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return IntersectCore(ar1, ar2, assume_unique, return_indices);
+        }
 
         [NDScoped]
         private static NDArray[] IntersectCore(NDArray ar1, NDArray ar2, bool assume_unique, bool return_indices)

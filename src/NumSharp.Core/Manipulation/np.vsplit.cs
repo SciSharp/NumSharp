@@ -20,6 +20,9 @@ namespace NumSharp
         /// </remarks>
         public static NDArray[] vsplit(NDArray ary, int indices_or_sections)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(ary))
+                return NDMatrixBoundary.WrappedAll((ary, indices_or_sections), static s => vsplit(s.ary, s.indices_or_sections));
             if (ary.ndim < 2)
                 throw new ArgumentException("vsplit only works on arrays of 2 or more dimensions");
 
@@ -42,6 +45,9 @@ namespace NumSharp
         /// </remarks>
         public static NDArray[] vsplit(NDArray ary, int[] indices)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(ary))
+                return NDMatrixBoundary.WrappedAll((ary, indices), static s => vsplit(s.ary, s.indices));
             if (ary.ndim < 2)
                 throw new ArgumentException("vsplit only works on arrays of 2 or more dimensions");
 

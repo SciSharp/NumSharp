@@ -40,6 +40,7 @@ namespace NumSharp
         [NDScoped]
         public static void put(NDArray a, NDArray indices, NDArray values, string mode = "raise")
         {
+            using var plain = NDMatrixBoundary.PlainFor(a, indices, values);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
             if (values is null) throw new ArgumentNullException(nameof(values));
@@ -101,7 +102,10 @@ namespace NumSharp
         /// </remarks>
         [NDScoped]
         public static void put(NDArray a, long index, object value, string mode = "raise")
-            => put(a, NDArray.Scalar(index), np.asanyarray(value), mode);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            put(a, NDArray.Scalar(index), np.asanyarray(value), mode);
+        }
 
         /// <summary>
         ///     The contiguous core of <see cref="put(NDArray, NDArray, NDArray, string)"/>: casts the indices to int64

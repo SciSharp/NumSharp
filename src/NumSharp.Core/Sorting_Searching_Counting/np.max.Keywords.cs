@@ -67,7 +67,9 @@ namespace NumSharp
         [OverloadResolutionPriority(1)]
         public static NDArray max(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
-            => @out is null && initial is null && @where is null
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, @out, keepdims, initial, @where), static s => max(s.a, s.axis, s.@out, s.keepdims, s.initial, s.@where), axis, keepdims, "max")
+            : @out is null && initial is null && @where is null
                 ? a.TensorEngine.ReduceAMax(a, axis, keepdims)
                 : DefaultEngine.MaxMinNumPy(a, axis, @out, keepdims, initial, @where, MinMaxOp.Max);
 
@@ -83,7 +85,9 @@ namespace NumSharp
         /// <exception cref="System.ArgumentException">An empty reduced axis (NumPy's "zero-size array" text).</exception>
         [OverloadResolutionPriority(1)]
         public static NDArray max(NDArray a, int? axis, bool keepdims)
-            => a.TensorEngine.ReduceAMax(a, axis, keepdims);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, keepdims), static s => max(s.a, s.axis, s.keepdims), axis, keepdims, "max")
+            : a.TensorEngine.ReduceAMax(a, axis, keepdims);
 
         /// <summary>
         ///     Return the maximum of an array or the maximum along an axis — NumPy's <c>np.amax</c>, an alias of
@@ -106,7 +110,9 @@ namespace NumSharp
         [OverloadResolutionPriority(1)]
         public static NDArray amax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
-            => max(a, axis, @out, keepdims, initial, @where);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, @out, keepdims, initial, @where), static s => amax(s.a, s.axis, s.@out, s.keepdims, s.initial, s.@where), axis, keepdims, "max")
+            : max(a, axis, @out, keepdims, initial, @where);
 
         /// <summary><c>np.amax(a, axis, keepdims)</c> — the positional keepdims form (see <see cref="max(NDArray, int?, bool)"/>).</summary>
         /// <param name="a">Input data.</param>
@@ -117,7 +123,9 @@ namespace NumSharp
         /// <exception cref="System.ArgumentException">An empty reduced axis.</exception>
         [OverloadResolutionPriority(1)]
         public static NDArray amax(NDArray a, int? axis, bool keepdims)
-            => a.TensorEngine.ReduceAMax(a, axis, keepdims);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, keepdims), static s => amax(s.a, s.axis, s.keepdims), axis, keepdims, "max")
+            : a.TensorEngine.ReduceAMax(a, axis, keepdims);
 
         /// <summary>
         ///     Return the minimum of an array or the minimum along an axis — NumPy's <c>np.min</c>, i.e.
@@ -142,7 +150,9 @@ namespace NumSharp
         [OverloadResolutionPriority(1)]
         public static NDArray min(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
-            => @out is null && initial is null && @where is null
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, @out, keepdims, initial, @where), static s => min(s.a, s.axis, s.@out, s.keepdims, s.initial, s.@where), axis, keepdims, "min")
+            : @out is null && initial is null && @where is null
                 ? a.TensorEngine.ReduceAMin(a, axis, keepdims)
                 : DefaultEngine.MaxMinNumPy(a, axis, @out, keepdims, initial, @where, MinMaxOp.Min);
 
@@ -155,7 +165,9 @@ namespace NumSharp
         /// <exception cref="System.ArgumentException">An empty reduced axis.</exception>
         [OverloadResolutionPriority(1)]
         public static NDArray min(NDArray a, int? axis, bool keepdims)
-            => a.TensorEngine.ReduceAMin(a, axis, keepdims);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, keepdims), static s => min(s.a, s.axis, s.keepdims), axis, keepdims, "min")
+            : a.TensorEngine.ReduceAMin(a, axis, keepdims);
 
         /// <summary>
         ///     Return the minimum of an array or the minimum along an axis — NumPy's <c>np.amin</c>, an alias of
@@ -178,7 +190,9 @@ namespace NumSharp
         [OverloadResolutionPriority(1)]
         public static NDArray amin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
-            => min(a, axis, @out, keepdims, initial, @where);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, @out, keepdims, initial, @where), static s => amin(s.a, s.axis, s.@out, s.keepdims, s.initial, s.@where), axis, keepdims, "min")
+            : min(a, axis, @out, keepdims, initial, @where);
 
         /// <summary><c>np.amin(a, axis, keepdims)</c> — the positional keepdims form (see <see cref="max(NDArray, int?, bool)"/>).</summary>
         /// <param name="a">Input data.</param>
@@ -189,7 +203,9 @@ namespace NumSharp
         /// <exception cref="System.ArgumentException">An empty reduced axis.</exception>
         [OverloadResolutionPriority(1)]
         public static NDArray amin(NDArray a, int? axis, bool keepdims)
-            => a.TensorEngine.ReduceAMin(a, axis, keepdims);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, keepdims), static s => amin(s.a, s.axis, s.keepdims), axis, keepdims, "min")
+            : a.TensorEngine.ReduceAMin(a, axis, keepdims);
 
         /// <summary>
         ///     Return the maximum of an array or the maximum along an axis, ignoring NaNs — NumPy's <c>np.nanmax</c>, which for
@@ -217,7 +233,9 @@ namespace NumSharp
         [OverloadResolutionPriority(1)]
         public static NDArray nanmax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
-            => @out is null && initial is null && @where is null
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, @out, keepdims, initial, @where), static s => nanmax(s.a, s.axis, s.@out, s.keepdims, s.initial, s.@where), axis, keepdims, "max")
+            : @out is null && initial is null && @where is null
                 ? a.TensorEngine.NanMax(a, axis, keepdims)
                 : DefaultEngine.MaxMinNumPy(a, axis, @out, keepdims, initial, @where, MinMaxOp.FMax);
 
@@ -242,7 +260,9 @@ namespace NumSharp
         [OverloadResolutionPriority(1)]
         public static NDArray nanmin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
-            => @out is null && initial is null && @where is null
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, @out, keepdims, initial, @where), static s => nanmin(s.a, s.axis, s.@out, s.keepdims, s.initial, s.@where), axis, keepdims, "min")
+            : @out is null && initial is null && @where is null
                 ? a.TensorEngine.NanMin(a, axis, keepdims)
                 : DefaultEngine.MaxMinNumPy(a, axis, @out, keepdims, initial, @where, MinMaxOp.FMin);
     }

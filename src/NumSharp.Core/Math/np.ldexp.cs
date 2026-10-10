@@ -35,6 +35,8 @@ namespace NumSharp
         /// </remarks>
         [NDScoped]
         public static NDArray ldexp(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null)
-            => x1.TensorEngine.Ldexp(x1, x2, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where), static s => ldexp(s.x1, s.x2, s.@out, s.where), @out)
+            : x1.TensorEngine.Ldexp(x1, x2, @out, where);
     }
 }

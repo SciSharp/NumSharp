@@ -39,6 +39,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray corrcoef(NDArray x, NDArray y = null, bool rowvar = true, DType dtype = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(x, y);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (x is null) throw new ArgumentNullException(nameof(x));
 
             // c = cov(x, y, rowvar, dtype=dtype). Delegating here also inherits cov's validation and

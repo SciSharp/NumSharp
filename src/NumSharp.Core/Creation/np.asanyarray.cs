@@ -37,6 +37,9 @@ namespace NumSharp
                 case null:
                     throw new ArgumentNullException(nameof(a));
                 case NDArray nd:
+                    // a numpy.matrix passes through as a matrix (np.asarray, which this calls, strips the class)
+                    if (NDMatrixBoundary.Sees(nd))
+                        return NDMatrixBoundary.Wrapped((nd, dtype, order), static s => asarray(s.nd, s.dtype, s.order));
                     return asarray(nd, dtype, order);
                 case object[] objArr:
                     // object[] has no fixed dtype — route through type-promotion path.

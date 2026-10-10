@@ -46,7 +46,12 @@ namespace NumSharp
         ///</returns>
         public static NDArray<bool> isclose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8,
             bool equal_nan = false)
-            => a.TensorEngine.IsClose(a, b, rtol, atol, equal_nan);
+        {
+            // NDArray<bool> cannot be a matrix object, so a matrix operand gives the plain result here (NumPy
+            // returns a matrix: gap MO01 of the matrix-operand oracle tier).
+            using var plain = NDMatrixBoundary.PlainFor(a, b);
+            return a.TensorEngine.IsClose(a, b, rtol, atol, equal_nan);
+        }
 
         /// <summary>
         /// Test element-wise for finiteness (not infinity and not Not a Number).
@@ -59,7 +64,9 @@ namespace NumSharp
         /// <param name="dtype">Validate-only (NumPy parity): the predicate has bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isfinite.html</remarks>
         public static NDArray isfinite(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => a.TensorEngine.IsFinite(a, dtype, @out, where);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, @out, where, dtype), static s => isfinite(s.a, s.@out, s.where, s.dtype), @out)
+            : a.TensorEngine.IsFinite(a, dtype, @out, where);
 
         /// <summary>
         /// Test element-wise for Not a Number.
@@ -72,7 +79,9 @@ namespace NumSharp
         /// <param name="dtype">Validate-only (NumPy parity): the predicate has bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isnan.html</remarks>
         public static NDArray isnan(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => a.TensorEngine.IsNan(a, dtype, @out, where);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, @out, where, dtype), static s => isnan(s.a, s.@out, s.where, s.dtype), @out)
+            : a.TensorEngine.IsNan(a, dtype, @out, where);
 
         /// <summary>
         /// Test element-wise for positive or negative infinity.
@@ -90,7 +99,9 @@ namespace NumSharp
         /// - NaN: Returns False (NaN is not infinity)
         /// </remarks>
         public static NDArray isinf(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => a.TensorEngine.IsInf(a, dtype, @out, where);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, @out, where, dtype), static s => isinf(s.a, s.@out, s.where, s.dtype), @out)
+            : a.TensorEngine.IsInf(a, dtype, @out, where);
 
         /// <summary>
         /// Return element-wise True where the sign bit is set (negative numbers, and — for floats —
@@ -116,7 +127,9 @@ namespace NumSharp
         /// </para>
         /// </remarks>
         public static NDArray signbit(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.SignBit(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => signbit(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.SignBit(x, dtype, @out, where);
 
         /// <summary>
         ///     Returns true incase of a number, bool or string. If null, returns false.

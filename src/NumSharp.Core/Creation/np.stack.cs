@@ -15,6 +15,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.stack.html</remarks>
         public static NDArray stack(NDArray[] arrays, int axis = 0)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arrays))
+                return NDMatrixBoundary.Wrapped((arrays, axis), static s => stack(s.arrays, s.axis));
             if (arrays == null)
                 throw new ArgumentNullException(nameof(arrays));
 

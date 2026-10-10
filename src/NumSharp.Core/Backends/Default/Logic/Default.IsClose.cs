@@ -51,6 +51,7 @@ namespace NumSharp.Backends
         [NDScoped]
         public override NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a, b);   // an engine method computes plain: np.abs / np.isfinite below must not apply its matrix rule
             // NumPy implementation (from numpy/_core/numeric.py):
             // result = (less_equal(abs(x - y), atol + rtol * abs(y))
             //           & isfinite(y)

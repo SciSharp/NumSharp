@@ -17,6 +17,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.column_stack.html</remarks>
         public static NDArray column_stack(params NDArray[] tup)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(tup))
+                return NDMatrixBoundary.Wrapped(tup, static s => column_stack(s));
             if (tup == null)
                 throw new ArgumentNullException(nameof(tup));
 

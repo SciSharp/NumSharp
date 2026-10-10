@@ -23,6 +23,9 @@ namespace NumSharp
             [NDScoped] // reclaims the ToCommon cast temp and the pre-collapse complex w/v CollapseEig supersedes
             public static (NDArray eigenvalues, NDArray eigenvectors) eig(NDArray a)
             {
+                // a numpy.matrix operand: NumPy returns the plain eigenvalues and wrap(vt), the eigenvectors as a matrix
+                if (NDMatrixBoundary.Sees(a))
+                    return NDMatrixBoundary.WrappedPair(a, static s => eig(s), wrapFirst: false, wrapSecond: true);
                 AssertStackedSquare(a);
                 AssertFinite(a);
                 var common = CommonType(a);
@@ -38,6 +41,7 @@ namespace NumSharp
             [NDScoped] // reclaims the ToCommon cast temp and the pre-collapse complex eigenvalues
             public static NDArray eigvals(NDArray a)
             {
+                using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 AssertStackedSquare(a);
                 AssertFinite(a);
                 var common = CommonType(a);
@@ -141,6 +145,9 @@ namespace NumSharp
             [NDScoped] // reclaims the ToCommon cast temp; the tuple is yielded component-wise
             public static (NDArray eigenvalues, NDArray eigenvectors) eigh(NDArray a, char UPLO = 'L')
             {
+                // a numpy.matrix operand: NumPy returns the plain eigenvalues and wrap(vt), the eigenvectors as a matrix
+                if (NDMatrixBoundary.Sees(a))
+                    return NDMatrixBoundary.WrappedPair((a, UPLO), static s => eigh(s.a, s.UPLO), wrapFirst: false, wrapSecond: true);
                 char uplo = RequireUplo(UPLO);
                 AssertStackedSquare(a);
                 var common = CommonType(a);
@@ -154,6 +161,7 @@ namespace NumSharp
             [NDScoped] // reclaims the ToCommon cast temp (the discarded eigenvector slot is null here)
             public static NDArray eigvalsh(NDArray a, char UPLO = 'L')
             {
+                using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 char uplo = RequireUplo(UPLO);
                 AssertStackedSquare(a);
                 var common = CommonType(a);

@@ -26,7 +26,11 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.real.html</remarks>
         public NDArray real
         {
-            get => np.real(this);
+            get
+            {
+                using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+                return np.real(this);
+            }
             // PyArray_CopyInto uses NPY_UNSAFE_CASTING; np.real(this) is the writeable target (the real
             // lane view for complex, `this` for a real array) whose writeability guard reproduces NumPy's
             // "assignment destination is read-only". The scope reclaims the lane view: it holds a counted
@@ -57,7 +61,11 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.imag.html</remarks>
         public NDArray imag
         {
-            get => np.imag(this);
+            get
+            {
+                using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+                return np.imag(this);
+            }
             // The scope reclaims the imaginary-lane view the copy targets: a counted reference on this
             // array's buffer (see the real setter), not a finalizer's job.
             [NDScoped]
@@ -65,6 +73,7 @@ namespace NumSharp
             {
                 if (typecode != NPTypeCode.Complex)
                     throw new TypeError("array does not have imaginary part to set");
+                using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
                 np.copyto(np.imag(this), value, casting: "unsafe");
             }
         }
@@ -84,7 +93,10 @@ namespace NumSharp
         public NDArray conjugate(NDArray @out = null)
         {
             if (typecode == NPTypeCode.Complex)
+            {
+                using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
                 return np.conjugate(this, @out);
+            }
 
             // Non-complex: PyArray_Conjugate returns `self` (out==NULL) or copies self into `out` under
             // NPY_DEFAULT_ASSIGN_CASTING (same_kind) — preserving the dtype (bool stays bool), NOT the

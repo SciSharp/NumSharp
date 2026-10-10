@@ -37,6 +37,9 @@ namespace NumSharp
         /// </remarks>
         public static NDArray require(NDArray a, DType dtype = null, string[] requirements = null, NDArray like = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, dtype, requirements, like), static s => require(s.a, s.dtype, s.requirements, s.like));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
 
@@ -85,7 +88,9 @@ namespace NumSharp
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.require.html</remarks>
         public static NDArray require(NDArray a, DType dtype, string requirements)
-            => require(a, dtype, ToCharTokens(requirements));
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, dtype, requirements), static s => require(s.a, s.dtype, s.requirements))
+            : require(a, dtype, ToCharTokens(requirements));
 
         /// <summary>Splits a requirements string into one-character tokens (NumPy iterates a string by char).</summary>
         private static string[] ToCharTokens(string requirements)
