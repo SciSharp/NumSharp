@@ -37,6 +37,9 @@ scikit-learn runs in the Python that the process embeds. `StandardScaler` is a C
 Python object, and `X_train` is a NumSharp array whose memory scikit-learn reads without a copy. The C#
 is typed: the compiler checks each call, and an editor completes it.
 
+[`PYTHONIC_SPEC.md`](PYTHONIC_SPEC.md) is the specification: each rule of a port and of the tree, with
+the measurement behind it. This page is the tour.
+
 [`NumSharpPythonnetLocalExample`](../NumSharpPythonnetLocalExample/README.md) shows the other way to
 call Python, `dynamic` and a codec. It needs no classes, and the compiler checks nothing.
 
@@ -232,6 +235,7 @@ the Python objects and then the arrays. Three things make sure that nothing stay
 | [`Program.cs`](Program.cs) | The command line and the check at the end. |
 | [`verify.py`](verify.py) | Compares each Python program with its port. |
 | [`requirements.txt`](requirements.txt) | The pinned Python libraries. |
+| [`PYTHONIC_SPEC.md`](PYTHONIC_SPEC.md) | The specification. |
 
 The project file is what these two commands write, and nothing more:
 
