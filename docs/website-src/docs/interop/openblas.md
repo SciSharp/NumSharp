@@ -619,6 +619,12 @@ the seam and is gated today - an implementation only has to supply numerics.
 
 ## See also
 
+- [A default project](https://github.com/SciSharp/NumSharp/tree/master/examples/NumSharpOpenBlasDefaultExample)
+  and [an advanced project](https://github.com/SciSharp/NumSharp/tree/master/examples/NumSharpOpenBlasAdvancedExample)
+  - two console apps to copy. The first has the one package reference and no configuration: the
+  statement that starts the backend, matrix products, linear algebra, and a timing against NumSharp's
+  own kernels. The second pins the OpenBLAS build in the project file and the thread count and the
+  kernels in code, and prints the hash of one product for each setting
 - [Interoperability](index.md) - the memory-bridge contract behind the other `NumSharp.Interop.*`
   packages (this one shares a *binary*, not a buffer)
 - [`docs/stale-docs/GEMM_PARITY.md`][gemm] - the engineering deep-dive: the ported routes, the design review,
