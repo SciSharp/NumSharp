@@ -25,6 +25,11 @@ namespace NumSharp.Tests
     //     operands (no error where NumPy raises, the wrong shape where NumPy broadcasts) nor, for logaddexp, promotes
     //     the dtype. np.equal & co. (the functions) are right.
     //
+    // FIXED 2026-10-12, when branch strings was rebased onto journey4: np.unique_values / np.unique and the set routines
+    // read an offset view right (RL04), so does ndarray.repeat of a 0-d view (RL05), and the comparison operators
+    // broadcast an empty left operand like the ufuncs (RL06). Their pins stay below as regression tests, untagged, each
+    // summary opening with "FIXED"; the generator's rules for RL04-RL06 are dropped.
+    //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's rule from the generator's _gap_of so
     // the cases return to the gate.
@@ -114,12 +119,13 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.unique_values</c> of a float64 <c>np.split</c> child (offset 3, <c>[3, 1, 3, 2]</c>): NumPy returns
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>np.unique_values</c> of a float64 <c>np.split</c> child (offset 3, <c>[3, 1, 3, 2]</c>): NumPy returns
         ///     <c>[1, 2, 3]</c>; NumSharp returns <c>[3, 7]</c>. And <c>np.intersect1d(ar1, [1, 2, 7])</c> with <c>ar1</c>
         ///     the int32 child: NumPy returns <c>[1, 2]</c>; NumSharp returns <c>[7]</c> (gap RL04: the set routines read
         ///     either operand from the owner's start, not only ar2).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "relayout-RL04")]
+        [TestMethod]
         public void Relayout_UniqueValues_AndIntersect1dFirstOperand_AtAnOffset_ShouldReadTheView()
         {
             using var fbase = np.array(new double[] { 7, 7, 7, 3, 1, 3, 2 });
@@ -137,12 +143,13 @@ namespace NumSharp.Tests
         // ----- Empty operands: no broadcast check -----
 
         /// <summary>
-        ///     The NDArray comparison operators with an EMPTY left operand: NumPy raises <c>ValueError: operands could not
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: The NDArray comparison operators with an EMPTY left operand: NumPy raises <c>ValueError: operands could not
         ///     be broadcast together with shapes (0,5) (4,5)</c> for <c>zeros((0,5)) == zeros((4,5))</c> and broadcasts
         ///     <c>zeros((0,1)) &lt; zeros((0,5))</c> to shape <c>(0, 5)</c>; NumSharp returns an empty result shaped like
         ///     the left operand for both (gap RL06; <c>np.equal</c> itself raises the right error).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "relayout-RL06")]
+        [TestMethod]
         public void Relayout_ComparisonOperators_EmptyLeftOperand_ShouldBroadcast()
         {
             using var a = np.zeros(new Shape(0, 5));

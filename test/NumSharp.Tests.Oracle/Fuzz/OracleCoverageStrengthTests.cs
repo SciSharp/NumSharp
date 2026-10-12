@@ -173,6 +173,10 @@ namespace NumSharp.Tests.Fuzz
             ["get_printoptions"] = "config getter: the axis is the (options, key) PARAM sweep, text results",
             ["format_float_positional"] = "float-scalar formatter: NumPy's widths float16 / float32 / float64 are its whole dtype axis",
             ["format_float_scientific"] = "float-scalar formatter: NumPy's widths float16 / float32 / float64 are its whole dtype axis",
+            // np.nditer's iteration-protocol section reads multi_index after k Python next() calls over ONE float32
+            // operand; its four cases joined the gate when the strings rebase (2026-10-12) closed gap SU42, which had
+            // carved all of them, and the index a step reports does not depend on the dtype.
+            ["nditer.multi_index"] = "iteration-protocol probe: the multi_index after k next() calls is dtype-independent; the protocol section's one float32 operand carries it",
             // finfo exists for the inexact dtypes only; these attributes' float32 / float64 / complex128 values and
             // every refusal are carved (gaps SU11-SU14, surface_gaps.jsonl), so the kept spread is narrower until fixed.
             ["finfo.minexp"] = "finfo of an inexact dtype: float32 / float64 / complex128 carved as SU12 (off by one)",

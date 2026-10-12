@@ -1236,6 +1236,9 @@ def gen_text(em):
 # the case. The matrix tier found them because it runs each method over layouts and dtypes the older tiers did
 # not combine. The class itself (the finalize rule, the row / column rule, the product, the result class and
 # ownership) is held to NumPy without exception.
+#
+# Redrawn 2026-10-12, when branch strings was rebased onto journey4: its fixes made MX06 (a -1 reshape of a broadcast
+# view copies) and MX11 (np.repeat reads an offset view) match NumPy; their rules are dropped.
 GAPS = {
     "MX01": "a[:, index_array]: NumPy returns its transposed MapIter view (F-contiguous for two axes); NumSharp's "
             "fancy getter returns a C-ordered array. Values equal. Library-wide (OpenBugs.FancyIndex.cs).",
@@ -1248,8 +1251,6 @@ GAPS = {
             "/ PyArray_Empty(ISFORTRAN) against NumSharp's). Values equal.",
     "MX05": "np.conjugate of a transposed strided or reversed complex128 view: NumPy's ufunc keeps the operand's "
             "K order, NumSharp writes C order. Reached through matrix.H. Values equal.",
-    "MX06": "ndarray.reshape with a -1 dimension on a broadcast (stride-0) view throws NotSupportedException; "
-            "NumPy copies and reshapes.",
     "MX07": "fancy assignment with two index entries into a C-contiguous view at a non-zero offset "
             "(a[rows, cols] = v, a[:, cols] = v) throws IndexOutOfRangeException: the offsets include the view's "
             "offset and the bound does not. The offset-view class of the array-object oracle.",
@@ -1260,8 +1261,6 @@ GAPS = {
             "order). The complex Prod gap of the reductions tier.",
     "MX10": "np.dot of an N-D operand with an M-D one (the generic DotNDMD route) computes every dtype in "
             "float64: a complex128 product loses its imaginary parts. Reached through ndarray(1,4,3) * matrix.",
-    "MX11": "np.repeat of a C-contiguous view at a non-zero offset reads from the start of the parent buffer "
-            "(the offset-view class of the array-object oracle).",
 }
 
 
@@ -1325,9 +1324,6 @@ def _gap_of(case):
     if op in ("matrix.H", "matrix.getH") and layout in ("rev", "step") and dt == "complex128":
         return "MX05"
 
-    if op == "matrix.reshape" and layout == "bcast" and -1 in (p.get("shape") or []):
-        return "MX06"
-
     if op == "matrix.__setitem__" and layout.startswith("off:") and not raises:
         # Only the assignments NumPy accepts reach the scatter that computes the offsets; a value NumPy refuses is
         # refused by NumSharp first, with the same text. An integer FIRST entry takes another route that is right.
@@ -1354,9 +1350,6 @@ def _gap_of(case):
 
     if op == "matrix.__rmul__" and layout.startswith("a143*m") and dt == "complex128":
         return "MX10"
-
-    if op == "matrix.repeat" and layout == "off":
-        return "MX11"
 
     return None
 

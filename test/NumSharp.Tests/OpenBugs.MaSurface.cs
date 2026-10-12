@@ -34,6 +34,13 @@ namespace NumSharp.Tests
     // (ma.size has no axis=), MS19 (ma.ndenumerate has no compressed=), MS20 (arange dtype= and a lone float stop, the
     // creation wrappers' order=, indices' sparse=), MS29 (compress_nd takes an int axis only).
     //
+    // FIXED 2026-10-12, when branch strings was rebased onto journey4 (its numpy.ma work: the fill value stored as NumPy
+    // stores it, masked_object's statements and shrink=, default_fill_value of any argument, putmask's same_kind cast, the
+    // edge finders of an empty array, compress_nd's axis check, the products' 0-d / 2-D handling): MS3, MS6-MS14, MS16,
+    // MS25, MS28 and MS35 match NumPy, and MS2 for column_stack / dstack / diagflat. Their pins below stay where they are
+    // as regression tests, untagged, each summary opening with "FIXED"; MS2's open part (hsplit) has a pin of its own,
+    // and the generator's rules for the fixed ids are dropped (MS35's remaining 0-d convolve cases are MS1's class).
+    //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's rule from the generator's _gap_of so the
     // cases return to the gate.
@@ -57,10 +64,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>ma.diagflat([1., 2.])</c> over a nomask operand: NumPy's _fromnxfunction builds the mask with getmaskarray,
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>ma.diagflat([1., 2.])</c> over a nomask operand: NumPy's _fromnxfunction builds the mask with getmaskarray,
         ///     so <c>getmask</c> is a (2, 2) all-False array; NumSharp keeps nomask (gap MS2).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS2")]
+        [TestMethod]
         public void MaSurface_Diagflat_NomaskOperand_GetsFullMask()
         {
             var r = np.ma.diagflat(np.ma.array(np.array(new[] { 1.0, 2.0 })));
@@ -70,10 +78,30 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>ma.zeros_like(ma.array([1., 2., 3.], mask=[0, 1, 0]))</c>: NumPy keeps a copy of the prototype's mask
+        ///     <c>ma.hsplit(ma.array(np.arange(6.).reshape(2, 3)), 3)</c> over a nomask operand: NumPy's _fromnxfunction
+        ///     builds each part's mask with getmaskarray, so every part's <c>getmask</c> is a (2, 1) all-False array;
+        ///     NumSharp's parts keep nomask. The open part of gap MS2 since column_stack / dstack / diagflat were fixed.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS2")]
+        public void MaSurface_Hsplit_NomaskOperand_PartsGetFullMasks()
+        {
+            var parts = np.ma.hsplit(np.ma.array(np.arange(6.0).reshape(2, 3)), 3);
+
+            parts.Should().HaveCount(3);
+            foreach (var part in parts)
+            {
+                var m = np.ma.getmask(part);
+                ReferenceEquals(m, np.ma.nomask).Should().BeFalse();
+                m.shape.Should().Equal(2L, 1L);
+            }
+        }
+
+        /// <summary>
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>ma.zeros_like(ma.array([1., 2., 3.], mask=[0, 1, 0]))</c>: NumPy keeps a copy of the prototype's mask
         ///     (<c>[False, True, False]</c>); NumSharp's result has no mask (gap MS3).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS3")]
+        [TestMethod]
         public void MaSurface_ZerosLike_KeepsThePrototypesMask()
         {
             var a = np.ma.array(np.array(new[] { 1.0, 2.0, 3.0 }), np.array(new[] { false, true, false }));
@@ -100,11 +128,12 @@ namespace NumSharp.Tests
         // ----- refusals and error texts -----
 
         /// <summary>
-        ///     <c>ma.apply_along_axis(ma.max, 0, ma.array(uint8 [[1, 2], [3, 4]]))</c>: NumPy sets the result's fill value to
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>ma.apply_along_axis(ma.max, 0, ma.array(uint8 [[1, 2], [3, 4]]))</c>: NumPy sets the result's fill value to
         ///     the default 999999, which does not fit uint8, and raises TypeError (a NumPy quirk NumSharp does not copy;
         ///     gap MS6).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS6")]
+        [TestMethod]
         public void MaSurface_ApplyAlongAxis_NarrowIntResult_RaisesNumPysFillValueTypeError()
         {
             var a = np.ma.array(np.array(new byte[,] { { 1, 2 }, { 3, 4 } }));
@@ -114,10 +143,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>ma.masked_object([1., 2., 1.], 1.).fill_value</c>: NumPy sets fill_value=value (1.0); NumSharp keeps the
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>ma.masked_object([1., 2., 1.], 1.).fill_value</c>: NumPy sets fill_value=value (1.0); NumSharp keeps the
         ///     default 1e20 (gap MS7).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS7")]
+        [TestMethod]
         public void MaSurface_MaskedObject_SetsTheFillValue()
         {
             var r = np.ma.masked_object(np.array(new[] { 1.0, 2.0, 1.0 }), 1.0);
@@ -126,10 +156,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>ma.masked_object(int8 [1, 2], 12345)</c>: NumPy raises TypeError (the fill value 12345 does not fit int8);
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>ma.masked_object(int8 [1, 2], 12345)</c>: NumPy raises TypeError (the fill value 12345 does not fit int8);
         ///     NumSharp computes (gap MS8).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS8")]
+        [TestMethod]
         public void MaSurface_MaskedObject_ValueOutOfRange_RaisesTypeError()
         {
             Action act = () => np.ma.masked_object(np.array(new sbyte[] { 1, 2 }), 12345);
@@ -138,10 +169,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>ma.masked_object([1., 2.], 5.)</c> over a plain array: nothing matches and NumPy's
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>ma.masked_object([1., 2.], 5.)</c> over a plain array: nothing matches and NumPy's
         ///     <c>make_mask(shrink=True)</c> returns nomask; NumSharp keeps an all-False mask array (gap MS9).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS9")]
+        [TestMethod]
         public void MaSurface_MaskedObject_NoMatch_ShrinksToNomask()
         {
             var r = np.ma.masked_object(np.array(new[] { 1.0, 2.0 }), 5.0);
@@ -150,24 +182,29 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>ma.putmask(ma.array([1, 2, 3]), [True, False, False], 2.5)</c>: NumPy's np.copyto(where=mask) casts
-        ///     same_kind and raises TypeError; NumSharp truncates 2.5 into the int64 array (gap MS11).
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this
+        ///     test pins it — NumPy's text under np.copyto's house exception type for a cast refusal
+        ///     (<see cref="InvalidCastException"/>, NumPy's TypeError; see np.copyto's divergences).
+        ///     Before the fix: <c>ma.putmask(ma.array([1, 2, 3]), [True, False, False], 2.5)</c>: NumPy's
+        ///     np.copyto(where=mask) casts same_kind and raises TypeError; NumSharp truncated 2.5 into the int64 array
+        ///     (gap MS11).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS11")]
+        [TestMethod]
         public void MaSurface_Putmask_FloatIntoInt_RaisesSameKindTypeError()
         {
             var a = np.ma.array(np.array(new long[] { 1, 2, 3 }));
             Action act = () => np.ma.putmask(a, np.array(new[] { true, false, false }), 2.5);
 
-            act.Should().Throw<TypeError>()
+            act.Should().Throw<InvalidCastException>()
                 .WithMessage("Cannot cast scalar from dtype('float64') to dtype('int64') according to the rule 'same_kind'");
         }
 
         /// <summary>
-        ///     <c>ma.set_fill_value(ma.array([1, 2, 3]), 1.5)</c>: NumPy converts the fill value to the dtype (int64 1);
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>ma.set_fill_value(ma.array([1, 2, 3]), 1.5)</c>: NumPy converts the fill value to the dtype (int64 1);
         ///     NumSharp stores 1.5 (gap MS12).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS12")]
+        [TestMethod]
         public void MaSurface_SetFillValue_ConvertsToTheDtype()
         {
             var a = np.ma.array(np.array(new long[] { 1, 2, 3 }));
@@ -178,10 +215,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     Two float64 masked arrays with fill values set to 3 and 3.0: NumPy's common_fill_value compares the converted
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: Two float64 masked arrays with fill values set to 3 and 3.0: NumPy's common_fill_value compares the converted
         ///     fill values and returns 3.0; NumSharp compares the raw long 3 with the double 3.0 and returns null (gap MS13).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS13")]
+        [TestMethod]
         public void MaSurface_CommonFillValue_ComparesConvertedValues()
         {
             var a = np.ma.array(np.array(new[] { 1.0, 2.0 }));
@@ -196,10 +234,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>ma.maximum_fill_value(ma.array([True, False]))</c>: NumPy's extremum table holds the Python int 0 for bool
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>ma.maximum_fill_value(ma.array([True, False]))</c>: NumPy's extremum table holds the Python int 0 for bool
         ///     (so a bool array plus the fill promotes to int64); NumSharp returns the bool False (gap MS14).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS14")]
+        [TestMethod]
         public void MaSurface_MaximumFillValue_OfBool_IsTheIntZero()
         {
             var f = np.ma.maximum_fill_value(np.ma.array(np.array(new[] { true, false })));
@@ -282,10 +321,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>ma.flatnotmasked_edges</c> of an empty array: NumPy returns <c>array([0, -1])</c>
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>ma.flatnotmasked_edges</c> of an empty array: NumPy returns <c>array([0, -1])</c>
         ///     (<c>[0, a.size - 1]</c>); NumSharp returns null (gap MS25).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS25")]
+        [TestMethod]
         public void MaSurface_FlatnotmaskedEdges_OfEmpty_IsZeroMinusOne()
         {
             var e = np.ma.flatnotmasked_edges(np.ma.array(np.zeros(new Shape(0))));
@@ -319,10 +359,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>ma.compress_nd(ma.array(arange(6.)), axis=3)</c>: NumPy normalizes the axis first and raises AxisError even
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>ma.compress_nd(ma.array(arange(6.)), axis=3)</c>: NumPy normalizes the axis first and raises AxisError even
         ///     without a mask; NumSharp returns the data (gap MS28).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS28")]
+        [TestMethod]
         public void MaSurface_CompressNd_AxisOutOfRange_RaisesAxisError()
         {
             var a = np.ma.array(np.arange(6.0));
@@ -410,10 +451,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>ma.convolve(ma.array(2.), [1., 2., 3.])</c>: NumPy reads the 0-d operand as one element and returns
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>ma.convolve(ma.array(2.), [1., 2., 3.])</c>: NumPy reads the 0-d operand as one element and returns
         ///     <c>[2., 4., 6.]</c>; NumSharp throws IncorrectShapeException (gap MS35).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS35")]
+        [TestMethod]
         public void MaSurface_Convolve_OfAZeroDOperand_ReadsOneElement()
         {
             var r = np.ma.convolve(np.ma.array(NDArray.Scalar(2.0)), np.ma.array(np.array(new[] { 1.0, 2.0, 3.0 })));

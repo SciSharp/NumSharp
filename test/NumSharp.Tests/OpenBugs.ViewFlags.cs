@@ -29,6 +29,12 @@ namespace NumSharp.Tests
     //     layout, np.reshape(-1) of a broadcast view throws, and np.linalg.multi_dot writes into an out= that np.dot
     //     itself refuses.
     //
+    // FIXED 2026-10-12, when branch strings was rebased onto journey4: np.repeat / ndarray.repeat and np.unique (with the
+    // set routines) read an offset view right (VF39, VF40), ravel(order='K') of a permuted array walks memory (VF05), a
+    // basic index of a read-only broadcast stays read-only (VF23), np.reshape(-1) of a broadcast view copies (VF24); the
+    // tiers' replay found VF03, VF11, VF18, VF25, VF28, VF33, VF35 fixed too, and parts of VF01, VF08, VF12, VF26 and
+    // VF32. The pins of the fixed gaps stay below as regression tests, untagged, each summary opening with "FIXED".
+    //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's carve rule from the generator
     // (_gap_of) so the case returns to the gate.
@@ -171,11 +177,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.repeat(v, 2)</c>, <c>v.repeat(2)</c> of <c>np.split(arange(6), [2])[1]</c> (offset 2, <c>[2, 3, 4, 5]</c>):
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>np.repeat(v, 2)</c>, <c>v.repeat(2)</c> of <c>np.split(arange(6), [2])[1]</c> (offset 2, <c>[2, 3, 4, 5]</c>):
         ///     NumPy returns <c>[2, 2, 3, 3, 4, 4, 5, 5]</c>; and of the 0-d <c>np.unstack(arange(6))[5]</c>: <c>[5, 5]</c>
         ///     (gap VF39).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "viewflags-VF39")]
+        [TestMethod]
         public void ViewFlags_Repeat_OfAnOffsetView_ShouldReadTheView()
         {
             using var parent = np.arange(6);
@@ -191,12 +198,13 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.unique</c> of <c>np.split(big, 2)[1]</c> (offset 4, <c>[[0, 3], [7.5, 6]]</c>): NumPy returns
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>np.unique</c> of <c>np.split(big, 2)[1]</c> (offset 4, <c>[[0, 3], [7.5, 6]]</c>): NumPy returns
         ///     <c>[0, 3, 6, 7.5]</c>; NumSharp returns the parent's <c>[9]</c>. The set routines that call it on an
         ///     <c>ar2</c> inherit it: NumPy's <c>intersect1d</c> / <c>setdiff1d</c> / <c>setxor1d</c> with
         ///     <c>ar1 = [0, 1.5, 3, 4.5, 6]</c> are <c>[0, 3, 6]</c>, <c>[1.5, 4.5]</c>, <c>[1.5, 4.5, 7.5]</c> (gap VF40).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "viewflags-VF40")]
+        [TestMethod]
         public void ViewFlags_UniqueAndSetRoutines_OfAnOffsetView_ShouldReadTheView()
         {
             using var big = np.array(new double[] { 9, 9, 9, 9, 0, 3, 7.5, 6 }).reshape(4, 2);
@@ -229,11 +237,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>b[1]</c> of the read-only broadcast <c>np.broadcast_to(arange(4), (3, 4))</c>, spelled through the
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>b[1]</c> of the read-only broadcast <c>np.broadcast_to(arange(4), (3, 4))</c>, spelled through the
         ///     <c>object[]</c> indexer: NumPy's view is read-only; NumSharp's is writeable, so a write through it changes the
         ///     one row every broadcast row shares (gap VF23).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "viewflags-VF23")]
+        [TestMethod]
         public void ViewFlags_IndexOfAReadOnlyBroadcast_ThroughTheObjectIndexer_ShouldStayReadOnly()
         {
             using var row = np.arange(4);
@@ -261,11 +270,12 @@ namespace NumSharp.Tests
         // ----- Order and layout -----
 
         /// <summary>
-        ///     <c>np.ravel(p, order='K')</c> of the permuted <c>arange(24).reshape(3, 4, 2).transpose(2, 0, 1)</c>: NumPy
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>np.ravel(p, order='K')</c> of the permuted <c>arange(24).reshape(3, 4, 2).transpose(2, 0, 1)</c>: NumPy
         ///     walks memory, returns <c>[0, 1, …, 23]</c> as a VIEW of <c>p</c>; NumSharp returns the C-order values as a
         ///     copy (gap VF05).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "viewflags-VF05")]
+        [TestMethod]
         public void ViewFlags_RavelOrderK_OfAPermutedArray_ShouldWalkMemory()
         {
             using var parent = np.arange(24).reshape(3, 4, 2);
@@ -307,10 +317,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.reshape(b, -1)</c> of the broadcast <c>np.broadcast_to(arange(4), (3, 4))</c>: NumPy copies and returns
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>np.reshape(b, -1)</c> of the broadcast <c>np.broadcast_to(arange(4), (3, 4))</c>: NumPy copies and returns
         ///     <c>[0, 1, 2, 3] * 3</c>; NumSharp throws <see cref="NotSupportedException"/> (gap VF24).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "viewflags-VF24")]
+        [TestMethod]
         public void ViewFlags_ReshapeMinusOne_OfABroadcast_ShouldCopy()
         {
             using var row = np.arange(4);

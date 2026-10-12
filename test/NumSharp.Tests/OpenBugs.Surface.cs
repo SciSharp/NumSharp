@@ -42,6 +42,13 @@ namespace NumSharp.Tests
     // only with a Debug.Assert, so in Release a double written into a float32 array lands as 8 bytes over the next two
     // elements (and past the buffer's end for the last one). The last test pins it; it is Inconclusive in Debug.
     //
+    // FIXED 2026-10-12, when branch strings was rebased onto journey4 (its np.nditer work: NumPy's descriptors,
+    // construction checks and iteration protocol; its axis normalization): SU1, SU25-SU34, SU40, SU41 and SU42 match
+    // NumPy, and SU4 for the 'auto' / 'fd' estimators. Their pins stay below as regression tests, untagged, each summary
+    // opening with "FIXED"; SU4's open part (the other estimators) has a pin of its own, and the generator's rules for the
+    // fixed ids are dropped. The np.array_equiv leak named above went with the comparison operators' empty-left early
+    // return (the sweep gates it at zero now).
+    //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's rule from the generator's _gap_of so the
     // cases return to the gate.
@@ -51,10 +58,11 @@ namespace NumSharp.Tests
         // ----- np.linalg Array-API forms -----
 
         /// <summary>
-        ///     <c>np.linalg.cross(a, b, axis=5)</c> on (2, 3) operands: NumPy raises IndexError <c>tuple index out of
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>np.linalg.cross(a, b, axis=5)</c> on (2, 3) operands: NumPy raises IndexError <c>tuple index out of
         ///     range</c> (its <c>a.shape[axis]</c> lookup); NumSharp raises AxisError with its own text (gap SU1).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU1")]
+        [TestMethod]
         public void Surface_LinalgCross_AxisOutOfRange_IsNumPysIndexError()
         {
             using var a = np.arange(6.0).reshape(2, 3);
@@ -95,16 +103,32 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.histogram(complex, bins="auto")</c>: NumPy raises TypeError <c>a must be an array of real numbers</c>;
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>np.histogram(complex, bins="auto")</c>: NumPy raises TypeError <c>a must be an array of real numbers</c>;
         ///     NumSharp returns a result (gap SU4).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU4")]
+        [TestMethod]
         public void Surface_Histogram_ComplexSampleWithEstimator_Refuses()
         {
             using var a = np.array(new Complex[] { new(1, 1), 2 });
             Action act = () => np.histogram(a, "auto");
 
             act.Should().Throw<Exception>().Which.Message.Should().Be("a must be an array of real numbers");
+        }
+
+        /// <summary>
+        ///     <c>np.histogram([1+1j, 2, 3], bins="sturges")</c>: NumPy raises TypeError <c>ufunc 'ceil' not supported for
+        ///     the input types, ...</c> (the bin count's ceil has no complex loop); NumSharp returns a result. The open part
+        ///     of gap SU4 since 'auto' / 'fd' were fixed: 'doane', 'scott', 'stone', 'rice', 'sturges' and 'sqrt' still
+        ///     compute.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "surface-SU4")]
+        public void Surface_Histogram_ComplexSampleWithSturges_Refuses()
+        {
+            using var a = np.array(new Complex[] { new(1, 1), 2, 3 });
+            Action act = () => np.histogram(a, "sturges");
+
+            act.Should().Throw<Exception>().Which.Message.Should().StartWith("ufunc 'ceil' not supported for the input types");
         }
 
         // ----- apply_along_axis -----
@@ -370,11 +394,12 @@ namespace NumSharp.Tests
         // ----- np.nditer -----
 
         /// <summary>
-        ///     <c>np.nditer([x, col])</c> with x an F-ordered (2, 3) <c>arange(6)</c> and col a (2, 1) <c>[0, 1]</c>: the
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>np.nditer([x, col])</c> with x an F-ordered (2, 3) <c>arange(6)</c> and col a (2, 1) <c>[0, 1]</c>: the
         ///     broadcast col abstains from the K-order vote, so NumPy walks F order — (0, 0), (3, 1), (1, 0), (4, 1);
         ///     NumSharp walks C order (gap SU25).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU25")]
+        [TestMethod]
         public void Surface_Nditer_KOrder_FOperandWithABroadcastOne_WalksF()
         {
             using var c = np.arange(6).astype(np.int32).reshape(2, 3);
@@ -392,10 +417,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.nditer(np.broadcast_to(arange(3), (2, 3))).shape</c> is <c>(3, 2)</c> in NumPy (NpyIter_GetShape lists
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>np.nditer(np.broadcast_to(arange(3), (2, 3))).shape</c> is <c>(3, 2)</c> in NumPy (NpyIter_GetShape lists
         ///     the axes innermost first); NumSharp lists them outermost first, <c>(2, 3)</c> (gap SU26).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU26")]
+        [TestMethod]
         public void Surface_NditerShape_WithoutMultiIndex_ListsTheInnermostAxisFirst()
         {
             using var row = np.arange(3);
@@ -406,10 +432,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.nditer(arange(6).reshape(2, 3), flags=['c_index'])</c> coalesces to a 1-D <c>(6,)</c> iterator in NumPy
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>np.nditer(arange(6).reshape(2, 3), flags=['c_index'])</c> coalesces to a 1-D <c>(6,)</c> iterator in NumPy
         ///     (the C index stays linear); NumSharp keeps two axes (gap SU27).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU27")]
+        [TestMethod]
         public void Surface_Nditer_CIndex_StillCoalesces()
         {
             using var a = np.arange(6).reshape(2, 3);
@@ -420,10 +447,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     Reading <c>iterindex</c> after the last <c>iternext()</c>: NumPy raises ValueError <c>Iterator is past the
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: Reading <c>iterindex</c> after the last <c>iternext()</c>: NumPy raises ValueError <c>Iterator is past the
         ///     end</c>; NumSharp returns the size (gap SU28).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU28")]
+        [TestMethod]
         public void Surface_Nditer_PastTheEnd_Refuses()
         {
             using var a = np.arange(3);
@@ -436,10 +464,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     After <c>close()</c>: NumPy's <c>iternext()</c> returns False and <c>ndim</c> raises <c>Iterator is
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: After <c>close()</c>: NumPy's <c>iternext()</c> returns False and <c>ndim</c> raises <c>Iterator is
         ///     invalid</c>; NumSharp throws <c>Iterator is closed</c> for both (gap SU29).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU29")]
+        [TestMethod]
         public void Surface_Nditer_AfterClose_IternextIsFalse()
         {
             using var a = np.arange(3);
@@ -452,10 +481,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.nditer(arange(6).reshape(2, 3), flags=['multi_index'], order='F').remove_axis(0)</c>: NumPy leaves a
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>np.nditer(arange(6).reshape(2, 3), flags=['multi_index'], order='F').remove_axis(0)</c>: NumPy leaves a
         ///     1-D <c>(3,)</c> iterator; NumSharp throws IndexOutOfRangeException (gap SU30).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU30")]
+        [TestMethod]
         public void Surface_NditerRemoveAxis_UnderFOrder_Works()
         {
             using var a = np.arange(6).reshape(2, 3);
@@ -466,11 +496,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.nditer([arange(6).reshape(2, 3), arange(3)], flags=['multi_index'])</c> then
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>np.nditer([arange(6).reshape(2, 3), arange(3)], flags=['multi_index'])</c> then
         ///     <c>remove_multi_index()</c>: NumPy keeps its C walk, 0, 1, 2, 3; NumSharp re-sorts the axes by stride and
         ///     moves the broadcast row's stride-0 axis innermost, walking 0, 3, 1, 4 (gap SU31).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU31")]
+        [TestMethod]
         public void Surface_NditerRemoveMultiIndex_KeepsTheIterationOrder()
         {
             using var a = np.arange(6).astype(np.int32).reshape(2, 3);
@@ -488,10 +519,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.nditer(arange(4.), flags=['buffered', 'delay_bufalloc'], op_dtypes=['float32'],
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>np.nditer(arange(4.), flags=['buffered', 'delay_bufalloc'], op_dtypes=['float32'],
         ///     casting='same_kind').value</c> before reset(): NumPy raises ValueError; NumSharp returns a value (gap SU32).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU32")]
+        [TestMethod]
         public void Surface_Nditer_DelayedBufferValueBeforeReset_Refuses()
         {
             using var a = np.arange(4.0);
@@ -504,10 +536,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>remove_axis</c> without <c>multi_index</c>: NumPy raises RuntimeError <c>Iterator RemoveAxis may only be
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>remove_axis</c> without <c>multi_index</c>: NumPy raises RuntimeError <c>Iterator RemoveAxis may only be
         ///     called if a multi-index is being tracked</c>; NumSharp accepts it (gap SU33).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU33")]
+        [TestMethod]
         public void Surface_NditerRemoveAxis_WithoutMultiIndex_Refuses()
         {
             using var a = np.arange(6).reshape(2, 3);
@@ -519,10 +552,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>enable_external_loop()</c> while a multi-index is tracked: NumPy raises ValueError <c>Iterator flag
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>enable_external_loop()</c> while a multi-index is tracked: NumPy raises ValueError <c>Iterator flag
         ///     EXTERNAL_LOOP cannot be used if an index or multi-index is being tracked</c>; NumSharp accepts it (gap SU34).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU34")]
+        [TestMethod]
         public void Surface_NditerEnableExternalLoop_WithMultiIndex_Refuses()
         {
             using var a = np.arange(6).reshape(2, 3);
@@ -565,11 +599,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.cumprod(np.arange(3), axis=1)</c>: NumPy raises AxisError <c>axis 1 is out of bounds for array of
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>np.cumprod(np.arange(3), axis=1)</c>: NumPy raises AxisError <c>axis 1 is out of bounds for array of
         ///     dimension 1</c>; NumSharp raises ArgumentOutOfRangeException with .NET's generic text (np.cumsum matches)
         ///     (gap SU40).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU40")]
+        [TestMethod]
         public void Surface_Cumprod_AxisOutOfRange_IsNumPysAxisError()
         {
             using var a = np.arange(3);
@@ -582,12 +617,13 @@ namespace NumSharp.Tests
         // ----- np.nditer's write-backs (the second pass, 2026-10-08) -----
 
         /// <summary>
-        ///     <c>np.nditer(a_f32, op_flags=[['readwrite', 'updateifcopy']], op_dtypes=['float64'], casting='same_kind')</c>
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>np.nditer(a_f32, op_flags=[['readwrite', 'updateifcopy']], op_dtypes=['float64'], casting='same_kind')</c>
         ///     without buffering: NumPy iterates a float64 COPY and close() writes it back (a = [1, 3, 5, 7, 9, 11] after
         ///     <c>x[...] = x * 2 + 1</c>); NumSharp refuses the cast ('Casting between different dtypes requires the BUFFERED
         ///     flag') (gap SU41).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU41")]
+        [TestMethod]
         public void Surface_Nditer_UpdateIfCopy_WritesBackAtClose()
         {
             using var a = np.arange(6).astype(np.float32);
@@ -601,13 +637,14 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     A buffered readwrite loop, <c>for x in np.nditer(a_f32, flags=['buffered'], op_flags=[['readwrite']],
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: A buffered readwrite loop, <c>for x in np.nditer(a_f32, flags=['buffered'], op_flags=[['readwrite']],
         ///     op_dtypes=['float64'], casting='same_kind'): x[...] = x * 2 + 1</c>: NumPy's <c>__next__</c> advances ON ENTRY,
         ///     so every write lands before its buffer is flushed (a = [1, 3, 5, 7, 9, 11]); NumSharp publishes the element
         ///     and THEN advances, so the last element's buffer is flushed before the loop body writes it (a[5] stays 5)
         ///     (gap SU42).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU42")]
+        [TestMethod]
         public void Surface_Nditer_BufferedReadWriteLoop_KeepsTheLastWrite()
         {
             using var a = np.arange(6).astype(np.float32);
@@ -622,10 +659,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     One step of the iteration protocol (NumPy's <c>next(it)</c>, C#'s MoveNext): NumPy's cursor is still at the
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: One step of the iteration protocol (NumPy's <c>next(it)</c>, C#'s MoveNext): NumPy's cursor is still at the
         ///     element it returned (iterindex 0); NumSharp's has already advanced (iterindex 1) (gap SU42).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU42")]
+        [TestMethod]
         public void Surface_Nditer_AfterOneNext_IterindexIsTheReturnedElement()
         {
             using var a = np.arange(3);

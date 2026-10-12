@@ -101,9 +101,10 @@ namespace NumSharp.Tests.Fuzz
                 case "harden_mask":
                 case "soften_mask": return MaHardMask(name, p, ops);
                 case "masked_object":
-                    if (p.ContainsKey("shrink"))
-                        throw new NotSupportedException("np.ma.masked_object has no shrink parameter");
-                    return np.ma.masked_object(ops[0], MaPyValue(p["value"]));
+                    // NumPy's shrink= (make_mask(condition, shrink=shrink)); the case passes it only when it is False.
+                    return p.ContainsKey("shrink")
+                        ? np.ma.masked_object(ops[0], MaPyValue(p["value"]), shrink: p["shrink"].GetBoolean())
+                        : np.ma.masked_object(ops[0], MaPyValue(p["value"]));
 
                 // ---- putmask: the mutated array is the result ---------------------------------------------------------
                 case "putmask": return MaPutmask(p, ops);
@@ -162,10 +163,11 @@ namespace NumSharp.Tests.Fuzz
             switch (name)
             {
                 case "default_fill_value":
-                    // NumSharp's overload takes a DType only; NumPy also takes an array or a scalar (whose dtype it reads).
-                    if (!p.ContainsKey("dtype"))
-                        throw new NotSupportedException("np.ma.default_fill_value takes a DType only (NumPy's also takes an array or a scalar)");
-                    return MaRepr(np.ma.default_fill_value(np.dtype(SurfStr(p, "dtype"))));
+                    // The argument: a DType (dtype param), a Python scalar (value param), else the masked operand — NumPy's
+                    // _get_dtype_of reads the dtype of each (the object overload takes the last two).
+                    if (p.ContainsKey("dtype"))
+                        return MaRepr(np.ma.default_fill_value(np.dtype(SurfStr(p, "dtype"))));
+                    return MaRepr(np.ma.default_fill_value(p.ContainsKey("value") ? MaPyValue(p["value"]) : ops[0]));
                 case "minimum_fill_value":
                 case "maximum_fill_value":
                 {

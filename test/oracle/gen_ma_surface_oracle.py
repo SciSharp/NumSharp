@@ -991,33 +991,20 @@ SECTIONS = [gen_create, gen_join, gen_fill, gen_query, gen_putmask, gen_products
 
 # Gap ids -> one line each (the [OpenBugs] replay prints the ids; OpenBugs.MaSurface.cs holds a public-call repro per
 # gap that a single call can show).
+# Redrawn 2026-10-12, when branch strings was rebased onto journey4: its numpy.ma fixes (the fill value stored as
+# NumPy stores it, masked_object's statements and shrink=, default_fill_value of any argument, putmask's same_kind
+# cast, the edge finders of an empty array, compress_nd's axis check, the 0-d / 2-D product refusals) made MS3, MS6-
+# MS14, MS16, MS25, MS28 and MS35 match NumPy, and MS2 for column_stack / dstack / diagflat; those rules are dropped
+# (the replay of the gap file found which). The 0-d convolve cases MS35 carved that still differ are MS1's class.
 GAPS = {
     "MS1": "convolve / correlate / cov / apply_along_axis drop an all-False result mask to nomask; NumPy keeps the mask "
            "array (masked_array(data, mask=mask) never shrinks)",
-    "MS2": "column_stack / dstack / hsplit / diagflat over nomask operands keep nomask; NumPy's _fromnxfunction wrappers "
-           "build the result mask with getmaskarray (a full all-False mask)",
-    "MS3": "zeros_like / ones_like / empty_like drop the prototype's mask; NumPy's result keeps a copy of it",
+    "MS2": "hsplit of a nomask operand keeps nomask in its parts; NumPy's _fromnxfunction wrappers build the result "
+           "mask with getmaskarray (a full all-False mask)",
     "MS4": "ma.resize to a 0-d shape keeps the mask; NumPy sets the mask only when the result has dimensions (0-d: nomask)",
     "MS5": "ma.apply_over_axes returns a masked array where NumPy returns a plain ndarray (an unmasked reduction's scalar "
            "re-expanded by expand_dims)",
-    "MS6": "ma.apply_along_axis computes a narrow-integer / bool result where NumPy raises TypeError (it sets the default "
-           "fill value 999999, which does not fit the dtype)",
-    "MS7": "ma.masked_object leaves the dtype's default fill value; NumPy sets fill_value=value (converted to the dtype)",
-    "MS8": "ma.masked_object accepts a value that does not fit the dtype; NumPy raises TypeError (Cannot convert fill_value)",
-    "MS9": "ma.masked_object over a nomask array with no match keeps an all-False mask; NumPy's make_mask(shrink=True) "
-           "returns nomask",
-    "MS10": "np.ma.masked_object has no shrink parameter",
-    "MS11": "ma.putmask casts the values unsafely; NumPy's np.copyto(where=mask) uses casting='same_kind' and raises "
-            "TypeError (a float into an int array, a complex into a float array, the masked singleton's 0.0 into an int "
-            "array, an int into a bool array)",
-    "MS12": "ma.set_fill_value stores the raw value: no conversion to the dtype (1.5 stays 1.5 on an int array, 7 stays 7 on "
-            "a bool array) and no TypeError for a value that does not fit or a str; None leaves NumSharp's raw default",
-    "MS13": "ma.common_fill_value compares the raw stored values (C# Equals: 3 != 3.0) where NumPy compares the converted "
-            "fill values, and inherits MS12's missing TypeErrors",
-    "MS14": "minimum_fill_value / maximum_fill_value of a bool array return True / False; NumPy returns the Python ints 1 "
-            "/ 0 (a bool array plus the fill promotes to int64 in NumPy, stays bool in NumSharp)",
     "MS15": "minimum_fill_value / maximum_fill_value refuse a dtype argument (NotSupportedException); NumPy reads it",
-    "MS16": "np.ma.default_fill_value takes a DType only; NumPy also takes an array or a scalar (and reads its dtype)",
     "MS17": "ma.is_mask(a masked bool array) is False; NumPy's is_mask reads the dtype (bool -> True)",
     "MS18": "np.ma.size has no axis parameter",
     "MS19": "np.ma.ndenumerate has no compressed parameter (NumPy's compressed=False yields masked entries too)",
@@ -1031,13 +1018,9 @@ GAPS = {
             "allowed')",
     "MS24": "clump_masked / clump_unmasked of a 0-d or empty array with a mask return a list; NumPy's _ezclump raises "
             "IndexError",
-    "MS25": "flatnotmasked_edges / notmasked_edges of an empty array return None; NumPy returns array([0, -1])",
     "MS26": "notmasked_edges of a 0-d array with an axis raises AxisError; NumPy returns [(), ()]",
     "MS27": "notmasked_contiguous with an axis out of range raises AxisError; NumPy raises IndexError (list assignment / "
             "tuple index out of range)",
-    "MS28": "compress_nd / compress_rowcols do not validate the axis: NumPy raises AxisError for an out-of-range axis even "
-            "without a mask, NumSharp returns the data (nomask) or raises ArgumentException('condition must be a 1-d "
-            "array')",
     "MS29": "np.ma.compress_nd takes an int axis only; NumPy also takes a tuple",
     "MS30": "ma.hsplit into parts of different shapes returns the parts; NumPy's _fromnxfunction_single wraps the list "
             "in masked_array, which raises the inhomogeneous-shape ValueError",
@@ -1050,9 +1033,6 @@ GAPS = {
             "singleton",
     "MS34": "ma.corrcoef's masked slots hold +0.0; NumPy's in-place corr /= outer(std, std) divides masked slots by 1, "
             "keeping cov's data there (-0.0, nan)",
-    "MS35": "ma.convolve / ma.correlate refuse a 0-d first operand (NumPy's convolve reads it as one element; correlate "
-            "raises 'object of too small depth') and word the 2-D refusal differently ('object too deep for desired "
-            "array')",
     "MS37": "ma.cov / ma.corrcoef with y decide rowvar after concatenating y: a 1-D x with rowvar=False becomes ONE "
             "variable of 2N observations (cov 0-d, corrcoef throws), where NumPy forces rowvar=True for a one-row x first "
             "(two variables)",
@@ -1081,63 +1061,11 @@ def _err_text(c):
     return (c.get("error") or {}).get("text", "") if c.get("expects_throw") else ""
 
 
-def _ns_default_repr(dtype):
-    """NumSharp's default fill value as MaRepr prints it: default_fill_value returns a raw C# value, never converted to
-    the array's dtype (True, the long 999999, the double 1e20, the complex 1e20+0j)."""
-    k = np.dtype(dtype).kind
-    if k == "b":
-        return "True"
-    if k in "iu":
-        return "999999"
-    if k == "c":
-        return "(1e+20+0j)"
-    return "1e+20"
-
-
-def _py_param(v):
-    """A JSON param as the Python object the C# side's MaPyValue boxes (the strings "nan" / "inf" / "-inf" are floats,
-    {"re", "im"} a complex)."""
-    if isinstance(v, dict):
-        return complex(_py_param(v["re"]), _py_param(v["im"]))
-    if v == "nan":
-        return float("nan")
-    if v == "inf":
-        return float("inf")
-    if v == "-inf":
-        return float("-inf")
-    return v
-
-
-def _ns_fill_repr(v, dtype):
-    """What NumSharp's ma reports for a fill value it stored raw (MS12): the value's own repr, or the raw default for
-    None."""
-    return _ns_default_repr(dtype) if v is None else pyrepr(v)
-
-
-def _ns_fill_key(v, dtype):
-    """The (CLR type, value) NumSharp compares in common_fill_value (C# Equals on the boxed values: a long and a double
-    never compare equal; a double NaN equals itself)."""
-    if v is None:
-        k = np.dtype(dtype).kind
-        return ("bool", True) if k == "b" else ("long", 999999) if k in "iu" else \
-               ("complex", complex(1e20, 0)) if k == "c" else ("double", 1e20)
-    if isinstance(v, bool):
-        return ("bool", v)
-    if isinstance(v, int):
-        return ("long" if -2 ** 63 <= v < 2 ** 63 else "bigint", v)
-    if isinstance(v, float):
-        return ("double", "nan" if v != v else v)
-    if isinstance(v, complex):
-        return ("complex", v)
-    return ("str", v)
-
-
 def _gap_of(c):
     """The gap id a case belongs to, or None to keep it.
 
     Each rule is a fixed predicate over the case (op, params, operand kinds and masks, NumPy's recorded outcome) or a model
-    of NumSharp's behavior where the gap is not a fixed set (MS12 / MS13: NumSharp's raw fill values; ids: which views
-    re-seat the storage address). The carve is exact: replayed uncarved, every carved case diverges and no kept case does
+    of NumSharp's behavior where the gap is not a fixed set (ids: which views re-seat the storage address). The carve is exact: replayed uncarved, every carved case diverges and no kept case does
     (README "The numpy.ma surface tier").
     """
     op = c["op"][3:]
@@ -1148,58 +1076,19 @@ def _gap_of(c):
     parts = label.split(".")
     ops = c["operands"]
     o0_mask = bool(ops) and "mask" in ops[0]
-    if op in ("convolve", "correlate") and ops and (len(ops[0]["shape"]) == 0 or len(ops[0]["shape"]) >= 2):
-        return "MS35"
     if op in ("cov", "corrcoef") and p.get("y") and len(ops[0]["shape"]) == 1 and not p.get("rowvar", True):
         return "MS37"
     if op in ("convolve", "correlate", "cov", "apply_along_axis") and not err and e.get("form") == "mask" \
             and not _mask_any(e):
         return "MS1"
-    if op in ("column_stack", "dstack", "diagflat") and not err and e.get("form") == "mask" \
-            and not any("mask" in o for o in ops):
-        return "MS2"
     if op == "hsplit" and not err and not o0_mask and any(s.get("form") == "mask" for s in e.get("slots", [])):
         return "MS2"
-    if op in ("zeros_like", "ones_like", "empty_like") and o0_mask and not p.get("plain"):
-        return "MS3"
     if op == "resize" and p.get("shape") == [] and o0_mask and not err:
         return "MS4"
     if op == "apply_over_axes" and e.get("form") == "scalar" and len(e.get("shape", [])) >= 1:
         return "MS5"
-    if op == "apply_along_axis" and err.startswith("Cannot convert fill_value"):
-        return "MS6"
-    if op == "masked_object":
-        if "shrink" in p:
-            return "MS10"
-        if err:
-            return "MS8"
-        if p.get("facet") == "fill_value":
-            return "MS7" if e.get("value") != _ns_default_repr(ops[0]["dtype"]) else None
-        if not o0_mask and e.get("form") in ("nomask", "scalar"):
-            return "MS9"
-    if op == "putmask" and err.startswith("Cannot cast"):
-        return "MS11"
-    if op == "set_fill_value":
-        if p.get("plain"):
-            return None
-        v = _py_param(p["value"])
-        if err or e.get("value") != _ns_fill_repr(v, ops[0]["dtype"]):
-            return "MS12"
-    if op == "common_fill_value":
-        if err:
-            return "MS13"
-        fa, fb = _py_param(p["fa"]), _py_param(p["fb"])
-        ka, kb = _ns_fill_key(fa, ops[0]["dtype"]), _ns_fill_key(fb, ops[1]["dtype"])
-        ns = _ns_fill_repr(fa, ops[0]["dtype"]) if ka == kb else "None"
-        if e.get("value") != ns:
-            return "MS13"
-    if op in ("minimum_fill_value", "maximum_fill_value"):
-        if "dtype" in p:
-            return "MS15"
-        if (ops and ops[0]["dtype"] == "bool") or p.get("value") is True:
-            return "MS14"
-    if op == "default_fill_value" and "dtype" not in p:
-        return "MS16"
+    if op in ("minimum_fill_value", "maximum_fill_value") and "dtype" in p:
+        return "MS15"
     if op == "is_mask" and p.get("arg") == "masked" and ops[0]["dtype"] == "bool":
         return "MS17"
     if op == "size" and "axis" in p:
@@ -1217,17 +1106,12 @@ def _gap_of(c):
         return "MS23"
     if op in ("clump_masked", "clump_unmasked") and err:
         return "MS24"
-    if op in ("flatnotmasked_edges", "notmasked_edges") and e.get("value") == "array([ 0, -1])":
-        return "MS25"
     if op == "notmasked_edges" and e.get("value") == "[(), ()]":
         return "MS26"
     if op == "notmasked_contiguous" and c.get("error", {}).get("type") == "IndexError":
         return "MS27"
-    if op in ("compress_nd", "compress_rowcols"):
-        if isinstance(p.get("axis"), list):
-            return "MS29"
-        if c.get("error", {}).get("type") == "AxisError":
-            return "MS28"
+    if op in ("compress_nd", "compress_rowcols") and isinstance(p.get("axis"), list):
+        return "MS29"
     if op == "hsplit" and "inhomogeneous" in err:
         return "MS30"
     if op in ("harden_mask", "soften_mask") and p.get("facet") == "assign" and err:

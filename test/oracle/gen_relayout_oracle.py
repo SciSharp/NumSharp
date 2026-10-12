@@ -776,6 +776,9 @@ def _predicted_kind(tname, nd, size):
 # needs ``_misread_observable``: a misread that leaves NumPy's answer unchanged cannot be seen, so it is not carved.
 # FuzzCorpusTests.Relayout.cs replays gaps/relayout*_gaps.jsonl under [TestCategory("OpenBugs")] with the ordinary
 # verdict AND the layout-invariance verdict. When a gap is fixed, drop its rule and regenerate.
+# 2026-10-12, when branch strings was rebased onto journey4: its fixes made RL04, RL05 and RL06 match NumPy, so their
+# rules are dropped and their 104 cases moved back into relayout.jsonl at the positions the generator gave them (a
+# regeneration on the merged corpus surveys strings' tiers too and is a separate step).
 GAPS = {
     "RL01": "np.searchsorted / ndarray.searchsorted read a C-contiguous v (operand 1) or sorter (operand 2) at a "
             "non-zero offset from the owner's start (WRONG indices); np.digitize passes its x as searchsorted's v, and "
@@ -788,24 +791,10 @@ GAPS = {
     "RL03": "np.ldexp reads a C-contiguous mantissa x1 already of the result dtype, or an int32 / int64 exponent x2, at "
             "a non-zero offset from the owner's start (WRONG values): MaterializeContiguous passes such an operand "
             "through np.ascontiguousarray unchanged and the kernel reads .Address without Shape.offset (VA05, x1 too)",
-    "RL04": "np.unique / np.unique_values of a C-contiguous array at a non-zero offset read the owner from its start "
-            "(WRONG unique set), and np.intersect1d / np.setdiff1d / np.setxor1d inherit it through either operand "
-            "(same root cause as VF40)",
-    "RL05": "ndarray.repeat of a 0-d view at a non-zero offset (an np.unstack child of a 1-D array) repeats the owner's "
-            "FIRST element, not the view's (same root cause as VF39; the ordinary replay's registry excuses it as a "
-            "known repeat bug, so only the layout-invariance verdict sees it)",
-    "RL06": "the NDArray comparison operators (==, !=, <, >, <=, >=) return np.empty(lhs.Shape, bool) for an EMPTY left "
-            "operand without broadcasting it against the right one: no error where NumPy raises 'operands could not be "
-            "broadcast together', a result shaped like the left operand where NumPy broadcasts both, and the untyped "
-            "empty wrapper behind MakeGeneric<bool>() is left to the finalizer (one pooled buffer per call; the leak "
-            "sweep's KnownEscapes lists the families that only leak)",
     "RL07": "np.logaddexp / np.logaddexp2 return a CLONE of an empty operand (either position) without broadcasting or "
             "promoting it: no error where NumPy raises 'operands could not be broadcast together', and the empty "
             "operand's own dtype (int32, uint8) where NumPy's float loop gives float64 / float16",
 }
-
-# The registry's comparison op keys, replayed through the NDArray operators (OpRegistry: ops[0] == ops[1], ...).
-COMPARISON_OPERATOR_OPS = {"equal", "not_equal", "less", "greater", "less_equal", "greater_equal"}
 
 # The kinds whose first element sits past the buffer's start by an EXTRA offset (kind_of): the operands a kernel
 # that forgets Shape.offset misreads.
@@ -869,21 +858,17 @@ def _gap_of(case, misread):
             return "RL02"
         if op == "ldexp" and ((pos == 0 and dts[0] == result_dt) or (pos == 1 and dts[1] in ("int32", "int64"))):
             return "RL03"
-        if (op in ("unique", "unique_values") and pos == 0) \
-                or (op in ("intersect1d", "setdiff1d", "setxor1d") and pos in (0, 1)):
-            return "RL04"
     if kind in ("c_offset", "0d_view") and op in ("nancumsum", "nancumprod") and pos == 0 \
             and dts[0] in ("float16", "complex128"):
         return "RL02"
-    if kind == "0d_view" and op == "ndarray.repeat" and pos == 0:
-        return "RL05"
     return None
 
 
 def _empty_gap(case, op, pos):
-    """The gap of a variant whose moved operand is EMPTY, by emulating the two NumSharp early returns that skip the
-    ufunc machinery for an empty operand (RL06, RL07): the variant is carved exactly when NumPy's outcome differs from
-    what that early return produces.
+    """The gap of a variant whose moved operand is EMPTY, by emulating the NumSharp early return that skips the ufunc
+    machinery for an empty operand (RL07): the variant is carved exactly when NumPy's outcome differs from what that
+    early return produces. (RL06, the comparison operators' empty-left early return, was fixed with the strings
+    rebase of 2026-10-12: the operators broadcast an empty operand like the ufuncs.)
 
     Parameters:
         case: the finished variant case.
@@ -891,15 +876,11 @@ def _empty_gap(case, op, pos):
         pos: the position of the emptied operand.
 
     Returns:
-        "RL06", "RL07" or None.
+        "RL07" or None.
     """
     emptied = case["operands"][pos]
     truth = ("err", case["error"]["type"], case["error"]["text"]) if case.get("expects_throw") \
         else ("ok", {k: v for k, v in case["expected"].items() if k != "kind"})
-    if op in COMPARISON_OPERATOR_OPS and pos == 0:
-        # operator ==(NDArray lhs, NDArray rhs) & co: `if (lhs.size == 0) return np.empty(lhs.Shape, bool)`.
-        early = ("ok", {"dtype": "bool", "shape": emptied["shape"], "buffer": ""})
-        return "RL06" if early != truth else None
     if op in ("logaddexp", "logaddexp2"):
         # DefaultEngine.LogAddExp: `if (x1.size == 0) return x1.Clone(); if (x2.size == 0) return x2.Clone();`.
         first_empty = next(d for d in case["operands"] if 0 in d["shape"])

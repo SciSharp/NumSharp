@@ -1511,17 +1511,18 @@ def _with_bufsize(n, fn):
 
 # gap id -> description. FuzzCorpusTests.Surface.cs replays gaps/surface_gaps.jsonl under [TestCategory("OpenBugs")].
 # When a gap is fixed, drop its rule and regenerate.
+# Redrawn 2026-10-12, when branch strings was rebased onto journey4: its fixes made SU1 (axis normalization), SU25-SU34,
+# SU41 and SU42 (np.nditer's descriptors, construction checks and iteration protocol) and SU40 match NumPy, and
+# SU4 for the 'auto' / 'fd' estimators; those rules are dropped (the replay of the gap file found which).
 GAPS = {
-    "SU1": "np.linalg.cross with an axis outside the operands' rank (or a 0-d operand) raises AxisError 'axis 5 is out "
-           "of bounds for array of dimension 2'; NumPy raises IndexError 'tuple index out of range' (its a.shape[axis] "
-           "lookup)",
     "SU2": "np.linalg.cross over operands that cannot broadcast raises 'operands could not be broadcast together with "
            "shapes (4,) (5,)'; NumPy's linalg.cross raises broadcast_shapes' 'shape mismatch: objects cannot be "
            "broadcast to a single shape.  Mismatch is between arg 0 with shape (4,) and arg 1 with shape (5,).'",
     "SU3": "np.histogram / np.histogram_bin_edges of a complex128 sample with a bin COUNT return float64 edges; NumPy's "
            "edges are complex128 (bin_type = result_type(first_edge, last_edge, a))",
-    "SU4": "np.histogram of a complex128 sample with an estimator name ('auto', 'fd', ...) returns a result; NumPy "
-           "raises TypeError (the estimators need real data)",
+    "SU4": "np.histogram of a complex128 sample with the estimators 'doane', 'scott', 'stone', 'rice', 'sturges' "
+           "or 'sqrt' returns a result; NumPy raises TypeError (ufunc 'ceil' has no complex loop for the bin count; "
+           "'auto' and 'fd' refuse with 'a must be an array of real numbers', as NumSharp does)",
     "SU5": "np.apply_along_axis over a broadcast view whose every stride is 0 at a non-zero Shape offset (np.broadcast_to "
            "of a one-element np.split child) throws ArgumentOutOfRangeException (Parameter 'length')",
     "SU6": "np.format_float_positional / np.format_float_scientific of inf or nan print .NET text ('Infinity.', "
@@ -1562,35 +1563,6 @@ GAPS = {
             "NumPy's _leading_trailing(a, 0) takes a[-0:] (the whole array), so 1e-9 and 1e5 make it scientific",
     "SU24": "dtype.type of a datetime64 / timedelta64 descriptor is null (no CLR element type before Stage C); NumPy's "
             "is numpy.datetime64 / numpy.timedelta64",
-    "SU25": "np.nditer in K order over an F-ordered operand and an operand broadcast along an axis iterates C order "
-            "(NumSharp sorts the axes by the smallest stride over all operands); NumPy lets each operand vote and the "
-            "stride-0 operand abstain, so it iterates F order: other values, chunks and itviews",
-    "SU26": "np.nditer.shape without multi_index lists the iterator's axes outermost first; NumPy's NpyIter_GetShape "
-            "lists its axisdata innermost first ((3, 2) for a (2, 3) array it cannot coalesce)",
-    "SU27": "np.nditer with c_index / f_index never coalesces axes; NumPy coalesces when the tracked index stays "
-            "linear (a C array with c_index is a 1-D (6,) iterator), so ndim, shape and itviews differ",
-    "SU28": "np.nditer members read past the end (iterindex, value, copy after the last iternext) return a value; "
-            "NumPy raises ValueError 'Iterator is past the end'",
-    "SU41": "np.nditer refuses a readwrite updateifcopy (copy) operand of another dtype without buffering ('Casting "
-            "between different dtypes requires the BUFFERED flag'); NumPy makes a write-back copy that close() resolves "
-            "(and raises its own same_kind TypeError for an int32 operand)",
-    "SU42": "np.nditer's iteration protocol publishes the current element and THEN advances, where NumPy's __next__ "
-            "advances on entry: after k next() calls iterindex / value / multi_index are one element ahead, and a "
-            "buffered readwrite loop's write into the last element of each buffer (or each external-loop chunk) is "
-            "flushed before the loop body runs, so it never reaches the operand",
-    "SU29": "np.nditer after close() throws InvalidOperationException 'Iterator is closed' for every member; NumPy's "
-            "iternext() returns False, ndim raises 'Iterator is invalid', value / iterindex 'Iterator is past the end'",
-    "SU30": "np.nditer.remove_axis throws IndexOutOfRangeException when the iteration order is not the operands' C "
-            "order (order='F', or an F-ordered operand in K order)",
-    "SU31": "np.nditer.remove_multi_index re-sorts the axes by stride and coalesces: an order='F' iterator over a C "
-            "array becomes a 1-D C walk, and a broadcast row moves its stride-0 axis innermost; NumPy keeps the "
-            "iteration order it had",
-    "SU32": "np.nditer with delay_bufalloc returns a value before reset(); NumPy raises 'Iterator construction used "
-            "delayed buffer allocation, and no reset has been done yet'",
-    "SU33": "np.nditer.remove_axis without multi_index is accepted; NumPy raises RuntimeError 'Iterator RemoveAxis may "
-            "only be called if a multi-index is being tracked'",
-    "SU34": "np.nditer.enable_external_loop while a multi-index is tracked is accepted; NumPy raises 'Iterator flag "
-            "EXTERNAL_LOOP cannot be used if an index or multi-index is being tracked'",
     "SU35": "the dtype name 'cdouble' (NumPy's alias of complex128) is not understood: np.dtype / np.finfo raise "
             "\"data type 'cdouble' not understood\"",
     "SU36":"numpy.cumulative_sum / cumulative_prod are aliased to np.cumsum / np.cumprod, which have no "
@@ -1602,85 +1574,7 @@ GAPS = {
             "complex values (the cast to the accumulator dtype is skipped): silent wrong values",
     "SU39": "np.cumsum(x, dtype=bool) accumulates counts into the bool result (bytes 2, 3, ...); NumPy's bool add loop is "
             "logical OR, so the result is True from the first nonzero element on",
-    "SU40": "np.cumprod with an axis out of range raises ArgumentOutOfRangeException 'Specified argument was out of the "
-            "range of valid values.'; NumPy raises AxisError 'axis 1 is out of bounds for array of dimension 1' "
-            "(np.cumsum matches)",
 }
-
-# The np.nditer configs that keep K order (order_c / order_f force one) and the members whose answer follows the
-# iteration order.
-_K_CONFIGS = {"plain", "multi", "c_index", "f_index", "extloop", "buffered", "ranged"}
-_ORDER_MEMBERS = {"value", "copy", "reset", "iternext", "iterindex", "itviews", "enable_external_loop"}
-
-
-def _nditer_gap(case):
-    """The gap an np.nditer case falls into (SU25-SU34), or None.
-
-    Parameters:
-        case: an nditer.* case (layout surface:objects:<set>:<config>[:k<steps> | :ax<axis>], where <set> is
-            one:<kind>, pair or pair_f).
-
-    Returns:
-        A GAPS id or None.
-    """
-    op, p, err = case["op"], case["params"], case.get("error")
-    if op == "nditer.close" and "after" in p:
-        return "SU29"
-    if op == "nditer.close" and "writeback" in p:
-        flags = [f for fl in (p.get("op_flags") or []) for f in fl]
-        if "updateifcopy" in flags and "buffered" not in p.get("flags", []) and (
-                not err or err["text"].startswith("Iterator requested dtype could not be cast")):
-            return "SU41"
-        if "buffered" in p.get("flags", []) and not err:
-            return "SU42"
-        return None  # the plain readwrite write-back and the read-only refusals match NumPy
-    if op.startswith("nditer.") and p.get("next") and not err:
-        # After the last element NumSharp's buffered iterator is past the end but its buffer still holds that element,
-        # so value matches NumPy's (which has not advanced yet) there; iterindex does not.
-        if p["attr"] == "value" and "buffered" in p.get("flags", []) and p["next"] == 6:
-            return None
-        return "SU42"
-    if err:
-        text = err["text"]
-        if text == "Iterator is past the end":
-            return "SU28"
-        if text.startswith("Iterator construction used delayed buffer allocation"):
-            return "SU32"
-        if text.startswith("Iterator RemoveAxis may only be called"):
-            return "SU33"
-        if text.startswith("Iterator flag EXTERNAL_LOOP cannot be used"):
-            return "SU34"
-        return None
-    parts = case["layout"].split(":")[2:]
-    if len(parts) < 2:
-        return None  # the single-label refusal / delayed-allocation cases: only their errors above diverge
-    set_label = ":".join(parts[:2]) if parts[0] == "one" else parts[0]
-    cfg = parts[2] if parts[0] == "one" else parts[1]
-    attr = p["attr"]
-    multi = "multi_index" in p["flags"]
-    o = np_ops(case["operands"])
-    if attr == "remove_axis":
-        return "SU30" if cfg == "order_f" or set_label == "one:f" else None
-    if attr == "remove_multi_index":
-        if (cfg == "order_f" and set_label != "one:f") or set_label in ("pair", "pair_f"):
-            return "SU31"
-        return "SU26" if set_label == "one:bcast" else None
-    if set_label == "pair_f" and cfg in _K_CONFIGS and attr in _ORDER_MEMBERS:
-        # NumSharp iterates this set in C order: NumPy's answer with order='C' is NumSharp's.
-        as_c = _nditer_attr(o, {**p, "order": "C"})
-        same = (len(as_c) == len(case["expected"]["slots"]) and all(
-            _array_record(a) == s for a, s in zip(as_c, case["expected"]["slots"]))) if isinstance(as_c, list) \
-            else _array_record(as_c) == {k: case["expected"][k] for k in ("dtype", "shape", "buffer")}
-        return None if same else "SU25"
-    if attr in ("ndim", "shape", "itviews") and cfg in ("c_index", "f_index"):
-        if _nditer(o, p).ndim < np.broadcast(*o).ndim:
-            return "SU27"
-    if attr == "shape" and not multi and not (set_label == "pair_f" and cfg in _K_CONFIGS):
-        shape = tuple(int(x) for x in np.frombuffer(bytes.fromhex(case["expected"]["buffer"]), dtype=np.int64))
-        if len(shape) >= 2 and shape != shape[::-1]:
-            return "SU26"
-    return None
-
 
 def _edge0_model(a, opts):
     """NumSharp's array2string of a 1-D array under threshold / edgeitems=0 summarization, modelled: '[... ' + the
@@ -1785,14 +1679,13 @@ def _gap_of(case):
     op, p, err = case["op"], case["params"], case.get("error")
     # finfo / iinfo take dtype SPELLINGS ('half', 'f4', 'intp', ...): the rules key on the dtype they name.
     dt = np.dtype(p["dtype"]).name if op.startswith(("finfo.", "iinfo.")) else p.get("dtype")
-    if op == "linalg.cross" and err:
-        if err["type"] == "IndexError":
-            return "SU1"
-        if err["text"].startswith("shape mismatch"):
-            return "SU2"
+    if op == "linalg.cross" and err and err["text"].startswith("shape mismatch"):
+        return "SU2"
     if op in ("histogram", "histogram_bin_edges") and case["operands"][0]["dtype"] == "complex128":
         if isinstance(p.get("bins"), str):
-            return "SU4"
+            # 'auto' and 'fd' reach np.percentile, which refuses complex data with NumPy's text; the other
+            # estimators compute where NumPy's ceil raises.
+            return "SU4" if p["bins"] not in ("auto", "fd") else None
         if "bins_operand" not in p:
             return "SU3"
     if op == "apply_along_axis" and ":scalar_bcast_offset:" in case["layout"]:
@@ -1830,8 +1723,6 @@ def _gap_of(case):
                 return "SU23"
     if op == "dtype.type" and p["dtype"][0] in "Mm":
         return "SU24"
-    if op.startswith("nditer."):
-        return _nditer_gap(case)
     if op in ("cumulative_sum", "cumulative_prod"):
         if p.get("include_initial"):
             return "SU36"
@@ -1841,8 +1732,6 @@ def _gap_of(case):
             return "SU38"
         if op == "cumulative_sum" and p.get("dtype") == "bool":
             return "SU39"
-        if op == "cumulative_prod" and err and err["type"] == "AxisError":
-            return "SU40"
     return None
 
 

@@ -479,9 +479,9 @@ namespace NumSharp.Tests.Fuzz
                 //     stepped, reversed, broadcast): 1.
                 ["viewflags:argpartition"] = 1,
                 ["viewflags:ndarray.argpartition"] = 1,
-                //   * np.pad of an empty (0, 3) array: 1. np.roll of it along axis 1: 2.
-                ["viewflags:pad [own_empty_2d]"] = 1,
-                ["viewflags:roll [own_empty_2d]"] = 2,
+                //   * (np.pad of an empty (0, 3) array, 1, and np.roll of it along axis 1, 2, were listed here until
+                //     2026-10-12: the rebase of branch strings onto journey4 brought their fixes, and the sweep found
+                //     both families clean, so they are gated at zero.)
                 //   * With NumSharp.Interop.OpenBLAS installed (the backend sweep): np.inner / ndarray.dot with an
                 //     operand BLAS cannot read in place (stepped, reversed, broadcast) leave the backend's copy of
                 //     it undisposed — 1 per copy, so 2 when both operands need one. The managed path is clean.
@@ -491,23 +491,11 @@ namespace NumSharp.Tests.Fuzz
                 ["viewflags:ndarray.dot"] = 1,
                 //
                 // FOUND BY THE RELAYOUT TIERS (2026-10-07, gen_relayout_oracle.py), recorded, NOT fixed:
-                //   * the NDArray comparison operators (==, !=, <, >, <=, >=, which the registry replays the six
-                //     comparison op keys through) with an EMPTY left operand: `return np.empty(lhs.Shape, bool)
-                //     .MakeGeneric<bool>()` wraps the storage in a second NDArray and leaves the untyped wrapper to
-                //     the finalizer: 1 per call (np.equal & co. are clean). The same early return skips the broadcast
-                //     check: relayout gap RL06 carves the cases where NumPy's outcome differs.
-                ["equal [relayout:empty@0]"] = 1,
-                ["equal [relayout:empty_view@0]"] = 1,
-                ["not_equal [relayout:empty@0]"] = 1,
-                ["not_equal [relayout:empty_view@0]"] = 1,
-                ["less [relayout:empty@0]"] = 1,
-                ["less [relayout:empty_view@0]"] = 1,
-                ["greater [relayout:empty@0]"] = 1,
-                ["greater [relayout:empty_view@0]"] = 1,
-                ["less_equal [relayout:empty@0]"] = 1,
-                ["less_equal [relayout:empty_view@0]"] = 1,
-                ["greater_equal [relayout:empty@0]"] = 1,
-                ["greater_equal [relayout:empty_view@0]"] = 1,
+                //   * (The NDArray comparison operators with an EMPTY left operand left an untyped wrapper to the
+                //     finalizer, 1 per call, in 12 families "<op> [relayout:empty@0 / empty_view@0]", listed here
+                //     until 2026-10-12: the rebase of branch strings onto journey4 brought the operators that
+                //     broadcast an empty operand like the ufuncs (relayout gap RL06 closed with them), and the sweep
+                //     found the families clean, so they are gated at zero.)
                 //   * the backend sweep's np.inner / ndarray.dot copy leak above (an operand BLAS cannot read in place
                 //     leaves the backend's copy undisposed), reached through the relayout tier's stepped and reversed
                 //     operands at either position: 1 per call.
@@ -533,13 +521,9 @@ namespace NumSharp.Tests.Fuzz
                 //     reversed, stepped or broadcast for order 'C'): np.MemoryView.tobytes materializes
                 //     `_arr.copy(order)` to read it and never disposes the copy: 1 per call. Every dtype.
                 ["ndarray.data"] = 1,
-                //   * np.array_equiv with an empty operand: its `a1 == a2` composition reaches the comparison
-                //     operators' empty-left early return (the relayout entries above): 1 per call.
-                ["array_equiv"] = 1,
-                //   * np.ma.fromfunction with the gt2 menu callback (i > j) over an empty grid (shape (0, 2)): the
-                //     callback's `>` reaches the same comparison operators' empty-left early return: 1 per call
-                //     (numpy.ma surface tier, 2026-10-08). The callback disposes everything it owns.
-                ["ma.fromfunction"] = 1,
+                //   * (np.array_equiv with an empty operand and np.ma.fromfunction's gt2 callback over an empty grid
+                //     reached the comparison operators' empty-left early return, 1 per call each, and were listed here
+                //     until 2026-10-12, when that early return went with the strings rebase.)
             };
 
             public static bool Contains(string op) => CeilingByOp.ContainsKey(op);
