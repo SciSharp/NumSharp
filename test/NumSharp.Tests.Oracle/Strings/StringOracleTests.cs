@@ -221,6 +221,46 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void StringDTypeCasts() => Run("tcast");
 
         /// <summary>
+        ///     Lifetime gate of the <c>StringDType</c> sections (strings phase 1, P1.9): once every case of tstore / tcreate /
+        ///     tmove / tcast has been replayed and its arrays are garbage, no string allocator is left alive — every buffer the
+        ///     replay made (operands, results, temporaries of the gathers, scatters and casts, failed operations) ran its clear
+        ///     loop, through <c>Dispose</c> or the collector. An allocator held by a static cache, a block whose reference is
+        ///     never released, or a temporary kept reachable fails here.
+        /// </summary>
+        [TestMethod]
+        public void StringDType_NoAllocatorOutlivesTheReplay()
+        {
+            GcQuiescence.CollectFull();
+            long baseline = NumSharp.Backends.Strings.VStringAllocator.LiveAllocators;
+            int replayed = ReplayForLifetime("tstore", "tcreate", "tmove", "tcast");
+            Assert.IsTrue(replayed > 8000, $"only {replayed} StringDType cases replayed");
+            // A buffer held only by finalizable wrappers needs a collection to finalize them and one more for what they held.
+            for (int i = 0; i < 3 && NumSharp.Backends.Strings.VStringAllocator.LiveAllocators != baseline; i++)
+                GcQuiescence.CollectFull();
+            Assert.AreEqual(baseline, NumSharp.Backends.Strings.VStringAllocator.LiveAllocators,
+                "string allocators outlived the replay of the StringDType sections");
+        }
+
+        /// <summary>Replays every case of the given sections, ignoring the verdicts (the section tests check them).</summary>
+        /// <param name="sections">The section prefixes.</param>
+        /// <returns>The number of cases replayed.</returns>
+        /// <remarks>NoInlining: no array of the replay stays reachable from the caller's frame.</remarks>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static int ReplayForLifetime(params string[] sections)
+        {
+            int n = 0;
+            foreach (var c in Cases)
+            {
+                string section = c.Id.Split('/')[0];
+                if (Array.IndexOf(sections, section) < 0)
+                    continue;
+                ReplayOne(c, out _);
+                n++;
+            }
+            return n;
+        }
+
+        /// <summary>
         ///     The most cases each section may defer to the computational phase (see the class remarks): the deferrals
         ///     left are sorting, searching, set routines, histograms and quantiles over text. A section not listed may
         ///     defer nothing.

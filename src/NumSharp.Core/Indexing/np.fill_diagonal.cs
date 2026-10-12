@@ -11,7 +11,8 @@ namespace NumSharp
         /// <param name="a">Array whose diagonal is to be filled; it is modified in place.</param>
         /// <param name="val">
         ///     Value(s) to write into the diagonal. A scalar is repeated; a sequence is raveled
-        ///     and then <b>tiled cyclically</b> (and truncated) to the diagonal's length.
+        ///     and then <b>tiled cyclically</b> (and truncated) to the diagonal's length. For a NEP 55
+        ///     <c>StringDType</c> array, null is Python's <c>None</c> (its NA object, or <c>'None'</c>).
         /// </param>
         /// <param name="wrap">
         ///     For tall matrices the diagonal "wraps" after N columns and continues on the row
@@ -22,6 +23,9 @@ namespace NumSharp
         ///     (ndim &gt; 2 with a non-hyper-cubic shape), or <c>underlying array is read-only</c>
         ///     — all verbatim NumPy <c>ValueError</c> texts.
         /// </exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null, or <paramref name="val"/> is null for an array that
+        ///     is not <c>StringDType</c>.</exception>
+        /// <exception cref="ValueError">A <c>StringDType(coerce=False)</c> array given a value that is not text.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.fill_diagonal.html
         ///     <para>
@@ -89,10 +93,11 @@ namespace NumSharp
             if (!a.Shape.IsWriteable)
                 throw new ArgumentException("underlying array is read-only");
 
-            if (val is null)
+            if (val is null && !a.Storage.IsVString)
                 // NumPy's `None` reaches the dtype's converter: nan for a float array, TypeError
                 // for an integral one. In C# a null `val` is a caller bug either way, and
-                // silently writing nan/zero would hide it.
+                // silently writing nan/zero would hide it. A StringDType array is the exception:
+                // None is stored by its setitem (the NA object, 'None', or coerce=False's refusal).
                 throw new ArgumentNullException(nameof(val));
 
             // The overwhelmingly common call is a SCALAR fill. A C# number is a Python (or NumPy) scalar in the

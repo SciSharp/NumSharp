@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Numerics;
 using System.Text;
+using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Strings;
 using NumSharp.Utilities;
 
@@ -140,6 +141,222 @@ namespace NumSharp.Tests.Backends.Strings
                    .WithMessage("'utf-8' codec can't decode byte 0xff in position 0: invalid start byte");
             Action surrogate = () => U("\ud800").astype(np.float64);
             surrogate.Should().Throw<ValueError>().WithMessage("could not convert string to float: np.str_('\\ud800')");
+        }
+
+        /// <summary>
+        ///     <c>complex()</c> of an <c>S</c> element decodes the whole value as strict UTF-8 first (<c>CDOUBLE_setitem</c>),
+        ///     with CPython 3.12's reason and byte range for the first bad sequence: a byte that cannot start one, a bad or
+        ///     out-of-range continuation (overlong forms, surrogates, values past U+10FFFF) over the bytes before it, a cut
+        ///     sequence to the end of the value — unless an early byte already proves it invalid. A valid value is then
+        ///     rewritten (Unicode digits and spaces) and parsed; an underscore error quotes the DECODED text.
+        /// </summary>
+        [TestMethod]
+        public void TextToComplex_BytesDecodeAsStrictUtf8_WithCPythonsRanges()
+        {
+            // One S element holding exactly these bytes, cast to complex128.
+            static NDArray C(params byte[] b) =>
+                np.array(new object[] { b }, dtype: "S" + System.Math.Max(b.Length, 1)).astype(np.complex128);
+            const string Codec = "'utf-8' codec can't decode ";
+            var errors = new (byte[] Bytes, string Text)[]
+            {
+                (new byte[] { 0xE2, 0x28, 0xA1 }, "byte 0xe2 in position 0: invalid continuation byte"),
+                (new byte[] { 0xE2, 0x82, 0x28 }, "bytes in position 0-1: invalid continuation byte"),
+                (new byte[] { 0xE2, 0x82 }, "bytes in position 0-1: unexpected end of data"),
+                (new byte[] { 0xE0, 0x80, 0x80 }, "byte 0xe0 in position 0: invalid continuation byte"),
+                (new byte[] { 0xED, 0xA0, 0x80 }, "byte 0xed in position 0: invalid continuation byte"),
+                (new byte[] { 0xF0, 0x80, 0x80, 0x80 }, "byte 0xf0 in position 0: invalid continuation byte"),
+                (new byte[] { 0xF4, 0x90, 0x80, 0x80 }, "byte 0xf4 in position 0: invalid continuation byte"),
+                (new byte[] { 0xF0, 0x28, 0x8C, 0xBC }, "byte 0xf0 in position 0: invalid continuation byte"),
+                (new byte[] { 0xF0, 0x9F, 0x98 }, "bytes in position 0-2: unexpected end of data"),
+                (new byte[] { 0xF0, 0x90, 0x28, 0xBC }, "bytes in position 0-1: invalid continuation byte"),
+                (new byte[] { 0xF0, 0x90, 0x8C, 0x28 }, "bytes in position 0-2: invalid continuation byte"),
+                (new byte[] { 0xF5 }, "byte 0xf5 in position 0: invalid start byte"),
+                (new byte[] { 0xC3 }, "byte 0xc3 in position 0: unexpected end of data"),
+                (new byte[] { 0xC3, 0x28 }, "byte 0xc3 in position 0: invalid continuation byte"),
+                (new byte[] { 0xF0, 0x9F }, "bytes in position 0-1: unexpected end of data"),
+                (new byte[] { 0xC0, 0x80 }, "byte 0xc0 in position 0: invalid start byte"),
+                (new byte[] { 0xC1 }, "byte 0xc1 in position 0: invalid start byte"),
+                (new byte[] { 0x80 }, "byte 0x80 in position 0: invalid start byte"),
+                (new byte[] { 0x31, 0xFF }, "byte 0xff in position 1: invalid start byte"),
+                (new byte[] { 0x31, 0x32, 0xE2, 0x82 }, "bytes in position 2-3: unexpected end of data"),
+                (new byte[] { 0xE0, 0x9F }, "byte 0xe0 in position 0: invalid continuation byte"),
+                (new byte[] { 0xED, 0xA0 }, "byte 0xed in position 0: invalid continuation byte"),
+                (new byte[] { 0xF0, 0x8F }, "byte 0xf0 in position 0: invalid continuation byte"),
+                (new byte[] { 0xF4, 0x90 }, "byte 0xf4 in position 0: invalid continuation byte"),
+                (new byte[] { 0xF0, 0x90, 0x28 }, "bytes in position 0-1: invalid continuation byte"),
+            };
+            foreach (var (bytes, text) in errors)
+            {
+                Action cast = () => C(bytes);
+                cast.Should().Throw<UnicodeDecodeError>(BitConverter.ToString(bytes)).WithMessage(Codec + text);
+            }
+            // Valid UTF-8 that is not a number: the rewrite turns the first other non-ASCII character into '?' and stops.
+            foreach (var bytes in new[] { new byte[] { 0xE2, 0x82, 0xAC }, new byte[] { 0xF0, 0x9F, 0x98, 0x80 }, Encoding.UTF8.GetBytes("é__1j") })
+            {
+                Action cast = () => C(bytes);
+                cast.Should().Throw<ValueError>(BitConverter.ToString(bytes)).WithMessage("complex() arg is a malformed string");
+            }
+            using (var r = C(Encoding.UTF8.GetBytes("١+٢j")))
+                r.GetValue(0).Should().Be(new Complex(1, 2));
+            // U+2003 EM SPACE is a Unicode space: the rewrite makes it ' '.
+            using (var r = C(Encoding.UTF8.GetBytes("\u2003 3j")))
+                r.GetValue(0).Should().Be(new Complex(0, 3));
+            using (var r = C(Encoding.UTF8.GetBytes("١_٠j")))
+                r.GetValue(0).Should().Be(new Complex(0, 10));
+            using (var r = C(Encoding.ASCII.GetBytes("(1+2j)")))
+                r.GetValue(0).Should().Be(new Complex(1, 2));
+            Action underscore = () => C(Encoding.UTF8.GetBytes("١__٠j"));
+            underscore.Should().Throw<ValueError>().WithMessage("could not convert string to complex: '١__٠j'");
+            Action asciiUnderscore = () => C(Encoding.ASCII.GetBytes("1__0j"));
+            asciiUnderscore.Should().Throw<ValueError>().WithMessage("could not convert string to complex: '1__0j'");
+        }
+
+        /// <summary>
+        ///     A <c>U</c> element of ONE code unit above U+10FFFF is CPython's <c>SystemError</c> for every target (NumPy builds
+        ///     the one-character <c>np.str_</c> first and PyUnicode_New refuses it); a longer element only records its maximum
+        ///     character, so it parses (and fails) as text, quoting the unit, and its truth value is True.
+        /// </summary>
+        [TestMethod]
+        public void LoneUnitAboveU10FFFF_IsTheSystemError_ForEveryTarget()
+        {
+            using var lone = np.array(new uint[] { 0x110000 }).view(np.dtype("<U1"));
+            foreach (var target in new[] { np.int64, np.float64, np.complex128, np.@bool })
+            {
+                Action cast = () => lone.astype(target);
+                cast.Should().Throw<SystemError>(target.name).WithMessage("invalid maximum character passed to PyUnicode_New");
+            }
+            using var two = np.array(new uint[] { 0x31, 0x110000 }).view(np.dtype("<U2"));
+            Action parse = () => two.astype(np.int64);
+            parse.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: np.str_('1\\U00110000')");
+            using (var truth = two.astype(np.@bool))
+                truth.GetBoolean(0).Should().BeTrue();
+            using var huge = np.array(new uint[] { 0x31, 0xFFFFFFFF }).view(np.dtype("<U2"));
+            Action parseHuge = () => huge.astype(np.int64);
+            parseHuge.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: np.str_('1\\Uffffffff')");
+        }
+
+        /// <summary>
+        ///     The truth value of an <c>S</c> element is whether ANY of its bytes is nonzero (a leading NUL with a later byte
+        ///     is True, an empty element False).
+        /// </summary>
+        [TestMethod]
+        public void BytesToBool_IsAnyNonzeroByte()
+        {
+            using var s = np.array(new object[] { new byte[0], new byte[] { (byte)'a' }, new byte[] { 0, (byte)'b' } }, dtype: "S2");
+            using var r = s.astype(np.@bool);
+            r.ToArray<bool>().Should().Equal(false, true, true);
+        }
+
+        /// <summary>
+        ///     CPython's <c>complex()</c> grammar takes a bare <c>j</c> after a sign as a unit imaginary part (<c>1+j</c>,
+        ///     <c>-j</c>), and its float grammar takes leading zeros in the exponent (<c>1e-005</c>).
+        /// </summary>
+        [TestMethod]
+        public void TextToNumbers_GrammarCorners()
+        {
+            using (var c = U("1+j", "1-j", "+j", "-j", "j").astype(np.complex128))
+                Enumerable.Range(0, 5).Select(i => (Complex)c.GetValue(i)).Should().Equal(
+                    new Complex(1, 1), new Complex(1, -1), new Complex(0, 1), new Complex(0, -1), new Complex(0, 1));
+            using (var f = U("1e05", "1e-005", "1E+00", "2e0").astype(np.float64))
+                f.ToArray<double>().Should().Equal(1e5, 1e-5, 1.0, 2.0);
+        }
+
+        /// <summary>
+        ///     The integer texts at the C <c>long</c> boundary (LP64 texts, probed against Linux NumPy 2.4.2): 2**63 and
+        ///     -2**63-1 do not fit a C long; -2**63 does; a negative value into an unsigned target is out of bounds while it
+        ///     fits a C long and "too large" past it; <c>-0</c> is 0 for every unsigned target.
+        /// </summary>
+        [TestMethod]
+        public void TextToNumbers_CLongBoundary_IsLP64()
+        {
+            const string CLong = "Python int too large to convert to C long";
+            Action i64Plus = () => U("9223372036854775808").astype(np.int64);
+            i64Plus.Should().Throw<OverflowException>().WithMessage(CLong);
+            Action i64Minus = () => U("-9223372036854775809").astype(np.int64);
+            i64Minus.Should().Throw<OverflowException>().WithMessage(CLong);
+            using (var min = U("-9223372036854775808").astype(np.int64))
+                min.GetInt64(0).Should().Be(long.MinValue);
+            Action u64Minus = () => U("-9223372036854775809").astype(np.uint64);
+            u64Minus.Should().Throw<OverflowException>().WithMessage(CLong);
+            Action u64Min = () => U("-9223372036854775808").astype(np.uint64);
+            u64Min.Should().Throw<OverflowException>().WithMessage("Python integer -9223372036854775808 out of bounds for uint64");
+            using (var z = U("-0").astype(np.uint64))
+                z.GetUInt64(0).Should().Be(0UL);
+            using (var z = U("-0").astype(np.uint32))
+                z.GetUInt32(0).Should().Be(0U);
+            Action u32Minus = () => U("-1").astype(np.uint32);
+            u32Minus.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint32");
+            Action i8 = () => U("9223372036854775808").astype(np.int8);
+            i8.Should().Throw<OverflowException>().WithMessage(CLong);
+        }
+
+        /// <summary>
+        ///     A C# string holding astral characters (UTF-16 surrogate pairs) is one Python <c>str</c> of code points: Unicode
+        ///     decimal digits beyond the BMP parse (MATHEMATICAL BOLD DIGIT ONE, TWO is 12), and an error quotes the character
+        ///     whole.
+        /// </summary>
+        [TestMethod]
+        public void CSharpString_WithSurrogatePairs_IsOneStrOfCodePoints()
+        {
+            using var a = np.zeros(new Shape(2), np.int64);
+            a[0] = "\U0001D7CF\U0001D7D0";
+            a.ToArray<long>().Should().Equal(12L, 0L);
+            Action emoji = () => a[0] = "1\U0001F600";
+            emoji.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: '1\U0001F600'");
+            using var b = np.zeros(new Shape(1), np.float64);
+            Action floatEmoji = () => b[0] = "\U0001F600";
+            floatEmoji.Should().Throw<ValueError>().WithMessage("could not convert string to float: '\U0001F600'");
+        }
+
+        /// <summary>
+        ///     A text-to-number copy whose source overlaps the destination (both views of one buffer, through
+        ///     <c>view(dtype)</c>) reads the source as it was before the copy: NumPy copies an overlapping source first. The
+        ///     masked form does too, and so does a number-to-text copy.
+        /// </summary>
+        [TestMethod]
+        public void Copyto_OverlappingTextAndNumbers_ReadsTheSourceFirst()
+        {
+            using (var x = np.array(new[] { 0x31, 0x32, 0x33, 0x34 }))
+            using (var u = x.view(np.dtype("<U1")))
+            {
+                np.copyto(x["1:"], u[":-1"], "unsafe");
+                x.ToArray<int>().Should().Equal(0x31, 1, 2, 3);
+            }
+            using (var x = np.array(new[] { 0x31, 0x32, 0x33, 0x34 }))
+            using (var u = x.view(np.dtype("<U1")))
+            {
+                np.copyto(x["1:"], u[":-1"], "unsafe", np.array(new[] { true, false, true }));
+                x.ToArray<int>().Should().Equal(0x31, 1, 0x33, 3);
+            }
+            using (var x = np.array(new[] { 1, 2, 3, 4 }))
+            using (var u = x.view(np.dtype("<U1")))
+            {
+                np.copyto(u["1:"], x[":-1"]);
+                x.ToArray<int>().Should().Equal(1, 0x31, 0x32, 0x33);
+            }
+        }
+
+        /// <summary>
+        ///     A masked text-to-number copy into a strided destination of two and three axes converts each run of selected
+        ///     elements and walks the outer axes with the mask (NumPy's <c>raw_array_wheremasked_assign_array</c>).
+        /// </summary>
+        [TestMethod]
+        public void Copyto_MaskedTextToNumbers_WalksTheOuterAxes()
+        {
+            using (var d = np.zeros(new Shape(3, 4), np.int64))
+            {
+                var view = d[":, ::2"];
+                np.copyto(view, np.array(new[,] { { "1", "2" }, { "3", "4" }, { "5", "6" } }), "unsafe",
+                    np.array(new[,] { { true, false }, { false, true }, { true, true } }));
+                view.ToArray<long>().Should().Equal(1L, 0L, 0L, 4L, 5L, 6L);
+            }
+            using (var d = np.zeros(new Shape(2, 3, 4), np.int64))
+            {
+                var view = d[":, ::2, ::2"];
+                np.copyto(view, np.array(new[, ,] { { { "1", "2" }, { "3", "4" } }, { { "5", "6" }, { "7", "8" } } }), "unsafe",
+                    np.array(new[, ,] { { { true, false }, { false, true } }, { { true, true }, { false, false } } }));
+                view.ToArray<long>().Should().Equal(1L, 0L, 0L, 4L, 5L, 6L, 0L, 0L);
+            }
         }
 
         /// <summary>An integer text outside the target raises the LP64 (Linux / macOS) OverflowError texts NumSharp pins
@@ -365,6 +582,404 @@ namespace NumSharp.Tests.Backends.Strings
             r.ToString(true).Should().Be("array([['1', ''],\n       ['', '1']], dtype='<U1')");
         }
 
+        // ================================================================================== creation and element stores
+
+        /// <summary>
+        ///     <c>np.array</c> of text mixed with numbers: each number widens the text dtype by its discovered descriptor's
+        ///     <c>REQUIRED_STR_LEN</c> (int64 21, uint64 20, a Python int past int64 but within uint64 20, float16 / float64
+        ///     32, complex 64); a Python int past 64 bits (NumPy's object array) and a value of no NumPy type are refused.
+        /// </summary>
+        [TestMethod]
+        public void TextWithNumbers_DiscoversTheNumbersWidths()
+        {
+            static string Width(object v) => np.array(new object[] { "x", v }).dtype.str;
+            Width(ulong.MaxValue).Should().Be("<U20");
+            Width(long.MaxValue).Should().Be("<U21");
+            Width(new BigInteger(long.MaxValue)).Should().Be("<U21");
+            Width(BigInteger.Pow(2, 63)).Should().Be("<U20");
+            Width((Half)1.5).Should().Be("<U32");
+            Width(1.5m).Should().Be("<U32");
+            Width(new Complex(1, 2)).Should().Be("<U64");
+            Action objectArray = () => np.array(new object[] { "x", BigInteger.Pow(2, 70) });
+            objectArray.Should().Throw<NotSupportedException>().WithMessage("*object array*");
+            Action noDtype = () => np.array(new object[] { "x", DateTime.Now });
+            noDtype.Should().Throw<NotSupportedException>().WithMessage("A DateTime value has no NumPy dtype*");
+        }
+
+        /// <summary>
+        ///     <c>np.array(values, numeric dtype)</c> over text and <c>None</c>: None is NaN for a float dtype (NumPy's
+        ///     POSITIVE quiet NaN), NaN+NaNj for complex, False for bool, and int()'s TypeError for an integer dtype; an F
+        ///     order request lays the result out column-major.
+        /// </summary>
+        [TestMethod]
+        public void TextAndNoneIntoNumbers_FollowEachDtypesSetitem()
+        {
+            using (var f = np.array(new object[] { "1", null }, np.float64))
+            {
+                f.GetDouble(0).Should().Be(1.0);
+                BitConverter.DoubleToUInt64Bits(f.GetDouble(1)).Should().Be(0x7FF8_0000_0000_0000UL);
+            }
+            using (var c = np.array(new object[] { "1", null }, np.complex128))
+            {
+                ((Complex)c.GetValue(0)).Should().Be(new Complex(1, 0));
+                var z = (Complex)c.GetValue(1);
+                double.IsNaN(z.Real).Should().BeTrue();
+                double.IsNaN(z.Imaginary).Should().BeTrue();
+            }
+            using (var b = np.array(new object[] { "1", null }, np.@bool))
+                b.ToArray<bool>().Should().Equal(true, false);
+            Action integer = () => np.array(new object[] { "1", null }, np.int64);
+            integer.Should().Throw<TypeError>()
+                   .WithMessage("int() argument must be a string, a bytes-like object or a real number, not 'NoneType'");
+            using var fortran = np.array(new object[,] { { "1", "2" }, { "3", "4" } }, np.int64, order: 'F');
+            fortran.Shape.IsFContiguous.Should().BeTrue();
+            fortran.ToArray<long>().Should().Equal(1L, 2L, 3L, 4L);
+        }
+
+        /// <summary>
+        ///     A typed numeric C# array under a string dtype is an ndarray cast to text: <c>np.array(int32[], 'U', ndmin=2)</c>
+        ///     is <c>&lt;U11</c> (the unsized class adapted to int32), raised to two axes.
+        /// </summary>
+        [TestMethod]
+        public void TypedNumbersUnderAStringDtype_AreCastWithNdmin()
+        {
+            using var a = np.array(new[] { 1, 22, 333 }, np.dtype("U"), ndmin: 2);
+            a.dtype.str.Should().Be("<U11");
+            a.shape.Should().Equal(1L, 3L);
+            NDArray.AsStringArray(a).Should().Equal("1", "22", "333");
+        }
+
+        /// <summary>
+        ///     One element stored into a fixed-width text array through the object route (<c>SetValue(object, …)</c>): a 0-d
+        ///     array as its own dtype's scalar <c>str()</c> (float32 shortest digits), a Python int of any size, a C# float as
+        ///     the Python float of its widened value, <c>np.float16</c> / <c>np.float64</c> (Half, decimal) by their scalar's
+        ///     digits, a complex; a C# object with no Python <c>str()</c> is refused. An unsized request discovers a big
+        ///     int's width.
+        /// </summary>
+        [TestMethod]
+        public void ElementStoresIntoText_AreTheValuesStr()
+        {
+            using var u = np.array(new[] { new string('x', 26) });
+            string Store(object v)
+            {
+                u.SetValue(v, 0L);
+                return (string)u.GetValue(0);
+            }
+            using (var f32 = NDArray.Scalar(0.1f))
+                Store(f32).Should().Be("0.1");
+            Store(BigInteger.Pow(2, 70)).Should().Be("1180591620717411303424");
+            Store((object)ulong.MaxValue).Should().Be("18446744073709551615");
+            Store((object)0.1f).Should().Be("0.10000000149011612");
+            Store((object)(Half)0.1).Should().Be("0.1");
+            Store((object)0.1m).Should().Be("0.1");
+            Store((object)new Complex(1, 2)).Should().Be("(1+2j)");
+            Action unknown = () => u.SetValue((object)DateTime.Now, 0L);
+            unknown.Should().Throw<NotSupportedException>().WithMessage("Cannot store a DateTime value in a fixed-width string array*");
+            using var big = np.array(new object[] { BigInteger.Pow(2, 70) }, np.dtype("U"));
+            big.dtype.str.Should().Be("<U22");
+            using var u2 = np.array(new[,] { { "a", "b" }, { "c", "d" } });
+            u2.GetValue(new[] { 1, 0 }).Should().Be("c");
+        }
+
+        /// <summary>
+        ///     <c>np.copyto</c> with a scalar: a 0-d text array into numbers is the array cast (parsed); a Python int into text
+        ///     is 'same_kind' (its <c>str()</c>, cut to the width), refused under 'safe' with NumPy's scalar text, and stored
+        ///     only where a mask selects.
+        /// </summary>
+        [TestMethod]
+        public void Copyto_ScalarsBetweenTextAndNumbers()
+        {
+            using (var d = np.zeros(new Shape(2), np.int64))
+            using (var seven = np.array("7"))
+            {
+                np.copyto(d, (NDArray)seven, "unsafe");
+                d.ToArray<long>().Should().Equal(7L, 7L);
+            }
+            using (var t = np.array(new[] { "ab", "cd" }))
+            {
+                np.copyto(t, 5);
+                NDArray.AsStringArray(t).Should().Equal("5", "5");
+                Action safe = () => np.copyto(t, 5, "safe");
+                safe.Should().Throw<InvalidCastException>()
+                    .WithMessage("Cannot cast scalar from dtype('int64') to dtype('<U2') according to the rule 'safe'");
+            }
+            using (var t = np.array(new[] { "ab", "cd" }))
+            {
+                np.copyto(t, 5, "unsafe", np.array(new[] { true, false }));
+                NDArray.AsStringArray(t).Should().Equal("5", "cd");
+                np.copyto(t, 6, "unsafe", np.array(new[] { false, false }));
+                NDArray.AsStringArray(t).Should().Equal("5", "cd");
+            }
+        }
+
+        /// <summary>
+        ///     A fancy assignment of text into a numeric array: a 0-d value is parsed before the index is read, an array value
+        ///     after the index and broadcast checks, and not at all for an empty selection (<c>d[[]] = ['x']</c> succeeds).
+        /// </summary>
+        [TestMethod]
+        public void FancySet_TextIntoNumbers()
+        {
+            using var d = np.zeros(new Shape(3), np.int64);
+            d[np.array(new[] { 0, 2 })] = "5";
+            d.ToArray<long>().Should().Equal(5L, 0L, 5L);
+            d[np.array(new[] { 0, 2 })] = np.array(new[] { "1", "2" });
+            d.ToArray<long>().Should().Equal(1L, 0L, 2L);
+            d[np.array(new long[0])] = np.array(new[] { "x" });
+            d.ToArray<long>().Should().Equal(1L, 0L, 2L);
+            Action bad = () => d[np.array(new[] { 1 })] = np.array(new[] { "x" });
+            bad.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: np.str_('x')");
+        }
+
+        /// <summary>
+        ///     The C# conversions of a 0-d text array (NumPy's <c>bool()</c> / <c>float()</c> / <c>int()</c> of the scalar):
+        ///     truth is non-emptiness, bytes parse as float, an integer text above <c>long.MaxValue</c> is a ulong, and one past
+        ///     64 bits is refused.
+        /// </summary>
+        [TestMethod]
+        public void ScalarConversions_OfZeroDText()
+        {
+            ((bool)np.array("")).Should().BeFalse();
+            ((bool)np.array("x")).Should().BeTrue();
+            ((bool)NDArray.Scalar(new byte[] { (byte)'x' })).Should().BeTrue();
+            ((double)NDArray.Scalar(Encoding.ASCII.GetBytes("1.5"))).Should().Be(1.5);
+            ((ulong)np.array("18446744073709551615")).Should().Be(ulong.MaxValue);
+            Action tooBig = () => _ = (ulong)np.array("18446744073709551616");
+            tooBig.Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+        }
+
+        /// <summary>
+        ///     A text <c>out=</c> receives the formatted results of every output: <c>np.divmod</c> and <c>np.modf</c> (two
+        ///     outputs), and <c>np.clip</c> without bounds (positive's typed copy); with <c>where=</c> the out's current text is
+        ///     parsed into the loop dtype first (NumPy's READWRITE masked out), so text that does not parse raises.
+        /// </summary>
+        [TestMethod]
+        public void TextOut_MultiOutputAndClip()
+        {
+            var (q, r) = np.divmod(np.array(new[] { 7 }), np.array(new[] { 2 }), (np.empty(new Shape(1), "U5"), np.empty(new Shape(1), "U5")));
+            NDArray.AsStringArray(q).Should().Equal("3");
+            NDArray.AsStringArray(r).Should().Equal("1");
+            var (frac, integral) = np.modf(np.array(new[] { 2.5 }), np.empty(new Shape(1), "U5"), np.empty(new Shape(1), "U5"));
+            NDArray.AsStringArray(frac).Should().Equal("0.5");
+            NDArray.AsStringArray(integral).Should().Equal("2.0");
+            using var clipped = np.clip(np.array(new[] { 1, 2 }), null, null, @out: np.empty(new Shape(2), "U3"));
+            NDArray.AsStringArray(clipped).Should().Equal("1", "2");
+            Action masked = () => np.clip(np.array(new[] { 1, 2 }), null, null, @out: np.array(new[] { "a", "b" }, "U3"),
+                where: np.array(new[] { true, false }));
+            masked.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: np.str_('a')");
+        }
+
+        /// <summary>
+        ///     A text array read out as C# numbers (<c>ToArray&lt;T&gt;</c> / <c>ToMuliDimArray&lt;T&gt;</c>) is parsed into T's
+        ///     dtype first, as <c>astype</c> parses it.
+        /// </summary>
+        [TestMethod]
+        public void TextReadOutAsNumbers_IsParsed()
+        {
+            np.array(new[] { "1", "2" }).ToArray<int>().Should().Equal(1, 2);
+            var m = (int[,])np.array(new[,] { { "1", "2" }, { "3", "4" } }).ToMuliDimArray<int>();
+            m[1, 0].Should().Be(3);
+        }
+
+        /// <summary>
+        ///     A MASKED text-to-number copy whose source is a reversed view of the destination's buffer converts the whole
+        ///     source first (NumPy's overlap rule for opposite directions), then copies under the mask.
+        /// </summary>
+        [TestMethod]
+        public void Copyto_MaskedOverlap_ReversedSource_ConvertsFirst()
+        {
+            using var x = np.array(new[] { 0x31, 0x32, 0x33, 0x34 });
+            using var u = x.view(np.dtype("<U1"));
+            np.copyto(x["1:"], u[":-1"]["::-1"], "unsafe", np.array(new[] { true, false, true }));
+            x.ToArray<int>().Should().Equal(0x31, 3, 0x33, 1);
+        }
+
+        /// <summary>
+        ///     Numeric functions over text: <c>np.cov</c> parses a <c>dtype=</c> request (rowvar=False transposes the parsed
+        ///     dims), <c>np.i0</c> parses into float64, <c>np.cumprod</c> with a numeric <c>dtype=</c> parses first; a bad
+        ///     <c>fill_value</c> bytes of a masked array is NumPy's TypeError; an integer power whose mask does not broadcast
+        ///     raises the broadcast error, not the negative-exponent one; <c>np.add</c> of text with an empty broadcast is the
+        ///     empty concatenation, and with a Python complex NumPy's no-loop TypeError.
+        /// </summary>
+        [TestMethod]
+        public void NumericFunctionsOverText()
+        {
+            using (var cov = np.cov(np.array(new[,] { { "1", "2" }, { "3", "5" } }), rowvar: false, dtype: np.float64))
+                cov.ToArray<double>().Should().Equal(2.0, 3.0, 3.0, 4.5);
+            using (var i0 = np.i0(np.array(new[] { "0", "1" })))
+            {
+                i0.GetDouble(0).Should().Be(1.0);
+                i0.GetDouble(1).Should().BeApproximately(1.2660658777520082, 1e-15);
+            }
+            using (var cp = np.cumprod(np.array(new[] { "2", "3" }), typeCode: np.int64))
+                cp.ToArray<long>().Should().Equal(2L, 6L);
+            Action fill = () => np.ma.array(np.array(new[] { 1L, 2L }), fill_value: new byte[] { (byte)'x' });
+            fill.Should().Throw<TypeError>().WithMessage("Cannot convert fill_value b'x' to dtype int64");
+            Action power = () => np.power(np.array(new[] { 2, 3 }), np.array(new[] { -1, 1 }), where: np.array(new[] { true, false, true }));
+            power.Should().Throw<ArgumentException>().WithMessage("operands could not be broadcast together with shapes (2,) (2,) (3,) ");
+            using (var empty = np.add(np.array(new string[0], "U1"), "x"))
+            {
+                empty.dtype.str.Should().Be("<U2");
+                empty.size.Should().Be(0);
+            }
+            Action complex = () => np.add(np.array(new[] { "a" }), new Complex(0, 1));
+            complex.Should().Throw<TypeError>()
+                   .WithMessage("ufunc 'add' did not contain a loop with signature matching types (dtype('<U1'), dtype('complex128')) -> None");
+        }
+
+        /// <summary>
+        ///     <c>np.place</c> with a Python list of strings into numbers builds the values in the target's dtype (each
+        ///     parsed by setitem, quoting the str): a bad one raises before anything is placed.
+        /// </summary>
+        [TestMethod]
+        public void Place_ListOfTextIntoNumbers_ParsesEveryValueFirst()
+        {
+            using var d = np.zeros(new Shape(2), np.int64);
+            Action place = () => np.place(d, np.array(new[] { true, true }), new object[] { "1", "x" });
+            place.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: 'x'");
+            d.ToArray<long>().Should().Equal(0L, 0L);
+        }
+
+        /// <summary>
+        ///     The routes left over: <c>np.full</c> with a 0-d text ARRAY into numbers (the array cast), a text copy into bool
+        ///     (the truth of each element; a lone unit above U+10FFFF is the SystemError), astral digits in Python's
+        ///     <c>float(str)</c> / <c>int(str)</c> of a C# string (a surrogate pair is one code point), <c>np.add</c> of numbers
+        ///     under a text <c>dtype=</c> (an empty broadcast, a Python complex), <c>np.frexp</c> into text outputs, the
+        ///     engine's <c>cumprod</c> over text with a numeric <c>dtype=</c>, and an unsized text dtype over a typed numeric
+        ///     array without <c>ndmin</c>.
+        /// </summary>
+        [TestMethod]
+        public void RemainingTextNumberRoutes()
+        {
+            using (var full = np.full(new Shape(2), np.array("7"), np.int64))
+                full.ToArray<long>().Should().Equal(7L, 7L);
+            using (var truth = np.zeros(new Shape(3), np.@bool))
+            {
+                np.copyto(truth, np.array(new object[] { new byte[0], new byte[] { (byte)'a' }, new byte[] { 0, (byte)'b' } }, dtype: "S2"), "unsafe");
+                truth.ToArray<bool>().Should().Equal(false, true, true);
+                using var lone = np.array(new uint[] { 0x110000 }).view(np.dtype("<U1"));
+                Action loneUnit = () => np.copyto(truth[":1"], lone, "unsafe");
+                loneUnit.Should().Throw<SystemError>().WithMessage("invalid maximum character passed to PyUnicode_New");
+                // An assignment of text into a bool array converts through the same truth loop (NumPy: SystemError too).
+                Action assign = () => truth[":1"] = lone;
+                assign.Should().Throw<SystemError>().WithMessage("invalid maximum character passed to PyUnicode_New");
+                truth[":"] = np.array(new object[] { new byte[0], new byte[] { (byte)'a' }, new byte[] { 0, (byte)'b' } }, dtype: "S2");
+                truth.ToArray<bool>().Should().Equal(false, true, true);
+            }
+            NumSharp.Backends.ReductionInitial.ParsePythonFloat("\U0001D7CF.5").Should().Be(1.5);
+            ((long)np.array("\U0001D7CF\U0001D7D0")).Should().Be(12L);
+            using (var empty = np.add(np.array(new double[0]), np.array(new double[0]), dtype: np.dtype("U")))
+            {
+                empty.dtype.str.Should().Be("<U64");
+                empty.size.Should().Be(0);
+            }
+            using (var complexText = np.add(new Complex(1, 2), np.array(new[] { 1.5 }), dtype: np.dtype("U")))
+            {
+                complexText.dtype.str.Should().Be("<U96");
+                NDArray.AsStringArray(complexText).Should().Equal("(1+2j)1.5");
+            }
+            var (mantissa, exponent) = np.frexp(np.array(new[] { 4.0 }), np.empty(new Shape(1), "U5"), np.empty(new Shape(1), "U5"));
+            NDArray.AsStringArray(mantissa).Should().Equal("0.5");
+            NDArray.AsStringArray(exponent).Should().Equal("3");
+            using (var text = np.array(new[] { "2", "3" }))
+            using (var cp = text.TensorEngine.ReduceCumMul(text, null, np.int64))
+                cp.ToArray<long>().Should().Equal(2L, 6L);
+            using (var plain = np.array((Array)new[] { 1, 22 }, np.dtype("U")))
+            {
+                plain.dtype.str.Should().Be("<U11");
+                plain.ndim.Should().Be(1);
+            }
+        }
+
+        /// <summary>
+        ///     The conversion core's own checks (its callers run NumPy's checks first): exactly one operand holds text, a
+        ///     mask is bool; an empty destination converts nothing.
+        /// </summary>
+        [TestMethod]
+        public void ConversionCore_Checks()
+        {
+            using var n1 = np.array(new[] { 1, 2 });
+            using var n2 = np.array(new[] { 1, 2 });
+            using var t1 = U("1", "2");
+            using var t2 = U("1", "2");
+            Action numbers = () => NDTextConversion.Convert(n1.Storage, n2.Storage);
+            numbers.Should().Throw<ArgumentException>().WithMessage("A text <-> number conversion needs exactly one string operand.");
+            Action texts = () => NDTextConversion.Convert(t1.Storage, t2.Storage, (NumSharp.Backends.UnmanagedStorage)null);
+            texts.Should().Throw<ArgumentException>();
+            using var mask = np.array(new[] { 1, 0 });
+            Action maskedTexts = () => NDTextConversion.Convert(t1.Storage, t2.Storage, mask.Storage);
+            maskedTexts.Should().Throw<ArgumentException>().WithMessage("A text <-> number conversion needs exactly one string operand.");
+            Action intMask = () => NDTextConversion.Convert(n1.Storage, t1.Storage, mask.Storage);
+            intMask.Should().Throw<ArgumentException>().WithMessage("A where mask is bool, not int32.*");
+            using var emptyNumbers = np.zeros(new Shape(0), np.int64);
+            using var emptyText = np.array(new string[0], "U1");
+            NDTextConversion.Convert(emptyNumbers.Storage, emptyText.Storage);
+            using var noneSelected = np.array(new bool[0]);
+            NDTextConversion.Convert(emptyNumbers.Storage, emptyText.Storage, noneSelected.Storage);
+            // The error builder of a failed run re-parses the element; an element that parses after all has no error.
+            using var valid = U("12");
+            unsafe
+            {
+                NDTextParse.ElementError((byte*)valid.Storage.Address, true, 2, NPTypeCode.Int64, TextReprStyle.ArrayElement)
+                    .Should().BeNull();
+            }
+        }
+
+        /// <summary>
+        ///     Where dynamic code is unavailable (the IL kernels switched off), the legacy text ↔ number casts convert
+        ///     through the scalar cast loop instead of the house IL cast kernel, with the same answers.
+        /// </summary>
+        [TestMethod]
+        public void TextNumberCasts_WithoutDynamicCode_GiveTheSameAnswers()
+        {
+            using var ints = np.array(new[] { 1, -22, 333 });
+            using var text = U("4", "-55", "666");
+            using var formatted = ints.astype(np.dtype("U"));
+            using var parsed = text.astype(np.int32);
+            DirectILKernelGenerator.Enabled = false;
+            try
+            {
+                using var f = ints.astype(np.dtype("U"));
+                NDArray.AsStringArray(f).Should().Equal(NDArray.AsStringArray(formatted));
+                using var p = text.astype(np.int32);
+                p.ToArray<int>().Should().Equal(parsed.ToArray<int>());
+            }
+            finally
+            {
+                DirectILKernelGenerator.Enabled = true;
+            }
+        }
+
+        /// <summary>
+        ///     The internal guards of the conversion layer: the numeric type code of a non-number, the promotion tables'
+        ///     refusal of the string lane (and their own miss for any other pair), Python's <c>float(str)</c> grammar for an
+        ///     <c>initial=</c> text, the <c>str()</c> length of a canonical number, the legacy string class's discovery of
+        ///     None and numbers, and a C# null string.
+        /// </summary>
+        [TestMethod]
+        public unsafe void InternalGuards()
+        {
+            Action kind = () => NDTextFormat.KindOf(NPTypeCode.String);
+            kind.Should().Throw<NotSupportedException>().WithMessage("String has no number <-> text conversion.");
+            Action family = () => NDTextParse.FamilyOf(NPTypeCode.String);
+            family.Should().Throw<NotSupportedException>().WithMessage("String is not a parse target.");
+            Action promote = () => np._FindCommonArrayType(NPTypeCode.String, NPTypeCode.Int32);
+            promote.Should().Throw<NotSupportedException>().WithMessage("This operation is not supported for fixed-width string arrays*");
+            Action promoteScalar = () => np._FindCommonArrayScalarType(NPTypeCode.Int32, NPTypeCode.String);
+            promoteScalar.Should().Throw<NotSupportedException>();
+            Action miss = () => np._FindCommonArrayType(NPTypeCode.Empty, NPTypeCode.Int32);
+            miss.Should().Throw<System.Collections.Generic.KeyNotFoundException>();
+            NumSharp.Backends.ReductionInitial.ParsePythonFloat("1_5.0").Should().Be(15.0);
+            double v = 12.5;
+            NDTextFormat.StrLength(TextNumberKind.Double, (byte*)&v).Should().Be(4);
+            var strMeta = np.dtype("U").Meta;
+            strMeta.DiscoverDescrFromObject(null).str.Should().Be("<U4");
+            strMeta.DiscoverDescrFromObject(12345L).str.Should().Be("<U5");
+            strMeta.IsKnownScalarType(typeof(string)).Should().BeTrue();
+            strMeta.IsKnownScalarType(typeof(Half)).Should().BeFalse("a NumPy scalar is discovered through its own dtype");
+            Action nullString = () => { NDArray _ = (string)null; };
+            nullString.Should().Throw<ArgumentNullException>();
+        }
+
         // ================================================================================== CPython character tables
 
         /// <summary>The pinned CPython 3.12 tables: Unicode decimal digits of every script, and str.isspace() (the C0
@@ -400,6 +1015,7 @@ namespace NumSharp.Tests.Backends.Strings
             T("١٢٣").Should().Be("123");
             T("1 2").Should().Be("1 2");
             T("1é2").Should().Be("1?");                     // CPython writes '?' and ends the text there
+            T("\U0001D7CF\U0001D7D0").Should().Be("12");    // a surrogate pair is ONE code point: an astral digit
         }
     }
 }

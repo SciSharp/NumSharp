@@ -6,7 +6,7 @@ Conversion between text and numbers works as in NumPy: a number written into a t
 
 Computing on text arrives in stages. Comparisons, truth values, concatenation and repetition compute now, with NumPy's results. Sorting, searching and the other `np.strings` functions throw `StringComputationNotSupportedException` until their stage lands. Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
 
-NumPy's raw `void` (`V`), `object` (`O`) and variable-width `StringDType` dtypes stay unsupported.
+NumPy 2's variable-width `StringDType` (`T`) stores, reads, writes, copies, casts and prints as in NumPy too; computing on it is the next phase (see [Variable-width text: `StringDType`](#variable-width-text-stringdtype)). NumPy's raw `void` (`V`) and `object` (`O`) dtypes stay unsupported.
 
 <!-- Tests: NumSharp.Tests.Documentation.FundamentalsStringsBytesDocTests - every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/FundamentalsStringsBytesDocTests.cs. Section → method(s):
      The two string dtypes → TwoStringDtypes_WidthAndItemSize, TwoStringDtypes_RawBytes
@@ -17,6 +17,7 @@ NumPy's raw `void` (`V`), `object` (`O`) and variable-width `StringDType` dtypes
      Converting between text and numbers → Converting_NumbersToText, Converting_TextToNumbers, Converting_StoresAndUfuncs, Converting_CSharpStringIsText
      Printing → Printing_StrAndRepr
      Computing on text → Computing_Comparisons, Computing_TruthValues, Computing_ConcatenationAndRepetition, Computing_NumPyRefusals, Computing_NextPhase, Computing_NeverEqualToNumbers, Computing_ChecksInNumPysOrder
+     Variable-width text: StringDType → StringDType_Creating, StringDType_NAObjects, StringDType_WritingElements, StringDType_MovingAndCasting, StringDType_Refusals
      .npy files → Npy_RoundTrip, Npy_CharWritesAsU1
      The Char dtype → Char_IsTwoByteUtf16CodeUnit
      Byte streams via np.frombuffer → Bytes_ViaFrombuffer -->
@@ -337,6 +338,78 @@ For what is not computed yet, convert to .NET and compute there. For example, `N
 
 ---
 
+## Variable-width text: `StringDType`
+
+NumPy 2's `StringDType` (`T`, NEP 55) has no width. Each element is a 16-byte cell: a text of up to 15 UTF-8 bytes sits in the cell itself, a longer text in an arena that belongs to the array's buffer, and a text that a later write makes longer than its slot moves to the heap. NumSharp stores `StringDType` arrays with NumPy's cell layout byte for byte (`tobytes()` returns the same bytes as NumPy), with its missing-data objects, its coercion rules and its casts.
+
+Computing on `StringDType` text (comparisons, concatenation, `np.sum`, sorting, the `np.strings` functions) is the next phase. Until then those calls throw `StringComputationNotSupportedException`, or the `NotSupportedException` of a route that has no `StringDType` form yet.
+
+### Creating `StringDType` arrays
+
+```csharp
+var t = np.array(new[] { "a", "a much longer text" }, np.dtype("T"));
+t.dtype;                                            // StringDType()
+t.dtype.itemsize;                                   // 16: the cell, whatever the length of the text
+np.zeros(new Shape(2), np.dtypes.StringDType());    // ['', '']
+np.ones(new Shape(2), np.dtypes.StringDType());     // ['1', '1']
+```
+
+### Missing data: the NA object
+
+`np.dtypes.StringDType(na_object: …)` names the object that stands for a missing element: `null` (NumPy's `None`), `double.NaN`, a string, or another object. Without an NA object, `None` is just the text `'None'`:
+
+```csharp
+var withNA = np.dtypes.StringDType(na_object: null);          // NumPy's StringDType(na_object=None)
+var a = np.array(new object[] { "x", null }, withNA);
+a.item(1);                                                     // null: the NA object
+a.ToString(true);                                              // array(['x', None], dtype=StringDType(na_object=None))
+np.array(new object[] { "x", null }, np.dtype("T")).item(1);   // "None"
+```
+
+### Writing elements
+
+A value written into a `StringDType` element is its `str()`. With `coerce: false`, only text is accepted:
+
+```csharp
+var t = np.array(new[] { "a", "b" }, np.dtypes.StringDType());
+t[0] = 3.25;                       // '3.25'
+var strict = np.array(new[] { "a" }, np.dtypes.StringDType(coerce: false));
+strict[0] = 5;                     // ValueError: StringDType only allows string data when string coercion is disabled.
+```
+
+### Moving and casting
+
+Views share the buffer and its arena. A copy, a gather (`np.take`, fancy indexing, a boolean mask) and a scatter duplicate every string into the destination's own buffer. The casts follow NumPy: text, bool and numbers cast to `StringDType`; `StringDType` casts to a sized `U` or `S` (the text is cut to the width) and to numbers (each text is parsed by Python's `int()`, `float()` or `complex()`; a missing element raises):
+
+```csharp
+var t = np.array(new[] { "12", "-3" }, np.dtypes.StringDType());
+t.astype(np.int64);                                               // [12, -3]
+t.astype("U1");                                                   // ['1', '-']
+np.array(new[] { 1.5, 2.0 }).astype(np.dtypes.StringDType());     // ['1.5', '2.0']
+```
+
+A copy moves a short text's cell as one block and reserves the destination's arena once for the longer texts. Measured against NumPy 2.4.2 on the same machine, copies, gathers (`np.take`, a boolean mask), `np.concatenate`, `np.where`, `np.repeat`, `np.array` from a list and the casts between `U` and `StringDType` run 1.8 to 31 times as fast as NumPy, for 1,000 to 1,000,000 elements.
+
+### What `StringDType` refuses
+
+| Call | NumSharp |
+|------|----------|
+| `view(another dtype)`, `memoryview` (`.data`), `np.frombuffer(..., "T")` | NumPy's errors: a cell is not raw text |
+| `np.ndarray(shape, "T", buffer: ...)` | `ArgumentException`. NumPy reads the bytes as cells; a cell holds an arena offset or a heap pointer, so NumSharp refuses |
+| `np.nditer` that buffers or casts a `StringDType` operand | `NotSupportedException` (a later package; `refs_ok` without buffering works) |
+| `.npy` files, `loadtxt` / `savetxt`, numpy.ma with `StringDType` | not yet (a later package) |
+| Computation: `==`, `np.sum`, `np.sort`, `np.strings.*` | `StringComputationNotSupportedException` or `NotSupportedException` (phase 2) |
+
+NumPy 2.4.2 has bugs on `StringDType` that NumSharp does not reproduce; NumSharp gives the correct answer:
+
+- `np.place` over a `StringDType` array crashes the process (a segmentation fault).
+- `np.choose`, `np.put` and `np.putmask` copy the cells raw: an arena string gives garbage.
+- The `bytes` to `StringDType` cast does not validate UTF-8, so a later read of the element raises. NumSharp raises the `UnicodeDecodeError` at the cast.
+- The `StringDType` to `complex` cast writes the real part into the imaginary part too.
+- A short string copied onto itself (`a[...] = a[:1]`) becomes `''`.
+
+---
+
 ## .npy files
 
 `np.save` and `np.load` read and write `U` and `S` arrays byte for byte, as NumPy writes them. A big-endian `>U3` file is byte-swapped when it is read.
@@ -394,7 +467,8 @@ This is NumPy's `np.frombuffer` on a bytestring, and the general interop bridge.
 | `a + b` / `np.char.add(a, b)` / `np.strings.add(a, b)` | `a + b` / `np.add(a, b)` / `np.strings.add(a, b)` |
 | `np.char.multiply(a, 3)` / `np.strings.multiply(a, 3)` | `np.strings.multiply(a, 3)` |
 | `np.char.upper(arr)` / `np.strings.upper(arr)` | a later stage: `NDArray.AsStringArray(arr).Select(s => s.ToUpper())` |
-| `StringDType()` array | not supported: `string[]` / `List<string>` |
+| `np.array(["a", "bb"], dtype=StringDType())` | `np.array(new[] { "a", "bb" }, np.dtypes.StringDType())` |
+| `StringDType(na_object=None)` | `np.dtypes.StringDType(na_object: null)` |
 | `np.array(['a','b','c'])` (single characters, `<U1`) | `np.array(new[] { "a", "b", "c" })` (`<U1`); `np.array(new[] { 'a', 'b', 'c' })` is `Char` |
 
 ---
@@ -444,7 +518,8 @@ A `U` to `S` cast encodes ASCII only, as NumPy does. Keep non-ASCII text in a `U
 | `np.strings.multiply(a, i)` / `np.multiply(a, i, out)` | The repetition, as wide as the longest one / cut to the width of `out` |
 | Other computing calls (`np.sort`, `np.unique`, ...) | `StringComputationNotSupportedException` (a later stage) |
 | NumPy's refusals (`np.sum`, `np.sqrt`, ...) | NumPy's exception and message |
-| `np.dtype("V7")` / `"O"` / `StringDType` | `NotSupportedException` |
+| `np.dtypes.StringDType(...)` / `np.dtype("T")` | NumPy's variable-width `StringDType`: storage, element access, copies, gathers, scatters, casts and printing as NumPy's; computing on it throws `StringComputationNotSupportedException` (phase 2) |
+| `np.dtype("V7")` / `"O"` | `NotSupportedException` |
 | `NPTypeCode.Char` | A 2-byte UTF-16 code unit dtype, written to `.npy` as `<U1` |
 | `np.frombuffer(byte[], dtype)` | Reinterprets raw bytes as an array, string dtypes included |
 

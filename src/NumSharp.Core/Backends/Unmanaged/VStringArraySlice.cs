@@ -176,12 +176,15 @@ namespace NumSharp.Backends.Unmanaged
         /// <exception cref="UnicodeDecodeError"><c>bytes</c> that are not UTF-8.</exception>
         /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
         /// <exception cref="OutOfMemoryException">NumPy's <c>Failed to pack string during StringDType setitem</c>.</exception>
+        [System.Runtime.CompilerServices.SkipLocalsInit]
         public void SetIndex(long index, object value)
         {
             // NumPy compares with the NA object and converts the value before it packs; both can raise, so they run before
-            // the cell is touched (an error leaves the element as it was).
+            // the cell is touched (an error leaves the element as it was). The UTF-8 form goes into stack space (a text whose
+            // form could be longer gets a heap array): no allocation per stored text.
             bool isNA = IsNAValue(value);
-            byte[] utf8 = isNA ? null : NDUtf8.Encode(AsPyString(value, Descr.VString.Coerce));
+            Span<byte> scratch = stackalloc byte[StackEncodeBytes];
+            ReadOnlySpan<byte> utf8 = isNA ? default : EncodeForStore(AsPyString(value, Descr.VString.Coerce), scratch);
             Allocator.Acquire();
             try
             {
@@ -192,6 +195,81 @@ namespace NumSharp.Backends.Unmanaged
                 Allocator.Release();
             }
         }
+
+        /// <summary>
+        ///     Stores <paramref name="values"/> into elements 0 … <c>values.Count - 1</c>, each by setitem (see
+        ///     <see cref="SetIndex(long, object)"/>), with the allocator locked ONCE for the whole run — <c>np.array(values,
+        ///     dtype=StringDType)</c> filling a fresh buffer.
+        /// </summary>
+        /// <param name="values">The values, in element order (no more than <see cref="Count"/>).</param>
+        /// <exception cref="ValueError">A value that is not text under <c>coerce=False</c>.</exception>
+        /// <exception cref="UnicodeDecodeError"><c>bytes</c> that are not UTF-8.</exception>
+        /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
+        /// <exception cref="OutOfMemoryException">NumPy's <c>Failed to pack string during StringDType setitem</c>.</exception>
+        /// <remarks>An error leaves the elements stored before it written (the caller discards the half-filled buffer, as
+        ///     NumPy discards its half-built array).</remarks>
+        [System.Runtime.CompilerServices.SkipLocalsInit]
+        internal void SetRange(System.Collections.Generic.IReadOnlyList<object> values)
+        {
+            Span<byte> scratch = stackalloc byte[StackEncodeBytes];
+            bool coerce = Descr.VString.Coerce;
+            bool hasNA = Descr.VString.HasNAObject; // no NA object: no value can be NA, skip the comparison per element
+            Allocator.Acquire();
+            try
+            {
+                for (int i = 0; i < values.Count; i++)
+                {
+                    object value = values[i];
+                    // The common element, a short ASCII string, written straight into its cell (what Pack gives for it).
+                    if (value is string text && !(hasNA && IsNAValue(value))
+                        && TryWriteShortAscii(Address + (long)i * VStringAllocator.CellSize, text))
+                        continue;
+                    bool isNA = hasNA && IsNAValue(value);
+                    ReadOnlySpan<byte> utf8 = isNA ? default : EncodeForStore(AsPyString(value, coerce), scratch);
+                    PackValue(Address + (long)i * VStringAllocator.CellSize, isNA, utf8);
+                }
+            }
+            finally
+            {
+                Allocator.Release();
+            }
+        }
+
+        /// <summary>The stack space an element store encodes its text into (a text whose UTF-8 form could be longer — up to
+        ///     3 bytes per UTF-16 unit — uses a heap array instead).</summary>
+        private const int StackEncodeBytes = 768;
+
+        /// <summary>
+        ///     Writes a non-empty ASCII text of at most 15 characters straight into a cell that holds no arena or heap text —
+        ///     the short-string cell <c>NpyString_pack</c> produces there (<c>free</c> releases nothing, <c>newsize</c> sets the
+        ///     flags and length, the bytes after the text are zero) without the UTF-8 transcoder and the allocator calls.
+        /// </summary>
+        /// <param name="cell">The cell (the allocator lock is held).</param>
+        /// <param name="text">The text.</param>
+        /// <returns>False, writing nothing, for an empty, longer or non-ASCII text or a cell that holds arena / heap text.</returns>
+        private static bool TryWriteShortAscii(byte* cell, string text)
+        {
+            int length = text.Length;
+            byte flags = cell[15];
+            if (length == 0 || length > VStringAllocator.ShortMaxSize
+                || (flags & VStringAllocator.Long) != 0 || (flags != 0 && (flags & VStringAllocator.OutsideArena) == 0)
+                || !System.Text.Ascii.IsValid(text))
+                return false;
+            *(ulong*)cell = 0;
+            *(ulong*)(cell + 8) = 0;
+            for (int k = 0; k < length; k++)
+                cell[k] = (byte)text[k];
+            cell[15] = (byte)(VStringAllocator.Initialized | VStringAllocator.OutsideArena | length);
+            return true;
+        }
+
+        /// <summary>The strict UTF-8 form of a stored text, in <paramref name="scratch"/> when it surely fits there.</summary>
+        /// <param name="text">The text.</param>
+        /// <param name="scratch">Stack space of <see cref="StackEncodeBytes"/> bytes.</param>
+        /// <returns>The UTF-8 bytes (a slice of <paramref name="scratch"/>, or a new array).</returns>
+        /// <exception cref="UnicodeEncodeError">A lone surrogate.</exception>
+        private static ReadOnlySpan<byte> EncodeForStore(string text, Span<byte> scratch)
+            => text.Length <= scratch.Length / 3 ? scratch.Slice(0, NDUtf8.Encode(text, scratch)) : NDUtf8.Encode(text);
 
         /// <summary>Element access by index (see <see cref="GetIndex(long)"/> / <see cref="SetIndex(long, object)"/>).</summary>
         /// <param name="index">The element index.</param>
@@ -287,7 +365,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="isNA">True to pack an NA cell.</param>
         /// <param name="utf8">The UTF-8 text (ignored for an NA cell).</param>
         /// <exception cref="OutOfMemoryException">NumPy's setitem <c>MemoryError</c> texts.</exception>
-        private void PackValue(byte* cell, bool isNA, byte[] utf8)
+        private void PackValue(byte* cell, bool isNA, ReadOnlySpan<byte> utf8)
         {
             if (isNA)
             {
@@ -345,6 +423,15 @@ namespace NumSharp.Backends.Unmanaged
                 try
                 {
                     byte* src = Address, dst = copy.Address;
+                    // The fresh copy takes every medium / long string at its arena's cursor: reserve the exact total once
+                    // (VStringAllocator.TryReserve) instead of growing by 25 % steps.
+                    if (Allocator.HoldsLongStrings)
+                    {
+                        long need = 0;
+                        for (long i = 0; i < Count; i++)
+                            need += VStringAllocator.ArenaBytesForDuplicate(src + i * VStringAllocator.CellSize);
+                        copy.Allocator.TryReserve(need);
+                    }
                     for (long i = 0; i < Count; i++)
                         VStringAllocator.FreeAndCopy(Allocator, copy.Allocator, src + i * VStringAllocator.CellSize,
                             dst + i * VStringAllocator.CellSize, "string to string cast");

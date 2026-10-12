@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 
@@ -58,6 +59,10 @@ namespace NumSharp.Backends.Strings
             var bshape = ShapesMatch(src.Shape, dst.Shape) ? src.Shape : np.broadcast_to(src.Shape, dst.Shape);
             if (dst.Shape.size == 0)
                 return;
+            // PyArray_AssignArray's shortcut: the same data pointer, dimensions and strides of one buffer (a[...] = a, two views
+            // of one slice) assign every element to itself — nothing to do.
+            if (ReferenceEquals(dst.VStringSlice.Allocator, src.VStringSlice.Allocator) && IdenticalElements(dst, src))
+                return;
 
             UnmanagedStorage temp = null;
             try
@@ -110,6 +115,24 @@ namespace NumSharp.Backends.Strings
             VStringAllocator.AcquirePair(inAllocator, outAllocator);
             try
             {
+                // A destination whose cells hold no arena strings takes the duplicated medium / long strings at its arena's
+                // cursor: reserve the exact total once instead of growing by 25 % steps (see TryReserve).
+                if (!outAllocator.HoldsLongStrings && (inAllocator.HoldsLongStrings || HasLongNAText(naName)))
+                {
+                    long need = 0;
+                    long naBytes = naName == null ? 0 : VStringAllocator.ArenaBytesForText(naName.Length);
+                    NDVStringCasting.Walk(dst, srcView, (s, ss, d, ds, count) =>
+                    {
+                        // Only a cell whose flags are 0 once free_and_copy's free has cleared MISSING takes an arena allocation
+                        // (heap_or_arena_allocate: a fresh cell, or an NA set on one). Here every other cell is a short string
+                        // (or an NA set on one), flagged OUTSIDE_ARENA, and its new text goes to the heap: counting it would
+                        // hold arena space that nothing uses.
+                        for (long i = 0; i < count; i++, s += ss, d += ds)
+                            if ((d[15] & ~VStringAllocator.Missing) == 0)
+                                need += naName != null && VStringAllocator.IsNull(s) ? naBytes : VStringAllocator.ArenaBytesForDuplicate(s);
+                    });
+                    outAllocator.TryReserve(need);
+                }
                 NDVStringCasting.Walk(dst, srcView, (s, ss, d, ds, count) =>
                     CopyRun(s, ss, d, ds, count, inAllocator, outAllocator, naName));
             }
@@ -177,11 +200,29 @@ namespace NumSharp.Backends.Strings
         /// <param name="naName">The UTF-8 <c>str()</c> of the source's NA object when its NA cells must become text (a
         ///     descriptor with an NA object into one without), else null.</param>
         /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <remarks>
+        ///     A cell copied onto itself is skipped (see the loop): the destination's free would otherwise empty the source of
+        ///     a short string first. A short non-empty source into a destination that holds no arena or heap text is one
+        ///     16-byte move (<see cref="IsShortIntoPlainCell"/>), the result <c>free_and_copy</c> gives for that pair.
+        /// </remarks>
         internal static void CopyRun(byte* s, long sStride, byte* d, long dStride, long count,
             VStringAllocator inAllocator, VStringAllocator outAllocator, byte[] naName)
         {
             for (long i = 0; i < count; i++, s += sStride, d += dStride)
             {
+                // A cell copied onto ITSELF (a broadcast view of the destination's own element: a[...] = a[:1]) is left as it
+                // is. NumPy 2.4.2 skips it only for an arena / heap string (share_memory); a short string goes through
+                // free_and_copy, whose free empties the source before the duplicate reads it, so NumPy turns every element into
+                // '' there — a NumPy bug; NumSharp keeps the text.
+                if (s == d)
+                    continue;
+                if (IsShortIntoPlainCell(s[15], d[15]))
+                {
+                    // The common case (a fresh result, short text): free_and_copy of this pair is the source cell itself.
+                    *(ulong*)d = *(ulong*)s;
+                    *(ulong*)(d + 8) = *(ulong*)(s + 8);
+                    continue;
+                }
                 if (VStringAllocator.ShareMemory(s, inAllocator, d, outAllocator))
                     continue;
                 if (naName != null && VStringAllocator.IsNull(s))
@@ -197,6 +238,55 @@ namespace NumSharp.Backends.Strings
                 }
             }
         }
+
+        /// <summary>Whether NA cells copied into the destination become a medium or long text (an arena allocation each).</summary>
+        /// <param name="naName">The NA replacement text (<see cref="NAReplacement"/>), or null.</param>
+        /// <returns>True when the replacement text needs arena space.</returns>
+        internal static bool HasLongNAText(byte[] naName) => naName != null && naName.Length > VStringAllocator.ShortMaxSize;
+
+        /// <summary>
+        ///     The arena bytes duplicating the cells an iteration over <paramref name="cells"/> visits takes in a fresh
+        ///     destination (<see cref="VStringAllocator.ArenaBytesForDuplicate"/> per cell; an NA cell as
+        ///     <paramref name="naName"/> when that is given), for <see cref="VStringAllocator.TryReserve"/>.
+        /// </summary>
+        /// <param name="cells">The raw source cells (a cell view, any layout; a broadcast cell counts once per visit).</param>
+        /// <param name="naName">The NA replacement text, or null when NA cells stay NA.</param>
+        /// <returns>The total bytes.</returns>
+        internal static long ArenaBytesForCopy(NDArray cells, byte[] naName)
+        {
+            long need = 0;
+            long naBytes = naName == null ? 0 : VStringAllocator.ArenaBytesForText(naName.Length);
+            using var iter = NDIterRef.MultiNew(
+                1, new[] { cells },
+                NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.ZEROSIZE_OK | NDIterGlobalFlags.REFS_OK,
+                NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_NO_CASTING,
+                new[] { NDIterPerOpFlags.READONLY });
+            iter.ForEach((dataptrs, strides, n, aux) =>
+            {
+                byte* s = (byte*)dataptrs[0];
+                long ss = strides[0];
+                for (long i = 0; i < n; i++, s += ss)
+                    need += naName != null && VStringAllocator.IsNull(s) ? naBytes : VStringAllocator.ArenaBytesForDuplicate(s);
+            });
+            return need;
+        }
+
+        /// <summary>
+        ///     Whether <c>free_and_copy</c> of a source cell into a destination cell is a plain 16-byte move: the source is a
+        ///     short, non-empty string (flags <c>INITIALIZED | OUTSIDE_ARENA</c>, length 1–15 — <c>NpyString_dup</c> copies such
+        ///     a cell with one <c>memcpy</c>) and the destination holds no arena or heap text (all zero, or outside the arena
+        ///     without <c>LONG</c>: a short or empty string, or an NA of one), so <c>NpyString_free</c> releases nothing before
+        ///     the copy overwrites the whole cell.
+        /// </summary>
+        /// <param name="sourceFlags">Byte 15 of the source cell.</param>
+        /// <param name="destinationFlags">Byte 15 of the destination cell.</param>
+        /// <returns>True when the destination may simply receive the source cell's 16 bytes.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsShortIntoPlainCell(byte sourceFlags, byte destinationFlags)
+            => (sourceFlags & VStringAllocator.FlagMask) == (VStringAllocator.Initialized | VStringAllocator.OutsideArena)
+               && (sourceFlags & VStringAllocator.ShortSizeMask) != 0
+               && (destinationFlags & VStringAllocator.Long) == 0
+               && (destinationFlags == 0 || (destinationFlags & VStringAllocator.OutsideArena) != 0);
 
         /// <summary>
         ///     The text an NA cell becomes in this copy: the source NA object's <c>str()</c> as UTF-8 when the source descriptor
@@ -220,6 +310,25 @@ namespace NumSharp.Backends.Strings
                 return true;
             int sn = (int)src.NDim;
             return dn == 1 && sn >= 1 && dst.strides[0] * src.strides[sn - 1] < 0;
+        }
+
+        /// <summary>
+        ///     Whether two storages of one buffer address exactly the same elements in the same order: the same first cell, the
+        ///     same dimensions and the same strides (NumPy's <c>PyArray_AssignArray</c> self-assignment test).
+        /// </summary>
+        /// <param name="dst">The destination storage.</param>
+        /// <param name="src">The source storage (same buffer as <paramref name="dst"/>).</param>
+        /// <returns>True for an assignment of every element onto itself.</returns>
+        private static bool IdenticalElements(UnmanagedStorage dst, UnmanagedStorage src)
+        {
+            if (dst.Address + dst.Shape.offset * VStringAllocator.CellSize != src.Address + src.Shape.offset * VStringAllocator.CellSize)
+                return false;
+            if (!ShapesMatch(dst.Shape, src.Shape))
+                return false;
+            for (int i = 0; i < dst.Shape.NDim; i++)
+                if (dst.Shape.strides[i] != src.Shape.strides[i])
+                    return false;
+            return true;
         }
 
         /// <summary>Whether two shapes have identical dimensions (no broadcast needed).</summary>

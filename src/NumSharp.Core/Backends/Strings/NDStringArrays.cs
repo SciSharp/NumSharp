@@ -106,11 +106,26 @@ namespace NumSharp.Backends.Strings
             if (array is null)
                 throw new ArgumentNullException(nameof(array));
 
-            var dims = new List<long>();
-            var values = new List<object>();
-            Collect(array, dims, values);
-            var built = Build(dims.ToArray(), values, dtype, order);
-            if (ndmin <= dims.Count)
+            long[] dims;
+            IReadOnlyList<object> values;
+            if (array is string[] strings)
+            {
+                // A flat string[] (the common input) is its own element list: no per-item walk through the non-generic
+                // enumerator and no copy into a List — the array, read through its object view (array covariance; never
+                // written).
+                dims = new[] { strings.LongLength };
+                values = strings;
+            }
+            else
+            {
+                var found = new List<long>();
+                var collected = new List<object>();
+                Collect(array, found, collected);
+                dims = found.ToArray();
+                values = collected;
+            }
+            var built = Build(dims, values, dtype, order);
+            if (ndmin <= dims.Length)
                 return built;
             // NumPy builds the array at its discovered rank and prepends the ones as a VIEW of it (OWNDATA False, the
             // prepended axes' strides C-like), so the result is a view here too; the built array's own reference goes.
@@ -649,7 +664,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="dtype">The requested dtype or null.</param>
         /// <param name="order">The requested memory layout.</param>
         /// <returns>The new array.</returns>
-        private static NDArray Build(long[] dims, List<object> values, DType dtype, char order)
+        private static NDArray Build(long[] dims, IReadOnlyList<object> values, DType dtype, char order)
         {
             // StringDType: every element is a Python object stored by stringdtype_setitem (BuildVString).
             if (dtype?.Meta is VStringDTypeMeta)
@@ -690,14 +705,13 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="ValueError">A non-text value under <c>coerce=False</c>.</exception>
         /// <exception cref="UnicodeDecodeError">A <c>bytes</c> value that is not UTF-8.</exception>
         /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
-        private static NDArray BuildVString(long[] dims, List<object> values, DType descr, char order)
+        private static NDArray BuildVString(long[] dims, IReadOnlyList<object> values, DType descr, char order)
         {
             var result = new NDArray(descr, new Shape(dims), true);
             try
             {
-                var slice = result.Storage.VStringSlice;
-                for (int i = 0; i < values.Count; i++)
-                    slice.SetIndex(i, values[i]);
+                // Every element by setitem, the allocator locked once for the whole fill (VStringArraySlice.SetRange).
+                result.Storage.VStringSlice.SetRange(values);
                 if (dims.Length > 1 && (order == 'F' || order == 'f'))
                 {
                     var f = result.copy('F');
@@ -730,7 +744,7 @@ namespace NumSharp.Backends.Strings
         ///     its descriptor's text width without one (NumPy discovers the number's own dtype, then
         ///     <c>PyArray_PromoteTypes</c> widens the string class to that dtype's <c>REQUIRED_STR_LEN</c>).
         /// </remarks>
-        private static DType Discover(List<object> values, DType dtype)
+        private static DType Discover(IReadOnlyList<object> values, DType dtype)
         {
             StringDTypeMeta cls;
             if (dtype != null)
@@ -828,7 +842,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="ValueError">A text is not a number of the dtype's kind (quoting <c>'…'</c>).</exception>
         /// <exception cref="OverflowException">A value does not fit an integer dtype.</exception>
         /// <exception cref="TypeError">None into an integer dtype, or a value of a type NumPy cannot convert.</exception>
-        private static NDArray BuildNumeric(long[] dims, List<object> values, DType dtype, char order)
+        private static NDArray BuildNumeric(long[] dims, IReadOnlyList<object> values, DType dtype, char order)
         {
             NPTypeCode tc = dtype.typecode;
             var result = new NDArray(dtype, new Shape(dims), false);

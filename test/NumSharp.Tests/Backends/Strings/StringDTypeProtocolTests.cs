@@ -381,5 +381,31 @@ namespace NumSharp.Tests.Backends.Strings
             NDPyObject.IsNaNLike(np.array(new[] { double.NaN })).Should().BeTrue();
             NDPyObject.IsNaNLike(np.array(new[] { 1.0 })).Should().BeFalse();
         }
+
+        /// <summary>
+        ///     The protocol corners a sentinel can reach: a dict of several entries prints CPython's
+        ///     <c>{'a': 1, 'b': 2}</c>; <c>None</c> equals nothing but itself; dicts of different sizes differ; an
+        ///     <c>np.float16</c> scalar against a one-element list holding a complex compares elementwise in complex128
+        ///     (<c>np.float16(1) == [1+0j]</c> is True), against a C# unsigned integer (a Python int) as a float; an array hashes
+        ///     by identity (it equals only itself) and an object outside the boundary map by its own hash.
+        /// </summary>
+        [TestMethod]
+        public void Protocol_Corners()
+        {
+            NDPyObject.Repr(new Hashtable { { "a", 1 } }).Should().Be("{'a': 1}");
+            var two = new System.Collections.Generic.SortedDictionary<string, int> { { "a", 1 }, { "b", 2 } };
+            NDPyObject.Repr(two).Should().Be("{'a': 1, 'b': 2}");
+            NDPyObject.PyEq(null, "x").Should().BeFalse();
+            NDPyObject.PyEq("x", null).Should().BeFalse();
+            NDPyObject.PyEq(new Hashtable { { "a", 1 } }, new Hashtable { { "a", 1 }, { "b", 2 } }).Should().BeFalse();
+            NDPyObject.PyEq((Half)1, new object[] { new Complex(1, 0) }).Should().BeTrue();
+            NDPyObject.PyEq((Half)1, new object[] { new Complex(1, 1) }).Should().BeFalse();
+            NDPyObject.PyEq((Half)1, (byte)1).Should().BeTrue();
+            NDPyObject.PyEq((Half)2, ulong.MaxValue).Should().BeFalse();
+            var a = np.array(new[] { 1.0 });
+            NDPyObject.Hash(a).Should().Be(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(a));
+            var opaque = new Opaque();
+            NDPyObject.Hash(opaque).Should().Be(opaque.GetHashCode());
+        }
     }
 }

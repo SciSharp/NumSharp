@@ -142,6 +142,10 @@ namespace NumSharp.Backends.Strings
                 try
                 {
                     var inAllocator = source.Allocator;
+                    // The fresh result takes every duplicated medium / long string at its arena's cursor: reserve the exact
+                    // total once (VStringAllocator.TryReserve) instead of growing by 25 % steps.
+                    if (inAllocator.HoldsLongStrings || NDVStringCopy.HasLongNAText(naName))
+                        outAllocator.TryReserve(NDVStringCopy.ArenaBytesForCopy(raw, naName));
                     iter.ForEach((dataptrs, strides, n, aux) =>
                         NDVStringCopy.CopyRun((byte*)dataptrs[0], strides[0], (byte*)dataptrs[1], strides[1], n, inAllocator, outAllocator, naName));
                 }
@@ -202,6 +206,9 @@ namespace NumSharp.Backends.Strings
                     try
                     {
                         var inAllocator = source.Allocator;
+                        // The fresh buffer takes every duplicated medium / long string at its arena's cursor (see Rehome).
+                        if (inAllocator.HoldsLongStrings || NDVStringCopy.HasLongNAText(naName))
+                            outAllocator.TryReserve(NDVStringCopy.ArenaBytesForCopy(raw, naName));
                         iter.ForEach((dataptrs, strides, n, aux) =>
                             NDVStringCopy.CopyRun((byte*)dataptrs[0], strides[0], (byte*)dataptrs[1], strides[1], n, inAllocator, outAllocator, naName));
                     }
@@ -259,6 +266,9 @@ namespace NumSharp.Backends.Strings
                 {
                     var inAllocator = source.Allocator;
                     var outAllocator = outSlice.Allocator;
+                    // The fresh copy takes every duplicated medium / long string at its arena's cursor (see Rehome).
+                    if (inAllocator.HoldsLongStrings)
+                        outAllocator.TryReserve(NDVStringCopy.ArenaBytesForCopy(src, null));
                     iter.ForEach((dataptrs, strides, n, aux) =>
                         NDVStringCopy.CopyRun((byte*)dataptrs[0], strides[0], (byte*)dataptrs[1], strides[1], n, inAllocator, outAllocator, null));
                 }
@@ -273,6 +283,38 @@ namespace NumSharp.Backends.Strings
                 result.Dispose(); // the half-filled copy owns the strings duplicated so far: its clear loop frees them
                 throw;
             }
+        }
+
+        /// <summary>
+        ///     <see cref="NDVStringCopy.ArenaBytesForCopy"/> for a multi-source gather: the arena bytes duplicating every raw cell
+        ///     takes in a fresh result, an NA cell counted as its own source's NA text.
+        /// </summary>
+        /// <param name="raw">The raw cells (any layout).</param>
+        /// <param name="which">The source index of each element (<c>int64</c>, <paramref name="raw"/>'s dimensions).</param>
+        /// <param name="naNames">The NA replacement text of each source, or null entries where NA cells stay NA.</param>
+        /// <returns>The total bytes.</returns>
+        private static long ArenaBytesForMultiCopy(NDArray raw, NDArray which, byte[][] naNames)
+        {
+            long need = 0;
+            var naBytes = new long[naNames.Length];
+            for (int j = 0; j < naNames.Length; j++)
+                naBytes[j] = naNames[j] == null ? 0 : VStringAllocator.ArenaBytesForText(naNames[j].Length);
+            using var iter = NDIterRef.MultiNew(
+                2, new[] { raw, which },
+                NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.ZEROSIZE_OK | NDIterGlobalFlags.REFS_OK,
+                NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_NO_CASTING,
+                new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READONLY });
+            iter.ForEach((dataptrs, strides, n, aux) =>
+            {
+                byte* s = (byte*)dataptrs[0], w = (byte*)dataptrs[1];
+                long ss = strides[0], ws = strides[1];
+                for (long i = 0; i < n; i++, s += ss, w += ws)
+                {
+                    long j = *(long*)w;
+                    need += naNames[j] != null && VStringAllocator.IsNull(s) ? naBytes[j] : VStringAllocator.ArenaBytesForDuplicate(s);
+                }
+            });
+            return need;
         }
 
         /// <summary>
@@ -318,6 +360,10 @@ namespace NumSharp.Backends.Strings
                 VStringAllocator.AcquireAll(locked);
                 try
                 {
+                    // The fresh result takes every duplicated medium / long string at its arena's cursor (see Rehome); an NA
+                    // cell becomes its own source's NA text.
+                    if (Array.Exists(inAllocators, a => a.HoldsLongStrings) || Array.Exists(naNames, NDVStringCopy.HasLongNAText))
+                        outAllocator.TryReserve(ArenaBytesForMultiCopy(raw, which, naNames));
                     iter.ForEach((dataptrs, strides, n, aux) =>
                     {
                         byte* s = (byte*)dataptrs[0], w = (byte*)dataptrs[1], d = (byte*)dataptrs[2];
@@ -414,8 +460,16 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="ValueError">A non-text value under <c>coerce=False</c>.</exception>
         /// <exception cref="UnicodeDecodeError"><c>bytes</c> that are not UTF-8.</exception>
         /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's setitem <c>MemoryError</c> texts.</exception>
-        /// <remarks>The value is converted even when the array is empty (NumPy packs it before it looks at the size).</remarks>
+        /// <exception cref="OutOfMemoryException">The copy loop's <c>MemoryError</c> texts: <c>Failed to deallocate string in
+        ///     string to string cast</c> for an element whose old text cannot be freed (a corrupt cell), <c>Failed to allocate
+        ///     string in string to string cast</c> when the memory is exhausted.</exception>
+        /// <remarks>
+        ///     The value is converted even when the array is empty (NumPy packs it before it looks at the size). NumPy then
+        ///     writes every element with <c>PyArray_AssignRawScalar</c>, whose copy loop (<c>string_to_string</c> →
+        ///     <c>free_and_copy</c>) frees the element and duplicates the packed value into it: here the same free and
+        ///     allocation, straight from the encoded value (the packed scalar lives in another allocator in NumPy too, so the
+        ///     element strings take the same arena offsets), with the copy loop's error texts.
+        /// </remarks>
         internal static void Fill(NDArray dst, object value)
         {
             var slice = dst.Storage.VStringSlice;
@@ -439,15 +493,18 @@ namespace NumSharp.Backends.Strings
                     long ds = strides[0];
                     for (long i = 0; i < n; i++, d += ds)
                     {
+                        // free_and_copy: free the element first (a corrupt cell fails here), then duplicate the value into it
+                        // (NpyString_dup of an NA source is pack_null; of a text, newsize).
+                        if (allocator.Free(d) < 0)
+                            throw new OutOfMemoryException("Failed to deallocate string in string to string cast");
+                        int status;
                         if (isNA)
-                        {
-                            if (allocator.PackNull(d) < 0)
-                                throw new OutOfMemoryException("Failed to pack null string during StringDType setitem");
-                            continue;
-                        }
-                        fixed (byte* b = utf8)
-                            if (allocator.Pack(d, b, utf8.Length) < 0)
-                                throw new OutOfMemoryException("Failed to pack string during StringDType setitem");
+                            status = allocator.PackNull(d);
+                        else
+                            fixed (byte* b = utf8)
+                                status = allocator.NewSize(b, utf8.Length, d);
+                        if (status < 0)
+                            throw new OutOfMemoryException("Failed to allocate string in string to string cast");
                     }
                 });
             }

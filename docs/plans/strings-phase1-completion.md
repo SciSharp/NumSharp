@@ -218,3 +218,24 @@ After this plan, phase 2 loses P2.4 and gains the `T` forms of P2.1–P2.6 plus 
   `Backends/Strings/StringDTypeProtocolTests` (10). Test trap: a lone surrogate cannot travel in `[DataRow]` (attribute
   arguments are UTF-8 in the metadata) nor in `[DynamicData]` (the test platform serializes rows as XML and refuses a
   high surrogate followed by another): keep such strings in the method body.
+- 2026-10-12 — **P1.3–P1.6 done** (commit `ea04c19e`). `StringDType` arrays. Storage
+  (`Backends/Strings/VStringAllocator.cs`, a statement-for-statement port of `static_string.c`: the packed cell, short
+  strings in the cell, medium / long strings in the per-buffer arena behind a 1- / 8-byte prefix, heap strings for a
+  longer rewrite, NA cells that keep their slot, the clear loop; `Backends/Unmanaged/VStringArraySlice.cs`: the cells,
+  the allocator and the descriptor instance; the cells' memory block owns the allocator, so views keep it alive). The
+  safety gate: `DTypeSize` / `dtypesize` THROW for a `T` storage, so every raw byte route fails loudly; byte arithmetic
+  reads `ItemBytes` (16). Movement (`NDVStringCopy.cs`: `PyArray_AssignArray` + `string_to_string`, NumPy's overlap
+  rules; `NDVStringMove.cs`: gathers run the numeric route on the CELL view and re-home each cell into a fresh buffer,
+  scatters write int64 marks and then duplicate the marked values) behind every movement entry (take, fancy / mask get
+  and set, where, repeat, resize, choose, select, compress, extract, take_along_axis, put_along_axis, put, place,
+  putmask, fill_diagonal, diag / diagflat, tril / triu, copyto, and the compositions over them). Creation, element access
+  and printing (`stringdtype_setitem`'s coercion and NA rules; `repr` with Python's quoting and the NA object as itself).
+  Casts (`NDVStringCasting.cs`, the `casts.cpp` loops `T` ↔ `T` / `U` / `S` / bool / numbers, NumPy's error texts).
+- 2026-10-12 — **P1.9 part 1** (commit `ecb27efb`). The `StringDType` oracle: sections `tstore` (324), `tcreate`
+  (3,402), `tmove` (1,990), `tcast` (2,608) — 8,324 strict cases. A `T` value travels as values, never as cells (an
+  arena offset or a heap pointer of NumPy's allocator means nothing to NumSharp); `tobytes()` cells are compared with
+  the heap pointers masked. The replay found 12 divergences, all fixed: `tobytes()` of a non-contiguous array ravels it
+  first; the copy core walks NumPy's destination-stride order (arena offsets follow the walk); `np.resize` keeps its view
+  of a fresh buffer; `np.where` takes NumPy's output layout; `.data` and `np.frombuffer` refuse `T` with NumPy's texts;
+  `None` / bool / str literals store by setitem; the store functions convert their values as `PyArray_FromAny(values,
+  dtype)`; `NDArray.Scalar(value, T)` is setitem; np.nditer's per-step views share the operand's allocator.

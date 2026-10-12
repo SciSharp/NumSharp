@@ -200,9 +200,21 @@ namespace NumSharp.Backends
         /// <param name="indices">Normalised (non-negative, in-range) leading coordinates.</param>
         /// <exception cref="ValueError">A value that does not broadcast to the target, a non-text literal (or array element
         ///     text) into a <c>coerce=False</c> descriptor, a text that does not parse when the value is cast.</exception>
+        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts: setitem's (<c>Failed to pack string during
+        ///     StringDType setitem</c>) when one element takes a Python object, the copy loop's otherwise.</exception>
         /// <exception cref="Exception">The cast's own errors (see <see cref="Strings.NDVStringCasting.Copy"/>).</exception>
+        /// <remarks>
+        ///     ONE element named by every coordinate (<paramref name="indices"/> as long as the rank) and given a Python object
+        ///     is NumPy's <c>array_assign_item</c>: <see cref="SetVStringItem"/>. Every other store packs the object into a 0-d
+        ///     temporary first and broadcasts it through the copy loop, as NumPy's <c>PyArray_CopyObject</c> does.
+        /// </remarks>
         internal void SetDataVString(NDArray value, int[] indices)
         {
+            if (indices.Length > 0 && indices.Length == _shape.NDim && IsVStringItemValue(value))
+            {
+                SetVStringItem(value, _shape.GetOffset(indices));
+                return;
+            }
             var packed = NDArray.PackForVStringStore(value, Descr);
             try
             {
@@ -221,6 +233,34 @@ namespace NumSharp.Backends
                 if (!ReferenceEquals(packed, value))
                     packed.Dispose();
             }
+        }
+
+        /// <summary>
+        ///     Whether a store value is a Python OBJECT that NumPy's setitem receives (a C# literal — number, bool, str — or
+        ///     null for <c>None</c>), rather than an ndarray that is cast.
+        /// </summary>
+        /// <param name="value">The value of the store.</param>
+        /// <returns>True for a marked literal or null.</returns>
+        internal static bool IsVStringItemValue(NDArray value)
+            => value is null || value.WasPythonLiteral || value.WasPythonStr || value.WasPythonBool;
+
+        /// <summary>
+        ///     NumPy's <c>array_assign_item</c> for a <c>StringDType</c> element (an index of integers only): <c>PyArray_Pack</c>
+        ///     calls <c>stringdtype_setitem</c> on the element itself, so the object is converted (the NA object, its
+        ///     <c>str()</c>, refused under <c>coerce=False</c>) and packed straight into this buffer's cell — no temporary, one
+        ///     allocation for a long text, and setitem's error texts (probed with a corrupt cell: <c>Failed to pack string
+        ///     during StringDType setitem</c>, where a slice assignment raises the copy loop's).
+        /// </summary>
+        /// <param name="value">A Python object (<see cref="IsVStringItemValue"/>): a marked literal, or null for <c>None</c>.</param>
+        /// <param name="offset">The element's index in this storage's slice.</param>
+        /// <exception cref="ValueError">A non-text value under <c>coerce=False</c>.</exception>
+        /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
+        /// <exception cref="OutOfMemoryException">Setitem's <c>MemoryError</c> texts.</exception>
+        internal void SetVStringItem(NDArray value, long offset)
+        {
+            // A str literal stores its ORIGINAL C# text (its 0-d U array drops trailing NULs on read; setitem keeps them).
+            object element = value is null ? null : value.WasPythonStr ? value.PythonStrText : value.Storage.GetAtIndex(0);
+            VStringSlice.SetIndex(offset, element);
         }
 
         /// <summary>

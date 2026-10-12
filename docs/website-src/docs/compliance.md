@@ -151,9 +151,10 @@ conversion, the other `np.strings` functions) arrives in later stages and throws
   to `System.Numerics.Complex`; writes use `c16`.
 - `datetime64` and `timedelta64`, including their unit metadata, are not implemented.
 - Object, structured, subarray, and void dtypes are not implemented.
-- NumPy 2.x's variable-width `StringDType` is not implemented. The fixed-width `S` and `U` dtypes
-  are (computing on them arrives in stages: comparisons, truth values, concatenation and repetition
-  compute now).
+- NumPy 2.x's variable-width `StringDType` stores, reads, writes, copies, casts and prints as in
+  NumPy (its 16-byte cells byte for byte, the NA objects, `coerce`); computing on it is the next phase.
+  The fixed-width `S` and `U` dtypes are implemented (computing on them arrives in stages:
+  comparisons, truth values, concatenation and repetition compute now).
 - `float128`/`longdouble` and `complex256`/`clongdouble` have no corresponding .NET storage type.
 
 See [Dtypes](dtypes.md) for scalar conversion, promotion, special-value, and casting details.

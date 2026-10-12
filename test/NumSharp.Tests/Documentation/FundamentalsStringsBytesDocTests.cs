@@ -378,6 +378,69 @@ namespace NumSharp.Tests.Documentation
             ((Action)(() => np.dtype("O"))).Should().Throw<NotSupportedException>();
         }
 
+        // ── Variable-width text: StringDType ──────────────────────────────────────────────────────
+
+        /// <summary>The "Creating StringDType arrays" snippet: the descriptor, the 16-byte cell, zeros and ones.</summary>
+        [TestMethod]
+        public void StringDType_Creating()
+        {
+            var t = np.array(new[] { "a", "a much longer text" }, np.dtype("T"));
+            t.dtype.ToString(true).Should().Be("StringDType()");
+            t.dtype.itemsize.Should().Be(16, "the cell, whatever the length of the text");
+            np.zeros(new Shape(2), np.dtypes.StringDType()).ToString(true).Should().Be("array(['', ''], dtype=StringDType())");
+            np.ones(new Shape(2), np.dtypes.StringDType()).ToString(true).Should().Be("array(['1', '1'], dtype=StringDType())");
+        }
+
+        /// <summary>The "Missing data: the NA object" snippet: None as the NA object, and None as text without one.</summary>
+        [TestMethod]
+        public void StringDType_NAObjects()
+        {
+            var withNA = np.dtypes.StringDType(na_object: null);
+            var a = np.array(new object[] { "x", null }, withNA);
+            a.item(1).Should().BeNull();
+            a.ToString(true).Should().Be("array(['x', None], dtype=StringDType(na_object=None))");
+            np.array(new object[] { "x", null }, np.dtype("T")).item(1).Should().Be("None");
+        }
+
+        /// <summary>The "Writing elements" snippet: a value is its str(); coerce=False accepts only text.</summary>
+        [TestMethod]
+        public void StringDType_WritingElements()
+        {
+            var t = np.array(new[] { "a", "b" }, np.dtypes.StringDType());
+            t[0] = 3.25;
+            t.item(0).Should().Be("3.25");
+            var strict = np.array(new[] { "a" }, np.dtypes.StringDType(coerce: false));
+            ((Action)(() => strict[0] = 5)).Should().Throw<ValueError>()
+                .WithMessage("StringDType only allows string data when string coercion is disabled.");
+        }
+
+        /// <summary>The "Moving and casting" snippet: parse to numbers, cut to a sized U, numbers to StringDType.</summary>
+        [TestMethod]
+        public void StringDType_MovingAndCasting()
+        {
+            var t = np.array(new[] { "12", "-3" }, np.dtypes.StringDType());
+            t.astype(np.int64).ToArray<long>().Should().Equal(12L, -3L);
+            NDArray.AsStringArray(t.astype("U1")).Should().Equal("1", "-");
+            np.array(new[] { 1.5, 2.0 }).astype(np.dtypes.StringDType()).ToString(true)
+                .Should().Be("array(['1.5', '2.0'], dtype=StringDType())");
+        }
+
+        /// <summary>The "What StringDType refuses" table: the raw-buffer routes, buffering np.nditer, computation.</summary>
+        [TestMethod]
+        public void StringDType_Refusals()
+        {
+            var t = np.array(new[] { "a" }, np.dtypes.StringDType());
+            ((Action)(() => t.view(np.dtype("U1")))).Should().Throw<TypeError>()
+                .WithMessage("Cannot change data-type for array of references.");
+            ((Action)(() => { var _ = t.data; })).Should().Throw<ValueError>()
+                .WithMessage("cannot include dtype 'numpy.dtypes.StringDType' in a buffer");
+            ((Action)(() => np.frombuffer(new byte[16], "T"))).Should().Throw<ValueError>()
+                .WithMessage("cannot create an OBJECT array from memory buffer");
+            ((Action)(() => np.ndarray(new Shape(1), np.dtype("T"), new byte[16]))).Should().Throw<ArgumentException>();
+            ((Action)(() => np.nditer(t, flags: new[] { "refs_ok", "buffered" }))).Should().Throw<NotSupportedException>();
+            ((Action)(() => { var _ = t == t; })).Should().Throw<StringComputationNotSupportedException>();
+        }
+
         // ── Byte streams via np.frombuffer ────────────────────────────────────────────────────────
 
         [TestMethod]

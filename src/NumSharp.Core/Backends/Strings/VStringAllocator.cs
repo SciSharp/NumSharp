@@ -93,6 +93,66 @@ namespace NumSharp.Backends.Strings
         /// <summary>Heap bytes that are reported to the GC in batches of at least this many (see <see cref="AccountHeap"/>).</summary>
         private const long PressureBatch = 64 * 1024;
 
+        // ------------------------------------------------------------------------------------------------------------
+        // fault injection (tests only)
+        // ------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     Whether an allocation failure is scheduled on some thread (<see cref="FailAllocationAfter"/>). Production code
+        ///     never sets it, so an allocation pays one static read and no thread-static access.
+        /// </summary>
+        private static volatile bool s_faultInjectionArmed;
+
+        /// <summary>
+        ///     The number of arena / heap allocations this thread may still make before the scheduled one fails (1 = the next
+        ///     one fails); 0 when nothing is scheduled. Thread-static, so a scheduled failure never reaches another thread.
+        /// </summary>
+        [ThreadStatic]
+        private static int t_failCountdown;
+
+        /// <summary>
+        ///     Test hook: makes the arena or heap allocation after <paramref name="successes"/> more successful ones on THIS
+        ///     thread fail, as an exhausted allocator fails (the request returns null, the member returns -1, and the caller
+        ///     raises NumPy's <c>MemoryError</c> text and runs its clean-up). Only medium and long strings allocate (a short
+        ///     string lives in its cell), so only they count. The failure fires once; <see cref="DisarmFaultInjection"/> cancels
+        ///     a failure that has not fired.
+        /// </summary>
+        /// <param name="successes">The number of allocations that still succeed first (0: the next one fails).</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="successes"/> is negative.</exception>
+        /// <remarks>Out-of-memory paths are otherwise unreachable on a test host: a real failure needs the native heap
+        ///     exhausted. NumPy's own tests cannot reach them either; this hook is how NumSharp proves each one raises the right
+        ///     text and frees what the operation duplicated before the failure.</remarks>
+        internal static void FailAllocationAfter(int successes)
+        {
+            if (successes < 0)
+                throw new ArgumentOutOfRangeException(nameof(successes), successes, "The number of successful allocations is not negative.");
+            t_failCountdown = successes + 1;
+            s_faultInjectionArmed = true;
+        }
+
+        /// <summary>Test hook: cancels this thread's scheduled allocation failure (<see cref="FailAllocationAfter"/>).</summary>
+        internal static void DisarmFaultInjection()
+        {
+            t_failCountdown = 0;
+            s_faultInjectionArmed = false;
+        }
+
+        /// <summary>
+        ///     Whether the allocation being made is the one <see cref="FailAllocationAfter"/> scheduled to fail: counts this
+        ///     thread's allocations down while a failure is scheduled.
+        /// </summary>
+        /// <returns>True for the scheduled failure (once).</returns>
+        private static bool InjectedFailure()
+        {
+            // The common case: nothing scheduled anywhere — one volatile read, no thread-static access.
+            if (!s_faultInjectionArmed || t_failCountdown <= 0)
+                return false;
+            if (--t_failCountdown != 0)
+                return false;
+            s_faultInjectionArmed = false;
+            return true;
+        }
+
         /// <summary>Refuses a big-endian host, whose cell would hold the flags in byte 0 (NumPy's other layout).</summary>
         /// <exception cref="PlatformNotSupportedException">The host is big-endian.</exception>
         static VStringAllocator()
@@ -118,7 +178,8 @@ namespace NumSharp.Backends.Strings
         /// <summary>The allocator mutex (<c>allocator_lock</c>).</summary>
         private readonly object _lock = new object();
 
-        /// <summary>Arena and heap bytes reported to the GC with <see cref="GC.AddMemoryPressure"/>; removed at <see cref="ClearAndFree"/>.</summary>
+        /// <summary>Arena and heap bytes reported through the pool's coarse accounting
+        ///     (<see cref="Unmanaged.Pooling.SizeBucketedBufferPool.AccountForeignAllocation"/>); released at <see cref="ClearAndFree"/>.</summary>
         private long _reportedPressure;
 
         /// <summary>Heap bytes allocated since the last report (reported in batches of <see cref="PressureBatch"/>).</summary>
@@ -289,6 +350,87 @@ namespace NumSharp.Backends.Strings
         /// <returns>True when freeing the cell frees heap memory.</returns>
         internal static bool OwnsHeapString(byte* s) => (s[15] & OutsideArena) != 0 && !IsShort(s) && VStringSize(s) > 0;
 
+        /// <summary>
+        ///     The arena bytes a duplicate of this cell appends to a destination arena whose cells hold no arena strings (so no
+        ///     slot can be reused): the text and its size prefix for a medium or long string (an arena or heap string of the
+        ///     source — <c>NpyString_newsize</c> puts both in the arena of a fresh cell), nothing for a short, empty or NA cell.
+        /// </summary>
+        /// <param name="s">The source cell.</param>
+        /// <returns>The bytes <see cref="ArenaMalloc"/> would append for it.</returns>
+        internal static long ArenaBytesForDuplicate(byte* s)
+        {
+            if (IsNull(s) || IsShort(s))
+                return 0;
+            ulong size = VStringSize(s);
+            return size == 0 ? 0 : (long)(size <= MediumMaxSize ? size + 1 : size + 8);
+        }
+
+        /// <summary>
+        ///     The arena bytes packing a text of <paramref name="size"/> bytes into a fresh cell appends (nothing for a short
+        ///     text).
+        /// </summary>
+        /// <param name="size">The UTF-8 size.</param>
+        /// <returns>The bytes, prefix included.</returns>
+        internal static long ArenaBytesForText(long size)
+            => size <= ShortMaxSize ? 0 : size <= MediumMaxSize ? size + 1 : size + 8;
+
+        /// <summary>Whether this allocator holds any medium, long or heap string (a copy of its cells may need arena space).</summary>
+        internal bool HoldsLongStrings => _arenaCursor > 0 || HeapStrings > 0;
+
+        /// <summary>
+        ///     Grows the arena so that <paramref name="bytes"/> more can be appended without another reallocation — the bulk
+        ///     copies call it with the exact total a fresh destination will take, instead of letting <see cref="ArenaMalloc"/>
+        ///     reallocate (and copy and zero) the arena some 50 times on the way up by 25 % steps (measured: a copy of a
+        ///     million 20–40-byte strings 93 ms → ~32 ms).
+        /// </summary>
+        /// <param name="bytes">The bytes about to be appended.</param>
+        /// <remarks>
+        ///     Best effort: a reallocation that fails leaves the arena as it was (the appends then grow it themselves and
+        ///     report NumPy's MemoryError if that fails too). Only the arena's CAPACITY differs from NumPy's growth sequence —
+        ///     never an offset (the cursor decides those), so no cell changes. The lock must be held.
+        /// </remarks>
+        internal void TryReserve(long bytes)
+        {
+            if (bytes <= 0 || _arenaSize - _arenaCursor >= (ulong)bytes)
+                return;
+            ulong newsize = _arenaCursor + (ulong)bytes;
+            if (newsize < _arenaCursor)
+                return; // overflow: leave it to the appends
+            // Best effort: a failed growth leaves the arena as it was, and the appends grow it themselves.
+            TryGrowArena(newsize);
+        }
+
+        /// <summary>
+        ///     Reallocates the arena to exactly <paramref name="newsize"/> bytes and zeroes the space past the cursor: the
+        ///     growth step of <c>arena_malloc</c>, which <see cref="ArenaMalloc"/> (125 % of what it needs) and
+        ///     <see cref="TryReserve"/> (the exact total of a bulk copy) share, so the arena has ONE reallocation site.
+        /// </summary>
+        /// <param name="newsize">The new capacity in bytes; larger than the current capacity.</param>
+        /// <returns>True when the arena now holds <paramref name="newsize"/> bytes; false when the reallocation failed, in
+        ///     which case the arena, its capacity and the accounted bytes are unchanged.</returns>
+        /// <remarks>
+        ///     <c>NativeMemory.Realloc</c> with a null pointer is an allocation, as <c>realloc(NULL, n)</c> is, so the first
+        ///     growth creates the arena. The space past the cursor must read as zero, as NumPy's <c>memset</c> leaves it: a
+        ///     realloc returns the new tail uninitialized. The lock must be held.
+        /// </remarks>
+        private bool TryGrowArena(ulong newsize)
+        {
+            byte* newbuf;
+            try
+            {
+                newbuf = (byte*)NativeMemory.Realloc(_arena, (nuint)newsize);
+            }
+            catch (OutOfMemoryException)
+            {
+                return false;
+            }
+            NativeMemory.Clear(newbuf + _arenaCursor, (nuint)(newsize - _arenaCursor));
+            AccountArena((long)(newsize - _arenaSize));
+            _arena = newbuf;
+            _arenaSize = newsize;
+            return true;
+        }
+
         // ------------------------------------------------------------------------------------------------------------
         // the arena (static_string.c: vstring_buffer, arena_malloc, arena_free)
         // ------------------------------------------------------------------------------------------------------------
@@ -317,6 +459,9 @@ namespace NumSharp.Backends.Strings
         /// <returns>The first text byte (after the prefix), or null when the size overflows or the reallocation fails.</returns>
         private byte* ArenaMalloc(ulong size)
         {
+            // A failure scheduled by a test (FailAllocationAfter): the same null an exhausted arena returns.
+            if (InjectedFailure())
+                return null;
             // one extra size_t to store the size of the allocation
             ulong storage = size <= MediumMaxSize ? size + 1 : size + 8;
             if (_arenaSize - _arenaCursor < storage)
@@ -328,20 +473,8 @@ namespace NumSharp.Backends.Strings
                 ulong newsize = minsize + minsize / 4;
                 if (newsize < minsize)
                     return null; // overflow means out of memory
-                byte* newbuf;
-                try
-                {
-                    // NativeMemory.Realloc with a null pointer is an allocation, as realloc(NULL, n) is.
-                    newbuf = (byte*)NativeMemory.Realloc(_arena, (nuint)newsize);
-                }
-                catch (OutOfMemoryException)
-                {
+                if (!TryGrowArena(newsize))
                     return null;
-                }
-                NativeMemory.Clear(newbuf + _arenaCursor, (nuint)(newsize - _arenaCursor));
-                AccountArena((long)(newsize - _arenaSize));
-                _arena = newbuf;
-                _arenaSize = newsize;
             }
             byte* ret;
             if (size <= MediumMaxSize)
@@ -461,6 +594,9 @@ namespace NumSharp.Backends.Strings
             // Heap allocate
             onHeap = true;
             toInit[15] = Initialized | OutsideArena | Long;
+            // A failure scheduled by a test (FailAllocationAfter): the same null an exhausted heap gives.
+            if (InjectedFailure())
+                return null;
             byte* heap;
             try
             {
@@ -744,7 +880,7 @@ namespace NumSharp.Backends.Strings
                 _arenaSize = _arenaCursor = 0;
                 if (_reportedPressure > 0)
                 {
-                    GC.RemoveMemoryPressure(_reportedPressure);
+                    Unmanaged.Pooling.SizeBucketedBufferPool.AccountForeignRelease(_reportedPressure);
                     _reportedPressure = 0;
                 }
                 _unreportedHeap = 0;
@@ -760,25 +896,30 @@ namespace NumSharp.Backends.Strings
         // GC memory pressure (the arena and heap strings are native memory the GC does not see)
         // ------------------------------------------------------------------------------------------------------------
 
-        /// <summary>Reports an arena growth to the GC, so dropped buffers with large arenas are collected promptly.</summary>
+        /// <summary>
+        ///     Reports an arena growth through the buffer pool's coarse accounting
+        ///     (<see cref="Unmanaged.Pooling.SizeBucketedBufferPool.AccountForeignAllocation"/>), so a process holding large
+        ///     arenas still pushes the GC to collect dropped buffers, without a <see cref="GC.AddMemoryPressure"/> call per
+        ///     growth (that drove constant gen-2 collections).
+        /// </summary>
         /// <param name="bytes">The growth in bytes.</param>
         private void AccountArena(long bytes)
         {
             if (bytes <= 0)
                 return;
-            GC.AddMemoryPressure(bytes);
+            Unmanaged.Pooling.SizeBucketedBufferPool.AccountForeignAllocation(bytes);
             _reportedPressure += bytes;
         }
 
-        /// <summary>Accumulates a heap allocation and reports it in batches (a pressure call per small string would cost more
-        ///     than the string).</summary>
+        /// <summary>Accumulates a heap allocation and reports it in batches through the pool's accounting (two interlocked
+        ///     adds per report).</summary>
         /// <param name="bytes">The heap allocation size.</param>
         private void AccountHeap(long bytes)
         {
             _unreportedHeap += bytes;
             if (_unreportedHeap < PressureBatch)
                 return;
-            GC.AddMemoryPressure(_unreportedHeap);
+            Unmanaged.Pooling.SizeBucketedBufferPool.AccountForeignAllocation(_unreportedHeap);
             _reportedPressure += _unreportedHeap;
             _unreportedHeap = 0;
         }

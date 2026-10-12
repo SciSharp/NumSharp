@@ -101,6 +101,50 @@ descriptor's coerce), `isdtype` refuses `T`, a `T` instance as a ufunc `dtype=` 
 `UnicodeEncodeError` already). Gate: oracle section `tdtype` (1,188 strict) + `DTypes/StringDTypeDescriptorTests.cs` +
 `Backends/Strings/StringDTypeProtocolTests.cs`. Test trap: a lone surrogate cannot travel in `[DataRow]` or
 `[DynamicData]` (UTF-8 metadata, XML-serialized rows); keep such strings in the test body.
+**NEP 55 `StringDType` ARRAYS exist (P1.3–P1.6, P1.9 — 2026-10-12; plan `docs/plans/strings-phase1-completion.md`).**
+Storage is NumPy's byte for byte (`Backends/Strings/VStringAllocator.cs` = `static_string.c`: the 16-byte cell, short
+strings in the cell, medium / long ones in a per-BUFFER arena, heap strings after a longer rewrite; the cells' memory block
+owns the allocator, so views keep it alive). Rules a new route must keep:
+- **Never move a `T` cell as raw bytes** (an arena offset or a heap pointer means something only to its own allocator).
+  `DTypeSize` / `dtypesize` THROW for a `T` storage so a raw route fails loudly; byte arithmetic reads `ItemBytes` (16).
+  Gathers run the numeric route on the CELL view and re-home each cell (`NDVStringMove.Gather` / `Rehome` /
+  `RehomeMulti`); scatters write int64 marks and duplicate the marked values (`ScatterMarks`); copies go through
+  `NDVStringCopy.Copy` (NumPy's overlap rules, the destination-stride walk that decides arena offsets).
+- **A store's value is NumPy's `PyArray_FromAny(values, dtype)`** (`NDVStringMove.StoreValue`): a Python object (a C#
+  literal — marked `WasPythonLiteral` / `WasPythonStr` / `WasPythonBool` —, null for `None`, a boxed value, the elements of
+  a C# array or list) by `stringdtype_setitem` (the NA object, its `str()`, refused under `coerce=False`), an ndarray by the
+  cast. An index of integers alone given a Python object is NumPy's `array_assign_item`: setitem straight into the element
+  (`UnmanagedStorage.SetVStringItem`), with setitem's MemoryError texts; a slice assignment and `fill` run the copy loop
+  ("... in string to string cast"). Probed by laying crafted cells over a buffer (`np.ndarray((2,), T, buffer=…)`).
+- **Out-of-memory paths are tested by fault injection**: `VStringAllocator.FailAllocationAfter(n)` makes the (n+1)-th arena
+  or heap allocation of THIS thread fail (`DisarmFaultInjection` cancels); production pays one volatile read. Each
+  operation must raise NumPy's text for its loop and dispose its half-built result (`StringDTypeFaultTests`: the live
+  allocator count returns to its baseline).
+- The oracle carries `T` values as values, never cells (`"t"` + `"values"`, `{"na": true}`), and compares `tobytes()`
+  cells with the heap pointers masked; sections `tstore` / `tcreate` / `tmove` / `tcast` (8,324 strict).
+- NumPy 2.4.2 bugs on `T` that NumSharp does not reproduce (pinned by unit tests, kept out of the corpus): `np.place`
+  segfaults, `np.choose` / `np.put` / `np.putmask` copy cells raw, `bytes → T` skips UTF-8 validation, `T → complex` puts the
+  real part into the imaginary part, a short cell copied onto itself (`a[...] = a[:1]`) becomes `''`.
+- Still refused loudly (P1.7 / phase 2): np.nditer buffering or casting a `T` operand (allocating one works), `.npy`,
+  `loadtxt` / `savetxt`, numpy.ma with `T`, and computation (comparisons, `np.sum`, sorting, `np.strings`).
+- **Speed rules** (NPY/NS geomean 5.35×, minimum 1.80×, over copy / arena copy / stepped copy / take / mask / concatenate /
+  where / repeat / `np.array(list)` / `U → T` / `T → U8` at 1K / 100K / 1M): allocator memory is reported through the
+  pool's coarse accounting (`SizeBucketedBufferPool.AccountForeignAllocation` / `AccountForeignRelease`), never one
+  `GC.AddMemoryPressure` per growth (that drove constant gen-2 collections). A bulk copy into an allocator with no arena
+  text reserves the arena's exact total first (`TryReserve`; the arena's one reallocation site is `TryGrowArena`, pinned by
+  the native-allocation chokepoint gate): only the capacity differs from NumPy's 125 % steps, never an offset. The
+  pre-pass counts a text only where `heap_or_arena_allocate` puts it in the arena: a destination cell whose flags are 0
+  once the free has cleared MISSING (a fresh cell, or an NA set on one); a cell that held a short string takes its new
+  text on the HEAP, so counting it reserves arena space nothing uses. A fast path
+  must give NumPy's cell for every input it takes: a short NON-EMPTY source into a cell that holds no arena or heap text
+  is the source cell (two 8-byte moves; an empty source is `pack_empty`, which keeps the destination's state — a heap or
+  arena destination must go through `free`), and `np.array(list, T)` writes a short ASCII text straight into its fresh cell.
+Traps: a `byte[][]` without a dtype is a uint8 matrix (pass an `S` dtype for bytes objects); C# binds a literal to an
+`NDArray` overload before an `object` one (`np.insert(t, 1, "x")` takes the literal's NDArray route — box it to reach the
+object route); `nd.CopyTo(byte*)` binds the generic `CopyTo<T>(T*)` (cast to `void*`). Coverage of a change is measured
+on the lines it ADDED (a cobertura run of the unit + oracle suites joined with `git diff -U0 <base>`): phase 1's is
+99.4 % (3,600 / 3,623; the rest cannot run: host limits and guards behind excluded conditions). Mutation pass: 27 planted
+bugs, 26 killed, 1 equivalent. A crashed test host counts as a kill (a corrupt cell can end it without a "Failed" line).
 Where NumPy REFUSES (no string loop) NumSharp raises NumPy's type + text; where NumPy COMPUTES something not ported yet
 (sort/search, the other `np.strings` functions) it throws
 `StringComputationNotSupportedException` — both AFTER NumPy's earlier checks in NumPy's order (`dtype=` class check,

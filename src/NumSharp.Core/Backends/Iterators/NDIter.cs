@@ -492,9 +492,12 @@ namespace NumSharp.Backends.Iteration
                     // A fixed-width string output is allocated from it (the type code names no width), an unsized request
                     // (`'U'`) growing to one character as every string allocation does (PyArray_NewFromDescr).
                     DType? resolvedDescr = opDescrs != null && opIdx < opDescrs.Length ? opDescrs[opIdx] : null;
+                    // A NEP 55 StringDType request is allocated with that descriptor instance (na_object, coerce): a fresh
+                    // buffer of empty strings with its own allocator, as NumPy allocates it — its type code (the String lane)
+                    // names no string class, so np.zeros(shape, NPTypeCode.String) would refuse it.
                     DType? stringAllocDescr = NDStringStorage.IsString(resolvedDescr)
                         ? NDStringStorage.AllocationDescr(resolvedDescr)
-                        : null;
+                        : resolvedDescr?.Meta is VStringDTypeMeta ? resolvedDescr : null;
 
                     NPTypeCode allocDtype;
                     bool isArrayMaskOp = (opFlags[opIdx] & NDIterPerOpFlags.ARRAYMASK) != 0;

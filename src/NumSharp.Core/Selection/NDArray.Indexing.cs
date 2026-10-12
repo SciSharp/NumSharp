@@ -77,7 +77,8 @@ namespace NumSharp
             set
             {
                 ThrowIfNotWriteable();
-                AssignThroughView(Storage.GetView(Slice.ParseSlices(slice)), value);
+                var slices = Slice.ParseSlices(slice);
+                AssignThroughView(Storage.GetView(slices), value, IsItemIndex(slices));
             }
         }
 
@@ -96,8 +97,25 @@ namespace NumSharp
             set
             {
                 ThrowIfNotWriteable();
-                AssignThroughView(Storage.GetView(slice), value);
+                AssignThroughView(Storage.GetView(slice), value, IsItemIndex(slice));
             }
+        }
+
+        /// <summary>
+        ///     Whether a basic index names ONE element by integers alone (one integer per axis, no slice, ellipsis or new
+        ///     axis) — NumPy's "full integer index", which its assignment routes to the dtype's setitem
+        ///     (<c>array_assign_item</c>) instead of the copy of a view.
+        /// </summary>
+        /// <param name="slices">The parsed index.</param>
+        /// <returns>True for a full integer index of this array.</returns>
+        private bool IsItemIndex(Slice[] slices)
+        {
+            if (slices.Length != ndim)
+                return false;
+            foreach (var s in slices)
+                if (s is null || !s.IsIndex || s.IsEllipsis || s.IsNewAxis)
+                    return false;
+            return true;
         }
 
         /// <summary>
@@ -109,18 +127,29 @@ namespace NumSharp
         ///     fresh zero-length pooled buffer.</param>
         /// <param name="value">The value (a C# literal is packed by NumPy's rules inside <c>SetData</c>, an empty
         ///     selection included).</param>
+        /// <param name="itemIndex">True when the index named one element by integers alone (<see cref="IsItemIndex"/>): a
+        ///     <c>StringDType</c> element then takes a Python object by setitem, as NumPy's <c>array_assign_item</c> does.</param>
         /// <exception cref="ValueError">The value does not broadcast to the selection, or a sequence into one element.</exception>
         /// <exception cref="OverflowException">A C# literal out of this dtype's range.</exception>
         /// <exception cref="TypeError">A complex literal into a real dtype.</exception>
+        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> store's <c>MemoryError</c> texts.</exception>
         /// <remarks>
         ///     The view is wrapped in an <see cref="NDArray"/> for the assignment and disposed after it, exceptions included:
         ///     the wrapper takes one counted reference on the view's slice and gives it back. A bare view storage was never
         ///     released, which stranded the empty selection's fresh buffer (one pooled buffer per <c>a[5:] = v</c>, found by
         ///     the zero-leak gate's store cases); a non-empty view shares the parent's buffer and is unaffected.
         /// </remarks>
-        private static void AssignThroughView(UnmanagedStorage view, NDArray value)
+        private static void AssignThroughView(UnmanagedStorage view, NDArray value, bool itemIndex = false)
         {
             using var target = new NDArray(view);
+            // NumPy's array_assign_item: one StringDType element given a Python object is packed by setitem into the element
+            // itself (setitem's error texts, one allocation); a view of a 0-d array selected by an ellipsis or a slice keeps
+            // the view assignment below (the copy loop), as in NumPy.
+            if (itemIndex && view.IsVString && UnmanagedStorage.IsVStringItemValue(value))
+            {
+                view.SetVStringItem(value, view.Shape.offset);
+                return;
+            }
             target.Storage.SetData(value, new int[0]);
         }
 

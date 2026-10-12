@@ -615,6 +615,30 @@ namespace NumSharp.Backends.Unmanaged.Pooling
                 AddPressureChunk(registered);
         }
 
+        /// <summary>
+        ///     Accounts native memory allocated OUTSIDE the pool — a <c>StringDType</c> buffer's arena or heap strings
+        ///     (<c>VStringAllocator</c>) — the way a hand-out is accounted: the coarse <see cref="PressureChunkBytes"/>
+        ///     pressure chunks and the pacing window. Reporting such memory with <see cref="GC.AddMemoryPressure"/> per growth
+        ///     drives the GC into the constant gen-2 collections the GC PRESSURE header note describes (measured: 0.6 gen-2
+        ///     collections per copy of 100,000 arena strings).
+        /// </summary>
+        /// <param name="bytes">The bytes allocated (nothing for zero or less).</param>
+        /// <remarks>Every call must be matched by <see cref="AccountForeignRelease"/> with the same total when the memory is
+        ///     freed.</remarks>
+        internal static void AccountForeignAllocation(long bytes)
+        {
+            if (bytes > 0)
+                AccountTake(bytes);
+        }
+
+        /// <summary>The release side of <see cref="AccountForeignAllocation"/>.</summary>
+        /// <param name="bytes">The bytes freed (nothing for zero or less).</param>
+        internal static void AccountForeignRelease(long bytes)
+        {
+            if (bytes > 0)
+                AccountReturn(bytes);
+        }
+
         /// <summary>Mirror of <see cref="AccountTake"/> for the give-back side (Return / free).</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void AccountReturn(long bytes)

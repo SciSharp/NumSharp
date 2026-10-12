@@ -380,6 +380,9 @@ namespace NumSharp.Backends.Strings
                     uint* u = (uint*)d;
                     int k = 0;
                     long pos = 0;
+                    // ASCII (the common case) is one code point per byte; the decoder runs only from the first byte above 0x7F.
+                    while (k < chars && pos < size && buf[pos] < 0x80)
+                        u[k++] = buf[pos++];
                     while (k < chars && pos < size)
                     {
                         System.Text.Rune.DecodeFromUtf8(new ReadOnlySpan<byte>(buf + pos, (int)Math.Min(size - pos, 4)), out var rune, out int used);
@@ -481,7 +484,12 @@ namespace NumSharp.Backends.Strings
             byte* canon = stackalloc byte[16];
             for (long i = 0; i < n; i++, s += ss, d += ds)
             {
-                if (Load(s, allocator, out byte* buf, out long size, "string to number cast"))
+                // load_non_nullable_string: a corrupt cell has its own MemoryError text here, an NA element is the
+                // missing-data ValueError.
+                int isNull = allocator.Load(s, out byte* buf, out long size);
+                if (isNull < 0)
+                    throw new OutOfMemoryException("Failed to load string for conversion to a non-nullable type");
+                if (isNull == 1)
                     throw new ValueError(MissingDataText);
                 if (size > int.MaxValue)
                     throw new OutOfMemoryException($"A StringDType element of {size} bytes is longer than a .NET span can be.");
