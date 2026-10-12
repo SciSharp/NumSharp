@@ -239,3 +239,31 @@ After this plan, phase 2 loses P2.4 and gains the `T` forms of P2.1–P2.6 plus 
   of a fresh buffer; `np.where` takes NumPy's output layout; `.data` and `np.frombuffer` refuse `T` with NumPy's texts;
   `None` / bool / str literals store by setitem; the store functions convert their values as `PyArray_FromAny(values,
   dtype)`; `NDArray.Scalar(value, T)` is setitem; np.nditer's per-step views share the operand's allocator.
+- 2026-10-13 — **P1.9 done** (commit `8357fa2f`). The closing pass over all phase-1 code.
+  - Coverage: 99.37 % of the executable lines phase 1 added to `src/NumSharp.Core` (3,600 / 3,623; a cobertura run of the
+    unit + oracle suites joined with `git diff -U0 0cf77427`). The 23 left cannot run: a big-endian host, texts past 2 GB,
+    allocation-failure returns the fault hook does not reach, guards behind conditions the callers exclude.
+  - Unit tests: `Backends/Strings/StringDType{Storage,Movement,Cast,Creation,Fault,Fence}Tests`, the P1.1 residuals in
+    `TextNumberConversionTests`, the docs page's `StringDType_*` tests; the oracle's
+    `StringDType_NoAllocatorOutlivesTheReplay` (lifetime). Fault injection: `VStringAllocator.FailAllocationAfter(n)` fails
+    the (n+1)-th arena or heap allocation of the thread, so every `MemoryError` path is tested with NumPy's text and the
+    disposal of the half-built result. `FencedMemory`: cells between two inaccessible pages. Guard pages: the unit suite
+    (only the 4 known pool-counting failures, no crash) and the oracle string sections.
+  - Mutation pass: 27 planted bugs, 26 killed, 1 equivalent (an element view's offset, always 0). Two fast-path mutants
+    survived their first round (a heap destination overwritten without its free, an empty source copied as a short
+    cell); two tests probed against NumPy now kill them.
+  - Fixes the tests found: an index of integers alone stores a Python object by setitem (`array_assign_item`, setitem's
+    texts); `fill` and slice assignment run the copy loop (free, then allocate, the copy loop's texts); a `T` → number
+    cast reports a corrupt cell with `load_non_nullable_string`'s text; np.nditer allocates an operand with a `T`
+    `op_dtype`; `np.fill_diagonal(t, null)` is Python's `None`; a cell copied onto itself keeps its text (NumPy 2.4.2
+    makes it `''`, a bug).
+  - Speed (NPY/NS, two pinned P-cores, best of rounds): geomean 5.35×, minimum 1.80×, over copy, arena copy, stepped copy,
+    `np.take`, a mask, `np.concatenate`, `np.where`, `np.repeat`, `np.array(list)`, `U` → `T`, `T` → `U8` at 1K / 100K / 1M
+    (the table is in the commit). Levers: the copy core moves a short non-empty cell into a cell without arena / heap text
+    as two 8-byte words; a bulk copy reserves the arena's exact total first, counting only the cells that
+    `heap_or_arena_allocate` puts in the arena (capacity only, never an offset); allocator memory goes through the pool's
+    coarse accounting instead of a `GC.AddMemoryPressure` per growth; `np.array(list, T)` writes short ASCII texts straight
+    into their fresh cells under one lock; `T` → `U` decodes the ASCII prefix without the UTF-8 decoder.
+- 2026-10-13 — **This round (P1.1–P1.6 and P1.9) is complete.** Later rounds: P1.7 (`T` in np.nditer's buffering and
+  casting, numpy.ma, `loadtxt` / `savetxt`, `.npy`, the whole-surface sweep) and P1.8 (pythonnet `S` / `U` zero-copy
+  both ways, `T` as a copy). Then phase 2 (computation on text).
