@@ -1052,6 +1052,173 @@ namespace NumSharp.Backends.Strings
         }
 
         // ---------------------------------------------------------------------------------------------
+        // StringDType elements (stringdtype/casts.cpp: string_to_int / string_to_float / string_to_complex_float)
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     Parses ONE NEP 55 <c>StringDType</c> element's UTF-8 text into <paramref name="target"/>'s canonical value — the
+        ///     per-element work of NumPy's <c>string_to_int</c> / <c>string_to_float</c> / <c>string_to_complex_float</c>: the
+        ///     text becomes a Python <c>str</c> and goes to CPython's <c>int(s, 10)</c>, <c>float(s)</c> or <c>complex(s)</c>
+        ///     (the same grammars, Unicode rewrite included, as the legacy casts); an integer is then packed by
+        ///     <c>PyLong_AsLongLong</c> / <c>PyLong_AsUnsignedLongLong</c> and NumPy's own range check, whose texts differ from
+        ///     the legacy casts' (<see cref="PackVStringInt"/>).
+        /// </summary>
+        /// <param name="utf8">The element's text (valid UTF-8: every StringDType write encoded it strictly).</param>
+        /// <param name="target">The numeric target dtype (not bool: a StringDType → bool cast is a truth test).</param>
+        /// <param name="canon">Receives the canonical value of <paramref name="target"/>'s family (16 bytes of room):
+        ///     <see cref="long"/>, <see cref="ulong"/>, <see cref="double"/> or <see cref="Complex"/>.</param>
+        /// <exception cref="ValueError">The text is not a number of the target's kind (<c>invalid literal for int() with base
+        ///     10: 'x'</c>, <c>could not convert string to float: 'x'</c>, <c>complex() arg is a malformed string</c>, quoting the
+        ///     Python <c>str</c>), or an integer literal has more than 4300 digits.</exception>
+        /// <exception cref="OverflowException">An integer that does not fit: <c>int too big to convert</c>, <c>can't convert
+        ///     negative int to unsigned</c>, <c>Integer 300 is out of bounds for byte</c>.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     <b>Complex.</b> NumPy 2.4.2's loop stores the REAL part into both parts (<c>npy_csetimag(out, real)</c>: '1+2j'
+        ///     becomes <c>1+1j</c>). This writes the value <c>complex()</c> parsed — a deliberate divergence from that bug.
+        ///     </para>
+        ///     <para>
+        ///     <b>ASCII fast path.</b> CPython's Unicode rewrite (<see cref="PyUnicode.TransformDecimalAndSpaceToAscii(ReadOnlySpan{uint}, Span{byte})"/>)
+        ///     is the identity on ASCII text, so an all-ASCII element (the common case) is parsed from its bytes directly; any
+        ///     other is decoded to code points and rewritten first.
+        ///     </para>
+        /// </remarks>
+        internal static void ParseVStringElement(ReadOnlySpan<byte> utf8, NPTypeCode target, byte* canon)
+        {
+            int n = utf8.Length;
+            bool ascii = System.Text.Ascii.IsValid(utf8);
+            // Work space: the ASCII rewrite (at most one byte per code point) plus its underscore-free copy; a short element
+            // stays on the stack.
+            int need = checked(2 * n + 16);
+            byte[] rented = need > 512 ? new byte[need] : null;
+            Span<byte> work = rented ?? stackalloc byte[512];
+            ReadOnlySpan<byte> text;
+            Span<byte> rest;
+            if (ascii)
+            {
+                text = utf8;
+                rest = work;
+            }
+            else
+            {
+                uint[] cps = new uint[n];
+                int count = DecodeTrustedUtf8(utf8, cps);
+                int m = PyUnicode.TransformDecimalAndSpaceToAscii(new ReadOnlySpan<uint>(cps, 0, count), work);
+                text = work.Slice(0, m);
+                rest = work.Slice(m);
+            }
+
+            TextParseStatus status;
+            Detail d = default;
+            switch (FamilyOf(target))
+            {
+                case Family.Signed:
+                case Family.Unsigned:
+                {
+                    status = ParseInt(text, out bool negative, out ulong magnitude, out bool beyond64, out int digits);
+                    if (status == TextParseStatus.Ok)
+                    {
+                        PackVStringInt(negative, magnitude, beyond64, target, canon);
+                        return;
+                    }
+                    d.Digits = digits;
+                    break;
+                }
+                case Family.Float:
+                {
+                    status = ParseFloat(text, rest, out double v);
+                    if (status == TextParseStatus.Ok)
+                    {
+                        *(double*)canon = v;
+                        return;
+                    }
+                    break;
+                }
+                default:
+                {
+                    status = ParseComplex(text, rest, out double re, out double im);
+                    if (status == TextParseStatus.Ok)
+                    {
+                        *(Complex*)canon = new Complex(re, im);
+                        return;
+                    }
+                    break;
+                }
+            }
+            // The error path: the Python str the loop handed to int() / float() / complex(), quoted as Python quotes it.
+            throw Build(status, d, target, PyRepr.Str(NDUtf8.DecodeTrusted(utf8)), null, TextReprStyle.PythonObject);
+        }
+
+        /// <summary>
+        ///     NumPy's packing of a parsed Python int into an integer target in <c>string_to_int</c>:
+        ///     <c>PyLong_AsLongLong</c> (signed targets) or <c>PyLong_AsUnsignedLongLong</c> (unsigned targets and char), then
+        ///     the cast to the target and NumPy's round-trip check with its NEP 50 text.
+        /// </summary>
+        /// <param name="negative">The value's sign.</param>
+        /// <param name="m">Its magnitude (when <paramref name="beyond64"/> is false).</param>
+        /// <param name="beyond64">Whether the magnitude is past 64 bits.</param>
+        /// <param name="target">The integer target.</param>
+        /// <param name="canon">Receives the <see cref="long"/> / <see cref="ulong"/> value.</param>
+        /// <exception cref="OverflowException">CPython's <c>int too big to convert</c> (past 64 bits) or <c>can't convert
+        ///     negative int to unsigned</c>; NumPy's <c>Integer {v} is out of bounds for {type}</c> with the C type names of a
+        ///     Linux / macOS build (<c>byte</c>, <c>short</c>, <c>int</c>, <c>unsigned byte</c>, <c>unsigned short</c>,
+        ///     <c>unsigned int</c>; Windows NumPy says <c>long</c> / <c>unsigned long</c> for the 32-bit types).</exception>
+        private static void PackVStringInt(bool negative, ulong m, bool beyond64, NPTypeCode target, byte* canon)
+        {
+            if (FamilyOf(target) == Family.Signed)
+            {
+                // PyLong_AsLongLong: anything outside int64 is the same OverflowError.
+                if (beyond64 || (negative ? m > 1UL << 63 : m > long.MaxValue))
+                    throw new OverflowException("int too big to convert");
+                long v = negative ? (long)(0UL - m) : (long)m;
+                (long min, long max, string name) = target switch
+                {
+                    NPTypeCode.SByte => (sbyte.MinValue, sbyte.MaxValue, "byte"),
+                    NPTypeCode.Int16 => (short.MinValue, short.MaxValue, "short"),
+                    NPTypeCode.Int32 => (int.MinValue, int.MaxValue, "int"),
+                    _ => (long.MinValue, long.MaxValue, "long"),
+                };
+                if (v < min || v > max)
+                    throw new OverflowException($"Integer {v.ToString(CultureInfo.InvariantCulture)} is out of bounds for {name}");
+                *(long*)canon = v;
+                return;
+            }
+
+            // PyLong_AsUnsignedLongLong: the sign is tested first ("-0" is zero, not negative), then the 64-bit range.
+            if (negative && (m != 0 || beyond64))
+                throw new OverflowException("can't convert negative int to unsigned");
+            if (beyond64)
+                throw new OverflowException("int too big to convert");
+            (ulong umax, string uname) = target switch
+            {
+                NPTypeCode.Byte => (byte.MaxValue, "unsigned byte"),
+                NPTypeCode.UInt16 or NPTypeCode.Char => (ushort.MaxValue, "unsigned short"),
+                NPTypeCode.UInt32 => (uint.MaxValue, "unsigned int"),
+                _ => (ulong.MaxValue, "unsigned long"),
+            };
+            if (m > umax)
+                throw new OverflowException($"Integer {m.ToString(CultureInfo.InvariantCulture)} is out of bounds for {uname}");
+            *(ulong*)canon = m;
+        }
+
+        /// <summary>Decodes UTF-8 known to be valid into code points (a StringDType element's text).</summary>
+        /// <param name="b">Valid UTF-8.</param>
+        /// <param name="cps">Receives the code points (room for one per byte).</param>
+        /// <returns>The number of code points.</returns>
+        private static int DecodeTrustedUtf8(ReadOnlySpan<byte> b, uint[] cps)
+        {
+            int count = 0;
+            int i = 0;
+            while (i < b.Length)
+            {
+                System.Text.Rune.DecodeFromUtf8(b.Slice(i), out var rune, out int used);
+                cps[count++] = (uint)rune.Value;
+                i += used;
+            }
+            return count;
+        }
+
+        // ---------------------------------------------------------------------------------------------
         // Error texts
         // ---------------------------------------------------------------------------------------------
 

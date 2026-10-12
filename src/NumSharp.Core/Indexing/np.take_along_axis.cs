@@ -44,6 +44,10 @@ namespace NumSharp
                     : NDMatrixBoundary.Wrapped((arr, indices, axis), static s => take_along_axis(s.arr, s.indices, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
+            // A StringDType source: the same gather runs on its cell view (NumPy's checks, this array's shapes) and the cells
+            // are duplicated (NDVStringMove) — never the raw byte kernel below.
+            if (arr.Storage.IsVString)
+                return Backends.Strings.NDVStringMove.Gather(arr, cells => take_along_axis(cells, indices, axis));
 
             // Boundary scope: reclaims the axis=None contiguous re-lay + its reshape view and the
             // int64 index cast at exit. The scope's tracked list also strong-roots those temps

@@ -47,6 +47,8 @@ namespace NumSharp
             // A string result (a's dtype, or a requested one — unsized means one character, NumPy's empty_like) is
             // `res = empty_like(...); copyto(res, fill_value, casting='unsafe')`: the copy truncates / converts the value.
             var resultDescr = dtype ?? a.dtype;
+            if (resultDescr.Meta is VStringDTypeMeta)
+                return Backends.Strings.NDVStringMove.Full(shape, fill_value, resultDescr);
             if (Backends.Strings.NDStringStorage.IsString(resultDescr))
                 return Backends.Strings.NDStringArrays.Full(shape, fill_value, resultDescr);
 

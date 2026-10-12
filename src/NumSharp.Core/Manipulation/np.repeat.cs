@@ -40,6 +40,10 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(a));
             if (repeats < 0)
                 throw new ArgumentException("repeats may not contain negative values");
+            // A StringDType source: the same repeat runs on its cell view (NumPy's checks, this array's shapes) and the cells
+            // are duplicated (NDVStringMove) — never the raw byte kernels below.
+            if (a.Storage.IsVString)
+                return Backends.Strings.NDVStringMove.Gather(a, cells => repeat(cells, repeats, axis));
 
             if (axis is null)
                 return RepeatScalarFlat(a, repeats);
@@ -83,6 +87,10 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(a));
             if (repeats is null)
                 throw new ArgumentNullException(nameof(repeats));
+            // A StringDType source: the same repeat runs on its cell view (the repeats' checks and the axis check are the
+            // numeric route's, in NumPy's order) and the cells are duplicated (NDVStringMove).
+            if (a.Storage.IsVString)
+                return Backends.Strings.NDVStringMove.Gather(a, cells => repeat(cells, repeats, axis));
 
             // NumPy parity: the repeats' rank is checked before its dtype (PyArray_FromAny's depth check, then the cast).
             if (repeats.ndim > 1)

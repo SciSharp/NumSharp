@@ -708,16 +708,25 @@ namespace NumSharp.Tests.DTypes
         }
 
         /// <summary>
-        ///     Until the storage lands (P1.3), allocating an array of a <c>StringDType</c> descriptor is refused loudly
-        ///     instead of falling into a fixed-width or numeric layout.
+        ///     Since P1.3 a <c>StringDType</c> descriptor allocates NumPy's 16-byte cells: every element of a fresh array is
+        ///     <c>''</c> (an all-zero cell), the array keeps the descriptor INSTANCE it was given (its <c>na_object</c> /
+        ///     <c>coerce</c>), and itemsize / nbytes / strides are NumPy's.
         /// </summary>
         [TestMethod]
-        public void Allocation_IsRefusedUntilStorageExists()
+        public void Allocation_GivesEmptyCellsWithTheDescriptor()
         {
-            Action a = () => np.zeros(3, np.dtype("T"));
-            a.Should().Throw<NotSupportedException>().WithMessage("Arrays of StringDType() cannot be allocated yet*");
-            Action b = () => new NDArray(np.dtypes.StringDType(null), new Shape(2));
-            b.Should().Throw<NotSupportedException>().WithMessage("Arrays of StringDType(na_object=None) cannot be allocated yet*");
+            var t = np.dtype("T");
+            using var a = np.zeros(3, t);
+            ReferenceEquals(a.dtype, t).Should().BeTrue();
+            a.itemsize.Should().Be(16);
+            a.nbytes.Should().Be(48);
+            a.strides.Should().Equal(16L);
+            a.GetAtIndex(0).Should().Be(string.Empty);
+            var tn = np.dtypes.StringDType(null);
+            using var b = new NDArray(tn, new Shape(2, 2));
+            b.dtype.Should().Be(tn);
+            b.strides.Should().Equal(32L, 16L);
+            b.GetAtIndex(3).Should().Be(string.Empty);
         }
     }
 }

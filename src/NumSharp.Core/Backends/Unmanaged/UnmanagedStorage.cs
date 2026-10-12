@@ -295,9 +295,12 @@ namespace NumSharp.Backends
                 var descr = _descr;
                 if (descr is null)
                 {
-                    // A string lane's descriptor is sized; the class singleton (unsized U0) would describe no element.
+                    // A string lane's descriptor is sized; the class singleton (unsized U0) would describe no element. A
+                    // StringDType slice carries its descriptor instance (na_object, coerce) the same way.
                     if (InternalArray is StringArraySlice strings)
                         return _descr = strings.Descr;
+                    if (InternalArray is VStringArraySlice vstrings)
+                        return _descr = vstrings.Descr;
                     var meta = DTypeRegistry.FromTypeCode(_typecode);
                     if (meta is null)
                         return null;
@@ -319,17 +322,42 @@ namespace NumSharp.Backends
         /// over <c>Address</c> uses this value, so the in-memory layout is
         /// the only correct reference.
         /// </remarks>
+        /// <exception cref="NotSupportedException">This storage holds NEP 55 <c>StringDType</c> text. Every caller of this
+        ///     property moves or reinterprets elements as raw bytes of this width, which is never valid for a
+        ///     <c>StringDType</c> cell (an arena offset or a heap pointer that only its own buffer's allocator can read), so
+        ///     the property refuses: a route without its <c>StringDType</c> form fails loudly instead of copying cells. Code
+        ///     that only needs the descriptor's item size (strides in bytes, <c>nbytes</c>, overlap bounds) reads
+        ///     <see cref="ItemBytes"/>.</exception>
         public int DTypeSize
         {
             get
             {
                 // A string element's width is a property of the DESCRIPTOR (S5 is 5 bytes, U5 is 20), not of the lane.
                 if (_typecode == NPTypeCode.String)
-                    return StringSlice?.ItemSize ?? Descr.itemsize;
+                {
+                    if (InternalArray is StringArraySlice strings)
+                        return strings.ItemSize;
+                    // The loud refusal of every raw route (docs/plans/strings-phase1-completion.md §3, rule 2): a StringDType
+                    // element is a cell tied to its allocator, so "its bytes" cannot be copied anywhere.
+                    if (InternalArray is VStringArraySlice vstrings)
+                        throw VStringNotSupported(vstrings.Descr, "A route that copies elements as raw bytes");
+                    return (int)Descr.itemsize;
+                }
 
                 return _typecode.SizeOf();
             }
         }
+
+        /// <summary>
+        ///     The descriptor's item size in bytes (NumPy's <c>dtype.itemsize</c>) for every storage: <see cref="DTypeSize"/>
+        ///     for the numeric and fixed-width string lanes, and 16 (one packed cell) for a NEP 55 <c>StringDType</c> storage.
+        /// </summary>
+        /// <remarks>
+        ///     Use it for byte ARITHMETIC that never moves an element (byte strides, <c>nbytes</c>, the extent of a view for an
+        ///     overlap test). A route that copies or reinterprets elements must read <see cref="DTypeSize"/>, which refuses a
+        ///     <c>StringDType</c> storage.
+        /// </remarks>
+        internal int ItemBytes => InternalArray is VStringArraySlice ? VStringAllocator.CellSize : DTypeSize;
 
         /// <summary>
         ///     The shape representing the data in this storage.
@@ -524,29 +552,12 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(descr));
 
             _typecode = descr.GetTypeCode(); // throws the descriptive "no storage yet" for a descriptor-only class
-            ThrowIfVStringStorage(descr);
             // The lane's CLR type (System.String for both string classes, whose descriptor type is string / byte[]) —
             // `_dtype.GetTypeCode()` must give back the lane, and byte[] would read as uint8.
             _dtype = _typecode.AsType();
             _descr = descr.Meta is StringDTypeMeta
                 ? NDStringStorage.AllocationDescr(descr)
                 : descr.isnative ? descr : descr.Meta.EnsureCanonical(descr);
-        }
-
-        /// <summary>
-        ///     Refuses to allocate storage for a NEP 55 <c>StringDType</c> descriptor until its own storage exists (P1.3 of
-        ///     <c>docs/plans/strings-phase1-completion.md</c>). The class shares the <see cref="NPTypeCode.String"/> lane with
-        ///     the fixed-width strings, so without this check a <c>T</c> request would fall into a fixed-width or numeric
-        ///     allocation and lay out cells NumPy's <c>StringDType</c> does not have.
-        /// </summary>
-        /// <param name="descr">The requested descriptor.</param>
-        /// <exception cref="NotSupportedException"><paramref name="descr"/> is a <c>StringDType</c> descriptor.</exception>
-        private static void ThrowIfVStringStorage(DType descr)
-        {
-            if (descr.Meta is VStringDTypeMeta)
-                throw new NotSupportedException(
-                    $"Arrays of {descr} cannot be allocated yet: the StringDType descriptor, its promotion and casting rules exist, " +
-                    "and its storage (16-byte cells over an arena) lands with P1.3 of docs/plans/strings-phase1-completion.md.");
         }
 
         private UnmanagedStorage(object value)
@@ -1229,6 +1240,18 @@ namespace NumSharp.Backends
 
                 case NPTypeCode.String:
                 {
+                    if (array is VStringArraySlice vstrings)
+                    {
+                        // The StringDType layout of the lane: the cells carry the allocator and the descriptor instance, so a
+                        // storage rebuilt from them by any generic path (contiguous slicing, Clone, GetData) is the same kind of
+                        // text array, sharing (a view) or owning (a clone) its allocator through the slice.
+                        InternalArray = vstrings;
+                        _slices.Byte = vstrings.Cells; // the byte lane keeps the block reachable through the union too
+                        Address = vstrings.Address;
+                        Count = vstrings.Count;
+                        _descr = vstrings.Descr;
+                        break;
+                    }
                     // The fixed-width string lane: the element slice carries its bytes AND its descriptor, so the
                     // descriptor is (re)installed from it — a storage rebuilt from a string slice by any generic path
                     // (contiguous slicing, Clone, GetData) is a string storage of the same width without knowing it.
@@ -1444,7 +1467,17 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(dtype));
 
             var typeCode = dtype.GetTypeCode(); // throws the descriptive "no storage yet" for a descriptor-only class
-            ThrowIfVStringStorage(dtype);
+            if (dtype.Meta is VStringDTypeMeta)
+            {
+                // NEP 55 StringDType: 16-byte cells, always zero-filled (an all-zero cell is the empty string, and a cell of
+                // pool noise would read as an arena offset or a heap pointer: NumPy's NPY_NEEDS_INIT, which fillZeros and
+                // overwriteAll cannot waive), and a new allocator owned by the cells' block. The overflow guard counts the
+                // cells' BYTES.
+                AllocationGuard.CheckDimensions(shape.dimensions, VStringAllocator.CellSize);
+                var fresh = shape.ForFreshAllocation();
+                _Allocate(fresh, VStringArraySlice.Allocate(dtype, fresh.size));
+                return;
+            }
             if (dtype.Meta is StringDTypeMeta)
             {
                 // The element width comes from the descriptor (an unsized request becomes one character), and the

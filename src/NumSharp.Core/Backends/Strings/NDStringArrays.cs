@@ -52,7 +52,9 @@ namespace NumSharp.Backends.Strings
                 elementType = elementType.GetElementType();
             if (elementType == typeof(string))
                 return true;
-            if (NDStringStorage.IsString(dtype))
+            // A string dtype (StringDType included) takes the Python objects of an object array (each stored by the dtype's
+            // setitem) and the bytes values of a byte[][]; a typed numeric array is an ndarray, which np.array casts.
+            if (NDStringStorage.IsString(dtype) || dtype?.Meta is VStringDTypeMeta)
                 return elementType == typeof(object) || elementType == typeof(byte[]);
             return elementType == typeof(object) && ContainsText(array);
         }
@@ -129,7 +131,12 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="InvalidOperationException">A dimension longer than a C# array can hold.</exception>
         public static Array ToManagedArray(NDArray a)
         {
-            var elementType = a.Storage.StringSlice.IsUnicode ? typeof(string) : typeof(byte[]);
+            // StringDType: string elements, or object ones when the NA object is not a string / None (its NA elements carry
+            // that object).
+            var vparams = a.Storage.IsVString ? a.dtype.VString : null;
+            var elementType = vparams != null
+                ? (!vparams.HasNAObject || vparams.NAObject is null || vparams.NAObject is string ? typeof(string) : typeof(object))
+                : a.Storage.StringSlice.IsUnicode ? typeof(string) : typeof(byte[]);
             var dims = a.Shape.dimensions;
             if (dims.Length == 0)
             {
@@ -297,6 +304,9 @@ namespace NumSharp.Backends.Strings
         /// </remarks>
         public static NDArray Where(NDArray condition, NDArray x, NDArray y, long[] dims)
         {
+            // A StringDType value operand moves through the allocators (NDVStringMove), never the unit / byte routes.
+            if (x.Storage.IsVString || y.Storage.IsVString)
+                return NDVStringMove.Where(condition, x, y, dims);
             var descr = DTypePromotion.ResultType(x, y);
 
             // NumPy's iterator allocates the result in the order of its operands (cond, x, y): stride-0 / extent-1 axes
@@ -641,6 +651,9 @@ namespace NumSharp.Backends.Strings
         /// <returns>The new array.</returns>
         private static NDArray Build(long[] dims, List<object> values, DType dtype, char order)
         {
+            // StringDType: every element is a Python object stored by stringdtype_setitem (BuildVString).
+            if (dtype?.Meta is VStringDTypeMeta)
+                return BuildVString(dims, values, dtype, order);
             // A numeric dtype: NumPy's discovery keeps the requested dtype and packs each element with its setitem.
             if (dtype != null && dtype.Meta is not StringDTypeMeta)
                 return BuildNumeric(dims, values, dtype, order);
@@ -661,6 +674,43 @@ namespace NumSharp.Backends.Strings
                 return f;
             }
             return result;
+        }
+
+        /// <summary>
+        ///     <c>np.array(values, dtype=StringDType)</c> for collected Python objects: NumPy's discovery keeps the requested
+        ///     descriptor and stores each element with <c>stringdtype_setitem</c> — the NA object packs an NA element, a
+        ///     <see cref="string"/> is itself, a <c>byte[]</c> is decoded as UTF-8, any other value is its <c>str()</c> when the
+        ///     descriptor coerces (<c>np.array([1, 2.5, True], dtype=T)</c> is <c>['1', '2.5', 'True']</c>).
+        /// </summary>
+        /// <param name="dims">The discovered dimensions.</param>
+        /// <param name="values">The element values in C order.</param>
+        /// <param name="descr">The <c>StringDType</c> descriptor.</param>
+        /// <param name="order">The memory layout (<c>'F'</c> for a column-major result; anything else C).</param>
+        /// <returns>The new array.</returns>
+        /// <exception cref="ValueError">A non-text value under <c>coerce=False</c>.</exception>
+        /// <exception cref="UnicodeDecodeError">A <c>bytes</c> value that is not UTF-8.</exception>
+        /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
+        private static NDArray BuildVString(long[] dims, List<object> values, DType descr, char order)
+        {
+            var result = new NDArray(descr, new Shape(dims), true);
+            try
+            {
+                var slice = result.Storage.VStringSlice;
+                for (int i = 0; i < values.Count; i++)
+                    slice.SetIndex(i, values[i]);
+                if (dims.Length > 1 && (order == 'F' || order == 'f'))
+                {
+                    var f = result.copy('F');
+                    result.Dispose();
+                    return f;
+                }
+                return result;
+            }
+            catch
+            {
+                result.Dispose();
+                throw;
+            }
         }
 
         /// <summary>

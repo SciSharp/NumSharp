@@ -586,6 +586,13 @@ namespace NumSharp
         /// </summary>
         public long size => Storage.Shape.Size;
 
+        /// <summary>
+        ///     The in-memory element size in bytes that NumSharp's raw element routes copy with (the legacy alias of
+        ///     <see cref="itemsize"/> for every numeric and fixed-width string dtype).
+        /// </summary>
+        /// <exception cref="NotSupportedException">The array holds NEP 55 <c>StringDType</c> text: its elements are 16-byte
+        ///     cells that only their own buffer's allocator can read, so no element can be copied as raw bytes and this
+        ///     property refuses (read <see cref="itemsize"/> for NumPy's 16).</exception>
         public int dtypesize => Storage.DTypeSize;
 
         /// <summary>
@@ -598,7 +605,7 @@ namespace NumSharp
         ///     <see cref="dtypesize"/>; the product <see cref="size"/> * <c>itemsize</c> is <see cref="nbytes"/>.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.itemsize.html</remarks>
-        public int itemsize => Storage.DTypeSize;
+        public int itemsize => Storage.ItemBytes;
 
         /// <summary>
         ///     Total bytes consumed by the elements of the array — the LOGICAL element count
@@ -609,7 +616,7 @@ namespace NumSharp
         ///     one itemsize and an empty array reports 0. Does not include the array object's own overhead.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.nbytes.html</remarks>
-        public long nbytes => Storage.Shape.Size * (long)Storage.DTypeSize;
+        public long nbytes => Storage.Shape.Size * (long)Storage.ItemBytes;
 
         public char order => Storage.Shape.Order;
 
@@ -629,7 +636,7 @@ namespace NumSharp
             get
             {
                 long[] elementStrides = Storage.Shape.strides;
-                int itemsize = Storage.DTypeSize;
+                int itemsize = Storage.ItemBytes; // a StringDType cell is 16 bytes (NumPy's itemsize), never copied raw here
                 var byteStrides = new long[elementStrides.Length];
                 for (int i = 0; i < elementStrides.Length; i++)
                     byteStrides[i] = elementStrides[i] * itemsize;
@@ -892,7 +899,7 @@ namespace NumSharp
             // A fixed-width string carries its width on the DESCRIPTOR (<U5), which the type-code cast below cannot
             // express: a string array or a string target takes NumPy's array_astype over descriptors (adapt an unsized
             // 'U' / 'S' to the array, the copy=False view shortcut, the casting rule, then the string copy route).
-            if (typecode == NPTypeCode.String || dtype.Meta is StringDTypeMeta)
+            if (typecode == NPTypeCode.String || dtype.Meta is StringDTypeMeta || dtype.Meta is VStringDTypeMeta)
                 return Backends.Strings.NDStringCasting.AsType(this, dtype, copy, order, casting);
             var typeCode = dtype.GetTypeCode(); // a descriptor-only class raises its own descriptive "no storage yet"
             ValidateAstypeCasting(typeCode, casting);
@@ -1052,6 +1059,9 @@ namespace NumSharp
             }
         }
 
+        /// <summary>NumPy's text when a view would reinterpret a buffer that holds references (<c>_view_is_safe</c>).</summary>
+        internal const string ViewOfReferencesText = "Cannot change data-type for array of references.";
+
         /// <summary>
         ///     New view of array with the same data.
         /// </summary>
@@ -1065,6 +1075,8 @@ namespace NumSharp
         ///     that does not divide the last axis' byte length.</exception>
         /// <exception cref="NotSupportedException">A fixed-width string view in a non-native byte order, or a dtype without
         ///     storage (<c>datetime64</c> before Stage C).</exception>
+        /// <exception cref="TypeError">A view from or to a NEP 55 <c>StringDType</c> descriptor that is not equal to this array's
+        ///     (NumPy's <c>Cannot change data-type for array of references.</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.ndarray.view.html
         ///     <para>A fixed-width string carries its width on the DESCRIPTOR, so a view from or to a string dtype reinterprets
@@ -1075,6 +1087,16 @@ namespace NumSharp
         {
             if (dtype is null)
                 return new NDArray(Storage.Alias()) { TensorEngine = TensorEngine };
+            // numpy._core._internal._view_is_safe: equal descriptors view each other; any other view from or to a dtype that
+            // holds references (StringDType's hasobject) is refused. An equal StringDType view shares this buffer's allocator
+            // (NumPy 2.4.2 gives the view a fresh descriptor instance with an EMPTY allocator, so its arena strings read as
+            // NULs — a NumPy bug this does not reproduce).
+            if (Storage.IsVString || dtype.Meta is VStringDTypeMeta)
+            {
+                if (dtype.Equals(this.dtype))
+                    return new NDArray(Storage.Alias()) { TensorEngine = TensorEngine };
+                throw new TypeError(ViewOfReferencesText);
+            }
             if (typecode == NPTypeCode.String || dtype.Meta is StringDTypeMeta)
                 return new NDArray(Storage.AliasAsDescr(dtype)) { TensorEngine = TensorEngine };
             if (dtype.GetTypeCode() == Storage.TypeCode)
@@ -1099,6 +1121,8 @@ namespace NumSharp
         ///     that does not divide the last axis' byte length.</exception>
         /// <exception cref="InvalidOperationException">A view whose byte offset or outer byte stride is not a whole number of
         ///     new elements (NumSharp keeps strides in elements; NumPy, in bytes, allows it).</exception>
+        /// <exception cref="TypeError">This array holds NEP 55 <c>StringDType</c> text (<c>Cannot change data-type for array of
+        ///     references.</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.ndarray.view.html
         ///     <para>
@@ -1108,7 +1132,10 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         public NDArray<T> view<T>() where T : unmanaged
-            => new NDArray<T>(typecode == NPTypeCode.String
+            => Storage.IsVString
+                // _view_is_safe: a StringDType buffer holds references; no numeric dtype may read its cells.
+                ? throw new TypeError(ViewOfReferencesText)
+                : new NDArray<T>(typecode == NPTypeCode.String
                 // A string array's element width is its descriptor's, not a CLR type's: reinterpret by descriptor.
                 ? Storage.AliasAsDescr(InfoOf<T>.NPTypeCode)
                 : Storage.AliasAs(InfoOf<T>.NPTypeCode)) { TensorEngine = TensorEngine };

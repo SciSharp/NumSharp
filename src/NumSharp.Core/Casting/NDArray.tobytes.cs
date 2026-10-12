@@ -42,6 +42,15 @@ namespace NumSharp
                 ? 'C'
                 : OrderResolver.Resolve(order, this.Shape);
 
+            // A StringDType array's bytes are its 16-byte cells exactly as they sit in THIS buffer (NumPy's PyArray_ToString
+            // copies elsize bytes per element, arena offsets and heap pointers included). A copy() would duplicate the
+            // strings into a new arena and change the offsets, so the cells are gathered raw through the cell view instead.
+            if (Storage.IsVString)
+            {
+                using var cells = new NDArray(Storage.VStringCellView()) { TensorEngine = TensorEngine };
+                return cells.tobytes(physical);
+            }
+
             // Fast path: read the logical bytes straight from this view's buffer when its memory already
             // lays elements out in the requested order AND its data starts at Storage.Address. The
             // offset==0 guard matters: simple contiguous slices are re-based (offset folded into Address),

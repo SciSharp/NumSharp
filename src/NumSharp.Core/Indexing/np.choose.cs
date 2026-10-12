@@ -3,6 +3,7 @@ using System.Numerics;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
 namespace NumSharp
@@ -291,6 +292,29 @@ namespace NumSharp
                     throw new TypeError("choose: invalid shape for output array.");
                 if (!@out.Shape.IsWriteable)
                     throw new ValueError("output array is read-only");
+            }
+
+            // ── 5b) a StringDType result: the cells move through the allocators ──────────
+            // The same choose runs on the choices' cell views (it picks the raw cells; the index range and the mode are the
+            // numeric route's, checked again with the same shapes) and on the choice numbers 0..n-1 (which choice each
+            // element came from); every cell is then duplicated through its own choice's allocator. (NumPy 2.4.2 copies the
+            // raw cells of a StringDType choose, so strings longer than 15 bytes from any choice but the result's own
+            // descriptor read garbage there; this gives the values NumPy's choose means.)
+            if (stringDescr?.Meta is VStringDTypeMeta)
+            {
+                var cellChoices = new object[n];
+                var numbers = new object[n];
+                var slices = new VStringArraySlice[n];
+                for (int i = 0; i < n; i++)
+                {
+                    cellChoices[i] = Backends.Strings.NDVStringMove.CellArray(castChoices[i]);
+                    numbers[i] = NDArray.Scalar((long)i);
+                    slices[i] = castChoices[i].Storage.VStringSlice;
+                }
+                var raw = ChooseCore(idx64, cellChoices, null, mode);
+                var which = ChooseCore(idx64, numbers, null, mode);
+                var chosen = Backends.Strings.NDVStringMove.RehomeMulti(raw, which, slices, stringDescr);
+                return FinishChoose(chosen, @out);
             }
 
             // ── 6) allocate the fresh C-contiguous result (common dtype) ──────────────────

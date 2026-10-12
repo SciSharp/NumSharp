@@ -184,6 +184,43 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     The value of a store into a NEP 55 <c>StringDType</c> array: a C# literal (NumPy's Python scalar or Python
+        ///     <c>str</c>) is stored the way NumPy's <c>stringdtype_setitem</c> stores a Python object — the descriptor's NA
+        ///     object packs an NA element, anything else becomes its <c>str()</c> when the descriptor coerces (a
+        ///     <c>coerce=False</c> descriptor refuses a non-text value) — into a NEW 0-d array of <paramref name="descr"/>; any
+        ///     other value (an array, which NumPy CASTS) is returned unchanged.
+        /// </summary>
+        /// <param name="value">The value of the assignment (null passes through for the caller to reject).</param>
+        /// <param name="descr">The destination's <c>StringDType</c> descriptor.</param>
+        /// <returns><paramref name="value"/> itself, or a new 0-d array the caller disposes
+        ///     (<c>!ReferenceEquals(result, value)</c>).</returns>
+        /// <exception cref="ValueError">A non-text literal into a <c>coerce=False</c> descriptor (<c>StringDType only allows
+        ///     string data when string coercion is disabled.</c>).</exception>
+        /// <exception cref="UnicodeEncodeError">A text literal with a lone surrogate.</exception>
+        /// <remarks>
+        ///     NumPy reaches this conversion for EVERY scalar store into a <c>StringDType</c> array — an element, a slice, a
+        ///     fancy or a mask assignment (<c>a[[0]] = 5</c> under <c>coerce=False</c> raises, probed 2.4.2) — while an
+        ///     ndarray value takes the cast (<c>a[:] = np.array([1, 2])</c> under <c>coerce=False</c> stores <c>'1'</c>,
+        ///     <c>'2'</c>). NumSharp's 0-d arrays that are not C# literals (NumPy scalars included) take the cast route.
+        /// </remarks>
+        internal static NDArray PackForVStringStore(NDArray value, DType descr)
+        {
+            if (value is null || !(value.WasPythonLiteral || value.WasPythonStr))
+                return value;
+            var packed = new NDArray(descr, Shape.Scalar, true);
+            try
+            {
+                packed.Storage.VStringSlice.SetIndex(0, value.Storage.GetAtIndex(0));
+            }
+            catch
+            {
+                packed.Dispose();
+                throw;
+            }
+            return packed;
+        }
+
+        /// <summary>
         ///     True for a boxed C# number that the boundary map makes a Python scalar (an integer primitive,
         ///     <see cref="System.Numerics.BigInteger"/>, <c>bool</c>, <c>float</c>, <c>double</c>,
         ///     <see cref="System.Numerics.Complex"/>) or a NumPy scalar (<see cref="Half"/>, <c>char</c>, <c>decimal</c>) —

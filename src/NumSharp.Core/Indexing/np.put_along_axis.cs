@@ -173,6 +173,16 @@ namespace NumSharp
             long totalSize = 1;
             for (int d = 0; d < ndim; d++) totalSize *= resultDims[d];
 
+            if (arr.Storage.IsVString)
+            {
+                // A StringDType target: the values in its descriptor, then the same scatter on marks (the values'
+                // element numbers: the value broadcast, the overlap snapshot and the bounds pass are the numeric route's)
+                // and the marked elements receive the strings.
+                var tvals = values.HasSameElementType(arr) ? values : values.astype(arr.dtype);
+                Backends.Strings.NDVStringMove.ScatterVia(arr, tvals, (marks, index) => PutAlongAxisCore(marks, indices, index, ax));
+                return;
+            }
+
             long elemBytes = arr.dtypesize;
 
             // Cast values to arr's dtype (assignment cast — floats truncate toward zero; over/underflow

@@ -29,7 +29,11 @@ namespace NumSharp.Backends.Printing
             // 0d arrays print like a scalar: floats are not truncated by precision and strings are
             // not quoted, so we return the scalar's str.
             if (a.ndim == 0)
-                return ScalarStr(a.GetAtIndex(0), a.typecode);
+                // A StringDType element is a Python str (or the descriptor's NA object): its str() is the text itself,
+                // 'None', 'nan', ...
+                return a.Storage.IsVString
+                    ? Strings.NDPyObject.Str(a.GetAtIndex(0))
+                    : ScalarStr(a.GetAtIndex(0), a.typecode);
 
             return Array2String(a, opts, " ", "", "");
         }
@@ -80,7 +84,12 @@ namespace NumSharp.Backends.Printing
             bool summarize = a.size > opts.threshold;
 
             var reduced = CollectReducedValues(a, opts.edgeitems, summarize);
-            IElementFormatter formatFn = BuildFormatFunction(reduced, a.typecode, a.ndim, opts);
+            // StringDType's scalar type is Python's str, not np.str_: NumPy's _get_format_function falls through to
+            // 'numpystr', which prints repr() of each element object - the quoted text, or the NA object's repr (None,
+            // nan, 'NA').
+            IElementFormatter formatFn = a.Storage.IsVString
+                ? new VStringReprFormat()
+                : BuildFormatFunction(reduced, a.typecode, a.ndim, opts);
 
             string nextLinePrefix = " " + new string(' ', prefix.Length);
             string summaryInsert = summarize ? "..." : "";
@@ -485,7 +494,10 @@ namespace NumSharp.Backends.Printing
         /// <remarks>Internal so <see cref="NDMaskedArray"/>'s repr prints the <c>dtype=</c> line exactly as the plain array
         ///     repr does.</remarks>
         internal static string DtypeShortRepr(NDArray a)
-            => a.typecode == NPTypeCode.String ? "'" + a.dtype.str + "'" : a.typecode.AsNumpyDtypeName();
+            => a.Storage.IsVString
+                // A DType with its own __repr__ (StringDType) prints that repr, unquoted: dtype=StringDType(na_object=None).
+                ? a.dtype.ToString(true)
+                : a.typecode == NPTypeCode.String ? "'" + a.dtype.str + "'" : a.typecode.AsNumpyDtypeName();
 
         /// <summary>
         ///     A shape as Python's <c>repr</c> of a tuple prints it: <c>()</c>, <c>(3,)</c>, <c>(2, 3)</c> (a space after each

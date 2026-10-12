@@ -117,7 +117,9 @@ namespace NumSharp
             // PyArray_FROM_OTF(mask, NPY_BOOL, CARRAY | FORCECAST) comes next, before the size check: a text mask becomes
             // its truth values here (NumPy's string-to-bool cast; a U unit above U+10FFFF raises SystemError before any
             // later error). The fresh truth array is reclaimed with the scope and never overlaps `a`.
-            if (mask.typecode == NPTypeCode.String)
+            if (mask.Storage.IsVString)
+                mask = mask.astype(NPTypeCode.Boolean, copy: true, order: 'C'); // StringDType's bool cast (NA rules)
+            else if (mask.typecode == NPTypeCode.String)
                 mask = Backends.Strings.NDStringTruth.Truth(mask, Backends.Strings.NDStringTruth.Flavor.Cast, 'C');
 
             if (mask.size != a.size)
@@ -187,6 +189,14 @@ namespace NumSharp
 
             // The values in a's element type, C-contiguous (the conversion above already is).
             NDArray valsCast = source.Shape.IsContiguous ? source : np.ascontiguousarray(source);
+            if (a.Storage.IsVString)
+            {
+                // A StringDType target: the same putmask runs on marks (the values' element numbers, cycled by position)
+                // and the marked elements receive the strings.
+                var mk = maskCast;
+                Backends.Strings.NDVStringMove.ScatterVia(a, valsCast, (marks, index) => PutMaskCore(marks, mk, index, false));
+                return;
+            }
             ExecutePutMask(a, maskCast, valsCast);
         }
 

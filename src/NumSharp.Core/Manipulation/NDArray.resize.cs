@@ -90,7 +90,9 @@ namespace NumSharp
             //    zero dim (so a negative dim following a zero is NOT reported) and rejects negatives
             //    otherwise, with this exact message (distinct from np.resize's wording).
             var newDims = new_shape.dimensions ?? System.Array.Empty<long>();
-            long itemsize = this.dtypesize;
+            // The descriptor's item size (a StringDType cell is 16 bytes; its cells are moved through the allocators below,
+            // never as raw bytes).
+            long itemsize = this.Storage.ItemBytes;
             long newSize = 1;
             for (int i = 0; i < newDims.Length; i++)
             {
@@ -157,10 +159,39 @@ namespace NumSharp
                 byte* src = this.Storage.Address + shape.offset * itemsize;
                 byte* dst = fresh.Storage.Address;
                 long copyBytes = Math.Min(oldBytes, newBytes);
-                if (copyBytes > 0)
-                    Buffer.MemoryCopy(src, dst, newBytes, copyBytes);
-                if (newBytes > copyBytes)
-                    NativeMemory.Clear(dst + copyBytes, (nuint)(newBytes - copyBytes));
+                if (this.Storage.IsVString)
+                {
+                    // A StringDType buffer: the surviving cells are DUPLICATED into the fresh buffer's own allocator (a raw
+                    // copy would leave arena offsets and heap pointers that only the old allocator can read, and the old
+                    // buffer's clear loop would free those heap strings). The grown tail stays zero: '' cells, NumPy's
+                    // zero-filled new elements. The truncated cells' strings are freed with the old buffer. NumPy reallocates
+                    // the cells and keeps its allocator, so its arena offsets survive; here the copy's arena is compact (the
+                    // values are the same, the raw cells of tobytes() can differ for strings longer than 15 bytes).
+                    long cells = copyBytes / itemsize;
+                    var inAllocator = this.Storage.VStringSlice.Allocator;
+                    var outAllocator = fresh.Storage.VStringSlice.Allocator;
+                    Backends.Strings.VStringAllocator.AcquirePair(inAllocator, outAllocator);
+                    try
+                    {
+                        Backends.Strings.NDVStringCopy.CopyRun(src, itemsize, dst, itemsize, cells, inAllocator, outAllocator, null);
+                    }
+                    catch
+                    {
+                        fresh.Dispose(); // its clear loop frees the strings duplicated so far
+                        throw;
+                    }
+                    finally
+                    {
+                        Backends.Strings.VStringAllocator.ReleasePair(inAllocator, outAllocator);
+                    }
+                }
+                else
+                {
+                    if (copyBytes > 0)
+                        Buffer.MemoryCopy(src, dst, newBytes, copyBytes);
+                    if (newBytes > copyBytes)
+                        NativeMemory.Clear(dst + copyBytes, (nuint)(newBytes - copyBytes));
+                }
 
                 // ARC-correct in-place swap: take a reference on the fresh buffer for `this`, drop
                 // `this`'s reference to the old buffer (freed here when uniquely owned; kept alive

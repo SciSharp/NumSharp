@@ -30,6 +30,19 @@ namespace NumSharp.Backends.Printing
         public string Format(object value) => value is byte[] bytes ? PyRepr.Bytes(bytes) : PyRepr.Str((string)value);
     }
 
+    /// <summary>
+    ///     NumPy's <c>numpystr</c> formatter for a NEP 55 <c>StringDType</c> array: <c>repr()</c> of each element OBJECT, never
+    ///     padded - a text prints quoted with CPython's escapes (<c>'a'</c>, <c>"a'b"</c>, <c>'e\nf'</c>), an NA element prints
+    ///     the repr of the descriptor's NA object (<c>None</c>, <c>nan</c>, <c>'NA'</c>).
+    /// </summary>
+    internal sealed class VStringReprFormat : IElementFormatter
+    {
+        /// <summary>Formats one element as NumPy prints it inside an array.</summary>
+        /// <param name="value">The element as the StringDType storage reads it: a <see cref="string"/>, or the NA object.</param>
+        /// <returns>The element's repr.</returns>
+        public string Format(object value) => Strings.NDPyObject.Repr(value);
+    }
+
     internal sealed class BoolFormat : IElementFormatter
     {
         private readonly string _true;

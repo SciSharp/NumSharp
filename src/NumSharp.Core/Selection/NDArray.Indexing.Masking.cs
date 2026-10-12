@@ -37,6 +37,10 @@ namespace NumSharp
                 {
                     // A string element has no element kernel: gather on the unit view (the mask covers the same leading
                     // axes there; the trailing character axis rides along).
+                    // A StringDType element is a cell tied to its allocator: the mask runs on the cell view and the picked
+                    // cells are duplicated (NDVStringMove.Gather).
+                    if (Storage.IsVString)
+                        return Backends.Strings.NDVStringMove.Gather(this, cells => cells[mask]);
                     if (typecode == NPTypeCode.String)
                         return StringAdvancedGet(u => MaskedUnitRows(u, mask, units => units[mask]), p => p[mask]);
                     return this.TensorEngine.BooleanMask(this, mask);
@@ -60,6 +64,12 @@ namespace NumSharp
                 // mask; a 0-D mask (arr[True]=v / arr[False]=v) assigns all / nothing.
                 if (mask.ndim <= this.ndim && IsPartialShapeMatch(mask))
                 {
+                    if (Storage.IsVString)
+                    {
+                        // The mask runs on marks; the marked elements receive the strings (NDArray.Indexing.VString.cs).
+                        VStringAdvancedSet(value, (marks, index) => marks[mask] = index);
+                        return;
+                    }
                     if (typecode == NPTypeCode.String)
                     {
                         StringAdvancedSet(value, (u, v) => u[mask] = v, (p, v) => p[mask] = v);

@@ -110,8 +110,9 @@ namespace NumSharp.Backends
                     *((System.Numerics.Complex*)Address + _shape.TransformOffset(index)) = (System.Numerics.Complex)value;
                     return;
                 case NPTypeCode.String:
-                    // NumPy's STRING_setitem / UNICODE_setitem: encode, truncate to the width, NUL-pad.
-                    StringSlice.SetIndex(_shape.TransformOffset(index), value);
+                    // NumPy's STRING_setitem / UNICODE_setitem (encode, truncate to the width, NUL-pad) or stringdtype_setitem
+                    // (the NA object, or the value's str() packed into the cell) — whichever layout the slice holds.
+                    InternalArray.SetIndex(_shape.TransformOffset(index), value);
                     return;
                 default:
                     throw new NotSupportedException();
@@ -220,7 +221,7 @@ namespace NumSharp.Backends
                     *((System.Numerics.Complex*)Address + _shape.GetOffset(indices)) = (System.Numerics.Complex)value;
                     return;
                 case NPTypeCode.String:
-                    StringSlice.SetIndex(_shape.GetOffset(indices), value);
+                    InternalArray.SetIndex(_shape.GetOffset(indices), value);
                     return;
                 default:
                     throw new NotSupportedException();
@@ -287,7 +288,7 @@ namespace NumSharp.Backends
                     *((System.Numerics.Complex*)Address + _shape.GetOffset(indices)) = (System.Numerics.Complex)value;
                     return;
                 case NPTypeCode.String:
-                    StringSlice.SetIndex(_shape.GetOffset(indices), value);
+                    InternalArray.SetIndex(_shape.GetOffset(indices), value);
                     return;
                 default:
                     throw new NotSupportedException();
@@ -355,6 +356,13 @@ namespace NumSharp.Backends
             // assigns the last element). InferNegativeCoordinates also raises NumPy's IndexError
             // for a genuinely out-of-range index.
             indices = Shape.InferNegativeCoordinates(_shape.dimensions, indices);
+
+            // A StringDType storage takes NumPy's StringDType setitem (NDArray.PackForVStringStore, SetDataVString).
+            if (IsVString)
+            {
+                SetDataVString(value, indices);
+                return;
+            }
 
             // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar: PyArray_Pack stores it with NumPy's range
             // checks (a[0] = 1000 on int8 raises "Python integer 1000 out of bounds for int8"; a 0-d ARRAY of 1000 would be

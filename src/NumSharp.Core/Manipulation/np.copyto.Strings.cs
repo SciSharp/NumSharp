@@ -81,6 +81,12 @@ namespace NumSharp
         /// </remarks>
         private static unsafe void CopytoAssignStrings(NDArray dst, NDArray src, NDArray @where, NPY_CASTING casting)
         {
+            // A StringDType operand has its own route: its cells move only through the allocators (np.copyto.VString.cs).
+            if (src.Storage.IsVString || dst.Storage.IsVString)
+            {
+                CopytoAssignVStrings(dst, src, @where, casting);
+                return;
+            }
             bool scalar = src.ndim == 0;
             DType from = src.dtype, to = dst.dtype;
 

@@ -108,8 +108,8 @@ namespace NumSharp.Backends.Iteration
             if (StridesToTerms(b, terms, ref nterms, skipEmpty: true))
                 return MemOverlap.Overflow;
 
-            int itemsizeA = a.Storage.DTypeSize;
-            int itemsizeB = b.Storage.DTypeSize;
+            int itemsizeA = a.Storage.ItemBytes;
+            int itemsizeB = b.Storage.ItemBytes;
             if (itemsizeA > 1)
             {
                 terms[nterms].A = 1;
@@ -154,7 +154,7 @@ namespace NumSharp.Backends.Iteration
             if (StridesToTerms(a, terms, ref nterms, skipEmpty: false))
                 return MemOverlap.Overflow;
 
-            int itemsize = a.Storage.DTypeSize;
+            int itemsize = a.Storage.ItemBytes;
             if (itemsize > 1)
             {
                 terms[nterms].A = 1;
@@ -202,7 +202,7 @@ namespace NumSharp.Backends.Iteration
         internal static void GetMemoryExtents(NDArray arr, out ulong start, out ulong end)
         {
             var shape = arr.Shape;
-            int itemsize = arr.Storage.DTypeSize;
+            int itemsize = arr.Storage.ItemBytes;
             // First-element address of the view: buffer base + element offset.
             ulong baseAddr = (ulong)arr.Address + (ulong)((long)shape.offset * itemsize);
 
@@ -249,7 +249,7 @@ namespace NumSharp.Backends.Iteration
         private static void StorageExtent(UnmanagedStorage st, out ulong start, out ulong end)
         {
             var shape = st.Shape;
-            int itemsize = st.DTypeSize;
+            int itemsize = st.ItemBytes;
             ulong baseAddr = (ulong)st.Address + (ulong)((long)shape.offset * itemsize);
 
             long lower = 0, upper = 0;
@@ -283,7 +283,7 @@ namespace NumSharp.Backends.Iteration
         private static bool StridesToTerms(NDArray arr, Span<DiophantineTerm> terms, ref int nterms, bool skipEmpty)
         {
             var shape = arr.Shape;
-            int itemsize = arr.Storage.DTypeSize;
+            int itemsize = arr.Storage.ItemBytes;
             int nd = shape.NDim;
             var dims = shape.dimensions;
             var strides = shape.strides;

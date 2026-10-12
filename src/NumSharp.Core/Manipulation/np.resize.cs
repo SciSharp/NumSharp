@@ -56,6 +56,15 @@ namespace NumSharp
             // so normalize to C-order dims — independent of any strides carried by new_shape.
             var outShape = Shape.Adopt(newDims);
 
+            // A StringDType source: the same tiling runs on its cell view and the cells are duplicated (NDVStringMove); an
+            // empty source or result is NumPy's zeros_like ('' elements).
+            if (a.Storage.IsVString)
+            {
+                if (a.size == 0 || newSize == 0)
+                    return zeros(outShape, a.dtype);
+                return Backends.Strings.NDVStringMove.Gather(a, cells => resize(cells, new_shape));
+            }
+
             // Flatten to a 1-D C-order read-out. ravel returns a view when a is already
             // contiguous, else a fresh contiguous copy — either way a dense run of `a.size`
             // elements starting at flat.Shape.offset. Disposed after the tiling copy.

@@ -119,6 +119,18 @@ namespace NumSharp
             // stride of n+1 walks it — the same arithmetic NumPy's flat-slice uses.
             long start = k >= 0 ? k : absK * n;
 
+            if (v1d.Storage.IsVString)
+            {
+                // A StringDType input: the diagonal of MARKS receives v's element numbers, and the marked elements of the
+                // fresh '' matrix receive the strings (never the raw strided-store kernel below).
+                Backends.Strings.NDVStringMove.ScatterVia(res, v1d, (marks, index) =>
+                {
+                    using var diagonal = new NDArray(marks.Storage.Alias(new Shape(new[] { s }, new[] { n + 1 }, start, n * n)));
+                    np.copyto(diagonal, index);
+                });
+                return res;
+            }
+
             // Scatter v1d straight down the diagonal via the IL strided-store kernel — no
             // aliased view, and none of NDIter.Copy's per-strided-write overhead (measured on a
             // 3162² construct: 3.5 ms via SetData vs 2.4 ms via the kernel; the win grows with the

@@ -84,7 +84,18 @@ namespace NumSharp.Backends.Strings
         /// </summary>
         /// <param name="a">The operand, or null.</param>
         /// <returns>True for an <c>S</c> or <c>U</c> array.</returns>
-        internal static bool IsString(NDArray a) => a is not null && a.typecode == NPTypeCode.String;
+        /// <exception cref="NotSupportedException"><paramref name="a"/> holds NEP 55 <c>StringDType</c> text. This predicate
+        ///     gates the fixed-width answers of the computing routes (their NumPy refusals, shape-decided answers and text
+        ///     loops), none of which has a <c>StringDType</c> form yet, so a <c>T</c> operand stops here loudly instead of being
+        ///     read as fixed-width text. A route that does support <c>T</c> tests it before calling this.</exception>
+        internal static bool IsString(NDArray a)
+        {
+            if (a is null || a.typecode != NPTypeCode.String)
+                return false;
+            if (a.Storage.IsVString)
+                throw UnmanagedStorage.VStringNotSupported(a.dtype);
+            return true;
+        }
 
         /// <summary>
         ///     The guard every binary ufunc entry point runs first: does nothing for two numeric operands (two field reads
@@ -861,6 +872,20 @@ namespace NumSharp.Backends.Strings
                 "of string computation (sorting and searching, the np.strings functions) is the next phase.");
 
         /// <summary>
+        ///     The phase-2 deferral of a NEP 55 <c>StringDType</c> computation: a call NumPy answers by computing on
+        ///     <c>StringDType</c> text (its comparisons, <c>add</c> / <c>maximum</c> / <c>minimum</c> loops, sorting, the
+        ///     <c>np.strings</c> functions). Phase 1 holds <c>StringDType</c> text as data only.
+        /// </summary>
+        /// <param name="op">The NumPy function or ufunc name.</param>
+        /// <param name="descr">The <c>StringDType</c> descriptor named in the message.</param>
+        /// <returns>The exception (not thrown).</returns>
+        internal static StringComputationNotSupportedException NextPhaseVString(string op, DType descr)
+            => new StringComputationNotSupportedException(
+                $"{op} is not supported for {descr} arrays yet: NumSharp holds NEP 55 StringDType text as data (storage, " +
+                "element access, copying, indexing, casts, printing); computing on it (comparisons, concatenation, sorting " +
+                "and searching, the np.strings functions) is phase 2 of the string support (docs/plans/strings-phase2.md).");
+
+        /// <summary>
         ///     The comparison operators <c>==</c> / <c>!=</c> with a string operand and an operand of another class: NumPy's
         ///     <c>_failed_comparison_workaround</c>. The ufunc has no loop, so the operator answers "never equal" without
         ///     reading an element: an all-False (<c>==</c>) or all-True (<c>!=</c>) bool array of the broadcast shape.
@@ -872,11 +897,32 @@ namespace NumSharp.Backends.Strings
         ///     caller raises <see cref="NextPhase(string, NDArray)"/>).</returns>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast (NumPy's ValueError, raised by the same
         ///     workaround when it allocates the result).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A NEP 55 <c>StringDType</c> operand meets another
+        ///     <c>StringDType</c> or a <c>U</c> operand and the broadcast result holds elements: NumPy registers string loops for
+        ///     those pairs and compares the text, which is phase 2 for <c>StringDType</c>.</exception>
+        /// <remarks>
+        ///     <c>StringDType</c> registers <c>equal</c> / <c>not_equal</c> loops for <c>(T, T)</c>, <c>(T, U)</c> and
+        ///     <c>(U, T)</c> only (probed 2.4.2): <c>T == S</c>, <c>T == 5</c> and <c>T == True</c> have no loop and take the
+        ///     workaround's constant, like the fixed-width classes.
+        /// </remarks>
         internal static NumSharp.Generic.NDArray<bool> FailedComparison(NDArray lhs, NDArray rhs, bool notEqual)
         {
             DType d1 = lhs.dtype, d2 = rhs.dtype;
             if (d1.Meta is StringDTypeMeta && d2.Meta is StringDTypeMeta && d1.Meta == d2.Meta)
                 return null;
+            if (d1.Meta is VStringDTypeMeta || d2.Meta is VStringDTypeMeta)
+            {
+                var other = d1.Meta is VStringDTypeMeta ? d2 : d1;
+                if (other.Meta is VStringDTypeMeta || other.Meta == DTypeRegistry.Str)
+                {
+                    // NumPy compares the text. An EMPTY broadcast result compares nothing (the shape decides it); anything
+                    // else is the comparison loop of StringDType, phase 2.
+                    var computed = Shape.ResolveReturnShape(lhs.Shape, rhs.Shape);
+                    if (computed.size == 0)
+                        return new NumSharp.Generic.NDArray<bool>(computed.Clean(), fillZeros: true);
+                    throw NextPhaseVString(notEqual ? "not_equal" : "equal", d1.Meta is VStringDTypeMeta ? d1 : d2);
+                }
+            }
             // The workaround allocates its result through an iterator over both operands, so a broadcast failure is
             // still reported; the values are a constant that needs no element of either operand. The typed array is
             // built directly: a typed wrapper made afterwards would alias it, and NumPy's result owns its data.

@@ -360,7 +360,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="start">Code-point position of the run start.</param>
         /// <param name="end">Code-point position one past the run end.</param>
         /// <returns>The exception (not thrown).</returns>
-        private static UnicodeEncodeError EncodeErrorFor(uint firstCodePoint, long start, long end)
+        internal static UnicodeEncodeError EncodeErrorFor(uint firstCodePoint, long start, long end)
         {
             if (end == start + 1)
             {

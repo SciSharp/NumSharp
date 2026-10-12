@@ -115,7 +115,9 @@ namespace NumSharp
             // PyArray_FROM_OTF(mask, NPY_BOOL, CARRAY | FORCECAST) comes next, before the size check: a text mask becomes
             // its truth values here (NumPy's string-to-bool cast; a U unit above U+10FFFF raises SystemError before any
             // later error). The fresh truth array is reclaimed with the scope.
-            if (mask.typecode == NPTypeCode.String)
+            if (mask.Storage.IsVString)
+                mask = mask.astype(NPTypeCode.Boolean, copy: true, order: 'C'); // StringDType's bool cast (NA rules)
+            else if (mask.typecode == NPTypeCode.String)
                 mask = Backends.Strings.NDStringTruth.Truth(mask, Backends.Strings.NDStringTruth.Flavor.Cast, 'C');
 
             if (mask.size != arr.size)
@@ -167,6 +169,14 @@ namespace NumSharp
                 return;   // mask all-false and empty vals — NumPy treats as no-op
 
             NDArray valsCast = converted ?? (vals.Shape.IsContiguous ? vals : np.ascontiguousarray(vals));
+            if (arr.Storage.IsVString)
+            {
+                // A StringDType target: the same place runs on marks (the values' element numbers, cycled over the True
+                // positions) and the marked elements receive the strings. (NumPy 2.4.2 crashes the process here.)
+                var mk = maskCast;
+                Backends.Strings.NDVStringMove.ScatterVia(arr, valsCast, (marks, index) => PlaceCore(marks, mk, index, false));
+                return;
+            }
             ExecutePlace(arr, maskCast, valsCast);
         }
 
@@ -214,6 +224,10 @@ namespace NumSharp
 
             if (values.HasSameElementType(target))
                 return null;
+
+            // Into StringDType (or from it): the StringDType casts (text, numbers' str(), the NA rules), in C order.
+            if (target.Storage.IsVString || values.Storage.IsVString)
+                return values.astype(target.dtype, copy: true, order: 'C');
 
             bool textValues = values.typecode == NPTypeCode.String, textTarget = target.typecode == NPTypeCode.String;
             if (textValues != textTarget)

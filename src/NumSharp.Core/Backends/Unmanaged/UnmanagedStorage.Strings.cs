@@ -7,17 +7,51 @@ namespace NumSharp.Backends
     public partial class UnmanagedStorage
     {
         /// <summary>
-        ///     True when this storage holds fixed-width strings (<c>S</c> or <c>U</c>): its lane is
-        ///     <see cref="NPTypeCode.String"/>, its <see cref="InternalArray"/> is a <see cref="StringArraySlice"/>, and its
-        ///     <see cref="Descr"/> is the sized string descriptor.
+        ///     True when this storage holds TEXT — the <see cref="NPTypeCode.String"/> lane, shared by the fixed-width strings
+        ///     (<c>S</c>, <c>U</c>: a <see cref="StringArraySlice"/>) and NEP 55 <c>StringDType</c> (<c>T</c>: a
+        ///     <see cref="VStringArraySlice"/>; decision D4 of <c>docs/plans/strings-phase1-completion.md</c>). The two layouts
+        ///     have nothing in common below the lane: test <see cref="IsFixedString"/> / <see cref="IsVString"/> (or the
+        ///     descriptor's class) before reading elements as bytes.
         /// </summary>
+        /// <remarks>
+        ///     A route that branches on this property and then treats the elements as fixed-width units reaches
+        ///     <see cref="StringSlice"/>, which refuses a <c>StringDType</c> storage with a clear
+        ///     <see cref="NotSupportedException"/> — the loud refusal of every text route not ported to <c>T</c> yet, instead of
+        ///     a raw copy of cells that are meaningless without their own allocator.
+        /// </remarks>
         public bool IsString => _typecode == NPTypeCode.String;
 
+        /// <summary>True when this storage holds fixed-width strings (<c>S</c> or <c>U</c>, a <see cref="StringArraySlice"/>).</summary>
+        public bool IsFixedString => InternalArray is StringArraySlice;
+
+        /// <summary>True when this storage holds NEP 55 <c>StringDType</c> text (<c>T</c>, a <see cref="VStringArraySlice"/>).</summary>
+        public bool IsVString => InternalArray is VStringArraySlice;
+
         /// <summary>
-        ///     The <see cref="StringArraySlice"/> of a string storage (null for every other lane) — the bytes plus the element
-        ///     width they are read with.
+        ///     The <see cref="StringArraySlice"/> of a fixed-width string storage (null for a numeric lane) — the bytes plus the
+        ///     element width they are read with.
         /// </summary>
-        internal StringArraySlice StringSlice => InternalArray as StringArraySlice;
+        /// <exception cref="NotSupportedException">This storage holds <c>StringDType</c> text: every caller of this property is a
+        ///     fixed-width route (unit views, the byte codec, width arithmetic) that has no <c>T</c> form yet, so it refuses here
+        ///     rather than reading the 16-byte cells as fixed-width text.</exception>
+        internal StringArraySlice StringSlice
+            => InternalArray as StringArraySlice ?? (InternalArray is VStringArraySlice v ? throw VStringNotSupported(v.Descr) : null);
+
+        /// <summary>The <see cref="VStringArraySlice"/> of a <c>StringDType</c> storage (null for every other storage).</summary>
+        internal VStringArraySlice VStringSlice => InternalArray as VStringArraySlice;
+
+        /// <summary>
+        ///     The refusal of a text route that has no <c>StringDType</c> form yet: a <see cref="NotSupportedException"/> naming
+        ///     the descriptor and the plan, thrown before any byte of the 16-byte cells is read as fixed-width text.
+        /// </summary>
+        /// <param name="descr">The <c>StringDType</c> descriptor of the refused operand.</param>
+        /// <param name="operation">The operation, when the caller knows it (<c>"astype"</c>, <c>"np.concatenate"</c>).</param>
+        /// <returns>The exception to throw.</returns>
+        internal static NotSupportedException VStringNotSupported(DType descr, string operation = null)
+            => new NotSupportedException(
+                (operation is null ? "This operation" : operation) + $" does not support {descr} arrays yet: NEP 55 StringDType " +
+                "arrays are being completed in strings phase 1 (docs/plans/strings-phase1-completion.md), and a route without " +
+                "its StringDType form refuses rather than reading the 16-byte cells as fixed-width text.");
 
         /// <summary>
         ///     Allocates a string storage of <paramref name="shape"/>'s dimensions — the string half of NumPy's
@@ -58,6 +92,19 @@ namespace NumSharp.Backends
         {
             if (address == null)
                 throw new ArgumentNullException(nameof(address));
+            if (IsVString)
+            {
+                // A StringDType element's bytes are its packed cell as it sits in this buffer (NumPy's tobytes): gathered
+                // raw in C order through the cell view — never duplicated into another allocator, which would change the
+                // arena offsets the cells hold.
+                long cellBytes = Count * (long)VStringAllocator.CellSize;
+                if (cellBytes == 0)
+                    return;
+                using var cellView = new NDArray(VStringCellView());
+                using var compactCells = cellView.Shape.IsContiguous && cellView.Shape.offset == 0 ? null : cellView.copy('C');
+                Buffer.MemoryCopy((compactCells ?? cellView).Storage.Address, address, cellBytes, cellBytes);
+                return;
+            }
             long bytes = Count * (long)DTypeSize;
             if (bytes == 0)
                 return;
@@ -142,6 +189,41 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     <c>this[indices] = value</c> for a NEP 55 <c>StringDType</c> storage — NumPy's <c>array_assign_subscript</c> with
+        ///     <c>stringdtype_setitem</c>: a C# literal is stored by setitem (<see cref="NDArray.PackForVStringStore"/>: the NA
+        ///     object, or its <c>str()</c>), and the result broadcasts over the target through the <c>StringDType</c> copy core;
+        ///     an array value is CAST (the copy core between two <c>StringDType</c> descriptors, the <c>StringDType</c> casts for
+        ///     text, bool and numbers). One element given an array of one or more dimensions stores that array's <c>str()</c>
+        ///     (<c>a[0] = np.array([1, 2])</c> is <c>'[1 2]'</c>: setitem coerces any object).
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="indices">Normalised (non-negative, in-range) leading coordinates.</param>
+        /// <exception cref="ValueError">A value that does not broadcast to the target, a non-text literal (or array element
+        ///     text) into a <c>coerce=False</c> descriptor, a text that does not parse when the value is cast.</exception>
+        /// <exception cref="Exception">The cast's own errors (see <see cref="Strings.NDVStringCasting.Copy"/>).</exception>
+        internal void SetDataVString(NDArray value, int[] indices)
+        {
+            var packed = NDArray.PackForVStringStore(value, Descr);
+            try
+            {
+                if (indices.Length == _shape.NDim && !packed.Shape.IsScalar)
+                {
+                    // One element, an array value: setitem stores the object's str() (NumPy's as_pystring), refused under
+                    // coerce=False like any other non-text object.
+                    var element = GetData(indices);
+                    element.SetAtIndex(packed, 0);
+                    return;
+                }
+                SetDataString(packed, indices);
+            }
+            finally
+            {
+                if (!ReferenceEquals(packed, value))
+                    packed.Dispose();
+            }
+        }
+
+        /// <summary>
         ///     <c>this[indices] = value</c> for a C# text scalar into a string storage: the value becomes a 0-d array of this
         ///     storage's CLASS (its width discovered, so a value longer than the element is truncated by the copy, exactly as
         ///     NumPy's setitem truncates), then broadcasts over the target.
@@ -194,15 +276,21 @@ namespace NumSharp.Backends
         ///     A fresh buffer of <paramref name="count"/> elements of THIS storage's element type — the descriptor's width for
         ///     a string storage (a <see cref="StringArraySlice"/> of the same descriptor), the lane's for a numeric one. The
         ///     generic clone paths size their result with it, because <see cref="ArraySlice.Allocate(NPTypeCode, long, bool)"/>
-        ///     cannot know a string lane's width.
+        ///     cannot know a string lane's width. A <c>StringDType</c> storage gets a new <see cref="VStringArraySlice"/> of its
+        ///     descriptor: zero-filled cells (empty strings) and a NEW allocator, whatever <paramref name="fillZeros"/> says,
+        ///     because a cell of pool noise would read as an arena offset or a heap pointer.
         /// </summary>
         /// <param name="count">The number of elements.</param>
-        /// <param name="fillZeros">True to zero-fill (NUL-fill for strings).</param>
+        /// <param name="fillZeros">True to zero-fill (NUL-fill for strings; always for <c>StringDType</c>).</param>
         /// <returns>The new slice.</returns>
         internal IArraySlice AllocateLike(long count, bool fillZeros)
-            => _typecode == NPTypeCode.String
-                ? StringArraySlice.Allocate(StringSlice.Descr, count, fillZeros)
-                : ArraySlice.Allocate(_typecode, count, fillZeros);
+        {
+            if (_typecode != NPTypeCode.String)
+                return ArraySlice.Allocate(_typecode, count, fillZeros);
+            if (InternalArray is VStringArraySlice vstrings)
+                return VStringArraySlice.Allocate(vstrings.Descr, count);
+            return StringArraySlice.Allocate(StringSlice.Descr, count, fillZeros);
+        }
 
         /// <summary>
         ///     Re-tags a FRESH, C-contiguous unit array (<c>uint8</c> for <c>S</c>, <c>uint32</c> for <c>U</c>, its last axis
@@ -307,6 +395,37 @@ namespace NumSharp.Backends
             r.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
             r.Engine = Engine;
             return r;
+        }
+
+        /// <summary>
+        ///     The CELL VIEW of a <c>StringDType</c> storage: the same 16-byte cells, typed as <see cref="System.Numerics.Complex"/>
+        ///     (the one 16-byte element of the numeric lanes), with this storage's exact shape, strides, offset and
+        ///     writeability. It exists so that <see cref="Iteration.NDIterRef"/> can WALK cells (broadcasting, coalescing,
+        ///     negative strides) and hand the cell pointers to a loop that works through the allocator; the "complex" values
+        ///     are never read or written as numbers.
+        /// </summary>
+        /// <returns>A bare view (no <see cref="NDArray"/>, so no counted reference of its own); its slice forwards reference
+        ///     counting to the cells, and its base is this storage's owner.</returns>
+        /// <exception cref="InvalidOperationException">This is not a <c>StringDType</c> storage.</exception>
+        /// <remarks>
+        ///     Two uses are valid. (1) <c>NDIterRef.ForEach</c> with the caller's own inner loop (no <c>COPY_IF_OVERLAP</c>, no
+        ///     buffering, no cast), which reaches the cells through the allocator. (2) A numeric MOVEMENT (take, index, repeat,
+        ///     where) whose result is a TEMPORARY cell array that <see cref="Strings.NDVStringMove.Rehome"/> immediately
+        ///     duplicates into a fresh <c>StringDType</c> buffer: the raw copies still refer to this storage's allocator, which
+        ///     is alive and unchanged meanwhile, and the temporary is never a <c>StringDType</c> buffer, so no clear loop frees a
+        ///     string twice. Writing raw cells INTO any <c>StringDType</c> buffer (this one included) is never valid.
+        /// </remarks>
+        internal unsafe UnmanagedStorage VStringCellView()
+        {
+            var slice = VStringSlice ?? throw new InvalidOperationException($"A cell view needs a StringDType storage, not {_typecode}.");
+            IArraySlice cells = ArraySlice.WrapShared<System.Numerics.Complex>(slice.Cells.VoidAddress, slice.Count, slice);
+            var view = new UnmanagedStorage();
+            view._Allocate(_shape, cells);
+            view._baseStorage = _baseStorage ?? this;
+            view.WriteProtected = WriteProtected;
+            view.OnReshaped(); // a view never owns its buffer
+            view.Engine = Engine;
+            return view;
         }
 
         /// <summary>

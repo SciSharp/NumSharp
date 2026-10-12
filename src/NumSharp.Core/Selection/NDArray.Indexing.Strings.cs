@@ -321,6 +321,8 @@ namespace NumSharp
         /// <returns>The selected string array.</returns>
         private NDArray StringFetchIndices(object[] normalized)
         {
+            if (Storage.IsVString)
+                return VStringFetchIndices(normalized); // cells + duplication, never the unit route (NDArray.Indexing.VString.cs)
             // A lone boolean mask over leading axes gathers whole rows (MaskedUnitRows); any other index runs on the unit
             // view as given.
             if (normalized.Length == 1 && normalized[0] is NDArray m && m.typecode == NPTypeCode.Boolean)
@@ -335,7 +337,14 @@ namespace NumSharp
         /// <param name="normalized">The normalized index tuple.</param>
         /// <param name="value">The value.</param>
         private void StringSetIndices(object[] normalized, NDArray value)
-            => StringAdvancedSet(value, (u, v) => u.SetIndices(WithCharacterAxis(normalized), v), (p, v) => p.SetIndices((object[])normalized.Clone(), v));
+        {
+            if (Storage.IsVString)
+            {
+                VStringSetIndices(normalized, value); // marks + duplication (NDArray.Indexing.VString.cs)
+                return;
+            }
+            StringAdvancedSet(value, (u, v) => u.SetIndices(WithCharacterAxis(normalized), v), (p, v) => p.SetIndices((object[])normalized.Clone(), v));
+        }
 
         /// <summary>
         ///     <c>this[index arrays]</c> GET for a string array. More index arrays than axes would reach the character axis of

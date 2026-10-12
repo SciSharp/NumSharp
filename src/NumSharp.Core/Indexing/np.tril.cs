@@ -100,6 +100,11 @@ namespace NumSharp
         {
             int ndim = m.ndim;
 
+            // A StringDType input takes NumPy's where composition (its StringDType gather duplicates the strings); the
+            // blit below copies elements as raw bytes.
+            if (m.Storage.IsVString)
+                return null;
+
             // The 1-D case broadcasts a row across a square result — a different traversal
             // than "copy a run of each source row", so leave it to the composition path.
             if (ndim < 2)

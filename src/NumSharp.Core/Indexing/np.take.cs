@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends.Kernels;
+using NumSharp.Backends.Strings;
 
 namespace NumSharp
 {
@@ -176,6 +177,19 @@ namespace NumSharp
 
             if (@out is not null)
                 ValidateTakeOut(a, @out, outDims);
+
+            if (a.Storage.IsVString)
+            {
+                // A StringDType source, after every check NumPy runs before its gather: the same take runs on the source's
+                // cell view (it repeats those checks and raises the empty-axis and bounds errors with this array's shapes),
+                // and the picked cells are duplicated into a fresh buffer (NDVStringMove). Its out= gets the strings through
+                // the StringDType copy core (np.copyto, unsafe — the cast check above already ran).
+                var taken = NDVStringMove.Gather(a, cells => TakeFrom(cells, indices, axis, null, mode));
+                if (@out is null)
+                    return taken;
+                np.copyto(@out, taken, casting: "unsafe");
+                return @out;
+            }
 
             var result = new NDArray(a.dtype, Shape.Adopt(outDims), false); // the descriptor: a string's width
             long indicesCount = indices.size;

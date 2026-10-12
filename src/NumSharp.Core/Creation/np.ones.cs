@@ -79,7 +79,7 @@ namespace NumSharp
         public static NDArray ones(Shape shape, DType dtype, string device = null)
         {
             ValidateDevice(device);
-            if (Backends.Strings.NDStringStorage.IsString(dtype))
+            if (Backends.Strings.NDStringStorage.IsString(dtype) || dtype?.Meta is VStringDTypeMeta)
                 return OnesOfText(shape, dtype);
             return OnesCore(shape, dtype?.GetTypeCode() ?? NPTypeCode.Double);
         }
@@ -93,7 +93,9 @@ namespace NumSharp
         /// <param name="dtype">The string dtype (sized or not).</param>
         /// <returns>The new string array.</returns>
         private static NDArray OnesOfText(Shape shape, DType dtype)
-            => Backends.Strings.NDStringArrays.Full(shape, 1L, dtype);
+            => dtype.Meta is VStringDTypeMeta
+                ? Backends.Strings.NDVStringMove.Full(shape, 1L, dtype) // the int 1 cast: '1' (coerce does not apply to a cast)
+                : Backends.Strings.NDStringArrays.Full(shape, 1L, dtype);
 
 
         /// <summary>
@@ -171,7 +173,7 @@ namespace NumSharp
         {
             char physical = OrderResolver.Resolve(order);
             var orderedShape = Shape.Adopt(shape.dimensions, physical);
-            if (Backends.Strings.NDStringStorage.IsString(dtype))
+            if (Backends.Strings.NDStringStorage.IsString(dtype) || dtype?.Meta is VStringDTypeMeta)
                 return OnesOfText(orderedShape, dtype);
             return OnesCore(orderedShape, dtype?.GetTypeCode() ?? NPTypeCode.Double);
         }

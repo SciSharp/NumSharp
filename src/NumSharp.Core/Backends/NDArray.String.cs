@@ -47,7 +47,9 @@ namespace NumSharp
         ///     all live in <see cref="NPTypeCode.String"/>, and copying one as the other reads or writes past its elements.
         /// </summary>
         /// <param name="other">The other array.</param>
-        /// <returns>True when no element conversion is needed.</returns>
+        /// <returns>True when no element conversion is needed. Two NEP 55 <c>StringDType</c> arrays need EQUAL descriptors (the
+        ///     same <c>na_object</c> and <c>coerce</c>): a copy between other descriptors converts NA values, and their elements
+        ///     still move through the allocators, never as raw bytes.</returns>
         internal bool HasSameElementType(NDArray other)
         {
             if (typecode != other.typecode)
@@ -56,6 +58,8 @@ namespace NumSharp
                 return true;
             var mine = dtype;
             var theirs = other.dtype;
+            if (mine.Meta is VStringDTypeMeta || theirs.Meta is VStringDTypeMeta)
+                return mine.Equals(theirs);
             return mine.Meta == theirs.Meta && mine.itemsize == theirs.itemsize;
         }
 
@@ -89,11 +93,16 @@ namespace NumSharp
         /// <remarks>
         ///     <b>Breaking:</b> this used to parse the <c>"N l1 l2:contents"</c> char-vector layout the old
         ///     <c>np.array(string[])</c> produced; that layout no longer exists.
+        ///     <para>A NEP 55 <c>StringDType</c> array is accepted too: each element is its text, an NA element the descriptor's
+        ///     NA object when that is a string or <c>None</c> (null); an NA element of any other NA object (a float NaN) cannot
+        ///     be a C# string and is refused — read such arrays with <see cref="tolist"/>.</para>
         /// </remarks>
         public static string[] AsStringArray(NDArray arr)
         {
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
+            if (arr.Storage.IsVString)
+                return Backends.Strings.NDVStringMove.ToStrings(arr);
             if (!(arr.Storage.StringSlice is { IsUnicode: true }))
                 throw new InvalidCastException($"AsStringArray reads a fixed-width Unicode (U) array, not {arr.dtype.ToString(true)}.");
             var result = new string[arr.size];

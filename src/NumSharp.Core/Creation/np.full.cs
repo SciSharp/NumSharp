@@ -63,6 +63,9 @@ namespace NumSharp
         public static NDArray full(Shape shape, object fill_value, DType dtype = null, string device = null)
         {
             ValidateDevice(device);
+            // StringDType: NumPy's empty + copyto(unsafe) (NDVStringMove.Full).
+            if (dtype?.Meta is VStringDTypeMeta)
+                return Backends.Strings.NDVStringMove.Full(shape, fill_value, dtype);
             // Fixed-width strings: NumPy's `a = empty(shape, dtype); copyto(a, fill_value, casting='unsafe')` — the dtype is
             // the fill value's own (np.full(2, 'abc') is <U3) or the requested one, an unsized request is ONE character
             // (np.full(2, 'abc', dtype='S') is [b'a', b'a']), and the value is truncated / converted by the copy.

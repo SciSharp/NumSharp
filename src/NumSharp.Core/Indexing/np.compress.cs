@@ -118,6 +118,9 @@ namespace NumSharp
             NDArray condition, NDArray a, int? axis, NDArray @out, out NDArray result)
         {
             result = null;
+            // A StringDType source takes the generic path (flatnonzero + np.take, whose StringDType gather duplicates the
+            // cells); this kernel copies elements as raw bytes.
+            if (a.Storage.IsVString) return false;
             if (condition.GetTypeCode != NPTypeCode.Boolean) return false;
             if (!condition.Shape.IsContiguous) return false;
             if (!a.Shape.IsContiguous) return false;

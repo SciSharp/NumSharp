@@ -64,9 +64,19 @@ namespace NumSharp.Backends.Strings
             // we can skip the copy." — PyArray_SafeCast(dtype, self->descr, NO_CASTING) with a view offset.
             if (!copy && OrderSatisfied(order, src.Shape))
             {
-                var safety = DTypeCasting.GetCastInfo(to, from, null, out long viewOffset);
-                if (safety == NPY_CASTING.NPY_NO_CASTING && viewOffset != ArrayMethod.NoView)
-                    return src;
+                // StringDType: "views are only legal between descriptors that share allocators (e.g. the same object)"
+                // (string_to_string_resolve_descriptors) — the array's own descriptor instance, never an equal fresh one.
+                if (from.Meta is VStringDTypeMeta || to.Meta is VStringDTypeMeta)
+                {
+                    if (ReferenceEquals(from, to))
+                        return src;
+                }
+                else
+                {
+                    var safety = DTypeCasting.GetCastInfo(to, from, null, out long viewOffset);
+                    if (safety == NPY_CASTING.NPY_NO_CASTING && viewOffset != ArrayMethod.NoView)
+                        return src;
+                }
             }
 
             // 'same_value' needs a cast loop that checks every value round-trips; the string casts (and the casts between

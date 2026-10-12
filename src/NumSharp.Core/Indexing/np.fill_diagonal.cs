@@ -114,6 +114,21 @@ namespace NumSharp
             if (count <= 0)
                 return;
 
+            if (a.Storage.IsVString)
+            {
+                // A StringDType target: the value in its descriptor (a number becomes its str()), then the same fill on
+                // marks (the value's element numbers, tiled cyclically by the numeric fill) and the marked diagonal elements
+                // receive the strings — never the raw strided-store kernel.
+                var text = val as NDArray ?? np.asanyarray(val);
+                if (text.size == 0)
+                    return; // NumPy: assigning an empty sequence leaves the diagonal untouched.
+                var flatText = text.ravel();
+                if (!flatText.HasSameElementType(a))
+                    flatText = flatText.astype(a.dtype);
+                Backends.Strings.NDVStringMove.ScatterVia(a, flatText, (marks, index) => fill_diagonal(marks, index, wrap));
+                return;
+            }
+
             NDArray values;
             if (scalarValue is not null)
             {

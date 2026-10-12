@@ -58,6 +58,12 @@ namespace NumSharp
             // NumPy (convert.c :: PyArray_FillWithScalar): writeability is checked FIRST, through the same
             // guard every other write path uses.
             NumSharpException.ThrowIfNotWriteable(Shape);
+            // A StringDType array stores the value through its setitem once, then into every element (NDVStringMove.Fill).
+            if (Storage.IsVString)
+            {
+                Backends.Strings.NDVStringMove.Fill(this, value);
+                return;
+            }
             // A fixed-width string array packs the value into ITS OWN descriptor (encoded, truncated to the element width;
             // the ASCII checks raise here, before any element is written and even when the array is empty) and copies that
             // one element everywhere.

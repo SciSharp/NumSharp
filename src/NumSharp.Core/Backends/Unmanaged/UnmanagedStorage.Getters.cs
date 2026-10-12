@@ -57,8 +57,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Single: return *((float*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Decimal: return *((decimal*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Complex: return *((System.Numerics.Complex*)Address + _shape.GetOffset(indices));
-                // A fixed-width string element decodes to its C# value (string for U, byte[] for S).
-                case NPTypeCode.String: return StringSlice.GetIndex(_shape.GetOffset(indices));
+                // A string element decodes to its C# value through its slice: string for U, byte[] for S, string or the NA
+                // object for StringDType (the slice of either layout implements IArraySlice.GetIndex(long)).
+                case NPTypeCode.String: return InternalArray.GetIndex(_shape.GetOffset(indices));
                 default:
                     throw new NotSupportedException();
             }
@@ -88,8 +89,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Single: return *((float*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Decimal: return *((decimal*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Complex: return *((System.Numerics.Complex*)Address + _shape.GetOffset(indices));
-                // A fixed-width string element decodes to its C# value (string for U, byte[] for S).
-                case NPTypeCode.String: return StringSlice.GetIndex(_shape.GetOffset(indices));
+                // A string element decodes to its C# value through its slice: string for U, byte[] for S, string or the NA
+                // object for StringDType (the slice of either layout implements IArraySlice.GetIndex(long)).
+                case NPTypeCode.String: return InternalArray.GetIndex(_shape.GetOffset(indices));
                 default:
                     throw new NotSupportedException();
             }
@@ -122,7 +124,7 @@ namespace NumSharp.Backends
                 case NPTypeCode.Single: return *((float*)Address + _shape.TransformOffset(index));
                 case NPTypeCode.Decimal: return *((decimal*)Address + _shape.TransformOffset(index));
                 case NPTypeCode.Complex: return *((System.Numerics.Complex*)Address + _shape.TransformOffset(index));
-                case NPTypeCode.String: return StringSlice.GetIndex(_shape.TransformOffset(index));
+                case NPTypeCode.String: return InternalArray.GetIndex(_shape.TransformOffset(index));
                 default:
                     throw new NotSupportedException();
             }

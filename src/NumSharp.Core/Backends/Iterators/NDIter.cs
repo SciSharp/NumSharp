@@ -215,6 +215,8 @@ namespace NumSharp.Backends.Iteration
             if (opFlags == null || opFlags.Length < nop)
                 throw new ArgumentException("OpFlags array must contain at least nop elements", nameof(opFlags));
 
+            ThrowIfReferenceOperandsUnsupported(nop, op, flags, opDescrs);
+
             // Allocate state on heap for ref struct lifetime — one block carrying the header and
             // the arena the dimension/operand arrays are carved from (recycled per thread).
             var statePtr = AllocateStateBlock();
@@ -242,6 +244,39 @@ namespace NumSharp.Backends.Iteration
                 iter.DiscardConstructionTemps();
                 FreeState(statePtr);
                 throw;
+            }
+        }
+
+        /// <summary>
+        ///     NumPy's reference check of <c>npyiter_prepare_one_operand</c>, plus the refusal of what NumSharp's iterator cannot
+        ///     do with such operands yet: an operand (or requested descriptor) that HOLDS REFERENCES — a NEP 55 <c>StringDType</c>
+        ///     array, whose 16-byte cells point into their buffer's allocator — needs <see cref="NDIterGlobalFlags.REFS_OK"/>;
+        ///     with it, the iterator may walk the operand in place, but its buffers and casts copy elements as raw bytes, which
+        ///     would move cells away from their allocator.
+        /// </summary>
+        /// <param name="nop">The number of operands.</param>
+        /// <param name="op">The operands (null entries are allocated).</param>
+        /// <param name="flags">The global flags.</param>
+        /// <param name="opDescrs">The requested descriptors, or null.</param>
+        /// <exception cref="TypeError">A reference operand without <see cref="NDIterGlobalFlags.REFS_OK"/> (NumPy's text:
+        ///     <c>Iterator operand or requested dtype holds references, but the NPY_ITER_REFS_OK flag was not enabled</c>).</exception>
+        /// <exception cref="NotSupportedException">A <c>StringDType</c> operand under <see cref="NDIterGlobalFlags.BUFFERED"/>,
+        ///     or one cast to another descriptor (the iterator's buffered casts of StringDType are strings phase 1, P1.7).</exception>
+        private static void ThrowIfReferenceOperandsUnsupported(int nop, NDArray[] op, NDIterGlobalFlags flags, DType[]? opDescrs)
+        {
+            for (int i = 0; i < nop; i++)
+            {
+                var operandDescr = op[i] is null ? null : op[i].dtype;
+                var requested = opDescrs != null && i < opDescrs.Length ? opDescrs[i] : null;
+                bool refs = (op[i] is not null && op[i].Storage.IsVString) || requested?.Meta is VStringDTypeMeta;
+                if (!refs)
+                    continue;
+                if ((flags & NDIterGlobalFlags.REFS_OK) == 0)
+                    throw new TypeError("Iterator operand or requested dtype holds references, but the NPY_ITER_REFS_OK flag was not enabled");
+                bool cast = operandDescr is not null && requested is not null && !requested.Equals(operandDescr);
+                if ((flags & NDIterGlobalFlags.BUFFERED) != 0 || cast)
+                    throw UnmanagedStorage.VStringNotSupported(operandDescr ?? requested,
+                        "An iterator that buffers or casts a StringDType operand");
             }
         }
 
@@ -5239,6 +5274,19 @@ namespace NumSharp.Backends.Iteration
             // layouts, the overlap guard and the SIMD kernels below are the numeric ones.
             if (dst.TypeCode == NPTypeCode.String || src.TypeCode == NPTypeCode.String)
             {
+                // NEP 55 StringDType elements are 16-byte cells tied to their buffer's allocator: two StringDType storages copy
+                // through the reference-aware core (each string duplicated, never the raw cells); a StringDType storage paired
+                // with another dtype is one of NumPy's StringDType casts (text, bool, numbers).
+                if (dst.IsVString && src.IsVString)
+                {
+                    NumSharp.Backends.Strings.NDVStringCopy.Copy(dst, src);
+                    return;
+                }
+                if (dst.IsVString || src.IsVString)
+                {
+                    NumSharp.Backends.Strings.NDVStringCasting.Copy(dst, src);
+                    return;
+                }
                 NumSharp.Backends.Strings.NDStringCopy.Copy(dst, src);
                 return;
             }

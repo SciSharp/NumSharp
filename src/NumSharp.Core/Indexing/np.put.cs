@@ -164,6 +164,16 @@ namespace NumSharp
             bool overlaps =
                 NDMemOverlap.SolveMayShareMemory(a, vals, maxWork: 0) != MemOverlap.No ||
                 NDMemOverlap.SolveMayShareMemory(a, idx64, maxWork: 0) != MemOverlap.No;
+            if (a.Storage.IsVString)
+            {
+                // A StringDType target: the same put runs on marks (the values' element numbers, cycled by the numeric put
+                // with its mode), and the marked elements receive the strings. NumPy writes a contiguous target that
+                // overlaps nothing as it goes, so the elements before an out-of-bounds index stay written; a copy (a
+                // non-contiguous target, or an overlap) is discarded on the error.
+                Backends.Strings.NDVStringMove.ScatterVia(a, vals, (marks, index) => PutTo(marks, indices, index, mode),
+                    keepPartialOnError: !overlaps && a.Shape.IsContiguous);
+                return;
+            }
             if (overlaps || !a.Shape.IsContiguous)
             {
                 // A contiguous target is copied with copy() (ascontiguousarray would hand back the target itself); the
