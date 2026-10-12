@@ -91,9 +91,118 @@ namespace NumSharp.Tests.Strings
                 case "t_ufunc_dtype":
                     result = np.add(ops[0], ops[0], dtype: Spec(p["spec"]));
                     return true;
+
+                // ---- sections tstore / tcreate / tmove (P1.3 - P1.5) ----
+                case "t_writes":
+                {
+                    // np.array(values, dtype=T) followed by `a[index] = value` writes in order; the array or its cells.
+                    var arr = np.array(ManagedArray(StringOracleCorpus.Decode(p["values"])), Dt(p, "dtype"));
+                    foreach (var w in p["writes"].EnumerateArray())
+                        SetLiteral(arr, Index(w[0]), StringOracleCorpus.Decode(w[1]));
+                    // Both arms as object: a ?: of byte[] and NDArray is typed NDArray (the implicit Array -> NDArray conversion
+                    // would turn the cells into a uint8 array).
+                    result = Str(p, "result") == "cells" ? (object)arr.tobytes() : arr;
+                    return true;
+                }
+                case "t_sizes":
+                {
+                    var a = ops[0];
+                    var sizes = new List<object> { (long)a.itemsize, (long)a.nbytes };
+                    sizes.AddRange(a.strides.Select(s => (object)s));
+                    result = sizes;
+                    return true;
+                }
+                case "t_tobytes":
+                    result = ops[0].tobytes(p.TryGetValue("order", out var to) ? to.GetString()[0] : 'C');
+                    return true;
+                case "t_copy_cells":
+                {
+                    // np.copy(a, order).tobytes(order='A'): the copy's own cells in its memory order, so the arena offsets
+                    // show the order the copy duplicated the strings in.
+                    using var copy = np.copy(ops[0], Str(p, "order")[0]);
+                    result = copy.tobytes('A');
+                    return true;
+                }
+                case "t_setitem":
+                    SetLiteral(ops[0], Index(p["index"]), StringOracleCorpus.Decode(p["value"]));
+                    result = ops[0];
+                    return true;
+                case "t_nditer":
+                {
+                    // [x[()] for x in np.nditer(a, flags=...)]: each step's operand 0 is a 0-d view; its element (a text or
+                    // the NA object) is the step's value.
+                    var flags = p["flags"].EnumerateArray().Select(e => e.GetString()).ToArray();
+                    using var it = np.nditer(ops[0], flags.Length == 0 ? null : flags);
+                    var values = new List<object>();
+                    foreach (var step in it)
+                        values.Add(step[0].Storage.GetAtIndex(0));
+                    result = values;
+                    return true;
+                }
+                case "t_view_same":
+                    // a.view(a.dtype): the array's own descriptor object.
+                    result = ops[0].view(ops[0].dtype);
+                    return true;
+                case "t_memoryview":
+                    result = ops[0].data;
+                    return true;
+                case "t_frombuffer":
+                    result = np.frombuffer(Convert.FromHexString(Str(p, "buffer")), Dt(p, "dtype"));
+                    return true;
+                case "select":
+                {
+                    var conds = p["conds"].EnumerateArray().Select(RawArray).ToArray();
+                    result = np.select(conds, ops.Cast<object>().ToArray(), StringOracleCorpus.Decode(p["default"]));
+                    return true;
+                }
+                case "fill_diagonal":
+                    np.fill_diagonal(ops[0], StringOracleCorpus.Decode(p["value"]), p["wrap"].GetBoolean());
+                    result = ops[0];
+                    return true;
+                case "t_resize_method":
+                    ops[0].resize(new Shape(p["shape"].EnumerateArray().Select(e => e.GetInt64()).ToArray()), refcheck: false);
+                    result = ops[0];
+                    return true;
             }
             result = null;
             return false;
+        }
+
+        /// <summary>
+        ///     <c>a[index] = value</c> as a ported NumPy line writes it, with the C# value standing for the Python object NumPy
+        ///     got: an all-integer index naming ONE element goes through the object-typed <see cref="NDArray.SetValue(object, int[])"/>
+        ///     (NumPy's <c>stringdtype_setitem</c> on the element — <c>None</c>, bytes and bools included); any other index
+        ///     through the indexer with the value's implicit conversion (a C# literal: a Python str / int / float / bool, and
+        ///     <c>null</c> for <c>None</c>).
+        /// </summary>
+        /// <param name="a">The target.</param>
+        /// <param name="index">The indexer arguments (<see cref="Index"/>).</param>
+        /// <param name="value">The decoded value.</param>
+        /// <exception cref="InvalidOperationException">A value kind the replay has no C# spelling for.</exception>
+        private static void SetLiteral(NDArray a, object[] index, object value)
+        {
+            if (index.Length == a.ndim && index.All(x => x is int))
+            {
+                // Negative integers count from the end, as NumPy's index does (SetValue takes non-negative coordinates).
+                var coords = new int[index.Length];
+                for (int i = 0; i < coords.Length; i++)
+                {
+                    int k = (int)index[i];
+                    coords[i] = k < 0 ? k + (int)a.Shape.dimensions[i] : k;
+                }
+                a.SetValue(value, coords);
+                return;
+            }
+            a[index] = value switch
+            {
+                null => null,
+                string s => s,
+                long l => l,
+                double d => d,
+                bool b => b,
+                byte[] bytes => NDArray.Scalar(bytes),
+                _ => throw new InvalidOperationException($"no literal spelling for {value.GetType().Name}"),
+            };
         }
 
         /// <summary>
@@ -108,7 +217,20 @@ namespace NumSharp.Tests.Strings
         {
             if (e.ValueKind == JsonValueKind.String)
                 return np.dtype(e.GetString());
-            var t = e.GetProperty("T");
+            return VStringDescr(e.GetProperty("T"));
+        }
+
+        /// <summary>
+        ///     The <c>StringDType</c> descriptor of a request's inner object <c>{"coerce": bool, "na": value}</c> (an operand's
+        ///     <c>t</c> member, a result's <c>t</c> member, the inside of a <c>{"T": ...}</c> request): the <c>na_object</c>
+        ///     overload when <c>"na"</c> is present (even for <c>None</c>), the <c>coerce</c>-only overload when absent.
+        /// </summary>
+        /// <param name="t">The inner object.</param>
+        /// <returns>A new descriptor.</returns>
+        /// <exception cref="UnicodeEncodeError">A string NA object with a lone surrogate.</exception>
+        /// <exception cref="InvalidOperationException">An NA encoding the decoder does not know.</exception>
+        internal static DType VStringDescr(JsonElement t)
+        {
             bool coerce = t.GetProperty("coerce").GetBoolean();
             return t.TryGetProperty("na", out var na)
                 ? np.dtypes.StringDType(na_object: DecodeNA(na), coerce: coerce)

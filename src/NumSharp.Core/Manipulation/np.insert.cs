@@ -628,6 +628,9 @@ namespace NumSharp
         private static NDArray ScalarValueAsArray(object value, DType dtype)
         {
             if (value is NDArray nd) return nd; // the caller's array, built before the scope opened: never disposed
+            // A StringDType target: NumPy's array(values, dtype=arr.dtype) stores Python objects by setitem.
+            if (dtype.Meta is VStringDTypeMeta)
+                return Backends.Strings.NDVStringMove.StoreValue(value, dtype);
             // A C# number is a Python (or NumPy) scalar in the boundary map: NumPy's array(values, dtype=arr.dtype) packs
             // it with PyArray_Pack (a Python int range-checked, a float truncated then range-checked, a complex refused
             // by a real dtype). The packed 0-d belongs to the caller's scope.
@@ -670,8 +673,11 @@ namespace NumSharp
             // Cast dtype if needed — NumPy's array(values, dtype=arr.dtype): by ELEMENT type, so a string value of
             // another width is truncated / NUL-padded to arr's (insert('QQQQQQ') into <U4 stores 'QQQQ'). A C# literal
             // (NDArray.WasPythonLiteral) is NumPy's Python scalar, which array(..., dtype=) packs with PyArray_Pack's range
-            // checks (np.insert(int8, 1, 1000) raises) after the index check; the packed 0-d is the scope's.
-            NDArray v = NDArray.PackForStore(values, arr.typecode, pyArrayPackRoute: false);
+            // checks (np.insert(int8, 1, 1000) raises) after the index check; the packed 0-d is the scope's. A StringDType
+            // target stores a literal by setitem and casts an ndarray (NDVStringMove.StoreValue).
+            NDArray v = arr.Storage.IsVString
+                ? Backends.Strings.NDVStringMove.StoreValue(values, arr.dtype)
+                : NDArray.PackForStore(values, arr.typecode, pyArrayPackRoute: false);
             if (!v.HasSameElementType(arr))
             {
                 v = v.astype(arr.dtype, copy: true);
@@ -774,8 +780,11 @@ namespace NumSharp
         {
             // Cast dtype — by ELEMENT type (a string's class and width), NumPy's array(values, dtype=arr.dtype). A C#
             // literal (NDArray.WasPythonLiteral) is NumPy's Python scalar: NumPy assigns it through new[tuple(slobj)] =
-            // values, whose fancy setitem packs it with PyArray_Pack's range checks; the packed 0-d is the scope's.
-            NDArray v = NDArray.PackForStore(values, arr.typecode, pyArrayPackRoute: false);
+            // values, whose fancy setitem packs it with PyArray_Pack's range checks; the packed 0-d is the scope's. A
+            // StringDType target stores a literal by setitem and casts an ndarray (NDVStringMove.StoreValue).
+            NDArray v = arr.Storage.IsVString
+                ? Backends.Strings.NDVStringMove.StoreValue(values, arr.dtype)
+                : NDArray.PackForStore(values, arr.typecode, pyArrayPackRoute: false);
             if (!v.HasSameElementType(arr))
             {
                 v = v.astype(arr.dtype, copy: true);

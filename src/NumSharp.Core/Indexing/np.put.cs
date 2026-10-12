@@ -208,6 +208,11 @@ namespace NumSharp
         [NDScopedCovered]
         private static NDArray PutValuesLikeNumPy(object values, NDArray a)
         {
+            // A StringDType target: Python objects (literals, boxed values, a list's elements) are stored by setitem, an
+            // ndarray is cast (NDVStringMove.StoreValue).
+            if (a.Storage.IsVString)
+                return Backends.Strings.NDVStringMove.StoreValue(values, a.dtype);
+
             // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar and is packed with PyArray_Pack's range
             // checks; a boxed C# number is packed by its kind; any other value is converted, for the cast below.
             var v = values is NDArray nd

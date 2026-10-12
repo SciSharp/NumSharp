@@ -116,10 +116,15 @@ namespace NumSharp.Backends.Strings
         /// <param name="raw">The raw cells (a <see cref="System.Numerics.Complex"/> array, any layout). Not disposed.</param>
         /// <param name="source">The slice whose allocator the raw cells refer to.</param>
         /// <param name="descr">The result descriptor.</param>
-        /// <returns>The new array: <paramref name="raw"/>'s layout when it is a fresh dense array, else C order.</returns>
+        /// <returns>The new array: <paramref name="raw"/>'s layout when it is a fresh dense array, else C order; when
+        ///     <paramref name="raw"/> is a VIEW of a temporary (a reshape of a fresh buffer, <c>np.resize</c>'s
+        ///     <c>concatenate(...)[:n].reshape(shape)</c>), the same view over a fresh <c>StringDType</c> buffer of the
+        ///     temporary's size (<see cref="RehomeView"/>), so OWNDATA, strides and offset are the numeric route's.</returns>
         /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
         internal static NDArray Rehome(NDArray raw, VStringArraySlice source, DType descr)
         {
+            if (!raw.flags.owndata && !raw.Shape.IsBroadcasted)
+                return RehomeView(raw, source, descr);
             var result = new NDArray(descr, ResultLayout(raw.Shape), true);
             if (result.size == 0)
                 return result;
@@ -154,6 +159,123 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
+        ///     <see cref="Rehome"/> for raw cells that are a VIEW of a temporary buffer: a fresh <c>StringDType</c> buffer of the
+        ///     temporary's size (all cells empty) receives a duplicate of every cell the view reaches, at the same position, and
+        ///     the result is the same view of it — a non-owning array, as NumPy's result is a view of its own temporary
+        ///     (<c>np.resize</c> returns <c>concatenate(...)[:new_size].reshape(new_shape)</c>, OWNDATA false).
+        /// </summary>
+        /// <param name="raw">The raw cells: a non-owning, non-broadcast view of a temporary. Not disposed.</param>
+        /// <param name="source">The slice whose allocator the raw cells refer to.</param>
+        /// <param name="descr">The result descriptor.</param>
+        /// <returns>The view over the new buffer (the buffer stays alive through the view's reference).</returns>
+        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <remarks>
+        ///     Cells of the temporary that the view does not reach are left all-zero (the empty string), never copied: a
+        ///     temporary may hold cells nobody wrote, and a cell of pool noise would read as an arena offset or a heap pointer.
+        /// </remarks>
+        private static NDArray RehomeView(NDArray raw, VStringArraySlice source, DType descr)
+        {
+            var rs = raw.Storage;
+            long count = rs.InternalArray.Count;
+            // The view's first element as a cell index of the temporary's buffer: a contiguous slice re-seats Address (offset
+            // 0), a strided view keeps the buffer's address and a non-zero offset; the sum is right for both.
+            long first = ((byte*)rs.Address - (byte*)rs.InternalArray.Address) / VStringAllocator.CellSize + raw.Shape.offset;
+            var baseArray = new NDArray(descr, new Shape(new[] { count }), true);
+            NDArray view = null;
+            try
+            {
+                var shape = new Shape((long[])raw.Shape.dimensions.Clone(), (long[])raw.Shape.strides.Clone(), first, count);
+                if (!raw.Shape.IsWriteable && shape.IsWriteable)
+                    shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+                view = new NDArray(baseArray.Storage.Alias(shape)) { TensorEngine = raw.TensorEngine };
+                if (view.size > 0)
+                {
+                    using var dst = CellArray(view);
+                    var outAllocator = baseArray.Storage.VStringSlice.Allocator;
+                    byte[] naName = NDVStringCopy.NAReplacement(source, baseArray.Storage.VStringSlice);
+                    using var iter = NDIterRef.MultiNew(
+                        2, new[] { raw, dst },
+                        NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.ZEROSIZE_OK | NDIterGlobalFlags.REFS_OK,
+                        NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_NO_CASTING,
+                        new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY });
+                    VStringAllocator.AcquirePair(source.Allocator, outAllocator);
+                    try
+                    {
+                        var inAllocator = source.Allocator;
+                        iter.ForEach((dataptrs, strides, n, aux) =>
+                            NDVStringCopy.CopyRun((byte*)dataptrs[0], strides[0], (byte*)dataptrs[1], strides[1], n, inAllocator, outAllocator, naName));
+                    }
+                    finally
+                    {
+                        VStringAllocator.ReleasePair(source.Allocator, outAllocator);
+                    }
+                }
+                return view;
+            }
+            catch
+            {
+                // The view holds its own reference on the buffer: drop it too, so the buffer's clear loop frees the strings
+                // duplicated so far.
+                view?.Dispose();
+                throw;
+            }
+            finally
+            {
+                baseArray.Dispose(); // the view (when returned) keeps the buffer alive through its own reference
+            }
+        }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_Ravel</c> copy of a <c>StringDType</c> array — the flat copy <c>tobytes()</c> takes of a buffer
+        ///     that is not laid out in the requested order: a fresh buffer with the same dimensions, contiguous in
+        ///     <paramref name="order"/>, whose strings are duplicated walking that order (C: row-major, F: column-major). The walk
+        ///     decides each arena string's OFFSET in the copy (allocations are appended), which the copy's cells show.
+        /// </summary>
+        /// <param name="t">A <c>StringDType</c> array of any layout.</param>
+        /// <param name="order"><c>'F'</c> for a column-major copy and walk; anything else row-major.</param>
+        /// <returns>The new array (its own buffer and allocator); the caller disposes it.</returns>
+        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        internal static NDArray Flatten(NDArray t, char order)
+        {
+            bool fortran = order == 'F' || order == 'f';
+            var result = new NDArray(t.dtype, Shape.Adopt((long[])t.Shape.dimensions.Clone(), fortran ? 'F' : 'C'), true);
+            if (result.size == 0)
+                return result;
+            try
+            {
+                var source = t.Storage.VStringSlice;
+                var outSlice = result.Storage.VStringSlice;
+                using var src = CellArray(t);
+                using var dst = CellArray(result);
+                // An explicit C / F iteration order (not KEEPORDER): PyArray_CopyAsFlat walks the source in the requested
+                // order, so the duplicates are appended to the new arena in that order.
+                using var iter = NDIterRef.MultiNew(
+                    2, new[] { src, dst },
+                    NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.ZEROSIZE_OK | NDIterGlobalFlags.REFS_OK,
+                    fortran ? NPY_ORDER.NPY_FORTRANORDER : NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_NO_CASTING,
+                    new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY });
+                VStringAllocator.AcquirePair(source.Allocator, outSlice.Allocator);
+                try
+                {
+                    var inAllocator = source.Allocator;
+                    var outAllocator = outSlice.Allocator;
+                    iter.ForEach((dataptrs, strides, n, aux) =>
+                        NDVStringCopy.CopyRun((byte*)dataptrs[0], strides[0], (byte*)dataptrs[1], strides[1], n, inAllocator, outAllocator, null));
+                }
+                finally
+                {
+                    VStringAllocator.ReleasePair(source.Allocator, outSlice.Allocator);
+                }
+                return result;
+            }
+            catch
+            {
+                result.Dispose(); // the half-filled copy owns the strings duplicated so far: its clear loop frees them
+                throw;
+            }
+        }
+
+        /// <summary>
         ///     A multi-source gather (<c>np.where</c>, <c>np.choose</c>, <c>np.select</c>): <paramref name="raw"/> holds raw
         ///     cells picked from several sources, and <paramref name="which"/> (an <c>int64</c> array of the same dimensions)
         ///     names the source of each element; every cell is duplicated through its own source's allocator.
@@ -162,15 +284,17 @@ namespace NumSharp.Backends.Strings
         /// <param name="which">The source index of each element (<c>int64</c>, <paramref name="raw"/>'s dimensions). Not disposed.</param>
         /// <param name="sources">The source slices, indexed by <paramref name="which"/>.</param>
         /// <param name="descr">The result descriptor.</param>
-        /// <returns>The new array: <paramref name="raw"/>'s layout when it is a fresh dense array, else C order.</returns>
+        /// <param name="layout">The result's layout (NumPy's iterator output layout of the caller's operands), or null for
+        ///     <paramref name="raw"/>'s layout when it is a fresh dense array, else C order.</param>
+        /// <returns>The new array.</returns>
         /// <exception cref="ArgumentException"><paramref name="which"/> is not <c>int64</c>.</exception>
         /// <exception cref="IndexOutOfRangeException">A source index outside <paramref name="sources"/> (the caller's bug).</exception>
         /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
-        internal static NDArray RehomeMulti(NDArray raw, NDArray which, VStringArraySlice[] sources, DType descr)
+        internal static NDArray RehomeMulti(NDArray raw, NDArray which, VStringArraySlice[] sources, DType descr, Shape? layout = null)
         {
             if (which.typecode != NPTypeCode.Int64)
                 throw new ArgumentException("The source index array of a StringDType gather must be int64.", nameof(which));
-            var result = new NDArray(descr, ResultLayout(raw.Shape), true);
+            var result = new NDArray(descr, layout ?? ResultLayout(raw.Shape), true);
             if (result.size == 0)
                 return result;
             try
@@ -265,7 +389,9 @@ namespace NumSharp.Backends.Strings
                 using var zero = NDArray.Scalar(0L);
                 using var one = NDArray.Scalar(1L);
                 using var which = np.where(cond, zero, one);
-                return RehomeMulti(raw, which, new[] { xt.Storage.VStringSlice, yt.Storage.VStringSlice }, descr);
+                // The result takes NumPy's layout for (condition, x, y) — the condition votes too (np.tril's mask over an F
+                // operand gives the strides NumPy's iterator chooses, not the operand's F order).
+                return RehomeMulti(raw, which, new[] { xt.Storage.VStringSlice, yt.Storage.VStringSlice }, descr, layout);
             }
             finally
             {
@@ -329,6 +455,104 @@ namespace NumSharp.Backends.Strings
             {
                 allocator.Release();
             }
+        }
+
+        /// <summary>
+        ///     The values of a STORE into a <c>StringDType</c> array that NumPy converts with <c>PyArray_FromAny(values,
+        ///     dtype=StringDType, FORCECAST)</c> — <c>np.put</c>, <c>np.putmask</c>, <c>np.place</c>, <c>np.fill_diagonal</c>,
+        ///     <c>np.insert</c>, <c>np.put_along_axis</c>: Python objects (a C# literal, a boxed number, a string, a
+        ///     <c>byte[]</c>, null for <c>None</c>, every element of a C# array or collection — NumPy's list) are stored by
+        ///     <c>stringdtype_setitem</c> (the NA object packs NA, anything else is its <c>str()</c>, refused under
+        ///     <c>coerce=False</c>; a text keeps its trailing NULs), an ndarray is CAST (allowed under <c>coerce=False</c>;
+        ///     another <c>StringDType</c> descriptor follows the NA rules).
+        /// </summary>
+        /// <param name="value">The values as the caller received them.</param>
+        /// <param name="descr">The destination's <c>StringDType</c> descriptor.</param>
+        /// <returns>An array of <paramref name="descr"/>: <paramref name="value"/> itself when it already is one (an
+        ///     <see cref="NDArray"/> of an equal descriptor), else a NEW array the caller disposes (or creates inside an
+        ///     <c>[NDScoped]</c> member).</returns>
+        /// <exception cref="ValueError">A non-text Python object under <c>coerce=False</c>, or a ragged sequence (NumPy's
+        ///     inhomogeneous-shape text).</exception>
+        /// <exception cref="UnicodeDecodeError"><c>bytes</c> that are not UTF-8.</exception>
+        /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
+        /// <exception cref="Exception">The cast's errors for an ndarray value.</exception>
+        internal static NDArray StoreValue(object value, DType descr)
+        {
+            switch (value)
+            {
+                case NDArray nd:
+                {
+                    // A C# literal's 0-d array is the Python scalar it stands for (setitem); any other array is cast.
+                    var packed = NDArray.PackForVStringStore(nd, descr);
+                    if (!ReferenceEquals(packed, nd))
+                        return packed;
+                    return nd.Storage.IsVString && nd.dtype.Equals(descr) ? nd : nd.astype(descr, true, 'K', "unsafe");
+                }
+                case null:
+                    return NDArray.PackForVStringStore(null, descr);
+                case string:
+                case byte[]:
+                    return StoreScalar(value, descr);
+                case Array arr when arr.Rank > 1 || IsTypedElement(arr.GetType().GetElementType()):
+                {
+                    // A rectangular C# array (or a 1-D array of typed elements): NumPy's list of Python objects, each element
+                    // stored by setitem in C order (a typed numeric array is a list of Python numbers here, so coerce=False
+                    // refuses it as NumPy refuses [5]).
+                    var dims = new long[arr.Rank];
+                    for (int d = 0; d < dims.Length; d++)
+                        dims[d] = arr.GetLongLength(d);
+                    var result = new NDArray(descr, Shape.Adopt(dims), true);
+                    try
+                    {
+                        var slice = result.Storage.VStringSlice;
+                        long i = 0;
+                        foreach (var element in arr) // a multi-dimensional Array enumerates in row-major (C) order
+                            slice.SetIndex(i++, element);
+                    }
+                    catch
+                    {
+                        result.Dispose();
+                        throw;
+                    }
+                    return result;
+                }
+                case Array objects:
+                    // An object[] or a jagged array (Python's nested lists): np.array's discovery with the requested
+                    // descriptor stores every leaf by setitem and raises NumPy's ragged-shape error.
+                    return np.array(objects, descr);
+                case System.Collections.IEnumerable sequence:
+                    return np.array(System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Cast<object>(sequence)), descr);
+                default:
+                    // A boxed number, bool or any other single object: one setitem.
+                    return StoreScalar(value, descr);
+            }
+        }
+
+        /// <summary>Whether a C# array's element type makes it a flat list of Python scalars (not objects, not nested arrays).</summary>
+        /// <param name="elementType">The array's element type.</param>
+        /// <returns>True for a typed element (string, number, bool, char, …).</returns>
+        private static bool IsTypedElement(Type elementType) => elementType != typeof(object) && !elementType.IsArray;
+
+        /// <summary>One Python object stored into a new 0-d <c>StringDType</c> array by <c>stringdtype_setitem</c>.</summary>
+        /// <param name="value">The value (null is <c>None</c>).</param>
+        /// <param name="descr">The <c>StringDType</c> descriptor.</param>
+        /// <returns>The new 0-d array (the caller disposes it).</returns>
+        /// <exception cref="ValueError">A non-text value under <c>coerce=False</c>.</exception>
+        /// <exception cref="UnicodeDecodeError"><c>bytes</c> that are not UTF-8.</exception>
+        /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
+        internal static NDArray StoreScalar(object value, DType descr)
+        {
+            var one = new NDArray(descr, Shape.Scalar, true);
+            try
+            {
+                one.Storage.VStringSlice.SetIndex(0, value);
+            }
+            catch
+            {
+                one.Dispose();
+                throw;
+            }
+            return one;
         }
 
         /// <summary>

@@ -1482,11 +1482,12 @@ namespace NumSharp
                     var dtype = _state->GetOpDType(op);
                     // A fixed-width string view needs its width and class: the descriptor of the side the pointer is on (the
                     // buffer under a buffered cast, the operand otherwise — the same descriptor without one).
-                    var stringDescr = dtype == NPTypeCode.String ? _state->GetOpDescr(op) : null;
+                    var stringDescr = dtype == NPTypeCode.String ? OperandStringDescr(op) : null;
+                    var vstrings = VStringAllocatorOf(op, stringDescr);
                     NDArray view;
                     if (!it.HasExternalLoop)
                     {
-                        view = AliasView(ptr, dtype, stringDescr, 1, 1, scalar: true);
+                        view = AliasView(ptr, dtype, stringDescr, 1, 1, scalar: true, vstrings);
                     }
 
                     // A 0-d operand has NO inner dimension, and GetInnerLoopSizePtr reads
@@ -1497,13 +1498,13 @@ namespace NumSharp
                     // here (np.nditer(np.array(3), flags=['external_loop']) -> array([3])).
                     else if (it.NDim == 0)
                     {
-                        view = AliasView(ptr, dtype, stringDescr, 1, 1, scalar: false);
+                        view = AliasView(ptr, dtype, stringDescr, 1, 1, scalar: false, vstrings);
                     }
                     else
                     {
                         long count = *it.GetInnerLoopSizePtr();
                         long stride = it.GetInnerLoopElementStride(op);
-                        view = AliasView(ptr, dtype, stringDescr, count, stride, scalar: false);
+                        view = AliasView(ptr, dtype, stringDescr, count, stride, scalar: false, vstrings);
                     }
 
                     // NumPy's views carry the operand's write flag (PyArray_NewFromDescrAndBase with NPY_ARRAY_WRITEABLE or
@@ -1528,7 +1529,7 @@ namespace NumSharp
                     var it = Borrow();
                     void* ptr = _state->GetDataPtr(op);
                     var dtype = _state->GetOpDType(op);
-                    var stringDescr = dtype == NPTypeCode.String ? _state->GetOpDescr(op) : null;
+                    var stringDescr = dtype == NPTypeCode.String ? OperandStringDescr(op) : null;
 
                     // npyiter_seq_ass_item's temporary: a 1-D view of the current inner loop — one element without
                     // external_loop, and a 0-d iteration has no inner axis to read (GetInnerLoopSizePtr would read Shape[-1]).
@@ -1539,10 +1540,32 @@ namespace NumSharp
                         stride = it.GetInnerLoopElementStride(op);
                     }
 
-                    using var target = AliasView(ptr, dtype, stringDescr, count, stride, scalar: false);
+                    using var target = AliasView(ptr, dtype, stringDescr, count, stride, scalar: false, VStringAllocatorOf(op, stringDescr));
                     AssignToIteratorView(target, value);
                 }
             }
+
+            /// <summary>
+            ///     The descriptor of operand <paramref name="op"/>'s string memory, for its views: a NEP 55 <c>StringDType</c>
+            ///     operand's own descriptor (the iterator state keeps only a type code and an element size per operand, which
+            ///     would rebuild a 16-byte <c>'|S16'</c> and expose the raw cells), a fixed-width operand's buffer-side
+            ///     descriptor (the buffer under a buffered cast, the operand otherwise).
+            /// </summary>
+            /// <param name="op">The operand index (a string operand).</param>
+            /// <returns>The descriptor.</returns>
+            private DType OperandStringDescr(int op)
+                => _operands[op] is { } a && a.Storage.IsVString ? a.dtype : _state->GetOpDescr(op);
+
+            /// <summary>
+            ///     The allocator of a NEP 55 <c>StringDType</c> operand's cells, for its iterator views. The iterator never buffers
+            ///     or casts a <c>StringDType</c> operand (refused at construction), so its data pointer is always inside the
+            ///     operand's own cells (the caller's array, or the COPY_IF_OVERLAP copy that replaced it in the operand list).
+            /// </summary>
+            /// <param name="op">The operand index.</param>
+            /// <param name="stringDescr">The operand's string descriptor, or null for a numeric operand.</param>
+            /// <returns>The allocator, or null when the operand is not <c>StringDType</c>.</returns>
+            private Backends.Strings.VStringAllocator VStringAllocatorOf(int op, DType stringDescr)
+                => stringDescr?.Meta is VStringDTypeMeta ? _operands[op].Storage.VStringSlice.Allocator : null;
 
             /// <summary>
             ///     NumPy's operand-index checks of <c>it[i]</c> (<c>npyiter_seq_item</c> / <c>npyiter_seq_ass_item</c>), in
@@ -1915,13 +1938,16 @@ namespace NumSharp
             /// <param name="count">The element count (1 for the per-element view).</param>
             /// <param name="stride">The element stride (in elements of the view's dtype).</param>
             /// <param name="scalar">True for the 0-d per-element view.</param>
+            /// <param name="vstrings">For a NEP 55 <c>StringDType</c> operand, the allocator of the cells the pointer is on (see
+            ///     <see cref="VStringAllocatorOf"/>); else null.</param>
             /// <returns>The non-owning view.</returns>
             /// <exception cref="NotSupportedException">A lane without a view (none of the 15 storage lanes).</exception>
-            private static NDArray AliasView(void* ptr, NPTypeCode dtype, DType stringDescr, long count, long stride, bool scalar)
+            private static NDArray AliasView(void* ptr, NPTypeCode dtype, DType stringDescr, long count, long stride, bool scalar,
+                                             Backends.Strings.VStringAllocator vstrings = null)
             {
                 switch (dtype)
                 {
-                    case NPTypeCode.String: return AliasStringView(ptr, stringDescr, count, stride, scalar);
+                    case NPTypeCode.String: return AliasStringView(ptr, stringDescr, count, stride, scalar, vstrings);
                     case NPTypeCode.Boolean: return AliasView<bool>(ptr, count, stride, scalar);
                     case NPTypeCode.Byte: return AliasView<byte>(ptr, count, stride, scalar);
                     case NPTypeCode.SByte: return AliasView<sbyte>(ptr, count, stride, scalar);
@@ -1951,8 +1977,14 @@ namespace NumSharp
             /// <param name="count">The element count.</param>
             /// <param name="stride">The element stride (in string elements; negative walks backward).</param>
             /// <param name="scalar">True for the 0-d per-element view.</param>
+            /// <param name="vstrings">For a NEP 55 <c>StringDType</c> descriptor, the allocator of the operand's cells: the
+            ///     view is a <c>StringDType</c> view of those cells (texts read and written through that allocator, never the
+            ///     raw cell bytes); else null.</param>
             /// <returns>The view (it does not own the memory and is invalid once the iterator moves past it or closes).</returns>
-            private static NDArray AliasStringView(void* ptr, DType descr, long count, long stride, bool scalar)
+            /// <exception cref="InvalidOperationException">A <c>StringDType</c> descriptor without its allocator (a routing
+            ///     bug: a <c>StringDType</c> cell is meaningless without the allocator of its buffer).</exception>
+            private static NDArray AliasStringView(void* ptr, DType descr, long count, long stride, bool scalar,
+                                                   Backends.Strings.VStringAllocator vstrings = null)
             {
                 int itemsize = descr.itemsize;
                 // The block spans every element the view touches; a negative stride starts it below the pointer and the
@@ -1963,7 +1995,19 @@ namespace NumSharp
                 long blockCount = high - low + 1;
 
                 var block = new UnmanagedMemoryBlock<byte>((byte*)ptr + low * itemsize, blockCount * itemsize);
-                var slice = new StringArraySlice(new ArraySlice<byte>(block), descr);
+                IArraySlice slice;
+                if (descr.Meta is VStringDTypeMeta)
+                {
+                    // A StringDType view: the cells keep meaning only with their own buffer's allocator. The non-owning block
+                    // runs no clear loop on release (the operand's block owns the allocator and outlives the view).
+                    if (vstrings is null)
+                        throw new InvalidOperationException("A StringDType iterator view needs the allocator of its operand's cells.");
+                    slice = new VStringArraySlice(new ArraySlice<byte>(block), vstrings, descr);
+                }
+                else
+                {
+                    slice = new StringArraySlice(new ArraySlice<byte>(block), descr);
+                }
                 if (scalar)
                     return new NDArray(new UnmanagedStorage(slice, Shape.NewScalar()));
 

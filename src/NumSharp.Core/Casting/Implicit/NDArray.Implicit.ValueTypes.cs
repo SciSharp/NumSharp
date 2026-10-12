@@ -31,7 +31,7 @@ namespace NumSharp
 
         /// <summary>A 0-d bool array (not a Python-literal mark: NumPy stores a bool like its cast).</summary>
         /// <param name="d">The value.</param>
-        public static implicit operator NDArray(bool d) => NDArray.Scalar<bool>(d);
+        public static implicit operator NDArray(bool d) => NDArray.PythonBoolLiteral(d);
         /// <summary>A 0-d int8 array marked as a Python int literal (see <see cref="WasPythonLiteral"/>).</summary>
         /// <param name="d">The value.</param>
         public static implicit operator NDArray(sbyte d) => NDArray.PythonLiteral<sbyte>(d);

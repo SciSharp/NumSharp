@@ -44,8 +44,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="value">The value.</param>
         /// <param name="onMarks">The assignment, applied to (marks, value element numbers of the value's shape).</param>
-        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
-        /// <exception cref="ValueError">This array is read-only, or the value does not broadcast to the selection.</exception>
+        /// <exception cref="ValueError">This array is read-only, the value does not broadcast to the selection, or a non-text
+        ///     scalar (null — Python's <c>None</c> — included) under <c>coerce=False</c>.</exception>
         /// <exception cref="Exception">The selection's indexing errors, and the value conversion's errors.</exception>
         /// <remarks>
         ///     <b>When the value is converted</b> (NumPy's <c>array_assign_subscript</c>, as the fixed-width route): a SCALAR
@@ -56,11 +56,9 @@ namespace NumSharp
         private void VStringAdvancedSet(NDArray value, Action<NDArray, NDArray> onMarks)
         {
             ThrowIfNotWriteable();
-            if (value is null)
-                throw new ArgumentNullException(nameof(value));
 
-            // A C# literal is NumPy's Python scalar: setitem stores it (the NA object, or its str(); refused under
-            // coerce=False) BEFORE the index is resolved, as NumPy packs a scalar first.
+            // A C# literal (null: Python's None) is NumPy's Python scalar: setitem stores it (the NA object, or its str();
+            // refused under coerce=False) BEFORE the index is resolved, as NumPy packs a scalar first.
             NDArray converted = NDArray.PackForVStringStore(value, dtype);
             if (ReferenceEquals(converted, value))
                 converted = null;

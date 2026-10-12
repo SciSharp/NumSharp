@@ -24,10 +24,12 @@ namespace NumSharp
         /// Modifications to the NDArray will affect the original buffer.
         /// The buffer must stay alive while the NDArray is in use.
         /// </remarks>
+        /// <exception cref="ValueError"><paramref name="dtype"/> is a NEP 55 <c>StringDType</c> descriptor: NumPy's <c>cannot create an OBJECT array from memory buffer</c> (a reference dtype cannot be laid over raw bytes).</exception>
         public static NDArray frombuffer(byte[] buffer, DType dtype = null, long count = -1, long offset = 0)
         {
             // A fixed-width string dtype reads the bytes as elements of its width (S: one byte per character, U: one
             // UCS-4 unit per character) — a view over the pinned buffer, like every other dtype.
+            ThrowIfReferenceDType(dtype); // NumPy refuses a StringDType buffer before any other check
             if (Backends.Strings.NDStringStorage.IsString(dtype))
                 return StringFromBuffer(buffer, dtype, count, offset);
             // A non-native descriptor (np.dtype(">u4")) means "these bytes are big-endian": route through the
@@ -169,9 +171,11 @@ namespace NumSharp
         /// <param name="offset">Start reading the buffer from this offset (in bytes). Default is 0.</param>
         /// <returns>A 1-D <see cref="NDArray"/> that VIEWS the buffer's memory (writes through to the source).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.frombuffer.html</remarks>
+        /// <exception cref="ValueError"><paramref name="dtype"/> is a NEP 55 <c>StringDType</c> descriptor: NumPy's <c>cannot create an OBJECT array from memory buffer</c> (a reference dtype cannot be laid over raw bytes).</exception>
         public static NDArray frombuffer(MemoryView buffer, DType dtype = null, long count = -1, long offset = 0)
         {
             // A fixed-width string dtype reads the source's bytes as string elements (a view that keeps them alive).
+            ThrowIfReferenceDType(dtype); // NumPy refuses a StringDType buffer before any other check
             if (Backends.Strings.NDStringStorage.IsString(dtype))
                 return StringFromMemoryView(buffer, dtype, count, offset);
             // A non-native descriptor (np.dtype(">u4")) means "these bytes are big-endian": route through the
@@ -278,6 +282,7 @@ namespace NumSharp
         /// a zero-copy view; a big-endian dtype needs a byte-swap and so COPIES (as the byte[] path does).
         /// </summary>
         /// <inheritdoc cref="frombuffer(MemoryView, DType, long, long)"/>
+        /// <exception cref="ValueError"><paramref name="dtype"/> spells NEP 55 <c>StringDType</c> (<c>"T"</c>): NumPy's <c>cannot create an OBJECT array from memory buffer</c>.</exception>
         public static NDArray frombuffer(MemoryView buffer, string dtype, long count = -1, long offset = 0)
         {
             if (buffer == null)
@@ -309,6 +314,7 @@ namespace NumSharp
         /// Note: Big-endian dtype strings (">u4", ">i4", etc.) require a COPY to perform byte swapping.
         /// Little-endian and native endian create views without copying.
         /// </remarks>
+        /// <exception cref="ValueError"><paramref name="dtype"/> spells NEP 55 <c>StringDType</c> (<c>"T"</c>): NumPy's <c>cannot create an OBJECT array from memory buffer</c>.</exception>
         public static NDArray frombuffer(byte[] buffer, string dtype, long count = -1, long offset = 0)
         {
             if (buffer == null)
@@ -423,9 +429,11 @@ namespace NumSharp
         /// Interpret a ReadOnlySpan as a 1-dimensional array.
         /// Note: ReadOnlySpan cannot be pinned, so this always creates a copy.
         /// </summary>
+        /// <exception cref="ValueError"><paramref name="dtype"/> is a NEP 55 <c>StringDType</c> descriptor: NumPy's <c>cannot create an OBJECT array from memory buffer</c> (a reference dtype cannot be laid over raw bytes).</exception>
         public static NDArray frombuffer(ReadOnlySpan<byte> buffer, DType dtype = null, long count = -1, long offset = 0)
         {
             // A fixed-width string dtype copies the selected bytes into string elements (a span cannot stay pinned).
+            ThrowIfReferenceDType(dtype); // NumPy refuses a StringDType buffer before any other check
             if (Backends.Strings.NDStringStorage.IsString(dtype))
                 return StringFromSpan(buffer, dtype, count, offset);
             return frombuffer(buffer, dtype?.GetTypeCode() ?? NPTypeCode.Double, count, offset);
@@ -506,6 +514,7 @@ namespace NumSharp
         /// <param name="dtype">Data-type of the returned array. Default is float64.</param>
         /// <param name="count">Number of items to read. -1 means all data in the segment.</param>
         /// <returns>1-dimensional NDArray viewing the segment's data.</returns>
+        /// <exception cref="ValueError"><paramref name="dtype"/> is a NEP 55 <c>StringDType</c> descriptor: NumPy's <c>cannot create an OBJECT array from memory buffer</c> (a reference dtype cannot be laid over raw bytes).</exception>
         public static NDArray frombuffer(ArraySegment<byte> segment, DType dtype = null, long count = -1)
         {
             if (segment.Array == null)
@@ -513,6 +522,7 @@ namespace NumSharp
 
             // A fixed-width string dtype: the segment IS the buffer (NumPy's frombuffer of a sliced memoryview), so its
             // elements end at the segment's end, not at the end of the array behind it.
+            ThrowIfReferenceDType(dtype); // NumPy refuses a StringDType buffer before any other check
             if (Backends.Strings.NDStringStorage.IsString(dtype))
                 return StringFromBufferObject(segment, segment.Count, dtype, count, 0);
 
@@ -539,9 +549,11 @@ namespace NumSharp
         /// <param name="count">Number of items to read. -1 means all data.</param>
         /// <param name="offset">Byte offset within the memory. Default is 0.</param>
         /// <returns>1-dimensional NDArray.</returns>
+        /// <exception cref="ValueError"><paramref name="dtype"/> is a NEP 55 <c>StringDType</c> descriptor: NumPy's <c>cannot create an OBJECT array from memory buffer</c> (a reference dtype cannot be laid over raw bytes).</exception>
         public static NDArray frombuffer(Memory<byte> memory, DType dtype = null, long count = -1, long offset = 0)
         {
             // A fixed-width string dtype: a view over the pinned memory (array-backed or not), bounded by its length.
+            ThrowIfReferenceDType(dtype); // NumPy refuses a StringDType buffer before any other check
             if (Backends.Strings.NDStringStorage.IsString(dtype))
                 return StringFromBufferObject(memory, memory.Length, dtype, count, offset);
             return frombuffer(memory, dtype?.GetTypeCode() ?? NPTypeCode.Double, count, offset);
@@ -584,9 +596,11 @@ namespace NumSharp
         /// var ptr = Marshal.AllocHGlobal(1024);
         /// var arr = np.frombuffer(ptr, 1024, typeof(float), dispose: () => Marshal.FreeHGlobal(ptr));
         /// </example>
+        /// <exception cref="ValueError"><paramref name="dtype"/> is a NEP 55 <c>StringDType</c> descriptor: NumPy's <c>cannot create an OBJECT array from memory buffer</c> (a reference dtype cannot be laid over raw bytes).</exception>
         public static unsafe NDArray frombuffer(IntPtr address, long byteLength, DType dtype = null, long count = -1, long offset = 0, Action dispose = null)
         {
             // A fixed-width string dtype reads the memory as string elements (its width is the descriptor's).
+            ThrowIfReferenceDType(dtype); // NumPy refuses a StringDType buffer before any other check
             if (Backends.Strings.NDStringStorage.IsString(dtype))
                 return StringFromPointer((byte*)address, byteLength, dtype, count, offset, dispose);
             return frombuffer(address, byteLength, dtype?.GetTypeCode() ?? NPTypeCode.Double, count, offset, dispose);
@@ -683,10 +697,12 @@ namespace NumSharp
         /// var asBytes = np.frombuffer(ints, typeof(byte));  // 16 bytes
         /// var asFloats = np.frombuffer(ints, typeof(float)); // 4 floats (same bits)
         /// </example>
+        /// <exception cref="ValueError"><paramref name="dtype"/> is a NEP 55 <c>StringDType</c> descriptor: NumPy's <c>cannot create an OBJECT array from memory buffer</c> (a reference dtype cannot be laid over raw bytes).</exception>
         public static NDArray frombuffer<TSource>(TSource[] array, DType dtype = null, long count = -1, long offset = 0)
             where TSource : unmanaged
         {
             // A fixed-width string dtype reads the array's bytes as string elements (a view over the pinned array).
+            ThrowIfReferenceDType(dtype); // NumPy refuses a StringDType buffer before any other check
             if (Backends.Strings.NDStringStorage.IsString(dtype))
                 return StringFromArray(array, dtype, count, offset);
             return frombuffer(array, dtype?.GetTypeCode() ?? InfoOf<TSource>.NPTypeCode, count, offset);

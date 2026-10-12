@@ -16,12 +16,21 @@ namespace NumSharp
         ///     <see cref="NPTypeCode"/>, a NumPy dtype string (<c>"f4"</c>) or a <see cref="DType"/> all convert implicitly.
         /// </param>
         /// <returns></returns>
-        /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Converts.ChangeType(object,System.Type)"/> will be called.</remarks>
+        /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Converts.ChangeType(object,System.Type)"/> will be called.
+        ///     A NEP 55 <c>StringDType</c> <paramref name="dtype"/> stores the value by NumPy's <c>stringdtype_setitem</c>
+        ///     (<c>np.array(5, dtype='T')</c> is <c>'5'</c>; the NA object, or null for <c>None</c>, packs an NA element).</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        /// <exception cref="ValueError">A non-text value into a <c>coerce=False</c> <c>StringDType</c>.</exception>
+        /// <exception cref="UnicodeDecodeError"><c>bytes</c> that are not UTF-8 into a <c>StringDType</c>.</exception>
+        /// <exception cref="UnicodeEncodeError">A text with a lone surrogate into a <c>StringDType</c>.</exception>
         [MethodImpl(Inline)]
         public static NDArray Scalar(object value, DType dtype)
         {
             if (dtype is null)
                 throw new ArgumentNullException(nameof(dtype));
+            // StringDType: one Python object through setitem (its str(), the NA object, coerce=False's refusal).
+            if (dtype.Meta is VStringDTypeMeta)
+                return Backends.Strings.NDVStringMove.StoreScalar(value, dtype);
             // A string dtype holds text: the value is encoded (str / bytes), not converted through IConvertible.
             if (dtype.Meta is StringDTypeMeta)
                 return Backends.Strings.NDStringArrays.FromScalar(value, dtype);

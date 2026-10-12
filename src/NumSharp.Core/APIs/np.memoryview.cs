@@ -55,9 +55,20 @@ namespace NumSharp
         {
             private readonly NDArray _arr;
 
+            /// <summary>
+            ///     Creates the buffer handle of <paramref name="a"/> (NumPy's <c>memoryview(a)</c>, through
+            ///     <see cref="NDArray.data"/>).
+            /// </summary>
+            /// <param name="a">The exporting array.</param>
+            /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+            /// <exception cref="ValueError"><paramref name="a"/> is a NEP 55 <c>StringDType</c> array: NumPy's buffer export
+            ///     refuses a reference dtype (<c>cannot include dtype 'numpy.dtypes.StringDType' in a buffer</c>) — its cells
+            ///     hold arena offsets and heap pointers that only the array's own allocator can read.</exception>
             internal MemoryView(NDArray a)
             {
                 _arr = a ?? throw new ArgumentNullException(nameof(a));
+                if (a.Storage.IsVString)
+                    throw new ValueError("cannot include dtype 'numpy.dtypes.StringDType' in a buffer");
             }
 
             /// <summary>
@@ -359,6 +370,7 @@ namespace NumSharp
         ///     <see cref="Data{T}"/> / <see cref="GetData()"/> for the typed / raw-slice accessors.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.data.html</remarks>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array (NumPy's buffer export refuses reference dtypes).</exception>
         public np.MemoryView data => new np.MemoryView(this);
     }
 }

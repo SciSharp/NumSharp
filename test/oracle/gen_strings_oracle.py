@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""NumPy 2.4.2 oracle for NumSharp's fixed-width string dtypes ('S' bytes, 'U' str).
+"""NumPy 2.4.2 oracle for NumSharp's string dtypes: the fixed-width 'S' (bytes) and 'U' (str), and NEP 55 StringDType ('T').
 
 Writes ``test/NumSharp.Tests.Oracle/Strings/corpus/strings.jsonl``: one case per line, replayed byte for byte by
 ``StringOracleTests`` (no Python at test time).
@@ -18,6 +18,11 @@ Each case records what NumPy 2.4.2 returns for one call:
   afterwards). A numeric NumPy SCALAR result is an ``array`` with ``"scalar": true`` and no writeable / owndata flags
   (a scalar is immutable and owns nothing; NumSharp answers with a read-only 0-d array).
 * ``error`` -- when NumPy raises: the exception's first well-known class on its MRO and ``str(e)`` verbatim.
+* NEP 55 ``StringDType`` (``T``, sections tstore / tcreate / tmove / tcast) travels by VALUE, never by cells (a cell holds
+  an arena offset or a heap pointer of NumPy's allocator): an operand has ``"t": {"coerce", "na"}`` (the descriptor
+  request) and ``"values"`` (the base's elements, ``{"na": true}`` for an NA cell, told apart by the cell's MISSING flag)
+  instead of ``"buffer"``; an array expectation has ``"values"`` instead of ``"buffer"``; an in-place call's base is
+  ``"basevalues"``; a ``tobytes()`` result is ``{"kind": "tcells"}`` with the heap pointers masked (``_mask_heap``).
 * ``phase`` -- 1 for the calls NumSharp's string support covers now (storage, element access, conversion, copying,
   string-to-string casts, text <-> number conversion, indexing, printing, and every refusal NumPy itself raises); 2 for
   the calls NumPy answers by COMPUTING on text (sorting, searching and the rest of phase 2). A phase-2 case passes while
@@ -59,7 +64,9 @@ def enc(v):
     if isinstance(v, (int, np.integer)):
         return {"int": int(v)}
     if isinstance(v, (float, np.floating)):
-        return {"float": float(v)}
+        # A non-finite float travels as "nan" / "inf" / "-inf" (the corpus is written with allow_nan=False); a StringDType
+        # NA object that is a float NaN reaches here through tolist() / item().
+        return {"float": _jf(float(v))}
     if isinstance(v, (list, tuple)):
         return [enc(x) for x in v]
     raise TypeError(f"cannot encode {type(v)}")
@@ -83,6 +90,8 @@ def err_info(e):
 def describe(base, view):
     """A (base, view) pair as an operand: the view is rebuilt over the whole base buffer, in elements."""
     assert base.ndim == 1 and base.flags.c_contiguous, "a base must be a 1-D C-contiguous buffer"
+    if base.dtype.kind == "T":
+        return _describe_t(base, view)
     isz = base.itemsize
     off_bytes = view.__array_interface__["data"][0] - base.__array_interface__["data"][0] if view.size else 0
     assert off_bytes % isz == 0
@@ -132,6 +141,8 @@ def target(arr):
 def array_expect(r, operands):
     """An array result: dtype, shape, C-order bytes, element strides, flags and memory sharing with each operand."""
     r = np.asarray(r)
+    if r.dtype.kind == "T":
+        return _t_array_expect(r, operands)
     d = {
         "kind": "array",
         "dtype": r.dtype.str,
@@ -201,6 +212,12 @@ def expect_of(r, operands):
         return {"kind": "tuple", "items": [array_expect(x, operands) for x in r]}
     if isinstance(r, _TProps):
         return tprops(r.d)
+    if isinstance(r, _TCells):
+        return {"kind": "tcells", "hex": _mask_heap(r.b)}
+    if type(r) is float:
+        # A StringDType element that is the float NaN NA object (a.item(i), a[i]); np.float64 is a subclass of float and
+        # keeps the NumPy-scalar branch below.
+        return {"kind": "value", "value": enc(r)}
     if isinstance(r, np.dtype):
         return {"kind": "dtype", "str": r.str, "repr": repr(r)}
     if isinstance(r, (bool, np.bool_)):
@@ -245,8 +262,12 @@ def add(section, op, *, params=None, operands=(), call, phase=1, layout="", muta
         r = call(*views)
         if mutate is not None:
             base, view = operands[mutate]
-            case["expected"] = {"kind": "mutated", "operand": mutate, "view": array_expect(view, None),
-                                "base": base.tobytes().hex()}
+            case["expected"] = {"kind": "mutated", "operand": mutate, "view": array_expect(view, None)}
+            # A StringDType base is compared by its values (its cells hold allocator offsets and heap pointers).
+            if base.dtype.kind == "T":
+                case["expected"]["basevalues"] = tvals(base)
+            else:
+                case["expected"]["base"] = base.tobytes().hex()
         else:
             case["expected"] = expect_of(r, views)
         if phase == "compute":
@@ -4033,6 +4054,843 @@ def gen_tdtype():
             call=lambda x, s=spec: np.add(x, x, dtype=sbuild(s)))
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# V. NEP 55 StringDType arrays (strings phase 1, P1.3 - P1.6)
+# ----------------------------------------------------------------------------------------------------------------------
+
+# Texts that reach every cell kind of static_string.c: short (<= 15 UTF-8 bytes, stored in the cell), medium (16 - 255
+# bytes: a one-byte arena prefix) and long (> 255 bytes: an eight-byte prefix), both size boundaries (15 / 16, 255 / 256),
+# multi-byte UTF-8 (the BYTE count decides the kind: 'é' * 8 is 16 bytes), embedded and trailing NULs (StringDType keeps
+# them, unlike 'U'), quotes, tabs and supplementary-plane characters.
+T_POOL = ["a", "m" * 16, "", "bc", "é" * 8, "def", "q" * 20, "Ü", "\U0001F600" * 5, "x y", "n" * 15, "中文",
+          "p" * 255, "a\x00b", "r" * 256, "it's", "s" * 300, "\t", "長い文字列です" * 2, "ab\x00"]
+# Short texts only: NumPy 2.4.2's put / putmask / choose copy StringDType cells RAW (no dup), which is correct only for
+# short strings (an arena or heap cell then points into another array's allocator: garbage or a crash), so those calls
+# get short values only; NumSharp's correct duplicate of every string is pinned by the unit tests for long ones.
+T_SHORT = ["a", "bc", "", "def", "Ü", "x y", "it's", "\t", "中文", "a\x00b", "\U0001F600", "zz", "é", "ab\x00", "~", "Q"]
+
+TD = TSpec()
+TDN = TSpec(None)
+TDNAN = TSpec(float("nan"))
+TDS = TSpec("NA")
+TDC = TSpec(coerce=False)
+TDNC = TSpec(None, coerce=False)
+
+
+def tspec_of(d):
+    """The ``{"coerce", "na"}`` request that rebuilds a StringDType descriptor equal to ``d``.
+
+    :param d: a StringDType descriptor.
+    :returns: ``{"coerce": bool}`` plus ``"na"`` (``enc_na``) when the descriptor has an NA object.
+    """
+    r = {"coerce": bool(d.coerce)}
+    if hasattr(d, "na_object"):
+        r["na"] = enc_na(d.na_object)
+    return r
+
+
+def tvals(arr):
+    """The elements of a StringDType array in C order: ``{"na": true}`` for an NA cell (its MISSING flag, read from the
+    cells — a string NA object equal to some text is told apart this way), else the text.
+
+    :param arr: a StringDType array of any layout.
+    :returns: the encoded elements.
+    """
+    flat = np.array(arr, copy=True, order="C").reshape(-1)
+    cells = flat.tobytes()
+    return [{"na": True} if cells[16 * i + 15] & 0x80 else enc(flat[i]) for i in range(flat.size)]
+
+
+def _describe_t(base, view):
+    """A StringDType (base, view) pair as an operand: the descriptor's request, the base's VALUES (its cells are
+    meaningful only with its own allocator) and the view's shape / element strides / element offset.
+
+    :param base: the 1-D C-contiguous StringDType base.
+    :param view: a view of it.
+    :returns: the operand descriptor.
+    """
+    off = view.__array_interface__["data"][0] - base.__array_interface__["data"][0] if view.size else 0
+    assert off % 16 == 0
+    d = {"dtype": view.dtype.str, "t": tspec_of(base.dtype), "shape": [int(x) for x in view.shape],
+         "strides": [int(s // 16) for s in view.strides], "offset": int(off // 16), "bufferSize": int(base.size),
+         "values": tvals(base)}
+    if not view.flags.writeable:
+        d["writeable"] = False
+    return d
+
+
+def _t_array_expect(r, operands):
+    """A StringDType array result: the descriptor (its ``str`` names the NA object and coerce), shape, the values with
+    NA cells marked, element strides, flags and memory sharing with each operand.
+
+    :param r: the StringDType array.
+    :param operands: the call's operand views, or None.
+    :returns: the expectation.
+    """
+    d = {"kind": "array", "dtype": r.dtype.str, "t": tspec_of(r.dtype), "shape": [int(x) for x in r.shape],
+         "values": tvals(r), "strides": [int(s // 16) for s in r.strides], "c": bool(r.flags.c_contiguous),
+         "f": bool(r.flags.f_contiguous), "writeable": bool(r.flags.writeable), "owndata": bool(r.flags.owndata)}
+    if operands:
+        d["shares"] = [bool(np.shares_memory(r, o)) if isinstance(o, np.ndarray) else False for o in operands]
+    return d
+
+
+class _TCells:
+    """Marks a call whose expectation is the raw cells of a StringDType array (``tobytes()``), heap pointers masked."""
+
+    def __init__(self, b):
+        """Keeps the bytes.
+
+        :param b: the cells as ``bytes``.
+        """
+        self.b = b
+
+
+def _mask_heap(b):
+    """StringDType cells with the bytes that hold a HEAP POINTER zeroed: a cell with ``OUTSIDE_ARENA | LONG`` (a heap
+    string, or one freed into an empty / NA cell that keeps the stale pointer). Everything else is deterministic: a short
+    string's text and length, an arena string's offset and size, the flags.
+
+    :param b: the cells.
+    :returns: the masked cells as hex.
+    """
+    out = bytearray(b)
+    for i in range(0, len(out), 16):
+        if out[i + 15] & 0x30 == 0x30:
+            out[i:i + 8] = bytes(8)
+    return out.hex()
+
+
+def t_values(spec, n, seed=0, pool=None, na_every=4):
+    """``n`` values cycling through ``pool`` from ``seed``; with an NA object, every ``na_every``-th one is that object.
+
+    :param spec: the TSpec.
+    :param n: the count.
+    :param seed: the first pool index.
+    :param pool: the texts (``T_POOL`` by default).
+    :param na_every: the NA period (0 for none).
+    :returns: the values.
+    """
+    pool = pool or T_POOL
+    vals = [pool[(seed + i) % len(pool)] for i in range(n)]
+    if spec.na is not _ABSENT and na_every:
+        for i in range(n):
+            if (seed + i) % na_every == na_every - 1:
+                vals[i] = spec.na
+    return vals
+
+
+def t_operand(spec, layout, seed=0, pool=None, na_every=4):
+    """A StringDType operand: a base built by ``np.array(values, dtype)`` and the layout's view of it.
+
+    :param spec: the TSpec.
+    :param layout: a ``LAYOUTS`` name.
+    :param seed: the first pool index.
+    :param pool: the texts.
+    :param na_every: the NA period.
+    :returns: the (base, view) pair.
+    """
+    n, build = LAYOUTS[layout]
+    base = np.array(t_values(spec, n, seed, pool, na_every), dtype=spec.build())
+    return base, build(base)
+
+
+def t_plain(arr):
+    """A StringDType operand of exactly ``arr``'s shape: a 1-D copy as the base and its reshaped view.
+
+    :param arr: a StringDType array.
+    :returns: the (base, view) pair.
+    """
+    base = np.array(arr, copy=True, order="C").reshape(-1)
+    return base, base.reshape(arr.shape)
+
+
+def _drop_platform_int_text():
+    """Drops the case just added when NumPy's error names the C type of an int32 / uint32 target: casts.cpp names the
+    target by its type number, which is NPY_LONG on Windows (``out of bounds for long``) and NPY_INT on LP64; NumSharp
+    pins the LP64 text (unit-tested), the policy of ``_platform_text``."""
+    err = CASES[-1].get("error")
+    if err and err["text"].endswith(("is out of bounds for long", "is out of bounds for unsigned long")):
+        _IDS.discard(CASES.pop()["id"])
+
+
+def _t_writes(spec, values, writes):
+    """Builds ``np.array(values, dtype)`` and applies each ``a[index] = value`` in order.
+
+    :param spec: the TSpec.
+    :param values: the initial values.
+    :param writes: (index entries, value) pairs (index entries as ``_py_index`` reads them).
+    :returns: the array.
+    """
+    a = np.array(values, dtype=spec.build())
+    for idx, v in writes:
+        a[tuple(_py_index(e) for e in idx)] = v
+    return a
+
+
+T_TEXT_SPECS = [TD, TDN, TDNAN, TDS]
+
+
+def gen_tstore():
+    """Section tstore (P1.3): the cells of StringDType arrays — what ``tobytes()`` shows after building an array from
+    values (short / medium / long strings and their boundaries, NA cells, empty strings, 1-D and 2-D) and after write
+    sequences that walk static_string.c's state machine (a shorter rewrite reuses its arena slot, a longer one moves to
+    the heap, a short write forgets the arena slot, an NA write keeps it, the empty string keeps it); the values and
+    layout of the same arrays; itemsize / nbytes / byte strides; and the raw cells of views. Heap pointers are masked
+    (``_mask_heap``); everything else in a cell is compared byte for byte.
+    """
+    sets = [["a", "bc", "", "def"], ["n" * 15, "m" * 16, "o" * 255, "p" * 256, "q" * 300],
+            ["é" * 7, "é" * 8, "\U0001F600" * 3, "\U0001F600" * 4, "中" * 5, "中" * 6], ["", "", ""],
+            ["a\x00b", "ab\x00", "\x00", "x" * 15 + "\x00"], T_POOL, [["a", "m" * 16], ["", "q" * 20]],
+            [[["x" * 20], ["y"]], [["z" * 30], [""]]], []]
+    for spec in T_TEXT_SPECS + [TDC]:
+        for vals in sets:
+            if spec.na is not _ABSENT and vals is T_POOL:
+                vals = t_values(spec, 20, 0, T_POOL, 3)
+            for result in ("array", "cells"):
+                add("tstore", "t_writes", params={"values": enc(vals), "dtype": senc(spec), "writes": [],
+                                                  "result": result},
+                    call=lambda s=spec, v=vals, r=result: _t_result(_t_writes(s, v, []), r))
+        # NA cells among texts of every kind, built by np.array.
+        if spec.na is not _ABSENT:
+            vals = ["a", spec.na, "x" * 20, spec.na, "", "y" * 300, spec.na]
+            for result in ("array", "cells"):
+                add("tstore", "t_writes", params={"values": enc(vals), "dtype": senc(spec), "writes": [],
+                                                  "result": result},
+                    call=lambda s=spec, v=vals, r=result: _t_result(_t_writes(s, v, []), r))
+
+    i0 = [{"int": 0}]
+    seqs = [
+        # a shorter rewrite of a medium string reuses its arena slot; an equal one too
+        (["q" * 20, "a"], [(i0, "r" * 17)]), (["q" * 20, "a"], [(i0, "r" * 20)]),
+        # a longer rewrite moves to the heap; the heap string is then rewritten shorter, longer, short, empty
+        (["q" * 20, "a"], [(i0, "s" * 40)]), (["q" * 20, "a"], [(i0, "s" * 40), (i0, "t" * 30)]),
+        (["q" * 20, "a"], [(i0, "s" * 40), (i0, "t" * 60)]), (["q" * 20, "a"], [(i0, "s" * 40), (i0, "u")]),
+        (["q" * 20, "a"], [(i0, "s" * 40), (i0, "")]),
+        # a short write forgets the arena slot: a later medium write goes to the heap
+        (["q" * 20, "a"], [(i0, "x"), (i0, "y" * 18)]),
+        # the empty string keeps an arena slot (size 0): a later medium write reuses it
+        (["q" * 20, "a"], [(i0, ""), (i0, "w" * 16)]),
+        # a long string's slot takes a medium rewrite; a longer one moves to the heap
+        (["L" * 300, "a"], [(i0, "M" * 100)]), (["L" * 300, "a"], [(i0, "N" * 400)]),
+        (["L" * 300, "a"], [(i0, "M" * 100), (i0, "O" * 290)]),
+        # short to short, short to medium (arena space appended after the existing strings), medium after medium
+        (["a", "b", "c"], [([{"int": 1}], "zz"), ([{"int": 2}], "k" * 17), (i0, "j" * 19)]),
+        # a slice assignment packs each element; a fill, a negative index, a 2-D target
+        (["a", "q" * 20, "b", "r" * 30], [([{"slice": [1, 3, None]}], "k" * 20)]),
+        (["a", "q" * 20, "b", "r" * 30], [([{"slice": [None, None, -1]}], "z")]),
+        (["a", "q" * 20, "b", "r" * 30], [([{"int": -1}], "v" * 25), ([{"int": -1}], "w" * 26)]),
+        ([["a", "q" * 20], ["b", "r" * 30]], [([{"int": 1}, {"int": 0}], "c" * 40), ([{"int": 0}], "d")]),
+        # non-ASCII rewrites (the BYTE size decides)
+        (["é" * 8, "a"], [(i0, "é" * 9)]), (["é" * 8, "a"], [(i0, "e" * 16)]),
+    ]
+    for spec in (TD, TDN):
+        for vals, writes in seqs:
+            for result in ("array", "cells"):
+                add("tstore", "t_writes",
+                    params={"values": enc(vals), "dtype": senc(spec), "result": result,
+                            "writes": [[idx, enc(v)] for idx, v in writes]},
+                    call=lambda s=spec, v=vals, w=writes, r=result: _t_result(_t_writes(s, v, w), r))
+    # NA writes keep the old allocation's metadata (a later write can reuse the arena slot); an NA overwritten by NA.
+    na_seqs = [lambda na: (["q" * 20, "a"], [(i0, na)]), lambda na: (["q" * 20, "a"], [(i0, na), (i0, "z" * 19)]),
+               lambda na: (["q" * 20, "a"], [(i0, na), (i0, "z" * 30)]), lambda na: (["a", "b"], [(i0, na), (i0, "c")]),
+               lambda na: (["q" * 20, "a"], [(i0, "s" * 40), (i0, na)]),
+               lambda na: (["q" * 20, "a"], [(i0, na), (i0, na)]),
+               lambda na: (["a", "b", "c"], [([{"slice": [None, None, 2]}], na)])]
+    for spec in (TDN, TDNAN, TDS):
+        for mk in na_seqs:
+            vals, writes = mk(spec.na)
+            for result in ("array", "cells"):
+                add("tstore", "t_writes",
+                    params={"values": enc(vals), "dtype": senc(spec), "result": result,
+                            "writes": [[idx, enc(v)] for idx, v in writes]},
+                    call=lambda s=spec, v=vals, w=writes, r=result: _t_result(_t_writes(s, v, w), r))
+
+    # itemsize / nbytes / byte strides (not of an empty array: NumPy reports all-zero strides for any zero-size array it
+    # allocates, a library-wide divergence pinned in OpenBugs.EmptyStrides), and tobytes() of views: a buffer already in
+    # the requested order gives its own cells, any other layout is RAVELLED first (a copy that duplicates the strings in
+    # that order into a new arena, so the offsets show the walk order).
+    for spec in (TD, TDN):
+        for lay in ("c1", "c2", "f2", "t3", "s1", "r1", "r2", "o1", "bc", "z0", "d5"):
+            add("tstore", "t_sizes", operands=[t_operand(spec, lay)], layout=lay,
+                call=lambda a: [int(a.itemsize), int(a.nbytes)] + [int(s) for s in a.strides])
+        for lay in ("c1", "c2", "f2", "t3", "s1", "r1", "r2", "o1", "bc", "z0", "e1", "e2", "d5"):
+            for order in ("C", "F"):
+                add("tstore", "t_tobytes", params={"order": order}, operands=[t_operand(spec, lay)], layout=lay,
+                    call=lambda a, o=order: _TCells(a.tobytes(order=o)))
+        # the cells of copies: np.copy duplicates the strings walking the destination's order
+        for lay in ("c2", "f2", "t3", "s2", "r2", "bc"):
+            for order in ("C", "F", "K"):
+                add("tstore", "t_copy_cells", params={"order": order}, operands=[t_operand(spec, lay)], layout=lay,
+                    call=lambda a, o=order: _TCells(np.copy(a, order=o).tobytes(order="A")))
+
+
+def _t_result(a, result):
+    """The array itself, or its cells.
+
+    :param a: a StringDType array.
+    :param result: ``"array"`` or ``"cells"``.
+    :returns: ``a`` or ``_TCells(a.tobytes())``.
+    """
+    return a if result == "array" else _TCells(a.tobytes())
+
+
+def gen_tcreate():
+    """Section tcreate (P1.5): creating StringDType arrays (``np.array`` from values of every kind under every
+    descriptor — numbers, bools and None coerced to their ``str()`` or refused by ``coerce=False``, the NA objects, bytes
+    decoded as UTF-8, lone surrogates and invalid UTF-8 refused, nested / ragged / empty lists, ``ndmin``, ``order``;
+    ``np.zeros`` / ``empty`` / ``ones`` / ``full`` and the ``_like`` forms, ``asarray`` / ``ascontiguousarray`` /
+    ``asfortranarray``), element access (``tolist``, ``item``, iteration, integer indexing — the NA object comes back
+    as itself), setitem of every value kind, ``fill``, printing (repr / str / array2string / array_repr / array_str with
+    NA objects, escapes and summarization), ``view`` (NumPy's reference refusal) and ``np.nditer``'s ``refs_ok`` rule.
+    """
+    nan = float("nan")
+    value_sets = [["a", "bc", "def"], ["", ""], ["x" * 20, "y" * 300, "z"], ["Ü", "é", "\U0001F600ab"],
+                  ["a\x00b", "c\x00"], [["a", "bc"], ["def", ""]], [[["a"], ["b" * 20]], [["cc"], ["d"]]], [],
+                  [[]], [["a", "b"], ["c"]], ["a", 1, 2.5, True, None], [5], [None], [nan, 1.5], [True, False],
+                  [b"ab", b"\xc3\xa9"], [b"\x80"], ["\ud800"], ["ok", "\udc80x"], ["NA", "x"], [-0.0, 1e16, 1e-5],
+                  [123456789, -7]]
+    for spec in T_TEXT_SPECS + [TDC, TDNC]:
+        for vals in value_sets:
+            add("tcreate", "array", params={"values": enc(vals), "dtype": senc(spec)},
+                call=lambda v=vals, s=spec: np.array(v, dtype=s.build()))
+    for vals in (["a", "b" * 20], [["a", "bc"], ["d" * 20, "e"]]):
+        for ndmin in (0, 1, 2, 3):
+            add("tcreate", "array", params={"values": enc(vals), "dtype": senc(TD), "ndmin": ndmin},
+                call=lambda v=vals, n=ndmin: np.array(v, dtype=TD.build(), ndmin=n))
+        for order in ("C", "F"):
+            add("tcreate", "array", params={"values": enc(vals), "dtype": senc(TDN), "order": order},
+                call=lambda v=vals, o=order: np.array(v, dtype=TDN.build(), order=o))
+
+    for v in ["abc", "", "x" * 20, None, 5, 2.5, True, b"ab", nan, "NA"]:
+        for spec in T_TEXT_SPECS + [TDC]:
+            add("tcreate", "array_scalar", params={"value": enc(v), "dtype": senc(spec)},
+                call=lambda v=v, s=spec: np.array(v, dtype=s.build()))
+
+    for spec in (TD, TDN, TDC):
+        for shape in ((3,), (2, 3), (0,), (2, 0), ()):
+            for fn in ("zeros", "empty", "ones"):
+                add("tcreate", fn, params={"shape": list(shape), "dtype": senc(spec)},
+                    call=lambda f=fn, sh=shape, s=spec: getattr(np, f)(sh, dtype=s.build()))
+    for spec in T_TEXT_SPECS + [TDC, TDNC]:
+        for fill in ("ab", "x" * 20, "", 7, -2.5, True, None, nan, b"ab", "NA"):
+            for shape in ((3,), (2, 2)):
+                add("tcreate", "full", params={"shape": list(shape), "fill": enc(fill), "dtype": senc(spec)},
+                    call=lambda sh=shape, f=fill, s=spec: np.full(sh, f, dtype=s.build()))
+
+    for spec in (TD, TDN):
+        for lay in ("c2", "f2", "t3", "s2", "r2", "bc", "z0", "e2"):
+            add("tcreate", "zeros_like", params={"dtype": None}, operands=[t_operand(spec, lay)], layout=lay,
+                call=lambda a: np.zeros_like(a))
+            add("tcreate", "empty_like", params={"dtype": None}, operands=[t_operand(spec, lay)], layout=lay,
+                call=lambda a: np.empty_like(a))
+            add("tcreate", "ones_like", operands=[t_operand(spec, lay)], layout=lay, call=lambda a: np.ones_like(a))
+            for fill in ("qq", "w" * 20, 5, None):
+                add("tcreate", "full_like", params={"fill": enc(fill), "dtype": None}, operands=[t_operand(spec, lay)],
+                    layout=lay, call=lambda a, f=fill: np.full_like(a, f))
+    for lay in ("c2", "f2", "bc"):
+        for spec in (TD, TDN):
+            add("tcreate", "zeros_like", params={"dtype": senc(spec)}, operands=[operand("<U3", lay)], layout=lay,
+                call=lambda a, s=spec: np.zeros_like(a, dtype=s.build()))
+            add("tcreate", "full_like", params={"fill": enc("zz"), "dtype": senc(spec)}, operands=[operand("<U3", lay)],
+                layout=lay, call=lambda a, s=spec: np.full_like(a, "zz", dtype=s.build()))
+            add("tcreate", "full_like", params={"fill": enc(None), "dtype": senc(spec)},
+                operands=[plain(np.arange(6).reshape(2, 3))], layout="c2",
+                call=lambda a, s=spec: np.full_like(a, None, dtype=s.build()))
+
+    for spec in (TD, TDN):
+        for lay in CORE_LAYOUTS + ["c3", "r1", "rs", "e1"]:
+            add("tcreate", "asarray", params={"dtype": None}, operands=[t_operand(spec, lay)], layout=lay,
+                call=lambda a: np.asarray(a))
+            add("tcreate", "asarray", params={"dtype": senc(spec)}, operands=[t_operand(spec, lay)], layout=lay,
+                call=lambda a, s=spec: np.asarray(a, dtype=s.build()))
+            add("tcreate", "ascontiguousarray", operands=[t_operand(spec, lay)], layout=lay,
+                call=lambda a: np.ascontiguousarray(a))
+            add("tcreate", "asfortranarray", operands=[t_operand(spec, lay)], layout=lay,
+                call=lambda a: np.asfortranarray(a))
+        for lay in ("c1", "c2", "f2"):
+            add("tcreate", "asarray", params={"dtype": senc(spec)}, operands=[operand("<U3", lay)], layout=lay,
+                call=lambda a, s=spec: np.asarray(a, dtype=s.build()))
+
+    # Element access: the NA object comes back as itself (None, nan, the string), text as a str.
+    for spec in T_TEXT_SPECS:
+        for lay in CORE_LAYOUTS + ["c3", "r1", "rs", "e1"]:
+            op = t_operand(spec, lay)
+            add("tcreate", "tolist", operands=[op], layout=lay, call=lambda a: a.tolist())
+            if op[1].size:
+                add("tcreate", "item", params={"index": 0}, operands=[op], layout=lay, call=lambda a: a.item(0))
+                add("tcreate", "item", params={"index": op[1].size - 1}, operands=[op], layout=lay,
+                    call=lambda a: a.item(a.size - 1))
+            if op[1].size == 1:
+                add("tcreate", "item", params={"index": None}, operands=[op], layout=lay, call=lambda a: a.item())
+            if op[1].ndim == 1:
+                add("tcreate", "iter", operands=[op], layout=lay, call=lambda a: [x for x in a])
+                for k in range(min(op[1].size, 4)):
+                    add("tcreate", "getitem", params={"index": [{"int": k}]}, operands=[op], layout=lay,
+                        call=lambda a, k=k: a[k])
+    add("tcreate", "item", params={"index": 99}, operands=[t_operand(TD, "c1")], layout="c1", call=lambda a: a.item(99))
+
+    # setitem: every value kind into every descriptor (a literal is stringdtype_setitem's: str() of any value with coerce,
+    # the NA object packs NA, coerce=False refuses anything but str, bytes decode as UTF-8), through every index kind.
+    values = ["zz", "", "longer text here!", "Ü", "\U0001F600" * 4, "a\x00", 5, -2.5, True, None, nan, b"by", b"\xff",
+              "\ud800", "NA"]
+    for spec in T_TEXT_SPECS + [TDC]:
+        for lay in ("c1", "c2", "f2", "s1", "r2", "bc", "z0", "e2"):
+            for v in values:
+                for idx in ([{"int": 0}], [{"ellipsis": True}], [{"slice": [None, None, 2]}], [{"arr": [0, -1]}],
+                            [{"mask": [True, False, True, False, False, True]}]):
+                    if "mask" in idx[0] and lay != "c1":
+                        continue
+                    if lay == "z0" and idx[0].keys() & {"int", "slice", "arr"}:
+                        continue
+                    # A Python bytes value only through an element index: C# reaches one element with the object-typed
+                    # SetValue (Python's bytes is a byte[] there), while an NDArray-typed store has no spelling for a bytes
+                    # object (a 0-d S array is NumPy's ndarray, which is CAST, not stored by setitem).
+                    if isinstance(v, bytes) and not ("int" in idx[0] and lay in ("c1", "s1")):
+                        continue
+                    key = tuple(_py_index(e) for e in idx)
+                    add("tcreate", "t_setitem", params={"index": idx, "value": enc(v)},
+                        operands=[t_operand(spec, lay)], layout=lay, mutate=0,
+                        call=lambda a, k=key, v=v: _setitem(a, k, v))
+            for v in ("fill text over twenty", "f", 7, None, nan, b"\xc3\xa9", "NA"):
+                add("tcreate", "fill", params={"value": enc(v)}, operands=[t_operand(spec, lay)], layout=lay,
+                    mutate=0, call=lambda a, v=v: a.fill(v))
+        # a whole array into one element is its str(); arrays into slices are cast
+        add("tcreate", "setitem_array", params={"index": [{"int": 0}]},
+            operands=[t_operand(spec, "c1"), plain(np.array(["zz", "y"]))], layout="c1", mutate=0,
+            call=lambda a, v: _setitem(a, 0, v))
+        add("tcreate", "setitem_array", params={"index": [{"slice": [None, 2, None]}]},
+            operands=[t_operand(spec, "c1"), plain(np.array([1, 2]))], layout="c1", mutate=0,
+            call=lambda a, v: _setitem(a, slice(None, 2), v))
+
+    # Printing: escapes, quotes, NULs, long strings, the NA objects, 0-d, 2-D, empty, summarization.
+    texts = ["", "a", "it's", 'say "hi"', "both'\"", "\t\n\r", "\x00a", "\x01\x1f\x7f", "\x80\x9f", "\xe9",
+             chr(0x4E2D), chr(0x1F600), chr(0x2028), chr(0xFEFF), "\\", "x" * 30, "tab\there"]
+    for spec in T_TEXT_SPECS:
+        arrs = [np.array(texts, dtype=spec.build()), np.array(t_values(spec, 10, 0, T_POOL, 3), dtype=spec.build())]
+        if spec.na is not _ABSENT:
+            arrs.append(np.array([spec.na, "a", spec.na], dtype=spec.build()))
+            arrs.append(np.array(spec.na, dtype=spec.build()))
+        arrs += [np.array("abc", dtype=spec.build()), np.array([["a", "bb"], ["ccc", "d"]], dtype=spec.build()),
+                 np.empty((0,), dtype=spec.build()), np.empty((2, 0), dtype=spec.build())]
+        for arr in arrs:
+            for fn in ("repr", "str"):
+                add("tcreate", fn, operands=[plain(arr)], layout=f"{arr.ndim}d",
+                    call=lambda a, f=fn: repr(a) if f == "repr" else str(a))
+        for lay in ("c2", "f2", "t3", "r2", "bc", "z0", "e2", "d5"):
+            op = t_operand(spec, lay)
+            add("tcreate", "repr", operands=[op], layout=lay, call=lambda a: repr(a))
+            add("tcreate", "str", operands=[op], layout=lay, call=lambda a: str(a))
+    long_t = plain(np.array([f"item{i}" for i in range(40)] + [None], dtype=TDN.build()))
+    for th, ed, lw in ((10, 2, 75), (5, 1, 30), (1000, 3, 20)):
+        add("tcreate", "repr_opts", params={"threshold": th, "edgeitems": ed, "linewidth": lw}, operands=[long_t],
+            layout="c1", call=lambda a, t=th, e=ed, l=lw: _with_opts(repr, a, t, e, l))
+        add("tcreate", "str_opts", params={"threshold": th, "edgeitems": ed, "linewidth": lw}, operands=[long_t],
+            layout="c1", call=lambda a, t=th, e=ed, l=lw: _with_opts(str, a, t, e, l))
+    for lw in (20, 40):
+        add("tcreate", "array2string", params={"max_line_width": lw, "separator": ", ", "prefix": "x("},
+            operands=[long_t], layout="c1",
+            call=lambda a, l=lw: np.array2string(a, max_line_width=l, separator=", ", prefix="x("))
+        add("tcreate", "array_repr", params={"max_line_width": lw}, operands=[long_t], layout="c1",
+            call=lambda a, l=lw: np.array_repr(a, max_line_width=l))
+        add("tcreate", "array_str", params={"max_line_width": lw}, operands=[long_t], layout="c1",
+            call=lambda a, l=lw: np.array_str(a, max_line_width=l))
+
+    # view: the array's own descriptor is a view sharing its allocator; any other dtype is NumPy's reference refusal (both
+    # directions). A DIFFERENT-but-equal StringDType instance is left out: NumPy 2.4.2 returns a view that reads its cells
+    # through the NEW instance's empty allocator, so every arena string reads '' (NumSharp keeps the array's allocator and
+    # reads the texts; unit-tested).
+    for spec in (TD, TDN):
+        for lay in ("c1", "f2", "s1", "bc", "z0"):
+            add("tcreate", "t_view_same", operands=[t_operand(spec, lay)], layout=lay, call=lambda a: a.view(a.dtype))
+            for t in (senc(TD if spec is TDN else TDN), "<U4", "|S16", "<i8", "<c16"):
+                add("tcreate", "view", params={"dtype": t}, operands=[t_operand(spec, lay)], layout=lay,
+                    call=lambda a, t=t: a.view(sbuild(t) if isinstance(t, str) else TSpec(**_tspec_kw(t)).build()))
+    for t in (senc(TD), senc(TDN)):
+        add("tcreate", "view", params={"dtype": t}, operands=[operand("<U4", "c1")], layout="c1",
+            call=lambda a, t=t: a.view(TSpec(**_tspec_kw(t)).build()))
+        add("tcreate", "view", params={"dtype": t}, operands=[plain(np.zeros(4, dtype="<c16"))], layout="c1",
+            call=lambda a, t=t: a.view(TSpec(**_tspec_kw(t)).build()))
+
+    # np.nditer: a StringDType operand needs refs_ok; with it, the walk yields 0-d views of the elements.
+    for spec in (TD, TDN):
+        for lay in ("c1", "c2", "f2", "r1", "bc", "e1"):
+            add("tcreate", "t_nditer", params={"flags": []}, operands=[t_operand(spec, lay)], layout=lay,
+                call=lambda a: [x[()] for x in np.nditer(a)])
+            add("tcreate", "t_nditer", params={"flags": ["refs_ok"]}, operands=[t_operand(spec, lay)], layout=lay,
+                call=lambda a: [x[()] for x in np.nditer(a, flags=["refs_ok"])])
+            add("tcreate", "t_nditer", params={"flags": ["refs_ok", "zerosize_ok"]}, operands=[t_operand(spec, lay)],
+                layout=lay, call=lambda a: [x[()] for x in np.nditer(a, flags=["refs_ok", "zerosize_ok"])])
+
+    # Raw-buffer routes NumPy refuses for a reference dtype.
+    add("tcreate", "t_memoryview", operands=[t_operand(TD, "c1")], layout="c1", call=lambda a: memoryview(a))
+    add("tcreate", "t_frombuffer", params={"buffer": (b"\x00" * 32).hex(), "dtype": senc(TD)},
+        call=lambda: np.frombuffer(bytearray(32), dtype=TD.build()))
+
+
+def _tspec_kw(enc_spec):
+    """The ``TSpec`` keywords of an encoded request (the inverse of ``TSpec.enc`` for the sentinels used here).
+
+    :param enc_spec: ``{"T": {"coerce": bool, "na": ...}}``.
+    :returns: ``{"coerce": ..., "na": ...}`` for ``TSpec(**kw)``.
+    """
+    t = enc_spec["T"]
+    kw = {"coerce": t["coerce"]}
+    if "na" in t:
+        na = t["na"]
+        kw["na"] = None if na == {"none": True} else float(na["float"]) if "float" in na else \
+            bytes.fromhex(na["u"]).decode("utf-32-le", "surrogatepass")
+    return kw
+
+
+def gen_tmove():
+    """Section tmove (P1.4): moving StringDType elements — the views (transposes, reshapes, flips, broadcasts, basic and
+    advanced indexing: a view shares its base's allocator), the copies of every layout and order, and every movement
+    function over operands holding short, arena and long strings and NA cells: repeat, tile, roll, resize, take, compress,
+    delete, insert, append, tril / triu, take_along_axis, split, diag / diagflat, pad, concatenate and the stack family
+    (StringDType with StringDType / U / S / numbers: NumPy's promotion and its common-instance error), where, choose,
+    select, extract, meshgrid, broadcast_arrays, unstack; and the in-place writes: setitem of arrays, put, putmask,
+    copyto (every casting rule, masks), put_along_axis, fill_diagonal, ndarray.resize. put / putmask / choose get short
+    texts only (``T_SHORT``: NumPy 2.4.2 copies their cells raw).
+    """
+    specs = [TD, TDN]
+    for spec in specs:
+        for lay in ("c2", "c3", "f2", "t3", "s2", "r2", "col", "nx", "bc", "z0", "e2", "d5"):
+            op = t_operand(spec, lay)
+            shape = op[1].shape
+            add("tmove", "transpose", params={"axes": None}, operands=[op], layout=lay, call=lambda a: a.transpose())
+            if len(shape) >= 2:
+                add("tmove", "swapaxes", params={"a1": 0, "a2": -1}, operands=[op], layout=lay,
+                    call=lambda a: np.swapaxes(a, 0, -1))
+                add("tmove", "moveaxis", params={"src": 0, "dst": -1}, operands=[op], layout=lay,
+                    call=lambda a: np.moveaxis(a, 0, -1))
+                add("tmove", "rot90", params={"k": 1}, operands=[op], layout=lay, call=lambda a: np.rot90(a))
+                add("tmove", "diagonal", params={"offset": 0}, operands=[op], layout=lay, call=lambda a: np.diagonal(a))
+            for order in ("C", "F", "A", "K"):
+                add("tmove", "ravel", params={"order": order}, operands=[op], layout=lay,
+                    call=lambda a, o=order: np.ravel(a, order=o))
+            for order in ("C", "F"):
+                add("tmove", "reshape", params={"shape": [-1], "order": order}, operands=[op], layout=lay,
+                    call=lambda a, o=order: np.reshape(a, (-1,), order=o))
+            add("tmove", "squeeze", params={"axis": None}, operands=[op], layout=lay, call=lambda a: np.squeeze(a))
+            add("tmove", "expand_dims", params={"axis": 0}, operands=[op], layout=lay,
+                call=lambda a: np.expand_dims(a, 0))
+            add("tmove", "flip", params={"axis": None}, operands=[op], layout=lay, call=lambda a: np.flip(a))
+            add("tmove", "atleast_2d", operands=[op], layout=lay, call=lambda a: np.atleast_2d(a))
+            add("tmove", "atleast_3d", operands=[op], layout=lay, call=lambda a: np.atleast_3d(a))
+        for lay in ("c1", "c2", "r1"):
+            op = t_operand(spec, lay)
+            add("tmove", "broadcast_to", params={"shape": [2] + list(op[1].shape)}, operands=[op], layout=lay,
+                call=lambda a: np.broadcast_to(a, (2,) + a.shape))
+
+        idx_cases = {
+            "c1": [[{"int": 1}], [{"slice": [1, 4, None]}], [{"slice": [None, None, -2]}], [{"ellipsis": True}],
+                   [{"none": True}], [{"arr": [0, 2, -1]}], [{"arr": [[0, 1], [5, 4]]}],
+                   [{"mask": [True, False, True, False, False, True]}], [{"int": 7}], [{"arr": [6]}]],
+            "c2": [[{"int": 1}], [{"slice": [None, None, None]}, {"int": 0}], [{"ellipsis": True}, {"int": -1}],
+                   [{"arr": [2, 0]}], [{"arr": [0, 2]}, {"arr": [1, 3]}],
+                   [{"mask2": [[True, False, False, True], [False] * 4, [True] * 4]}], [{"none": True}, {"int": 0}]],
+            "f2": [[{"int": 1}], [{"slice": [None, None, None]}, {"int": 2}], [{"arr": [2, 0]}]],
+            "r2": [[{"int": 0}], [{"arr": [1, 2]}], [{"slice": [None, None, 2]}, {"slice": [1, None, None]}]],
+            "bc": [[{"int": 2}], [{"arr": [0, 0, 2]}], [{"slice": [None, None, None]}, {"int": 3}]],
+            "z0": [[{"ellipsis": True}], [{"none": True}]],
+        }
+        for lay, idxs in idx_cases.items():
+            for idx in idxs:
+                key = tuple(_py_index(e) for e in idx)
+                add("tmove", "getitem", params={"index": idx}, operands=[t_operand(spec, lay)], layout=lay,
+                    call=lambda a, k=key: a[k])
+
+        for lay in CORE_LAYOUTS + ["c3", "f3", "r1", "rs", "nx", "bcol", "d5", "e3", "one"]:
+            op = t_operand(spec, lay)
+            nd = op[1].ndim
+            for order in ("C", "F", "A", "K"):
+                add("tmove", "copy", params={"order": order}, operands=[op], layout=lay,
+                    call=lambda a, o=order: np.copy(a, order=o))
+            for order in ("C", "F"):
+                add("tmove", "flatten", params={"order": order}, operands=[op], layout=lay,
+                    call=lambda a, o=order: a.flatten(order=o))
+            add("tmove", "repeat", params={"repeats": 2, "axis": None}, operands=[op], layout=lay,
+                call=lambda a: np.repeat(a, 2))
+            add("tmove", "tile", params={"reps": [2, 1]}, operands=[op], layout=lay, call=lambda a: np.tile(a, (2, 1)))
+            add("tmove", "roll", params={"shift": 2, "axis": None}, operands=[op], layout=lay,
+                call=lambda a: np.roll(a, 2))
+            add("tmove", "resize", params={"shape": [5]}, operands=[op], layout=lay, call=lambda a: np.resize(a, (5,)))
+            add("tmove", "take", params={"indices": [0, -1, 1], "axis": None, "mode": "raise"}, operands=[op],
+                layout=lay, call=lambda a: np.take(a, [0, -1, 1]))
+            add("tmove", "take", params={"indices": [5, -7, 100], "axis": None, "mode": "wrap"}, operands=[op],
+                layout=lay, call=lambda a: np.take(a, [5, -7, 100], mode="wrap"))
+            add("tmove", "take", params={"indices": [5, -7, 100], "axis": None, "mode": "clip"}, operands=[op],
+                layout=lay, call=lambda a: np.take(a, [5, -7, 100], mode="clip"))
+            if nd >= 1:
+                add("tmove", "repeat", params={"repeats": [2], "axis": 0}, operands=[op], layout=lay,
+                    call=lambda a: np.repeat(a, [2], axis=0))
+                if op[1].shape[0] >= 1:
+                    reps = [k % 3 for k in range(op[1].shape[0])]
+                    add("tmove", "repeat", params={"repeats": reps, "axis": 0}, operands=[op], layout=lay,
+                        call=lambda a, r=reps: np.repeat(a, r, axis=0))
+                add("tmove", "roll", params={"shift": -1, "axis": 0}, operands=[op], layout=lay,
+                    call=lambda a: np.roll(a, -1, axis=0))
+                add("tmove", "take", params={"indices": [1, 0], "axis": 0, "mode": "clip"}, operands=[op],
+                    layout=lay, call=lambda a: np.take(a, [1, 0], axis=0, mode="clip"))
+                add("tmove", "compress", params={"condition": [True, False, True], "axis": 0}, operands=[op],
+                    layout=lay, call=lambda a: np.compress([True, False, True], a, axis=0))
+                add("tmove", "flip", params={"axis": 0}, operands=[op], layout=lay, call=lambda a: np.flip(a, 0))
+                add("tmove", "delete", params={"obj": [0], "axis": 0}, operands=[op], layout=lay,
+                    call=lambda a: np.delete(a, [0], axis=0))
+                add("tmove", "insert", params={"obj": 1, "values": enc("inserted text value"), "axis": 0},
+                    operands=[op], layout=lay, call=lambda a: np.insert(a, 1, "inserted text value", axis=0))
+                add("tmove", "append", params={"values": enc(["zz", "w" * 20]), "axis": None}, operands=[op],
+                    layout=lay, call=lambda a: np.append(a, ["zz", "w" * 20]))
+            if nd >= 2:
+                add("tmove", "tril", params={"k": 0}, operands=[op], layout=lay, call=lambda a: np.tril(a))
+                add("tmove", "triu", params={"k": 1}, operands=[op], layout=lay, call=lambda a: np.triu(a, 1))
+                add("tmove", "take_along_axis", params={"indices": np.zeros((1,) * (nd - 1) + (2,), int).tolist(),
+                                                        "axis": -1}, operands=[op], layout=lay,
+                    call=lambda a: np.take_along_axis(a, np.zeros((1,) * (a.ndim - 1) + (2,), int), -1))
+                add("tmove", "split", params={"sections": 2, "axis": -1}, operands=[op], layout=lay,
+                    call=lambda a: np.array_split(a, 2, axis=-1))
+            if nd == 1:
+                add("tmove", "diag", params={"k": 0}, operands=[op], layout=lay, call=lambda a: np.diag(a))
+                add("tmove", "diag", params={"k": -1}, operands=[op], layout=lay, call=lambda a: np.diag(a, -1))
+                add("tmove", "diagflat", params={"k": 1}, operands=[op], layout=lay, call=lambda a: np.diagflat(a, 1))
+            for mode in ("edge", "reflect", "symmetric", "wrap"):
+                add("tmove", "pad", params={"pad_width": 1, "mode": mode, "constant": None}, operands=[op],
+                    layout=lay, call=lambda a, m=mode: np.pad(a, 1, mode=m))
+            add("tmove", "pad", params={"pad_width": [[1, 2]] * nd if nd else 1, "mode": "constant",
+                                        "constant": enc("pad text over 16 b")}, operands=[op], layout=lay,
+                call=lambda a: np.pad(a, [(1, 2)] * a.ndim if a.ndim else 1, mode="constant",
+                                      constant_values="pad text over 16 b"))
+            add("tmove", "pad", params={"pad_width": 1, "mode": "constant", "constant": None}, operands=[op],
+                layout=lay, call=lambda a: np.pad(a, 1))
+
+        # Joining: StringDType with StringDType (the first descriptor wins; another NA object is NumPy's common-instance
+        # error), with U (promotes to StringDType), with S / numbers (DTypePromotionError).
+        a = t_operand(spec, "c2")
+        for other_name, other in (("T", t_operand(spec, "f2", seed=4)), ("Tother", t_operand(TDN if spec is TD else TD, "r2", seed=5)),
+                                  ("U", operand("<U5", "c2", seed=4)), ("S", operand("|S5", "c2", seed=4, ascii_only=True)),
+                                  ("int", plain(np.arange(12).reshape(3, 4)))):
+            for axis in (0, 1, None):
+                add("tmove", "concatenate", params={"axis": axis}, operands=[a, other], layout=f"c2+{other_name}",
+                    call=lambda x, y, ax=axis: np.concatenate([x, y], axis=ax))
+            for fn in ("stack", "vstack", "hstack", "dstack", "column_stack"):
+                add("tmove", fn, params={"axis": 0}, operands=[a, other], layout=f"c2+{other_name}",
+                    call=lambda x, y, f=fn: np.stack([x, y]) if f == "stack" else getattr(np, f)([x, y]))
+            add("tmove", "where", params={"cond": [[True, False, True, False], [False] * 4, [True] * 4]},
+                operands=[a, other], layout=f"c2+{other_name}",
+                call=lambda x, y: np.where(np.array([[True, False, True, False], [False] * 4, [True] * 4]), x, y))
+        for xv, yv in (("long scalar text value", None), (None, "q"), ("Ü", "w" * 20)):
+            add("tmove", "where_scalar", params={"cond": [True, False, True, False, True, False],
+                                                 "x": enc(xv) if xv is not None else None,
+                                                 "y": enc(yv) if yv is not None else None},
+                operands=[t_operand(spec, "c1")], layout="c1",
+                call=lambda a, x=xv, y=yv: np.where(np.array([True, False, True, False, True, False]),
+                                                    a if x is None else x, a if y is None else y))
+        sa = t_operand(spec, "c2", pool=T_SHORT)
+        sb = t_operand(spec, "r2", seed=5, pool=T_SHORT)
+        add("tmove", "choose", params={"index": [[0, 1, 0, 1], [1, 1, 0, 0], [0, 0, 0, 1]]}, operands=[sa, sb],
+            layout="c2+r2", call=lambda x, y: np.choose(np.array([[0, 1, 0, 1], [1, 1, 0, 0], [0, 0, 0, 1]]), [x, y]))
+        add("tmove", "select", params={"conds": [[[True, False, True, False], [False] * 4, [True] * 4],
+                                                 [[False] * 4, [True] * 4, [True] * 4]], "default": enc("dflt")},
+            operands=[t_operand(spec, "c2"), t_operand(spec, "f2", seed=3)], layout="c2+f2",
+            call=lambda x, y: np.select([np.array([[True, False, True, False], [False] * 4, [True] * 4]),
+                                         np.array([[False] * 4, [True] * 4, [True] * 4])], [x, y], "dflt"))
+        add("tmove", "meshgrid", params={"indexing": "xy"}, operands=[t_operand(spec, "c1"), t_operand(spec, "o1", 2)],
+            layout="c1+o1", call=lambda x, y: np.meshgrid(x, y))
+        add("tmove", "broadcast_arrays", operands=[t_operand(spec, "c2"), t_operand(spec, "one", 2)],
+            layout="c2+one", call=lambda x, y: np.broadcast_arrays(x, y))
+        add("tmove", "unstack", params={"axis": 1}, operands=[t_operand(spec, "c2")], layout="c2",
+            call=lambda a: np.unstack(a, axis=1))
+        add("tmove", "extract", params={"condition": [[True, False, True, False], [False] * 4, [True] * 4]},
+            operands=[t_operand(spec, "c2", seed=5)], layout="c2",
+            call=lambda a: np.extract(np.array([[True, False, True, False], [False] * 4, [True] * 4]), a))
+
+        # In-place writes with array values: StringDType / U / S / numbers into StringDType targets of every layout.
+        for lay in ("c2", "f2", "r2"):
+            for vname, vop in (("T", t_operand(spec, "c2", seed=7)), ("Trow", t_operand(spec, "c1", seed=9)),
+                               ("U", plain(np.array(["p", "qq", "rrrr", "s"]))),
+                               ("S", plain(np.array([b"p", b"q" * 20, b"r", b"s"]))),
+                               ("int", plain(np.array([[1], [2], [3]])))):
+                if vname == "Trow":
+                    vop = t_operand(spec, "o1", seed=9)
+                add("tmove", "setitem_array", params={"index": [{"ellipsis": True}]},
+                    operands=[t_operand(spec, lay), vop], layout=f"{lay}<-{vname}", mutate=0,
+                    call=lambda t, v: _setitem(t, Ellipsis, v))
+            add("tmove", "setitem_array", params={"index": [{"arr": [2, 0]}]},
+                operands=[t_operand(spec, lay), t_plain(np.array(t_values(spec, 8, 3), dtype=spec.build()).reshape(2, 4))],
+                layout=lay, mutate=0, call=lambda t, v: _setitem(t, np.array([2, 0]), v))
+        add("tmove", "setitem_array", params={"index": [{"mask": [True, False, True, False, False, True]}]},
+            operands=[t_operand(spec, "c1"), plain(np.array(["u" * 20, "v"]))], layout="c1", mutate=0,
+            call=lambda t, v: _setitem(t, np.array([True, False, True, False, False, True]), v))
+        add("tmove", "setitem_array", params={"index": [{"slice": [None, None, None]}]},
+            operands=[t_operand(spec, "c1"), t_operand(spec, "r1", seed=2)], layout="c1<-r1", mutate=0,
+            call=lambda t, v: _setitem(t, slice(None), v))
+
+        for lay in ("c1", "c2", "f2", "s1", "r2"):
+            vals = ["P", "QQ", "RRRR"]
+            for mode in ("raise", "wrap", "clip"):
+                add("tmove", "put", params={"indices": [0, 4, -1, 9], "values": enc(vals), "mode": mode},
+                    operands=[t_operand(spec, lay, pool=T_SHORT)], layout=lay, mutate=0,
+                    call=lambda t, v=vals, m=mode: np.put(t, [0, 4, -1, 9], v, mode=m))
+            mask = (np.arange(t_operand(spec, lay)[1].size) % 3 == 0).reshape(t_operand(spec, lay)[1].shape)
+            add("tmove", "putmask", params={"mask": mask.tolist(), "values": enc(vals)},
+                operands=[t_operand(spec, lay, pool=T_SHORT)], layout=lay, mutate=0,
+                call=lambda t, m=mask, v=vals: np.putmask(t, m, v))
+        for src_name, src in (("T", t_operand(spec, "c2", seed=6)), ("Tf", t_operand(spec, "f2", seed=6)),
+                              ("Tother", t_operand(TDN if spec is TD else TD, "c2", seed=6)),
+                              ("Ubc", operand("<U5", "bc", seed=6)), ("U", operand("<U1", "f2", seed=6)),
+                              ("S", operand("|S5", "r2", seed=6, ascii_only=True)),
+                              ("int", plain(np.arange(12).reshape(3, 4))), ("f8", plain(np.linspace(0, 1, 12).reshape(3, 4))),
+                              ("bool", plain(np.arange(12).reshape(3, 4) % 2 == 0))):
+            for casting in ("no", "same_kind", "unsafe"):
+                for where in (None, [[True, False, True, False], [False, True, False, True], [True] * 4]):
+                    add("tmove", "copyto", params={"casting": casting, "where": where},
+                        operands=[t_operand(spec, "c2"), src], layout=f"c2<-{src_name}", mutate=0,
+                        call=lambda d, s, c=casting, w=where: np.copyto(d, s, casting=c,
+                                                                       where=True if w is None else np.array(w)))
+        # a StringDType source into U / S / numeric targets (the T -> other casts)
+        for tgt_name, tgt in (("U8", plain(np.array(["x"] * 12, dtype="<U8").reshape(3, 4))),
+                              ("S8", plain(np.array([b"x"] * 12, dtype="|S8").reshape(3, 4)))):
+            for casting in ("same_kind", "unsafe"):
+                add("tmove", "copyto", params={"casting": casting, "where": None},
+                    operands=[tgt, t_operand(spec, "c2", pool=T_SHORT[:9] if tgt_name == "S8" else T_POOL)],
+                    layout=f"{tgt_name}<-T", mutate=0,
+                    call=lambda d, s, c=casting: np.copyto(d, s, casting=c))
+        add("tmove", "put_along_axis", params={"indices": [[1], [0], [3]], "axis": 1},
+            operands=[t_operand(spec, "c2"), t_plain(np.array(t_values(spec, 3, 4), dtype=spec.build()).reshape(3, 1))],
+            layout="c2", mutate=0, call=lambda t, v: np.put_along_axis(t, np.array([[1], [0], [3]]), v, axis=1))
+        for lay in ("c2", "f2"):
+            for wrap in (False, True):
+                add("tmove", "fill_diagonal", params={"value": enc("diagonal text value"), "wrap": wrap},
+                    operands=[t_operand(spec, lay)], layout=lay, mutate=0,
+                    call=lambda t, w=wrap: np.fill_diagonal(t, "diagonal text value", wrap=w))
+        for shape in ((8,), (3,), (2, 2), (0,)):
+            add("tmove", "t_resize_method", params={"shape": list(shape)}, operands=[t_operand(spec, "c1")],
+                layout="c1", mutate=0, call=lambda t, sh=shape: t.resize(sh, refcheck=False))
+
+
+def gen_tcast():
+    """Section tcast (P1.6): the casts.cpp loops — StringDType to StringDType (another NA object: NA cells become the
+    NA object's str() where the target has none), to U / S (unsized refused, sized cut by code points; S encodes ASCII),
+    to bool (empty False, NA by the NA object's kind), to every number (CPython's int() / float() parse, NumPy's packing
+    errors, NA refused); and U / S (UTF-8 decoded) / bool / every number (the NumPy scalar's str(); a float64 NaN is NA
+    for a NaN-like NA object) to StringDType — over every layout, order, copy flag and casting rule.
+    """
+    targets = [senc(TD), senc(TDN), senc(TDNAN), senc(TDS), senc(TDC), "<U1", "<U3", "<U8", "U", "|S3", "|S8", "S",
+               "?", "i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "f2", "f4", "f8"]
+    for spec in T_TEXT_SPECS:
+        for lay in CORE_LAYOUTS + ["c3", "r1", "rs", "d5", "e1"]:
+            for t in targets:
+                ascii_only = isinstance(t, str) and t.lstrip("|<").startswith("S")
+                pool = T_SHORT[:9] if ascii_only else T_POOL
+                add("tcast", "astype", params={"dtype": t, "casting": "unsafe", "order": "K", "copy": True},
+                    operands=[t_operand(spec, lay, seed=3, pool=pool)], layout=lay,
+                    call=lambda a, t=t: a.astype(_tbuild(t)))
+    # orders and copy=False
+    for spec in (TD, TDN):
+        for lay in ("c2", "f2", "t3", "r2", "bc"):
+            for order in ("C", "F", "A", "K"):
+                for t in (senc(spec), "<U8", senc(TDN if spec is TD else TD)):
+                    add("tcast", "astype", params={"dtype": t, "casting": "unsafe", "order": order, "copy": True},
+                        operands=[t_operand(spec, lay)], layout=lay,
+                        call=lambda a, t=t, o=order: a.astype(_tbuild(t), order=o))
+            for t in (senc(spec), senc(TDN if spec is TD else TD), "<U8"):
+                add("tcast", "astype", params={"dtype": t, "casting": "unsafe", "order": "K", "copy": False},
+                    operands=[t_operand(spec, lay)], layout=lay,
+                    call=lambda a, t=t: a.astype(_tbuild(t), copy=False))
+        for t in (senc(spec), senc(TDN if spec is TD else TD), "<U8", "U", "|S8", "?", "i8", "f8"):
+            for casting in ("no", "equiv", "safe", "same_kind", "unsafe"):
+                add("tcast", "astype", params={"dtype": t, "casting": casting, "order": "K", "copy": True},
+                    operands=[t_operand(spec, "c1", pool=T_SHORT[:9] if t == "|S8" else T_POOL)], layout="c1",
+                    call=lambda a, t=t, c=casting: a.astype(_tbuild(t), casting=c))
+    # Text that is not ASCII into S; NA into every number and bool.
+    for spec in T_TEXT_SPECS:
+        for vals, t in [(["ab", "cé"], "|S3"), (["x", "\U0001F600"], "|S8"), (["ab", "cé" * 10], "<U2"),
+                        (["\U0001F600" * 4, "a"], "<U3")]:
+            add("tcast", "astype", params={"dtype": t, "casting": "unsafe", "order": "K", "copy": True},
+                operands=[plain(np.array(vals, dtype=spec.build()))], layout="c1", call=lambda a, t=t: a.astype(t))
+    # Text <-> numbers: CPython's int() / float() grammar, Unicode digits and spaces, NumPy's packing errors.
+    int_texts = ["0", "-0", "+5", " 12 ", "\t7\n", "1_000", "00012", "١٢٣", "１２", "-1", "", "x", "1.5", "300",
+                 "-129", "255", "256", "65536", "2147483648", "9223372036854775807", "9223372036854775808",
+                 "18446744073709551616", "1e3", "nan"]
+    float_texts = ["1.5", "-0.0", "inf", "-Infinity", "nan", "-nan", "NaN", "+inf", "1e308", "1e309", "1e-400", " 2.5 ",
+                   "1_0.5", "0x10", "", "abc", "1e", "６.５", "65504", "65520", "3.4028235e38", "3.5e38"]
+    for spec in (TD, TDN):
+        for texts, targets_ in ((int_texts, ["i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8"]),
+                                (float_texts, ["f2", "f4", "f8"])):
+            for t in targets_:
+                for tx in texts:
+                    add("tcast", "astype", params={"dtype": t, "casting": "unsafe", "order": "K", "copy": True},
+                        operands=[plain(np.array([tx], dtype=spec.build()))], layout="c1",
+                        call=lambda a, t=t: a.astype(t))
+                    _drop_platform_int_text()
+        for t in ("?", "i8", "u1", "f8", "f4", "c16"):
+            # StringDType -> complex succeeds wrongly in NumPy 2.4.2 (the real part is written into the imaginary part too:
+            # ['1', '2'] -> [1+1j, 2+2j]); only its NA refusal is NumPy's answer, the values are unit-tested.
+            if t == "c16" and spec is not TDN:
+                continue
+            add("tcast", "astype", params={"dtype": t, "casting": "unsafe", "order": "K", "copy": True},
+                operands=[plain(np.array(["1", None] if spec is TDN else ["1", "2"], dtype=spec.build()))],
+                layout="c1", call=lambda a, t=t: a.astype(t))
+    for spec in (TDNAN, TDS):
+        for t in ("?", "i8", "f8", "c16"):
+            add("tcast", "astype", params={"dtype": t, "casting": "unsafe", "order": "K", "copy": True},
+                operands=[plain(np.array(["1", spec.na], dtype=spec.build()))], layout="c1",
+                call=lambda a, t=t: a.astype(t))
+    for spec in T_TEXT_SPECS:
+        add("tcast", "astype", params={"dtype": "?", "casting": "unsafe", "order": "K", "copy": True},
+            operands=[plain(np.array(["", "a", "0", "False", " ", "\x00"], dtype=spec.build()))], layout="c1",
+            call=lambda a: a.astype("?"))
+
+    # Into StringDType: U (any code point), S (UTF-8 decoded; invalid bytes refused), bool, every number.
+    numbers = {
+        "?": [True, False], "i1": [-128, 0, 127], "u1": [0, 255], "i2": [-32768, 32767], "u2": [65535],
+        "i4": [-2147483648, 7], "u4": [4294967295], "i8": [-9223372036854775808, 9223372036854775807],
+        "u8": [18446744073709551615, 0],
+        "f2": [0.5, -0.0, float("inf"), float("nan"), 65504.0, 1e-7, 0.1],
+        "f4": [0.1, 1e16, 1e-5, -0.0, float("nan"), float("-inf"), 3.4028235e38, 1.0, 123456789.0],
+        "f8": [0.1, 1e16, 1e-5, -0.0, float("nan"), float("inf"), 1 / 3, 1e22, 5e-324, 2.5, 100.0],
+        "c16": [1 + 2j, -0.0 - 1j, complex(float("nan"), 1), complex(1, float("inf")), 0j],
+    }
+    for dt, vals in numbers.items():
+        arr = np.array(vals, dtype=dt)
+        for spec in T_TEXT_SPECS + [TDC]:
+            add("tcast", "astype", params={"dtype": senc(spec), "casting": "unsafe", "order": "K", "copy": True},
+                operands=[plain(arr)], layout="c1", call=lambda a, s=spec: a.astype(s.build()))
+    for spec in (TD, TDN):
+        for src in ("<U1", "<U3", "<U5", "|S1", "|S3", "|S5"):
+            for lay in CORE_LAYOUTS + ["c3", "r1", "e1"]:
+                # An S source holds valid UTF-8 only: NumPy 2.4.2's bytes -> StringDType cast copies the bytes WITHOUT
+                # validating them (casts.cpp bytes_to_string), so invalid UTF-8 is stored and raises on every later read;
+                # NumSharp raises the same UnicodeDecodeError at the cast (unit-tested divergence).
+                add("tcast", "astype", params={"dtype": senc(spec), "casting": "unsafe", "order": "K", "copy": True},
+                    operands=[operand(src, lay, seed=3, ascii_only=src[1] == "S")], layout=lay,
+                    call=lambda a, s=spec: a.astype(s.build()))
+        for vals in ([b"\xc3\xa9", b"\xe2\x82\xac"], ["\ud800"], ["a", "\U0010FFFF"]):
+            add("tcast", "astype", params={"dtype": senc(spec), "casting": "unsafe", "order": "K", "copy": True},
+                operands=[plain(np.array(vals))], layout="c1", call=lambda a, s=spec: a.astype(s.build()))
+        for casting in ("no", "equiv", "safe", "same_kind", "unsafe"):
+            for src in (plain(np.array(["ab", "c"])), plain(np.array([b"ab", b"c"])), plain(np.array([1, 2])),
+                        plain(np.array([True])), plain(np.array([1.5]))):
+                add("tcast", "astype", params={"dtype": senc(spec), "casting": casting, "order": "K", "copy": True},
+                    operands=[src], layout="c1", call=lambda a, s=spec, c=casting: a.astype(s.build(), casting=c))
+    # np.array of a StringDType operand with a U / S / numeric dtype, and np.array of U with dtype=StringDType.
+    for spec in (TD, TDN):
+        for t in ("<U8", "|S8", "f8"):
+            vals = ["1.5", "2", "-3"] if t == "f8" else ["ab", "c", "def"]
+            add("tcast", "asarray", params={"dtype": t}, operands=[plain(np.array(vals, dtype=spec.build()))],
+                layout="c1", call=lambda a, t=t: np.asarray(a, dtype=t))
+
+
+def _tbuild(t):
+    """A target dtype of section tcast: a dtype string, or an encoded StringDType request.
+
+    :param t: the request.
+    :returns: the NumPy descriptor.
+    """
+    return np.dtype(t) if isinstance(t, str) else TSpec(**_tspec_kw(t)).build()
+
+
 class _TProps:
     """Marks a descriptor whose expectation is its full attribute set (``tprops``) rather than ``{"kind": "dtype"}``."""
 
@@ -4044,33 +4902,34 @@ class _TProps:
         self.d = d
 
 
+GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
+              gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
+              gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
+              gen_tmove, gen_tcast]
+
+
 def main():
-    gen_dtypes()
-    gen_creation()
-    gen_astype()
-    gen_views()
-    gen_movement()
-    gen_mutation()
-    gen_access()
-    gen_printing()
-    gen_refusals()
-    gen_string_requests()
-    gen_text_precedence()
-    gen_shape_decided()
-    gen_validation_order()
-    gen_surface()
-    gen_strma()
-    gen_striter()
-    gen_strcomp()
-    gen_strarith()
-    gen_strconv()
-    gen_tdtype()
+    """Writes the whole corpus, or with ``--sections a,b`` regenerates only those sections' generators (``gen_<name>``)
+    and splices their cases into the existing corpus in place of the old ones — a development shortcut (the whole corpus
+    takes minutes); the committed corpus is always a full run."""
+    only = None
+    if len(sys.argv) > 2 and sys.argv[1] == "--sections":
+        only = set(sys.argv[2].split(","))
+    for gen in GENERATORS:
+        if only is None or gen.__name__[len("gen_"):] in only:
+            gen()
+    lines = [json.dumps(c, ensure_ascii=True, separators=(",", ":"), allow_nan=False).encode("ascii") + b"\n"
+             for c in CASES]
+    if only is not None:
+        # Keep the other sections' cases as they are; the regenerated sections replace their old cases.
+        regenerated = {c["id"].split("/")[0] for c in CASES} | only
+        kept = [ln for ln in open(OUT, "rb") if json.loads(ln)["id"].split("/")[0] not in regenerated]
+        lines = kept + lines
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with open(OUT, "wb") as f:
-        for c in CASES:
-            # allow_nan=False: a NaN / infinity in the params would be written as invalid JSON (Infinity); such a value
-            # travels as a string instead (_json_floats).
-            f.write(json.dumps(c, ensure_ascii=True, separators=(",", ":"), allow_nan=False).encode("ascii") + b"\n")
+        # allow_nan=False above: a NaN / infinity in the params would be written as invalid JSON (Infinity); such a value
+        # travels as a string instead (_json_floats).
+        f.writelines(lines)
     by_section = {}
     for c in CASES:
         sec = c["id"].split("/")[0]

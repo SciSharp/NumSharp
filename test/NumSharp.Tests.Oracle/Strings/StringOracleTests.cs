@@ -185,6 +185,42 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void StringDTypeDescriptors() => Run("tdtype");
 
         /// <summary>
+        ///     Section tstore (strings phase 1, P1.3): the cells of <c>StringDType</c> arrays — <c>tobytes()</c> after
+        ///     <c>np.array</c> (short / medium / long strings and their size boundaries, NA cells, empty strings, 1-D and 2-D)
+        ///     and after write sequences that walk static_string.c's state machine (a shorter rewrite reuses its arena slot,
+        ///     a longer one moves to the heap, a short write forgets the slot, an NA write and the empty string keep it), the
+        ///     values and layout of the same arrays, itemsize / nbytes / byte strides, and the raw cells of views. Heap pointers
+        ///     are masked; every other cell byte is compared. Every case is strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeStorage() => Run("tstore");
+
+        /// <summary>
+        ///     Section tcreate (strings phase 1, P1.5): creating <c>StringDType</c> arrays (<c>np.array</c> from values of
+        ///     every kind under every descriptor, <c>zeros</c> / <c>empty</c> / <c>ones</c> / <c>full</c>, the <c>_like</c>
+        ///     forms, <c>asarray</c> and the contiguity conversions), element access (the NA object comes back as itself),
+        ///     setitem and <c>fill</c> with NumPy's coercion and NA rules, printing, <c>view</c>'s reference refusal,
+        ///     <c>np.nditer</c>'s <c>refs_ok</c> rule and the raw-buffer refusals. Every case is strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeCreationAndAccess() => Run("tcreate");
+
+        /// <summary>
+        ///     Section tmove (strings phase 1, P1.4): moving <c>StringDType</c> elements — views, copies and every movement
+        ///     function over short, arena and long strings and NA cells, joining with <c>StringDType</c> / <c>U</c> / <c>S</c>
+        ///     / numbers (NumPy's promotion and common-instance errors), and the in-place writes (setitem of arrays, put,
+        ///     putmask, copyto under every casting rule and mask, put_along_axis, fill_diagonal, ndarray.resize). Every case
+        ///     is strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeMovement() => Run("tmove");
+
+        /// <summary>
+        ///     Section tcast (strings phase 1, P1.6): the casts.cpp loops between <c>StringDType</c> and <c>StringDType</c>
+        ///     (NA conversion), <c>U</c> / <c>S</c> (sizes, truncation, ASCII, UTF-8), bool and every number (CPython's
+        ///     parse with NumPy's errors, the NumPy scalar's <c>str()</c>, NaN as NA) over every layout, order, copy flag and
+        ///     casting rule. Every case is strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeCasts() => Run("tcast");
+
+        /// <summary>
         ///     The most cases each section may defer to the computational phase (see the class remarks): the deferrals
         ///     left are sorting, searching, set routines, histograms and quantiles over text. A section not listed may
         ///     defer nothing.
@@ -203,7 +239,7 @@ namespace NumSharp.Tests.Strings
             {
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
                 "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
-                "strcomp", "strarith", "strconv", "tdtype",
+                "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)
@@ -476,6 +512,13 @@ namespace NumSharp.Tests.Strings
                 {
                     int k = exp.GetProperty("operand").GetInt32();
                     CompareArray(exp.GetProperty("view"), ops[k], null, diffs, "view ");
+                    if (exp.TryGetProperty("basevalues", out var baseValues))
+                    {
+                        // A StringDType base: every cell of the whole buffer, by value and NA flag (its bytes are allocator
+                        // offsets and heap pointers).
+                        CompareVStringBase(baseValues, ops[k], diffs);
+                        break;
+                    }
                     var baseHex = Convert.ToHexString(StringOracleCorpus.BaseBytes(ops[k])).ToLowerInvariant();
                     if (baseHex != exp.GetProperty("base").GetString())
                         diffs.Add($"base buffer {Shorten(baseHex)} != NumPy {Shorten(exp.GetProperty("base").GetString())}");
@@ -491,10 +534,27 @@ namespace NumSharp.Tests.Strings
                 }
                 case "text":
                 {
-                    // The text travels as UTF-32 hex (a printed lone surrogate is not valid JSON text).
+                    // The text travels as UTF-32 hex (a printed lone surrogate is not valid JSON text). An integer index into a
+                    // StringDType array is NumPy's Python str; NumSharp's indexer returns the element as a 0-d view, whose
+                    // element is compared (only for StringDType, so a printing op that returns an array still fails).
                     var want = StringOracleCorpus.Utf32HexToString(exp.GetProperty("u").GetString());
-                    if (result is not string got || got != want)
-                        diffs.Add($"text {Show(result)} != NumPy {Show(want)}");
+                    var got = VStringElementOr(result);
+                    if (got is not string gs || gs != want)
+                        diffs.Add($"text {Show(got)} != NumPy {Show(want)}");
+                    break;
+                }
+                case "tcells":
+                {
+                    // The cells of a StringDType array (tobytes()), heap pointers masked on both sides.
+                    if (result is not byte[] cells)
+                    {
+                        diffs.Add($"expected the cells (byte[]), got {Describe(result)}");
+                        return;
+                    }
+                    var gotHex = MaskHeapPointers(cells);
+                    var wantHex = exp.GetProperty("hex").GetString();
+                    if (gotHex != wantHex)
+                        diffs.Add($"cells {Shorten(gotHex)} != NumPy {Shorten(wantHex)}");
                     break;
                 }
                 case "bool":
@@ -568,7 +628,9 @@ namespace NumSharp.Tests.Strings
                         diffs.Add($"expected numpy.ma's masked constant, got {Describe(result)}");
                     break;
                 case "none":
-                    if (result is not null)
+                    // NumPy's None — also the NA object an integer index returns from a StringDType(na_object=None) array,
+                    // which NumSharp's indexer returns as a 0-d view holding it.
+                    if (VStringElementOr(result) is not null)
                         diffs.Add($"expected None, got {Describe(result)}");
                     break;
                 case "seq":
@@ -711,10 +773,19 @@ namespace NumSharp.Tests.Strings
                 diffs.Add($"{prefix}shape ({string.Join(",", gotShape)}) != NumPy ({string.Join(",", wantShape)})");
                 return;
             }
-            var gotHex = Convert.ToHexString(StringOracleCorpus.CBytes(r)).ToLowerInvariant();
-            var wantHex = exp.GetProperty("buffer").GetString();
-            if (gotHex != wantHex)
-                diffs.Add($"{prefix}bytes {Shorten(gotHex)} != NumPy {Shorten(wantHex)} (as text: {Show(Text(r))})");
+            if (exp.TryGetProperty("values", out var tvalues))
+            {
+                // A StringDType result: its elements by value and NA flag (the descriptor's str above already compared the NA
+                // object and coerce; its cells are allocator-specific).
+                CompareVStringValues(tvalues, r, diffs, prefix);
+            }
+            else
+            {
+                var gotHex = Convert.ToHexString(StringOracleCorpus.CBytes(r)).ToLowerInvariant();
+                var wantHex = exp.GetProperty("buffer").GetString();
+                if (gotHex != wantHex)
+                    diffs.Add($"{prefix}bytes {Shorten(gotHex)} != NumPy {Shorten(wantHex)} (as text: {Show(Text(r))})");
+            }
             if (!compareLayout)
                 return;
 
@@ -748,6 +819,117 @@ namespace NumSharp.Tests.Strings
                         diffs.Add($"{prefix}shares_memory(result, operand {i}) {got} != NumPy {want[i]}");
                 }
             }
+        }
+
+        /// <summary>
+        ///     Compares the elements of a <c>StringDType</c> array with NumPy's in logical C order: an NA expectation needs the
+        ///     cell's MISSING flag, a text expectation needs a non-NA cell with that exact text.
+        /// </summary>
+        /// <param name="want">NumPy's encoded elements (<c>{"na": true}</c> or <c>{"u": hex}</c>).</param>
+        /// <param name="r">NumSharp's array (any layout; its descriptor already matched).</param>
+        /// <param name="diffs">Receives the divergences (the first few elements that differ).</param>
+        /// <param name="prefix">A label for tuple items and mutation views.</param>
+        private static unsafe void CompareVStringValues(JsonElement want, NDArray r, List<string> diffs, string prefix)
+        {
+            var items = want.EnumerateArray().ToArray();
+            if (items.Length != r.size)
+            {
+                diffs.Add($"{prefix}{r.size} elements, NumPy {items.Length}");
+                return;
+            }
+            if (r.Storage.InternalArray is not NumSharp.Backends.Unmanaged.VStringArraySlice slice)
+            {
+                diffs.Add($"{prefix}expected StringDType storage, got {r.Storage.InternalArray?.GetType().Name}");
+                return;
+            }
+            int reported = 0;
+            for (long i = 0; i < items.Length && reported < 3; i++)
+            {
+                // Logical C-order element i → its storage offset (strides, offset and broadcasting included).
+                long off = r.Shape.TransformOffset(i);
+                CompareVStringCell(items[i], slice, off, diffs, $"{prefix}[{i}]", ref reported);
+            }
+        }
+
+        /// <summary>
+        ///     Compares every cell of the whole <c>StringDType</c> buffer under an operand view with NumPy's base after an
+        ///     in-place call: the elements inside AND outside the view, so a write that strays is caught.
+        /// </summary>
+        /// <param name="want">NumPy's encoded base elements.</param>
+        /// <param name="view">The operand (it shares its base's storage).</param>
+        /// <param name="diffs">Receives the divergences.</param>
+        private static void CompareVStringBase(JsonElement want, NDArray view, List<string> diffs)
+        {
+            var items = want.EnumerateArray().ToArray();
+            if (view.Storage.InternalArray is not NumSharp.Backends.Unmanaged.VStringArraySlice slice)
+            {
+                diffs.Add($"base: expected StringDType storage, got {view.Storage.InternalArray?.GetType().Name}");
+                return;
+            }
+            if (slice.Count != items.Length)
+            {
+                diffs.Add($"base: {slice.Count} cells, NumPy {items.Length}");
+                return;
+            }
+            int reported = 0;
+            for (long i = 0; i < items.Length && reported < 3; i++)
+                CompareVStringCell(items[i], slice, i, diffs, $"base[{i}]", ref reported);
+        }
+
+        /// <summary>Compares one cell with one encoded element (see <see cref="CompareVStringValues"/>).</summary>
+        /// <param name="want">The encoded element.</param>
+        /// <param name="slice">The cells.</param>
+        /// <param name="offset">The cell index.</param>
+        /// <param name="diffs">Receives a divergence.</param>
+        /// <param name="label">The element's label in the message.</param>
+        /// <param name="reported">Counts the divergences reported so far (the caller stops after a few).</param>
+        private static unsafe void CompareVStringCell(JsonElement want, NumSharp.Backends.Unmanaged.VStringArraySlice slice, long offset,
+                                                      List<string> diffs, string label, ref int reported)
+        {
+            byte* cell = slice.Address + offset * NumSharp.Backends.Strings.VStringAllocator.CellSize;
+            bool gotNA = NumSharp.Backends.Strings.VStringAllocator.IsNull(cell);
+            bool wantNA = want.ValueKind == JsonValueKind.Object && want.TryGetProperty("na", out _);
+            if (wantNA || gotNA)
+            {
+                if (wantNA != gotNA)
+                {
+                    diffs.Add($"{label} {(gotNA ? "NA" : Show(slice.GetIndex(offset)))} != NumPy {(wantNA ? "NA" : Show(StringOracleCorpus.Decode(want)))}");
+                    reported++;
+                }
+                return;
+            }
+            var w = (string)StringOracleCorpus.Decode(want);
+            var g = slice.GetIndex(offset) as string;
+            if (!string.Equals(w, g, StringComparison.Ordinal))
+            {
+                diffs.Add($"{label} {Show(g)} != NumPy {Show(w)}");
+                reported++;
+            }
+        }
+
+        /// <summary>
+        ///     The element of a 0-d <c>StringDType</c> array (NumSharp's indexer returns one where NumPy returns a Python
+        ///     <c>str</c> or the NA object); any other result unchanged.
+        /// </summary>
+        /// <param name="result">NumSharp's result.</param>
+        /// <returns>The element, or <paramref name="result"/>.</returns>
+        private static object VStringElementOr(object result)
+            => result is NDArray nd && nd.ndim == 0 && nd.Storage.IsVString ? nd.Storage.GetAtIndex(0) : result;
+
+        /// <summary>
+        ///     The generator's <c>_mask_heap</c>: cells as lowercase hex with the bytes that hold a heap pointer zeroed (a cell
+        ///     whose flags have both <c>OUTSIDE_ARENA</c> and <c>LONG</c>: a heap string, or a freed one keeping the stale
+        ///     pointer).
+        /// </summary>
+        /// <param name="cells">The cells (16 bytes each).</param>
+        /// <returns>The masked hex.</returns>
+        private static string MaskHeapPointers(byte[] cells)
+        {
+            var copy = (byte[])cells.Clone();
+            for (int i = 0; i + 15 < copy.Length; i += 16)
+                if ((copy[i + 15] & 0x30) == 0x30)
+                    Array.Clear(copy, i, 8);
+            return Convert.ToHexString(copy).ToLowerInvariant();
         }
 
         /// <summary>A result as one array: an NDArray, or a C# scalar NumSharp returns where NumPy returns a 0-d value.</summary>

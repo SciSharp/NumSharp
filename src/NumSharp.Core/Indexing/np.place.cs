@@ -81,7 +81,9 @@ namespace NumSharp
             if (vals is null) throw new ArgumentNullException(nameof(vals));
             // The list's own dtype is discovered first (np.array), then converted into arr's dtype by PlaceCore after the
             // size check, as NumPy's conversion follows its mask checks. The discovered array is released with the scope.
-            PlaceCore(arr, mask, np.array(vals), sequence: true);
+            // A StringDType target converts the list with its own descriptor (every element by setitem, as NumPy's
+            // PyArray_FromAny(vals, dtype) does); the discovered U / number array would be cast instead.
+            PlaceCore(arr, mask, arr is not null && arr.Storage.IsVString ? Backends.Strings.NDVStringMove.StoreValue(vals, arr.dtype) : np.array(vals), sequence: true);
         }
 
         /// <summary>
@@ -207,6 +209,10 @@ namespace NumSharp
         ///     text is wide enough to hold any of them (<c>int64 → &lt;U21</c>): both come from the rule check.</remarks>
         private static NDArray PlaceValuesLikeNumPy(NDArray values, NDArray target, bool sequence)
         {
+            // A C# literal into a StringDType target is NumPy's Python scalar: stored by setitem (the NA object, its str(),
+            // refused under coerce=False), not cast.
+            if (target.Storage.IsVString && (values.WasPythonLiteral || values.WasPythonStr || values.WasPythonBool))
+                return NDArray.PackForVStringStore(values, target.dtype);
             // A C# literal (NDArray.WasPythonLiteral / WasPythonStr) is NumPy's Python scalar: PyArray_FromAny(values, dtype,
             // CARRAY) packs it with PyArray_Pack's range checks (np.putmask(int8, m, 1000) / np.place(int8, m, 1000) raise
             // "Python integer 1000 out of bounds for int8"; a str is parsed, its error quoting the str) instead of applying

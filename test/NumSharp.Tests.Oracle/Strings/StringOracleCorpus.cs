@@ -85,6 +85,20 @@ namespace NumSharp.Tests.Strings
 
             /// <summary>False when NumPy's view was read-only beyond what its strides show; null otherwise.</summary>
             public bool? Writeable { get; set; }
+
+            /// <summary>
+            ///     A NEP 55 <c>StringDType</c> operand's descriptor request (<c>{"coerce": bool, "na": value}</c>, the
+            ///     <c>na</c> member absent when the descriptor has no NA object); null for every other dtype.
+            /// </summary>
+            /// <remarks>A <c>StringDType</c> base carries <see cref="Values"/> instead of <see cref="Buffer"/>: its cells hold
+            ///     arena offsets and heap pointers that only NumPy's allocator could read.</remarks>
+            public JsonElement? T { get; set; }
+
+            /// <summary>
+            ///     A <c>StringDType</c> base's elements in order: <c>{"u": hex}</c> for a text, <c>{"na": true}</c> for an NA
+            ///     cell (the base is rebuilt by storing each value, the descriptor's NA object for an NA cell).
+            /// </summary>
+            public JsonElement[] Values { get; set; }
         }
 
         /// <summary>The corpus path next to the test assembly (copied there by the csproj rule).</summary>
@@ -115,6 +129,8 @@ namespace NumSharp.Tests.Strings
         /// <exception cref="NotSupportedException">A numeric dtype the general corpus has no mapping for.</exception>
         internal static NDArray Reconstruct(Operand o)
         {
+            if (o.T.HasValue)
+                return ReconstructVString(o);
             var descr = np.dtype(o.Dtype);
             bool isString = descr.Meta is StringDTypeMeta;
             if (!isString)
@@ -155,9 +171,48 @@ namespace NumSharp.Tests.Strings
         }
 
         /// <summary>
+        ///     Rebuilds a NEP 55 <c>StringDType</c> operand: a base of <see cref="Operand.BufferSize"/> cells of the
+        ///     requested descriptor whose elements are stored one by one in index order (the order NumPy's
+        ///     <c>np.array(values, dtype)</c> stores them, so short, arena and heap placement — and with it <c>tobytes()</c> —
+        ///     is NumPy's), an NA cell by storing the descriptor's NA object; then the view over it, as for the fixed-width
+        ///     dtypes.
+        /// </summary>
+        /// <param name="o">The operand descriptor (with <see cref="Operand.T"/> and <see cref="Operand.Values"/>).</param>
+        /// <returns>The base or the view.</returns>
+        /// <exception cref="FormatException">A value encoding the decoder does not know.</exception>
+        private static NDArray ReconstructVString(Operand o)
+        {
+            var descr = StringOracleOps.VStringDescr(o.T.Value);
+            var baseArray = new NDArray(descr, new Shape(new[] { o.BufferSize }), true);
+            var slice = baseArray.Storage.VStringSlice;
+            for (long i = 0; i < o.BufferSize; i++)
+                slice.SetIndex(i, VStringValue(o.Values[i], descr));
+            bool isBase = o.Shape.Length == 1 && o.Shape[0] == o.BufferSize && o.Offset == 0
+                          && (o.BufferSize <= 1 || o.Strides[0] == 1);
+            NDArray view = isBase
+                ? baseArray
+                : new NDArray(baseArray.Storage.Alias(new Shape(o.Shape, o.Strides, o.Offset, o.BufferSize)));
+            if (o.Writeable == false)
+                view.setflags(write: false);
+            return view;
+        }
+
+        /// <summary>
+        ///     One encoded <c>StringDType</c> element as the C# value that stores it: <c>{"na": true}</c> → the descriptor's
+        ///     NA object, any other encoding → <see cref="Decode"/> (a text).
+        /// </summary>
+        /// <param name="e">The encoded element.</param>
+        /// <param name="descr">The <c>StringDType</c> descriptor.</param>
+        /// <returns>The value.</returns>
+        /// <exception cref="FormatException">An unknown encoding.</exception>
+        internal static object VStringValue(JsonElement e, DType descr)
+            => e.ValueKind == JsonValueKind.Object && e.TryGetProperty("na", out _) ? descr.na_object : Decode(e);
+
+        /// <summary>
         ///     A value the generator encoded with <c>enc()</c>: <c>{"u"}</c> → <see cref="string"/>, <c>{"b"}</c> →
         ///     <c>byte[]</c>, <c>{"none"}</c> → null, <c>{"bool"}</c> / <c>{"int"}</c> / <c>{"float"}</c> → bool / long /
-        ///     double, a JSON array → a <see cref="List{T}"/> of decoded items.
+        ///     double (a non-finite float travels as <c>"nan"</c> / <c>"inf"</c> / <c>"-inf"</c>), a JSON array → a
+        ///     <see cref="List{T}"/> of decoded items.
         /// </summary>
         /// <param name="e">The encoded value.</param>
         /// <returns>The decoded value.</returns>
@@ -179,7 +234,15 @@ namespace NumSharp.Tests.Strings
             if (e.TryGetProperty("int", out var i))
                 return i.GetInt64();
             if (e.TryGetProperty("float", out var f))
-                return f.GetDouble();
+                return f.ValueKind == JsonValueKind.Number
+                    ? f.GetDouble()
+                    : f.GetString() switch
+                    {
+                        "nan" => double.NaN,
+                        "inf" => double.PositiveInfinity,
+                        "-inf" => double.NegativeInfinity,
+                        var s => throw new FormatException($"unknown float spelling '{s}'"),
+                    };
             throw new FormatException($"unknown value encoding {e}");
         }
 

@@ -505,7 +505,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="dst">The run's first destination element.</param>
         /// <param name="dstStride">The destination byte stride.</param>
         /// <param name="count">The run length.</param>
-        private delegate void RunAction(byte* src, long srcStride, byte* dst, long dstStride, long count);
+        internal delegate void RunAction(byte* src, long srcStride, byte* dst, long dstStride, long count);
 
         /// <summary>
         ///     NumPy's raw assignment walk: the axes sorted by the destination's strides (<see cref="RawArrayIter.PrepareThree"/>),
@@ -515,7 +515,12 @@ namespace NumSharp.Backends.Strings
         /// <param name="dst">The destination.</param>
         /// <param name="src">The source.</param>
         /// <param name="run">The per-run converter.</param>
-        private static void Walk(UnmanagedStorage dst, UnmanagedStorage src, RunAction run)
+        /// <remarks>
+        ///     The walk order is observable for <c>StringDType</c> destinations: each duplicated arena string is appended to the
+        ///     destination's arena in walk order, so the cells' offsets (<c>tobytes()</c>) are NumPy's only when the walk is
+        ///     NumPy's — which is why the <c>StringDType</c> copy core uses this walk too (<see cref="NDVStringCopy"/>).
+        /// </remarks>
+        internal static void Walk(UnmanagedStorage dst, UnmanagedStorage src, RunAction run)
         {
             var ds = dst.Shape;
             int ndim = ds.NDim;

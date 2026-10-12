@@ -254,16 +254,31 @@ namespace NumSharp
         {
             if (string.IsNullOrEmpty(dtype))
                 return null;
+            DType descr;
             try
             {
-                var descr = np.dtype(dtype);
-                return NDStringStorage.IsString(descr) ? descr : null;
+                descr = np.dtype(dtype);
             }
             catch (Exception e) when (e is NotSupportedException || e is ArgumentException || e is TypeError)
             {
                 // Not a dtype np.dtype knows: the numeric parser reports it with frombuffer's own text.
                 return null;
             }
+            // 'T' (StringDType) is a reference dtype: PyArray_FromBuffer's first check refuses it.
+            ThrowIfReferenceDType(descr);
+            return NDStringStorage.IsString(descr) ? descr : null;
+        }
+
+        /// <summary>
+        ///     NumPy's first check of <c>PyArray_FromBuffer</c>: a dtype holding references (<c>PyDataType_REFCHK</c> — the NEP 55
+        ///     <c>StringDType</c>, whose cells are arena offsets and heap pointers) cannot be laid over a buffer's bytes.
+        /// </summary>
+        /// <param name="dtype">The requested descriptor (null is the default float64).</param>
+        /// <exception cref="ValueError">NumPy's <c>cannot create an OBJECT array from memory buffer</c>.</exception>
+        internal static void ThrowIfReferenceDType(DType dtype)
+        {
+            if (dtype?.Meta is VStringDTypeMeta)
+                throw new ValueError("cannot create an OBJECT array from memory buffer");
         }
     }
 }

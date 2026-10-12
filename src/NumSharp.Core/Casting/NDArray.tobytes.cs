@@ -42,12 +42,16 @@ namespace NumSharp
                 ? 'C'
                 : OrderResolver.Resolve(order, this.Shape);
 
-            // A StringDType array's bytes are its 16-byte cells exactly as they sit in THIS buffer (NumPy's PyArray_ToString
-            // copies elsize bytes per element, arena offsets and heap pointers included). A copy() would duplicate the
-            // strings into a new arena and change the offsets, so the cells are gathered raw through the cell view instead.
+            // A StringDType array's bytes are 16-byte cells (NumPy 2.4.2's PyArray_ToString): a buffer that already lays its
+            // elements out in the requested order gives its OWN cells — arena offsets and heap pointers of this buffer —,
+            // any other layout is first RAVELLED (the "has references / needs init" path: PyArray_Ravel copies, duplicating
+            // every string into a new buffer and arena in the requested order) and that copy's cells are returned.
             if (Storage.IsVString)
             {
-                using var cells = new NDArray(Storage.VStringCellView()) { TensorEngine = TensorEngine };
+                bool own = physical == 'C' ? Shape.IsContiguous : Shape.IsFContiguous;
+                using var flat = own ? null : Backends.Strings.NDVStringMove.Flatten(this, physical);
+                var cellSource = flat ?? this;
+                using var cells = new NDArray(cellSource.Storage.VStringCellView()) { TensorEngine = TensorEngine };
                 return cells.tobytes(physical);
             }
 

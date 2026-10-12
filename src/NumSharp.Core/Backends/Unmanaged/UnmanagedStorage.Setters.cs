@@ -343,10 +343,13 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError">A float NaN literal into an integer dtype, a sequence into one element, or a value
         ///     that does not broadcast to the selection.</exception>
         /// <exception cref="TypeError">A complex literal into a real dtype.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null and this is not a NEP 55
+        ///     <c>StringDType</c> storage (only <c>StringDType</c> stores Python's <c>None</c>: its NA object, or <c>'None'</c>).</exception>
         public void SetData(NDArray value, int[] indices)
         {
             ThrowIfNotWriteable();
-            if (ReferenceEquals(value, null))
+            // A null value is Python's None, which only StringDType's setitem stores (SetDataVString below).
+            if (ReferenceEquals(value, null) && !IsVString)
                 throw new ArgumentNullException(nameof(value));
 
             // Wrap negative coordinates to [0, dim) and bounds-check each axis, exactly as the
@@ -627,6 +630,11 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Set a <see cref="NDArray"/> at given <see cref="indices"/> (long version).
         /// </summary>
+        /// <param name="value">The value; null is Python's <c>None</c>, which only a NEP 55 <c>StringDType</c> storage stores.</param>
+        /// <param name="indices">The leading coordinates.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null and this is not a <c>StringDType</c> storage.</exception>
+        /// <exception cref="OverflowException">A coordinate outside the <c>int</c> range.</exception>
+        /// <exception cref="Exception">The <see cref="SetData(NDArray, int[])"/> overload's errors.</exception>
         public void SetData(NDArray value, params long[] indices)
         {
             // Delegate to the int[] overload so the SAME semantics apply: a scalar broadcasts
@@ -635,7 +643,9 @@ namespace NumSharp.Backends
             // ValueError. This overload previously wrote only the FIRST element for a scalar and
             // linear-copied a larger/smaller value WITHOUT validation — reachable via the
             // object[] single-int setter (b[(object)0] = v) and the long[] coordinate shim.
-            if (ReferenceEquals(value, null))
+            // A null value is Python's None for a StringDType storage (the int[] overload's setitem stores it after the
+            // index's bounds check, so an out-of-range index still reports NumPy's IndexError first).
+            if (ReferenceEquals(value, null) && !IsVString)
                 throw new ArgumentNullException(nameof(value));
             var intIndices = new int[indices.Length];
             for (int i = 0; i < indices.Length; i++)

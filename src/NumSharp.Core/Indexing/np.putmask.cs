@@ -83,7 +83,9 @@ namespace NumSharp
         {
             if (values is null) throw new ArgumentNullException(nameof(values));
             // The list's own dtype is discovered first, then converted into a's dtype by PutMaskCore after the size check.
-            PutMaskCore(a, mask, np.array(values), sequence: true);
+            // A StringDType target converts the list with its own descriptor (every element by setitem, as NumPy's
+            // PyArray_FromAny(values, dtype) does); the discovered U / number array would be cast instead.
+            PutMaskCore(a, mask, a is not null && a.Storage.IsVString ? Backends.Strings.NDVStringMove.StoreValue(values, a.dtype) : np.array(values), sequence: true);
         }
 
         /// <summary>

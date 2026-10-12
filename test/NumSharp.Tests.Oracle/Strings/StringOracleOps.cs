@@ -54,9 +54,9 @@ namespace NumSharp.Tests.Strings
                         return dt is null ? np.array(s) : np.array(s, dt);
                     return dt is null ? NDArray.Scalar(v) : NDArray.Scalar(v, dt);
                 }
-                case "zeros": return np.zeros(ShapeOf(p, "shape"), np.dtype(Str(p, "dtype")));
-                case "empty": return np.empty(ShapeOf(p, "shape"), np.dtype(Str(p, "dtype")));
-                case "ones": return np.ones(ShapeOf(p, "shape"), np.dtype(Str(p, "dtype")));
+                case "zeros": return np.zeros(ShapeOf(p, "shape"), Dt(p, "dtype"));
+                case "empty": return np.empty(ShapeOf(p, "shape"), Dt(p, "dtype"));
+                case "ones": return np.ones(ShapeOf(p, "shape"), Dt(p, "dtype"));
                 case "full": return np.full(ShapeOf(p, "shape"), StringOracleCorpus.Decode(p["fill"]), Dt(p, "dtype"));
                 case "zeros_like": return np.zeros_like(a, Dt(p, "dtype"));
                 case "empty_like": return np.empty_like(a, Dt(p, "dtype"));
@@ -85,7 +85,7 @@ namespace NumSharp.Tests.Strings
 
                 // ---- casts ----
                 case "astype":
-                    return a.astype(np.dtype(Str(p, "dtype")), p["copy"].GetBoolean(), Str(p, "order")[0], Str(p, "casting"));
+                    return a.astype(Dt(p, "dtype"), p["copy"].GetBoolean(), Str(p, "order")[0], Str(p, "casting"));
 
                 // ---- views ----
                 case "transpose": return np.transpose(a);
@@ -101,7 +101,7 @@ namespace NumSharp.Tests.Strings
                 case "atleast_2d": return np.atleast_2d(a);
                 case "atleast_3d": return np.atleast_3d(a);
                 case "broadcast_to": return np.broadcast_to(a, ShapeOf(p, "shape"));
-                case "view": return a.view(np.dtype(Str(p, "dtype")));
+                case "view": return a.view(Dt(p, "dtype"));
                 case "getitem": return a[Index(p["index"])];
 
                 // ---- copies and movement ----
@@ -488,9 +488,23 @@ namespace NumSharp.Tests.Strings
         private static int? NullableInt(Dictionary<string, JsonElement> p, string key)
             => p.TryGetValue(key, out var e) && e.ValueKind == JsonValueKind.Number ? e.GetInt32() : null;
 
-        /// <summary>A dtype-or-None parameter.</summary>
+        /// <summary>
+        ///     A dtype-or-None parameter: a dtype string through <c>np.dtype</c>, a <c>{"T": {...}}</c> StringDType request
+        ///     through <c>np.dtypes.StringDType</c> (<see cref="VStringDescr"/>), anything else (absent, JSON null) None.
+        /// </summary>
+        /// <param name="p">The case parameters.</param>
+        /// <param name="key">The parameter name.</param>
+        /// <returns>The descriptor, or null.</returns>
         private static DType Dt(Dictionary<string, JsonElement> p, string key)
-            => p.TryGetValue(key, out var e) && e.ValueKind == JsonValueKind.String ? np.dtype(e.GetString()) : null;
+        {
+            if (!p.TryGetValue(key, out var e))
+                return null;
+            if (e.ValueKind == JsonValueKind.String)
+                return np.dtype(e.GetString());
+            if (e.ValueKind == JsonValueKind.Object && e.TryGetProperty("T", out var t))
+                return VStringDescr(t);
+            return null;
+        }
 
         /// <summary>A shape parameter (a JSON list of ints).</summary>
         private static Shape ShapeOf(Dictionary<string, JsonElement> p, string key) => new Shape(Longs(p[key]));

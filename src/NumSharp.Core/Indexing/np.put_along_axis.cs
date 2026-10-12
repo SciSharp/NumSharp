@@ -178,7 +178,7 @@ namespace NumSharp
                 // A StringDType target: the values in its descriptor, then the same scatter on marks (the values'
                 // element numbers: the value broadcast, the overlap snapshot and the bounds pass are the numeric route's)
                 // and the marked elements receive the strings.
-                var tvals = values.HasSameElementType(arr) ? values : values.astype(arr.dtype);
+                var tvals = Backends.Strings.NDVStringMove.StoreValue(values, arr.dtype);
                 Backends.Strings.NDVStringMove.ScatterVia(arr, tvals, (marks, index) => PutAlongAxisCore(marks, indices, index, ax));
                 return;
             }

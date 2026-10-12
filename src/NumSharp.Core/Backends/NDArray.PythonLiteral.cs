@@ -68,6 +68,39 @@ namespace NumSharp
         internal bool WasPythonStr { get; private set; }
 
         /// <summary>
+        ///     True for the 0-d bool array that a C# <c>bool</c> becomes through the implicit conversion operator: a Python
+        ///     <c>bool</c> in the boundary map.
+        /// </summary>
+        /// <remarks>
+        ///     Only the NEP 55 <c>StringDType</c> store reads it (<see cref="PackForVStringStore"/>): NumPy's
+        ///     <c>stringdtype_setitem</c> stores <c>str(True)</c> under coercion and REFUSES a bool under <c>coerce=False</c>,
+        ///     where a cast of a 0-d bool array stores <c>'True'</c> in both. Every other store packs a bool like its cast,
+        ///     which is why <see cref="WasPythonLiteral"/> (NumPy's flag marks only int / float / complex) stays false for a
+        ///     bool. Like the other marks, it belongs to this one object.
+        /// </remarks>
+        internal bool WasPythonBool { get; private set; }
+
+        /// <summary>
+        ///     The C# text a <see cref="WasPythonStr"/> array was made from, exactly (trailing NULs included); null for any other
+        ///     array. The array's 0-d <c>U</c> element reads WITHOUT trailing NULs (<c>U</c>'s storage rule), so a store into a
+        ///     NEP 55 <c>StringDType</c> array — which keeps them, as NumPy's setitem stores the Python str itself — reads this.
+        /// </summary>
+        internal string PythonStrText { get; private set; }
+
+        /// <summary>
+        ///     Creates the 0-d bool array of a C# <c>bool</c> literal, marked <see cref="WasPythonBool"/>. The implicit
+        ///     <c>bool → NDArray</c> conversion calls it.
+        /// </summary>
+        /// <param name="value">The literal.</param>
+        /// <returns>A new 0-d bool array holding <paramref name="value"/>.</returns>
+        internal static NDArray PythonBoolLiteral(bool value)
+        {
+            var nd = Scalar(value);
+            nd.WasPythonBool = true;
+            return nd;
+        }
+
+        /// <summary>
         ///     Creates the 0-d text array of a C# string literal (NumPy's <c>np.array(str)</c>: <c>&lt;U{len}</c>), marked
         ///     <see cref="WasPythonStr"/>. The implicit <c>string → NDArray</c> conversion calls it.
         /// </summary>
@@ -77,6 +110,7 @@ namespace NumSharp
         {
             var nd = Backends.Strings.NDStringArrays.FromScalar(value, null);
             nd.WasPythonStr = true;
+            nd.PythonStrText = value;
             return nd;
         }
 
@@ -190,12 +224,13 @@ namespace NumSharp
         ///     <c>coerce=False</c> descriptor refuses a non-text value) — into a NEW 0-d array of <paramref name="descr"/>; any
         ///     other value (an array, which NumPy CASTS) is returned unchanged.
         /// </summary>
-        /// <param name="value">The value of the assignment (null passes through for the caller to reject).</param>
+        /// <param name="value">The value of the assignment; null is Python's <c>None</c> (the NA element of a descriptor whose
+        ///     NA object is <c>None</c>, <c>'None'</c> under coercion, refused under <c>coerce=False</c>).</param>
         /// <param name="descr">The destination's <c>StringDType</c> descriptor.</param>
         /// <returns><paramref name="value"/> itself, or a new 0-d array the caller disposes
         ///     (<c>!ReferenceEquals(result, value)</c>).</returns>
-        /// <exception cref="ValueError">A non-text literal into a <c>coerce=False</c> descriptor (<c>StringDType only allows
-        ///     string data when string coercion is disabled.</c>).</exception>
+        /// <exception cref="ValueError">A non-text literal (a bool and <c>None</c> included) into a <c>coerce=False</c>
+        ///     descriptor (<c>StringDType only allows string data when string coercion is disabled.</c>).</exception>
         /// <exception cref="UnicodeEncodeError">A text literal with a lone surrogate.</exception>
         /// <remarks>
         ///     NumPy reaches this conversion for EVERY scalar store into a <c>StringDType</c> array — an element, a slice, a
@@ -205,12 +240,17 @@ namespace NumSharp
         /// </remarks>
         internal static NDArray PackForVStringStore(NDArray value, DType descr)
         {
-            if (value is null || !(value.WasPythonLiteral || value.WasPythonStr))
+            // A C# null in an NDArray-typed store is Python's None; a marked literal (number, bool, str) is the Python
+            // scalar it stands for. Both go through stringdtype_setitem; any other array is the caller's cast.
+            if (value is not null && !(value.WasPythonLiteral || value.WasPythonStr || value.WasPythonBool))
                 return value;
             var packed = new NDArray(descr, Shape.Scalar, true);
             try
             {
-                packed.Storage.VStringSlice.SetIndex(0, value.Storage.GetAtIndex(0));
+                // A str literal stores its ORIGINAL C# text: its 0-d U array drops trailing NULs on read ('a\0' reads 'a'),
+                // which a StringDType element keeps (NumPy's setitem stores the Python str itself).
+                object element = value is null ? null : value.WasPythonStr ? value.PythonStrText : value.Storage.GetAtIndex(0);
+                packed.Storage.VStringSlice.SetIndex(0, element);
             }
             catch
             {

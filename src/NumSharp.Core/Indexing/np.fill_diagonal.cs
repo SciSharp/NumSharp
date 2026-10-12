@@ -119,7 +119,9 @@ namespace NumSharp
                 // A StringDType target: the value in its descriptor (a number becomes its str()), then the same fill on
                 // marks (the value's element numbers, tiled cyclically by the numeric fill) and the marked diagonal elements
                 // receive the strings — never the raw strided-store kernel.
-                var text = val as NDArray ?? np.asanyarray(val);
+                // NumPy's a.flat[...] = val converts val with the array's descriptor: Python objects (and a list's elements)
+                // by setitem, an ndarray by the cast (NDVStringMove.StoreValue).
+                var text = Backends.Strings.NDVStringMove.StoreValue(val, a.dtype);
                 if (text.size == 0)
                     return; // NumPy: assigning an empty sequence leaves the diagonal untouched.
                 var flatText = text.ravel();

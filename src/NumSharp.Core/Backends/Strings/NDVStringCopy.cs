@@ -90,8 +90,10 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     The NDIter walk: both cell views (the source with its broadcast shape) under one external-loop iterator; the
-        ///     inner loop runs the <c>string_to_string</c> body on each pair of cell pointers.
+        ///     NumPy's <c>raw_array_assign_array</c> walk (<see cref="NDVStringCasting.Walk"/>: the axes sorted by the
+        ///     DESTINATION's strides, the source broadcast); every innermost run runs the <c>string_to_string</c> body. The
+        ///     destination order decides where each duplicated arena string lands in the destination's arena, so a copy's cells
+        ///     (<c>tobytes()</c>) are NumPy's: <c>np.copy(c_array, order='F')</c> duplicates in F order.
         /// </summary>
         /// <param name="dst">The destination storage.</param>
         /// <param name="src">The source storage.</param>
@@ -102,42 +104,18 @@ namespace NumSharp.Backends.Strings
             var inAllocator = src.VStringSlice.Allocator;
             var outAllocator = dst.VStringSlice.Allocator;
             byte[] naName = NAReplacement(src.VStringSlice, dst.VStringSlice);
-
-            // NDIterRef walks NDArrays, and an NDArray wrapper counts a reference that its Dispose releases — which FREES a
-            // block nobody counted yet (a fresh buffer still being filled: CloneData's result, the clone of a temporary).
-            // An extra reference held across the walk, dropped with Abandon (a decrement that never frees), keeps every
-            // operand alive through the wrappers' release and leaves each count where it was.
-            bool srcHeld = src.InternalArray.TryAddRef();
-            bool dstHeld = dst.InternalArray.TryAddRef();
+            // The walk reads raw pointers of both storages, no NDArray wrapper is made (so no reference is counted or
+            // released here: the caller keeps both buffers alive for the call).
+            var srcView = src.Alias(bshape);
+            VStringAllocator.AcquirePair(inAllocator, outAllocator);
             try
             {
-                var srcView = src.VStringCellView().Alias(bshape);
-                using var sv = new NDArray(srcView);
-                using var dv = new NDArray(dst.VStringCellView());
-                using var iter = NDIterRef.MultiNew(
-                    2, new[] { sv, dv },
-                    NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.ZEROSIZE_OK | NDIterGlobalFlags.REFS_OK,
-                    NPY_ORDER.NPY_KEEPORDER,
-                    NPY_CASTING.NPY_NO_CASTING,
-                    new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY });
-
-                VStringAllocator.AcquirePair(inAllocator, outAllocator);
-                try
-                {
-                    iter.ForEach((dataptrs, strides, count, aux) =>
-                        CopyRun((byte*)dataptrs[0], strides[0], (byte*)dataptrs[1], strides[1], count, inAllocator, outAllocator, naName));
-                }
-                finally
-                {
-                    VStringAllocator.ReleasePair(inAllocator, outAllocator);
-                }
+                NDVStringCasting.Walk(dst, srcView, (s, ss, d, ds, count) =>
+                    CopyRun(s, ss, d, ds, count, inAllocator, outAllocator, naName));
             }
             finally
             {
-                if (dstHeld)
-                    dst.InternalArray.Abandon();
-                if (srcHeld)
-                    src.InternalArray.Abandon();
+                VStringAllocator.ReleasePair(inAllocator, outAllocator);
             }
         }
 
