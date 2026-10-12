@@ -420,7 +420,9 @@ compare primitives exist; P2.2's `sort_complex` and P2.4's int parser need P2.0'
 
 ## 5. Out of scope
 
-- NEP 55 `StringDType` (variable width, UTF-8, missing values) — phase 3.
+- NEP 55 `StringDType` (variable width, UTF-8, missing values) as data, and P2.4 (casts between text and numbers):
+  moved to phase 1 by the owner on 2026-10-10 (`docs/plans/strings-phase1-completion.md`). The `T` forms of the
+  phase-2 computations stay here.
 - The object-array functions `np.char.split`, `rsplit`, `splitlines`, and `np.strings.mod` with tuple values:
   NumSharp has no object dtype.
 - The `np.char.chararray` subclass (auto-rstrip semantics): NumSharp has no ndarray subclasses.

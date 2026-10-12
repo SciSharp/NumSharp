@@ -497,7 +497,8 @@ oracle sections closed the gaps between "NumPy refuses" and "NumPy computes":
   batch — is NumPy's answer without a backend since 2026-10-08: `Backends/Default/LinearAlgebra/LinAlgEmpty.cs`, the
   portable `linalg_empty.jsonl` tier, plan `api-parameter-parity.md` X34.)
 
-**Not yet:** datetime storage/kernels/NaT/ISO (C — `docs/plans/datetime64.md`); Stage D phase 2 (computing on text —
-comparisons, `np.strings`, sorting, `add`/`multiply` loops, text ↔ number casts, the gated corpus is ready; planned in
-`docs/plans/strings-phase2.md`: the techniques, measured against NumPy, and eight subphases P2.0–P2.7) and NEP 55
-`StringDType` (phase 3).
+**Not yet:** datetime storage/kernels/NaT/ISO (C — `docs/plans/datetime64.md`); the completion of Stage D phase 1
+(`docs/plans/strings-phase1-completion.md`, owner direction 2026-10-10: NEP 55 `StringDType` and the text ↔ number
+casts are phase 1, text as data for all three string dtypes, not a later phase); Stage D phase 2 (computing on text —
+comparisons, `np.strings`, sorting, `add`/`multiply` loops; planned in `docs/plans/strings-phase2.md`: the techniques,
+measured against NumPy, and eight subphases P2.0–P2.7, of which P2.4 moved to phase 1).
