@@ -1025,13 +1025,15 @@ reporting the original axis). `num<0` → `ValueError("Number of samples, {num},
     body too many when `n % step == step - 1`: one element read past the inputs and one bool written past the
     result (`a == b` over 31 bool elements, `np.isnan` over 7 float32; an `out=` view's next parent slot). The
     three sentinel tests of the test file fail on the old kernels.
-  - **What stays on `strings`.** The NEP 50 weak-scalar pack of the same commit (plan X24 / X2 / X21, a breaking
-    change, with its `weak_scalar` tier). The vector loop needs the array to have the comparison dtype already,
-    and journey4 still promotes a 0-d operand strongly. So a literal that promotes the comparison stays in the
-    scalar loop until that merge (100K elements): `float32 > 50.5` 72 µs against 7.9 for `50.5f`, `uint8 > 50`
-    39 µs against 3.9 for `(byte)50`, `int16 > 50` 37 against 4.7 for `(short)50`, `int32 > 50L` 39. A literal
-    that does not promote takes the vector loop: an `int`, `float` or `double` against float64, an `int` against
-    int32 / int64.
+  - **What stayed on `strings` until the rebase (2026-10-12).** The NEP 50 weak-scalar pack of the same commit
+    (plan X24 / X2 / X21, a breaking change, with its `weak_scalar` tier) arrived when `strings` was rebased onto
+    journey4: a Python-scalar 0-d operand is packed into a float16 / float32 array's dtype, and an in-range Python
+    int into an integer array's dtype, before the comparison (`DefaultEngine.CompareOp.WeakScalar.cs`), so those
+    literals now reach the array's own vector loop (not re-measured). Measured on journey4 BEFORE the rebase, when a
+    literal that promotes the comparison stayed in the scalar loop (100K elements): `float32 > 50.5` 72 µs against
+    7.9 for `50.5f`, `uint8 > 50` 39 µs against 3.9 for `(byte)50`, `int16 > 50` 37 against 4.7 for `(short)50`,
+    `int32 > 50L` 39. A literal that does not promote took the vector loop already: an `int`, `float` or `double`
+    against float64, an `int` against int32 / int64.
   - **Perf (NPY/NS; before).** `m > 0.75` 2.0× / 1.2× / 1.0× at 4 / 64 / 512 square (1.39× / 0.52× / 0.25×); a
     float64 array against a held 0-d operand 2.0× / 1.4× / 1.0× (1.9× / 0.40× / 0.22×); every SIMD dtype against
     a 0-d operand of its own dtype 1.9–2.4× at 1K, 0.86–1.9× at 100K, 1.4–4.0× at 10M (0.03–1.6× before). A
@@ -2526,7 +2528,8 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
     operands take 0.43. No cheap lever was found.
   - *`np.less(a, b, out)` of two float64 arrays at 100K* (0.97×): both libraries take 14.8–15.6 µs, the transfer
     bound for 1.7 MB of operands and result in a 2 MB L2.
-  - *The empty result `(0,3) < (3,)`* (0.87×): branch `strings` has an empty-result guard that arrives with the merge.
+  - *The empty result `(0,3) < (3,)`* (0.87×): the empty-result guard of branch `strings` arrived with its rebase onto
+    journey4 (2026-10-12; not re-measured).
   - *Between 1.0× and 1.5×* (403 cells): contiguous operands at 100K, in C order, F order, as a transposed pair or
     at an offset (both libraries run a vector loop at the L2 transfer bound: 1.05–1.5×), contiguous at 1K and tiny
     operands (the NDArray allocation floor: about 0.35 µs of a 0.45–0.55 µs call; 1.2–1.5×), two stepped operands
@@ -2543,11 +2546,15 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
   cycles each, took 1.06 ns a step): measure the clock before a port or latency argument. The host was also not
   quiet then (about 17 % background load): two routes were timed in one process, in turn, five passes, the minimum
   of each (`ComparisonRun.TilesDisabled` / `RepeatedRowDisabled`), and effects under 1.3× were not acted on.
-- **Merging `strings`.** The edits stay out of the hunks `strings` changed in `DefaultEngine.CompareOp.cs` (the top
-  of `ExecuteComparisonOp`, the general fallback, the six overrides, the result allocation of the iterator route) and
-  repeat its comparison-type lines of `DefaultEngine.UfuncOut.cs` byte for byte. `git merge-tree` reports the same
-  conflict list with and without this work. After that merge an operand that NEP 50 treats as weak arrives in the
-  array's dtype already, so adoption then serves the strong 0-d operands.
+- **Merged with `strings` (2026-10-12, `strings` rebased onto journey4).** The engine's edits stayed out of the hunks
+  `strings` changed in `DefaultEngine.CompareOp.cs` (the top of `ExecuteComparisonOp`, the general fallback, the six
+  overrides, the result allocation of the iterator route) and repeated its comparison-type lines of
+  `DefaultEngine.UfuncOut.cs` byte for byte, so the rebase met no conflict there. The weak-scalar step
+  (`ExecuteComparison` → `AdoptWeakComparisonScalar`) runs BEFORE `ExecuteComparisonOp` and the `out=` / `where=`
+  route: an operand that NEP 50 treats as weak arrives in the array's dtype already, and the run's scalar adoption
+  serves the strong 0-d operands (`char`, `Half`, `decimal`) and the out-of-range Python ints. `ComparisonRunTests`
+  holds its element reference to that rule (`Expected` / `PackWeak` for a Python scalar against a float16 / float32
+  array, `RaisesOverflow` for a bool array against a Python int at or past 2^63).
 
 ### Type Promotion & Dtype
 `can_cast`, `common_type`, `datetime_data`, `dtype`, `dtypes` (the `np.dtypes` class module), `find_common_type`, `finfo`, `iinfo`, `isdtype`, `issubdtype`, `min_scalar_type`, `mintypecode`, `promote_types`, `result_type`

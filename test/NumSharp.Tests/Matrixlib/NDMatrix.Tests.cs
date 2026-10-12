@@ -766,9 +766,10 @@ namespace NumSharp.Tests.Matrixlib
             tooMany.Should().Throw<IndexError>().WithMessage("too many indices for array: array is 2-dimensional, but 3 were indexed");
             Action ellipses = () => { var _ = m["..., ..."]; };
             ellipses.Should().Throw<IndexError>().WithMessage("an index can only have a single ellipsis ('...')");
-            // np.take reports its bound with .NET's argument exception (the house type); the text is NumPy's.
+            // np.take is PyArray_TakeFrom: NumPy's IndexError, type and text (NumPy 2.4.2: m.take(np.array([12])) raises
+            // "IndexError: index 12 is out of bounds for axis 1 with size 12").
             Action take = () => m.take(np.array(new long[] { 12 }));
-            take.Should().Throw<ArgumentOutOfRangeException>().WithMessage("index 12 is out of bounds for axis 1 with size 12*");
+            take.Should().Throw<IndexError>().WithMessage("index 12 is out of bounds for axis 1 with size 12");
         }
 
         /// <summary>

@@ -16,7 +16,10 @@ namespace NumSharp.Tests.Backends.Kernels
     /// <remarks>
     ///     <para>Every expected value comes from <see cref="Reference"/>, a per-element comparison written from NumPy's
     ///     rules and computed without NumSharp's kernels: integers exactly, floats in NumPy's comparison dtype
-    ///     (<c>result_type</c> of the pair), complex by NumPy's <c>CLT</c> / <c>CEQ</c> macros, decimal by value.</para>
+    ///     (<c>result_type</c> of the pair), complex by NumPy's <c>CLT</c> / <c>CEQ</c> macros, decimal by value. A 0-d
+    ///     operand against an array is the NEP 50 weak Python scalar its C# type stands for (<see cref="Expected"/>): of
+    ///     another dtype against a float16 / float32 array it is packed into the array's precision first, and a bool
+    ///     array against a Python int at or past 2^63 raises (<see cref="RaisesOverflow"/>).</para>
     ///     <para>The tests that drive <see cref="ComparisonRun.Run"/> and <see cref="ComparisonRun.RunRows"/> on raw
     ///     memory surround every buffer with sentinel bytes, so a store outside the result slots fails the test.</para>
     ///     <para>The two forms of a whole rows iteration have tests of their own: an operand whose rows are adjacent
@@ -149,6 +152,116 @@ namespace NumSharp.Tests.Backends.Kernels
             }
         }
 
+        /// <summary>Which operand of a comparison NumSharp reads as a NEP 50 weak Python scalar.</summary>
+        private enum WeakSide
+        {
+            /// <summary>Neither: two arrays, or two 0-d operands (both keep the strong promotion).</summary>
+            None,
+
+            /// <summary>The left operand is 0-d and the right one is an array.</summary>
+            Left,
+
+            /// <summary>The right operand is 0-d and the left one is an array.</summary>
+            Right,
+        }
+
+        /// <summary>
+        ///     The operand the comparison ufuncs read as the Python scalar its C# type stands for: a 0-d operand against an
+        ///     array operand (ndim &gt;= 1). NumSharp cannot tell a C# literal from an explicit 0-d array, so every such
+        ///     0-d operand is weak (<c>DefaultEngine.AdoptWeakComparisonScalar</c>).
+        /// </summary>
+        /// <param name="a">Left operand.</param>
+        /// <param name="b">Right operand.</param>
+        /// <returns>The weak side, or <see cref="WeakSide.None"/>.</returns>
+        private static WeakSide WeakOperand(NDArray a, NDArray b)
+            => a.ndim == 0 && b.ndim > 0 ? WeakSide.Left : b.ndim == 0 && a.ndim > 0 ? WeakSide.Right : WeakSide.None;
+
+        /// <summary>
+        ///     Whether a 0-d operand of <paramref name="t"/> stands for a Python scalar (the C# types that have a Python
+        ///     literal): bool, the eight integer primitives, float, double and <see cref="Complex"/>. <see cref="Half"/>,
+        ///     char and decimal are NumPy scalars (strong) or have no NumPy analog.
+        /// </summary>
+        /// <param name="t">The 0-d operand's dtype.</param>
+        /// <returns>True for a weak scalar dtype.</returns>
+        private static bool IsPythonScalarType(NPTypeCode t) => t is NPTypeCode.Boolean or NPTypeCode.SByte or NPTypeCode.Byte
+            or NPTypeCode.Int16 or NPTypeCode.UInt16 or NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64
+            or NPTypeCode.UInt64 or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex;
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_Pack</c> of a weak Python scalar into the precision of a float16 / float32 array: a real
+        ///     value becomes its double first (a bool 0 / 1, an int its correctly rounded double, so an int past 2^53
+        ///     rounds twice) and then narrows to the array's dtype (<c>npy_double_to_half</c> / a float cast; a value past
+        ///     the range becomes infinity); a complex value is <c>CFLOAT_setitem</c>, each part rounded to float32 (NumPy
+        ///     compares a float16 / float32 array with a Python complex in complex64).
+        /// </summary>
+        /// <param name="value">The boxed scalar.</param>
+        /// <param name="arrayType"><see cref="NPTypeCode.Half"/> or <see cref="NPTypeCode.Single"/>.</param>
+        /// <returns>A boxed <see cref="Half"/> or <see cref="float"/>, or a <see cref="Complex"/> with float32 parts.</returns>
+        /// <remarks>.NET's <c>(Half)double</c> rounds once, to nearest even, exactly like <c>npy_double_to_half</c>
+        ///     (checked over every half tie, nudged both ways, and 2 million random doubles).</remarks>
+        private static object PackWeak(object value, NPTypeCode arrayType)
+        {
+            if (value is Complex z)
+                return new Complex((float)z.Real, (float)z.Imaginary);
+            double d = AsDouble(value);
+            return arrayType == NPTypeCode.Half ? (Half)d : (object)(float)d;
+        }
+
+        /// <summary>
+        ///     NumPy's comparison of one element pair, given which operand (if any) is a weak Python scalar: a weak
+        ///     scalar of another dtype against a float16 / float32 array is packed into the array's precision and
+        ///     compared there (NEP 50: <c>np.array([0.1], np.float32) &gt; 0.1</c> is False, <c>np.array([2048],
+        ///     np.float16) == 2049</c> is True); every other pair is <see cref="Reference"/>.
+        /// </summary>
+        /// <param name="op">The comparison.</param>
+        /// <param name="a">Left element.</param>
+        /// <param name="ta">Its dtype.</param>
+        /// <param name="b">Right element.</param>
+        /// <param name="tb">Its dtype.</param>
+        /// <param name="weak">The weak operand.</param>
+        /// <returns>The expected result.</returns>
+        /// <remarks>
+        ///     Only float16 and float32 arrays compare differently: an integer or bool array against a Python int compares
+        ///     exactly (in range or not), against a Python float or complex in float64 / complex128, which the strong
+        ///     promotion gives exactly too (every element and value it pairs is exact in the promoted dtype); a float64 or
+        ///     complex128 array holds every Python float.
+        /// </remarks>
+        private static bool Expected(ComparisonOp op, object a, NPTypeCode ta, object b, NPTypeCode tb, WeakSide weak)
+        {
+            if (weak != WeakSide.None)
+            {
+                NPTypeCode arrayType = weak == WeakSide.Right ? ta : tb;
+                NPTypeCode scalarType = weak == WeakSide.Right ? tb : ta;
+                if (arrayType is NPTypeCode.Half or NPTypeCode.Single && scalarType != arrayType && IsPythonScalarType(scalarType))
+                {
+                    object packed = PackWeak(weak == WeakSide.Right ? b : a, arrayType);
+                    NPTypeCode packedType = packed is Complex ? NPTypeCode.Complex : arrayType;
+                    return weak == WeakSide.Right ? Reference(op, a, ta, packed, packedType) : Reference(op, packed, packedType, b, tb);
+                }
+            }
+            return Reference(op, a, ta, b, tb);
+        }
+
+        /// <summary>
+        ///     Whether NumPy raises before it compares: a bool array against a Python int at or past 2^63. NumPy compares a
+        ///     bool array with a Python int in its int64 loop, whose pack of such an int fails (OverflowError; NumSharp
+        ///     raises the LP64 text, "Python int too large to convert to C long").
+        /// </summary>
+        /// <param name="a">Left operand.</param>
+        /// <param name="ta">Its dtype.</param>
+        /// <param name="b">Right operand.</param>
+        /// <param name="tb">Its dtype.</param>
+        /// <returns>True when the comparison must throw <see cref="OverflowException"/>.</returns>
+        private static bool RaisesOverflow(NDArray a, NPTypeCode ta, NDArray b, NPTypeCode tb)
+        {
+            var weak = WeakOperand(a, b);
+            if (weak == WeakSide.None)
+                return false;
+            var (arrayType, scalarType, scalar) = weak == WeakSide.Right ? (ta, tb, b) : (tb, ta, a);
+            // Only a C# ulong can hold a Python int at or past 2^63 (a BigInteger is not an array dtype).
+            return arrayType == NPTypeCode.Boolean && scalarType == NPTypeCode.UInt64 && (ulong)scalar.GetAtIndex(0) >= 1UL << 63;
+        }
+
         /// <summary>
         ///     The values a dtype is tested with: extremes, the neighbours of other dtypes' limits, signed zeros, NaN
         ///     and infinities, and for complex a NaN in either part.
@@ -267,6 +380,9 @@ namespace NumSharp.Tests.Backends.Kernels
         /// <param name="op">The comparison.</param>
         private static void AssertCompared(string what, NDArray got, NDArray a, NPTypeCode ta, NDArray b, NPTypeCode tb, ComparisonOp op)
         {
+            // The weak operand is decided by the operands as given: broadcasting below turns a 0-d operand into an array.
+            var weak = WeakOperand(a, b);
+
             // Operands of at most one dimension (the pair matrix: about 100,000 calls) are read in place, element by
             // element in logical order; GetAtIndex follows a view's strides. Everything else is broadcast and copied.
             if (a.ndim <= 1 && b.ndim <= 1 && got.ndim <= 1 && (a.size == b.size || a.size == 1 || b.size == 1))
@@ -274,7 +390,7 @@ namespace NumSharp.Tests.Backends.Kernels
                 long n = a.size == 1 ? b.size : a.size;
                 got.size.Should().Be(n, what);
                 for (long i = 0; i < n; i++)
-                    AssertElement(what, i, got.GetAtIndex(i), a.GetAtIndex(a.size == 1 ? 0 : i), ta, b.GetAtIndex(b.size == 1 ? 0 : i), tb, op);
+                    AssertElement(what, i, got.GetAtIndex(i), a.GetAtIndex(a.size == 1 ? 0 : i), ta, b.GetAtIndex(b.size == 1 ? 0 : i), tb, op, weak);
                 return;
             }
 
@@ -284,7 +400,30 @@ namespace NumSharp.Tests.Backends.Kernels
             using var fg = got.flatten();
             fg.size.Should().Be(fa.size, what);
             for (long i = 0; i < fa.size; i++)
-                AssertElement(what, i, fg.GetAtIndex(i), fa.GetAtIndex(i), ta, fb.GetAtIndex(i), tb, op);
+                AssertElement(what, i, fg.GetAtIndex(i), fa.GetAtIndex(i), ta, fb.GetAtIndex(i), tb, op, weak);
+        }
+
+        /// <summary>
+        ///     Compares two operands and checks the result against the reference, or, where NumPy raises before it
+        ///     compares (a bool array against a Python int at or past 2^63, <see cref="RaisesOverflow"/>), checks that the
+        ///     comparison throws NumPy's <see cref="OverflowException"/>.
+        /// </summary>
+        /// <param name="what">Label for the failure message.</param>
+        /// <param name="op">The comparison.</param>
+        /// <param name="a">Left operand.</param>
+        /// <param name="ta">Its dtype.</param>
+        /// <param name="b">Right operand.</param>
+        /// <param name="tb">Its dtype.</param>
+        private static void CompareAndAssert(string what, ComparisonOp op, NDArray a, NPTypeCode ta, NDArray b, NPTypeCode tb)
+        {
+            if (RaisesOverflow(a, ta, b, tb))
+            {
+                Action call = () => Compare(op, a, b).Dispose();
+                call.Should().Throw<OverflowException>(what).WithMessage("Python int too large to convert to C long");
+                return;
+            }
+            using var g = Compare(op, a, b);
+            AssertCompared(what, g, a, ta, b, tb, op);
         }
 
         /// <summary>Asserts one result element against the reference.</summary>
@@ -296,9 +435,10 @@ namespace NumSharp.Tests.Backends.Kernels
         /// <param name="y">Right element.</param>
         /// <param name="tb">Its dtype.</param>
         /// <param name="op">The comparison.</param>
-        private static void AssertElement(string what, long i, object g, object x, NPTypeCode ta, object y, NPTypeCode tb, ComparisonOp op)
+        /// <param name="weak">Which operand is a weak Python scalar (<see cref="WeakOperand"/>).</param>
+        private static void AssertElement(string what, long i, object g, object x, NPTypeCode ta, object y, NPTypeCode tb, ComparisonOp op, WeakSide weak)
         {
-            bool want = Reference(op, x, ta, y, tb);
+            bool want = Expected(op, x, ta, y, tb, weak);
             bool have = g is bool gb ? gb : Convert.ToDouble(g) != 0;
             if (have != want)
                 Assert.Fail($"{what} [{i}]: {x} ({ta}) {op} {y} ({tb}) should be {want}");
@@ -344,12 +484,13 @@ namespace NumSharp.Tests.Backends.Kernels
                     using (var g = Compare(op, aThree, b)) AssertCompared(tag + " step 3 / contiguous", g, aThree, ta, b, tb, op);
                     using (var g = Compare(op, a, bBack)) AssertCompared(tag + " contiguous / step -2", g, a, ta, bBack, tb, op);
                     using (var g = Compare(op, aRev, bStep)) AssertCompared(tag + " reversed / step 2", g, aRev, ta, bStep, tb, op);
-                    using (var g = Compare(op, a, value)) AssertCompared(tag + " array / value", g, a, ta, value, tb, op);
-                    using (var g = Compare(op, aRev, value)) AssertCompared(tag + " reversed / value", g, aRev, ta, value, tb, op);
-                    using (var g = Compare(op, valueLeft, bStep)) AssertCompared(tag + " value / step 2", g, valueLeft, ta, bStep, tb, op);
+                    // A 0-d operand is a weak Python scalar: a bool array against a Python int at or past 2^63 raises.
+                    CompareAndAssert(tag + " array / value", op, a, ta, value, tb);
+                    CompareAndAssert(tag + " reversed / value", op, aRev, ta, value, tb);
+                    CompareAndAssert(tag + " value / step 2", op, valueLeft, ta, bStep, tb);
                     using (var g = Compare(op, aStepEnd, bStepEnd)) AssertCompared(tag + " step 2 to the buffer end", g, aStepEnd, ta, bStepEnd, tb, op);
                     using (var g = Compare(op, aThreeEnd, bRev)) AssertCompared(tag + " step 3 to the buffer end / reversed", g, aThreeEnd, ta, bRev, tb, op);
-                    using (var g = Compare(op, aStepEnd, value)) AssertCompared(tag + " step 2 to the buffer end / value", g, aStepEnd, ta, value, tb, op);
+                    CompareAndAssert(tag + " step 2 to the buffer end / value", op, aStepEnd, ta, value, tb);
                 }
             }
         }
@@ -507,13 +648,15 @@ namespace NumSharp.Tests.Backends.Kernels
         }
 
         /// <summary>
-        ///     An array against ONE value of another dtype is compared in the array's own dtype, and the result is that
-        ///     of the comparison in the promoted dtype for every element: every uint8 and int8 value, every float16 bit
-        ///     pattern, and float32 values around each threshold, against values at, between and beyond the array
-        ///     dtype's values.
+        ///     An array against ONE value of another dtype is compared in the array's own dtype, and the result is
+        ///     NumPy's for every element: every uint8 and int8 value, every float16 bit pattern, and float32 values around
+        ///     each threshold, against values at, between and beyond the array dtype's values. NumPy's result is the
+        ///     comparison in the promoted dtype, except for a weak Python scalar (the 0-d of a C# bool, integer, float,
+        ///     double or <see cref="Complex"/>): against a float16 / float32 array it is first packed into the array's
+        ///     precision (NEP 50, <see cref="PackWeak"/>), and a bool array against one at or past 2^63 raises.
         /// </summary>
         [TestMethod]
-        public void ValueOfAnotherDtype_ComparesAsInThePromotedDtype()
+        public void ValueOfAnotherDtype_ComparesAsNumPyDoes()
         {
             // Integer arrays: every value of the narrow dtypes, the extremes and neighbours of the wide ones.
             var integerArrays = new (NPTypeCode Type, object[] Values)[]
@@ -600,8 +743,10 @@ namespace NumSharp.Tests.Backends.Kernels
         ///     A float array is checked without boxing (the float16 case is 65,536 elements against 40 values, six
         ///     operators and two sides: 31 million checks). Both operands convert exactly to float64 once they are in
         ///     the comparison dtype, and two floats compare as their float64 values do, so the reference there is one
-        ///     float64 comparison per element, of the element and of the value AS CONVERTED TO THE COMPARISON DTYPE
-        ///     (the rounding <see cref="Reference"/> applies).
+        ///     float64 comparison per element, of the element and of the value AS CONVERTED TO THE COMPARISON DTYPE: the
+        ///     array's own dtype for a weak Python scalar (<see cref="PackWeak"/>, the rounding <see cref="Expected"/>
+        ///     applies), the promoted dtype for a strong one (the rounding <see cref="Reference"/> applies). A bool array
+        ///     against a Python int at or past 2^63 must raise on both sides (<see cref="RaisesOverflow"/>).
         /// </remarks>
         private static void AssertAdoption(NPTypeCode ta, object[] elements, (NPTypeCode Type, object Value)[] values)
         {
@@ -615,17 +760,31 @@ namespace NumSharp.Tests.Backends.Kernels
                 if (tv == ta)
                     continue;
                 using var s = NDArray.Scalar(value, tv);
-                // The value as the comparison dtype holds it, as a float64 (float arrays only).
+                if (RaisesOverflow(a, ta, s, tv))
+                {
+                    foreach (var op in Ops)
+                    {
+                        Action right = () => Compare(op, a, s).Dispose();
+                        Action left = () => Compare(op, s, a).Dispose();
+                        right.Should().Throw<OverflowException>($"{ta} array {op} {tv} {value}").WithMessage("Python int too large to convert to C long");
+                        left.Should().Throw<OverflowException>($"{tv} {value} {op} {ta} array").WithMessage("Python int too large to convert to C long");
+                    }
+                    continue;
+                }
+                // The value as the comparison dtype holds it, as a float64 (float arrays only): a weak Python scalar is
+                // packed into the array's precision, a strong value converts to the promoted dtype.
                 double t = 0;
                 if (floatArray)
                 {
-                    t = np._FindCommonScalarType(ta, tv) switch
-                    {
-                        NPTypeCode.Half => (double)(Half)AsDouble(value),
-                        NPTypeCode.Single => (float)AsDouble(value),
-                        NPTypeCode.Double => AsDouble(value),
-                        var other => throw new InvalidOperationException($"{ta} with {tv} compares in {other}"),
-                    };
+                    t = IsPythonScalarType(tv)
+                        ? AsDouble(PackWeak(value, ta))
+                        : np._FindCommonScalarType(ta, tv) switch
+                        {
+                            NPTypeCode.Half => (double)(Half)AsDouble(value),
+                            NPTypeCode.Single => (float)AsDouble(value),
+                            NPTypeCode.Double => AsDouble(value),
+                            var other => throw new InvalidOperationException($"{ta} with {tv} compares in {other}"),
+                        };
                 }
                 foreach (var op in Ops)
                 {

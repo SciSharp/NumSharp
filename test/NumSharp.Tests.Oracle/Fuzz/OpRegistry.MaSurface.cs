@@ -420,16 +420,22 @@ namespace NumSharp.Tests.Fuzz
             return (NDMaskedArray)m[parts];
         }
 
-        /// <summary>Disposes the data and mask views a view recipe created (never the operand's own parts): a view holds a
-        /// counted reference to its owner's buffer, which the leak sweep would otherwise read as an escape.</summary>
-        /// <param name="view">The view.</param>
+        /// <summary>Disposes the data and mask views a view recipe created and the stored fill the result holds of its own
+        /// (never the operand's own parts): a view holds a counted reference to its owner's buffer, and a stored fill is
+        /// a pooled 0-d array (numpy.ma's <c>_fill_value</c>), which the leak sweep would otherwise read as escapes.</summary>
+        /// <param name="view">The view (or a result derived from the operand, such as masked_object's).</param>
         /// <param name="owner">The operand it was taken from.</param>
+        /// <remarks>The fill is released only when it is not the owner's: a view shares its owner's stored fill (NumPy's
+        /// <c>_update_from</c>), while a constructor such as <c>np.ma.masked_object</c> stores a converted copy of its
+        /// own.</remarks>
         private static void ReleaseMaView(NDMaskedArray view, NDMaskedArray owner)
         {
             if (!ReferenceEquals(view.data, owner.data))
                 view.data.Dispose();
             if (view._mask is not null && !ReferenceEquals(view._mask, owner._mask))
                 view._mask.Dispose();
+            if (view._fill_value is not null && !ReferenceEquals(view._fill_value, owner._fill_value))
+                view._fill_value.Dispose();
         }
 
         /// <summary>

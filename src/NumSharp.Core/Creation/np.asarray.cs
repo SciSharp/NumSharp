@@ -149,9 +149,14 @@ namespace NumSharp
             // an EQUAL descriptor that is another object (every sized string descriptor is a fresh object) gets a view of
             // the array with that descriptor: np.asarray(u, dtype='<U2') shares u's memory but is not u (owndata false).
             if (noCopyNeeded)
-                return dtype is null || ReferenceEquals(dtype, a.dtype) || dtype.itemsize == 0
-                    ? a
-                    : new NDArray(a.Storage.Alias(a.Shape)) { TensorEngine = a.TensorEngine };
+            {
+                if (dtype is null || ReferenceEquals(dtype, a.dtype) || dtype.itemsize == 0)
+                    return a;
+                // The view is a new object, and the explicit-0-d mark is per object: NumPy's view of an explicit 0-d array
+                // is an explicit 0-d array too, so the mark is carried over like on the copy paths.
+                var view = new NDArray(a.Storage.Alias(a.Shape)) { TensorEngine = a.TensorEngine };
+                return explicitZeroDim ? view.MarkExplicitZeroDimArray() : view;
+            }
 
             // copy == null && !noCopyNeeded: copy / cast as required.
             NDArray converted = !typeMatches ? a.astype(dtype, copy: true, order: order) : a.copy(order);

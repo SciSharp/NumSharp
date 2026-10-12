@@ -56,12 +56,41 @@ namespace NumSharp
                 emptyReturnsNaN: true, ignoreNaN: true);
         }
 
+        /// <summary>
+        ///     The q-th quantile over SEVERAL axes at once, ignoring NaNs (NumPy's tuple <c>axis</c>): the reduced axes are
+        ///     merged into one before the partition, a slice that holds only NaNs (or nothing) gives NaN, and an EMPTY
+        ///     axis list reduces nothing.
+        /// </summary>
+        /// <param name="a">The data (any real dtype; text is refused or deferred, see the exceptions).</param>
+        /// <param name="q">The quantile, in [0, 1].</param>
+        /// <param name="axis">The axes to reduce (negative values count from the end); null reduces the flattened
+        ///     data.</param>
+        /// <param name="out">An optional output array of the result's shape, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place (NumSharp stages a copy
+        ///     anyway).</param>
+        /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's thirteen names).</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <returns>The NaN-ignoring quantile over the reduced axes; <paramref name="out"/> itself when one is
+        ///     given.</returns>
         /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
-        ///     first statement (before q is read).</exception>
+        ///     first statement (before q is read); or bool data with an interpolating method (NumPy's boolean-subtract
+        ///     text).</exception>
+        /// <exception cref="ValueError"><paramref name="q"/> is outside [0, 1] ("Quantiles must be in the range [0, 1]"),
+        ///     or an axis repeats.</exception>
+        /// <exception cref="AxisError">An axis is out of range for <paramref name="a"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="method"/> is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="method"/> is not one of NumPy's names, or
+        ///     <paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="StringComputationNotSupportedException">Text data that NumPy partitions (see
+        ///     <see cref="Backends.Strings.NDStringUfuncs.QuantileAnswer"/> for the errors it raises first).</exception>
+        /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain: this overload has
+        ///     no matrix rule, because NumPy's tuple-axis answer for a matrix is an artifact of matrix semantics inside its
+        ///     own Python code (<c>np.nanquantile(m, 0.5, axis=(0, 1))</c> returns the input's values).</remarks>
         public static NDArray nanquantile(NDArray a, double q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
             RejectComplexQuantileData(a);
             ValidateQuantile(q);
@@ -74,12 +103,41 @@ namespace NumSharp
                 emptyReturnsNaN: true, ignoreNaN: true);
         }
 
+        /// <summary>
+        ///     The q-th quantiles over SEVERAL axes at once, ignoring NaNs (NumPy's tuple <c>axis</c>): the result's first
+        ///     axis is q, a slice that holds only NaNs (or nothing) gives NaN, and an EMPTY axis list reduces nothing.
+        /// </summary>
+        /// <param name="a">The data (any real dtype; text is refused or deferred, see the exceptions).</param>
+        /// <param name="q">The quantiles, each in [0, 1].</param>
+        /// <param name="axis">The axes to reduce (negative values count from the end); null reduces the flattened
+        ///     data.</param>
+        /// <param name="out">An optional output array of the result's shape, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place (NumSharp stages a copy
+        ///     anyway).</param>
+        /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's thirteen names).</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <returns>One NaN-ignoring quantile per element of <paramref name="q"/> along the first axis, over the reduced
+        ///     axes; <paramref name="out"/> itself when one is given.</returns>
         /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
-        ///     first statement (before q is read).</exception>
+        ///     first statement (before q is read); or bool data with an interpolating method (NumPy's boolean-subtract
+        ///     text).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="q"/>, <paramref name="a"/> or
+        ///     <paramref name="method"/> is null.</exception>
+        /// <exception cref="ValueError">A quantile is outside [0, 1] ("Quantiles must be in the range [0, 1]"), or an
+        ///     axis repeats.</exception>
+        /// <exception cref="AxisError">An axis is out of range for <paramref name="a"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="method"/> is not one of NumPy's names, or
+        ///     <paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="StringComputationNotSupportedException">Text data that NumPy partitions (see
+        ///     <see cref="Backends.Strings.NDStringUfuncs.QuantileAnswer"/> for the errors it raises first).</exception>
+        /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain: this overload has
+        ///     no matrix rule, because NumPy's tuple-axis answer for a matrix is an artifact of matrix semantics inside its
+        ///     own Python code.</remarks>
         public static NDArray nanquantile(NDArray a, double[] q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
             RejectComplexQuantileData(a);
             if (q is null) throw new ArgumentNullException(nameof(q));

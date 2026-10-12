@@ -83,6 +83,19 @@ namespace NumSharp
                 outSize *= outShape[i];
             }
 
+            // Trivial case: all reps are 1 → return a keep-order copy preserving the
+            // (possibly promoted) shape. Matches NumPy's array(A, copy=True, ndmin=d)
+            // shortcut: F-contiguous inputs stay F-contiguous, other views materialize as C.
+            // NumPy tests the all-ones reps FIRST, so an EMPTY input with all-ones reps is this owning copy too (probed
+            // 2.4.2: np.tile(np.zeros((0, 3)), (1, 1)).flags.owndata is True), not the view the empty branch below makes.
+            bool allOnes = true;
+            for (int i = 0; i < outDim; i++) if (tup[i] != 1) { allOnes = false; break; }
+            if (allOnes)
+            {
+                var c = aDim == outDim ? A.copy('K') : A.reshape(Shape.Adopt(aShape)).copy('K');
+                return c;
+            }
+
             // Empty result: any rep==0 or any aShape[i]==0 → a zero-element array of the correct shape and dtype.
             // NumPy ends tile with `c.reshape(shape_out)`: for an EMPTY input c is A itself (or its ndmin view), so the
             // result is a view of A; for a zero repetition of a non-empty input c is the fresh repeat, so the result is a
@@ -96,17 +109,6 @@ namespace NumSharp
                 }
                 var fresh = zeros(Shape.Adopt(outShape), A.dtype);
                 return new NDArray(fresh.Storage.Alias(fresh.Shape)) { TensorEngine = A.TensorEngine };
-            }
-
-            // Trivial case: all reps are 1 → return a keep-order copy preserving the
-            // (possibly promoted) shape. Matches NumPy's array(A, copy=True, ndmin=d)
-            // shortcut: F-contiguous inputs stay F-contiguous, other views materialize as C.
-            bool allOnes = true;
-            for (int i = 0; i < outDim; i++) if (tup[i] != 1) { allOnes = false; break; }
-            if (allOnes)
-            {
-                var c = aDim == outDim ? A.copy('K') : A.reshape(Shape.Adopt(aShape)).copy('K');
-                return c;
             }
 
             // General case: insert size-1 axes between A's axes to create a tile axis next to each
