@@ -225,6 +225,8 @@
     "where1": ["numpy.where"],
     "argwhere": ["numpy.argwhere"],
     "flatnonzero": ["numpy.flatnonzero"],
+    "unravel": ["numpy.unravel_index"],
+    "ravelmi": ["numpy.ravel_multi_index"],
     "linspace": ["numpy.linspace"],
     "bcastw": ["numpy.broadcast_to"],
     "copyk:copy": ["numpy.ndarray.copy"],

@@ -16,7 +16,13 @@ namespace NumSharp
         ///     NumSharp's legacy <c>string → NDArray</c> conversion (a char array) does not apply here. A <c>byte[]</c> stays a
         ///     numeric <c>uint8</c> array; build an <c>S</c> scalar with <see cref="NDArray.Scalar(object)"/> for NumPy's
         ///     <c>bytes</c>.
+        ///     <para>
+        ///     <c>[ModuleName("np.strings")]</c> files its members under NumPy's <c>numpy.strings</c> in the API inventory
+        ///     (<c>coverage/NumSharp.Tools.ApiInventory</c>), whose guard refuses a public nested static class of <c>np</c>
+        ///     that names no module.
+        ///     </para>
         /// </remarks>
+        [ModuleName("np.strings")]
         public static partial class strings
         {
             /// <summary>

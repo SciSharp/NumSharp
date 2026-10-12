@@ -397,6 +397,22 @@ namespace NumSharp.Tests.Fuzz
             E(l, "np.apply_over_axes", "int[] axes, view callback (re-expand path)", f => np.apply_over_axes((x, ax) => x[ax == 0 ? "0" : ":, :, 0"], f.Cube, new[] { 0, 2 }));
             E(l, "np.are_broadcastable", "arrays", f => Box(np.are_broadcastable(f.M, f.V3)));
             E(l, "np.are_broadcastable", "shapes", f => Box(np.are_broadcastable(new long[] { 3, 4 }, new long[] { 4 })));
+            // numpy.strings ([ModuleName("np.strings")]): the string oracle replays these through its own harness, which
+            // the corpus sweep does not measure, so the catalogue covers them. The operands are each entry's own scratch.
+            E(l, "np.strings.add", "U + U, a C# string operand", f =>
+            {
+                using var a = np.array(new[] { "ab", "c" });
+                using var b = np.array(new[] { "x", "yz" });
+                using var ab = np.strings.add(a, b);
+                return np.strings.add(ab, "!");
+            });
+            E(l, "np.strings.multiply", "U * int array, a C# string operand", f =>
+            {
+                using var a = np.array(new[] { "ab", "c" });
+                using var n = np.array(new[] { 2L, 3L });
+                using var an = np.strings.multiply(a, n);
+                return np.strings.multiply("xy", n);
+            });
             E(l, "np.array2string", "float matrix", f => np.array2string(f.M));
             E(l, "np.array2string", "non-contiguous + nan", f => np.array2string(f.MT) + np.array2string(f.NanV));
             E(l, "np.array_equiv", "broadcast-consistent", f => Box(np.array_equiv(f.M, f.M)));
