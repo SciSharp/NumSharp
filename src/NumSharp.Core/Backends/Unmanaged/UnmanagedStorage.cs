@@ -524,12 +524,29 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(descr));
 
             _typecode = descr.GetTypeCode(); // throws the descriptive "no storage yet" for a descriptor-only class
+            ThrowIfVStringStorage(descr);
             // The lane's CLR type (System.String for both string classes, whose descriptor type is string / byte[]) —
             // `_dtype.GetTypeCode()` must give back the lane, and byte[] would read as uint8.
             _dtype = _typecode.AsType();
             _descr = descr.Meta is StringDTypeMeta
                 ? NDStringStorage.AllocationDescr(descr)
                 : descr.isnative ? descr : descr.Meta.EnsureCanonical(descr);
+        }
+
+        /// <summary>
+        ///     Refuses to allocate storage for a NEP 55 <c>StringDType</c> descriptor until its own storage exists (P1.3 of
+        ///     <c>docs/plans/strings-phase1-completion.md</c>). The class shares the <see cref="NPTypeCode.String"/> lane with
+        ///     the fixed-width strings, so without this check a <c>T</c> request would fall into a fixed-width or numeric
+        ///     allocation and lay out cells NumPy's <c>StringDType</c> does not have.
+        /// </summary>
+        /// <param name="descr">The requested descriptor.</param>
+        /// <exception cref="NotSupportedException"><paramref name="descr"/> is a <c>StringDType</c> descriptor.</exception>
+        private static void ThrowIfVStringStorage(DType descr)
+        {
+            if (descr.Meta is VStringDTypeMeta)
+                throw new NotSupportedException(
+                    $"Arrays of {descr} cannot be allocated yet: the StringDType descriptor, its promotion and casting rules exist, " +
+                    "and its storage (16-byte cells over an arena) lands with P1.3 of docs/plans/strings-phase1-completion.md.");
         }
 
         private UnmanagedStorage(object value)
@@ -1427,6 +1444,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(dtype));
 
             var typeCode = dtype.GetTypeCode(); // throws the descriptive "no storage yet" for a descriptor-only class
+            ThrowIfVStringStorage(dtype);
             if (dtype.Meta is StringDTypeMeta)
             {
                 // The element width comes from the descriptor (an unsized request becomes one character), and the

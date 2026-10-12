@@ -175,6 +175,16 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void TextNumberConversions() => Run("strconv");
 
         /// <summary>
+        ///     Section tdtype (strings phase 1, P1.2): the NEP 55 <c>StringDType</c> descriptor without arrays — every
+        ///     attribute for every kind of <c>na_object</c> (None, NaN, text, numbers, bytes, <c>np.float16</c>, complex, big
+        ///     ints, tuples, lists; a lone surrogate is NumPy's encode error) and <c>coerce</c>, <c>np.dtype</c>'s spellings,
+        ///     equality (and against a dtype string), promotion with every class, common instances and sequences, the
+        ///     casting-rule table both ways under every rule, the scalar hierarchy, <c>np.isdtype</c>'s refusals,
+        ///     <c>newbyteorder</c> and the ufunc <c>dtype=</c> refusal. Every case is strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeDescriptors() => Run("tdtype");
+
+        /// <summary>
         ///     The most cases each section may defer to the computational phase (see the class remarks): the deferrals
         ///     left are sorting, searching, set routines, histograms and quantiles over text. A section not listed may
         ///     defer nothing.
@@ -193,7 +203,7 @@ namespace NumSharp.Tests.Strings
             {
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
                 "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
-                "strcomp", "strarith", "strconv",
+                "strcomp", "strarith", "strconv", "tdtype",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)
@@ -537,6 +547,17 @@ namespace NumSharp.Tests.Strings
                     Check("alignment", d.alignment, exp.GetProperty("alignment").GetInt32());
                     Check("repr", d.ToString(true), exp.GetProperty("repr").GetString());
                     Check("str()", d.ToString(), exp.GetProperty("strfmt").GetString());
+                    // Section tdtype records what a StringDType adds (and hasobject / flags for every descriptor).
+                    if (exp.TryGetProperty("hasobject", out var hasobject))
+                        Check("hasobject", d.hasobject, hasobject.GetBoolean());
+                    if (exp.TryGetProperty("flags", out var flags))
+                        Check("flags", d.flags, flags.GetInt32());
+                    if (exp.TryGetProperty("coerce", out var coerce))
+                        Check("coerce", d.coerce, coerce.GetBoolean());
+                    if (exp.TryGetProperty("has_na", out var hasNA))
+                        Check("has na_object", d.HasNAObject, hasNA.GetBoolean());
+                    if (exp.TryGetProperty("na_repr", out var naRepr))
+                        Check("repr(na_object)", NumSharp.Backends.Strings.NDPyObject.Repr(d.na_object), naRepr.GetString());
                     break;
                 }
                 case "masked":

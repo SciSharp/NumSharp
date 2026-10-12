@@ -18,9 +18,12 @@ namespace NumSharp
         ///     (C <c>long</c>: 32-bit on Windows and 32-bit hosts, 64-bit on LP64 Unix). <c>LongDoubleDType</c> and
         ///     <c>CLongDoubleDType</c> alias the 64-bit float / complex classes — NumSharp has no extended precision, exactly
         ///     as NumPy's win-amd64 build. <c>StrDType</c> and <c>BytesDType</c> are the fixed-width string classes
-        ///     (<see cref="StringDTypeMeta"/>). The classes NumPy has and NumSharp does not (<c>Complex64DType</c>,
-        ///     <c>StringDType</c>, <c>ObjectDType</c>, <c>VoidDType</c>) are absent rather than stubbed; <c>DecimalDType</c> and
-        ///     <c>CharDType</c> are NumSharp-only.
+        ///     (<see cref="StringDTypeMeta"/>). <c>StringDType</c> (NEP 55) is NumPy's one class you CALL with keyword
+        ///     parameters; C# cannot make a member both a class and a call, so it is the pair of factory methods
+        ///     <see cref="StringDType(bool)"/> / <see cref="StringDType(object, bool)"/>, and the class itself is
+        ///     <see cref="DTypeRegistry.VString"/> (<c>type(dt)</c> is <see cref="DType.Meta"/>). The classes NumPy has and
+        ///     NumSharp does not (<c>Complex64DType</c>, <c>ObjectDType</c>, <c>VoidDType</c>) are absent rather than stubbed;
+        ///     <c>DecimalDType</c> and <c>CharDType</c> are NumSharp-only.
         /// </remarks>
         [ModuleName("np.dtypes")]
         public static class dtypes
@@ -97,6 +100,46 @@ namespace NumSharp
 
             /// <summary>NumSharp-only: the <see cref="decimal"/> class (no NumPy analog; type number 256, <c>isbuiltin == 2</c>).</summary>
             public static LegacyBuiltinDTypeMeta DecimalDType => DTypeRegistry.Decimal;
+
+            // ---- NEP 55 StringDType: called with parameters ----
+
+            /// <summary>
+            ///     <c>np.dtypes.StringDType(coerce=True)</c>: a NEW variable-width string descriptor without a missing-data
+            ///     object. Every call returns a fresh descriptor (NumPy's <c>StringDType() is StringDType()</c> is False),
+            ///     equal to any other with the same parameters.
+            /// </summary>
+            /// <param name="coerce">NumPy's <c>coerce</c>: true (the default) stores a value that is not a <c>str</c> as its
+            ///     <c>str()</c> (<c>3.25</c> → <c>'3.25'</c>); false refuses it with NumPy's
+            ///     <c>ValueError: StringDType only allows string data when string coercion is disabled.</c></param>
+            /// <returns>A fresh descriptor: <c>StringDType()</c> or <c>StringDType(coerce=False)</c>.</returns>
+            /// <remarks>
+            ///     The overload without <c>na_object</c> keeps NumPy's "not given" apart from <c>na_object=None</c>
+            ///     (decision D5): <c>StringDType()</c> has no missing-data object at all, while
+            ///     <c>StringDType(na_object: null)</c> has <c>None</c> as its sentinel.
+            /// </remarks>
+            public static DType StringDType(bool coerce = true) => DTypeRegistry.VString.Descr(false, null, coerce);
+
+            /// <summary>
+            ///     <c>np.dtypes.StringDType(na_object=…, coerce=True)</c>: a NEW variable-width string descriptor with a
+            ///     missing-data sentinel.
+            /// </summary>
+            /// <param name="na_object">The sentinel (decision D5): <see langword="null"/> is Python's <c>None</c>; a
+            ///     <see cref="double"/> / <see cref="float"/> NaN is <c>nan</c> (NaN-like: <c>StringDType(na_object=nan)</c>
+            ///     equals <c>StringDType(na_object=np.nan)</c>); a <see cref="string"/> (or a <see cref="char"/>) is a string
+            ///     sentinel, which missing values read as in string operations; any other value is an "other" sentinel compared
+            ///     with Python's <c>==</c> (numbers by value).</param>
+            /// <param name="coerce">NumPy's <c>coerce</c> (see <see cref="StringDType(bool)"/>).</param>
+            /// <returns>A fresh descriptor, printing as <c>StringDType(na_object=None)</c>,
+            ///     <c>StringDType(na_object='NA', coerce=False)</c>, …</returns>
+            /// <exception cref="UnicodeEncodeError">A string sentinel (or the <c>str()</c> of another sentinel) holds a lone
+            ///     surrogate: NumPy stores it as UTF-8 and raises CPython's
+            ///     <c>'utf-8' codec can't encode character '\ud800' in position 0: surrogates not allowed</c>.</exception>
+            /// <remarks>
+            ///     Pass a <see cref="bool"/> sentinel BY NAME (<c>StringDType(na_object: true)</c>): a positional bool binds
+            ///     the <see cref="StringDType(bool)"/> overload and means <c>coerce</c>.
+            /// </remarks>
+            public static DType StringDType(object na_object, bool coerce = true) => DTypeRegistry.VString.Descr(true, na_object, coerce);
+
             /// <summary>NumSharp-only: the <see cref="char"/> class (no NumPy analog; promotes as uint16; type number 257).</summary>
             public static LegacyBuiltinDTypeMeta CharDType => DTypeRegistry.Char;
         }

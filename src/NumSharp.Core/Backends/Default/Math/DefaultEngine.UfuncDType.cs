@@ -11,6 +11,14 @@ namespace NumSharp.Backends
             "order or time unit. You can avoid this error by using the scalar types `np.float64` or the dtype string notation.";
 
         /// <summary>
+        ///     NumPy's refusal text for a <c>dtype=</c> / <c>signature=</c> argument that is an INSTANCE of a non-legacy DType
+        ///     class (a <c>StringDType</c> descriptor; <c>_get_dtype</c>), verbatim. NumPy accepts the class object there; NumSharp
+        ///     has no way to pass a class to <c>dtype=</c>, so every <c>StringDType</c> request is refused this way.
+        /// </summary>
+        internal const string NewStyleDTypeInstanceText =
+            "Cannot pass a new user DType instance to the `dtype` or `signature` arguments of ufuncs. Pass the DType class instead.";
+
+        /// <summary>
         ///     The loop lane a ufunc's (or a reduce-based reduction's) <c>dtype=</c> argument selects, after NumPy's
         ///     <c>_get_dtype</c> check: the argument chooses only the DType CLASS, so a descriptor that is neither its
         ///     class's singleton nor equivalent to it — a byte-swapped <c>'&gt;f8'</c>, a sized string <c>'U6'</c> — is refused
@@ -74,9 +82,13 @@ namespace NumSharp.Backends
         ///     singleton or is equivalent to it (<c>PyArray_EquivTypes</c>).
         /// </summary>
         /// <param name="dtype">A requested loop descriptor.</param>
-        /// <exception cref="TypeError">A byte-swapped, sized-string or otherwise detailed descriptor.</exception>
+        /// <exception cref="TypeError">A byte-swapped, sized-string or otherwise detailed descriptor
+        ///     (<see cref="GeneralDTypeOnlyText"/>), or an instance of a non-legacy class such as <c>StringDType</c>
+        ///     (<see cref="NewStyleDTypeInstanceText"/>, checked first, as in NumPy).</exception>
         internal static void ThrowIfNotGeneralDType(DType dtype)
         {
+            if (!dtype.Meta.IsLegacy)
+                throw new TypeError(NewStyleDTypeInstanceText);
             var singleton = dtype.Meta.Singleton;
             if (ReferenceEquals(singleton, dtype))
                 return;

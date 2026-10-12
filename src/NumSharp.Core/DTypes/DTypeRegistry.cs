@@ -64,6 +64,13 @@ namespace NumSharp
         ///     so it is reached by name only (<c>"S5"</c>, <see cref="np.bytes_"/>).
         /// </summary>
         public static StringDTypeMeta Bytes { get; }
+        /// <summary>
+        ///     <c>np.dtypes.StringDType</c> — the NEP 55 variable-width string class (kind <c>'T'</c>, type number 2056). It
+        ///     shares the <see cref="NPTypeCode.String"/> lane with <see cref="Str"/> / <see cref="Bytes"/> but owns neither the
+        ///     code nor a C# type, and it has no singleton: descriptors come from <see cref="np.dtypes.StringDType(bool)"/>,
+        ///     <see cref="np.dtypes.StringDType(object, bool)"/> and <c>np.dtype("T")</c>, a fresh one each time.
+        /// </summary>
+        public static VStringDTypeMeta VString { get; }
         /// <summary><c>np.dtypes.DateTime64DType</c>.</summary>
         public static DatetimeDTypeMeta DateTime64 { get; }
         /// <summary><c>np.dtypes.TimeDelta64DType</c>.</summary>
@@ -134,6 +141,13 @@ namespace NumSharp
             DateTime64.Singleton = DateTime64.Descr(DatetimeMetaData.Generic);
             TimeDelta64.Singleton = TimeDelta64.Descr(DatetimeMetaData.Generic);
 
+            // NEP 55 StringDType: a NEW-STYLE class (no builtin singleton — each descriptor instance is its own, as in
+            // NumPy where every instance carries a string allocator). It shares the NPTypeCode.String lane with S / U
+            // (decision D4) but owns neither the lane nor the C# string type, so `(DType)NPTypeCode.String` and
+            // `np.dtype(typeof(string))` keep meaning `<U`.
+            VString = new VStringDTypeMeta();
+            Add(VString);
+
             PyLong = new PyScalarDTypeMeta("_PyLongDType", PyScalarKind.Int, NPTypeCode.Int64);
             PyFloat = new PyScalarDTypeMeta("_PyFloatDType", PyScalarKind.Float, NPTypeCode.Double);
             PyComplex = new PyScalarDTypeMeta("_PyComplexDType", PyScalarKind.Complex, NPTypeCode.Complex);
@@ -147,6 +161,7 @@ namespace NumSharp
             InitializeNumericCasts();
             InitializeDatetimeCasts();
             InitializeStringCasts();
+            InitializeVStringCasts();
         }
 
         private static LegacyBuiltinDTypeMeta Legacy(string name, string module, int typeNum, NPTypeCode code, Type scalar, string scalarName,
@@ -285,6 +300,40 @@ namespace NumSharp
             /* S -> U is same-kind (safe when long enough); U -> S is unsafe (a code point above 127 cannot be stored). */
             Bytes.AddCastingImpl(new ToStringCastingImpl(Bytes, Str));
             Str.AddCastingImpl(new ToStringCastingImpl(Str, Bytes));
+        }
+
+        /// <summary>
+        ///     NumPy's <c>stringdtype/casts.cpp</c> <c>get_casts()</c>, class by class: within <c>StringDType</c> (minimal
+        ///     <c>unsafe</c>, resolved to <c>no</c> casting unless an NA-holding descriptor loses its NA); <c>U</c> ↔ <c>T</c>
+        ///     and <c>S</c> ↔ <c>T</c> <c>same_kind</c> (and only to a sized <c>U</c> / <c>S</c>); <c>T</c> ↔ bool (minimal
+        ///     <c>same_kind</c> both ways, resolved <c>unsafe</c> out of <c>T</c> and <c>safe</c> into it); numbers and the
+        ///     datetime pair into <c>T</c> <c>safe</c>, <c>T</c> into them <c>unsafe</c>. NumSharp's Decimal takes float64's
+        ///     casts and its Char uint16's (the classes they convert as); NumPy's void casts have no NumSharp class.
+        /// </summary>
+        private static void InitializeVStringCasts()
+        {
+            VString.AddCastingImpl(new VStringToVStringCastingImpl(VString));
+
+            Str.AddCastingImpl(new AnyToVStringCastingImpl(Str, VString, NPY_CASTING.NPY_SAME_KIND_CASTING, NPY_CASTING.NPY_SAME_KIND_CASTING));
+            VString.AddCastingImpl(new VStringToFixedWidthCastingImpl(VString, Str));
+            Bytes.AddCastingImpl(new AnyToVStringCastingImpl(Bytes, VString, NPY_CASTING.NPY_SAME_KIND_CASTING, NPY_CASTING.NPY_SAME_KIND_CASTING));
+            VString.AddCastingImpl(new VStringToFixedWidthCastingImpl(VString, Bytes));
+
+            Bool.AddCastingImpl(new AnyToVStringCastingImpl(Bool, VString, NPY_CASTING.NPY_SAME_KIND_CASTING, NPY_CASTING.NPY_SAFE_CASTING));
+            VString.AddCastingImpl(new VStringToNumberCastingImpl(VString, Bool, NPY_CASTING.NPY_SAME_KIND_CASTING));
+
+            var numbers = new[] { Int8, UInt8, Int16, UInt16, Int32, UInt32, Int64, UInt64, Half, Single, Double, Complex128, Decimal, Char };
+            foreach (var num in numbers)
+            {
+                num.AddCastingImpl(new AnyToVStringCastingImpl(num, VString, NPY_CASTING.NPY_SAFE_CASTING, NPY_CASTING.NPY_SAFE_CASTING));
+                VString.AddCastingImpl(new VStringToNumberCastingImpl(VString, num, NPY_CASTING.NPY_UNSAFE_CASTING));
+            }
+
+            foreach (var time in new[] { DateTime64, TimeDelta64 })
+            {
+                time.AddCastingImpl(new AnyToVStringCastingImpl(time, VString, NPY_CASTING.NPY_SAFE_CASTING, NPY_CASTING.NPY_SAFE_CASTING));
+                VString.AddCastingImpl(new VStringToNumberCastingImpl(VString, time, NPY_CASTING.NPY_UNSAFE_CASTING));
+            }
         }
 
         // ---- lookups ----

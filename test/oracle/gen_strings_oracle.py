@@ -199,6 +199,8 @@ def expect_of(r, operands):
         return array_expect(r, operands)
     if isinstance(r, (tuple, list)) and r and all(isinstance(x, np.ndarray) for x in r):
         return {"kind": "tuple", "items": [array_expect(x, operands) for x in r]}
+    if isinstance(r, _TProps):
+        return tprops(r.d)
     if isinstance(r, np.dtype):
         return {"kind": "dtype", "str": r.str, "repr": repr(r)}
     if isinstance(r, (bool, np.bool_)):
@@ -3802,6 +3804,246 @@ def _strconv_reduce(name, a, dt):
     return getattr(np, name)(a, axis=None, dtype=dt)
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# U. NEP 55 StringDType descriptors (strings phase 1, P1.2)
+# ----------------------------------------------------------------------------------------------------------------------
+
+_ABSENT = object()
+
+
+def _jf(x):
+    """A float as JSON (the corpus is written with ``allow_nan=False``).
+
+    :param x: the float.
+    :returns: ``"nan"``, ``"inf"`` or ``"-inf"`` for the non-finite values (the replay parses them back), else ``x``.
+    """
+    if x != x:
+        return "nan"
+    if x in (float("inf"), float("-inf")):
+        return "inf" if x > 0 else "-inf"
+    return x
+
+
+def enc_na(v):
+    """A StringDType ``na_object`` as JSON, so the replay rebuilds the C# value standing in for it.
+
+    :param v: the Python object: anything ``enc`` encodes, a float (NaN / infinity included), an np.float16 (by its
+        bits, so a NaN payload survives), a complex, a Python int past int64, a tuple or a list (element by element).
+    :returns: the JSON-ready encoding.
+    :raises TypeError: an object ``enc`` cannot encode either.
+    """
+    if isinstance(v, np.float16):
+        return {"f2bits": int(np.array(v).view(np.uint16))}
+    if isinstance(v, complex):
+        return {"complex": [_jf(v.real), _jf(v.imag)]}
+    if isinstance(v, float):
+        return {"float": _jf(v)}
+    if isinstance(v, int) and not isinstance(v, bool) and not (-2 ** 63 <= v < 2 ** 63):
+        return {"bigint": str(v)}
+    if isinstance(v, tuple):
+        return {"tuple": [enc_na(x) for x in v]}
+    if isinstance(v, list):
+        return {"list": [enc_na(x) for x in v]}
+    return enc(v)
+
+
+class TSpec:
+    """A StringDType descriptor request: ``np.dtypes.StringDType(na_object=..., coerce=...)`` with the sentinel absent
+    unless given (NumPy distinguishes "not given" from ``None``). Building happens inside the recorded call, so a
+    sentinel NumPy refuses (a lone surrogate) is a recorded error, not a generator crash.
+    """
+
+    def __init__(self, na=_ABSENT, coerce=True):
+        """Records the request.
+
+        :param na: the sentinel, or ``_ABSENT`` for none.
+        :param coerce: NumPy's ``coerce``.
+        """
+        self.na, self.coerce = na, coerce
+
+    def enc(self):
+        """The request as JSON.
+
+        :returns: ``{"T": {"coerce": bool, "na": <enc_na>}}``, ``na`` left out when the sentinel is absent.
+        """
+        d = {"coerce": self.coerce}
+        if self.na is not _ABSENT:
+            d["na"] = enc_na(self.na)
+        return {"T": d}
+
+    def build(self):
+        """The NumPy descriptor.
+
+        :returns: a fresh ``StringDType`` instance.
+        :raises UnicodeEncodeError: a string sentinel (or a sentinel's ``str()``) with a lone surrogate.
+        """
+        kw = {"coerce": self.coerce}
+        if self.na is not _ABSENT:
+            kw["na_object"] = self.na
+        return np.dtypes.StringDType(**kw)
+
+
+def senc(s):
+    """A descriptor request as JSON.
+
+    :param s: a dtype string or a ``TSpec``.
+    :returns: the string itself, or the TSpec's ``{"T": {...}}``.
+    """
+    return s if isinstance(s, str) else s.enc()
+
+
+def sbuild(s):
+    """The NumPy descriptor of a request.
+
+    :param s: a dtype string or a ``TSpec``.
+    :returns: ``np.dtype(s)`` for a string, the StringDType call for a TSpec.
+    :raises TypeError: a dtype string NumPy does not understand (recorded as the case's error).
+    """
+    return np.dtype(s) if isinstance(s, str) else s.build()
+
+
+def tprops(d):
+    """The ``props`` expectation of a descriptor, with the attributes a StringDType adds.
+
+    :param d: any NumPy descriptor.
+    :returns: the attributes of ``dtype_props`` plus ``hasobject`` and ``flags``, and for a StringDType ``coerce``,
+        ``has_na`` and (when the attribute exists) ``na_repr``, the sentinel's ``repr()``.
+    """
+    r = {"kind": "props", "str": d.str, "name": d.name, "char": d.char, "dkind": d.kind, "num": int(d.num),
+         "itemsize": int(d.itemsize), "byteorder": d.byteorder, "isbuiltin": int(d.isbuiltin),
+         "isnative": bool(d.isnative), "alignment": int(d.alignment), "repr": repr(d), "strfmt": str(d),
+         "hasobject": bool(d.hasobject), "flags": int(d.flags)}
+    if d.kind == "T":
+        r["coerce"] = bool(d.coerce)
+        r["has_na"] = hasattr(d, "na_object")
+        if r["has_na"]:
+            r["na_repr"] = repr(d.na_object)
+    return r
+
+
+_CATEGORIES = {"generic": np.generic, "character": np.character, "flexible": np.flexible, "number": np.number,
+               "integer": np.integer, "inexact": np.inexact, "str_": np.str_, "bytes_": np.bytes_}
+
+
+def gen_tdtype():
+    """Section tdtype (strings phase 1, P1.2): the NEP 55 ``StringDType`` descriptor without arrays — its attributes
+    for every kind of sentinel, equality, promotion (classes, common instances, sequences), the casting-rule table, the
+    scalar hierarchy, ``np.isdtype``'s refusals, ``newbyteorder`` and the ufunc ``dtype=`` refusal. Every case is
+    strict: none needs storage.
+    """
+    nan, inf = float("nan"), float("inf")
+    sentinels = [None, nan, -nan, "NA", "", "None", "it's", 'q"z', "a\nb", "😀", 5, -7, 1.5, -0.0, 0.0, inf, -inf,
+                 True, False, b"x", b"\x80", np.float16(1.5), np.float16(nan), np.float16(65504), complex(1, 2),
+                 complex(nan, 0), complex(0, 1), 2 ** 70, -2 ** 64, (1,), (1, 2), (), [], ["a", None], ["\ud800"],
+                 "\ud800", "a\udc00b", "x" * 40]
+    t_specs = [TSpec(), TSpec(coerce=False)] + [TSpec(na) for na in sentinels] + \
+              [TSpec(None, coerce=False), TSpec("NA", coerce=False), TSpec(nan, coerce=False)]
+
+    # 1. descriptor attributes: np.dtype's spellings and every kind of sentinel (a lone surrogate in a string sentinel is
+    #    CPython's encode error at construction).
+    for spec in ["T", "<T", ">T", "=T", "|T", "T8", "T16", "StringDType", "StringDType()", "t", "TT", "T()", "T(2)",
+                 "(2)T", "|T(2)", "U5", "f8"] + t_specs:
+        add("tdtype", "t_props", params={"spec": senc(spec)}, call=lambda s=spec: _TProps(sbuild(s)))
+
+    # 2. equality: every pair of a set of descriptors (NaN sentinels equal, 5 == 5.0, True == 1, None != absent,
+    #    coerce differing, the same sentinel object vs another), and a descriptor against a dtype STRING (StringDType's
+    #    __eq__ does not coerce one: T == 'T' is False, while U5 == 'U5' is True).
+    eq_set = [TSpec(), TSpec(coerce=False), TSpec(None), TSpec(None, coerce=False), TSpec(nan), TSpec(-nan),
+              TSpec("NA"), TSpec("NB"), TSpec(5), TSpec(5.0), TSpec(True), TSpec(1), TSpec(complex(1, 0)),
+              TSpec(0.0), TSpec(-0.0), TSpec(b"x"), TSpec("x"), TSpec(np.float16(nan)), TSpec(2 ** 53 + 1),
+              TSpec(float(2 ** 53)), TSpec((1, 2)), "T", "U5", "f8"]
+    for a in eq_set:
+        for b in eq_set:
+            # "same": both descriptors are built from ONE sentinel object, whose identity na_eq_cmp tests first (an
+            # np.float16 NaN equals itself only that way); the replay decodes the sentinel once for such a pair.
+            prm = {"a": senc(a), "b": senc(b)}
+            if a is b and isinstance(a, TSpec):
+                prm["same"] = True
+            add("tdtype", "t_eq", params=prm, call=lambda a=a, b=b: bool(sbuild(a) == sbuild(b)))
+    for a in [TSpec(), TSpec(None), "U5", "f8"]:
+        for b in ["T", "U", "U5", "str", "f8", "StringDType()"]:
+            add("tdtype", "t_eq_str", params={"a": senc(a), "b": b}, call=lambda a=a, b=b: bool(sbuild(a) == b))
+
+    # 3. promotion: T with every class (only U promotes), the common instance of two StringDTypes (compatible
+    #    sentinels, coerce from the first), and sequences (NumPy's most-knowledgeable reduction, weak Python literals).
+    others = ["U5", "U", "S5", "S", "?", "i1", "u1", "i8", "u8", "f2", "f4", "f8", "c16", "M8[s]", "m8[s]", "T"]
+    for o in others:
+        for x, y in (("T", o), (o, "T")):
+            add("tdtype", "t_promote", params={"a": x, "b": y}, call=lambda x=x, y=y: np.promote_types(sbuild(x), sbuild(y)))
+    inst = [TSpec(), TSpec(coerce=False), TSpec(None), TSpec(nan), TSpec("NA"), TSpec("NB"), TSpec(None, coerce=False),
+            TSpec(5), TSpec(5.0), "U5"]
+    for a in inst:
+        for b in inst:
+            add("tdtype", "t_promote", params={"a": senc(a), "b": senc(b)},
+                call=lambda a=a, b=b: np.promote_types(sbuild(a), sbuild(b)))
+    groups = [["T"], ["T", "U5"], ["U5", "T", "S2"], ["T", "U5", "i8"], ["i8", "T"], ["U5", "i8", "T"],
+              ["T", "S5", "U5"], [TSpec(None), "T"], [TSpec(None), TSpec(nan)], ["T", TSpec(None, coerce=False), "U3"],
+              ["S3", "T"], ["T", "T", "T"]]
+    for g in groups:
+        add("tdtype", "t_result", params={"specs": [senc(s) for s in g], "extra": []},
+            call=lambda g=g: np.result_type(*[sbuild(s) for s in g]))
+    for g, extra in [(["T"], [1]), (["T"], [1.5]), (["T"], [True]), (["T", "U5"], [1]), (["U5"], [1]),
+                     (["T"], [complex(1, 2)])]:
+        add("tdtype", "t_result", params={"specs": [senc(s) for s in g], "extra": [enc_na(e) for e in extra]},
+            call=lambda g=g, extra=extra: np.result_type(*[sbuild(s) for s in g], *extra))
+
+    # 4. casting rules: T against every class under every rule, and between StringDType instances (an NA to a no-NA
+    #    descriptor is unsafe; any other pair is a no-cast).
+    casts = ["U5", "U", "S5", "S", "?", "i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "f2", "f4", "f8", "c16",
+             "M8[s]", "m8[s]", "M8", "m8"]
+    for o in casts:
+        for x, y in (("T", o), (o, "T")):
+            for casting in ("no", "equiv", "safe", "same_kind", "unsafe"):
+                add("tdtype", "t_can_cast", params={"from": x, "to": y, "casting": casting},
+                    call=lambda x=x, y=y, c=casting: bool(np.can_cast(sbuild(x), sbuild(y), c)))
+    for a in [TSpec(), TSpec(None), TSpec(nan), TSpec("NA"), TSpec(coerce=False)]:
+        for b in [TSpec(), TSpec(None), TSpec(nan), TSpec("NA"), TSpec(coerce=False)]:
+            for casting in ("no", "equiv", "safe", "same_kind", "unsafe"):
+                add("tdtype", "t_can_cast", params={"from": senc(a), "to": senc(b), "casting": casting},
+                    call=lambda a=a, b=b, c=casting: bool(np.can_cast(sbuild(a), sbuild(b), c)))
+
+    # 5. the scalar hierarchy: StringDType's type is Python's str (np.str_ derives from it), under no NumPy category.
+    for a, b in [("T", "T"), ("U5", "T"), ("T", "U5"), ("S5", "T"), ("T", "S5"), ("i8", "T"), ("T", "i8"),
+                 (TSpec(None), "T"), ("T", TSpec(coerce=False)), ("T", "U"), ("U3", "U")] + \
+                [("T", c) for c in _CATEGORIES] + [("U5", c) for c in ("character", "str_")]:
+        if isinstance(b, str) and b in _CATEGORIES:
+            add("tdtype", "t_issubdtype", params={"a": senc(a), "category": b},
+                call=lambda a=a, b=b: bool(np.issubdtype(sbuild(a), _CATEGORIES[b])))
+        else:
+            add("tdtype", "t_issubdtype", params={"a": senc(a), "b": senc(b)},
+                call=lambda a=a, b=b: bool(np.issubdtype(sbuild(a), sbuild(b))))
+
+    # 6. np.isdtype refuses a StringDType descriptor as the dtype (first) and as a kind.
+    for dt, kinds in [("T", ["numeric"]), ("T", ["foo"]), ("T", []), ("f8", ["numeric"]), ("U5", ["numeric"])]:
+        add("tdtype", "t_isdtype", params={"dtype": dt, "kinds": kinds},
+            call=lambda dt=dt, k=kinds: bool(np.isdtype(sbuild(dt), tuple(k) if len(k) != 1 else k[0])))
+    for dt, kinds in [("f8", ["T"]), ("f8", ["f8", "T"]), ("T", ["f8"])]:
+        add("tdtype", "t_isdtype_dtypes", params={"dtype": dt, "kinds": kinds},
+            call=lambda dt=dt, k=kinds: bool(np.isdtype(sbuild(dt), tuple(sbuild(x) for x in k) if len(k) != 1 else sbuild(k[0]))))
+
+    # 7. byte order: new-style descriptors refuse newbyteorder (after the order code is parsed).
+    for spec in ["T", TSpec(None)]:
+        for order in ["S", "=", "<", ">", "|", "x"]:
+            add("tdtype", "t_newbyteorder", params={"spec": senc(spec), "order": order},
+                call=lambda s=spec, o=order: sbuild(s).newbyteorder(o))
+
+    # 8. a ufunc refuses a new-style descriptor INSTANCE as dtype=.
+    for spec in ["T", TSpec(None)]:
+        add("tdtype", "t_ufunc_dtype", params={"spec": senc(spec), "name": "add"}, operands=[num_operand(np.arange(3))],
+            call=lambda x, s=spec: np.add(x, x, dtype=sbuild(s)))
+
+
+class _TProps:
+    """Marks a descriptor whose expectation is its full attribute set (``tprops``) rather than ``{"kind": "dtype"}``."""
+
+    def __init__(self, d):
+        """Wraps the descriptor.
+
+        :param d: the NumPy descriptor the call returned.
+        """
+        self.d = d
+
+
 def main():
     gen_dtypes()
     gen_creation()
@@ -3822,6 +4064,7 @@ def main():
     gen_strcomp()
     gen_strarith()
     gen_strconv()
+    gen_tdtype()
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with open(OUT, "wb") as f:
         for c in CASES:

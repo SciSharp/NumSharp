@@ -157,6 +157,12 @@ namespace NumSharp
 
         private readonly DatetimeMetaData? _datetime;
 
+        /// <summary>
+        ///     The instance parameters of a NEP 55 <c>StringDType</c> descriptor (<c>na_object</c>, <c>coerce</c> and the values
+        ///     NumPy derives from them); null for every other class.
+        /// </summary>
+        private readonly VStringParameters _vstring;
+
         // ---- construction ----
 
         /// <summary>
@@ -209,17 +215,23 @@ namespace NumSharp
         /// <param name="itemsize">Bytes per element. Must equal <paramref name="meta"/>'s size for a fixed-size class; for a
         /// string class any non-negative size (a multiple of 4 for <c>U</c>), where 0 is NumPy's unsized <c>S0</c>/<c>U0</c>.</param>
         /// <param name="typeChar">NumPy's <c>dtype.char</c>; the class's own character, or <c>'c'</c> for a one-byte <c>S</c>.</param>
+        /// <param name="vstring">The parameters of a <c>StringDType</c> descriptor (required for that class, null for every other).</param>
         /// <exception cref="ArgumentNullException"><paramref name="meta"/> is null.</exception>
         /// <exception cref="TypeError"><paramref name="meta"/> is abstract.</exception>
-        /// <exception cref="ArgumentException">The datetime metadata does not match the class, or the item size / type
-        /// character is not one this class can have.</exception>
-        internal DType(DTypeMeta meta, char byteorder, DatetimeMetaData? datetime, int itemsize, char typeChar)
+        /// <exception cref="ArgumentException">The datetime metadata or the <c>StringDType</c> parameters do not match the
+        /// class, or the item size / type character is not one this class can have.</exception>
+        internal DType(DTypeMeta meta, char byteorder, DatetimeMetaData? datetime, int itemsize, char typeChar, VStringParameters vstring = null)
         {
             Meta = meta ?? throw new ArgumentNullException(nameof(meta));
             if (meta.IsAbstract)
                 throw new TypeError($"Cannot instantiate abstract DType {meta}");
             if (meta is DatetimeDTypeMeta != datetime.HasValue)
                 throw new ArgumentException($"{meta} {(datetime.HasValue ? "takes no" : "requires")} datetime metadata.", nameof(datetime));
+            // A StringDType descriptor IS its parameters (na_object, coerce): one without them would compare, hash and print
+            // as no NumPy descriptor does, so the class and the parameters must come together.
+            if (meta is VStringDTypeMeta != (vstring != null))
+                throw new ArgumentException($"{meta} {(vstring != null ? "takes no" : "requires")} StringDType parameters.", nameof(vstring));
+            _vstring = vstring;
 
             // Only a flexible class varies its element size per instance. Every other class has ONE layout, and
             // accepting a different size there would let a descriptor disagree with the storage lane it selects.
@@ -247,6 +259,19 @@ namespace NumSharp
             this.byteorder = NormalizeByteOrder(meta, byteorder);
             this.TYPECHAR = (NPY_TYPECHAR)typeChar;
             this.name = ComputeName();
+        }
+
+        /// <summary>
+        ///     A NEP 55 <c>StringDType</c> descriptor with the given parameters (NumPy's <c>new_stringdtype_instance</c>): a
+        ///     16-byte cell, alignment 8, byte order <c>'|'</c>, type character <c>'T'</c>.
+        /// </summary>
+        /// <param name="meta">The <c>StringDType</c> class.</param>
+        /// <param name="parameters">The descriptor's <c>na_object</c> / <c>coerce</c> parameters.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="meta"/> or <paramref name="parameters"/> is null.</exception>
+        internal DType(VStringDTypeMeta meta, VStringParameters parameters)
+            : this(meta, NotApplicableByteOrder, null, VStringDTypeMeta.CellSize, 'T',
+                parameters ?? throw new ArgumentNullException(nameof(parameters)))
+        {
         }
 
         /// <summary>
@@ -316,8 +341,16 @@ namespace NumSharp
         /// </summary>
         /// <returns>The <see cref="name"/> string.</returns>
         /// <exception cref="RuntimeError">An unknown kind (an internal inconsistency).</exception>
+        /// <remarks>
+        ///     A non-legacy (NEP 42) class is named after the class itself plus the bit count, because its scalar type is not
+        ///     flexible (<c>_name_get</c>: <c>type(dtype).__name__</c>, then <c>_name_includes_bit_suffix</c>): a
+        ///     <c>StringDType</c> descriptor is <c>'StringDType128'</c>. This runs before the user-range branch, whose
+        ///     threshold (<c>TypeNum &gt;= 256</c>) the NEP 55 class number 2056 also passes.
+        /// </remarks>
         private string ComputeName()
         {
+            if (!Meta.IsLegacy)
+                return Meta.Name + (long)itemsize * 8;
             if (Meta.TypeNum >= 256)
                 return Meta.ScalarName; // user dtypes don't promise to do anything special
             if (Meta is DatetimeDTypeMeta)
@@ -423,6 +456,9 @@ namespace NumSharp
         {
             get
             {
+                // A non-legacy class's typestring is its str() (arraydescr_protocol_typestr_get): 'StringDType()'.
+                if (_vstring != null)
+                    return _vstring.Repr();
                 char endian = byteorder == NativeByteOrder ? HostByteOrder : byteorder;
                 if (Meta is DatetimeDTypeMeta)
                     return endian.ToString() + Meta.TypeChar + "8" + _datetime.Value.ToString(skipBrackets: false);
@@ -436,20 +472,24 @@ namespace NumSharp
 
         /// <summary>
         ///     <c>dtype.isbuiltin</c>: 1 for the canonical instance of a builtin class, 2 for a user-defined class (the
-        ///     NumSharp-only Decimal/Char), 0 for any other instance — a datetime descriptor, a non-native byte order, or a
-        ///     copy made with the public constructors.
+        ///     NumSharp-only Decimal/Char), 0 for any other instance — a datetime descriptor, a non-native byte order, a
+        ///     copy made with the public constructors, or any descriptor of a non-legacy class (<c>StringDType</c>: NumPy's
+        ///     getter reads the legacy <c>fields</c> slot, which a new-style descriptor does not have).
         /// </summary>
-        public int isbuiltin => Meta.TypeNum >= 256 ? 2 : (ReferenceEquals(this, Meta.Singleton) ? 1 : 0);
+        public int isbuiltin => !Meta.IsLegacy ? 0 : Meta.TypeNum >= 256 ? 2 : (ReferenceEquals(this, Meta.Singleton) ? 1 : 0);
 
         /// <summary><c>dtype.isnative</c>: true unless the byte order is explicitly the non-host one.</summary>
         public bool isnative => byteorder != '<' && byteorder != '>';
 
-        /// <summary><c>dtype.hasobject</c>: whether items hold references that need clearing (false for every current class).</summary>
+        /// <summary>
+        ///     <c>dtype.hasobject</c>: whether items hold references that need clearing — true for <c>StringDType</c> (a cell
+        ///     can own heap memory its array must free), false for every other class.
+        /// </summary>
         public bool hasobject => Meta.HasReferences;
 
         /// <summary>
-        ///     <c>dtype.flags</c>: the item flags (NumPy's <c>NPY_ITEM_REFCOUNT | NPY_NEEDS_INIT | …</c>) — 63 for a
-        ///     reference-holding dtype, 8 (<c>NPY_NEEDS_INIT</c>) for <c>U</c>, 0 otherwise (<see cref="DTypeMeta.ItemFlags"/>).
+        ///     <c>dtype.flags</c>: the item flags (NumPy's <c>NPY_ITEM_REFCOUNT | NPY_NEEDS_INIT | …</c>) — 107 for
+        ///     <c>StringDType</c>, 8 (<c>NPY_NEEDS_INIT</c>) for <c>U</c>, 0 otherwise (<see cref="DTypeMeta.ItemFlags"/>).
         /// </summary>
         public int flags => Meta.ItemFlags;
 
@@ -473,6 +513,54 @@ namespace NumSharp
 
         /// <summary><c>dtype.names</c>: always null (no structured dtypes).</summary>
         public string[] names => null;
+
+        // ---- the StringDType parameters (NEP 55) ----
+
+        /// <summary>
+        ///     The parameters of a <c>StringDType</c> descriptor; null for every other class. Internal readers (the cast and
+        ///     store paths) take the cached derived fields from here instead of re-running Python protocols per element.
+        /// </summary>
+        internal VStringParameters VString => _vstring;
+
+        /// <summary>
+        ///     True when this is a <c>StringDType</c> descriptor that has a missing-data object — the C# stand-in for
+        ///     <c>hasattr(dtype, 'na_object')</c>, which tells "no sentinel" apart from a <c>None</c> sentinel (both make
+        ///     <see cref="na_object"/> look like <see langword="null"/>, but only one of them exists).
+        /// </summary>
+        public bool HasNAObject => _vstring?.HasNAObject == true;
+
+        /// <summary>
+        ///     <c>dtype.na_object</c> of a <c>StringDType</c> descriptor: the missing-data sentinel it was built with
+        ///     (<see langword="null"/> is Python's <c>None</c>; a <see cref="char"/> sentinel reads back as a one-character
+        ///     <see cref="string"/>). Use <see cref="HasNAObject"/> to test for it without the exception.
+        /// </summary>
+        /// <exception cref="AttributeError">The descriptor has no missing-data object, or is not a <c>StringDType</c>:
+        ///     NumPy's <c>'numpy.dtypes.StringDType' object has no attribute 'na_object'</c>.</exception>
+        public object na_object
+        {
+            get
+            {
+                if (_vstring is null || !_vstring.HasNAObject)
+                    throw new AttributeError($"'{Meta.FullName}' object has no attribute 'na_object'");
+                return _vstring.NAObject;
+            }
+        }
+
+        /// <summary>
+        ///     <c>dtype.coerce</c> of a <c>StringDType</c> descriptor: whether a stored value that is not a <c>str</c> is
+        ///     converted to its <c>str()</c> (true, the default) or refused with NumPy's <c>ValueError</c> (false).
+        /// </summary>
+        /// <exception cref="AttributeError">The descriptor is not a <c>StringDType</c>: NumPy's
+        ///     <c>'numpy.dtypes.Float64DType' object has no attribute 'coerce'</c>.</exception>
+        public bool coerce
+        {
+            get
+            {
+                if (_vstring is null)
+                    throw new AttributeError($"'{Meta.FullName}' object has no attribute 'coerce'");
+                return _vstring.Coerce;
+            }
+        }
 
         // ---- factories (public ctors are copies; these return the canonical instance) ----
 
@@ -674,21 +762,30 @@ namespace NumSharp
         /// <summary>
         ///     Structural equality: the same class, byte order, item size and instance parameters (<c>M8[ns] != M8[s]</c>,
         ///     <c>&gt;i4 != i4</c>, <c>U5 != U3</c>). The type character is NOT compared, as in NumPy: <c>np.dtype('c') == np.dtype('S1')</c>.
+        ///     Two <c>StringDType</c> descriptors are equal when they coerce alike and their missing-data objects are the same
+        ///     missing value (NumPy's <c>stringdtype_richcompare</c>: <c>StringDType(na_object=nan) == StringDType(na_object=np.nan)</c>).
         /// </summary>
         /// <param name="other">The descriptor to compare with (null is unequal).</param>
         /// <returns>True when both describe the same element layout and parameters.</returns>
         public bool Equals(DType other)
-            => other is not null && ReferenceEquals(Meta, other.Meta) && byteorder == other.byteorder && itemsize == other.itemsize
-               && Nullable.Equals(_datetime, other._datetime);
+            => other is not null && (ReferenceEquals(this, other)
+               || (ReferenceEquals(Meta, other.Meta) && byteorder == other.byteorder && itemsize == other.itemsize
+                   && Nullable.Equals(_datetime, other._datetime) && VStringParameters.AreEqual(_vstring, other._vstring)));
 
         /// <summary>
         ///     NumPy's coercing <c>dtype.__eq__</c>: the operand is converted to a descriptor first, so a
         ///     <see cref="System.Type"/> (<c>typeof(int)</c>), an <see cref="NPTypeCode"/> or a dtype string
         ///     (<c>"i4"</c>, <c>"int32"</c>) compare equal to the descriptor they denote; anything that is not a dtype
-        ///     (a bad string, a <see cref="DTypeMeta"/> class object, null) compares unequal without raising.
+        ///     (a bad string, a <see cref="DTypeMeta"/> class object, null) compares unequal without raising. A
+        ///     <c>StringDType</c> descriptor does NOT coerce: its <c>__eq__</c> returns <c>NotImplemented</c> for anything but
+        ///     another <c>StringDType</c> instance, so <c>np.dtype('T') == 'T'</c> and <c>np.dtype('T') == str</c> are False.
         /// </summary>
+        /// <param name="obj">A descriptor, a dtype spelling, or any other object.</param>
+        /// <returns>True when <paramref name="obj"/> denotes an equal descriptor.</returns>
         public override bool Equals(object obj)
         {
+            if (_vstring != null && obj is not DType)
+                return false; // stringdtype_richcompare: Py_TYPE(other) != Py_TYPE(self) -> NotImplemented -> identity -> False
             switch (obj)
             {
                 case null:
@@ -733,8 +830,10 @@ namespace NumSharp
         ///     <c>hash(M8[ns]) == hash(M8[s])</c>). Fixed-size classes keep the two-field hash they always had.
         /// </summary>
         /// <returns>The hash code.</returns>
+        /// <remarks>A <c>StringDType</c> descriptor hashes its parameters (NumPy hashes the tuple <c>(coerce, na_object)</c>).</remarks>
         public override int GetHashCode()
-            => Meta is StringDTypeMeta ? HashCode.Combine(Meta.TypeNum, byteorder, itemsize) : HashCode.Combine(Meta.TypeNum, byteorder);
+            => _vstring != null ? HashCode.Combine(Meta.TypeNum, _vstring.Hash())
+                : Meta is StringDTypeMeta ? HashCode.Combine(Meta.TypeNum, byteorder, itemsize) : HashCode.Combine(Meta.TypeNum, byteorder);
 
         // NOTE: there are deliberately NO `==(DType, string)` operators. A `null` literal would bind them (`descr == null`
         // silently became "false" for a null descriptor inside the engine), so the coercing string comparison lives on
@@ -774,16 +873,24 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>str(dtype)</c>: the <see cref="name"/> for a native descriptor (<c>int32</c>, <c>datetime64[ns]</c>,
-        ///     <c>decimal</c>), the typestring for a non-native or flexible one (<c>&gt;i4</c>).
+        ///     <c>decimal</c>), the typestring for a non-native or flexible one (<c>&gt;i4</c>), and a <c>StringDType</c>
+        ///     descriptor's own repr (<c>StringDType()</c>, <c>StringDType(na_object=None)</c>).
         /// </summary>
-        public override string ToString() => (!isnative || kind == 'U' || kind == 'S' || kind == 'V') ? str : name;
+        /// <returns>The <c>str()</c> text.</returns>
+        public override string ToString()
+            => _vstring != null ? _vstring.Repr() : (!isnative || kind == 'U' || kind == 'S' || kind == 'V') ? str : name;
 
         /// <summary>
         ///     <paramref name="repr"/> false: <c>str(dtype)</c>. <paramref name="repr"/> true: NumPy's <c>repr(dtype)</c> —
         ///     <c>dtype('int32')</c>, <c>dtype('bool')</c>, <c>dtype('&gt;i4')</c>, <c>dtype('&lt;M8[ns]')</c>, and for the
-        ///     NumSharp-only user-range classes NumPy's unquoted user form <c>dtype(decimal)</c>.
+        ///     NumSharp-only user-range classes NumPy's unquoted user form <c>dtype(decimal)</c>. A <c>StringDType</c>
+        ///     descriptor prints the same text both ways, with no <c>dtype(…)</c> wrapper (<c>StringDType(coerce=False)</c>):
+        ///     NumPy gives the class its own <c>tp_repr</c> and <c>tp_str</c>.
         /// </summary>
-        public string ToString(bool repr) => repr ? "dtype(" + ConstructionRepr() + ")" : ToString();
+        /// <param name="repr">True for <c>repr(dtype)</c>, false for <c>str(dtype)</c>.</param>
+        /// <returns>The text.</returns>
+        public string ToString(bool repr)
+            => _vstring != null ? _vstring.Repr() : repr ? "dtype(" + ConstructionRepr() + ")" : ToString();
 
         /// <summary>
         ///     NumPy's <c>_construction_repr</c> / <c>_scalar_str</c>: <c>'bool'</c>; <c>'S'</c> / <c>'S5'</c> for byte
@@ -817,8 +924,9 @@ namespace NumSharp
         ///     <c>&gt;U5</c> and <c>np.dtype('c').newbyteorder()</c> still reports <c>char == 'c'</c>.
         /// </summary>
         /// <param name="newByteOrder">The requested byte-order character (<c>= | &lt; &gt;</c>).</param>
-        /// <returns>A fresh descriptor (never the singleton).</returns>
-        internal DType WithByteOrder(char newByteOrder) => new DType(Meta, newByteOrder, _datetime, itemsize, _typeChar);
+        /// <returns>A fresh descriptor (never the singleton); a <c>StringDType</c> descriptor keeps its parameters and its
+        ///     <c>'|'</c> byte order.</returns>
+        internal DType WithByteOrder(char newByteOrder) => new DType(Meta, newByteOrder, _datetime, itemsize, _typeChar, _vstring);
 
         /// <summary>
         ///     Return a new dtype with a different byte order (NumPy's <c>dtype.newbyteorder</c>).
@@ -830,6 +938,8 @@ namespace NumSharp
         /// </param>
         /// <returns>A new descriptor with the requested byte order (single-byte classes are unaffected).</returns>
         /// <exception cref="ValueError"><c>byteorder not recognized (got '…')</c>.</exception>
+        /// <exception cref="TypeError">A descriptor of a non-legacy class (<c>StringDType</c>): NumPy's
+        ///     <c>Cannot use DescrNewByteOrder for this new style DTypes.</c> (raised after the order itself is parsed).</exception>
         public DType newbyteorder(string new_order = "S")
         {
             if (string.IsNullOrEmpty(new_order))
@@ -838,6 +948,10 @@ namespace NumSharp
         }
 
         /// <summary>See <see cref="newbyteorder(string)"/>.</summary>
+        /// <param name="new_order">The byte-order code (see <see cref="newbyteorder(string)"/>).</param>
+        /// <returns>A new descriptor with the requested byte order.</returns>
+        /// <exception cref="ValueError"><c>byteorder not recognized (got '…')</c>.</exception>
+        /// <exception cref="TypeError">A descriptor of a non-legacy class (<c>StringDType</c>).</exception>
         public DType newbyteorder(char new_order)
         {
             char target;
@@ -870,6 +984,10 @@ namespace NumSharp
                 default:
                     throw new ValueError($"byteorder not recognized (got '{new_order}')");
             }
+            // PyArray_DescrNewByteorder refuses every new-style descriptor; NumPy's argument converter has parsed the order
+            // first, so a bad code is still the ValueError above.
+            if (!Meta.IsLegacy)
+                throw new TypeError("Cannot use DescrNewByteOrder for this new style DTypes.");
             return WithByteOrder(target);
         }
     }

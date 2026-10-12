@@ -56,9 +56,13 @@ namespace NumSharp
         /// </code>
         /// </example>
         /// <exception cref="ValueError"><c>kind argument is a string, but '…' is not a known kind name.</c> — verbatim NumPy.</exception>
+        /// <exception cref="TypeError"><paramref name="dtype"/> is a <c>StringDType</c> descriptor (checked FIRST, as NumPy
+        ///     preprocesses the dtype before any kind): <c>dtype argument must be a NumPy dtype, but it is a &lt;class
+        ///     'numpy.dtypes.StringDType'&gt;.</c></exception>
         public static bool isdtype(DType dtype, string kind)
         {
             if (dtype is null) throw new ArgumentNullException(nameof(dtype));
+            ThrowIfNotNumPyDType(dtype);
             if (kind is null) throw new TypeError("kind argument must be comprised of NumPy dtypes or strings only, but is a null.");
             switch (kind)
             {
@@ -82,9 +86,17 @@ namespace NumSharp
         /// <summary>
         /// Returns True if the descriptor is of any of the specified categories (NumPy's tuple form).
         /// </summary>
+        /// <param name="dtype">The descriptor to test.</param>
+        /// <param name="kinds">The category names (see <see cref="isdtype(DType, string)"/>).</param>
+        /// <returns>True when <paramref name="dtype"/> is under any of the categories.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> or <paramref name="kinds"/> is null.</exception>
+        /// <exception cref="TypeError"><paramref name="dtype"/> is a <c>StringDType</c> descriptor (checked first), or an
+        ///     entry is null.</exception>
+        /// <exception cref="ValueError">An entry is not a known kind name.</exception>
         public static bool isdtype(DType dtype, params string[] kinds)
         {
             if (dtype is null) throw new ArgumentNullException(nameof(dtype));
+            ThrowIfNotNumPyDType(dtype); // before any kind, an empty tuple included
             if (kinds is null) throw new ArgumentNullException(nameof(kinds));
             bool result = false;
             foreach (var kind in kinds)
@@ -96,11 +108,36 @@ namespace NumSharp
         /// Returns True if the two descriptors are instances of the same DType class — NumPy's <c>np.isdtype(dtype, other_dtype)</c>
         /// compares the scalar TYPES, so <c>isdtype('M8[s]', 'M8[ns]')</c> is True while <c>isdtype(float32, float64)</c> is False.
         /// </summary>
+        /// <param name="dtype">The descriptor to test.</param>
+        /// <param name="kind">The descriptor whose class counts as a match.</param>
+        /// <returns>True when both are instances of one class.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        /// <exception cref="TypeError"><paramref name="kind"/> is null, or either is a <c>StringDType</c> descriptor
+        ///     (NumPy's <c>_preprocess_dtype</c> accepts only the builtin scalar types: <c>dtype argument must be a NumPy
+        ///     dtype, but it is a …</c> for the dtype, checked first; <c>kind argument must be comprised of NumPy dtypes or
+        ///     strings only, but is a …</c> for the kind).</exception>
         public static bool isdtype(DType dtype, DType kind)
         {
             if (dtype is null) throw new ArgumentNullException(nameof(dtype));
+            ThrowIfNotNumPyDType(dtype);
             if (kind is null) throw new TypeError("kind argument must be comprised of NumPy dtypes or strings only, but is a null.");
+            if (!kind.Meta.IsLegacy)
+                throw new TypeError($"kind argument must be comprised of NumPy dtypes or strings only, but is a {kind.Meta}.");
             return ReferenceEquals(dtype.Meta, kind.Meta);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_preprocess_dtype</c> refusal for the dtype argument of <c>np.isdtype</c>: only a dtype whose scalar
+        ///     type is one of NumPy's builtin scalar types is accepted, and a <c>StringDType</c> descriptor's type is Python's
+        ///     own <c>str</c>.
+        /// </summary>
+        /// <param name="dtype">The dtype argument (not null).</param>
+        /// <exception cref="TypeError">A non-legacy (<c>StringDType</c>) descriptor: <c>dtype argument must be a NumPy
+        ///     dtype, but it is a &lt;class 'numpy.dtypes.StringDType'&gt;.</c></exception>
+        private static void ThrowIfNotNumPyDType(DType dtype)
+        {
+            if (!dtype.Meta.IsLegacy)
+                throw new TypeError($"dtype argument must be a NumPy dtype, but it is a {dtype.Meta}.");
         }
 
         /// <summary>
@@ -112,10 +149,12 @@ namespace NumSharp
         /// <param name="kinds">The dtypes whose classes count as a match.</param>
         /// <returns>True when <paramref name="dtype"/>'s class is the class of any entry.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="dtype"/> or <paramref name="kinds"/> is null.</exception>
-        /// <exception cref="TypeError">An entry is null (NumPy: <c>kind argument must be comprised of NumPy dtypes or strings only</c>).</exception>
+        /// <exception cref="TypeError">An entry is null (NumPy: <c>kind argument must be comprised of NumPy dtypes or strings only</c>),
+        ///     or <paramref name="dtype"/> (checked first) or an entry is a <c>StringDType</c> descriptor.</exception>
         public static bool isdtype(DType dtype, params DType[] kinds)
         {
             if (dtype is null) throw new ArgumentNullException(nameof(dtype));
+            ThrowIfNotNumPyDType(dtype); // before any kind, an empty tuple included
             if (kinds is null) throw new ArgumentNullException(nameof(kinds));
             bool result = false;
             foreach (var kind in kinds)

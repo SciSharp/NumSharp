@@ -85,6 +85,22 @@ parsed numbers). Overflow texts are the LP64 ones (`Python int too large to conv
 `astype`, setitem / `fill` / `full` / `ones` / `pad` / `copyto` / `np.array`, numeric ufuncs into a text `out=` (with
 `where=` the out's text is parsed into the loop dtype first, as NumPy's READWRITE buffer does), `np.add` under a string
 `dtype=` over numbers, numeric-`dtype=` reductions and `np.cov` over text (parsed first). 2.0–7.9× NumPy at 1K / 100K / 1M.
+**The NEP 55 `StringDType` descriptor exists (P1.2, 2026-10-12); its arrays come with P1.3.** `VStringDTypeMeta` is
+the class (`numpy.dtypes.StringDType`, kind / char `'T'`, num 2056, a 16-byte cell aligned to 8, parametric, NO singleton:
+every descriptor is fresh). It shares the `NPTypeCode.String` lane with `S` / `U` (decision D4: the descriptor's class
+tells the layouts apart — test `descr.Meta is VStringDTypeMeta`, never the typecode; `FromTypeCode(String)` and
+`FromScalarType(string)` stay `StrDType`). `VStringParameters` holds `na_object` / `coerce` and NumPy's derived fields;
+`np.dtypes.StringDType(bool coerce = true)` and `np.dtypes.StringDType(object na_object, bool coerce = true)` build it
+(a bool sentinel goes BY NAME: a positional bool binds `coerce`), and so does `np.dtype("T")`. Equality is NumPy's
+`na_eq_cmp` through `Backends/Strings/NDPyObject.cs` (CPython's `str()` / `repr()` / `==` over the C# boundary map, with
+NumPy's scalar rules when an `np.float16` (`Half`) or a decimal takes part: `np.float16(2048) == 2049` is True); the hash
+is coarse for numbers so it can follow that non-transitive equality. The cast table is `casts.cpp`'s
+(`VStringCastingImpls.cs`), promotion admits only `U` (the common instance takes the present sentinel and the FIRST
+descriptor's coerce), `isdtype` refuses `T`, a `T` instance as a ufunc `dtype=` is NumPy's new-style refusal.
+`Backends/Strings/NDUtf8.cs` is the strict UTF-8 codec with CPython 3.12's texts (a lone surrogate in a string sentinel is
+`UnicodeEncodeError` already). Gate: oracle section `tdtype` (1,188 strict) + `DTypes/StringDTypeDescriptorTests.cs` +
+`Backends/Strings/StringDTypeProtocolTests.cs`. Test trap: a lone surrogate cannot travel in `[DataRow]` or
+`[DynamicData]` (UTF-8 metadata, XML-serialized rows); keep such strings in the test body.
 Where NumPy REFUSES (no string loop) NumSharp raises NumPy's type + text; where NumPy COMPUTES something not ported yet
 (sort/search, the other `np.strings` functions) it throws
 `StringComputationNotSupportedException` — both AFTER NumPy's earlier checks in NumPy's order (`dtype=` class check,
@@ -92,7 +108,7 @@ read-only `out=`, non-bool `where=`, the axis under one of three rules, the quan
 a computing loop's output cast and broadcast; `Backends/Strings/NDStringUfuncs{,.Precedence}.cs`). Every engine ufunc
 member resolves its `dtype=` through `UfuncLoopCode(dtype, "<numpy name>", x1, x2, out, where)` so an unsized string
 request (`'U'`, `'S'`) gets NumPy's per-ufunc answer. Gate: the string oracle (`test/oracle/gen_strings_oracle.py` →
-`NumSharp.Tests.Oracle/Strings`, 42,637 cases in 22 sections, `strconv` = 4,487 conversion cases; a phase-2 case passes as
+`NumSharp.Tests.Oracle/Strings`, 43,825 cases in 23 sections, `strconv` = 4,487 conversion cases, `tdtype` = 1,188 descriptor cases; a phase-2 case passes as
 "deferred" only while NumSharp throws `StringComputationNotSupportedException`, so phase 2 is gated by the same corpus,
 and a section may defer no more than its ceiling (`StringOracleTests.DeferralCeilings`, 537 in all: sorting, searching,
 set routines, histograms, quantiles), so a computation answered today cannot slide back; `NUMSHARP_STRING_ORACLE_DEFERRED=1`

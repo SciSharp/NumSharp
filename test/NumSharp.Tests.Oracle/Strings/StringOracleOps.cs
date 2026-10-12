@@ -234,6 +234,9 @@ namespace NumSharp.Tests.Strings
             // Section strcomp's own ops (the C# string operators, the truth reductions along an axis) live in their partial.
             if (TryInvokeCompute(c.Op, p, ops, out var computed))
                 return computed;
+            // Section tdtype (the NEP 55 StringDType descriptor, P1.2) decodes its descriptor requests in its own partial.
+            if (TryInvokeVString(c.Op, p, ops, out var vstring))
+                return vstring;
             throw new InvalidOperationException($"the string oracle has no op '{c.Op}'");
         }
 

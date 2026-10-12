@@ -185,3 +185,36 @@ After this plan, phase 2 loses P2.4 and gains the `T` forms of P2.1–P2.6 plus 
   3.5–4.0×, copyto f8→U32 2.5–2.9×, `np.add(f8, f8, dtype='U')` 2.2–3.0× at 1K / 100K / 1M. Benchmark trap: without
   `DOTNET_TC_CallCountingDelayMs=0` the first row of a run is measured at tier 0 even after 120 warm-up calls (U→f8 at 1K
   read 1.36× there, 3.7× with it).
+- 2026-10-12 — **P1.2 done.** The `StringDType` descriptor, without arrays. Class `DTypes/VStringDTypeMeta.cs` (the
+  DType class `numpy.dtypes.StringDType`: num 2056, kind / char `'T'`, a 16-byte cell aligned to 8, flags 107,
+  parametric, no singleton — every descriptor is fresh — and the `NPTypeCode.String` lane shared with `S` / `U` per D4:
+  `OwnsTypeCode` / `OwnsScalarType` are false, so `FromTypeCode(String)` and `FromScalarType(string)` stay `StrDType`).
+  Parameters `DTypes/VStringParameters.cs` (`na_object`, `coerce`, and NumPy's derived `has_nan_na`, `has_string_na`,
+  `na_name`, `default_string`, computed once). Factories `np.dtypes.StringDType(bool coerce = true)` and
+  `np.dtypes.StringDType(object na_object, bool coerce = true)` (D5; a bool sentinel goes BY NAME, a positional bool is
+  `coerce`); `np.dtype("T")` with any byte-order prefix. Descriptor surface (`str` = `repr` = `StringDType(...)` with
+  Python's repr of the sentinel, name `StringDType128`, `isbuiltin` 0, `byteorder` `'|'`, `na_object` / `coerce` with
+  NumPy's AttributeError when absent), equality = NumPy's `_eq_comparison` + `na_eq_cmp`, hash consistent with it,
+  `newbyteorder` refuses (TypeError after the order is parsed), `issubdtype` through Python's `str` hierarchy (`U` is a
+  subtype of `T`, not the reverse; `T` under no category), `isdtype` refuses `T` as dtype or kind, a `T` INSTANCE as a
+  ufunc `dtype=` is NumPy's new-style refusal, promotion (`T` with `U` is `T`, no other class; the common instance takes
+  the present sentinel and the FIRST descriptor's coerce; NumPy's sequence reduction and its texts), the cast table of
+  `casts.cpp` (`DTypes/VStringCastingImpls.cs`: `T → T` spec unsafe / resolved no-cast, sentinel → no sentinel unsafe;
+  `U` / `S` → `T` same_kind; `T` → `U` / `S` same_kind with NumPy's unsized-destination TypeError; bool → `T` safe,
+  `T` → bool same_kind (resolved unsafe); numbers and datetimes → `T` safe, `T` → numbers / datetimes unsafe; decimal
+  casts as float64, char as uint16). The CPython protocols the descriptor runs: `Backends/Strings/NDPyObject.cs`
+  (`str()`, `repr()`, `==` and a hash over the C# boundary map; NumPy's scalar rules where an `np.float16` / decimal takes
+  part — `np.float16(2048) == 2049` is True — and Python's container `==`) and `Backends/Strings/NDUtf8.cs` (the strict
+  UTF-8 codec with CPython 3.12's error texts; validation and transcoding on .NET's vectorized routines, CPython's
+  diagnosis only on failure). Allocating a `T` array is refused loudly until P1.3 (`UnmanagedStorage.ThrowIfVStringStorage`).
+  Found and fixed on the way: a string sentinel with a lone surrogate is CPython's `UnicodeEncodeError` at construction
+  (NumPy keeps `default_string` and `na_name` as UTF-8); `np.dtype` raised "nested array dtypes" for any string with a
+  parenthesis, where NumPy's grammar says "not understood" (`'(2)i4'`, `'T()'`) or reaches the datetime parser
+  (`'M8(s)'`); CPython compares an int and a float exactly even when the int's double overflows (`2**1100 != inf`).
+  Validation outside the corpus: `NDUtf8` against CPython over 373,249 inputs (every 1- and 2-byte sequence, 3- and 4-byte
+  sweeps, 60,000 random byte strings, ~36,000 strings with lone surrogates), `NDPyObject` over 83 objects × `str` /
+  `repr` and a 57 × 57 `==` matrix of Python numbers, `np.float16`, `np.float64` and containers — all identical. Gate:
+  oracle section `tdtype` (1,188 cases, strict), `DTypes/StringDTypeDescriptorTests` (25),
+  `Backends/Strings/StringDTypeProtocolTests` (10). Test trap: a lone surrogate cannot travel in `[DataRow]` (attribute
+  arguments are UTF-8 in the metadata) nor in `[DynamicData]` (the test platform serializes rows as XML and refuses a
+  high surrogate followed by another): keep such strings in the method body.

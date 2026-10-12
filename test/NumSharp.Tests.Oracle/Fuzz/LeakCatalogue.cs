@@ -413,6 +413,13 @@ namespace NumSharp.Tests.Fuzz
                 using var an = np.strings.multiply(a, n);
                 return np.strings.multiply("xy", n);
             });
+            // np.dtypes.StringDType (NEP 55, P1.2): the string oracle's tdtype section replays it, outside the corpus sweep.
+            // A descriptor owns no array memory; the entries prove its construction (and the CPython protocols it runs on
+            // the sentinel) leave no pooled buffer behind.
+            E(l, "np.dtypes.StringDType", "coerce only", f => np.dtypes.StringDType(false));
+            E(l, "np.dtypes.StringDType", "na_object string / NaN / array sentinel", f =>
+                np.dtypes.StringDType("NA").ToString() + np.dtypes.StringDType(double.NaN, false).ToString()
+                + np.dtypes.StringDType(f.V3).ToString());
             E(l, "np.array2string", "float matrix", f => np.array2string(f.M));
             E(l, "np.array2string", "non-contiguous + nan", f => np.array2string(f.MT) + np.array2string(f.NanV));
             E(l, "np.array_equiv", "broadcast-consistent", f => Box(np.array_equiv(f.M, f.M)));

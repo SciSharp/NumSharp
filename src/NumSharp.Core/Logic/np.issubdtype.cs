@@ -61,12 +61,22 @@ namespace NumSharp
         /// subclass of it — NumPy's <c>issubdtype(dtype1, dtype2)</c> over two DESCRIPTORS, which compares their
         /// <c>.type</c>: instances of one class compare equal whatever their parameters
         /// (<c>issubdtype('M8[s]', 'M8[ns]')</c> is True, as is <c>issubdtype('&gt;i4', 'i4')</c>), and distinct concrete
-        /// classes are never related (<c>issubdtype(int32, int64)</c> is False).
+        /// classes are never related (<c>issubdtype(int32, int64)</c> is False). A <c>StringDType</c> descriptor's
+        /// <c>.type</c> is Python's own <c>str</c>, of which NumPy's <c>np.str_</c> is a SUBCLASS: so
+        /// <c>issubdtype('U5', StringDType())</c> is True while <c>issubdtype(StringDType(), 'U5')</c> is False, and two
+        /// <c>StringDType</c> descriptors are related whatever their <c>na_object</c> / <c>coerce</c>.
         /// </summary>
+        /// <param name="arg1">The descriptor to test.</param>
+        /// <param name="arg2">The descriptor whose class (or a superclass of it) <paramref name="arg1"/>'s class must be.</param>
+        /// <returns>True when <paramref name="arg1"/>'s scalar type is <paramref name="arg2"/>'s or a subclass of it.</returns>
+        /// <exception cref="ArgumentNullException">Either argument is null.</exception>
         public static bool issubdtype(DType arg1, DType arg2)
         {
             if (arg1 is null) throw new ArgumentNullException(nameof(arg1));
             if (arg2 is null) throw new ArgumentNullException(nameof(arg2));
+            // issubclass(arg1.type, str): StringDType's type is str itself, and np.str_ (the U class) derives from str.
+            if (arg2.Meta is VStringDTypeMeta)
+                return arg1.Meta is VStringDTypeMeta || (arg1.Meta is StringDTypeMeta s && s.IsUnicode);
             return ReferenceEquals(arg1.Meta, arg2.Meta);
         }
 
@@ -80,7 +90,10 @@ namespace NumSharp
         /// Any other string is a dtype spelling and compares the CLASSES, as NumPy's <c>issubdtype</c> does through
         /// <c>dtype(arg2).type</c>: <c>issubdtype(U5, "U")</c>, <c>issubdtype(U5, "U3")</c> and <c>issubdtype(U5, "str")</c>
         /// are True, <c>issubdtype(U5, "S")</c> is False. A string that is neither is False (NumSharp's long-standing answer;
-        /// NumPy raises <c>TypeError</c> there).
+        /// NumPy raises <c>TypeError</c> there). A <c>StringDType</c> descriptor is under NO category (its scalar type is
+        /// Python's <c>str</c>, outside NumPy's scalar hierarchy: <c>issubdtype(StringDType(), np.character)</c> and
+        /// <c>issubdtype(StringDType(), np.generic)</c> are False), and <c>"T"</c> names its class
+        /// (<c>issubdtype('U5', 'T')</c> is True, see <see cref="issubdtype(DType, DType)"/>).
         /// </summary>
         /// <param name="arg1">The descriptor to test.</param>
         /// <param name="arg2">A category name or a dtype string.</param>
@@ -104,8 +117,13 @@ namespace NumSharp
                 {
                     return false;
                 }
-                return ReferenceEquals(arg1.Meta, other.Meta);
+                return issubdtype(arg1, other);
             }
+
+            // A StringDType's scalar type is Python's str, which is under no NumPy scalar category (not even `generic`).
+            // Checked before the storage-lane test below, which would read the shared String lane as `U`.
+            if (arg1.Meta is VStringDTypeMeta)
+                return false;
 
             if (arg1.Meta is DatetimeDTypeMeta dt)
             {

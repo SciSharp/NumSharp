@@ -277,8 +277,10 @@ namespace NumSharp
             /* check for commas present or first (or second) element a digit */
             if (CheckForCommaString(type))
                 throw new NotSupportedException("NumSharp does not support structured (comma-string / field list) dtypes");
-            if (type.Contains('('))
-                throw new NotSupportedException("NumSharp does not support custom nested array dtypes");
+            // A parenthesis outside a comma-string is no sub-array in NumPy: `_convert_from_str` goes on with the grammar
+            // below, which names no type with a '(' — so '(2)i4', 'i4(2)', 'T()' and 'StringDType()' are "not understood"
+            // and 'M8(s)' is the datetime parser's "Invalid datetime metadata string". (A sub-array string is always a
+            // comma-string: '(2,)i4' and '2i4' are caught above.)
 
             /* Process the endian character. '|' is replaced by '='*/
             char endian = DType.NativeByteOrder;
@@ -329,6 +331,11 @@ namespace NumSharp
                     case 'c':
                         // NPY_CHARLTR: PyArray_DescrFromType(NPY_CHAR) is a FRESH S1 whose type character stays 'c'.
                         flexible = new DType(DTypeRegistry.Bytes, DType.NotApplicableByteOrder, null, 1, (char)NPY_TYPECHAR.NPY_CHARLTR);
+                        break;
+                    case 'T':
+                        // NPY_VSTRINGLTR: the StringDType class's default descriptor, a FRESH StringDType() each time. Its
+                        // byte order is '|', so a '<' / '>' / '=' / '|' prefix is accepted and ignored ('>T' is StringDType()).
+                        flexible = DTypeRegistry.VString.DefaultDescr();
                         break;
                     default:
                         if (!_dtype_string_map.TryGetValue(type, out resolved))
@@ -695,7 +702,7 @@ namespace NumSharp
         NPY_NTYPES_ABI_COMPATIBLE = 21,
         /// <summary>The first user-defined type number — everything at or above is a registered user dtype (NumSharp's Decimal/Char live here).</summary>
         NPY_USERDEF = 256,
-        /// <summary>NEP 55 variable-width <c>StringDType</c> — the first non-legacy-layout dtype (reserved; Stage D).</summary>
+        /// <summary>NEP 55 variable-width <c>StringDType</c> — the first non-legacy-layout dtype (<see cref="VStringDTypeMeta"/>).</summary>
         NPY_VSTRING = 2056,
 
         // ---- NumSharp extensions (no NumPy analog) — the user-defined range, exactly as NumPy numbers a user dtype ----
@@ -737,6 +744,8 @@ namespace NumSharp
         NPY_DATETIMELTR = 'M',
         NPY_TIMEDELTALTR = 'm',
         NPY_CHARLTR = 'c',
+        /// <summary>NEP 55 <c>StringDType</c>'s kind and type character (<c>np.dtype('T')</c>).</summary>
+        NPY_VSTRINGLTR = 'T',
 
         /*
          * No Descriptor, just a define -- this let's
