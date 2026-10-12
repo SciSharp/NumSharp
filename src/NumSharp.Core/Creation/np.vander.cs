@@ -21,8 +21,6 @@ namespace NumSharp
         ///     (the allocation's <c>negative dimensions are not allowed</c>).</exception>
         /// <exception cref="TypeError">A text <paramref name="x"/> with two or more columns: the powers come from
         ///     <c>multiply.accumulate</c>, which has no string loop.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty text <paramref name="x"/> with ONE column:
-        ///     NumPy writes the power 0 as the text <c>'1'</c> (formatting a number, the next phase).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.vander.html
         /// <para>NumPy's statements: <c>v = empty((len(x), N), dtype=promote_types(x.dtype, int))</c>; <c>if N &gt; 0:
         /// tmp[:, 0] = 1</c>; <c>if N &gt; 1: tmp[:, 1:] = x[:, None]; multiply.accumulate(tmp[:, 1:], ...)</c>. A text
@@ -48,11 +46,12 @@ namespace NumSharp
                 // `if N > 1: ... multiply.accumulate(...)` — the dtype refusal, whatever the rows.
                 if (n > 1)
                     throw Backends.Strings.NDStringUfuncs.NoLoop("multiply", text, text);
-                // `if N > 0: tmp[:, 0] = 1` writes the formatted '1' into every row — the next phase when there is one.
-                if (n == 1 && m > 0)
-                    throw Backends.Strings.NDStringCasting.TextConversion(np.int64, text);
-                // `empty((len(x), N), dtype)`: no column (or no row) to write — the allocation is the matrix, and a
-                // negative N is its own error. A U matrix is zero-filled, as NumPy's NEEDS_INIT allocation is.
+                // `if N > 0: tmp[:, 0] = 1` writes the number one as its str() — the text '1' — into every row of the single
+                // column (np.ones' string route).
+                if (n == 1)
+                    return np.ones(new Shape(m, n), text);
+                // `empty((len(x), N), dtype)`: no column to write — the allocation is the matrix, and a negative N is its
+                // own error. A U matrix is zero-filled, as NumPy's NEEDS_INIT allocation is.
                 return np.empty(new Shape(m, n), text);
             }
             NPTypeCode dt = np.promote_types(x.typecode, NPTypeCode.Int64);

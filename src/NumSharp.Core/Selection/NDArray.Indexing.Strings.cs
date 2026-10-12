@@ -186,15 +186,14 @@ namespace NumSharp
         /// <exception cref="ValueError">This array is read-only, or the value does not broadcast to the selection.</exception>
         /// <exception cref="UnicodeEncodeError">A <c>U</c> value is not ASCII and this array is <c>S</c>.</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S</c> value is not ASCII and this array is <c>U</c>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">The value is numeric and the selection holds an element.</exception>
         /// <remarks>
         ///     <b>When the value is converted (NumPy's <c>array_assign_subscript</c>).</b> A SCALAR text value — a C# literal,
         ///     NumPy's Python <c>str</c> — is converted before the index is resolved (<c>PyArray_FromAny(value, descr,
         ///     FORCECAST)</c>), so its conversion error wins even over an out-of-range index. An ARRAY value is converted element
         ///     by element as the selection is written (the map iterator's cast, the boolean assignment's transfer function) —
         ///     after the index and broadcast checks, and not at all when the selection is empty (<c>a[[]] = np.array(['é'])</c>
-        ///     into an <c>S</c> array succeeds). A number formats without fail, so a numeric value (scalar or array) is refused
-        ///     only when the selection holds an element.
+        ///     into an <c>S</c> array succeeds). A number formats without fail (its <c>str()</c>, truncated to the width), so a
+        ///     numeric value is converted only when the selection holds an element, after the same checks.
         /// </remarks>
         private void StringAdvancedSet(NDArray value, Action<NDArray, NDArray> onUnits, Action<NDArray, NDArray> onProxy)
         {
@@ -210,10 +209,6 @@ namespace NumSharp
                 // them for this array's and the value's shapes), and an empty selection converts nothing.
                 if (!ProxySelectionWrites(value, onProxy))
                     return;
-                if (!text)
-                    throw new StringComputationNotSupportedException(
-                        $"Cannot assign {value.dtype.ToString(true)} values to a {dtype.ToString(true)} array: converting numbers to text " +
-                        "is not part of NumSharp's fixed-width string storage phase yet.");
             }
 
             // The value in this array's dtype (a scalar's conversion runs before the index is resolved, as in NumPy).

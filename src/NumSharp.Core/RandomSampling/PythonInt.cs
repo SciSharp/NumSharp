@@ -293,14 +293,17 @@ namespace NumSharp
         /// <returns><paramref name="s"/> itself when it is already ASCII (the common case), else the rewritten text.</returns>
         /// <remarks>
         ///     CPython walks code points; a C# string holds an astral digit (<c>U+1D7CF</c>) as a surrogate pair, so the pair
-        ///     is read as one code point and becomes ONE ASCII digit. .NET's whitespace set equals Python's above ASCII
-        ///     (<c>U+0085</c>, <c>U+00A0</c>, <c>U+1680</c>, <c>U+2000..U+200A</c>, <c>U+2028</c>, <c>U+2029</c>,
-        ///     <c>U+202F</c>, <c>U+205F</c>, <c>U+3000</c>).
+        ///     is read as one code point and becomes ONE ASCII digit. The whitespace and digit sets are CPython 3.12's
+        ///     (Unicode 15.0.0, <see cref="NumSharp.Utilities.PyUnicode"/>), not .NET's: .NET 10 reads Unicode 16.0, whose new
+        ///     decimal digits (Garay <c>U+10D40</c>, ...) CPython 3.12 does not parse. (Until 2026-10-12 this read
+        ///     <see cref="CharUnicodeInfo.GetDecimalDigitValue(string, int)"/> and accepted them on .NET 10.)
         /// </remarks>
         private static string TransformDecimalAndSpaceToAscii(string s)
         {
-            // CPython returns the text untouched when every code point is below 127 (DEL included in the rewrite).
-            if (s.AsSpan().IndexOfAnyExceptInRange('\0', '\x7E') < 0)
+            // CPython returns the text untouched when every code point is ASCII (PyUnicode_IS_ASCII, DEL included); the
+            // per-character rule below (which turns DEL into '?') runs only for a text with a non-ASCII character. For
+            // int() the two agree anyway: DEL is an invalid character either way.
+            if (s.AsSpan().IndexOfAnyExceptInRange('\0', '\x7F') < 0)
                 return s;
 
             var sb = new StringBuilder(s.Length);
@@ -312,17 +315,23 @@ namespace NumSharp
                     sb.Append(c);
                     continue;
                 }
-                if (char.IsWhiteSpace(c))
+                // A valid surrogate pair is ONE code point (an astral digit is one digit); a lone surrogate is its own.
+                int cp = c;
+                bool pair = char.IsHighSurrogate(c) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1]);
+                if (pair)
+                    cp = char.ConvertToUtf32(c, s[i + 1]);
+                if (NumSharp.Utilities.PyUnicode.IsSpace(cp))
                 {
                     sb.Append(' ');
+                    if (pair)
+                        i++;
                     continue;
                 }
-                // GetDecimalDigitValue(string, index) reads a surrogate pair at index as its combined code point.
-                int d = CharUnicodeInfo.GetDecimalDigitValue(s, i);
+                int d = NumSharp.Utilities.PyUnicode.DecimalValue(cp);
                 if (d >= 0)
                 {
                     sb.Append((char)('0' + d));
-                    if (char.IsHighSurrogate(c) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1]))
+                    if (pair)
                         i++;
                     continue;
                 }

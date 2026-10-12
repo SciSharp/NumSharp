@@ -172,6 +172,122 @@ namespace NumSharp.Backends.Strings
                && x1.dtype.Meta == x2.dtype.Meta;
 
         /// <summary>
+        ///     <c>np.add</c> under a string <c>dtype=</c> request whose operands are NOT two strings of one class (those ignore
+        ///     the request, <see cref="IsIgnoredStringRequest"/>): NumPy's string add promoter casts each input to the
+        ///     requested class — a number becomes its scalar's <c>str()</c> at its <c>REQUIRED_STR_LEN</c>
+        ///     (<c>add(u, f8, dtype='U')</c> of a <c>&lt;U1</c> is <c>&lt;U33</c>: <c>'a1.5'</c>), a string of the other class
+        ///     is cast (<c>S → U</c> decodes ASCII; <c>U → S</c> is not a same_kind cast) — and concatenates the texts.
+        /// </summary>
+        /// <param name="dtype">The <c>dtype=</c> argument, or null.</param>
+        /// <param name="x1">The first input.</param>
+        /// <param name="x2">The second input.</param>
+        /// <param name="out">The <c>out=</c> operand, or null.</param>
+        /// <param name="where">The <c>where=</c> mask, or null.</param>
+        /// <returns>Null when the call is not such a request (the numeric path, or the ignored request, continues);
+        ///     otherwise the concatenation (<paramref name="out"/> itself, or a fresh array of the summed descriptor).</returns>
+        /// <exception cref="TypeError">A sized request (<see cref="DefaultEngine.GeneralDTypeOnlyText"/>), two string classes
+        ///     (<c>ufunc 'add' cannot use operands with types …</c>), or a concatenation wider than 2^31 - 1 bytes.</exception>
+        /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; an input the requested class cannot reach
+        ///     by a same_kind cast (<c>Cannot cast ufunc 'add' input 0 from dtype('&lt;U1') to dtype('S1') …</c>); a result
+        ///     that cannot be cast into <paramref name="out"/>; operands that do not broadcast.</exception>
+        /// <exception cref="UnicodeDecodeError">An <c>S</c> input cast to a <c>U</c> request meets a byte ≥ 0x80.</exception>
+        /// <remarks>
+        ///     NumPy's order: the dtype class check, the <c>out=</c> / <c>where=</c> parse, the promoter (class mix, the input
+        ///     casts in input order), the descriptor resolution (the width limit), the output cast, the broadcast — then the
+        ///     loop. A C# number literal (<see cref="NDArray.WasPythonLiteral"/>) is the Python scalar it stands for, whose
+        ///     array NumPy builds with the scalar's default dtype: an integer reads as int64 (21 characters; uint64 past
+        ///     int64), a <c>float</c> or <c>double</c> as float64 (printed by the double's repr), a complex as complex128.
+        ///     The cast operands are temporaries of the inputs' own shapes (a number never fails to format), released when
+        ///     the call returns.
+        /// </remarks>
+        internal static NDArray AddUnderStringRequest(DType dtype, NDArray x1, NDArray x2, NDArray @out, NDArray where)
+        {
+            if (x2 is null || !IsStringRequest(dtype) || IsIgnoredStringRequest("add", dtype, x1, x2))
+                return null;
+            DefaultEngine.ThrowIfNotGeneralDType(dtype);
+            ThrowIfOutWhereInvalid(@out, where);
+            var req = dtype.Meta;
+            DType d1 = PythonScalarDescr(x1), d2 = PythonScalarDescr(x2);
+            bool s1 = d1.Meta is StringDTypeMeta, s2 = d2.Meta is StringDTypeMeta;
+            // Two strings of one class ignore the request (handled above); two classes are the promoter's refusal.
+            if (s1 && s2)
+                throw new TypeError($"ufunc 'add' cannot use operands with types {d1.ToString(true)} and {d2.ToString(true)}");
+            // The input casts, in input order: text of the requested class stays, everything else is cast to the class.
+            var c1 = s1 && d1.Meta == req ? d1 : DTypePromotion.CastDescrToDType(d1, req);
+            if (!DTypeCasting.CanCastTypeTo(d1, c1, NPY_CASTING.NPY_SAME_KIND_CASTING))
+                throw InputCastText("add", 0, d1, c1);
+            var c2 = s2 && d2.Meta == req ? d2 : DTypePromotion.CastDescrToDType(d2, req);
+            if (!DTypeCasting.CanCastTypeTo(d2, c2, NPY_CASTING.NPY_SAME_KIND_CASTING))
+                throw InputCastText("add", 1, d2, c2);
+            var result = Concatenation(c1, c2);
+            if (@out is not null && !DTypeCasting.CanCastTypeTo(result, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
+                throw new ArgumentException(
+                    $"Cannot cast ufunc 'add' output from {result.ToString(true)} to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
+            var broadcast = BroadcastError(x1, x2, @out, where);
+            if (broadcast is not null)
+                throw broadcast;
+
+            var dims = BroadcastDims(x1, x2, @out, where);
+            if (ShapeSize(dims) == 0)
+                return @out ?? new NDArray(result, dims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(dims), true);
+
+            NDArray t1 = null, t2 = null;
+            try
+            {
+                t1 = TextOperand(x1, d1, c1);
+                t2 = TextOperand(x2, d2, c2);
+                return NDStringArithmetic.Add(t1 ?? x1, t2 ?? x2, @out, where);
+            }
+            finally
+            {
+                // The cast operands are temporaries: the result never aliases them (a fresh array or out=).
+                t1?.Dispose();
+                t2?.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     The descriptor NumPy's promoter sees for an operand: a C# number literal's 0-d array is a Python scalar, whose
+        ///     array has the scalar's default dtype (int64, or uint64 for an integer past int64; float64; complex128); every
+        ///     other operand has its own descriptor.
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>The descriptor.</returns>
+        private static DType PythonScalarDescr(NDArray x)
+        {
+            if (!x.WasPythonLiteral)
+                return x.dtype;
+            var tc = x.typecode;
+            if (tc.IsInteger())
+                return tc == NPTypeCode.UInt64 && x.GetUInt64(0) > long.MaxValue ? np.uint64 : np.int64;
+            if (tc == NPTypeCode.Complex)
+                return np.complex128;
+            return np.float64;
+        }
+
+        /// <summary>
+        ///     An operand of <see cref="AddUnderStringRequest"/> as text of the loop's descriptor: null when it already is that
+        ///     text, else a new array (a number formatted as its <c>str()</c>; a Python-literal number first widened to the
+        ///     scalar's default dtype, so a <c>0.1f</c> literal prints the double's digits as a Python float does; a string
+        ///     of the other class cast).
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <param name="seen">The descriptor the promoter saw (<see cref="PythonScalarDescr"/>).</param>
+        /// <param name="loop">The loop's descriptor for this input.</param>
+        /// <returns>The new text operand the caller disposes, or null.</returns>
+        /// <exception cref="UnicodeDecodeError">An <c>S</c> operand meets a byte ≥ 0x80 on its way to <c>U</c>.</exception>
+        private static NDArray TextOperand(NDArray x, DType seen, DType loop)
+        {
+            if (x.dtype == loop)
+                return null;
+            if (seen == x.dtype)
+                return x.astype(loop, true, 'K', "unsafe");
+            using var widened = x.astype(seen, true, 'K', "unsafe");
+            return widened.astype(loop, true, 'K', "unsafe");
+        }
+
+        /// <summary>
         ///     NumPy's answer for a ufunc called with a string <c>dtype=</c> request (the operands may be numbers or text).
         /// </summary>
         /// <param name="ufunc">NumPy's ufunc name.</param>
@@ -642,13 +758,60 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
+        ///     The text a reduction with a NUMERIC <c>dtype=</c> request reduces: NumPy's multiply / maximum / minimum
+        ///     reductions resolve the requested number type's loop and cast the text input to it first — a parse
+        ///     (<c>np.prod(['1', '2'], dtype='f8')</c> is 2.0, <c>'a'</c> is <c>could not convert string to float:
+        ///     np.str_('a')</c>, probed). The add family is not here: the string add loop resolves from the two text operands
+        ///     alone (<c>np.add(u, u, dtype='f8')</c> concatenates, probed), so <c>np.sum(u, dtype='f8')</c> is the
+        ///     <c>add.reduce</c> refusal (<see cref="ThrowIfReduce(string, NDArray, int?, DType)"/>).
+        /// </summary>
+        /// <param name="op">The NumPy function name (<c>"prod"</c>, <c>"cumprod"</c>, <c>"max"</c>, <c>"min"</c>, ...).</param>
+        /// <param name="a">The reduced array.</param>
+        /// <param name="axis">The <c>axis</c> argument, or null.</param>
+        /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
+        /// <returns>The parsed array of <paramref name="dtype"/> (the caller reduces it, then disposes it — see
+        ///     <see cref="ReduceParsed"/>), or null when the call is not a numeric request over text.</returns>
+        /// <exception cref="TypeError">The dtype= class check NumPy makes first.</exception>
+        /// <exception cref="AxisError">The axis is out of bounds (checked before any text is parsed).</exception>
+        /// <exception cref="ValueError">A text element that does not parse into <paramref name="dtype"/>.</exception>
+        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dtype"/>.</exception>
+        internal static NDArray ParseForNumericReduce(string op, NDArray a, int? axis, DType dtype)
+        {
+            if (dtype is null || !IsString(a) || IsStringRequest(dtype) || ReducesWithAdd(op))
+                return null;
+            PreReduceDTypeCheck(op, dtype);
+            ValidateReduceAxis(op, a.ndim, axis);
+            PostReduceDTypeCheck(op, dtype);
+            return a.astype(dtype, true, 'K', "unsafe");
+        }
+
+        /// <summary>
+        ///     Runs a reduction over an array <see cref="ParseForNumericReduce"/> produced and releases that array unless the
+        ///     result IS it or a view of it (a shortcut that returns its input).
+        /// </summary>
+        /// <param name="parsed">The parsed input (owned here).</param>
+        /// <param name="reduce">The reduction over it.</param>
+        /// <returns>The reduction's result.</returns>
+        internal static NDArray ReduceParsed(NDArray parsed, Func<NDArray, NDArray> reduce)
+        {
+            NDArray result = null;
+            try
+            {
+                result = reduce(parsed);
+                return result;
+            }
+            finally
+            {
+                if (result is null || !ReferenceEquals(result.Storage.InternalArray, parsed.Storage.InternalArray))
+                    parsed.Dispose();
+            }
+        }
+
+        /// <summary>
         ///     The answer of a reduction-style function once its checks passed: a string <c>dtype=</c> request is
-        ///     <see cref="ReduceDTypeLoopError"/>; a text input is <see cref="ReduceError"/> — except that a NUMERIC request
-        ///     over text makes a multiply / maximum / minimum reduction cast the text to that number type first
-        ///     (<c>np.prod(['1', '2'], dtype='f8')</c> is 2.0, <c>'a'</c> is <c>could not convert string to float</c>, probed),
-        ///     which is text-to-number conversion, the next phase. The add family ignores a numeric request: the string add
-        ///     loop resolves from the two text operands alone (<c>np.add(u, u, dtype='f8')</c> concatenates, probed), so
-        ///     <c>np.sum(u, dtype='f8')</c> is the same <c>add.reduce</c> refusal as without one.
+        ///     <see cref="ReduceDTypeLoopError"/>; a text input is <see cref="ReduceError"/>. (A NUMERIC request over text
+        ///     for a multiply / maximum / minimum reduction never gets here: its callers parse the text first,
+        ///     <see cref="ParseForNumericReduce"/>.)
         /// </summary>
         /// <param name="op">The NumPy function name.</param>
         /// <param name="a">The reduced array.</param>
@@ -659,8 +822,6 @@ namespace NumSharp.Backends.Strings
         {
             if (request)
                 return ReduceDTypeLoopError(op, dtype, a);
-            if (dtype is not null && !ReducesWithAdd(op))
-                return NextPhase(op, a);
             return ReduceError(op, a);
         }
 

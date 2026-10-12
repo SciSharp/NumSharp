@@ -66,11 +66,20 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         [TestMethod]
-        public void AddRequest_NumbersAreFormattedAsText_IsTheNextPhase()
+        public void AddRequest_NumbersAreFormattedAsText()
         {
-            // NumPy computes ['1.51.5', '2.02.0', '3.03.0'] (<U64): the string add loop, the next phase.
-            Action act = () => np.add(F(), F(), dtype: "U");
-            act.Should().Throw<StringComputationNotSupportedException>().WithMessage("*<U64*");
+            // NumPy's string add promoter casts each float64 to <U32 (its REQUIRED_STR_LEN) and concatenates (probed 2.4.2).
+            var r = np.add(F(), F(), dtype: "U");
+            r.dtype.str.Should().Be("<U64");
+            NDArray.AsStringArray(r).Should().Equal("1.51.5", "2.02.0", "3.03.0");
+            // A text operand of the requested class keeps its width: <U2 + int64 (<U21) is <U23.
+            var mixed = np.add(U(), I(), dtype: "U");
+            mixed.dtype.str.Should().Be("<U23");
+            NDArray.AsStringArray(mixed).Should().Equal("ab1", "c2", "de3");
+            // U text never reaches S by a same_kind cast: the input cast refusal names the resolved descriptor.
+            Action narrow = () => np.add(U(), F(), dtype: "S");
+            narrow.Should().Throw<ArgumentException>()
+                  .WithMessage("Cannot cast ufunc 'add' input 0 from dtype('<U2') to dtype('S2') with casting rule 'same_kind'");
         }
 
         [TestMethod]
@@ -193,9 +202,11 @@ namespace NumSharp.Tests.Backends.Strings
             sum.Should().Throw<TypeError>().WithMessage(
                 "the resolved dtypes are not compatible with add.reduce. Resolved (dtype('<U2'), dtype('<U2'), dtype('<U4'))");
 
-            // np.prod(u, dtype='f8') parses the text (could not convert string to float: np.str_('ab')): the next phase.
+            // np.prod(u, dtype='f8') parses the text first: 'ab' is NumPy's ValueError, numbers multiply (probed 2.4.2).
             Action prod = () => np.prod(U(), (int?)null, np.float64);
-            prod.Should().Throw<StringComputationNotSupportedException>();
+            prod.Should().Throw<ValueError>().WithMessage("could not convert string to float: np.str_('ab')");
+            np.prod(np.array(new[] { "1", "2.5" }), (int?)null, np.float64).GetDouble().Should().Be(2.5);
+            np.prod(np.array(new[] { "1", "2" }), (int?)null, np.int64).GetInt64().Should().Be(2L);
         }
 
         [TestMethod]

@@ -38,6 +38,10 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentException">An integer loop meets a negative integer exponent ("Integers to
         /// negative integer powers are not allowed."), a cast is not allowed, a mask is not bool, or the out is
         /// read-only.</exception>
+        /// <exception cref="INumSharpException">A read-only <paramref name="out"/>: NumPy's ValueError "output array is
+        /// read-only" (<see cref="NumSharpException.ThrowIfNotWriteable"/>).</exception>
+        /// <exception cref="ValueError">A text <paramref name="out"/> under <paramref name="where"/> whose current text does
+        /// not parse into the loop dtype (read before the loop, as NumPy's buffered iteration does).</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast together, or the out cannot hold
         /// the broadcast result.</exception>
         public override NDArray Power(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
@@ -72,7 +76,17 @@ namespace NumSharp.Backends
                 ValidateWhereMask(where);
             CheckWeakPyIntOperand(lhs, rhs, promotedLoop, loopFromPromotion: !typeCode.HasValue);
 
-            if (loopIsInteger && IsSignedInteger(rhs.GetTypeCode) && ContainsNegative(rhs))
+            // A text out= under where= is READWRITE: NumPy's buffered iteration parses the out's current text into the loop
+            // dtype (after the output cast check and the broadcast) BEFORE the loop runs, so its parse error wins over the
+            // loop's negative-exponent error (probed: power(i8, i8, out=['7', 'x', …], where=…) reports the 'x').
+            if (@out is not null && @out.typecode == NPTypeCode.String && where is not null)
+            {
+                ThrowIfTextOutCastFails("power", "output", promotedLoop, @out);
+                ResolveUfuncIterationShape(Broadcast(lhs.Shape, rhs.Shape).Item1.Clean(), new[] { lhs, rhs }, @out, where);
+                ReadMaskedTextOut(@out, promotedLoop, where);
+            }
+
+            if (loopIsInteger && IsSignedInteger(rhs.GetTypeCode) && ContainsNegative(rhs, where))
                 throw new ArgumentException("Integers to negative integer powers are not allowed.");
 
             // The float32 / float64 loops branch on the exponent's STEP inside NumPy's inner-loop call, on every
@@ -288,6 +302,37 @@ namespace NumSharp.Backends
         /// Mirrors numpy's per-element check in <c>@TYPE@_power</c> but hoisted to a single
         /// pre-pass so the inner kernel stays branch-free.
         /// </summary>
+        /// <summary>
+        ///     Whether an integer power loop meets a negative exponent where it RUNS: NumPy raises inside the loop, so under a
+        ///     <c>where=</c> mask only a selected element counts (<c>power([2, -1], [2, -1], out=…, where=[True, False])</c>
+        ///     computes <c>[4, …]</c>, probed against NumPy 2.4.2).
+        /// </summary>
+        /// <param name="nd">The exponents.</param>
+        /// <param name="where">The bool mask, or null (every element runs).</param>
+        /// <returns>True when a running element's exponent is negative.</returns>
+        /// <remarks>When the exponents and the mask do not broadcast, this answers false: the ufunc route then raises
+        ///     NumPy's broadcast error, which lists every operand (NumPy builds its iterator before any loop runs).</remarks>
+        private static bool ContainsNegative(NDArray nd, NDArray where)
+        {
+            if (where is null)
+                return ContainsNegative(nd);
+            if (!ContainsNegative(nd))
+                return false;
+            try
+            {
+                using var negative = np.less(nd, NDArray.Scalar(0L));
+                using var selected = np.logical_and(negative, where);
+                return np.any(selected);
+            }
+            catch (Exception e) when (e is IncorrectShapeException or ArgumentException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Whether any exponent of a signed integer array is negative (every element, every layout).</summary>
+        /// <param name="nd">The exponents.</param>
+        /// <returns>True when an element is below zero; false for an unsigned / non-integer dtype.</returns>
         private static bool ContainsNegative(NDArray nd)
         {
             switch (nd.GetTypeCode)

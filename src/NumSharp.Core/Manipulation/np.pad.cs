@@ -314,25 +314,21 @@ namespace NumSharp
         ///     original into the center, then assign each axis's before / after constant into its pad band, the bands of
         ///     earlier axes covering the corners. Each constant is assigned as text: a <see cref="string"/> or <c>byte[]</c>
         ///     is encoded once into a 0-d string array and broadcast by the string copy route, which cuts it to the array's
-        ///     width (<c>'zzzzz'</c> into <c>&lt;U3</c> is <c>'zzz'</c>) and converts <c>S ↔ U</c> with the ASCII checks.
+        ///     width (<c>'zzzzz'</c> into <c>&lt;U3</c> is <c>'zzz'</c>) and converts <c>S ↔ U</c> with the ASCII checks; a
+        ///     number (the default constant is 0) is written as its <c>str()</c> (<c>np.pad(u, 1)</c> pads with <c>'0'</c>).
         /// </summary>
         /// <param name="array">The string array to pad.</param>
         /// <param name="padPairs">The normalized (before, after) widths per axis.</param>
         /// <param name="constantValues">The constant(s) in any of np.pad's spellings, or null for NumPy's default 0.</param>
         /// <returns>The padded array (the input's dtype, a fresh buffer).</returns>
-        /// <exception cref="StringComputationNotSupportedException">The default constant 0 or any number: NumPy pads with its text (<c>'0'</c>),
-        ///     and converting numbers to text is the next phase of the string support.</exception>
         /// <exception cref="UnicodeEncodeError">A non-ASCII str constant into an <c>S</c> array.</exception>
         /// <exception cref="UnicodeDecodeError">A non-ASCII bytes constant into a <c>U</c> array.</exception>
         private static NDArray PadConstantText(NDArray array, long[,] padPairs, object constantValues)
         {
             int ndim = array.ndim;
-            // NumPy's default constant is the number 0, stored in a string array as the text '0'.
-            if (constantValues is null)
-                throw new StringComputationNotSupportedException(
-                    $"np.pad of a fixed-width string array ({array.dtype.ToString(true)}) in 'constant' mode needs text " +
-                    "constant_values (a string or byte[]): the default 0 is a number, which NumPy stores as the text '0', and " +
-                    "converting numbers to text is the next phase of NumSharp's string support.");
+            // NumPy's default constant is the number 0 (np.array(0), an int64 scalar), stored in a string array as the
+            // text '0' — its str().
+            constantValues ??= 0L;
 
             object[,] valuePairs = _AsPairsValues(constantValues, Math.Max(ndim, 1));
 
@@ -343,9 +339,12 @@ namespace NumSharp
                 for (int side = 0; side < 2; side++)
                 {
                     object v = valuePairs[axis, side];
+                    // Text stays text; a number becomes its 0-d array, which the area assignment writes as its str()
+                    // (NumPy's _as_pairs makes every constant a NumPy scalar through np.array).
                     encoded[axis, side] = v is NDArray given ? given
                         : v is string or byte[] or char ? Backends.Strings.NDStringArrays.FromScalar(v, null)
-                        : throw Backends.Strings.NDStringStorage.NumberToText(v?.GetType().Name ?? "None");
+                        : v is null ? Backends.Strings.NDStringArrays.FromScalar(null, array.dtype)
+                        : NDArray.Scalar(v);
                 }
 
             var (padded, originalSlice) = _PadSimple(array, padPairs, fillValue: null);

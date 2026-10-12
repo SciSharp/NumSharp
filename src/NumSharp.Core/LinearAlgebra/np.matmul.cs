@@ -64,6 +64,13 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <returns>The matrix product, or <paramref name="out"/> when one is given (a text <paramref name="out"/> receives
+        ///     each product as its scalar's <c>str()</c>).</returns>
+        /// <exception cref="TypeError">Text operands or a string <paramref name="dtype"/> (no matmul loop), <c>keepdims</c>
+        ///     or <c>axis</c> (NumPy's matmul refusals).</exception>
+        /// <exception cref="INumSharpException">A read-only <paramref name="out"/> (NumPy's ValueError "output array is
+        ///     read-only").</exception>
+        /// <exception cref="ArgumentException">A cast <paramref name="casting"/> refuses (NumPy's UFuncTypeError text).</exception>
         [NDScoped]
         public static NDArray matmul(NDArray x1, NDArray x2, NDArray @out = null, int[][] axes = null,
             int? axis = null, bool? keepdims = null, DType dtype = null, string casting = "same_kind",
@@ -135,8 +142,8 @@ namespace NumSharp
             if (dtype is not null)
             {
                 var loopType = dtype.GetTypeCode(); // a descriptor-only class raises its own descriptive "no storage yet"
-                ValidateMatmulCast(a.typecode, loopType, casting, "input 0");
-                ValidateMatmulCast(b.typecode, loopType, casting, "input 1");
+                ValidateMatmulCast(a.dtype, dtype, casting, "input 0");
+                ValidateMatmulCast(b.dtype, dtype, casting, "input 1");
                 a = a.astype(dtype, copy: false);
                 b = b.astype(dtype, copy: false);
             }
@@ -152,7 +159,9 @@ namespace NumSharp
                 return result;
 
             // out cast is validated BEFORE the shape (probed order), then the shape, then the copy.
-            ValidateMatmulCast(result.typecode, @out.typecode, casting, "output");
+            // By descriptor: a text out= receives the product as each number's str() (probed: matmul of int64 into
+            // out=S3 is [[b'11']]), and the string lane alone carries no width or class.
+            ValidateMatmulCast(result.dtype, @out.dtype, casting, "output");
             ValidateMatmulOutputShape(result, @out, outputCore);
             np.copyto(@out, result, "unsafe");   // cast already validated
             return @out;
@@ -226,14 +235,24 @@ namespace NumSharp
             }
         }
 
-        /// <summary>A ufunc cast gate: reports NumPy's verbatim "Cannot cast ufunc 'matmul' {role} …".</summary>
-        private static void ValidateMatmulCast(NPTypeCode from, NPTypeCode to, string casting, string role)
+        /// <summary>
+        ///     A ufunc cast gate: reports NumPy's verbatim "Cannot cast ufunc 'matmul' {role} …". Checked by descriptor, so
+        ///     a text <c>out=</c> (whose storage lane alone carries no width or class) gets NumPy's answer: every number to
+        ///     text cast is same_kind, and the copy formats each product as its scalar's <c>str()</c>.
+        /// </summary>
+        /// <param name="from">The source descriptor (an input, or the product).</param>
+        /// <param name="to">The target descriptor (the loop, or <c>out=</c>).</param>
+        /// <param name="casting">The <c>casting=</c> rule (validated by the caller).</param>
+        /// <param name="role"><c>"input 0"</c>, <c>"input 1"</c> or <c>"output"</c>, as NumPy names the operand.</param>
+        /// <exception cref="ArgumentException">The cast is not allowed under <paramref name="casting"/> (NumPy's
+        ///     UFuncTypeError text).</exception>
+        private static void ValidateMatmulCast(DType from, DType to, string casting, string role)
         {
-            if (from == to || np.can_cast(from, to, casting))
+            if (from == to || DTypeCasting.CanCastTypeTo(from, to, DTypeCasting.ParseCasting(casting)))
                 return;
             throw new ArgumentException(
-                $"Cannot cast ufunc 'matmul' {role} from dtype('{from.AsNumpyDtypeName()}') to " +
-                $"dtype('{to.AsNumpyDtypeName()}') with casting rule '{casting}'");
+                $"Cannot cast ufunc 'matmul' {role} from {from.ToString(true)} to {to.ToString(true)} " +
+                $"with casting rule '{casting}'");
         }
 
         /// <summary>

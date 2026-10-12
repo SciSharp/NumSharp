@@ -19,9 +19,9 @@ namespace NumSharp.Tests.APIs
     ///     either as text (an <c>S</c> element through Latin-1, so every byte survives).
     ///     </para>
     ///     <para>
-    ///     A conversion between text and numbers is the string dtypes' computational phase, which NumSharp does not do yet:
-    ///     those calls raise <see cref="StringComputationNotSupportedException"/> where NumPy formats or parses
-    ///     (<see cref="TextNumberConversions_AreTheComputationalPhase"/>, <c>[Misaligned]</c>).
+    ///     A conversion between text and numbers runs NumPy's legacy casts: a number is written as its scalar's
+    ///     <c>str()</c>, a text is parsed by <c>int()</c> / <c>float()</c> / <c>complex()</c>
+    ///     (<see cref="TextNumberConversions_FormatAndParse"/>).
     ///     </para>
     /// </remarks>
     [TestClass]
@@ -450,46 +450,38 @@ namespace NumSharp.Tests.APIs
         }
 
         /// <summary>
-        ///     Text ↔ number conversions are the string dtypes' COMPUTATIONAL phase: NumPy formats an int64 as <c>&lt;U21</c>
-        ///     text (<c>'0' '1' '2'</c>), parses <c>'1' '22' '-3'</c> into int64, finds <c>&lt;U21</c> as the common dtype of
-        ///     <c>&lt;U2</c> and int64, and stores <c>it[0] = 5</c> as <c>'5'</c>; NumSharp raises
-        ///     <see cref="StringComputationNotSupportedException"/> for each, naming the cast NumPy would run (so the resolved
-        ///     widths are NumPy's).
+        ///     Text ↔ number conversions through the iterator's buffers run NumPy's legacy casts (probed against NumPy 2.4.2):
+        ///     an int64 operand requested as <c>'U'</c> reads <c>&lt;U21</c> text <c>'0' '1' '2'</c>; <c>'1' '22' '-3'</c>
+        ///     requested as int64 reads 1, 22, -3; <c>common_dtype</c> over <c>&lt;U2</c> and int64 is <c>&lt;U21</c> for
+        ///     both, the numbers read as text; and <c>it[0] = 5</c> into a <c>&lt;U2</c> operand stores <c>'5'</c>.
         /// </summary>
         [TestMethod]
-        [Misaligned]
-        public void TextNumberConversions_AreTheComputationalPhase()
+        public void TextNumberConversions_FormatAndParse()
         {
-            var format = () =>
+            using (var a = np.arange(3))
+            using (var it = np.nditer(a, new[] { "buffered" }, op_dtypes: new[] { np.dtype("U") }, casting: "unsafe"))
             {
-                using var a = np.arange(3);
-                using var it = np.nditer(a, new[] { "buffered" }, op_dtypes: new[] { np.dtype("U") }, casting: "unsafe");
-                foreach (var _ in it) { }
-            };
-            format.Should().Throw<StringComputationNotSupportedException>().WithMessage("Casting dtype('int64') to dtype('<U21') *");
+                it.dtypes[0].str.Should().Be("<U21");
+                Walk(it).Should().Equal("0", "1", "2");
+            }
 
-            var parse = () =>
-            {
-                using var u = U("1", "22", "-3");
-                using var it = np.nditer(u, new[] { "buffered" }, op_dtypes: new[] { np.int64 }, casting: "unsafe");
-                foreach (var _ in it) { }
-            };
-            parse.Should().Throw<StringComputationNotSupportedException>().WithMessage("Casting dtype('<U2') to dtype('int64') *");
+            using (var u = U("1", "22", "-3"))
+            using (var it = np.nditer(u, new[] { "buffered" }, op_dtypes: new[] { np.int64 }, casting: "unsafe"))
+                it.Select(v => (long)v[0].GetAtIndex(0)).ToList().Should().Equal(1L, 22L, -3L);
 
-            var common = () =>
+            using (var u = U("ab", "c"))
+            using (var n = np.arange(2))
+            using (var it = np.nditer(new[] { u, n }, new[] { "common_dtype", "buffered" }, casting: "unsafe"))
             {
-                using var u = U("ab", "c");
-                using var n = np.arange(2);
-                using var it = np.nditer(new[] { u, n }, new[] { "common_dtype", "buffered" }, casting: "unsafe");
-                foreach (var _ in it) { }
-            };
-            common.Should().Throw<StringComputationNotSupportedException>().WithMessage("Casting dtype('int64') to dtype('<U21') *");
+                it.dtypes.Select(d => d.str).Should().Equal("<U21", "<U21");
+                it.Select(v => Text(v[0].GetAtIndex(0)) + "|" + Text(v[1].GetAtIndex(0))).ToList().Should().Equal("ab|0", "c|1");
+            }
 
             using var text = U("ab", "c");
-            using var writer = np.nditer(text, op_flags: new[] { "readwrite" });
-            using var five = NDArray.Scalar(5);
-            var store = () => writer[0] = five;
-            store.Should().Throw<StringComputationNotSupportedException>().WithMessage("Casting dtype('int32') to dtype('<U2') *");
+            using (var writer = np.nditer(text, op_flags: new[] { "readwrite" }))
+            using (var five = NDArray.Scalar(5))
+                writer[0] = five;
+            NDArray.AsStringArray(text).Should().Equal("5", "c");
         }
 
         // ------------------------------------------------------------------ refusals

@@ -1,6 +1,10 @@
 using System;
 using System.Collections;
+using System.Globalization;
+using System.Numerics;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends.Printing;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends.Strings
 {
@@ -15,8 +19,11 @@ namespace NumSharp.Backends.Strings
     ///     <see cref="char"/>), bytes (<c>byte[]</c>, <see cref="ReadOnlyMemory{T}"/> of <see cref="byte"/>), a 0-d string
     ///     array (NumPy's "convert to scalar and retry"), and Python's <c>None</c> (C# <see langword="null"/>), which NumPy
     ///     stores as its <c>str()</c> — the text <c>"None"</c>. A sequence raises NumPy's
-    ///     <c>setting an array element with a sequence</c>. Numbers (<c>str(5)</c> → <c>'5'</c>) are NumPy's number→text
-    ///     conversion, which belongs to the computational phase; they raise <see cref="NotSupportedException"/> naming that.
+    ///     <c>setting an array element with a sequence</c>. A number stores as its <c>str()</c> (<c>a[0] = 5</c> gives
+    ///     <c>'5'</c>), truncated to the width: the C# integers, <see cref="bool"/>, <see cref="float"/>, <see cref="double"/>
+    ///     and <see cref="System.Numerics.Complex"/> are Python scalars (a <see cref="float"/> is a Python float, so it prints
+    ///     its double value: <c>0.1f</c> is <c>'0.10000000149011612'</c>), <see cref="Half"/> and <see cref="decimal"/> are
+    ///     NumPy scalars (<c>np.float16(0.1)</c> is <c>'0.1'</c>), a numeric 0-d array prints as its own dtype's scalar.
     /// </remarks>
     internal static unsafe class NDStringStorage
     {
@@ -54,7 +61,8 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
         /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into <c>U</c>.</exception>
         /// <exception cref="ValueError">A sequence (<c>setting an array element with a sequence</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A number or other non-text value (number→text is the computational phase).</exception>
+        /// <exception cref="NotSupportedException">A value that is neither text, bytes, None, a number nor a 0-d array (a C#
+        ///     object has no Python <c>str()</c> to store).</exception>
         public static void WriteElement(byte* dst, bool unicode, int chars, object value)
         {
             switch (value)
@@ -80,16 +88,99 @@ namespace NumSharp.Backends.Strings
                     WriteBinary(dst, unicode, chars, mem.Span);
                     return;
                 case NDArray nd when nd.ndim == 0:
-                    // NumPy's convert_to_scalar_and_retry: a 0-d array stores as its element.
+                    // NumPy's convert_to_scalar_and_retry: a 0-d array stores as its element — a number as ITS dtype's
+                    // scalar str() (a float32 0-d array prints float32's shortest digits).
                     if (nd.typecode != NPTypeCode.String)
-                        throw NumberToText(nd.dtype.ToString());
+                    {
+                        NDTextConversion.FormatRun((byte*)nd.Address + nd.Shape.offset * (long)nd.typecode.SizeOf(), 0,
+                            nd.typecode, dst, 0, unicode, chars, 1);
+                        GC.KeepAlive(nd);
+                        return;
+                    }
                     WriteElement(dst, unicode, chars, nd.Storage.GetAtIndex(0));
                     return;
                 case IEnumerable:
                     // PySequence_NoString_Check: a list / array / NDArray of rank >= 1 is not one element.
                     throw new ValueError("setting an array element with a sequence");
                 default:
-                    throw NumberToText(value.GetType().Name);
+                    WriteNumber(dst, unicode, chars, value);
+                    return;
+            }
+        }
+
+        /// <summary>
+        ///     The length of the text <see cref="WriteElement"/> stores for a number (its <c>str()</c>, before truncation) —
+        ///     the width an UNSIZED string dtype discovers from it (<c>np.array([1, 22], dtype='U')</c> is <c>&lt;U2</c>).
+        /// </summary>
+        /// <param name="value">The number (boxed).</param>
+        /// <returns>The number of characters.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="value"/> is not a number NumSharp knows.</exception>
+        internal static int StrLength(object value)
+        {
+            if (value is BigInteger big)
+                return big.ToString(CultureInfo.InvariantCulture).Length;
+            Span<char> buf = stackalloc char[NDTextFormat.MaxTextLength];
+            return FormatNumber(value, buf);
+        }
+
+        /// <summary>
+        ///     Stores a number as its Python / NumPy <c>str()</c> (see the class remarks for which C# type is which), truncated
+        ///     to the element width and NUL-padded — <c>UNICODE_setitem</c> / <c>STRING_setitem</c> calling
+        ///     <c>PyObject_Str</c>.
+        /// </summary>
+        /// <param name="dst">The element's first byte.</param>
+        /// <param name="unicode">True for <c>U</c>.</param>
+        /// <param name="chars">The element width in characters.</param>
+        /// <param name="value">The number (boxed).</param>
+        /// <exception cref="NotSupportedException"><paramref name="value"/> is not a number NumSharp knows.</exception>
+        private static void WriteNumber(byte* dst, bool unicode, int chars, object value)
+        {
+            if (value is BigInteger big)
+            {
+                // A Python int of any size: its decimal digits (a value past 64 bits can exceed MaxTextLength).
+                NDTextFormat.Store(big.ToString(CultureInfo.InvariantCulture).AsSpan(), dst, unicode, chars);
+                return;
+            }
+            Span<char> buf = stackalloc char[NDTextFormat.MaxTextLength];
+            int n = FormatNumber(value, buf);
+            NDTextFormat.Store(buf.Slice(0, n), dst, unicode, chars);
+        }
+
+        /// <summary>
+        ///     The <c>str()</c> of a number (not a <see cref="BigInteger"/>) into <paramref name="buf"/>: the Python scalars by
+        ///     Python's rules, <see cref="Half"/> and <see cref="decimal"/> by their NumPy scalar's (see the class remarks).
+        /// </summary>
+        /// <param name="value">The number (boxed).</param>
+        /// <param name="buf">Receives the text; room for <see cref="NDTextFormat.MaxTextLength"/> characters.</param>
+        /// <returns>The text's length.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="value"/> is not a number NumSharp knows.</exception>
+        private static int FormatNumber(object value, Span<char> buf)
+        {
+            switch (value)
+            {
+                case bool b:
+                    return NDTextFormat.FormatBool(b, buf);
+                case sbyte or short or int or long:
+                    return NDTextFormat.FormatInt64(Convert.ToInt64(value, CultureInfo.InvariantCulture), buf);
+                case byte or ushort or uint or ulong:
+                    return NDTextFormat.FormatUInt64(Convert.ToUInt64(value, CultureInfo.InvariantCulture), buf);
+                case float f:
+                    // A Python float: the float32 value widened, printed by the double's repr.
+                    return NDTextFormat.FormatFloat(f, FloatKind.Double, buf);
+                case double d:
+                    return NDTextFormat.FormatFloat(d, FloatKind.Double, buf);
+                case Half h:
+                    // np.float16: its own shortest digits and positional window.
+                    return NDTextFormat.FormatFloat((double)h, FloatKind.Half, buf);
+                case decimal m:
+                    // NumSharp's decimal prints as a float64 scalar (ArrayFormatter.ScalarStr's rule).
+                    return NDTextFormat.FormatFloat(Converts.ToDouble(m), FloatKind.Double, buf);
+                case Complex c:
+                    return NDTextFormat.FormatComplex(c, buf);
+                default:
+                    throw new NotSupportedException(
+                        $"Cannot store a {value.GetType().Name} value in a fixed-width string array: a string element takes text " +
+                        "(string, char, byte[]), a number (stored as its str()), None, or a 0-d array.");
             }
         }
 
@@ -122,14 +213,6 @@ namespace NumSharp.Backends.Strings
             else
                 NDStringCodec.WriteBytes(bytes, dst, chars);
         }
-
-        /// <summary>The refusal for a value NumPy would store as its <c>str()</c> — number→text is not part of this phase.</summary>
-        /// <param name="what">The value's type name.</param>
-        /// <returns>The exception (not thrown).</returns>
-        internal static StringComputationNotSupportedException NumberToText(string what)
-            => new StringComputationNotSupportedException(
-                $"Cannot store a {what} value in a fixed-width string array: converting numbers to text (NumPy's str(value)) " +
-                "is not part of NumSharp's string storage phase yet; pass the text itself (a string or byte[]).");
 
         /// <summary>
         ///     Copies the first <paramref name="itemsize"/> bytes of <paramref name="buffer"/> into every following element

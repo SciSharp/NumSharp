@@ -13,9 +13,9 @@ namespace NumSharp.Tests.Documentation
     ///     Executable coverage for every code example in
     ///     <c>docs/website-src/docs/fundamentals/strings-and-bytes.md</c> (the "Working with arrays of
     ///     strings and bytes" fundamentals article). Each test mirrors one documented snippet and
-    ///     asserts the behaviour the page claims: NumPy's fixed-width <c>U</c> / <c>S</c> dtypes store, convert,
-    ///     move and print like NumPy 2.4.2, and computing on text gives NumPy's results (comparisons, truth values,
-    ///     concatenation, repetition), NumPy's refusal (NumPy's text), or the next-phase exception.
+    ///     asserts the behaviour the page claims: NumPy's fixed-width <c>U</c> / <c>S</c> dtypes store, convert (to and from
+    ///     numbers included), move and print like NumPy 2.4.2, and computing on text gives NumPy's results (comparisons,
+    ///     truth values, concatenation, repetition), NumPy's refusal (NumPy's text), or the next-phase exception.
     /// </summary>
     [TestClass]
     public class FundamentalsStringsBytesDocTests
@@ -134,6 +134,88 @@ namespace NumSharp.Tests.Documentation
                .WithMessage("'ascii' codec can't encode character '\\xe9' in position 0: ordinal not in range(128)");
         }
 
+        // ── Converting between text and numbers ──────────────────────────────────────────────────
+
+        /// <summary>The "Numbers to text" snippets: a number is its scalar's <c>str()</c>, at NumPy's width for its
+        /// type when the request is unsized, and cut to a sized request's width; the same text goes in through every
+        /// store.</summary>
+        [TestMethod]
+        public void Converting_NumbersToText()
+        {
+            np.arange(3).astype("U").ToString(true).Should().Be("array(['0', '1', '2'], dtype='<U21')");
+            np.array(new[] { 1.5, 1e16, 1e-5 }).astype("U").ToString(true).Should().Be("array(['1.5', '1e+16', '1e-05'], dtype='<U32')");
+            np.array(new[] { true, false }).astype("U").ToString(true).Should().Be("array(['True', 'False'], dtype='<U5')");
+            np.array(new[] { 0.1f }).astype("U").ToString(true).Should().Be("array(['0.1'], dtype='<U32')");
+            np.array(new[] { 3.14159 }).astype("U3").ToString(true).Should().Be("array(['3.1'], dtype='<U3')");
+
+            var u = np.array(new[] { "ab", "cd" });
+            u[0] = 5;
+            NDArray.AsStringArray(u).Should().Equal("5", "cd");
+            u[1] = 2.5;
+            NDArray.AsStringArray(u).Should().Equal("5", "2.");
+            np.full(new Shape(2), 7, "U").ToString(true).Should().Be("array(['7', '7'], dtype='<U1')");
+            np.ones(new Shape(2), "U").ToString(true).Should().Be("array(['1', '1'], dtype='<U1')");
+            np.pad(np.array(new[] { "ab", "c" }), 1).ToString().Should().Be("['0' 'ab' 'c' '0']");
+        }
+
+        /// <summary>The "Text to numbers" snippets: each element parsed by <c>int()</c> / <c>float()</c> /
+        /// <c>complex()</c>, NumPy's ValueError for a text that does not parse, NumPy's OverflowError for an integer that
+        /// does not fit.</summary>
+        [TestMethod]
+        public void Converting_TextToNumbers()
+        {
+            np.array(new[] { "1", " 22 ", "-3", "1_000" }).astype(np.int64).ToArray<long>().Should().Equal(1L, 22L, -3L, 1000L);
+            var f = np.array(new[] { "1.5", "inf", "-nan", "1e3" }).astype(np.float64).ToArray<double>();
+            f[0].Should().Be(1.5);
+            double.IsPositiveInfinity(f[1]).Should().BeTrue();
+            double.IsNaN(f[2]).Should().BeTrue();
+            f[3].Should().Be(1000.0);
+            np.array(new[] { "1+2j", "3", "(4-5j)" }).astype(np.complex128).ToString().Should().Be("[1.+2.j 3.+0.j 4.-5.j]");
+
+            Action badInt = () => np.array(new[] { "1", "x" }).astype(np.int64);
+            badInt.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: np.str_('x')");
+            Action badFloat = () => np.array(new[] { "1", "a" }).astype(np.float64);
+            badFloat.Should().Throw<ValueError>().WithMessage("could not convert string to float: np.str_('a')");
+            Action overflow = () => np.array(new[] { "300" }).astype(np.int8);
+            overflow.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+
+            var a = np.zeros(new Shape(3), np.int32);
+            a[0] = "12";
+            a.ToArray<int>().Should().Equal(12, 0, 0);
+            Action hello = () => a[0] = "hello";
+            hello.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: 'hello'");
+        }
+
+        /// <summary>The "Conversions inside other calls" snippets: a string <c>dtype=</c> request of <c>np.add</c>, a text
+        /// <c>out=</c> (of a comparison of text, and of a numeric ufunc), a reduction with a numeric <c>dtype=</c>, and the
+        /// out's text parsed first under <c>where=</c>.</summary>
+        [TestMethod]
+        public void Converting_StoresAndUfuncs()
+        {
+            np.add(np.array(new[] { 1.5, 2.0 }), np.array(new long[] { 1, 2 }), dtype: "U").ToString(true)
+              .Should().Be("array(['1.51', '2.02'], dtype='<U53')");
+            np.equal(Names(), np.array(new[] { "cat", "cow", "bird" }), np.empty(new Shape(3), "U5")).ToString()
+              .Should().Be("['True' 'False' 'True']");
+            np.add(np.array(new[] { 1.0, 2.5 }), np.array(new[] { 1.0, 3.0 }), np.zeros(new Shape(2), "U5")).ToString()
+              .Should().Be("['2.0' '5.5']");
+            np.prod(np.array(new[] { "1.5", "2", "4" }), (int?)null, np.float64).GetDouble().Should().Be(12.0);
+
+            var outText = np.array(new[] { "1", "x" }).astype("U32");
+            Action masked = () => np.sqrt(np.array(new[] { 1.0, 2.5 }), outText, np.array(new[] { true, false }));
+            masked.Should().Throw<ValueError>().WithMessage("could not convert string to float: np.str_('x')");
+        }
+
+        /// <summary>The breaking change: a C# string is NumPy's <c>np.array(str)</c>, a 0-d <c>U</c> array, never the
+        /// numbers the text spells.</summary>
+        [TestMethod]
+        public void Converting_CSharpStringIsText()
+        {
+            NDArray x = "[1, 2, 3]";
+            x.ToString(true).Should().Be("array('[1, 2, 3]', dtype='<U9')");
+            NDArray y = "1.5";
+            y.astype(np.float64).GetDouble().Should().Be(1.5);
+        }
+
         // ── Printing ──────────────────────────────────────────────────────────────────────────────
 
         [TestMethod]
@@ -206,8 +288,9 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>
-        ///     What the doc page still lists as a later phase: sorting, the unique values (a sort) and the number-to-text cast
-        ///     refuse with <see cref="StringComputationNotSupportedException"/> (a <see cref="NotSupportedException"/>).
+        ///     What the doc page still lists as a later phase: sorting and the unique values (a sort) refuse with
+        ///     <see cref="StringComputationNotSupportedException"/> (a <see cref="NotSupportedException"/>); a string
+        ///     <c>dtype=</c> request of <c>np.add</c> over numbers computes (the numbers written as text, then concatenated).
         /// </summary>
         [TestMethod]
         public void Computing_NextPhase()
@@ -217,8 +300,7 @@ namespace NumSharp.Tests.Documentation
             sort.Should().Throw<StringComputationNotSupportedException>();
             Action unique = () => np.unique(names);
             unique.Should().Throw<StringComputationNotSupportedException>();
-            Action request = () => np.add(np.array(new[] { 1.5 }), np.array(new[] { 1.5 }), dtype: "U");
-            request.Should().Throw<StringComputationNotSupportedException>();
+            NDArray.AsStringArray(np.add(np.array(new[] { 1.5 }), np.array(new[] { 1.5 }), dtype: "U")).Should().Equal("1.51.5");
             // StringComputationNotSupportedException is a NotSupportedException.
             sort.Should().Throw<NotSupportedException>();
 
@@ -234,7 +316,7 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>The "Masked text arrays" snippets: the fill value stored at its own width, cut by
-        /// <c>filled()</c>; a masked reduction refuses; a number written into text is the next phase.</summary>
+        /// <c>filled()</c>; a masked reduction refuses; a number fill is written as its text.</summary>
         [TestMethod]
         public void Computing_MaskedTextArrays()
         {
@@ -246,8 +328,7 @@ namespace NumSharp.Tests.Documentation
             Action sum = () => np.ma.sum(m);
             sum.Should().Throw<TypeError>().WithMessage(
                 "the resolved dtypes are not compatible with add.reduce. Resolved (dtype('<U2'), dtype('<U2'), dtype('<U4'))");
-            Action formatted = () => m.filled(5);
-            formatted.Should().Throw<StringComputationNotSupportedException>();
+            NDArray.AsStringArray(m.filled(5)).Should().Equal("5", "c", "de");
         }
 
         [TestMethod]

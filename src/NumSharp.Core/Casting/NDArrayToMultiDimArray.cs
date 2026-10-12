@@ -283,11 +283,15 @@ namespace NumSharp
         private unsafe T[] ToArrayConverted<T>() where T : unmanaged
         {
             var storage = Storage;
-            // A fixed-width string array has no numeric elements to convert: reading text as numbers parses it, which is
-            // the next phase of the string support (NumPy's astype from text). The cast kernels below have no text lane.
-            // (A T with no NumSharp dtype keeps the general frame's own "not a NumSharp dtype" refusal.)
+            // A fixed-width string array is read as numbers the way astype reads it (NumPy's astype from text: each element
+            // parsed by T's int() / float() / complex(), the first failing element raising NumPy's text); the cast kernels
+            // below have no text lane, so the parsed array is read out instead. (A T with no NumSharp dtype keeps the
+            // general frame's own "not a NumSharp dtype" refusal.)
             if (storage.TypeCode == NPTypeCode.String && InfoOf<T>.NPTypeCode != NPTypeCode.Empty)
-                throw Backends.Strings.NDStringCasting.TextConversion(dtype, DType.From(InfoOf<T>.NPTypeCode));
+            {
+                using var numbers = astype(DType.From(InfoOf<T>.NPTypeCode), true, 'C', "unsafe");
+                return numbers.ToArray<T>();
+            }
             ref readonly Shape shape = ref storage.ShapeReference;
             long count = shape.size;
             NPTypeCode source = storage.TypeCode;
@@ -2424,9 +2428,13 @@ namespace NumSharp
             // astype semantics need a NumSharp dtype to cast into; Guid, nint, DateTime… have none.
             if (target == NPTypeCode.Empty)
                 throw new NotSupportedException($"Unable to convert to {typeof(T).Name}[]: {typeof(T).Name} is not a NumSharp dtype.");
-            // Text has no unmanaged element type: converting it to numbers parses it (the next phase of the string support).
+            // Text has no unmanaged element type: it is parsed into T's dtype first (astype's text -> number conversion),
+            // then that array is read out.
             if (typecode == NPTypeCode.String)
-                throw Backends.Strings.NDStringCasting.TextConversion(dtype, DType.From(target));
+            {
+                using var numbers = astype(DType.From(target), true, 'C', "unsafe");
+                return numbers.ToMuliDimArray<T>();
+            }
 
             var storage = Storage;
             ref readonly Shape shape = ref storage.ShapeReference;

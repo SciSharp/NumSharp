@@ -253,6 +253,25 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     The element a text scalar becomes in a numeric array through the legacy text cast (each text parsed by the
+        ///     target's <c>int()</c> / <c>float()</c> / <c>complex()</c>; bool reads the text's truth), written into
+        ///     <paramref name="element"/>.
+        /// </summary>
+        /// <param name="text">A 0-d text array (not modified).</param>
+        /// <param name="dstType">The numeric target dtype.</param>
+        /// <param name="element">Receives the element; at least <paramref name="dstType"/>'s item size.</param>
+        /// <exception cref="ValueError">The text does not parse into <paramref name="dstType"/>.</exception>
+        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dstType"/>.</exception>
+        private static unsafe void CopytoParseTextScalar(NDArray text, NPTypeCode dstType, Span<byte> element)
+        {
+            // One element: the array cast's own parse (its NumPy-scalar error texts), then the element copied out.
+            using var parsed = text.astype((DType)dstType, true, 'K', "unsafe");
+            int size = dstType.SizeOf();
+            fixed (byte* e = element)
+                Buffer.MemoryCopy((byte*)parsed.Address + parsed.Shape.offset * size, e, element.Length, size);
+        }
+
+        /// <summary>
         ///     The one element <c>np.copyto(dst, value, casting='unsafe')</c> stores for a SCALAR <paramref name="value"/> —
         ///     the second statement of NumPy's <c>np.full</c> (<c>a = empty(shape, dtype); copyto(a, fill_value,
         ///     casting='unsafe')</c>) and <c>np.full_like</c>, which fill every element with it.
@@ -262,9 +281,14 @@ namespace NumSharp
         /// <param name="dstType">The new array's dtype (numeric).</param>
         /// <param name="element">Receives the element; at least <see cref="ReductionInitial.SlotBytes"/> bytes.</param>
         /// <returns><c>false</c> when <paramref name="value"/> is not a scalar this rule covers (an array with dimensions, a
-        ///     list, text): the caller keeps its own conversion.</returns>
+        ///     list): the caller keeps its own conversion.</returns>
         /// <exception cref="OverflowException">A Python int out of an integer dtype's range ("Python integer 1000 out of
-        ///     bounds for int8"; the LP64 texts past the C <c>long</c>), or past the double range into a float.</exception>
+        ///     bounds for int8"; the LP64 texts past the C <c>long</c>), or past the double range into a float; an integer
+        ///     text outside an integer dtype.</exception>
+        /// <exception cref="ValueError">A text (a C# string or <c>byte[]</c>, or a 0-d text array) that does not parse into
+        ///     <paramref name="dstType"/> (NumPy's <c>invalid literal for int() with base 10: np.str_('x')</c>).</exception>
+        /// <exception cref="ArgumentException"><paramref name="element"/> is smaller than
+        ///     <see cref="ReductionInitial.SlotBytes"/> (a caller bug).</exception>
         /// <remarks>
         ///     <para>
         ///     <c>casting='unsafe'</c> lets every cast through, but a Python scalar is still PACKED first: its stored dtype
@@ -323,6 +347,17 @@ namespace NumSharp
                     // shape's offset (Address + offset · itemsize covers a contiguous slice and a strided view alike).
                     fixed (byte* e = element)
                         NDIterCasting.ConvertValue((byte*)nd.Address + nd.Shape.offset * nd.dtypesize, e, nd.typecode, dstType);
+                    return true;
+                case string or byte[]:
+                    // A Python str / bytes: array_copyto converts it with np.asarray (a 0-d U / S array — text is never a
+                    // weak scalar), then the legacy text cast parses it; its errors quote the NumPy scalar
+                    // (np.full(2, 'x', dtype=int) raises "invalid literal for int() with base 10: np.str_('x')", probed).
+                    using (var text = value is string s ? NDArray.Scalar(s) : NDArray.Scalar((byte[])value))
+                        CopytoParseTextScalar(text, dstType, element);
+                    return true;
+                case NDArray nd when nd.ndim == 0:
+                    // A 0-d text array: the same array cast.
+                    CopytoParseTextScalar(nd, dstType, element);
                     return true;
                 default:
                     return false;
@@ -541,27 +576,40 @@ namespace NumSharp
         /// <param name="casting">The casting level.</param>
         /// <exception cref="ValueError">A read-only destination, or a mask that does not broadcast.</exception>
         /// <exception cref="InvalidCastException">The cast is not allowed ("Cannot cast scalar from …").</exception>
-        /// <exception cref="StringComputationNotSupportedException">A string destination with an element the mask selects:
-        ///     formatting the number as text is the computational phase of the string dtypes.</exception>
+        /// <remarks>A string destination receives the number's NumPy scalar <c>str()</c>, truncated to its width
+        ///     (<see cref="NDTextConversion.FormatRun"/>).</remarks>
         private static unsafe void CopytoAssignRawScalar(NDArray dst, byte* srcData, NPTypeCode srcType, NDArray @where, NPY_CASTING casting)
         {
             NumSharpException.ThrowIfNotWriteable(dst.Shape);
 
             // A number into a fixed-width string array: NumPy's descriptor rule decides first (int64 → <U5 is 'same_kind',
-            // so 'safe' raises its TypeError text); an allowed cast formats the number — the computational phase, observable
-            // only once an element is WRITTEN (formatting cannot fail): the mask's broadcast check still runs, and an empty
-            // destination or a mask that selects nothing returns, as in NumPy.
+            // so 'safe' raises its TypeError text); an allowed cast formats the number ONCE into one element of the
+            // destination's dtype (its scalar's str(), truncated to the width — formatting cannot fail, so doing it before
+            // the mask's broadcast check is unobservable), and the masked raw walk copies that element's bytes.
             if (dst.typecode == NPTypeCode.String)
             {
                 DType from = srcType;
                 if (!DTypeCasting.CanCastTypeTo(from, dst.dtype, casting))
                     throw NDStringCasting.InvalidCast(from, dst.dtype, casting, scalar: true);
+                long[] textMaskStrides = null;
                 if (@where is not null)
-                    CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
+                    textMaskStrides = CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
                         "where mask", stripLeadingUnitAxes: false);
                 if (dst.size == 0 || (@where is not null && !np.any(@where)))
                     return;
-                throw NDStringCasting.TextConversion(from, dst.dtype);
+                var slice = dst.Storage.StringSlice;
+                byte[] element = new byte[Math.Max(slice.ItemSize, 1)];
+                fixed (byte* text = element)
+                {
+                    NDTextConversion.FormatRun(srcData, 0, srcType, text, slice.ItemSize, slice.IsUnicode, slice.Chars, 1);
+                    long[] zeros = new long[dst.ndim];
+                    byte selected = 1;
+                    if (@where is null)
+                        CopytoMaskedRaw(dst, text, zeros, &selected, zeros);
+                    else
+                        CopytoMaskedRaw(dst, text, zeros, CopytoData(@where), textMaskStrides);
+                }
+                return;
             }
 
             if (!NDIterCasting.CanCast(srcType, dst.typecode, casting))

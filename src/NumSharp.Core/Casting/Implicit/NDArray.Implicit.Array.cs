@@ -147,61 +147,25 @@ namespace NumSharp
             }
         }
 
+        /// <summary>
+        ///     A C# string is a Python <c>str</c>: the 0-d text array <c>np.array(str)</c> builds (<c>&lt;U{len}</c>), marked as
+        ///     the Python str it stands for (<see cref="NDArray.WasPythonStr"/>), so <c>a[i] = "xy"</c> stores text into an
+        ///     S / U array and <c>a[i] = "12"</c> parses it into a numeric one with NumPy's setitem texts.
+        /// </summary>
+        /// <param name="str">The text.</param>
+        /// <returns>The 0-d text array.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="str"/> is null.</exception>
+        /// <remarks>
+        ///     Until 2026-10-12 a text shaped like <c>"[1, 2, 3]"</c> or <c>"[1 2; 3 4]"</c> was parsed into a float64 vector or
+        ///     matrix here (a legacy NumSharp shorthand). NumPy never reads a str as numbers in <c>np.array</c>
+        ///     (<c>np.array('[1, 2, 3]')</c> is the 0-d <c>&lt;U9</c> text), and the owner decided (strings plan D6) to drop
+        ///     the shorthand; <see cref="np.matrix(string, DType, bool)"/> keeps its own literal grammar (<c>"1 2; 3 4"</c>).
+        /// </remarks>
         public static implicit operator NDArray(string str)
         {
-            // process "[1, 2, 3]" 
-            if (new Regex(@"^\[[\d,\s\.]+\]$").IsMatch(str))
-            {
-                var data = str.Substring(1, str.Length - 2)
-                    .Split(',')
-                    .Select(x => double.Parse(x)).ToArray();
-                var nd = new NDArray(data, new Shape(data.Length));
-                return nd;
-            }
-
-            Regex reg = new Regex(@"\[((\d,?)+|;)+\]");
-
-            if (reg.IsMatch(str))
-            {
-                NDArray nd = null;
-
-                string[][] splitted = null;
-                str = str.Substring(1, str.Length - 2);
-
-                if (str.Contains(","))
-                {
-                    splitted = str.Split(';')
-                        .Select(x => x.Split(','))
-                        .ToArray();
-                }
-                else
-                {
-                    splitted = str.Split(';')
-                        .Select(x => x.Split(' '))
-                        .ToArray();
-                }
-
-
-                var shape = Shape.Matrix(splitted.Length, splitted[0].Length);
-
-                nd = new NDArray(typeof(double), shape);
-
-                for (int idx = 0; idx < splitted.Length; idx++)
-                {
-                    for (int jdx = 0; jdx < splitted[0].Length; jdx++)
-                    {
-                        nd[idx, jdx] = (NDArray)Double.Parse(splitted[idx][jdx]);
-                    }
-                }
-
-                return nd;
-            }
-            else
-            {
-                // Any other text is NumPy's np.array(str): a 0-d fixed-width Unicode array (it used to be a char vector;
-                // NDArray.FromString keeps that conversion). This is what makes `a[i] = "xy"` store text into an S/U array.
-                return Backends.Strings.NDStringArrays.FromScalar(str, null);
-            }
+            if (str is null)
+                throw new ArgumentNullException(nameof(str));
+            return NDArray.PythonStrLiteral(str);
         }
     }
 }

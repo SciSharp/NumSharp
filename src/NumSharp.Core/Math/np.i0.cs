@@ -105,13 +105,17 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
         /// <exception cref="IncorrectTypeException"><paramref name="x"/> is Complex — I₀ has no complex loop (NumPy's <c>TypeError("i0 not supported for complex values")</c>).</exception>
         /// <exception cref="OverflowException"><paramref name="x"/> is Decimal and I₀ overflows the decimal range (double→decimal bridge limit).</exception>
+        /// <exception cref="ValueError"><paramref name="x"/> is text and an element does not parse as a float (NumPy's
+        ///     <c>x.astype(float)</c>: <c>could not convert string to float: np.str_('x')</c>).</exception>
         public static NDArray i0(NDArray x)
         {
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy computes this on text (sorting, searching, truth tests); string computation is
-            // the next phase of NumSharp's string support, so a string array is refused here.
-            if (Backends.Strings.NDStringUfuncs.IsString(x)) throw Backends.Strings.NDStringUfuncs.NextPhase("i0", x);
             if (x is null) throw new ArgumentNullException(nameof(x));
+            // NumPy: `if x.dtype.kind != 'f': x = x.astype(float)` — a text array is parsed into float64 (each element by
+            // float()), then I0 runs on the numbers.
+            using var parsed = Backends.Strings.NDStringUfuncs.IsString(x) ? x.astype(np.float64, true, 'K', "unsafe") : null;
+            if (parsed is not null)
+                x = parsed;
 
             // Dispatch by PRECISION DOMAIN, not per-dtype: the cephes recurrence is bit-exact only
             // when run at the input's own float width (see the header). Each arm is a genuinely

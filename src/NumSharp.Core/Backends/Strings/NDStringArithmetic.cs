@@ -277,13 +277,20 @@ namespace NumSharp.Backends.Strings
         /// <summary>
         ///     NumPy's output cast for a loop whose descriptor is not <paramref name="out"/>'s: the loop's result (computed by
         ///     <paramref name="compute"/> into a fresh temporary) copied into <paramref name="out"/> under the mask with the
-        ///     same_kind rule the guard already checked — truncation, zero padding, or the ASCII decode of S into U.
+        ///     same_kind rule the guard already checked — truncation, zero padding, the ASCII decode of S into U, or a bool
+        ///     result formatted as <c>'True'</c> / <c>'False'</c> into a text <paramref name="out"/> (a comparison's).
         /// </summary>
         /// <param name="out">The caller's output.</param>
         /// <param name="where">The mask, or null.</param>
         /// <param name="compute">Computes the unmasked loop result as a fresh array (owned here).</param>
         /// <returns><paramref name="out"/>.</returns>
-        private static NDArray CastInto(NDArray @out, NDArray where, Func<NDArray> compute)
+        /// <exception cref="Exception">Whatever <paramref name="compute"/> throws (nothing is written then).</exception>
+        /// <exception cref="UnicodeDecodeError">An <c>S</c> result cast into a <c>U</c> <paramref name="out"/> meets a byte
+        ///     ≥ 0x80 in a selected element.</exception>
+        /// <remarks>The temporary has the inputs' broadcast shape; <c>np.copyto</c> broadcasts it into
+        ///     <paramref name="out"/>. Computing first and copying after also gives NumPy's answer when
+        ///     <paramref name="out"/> overlaps an input (NumPy's COPY_IF_OVERLAP).</remarks>
+        internal static NDArray CastInto(NDArray @out, NDArray where, Func<NDArray> compute)
         {
             using var temp = compute();
             np.copyto(@out, temp, "same_kind", where);

@@ -71,30 +71,29 @@ namespace NumSharp
         ///     implicitly. Default (null) is <see cref="float64"/> / <see cref="double"/>.
         /// </param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
-        /// <exception cref="StringComputationNotSupportedException">A string dtype: NumPy fills it with the text of the number
-        ///     one (<c>'1'</c>), and converting numbers to text is the computational phase of the string support.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.ones.html. A string dtype is NumPy's
+        ///     <c>a = empty(shape, dtype); copyto(a, 1, casting='unsafe')</c>: every element is the text <c>'1'</c> (an
+        ///     unsized <c>'U'</c> / <c>'S'</c> request is ONE character, NumPy's allocation rule).
+        /// </remarks>
         public static NDArray ones(Shape shape, DType dtype, string device = null)
         {
             ValidateDevice(device);
-            ThrowIfOnesOfText(dtype);
+            if (Backends.Strings.NDStringStorage.IsString(dtype))
+                return OnesOfText(shape, dtype);
             return OnesCore(shape, dtype?.GetTypeCode() ?? NPTypeCode.Double);
         }
 
         /// <summary>
-        ///     The refusal of <c>np.ones</c> for a string dtype: NumPy's <c>np.ones(2, dtype='U')</c> is <c>['1', '1']</c> — the
-        ///     number one converted to text, which is the computational phase of NumSharp's string support (the storage
-        ///     lane alone has no "one" to fill with).
+        ///     <c>np.ones</c> for a string dtype — NumPy's <c>empty</c> + <c>copyto(a, 1, casting='unsafe')</c>: the number one
+        ///     written as its <c>str()</c>, <c>'1'</c>, into every element (<see cref="Backends.Strings.NDStringArrays.Full"/>
+        ///     with the Python int 1).
         /// </summary>
-        /// <param name="dtype">The requested dtype (null is float64).</param>
-        /// <exception cref="StringComputationNotSupportedException">A string dtype.</exception>
-        private static void ThrowIfOnesOfText(DType dtype)
-        {
-            if (Backends.Strings.NDStringStorage.IsString(dtype))
-                throw new StringComputationNotSupportedException(
-                    $"np.ones with dtype {dtype.ToString(true)} fills the array with the text '1' (NumPy converts the number one " +
-                    "to text), and converting numbers to text is the next phase of NumSharp's string support.");
-        }
+        /// <param name="shape">The dimensions (a fresh dense layout is kept, a view's re-laid out in C order).</param>
+        /// <param name="dtype">The string dtype (sized or not).</param>
+        /// <returns>The new string array.</returns>
+        private static NDArray OnesOfText(Shape shape, DType dtype)
+            => Backends.Strings.NDStringArrays.Full(shape, 1L, dtype);
 
 
         /// <summary>
@@ -170,9 +169,10 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones(Shape shape, char order, DType dtype = null)
         {
-            ThrowIfOnesOfText(dtype);
             char physical = OrderResolver.Resolve(order);
             var orderedShape = Shape.Adopt(shape.dimensions, physical);
+            if (Backends.Strings.NDStringStorage.IsString(dtype))
+                return OnesOfText(orderedShape, dtype);
             return OnesCore(orderedShape, dtype?.GetTypeCode() ?? NPTypeCode.Double);
         }
     }

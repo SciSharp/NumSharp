@@ -54,7 +54,7 @@ namespace NumSharp
             // refuses text — or the empty-variables early return, which yields the (0, 0) float64 result.
             if (Backends.Strings.NDStringUfuncs.IsString(m) || Backends.Strings.NDStringUfuncs.IsString(y) ||
                 Backends.Strings.NDStringUfuncs.IsStringRequest(dtype))
-                return CovOfText(m, y, rowvar, fweights, aweights, dtype);
+                return CovOfText(m, y, rowvar, bias, ddof, fweights, aweights, dtype);
 
             // Result dtype: at least float64 (complex input stays complex).
             NPTypeCode resultType = dtype?.GetTypeCode() ?? (y is null
@@ -215,23 +215,30 @@ namespace NumSharp
         private static NDArray EmptyCovariance() => np.array(Array.Empty<double>()).reshape(0, 0);
 
         /// <summary>
-        ///     <c>np.cov</c> over text (a string operand, or a string <c>dtype=</c> request), following NumPy's statements
-        ///     up to the first reduction: the observations' descriptor (<c>result_type(m, y, float64)</c> without
-        ///     <c>dtype=</c> — text absorbs float64 as 32 characters — else <c>array(m, dtype=dtype)</c>'s), the
-        ///     text-to-text conversion (which can fail: U → S encodes ASCII, S → U decodes it), the empty-variables early
-        ///     return, <c>y</c>'s conversion and concatenation, the weight checks, and then <c>average</c>: its
-        ///     <c>a.mean</c> refuses text with add.reduce's text, or with weights its weight sum refuses the SIZED string
-        ///     descriptor by class.
+        ///     <c>np.cov</c> over text (a string operand, or a string <c>dtype=</c> request), following NumPy's statements:
+        ///     with a NUMERIC <c>dtype=</c>, <c>X = array(m, ndmin=2, dtype=dtype)</c> parses text <paramref name="m"/> (each
+        ///     element by <c>int()</c> / <c>float()</c> / <c>complex()</c>), the empty-variables early return comes next, then
+        ///     <c>array(y, dtype=dtype)</c> parses text <paramref name="y"/>, and the covariance of the numbers follows.
+        ///     Otherwise the statements run up to the first reduction: the observations' descriptor
+        ///     (<c>result_type(m, y, float64)</c> without <c>dtype=</c> — text absorbs float64 as 32 characters — else
+        ///     <c>array(m, dtype=dtype)</c>'s), the text-to-text conversion (which can fail: U → S encodes ASCII, S → U
+        ///     decodes it), the empty-variables early return, <c>y</c>'s conversion and concatenation, the weight checks,
+        ///     and then <c>average</c>: its <c>a.mean</c> refuses text with add.reduce's text, or with weights its weight sum
+        ///     refuses the SIZED string descriptor by class.
         /// </summary>
         /// <param name="m">The variables.</param>
         /// <param name="y">The additional variables, or null.</param>
         /// <param name="rowvar">Whether rows are variables.</param>
+        /// <param name="bias">The <c>bias</c> argument (passed on to the numeric covariance of parsed text).</param>
+        /// <param name="ddof">The <c>ddof</c> argument (passed on to the numeric covariance of parsed text).</param>
         /// <param name="fweights">The frequency weights, or null.</param>
         /// <param name="aweights">The analytic weights, or null.</param>
         /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
-        /// <returns>The empty float64 <c>(0, 0)</c> covariance NumPy returns when there are no variables.</returns>
-        /// <exception cref="StringComputationNotSupportedException">A numeric <paramref name="dtype"/> with a text operand:
-        ///     NumPy parses the text as numbers (the next phase).</exception>
+        /// <returns>The covariance of the parsed numbers (a numeric <paramref name="dtype"/>), or the empty float64
+        ///     <c>(0, 0)</c> covariance NumPy returns when there are no variables.</returns>
+        /// <exception cref="ValueError">A text element that does not parse into a numeric <paramref name="dtype"/>
+        ///     (<c>could not convert string to float: np.str_('ab')</c>; <paramref name="m"/>'s before <paramref name="y"/>'s).</exception>
+        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dtype"/>.</exception>
         /// <exception cref="UnicodeEncodeError">A U → S conversion of non-ASCII text.</exception>
         /// <exception cref="UnicodeDecodeError">An S → U conversion of non-ASCII bytes.</exception>
         /// <exception cref="ValueError">The variables of <paramref name="m"/> and <paramref name="y"/> do not have the same
@@ -240,9 +247,25 @@ namespace NumSharp
         ///     frequency weight.</exception>
         /// <exception cref="RuntimeError">A malformed weight array.</exception>
         [NDScopedCovered] // only caller: the [NDScoped] cov (the conversion temporaries are scope-reclaimed)
-        private static NDArray CovOfText(NDArray m, NDArray y, bool rowvar, NDArray fweights, NDArray aweights, DType dtype)
+        private static NDArray CovOfText(NDArray m, NDArray y, bool rowvar, bool bias, int? ddof, NDArray fweights,
+            NDArray aweights, DType dtype)
         {
             DType xd, yd;
+            if (dtype is not null && !Backends.Strings.NDStringUfuncs.IsStringRequest(dtype))
+            {
+                // X = array(m, ndmin=2, dtype=dtype): np.array with a dtype casts unsafely, so text is parsed (a number is
+                // left for the numeric path's own cast).
+                var xm = Backends.Strings.NDStringUfuncs.IsString(m) ? m.astype(dtype, true, 'K', "unsafe") : m;
+                long[] parsedDims = AtLeast2dDims(xm);
+                if (!rowvar && xm.ndim != 1)
+                    Array.Reverse(parsedDims);
+                // `if X.shape[0] == 0: return np.array([]).reshape(0, 0)` — before y is converted at all.
+                if (parsedDims[0] == 0)
+                    return EmptyCovariance();
+                // y = array(y, ndmin=2, dtype=dtype): the same parse for text y; then the covariance of the numbers.
+                var ym = y is not null && Backends.Strings.NDStringUfuncs.IsString(y) ? y.astype(dtype, true, 'K', "unsafe") : y;
+                return cov(xm, ym, rowvar, bias, ddof, fweights, aweights, dtype);
+            }
             if (dtype is null)
             {
                 // dtype = result_type(m, y, float64): every array is strong, and text absorbs float64 as 32 characters.
@@ -250,9 +273,6 @@ namespace NumSharp
                     : DTypePromotion.PromoteTypes(DTypePromotion.PromoteTypes(m.dtype, y.dtype), np.float64);
                 xd = yd = r;
             }
-            else if (!Backends.Strings.NDStringUfuncs.IsStringRequest(dtype))
-                // array(text, dtype=float64) parses the text as numbers: the computational phase.
-                throw Backends.Strings.NDStringUfuncs.NextPhase("cov", Backends.Strings.NDStringUfuncs.IsString(m) ? m : y);
             else if (dtype.itemsize != 0)
                 xd = yd = dtype;
             else
@@ -304,7 +324,8 @@ namespace NumSharp
         /// <summary>
         ///     Runs the text-to-text conversion <c>np.array(x, dtype=descr)</c> makes, for its errors only: U → S encodes
         ///     ASCII and S → U decodes it, so non-ASCII content raises NumPy's Unicode error. A number converted to text
-        ///     cannot fail (and is the computational phase), so it is skipped, as is a conversion within one class.
+        ///     cannot fail (and the covariance refuses the text it makes anyway), so it is skipped, as is a conversion
+        ///     within one class.
         /// </summary>
         /// <param name="x">The operand.</param>
         /// <param name="descr">The descriptor it is converted to.</param>

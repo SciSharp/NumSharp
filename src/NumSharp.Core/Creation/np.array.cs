@@ -94,10 +94,19 @@ namespace NumSharp
             // build a fixed-width S/U array: NumPy's discovery of the class and the longest value, then setitem per element.
             if (Backends.Strings.NDStringArrays.IsTextInput(array, dtype))
                 return Backends.Strings.NDStringArrays.FromManaged(array, dtype, ndmin, order);
-            // A string dtype over NUMBERS is NumPy's number->text conversion (np.array([1, 22], dtype='U') is ['1', '22']),
-            // which is not part of the storage phase; refuse it instead of reinterpreting the numbers' bytes.
+            // A string dtype over a TYPED numeric C# array: the array is an ndarray of its element dtype (the house rule for
+            // typed arrays), so NumPy's np.array(arr, dtype='U') casts it — the unsized class adapted to the array
+            // (PyArray_AdaptDescriptorToArray: int32 -> <U11), each number written as its scalar's str().
             if (Backends.Strings.NDStringStorage.IsString(dtype))
-                throw Backends.Strings.NDStringStorage.NumberToText(array.GetType().GetElementType()?.Name ?? "value");
+            {
+                using var numbers = np.array(array, null, 0, true, order);
+                var text = numbers.astype(dtype, copy: true, order: 'K', casting: "unsafe");
+                if (ndmin <= text.ndim)
+                    return text;
+                var raised = AtLeastNdView(text, ndmin);
+                text.Dispose();
+                return raised;
+            }
 
             var arrType = array.ResolveElementType();
 

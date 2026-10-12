@@ -28,6 +28,11 @@ namespace NumSharp
                 return NDMatrixBoundary.Wrapped((a, axis, dtype, @out), static s => nancumprod(s.a, s.axis, s.dtype, s.@out), @out);
             // Text, or a string dtype= request: NumPy's _replace_nan leaves text alone and its accumulate validates the
             // axis (a 0-d input ravels first), then refuses with its verbatim text; see NDStringUfuncs.ReduceError.
+            // A numeric dtype= over text: NumPy's _replace_nan leaves text alone (it masks only inexact arrays), and cumprod's
+            // cast to the requested number type parses it — so a parsed 'nan' is MULTIPLIED, not replaced by 1 (probed:
+            // np.nancumprod(['inf', 'nan'], dtype='f8') is [inf, nan]). The scope reclaims the parsed array.
+            if (Backends.Strings.NDStringUfuncs.ParseForNumericReduce("nancumprod", a, axis, dtype) is { } parsed)
+                return cumprod(parsed, axis, dtype, @out);
             Backends.Strings.NDStringUfuncs.ThrowIfReduce("nancumprod", a, axis, @out, dtype);
             // Boundary scope: the full-size NaN-replaced copy is reclaimed at exit; the scan
             // result (or the caller's @out — untracked, a Returns no-op) is yielded.

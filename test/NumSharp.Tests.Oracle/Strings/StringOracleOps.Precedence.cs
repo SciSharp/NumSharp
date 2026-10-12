@@ -207,10 +207,17 @@ namespace NumSharp.Tests.Strings
                 case "logical_and": return np.logical_and(x, y, @out, where, dt);
                 case "logical_or": return np.logical_or(x, y, @out, where, dt);
                 case "logical_xor": return np.logical_xor(x, y, @out, where, dt);
+                case "power": return np.power(x, y, @out, where, dt);
+                case "floor_divide": return np.floor_divide(x, y, @out, where, dt);
+                case "maximum": return np.maximum(x, y, @out, where, dt);
+                case "minimum": return np.minimum(x, y, @out, where, dt);
                 case "sqrt": return np.sqrt(x, @out, where, dt);
                 case "negative": return np.negative(x, @out, where, dt);
+                case "absolute": return np.absolute(x, @out, where, dt);
+                case "rint": return np.rint(x, @out, where, dt);
                 case "logical_not": return np.logical_not(x, @out, where, dt);
                 case "isnan": return np.isnan(x, @out, where, dt);
+                case "isinf": return np.isinf(x, @out, where, dt);
             }
             throw new InvalidOperationException($"the string oracle has no keyword ufunc '{Str(p, "name")}'");
         }

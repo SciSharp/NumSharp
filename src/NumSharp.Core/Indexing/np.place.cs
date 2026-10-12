@@ -33,9 +33,8 @@ namespace NumSharp
         ///     dtype('int64') according to the rule 'safe'</c>) — even when <paramref name="arr"/> is empty.</exception>
         /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
         /// <exception cref="UnicodeDecodeError">Byte values that are not ASCII into a <c>U</c> array.</exception>
-        /// <exception cref="StringComputationNotSupportedException">NumPy computes on text here: a text scalar parsed into a
-        ///     number, or numbers formatted into a text array where the mask selects an element (the number-text casts of a
-        ///     later string subphase).</exception>
+        /// <exception cref="ValueError">A text value that does not parse into a numeric array (NumPy's <c>int()</c> /
+        ///     <c>float()</c> / <c>complex()</c> texts); numbers into a text array are written as their <c>str()</c>.</exception>
         /// <exception cref="SystemError">A <c>U</c> mask holds a unit above U+10FFFF: NumPy's string-to-bool cast of the mask
         ///     raises it, before the size check. (A text mask is otherwise read by its truth values: a non-empty string is
         ///     True.)</exception>
@@ -70,8 +69,7 @@ namespace NumSharp
         /// <exception cref="ValueError">The checks of <see cref="place(NDArray, NDArray, NDArray)"/>.</exception>
         /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
         /// <exception cref="UnicodeDecodeError">Byte values that are not ASCII into a <c>U</c> array.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text parsed into a numeric array, or numbers formatted
-        ///     into a text array where the mask selects an element (the computational phase of the string dtypes).</exception>
+        /// <exception cref="ValueError">A text value that does not parse into a numeric array.</exception>
         /// <remarks>
         ///     C# binds a typed array argument (<c>double[]</c>, <c>string[]</c>) here rather than to the
         ///     <see cref="NDArray"/> overload: an identity/reference conversion beats NumSharp's implicit
@@ -99,7 +97,7 @@ namespace NumSharp
         /// <exception cref="InvalidCastException">An ndarray of values that does not cast 'safely'.</exception>
         /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
         /// <exception cref="UnicodeDecodeError">Byte values that are not ASCII into a <c>U</c> array.</exception>
-        /// <exception cref="StringComputationNotSupportedException">See <see cref="place(NDArray, NDArray, NDArray)"/>.</exception>
+        /// <exception cref="ValueError">See <see cref="place(NDArray, NDArray, NDArray)"/>.</exception>
         [NDScoped]
         private static void PlaceCore(NDArray arr, NDArray mask, NDArray vals, bool sequence)
         {
@@ -125,7 +123,7 @@ namespace NumSharp
 
             // NumPy converts the values before it looks at the mask's contents — the casting rule (a dtype check, so an
             // empty target raises too) and every value's conversion.
-            NDArray converted = PlaceValuesLikeNumPy(vals, arr, sequence, out bool formatsText);
+            NDArray converted = PlaceValuesLikeNumPy(vals, arr, sequence);
 
             // Empty arr ⇒ empty mask ⇒ no-op.
             if (arr.size == 0)
@@ -168,15 +166,6 @@ namespace NumSharp
             if (vals.size == 0)
                 return;   // mask all-false and empty vals — NumPy treats as no-op
 
-            // Numbers formatted into a text array: unobservable unless written, and the loop writes only where the mask is
-            // true.
-            if (formatsText)
-            {
-                if (AnyTrueMask(maskCast))
-                    throw Backends.Strings.NDStringCasting.TextConversion(vals.dtype, arr.dtype);
-                return;
-            }
-
             NDArray valsCast = converted ?? (vals.Shape.IsContiguous ? vals : np.ascontiguousarray(vals));
             ExecutePlace(arr, maskCast, valsCast);
         }
@@ -192,28 +181,27 @@ namespace NumSharp
         /// </summary>
         /// <param name="values">The caller's values.</param>
         /// <param name="target">The array written into (its dtype is the conversion's target).</param>
-        /// <param name="sequence">True when <paramref name="values"/> was discovered from a list: no <c>'safe'</c> rule.</param>
-        /// <param name="formatsText">Set when numbers would be formatted into the text target (cannot fail; the caller
-        ///     refuses only where one is written). The values are then NOT converted.</param>
+        /// <param name="sequence">True when <paramref name="values"/> was discovered from a list: no <c>'safe'</c> rule, and
+        ///     a list of strings parsed into a numeric target quotes each Python str (<c>'x'</c>) in its error.</param>
         /// <returns>The converted values (C-contiguous, the target's dtype), or null when <paramref name="values"/> already
-        ///     holds the target's element type (or when <paramref name="formatsText"/> is set).</returns>
+        ///     holds the target's element type.</returns>
         /// <exception cref="InvalidCastException">An array of values does not cast 'safely' (NumPy's TypeError text).</exception>
         /// <exception cref="OverflowException">A C# literal out of the target's integer range (NumPy's OverflowError).</exception>
         /// <exception cref="ValueError">A float NaN literal into an integer target.</exception>
         /// <exception cref="TypeError">A complex literal into a real target.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A text scalar into a numeric target: NumPy parses it.</exception>
+        /// <exception cref="ValueError">A text value that does not parse into a numeric target (NumPy's <c>int()</c> /
+        ///     <c>float()</c> / <c>complex()</c> texts).</exception>
         /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> target.</exception>
         /// <exception cref="UnicodeDecodeError">Byte values that are not ASCII into a <c>U</c> target.</exception>
         /// <remarks>An ARRAY of text values never casts safely to a number, and numbers cast safely to text only when the
         ///     text is wide enough to hold any of them (<c>int64 → &lt;U21</c>): both come from the rule check.</remarks>
-        private static NDArray PlaceValuesLikeNumPy(NDArray values, NDArray target, bool sequence, out bool formatsText)
+        private static NDArray PlaceValuesLikeNumPy(NDArray values, NDArray target, bool sequence)
         {
-            formatsText = false;
-            // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar: PyArray_FromAny(values, dtype, CARRAY)
-            // packs it with PyArray_Pack's range checks (np.putmask(int8, m, 1000) / np.place(int8, m, 1000) raise
-            // "Python integer 1000 out of bounds for int8") instead of applying an array's 'safe' rule or cast. A literal of
-            // the target's own dtype is exact and is used as is.
-            if (values.WasPythonLiteral && target.typecode != NPTypeCode.String)
+            // A C# literal (NDArray.WasPythonLiteral / WasPythonStr) is NumPy's Python scalar: PyArray_FromAny(values, dtype,
+            // CARRAY) packs it with PyArray_Pack's range checks (np.putmask(int8, m, 1000) / np.place(int8, m, 1000) raise
+            // "Python integer 1000 out of bounds for int8"; a str is parsed, its error quoting the str) instead of applying
+            // an array's 'safe' rule or cast. A literal of the target's own dtype is exact and is used as is.
+            if ((values.WasPythonLiteral || values.WasPythonStr) && target.typecode != NPTypeCode.String)
             {
                 var packed = NDArray.PackForStore(values, target.typecode, pyArrayPackRoute: false);
                 return ReferenceEquals(packed, values) ? null : packed;
@@ -228,12 +216,23 @@ namespace NumSharp
                 return null;
 
             bool textValues = values.typecode == NPTypeCode.String, textTarget = target.typecode == NPTypeCode.String;
-            if (textValues && !textTarget)
-                throw Backends.Strings.NDStringCasting.TextConversion(values.dtype, target.dtype);   // a scalar parsed
-            if (!textValues && textTarget)
+            if (textValues != textTarget)
             {
-                formatsText = true;
-                return null;
+                // Text into numbers (a 0-d text array, or a list of strings — an ndarray of text failed the 'safe' rule
+                // above) is parsed, numbers into text formatted, every value now, before the mask is read.
+                var result = NDArray.ForOverwrite(target.dtype, Shape.Adopt((long[])values.Shape.dimensions.Clone()));
+                try
+                {
+                    if (result.size > 0)
+                        Backends.Strings.NDTextConversion.Convert(result.Storage, values.Storage,
+                            sequence ? Backends.Strings.TextReprStyle.PythonObject : Backends.Strings.TextReprStyle.ArrayElement);
+                    return result;
+                }
+                catch
+                {
+                    result.Dispose();
+                    throw;
+                }
             }
             // Number to number (unsafe for a scalar, the rule already checked for an array), or text to text (truncated /
             // NUL-padded, S <-> U ASCII-checked): every value converted now, as NumPy does before reading the mask. In C

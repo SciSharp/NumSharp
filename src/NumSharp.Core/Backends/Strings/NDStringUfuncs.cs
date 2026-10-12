@@ -131,7 +131,7 @@ namespace NumSharp.Backends.Strings
         ///     the repeat of a string by an integer into <paramref name="out"/> (<see cref="NDStringArithmetic"/>), the empty
         ///     result (or <paramref name="out"/>) of a computing call whose broadcast result is empty.</returns>
         /// <exception cref="Exception">Every exception <see cref="ThrowIfBinary"/> documents, for a call this phase does not
-        ///     compute yet (a text <paramref name="out"/> of a comparison, a number a string <c>dtype=</c> casts to text);
+        ///     compute;
         ///     <see cref="SystemError"/> for a logical ufunc over a lone <c>U</c> unit above U+10FFFF (NumPy's bool cast);
         ///     <see cref="TypeError"/> for a concatenation wider than 2^31 - 1 bytes; <see cref="OverflowException"/> for a
         ///     repeat whose <c>reps * len</c> exceeds 2^63 - 1; <see cref="UnicodeDecodeError"/> for an <c>S</c> result cast
@@ -151,16 +151,21 @@ namespace NumSharp.Backends.Strings
                 var dims = BroadcastDims(x1, x2, @out, where);
                 if (ShapeSize(dims) == 0)
                     return @out ?? new NDArray(computed, dims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(dims), true);
-                // A text out= receives the bool results FORMATTED ('True' / 'False', truncated to its width): the
-                // number-to-text cast, a later subphase — so such a call stays deferred.
+                // A text out= receives the bool results FORMATTED ('True' / 'False', truncated to its width, NumPy's
+                // output cast): the bools are computed into a temporary and cast into out= under where= (the guard
+                // already checked the bool → text cast and the broadcast).
                 bool textOut = IsString(@out);
-                if (!textOut && s_comparisons.Contains(ufunc) && ComparesText(x1.dtype, x2.dtype))
-                    return NDStringComparison.Execute(ufunc, x1, x2, @out, where);
-                if (!textOut && s_logical.Contains(ufunc))
-                    return LogicalOverTruth(ufunc, x1, x2, @out, where);
+                if (s_comparisons.Contains(ufunc) && ComparesText(x1.dtype, x2.dtype))
+                    return textOut
+                        ? NDStringArithmetic.CastInto(@out, where, () => NDStringComparison.Execute(ufunc, x1, x2, null, null))
+                        : NDStringComparison.Execute(ufunc, x1, x2, @out, where);
+                if (s_logical.Contains(ufunc))
+                    return textOut
+                        ? NDStringArithmetic.CastInto(@out, where, () => LogicalOverTruth(ufunc, x1, x2, null, null))
+                        : LogicalOverTruth(ufunc, x1, x2, @out, where);
                 // The concatenation of two strings of one class, and the repeat of a string by an integer into its (text)
                 // out= — the guard's output cast already refused every non-text out for both. A numeric operand that a
-                // string dtype= request casts to text never gets here (that is the number-to-text cast, a later subphase).
+                // string dtype= request casts to text never gets here (AddUnderStringRequest computes that call first).
                 if (ufunc == "add" && ComparesText(x1.dtype, x2.dtype))
                     return NDStringArithmetic.Add(x1, x2, @out, where);
                 if (ufunc == "multiply" && textOut)
@@ -843,8 +848,7 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     <see cref="NextPhase(string, NDArray)"/> naming a descriptor rather than an operand: the string loop's output
-        ///     descriptor when the operands are numbers NumPy would format as text (<c>add(f8, f8, dtype='U')</c> names
-        ///     <c>&lt;U64</c>).
+        ///     descriptor of a computing loop this phase does not run yet.
         /// </summary>
         /// <param name="op">The NumPy function or ufunc name.</param>
         /// <param name="descr">The descriptor named in the message.</param>
@@ -852,9 +856,9 @@ namespace NumSharp.Backends.Strings
         internal static StringComputationNotSupportedException NextPhase(string op, DType descr)
             => new StringComputationNotSupportedException(
                 $"{op} is not supported for fixed-width string arrays yet ({descr.ToString(true)}): NumSharp's string support " +
-                "covers storage, element access, conversion to and from C#, copying, casts between string dtypes, indexing, " +
-                "printing, comparisons, truth tests, concatenation and repetition. The rest of string computation (sorting and " +
-                "searching, conversion between text and numbers, the np.strings functions) is the next phase.");
+                "covers storage, element access, conversion to and from C#, copying, casts between string dtypes, conversion " +
+                "between text and numbers, indexing, printing, comparisons, truth tests, concatenation and repetition. The rest " +
+                "of string computation (sorting and searching, the np.strings functions) is the next phase.");
 
         /// <summary>
         ///     The comparison operators <c>==</c> / <c>!=</c> with a string operand and an operand of another class: NumPy's

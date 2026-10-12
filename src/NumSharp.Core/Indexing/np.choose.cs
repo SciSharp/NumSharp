@@ -53,9 +53,6 @@ namespace NumSharp
         ///     wrong shape (<c>"choose: invalid shape for output array."</c>).
         /// </exception>
         /// <exception cref="ArgumentNullException"><paramref name="a"/>, <paramref name="choices"/> or a choice entry is null.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text and numeric choices are mixed and the result reads an
-        ///     element of a numeric choice: NumPy formats the numbers as text (the computational phase of the string dtypes).
-        ///     Every earlier check runs as in NumPy; an empty result, or one that selects only text choices, is returned.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.choose.html
         ///     <para>Scoped by <c>[NDScoped]</c>: the int64 copy of a non-int64 index array, the 0-d arrays of
@@ -94,7 +91,6 @@ namespace NumSharp
         ///     <c>mode="raise"</c>, or <paramref name="mode"/> is not a known clip mode.</exception>
         /// <exception cref="TypeError"><paramref name="a"/> cannot be safe-cast to int64, or <paramref name="out"/>
         ///     has the wrong shape.</exception>
-        /// <exception cref="StringComputationNotSupportedException">See <see cref="choose(NDArray,object[],NDArray,string)"/>.</exception>
         /// <remarks>Scoped by <c>[NDScoped]</c>, with the same reclaimed set as the <see cref="object"/>[] overload.</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
@@ -126,7 +122,6 @@ namespace NumSharp
         ///     to int64, or <paramref name="out"/> has the wrong shape.</exception>
         /// <exception cref="ValueError"><paramref name="choices"/> has length 0 along its first axis, an index is out
         ///     of range under <c>mode="raise"</c>, or <paramref name="mode"/> is not a known clip mode.</exception>
-        /// <exception cref="StringComputationNotSupportedException">See <see cref="choose(NDArray,object[],NDArray,string)"/>.</exception>
         /// <remarks>Scoped by <c>[NDScoped]</c>, with the same reclaimed set as the <see cref="object"/>[] overload,
         ///     plus the views along axis 0 this overload builds (each held a reference on the caller's buffer until
         ///     the finalizer ran).</remarks>
@@ -163,10 +158,6 @@ namespace NumSharp
         ///     read-only <paramref name="out"/>.</exception>
         /// <exception cref="TypeError">The index array cannot be safe-cast to int64, or <paramref name="out"/> has
         ///     the wrong shape.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text and numeric choices are mixed and the result reads an
-        ///     element of a numeric choice (formatting numbers as text is the computational phase of the string dtypes). Every
-        ///     check before that runs as in NumPy, and an empty result, or one that selects only text choices, is
-        ///     returned.</exception>
         /// <remarks>
         ///     Covered by <c>[NDScopedCovered]</c>: its only callers are the three <c>[NDScoped]</c> <c>choose</c>
         ///     overloads, so every array built here except the returned result is released by the caller's scope,
@@ -250,32 +241,30 @@ namespace NumSharp
             // out=, the index range) still decide, and the formatting is the computational phase only where the result
             // reads a formatted element (see step 6). The gather kernels copy elemBytes bytes, any width.
             DType stringDescr = null;
-            bool numericInText = false;
             if (anyString)
             {
+                // Mixed text and numbers promote to a string descriptor (a numeric choice widens it to its dtype's text
+                // width); the numeric choices are formatted into it below.
                 var operands = new object[n];
                 for (int i = 0; i < n; i++)
                     operands[i] = choices[i] is NDArray ? (object)mats[i] : choices[i] is sbyte or byte or short or ushort or int or uint or long or ulong or float or double or Complex ? choices[i] : mats[i];
                 stringDescr = DTypePromotion.ResultType(operands);
-                foreach (var m in mats)
-                    numericInText |= m.typecode != NPTypeCode.String;
             }
 
             NPTypeCode dtype = anyString ? NPTypeCode.String : ResolveChooseDtype(anyStrong, strong, weakRank, anyBeyondInt64);
             int elemBytes = anyString ? (int)stringDescr.itemsize : InfoOf.GetSize(dtype);
 
             // ── 2) cast each choice to the common dtype (copy only when needed) ───────────
-            // A numeric choice of a text result is never formatted here: its slot gets a 0-d placeholder of the result
-            // descriptor (broadcast, never read — step 6 refuses a result that would read the choice).
+            // A numeric choice of a text result is formatted here (each number's str(), truncated to the result width):
+            // NumPy's PyArray_ConvertToCommonType converts every choice before the gather, and formatting cannot fail, so
+            // when it happens is unobservable.
             var castChoices = new NDArray[n];
             for (int i = 0; i < n; i++)
             {
                 if (anyString)
-                    castChoices[i] = mats[i].typecode != NPTypeCode.String
-                        ? new NDArray(stringDescr, Shape.NewScalar(), true)
-                        : mats[i].dtype.Meta == stringDescr.Meta && mats[i].dtype.itemsize == stringDescr.itemsize
-                            ? mats[i]
-                            : mats[i].astype(stringDescr, copy: false);
+                    castChoices[i] = mats[i].dtype.Meta == stringDescr.Meta && mats[i].dtype.itemsize == stringDescr.itemsize
+                        ? mats[i]
+                        : mats[i].astype(stringDescr, copy: false);
                 else
                     castChoices[i] = mats[i].GetTypeCode == dtype ? mats[i] : mats[i].astype(dtype, copy: false);
             }
@@ -289,7 +278,7 @@ namespace NumSharp
             // ── 4) common broadcast shape of (all choices + index) ────────────────────────
             // (a numeric choice of a text result broadcasts with its OWN shape — its placeholder is 0-d)
             var shapes = new Shape[n + 1];
-            for (int i = 0; i < n; i++) shapes[i] = numericInText && mats[i].typecode != NPTypeCode.String ? mats[i].Shape : castChoices[i].Shape;
+            for (int i = 0; i < n; i++) shapes[i] = castChoices[i].Shape;
             shapes[n] = idx64.Shape;
             Shape common = Shape.Broadcast(shapes)[0];
             long[] resultDims = common.dimensions;
@@ -310,25 +299,6 @@ namespace NumSharp
 
             if (totalSize == 0)
                 return FinishChoose(result, @out);   // empty — nothing to gather
-
-            // A numeric choice of a text result: NumPy formatted it (unobservably) and now gathers — raising "invalid entry"
-            // at an out-of-range index under mode='raise' (data, not text: reported as NumPy does), and otherwise reading a
-            // formatted element wherever the index selects that choice (the computational phase). Every element of the
-            // index array is used by a non-empty broadcast, so its values decide both.
-            if (numericInText)
-            {
-                using NDArray selected = modeInt == DirectILKernelGenerator.ChooseModeWrap ? np.mod(idx64, NDArray.Scalar((long)n))
-                    : modeInt == DirectILKernelGenerator.ChooseModeClip ? np.clip(idx64, 0L, (long)(n - 1))
-                    : idx64.view();
-                if (modeInt == DirectILKernelGenerator.ChooseModeRaise
-                    && (np.any(selected < 0L) || np.any(selected >= (long)n)))
-                    throw new ValueError("invalid entry in choice array");
-                for (int i = 0; i < n; i++)
-                {
-                    if (mats[i].typecode != NPTypeCode.String && np.any(selected == (long)i))
-                        throw Backends.Strings.NDStringCasting.TextConversion(mats[i].dtype, stringDescr);
-                }
-            }
 
             // ── 7) broadcast every choice and the index to the common shape ───────────────
             var chViews = new NDArray[n];

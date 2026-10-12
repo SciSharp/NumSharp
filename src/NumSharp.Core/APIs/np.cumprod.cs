@@ -22,6 +22,9 @@ namespace NumSharp
                 return NDMatrixBoundary.Wrapped((arr, axis, typeCode, @out), static s => cumprod(s.arr, s.axis, s.typeCode, s.@out), @out);
             // Text (input or out=): multiply.accumulate's loop on (out, arr) answers after the axis (ReduceOutError); without
             // out= the engine's guard answers (ReduceError).
+            // A numeric dtype= over text: NumPy casts the text to that number type first (a parse); the scope reclaims it.
+            if (Backends.Strings.NDStringUfuncs.ParseForNumericReduce("cumprod", arr, axis, typeCode) is { } parsed)
+                arr = parsed;
             Backends.Strings.NDStringUfuncs.ThrowIfReduce("cumprod", arr, axis, @out, typeCode);
             NDArray result = arr.TensorEngine.ReduceCumMul(arr, axis, typeCode);
             return WriteScanToOut(result, @out);

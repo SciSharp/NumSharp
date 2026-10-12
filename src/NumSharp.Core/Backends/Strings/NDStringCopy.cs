@@ -24,8 +24,9 @@ namespace NumSharp.Backends.Strings
     ///       <item><description><b><c>U → S</c></b>: every source element is checked whole — a unit above <c>U+10FFFF</c>
     ///       is NumPy's <c>SystemError</c>, a code point at or above 128 its <c>UnicodeEncodeError</c> — then the code
     ///       points narrow to bytes.</description></item>
-    ///       <item><description><b>Numbers ↔ text</b> are the computational phase: refused with
-    ///       <see cref="NotSupportedException"/>.</description></item>
+    ///       <item><description><b>Numbers ↔ text</b> convert as NumPy's legacy casts do (<see cref="NDTextConversion"/>):
+    ///       a number becomes its scalar's <c>str()</c>, a text is parsed by CPython's <c>int()</c> / <c>float()</c> /
+    ///       <c>complex()</c>, a text cast to bool is its truth value.</description></item>
     ///     </list>
     ///     <para>
     ///     <b>Errors.</b> NumPy converts element by element in the order its raw assignment visits the DESTINATION
@@ -54,10 +55,14 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="IncorrectShapeException">The source does not broadcast to the destination.</exception>
         /// <exception cref="UnicodeEncodeError">A <c>U → S</c> copy meets a code point at or above 128.</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S → U</c> copy meets a byte at or above <c>0x80</c>.</exception>
-        /// <exception cref="SystemError">A <c>U → S</c> copy meets a unit above <c>U+10FFFF</c>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">One operand is numeric and the destination has elements
-        ///     (number ↔ text conversion is not part of this phase). An EMPTY destination converts nothing, so it returns
-        ///     after the writeability and broadcast checks, as NumPy's raw assignment does.</exception>
+        /// <exception cref="SystemError">A <c>U → S</c> copy, or a <c>U</c> text converted to a number, meets a unit above
+        ///     <c>U+10FFFF</c>.</exception>
+        /// <exception cref="ValueError">A text is not a number of the numeric destination's kind (NumPy's <c>int()</c> /
+        ///     <c>float()</c> / <c>complex()</c> texts), or an integer text has more than 4300 digits.</exception>
+        /// <exception cref="OverflowException">An integer text does not fit the numeric destination (NumPy's LP64 texts).</exception>
+        /// <exception cref="UnicodeDecodeError">An <c>S</c> text converted to complex is not UTF-8.</exception>
+        /// <remarks>An EMPTY destination converts nothing, so it returns after the writeability and broadcast checks, as
+        ///     NumPy's raw assignment does.</remarks>
         public static void Copy(UnmanagedStorage dst, UnmanagedStorage src)
         {
             NumSharpException.ThrowIfNotWriteable(dst.Shape);
@@ -68,9 +73,13 @@ namespace NumSharp.Backends.Strings
             if (dst.Shape.size == 0)
                 return;
             // Numbers <-> text: NumPy reaches the per-element conversion only now (after the shape checks, with an element
-            // to convert) — formatting / parsing values is the computational phase.
+            // to convert). A number is written as its scalar's str(), a text parsed by int() / float() / complex() (or
+            // truth-tested for bool), in NumPy's raw assignment order with its 128-element commit blocks.
             if (!dst.IsString || !src.IsString)
-                throw MixedKinds(src, dst);
+            {
+                NDTextConversion.Convert(dst, src);
+                return;
+            }
 
             var dSlice = dst.StringSlice;
             var sSlice = src.StringSlice;

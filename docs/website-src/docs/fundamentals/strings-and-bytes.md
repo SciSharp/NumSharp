@@ -2,7 +2,9 @@
 
 NumSharp has NumPy's two fixed-width text dtypes: `str_` (`U`, Unicode) and `bytes_` (`S`, bytes). It stores, reads, writes, converts, copies, casts and prints them byte for byte like NumPy 2.4.2.
 
-Computing on text arrives in stages. Comparisons, truth values, concatenation and repetition compute now, with NumPy's results. Sorting, searching, the other `np.strings` functions and conversion between text and numbers throw `StringComputationNotSupportedException` until their stage lands. Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
+Conversion between text and numbers works as in NumPy: a number written into a text array is its scalar's `str()`, and a text cast to a number is parsed by Python's `int()`, `float()` or `complex()`, with NumPy's errors.
+
+Computing on text arrives in stages. Comparisons, truth values, concatenation and repetition compute now, with NumPy's results. Sorting, searching and the other `np.strings` functions throw `StringComputationNotSupportedException` until their stage lands. Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
 
 NumPy's raw `void` (`V`), `object` (`O`) and variable-width `StringDType` dtypes stay unsupported.
 
@@ -12,6 +14,7 @@ NumPy's raw `void` (`V`), `object` (`O`) and variable-width `StringDType` dtypes
      Reading and writing elements → Elements_ReadAndWrite, CharVectorApi_RefusesStringArrays
      Dtype integration → Dtypes_PromotionAndCasting
      Moving data → Moving_ViewsCopiesAndCasts, Moving_NonAsciiToBytes_Throws
+     Converting between text and numbers → Converting_NumbersToText, Converting_TextToNumbers, Converting_StoresAndUfuncs, Converting_CSharpStringIsText
      Printing → Printing_StrAndRepr
      Computing on text → Computing_Comparisons, Computing_TruthValues, Computing_ConcatenationAndRepetition, Computing_NumPyRefusals, Computing_NextPhase, Computing_NeverEqualToNumbers, Computing_ChecksInNumPysOrder
      .npy files → Npy_RoundTrip, Npy_CharWritesAsU1
@@ -121,6 +124,75 @@ The last call raises `UnicodeEncodeError` with Python's message: `'ascii' codec 
 
 ---
 
+## Converting between text and numbers
+
+### Numbers to text
+
+A number becomes the text of its NumPy scalar's `str()`. An unsized `"U"` or `"S"` request takes the width NumPy reserves for the number type: 5 for `bool`, 21 for `int64`, 32 for the floats, 64 for complex. A sized request cuts the text to its width:
+
+```csharp
+np.arange(3).astype("U");                          // ['0' '1' '2'], <U21
+np.array(new[] { 1.5, 1e16, 1e-5 }).astype("U");   // ['1.5' '1e+16' '1e-05'], <U32
+np.array(new[] { true, false }).astype("U");       // ['True' 'False'], <U5
+np.array(new[] { 0.1f }).astype("U");              // ['0.1'] - float32 prints its own shortest digits
+np.array(new[] { 3.14159 }).astype("U3");          // ['3.1']
+```
+
+The same text is written wherever a number goes into a text array: an element, `fill`, `np.full`, `np.ones`, `np.pad`, `np.copyto`, and a masked array's fill value:
+
+```csharp
+var u = np.array(new[] { "ab", "cd" });
+u[0] = 5;                                     // ['5' 'cd']
+u[1] = 2.5;                                   // ['5' '2.'] - cut to the width
+np.full(new Shape(2), 7, "U");                // ['7' '7'], <U1
+np.ones(new Shape(2), "U");                   // ['1' '1'], <U1
+np.pad(np.array(new[] { "ab", "c" }), 1);     // ['0' 'ab' 'c' '0']
+```
+
+### Text to numbers
+
+A cast to a number parses each element. `int()` takes decimal digits with an optional sign, underscores between digits and surrounding whitespace. `float()` also takes `inf`, `nan` and exponents. `complex()` takes `1+2j` forms, with or without parentheses. An element that does not parse raises NumPy's `ValueError`, and an integer that does not fit raises NumPy's `OverflowError` (as `OverflowException`):
+
+```csharp
+np.array(new[] { "1", " 22 ", "-3", "1_000" }).astype(np.int64);    // [   1   22   -3 1000]
+np.array(new[] { "1.5", "inf", "-nan", "1e3" }).astype(np.float64); // [   1.5    inf    nan 1000. ]
+np.array(new[] { "1+2j", "3", "(4-5j)" }).astype(np.complex128);    // [1.+2.j 3.+0.j 4.-5.j]
+np.array(new[] { "1", "x" }).astype(np.int64);      // ValueError: invalid literal for int() with base 10: np.str_('x')
+np.array(new[] { "1", "a" }).astype(np.float64);    // ValueError: could not convert string to float: np.str_('a')
+np.array(new[] { "300" }).astype(np.int8);          // OverflowException: Python integer 300 out of bounds for int8
+```
+
+A `bytes` (`S`) element parses the same way. The error names the first element that fails, in NumPy's order.
+
+A C# `string` written into a numeric array is NumPy's Python `str`. It parses the same way, and its error quotes the string itself:
+
+```csharp
+var a = np.zeros(new Shape(3), np.int32);
+a[0] = "12";        // [12  0  0]
+a[0] = "hello";     // ValueError: invalid literal for int() with base 10: 'hello'
+```
+
+### Conversions inside other calls
+
+NumPy converts between text and numbers inside other calls too, and NumSharp follows:
+
+```csharp
+np.add(np.array(new[] { 1.5, 2.0 }), np.array(new long[] { 1, 2 }), dtype: "U");   // ['1.51' '2.02'], <U53
+np.equal(names, np.array(new[] { "cat", "cow", "bird" }), np.empty(new Shape(3), "U5"));   // ['True' 'False' 'True']
+np.add(np.array(new[] { 1.0, 2.5 }), np.array(new[] { 1.0, 3.0 }), np.zeros(new Shape(2), "U5"));   // ['2.0' '5.5']
+np.prod(np.array(new[] { "1.5", "2", "4" }), (int?)null, np.float64);   // 12.0 - the text is parsed first
+```
+
+- `np.add` with a string `dtype=` writes each number as text, then concatenates.
+- A ufunc with a text `out=` writes each result as text, cut to the width of `out`.
+- A reduction with a numeric `dtype=` parses the text first.
+
+With `where=`, NumPy also parses the CURRENT text of `out` into the loop's number type before it computes, so a masked-off `'x'` in a float loop raises `ValueError`.
+
+> **Breaking change:** a C# string converts to a 0-d `U` array, as `np.array(str)` does in NumPy. `NDArray x = "[1, 2, 3]"` is `array('[1, 2, 3]', dtype='<U9')`. It no longer parses the numbers in the text. Parse explicitly with `astype`.
+
+---
+
 ## Printing
 
 `ToString()` is NumPy's `str()`, and `ToString(true)` is NumPy's `repr()`, including Python's quoting rules:
@@ -212,7 +284,7 @@ NumSharp also reports the problems of a call in NumPy's order, before it answers
 np.sum(names, 9);   // AxisError: axis 9 is out of bounds for array of dimension 1
 ```
 
-An unsized string `dtype=` request (`"U"`, `"S"`) gets NumPy's answer too. `np.sqrt(x, dtype: "U")` names no loop. `np.add(x, x, dtype: "U")` waits for a later stage, because NumPy formats the numbers as text and concatenates them.
+An unsized string `dtype=` request (`"U"`, `"S"`) gets NumPy's answer too. `np.sqrt(x, dtype: "U")` names no loop. `np.add(x, x, dtype: "U")` writes the numbers as text and concatenates them.
 
 ### When the shape decides the answer
 
@@ -254,11 +326,11 @@ m.filled("zz");    // ['zz' 'c' 'de']
 np.ma.count(m);    // 2
 ```
 
-The rules for computing are the same as for plain arrays. A masked reduction refuses with NumPy's message. A call that must format numbers as text waits for a later stage:
+The rules for computing are the same as for plain arrays. A masked reduction refuses with NumPy's message. A number used as a fill value is written as its text:
 
 ```csharp
 np.ma.sum(m);      // TypeError: the resolved dtypes are not compatible with add.reduce. Resolved (dtype('<U2'), dtype('<U2'), dtype('<U4'))
-m.filled(5);       // StringComputationNotSupportedException: NumPy writes 5 as the text '5'
+m.filled(5);       // ['5' 'c' 'de']
 ```
 
 For what is not computed yet, convert to .NET and compute there. For example, `NDArray.AsStringArray(names).Select(s => s.ToUpper())`.
@@ -315,6 +387,8 @@ This is NumPy's `np.frombuffer` on a bytestring, and the general interop bridge.
 | `np.array(["hello", "world"])` (→ `<U5`) | `np.array(new[] { "hello", "world" })` (→ `<U5`) |
 | `np.array([b"hi"], dtype="S2")` | `np.array(new object[] { Encoding.ASCII.GetBytes("hi") }, np.dtype("S2"))` |
 | `arr.astype("U10")` | `arr.astype("U10")` |
+| `np.arange(3).astype(str)` (→ `<U21`) | `np.arange(3).astype("U")` (→ `<U21`) |
+| `np.array(["1", "2"]).astype(float)` | `np.array(new[] { "1", "2" }).astype(np.float64)` |
 | `arr[0]` (a `numpy.str_`) | `arr.item(0)` (a C# `string`) |
 | `arr.tolist()` | `arr.tolist()` or `NDArray.AsStringArray(arr)` |
 | `a + b` / `np.char.add(a, b)` / `np.strings.add(a, b)` | `a + b` / `np.add(a, b)` / `np.strings.add(a, b)` |
@@ -328,7 +402,13 @@ This is NumPy's `np.frombuffer` on a bytestring, and the general interop bridge.
 ## Troubleshooting
 
 ### "`StringComputationNotSupportedException`: ... is the next phase"
-NumPy computes this call on text, and NumSharp does not compute it yet (comparisons, truth values, concatenation and repetition already compute). Convert the values to .NET (`NDArray.AsStringArray`, `item`) and use LINQ, or keep the computation in NumPy.
+NumPy computes this call on text, and NumSharp does not compute it yet (comparisons, truth values, concatenation, repetition and the conversions between text and numbers already compute). Convert the values to .NET (`NDArray.AsStringArray`, `item`) and use LINQ, or keep the computation in NumPy.
+
+### "`ValueError: could not convert string to float`"
+A cast from text to a number parses every element, as NumPy does. Clean the text first, or keep it as text.
+
+### "My `NDArray x = "1.5"` is text, not a number"
+A C# string is NumPy's `str`: a 0-d `U` array. Write the number itself (`NDArray x = 1.5`), or parse the text with `astype(np.float64)`.
 
 ### "My `byte[][]` became a `uint8` matrix"
 A jagged `byte[][]` is numeric data in C#. Pass an `object[]` of `byte[]` values to get an `S` array.
@@ -356,6 +436,9 @@ A `U` to `S` cast encodes ASCII only, as NumPy does. Keep non-ASCII text in a `U
 | `NDArray.AsStringArray(arr)` | Every element of a `U` array as a `string[]`, in C order |
 | `arr[i] = "text"` | Writes one element, cut to the width |
 | `arr.astype("S3")` / `arr.astype("U8")` | Casts between string dtypes, as NumPy does |
+| `arr.astype("U")` of numbers | Each number as its scalar's `str()`, at NumPy's width for the number type (21 for `int64`, 32 for `float64`) |
+| `arr.astype(np.float64)` of text | Each text parsed by `float()` (`int()` / `complex()` for those targets), with NumPy's errors |
+| `arr[i] = 5` / `arr[i] = "12"` | A number stored as text / a C# string parsed into a numeric array |
 | Comparisons (`==`, `<`, `np.equal`, ...) and truth values (`astype(bool)`, `np.any`, `np.nonzero`, ...) | NumPy's results |
 | `np.add(a, b)` / `a + b` / `np.strings.add(a, b)` over two text arrays of one class | The concatenation, as wide as the two widths together |
 | `np.strings.multiply(a, i)` / `np.multiply(a, i, out)` | The repetition, as wide as the longest one / cut to the width of `out` |

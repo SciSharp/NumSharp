@@ -38,7 +38,10 @@ namespace NumSharp.Backends
         /// identity), an omitted one is a fresh loop-dtype array whose layout follows the input (an
         /// F-contiguous input yields F-contiguous fresh outputs, matching NumPy).</returns>
         /// <exception cref="TypeError">Complex input (no loop), or a non-float <paramref name="dtype"/>.</exception>
-        /// <exception cref="ValueError">A read-only provided output.</exception>
+        /// <exception cref="ValueError">A read-only provided output; a text output under <paramref name="where"/> whose
+        /// current text does not parse into the loop dtype (a text output receives the parts as text otherwise).</exception>
+        /// <exception cref="INumSharpException">The read-only output's ValueError ("output array is read-only",
+        /// <see cref="NumSharpException.ThrowIfNotWriteable"/>).</exception>
         /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, an out not
         /// same_kind-castable from the loop dtype, or an output that would have to be broadcast/stretched.</exception>
         public override (NDArray Fractional, NDArray Integral) ModF(
@@ -68,18 +71,24 @@ namespace NumSharp.Backends
             if (outFrac is not null)
             {
                 NumSharpException.ThrowIfNotWriteable(outFrac.Shape, "output array");
-                ValidateModfOutCast(loopType, outFrac.typecode, 1);
+                ValidateModfOutCast(loopType, outFrac, 1);
             }
             if (outIntegral is not null)
             {
                 NumSharpException.ThrowIfNotWriteable(outIntegral.Shape, "output array");
-                ValidateModfOutCast(loopType, outIntegral.typecode, 2);
+                ValidateModfOutCast(loopType, outIntegral, 2);
             }
 
             // Iteration (= output) shape: the input broadcasts UP to a bigger provided output (which is
             // never itself stretched), and a where mask joins the shape too. With no out/where this is
             // just the input's shape, so the common path allocates exactly what it did before.
             Shape iterShape = ResolveModfIterationShape(nd.Shape, outFrac, outIntegral, where);
+
+            // A text output under where= is READWRITE: NumPy parses its current text into the loop dtype first (both
+            // outputs, in operand order), before the loop. (Without where= a text output is written by the masked-copy
+            // route below, whose copyto formats the loop's numbers.)
+            ReadMaskedTextOut(outFrac, loopType, where);
+            ReadMaskedTextOut(outIntegral, loopType, where);
 
             // The OUT-OF-PLACE kernel reads `source[i]` and writes `frac[i]`/`integral[i]` at the SAME
             // linear index, so `source` AND every write target must share ONE memory layout for the logical
@@ -241,11 +250,18 @@ namespace NumSharp.Backends
         /// integral output is 2 — <c>nin + output_position</c>).
         /// </summary>
         /// <param name="loopType">The loop (compute) dtype.</param>
-        /// <param name="outType">The provided output's dtype.</param>
+        /// <param name="output">The provided output (a text one is checked by descriptor: its storage lane alone carries
+        ///     no width or class).</param>
         /// <param name="operandIndex">1 for the fractional output, 2 for the integral output.</param>
         /// <exception cref="ArgumentException">When the cast is not permitted under the same_kind rule.</exception>
-        private static void ValidateModfOutCast(NPTypeCode loopType, NPTypeCode outType, int operandIndex)
+        private static void ValidateModfOutCast(NPTypeCode loopType, NDArray output, int operandIndex)
         {
+            if (output.typecode == NPTypeCode.String)
+            {
+                ThrowIfTextOutCastFails("modf", $"output {operandIndex}", loopType, output);
+                return;
+            }
+            var outType = output.typecode;
             if (loopType == outType)
                 return;
             if (NDIterCasting.CanCast(loopType, outType, NPY_CASTING.NPY_SAME_KIND_CASTING))

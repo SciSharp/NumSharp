@@ -20,10 +20,15 @@ namespace NumSharp.Tests.Strings
     /// <remarks>
     ///     <para>
     ///     <b>Phases.</b> A phase-1 case must match NumPy now. A phase-2 case is one NumPy answers by COMPUTING on text
-    ///     (comparisons, concatenation, truth tests, sorting and searching, text ↔ number conversion): it passes as
-    ///     "deferred" while NumSharp throws <see cref="StringComputationNotSupportedException"/>, and is held to NumPy's
-    ///     answer the moment NumSharp returns a result or throws anything else — so the computational phase is gated by
-    ///     this same corpus without editing it.
+    ///     (sorting, searching and the rest of the computational phase): it passes as "deferred" while NumSharp throws
+    ///     <see cref="StringComputationNotSupportedException"/>, and is held to NumPy's answer the moment NumSharp returns
+    ///     a result or throws anything else — so the computational phase is gated by this same corpus without editing it.
+    ///     </para>
+    ///     <para>
+    ///     <b>Deferral ceilings.</b> A section may not defer more cases than <see cref="DeferralCeilings"/> allows: a
+    ///     computation that NumSharp answers today (a comparison, a conversion between text and numbers) cannot slide back
+    ///     into a deferral without failing the gate, even where the generator labels its case phase 2 (a computing call
+    ///     whose phase follows NumPy's outcome). Lower a ceiling when a later phase removes deferrals.
     ///     </para>
     ///     <para>
     ///     <b>Comparison details.</b> Strides and contiguity are compared only on axes of more than one element of a
@@ -156,6 +161,30 @@ namespace NumSharp.Tests.Strings
         /// </summary>
         [TestMethod] public void TextConcatenationAndRepetition() => Run("strarith");
 
+        /// <summary>
+        ///     Section strconv (strings phase 1, P1.1): conversion between text and numbers through every route that
+        ///     converts — <c>astype</c> both ways (every numeric dtype and value class, every target width, layout,
+        ///     casting rule and order; every text grammar NumPy's <c>int()</c> / <c>float()</c> / <c>complex()</c> accept or
+        ///     refuse, Unicode digits and spaces, the 4300-digit limit, the first failing element in NumPy's order), element
+        ///     stores (setitem, fill, full, ones, a text array into a numeric one), <c>np.copyto</c> with every casting rule
+        ///     and a mask, <c>np.array</c> over mixed values, numeric ufuncs into a text <c>out=</c> (with <c>where=</c>
+        ///     reading the out's text first), the string-request <c>np.add</c> over numbers, numeric-dtype reductions and
+        ///     <c>np.cov</c> over text, <c>np.concatenate</c> / <c>np.where</c> / <c>np.pad</c> /
+        ///     <c>np.linalg.matrix_power(a, 0)</c> mixing text and numbers. Every case is strict.
+        /// </summary>
+        [TestMethod] public void TextNumberConversions() => Run("strconv");
+
+        /// <summary>
+        ///     The most cases each section may defer to the computational phase (see the class remarks): the deferrals
+        ///     left are sorting, searching, set routines, histograms and quantiles over text. A section not listed may
+        ///     defer nothing.
+        /// </summary>
+        private static readonly Dictionary<string, int> DeferralCeilings = new()
+        {
+            ["reductions"] = 32, ["straxis"] = 130, ["strshape"] = 190, ["strvalid"] = 5, ["strsurface"] = 67,
+            ["strma"] = 113,
+        };
+
         /// <summary>The corpus is complete: every section has cases and every case belongs to a section above.</summary>
         [TestMethod]
         public void Corpus_EverySectionIsReplayed()
@@ -164,7 +193,7 @@ namespace NumSharp.Tests.Strings
             {
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
                 "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
-                "strcomp", "strarith",
+                "strcomp", "strarith", "strconv",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)
@@ -212,6 +241,12 @@ namespace NumSharp.Tests.Strings
             if (!string.IsNullOrEmpty(listDeferred) && listDeferred != "0")
                 foreach (var d in deferredCases)
                     Console.WriteLine("  deferred " + d);
+            // A computation answered today must not slide back into a deferral (the class remarks): more deferrals than
+            // the section's ceiling fail the section.
+            int ceiling = DeferralCeilings.TryGetValue(section, out var cap) ? cap : 0;
+            if (deferred > ceiling)
+                failures.Add($"{deferred} cases deferred to the computational phase, more than the section's ceiling of " +
+                             $"{ceiling} (set {ListDeferredVariable}=1 to list them)");
             // Every divergence goes to the test's standard output (the assertion message keeps the first 80).
             foreach (var f in failures)
                 Console.WriteLine("  " + f);

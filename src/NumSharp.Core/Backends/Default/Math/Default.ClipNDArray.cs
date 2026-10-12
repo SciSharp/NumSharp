@@ -66,6 +66,10 @@ namespace NumSharp.Backends
         /// ("Python integer 1000 out of bounds for int8"), raised before any element is read, so also for an
         /// empty <paramref name="lhs"/>. See <see cref="NDExprTypeRules.CheckPyIntPacksIntoLoop"/>.</exception>
         /// <exception cref="TypeError">No bound is left and the loop would be bool: NumPy's <c>positive</c> has no bool loop.</exception>
+        /// <exception cref="INumSharpException">A read-only <paramref name="out"/>: NumPy's ValueError "output array is
+        /// read-only", raised first (<see cref="NumSharpException.ThrowIfNotWriteable"/>).</exception>
+        /// <exception cref="ValueError">A text <paramref name="out"/> under <paramref name="where"/> whose current text does
+        /// not parse into the loop dtype (a text out receives the clipped values as text otherwise).</exception>
         [NDScoped]
         public override unsafe NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
@@ -144,6 +148,18 @@ namespace NumSharp.Backends
             if (typeCode.HasValue)
                 ValidateClipInputCasts(lhs, min, max, outType, ufunc);
 
+            // ---- A text out= (no operand is text — refused above): the routed ufunc's numeric loop formats its results
+            //      into it. The cast check, the joint broadcast (out joined) and, under where=, the read of the out's text
+            //      come in NumPy's order; then the clip runs without out= and is cast into it under the mask.
+            if (@out is not null && @out.typecode == NPTypeCode.String)
+            {
+                ThrowIfTextOutCastFails(ufunc, "output", outType, @out);
+                ClipIterationDims(lhs, min, max, @out, where);
+                ReadMaskedTextOut(@out, outType, where);
+                var (lo, hi) = (min, max);
+                return Strings.NDStringArithmetic.CastInto(@out, where, () => ClipNDArray(lhs, lo, hi, dtype, null, where));
+            }
+
             // ---- @out: the cast rule before the shape — NumPy resolves dtypes, then builds the iterator.
             //      A same_kind-reachable out of another dtype is legal: the loop runs at outType and the
             //      result is cast into out (np.clip(uint8, 5, 100, out=int8) is NumPy-legal).
@@ -186,6 +202,14 @@ namespace NumSharp.Backends
         {
             ValidatePositiveLoop(lhs.GetTypeCode, typeCode);
             NPTypeCode copyType = typeCode ?? lhs.GetTypeCode;
+            // A text out= (the input is not text): positive's typed copy formatted into it, NumPy's order of checks.
+            if (@out is not null && @out.typecode == NPTypeCode.String)
+            {
+                ThrowIfTextOutCastFails("positive", "output", copyType, @out);
+                ClipIterationDims(lhs, null, null, @out, where);
+                ReadMaskedTextOut(@out, copyType, where);
+                return Strings.NDStringArithmetic.CastInto(@out, where, () => ClipPositive(lhs, typeCode, null, where));
+            }
             if (@out is not null)
                 ValidateOutCast(copyType, @out.GetTypeCode, "positive");
 

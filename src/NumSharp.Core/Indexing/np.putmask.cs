@@ -51,9 +51,8 @@ namespace NumSharp
         ///     for a Python scalar) is converted unconditionally.</exception>
         /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
         /// <exception cref="UnicodeDecodeError">Byte values that are not ASCII into a <c>U</c> array.</exception>
-        /// <exception cref="StringComputationNotSupportedException">NumPy computes on text here: a text scalar parsed into a
-        ///     number, or numbers formatted into a text array where the mask selects an element (the number-text casts of a
-        ///     later string subphase).</exception>
+        /// <exception cref="ValueError">A text value that does not parse into a numeric array (NumPy's <c>int()</c> /
+        ///     <c>float()</c> / <c>complex()</c> texts); numbers into a text array are written as their <c>str()</c>.</exception>
         /// <exception cref="SystemError">A <c>U</c> mask holds a unit above U+10FFFF: NumPy's string-to-bool cast of the mask
         ///     raises it, before the size check. (A text mask is otherwise read by its truth values: a non-empty string is
         ///     True.)</exception>
@@ -75,8 +74,7 @@ namespace NumSharp
         /// <exception cref="ValueError">The checks of <see cref="putmask(NDArray, NDArray, NDArray)"/>.</exception>
         /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
         /// <exception cref="UnicodeDecodeError">Byte values that are not ASCII into a <c>U</c> array.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text parsed into a numeric array, or numbers formatted
-        ///     into a text array where the mask selects an element.</exception>
+        /// <exception cref="ValueError">A text value that does not parse into a numeric array.</exception>
         /// <remarks>C# binds a typed array argument here rather than to the <see cref="NDArray"/> overload (a reference
         ///     conversion beats NumSharp's implicit <c>Array → NDArray</c> one): pass <c>np.array(...)</c> for NumPy's ndarray
         ///     semantics.</remarks>
@@ -100,7 +98,7 @@ namespace NumSharp
         /// <exception cref="InvalidCastException">An ndarray of values that does not cast 'safely'.</exception>
         /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
         /// <exception cref="UnicodeDecodeError">Byte values that are not ASCII into a <c>U</c> array.</exception>
-        /// <exception cref="StringComputationNotSupportedException">See <see cref="putmask(NDArray, NDArray, NDArray)"/>.</exception>
+        /// <exception cref="ValueError">See <see cref="putmask(NDArray, NDArray, NDArray)"/>.</exception>
         [NDScoped]
         private static void PutMaskCore(NDArray a, NDArray mask, NDArray values, bool sequence)
         {
@@ -127,7 +125,7 @@ namespace NumSharp
 
             // PyArray_FromAny(values, a.dtype, CARRAY): the 'safe' rule for an array of values (a dtype check, so empty
             // values and an empty target raise too) and every value's conversion, before nv is read.
-            NDArray converted = PlaceValuesLikeNumPy(values, a, sequence, out bool formatsText);
+            NDArray converted = PlaceValuesLikeNumPy(values, a, sequence);
 
             // Empty values ⇒ no-op. NumPy: nv <= 0 returns None without writing (probed 2.4.2).
             // Checked after writeable + mask-size + the conversion (NumPy's order), before the contig copy so an
@@ -185,15 +183,6 @@ namespace NumSharp
                 maskCast = mask.GetTypeCode == NPTypeCode.Boolean
                     ? np.ascontiguousarray(mask)
                     : mask.astype(NPTypeCode.Boolean, copy: true, order: 'C');
-            }
-
-            // Numbers formatted into a text array: unobservable unless written, and the loop writes only where the mask
-            // is true.
-            if (formatsText)
-            {
-                if (AnyTrueMask(maskCast))
-                    throw Backends.Strings.NDStringCasting.TextConversion(values.dtype, a.dtype);
-                return;
             }
 
             // The values in a's element type, C-contiguous (the conversion above already is).

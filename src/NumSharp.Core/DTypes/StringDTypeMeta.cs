@@ -150,15 +150,16 @@ namespace NumSharp
         /// <summary>
         ///     <c>string_discover_descr_from_pyobject</c>: the descriptor a C# scalar needs to be stored whole — a
         ///     <see cref="string"/> holds as many characters as it has CODE POINTS (Python's <c>len(str)</c>: a surrogate
-        ///     pair is one, a lone surrogate is one), a <c>byte[]</c> as many as it has bytes. For <c>U</c> the item size is
-        ///     4 bytes per character.
+        ///     pair is one, a lone surrogate is one), a <c>byte[]</c> as many as it has bytes, any other value as many as its
+        ///     <c>str()</c> has (<c>PyArray_DTypeFromObjectStringDiscovery</c>: <c>np.array([1, 22], dtype='U')</c> is
+        ///     <c>&lt;U2</c>, None is <c>'None'</c>, 4). For <c>U</c> the item size is 4 bytes per character.
         /// </summary>
-        /// <param name="obj">A <see cref="string"/> or <c>byte[]</c> element value.</param>
+        /// <param name="obj">An element value: text, bytes, a number or null (None).</param>
         /// <returns>A fresh sized descriptor of this class.</returns>
         /// <exception cref="TypeError">The value is too long for a descriptor of this class (NumPy's
         /// <c>string too large to store inside array.</c>).</exception>
-        /// <exception cref="NotSupportedException">Any other value: discovering a length from <c>str(value)</c> (a number
-        /// stored into a string array) is NumPy's number→text conversion, which arrives with the computational phase.</exception>
+        /// <exception cref="NotSupportedException">A value that is neither text, bytes, a number nor None (a C# object has no
+        /// Python <c>str()</c>).</exception>
         public override DType DiscoverDescrFromObject(object obj)
         {
             long length;
@@ -170,10 +171,12 @@ namespace NumSharp
                 case byte[] b:
                     length = b.Length;
                     break;
+                case null:
+                    length = 4; // str(None) == 'None'
+                    break;
                 default:
-                    throw new StringComputationNotSupportedException(
-                        $"Cannot discover a {Name} length from a {obj?.GetType().Name ?? "null"} value: converting numbers to text " +
-                        "(NumPy's str(value) discovery) is not part of NumSharp's fixed-width string storage phase yet.");
+                    length = NDStringStorage.StrLength(obj);
+                    break;
             }
             if (length > MaxChars)
                 throw new TypeError("string too large to store inside array.");
@@ -181,13 +184,21 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     <c>string_known_scalar_types</c>, narrowed to what this phase stores: a C# <see cref="string"/> (Python
-        ///     <c>str</c>) and a <c>byte[]</c> (Python <c>bytes</c>) are scalars of either string class. NumPy also accepts
-        ///     the Python numbers (stored as their <c>str()</c>); NumSharp refuses those until number↔text conversion lands.
+        ///     <c>string_known_scalar_types</c> (<c>python_builtins_are_known_scalar_types</c>): the Python <c>str</c>,
+        ///     <c>bytes</c>, <c>int</c>, <c>float</c>, <c>complex</c> and <c>bool</c> are scalars of either string class —
+        ///     in the C# boundary map <see cref="string"/>, <c>byte[]</c>, the integer primitives and
+        ///     <see cref="System.Numerics.BigInteger"/>, <see cref="float"/> / <see cref="double"/>,
+        ///     <see cref="System.Numerics.Complex"/> and <see cref="bool"/>. A NumPy scalar (<see cref="Half"/>, <c>char</c>,
+        ///     <c>decimal</c>) is not: it is discovered through its own dtype and promoted.
         /// </summary>
         /// <param name="type">The C# type of a candidate element value.</param>
-        /// <returns>True for <see cref="string"/> and <c>byte[]</c>.</returns>
-        public override bool IsKnownScalarType(Type type) => type == typeof(string) || type == typeof(byte[]);
+        /// <returns>True for the Python builtin scalar types.</returns>
+        public override bool IsKnownScalarType(Type type)
+            => type == typeof(string) || type == typeof(byte[]) || type == typeof(bool)
+               || type == typeof(sbyte) || type == typeof(byte) || type == typeof(short) || type == typeof(ushort)
+               || type == typeof(int) || type == typeof(uint) || type == typeof(long) || type == typeof(ulong)
+               || type == typeof(System.Numerics.BigInteger) || type == typeof(float) || type == typeof(double)
+               || type == typeof(System.Numerics.Complex);
 
         /// <summary>
         ///     The no-argument class call <c>StrDType()</c>: NumPy's string classes require the length argument, so this

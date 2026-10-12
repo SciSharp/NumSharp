@@ -41,10 +41,14 @@ namespace NumSharp.Backends.Strings
         ///     (<c>Cannot cast scalar from …</c> for a 0-d array).</exception>
         /// <exception cref="UnicodeEncodeError"><c>U → S</c> meets a code point at or above 128.</exception>
         /// <exception cref="UnicodeDecodeError"><c>S → U</c> meets a byte at or above <c>0x80</c>.</exception>
-        /// <exception cref="SystemError"><c>U → S</c> or <c>U → bool</c> meets a unit above <c>U+10FFFF</c>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">The cast is allowed but converts between text and numbers / dates
-        ///     other than text → bool (the computational phase) and the array has elements; an empty array converts to an
-        ///     empty result.</exception>
+        /// <exception cref="SystemError"><c>U → S</c>, <c>U → bool</c> or <c>U → number</c> meets a unit above
+        ///     <c>U+10FFFF</c>.</exception>
+        /// <exception cref="ValueError">Text → number meets a text that is not a number of the target's kind (NumPy's
+        ///     <c>invalid literal for int() with base 10: np.str_('x')</c>, <c>could not convert string to float: ...</c>,
+        ///     <c>complex() arg is a malformed string</c>) or an integer text of more than 4300 digits — the FIRST such
+        ///     element in NumPy's raw assignment order.</exception>
+        /// <exception cref="OverflowException">Text → integer meets a value outside the target (NumPy's LP64 texts:
+        ///     <c>Python integer 300 out of bounds for int8</c>, <c>Python int too large to convert to C long</c>).</exception>
         public static NDArray AsType(NDArray src, DType dtype, bool copy, char order, string casting)
         {
             // npy_parse_arguments: the casting and order converters run before the dtype is adapted. astype's converter
@@ -80,12 +84,10 @@ namespace NumSharp.Backends.Strings
             if (from.Meta is StringDTypeMeta && to.typecode == NPTypeCode.Boolean)
                 return NDStringTruth.Truth(src, NDStringTruth.Flavor.Cast, order);
 
-            // Formatting numbers as text or parsing text as numbers is the computational phase — unless the array has no
-            // element: NumPy then allocates the result and converts nothing (np.zeros(0, 'U2').astype(np.float64) is an
-            // empty float64 array), which the copy route below does for an empty array of any dtype.
-            if ((!(from.Meta is StringDTypeMeta) || !(to.Meta is StringDTypeMeta)) && src.size != 0)
-                throw TextConversion(from, to);
-
+            // Every other pair — text to text, numbers to text, text to numbers — is a fresh array of the adapted dtype
+            // filled by the string copy route (NumPy's PyArray_NewLikeArray + PyArray_CopyInto): numbers are formatted as
+            // their scalar's str(), texts parsed by int() / float() / complex() (NDTextConversion). An empty array
+            // allocates the result and converts nothing (np.zeros(0, 'U2').astype(np.float64) is an empty float64 array).
             return NDIter.CopyAs(to, src, order);
         }
 
@@ -125,7 +127,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="requested">The requested descriptor.</param>
         /// <returns>The descriptor the result is allocated with.</returns>
         /// <exception cref="TypeError">No cast exists from <paramref name="from"/> to the requested class.</exception>
-        private static DType AdaptDescriptorToArray(DType from, DType requested)
+        internal static DType AdaptDescriptorToArray(DType from, DType requested)
         {
             // descr_is_legacy_parametric_instance: an unsized flexible descriptor stands for its class.
             if (requested.itemsize == 0 && requested.Meta is StringDTypeMeta)

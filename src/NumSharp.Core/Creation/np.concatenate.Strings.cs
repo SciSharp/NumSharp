@@ -48,16 +48,15 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> has the wrong rank or shape.</exception>
         /// <exception cref="UnicodeEncodeError">A <c>U</c> input is not ASCII and the result is <c>S</c>.</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S</c> input is not ASCII and the result is <c>U</c>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">The cast is allowed but converts between text and numbers for
-        ///     an input with elements: a text input parsed into a numeric result (at that input), or a numeric input formatted
-        ///     into a text result (reported once every other input passed — formatting cannot fail). An EMPTY input converts
-        ///     nothing.</exception>
+        /// <exception cref="ValueError">A text input does not parse into a numeric result (NumPy's <c>int()</c> /
+        ///     <c>float()</c> / <c>complex()</c> texts).</exception>
+        /// <exception cref="OverflowException">An integer text input does not fit a numeric result.</exception>
         /// <remarks>
         ///     <b>Order (NumPy's <c>PyArray_ConcatenateArrays</c>).</b> The <paramref name="out"/> shape first; then each input
         ///     in turn through <c>PyArray_AssignArray</c> — its casting rule, then its conversion — so the FIRST input's rule or
         ///     conversion error wins over a later input's (a non-ASCII <c>S</c> input before a <c>U5</c> input that fails
-        ///     <c>'safe'</c> into <c>&lt;U3</c> reports the UnicodeDecodeError). Formatting a number cannot fail and is
-        ///     unobservable once the call fails, so a numeric input defers only when every input passed.
+        ///     <c>'safe'</c> into <c>&lt;U3</c> reports the UnicodeDecodeError). A numeric input into a text result is written
+        ///     as its numbers' <c>str()</c>; a text input into a numeric result is parsed. An EMPTY input converts nothing.
         /// </remarks>
         private static NDArray ConcatenateStrings(NDArray[] arrays, int axis, int ndim, long[] resultDims, NDArray @out, DType dtype, string casting)
         {
@@ -70,7 +69,6 @@ namespace NumSharp
                 result = @out.dtype;
             else
                 result = DTypePromotion.ResultType(arrays.Cast<object>().ToArray());
-            bool resultIsText = result.Meta is StringDTypeMeta;
 
             NDArray dst;
             if (@out is not null)
@@ -103,25 +101,15 @@ namespace NumSharp
                     accessor[i] = Slice.All;
 
                 long position = 0;
-                DType pendingFormat = null;
                 foreach (var src in arrays)
                 {
                     // PyArray_AssignArray, input by input: the casting rule (a dtype check, so it runs for an empty input
-                    // too), then the conversion.
+                    // too), then the conversion — a number written as its scalar's str(), a text parsed (the copy route's
+                    // NDTextConversion), so a parse error is reported at its input, after the inputs before it were written.
                     if (!DTypeCasting.CanCastTypeTo(src.dtype, result, rule))
                         throw NDStringCasting.InvalidCast(src.dtype, result, rule, scalar: false);
 
                     long len = src.Shape.dimensions[axis];
-                    if ((src.typecode == NPTypeCode.String) != resultIsText && src.size != 0)
-                    {
-                        // Parsing text into numbers can fail, so it is reported at this input; formatting numbers cannot,
-                        // so a later input's error still wins and the refusal waits for the end.
-                        if (!resultIsText)
-                            throw NDStringCasting.TextConversion(src.dtype, result);
-                        pendingFormat ??= src.dtype;
-                        position += len;
-                        continue;
-                    }
                     if (len == 0)
                         continue;
                     accessor[axis] = new Slice(position, position + len);
@@ -130,9 +118,6 @@ namespace NumSharp
                     NDIter.Copy(slab.Storage, src.Storage);
                     position += len;
                 }
-
-                if (pendingFormat is not null)
-                    throw NDStringCasting.TextConversion(pendingFormat, result);
                 return dst;
             }
             catch

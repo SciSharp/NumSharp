@@ -19,10 +19,10 @@ Each case records what NumPy 2.4.2 returns for one call:
   (a scalar is immutable and owns nothing; NumSharp answers with a read-only 0-d array).
 * ``error`` -- when NumPy raises: the exception's first well-known class on its MRO and ``str(e)`` verbatim.
 * ``phase`` -- 1 for the calls NumSharp's string support covers now (storage, element access, conversion, copying,
-  string-to-string casts, indexing, printing, and every refusal NumPy itself raises); 2 for the calls NumPy answers by
-  COMPUTING on text (comparisons, concatenation, truth tests, sorting and searching, text <-> number conversion). A
-  phase-2 case passes while NumSharp throws ``StringComputationNotSupportedException`` (counted as deferred) and is
-  compared strictly as soon as NumSharp computes it.
+  string-to-string casts, text <-> number conversion, indexing, printing, and every refusal NumPy itself raises); 2 for
+  the calls NumPy answers by COMPUTING on text (sorting, searching and the rest of phase 2). A phase-2 case passes while
+  NumSharp throws ``StringComputationNotSupportedException`` (counted as deferred) and is compared strictly as soon as
+  NumSharp computes it.
 
 Deterministic: no randomness; regenerate with ``python test/oracle/gen_strings_oracle.py`` (needs numpy==2.4.2).
 """
@@ -227,8 +227,8 @@ def add(section, op, *, params=None, operands=(), call, phase=1, layout="", muta
     ``operands`` is a list of (base, view) pairs; ``call(*views)`` makes the call. ``mutate`` names the operand an
     in-place call writes: its view and whole base buffer afterwards are the expectation. ``phase`` is 1, 2, or
     ``"compute"`` for a call NumPy may answer by computing on text: phase 2 when NumPy returns a result, phase 1 when it
-    raises (NumPy's error is then final, so NumSharp must raise the same) -- except a PARSE error (NumPy converting text
-    to a number, ``could not convert string to float``), whose outcome depends on the text and is phase 2 too.
+    raises (NumPy's error is then final, so NumSharp must raise the same) -- a PARSE error (NumPy converting text to a
+    number, ``could not convert string to float``) included: text -> number conversion is phase 1 since P1.1.
     """
     views = [v for _, v in operands]
     n = sum(1 for c in CASES if c["id"].startswith(f"{section}/{op}/")) + 1
@@ -252,8 +252,21 @@ def add(section, op, *, params=None, operands=(), call, phase=1, layout="", muta
     except Exception as e:  # noqa: BLE001 -- every NumPy exception is a recorded outcome
         case["error"] = err_info(e)
         if phase == "compute":
-            case["phase"] = 2 if _is_parse_error(e) else 1
+            case["phase"] = 2 if _is_parse_error(e) and not _parses_in_phase1(op) else 1
     CASES.append(case)
+
+
+# Calls whose parse runs only after a computation of the later phase: np.sort_complex sorts the text, THEN casts it
+# to complex (b.sort(); b.astype('D')), so its parse error is reachable only once text sorts.
+_PARSE_AFTER_PHASE2 = {"sort_complex"}
+
+
+def _parses_in_phase1(op):
+    """True when a parse error of ``op`` is one NumSharp's phase 1 raises: text -> number conversion (P1.1) answers
+    every failed int() / float() / complex() of a string and numpy.ma's TypeError around one (the RecursionError of
+    numpy.ma.flatten_mask is a truth test, which phase 1 answers too) -- except where a phase-2 computation runs
+    before the parse (``_PARSE_AFTER_PHASE2``)."""
+    return op not in _PARSE_AFTER_PHASE2
 
 
 def _is_parse_error(e):
@@ -436,15 +449,15 @@ def gen_creation():
         for order in ("C", "F"):
             add("creation", "array", params={"values": enc(vals), "dtype": "U4", "order": order},
                 call=lambda v=vals, o=order: np.array(v, dtype="U4", order=o))
-    # None stores its text under a string dtype (NumPy's str(None)); text into numbers / numbers into text compute.
+    # None stores its text under a string dtype (NumPy's str(None)); text into numbers / numbers into text convert.
     add("creation", "array", params={"values": enc([None, "a"]), "dtype": "U"},
         call=lambda: np.array([None, "a"], dtype="U"))
     add("creation", "array", params={"values": enc([None]), "dtype": "S5"}, call=lambda: np.array([None], dtype="S5"))
-    add("creation", "array", params={"values": enc(["a", 1]), "dtype": None}, phase=2,
+    add("creation", "array", params={"values": enc(["a", 1]), "dtype": None},
         call=lambda: np.array(["a", 1]))
-    add("creation", "array", params={"values": enc(["12", "3"]), "dtype": "i8"}, phase=2,
+    add("creation", "array", params={"values": enc(["12", "3"]), "dtype": "i8"},
         call=lambda: np.array(["12", "3"], dtype="i8"))
-    add("creation", "array", params={"values": enc([1.5, 2.0]), "dtype": "U"}, phase=2,
+    add("creation", "array", params={"values": enc([1.5, 2.0]), "dtype": "U"},
         call=lambda: np.array([1.5, 2.0], dtype="U"))
 
     for v in ["abc", "", "a\x00", "\U0001F600", b"ab", b"", b"\x00x", "it's"]:
@@ -465,9 +478,9 @@ def gen_creation():
             for shape in ((3,), (2, 2)):
                 add("creation", "full", params={"shape": list(shape), "fill": enc(fill), "dtype": dt},
                     call=lambda s=shape, f=fill, d=dt: np.full(s, f, dtype=d))
-    add("creation", "full", params={"shape": [2], "fill": enc(7), "dtype": "U3"}, phase=2,
+    add("creation", "full", params={"shape": [2], "fill": enc(7), "dtype": "U3"},
         call=lambda: np.full((2,), 7, dtype="U3"))
-    add("creation", "ones", params={"shape": [2], "dtype": "U3"}, phase=2, call=lambda: np.ones((2,), dtype="U3"))
+    add("creation", "ones", params={"shape": [2], "dtype": "U3"}, call=lambda: np.ones((2,), dtype="U3"))
 
     for spec in ("<U3", "|S3"):
         for lay in ("c2", "f2", "t3", "s2", "bc", "z0", "e2"):
@@ -480,7 +493,7 @@ def gen_creation():
             if spec[1] == "U":
                 add("creation", "empty_like", params={"dtype": None}, operands=[operand(spec, lay)], layout=lay,
                     call=lambda a: np.empty_like(a))
-            add("creation", "ones_like", params={}, operands=[operand(spec, lay)], layout=lay, phase=2,
+            add("creation", "ones_like", params={}, operands=[operand(spec, lay)], layout=lay,
                 call=lambda a: np.ones_like(a))
 
     for spec in SPECS:
@@ -586,15 +599,15 @@ def gen_astype():
                     ([b"\x80"], "U")]:
         add("astype", "astype", params={"dtype": t, "casting": "unsafe", "order": "K", "copy": True},
             operands=[plain(np.array(vals))], layout="c1", call=lambda a, t=t: a.astype(t))
-    # Text <-> numbers: NumPy parses / formats (the computational phase).
+    # Text <-> numbers: NumPy parses / formats (phase 1 since P1.1; section strconv has the full matrix).
     for vals, t in [(["12", "-3"], "i8"), (["1.5", "nan"], "f8"), (["ab"], "i4"), (["True", ""], "?"),
                     ([b"7", b"8"], "u1"), (["1+2j"], "c16")]:
         add("astype", "astype", params={"dtype": t, "casting": "unsafe", "order": "K", "copy": True},
-            operands=[plain(np.array(vals))], layout="c1", phase=2, call=lambda a, t=t: a.astype(t))
+            operands=[plain(np.array(vals))], layout="c1", call=lambda a, t=t: a.astype(t))
     for arr, t in [(np.array([1, -2], dtype="i8"), "U"), (np.array([1.5, 2.0]), "S"), (np.array([True]), "U5"),
                    (np.array([300], dtype="i2"), "S2")]:
         add("astype", "astype", params={"dtype": t, "casting": "unsafe", "order": "K", "copy": True},
-            operands=[plain(arr)], layout="c1", phase=2, call=lambda a, t=t: a.astype(t))
+            operands=[plain(arr)], layout="c1", call=lambda a, t=t: a.astype(t))
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -764,7 +777,7 @@ def gen_movement():
                 add("movement", "pad", params={"pad_width": 1, "mode": "empty", "constant": None}, operands=[op],
                     layout=lay, call=lambda a: np.pad(a, 1, mode="empty"))
             add("movement", "pad", params={"pad_width": 1, "mode": "constant", "constant": None}, operands=[op],
-                layout=lay, phase=2, call=lambda a: np.pad(a, 1))
+                layout=lay, call=lambda a: np.pad(a, 1))
 
         # Joining operands of different widths and classes: the result is the common string dtype.
         for other, lay2 in (("<U5", "c2"), ("|S5", "f2"), ("<U1", "r2"), ("|S1", "bc")):
@@ -783,10 +796,10 @@ def gen_movement():
                 operands=[a, b], layout=f"c2+{lay2}",
                 call=lambda x, y: np.choose(np.array([[0, 1, 0, 1], [1, 1, 0, 0], [0, 0, 0, 1]]), [x, y]))
         add("movement", "concatenate", params={"axis": 0}, operands=[operand(spec, "c1"), plain(np.arange(3))],
-            layout="c1+int", phase=2, call=lambda x, y: np.concatenate([x, y]))
+            layout="c1+int", call=lambda x, y: np.concatenate([x, y]))
         text3 = plain(np.array(["xy"] * 3 if spec[1] == "U" else [b"xy"] * 3))
         add("movement", "where", params={"cond": [True, False, True]}, operands=[text3, plain(np.array([1, 2, 3]))],
-            layout="c1+int", phase=2, call=lambda x, y: np.where(np.array([True, False, True]), x, y))
+            layout="c1+int", call=lambda x, y: np.where(np.array([True, False, True]), x, y))
         # Scalar text operands of np.where (NumPy's weak-scalar promotion for str / bytes).
         for xv, yv in (("long text", None), (None, "q"), ("Ü", "w")):
             xs = xv if spec[1] == "U" else (xv.encode() if xv and xv.isascii() else xv)
@@ -838,7 +851,7 @@ def gen_mutation():
             add("mutation", "fill", params={"value": enc(values[3])}, operands=[operand(spec, lay)], layout=lay,
                 mutate=0, call=lambda a, v=values[3]: a.fill(v))
             add("mutation", "setitem", params={"index": [{"int": 0}], "value": enc(5)}, operands=[operand(spec, lay)],
-                layout=lay, mutate=0, phase=2, call=lambda a: _setitem(a, 0, 5))
+                layout=lay, mutate=0, call=lambda a: _setitem(a, 0, 5))
         # Array values: broadcasting, sequences into one element, other widths and classes.
         for lay in ("c2", "f2"):
             for vals in (["p", "qq", "rrrr", "s"], [["x"], ["y"], ["z"]], [[["only"] * 4] * 3], ["a", "b"]):
@@ -859,7 +872,7 @@ def gen_mutation():
             operands=[operand(spec, "c1"), plain(np.array(["u", "v"]))], layout="c1", mutate=0,
             call=lambda a, v: _setitem(a, np.array([True, False, True, False, False, True]), v))
         add("mutation", "setitem_array", params={"index": [{"ellipsis": True}]},
-            operands=[operand(spec, "c1"), plain(np.arange(6))], layout="c1", mutate=0, phase=2,
+            operands=[operand(spec, "c1"), plain(np.arange(6))], layout="c1", mutate=0,
             call=lambda a, v: _setitem(a, Ellipsis, v))
 
         # put / place / putmask / copyto / put_along_axis.
@@ -888,7 +901,7 @@ def gen_mutation():
             operands=[operand(spec, "c1"), plain(np.array(["é"] * 6))], layout="c1", mutate=0,
             call=lambda d, s: np.copyto(d, s, casting="unsafe"))
         add("mutation", "copyto", params={"casting": "unsafe", "where": None},
-            operands=[operand(spec, "c1"), plain(np.arange(6))], layout="c1", mutate=0, phase=2,
+            operands=[operand(spec, "c1"), plain(np.arange(6))], layout="c1", mutate=0,
             call=lambda d, s: np.copyto(d, s, casting="unsafe"))
         add("mutation", "put_along_axis", params={"indices": [[1], [0], [3]], "axis": 1},
             operands=[operand(spec, "c2"), plain(np.array([["v"], ["w"], ["x"]] if spec[1] == "U" else
@@ -1067,7 +1080,7 @@ def gen_refusals():
                   "logical_not", "bincount", "digitize", "interp", "polyval", "trapezoid", "convolve", "correlate",
                   "dot", "inner", "vdot", "outer", "kron", "tensordot", "cross", "einsum", "byteswap", "conj"]
     # NumPy computes these on text: ordering, truth, searching, set logic, and the functions that parse the text as
-    # numbers (i0 and linalg.norm cast to float first) — phase 2 when NumPy returns or raises a parsing error.
+    # numbers (i0 and linalg.norm cast to float first: phase 1 since P1.1, they parse the text).
     computes = {"argmax", "argmin", "nanargmax", "nanargmin", "all", "any", "count_nonzero", "nonzero", "flatnonzero",
                 "argwhere", "sort", "argsort", "unique", "trim_zeros", "lexsort", "searchsorted", "partition",
                 "argpartition", "isin", "union1d", "intersect1d", "setdiff1d", "setxor1d", "array_equal", "array_equiv",
@@ -1075,7 +1088,7 @@ def gen_refusals():
     parses = {"i0", "linalg.norm"}
     for name in reductions:
         for k, a in (("U", u), ("S", s)):
-            phase = 2 if name in parses else "compute" if name in computes else 1
+            phase = 1 if name in parses else "compute" if name in computes else 1
             add("reductions", "call", params={"name": name}, operands=[a], layout=k, phase=phase,
                 call=lambda x, n=name: _call_named(n, x))
 
@@ -1420,10 +1433,10 @@ def gen_text_precedence():
                         ("b", num_operand(np.array([True, False, True]))), ("e", e2),
                         ("u3d", plain(np.zeros((2, 2, 2), "<U1")))):
             for dt in (None, "U", "S", "U3", "f8"):
-                # A numeric dtype= makes NumPy PARSE the text (array(m, dtype=float64)): the computational phase.
+                # A numeric dtype= makes NumPy PARSE the text (array(m, dtype=float64)): phase 1 since P1.1.
                 parses = dt == "f8" and key in ("u", "s", "u2d", "e", "u3d")
                 add("strcov", "cov", params={"corr": corr, "dtype": dt}, operands=[op], layout=key,
-                    phase=2 if parses else "compute", call=lambda a, f=fn, d=dt: f(a, dtype=d))
+                    phase=1 if parses else "compute", call=lambda a, f=fn, d=dt: f(a, dtype=d))
         add("strcov", "cov", params={"corr": corr, "dtype": None, "rowvar": False}, operands=[a2], layout="rowvar",
             phase="compute", call=lambda a, f=fn: f(a, rowvar=False))
         add("strcov", "cov", params={"corr": corr, "dtype": None, "y": 1}, operands=[a1, num_operand(np.ones(3))],
@@ -2977,18 +2990,18 @@ def gen_striter():
             _it_add("pair", [(ba, build(ba)), (bb, bb)], layout="pair", flags=flags, casting="unsafe",
                     phase="compute")
 
-    # G. text <-> number through the buffers: NumPy parses / formats (the computational phase).
+    # G. text <-> number through the buffers: NumPy parses / formats (phase 1 since P1.1).
     for spec, values in (("<U3", ["1", "22", "-3"]), ("|S3", [b"1", b"22", b"-3"]), ("<U3", ["1.5", "x", "2"])):
         base = np.array(values * 2, dtype=spec)
         for req in ("<i8", "<f8", "?"):
             for casting in ("safe", "unsafe"):
                 _it_add("tonumber", [(base, base)], layout="c1", flags=["buffered"], op_dtypes=[req],
-                        casting=casting, phase="compute")
+                        casting=casting, phase=1)
     for src in (np.arange(6, dtype=np.int64), np.array([1.5, -2.0, 3.25, 0.0, 1e20, -0.5]), np.array([True, False] * 3)):
         for req in ("<U5", "|S5", "U", "S", "<U2"):
             for casting in ("safe", "unsafe"):
                 _it_add("fromnumber", [(src, src)], layout="c1", flags=["buffered"], op_dtypes=[req],
-                        casting=casting, phase="compute")
+                        casting=casting, phase=1)
 
     # H. NumPy's refusals over strings: a cast neither copied nor buffered, a read-only broadcast written, ranges.
     for spec in ("<U3", "|S3"):
@@ -3441,6 +3454,354 @@ def gen_strarith():
             call=lambda i, t=text: np.strings.multiply(t, i), layout="a:str")
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Section strconv: conversion between text and numbers (strings phase 1, P1.1), strict. NumPy's legacy casts: a number
+# becomes its scalar's str() (truncated / NUL-padded to the width; an unsized request takes REQUIRED_STR_LEN), a text
+# is parsed by int() / float() / complex() through the NumPy scalar (np.str_ / np.bytes_), with NumPy's errors.
+# ----------------------------------------------------------------------------------------------------------------------
+
+_INF, _NAN = float("inf"), float("nan")
+
+# The value set per numeric dtype: zeros of both signs, extremes, the float positional / scientific thresholds,
+# specials, values whose shortest repr needs every digit.
+CONV_VALUES = {
+    "?": [True, False],
+    "i1": [0, 1, -1, 127, -128, 42],
+    "u1": [0, 1, 255, 42],
+    "i2": [0, -1, 32767, -32768, 1234],
+    "u2": [0, 65535, 1234],
+    "i4": [0, -1, 2 ** 31 - 1, -2 ** 31, 123456],
+    "u4": [0, 2 ** 32 - 1, 123456],
+    "i8": [0, -1, 2 ** 63 - 1, -2 ** 63, 1234567890123],
+    "u8": [0, 2 ** 64 - 1, 2 ** 63, 1234567890123],
+    "f2": [0.0, -0.0, 1.5, -2.25, 65504.0, 6e-08, 0.1, 1e4, _INF, -_INF, _NAN, 1 / 3, 2049.0, 0.00006103515625],
+    "f4": [0.0, -0.0, 1.5, 0.1, 1e16, 1e-5, 1e-4, 3.4028235e38, 1.4e-45, 16777217.0, _INF, -_INF, _NAN, 1 / 3,
+           9999999.0, 1e15, 0.0001],
+    "f8": [0.0, -0.0, 1.5, -2.25, 0.1, 1e16, 9999999999999998.0, 1e15, 1e-4, 1e-5, 1e22, 5e-324,
+           1.7976931348623157e308, _INF, -_INF, _NAN, 1 / 3, 123456789.125, 2.0 ** 53 + 2],
+    "c16": [1 + 2j, complex(0.0, -0.0), complex(-0.0, 0.0), complex(_INF, _NAN), complex(_NAN, -_INF),
+            complex(1e16, 1e-5), 0j, -1.5j, complex(_NAN, 0.0), complex(1.5, -0.0), complex(-1e-5, 1e22)],
+}
+CONV_LAYOUTS = ["c1", "r1", "s1", "c2", "f2", "bc", "z0", "e1", "one", "rs"]
+
+
+def _num_operand(dt, layout, values, seed=0):
+    """A numeric (base, view) operand of dtype ``dt`` in one of LAYOUTS, its base cycling through ``values``."""
+    n, build = LAYOUTS[layout]
+    base = np.array([values[(seed + i) % len(values)] for i in range(n)], dtype=dt) if n else np.zeros(0, dt)
+    return base, build(base)
+
+
+def _platform_text(text):
+    """NumPy's C long / long long overflow texts differ between the Windows corpus host and LP64 (Linux / macOS):
+    "int too big to convert" / "Python int too large to convert to C long" on Windows, "Python integer ... out of
+    bounds for int32" on LP64 for an int32 / uint32 target between 2^31 and 2^63. NumSharp pins the LP64 texts (unit
+    tests); such cases stay out of the corpus, the clip_pyint policy."""
+    return "too large to convert" in text or "too big to convert" in text
+
+
+def _conv(section, op, **kw):
+    """``add`` for a case whose outcome must be portable: a case NumPy answers with a platform-dependent overflow text is
+    dropped again (its id freed)."""
+    add(section, op, **kw)
+    c = CASES[-1]
+    if "error" in c and _platform_text(c["error"]["text"]):
+        CASES.pop()
+        _IDS.discard(c["id"])
+
+
+def _text_operand(values, spec):
+    """A 1-D text operand of the given values (a str list for U, encoded for S) at ``spec`` (e.g. "U", "S", "U8")."""
+    if spec.lstrip("<|")[0] == "S":
+        vals = [v if isinstance(v, bytes) else v.encode("utf-8") for v in values]
+    else:
+        vals = values
+    return plain(np.array(vals, dtype=spec))
+
+
+# Texts and the target kinds they exercise. Each text is converted alone (so NumPy's error names it) and every target
+# of the kind is tried.
+INT_TEXTS = ["0", "-0", "+5", " 12 ", "\t7\n", "1_000", "00012", "١٢٣", "１２", "  5 　", "-1", "",
+             " ", "1.0", "1e3", "0x10", "1__0", "_1", "1_", "+-1", "abc", "1 2", "٣.٥", "12\x00", "1\x002", "\x00",
+             "127", "128", "-128", "-129", "255", "256", "32767", "32768", "65535", "65536", "2147483647",
+             "2147483648", "4294967295", "4294967296", "9223372036854775807", "9223372036854775808",
+             "18446744073709551615", "18446744073709551616", "-9223372036854775808", "-9223372036854775809",
+             "\ud800", "\U0001F600", "Ⅻ", "²", "0b1", "1 _0", "- 1"]
+FLOAT_TEXTS = ["1.5", "-0.0", "inf", "-Infinity", "nan", "-nan", "NaN", "+inf", "1e308", "1e309", "1e-400",
+               "1_000.5", ".5", "5.", " 3.25 ", "٣.٥", "1E5", "infinity", "-iNf", "0.1", "65520", "65519.99",
+               "3.4028236e38", "1e-45", "6e-8", "", "0x1p3", "1._5", "nan(123)", "infinit", "1e", "e5", "--1",
+               "1.5.5", "1_e5", "1e_5", "_1.5", "1.5_", "١_٢", "inf ", " -nan", "+-1.5", "1,5", "1.5\x00", "\x001.5",
+               "12345678901234567890", "-0", "1e1000", "0.000000000000000000000000000001"]
+COMPLEX_TEXTS = ["1+2j", "(1+2j)", "-j", "j", "1e3j", "inf+nanj", "1+2J", " (3-4j) ", "2", "nan", "-0-0j",
+                 "+1.5-2.5j", "(1)", " 1+2j ", "1+", "(1+2j", "1 + 2j", "1+2", "jj", "(", "", "1j2", "1+2jj", "( 1+2j )",
+                 "1_0+2_0j", "infj", "-infj", "nanj", "1e5+1e-5j", "1.5", "  ", "(1+2j)\x00"]
+TARGETS = {"int": ["i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8"], "float": ["f2", "f4", "f8"], "complex": ["c16"]}
+
+
+def gen_strconv():
+    """Section strconv: text <-> number conversions through every route that converts, strict."""
+    # A. Numbers to text: every numeric dtype x value set x layout x unsized / sized / narrow targets.
+    targets = ["U", "S", "U1", "U4", "U40", "S3", "S40"]
+    for dt, values in CONV_VALUES.items():
+        for lay in CONV_LAYOUTS:
+            for t in targets:
+                _conv("strconv", "astype", params={"dtype": t, "casting": "unsafe", "order": "K", "copy": True},
+                      operands=[_num_operand(dt, lay, values, seed=1)], layout=f"{dt}:{lay}",
+                      call=lambda a, t=t: a.astype(t))
+        # Every value alone through each target: the scalar str() of each special.
+        for i, v in enumerate(values):
+            for t in ("U", "S", "U6"):
+                _conv("strconv", "astype", params={"dtype": t, "casting": "unsafe", "order": "K", "copy": True},
+                      operands=[plain(np.array([v], dtype=dt))], layout=f"{dt}:v{i}", call=lambda a, t=t: a.astype(t))
+        # The casting rules: an unsized request adapts to REQUIRED_STR_LEN (safe); a narrower one is same_kind.
+        for t in ("U", "U3", "S", "S3", "U64"):
+            for casting in ("no", "equiv", "safe", "same_kind", "unsafe"):
+                _conv("strconv", "astype", params={"dtype": t, "casting": casting, "order": "K", "copy": True},
+                      operands=[plain(np.array(values[:2], dtype=dt))], layout=f"{dt}:{casting}",
+                      call=lambda a, t=t, c=casting: a.astype(t, casting=c))
+        # Orders over a 2-D numeric source.
+        for order in ("C", "F", "A"):
+            _conv("strconv", "astype", params={"dtype": "U", "casting": "unsafe", "order": order, "copy": True},
+                  operands=[_num_operand(dt, "f2", values)], layout=f"{dt}:order{order}",
+                  call=lambda a, o=order: a.astype("U", order=o))
+
+    # B. Text to numbers: every text alone into every target of its kind (U and S), then layouts of valid texts, then the
+    #    first failing element in NumPy's raw assignment order (reversed and stepped sources, two bad elements).
+    for kind, texts in (("int", INT_TEXTS), ("float", FLOAT_TEXTS), ("complex", COMPLEX_TEXTS)):
+        for i, text in enumerate(texts):
+            for spec in ("U", "S"):
+                if spec == "S":
+                    try:
+                        text.encode("ascii")
+                    except UnicodeEncodeError:
+                        continue
+                for t in TARGETS[kind] + (["?"] if i % 7 == 0 else []):
+                    _conv("strconv", "astype", params={"dtype": t, "casting": "unsafe", "order": "K", "copy": True},
+                          operands=[_text_operand([text], spec)], layout=f"{kind}:{spec}{i}",
+                          call=lambda a, t=t: a.astype(t))
+    # Non-ASCII bytes: int() / float() of bytes run on the bytes; complex() decodes them as UTF-8 first.
+    for raw in (b"\xff", b"\xc3\xa9", b"1\xff", b"\x80", b"\xe2\x82\xac1"):
+        for t in ("i8", "f8", "c16"):
+            _conv("strconv", "astype", params={"dtype": t, "casting": "unsafe", "order": "K", "copy": True},
+                  operands=[plain(np.array([raw]))], layout="S:nonascii", call=lambda a, t=t: a.astype(t))
+    # Long digit strings: CPython's 4300-digit limit for int(), none for float().
+    for digits in (4299, 4300, 4301):
+        txt = "1" * digits
+        for t in ("i8", "f8", "c16"):
+            _conv("strconv", "astype", params={"dtype": t, "casting": "unsafe", "order": "K", "copy": True},
+                  operands=[plain(np.array([txt]))], layout=f"digits{digits}", call=lambda a, t=t: a.astype(t))
+    # Valid texts through every layout.
+    good = {"int": ["12", "-3", " 7", "1_0", "0", "99", "-128", "+4"],
+            "float": ["1.5", "-0.0", "inf", "nan", "1e-5", " 2 ", "3.25", "1_0.5"],
+            "complex": ["1+2j", "(3-4j)", "-j", "2", "nan", "1e3j", " 5 ", "0j"]}
+    for kind, vals in good.items():
+        for spec in ("U", "S"):
+            for lay in CONV_LAYOUTS:
+                n, build = LAYOUTS[lay]
+                base = np.array([vals[i % len(vals)] for i in range(n)] if n else [], dtype=spec + "8")
+                for t in TARGETS[kind]:
+                    _conv("strconv", "astype", params={"dtype": t, "casting": "unsafe", "order": "K", "copy": True},
+                          operands=[(base, build(base))], layout=f"{kind}:{spec}:{lay}",
+                          call=lambda a, t=t: a.astype(t))
+    # The first failing element: NumPy walks the destination's order (a reversed source is read backwards).
+    for lay in ("c1", "r1", "s1", "rs", "f2", "t3"):
+        n, build = LAYOUTS[lay]
+        vals = ["1"] * n
+        vals[1], vals[n - 2] = "x1", "x2"
+        base = np.array(vals, dtype="U4")
+        for t in ("i8", "f8", "c16", "u1"):
+            _conv("strconv", "astype", params={"dtype": t, "casting": "unsafe", "order": "K", "copy": True},
+                  operands=[(base, build(base))], layout=f"firstbad:{lay}", call=lambda a, t=t: a.astype(t))
+    # The casting rules for text -> numbers: unsafe only.
+    for t in ("i8", "f8", "c16", "?"):
+        for casting in ("no", "equiv", "safe", "same_kind", "unsafe"):
+            _conv("strconv", "astype", params={"dtype": t, "casting": casting, "order": "K", "copy": True},
+                  operands=[_text_operand(["1", "2"], "U")], layout=f"text:{casting}",
+                  call=lambda a, t=t, c=casting: a.astype(t, casting=c))
+
+    # C. Element stores: numbers into text arrays (setitem / fill / full / ones), text into numeric arrays.
+    num_values = [5, -1, 2.5, 1e16, True, False, 123456789, -9223372036854775808, 0.1, 1e-5, 1e22, -0.0]
+    for spec in ("<U1", "<U3", "<U40", "|S3"):
+        for v in num_values:
+            for idx in ([{"int": 0}], [{"ellipsis": True}], [{"slice": [None, None, 2]}], [{"arr": [0, -1]}]):
+                key = tuple(_py_index(e) for e in idx)
+                _conv("strconv", "setitem", params={"index": idx, "value": enc(v)}, operands=[operand(spec, "c1")],
+                      layout=spec, mutate=0, call=lambda a, k=key, v=v: _setitem(a, k, v))
+            _conv("strconv", "fill", params={"value": enc(v)}, operands=[operand(spec, "c2")], layout=spec, mutate=0,
+                  call=lambda a, v=v: a.fill(v))
+            _conv("strconv", "full", params={"shape": [3], "fill": enc(v), "dtype": spec},
+                  call=lambda v=v, d=spec: np.full((3,), v, dtype=d))
+        for shape in ((3,), (2, 2), (0,), ()):
+            _conv("strconv", "ones", params={"shape": list(shape), "dtype": spec},
+                  call=lambda s=shape, d=spec: np.ones(s, dtype=d))
+    for d in ("U", "S"):
+        for v in (7, 2.5, True, -12):
+            _conv("strconv", "full", params={"shape": [2], "fill": enc(v), "dtype": d},
+                  call=lambda v=v, d=d: np.full((2,), v, dtype=d))
+        _conv("strconv", "ones", params={"shape": [2], "dtype": d}, call=lambda d=d: np.ones((2,), dtype=d))
+    # Text into numeric arrays: a Python str is parsed by the target's setitem (its error quotes the str itself).
+    text_values = ["12", " 7 ", "x", "1.5", "300", "-1", "1+2j", "", "inf", "1_0", "١٢", b"34", b"x", b"\xff"]
+    for dt in ("?", "i1", "u1", "i4", "i8", "u8", "f2", "f4", "f8", "c16"):
+        for v in text_values:
+            # The C# indexer takes a Python bytes only as the 0-d S array the replay builds (an ndarray): NumPy's error
+            # text for an unparsable Python bytes quotes b'x', the array's np.bytes_(b'x'), so only a parsable one is
+            # stored through the indexer (fill / full take the bytes object itself).
+            if not (isinstance(v, bytes) and v != b"34"):
+                _conv("strconv", "setitem", params={"index": [{"int": 0}], "value": enc(v)},
+                      operands=[plain(np.zeros(3, dtype=dt))], layout=dt, mutate=0,
+                      call=lambda a, v=v: _setitem(a, 0, v))
+            _conv("strconv", "fill", params={"value": enc(v)}, operands=[plain(np.zeros(3, dtype=dt))], layout=dt,
+                  mutate=0, call=lambda a, v=v: a.fill(v))
+            _conv("strconv", "full", params={"shape": [2], "fill": enc(v), "dtype": dt},
+                  call=lambda v=v, d=dt: np.full((2,), v, dtype=d))
+        # A text ARRAY into a numeric array: the array cast (its errors quote the NumPy scalar).
+        for vals in (["1", "2"], ["1", "x"], ["3.5", "nan"]):
+            _conv("strconv", "setitem_array", params={"index": [{"ellipsis": True}]},
+                  operands=[plain(np.zeros(2, dtype=dt)), plain(np.array(vals))], layout=dt, mutate=0,
+                  call=lambda a, v: _setitem(a, Ellipsis, v))
+
+    # D. np.copyto between text and numbers, every casting rule, with and without a mask, both directions.
+    for dt, values in (("i8", CONV_VALUES["i8"]), ("f8", CONV_VALUES["f8"]), ("?", CONV_VALUES["?"]),
+                       ("c16", CONV_VALUES["c16"]), ("f4", CONV_VALUES["f4"]), ("u1", CONV_VALUES["u1"])):
+        for spec in ("<U3", "<U32", "|S8"):
+            for casting in ("no", "safe", "same_kind", "unsafe"):
+                for where in (None, [True, False, True, True, False, True]):
+                    _conv("strconv", "copyto", params={"casting": casting, "where": where},
+                          operands=[operand(spec, "c1"), _num_operand(dt, "c1", values)], layout=f"{spec}<-{dt}",
+                          mutate=0, call=lambda d, s, c=casting, w=where: np.copyto(
+                              d, s, casting=c, where=True if w is None else np.array(w)))
+            # Reversed / broadcast sources.
+            for lay in ("r1", "bc", "z0"):
+                dst = operand(spec, "c2" if lay == "bc" else ("c1" if lay != "z0" else "c1"))
+                _conv("strconv", "copyto", params={"casting": "unsafe", "where": None},
+                      operands=[dst, _num_operand(dt, lay, values)], layout=f"{spec}<-{dt}:{lay}", mutate=0,
+                      call=lambda d, s: np.copyto(d, s, casting="unsafe"))
+    for dt in ("i8", "f8", "c16", "u1", "?"):
+        for vals in (["1", "2", "3", "4", "5", "6"], ["1", "x", "3", "4", "5", "6"], [" 1", "-2", "3_0", "4", "5", "6"]):
+            for casting in ("unsafe", "same_kind"):
+                for where in (None, [True, False, True, True, False, True]):
+                    _conv("strconv", "copyto", params={"casting": casting, "where": where},
+                          operands=[plain(np.zeros(6, dtype=dt)), plain(np.array(vals))], layout=f"{dt}<-U", mutate=0,
+                          call=lambda d, s, c=casting, w=where: np.copyto(
+                              d, s, casting=c, where=True if w is None else np.array(w)))
+
+    # E. np.array over mixed values and number <-> text dtypes.
+    mixed = [["a", 1], [1, "ab"], [1.5, "ab"], [True, "x"], ["1", 2], [2, "1"], [1e16, "a"], [b"1", 2],
+             [-2 ** 63, "a"], [[1, "a"], ["bc", 2.5]], ["12", "3"], [b"7", b"8"]]
+    for vals in mixed:
+        for dt in (None, "U", "S", "U3", "i8", "f8", "c16", "?"):
+            _conv("strconv", "array", params={"values": enc(vals), "dtype": dt},
+                  call=lambda v=vals, d=dt: np.array(v, dtype=d))
+    for vals in ([1, 22, -333], [1.5, 1e16, 1e-5], [True, False]):
+        for dt in ("U", "S", "U2", "S4"):
+            _conv("strconv", "array", params={"values": enc(vals), "dtype": dt},
+                  call=lambda v=vals, d=dt: np.array(v, dtype=d))
+
+    # F. Ufuncs: numeric loops into a text out= (with and without where=), the string-request add over numbers, text
+    #    comparisons and logical ufuncs into a text out=.
+    f = num_operand(np.array([1.0, 2.5, -0.5, 4.0]))
+    g = num_operand(np.array([1.0, 3.0, 0.5, 2.0]))
+    ii = num_operand(np.array([1, 2, -3, 4]))
+    uu = plain(np.array(["ab", "c", "de", "f"]))
+    vv = plain(np.array(["ab", "x", "dd", "f"]))
+    calls = [("add", [f, g]), ("add", [ii, ii]), ("subtract", [ii, f]), ("multiply", [f, ii]), ("power", [ii, ii]),
+             ("floor_divide", [f, g]), ("maximum", [f, g]), ("minimum", [ii, ii]), ("equal", [f, g]), ("less", [ii, f]),
+             ("logical_and", [f, ii]), ("logical_or", [ii, ii]), ("sqrt", [f]), ("negative", [ii]), ("absolute", [f]),
+             ("isnan", [f]), ("isinf", [f]), ("rint", [f]), ("equal", [uu, vv]), ("less", [uu, vv]),
+             ("logical_and", [uu, ii]), ("logical_xor", [uu, vv])]
+    outs = ["U1", "U5", "U32", "S1", "S5", "S32"]
+    for name, ins in calls:
+        fn = getattr(np, name)
+        for odt in outs:
+            _conv("strconv", "ufunc_kw", params={"name": name, "dtype": None, "nin": len(ins), "out": len(ins)},
+                  operands=ins + [target(np.zeros(4, odt))], layout=f"out{odt}", mutate=None,
+                  call=lambda *xs, f=fn, n=len(ins): f(*xs[:n], out=xs[n]))
+        # where= with an out whose text parses (selected slots written, masked-off kept) and one that does not.
+        for wname, text in (("ok", ["7", "8", "9", "1"]), ("bad", ["7", "x", "9", "1"]), ("truth", ["", "a", "b", ""])):
+            _conv("strconv", "ufunc_kw", params={"name": name, "dtype": None, "nin": len(ins), "out": len(ins),
+                                                 "where": len(ins) + 1},
+                  operands=ins + [target(np.array(text, dtype="U8")), num_operand(np.array([True, False, True, False]))],
+                  layout=f"where:{wname}", call=lambda *xs, f=fn, n=len(ins): f(*xs[:n], out=xs[n], where=xs[n + 1]))
+    # The out= broadcast (an out larger than the inputs) and a 0-d out.
+    _conv("strconv", "ufunc_kw", params={"name": "add", "dtype": None, "nin": 2, "out": 2},
+          operands=[f, num_operand(np.array(1.0)), target(np.zeros((3, 4), "U5"))], layout="out:bcast",
+          call=lambda x, y, o: np.add(x, y, out=o))
+    _conv("strconv", "ufunc_kw", params={"name": "add", "dtype": None, "nin": 2, "out": 2},
+          operands=[num_operand(np.array(1.5)), num_operand(np.array(2.0)), target(np.zeros((), "U5"))], layout="out:0d",
+          call=lambda x, y, o: np.add(x, y, out=o))
+    # The string-request add: every numeric dtype with itself, with text, the casting refusals, an out.
+    num_ops = {dt: num_operand(np.array(CONV_VALUES[dt][:4] if len(CONV_VALUES[dt]) >= 4 else
+                                        (CONV_VALUES[dt] * 2)[:4], dtype=dt)) for dt in CONV_VALUES}
+    for dt, op in num_ops.items():
+        for req in ("U", "S"):
+            _conv("strconv", "ufunc_kw", params={"name": "add", "dtype": req, "nin": 2}, operands=[op, op],
+                  layout=f"req{req}:{dt}", call=lambda x, y, r=req: np.add(x, y, dtype=r))
+            _conv("strconv", "ufunc_kw", params={"name": "add", "dtype": req, "nin": 2}, operands=[uu, op],
+                  layout=f"req{req}:U+{dt}", call=lambda x, y, r=req: np.add(x, y, dtype=r))
+            _conv("strconv", "ufunc_kw", params={"name": "add", "dtype": req, "nin": 2},
+                  operands=[op, plain(np.array([b"ab", b"c", b"de", b"f"]))], layout=f"req{req}:{dt}+S",
+                  call=lambda x, y, r=req: np.add(x, y, dtype=r))
+        _conv("strconv", "ufunc_kw", params={"name": "add", "dtype": "U", "nin": 2, "out": 2},
+              operands=[op, op, target(np.zeros(4, "U3"))], layout=f"reqU:{dt}:outU3",
+              call=lambda x, y, o: np.add(x, y, out=o, dtype="U"))
+        _conv("strconv", "ufunc_kw", params={"name": "add", "dtype": "U", "nin": 2, "out": 2, "where": 3},
+              operands=[op, op, target(np.array(["p", "q", "r", "s"], dtype="U9")),
+                        num_operand(np.array([True, False, True, False]))], layout=f"reqU:{dt}:where",
+              call=lambda x, y, o, w: np.add(x, y, out=o, where=w, dtype="U"))
+    # A numeric dtype= reduction over text parses first; numbers multiply / extremes compare.
+    for vals in (["1.5", "2", "4"], ["1", "x"], ["3", "-1", "2"], [" 2 ", "1_0"], ["inf", "nan"], []):
+        arr = plain(np.array(vals, dtype="U4"))
+        for name in ("prod", "cumprod", "nancumprod", "maximum.reduce", "minimum.reduce"):
+            for dt in ("f8", "i8", "c16"):
+                # A complex product of inf and nan is NumPy's MSVC operand order per part (the NaN sign of each part),
+                # a numeric residual pinned elsewhere ([OpenBugs] NaNOperandOrder): not this tier's business.
+                if dt == "c16" and "nan" in vals:
+                    continue
+                _conv("strconv", "reduce", params={"name": name, "axis": None, "dtype": dt}, operands=[arr],
+                      layout=f"{name}:{dt}", call=lambda a, n=name, d=dt: _strconv_reduce(n, a, d))
+    # np.cov / np.corrcoef with a numeric dtype parse the text.
+    # (A 2-D operand would end in the covariance's squeeze, whose OWNDATA is the array-object oracle's carved gap VA04.)
+    for vals in (["1", "2", "4"], ["1", "x"], [" 1.5", "2_0", "4"], np.zeros((0, 2), "U1")):
+        arr = plain(np.array(vals, dtype="U2") if not isinstance(vals, np.ndarray) else vals)
+        for corr in (False, True):
+            fn = np.corrcoef if corr else np.cov
+            _conv("strconv", "cov", params={"corr": corr, "dtype": "f8"}, operands=[arr], layout="parse",
+                  call=lambda a, f=fn: f(a, dtype="f8"))
+
+    # G. Number <-> text inside movement routes: concatenate / where promote text with numbers (REQUIRED_STR_LEN),
+    #    np.pad pads text with the str() of 0, matrix_power(text, 0) is an identity written as text.
+    for dt in ("i8", "f8", "?", "c16", "u1"):
+        op = num_ops[dt]
+        _conv("strconv", "concatenate", params={"axis": 0}, operands=[uu, op], layout=f"U+{dt}",
+              call=lambda x, y: np.concatenate([x, y]))
+        _conv("strconv", "concatenate", params={"axis": 0}, operands=[op, plain(np.array([b"ab", b"c"]))],
+              layout=f"{dt}+S", call=lambda x, y: np.concatenate([x, y]))
+        _conv("strconv", "where", params={"cond": [True, False, True, False]}, operands=[uu, op], layout=f"U|{dt}",
+              call=lambda x, y: np.where(np.array([True, False, True, False]), x, y))
+    for spec in ("<U1", "<U3", "|S2"):
+        for lay in ("c1", "c2"):
+            _conv("strconv", "pad", params={"pad_width": 1, "mode": "constant", "constant": None},
+                  operands=[operand(spec, lay)], layout=f"{spec}:{lay}", call=lambda a: np.pad(a, 1))
+            for cv in (7, 2.5, True, -12):
+                _conv("strconv", "pad", params={"pad_width": 1, "mode": "constant", "constant": enc(cv)},
+                      operands=[operand(spec, lay)], layout=f"{spec}:{lay}:cv",
+                      call=lambda a, cv=cv: np.pad(a, 1, constant_values=cv))
+    for spec in ("<U1", "<U3", "|S2"):
+        sq = plain(np.array([["a", "b"], ["c", "d"]], dtype=spec) if spec[1] == "U" else
+                   np.array([[b"a", b"b"], [b"c", b"d"]], dtype=spec))
+        _conv("strconv", "linalg1", params={"name": "matrix_power0"}, operands=[sq], layout=spec,
+              call=lambda a: np.linalg.matrix_power(a, 0))
+
+
+def _strconv_reduce(name, a, dt):
+    """A reduction-style call by name with a dtype= request (the replay's ``reduce`` op names)."""
+    if name == "maximum.reduce":
+        return np.maximum.reduce(a, axis=None, dtype=dt)
+    if name == "minimum.reduce":
+        return np.minimum.reduce(a, axis=None, dtype=dt)
+    return getattr(np, name)(a, axis=None, dtype=dt)
+
+
 def main():
     gen_dtypes()
     gen_creation()
@@ -3460,6 +3821,7 @@ def main():
     gen_striter()
     gen_strcomp()
     gen_strarith()
+    gen_strconv()
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with open(OUT, "wb") as f:
         for c in CASES:

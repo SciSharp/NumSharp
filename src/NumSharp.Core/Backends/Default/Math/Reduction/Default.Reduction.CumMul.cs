@@ -26,6 +26,9 @@ namespace NumSharp.Backends
         {
             // Text, or a string dtype= request: NumPy's cumprod checks its arguments first (the axis, and the dtype= class where
             // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            // A numeric dtype= over text: NumPy casts the text to that number type first (a parse), then reduces the numbers.
+            if (Strings.NDStringUfuncs.ParseForNumericReduce("cumprod", arr, axis_, dtype) is { } parsed)
+                return Strings.NDStringUfuncs.ReduceParsed(parsed, p => ReduceCumMul(p, axis_, dtype));
             Strings.NDStringUfuncs.ThrowIfReduce("cumprod", arr, axis_, dtype);
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy: cumprod on boolean arrays treats True as 1 and False as 0, returning int64

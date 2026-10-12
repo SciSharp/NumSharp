@@ -71,17 +71,33 @@ comparisons and truth values (P2.1) and concatenation / repetition (P2.3: `np.ad
 text kernels (`Backends/Kernels/ILKernelGenerator.Text{,.Emit,.Concat}.cs`: element widths are emit-time constants, every
 element is fixed-size chunk loads / stores, so no per-element branch follows its length — NumPy's own repeat loop runs a
 variable-size memcpy per copy and loses to that 2–4×) driven by `Backends/Strings/NDString{Comparison,Truth,Arithmetic}.cs`.
+**Text ↔ number conversion is phase 1 (P1.1, 2026-10-12, `docs/plans/strings-phase1-completion.md`)** — NumPy's legacy
+casts, byte for byte: a number becomes its scalar's `str()` (`Backends/Strings/NDTextFormat.cs`: the float positional /
+scientific windows per type, float16 / float32 shortest digits, complex forms; an unsized `'U'` / `'S'` takes
+`REQUIRED_STR_LEN`, 21 for int64, 32 for the floats, 64 for complex; NumSharp's `char` converts as uint16, `decimal` as
+float64), a text is parsed by CPython 3.12's `int()` / `float()` / `complex()` (`NDTextParse.cs`, with the pinned Unicode
+tables of `Utilities/PyUnicode.cs`: decimal digits of every script, `str.isspace()`, the 4300-digit limit, strict UTF-8
+for `S → complex`). `NDTextConversion.cs` walks NumPy's raw assignment order and commits blocks of 128 (a failing
+element leaves the earlier blocks written, as NumPy does), converts only the selected runs under a mask, and quotes the
+NumPy scalar in an array cast's error (`np.str_('x')`) but the Python object in a store of a C# string (`'x'`: a C#
+string is a Python `str`, `NDArray.WasPythonStr`; **breaking:** `NDArray x = "[1, 2, 3]"` is a 0-d `<U9`, no longer
+parsed numbers). Overflow texts are the LP64 ones (`Python int too large to convert to C long`). Every route converts:
+`astype`, setitem / `fill` / `full` / `ones` / `pad` / `copyto` / `np.array`, numeric ufuncs into a text `out=` (with
+`where=` the out's text is parsed into the loop dtype first, as NumPy's READWRITE buffer does), `np.add` under a string
+`dtype=` over numbers, numeric-`dtype=` reductions and `np.cov` over text (parsed first). 2.0–7.9× NumPy at 1K / 100K / 1M.
 Where NumPy REFUSES (no string loop) NumSharp raises NumPy's type + text; where NumPy COMPUTES something not ported yet
-(sort/search, text ↔ number parse / format, the other `np.strings` functions) it throws
+(sort/search, the other `np.strings` functions) it throws
 `StringComputationNotSupportedException` — both AFTER NumPy's earlier checks in NumPy's order (`dtype=` class check,
 read-only `out=`, non-bool `where=`, the axis under one of three rules, the quantile q/axis/method/empty-axis order,
 a computing loop's output cast and broadcast; `Backends/Strings/NDStringUfuncs{,.Precedence}.cs`). Every engine ufunc
 member resolves its `dtype=` through `UfuncLoopCode(dtype, "<numpy name>", x1, x2, out, where)` so an unsized string
 request (`'U'`, `'S'`) gets NumPy's per-ufunc answer. Gate: the string oracle (`test/oracle/gen_strings_oracle.py` →
-`NumSharp.Tests.Oracle/Strings`, 38,150 cases in 21 sections; a phase-2 case passes as "deferred" only while NumSharp
-throws `StringComputationNotSupportedException`, so phase 2 is gated by the same corpus; `NUMSHARP_STRING_ORACLE_DEFERRED=1`
+`NumSharp.Tests.Oracle/Strings`, 42,637 cases in 22 sections, `strconv` = 4,487 conversion cases; a phase-2 case passes as
+"deferred" only while NumSharp throws `StringComputationNotSupportedException`, so phase 2 is gated by the same corpus,
+and a section may defer no more than its ceiling (`StringOracleTests.DeferralCeilings`, 537 in all: sorting, searching,
+set routines, histograms, quantiles), so a computation answered today cannot slide back; `NUMSHARP_STRING_ORACLE_DEFERRED=1`
 lists every deferred case with its refusal) + `Backends/Strings/StringCallOrderTests.cs` + `StringShapeDecidedTests.cs`
-+ `StringComparisonTruthTests.cs` + `StringArithmeticTests.cs`. **Validation pass (2026-10-07)** — the deferral rule is now exact: defer ONLY where NumPy
++ `StringComparisonTruthTests.cs` + `StringArithmeticTests.cs` + `TextNumberConversionTests.cs`. **Validation pass (2026-10-07)** — the deferral rule is now exact: defer ONLY where NumPy
 reads the text (compares, concatenates, parses, formats into a result); where dtypes, sizes or shapes decide NumPy's
 answer, give that answer. So (1) an empty array, lines of one element, or a pair the comparison operators cannot compare
 are answered from the shape — truth tests, counts, the nonzero family, arg-reductions, sort / partition, `np.unique` and
@@ -3086,7 +3102,7 @@ the NumSharp-extension typed forms `nditer<T>` / `nditer_chunks<T>`
 `npyiter_allocate_arrays` (a read-only 0-d cast operand, `copy`, `updateifcopy` written back at `close()`), the
 "required copying or buffering" TypeError, allocated outputs laid out in the settled order (reused when the up-front
 allocation already has it), and fixed-width strings: 0-d `S` / `U` views, buffered / copy-route conversions between
-widths and between `S` and `U` (ASCII; text ↔ number is phase 2's `StringComputationNotSupportedException`). The
+widths and between `S` and `U` (ASCII), and between text and numbers (NumPy's legacy casts, since P1.1). The
 wrapper (`APIs/np.nditer.cs`) is `nditer_pywrap.c`: the started / finished flags (advance-on-entry pulls), every
 getter's and setter's checks and texts ("Iterator is past the end", "Iterator is invalid", the delayed-allocation
 text), `it[i] = v` packing a Python int with NumPy's range check, NumPy's write flags on the views; `np.nested_iters`
@@ -5234,8 +5250,9 @@ non-structured subset would only re-expose `loadtxt`.
   pads with 232).
 - **Kept as casts:** `SetValue` / `itemset` (NumSharp's low-level typed setters; `itemset` is gone from NumPy 2.0),
   an unmarked 0-d array everywhere, and a 0-d view from integer indexing (`a[i] = b[j]`: NumPy's `b[j]` is a NumPy
-  scalar, which a SIGNED integer destination would range-check — `[Misaligned]`). Text into a numeric store stays the
-  string phase's deferral (`StringComputationNotSupportedException`; `float64.fill("5.5")` parsed with `Convert` before).
+  scalar, which a SIGNED integer destination would range-check — `[Misaligned]`). Text into a numeric store is parsed
+  like NumPy's setitem of a Python `str` (since strings P1.1: `float64.fill("5.5")` is 5.5, `int32[0] = "hello"` raises
+  `invalid literal for int() with base 10: 'hello'`).
 - **Found on the way:** a basic-index setter with an EMPTY selection (`a["4:"] = v`) stranded one pooled buffer per
   call (the empty view's fresh zero-length buffer was never released; `AssignThroughView` wraps and disposes the view).
   Open: `np.array(object[], dtype)` (a Python list with a dtype) is not supported at all (`ArgumentOutOfRangeException`;

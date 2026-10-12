@@ -84,12 +84,15 @@ namespace NumSharp.Backends
         ///     axes of the value squeezed away first; the bytes move through the string copy route (encode / convert,
         ///     truncate, NUL-pad).
         /// </summary>
-        /// <param name="value">The value array (string, or numeric — which the copy route refuses).</param>
+        /// <param name="value">The value array: text, or numbers into a string storage (each written as its
+        ///     <c>str()</c>), or text into a numeric storage (each parsed by the storage dtype's <c>int()</c> /
+        ///     <c>float()</c> / <c>complex()</c>, the copy route's conversion).</param>
         /// <param name="indices">Normalised (non-negative, in-range) leading coordinates.</param>
-        /// <exception cref="ValueError">A sequence into one element, or a value that does not broadcast to the target.</exception>
+        /// <exception cref="ValueError">A sequence into one element, a value that does not broadcast to the target, or a text
+        ///     that does not parse into a numeric storage.</exception>
+        /// <exception cref="OverflowException">An integer text outside a numeric storage's dtype.</exception>
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
         /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into <c>U</c>.</exception>
-        /// <exception cref="NotSupportedException">Numbers into text or text into numbers (the computational phase).</exception>
         internal void SetDataString(NDArray value, int[] indices)
         {
             var valueShape = value.Shape;
@@ -128,15 +131,11 @@ namespace NumSharp.Backends
                 // empty target (np.zeros(0, 'S1')[...] = np.array(['é']) succeeds). A SCALAR value — a C# literal, NumPy's
                 // Python str — is first packed into this array's dtype (PyArray_Pack), so a text that cannot convert raises
                 // even when the target selects nothing (a[...] = 'é' into an empty S array): that conversion is run and
-                // discarded here. Parsing a text scalar into a number is the computational phase; formatting a number as
-                // text cannot fail, so a numeric value leaves nothing to report.
-                if (valueShape.IsScalar && value.Storage.IsString)
-                {
-                    if (!IsString)
-                        throw NDStringCopy.MixedKinds(value.Storage, this);
-                    if (value.dtype.Meta != Descr.Meta)
-                        value.astype(Descr, true, 'K', "unsafe").Dispose();
-                }
+                // discarded here. Into a numeric array a Python str literal (NDArray.WasPythonStr) was already parsed by
+                // SetData's pack before it got here, and a 0-d text ARRAY converts nothing; formatting a number as text
+                // cannot fail, so a numeric value leaves nothing to report.
+                if (valueShape.IsScalar && value.Storage.IsString && IsString && value.dtype.Meta != Descr.Meta)
+                    value.astype(Descr, true, 'K', "unsafe").Dispose();
                 return;
             }
             Iteration.NDIter.Copy(target, source);

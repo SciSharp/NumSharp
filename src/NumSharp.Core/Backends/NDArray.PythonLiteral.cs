@@ -53,6 +53,34 @@ namespace NumSharp
         internal bool WasNumPyScalar { get; private set; }
 
         /// <summary>
+        ///     True for the 0-d text array that a C# <see cref="string"/> becomes through the implicit conversion operator: a
+        ///     Python <c>str</c> in the boundary map. A store packs it the way NumPy's <c>PyArray_Pack</c> packs a Python str —
+        ///     parsed by the destination's setitem (<c>int()</c> / <c>float()</c> / <c>complex()</c>), its errors quoting the
+        ///     str itself (<c>invalid literal for int() with base 10: 'x'</c>) — where a 0-d text ARRAY
+        ///     (<c>np.array("x")</c>) is cast like any array and its errors quote the NumPy scalar (<c>np.str_('x')</c>).
+        /// </summary>
+        /// <remarks>
+        ///     NumPy's own flag (<c>NPY_ARRAY_WAS_PYTHON_LITERAL</c>) marks only int / float / complex, because it serves
+        ///     NEP 50 promotion; a Python str never takes part in that. This mark serves the store paths only
+        ///     (<see cref="PackForStore"/>, <see cref="ReductionInitial.TryPack"/>), which in NumPy receive the str object
+        ///     itself. Like <see cref="WasPythonLiteral"/>, it belongs to this one object: a view or a copy is not marked.
+        /// </remarks>
+        internal bool WasPythonStr { get; private set; }
+
+        /// <summary>
+        ///     Creates the 0-d text array of a C# string literal (NumPy's <c>np.array(str)</c>: <c>&lt;U{len}</c>), marked
+        ///     <see cref="WasPythonStr"/>. The implicit <c>string → NDArray</c> conversion calls it.
+        /// </summary>
+        /// <param name="value">The text (not null).</param>
+        /// <returns>A new 0-d <c>U</c> array holding <paramref name="value"/>.</returns>
+        internal static NDArray PythonStrLiteral(string value)
+        {
+            var nd = Backends.Strings.NDStringArrays.FromScalar(value, null);
+            nd.WasPythonStr = true;
+            return nd;
+        }
+
+        /// <summary>
         ///     Creates the 0-d array of a C# <see cref="Half"/> or <c>char</c> value, marked <see cref="WasNumPyScalar"/>.
         ///     The implicit conversion operators call it.
         /// </summary>
@@ -134,16 +162,17 @@ namespace NumSharp
         /// </remarks>
         internal static unsafe NDArray PackForStore(NDArray value, NPTypeCode destination, bool pyArrayPackRoute)
         {
-            // A NumPy scalar on a PyArray_FromAny route is cast like any 0-d array: the caller's cast applies.
-            if (value is null || !(value.WasPythonLiteral || (value.WasNumPyScalar && pyArrayPackRoute))
+            // A NumPy scalar on a PyArray_FromAny route is cast like any 0-d array: the caller's cast applies. A Python str
+            // into a string destination is the text route's own business (it converts text itself).
+            if (value is null || !(value.WasPythonLiteral || value.WasPythonStr || (value.WasNumPyScalar && pyArrayPackRoute))
                 || destination == value.typecode || destination == NPTypeCode.String || destination == NPTypeCode.Empty)
                 return value;
 
-            // The literal's own C# value (a boxed int / long / ulong / double / float / Complex, or a Half / char), packed
-            // by NumPy's rules for the Python or NumPy scalar it stands for. A marked array is 0-d by construction, so
-            // element 0 is the literal.
+            // The literal's own C# value (a boxed int / long / ulong / double / float / Complex, a string, or a Half /
+            // char), packed by NumPy's rules for the Python or NumPy scalar it stands for. A marked array is 0-d by
+            // construction, so element 0 is the literal.
             byte* slot = stackalloc byte[ReductionInitial.SlotBytes];
-            if (value.WasPythonLiteral)
+            if (value.WasPythonLiteral || value.WasPythonStr)
                 ReductionInitial.TryPack(value.Storage.GetAtIndex(0), destination, new Span<byte>(slot, ReductionInitial.SlotBytes));
             else
                 ReductionInitial.PackNumPyScalar(value.Storage.GetAtIndex(0), destination, new Span<byte>(slot, ReductionInitial.SlotBytes));

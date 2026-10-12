@@ -1194,10 +1194,13 @@ namespace NumSharp.Backends.Iteration
         /// <param name="dstElemStride">The destination stride in ELEMENTS of the destination side.</param>
         /// <param name="count">The number of elements.</param>
         /// <param name="toBuffer">True for array → buffer (the fill), false for buffer → array (the flush).</param>
-        /// <exception cref="StringComputationNotSupportedException">One side is numeric and the run has elements: NumPy
-        ///     formats / parses the values here, which is the computational phase of the string dtypes.</exception>
+        /// <exception cref="ValueError">Text → number meets a text that is not a number of the numeric side's kind (NumPy's
+        ///     <c>int()</c> / <c>float()</c> / <c>complex()</c> texts, quoting <c>np.str_('…')</c>).</exception>
+        /// <exception cref="OverflowException">Text → integer meets a value outside the numeric side.</exception>
+        /// <exception cref="SystemError">A <c>U</c> text converted to a number is one unit above U+10FFFF.</exception>
         /// <exception cref="UnicodeEncodeError">A <c>U → S</c> element holds a code point at or above 128.</exception>
-        /// <exception cref="UnicodeDecodeError">An <c>S → U</c> element holds a byte at or above <c>0x80</c>.</exception>
+        /// <exception cref="UnicodeDecodeError">An <c>S → U</c> element holds a byte at or above <c>0x80</c>, or an
+        ///     <c>S</c> text converted to complex is not UTF-8.</exception>
         private static void CopyStringRun(ref NDIterState state, int op, byte* src, long srcElemStride,
                                           byte* dst, long dstElemStride, long count, bool toBuffer)
         {
@@ -1206,19 +1209,33 @@ namespace NumSharp.Backends.Iteration
 
             var bufType = state.GetOpDType(op);
             var arrType = state.GetOpSrcDType(op);
-            if (bufType != NPTypeCode.String || arrType != NPTypeCode.String)
-            {
-                // Numbers <-> text: NumPy converts each element at this point (after every construction check passed).
-                var from = toBuffer ? state.GetOpSrcDescr(op) : state.GetOpDescr(op);
-                var to = toBuffer ? state.GetOpDescr(op) : state.GetOpSrcDescr(op);
-                throw Strings.NDStringCasting.TextConversion(from, to);
-            }
-
             int kinds = state.OpStringKinds[op];
             bool bufUnicode = (kinds & NDIterState.StringBufferUnicode) != 0;
             bool arrUnicode = (kinds & NDIterState.StringSourceUnicode) != 0;
             int bufSize = state.GetElementSize(op);
             int arrSize = state.GetSrcElementSize(op);
+            if (bufType != NPTypeCode.String || arrType != NPTypeCode.String)
+            {
+                // Numbers <-> text: NumPy converts each element at this point (after every construction check passed),
+                // through the same legacy casts as astype — a number formatted as its scalar's str(), a text parsed.
+                NPTypeCode fromType = toBuffer ? arrType : bufType, toType = toBuffer ? bufType : arrType;
+                bool fromUnicode = toBuffer ? arrUnicode : bufUnicode, toUnicode = toBuffer ? bufUnicode : arrUnicode;
+                int fromSize = toBuffer ? arrSize : bufSize, toSize = toBuffer ? bufSize : arrSize;
+                if (toType == NPTypeCode.String)
+                {
+                    Strings.NDTextConversion.FormatRun(src, srcElemStride * fromSize, fromType, dst, dstElemStride * toSize,
+                        toUnicode, toUnicode ? toSize / 4 : toSize, count);
+                }
+                else
+                {
+                    int chars = fromUnicode ? fromSize / 4 : fromSize;
+                    byte[] scratch = new byte[Strings.NDTextParse.ScratchBytes(chars)];
+                    Strings.NDTextConversion.ParseRun(src, srcElemStride * fromSize, fromUnicode, chars, dst,
+                        dstElemStride * toSize, toType, count, scratch, Strings.TextReprStyle.ArrayElement);
+                }
+                return;
+            }
+
             if (toBuffer)
                 Strings.NDStringCopy.TransferElements(src, srcElemStride * arrSize, arrSize, arrUnicode,
                                                       dst, dstElemStride * bufSize, bufSize, bufUnicode, count);

@@ -31,9 +31,8 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, dtype, order, device), static s => ones_like(s.a, s.dtype, s.order, s.device));
-            // NumPy computes this on text (sorting, searching, truth tests); string computation is
-            // the next phase of NumSharp's string support, so a string array is refused here.
-            if (Backends.Strings.NDStringUfuncs.IsString(a)) throw Backends.Strings.NDStringUfuncs.NextPhase("ones_like", a);
+            // A string array (or dtype) is NumPy's empty_like + copyto(res, 1, casting='unsafe'): the text '1' in every
+            // element, through np.ones' string route.
             ValidateDevice(device);
             // PyArray_NewLikeArray's layout: order='K' keeps a's axis permutation, not merely C-or-F.
             var resolvedShape = Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());

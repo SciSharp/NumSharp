@@ -191,8 +191,6 @@ namespace NumSharp
             ///     packed into the base's dtype — a Python int out of range, a float NaN / infinity into an integer, a
             ///     complex into a real dtype, a sequence — all "Error setting single item of array." as in NumPy, the
             ///     specific error kept as the inner exception.</exception>
-            /// <exception cref="StringComputationNotSupportedException">Text into a numeric base: NumPy parses it, the
-            ///     computational phase of the string support.</exception>
             /// <exception cref="ArgumentNullException"><paramref name="value"/> is null (house convention).</exception>
             /// <remarks>An exact-dtype value goes straight to the stride-aware <c>SetAtIndex</c> (no packing, no
             ///     allocation — the hot path); <c>SetAtIndex</c> itself never converts.</remarks>
@@ -216,14 +214,6 @@ namespace NumSharp
                     throw new ArgumentNullException(nameof(value));
 
                 var tc = _base.typecode;
-                // Text into a numeric base is NumPy's int(str) / float(str) parse: deferred, like every text-to-number
-                // conversion of the string phase, and not a packing error.
-                if (value is string || value is byte[])
-                {
-                    using var text = NDArray.Scalar(value);
-                    throw Backends.Strings.NDStringCasting.TextConversion(text.dtype, _base.dtype);
-                }
-
                 byte* slot = stackalloc byte[ReductionInitial.SlotBytes];
                 try
                 {

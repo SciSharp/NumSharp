@@ -23,7 +23,16 @@ namespace NumSharp.Backends.Strings
     ///     <para>
     ///     <b>Values.</b> <see langword="null"/> is Python's <c>None</c>: with a string dtype it stores <c>"None"</c> (NumPy's
     ///     <c>str(None)</c>); without one NumPy would build an <c>object</c> array, which NumSharp has not, so it is refused.
-    ///     Numbers among the values are NumPy's number→text conversion — the computational phase — and are refused.
+    ///     A number among text values stores as its <c>str()</c>. Without a dtype it promotes with the text by its own
+    ///     descriptor (<c>np.array(['x', 1])</c> is <c>&lt;U21</c>: a Python int is int64, whose text width is 21; a Python
+    ///     float 32, a complex 64, a bool 5); with an unsized string dtype it contributes the length of its <c>str()</c>
+    ///     (<c>np.array([1, 22], dtype='U')</c> is <c>&lt;U2</c>).
+    ///     </para>
+    ///     <para>
+    ///     <b>A numeric dtype</b> over text values (<c>np.array(['12', '3'], dtype='i8')</c>) packs every element with the
+    ///     dtype's setitem (<see cref="ReductionInitial.TryPack"/>, NumPy's <c>PyArray_Pack</c>): a text is parsed by
+    ///     CPython's <c>int()</c> / <c>float()</c> / <c>complex()</c> and its errors quote the Python object
+    ///     (<c>invalid literal for int() with base 10: '3.5'</c>), a number is packed as itself (range-checked).
     ///     </para>
     /// </remarks>
     internal static unsafe class NDStringArrays
@@ -277,8 +286,6 @@ namespace NumSharp.Backends.Strings
         /// <param name="y">Values elsewhere.</param>
         /// <param name="dims">The broadcast dimensions of the three (the caller validated the broadcast); adopted.</param>
         /// <returns>The new string array.</returns>
-        /// <exception cref="StringComputationNotSupportedException">The result has elements and one of <paramref name="x"/> /
-        ///     <paramref name="y"/> is numeric (formatting numbers as text is a later subphase).</exception>
         /// <exception cref="SystemError">A <c>U</c> condition holds a unit above U+10FFFF (NumPy's bool cast of it).</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S</c> value NumPy converts to the <c>U</c> result is not ASCII — the
         ///     element NumPy's loop converts first (see <see cref="ThrowIfWhereDecodeFails"/>).</exception>
@@ -304,10 +311,39 @@ namespace NumSharp.Backends.Strings
             using var cond = condition.typecode == NPTypeCode.Boolean ? condition.view()
                 : condition.typecode == NPTypeCode.String ? NDStringTruth.Truth(condition, NDStringTruth.Flavor.Cast)
                 : condition.astype(NPTypeCode.Boolean);
-            if (x.typecode != NPTypeCode.String)
-                throw NDStringCasting.TextConversion(x.dtype, descr);
-            if (y.typecode != NPTypeCode.String)
-                throw NDStringCasting.TextConversion(y.dtype, descr);
+            // A numeric x / y is cast to the result's string dtype by the iterator's buffers: each number written as its
+            // scalar's str(), truncated to the result width. Formatting cannot fail, so converting the operand whole first
+            // gives the same result (and an S -> U decode below still names NumPy's element).
+            NDArray xText = null, yText = null;
+            try
+            {
+                if (x.typecode != NPTypeCode.String)
+                    x = xText = x.astype(descr, copy: true, order: 'K', casting: "unsafe");
+                if (y.typecode != NPTypeCode.String)
+                    y = yText = y.astype(descr, copy: true, order: 'K', casting: "unsafe");
+                return WhereText(cond, x, y, descr, dims, layout);
+            }
+            finally
+            {
+                xText?.Dispose();
+                yText?.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     <see cref="Where"/> once every value operand is text: NumPy's S → U decode check, then the selection over unit
+        ///     views (or the contiguous fast path).
+        /// </summary>
+        /// <param name="cond">The bool condition (already the truth of a text condition).</param>
+        /// <param name="x">Text values where the condition holds.</param>
+        /// <param name="y">Text values elsewhere.</param>
+        /// <param name="descr">The result descriptor.</param>
+        /// <param name="dims">The broadcast dimensions.</param>
+        /// <param name="layout">The result layout (NumPy's iterator output layout).</param>
+        /// <returns>The new string array.</returns>
+        /// <exception cref="UnicodeDecodeError">An <c>S</c> value the result converts to <c>U</c> is not ASCII.</exception>
+        private static NDArray WhereText(NDArray cond, NDArray x, NDArray y, DType descr, long[] dims, Shape layout)
+        {
             // S -> U decoding is the only conversion of a string where that can fail; NumPy's loop decides which element
             // it reports, so that is found first, and the conversions below skip the ASCII check they no longer need.
             bool decodes = descr.Meta == DTypeRegistry.Str && (!x.Storage.StringSlice.IsUnicode || !y.Storage.StringSlice.IsUnicode);
@@ -605,6 +641,10 @@ namespace NumSharp.Backends.Strings
         /// <returns>The new array.</returns>
         private static NDArray Build(long[] dims, List<object> values, DType dtype, char order)
         {
+            // A numeric dtype: NumPy's discovery keeps the requested dtype and packs each element with its setitem.
+            if (dtype != null && dtype.Meta is not StringDTypeMeta)
+                return BuildNumeric(dims, values, dtype, order);
+
             var descr = Discover(values, dtype);
             var storage = UnmanagedStorage.AllocateString(new Shape(dims), descr, fillZeros: false);
             var slice = storage.StringSlice;
@@ -625,21 +665,27 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     NumPy's dtype discovery for text values: the class (requested, or <c>U</c> when any value is text, <c>S</c>
-        ///     when all are bytes) and the width (requested, or the longest value; Python's <c>str(None)</c> is 4 long).
+        ///     when the text is all bytes) and the width (requested, or the widest value).
         /// </summary>
         /// <param name="values">The element values.</param>
-        /// <param name="dtype">The requested dtype or null.</param>
+        /// <param name="dtype">The requested string dtype or null.</param>
         /// <returns>The descriptor to allocate (possibly unsized; the allocator grows 0 to one character).</returns>
-        /// <exception cref="NotSupportedException">A numeric requested dtype, a number value, or None without a dtype.</exception>
+        /// <exception cref="NotSupportedException">None without a dtype (NumPy's object array), or a value that is neither
+        ///     text, bytes, a number nor None.</exception>
+        /// <exception cref="TypeError">The width exceeds the class's maximum (<c>string too large to store inside
+        ///     array.</c>).</exception>
+        /// <remarks>
+        ///     The width of a value: a string's code points, a byte[]'s length, 4 for <c>str(None)</c>; a number's is the
+        ///     length of its <c>str()</c> under a requested unsized class (<c>PyArray_DTypeFromObjectStringDiscovery</c>), and
+        ///     its descriptor's text width without one (NumPy discovers the number's own dtype, then
+        ///     <c>PyArray_PromoteTypes</c> widens the string class to that dtype's <c>REQUIRED_STR_LEN</c>).
+        /// </remarks>
         private static DType Discover(List<object> values, DType dtype)
         {
             StringDTypeMeta cls;
             if (dtype != null)
             {
-                if (dtype.Meta is not StringDTypeMeta requested)
-                    throw new StringComputationNotSupportedException(
-                        $"Cannot build a {dtype.ToString(true)} array from text values: parsing text into numbers is not part of " +
-                        "NumSharp's fixed-width string storage phase yet.");
+                var requested = (StringDTypeMeta)dtype.Meta;
                 if (dtype.itemsize > 0)
                     return dtype;
                 cls = requested;
@@ -662,11 +708,10 @@ namespace NumSharp.Backends.Strings
                             throw new NotSupportedException(
                                 "A null (None) among the values would make NumPy build an object array, which NumSharp does not have; " +
                                 "pass a string dtype (np.str_ / \"U\") to store it as the text 'None', or replace it.");
-                        default:
-                            throw NDStringStorage.NumberToText(v.GetType().Name);
                     }
                 }
-                // Unicode absorbs bytes (string_unicode_common_dtype); an empty value set is NumPy's default U.
+                // Unicode absorbs bytes (string_unicode_common_dtype); an empty value set is NumPy's default U. A number
+                // never changes the class: the string class absorbs every numeric DType.
                 cls = anyText || !anyBytes ? DTypeRegistry.Str : DTypeRegistry.Bytes;
             }
 
@@ -679,7 +724,7 @@ namespace NumSharp.Backends.Strings
                     char _ => 1,
                     byte[] b => b.Length,
                     null => 4, // str(None) == 'None'
-                    _ => throw NDStringStorage.NumberToText(v.GetType().Name),
+                    _ => dtype != null ? NDStringStorage.StrLength(v) : NumberTextWidth(v),
                 };
                 if (len > width)
                     width = len;
@@ -687,6 +732,118 @@ namespace NumSharp.Backends.Strings
             if (width > cls.MaxChars)
                 throw new TypeError("string too large to store inside array.");
             return width == 0 ? cls.Singleton : cls.Descr(width);
+        }
+
+        /// <summary>
+        ///     The text width a number contributes when NumPy promotes it with text (<c>np.array(['x', 1])</c>): its
+        ///     discovered descriptor's <c>REQUIRED_STR_LEN</c> — a Python int is int64 (21; uint64, 20, when only that holds
+        ///     it), a Python float / NumPy float16 / decimal 32, a complex 64, a bool 5.
+        /// </summary>
+        /// <param name="v">The number (boxed C# value).</param>
+        /// <returns>The width in characters.</returns>
+        /// <exception cref="NotSupportedException">A Python int past 64 bits (NumPy builds an object array), or a value that
+        ///     is not a number.</exception>
+        private static long NumberTextWidth(object v)
+        {
+            NPTypeCode discovered = v switch
+            {
+                bool => NPTypeCode.Boolean,
+                sbyte or byte or short or ushort or int or uint or long => NPTypeCode.Int64,
+                ulong u => u <= long.MaxValue ? NPTypeCode.Int64 : NPTypeCode.UInt64,
+                System.Numerics.BigInteger bi when bi >= long.MinValue && bi <= long.MaxValue => NPTypeCode.Int64,
+                System.Numerics.BigInteger bi when bi >= 0 && bi <= ulong.MaxValue => NPTypeCode.UInt64,
+                System.Numerics.BigInteger => throw new NotSupportedException(
+                    "A Python int past 64 bits among text values makes NumPy build an object array, which NumSharp does not have."),
+                float or double => NPTypeCode.Double,
+                Half => NPTypeCode.Half,
+                decimal => NPTypeCode.Decimal,
+                System.Numerics.Complex => NPTypeCode.Complex,
+                _ => throw new NotSupportedException(
+                    $"A {v.GetType().Name} value has no NumPy dtype: a text array takes text, bytes, numbers and None."),
+            };
+            return NDTextFormat.RequiredWidth(discovered);
+        }
+
+        /// <summary>
+        ///     <c>np.array(values, dtype)</c> with a NUMERIC dtype over values that hold text: every element packed by the
+        ///     dtype's setitem (<see cref="ReductionInitial.TryPack"/>), so a text is parsed by CPython's <c>int()</c> /
+        ///     <c>float()</c> / <c>complex()</c> (a bool dtype takes its truth value) and a number is range-checked as NumPy
+        ///     packs a Python scalar.
+        /// </summary>
+        /// <param name="dims">The result dimensions.</param>
+        /// <param name="values">The elements, C order.</param>
+        /// <param name="dtype">The numeric dtype.</param>
+        /// <param name="order">The requested memory layout.</param>
+        /// <returns>The new array.</returns>
+        /// <exception cref="ValueError">A text is not a number of the dtype's kind (quoting <c>'…'</c>).</exception>
+        /// <exception cref="OverflowException">A value does not fit an integer dtype.</exception>
+        /// <exception cref="TypeError">None into an integer dtype, or a value of a type NumPy cannot convert.</exception>
+        private static NDArray BuildNumeric(long[] dims, List<object> values, DType dtype, char order)
+        {
+            NPTypeCode tc = dtype.typecode;
+            var result = new NDArray(dtype, new Shape(dims), false);
+            try
+            {
+                int size = tc.SizeOf();
+                byte* p = (byte*)result.Address;
+                Span<byte> slot = stackalloc byte[ReductionInitial.SlotBytes];
+                for (int i = 0; i < values.Count; i++)
+                {
+                    PackNumeric(values[i], tc, slot);
+                    slot.Slice(0, size).CopyTo(new Span<byte>(p + (long)i * size, size));
+                }
+                GC.KeepAlive(result);
+                if (dims.Length > 1 && (order == 'F' || order == 'f'))
+                {
+                    var f = result.copy('F');
+                    result.Dispose();
+                    return f;
+                }
+                return result;
+            }
+            catch
+            {
+                result.Dispose();
+                throw;
+            }
+        }
+
+        /// <summary>
+        ///     NumPy's setitem of one creation value into a numeric dtype: <see cref="ReductionInitial.TryPack"/>, plus the
+        ///     <c>None</c> rules it leaves to its caller — <c>MyPyFloat_AsDouble(None)</c> is NaN for a float dtype,
+        ///     <c>CDOUBLE_setitem(None)</c> NaN+NaNj, <c>PyObject_IsTrue(None)</c> False, and <c>int(None)</c> a TypeError.
+        /// </summary>
+        /// <param name="value">The value (null is None).</param>
+        /// <param name="tc">The numeric dtype.</param>
+        /// <param name="slot">Receives the element.</param>
+        /// <exception cref="TypeError">None into an integer dtype.</exception>
+        private static void PackNumeric(object value, NPTypeCode tc, Span<byte> slot)
+        {
+            if (value is not null)
+            {
+                ReductionInitial.TryPack(value, tc, slot);
+                return;
+            }
+            slot.Clear();
+            switch (tc)
+            {
+                case NPTypeCode.Boolean:
+                    return;
+                case NPTypeCode.Half:
+                case NPTypeCode.Single:
+                case NPTypeCode.Double:
+                case NPTypeCode.Decimal:
+                case NPTypeCode.Complex:
+                    // NPY_NAN is the POSITIVE quiet NaN (.NET's double.NaN has the sign bit set).
+                    double nan = BitConverter.UInt64BitsToDouble(0x7FF8_0000_0000_0000UL);
+                    if (tc == NPTypeCode.Complex)
+                        System.Runtime.CompilerServices.Unsafe.WriteUnaligned(ref slot[0], new System.Numerics.Complex(nan, nan));
+                    else
+                        ReductionInitial.TryPack(nan, tc, slot);
+                    return;
+                default:
+                    throw new TypeError("int() argument must be a string, a bytes-like object or a real number, not 'NoneType'");
+            }
         }
 
         /// <summary>

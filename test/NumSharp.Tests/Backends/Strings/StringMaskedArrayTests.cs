@@ -79,9 +79,12 @@ namespace NumSharp.Tests.Backends.Strings
             Action plain = () => np.ma.trace(np.ma.array(t2));
             plain.Should().Throw<TypeError>()
                  .WithMessage("the resolved dtypes are not compatible with add.reduce. Resolved (dtype('<U1'), dtype('<U1'), dtype('<U2'))");
-            // A mask: D.astype(float64) PARSES the text ('1' -> 1.0, 'a' -> ValueError) — the next phase.
-            Action masked = () => np.ma.trace(np.ma.array(t2, mask: new[,] { { false, false }, { false, true } }));
-            masked.Should().Throw<StringComputationNotSupportedException>();
+            // A mask: the diagonal's D.astype(float64) PARSES the text ('1' -> 1.0) and the masked '4' is filled with 0
+            // (probed 2.4.2: 1.0); a diagonal text that is no number raises float()'s ValueError.
+            np.ma.trace(np.ma.array(t2, mask: new[,] { { false, false }, { false, true } })).GetDouble().Should().Be(1.0);
+            var bad = np.array(new[,] { { "a", "2" }, { "3", "4" } });
+            Action masked = () => np.ma.trace(np.ma.array(bad, mask: new[,] { { false, false }, { false, true } }));
+            masked.Should().Throw<ValueError>().WithMessage("could not convert string to float: np.str_('a')");
             // A 1-D operand has no diagonal.
             Action oneD = () => np.ma.trace(MU());
             oneD.Should().Throw<Exception>().WithMessage("diag requires an array of at least two dimensions*");
@@ -195,9 +198,9 @@ namespace NumSharp.Tests.Backends.Strings
             var some = np.ma.sometrue(np.ma.array(np.zeros(new Shape(0L, 2L), "U1"), mask: np.zeros(new Shape(0L, 2L), np.@bool)));
             np.ma.getdata(some).ToArray<bool>().Should().Equal(false, false);
             np.ma.getmaskarray(some).ToArray<bool>().Should().Equal(true, true);
-            // Non-empty text: the truth of '' is read.
-            Action alltrue = () => np.ma.alltrue(np.ma.array(np.array(new[] { "a", "" }), mask: new[] { true, false }));
-            alltrue.Should().Throw<StringComputationNotSupportedException>();
+            // Non-empty text: the truth of '' is read (the masked 'a' is filled with True, formatted as text): False.
+            np.ma.getdata(np.ma.alltrue(np.ma.array(np.array(new[] { "a", "" }), mask: new[] { true, false })))
+              .GetBoolean().Should().BeFalse();
             // ma.count reads only the mask: [[a, b]] with [0, 0] masked, axis 0 -> [0, 1].
             np.ma.count(np.ma.array(np.array(new[,] { { "a", "b" } }), mask: new[,] { { true, false } }), 0)
               .ToArray<long>().Should().Equal(0L, 1L);
@@ -236,9 +239,12 @@ namespace NumSharp.Tests.Backends.Strings
             noColumn.shape.Should().Equal(new long[] { 2, 0 });
             np.vander(np.zeros(new Shape(0L), "U1"), 1).shape.Should().Equal(new long[] { 0, 1 });
             np.vander(Bytes("a"), 0).dtype.str.Should().Be("|S21");
-            // One column writes the formatted '1' — the next phase; two columns multiply — no string loop, rows or not.
-            Action one = () => np.vander(np.array(new[] { "a" }), 1);
-            one.Should().Throw<StringComputationNotSupportedException>();
+            // One column writes the Python int 1 as its str() '1' (probed 2.4.2); two columns multiply — no string loop,
+            // rows or not.
+            var one = np.vander(np.array(new[] { "a", "bc" }), 1);
+            one.dtype.str.Should().Be("<U21");
+            NDArray.AsStringArray(one).Should().Equal("1", "1");
+            NDArray.AsStringArray(np.vander(Bytes("a"), 1).astype("U21")).Should().Equal("1");
             const string multiply = "ufunc 'multiply' did not contain a loop with signature matching types (dtype('<U21'), dtype('<U21')) -> None";
             Action two = () => np.vander(np.array(new[] { "a" }), 2);
             two.Should().Throw<TypeError>().WithMessage(multiply);
@@ -294,14 +300,16 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         [TestMethod]
-        public void Filled_OfText_WritesTextFillsAndDefersFormattedNumbers()
+        public void Filled_OfText_WritesTextAndFormattedNumberFills()
         {
             var x = np.ma.array(np.array(new[] { "ab", "c" }), mask: new[] { true, false });
             NDArray.AsStringArray(x.filled()).Should().Equal("N/", "c");
             NDArray.AsStringArray(x.filled("zz")).Should().Equal("zz", "c");
-            // A number written into text is formatted ('5') — the next phase.
-            Action number = () => x.filled(5);
-            number.Should().Throw<StringComputationNotSupportedException>();
+            // A number written into text is its str(), cut to the width (probed 2.4.2: '5', '5.', 'Tr', '12').
+            NDArray.AsStringArray(x.filled(5)).Should().Equal("5", "c");
+            NDArray.AsStringArray(x.filled(5.5)).Should().Equal("5.", "c");
+            NDArray.AsStringArray(x.filled(true)).Should().Equal("Tr", "c");
+            NDArray.AsStringArray(x.filled(123)).Should().Equal("12", "c");
             // Nothing masked: `filled` returns the data itself before any fill is converted.
             var clean = np.ma.array(np.array(new[] { "ab" }), mask: new[] { false });
             var view = clean.filled(5);

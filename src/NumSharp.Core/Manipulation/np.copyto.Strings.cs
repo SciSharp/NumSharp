@@ -22,10 +22,12 @@ namespace NumSharp
         /// <exception cref="InvalidCastException">The cast from <c>&lt;U{len}</c> to the destination's dtype is not allowed:
         ///     <c>Cannot cast scalar from dtype('&lt;U6') to dtype('S3') according to the rule 'same_kind'</c>.</exception>
         /// <exception cref="UnicodeEncodeError">The text is not ASCII and the destination is <c>S</c>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">The destination is numeric, the rule allows the cast and
-        ///     NumPy parses the text (a destination of more than one element, or one element the mask selects): parsing text
-        ///     into numbers is the computational phase of the string dtypes.</exception>
-        /// <exception cref="ValueError">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</exception>
+        /// <exception cref="OverflowException">The destination is an integer dtype and the text is an integer outside it
+        ///     (NumPy's LP64 OverflowError texts).</exception>
+        /// <exception cref="SystemError">The text is one unit above U+10FFFF (only reachable through a raw view).</exception>
+        /// <exception cref="ValueError">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>; also a numeric destination
+        ///     the text does not parse into (<c>invalid literal for int() with base 10: np.str_('x')</c> — NumPy parses the 0-d
+        ///     array the text became, so it quotes the NumPy scalar).</exception>
         /// <exception cref="TypeError">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</exception>
         /// <exception cref="ArgumentException">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</exception>
         /// <remarks>
@@ -63,9 +65,8 @@ namespace NumSharp
         /// <exception cref="UnicodeEncodeError">A selected <c>U</c> element is not ASCII and the destination is <c>S</c>.</exception>
         /// <exception cref="UnicodeDecodeError">A selected <c>S</c> element is not ASCII and the destination is <c>U</c>.</exception>
         /// <exception cref="SystemError">A selected <c>U</c> element holds a unit above <c>U+10FFFF</c> and the destination is <c>S</c>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">An allowed cast between text and numbers that NumPy would
-        ///     run on an element (the computational phase) — see <see cref="CopytoTextNumber"/>; an empty destination or a mask
-        ///     that selects nothing returns.</exception>
+        /// <exception cref="OverflowException">An allowed text → integer cast meets a value outside the destination (see
+        ///     <see cref="CopytoTextNumber"/>).</exception>
         /// <remarks>
         ///     <para><b>Which elements are converted.</b> NumPy's masked cast converts only the elements the mask selects, so a
         ///     non-ASCII element under a false mask is never encoded (no error); its unmasked cast — and the temporary copy of
@@ -158,10 +159,9 @@ namespace NumSharp
 
         /// <summary>
         ///     <c>PyArray_AssignArray</c> / <c>PyArray_AssignRawScalar</c> between text and numbers once the destination's
-        ///     writeability and the cast rule passed: NumPy's remaining checks run in its order, and the assignment is refused
-        ///     (the computational phase) only where NumPy's conversion has an observable effect — a PARSE of text into a
-        ///     number it runs (which can fail), or a WRITE of formatted text (formatting a number cannot fail, so an unwritten
-        ///     one is unobservable). An empty destination, or a mask that selects nothing, therefore returns, as in NumPy.
+        ///     writeability and the cast rule passed: NumPy's remaining checks and conversions in its order. A number is
+        ///     written as its scalar's <c>str()</c>, a text parsed by CPython's <c>int()</c> / <c>float()</c> /
+        ///     <c>complex()</c> (<see cref="NDTextConversion"/>), and only the elements NumPy converts are converted.
         /// </summary>
         /// <param name="dst">The destination (writeable).</param>
         /// <param name="src">The source (string or numeric; the other kind than <paramref name="dst"/>).</param>
@@ -169,21 +169,27 @@ namespace NumSharp
         /// <param name="from">The source descriptor.</param>
         /// <param name="to">The destination descriptor.</param>
         /// <exception cref="ValueError">The source or the mask does not broadcast to <paramref name="dst"/>
-        ///     (<c>could not broadcast input array from shape (2,) into shape (3,)</c>, <c>… where mask …</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">NumPy parses a text element — a 0-d text source into a
-        ///     destination of more than one element (parsed once, before the mask is read), an overlapping text source NumPy
-        ///     copies first — or writes a converted element the mask selects.</exception>
+        ///     (<c>could not broadcast input array from shape (2,) into shape (3,)</c>, <c>… where mask …</c>), or a converted
+        ///     text is not a number of the destination's kind (NumPy's <c>int()</c> / <c>float()</c> / <c>complex()</c>
+        ///     texts).</exception>
+        /// <exception cref="OverflowException">A converted integer text does not fit the destination.</exception>
+        /// <exception cref="SystemError">A converted <c>U</c> element is one unit above U+10FFFF.</exception>
+        /// <exception cref="UnicodeDecodeError">A converted <c>S</c> element is not UTF-8 and the destination is
+        ///     complex.</exception>
         /// <remarks>
-        ///     NumPy's masked transfer converts only the selected runs (<c>_strided_masked_wrapper_transfer_function</c>), so a
-        ///     mask with no true element converts nothing; a mask that broadcasts to a non-empty destination maps every one of
-        ///     its elements to at least one destination element, so <c>any(where)</c> decides.
+        ///     <para><b>Which elements are converted, and when.</b> A 0-d source is converted ONCE, before the mask is read,
+        ///     when the destination has more than one element (NumPy's <c>PyArray_CastRawArrays</c> into a scalar buffer — a
+        ///     parse error then ignores the mask); a one-element destination converts it inside the masked loop (a false mask
+        ///     converts nothing). An overlapping source is first converted whole into a temporary of the destination's dtype
+        ///     (NumPy's <c>PyArray_NewLikeArray</c> + unmasked assignment). Otherwise the masked transfer converts only the
+        ///     selected runs (<c>_strided_masked_wrapper_transfer_function</c>), so an unselected bad text never raises.</para>
+        ///     <para><b>Partial writes.</b> A failing parse leaves the destination as NumPy leaves it: every 128-element block
+        ///     before the failing one written, the failing block and everything after untouched.</para>
         /// </remarks>
         private static unsafe void CopytoTextNumber(NDArray dst, NDArray src, NDArray @where, DType from, DType to)
         {
-            // Text into numbers parses (can fail, so every parse NumPy runs is the computational phase); numbers into text
-            // format (cannot fail, so only a write matters).
             bool parses = src.Storage.IsString;
-            // Text into bool is a string's truth value (NumPy's string-to-bool cast), computed now.
+            // Text into bool is a string's truth value (NumPy's string-to-bool cast), computed by the truth route.
             if (parses && dst.typecode == NPTypeCode.Boolean)
             {
                 CopytoTextTruth(dst, src, @where);
@@ -191,28 +197,40 @@ namespace NumSharp
             }
             if (src.ndim == 0)
             {
-                // AssignRawScalar: a destination of more than one element gets the scalar converted ONCE, before the mask.
-                if (dst.size > 1 && parses)
-                    throw NDStringCasting.TextConversion(from, to);
+                // AssignRawScalar: a destination of more than one element gets the scalar converted ONCE, before the mask;
+                // the converted 0-d value is then assigned like a same-dtype scalar (mask and all).
+                if (dst.size > 1)
+                {
+                    using var converted = CopytoConvertWhole(src, to, Shape.NewScalar());
+                    np.copyto(dst, converted, "unsafe", @where);
+                    return;
+                }
                 if (@where is not null)
                     CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
                         "where mask", stripLeadingUnitAxes: false);
                 // Nothing written (or, for one element, nothing converted inside the masked loop) when nothing is selected.
                 if (dst.size == 0 || (@where is not null && !np.any(@where)))
                     return;
-                throw NDStringCasting.TextConversion(from, to);
+                NDTextConversion.Convert(dst.Storage, src.Storage);
+                return;
             }
 
             // An overlapping source (two views of one buffer read as text and as numbers) is copied first by an UNMASKED
-            // conversion of every element — after its own broadcast check, so the broadcast error still comes first.
+            // conversion of every element into a temporary of the destination's dtype — after its own broadcast check, so
+            // the broadcast error still comes first.
             int dnd = dst.ndim;
             bool overlapNeedsCopy =
                 ((dnd == 1 && dst.Shape.strides[0] * src.Shape.strides[src.ndim - 1] < 0) || dnd > 1)
                 && NDMemOverlap.SolveMayShareMemory(src, dst, 0) != MemOverlap.No;
             CopytoBroadcastStrides(dst.Shape.dimensions, src.Shape.dimensions, src.Shape.strides, "input array",
                 stripLeadingUnitAxes: true);
-            if (overlapNeedsCopy && dst.size > 0 && parses)
-                throw NDStringCasting.TextConversion(from, to);
+            UnmanagedStorage source = src.ndim > dnd ? StrippedSourceView(src, dnd) : src.Storage;
+            if (overlapNeedsCopy && dst.size > 0)
+            {
+                using var temp = CopytoConvertWhole(new NDArray(source), to, dst.Shape.KeepOrder());
+                np.copyto(dst, temp, "unsafe", @where);
+                return;
+            }
 
             // "optimization: scalar boolean mask"
             if (@where is not null && @where.ndim == 0)
@@ -226,7 +244,36 @@ namespace NumSharp
                     stripLeadingUnitAxes: false);
             if (dst.size == 0 || (@where is not null && !np.any(@where)))
                 return;
-            throw NDStringCasting.TextConversion(from, to);
+            NDTextConversion.Convert(dst.Storage, source, @where?.Storage);
+        }
+
+        /// <summary>
+        ///     Converts a whole source into a fresh array of <paramref name="to"/> laid out as <paramref name="layout"/> — the
+        ///     scalar buffer of NumPy's <c>PyArray_AssignRawScalar</c> (a 0-d layout) and the temporary of an overlapping
+        ///     source (the destination's dimensions in KEEPORDER layout).
+        /// </summary>
+        /// <param name="src">The source (text or numbers), broadcastable to <paramref name="layout"/>.</param>
+        /// <param name="to">The destination's dtype (the temporary's).</param>
+        /// <param name="layout">The temporary's shape (a fresh dense layout).</param>
+        /// <returns>The converted array (the caller disposes it).</returns>
+        /// <exception cref="ValueError">A text is not a number of <paramref name="to"/>'s kind.</exception>
+        /// <exception cref="OverflowException">An integer text does not fit <paramref name="to"/>.</exception>
+        /// <exception cref="SystemError">A <c>U</c> element is one unit above U+10FFFF.</exception>
+        /// <exception cref="UnicodeDecodeError">An <c>S</c> element converted to complex is not UTF-8.</exception>
+        private static NDArray CopytoConvertWhole(NDArray src, DType to, Shape layout)
+        {
+            var temp = NDArray.ForOverwrite(to, layout);
+            try
+            {
+                if (temp.size > 0)
+                    NDTextConversion.Convert(temp.Storage, src.Storage);
+                return temp;
+            }
+            catch
+            {
+                temp.Dispose();
+                throw;
+            }
         }
 
         /// <summary>

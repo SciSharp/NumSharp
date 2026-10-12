@@ -5,15 +5,15 @@ namespace NumSharp
     /// <summary>
     ///     A call that NumPy answers by COMPUTING on fixed-width string data (<c>S</c> / <c>U</c>), which NumSharp's string
     ///     support does not do yet. The string dtypes cover storage, element access, conversion to and from C#, copying,
-    ///     casts between string dtypes, indexing, printing, comparisons, truth tests, concatenation and repetition; the rest
-    ///     of text computation — sorting and searching, conversion between text and numbers, and the <c>np.strings</c>
-    ///     functions beyond <c>add</c> / <c>multiply</c> — is the next phase.
+    ///     casts between string dtypes, conversion between text and numbers (NumPy's legacy casts: a number's scalar
+    ///     <c>str()</c>, a text's <c>int()</c> / <c>float()</c> / <c>complex()</c>), indexing, printing, comparisons, truth
+    ///     tests, concatenation and repetition; the rest of text computation — sorting and searching, and the
+    ///     <c>np.strings</c> functions beyond <c>add</c> / <c>multiply</c> — is the next phase.
     /// </summary>
     /// <remarks>
     ///     <para>
     ///     <b>When it is thrown.</b> Only where NumPy itself returns a result: <c>np.sort(u)</c>, <c>np.unique(u)</c>,
-    ///     <c>np.searchsorted(u, v)</c>, <c>u.astype(np.int64)</c>, <c>np.add(f8, f8, dtype: "U")</c> (numbers formatted as
-    ///     text), <c>np.array(new object[] { "a", 1 })</c> and similar. Where NumPy raises an error for a string operand
+    ///     <c>np.searchsorted(u, v)</c>, <c>np.histogram(u)</c> and similar. Where NumPy raises an error for a string operand
     ///     (<c>np.subtract(u, u)</c>, <c>np.sum(u)</c>, <c>np.dot(u, u)</c>), NumSharp raises NumPy's own exception and text
     ///     instead, because that answer is final.
     ///     </para>

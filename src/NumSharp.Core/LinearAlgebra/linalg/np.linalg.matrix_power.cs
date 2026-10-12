@@ -22,8 +22,6 @@ namespace NumSharp
             ///     a negative power of a singular matrix.</exception>
             /// <exception cref="TypeError">A text matrix with <c>n</c> of 2 or more (matmul has no string loop) or a negative
             ///     <c>n</c> (inv's input cast).</exception>
-            /// <exception cref="StringComputationNotSupportedException">A non-empty text matrix with <c>n == 0</c>: NumPy writes
-            ///     the identity's numbers into the text dtype as text.</exception>
             /// <exception cref="OpenBlasMissingBackendException">A negative power of a matrix the managed LU cannot take
             ///     with no backend installed.</exception>
             /// <remarks>
@@ -88,15 +86,21 @@ namespace NumSharp
 
             /// <summary>
             ///     The identity matching a stack's trailing two axes, broadcast across the batch —
-            ///     what <c>matrix_power(a, 0)</c> returns.
+            ///     what <c>matrix_power(a, 0)</c> returns (NumPy: <c>a[...] = eye(a.shape[-2], dtype=a.dtype)</c>).
             /// </summary>
+            /// <param name="a">The (square-stacked) operand.</param>
+            /// <returns>A new array of <paramref name="a"/>'s dtype and shape holding the identity.</returns>
+            /// <exception cref="OverflowException">The matrix side exceeds <see cref="int.MaxValue"/>.</exception>
+            /// <remarks>The identity is built IN the operand's dtype, as NumPy's <c>eye(..., dtype=a.dtype)</c> is: for a text
+            ///     dtype the diagonal stores the Python int 1 as its <c>str()</c> (<c>'1'</c>) and the rest stays empty, where
+            ///     a float64 identity cast to text would read <c>'1.0'</c> / <c>'0.0'</c>.</remarks>
             private static NDArray Identity(NDArray a)
             {
                 long side = a.Shape.dimensions[a.ndim - 1];
                 if (side > int.MaxValue)
                     throw new OverflowException($"Matrix dimension {side} exceeds int.MaxValue for np.eye");
 
-                var eye = np.eye((int)side).astype(a.dtype);
+                var eye = np.eye((int)side, dtype: a.dtype);
                 if (a.ndim == 2)
                     return eye;
 

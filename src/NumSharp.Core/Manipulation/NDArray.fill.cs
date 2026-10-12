@@ -52,8 +52,6 @@ namespace NumSharp
         ///     or float) dtype — NumPy funnels it through <c>int()</c>/<c>float()</c>, which reject a complex.</exception>
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into a bytes (<c>S</c>) array.</exception>
         /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into a str (<c>U</c>) array.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A number into a string array (NumPy stores its text,
-        ///     the computational phase of the string support).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.fill.html</remarks>
         public void fill(object value)
         {
@@ -94,7 +92,8 @@ namespace NumSharp
         ///     <see cref="fill"/> for a fixed-width string array: NumPy's <c>PyArray_Pack</c> of the value into this array's
         ///     descriptor, then the broadcast copy of that one element into every position (any layout).
         /// </summary>
-        /// <param name="value">A <see cref="string"/>, a <c>byte[]</c>, a <see cref="char"/>, or a 0-d array.</param>
+        /// <param name="value">A <see cref="string"/>, a <c>byte[]</c>, a <see cref="char"/>, a number (stored as its
+        ///     <c>str()</c>, truncated to the width), or a 0-d array.</param>
         /// <exception cref="ArgumentNullException"><paramref name="value"/> is null (the house convention of
         ///     <see cref="fill"/>).</exception>
         /// <exception cref="ValueError">An array of one or more dimensions, of any size and dtype (<c>setting an array
@@ -102,7 +101,6 @@ namespace NumSharp
         ///     words it differently, probed 2.4.2).</exception>
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into a bytes (<c>S</c>) array.</exception>
         /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into a str (<c>U</c>) array.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A number (NumPy stores its text).</exception>
         private void FillText(object value)
         {
             if (value is null)
@@ -133,7 +131,6 @@ namespace NumSharp
         /// <param name="value">A 0-d string storage (converted to this array's descriptor here).</param>
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into a bytes (<c>S</c>) array.</exception>
         /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into a str (<c>U</c>) array.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A numeric value.</exception>
         private unsafe void FillTextFrom(UnmanagedStorage value)
         {
             var shape = Shape;
@@ -277,8 +274,6 @@ namespace NumSharp
         ///     with dimensions ("setting an array element with a sequence.").</exception>
         /// <exception cref="TypeError">A complex into a real dtype (Python's int() / float() texts), or a sequence into an
         ///     integer or complex dtype.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text into a numeric array: NumPy parses it (int(str) /
-        ///     float(str)), the computational phase of the string support.</exception>
         /// <remarks>
         ///     <para>
         ///     The C# boundary map decides the kind of each value, so every rule is NumPy's for that kind: an integer
@@ -307,14 +302,6 @@ namespace NumSharp
             // number qualifies: an array or a list is not an element, whatever its element type.
             if (IsStoreScalar(value) && value.GetType().GetTypeCode() == typecode)
                 return value;
-
-            // Text into a numeric array is NumPy's int(str) / float(str) parse — the computational phase of the string
-            // support, deferred like every text-to-number conversion (a string array took FillText before this).
-            if (value is string || value is byte[])
-            {
-                using var text = NDArray.Scalar(value);
-                throw Backends.Strings.NDStringCasting.TextConversion(text.dtype, dtype);
-            }
 
             NPTypeCode tc = typecode;
             byte* slot = stackalloc byte[ReductionInitial.SlotBytes];

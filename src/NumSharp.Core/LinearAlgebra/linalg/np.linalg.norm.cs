@@ -22,8 +22,8 @@ namespace NumSharp
             ///     inf-, 1- and 2-norms are 0.0 (NumPy 2.x reduces those with <c>initial=0</c>).</returns>
             /// <exception cref="ValueError">An order that is invalid for the number of reduced axes, duplicate axes, more
             ///     than two reduced axes, or a min order (-1, -inf, -2) of an empty operand.</exception>
-            /// <exception cref="StringComputationNotSupportedException">A non-empty text array: NumPy parses its text as
-            ///     numbers (<c>x.astype(float)</c>); an empty one converts to an empty float64 array.</exception>
+            /// <exception cref="ValueError">A text element that does not parse as a float (NumPy's <c>x.astype(float)</c>:
+            ///     <c>could not convert string to float: np.str_('x')</c>).</exception>
             /// <exception cref="OpenBlasMissingBackendException">A matrix order 2, -2 or <c>"nuc"</c> over a non-empty
             ///     matrix with no matrix backend installed (an empty matrix or a zero-size batch needs none).</exception>
             /// <remarks>
@@ -57,15 +57,11 @@ namespace NumSharp
                 // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
                 if (NDMatrixBoundary.Sees(x))
                     return NDMatrixBoundary.Plain((x, ord, axis, keepdims), static s => norm(s.x, s.ord, s.axis, s.keepdims));
-                // NumPy's norm converts the input with astype(float), parsing the text as numbers: the next phase of the
-                // string support. An EMPTY text array has nothing to parse — its astype(float) is an empty float64 array,
-                // and the norm (and its order / axis checks) runs on that.
-                if (Backends.Strings.NDStringUfuncs.IsString(x))
-                {
-                    if (x.size != 0)
-                        throw Backends.Strings.NDStringUfuncs.NextPhase("linalg.norm", x);
-                    x = np.zeros(Shape.Adopt((long[])x.Shape.dimensions.Clone()), NPTypeCode.Double);
-                }
+                // NumPy's norm converts a non-inexact input with x.astype(float): a text array is parsed (each element by
+                // float(), the first failing one raising NumPy's text), and the norm runs on the float64 numbers.
+                using var parsed = Backends.Strings.NDStringUfuncs.IsString(x) ? x.astype(np.float64, true, 'K', "unsafe") : null;
+                if (parsed is not null)
+                    x = parsed;
                 var a = ToFloating(x);
                 int nd = a.ndim;
 

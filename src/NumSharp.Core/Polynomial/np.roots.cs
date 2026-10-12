@@ -13,8 +13,8 @@ namespace NumSharp
         /// <returns>The roots — the eigenvalues of the companion matrix.</returns>
         /// <exception cref="ValueError"><paramref name="p"/> is not rank 1 after <c>atleast_1d</c> (<c>Input must be a rank-1
         ///     array.</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text coefficients: NumPy finds the non-empty ones and parses
-        ///     them as numbers.</exception>
+        /// <exception cref="ValueError">A text coefficient between the first and last non-empty one that does not parse as a
+        ///     float (NumPy's <c>p.astype(float)</c>: <c>could not convert string to float: np.str_('x')</c>).</exception>
         /// <exception cref="NotSupportedException">Two or more non-zero coefficients and no LAPACK backend installed.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.roots.html</remarks>
         [NDScoped] // reclaims the ravel/nonzero/strip/astype chain and the companion-matrix + eigvals intermediates
@@ -24,9 +24,8 @@ namespace NumSharp
             p = np.atleast_1d(p);
             if (p.ndim != 1)
                 throw new ValueError("Input must be a rank-1 array.");
-            // NumPy then finds the non-zero (non-empty) text and casts it to float, parsing it: the next phase.
-            if (Backends.Strings.NDStringUfuncs.IsString(p)) throw Backends.Strings.NDStringUfuncs.NextPhase("roots", p);
-
+            // Text coefficients: the non-zero ones are the non-empty strings (their truth), and the stripped run is parsed
+            // by `p.astype(float)` below, as in NumPy.
             // Indices of the non-zero coefficients (over the flattened array).
             NDArray nonZero = np.nonzero(np.ravel(p))[0];
             if (nonZero.size == 0)

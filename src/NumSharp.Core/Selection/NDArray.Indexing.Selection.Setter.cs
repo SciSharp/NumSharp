@@ -566,28 +566,48 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     A fancy assignment of TEXT into a numeric array, up to the point where NumPy parses: a scalar text value — a C#
-        ///     literal, NumPy's Python <c>str</c> — is parsed before the index is resolved (<c>PyArray_FromAny(value, descr,
-        ///     FORCECAST)</c>); an array value is parsed element by element as the selection is written, after the index and
-        ///     broadcast checks and not at all when the selection is empty (<c>a[[]] = np.array(['x'])</c> succeeds). The index
-        ///     and broadcast checks run on byte proxies of the same shapes, so they raise NumPy's errors.
+        ///     A fancy assignment of TEXT into a numeric array (NumPy's <c>array_assign_subscript</c> → <c>PyArray_FromAny(value,
+        ///     descr, FORCECAST)</c> → map iteration): a scalar text value is converted to the array's dtype BEFORE the index
+        ///     is resolved — a C# string literal (<see cref="NDArray.WasPythonStr"/>) packed like NumPy's Python str, a 0-d
+        ///     text array cast like an array — so its parse error wins even over a bad index; an array value is converted after
+        ///     the index and broadcast checks (run on byte proxies of the same shapes, which raise NumPy's errors), and not at
+        ///     all when the selection is empty (<c>a[[]] = np.array(['x'])</c> succeeds). The numeric value is then assigned by
+        ///     the numeric fancy route.
         /// </summary>
         /// <param name="src">The numeric destination.</param>
-        /// <param name="indices">The index arrays (cloned before the proxy assignment, which normalizes them in place).</param>
+        /// <param name="indices">The index arrays.</param>
         /// <param name="values">The text value.</param>
-        /// <exception cref="StringComputationNotSupportedException">NumPy parses an element: a scalar value, or an array value
-        ///     with a non-empty selection.</exception>
-        /// <exception cref="Exception">The index / broadcast error NumPy raises first (IndexError, ValueError, …).</exception>
-        /// <remarks>Returns normally when the selection is empty: nothing is written, as in NumPy.</remarks>
-        private static void ThrowIfTextSelectionParses(NDArray src, NDArray[] indices, NDArray values)
+        /// <exception cref="ValueError">A text that does not parse into the destination's dtype (NumPy's <c>int()</c> /
+        ///     <c>float()</c> / <c>complex()</c> texts), or the broadcast error NumPy raises first.</exception>
+        /// <exception cref="OverflowException">An integer text outside the destination's dtype.</exception>
+        /// <exception cref="Exception">The index error NumPy raises first (IndexError, ...).</exception>
+        /// <remarks>An array value is converted whole, in NumPy's astype order, so when two of its elements fail the one
+        ///     reported can differ from the one NumPy's map iterator meets first; the error kind and text form are the same.</remarks>
+        private static void SetIndicesFromText(NDArray src, NDArray[] indices, NDArray values)
         {
             if (values.ndim == 0)
-                throw Backends.Strings.NDStringCasting.TextConversion(values.dtype, src.dtype);
-            using var proxy = np.zeros(new Shape((long[])src.Shape.dimensions.Clone()), NPTypeCode.Byte);
-            using var valueProxy = np.ones(new Shape((long[])values.Shape.dimensions.Clone()), NPTypeCode.Byte);
-            SetIndices(proxy, (NDArray[])indices.Clone(), valueProxy);
-            if (np.any(proxy))
-                throw Backends.Strings.NDStringCasting.TextConversion(values.dtype, src.dtype);
+            {
+                var packed = NDArray.PackForStore(values, src.typecode, pyArrayPackRoute: false);
+                NDArray numeric = ReferenceEquals(packed, values) ? values.astype(src.dtype, true, 'K', "unsafe") : packed;
+                try
+                {
+                    SetIndices(src, indices, numeric);
+                }
+                finally
+                {
+                    numeric.Dispose();
+                }
+                return;
+            }
+            using (var proxy = np.zeros(new Shape((long[])src.Shape.dimensions.Clone()), NPTypeCode.Byte))
+            using (var valueProxy = np.ones(new Shape((long[])values.Shape.dimensions.Clone()), NPTypeCode.Byte))
+            {
+                SetIndices(proxy, (NDArray[])indices.Clone(), valueProxy);
+                if (!np.any(proxy))
+                    return;
+            }
+            using var converted = values.astype(src.dtype, true, 'K', "unsafe");
+            SetIndices(src, indices, converted);
         }
 
         // NDScoped (void method — nothing escapes): reclaims the per-dispatch MakeGeneric alias,
@@ -596,11 +616,11 @@ namespace NumSharp
         [NDScoped]
         protected static void SetIndices(NDArray src, NDArray[] indices, NDArray values)
         {
-            // Text into a numeric array (a string array takes the string route): parsing is the computational phase, but
-            // NumPy reaches it only where it converts an element — see ThrowIfTextSelectionParses.
+            // Text into a numeric array (a string array takes the string route): converted where NumPy converts it — see
+            // SetIndicesFromText.
             if (values is not null && values.typecode == NPTypeCode.String && src.typecode != NPTypeCode.String)
             {
-                ThrowIfTextSelectionParses(src, indices, values);
+                SetIndicesFromText(src, indices, values);
                 return;
             }
 

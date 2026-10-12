@@ -64,6 +64,44 @@ namespace NumSharp.Backends.Printing
         }
 
         /// <summary>
+        ///     Python's <c>repr(s)</c> of a text given as CODE POINTS — a <c>U</c> element's UCS-4 units as NumPy's
+        ///     <c>np.str_</c> holds them. Identical to <see cref="Str"/> for valid code points; a unit above U+10FFFF, which
+        ///     no C# string can hold but a multi-character <c>np.str_</c> can (CPython's <c>PyUnicode_New</c> caps only the
+        ///     maximum character it records), is non-printable and prints as <c>\Uhhhhhhhh</c> — NumPy's
+        ///     <c>np.str_('1\U00110000')</c>.
+        /// </summary>
+        /// <param name="codePoints">The text's code points (trailing NULs already removed by the caller).</param>
+        /// <returns>The quoted, escaped representation.</returns>
+        public static string StrCodePoints(ReadOnlySpan<uint> codePoints)
+        {
+            bool hasSingle = false, hasDouble = false;
+            foreach (uint u in codePoints)
+            {
+                hasSingle |= u == '\'';
+                hasDouble |= u == '"';
+            }
+            char quote = hasSingle && !hasDouble ? '"' : '\'';
+
+            var sb = new StringBuilder(codePoints.Length + 2);
+            sb.Append(quote);
+            foreach (uint u in codePoints)
+            {
+                if (u > 0x10FFFF)
+                {
+                    // Not a character: CPython's isprintable() is false for it, so the 8-digit escape (the value fits
+                    // 32 bits; CPython prints the low 32 bits of a UCS-4 unit).
+                    sb.Append("\\U");
+                    for (int shift = 28; shift >= 0; shift -= 4)
+                        sb.Append(HexDigits[(int)((u >> shift) & 0xF)]);
+                    continue;
+                }
+                AppendStrChar(sb, (int)u, quote);
+            }
+            sb.Append(quote);
+            return sb.ToString();
+        }
+
+        /// <summary>
         ///     Python's <c>ascii()</c> applied to a representation <paramref name="repr"/> already built (CPython's
         ///     <c>PyObject_ASCII</c>: the <c>repr</c>, then every non-ASCII code point escaped as <c>\xhh</c>,
         ///     <c>\uhhhh</c> or <c>\Uhhhhhhhh</c> by magnitude, lone surrogates as <c>\udXXX</c>). A bytes repr is

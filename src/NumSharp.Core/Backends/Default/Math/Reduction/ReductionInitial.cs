@@ -94,7 +94,7 @@ namespace NumSharp.Backends
             // A C# literal's 0-d array (NDArray.WasPythonLiteral, NumPy's NPY_ARRAY_WAS_PYTHON_LITERAL temporary) stands
             // for the Python scalar it was made from: pack the literal's own value, not the array's cast. A Half / char
             // value's array (NDArray.WasNumPyScalar) unwraps to the NumPy scalar, whose case below applies NumPy's rule.
-            if (initial is NDArray literal && (literal.WasPythonLiteral || literal.WasNumPyScalar))
+            if (initial is NDArray literal && (literal.WasPythonLiteral || literal.WasPythonStr || literal.WasNumPyScalar))
                 initial = literal.Storage.GetAtIndex(0);
 
             slot.Clear();
@@ -112,7 +112,7 @@ namespace NumSharp.Backends
                     PackArray(nd, loop, slot);
                     return true;
                 case string s:
-                    PackString(s, loop, slot);
+                    PackText(s, null, loop, slot);
                     return true;
                 case bool b:
                     // A Python bool is an int subclass: True packs as 1 everywhere a number goes.
@@ -166,6 +166,10 @@ namespace NumSharp.Backends
                     return true;
                 case Complex z:
                     PackComplex(z, loop, slot);
+                    return true;
+                case byte[] bytes:
+                    // A Python bytes (checked before IEnumerable: a byte[] is one value, not a list of ints).
+                    PackText(null, bytes, loop, slot);
                     return true;
                 case ITuple:
                     PackSequence("tuple", loop);
@@ -553,37 +557,32 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Packs a Python str: <c>int(s)</c> into an integer loop, <c>float(s)</c> into a float loop, <c>complex(s)</c>
-        ///     into a complex loop, <see cref="decimal.Parse(string, IFormatProvider)"/> into decimal (NumSharp-only).
+        ///     Packs a Python <c>str</c> or <c>bytes</c>: <c>int(s)</c> into an integer loop (range-checked like any Python
+        ///     int), <c>float(s)</c> into a float loop (rounded once more into float32 / float16), <c>complex(s)</c> into a
+        ///     complex loop (bytes decoded as UTF-8 first) — CPython 3.12's exact grammars and texts
+        ///     (<see cref="Strings.NDTextParse"/>), quoting the object as <c>'…'</c> / <c>b'…'</c>. NumSharp's decimal parses as
+        ///     a float64 and converts like the float64 → decimal cast (the rule its text conversions share).
         /// </summary>
-        /// <param name="s">The text.</param>
+        /// <param name="text">The str, or null when <paramref name="bytes"/> is given.</param>
+        /// <param name="bytes">The bytes, or null when <paramref name="text"/> is given.</param>
         /// <param name="loop">The loop dtype (not bool).</param>
         /// <param name="slot">Receives the element.</param>
-        /// <exception cref="ValueError">The text is not a valid literal (Python's texts).</exception>
-        /// <exception cref="OverflowException">The parsed integer does not fit an integer loop.</exception>
-        private static void PackString(string s, NPTypeCode loop, Span<byte> slot)
+        /// <exception cref="ValueError">The text is not a valid literal (Python's texts), or an integer literal has more
+        ///     than 4300 digits.</exception>
+        /// <exception cref="OverflowException">The parsed integer does not fit an integer loop (NumPy's LP64 texts).</exception>
+        /// <exception cref="UnicodeDecodeError">Bytes into a complex loop that are not UTF-8.</exception>
+        private static unsafe void PackText(string text, byte[] bytes, NPTypeCode loop, Span<byte> slot)
         {
-            if (IsIntegerLoop(loop))
-            {
-                PackPyInt(PythonInt.Parse(s, 10), loop, slot);
-                return;
-            }
-
-            if (loop == NPTypeCode.Complex)
-            {
-                Unsafe.WriteUnaligned(ref slot[0], ParsePythonComplex(s));
-                return;
-            }
-
-            if (loop == NPTypeCode.Decimal)
-            {
-                if (!decimal.TryParse(s.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var m))
-                    throw new ValueError($"could not convert string to float: {PythonInt.Repr(s)}");
-                Unsafe.WriteUnaligned(ref slot[0], m);
-                return;
-            }
-
-            WriteFloat(ParsePythonFloat(s), loop, slot);
+            byte* canon = stackalloc byte[16];
+            if (text is not null)
+                Strings.NDTextParse.ParseObject(text, loop, canon);
+            else
+                Strings.NDTextParse.ParseObject(bytes, loop, canon);
+            // The canonical value (int64 / uint64 range-checked for the loop, a double, a complex) cast into the loop: exact
+            // for an integer, one more rounding for float32 / float16 (NumPy's FLOAT_setitem / npy_double_to_half).
+            var canonType = Strings.NDTextParse.CanonicalType(Strings.NDTextParse.FamilyOf(loop));
+            fixed (byte* d = slot)
+                NDIterCasting.ConvertValue(canon, d, canonType, loop);
         }
 
         /// <summary>
@@ -679,120 +678,17 @@ namespace NumSharp.Backends
                 or NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64;
 
         /// <summary>
-        ///     Python's <c>float(str)</c>: surrounding whitespace ignored, an optional sign, then <c>inf</c> /
-        ///     <c>infinity</c> / <c>nan</c> (any case) or a decimal literal whose digits may be separated by single
-        ///     underscores.
+        ///     Python's <c>float(str)</c> (CPython 3.12's grammar: Unicode digits and whitespace rewritten, single underscores
+        ///     between digits, <c>inf</c> / <c>infinity</c> / <c>nan</c> in any case, <c>-nan</c> with the sign bit set).
         /// </summary>
         /// <param name="s">The text.</param>
         /// <returns>The correctly rounded double.</returns>
         /// <exception cref="ValueError">The text is not a float literal: "could not convert string to float: '…'".</exception>
-        internal static double ParsePythonFloat(string s)
+        internal static unsafe double ParsePythonFloat(string s)
         {
-            if (TryParsePythonFloat(s.AsSpan().Trim(), out double d))
-                return d;
-            throw new ValueError($"could not convert string to float: {PythonInt.Repr(s)}");
-        }
-
-        /// <summary>
-        ///     The grammar of <see cref="ParsePythonFloat"/> on already-trimmed text, without throwing.
-        /// </summary>
-        /// <param name="t">The trimmed text.</param>
-        /// <param name="value">Receives the value.</param>
-        /// <returns>Whether <paramref name="t"/> is a Python float literal.</returns>
-        private static bool TryParsePythonFloat(ReadOnlySpan<char> t, out double value)
-        {
-            value = 0;
-            if (t.IsEmpty)
-                return false;
-
-            int i = 0;
-            bool negative = false;
-            if (t[0] == '+' || t[0] == '-')
-            {
-                negative = t[0] == '-';
-                i = 1;
-            }
-
-            var word = t[i..];
-            if (word.Equals("inf", StringComparison.OrdinalIgnoreCase) || word.Equals("infinity", StringComparison.OrdinalIgnoreCase))
-            {
-                value = negative ? double.NegativeInfinity : double.PositiveInfinity;
-                return true;
-            }
-
-            if (word.Equals("nan", StringComparison.OrdinalIgnoreCase))
-            {
-                // CPython's float('nan') is the positive quiet NaN, float('-nan') the same with the sign bit set. Spelled in
-                // bits: .NET's double.NaN already HAS the sign bit (0xFFF8…), so -double.NaN would be the positive one.
-                value = BitConverter.Int64BitsToDouble(negative ? unchecked((long)0xFFF8000000000000UL) : 0x7FF8000000000000L);
-                return true;
-            }
-
-            // Digits, one '.', an exponent; an underscore only between two digits (PEP 515). Copy without underscores.
-            Span<char> buf = t.Length <= 256 ? stackalloc char[t.Length] : new char[t.Length];
-            int n = 0;
-            bool sawDigit = false;
-            for (int k = 0; k < t.Length; k++)
-            {
-                char c = t[k];
-                if (c == '_')
-                {
-                    if (k == 0 || k == t.Length - 1 || !char.IsAsciiDigit(t[k - 1]) || !char.IsAsciiDigit(t[k + 1]))
-                        return false;
-                    continue;
-                }
-
-                if (char.IsAsciiDigit(c))
-                    sawDigit = true;
-                else if (c != '.' && c != 'e' && c != 'E' && c != '+' && c != '-')
-                    return false;
-                buf[n++] = c;
-            }
-
-            return sawDigit && double.TryParse(buf[..n], NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent,
-                CultureInfo.InvariantCulture, out value);
-        }
-
-        /// <summary>
-        ///     Python's <c>complex(str)</c> for the forms a reduction's initial value plausibly takes: a real literal, an
-        ///     imaginary literal (<c>2j</c>), or <c>a±bj</c>, optionally in parentheses.
-        /// </summary>
-        /// <param name="s">The text.</param>
-        /// <returns>The value.</returns>
-        /// <exception cref="ValueError">"complex() arg is a malformed string".</exception>
-        private static Complex ParsePythonComplex(string s)
-        {
-            var t = s.AsSpan().Trim();
-            if (t.Length >= 2 && t[0] == '(' && t[^1] == ')')
-                t = t[1..^1].Trim();
-
-            if (TryParsePythonFloat(t, out double re))
-                return new Complex(re, 0);
-
-            if (t.Length >= 1 && (t[^1] == 'j' || t[^1] == 'J'))
-            {
-                var body = t[..^1];
-                if (body.IsEmpty || body is "+" || body is "-")
-                    return new Complex(0, body is "-" ? -1 : 1);
-                if (TryParsePythonFloat(body, out double imOnly))
-                    return new Complex(0, imOnly);
-
-                // a±bj: the split is the last sign that is not an exponent's sign and not the first character.
-                for (int k = body.Length - 1; k > 0; k--)
-                {
-                    char c = body[k];
-                    if ((c == '+' || c == '-') && body[k - 1] != 'e' && body[k - 1] != 'E')
-                    {
-                        var imText = body[k..];
-                        double im = imText is "+" ? 1 : imText is "-" ? -1 : double.NaN;
-                        if (TryParsePythonFloat(body[..k], out double r) && (!double.IsNaN(im) || TryParsePythonFloat(imText, out im)))
-                            return new Complex(r, im);
-                        break;
-                    }
-                }
-            }
-
-            throw new ValueError("complex() arg is a malformed string");
+            double value;
+            Strings.NDTextParse.ParseObject(s, NPTypeCode.Double, (byte*)&value);
+            return value;
         }
     }
 }

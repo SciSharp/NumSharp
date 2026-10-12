@@ -15,7 +15,8 @@ namespace NumSharp
         ///     non-empty square 2d array.</c>).</exception>
         /// <exception cref="TypeError">A square text matrix: its eigenvalues' finiteness check (<c>isfinite</c> has no text
         ///     loop).</exception>
-        /// <exception cref="StringComputationNotSupportedException">1-D text roots: NumPy parses them as numbers.</exception>
+        /// <exception cref="ValueError">A 1-D text root that does not parse as a float (NumPy casts the roots to their
+        ///     mintypecode, 'd' for text: <c>could not convert string to float: np.str_('x')</c>).</exception>
         /// <exception cref="NotSupportedException">A square matrix and no LAPACK backend installed (the eigenvalues).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.poly.html
@@ -38,12 +39,10 @@ namespace NumSharp
             }
             else if (nd == 1)
             {
-                // NumPy casts the roots to their mintypecode float, which PARSES text as numbers: the next phase.
-                if (text)
-                    throw Backends.Strings.NDStringUfuncs.NextPhase("poly", seq_of_zeros);
                 // A real (non-object) sequence is cast to its mintypecode float — float32 stays float32,
-                // everything else (int/bool/float16/float64) becomes float64; complex stays complex.
-                seq = seq_of_zeros.astype(PolyMinType(seq_of_zeros.typecode));
+                // everything else (int/bool/float16/float64) becomes float64; complex stays complex. Text has no
+                // mintypecode of its own ('U' is in no typeset), so it takes the default 'd': parsed into float64.
+                seq = seq_of_zeros.astype(text ? NPTypeCode.Double : PolyMinType(seq_of_zeros.typecode));
             }
             else
             {

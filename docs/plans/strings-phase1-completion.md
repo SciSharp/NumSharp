@@ -164,3 +164,24 @@ After this plan, phase 2 loses P2.4 and gains the `T` forms of P2.1–P2.6 plus 
 - 2026-10-10 — Investigation and plan (in chat). The owner answered D1, D2, D4, D5, D6 on 2026-10-12 and rebased
   `strings` onto journey4 (D9).
 - 2026-10-12 — This document.
+- 2026-10-12 — **P1.1 done.** Number ↔ text for `S` / `U` through every route that converts. Engine:
+  `Backends/Strings/NDTextFormat.cs` (the NumPy scalar's `str()` per type, `REQUIRED_STR_LEN`), `NDTextParse.cs` (CPython
+  3.12 `int()` / `float()` / `complex()`, NumPy's error texts in both quoting styles, the LP64 overflow texts, the
+  4300-digit limit, strict UTF-8 for `S → complex`), `NDTextConversion.cs` (NumPy's raw assignment order, blocks of 128
+  committed whole, masked runs), `Utilities/PyUnicode.cs` (CPython 3.12's decimal and space tables). Routes: `astype`,
+  setitem / `fill` / `full` / `ones` / `zeros_like` / `pad` / `copyto` / `np.array`, the iterator's buffered casts, numpy.ma
+  fills, `np.add` under a string `dtype=` over numbers (`AddUnderStringRequest`), comparisons and logical ufuncs into a
+  text `out=`, every numeric ufunc / clip / matmul / modf / frexp into a text `out=` (`IntoTextOut`: with `where=` the out's
+  text is parsed into the loop dtype first, as NumPy's READWRITE buffer does), numeric-`dtype=` reductions over text
+  (`ParseForNumericReduce`: prod / cumprod / nancumprod / max / min), `np.cov` / `np.corrcoef` with a numeric `dtype=`,
+  `np.linalg.norm`, `np.i0`, `np.roots`, `np.poly`, `matrix_power(text, 0)`. D6 done: a C# string is a 0-d `U` array.
+  Found on the way and fixed: numpy.ma's `astype` converts the stored fill BEFORE the data (NumPy's `__array_finalize__`
+  runs at allocation); a masked fill value prints with its mask in the conversion error; `np.power`'s integer loop raised
+  for a masked-off negative exponent (NumPy raises inside the loop); `frexp`'s cast errors name "output 1" / "output 2".
+  Gate: oracle section `strconv` (4,487 cases, strict), the conversion cases of the other sections flipped to phase 1,
+  per-section deferral ceilings (`StringOracleTests.DeferralCeilings`: 537 deferrals left, all sorting / searching / set
+  routines / histograms / quantiles; were 970), `TextNumberConversionTests` (20). Speed (NPY/NS, two pinned P-cores,
+  `DOTNET_TC_CallCountingDelayMs=0`): i8→U 5.7–7.9×, f8→U 2.6–3.0×, U→i8 5.4–5.6×, U→f8 3.2–3.7×, S→f8 2.1–2.5×, U→c16
+  3.5–4.0×, copyto f8→U32 2.5–2.9×, `np.add(f8, f8, dtype='U')` 2.2–3.0× at 1K / 100K / 1M. Benchmark trap: without
+  `DOTNET_TC_CallCountingDelayMs=0` the first row of a run is measured at tier 0 even after 120 warm-up calls (U→f8 at 1K
+  read 1.36× there, 3.7× with it).

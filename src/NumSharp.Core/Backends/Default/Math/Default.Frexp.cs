@@ -19,8 +19,16 @@ namespace NumSharp.Backends
         ///     exponent, both C-contiguous with the shape of <paramref name="x"/>. (The public
         ///     <see cref="np.frexp"/> wrapper restores F-order when the input was F-contiguous.)
         /// </returns>
+        /// <param name="out1">The mantissa output, or null (a TEXT output receives the mantissas as text).</param>
+        /// <param name="out2">The exponent output, or null (a TEXT output receives the exponents as text).</param>
+        /// <param name="where">The bool write mask, or null.</param>
         /// <exception cref="IncorrectTypeException"><paramref name="x"/> is complex — frexp has no complex loop
         /// (NumPy raises the same "not supported for the input types" TypeError).</exception>
+        /// <exception cref="ArgumentException">An output its loop dtype cannot be cast to under same_kind (NumPy numbers the
+        /// outputs: "output 1" / "output 2"), or a non-bool <paramref name="where"/>.</exception>
+        /// <exception cref="ValueError">A text output under <paramref name="where"/> whose current text does not parse into
+        /// its loop dtype.</exception>
+        /// <exception cref="NotSupportedException">A dtype the frexp kernels do not handle.</exception>
         /// <remarks>
         ///     Bit-identical to win-amd64 NumPy 2.4.2, including the platform C-runtime quirks its scalar
         ///     <c>npy_frexp</c> produces: <c>frexp(±inf)</c> and <c>frexp(NaN)</c> report exponent <c>-1</c>
@@ -40,10 +48,15 @@ namespace NumSharp.Backends
             var floatType = ResolveUnaryFloatReturnType(x, null, "frexp");
             // out1 (mantissa) takes a same_kind cast from the mantissa loop dtype; out2 (exponent) from int32
             // (so an int64 exponent-out is accepted, an int32 mantissa-out is not). Matches NumPy's ufunc rules.
+            // NumPy numbers the outputs of a multi-output ufunc by operand position ("output 1" / "output 2", probed:
+            // frexp(f8, out=(int8, int32)) reports output 1); a text output is checked by descriptor.
             if (out1 is not null)
-                ValidateOutCast(floatType, out1.typecode, "frexp");
+                ValidateNumberedOutCast("frexp", 1, floatType, out1);
             if (out2 is not null)
-                ValidateOutCast(NPTypeCode.Int32, out2.typecode, "frexp");
+                ValidateNumberedOutCast("frexp", 2, NPTypeCode.Int32, out2);
+            // A text output under where= is READWRITE: NumPy parses its current text into the loop dtype first.
+            ReadMaskedTextOut(out1, floatType, where);
+            ReadMaskedTextOut(out2, NPTypeCode.Int32, where);
 
             // Read the input as a C-contiguous buffer at the mantissa dtype (reads through ANY layout — a
             // strided/transposed/broadcast view is materialized in logical C-order; a no-op passthrough when x

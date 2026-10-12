@@ -74,11 +74,13 @@ namespace NumSharp.Tests.Backends.Unmanaged
             str = str.reshape(5, 5);
 
             // SetString writes the characters of the text into a char row. (SetData(hello, 3) is NumPy's assignment of
-            // the 0-d <U5 text "hello" instead: a text-to-char conversion, which the string support refuses for now.)
+            // the 0-d <U5 text "hello" instead: a char array is NumPy's uint16, whose setitem parses the text with int(),
+            // so "hello" raises int()'s ValueError, probed against NumPy 2.4.2.)
             str.SetString(hello, 3);
             str.GetString(3).Should().Be(hello);
             new Action(() => { str.SetString(hello, 3, 1); }).Should().Throw<ArgumentOutOfRangeException>();
-            new Action(() => str.SetData(hello, 3)).Should().Throw<NotSupportedException>();
+            new Action(() => str.SetData(hello, 3)).Should().Throw<ValueError>()
+                .WithMessage("invalid literal for int() with base 10: 'hello'");
         }
     }
 }

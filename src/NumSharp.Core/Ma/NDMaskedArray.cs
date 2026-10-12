@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using System.Text;
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Printing;
 using NumSharp.Backends.Strings;
 using NumSharp.Generic;
@@ -636,30 +637,61 @@ namespace NumSharp
         /// <param name="dtype">Target element dtype.</param>
         /// <param name="copy">Copy the data even when the dtype already matches (NumPy default true).</param>
         /// <returns>A masked array of the new dtype with the same mask.</returns>
-        /// <exception cref="StringComputationNotSupportedException">The cast converts between text and numbers (the data or
-        ///     a text fill value): the next phase of the string support.</exception>
+        /// <exception cref="TypeError">The stored fill does not convert to the new dtype (<c>Cannot convert fill_value zz to
+        ///     dtype float64</c>; checked BEFORE the data is cast, see the remarks).</exception>
+        /// <exception cref="ValueError">A text element of the data that does not parse into a numeric <paramref name="dtype"/>
+        ///     (<c>could not convert string to float: np.str_('ab')</c>).</exception>
+        /// <exception cref="OverflowException">An integer text of the data outside an integer <paramref name="dtype"/>.</exception>
+        /// <exception cref="UnicodeError">A text cast between the string classes that cannot encode or decode a character.</exception>
         /// <remarks>
         ///     NumPy's <c>__array_finalize__</c> re-checks a stored fill against the new dtype
         ///     (<c>_check_fill_value(self._fill_value, self.dtype)</c>): the result stores a converted COPY (an array cast,
         ///     unsafe, never raising for numbers). A fill of 7.5 reads back <see cref="long"/> 7 after <c>astype(int64)</c>;
         ///     a text fill follows a width change (<c>'qrs'</c> becomes <c>'q'</c> after <c>astype('U1')</c>, <c>b'qr'</c>
-        ///     after <c>astype('S2')</c>). A fill that was never set or read is not stored, so the result reads ITS OWN
-        ///     default — but a default that was READ is stored and converted: the float64 default 1e20 becomes
-        ///     <c>long.MinValue</c> after <c>astype(int64)</c> (MSVC's out-of-range float-to-int cast) and 0 after
-        ///     <c>astype(int8)</c>, exactly as in NumPy. The data is cast first, so its own refusal wins. The result's mask
-        ///     is a COPY of this array's and its hard-mask flag is this array's; with <paramref name="copy"/> false and the
-        ///     same dtype the array itself is returned.
+        ///     after <c>astype('S2')</c>) and a number fill becomes its <c>str()</c> after a text cast. A fill that was never
+        ///     set or read is not stored, so the result reads ITS OWN default — but a default that was READ is stored and
+        ///     converted: the float64 default 1e20 becomes <c>long.MinValue</c> after <c>astype(int64)</c> (MSVC's
+        ///     out-of-range float-to-int cast) and 0 after <c>astype(int8)</c>, and a text array's read default <c>'N/A'</c>
+        ///     raises <c>Cannot convert fill_value N/A to dtype float64</c>, exactly as in NumPy.
+        ///     <para>
+        ///     <b>Order.</b> <c>ndarray.astype</c> allocates the result (<c>PyArray_NewLikeArray</c>, whose
+        ///     <c>__array_finalize__</c> converts the fill) BEFORE it copies the data into it, so a fill that does not convert
+        ///     is reported even when the data would not convert either (probed: <c>['ab', '1']</c> with fill <c>'zz'</c> raises
+        ///     the fill's TypeError; with fill <c>'3'</c> the data's ValueError). The result's mask is a COPY of this array's
+        ///     and its hard-mask flag is this array's; with <paramref name="copy"/> false and an equivalent dtype the array
+        ///     itself is returned (no new array, so no fill conversion).
+        ///     </para>
         /// </remarks>
         public NDMaskedArray astype(DType dtype, bool copy = true)
         {
-            var data = _data.astype(dtype, copy);
-            // ndarray.astype(copy=False) of the same dtype returns the array ITSELF.
-            if (ReferenceEquals(data, _data))
-                return this;
+            // The descriptor the new array is allocated with (an unsized string request takes the data's width, NumPy's
+            // PyArray_AdaptDescriptorToArray), which is the dtype `__array_finalize__` converts the fill to.
+            var to = NDStringCasting.AdaptDescriptorToArray(_data.dtype, dtype);
+            // ndarray.astype(copy=False) of an equivalent dtype returns the array ITSELF: no new array, no `__array_finalize__`.
+            bool sameArray = !copy && DTypeCasting.GetCastInfo(to, _data.dtype, null, out long viewOffset) == NPY_CASTING.NPY_NO_CASTING
+                             && viewOffset != ArrayMethod.NoView;
             // `__array_finalize__`: `_check_fill_value(self._fill_value, self.dtype)` converts a stored fill to the new dtype
             // (a copy: 7.5 becomes int64 7, the read default 1e20 becomes long.MinValue, 'qrs' becomes 'q' in <U1); an
-            // array with nothing stored passes None on, so the result materializes ITS default when read.
-            var fill = _fill_value is null ? null : MaskedArrayModule.StoreFill(_fill_value, data.dtype);
+            // array with nothing stored passes None on, so the result materializes ITS default when read. It runs before
+            // the data is cast, so its refusal wins over the data's.
+            var fill = sameArray || _fill_value is null ? null : MaskedArrayModule.StoreFill(_fill_value, to);
+            NDArray data;
+            try
+            {
+                data = _data.astype(dtype, copy);
+            }
+            catch
+            {
+                // The data did not convert: the converted fill belongs to no array.
+                fill?.Dispose();
+                throw;
+            }
+            // ndarray.astype(copy=False) of the same dtype returns the array ITSELF.
+            if (ReferenceEquals(data, _data))
+            {
+                fill?.Dispose();
+                return this;
+            }
             // `__array_finalize__` over a NEW buffer: the mask is copied (`_mask.astype(...)`, so a masked write through
             // the result never reaches this array) and the hard-mask flag carries over (`_update_from(obj)`).
             return new NDMaskedArray(data, _mask?.copy(), fill) { _hardmask = _hardmask };
@@ -2477,35 +2509,46 @@ namespace NumSharp
                     using (var src = NDArray.Scalar(s))
                         return TextFillToDType(src, ndtype, s);
                 case byte[] b:
+                    // np.asarray(b'1.5', dtype=float64) packs the bytes object with the dtype's setitem (float(b'1.5')).
+                    if (!textData)
+                        return BytesFillToNumber(b, ndtype);
                     using (var src = NDArray.Scalar(b))
-                    {
-                        // np.asarray(b'1.5', dtype=float64) parses the bytes: the next phase of the string support.
-                        if (!textData)
-                            throw NDStringCasting.TextConversion(src.dtype, ndtype);
                         return TextFillToDType(src, ndtype, PyRepr.Bytes(b));
-                    }
                 case NDMaskedArray m:
-                    // np.asarray(masked_array) reads its data (the mask plays no part in a fill value).
+                    // np.asarray(masked_array) reads its data (the mask plays no part in a fill value) — but the error text
+                    // formats the fill object itself with %s, a masked array's str ("[-- 'c' 'de']").
+                    if (m._data.typecode == NPTypeCode.String || textData)
+                        return ArrayFill(m._data, ndtype, m.ToString());
                     return CheckFillValue(m._data, ndtype);
                 case NDArray nd:
-                    bool textFill = nd.typecode == NPTypeCode.String;
-                    if (textFill && textData)
-                        return TextFillToDType(nd, ndtype, nd.ToString());
-                    // Text into a number parses it, a number into text formats it: both compute on text.
-                    if (textFill || textData)
-                        throw NDStringCasting.TextConversion(nd.dtype, ndtype);
+                    if (nd.typecode == NPTypeCode.String || textData)
+                        return ArrayFill(nd, ndtype, nd.ToString());
                     // A C# literal's 0-d array is a Python scalar (packed, range-checked); any other array is cast.
                     return ConvertNumericFill(nd, nd.WasPythonLiteral ? nd.Storage.GetAtIndex(0) : null, ndtype);
                 default:
-                    // A C# number, bool, char, Half, decimal or Complex: into a text dtype NumPy formats it as text. A
-                    // BigInteger (a Python int of any size) has no storage lane; the message names int64, NumPy's default
-                    // integer.
+                    // A C# number, bool, char, Half, decimal, Complex or BigInteger: into a text dtype NumPy formats it as
+                    // its str() (np.asarray(5, dtype='U3') is '5'), which cannot fail.
                     if (textData)
-                        throw NDStringCasting.TextConversion(
-                            fill_value is BigInteger ? DType.From(NPTypeCode.Int64) : (DType)fill_value.GetType(), ndtype);
+                        return NDStringArrays.FromScalar(fill_value, ndtype);
                     return ConvertNumericFill(fill_value, NDArray.IsStoreScalar(fill_value) ? fill_value : null, ndtype);
             }
         }
+
+        /// <summary>
+        ///     The text half of <see cref="CheckFillValue"/> for an array fill: text into text converts between the string
+        ///     classes (<see cref="TextFillToDType"/>), text into a number parses each element and a number into text formats
+        ///     it (<see cref="CastFillAcrossKinds"/>).
+        /// </summary>
+        /// <param name="fill">The fill's data (text, or numbers for a text <paramref name="ndtype"/>); never modified.</param>
+        /// <param name="ndtype">The data dtype.</param>
+        /// <param name="display">The fill object as NumPy's <c>%s</c> formats it (a masked fill's str shows <c>--</c>).</param>
+        /// <returns>A new array of <paramref name="ndtype"/> the caller owns.</returns>
+        /// <exception cref="TypeError">NumPy's <c>Cannot convert fill_value … to dtype …</c> (see the two helpers).</exception>
+        /// <exception cref="SystemError">A <c>U</c> fill element one unit above U+10FFFF.</exception>
+        private static NDArray ArrayFill(NDArray fill, DType ndtype, string display)
+            => fill.typecode == NPTypeCode.String && ndtype.typecode == NPTypeCode.String
+                ? TextFillToDType(fill, ndtype, display)
+                : CastFillAcrossKinds(fill, ndtype, display);
 
         /// <summary>
         ///     The numeric half of <see cref="CheckFillValue"/>: <c>np.array(np.asarray(fill_value, dtype=ndtype))</c> for a
@@ -2564,6 +2607,59 @@ namespace NumSharp
         ///     intermediate's fill to the finalizer (the leak gate counted <c>ma.trace</c>'s <c>astype</c> copy).</remarks>
         internal static NDArray StoreFill(object fill_value, DType ndtype)
             => fill_value is null ? null : CheckFillValue(fill_value, ndtype);
+
+        /// <summary>
+        ///     The text ↔ number half of <see cref="CheckFillValue"/>: <c>np.asarray(fill, dtype=ndtype)</c> for a text array
+        ///     fill and a numeric dtype (each text parsed by the dtype's <c>int()</c> / <c>float()</c> / <c>complex()</c>), or
+        ///     a numeric array fill and a text dtype (each number written as its <c>str()</c>), with numpy.ma's
+        ///     <c>except (OverflowError, ValueError): raise TypeError(...)</c> around it.
+        /// </summary>
+        /// <param name="fill">The fill array; never modified.</param>
+        /// <param name="ndtype">The data dtype.</param>
+        /// <param name="display">The fill as NumPy's <c>%s</c> formats it, for the error text.</param>
+        /// <returns>A new array of <paramref name="ndtype"/> the caller owns (the fill's shape).</returns>
+        /// <exception cref="TypeError">A text that does not parse, or an integer text outside the dtype: NumPy's
+        ///     <c>Cannot convert fill_value … to dtype …</c>, the parse error as the inner exception.</exception>
+        /// <exception cref="SystemError">A <c>U</c> fill element that is one unit above U+10FFFF (not a ValueError, so
+        ///     numpy.ma lets it through).</exception>
+        private static NDArray CastFillAcrossKinds(NDArray fill, DType ndtype, string display)
+        {
+            try
+            {
+                return fill.astype(ndtype);
+            }
+            catch (Exception e) when (e is OverflowException or ValueError)
+            {
+                throw new TypeError($"Cannot convert fill_value {display} to dtype {ndtype}", e);
+            }
+        }
+
+        /// <summary>
+        ///     <c>np.asarray(b, dtype=ndtype)</c> for a bytes fill and a numeric dtype: the Python bytes object packed by the
+        ///     dtype's setitem (<c>int(b)</c> / <c>float(b)</c> / <c>complex(b.decode())</c>), with numpy.ma's TypeError around a
+        ///     failed parse.
+        /// </summary>
+        /// <param name="b">The bytes.</param>
+        /// <param name="ndtype">The numeric data dtype.</param>
+        /// <returns>A new 0-d array of <paramref name="ndtype"/> the caller owns.</returns>
+        /// <exception cref="TypeError">The bytes do not parse into the dtype (<c>Cannot convert fill_value b'x' to dtype
+        ///     float64</c>), the parse error as the inner exception.</exception>
+        private static unsafe NDArray BytesFillToNumber(byte[] b, DType ndtype)
+        {
+            var tc = ndtype.typecode;
+            var slot = stackalloc byte[ReductionInitial.SlotBytes];
+            try
+            {
+                ReductionInitial.TryPack(b, tc, new Span<byte>(slot, ReductionInitial.SlotBytes));
+            }
+            catch (Exception e) when (e is OverflowException or ValueError)
+            {
+                throw new TypeError($"Cannot convert fill_value {PyRepr.Bytes(b)} to dtype {ndtype}", e);
+            }
+            var result = new NDArray(ndtype, Shape.Scalar, false);
+            Buffer.MemoryCopy(slot, (byte*)result.Address, result.dtypesize, result.dtypesize);
+            return result;
+        }
 
         /// <summary>
         ///     The string-to-string half of <see cref="CheckFillValue"/>: <c>np.asarray(fill, dtype=ndtype)</c> for a text
@@ -4454,50 +4550,26 @@ namespace NumSharp
 
         /// <summary>
         ///     numpy.ma's <c>filled(a, fill)</c> as a NUMERIC operation reads it (<c>self.filled(0).sum()</c>,
-        ///     <c>self.filled(1).cumprod()</c>, <c>np.dot(filled(a, 0), filled(b, 0))</c>, <c>np.inner(...)</c>), safe for
-        ///     TEXT data. NumPy formats the number into the masked text slots (<c>'0'</c>) — a step that cannot fail and
-        ///     keeps the dtype and the shape — so the operation then decides the call: over text it refuses by dtype or
+        ///     <c>self.filled(1).cumprod()</c>, <c>np.dot(filled(a, 0), filled(b, 0))</c>, <c>np.inner(...)</c>). Over TEXT data
+        ///     NumPy writes the number into the masked text slots as its <c>str()</c> (<c>'0'</c>) — a step that cannot fail
+        ///     and keeps the dtype and the shape — and the operation then decides the call: over text it refuses by dtype or
         ///     shape (no string loop, <c>data type must provide an itemsize</c>, a misaligned product, a rank error), or it
-        ///     computes on the text. Formatting numbers into text is the next phase, so for a text operand with a masked
-        ///     slot this returns the UNFILLED data and records the deferral: the caller runs its operation (whose refusal
-        ///     is then NumPy's, the dtype and shape being the same) and throws the deferral if the operation returns.
+        ///     computes on the text.
         /// </summary>
         /// <param name="a">The operand: a masked array, a plain array or an array-like.</param>
         /// <param name="fill">The value numpy.ma fills the masked slots with.</param>
-        /// <param name="deferral">Receives the next-phase exception when <paramref name="a"/> is text with a masked slot
-        ///     and <paramref name="fill"/> is a number (left unchanged otherwise, so several operands share one).</param>
+        /// <param name="deferral">Left unchanged (the callers' slot for a refusal recorded before the operation runs; since
+        ///     numbers format into text, none is recorded here — the parameter stays so the callers keep one shape).</param>
         /// <param name="reduction">True for a reduction's fill (<see cref="FilledForReduction"/>: a K-order copy, reading
         ///     the data's own memory order), false for the public <see cref="NDMaskedArray.filled(object)"/>.</param>
-        /// <returns>The filled data (or the data itself / a view of it when no slot is masked), or the unfilled text data
-        ///     when the deferral was recorded.</returns>
+        /// <returns>The filled data (or the data itself / a view of it when no slot is masked).</returns>
         /// <exception cref="TypeError">A fill numpy.ma refuses (see <see cref="CheckFillValue"/>).</exception>
         private static NDArray FilledForNumericOp(object a, object fill, ref Exception deferral, bool reduction = false)
         {
             if (a is not NDMaskedArray m || m._mask is null)
                 return AsData(a);
-            if (m._data.typecode == NPTypeCode.String && FormatsAsText(fill) && np.any(m._mask))
-            {
-                deferral ??= FormattingDeferral(fill, m._data.dtype);
-                return m._data;
-            }
             return reduction ? FilledForReduction(m._data, m._mask, fill) : m.filled(fill);
         }
-
-        /// <summary>
-        ///     The exception NumPy's <c>_check_fill_value</c> formatting a number into a text dtype stands for in NumSharp:
-        ///     the next phase of the string support (the cast <c>number → U/S</c>).
-        /// </summary>
-        /// <param name="fill">The number (or numeric array) NumPy would format.</param>
-        /// <param name="ndtype">The text dtype it would be formatted into.</param>
-        /// <returns>The <see cref="StringComputationNotSupportedException"/> to throw.</returns>
-        private static Exception FormattingDeferral(object fill, DType ndtype) => fill switch
-        {
-            NDMaskedArray m => NDStringCasting.TextConversion(m._data.dtype, ndtype),
-            NDArray nd => NDStringCasting.TextConversion(nd.dtype, ndtype),
-            // A BigInteger (a Python int of any size) has no storage lane; the message names int64, NumPy's default integer.
-            BigInteger => NDStringCasting.TextConversion(DType.From(NPTypeCode.Int64), ndtype),
-            _ => NDStringCasting.TextConversion((DType)fill.GetType(), ndtype),
-        };
 
         /// <summary>
         ///     NumPy's <c>MaskedArray.filled(fill)</c> as numpy.ma's reductions (<c>self.filled(0).sum(...)</c>, prod, min,
