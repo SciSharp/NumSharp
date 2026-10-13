@@ -5,6 +5,7 @@ using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -327,9 +328,20 @@ namespace NumSharp
 
         /// <summary>
         ///     Converts a list of objects to an NDArray of the specified element type.
-        ///     The pattern <c>is T v ? v : Convert.ToT(item)</c> takes the direct-cast fast path for
-        ///     homogeneous collections while still handling mixed-type promotion via Convert.
+        ///     The pattern <c>is T v ? v : Converts.ToT(item)</c> takes the direct-cast fast path for
+        ///     homogeneous collections while still handling mixed-type promotion via <see cref="Converts"/>.
         /// </summary>
+        /// <param name="items">The non-null items, in order.</param>
+        /// <param name="elementType">The promoted element type (<see cref="FindCommonNumericType"/>).</param>
+        /// <returns>The 1-D array, or null when <paramref name="elementType"/> is not a NumSharp dtype.</returns>
+        /// <remarks>
+        ///     The element type is the promotion of every item's type, so a numeric item converts into a type at least
+        ///     as wide as its own and the conversion is exact. It goes through <see cref="Converts"/>, not
+        ///     <see cref="Convert"/>: <see cref="Half"/> and <see cref="Complex"/> are not <see cref="IConvertible"/>,
+        ///     so <c>Convert.ToDouble</c> threw for a float16 item beside a float64 one (<c>new object[] { (Half)1, 2.5 }</c>),
+        ///     and a <see cref="Complex"/> target read every non-complex item through that same call (a float16 item threw
+        ///     there too).
+        /// </remarks>
         private static NDArray ConvertObjectListToNDArray(List<object> items, Type elementType)
         {
             var span = CollectionsMarshal.AsSpan(items);
@@ -338,105 +350,105 @@ namespace NumSharp
             {
                 var arr = GC.AllocateUninitializedArray<bool>(span.Length);
                 for (int i = 0; i < span.Length; i++)
-                    arr[i] = span[i] is bool v ? v : Convert.ToBoolean(span[i]);
+                    arr[i] = span[i] is bool v ? v : Converts.ToBoolean(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(byte))
             {
                 var arr = GC.AllocateUninitializedArray<byte>(span.Length);
                 for (int i = 0; i < span.Length; i++)
-                    arr[i] = span[i] is byte v ? v : Convert.ToByte(span[i]);
+                    arr[i] = span[i] is byte v ? v : Converts.ToByte(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(short))
             {
                 var arr = GC.AllocateUninitializedArray<short>(span.Length);
                 for (int i = 0; i < span.Length; i++)
-                    arr[i] = span[i] is short v ? v : Convert.ToInt16(span[i]);
+                    arr[i] = span[i] is short v ? v : Converts.ToInt16(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(ushort))
             {
                 var arr = GC.AllocateUninitializedArray<ushort>(span.Length);
                 for (int i = 0; i < span.Length; i++)
-                    arr[i] = span[i] is ushort v ? v : Convert.ToUInt16(span[i]);
+                    arr[i] = span[i] is ushort v ? v : Converts.ToUInt16(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(int))
             {
                 var arr = GC.AllocateUninitializedArray<int>(span.Length);
                 for (int i = 0; i < span.Length; i++)
-                    arr[i] = span[i] is int v ? v : Convert.ToInt32(span[i]);
+                    arr[i] = span[i] is int v ? v : Converts.ToInt32(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(uint))
             {
                 var arr = GC.AllocateUninitializedArray<uint>(span.Length);
                 for (int i = 0; i < span.Length; i++)
-                    arr[i] = span[i] is uint v ? v : Convert.ToUInt32(span[i]);
+                    arr[i] = span[i] is uint v ? v : Converts.ToUInt32(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(long))
             {
                 var arr = GC.AllocateUninitializedArray<long>(span.Length);
                 for (int i = 0; i < span.Length; i++)
-                    arr[i] = span[i] is long v ? v : Convert.ToInt64(span[i]);
+                    arr[i] = span[i] is long v ? v : Converts.ToInt64(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(ulong))
             {
                 var arr = GC.AllocateUninitializedArray<ulong>(span.Length);
                 for (int i = 0; i < span.Length; i++)
-                    arr[i] = span[i] is ulong v ? v : Convert.ToUInt64(span[i]);
+                    arr[i] = span[i] is ulong v ? v : Converts.ToUInt64(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(char))
             {
                 var arr = GC.AllocateUninitializedArray<char>(span.Length);
                 for (int i = 0; i < span.Length; i++)
-                    arr[i] = span[i] is char v ? v : Convert.ToChar(span[i]);
+                    arr[i] = span[i] is char v ? v : Converts.ToChar(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(float))
             {
                 var arr = GC.AllocateUninitializedArray<float>(span.Length);
                 for (int i = 0; i < span.Length; i++)
-                    arr[i] = span[i] is float v ? v : Convert.ToSingle(span[i]);
+                    arr[i] = span[i] is float v ? v : Converts.ToSingle(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(double))
             {
                 var arr = GC.AllocateUninitializedArray<double>(span.Length);
                 for (int i = 0; i < span.Length; i++)
-                    arr[i] = span[i] is double v ? v : Convert.ToDouble(span[i]);
+                    arr[i] = span[i] is double v ? v : Converts.ToDouble(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(decimal))
             {
                 var arr = GC.AllocateUninitializedArray<decimal>(span.Length);
                 for (int i = 0; i < span.Length; i++)
-                    arr[i] = span[i] is decimal v ? v : Convert.ToDecimal(span[i]);
+                    arr[i] = span[i] is decimal v ? v : Converts.ToDecimal(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(sbyte))
             {
                 var arr = GC.AllocateUninitializedArray<sbyte>(span.Length);
                 for (int i = 0; i < span.Length; i++)
-                    arr[i] = span[i] is sbyte v ? v : Convert.ToSByte(span[i]);
+                    arr[i] = span[i] is sbyte v ? v : Converts.ToSByte(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(Half))
             {
                 var arr = GC.AllocateUninitializedArray<Half>(span.Length);
                 for (int i = 0; i < span.Length; i++)
-                    arr[i] = span[i] is Half v ? v : (Half)Convert.ToDouble(span[i]);
+                    arr[i] = span[i] is Half v ? v : Converts.ToHalf(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(Complex))
             {
                 var arr = GC.AllocateUninitializedArray<Complex>(span.Length);
                 for (int i = 0; i < span.Length; i++)
-                    arr[i] = span[i] is Complex v ? v : new Complex(Convert.ToDouble(span[i]), 0.0);
+                    arr[i] = span[i] is Complex v ? v : Converts.ToComplex(span[i]);
                 return np.array(arr);
             }
 

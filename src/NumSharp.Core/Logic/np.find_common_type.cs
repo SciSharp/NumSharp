@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using NumSharp.Backends;
 
 namespace NumSharp
@@ -1088,119 +1089,95 @@ namespace NumSharp
 
         #region Private of find_common_type
 
+        /// <summary>
+        ///     The common type of a set of array types: NumPy's <c>np.result_type</c> over them
+        ///     (<c>PyArray_PromoteDTypeSequence</c>), which does not depend on their order.
+        /// </summary>
+        /// <param name="dtypelist">The types (any order).</param>
+        /// <returns>The promoted type; <see cref="NPTypeCode.Empty"/> for an empty list.</returns>
+        /// <exception cref="NotSupportedException">A type is the string lane (a numeric promotion cannot take text).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     Two types read the frozen array-array table (<see cref="_nptypemap_arr_arr"/>). Three or more run NumPy's
+        ///     sequence reduction (<see cref="DTypePromotion.PromoteDTypeSequence"/>): the DType class with the highest type
+        ///     number promotes every other one and the results are combined, so <c>int8, uint8, float16</c> is
+        ///     <c>float16</c> in every order, where a pairwise fold gives <c>float32</c> in this order
+        ///     (<c>int8 + uint8</c> is <c>int16</c>, then <c>int16 + float16</c> is <c>float32</c>) and <c>float16</c> in
+        ///     another. A builtin class's common class IS the table, so a pair gives the table's answer either way.
+        ///     </para>
+        ///     <para>
+        ///     This replaced a loop that promoted the list two entries at a time and kept only the LAST pair's result, so
+        ///     four or more types lost every pair but one (<c>int8, int8, float64, int8</c> gave <c>int8</c>; NumPy gives
+        ///     <c>float64</c>), and three types folded in list order (10 of the 2,197 three-type combinations of NumPy's
+        ///     13 dtypes differed from NumPy).
+        ///     </para>
+        /// </remarks>
+        [MethodImpl(Optimize)]
+        private static NPTypeCode PromoteTypeSequence(ReadOnlySpan<NPTypeCode> dtypelist)
+        {
+            int n = dtypelist.Length;
+            if (n == 0)
+                return NPTypeCode.Empty;
+            if (n == 1)
+                return dtypelist[0];
+
+            // The numeric promotion refuses the string lane with the house text (PromotionTableMiss), before the DType
+            // engine, which would promote text and numbers to a string type that no numeric kernel takes.
+            for (int i = 0; i < n; i++)
+                if (dtypelist[i] == NPTypeCode.String)
+                    throw PromotionTableMiss((dtypelist[i], dtypelist[i == 0 ? 1 : 0]));
+
+            if (n == 2)
+                return PromoteArrArr((dtypelist[1], dtypelist[0]));
+
+            var metas = new DTypeMeta[n];
+            for (int i = 0; i < n; i++)
+                metas[i] = DTypeRegistry.FromTypeCode(dtypelist[i]);
+            return DTypePromotion.PromoteDTypeSequence(metas).TypeCode;
+        }
+
+        /// <summary>The common type of a set of array types (<see cref="PromoteTypeSequence"/>).</summary>
+        /// <param name="dtypelist">The types (any order).</param>
+        /// <returns>The promoted type; <see cref="NPTypeCode.Empty"/> for an empty list.</returns>
+        /// <exception cref="NotSupportedException">A type is the string lane.</exception>
         [MethodImpl(Optimize)]
         private static NPTypeCode _can_coerce_all(NPTypeCode[] dtypelist)
         {
-            int N = dtypelist.Length;
-
-            if (N == 0)
-                return NPTypeCode.Empty;
-            if (N == 1)
-                return dtypelist[0];
-            NPTypeCode ret = default;
-            while (N >= 2)
-            {
-                ret = PromoteArrArr((dtypelist[N - 1], dtypelist[N - 2]));
-                N -= 2;
-            }
-
-            if (N == 1)
-            {
-                ret = PromoteArrArr((ret, dtypelist[0]));
-            }
-
-            return ret;
+            return PromoteTypeSequence(dtypelist);
         }
 
+        /// <summary>The common type of a set of array types (<see cref="PromoteTypeSequence"/>).</summary>
+        /// <param name="dtypelist">The types (any order).</param>
+        /// <returns>The promoted type; <see cref="NPTypeCode.Empty"/> for an empty list.</returns>
+        /// <exception cref="NotSupportedException">A type is the string lane.</exception>
         [MethodImpl(Optimize)]
         private static NPTypeCode _can_coerce_all(List<NPTypeCode> dtypelist)
         {
-            int N = dtypelist.Count;
-
-            if (N == 0)
-                return NPTypeCode.Empty;
-            if (N == 1)
-                return dtypelist[0];
-            NPTypeCode ret = default;
-
-            while (N >= 2)
-            {
-                ret = PromoteArrArr((dtypelist[N - 1], dtypelist[N - 2]));
-                N -= 2;
-            }
-
-            if (N == 1)
-            {
-                ret = PromoteArrArr((ret, dtypelist[0]));
-            }
-
-            return ret;
+            return PromoteTypeSequence(CollectionsMarshal.AsSpan(dtypelist));
         }
 
+        /// <summary>The common type of the types from <paramref name="start"/> on (<see cref="PromoteTypeSequence"/>).</summary>
+        /// <param name="dtypelist">The types.</param>
+        /// <param name="start">The first index taken.</param>
+        /// <returns>The promoted type; <see cref="NPTypeCode.Empty"/> when no type is left.</returns>
+        /// <exception cref="NotSupportedException">A type is the string lane.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="start"/> is past the end of the list.</exception>
         [MethodImpl(Optimize)]
         private static NPTypeCode _can_coerce_all(NPTypeCode[] dtypelist, int start)
         {
-            int N = dtypelist.Length;
-            if (start > 0)
-            {
-                var len = N - start;
-                var sub = new NPTypeCode[len];
-                Array.Copy(dtypelist, start, sub, 0, len);
-                dtypelist = sub;
-                N = sub.Length;
-            }
-
-            if (N == 0)
-                return NPTypeCode.Empty;
-            if (N == 1)
-                return dtypelist[0];
-            NPTypeCode ret = default;
-            while (N >= 2)
-            {
-                ret = PromoteArrArr((dtypelist[N - 1], dtypelist[N - 2]));
-                N -= 2;
-            }
-
-            if (N == 1)
-            {
-                ret = PromoteArrArr((ret, dtypelist[0]));
-            }
-
-            return ret;
+            return PromoteTypeSequence(new ReadOnlySpan<NPTypeCode>(dtypelist).Slice(Math.Max(start, 0)));
         }
 
+        /// <summary>The common type of the types from <paramref name="start"/> on (<see cref="PromoteTypeSequence"/>).</summary>
+        /// <param name="dtypelist">The types.</param>
+        /// <param name="start">The first index taken.</param>
+        /// <returns>The promoted type; <see cref="NPTypeCode.Empty"/> when no type is left.</returns>
+        /// <exception cref="NotSupportedException">A type is the string lane.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="start"/> is past the end of the list.</exception>
         [MethodImpl(Optimize)]
         private static NPTypeCode _can_coerce_all(List<NPTypeCode> dtypelist, int start)
         {
-            int N = dtypelist.Count;
-            if (start > 0)
-            {
-                var len = N - start;
-                var sub = new List<NPTypeCode>(len);
-                for (int i = start; i < N; i++)
-                    sub.Add(dtypelist[i]);
-                dtypelist = sub;
-                N = sub.Count;
-            }
-
-            if (N == 0)
-                return NPTypeCode.Empty;
-            if (N == 1)
-                return dtypelist[0];
-            NPTypeCode ret = default;
-
-            while (N >= 2)
-            {
-                ret = PromoteArrArr((dtypelist[N - 1], dtypelist[N - 2]));
-                N -= 2;
-            }
-
-            if (N == 1)
-            {
-                ret = PromoteArrArr((ret, dtypelist[0]));
-            }
-
-            return ret;
+            return PromoteTypeSequence(CollectionsMarshal.AsSpan(dtypelist).Slice(Math.Max(start, 0)));
         }
 
         // Keep incrementing until a common type both can be coerced to

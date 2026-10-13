@@ -296,3 +296,46 @@ After this plan, phase 2 loses P2.4 and gains the `T` forms of P2.1–P2.6 plus 
     short-string export 1.45–1.55×; the long-string export is 0.88–1.05×: numpy's allocator stores each long string
     through `NpyString_pack`, the same work its own copy does, and the C API has no way to reserve numpy's arena.
     Fixed-width views are flat: `ToNumpy` 5.7–6.6 µs, `AsNDArray` 4.0–4.1 µs from 1K to 1M elements.
+- 2026-10-13 — **Conversions and NEP 50 across types** (owner's request: "'Converts' and other classes that interop and
+  NEP50 across types, fix them all").
+  - `Converts` text is NumPy's (`Utilities/Converts.NumPyText.cs`): number → text is the NumPy scalar's `str()` through
+    `NDTextFormat` (`str(np.float16(1))` is `'1.0'`, a complex `'(1+2j)'`, char its uint16 number, decimal its float64);
+    text → number is NumPy's store of a Python str (`NDTextParse.ParseObject`: CPython `int()` / `float()` / `complex()`
+    and NumPy's packing check, errors quoting `'1.5'`); a bool target takes the str's truth. Both culture-invariant: the
+    `IFormatProvider` overloads ignore the provider for dtype values. Every route reaches it: the typed and object
+    `To*` / `ToString` overloads, `ChangeType` (generic, `NPTypeCode`, .NET `TypeCode`, with provider),
+    `FindConverter` / `Converts<T>` (a string source no longer truncates through `IConvertible.ToDouble`),
+    `NonGenericConvert`, `TypelessConvert`, `ArrayConvert` (its `sbyte[]` / `Half[]` / `Complex[]` → `string[]` used .NET
+    text; `ToComplex(string[])` is `complex()`: `''` raises as in NumPy, null stays zero). A char target follows astype
+    for numbers (a float past int32 through the int32 intermediate: `4294967295.0` → 0, was 0xFFFF) and the uint16 parse
+    for text (`"70000"` raises).
+  - Other interop classes: `py.complex` is CPython's `complex(str)` (was a culture-dependent regex that refused `'1e3'`,
+    `'inf'`, `'(1+2j)'` and accepted `'1+'`); `Converts.ToDateTime64(string)` reads the invariant culture;
+    `np.loadtxt`'s converter results are stored by `PyArray_Pack` (`ReductionInitial.TryPack`: a float truncates — the
+    `Convert` route rounded 1.7 to 2 —, a str parses, a `Half` wraps, None is NumPy's positive NaN / `nan+nanj` / False);
+    `np.asanyarray` of mixed object items converts through `Converts` (`Convert.ToDouble` threw for a `Half` item).
+  - Promotion engines: `NDIterCasting.PromoteTypes` is the table (its own rules differed on 30 of 225 pairs: int32 +
+    float32 gave float32), `NDIterCasting.FindCommonDtype` and the iterator's VIRTUAL operand take NumPy's
+    order-independent `result_type`, `NDExprTypeRules.PromoteStrong` keeps char beside bool / uint8 (was uint16), and the
+    set promotion behind `np._FindCommonType` (`_can_coerce_all`) is `PyArray_PromoteDTypeSequence` (the old loop kept
+    only the last pair of four or more types; three types folded in list order: 10 of NumPy's 2,197 triples differed).
+  - NEP 50 with text: a C# number literal is a WEAK Python scalar wherever a promotion reads the mark
+    (`NDArray.Nep50Operand`, `NDArray.FromPythonOperand` for the `object` overloads), so `np.where(c, u, 1)`,
+    `np.choose(idx, [u, 1])`, `np.select([c], [u], default=1)` and `np.r_[u, 1]` raise NumPy's `DTypePromotionError`
+    (they promoted the literal's int32 to `<U11`). `np.select` makes NumPy 2.4.2's ONE `result_type` call over the choices
+    and the default (one error text). `np.choose` converts each choice to the common dtype under 'safe' (a U choice beside
+    a `StringDType` one raises NumPy's TypeError). `np.r_` / `np.c_` promote text by descriptor (`np.r_[i, u]` is `<U21`).
+    A marked literal inside an `NDArray[]` / NDArray default is weak in the numeric routes of `np.choose`, `np.select` and
+    `np.r_` too (`np.choose(idx, [int8, 1000])` is int8 `[1, -24]`, was int32). `np.put` / `np.insert` of a str into a
+    numeric array quote the str (`'1.5'`, was `np.str_('1.5')`).
+  - Open, for the owner (next phase): the ufunc family and `np.where`'s numeric route read EVERY 0-d operand as weak (the
+    house rule, `[Misaligned]`, registry branch (1)); NumPy 2.x reads a 0-d array or a NumPy scalar as strong. With the
+    marks a library can tell them apart, but ~373 library sites build their scalar operands with `NDArray.Scalar` and rely
+    on the weak reading.
+  - Gates: `Casting/ConvertsNumPyTextTests` (16), `DTypes/PromotionEngineParityTests` (6),
+    `APIs/Nep50LiteralPromotionTests` (11), `ConvertsBattleTests` (6 expectations moved from .NET text to NumPy's). Probes
+    against NumPy 2.4.2: Converts text 16,048 route × value × culture checks, 0 differ except the 280 LP64 "Python int too
+    large to convert to C long" texts NumSharp pins (the probe ran Windows NumPy); scalar casts vs astype 0 of 7,875 (were
+    7); engines 0 of 225 pairs and 0 of 5,197 sets; element APIs 0 of 815; text `where` / `choose` / `select` / `r_` 3 of 172
+    (NumPy reads a bytes scalar in `r_` as a dtype spec; C# has no bytes scalar); numeric 74 of 420, all the house 0-d rule
+    (28), complex64 (10) or probe artifacts (36).

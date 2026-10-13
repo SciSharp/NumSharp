@@ -16,11 +16,26 @@ namespace NumSharp.Utilities
         /// Used as fallback when explicit type pair not found in FindConverter.
         /// Uses NumPy-compatible wrapping behavior for integer overflow (no exceptions).
         /// </summary>
+        /// <typeparam name="TIn">The source type.</typeparam>
+        /// <typeparam name="TOut">The target type.</typeparam>
+        /// <returns>The converter.</returns>
+        /// <remarks>
+        ///     A <see cref="string"/> source (NumPy's Python <c>str</c>) converts through <see cref="ChangeType(object, NPTypeCode)"/>,
+        ///     which parses it with NumPy's text rules: CPython's <c>int()</c> / <c>float()</c> / <c>complex()</c> grammar and
+        ///     NumPy's packing check, so <c>"1.5"</c> into an integer raises <see cref="ValueError"/> and <c>"300"</c> into a
+        ///     byte raises <see cref="OverflowException"/>. It must not reach <see cref="CreateIntegerConverter{TIn,TOut,TIntermediate}"/>,
+        ///     whose <see cref="IConvertible.ToDouble"/> step would parse the text with the CURRENT culture and truncate it.
+        ///     A <see cref="string"/> target is NumPy's <c>str()</c> of the value (<see cref="CreateDefaultConverter{TIn,TOut}"/>).
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static Func<TIn, TOut> CreateFallbackConverter<TIn, TOut>()
         {
             var toutCode = InfoOf<TOut>.NPTypeCode;
             var tinCode = InfoOf<TIn>.NPTypeCode;
+
+            // A Python str source: NumPy's text parse for every target (see remarks).
+            if (tinCode == NPTypeCode.String)
+                return @in => (TOut)ChangeType((object)@in, toutCode);
 
             // Special handling for Half output (doesn't implement IConvertible).
             // Route through Converts.ToDouble(object) which handles char and Half/Complex.
@@ -128,7 +143,10 @@ namespace NumSharp.Utilities
                 case NPTypeCode.Boolean:
                     return (TOut)(object)ToBoolean_NumPy(value);
                 case NPTypeCode.Char:
-                    return (TOut)(object)Converts.ToChar(ToLong_NumPy(value));
+                    // Converts.ToChar(object): a number by the cast astype runs (a float / decimal / complex through an
+                    // int32 intermediate, so 4294967295.0 -> 0 like NumPy's MSVC cast, not int64's 0xFFFF), a Python str
+                    // parsed as a uint16 with NumPy's packing check ("70000" raises).
+                    return (TOut)(object)Converts.ToChar(value);
                 case NPTypeCode.Byte:
                     return (TOut)(object)ToByte_NumPy(value);
                 case NPTypeCode.SByte:
@@ -156,10 +174,9 @@ namespace NumSharp.Utilities
                 case NPTypeCode.Complex:
                     return (TOut)(object)ToComplex_NumPy(value);
                 case NPTypeCode.String:
-                    // Half/Complex don't implement IConvertible; IFormattable covers every supported type.
-                    return (TOut)(object)(value is IFormattable f
-                        ? f.ToString(null, CultureInfo.InvariantCulture)
-                        : value.ToString());
+                    // A dtype value is written as NumPy's str() (np.float32(0.1) -> "0.1", 1e20 -> "1e+20", (1+2j)); any other
+                    // object keeps its culture-invariant .NET text.
+                    return (TOut)(object)ToStringTarget(value);
                 case NPTypeCode.Empty:
                     throw new InvalidCastException("InvalidCast_Empty");
                 default:
@@ -195,7 +212,10 @@ namespace NumSharp.Utilities
                 case NPTypeCode.Boolean:
                     return ToBoolean_NumPy(value);
                 case NPTypeCode.Char:
-                    return Converts.ToChar(ToLong_NumPy(value));
+                    // Converts.ToChar(object): a number by the cast astype runs (a float / decimal / complex through an
+                    // int32 intermediate, so 4294967295.0 -> 0 like NumPy's MSVC cast, not int64's 0xFFFF), a Python str
+                    // parsed as a uint16 with NumPy's packing check ("70000" raises).
+                    return Converts.ToChar(value);
                 case NPTypeCode.Byte:
                     return ToByte_NumPy(value);
                 case NPTypeCode.SByte:
@@ -223,10 +243,8 @@ namespace NumSharp.Utilities
                 case NPTypeCode.Complex:
                     return ToComplex_NumPy(value);
                 case NPTypeCode.String:
-                    // Half/Complex don't implement IConvertible; IFormattable covers every supported type.
-                    return value is IFormattable f
-                        ? f.ToString(null, CultureInfo.InvariantCulture)
-                        : value.ToString();
+                    // A dtype value is written as NumPy's str(); any other object keeps its culture-invariant .NET text.
+                    return ToStringTarget(value);
                 case NPTypeCode.Empty:
                     throw new InvalidCastException("InvalidCast_Empty");
                 default:
@@ -1176,11 +1194,12 @@ namespace NumSharp.Utilities
         public static Object ChangeType(Object value, NPTypeCode typeCode, IFormatProvider provider)
         {
             // Delegate to the 2-arg version which uses NumPy-aware helpers.
-            // IFormatProvider is only meaningful for String target.
+            // IFormatProvider is only meaningful for a String target, and only for objects that are not dtype values:
+            // a dtype value is written as NumPy's str(), which has no culture.
             if (typeCode == NPTypeCode.String)
             {
                 if (value == null) return null;
-                return value is IConvertible ic ? ic.ToString(provider) : value.ToString();
+                return NumPyStr(value) ?? (value is IConvertible ic ? ic.ToString(provider) : value.ToString());
             }
             return ChangeType(value, typeCode);
         }

@@ -322,7 +322,10 @@ namespace NumSharp.Backends.Strings
             // A StringDType value operand moves through the allocators (NDVStringMove), never the unit / byte routes.
             if (x.Storage.IsVString || y.Storage.IsVString)
                 return NDVStringMove.Where(condition, x, y, dims);
-            var descr = DTypePromotion.ResultType(x, y);
+            // NumPy's result_type(x, y) under NEP 50: a C# number literal is a WEAK Python scalar (Nep50Operand), which has
+            // no common DType with text — np.where(c, u, 1) raises DTypePromotionError naming _PyLongDType, where a 0-d
+            // number ARRAY (np.int64(1)) promotes to a string wide enough for its text (<U21).
+            var descr = DTypePromotion.ResultType(x.Nep50Operand, y.Nep50Operand);
 
             // NumPy's iterator allocates the result in the order of its operands (cond, x, y): stride-0 / extent-1 axes
             // abstain, C wins a tie — a transposed or F operand set gives a transposed or F result.

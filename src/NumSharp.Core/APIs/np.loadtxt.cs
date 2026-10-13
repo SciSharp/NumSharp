@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
@@ -487,34 +488,73 @@ namespace NumSharp
             return conv;
         }
 
+        /// <summary>
+        ///     Runs a column's converter over one field and stores its result into the field's element — NumPy's
+        ///     <c>to_generic_with_converter</c> (<c>textreading/conversions.c</c>), which hands the converter's output to
+        ///     <c>PyArray_Pack</c>, the dtype's element setter.
+        /// </summary>
+        /// <param name="conv">The column's converter.</param>
+        /// <param name="tok">The field's text.</param>
+        /// <param name="tc">The result dtype.</param>
+        /// <param name="dst">The element's bytes (the dtype's item size).</param>
+        /// <returns>True when the value was stored; false when the converter threw or its value cannot be stored, which
+        ///     the caller reports as NumPy's <c>could not convert string '…' to int64 at row r, column c.</c>.</returns>
+        /// <remarks>
+        ///     <para>
+        ///     The store follows NumPy's setitem rules for the KIND of the converter's value
+        ///     (<see cref="ReductionInitial.TryPack"/>, probed against NumPy 2.4.2): a C# float into an integer dtype
+        ///     truncates toward zero (<c>1.7</c> → 1, <c>-1.7</c> → -1); a C# integer out of the dtype's range fails
+        ///     (NumPy's <c>Python integer 300 out of bounds for uint8</c>) where a <see cref="Half"/> (a NumPy scalar) wraps
+        ///     (<c>np.float16(300)</c> into uint8 is 44); a <see cref="string"/> parses with Python's <c>int()</c> /
+        ///     <c>float()</c> / <c>complex()</c> (<c>' 1_0 '</c> → 10, <c>'1.5'</c> into an integer fails); a bool dtype takes
+        ///     Python truthiness (<c>'False'</c> is True, <c>''</c> False); a complex into a real dtype and a list fail.
+        ///     </para>
+        ///     <para>
+        ///     A null result is NumPy's <c>None</c>: False for a bool dtype, NumPy's positive quiet NaN for a float dtype and
+        ///     <c>nan+nanj</c> for complex (NumPy's float and complex setitems read <c>None</c> as NaN), and a failure for every
+        ///     other dtype (<c>int()</c> of <c>None</c>; decimal has no NaN).
+        ///     </para>
+        ///     <para>
+        ///     This used <see cref="Convert"/> before, which ROUNDED a float into an integer (<c>1.7</c> → 2, banker's
+        ///     rounding), parsed only .NET's number grammar, read <c>"1"</c> into a bool as an error, and threw for a
+        ///     <see cref="Half"/> (which is not <see cref="IConvertible"/>).
+        ///     </para>
+        /// </remarks>
         private static bool PackConverted(Func<string, object> conv, string tok, NPTypeCode tc, Span<byte> dst)
         {
             object o;
             try { o = conv(tok); }
             catch { return false; }
-            if (o == null) return false;
+
+            if (o == null)
+            {
+                // NumPy's None: BOOL_setitem reads its truth value (False), the float setitems read NumPy's POSITIVE quiet
+                // NaN (NPY_NAN: 0x7e00 / 0x7fc00000 / 0x7ff8000000000000 — .NET's Half/float/double.NaN are negative), the
+                // complex setitem NaN in BOTH parts, an integer setitem runs int(None) (a TypeError).
+                switch (tc)
+                {
+                    case NPTypeCode.Boolean: dst[0] = 0; return true;
+                    case NPTypeCode.Half: { ushort v = 0x7E00; MemoryMarshal.Write(dst, in v); return true; }
+                    case NPTypeCode.Single: { uint v = 0x7FC00000u; MemoryMarshal.Write(dst, in v); return true; }
+                    case NPTypeCode.Double: { ulong v = 0x7FF8000000000000ul; MemoryMarshal.Write(dst, in v); return true; }
+                    case NPTypeCode.Complex:
+                    {
+                        ulong v = 0x7FF8000000000000ul;
+                        MemoryMarshal.Write(dst, in v);
+                        MemoryMarshal.Write(dst.Slice(8), in v);
+                        return true;
+                    }
+                    default: return false;
+                }
+            }
 
             try
             {
-                switch (tc)
-                {
-                    case NPTypeCode.Boolean: { dst[0] = (byte)(Convert.ToBoolean(o, CI) ? 1 : 0); return true; }
-                    case NPTypeCode.Byte: { byte v = Convert.ToByte(o, CI); MemoryMarshal.Write(dst, in v); return true; }
-                    case NPTypeCode.SByte: { sbyte v = Convert.ToSByte(o, CI); MemoryMarshal.Write(dst, in v); return true; }
-                    case NPTypeCode.Int16: { short v = Convert.ToInt16(o, CI); MemoryMarshal.Write(dst, in v); return true; }
-                    case NPTypeCode.UInt16: { ushort v = Convert.ToUInt16(o, CI); MemoryMarshal.Write(dst, in v); return true; }
-                    case NPTypeCode.Int32: { int v = Convert.ToInt32(o, CI); MemoryMarshal.Write(dst, in v); return true; }
-                    case NPTypeCode.UInt32: { uint v = Convert.ToUInt32(o, CI); MemoryMarshal.Write(dst, in v); return true; }
-                    case NPTypeCode.Int64: { long v = Convert.ToInt64(o, CI); MemoryMarshal.Write(dst, in v); return true; }
-                    case NPTypeCode.UInt64: { ulong v = Convert.ToUInt64(o, CI); MemoryMarshal.Write(dst, in v); return true; }
-                    case NPTypeCode.Char: { char v = Convert.ToChar(o, CI); MemoryMarshal.Write(dst, in v); return true; }
-                    case NPTypeCode.Half: { Half v = (Half)Convert.ToDouble(o, CI); MemoryMarshal.Write(dst, in v); return true; }
-                    case NPTypeCode.Single: { float v = Convert.ToSingle(o, CI); MemoryMarshal.Write(dst, in v); return true; }
-                    case NPTypeCode.Double: { double v = Convert.ToDouble(o, CI); MemoryMarshal.Write(dst, in v); return true; }
-                    case NPTypeCode.Decimal: { decimal v = Convert.ToDecimal(o, CI); MemoryMarshal.Write(dst, in v); return true; }
-                    case NPTypeCode.Complex: { Complex v = o is Complex cc ? cc : new Complex(Convert.ToDouble(o, CI), 0.0); MemoryMarshal.Write(dst, in v); return true; }
-                    default: return false;
-                }
+                // PyArray_Pack into a 16-byte slot (the widest element), then the element's own bytes into the row.
+                Span<byte> slot = stackalloc byte[ReductionInitial.SlotBytes];
+                ReductionInitial.TryPack(o, tc, slot);
+                slot.Slice(0, dst.Length).CopyTo(dst);
+                return true;
             }
             catch { return false; }
         }

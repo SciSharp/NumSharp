@@ -633,8 +633,10 @@ namespace NumSharp
                 return Backends.Strings.NDVStringMove.StoreValue(value, dtype);
             // A C# number is a Python (or NumPy) scalar in the boundary map: NumPy's array(values, dtype=arr.dtype) packs
             // it with PyArray_Pack (a Python int range-checked, a float truncated then range-checked, a complex refused
-            // by a real dtype). The packed 0-d belongs to the caller's scope.
-            if (NDArray.IsStoreScalar(value) && !Backends.Strings.NDStringStorage.IsString(dtype))
+            // by a real dtype). A C# string into a NUMERIC array is a Python str, which PyArray_Pack parses with the dtype's
+            // setitem (int() / float() / complex(); its errors quote the str '1.5', not np.str_('1.5')). The packed 0-d
+            // belongs to the caller's scope.
+            if ((NDArray.IsStoreScalar(value) || value is string) && !Backends.Strings.NDStringStorage.IsString(dtype))
                 return NDArray.AsStoreValue(value, dtype.GetTypeCode());
             var asArr = np.asanyarray(value);
             if (!Equals(asArr.dtype, dtype))

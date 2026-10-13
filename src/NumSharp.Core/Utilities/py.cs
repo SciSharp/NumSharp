@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Numerics;
-using System.Text.RegularExpressions;
 
 namespace NumSharp.Utilities
 {
@@ -17,46 +16,28 @@ namespace NumSharp.Utilities
             return a;
         }
         /// <summary>
-        /// 解析单个Python风格的复数字符串为Complex对象
+        ///     CPython 3.12's <c>complex(str)</c>: parses one Python complex literal into a <see cref="Complex"/>, with the
+        ///     grammar NumPy uses for a <c>str → complex128</c> conversion (<c>np.array(['1+2j']).astype(complex)</c>).
         /// </summary>
-        private static readonly Regex _pythonComplexRegex = new Regex(
-@"^(?<real>-?\d+(\.\d+)?)?((?<imagSign>\+|-)?(?<imag>\d+(\.\d+)?)?)?j$|^(?<onlyReal>-?\d+(\.\d+)?)$",
-RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.ExplicitCapture);
+        /// <param name="input">The text: <c>'10+5j'</c>, <c>'3-2j'</c>, <c>'4j'</c>, <c>'j'</c>, <c>'5'</c>, <c>'1e3'</c>,
+        ///     <c>'inf'</c> / <c>'nan'</c> in any case, <c>'(1+2j)'</c>, either <c>j</c> or <c>J</c>, surrounding whitespace,
+        ///     underscores between digits, non-ASCII decimal digits.</param>
+        /// <returns>The complex value.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="input"/> is null.</exception>
+        /// <exception cref="ValueError">The text is not a complex literal (CPython's text: <c>complex() arg is a malformed
+        ///     string</c>) — the empty string and whitespace included.</exception>
+        /// <remarks>
+        ///     This replaced a culture-dependent regular expression (<c>double.Parse</c> in the CURRENT culture, so under
+        ///     de-DE <c>'1.5'</c> read 15) that refused <c>'1e3'</c>, <c>'inf'</c>, <c>'(1+2j)'</c>, whitespace and
+        ///     underscores, accepted <c>'1+'</c>, and threw <see cref="FormatException"/>. The parser is the one every
+        ///     NumSharp text → complex route runs (<see cref="Converts.ToComplex(string)"/>, <c>astype</c>, setitem), so the
+        ///     answers agree.
+        /// </remarks>
         public static Complex complex(string input)
         {
-            var match = _pythonComplexRegex.Match(input);
-            if (!match.Success)
-                throw new FormatException($"Invalid Python complex format: '{input}'. Expected format like '10+5j', '3-2j', '4j' or '5'.");
-
-            // 解析仅实部的场景
-            if (match.Groups["onlyReal"].Success)
-            {
-                double real = double.Parse(match.Groups["onlyReal"].Value);
-                return new Complex(real, 0);
-            }
-
-            // 解析实部（默认0）
-            double realPart = 0;
-            if (double.TryParse(match.Groups["real"].Value, out double r))
-                realPart = r;
-
-            // 解析虚部（处理特殊情况：j / -j / +j）
-            double imagPart = 0;
-            string imagStr = match.Groups["imag"].Value;
-            string imagSign = match.Groups["imagSign"].Value;
-
-            if (string.IsNullOrEmpty(imagStr) && !string.IsNullOrEmpty(input.TrimEnd('j', 'J')))
-            {
-                // 处理仅虚部的情况：j → 1j, -j → -1j, +j → 1j
-                imagStr = "1";
-            }
-
-            if (double.TryParse(imagStr, out double im))
-            {
-                imagPart = im * (imagSign == "-" ? -1 : 1);
-            }
-
-            return new Complex(realPart, imagPart);
+            if (input == null)
+                throw new ArgumentNullException(nameof(input));
+            return Converts.ParseNumPyText<Complex>(input, NPTypeCode.Complex);
         }
     }
 }

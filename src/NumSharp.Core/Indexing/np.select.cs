@@ -103,6 +103,17 @@ namespace NumSharp
                         weakRank = Math.Max(weakRank, 1);
                         break;
 
+                    case NDArray lit when lit.WasPythonLiteral:
+                        // A C# number literal that reached select as its implicit 0-d array (an NDArray default, a literal
+                        // inside an NDArray[] choicelist): NumPy keeps a Python int / float / complex as the weak scalar
+                        // (`choice if type(choice) in (int, float, complex) else np.asarray(choice)`), exactly as the boxed
+                        // literal below — an int8 choice beside the default 1000 stays int8.
+                        mat = lit;
+                        weakRank = Math.Max(weakRank, lit.typecode == NPTypeCode.Complex ? 3
+                            : lit.typecode is NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Half ? 2 : 1);
+                        if (lit.typecode == NPTypeCode.UInt64 && lit.GetAtIndex<ulong>(0) > long.MaxValue) anyBeyondInt64 = true;
+                        break;
+
                     case NDArray a:
                         mat = a;
                         if (a.typecode == NPTypeCode.String)
@@ -199,39 +210,38 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     <c>np.select</c>'s result dtype when a string is involved — NumPy's
-        ///     <c>intermediate = result_type(*choicelist)</c> then <c>dtype = result_type(intermediate, asarray(default))</c>,
-        ///     over descriptors, with C# integer / float / complex literals (and the null default, NumPy's <c>0</c>) taking
-        ///     part as NEP 50 weak Python scalars.
+        ///     <c>np.select</c>'s result dtype when a string is involved — NumPy 2.4.2's ONE
+        ///     <c>dtype = result_type(*choicelist, default)</c> over descriptors, with C# integer / float / complex literals
+        ///     (boxed, or the 0-d array an implicit conversion marked <see cref="NDArray.WasPythonLiteral"/>) and the null
+        ///     default (NumPy's <c>0</c>) taking part as NEP 50 weak Python scalars.
         /// </summary>
         /// <param name="choicelist">The caller's choices.</param>
         /// <param name="default">The caller's default (null means NumPy's <c>0</c>).</param>
         /// <param name="mats">The materialised choices and default (slot <paramref name="n"/>).</param>
         /// <param name="n">The number of choices.</param>
         /// <returns>The result descriptor.</returns>
-        /// <exception cref="TypeError"><c>Choicelist elements do not have a common dtype: …</c> or <c>Choicelist and default
-        ///     value do not have a common dtype: …</c> — NumPy's texts around the promotion error.</exception>
+        /// <exception cref="TypeError"><c>Choicelist and default value do not have a common dtype: …</c> — NumPy's text
+        ///     around the promotion error, whose DType list names every choice and the default in order.</exception>
+        /// <remarks>
+        ///     NumPy 2.4.2 promotes the choices and the default in a single <c>result_type</c> call (NumPy 1.x made two, the
+        ///     first wrapped in <c>Choicelist elements do not have a common dtype</c>; this followed that before). The single
+        ///     call decides the error text too: a string choice beside a number choice reports <c>Choicelist and default value
+        ///     …</c> with the default's <c>_PyLongDType</c> at the end of the list.
+        /// </remarks>
         private static DType ResolveSelectStringDescr(object[] choicelist, object @default, NDArray[] mats, int n)
         {
             static object Operand(object item, NDArray mat)
-                => item is sbyte or byte or short or ushort or int or uint or long or ulong or float or double or Complex ? item : mat;
+                => item is sbyte or byte or short or ushort or int or uint or long or ulong or float or double or Complex ? item
+                    : item is NDArray nd ? nd.Nep50Operand
+                    : mat;
 
-            DType intermediate;
+            var operands = new object[n + 1];
+            for (int i = 0; i < n; i++)
+                operands[i] = Operand(choicelist[i], mats[i]);
+            operands[n] = @default is null ? 0 : Operand(@default, mats[n]);
             try
             {
-                var operands = new object[n];
-                for (int i = 0; i < n; i++)
-                    operands[i] = Operand(choicelist[i], mats[i]);
-                intermediate = DTypePromotion.ResultType(operands);
-            }
-            catch (DTypePromotionError e)
-            {
-                throw new TypeError($"Choicelist elements do not have a common dtype: {e.Message}");
-            }
-
-            try
-            {
-                return DTypePromotion.ResultType(intermediate, @default is null ? 0 : Operand(@default, mats[n]));
+                return DTypePromotion.ResultType(operands);
             }
             catch (DTypePromotionError e)
             {

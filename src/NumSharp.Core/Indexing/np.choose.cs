@@ -193,6 +193,15 @@ namespace NumSharp
                         // NumPy would build an object array (a dtype NumSharp lacks); a null choice is a bug.
                         throw new ArgumentNullException($"choices[{i}]", "choices entries must not be null.");
 
+                    case NDArray lit when lit.WasPythonLiteral:
+                        // A C# number literal that reached choose as its implicit 0-d array (a literal inside an NDArray[]
+                        // choices list): NumPy's weak Python scalar, exactly as the boxed literal below — an int8 choice
+                        // beside the literal 1000 stays int8 (wrapping to -24), where a 0-d ARRAY of 1000 promotes.
+                        mat = lit;
+                        weakRank = Math.Max(weakRank, WeakRankOfLiteral(lit.typecode));
+                        if (lit.typecode == NPTypeCode.UInt64 && lit.GetAtIndex<ulong>(0) > long.MaxValue) anyBeyondInt64 = true;
+                        break;
+
                     case NDArray arr:
                         mat = arr;
                         if (arr.typecode == NPTypeCode.String)
@@ -248,8 +257,21 @@ namespace NumSharp
                 // width); the numeric choices are formatted into it below.
                 var operands = new object[n];
                 for (int i = 0; i < n; i++)
-                    operands[i] = choices[i] is NDArray ? (object)mats[i] : choices[i] is sbyte or byte or short or ushort or int or uint or long or ulong or float or double or Complex ? choices[i] : mats[i];
+                    operands[i] = choices[i] is NDArray nd ? nd.Nep50Operand : choices[i] is sbyte or byte or short or ushort or int or uint or long or ulong or float or double or Complex ? choices[i] : mats[i];
                 stringDescr = DTypePromotion.ResultType(operands);
+
+                // NumPy's PyArray_ConvertToCommonType converts every choice to the common descriptor with
+                // PyArray_FromArray(…, NPY_ARRAY_CARRAY), which requires a SAFE cast (a Python scalar is force-cast, but a
+                // Python number never reaches a string descriptor: the promotion above refused it). S -> U, U2 -> U5 and a
+                // number -> its text width are safe; U -> StringDType is NOT (np.can_cast('U2', StringDType(), 'safe') is
+                // False), so a U or str choice beside a StringDType one raises — the first refused choice in order.
+                for (int i = 0; i < n; i++)
+                {
+                    if (!DTypeCasting.CanCastTypeTo(mats[i].dtype, stringDescr, NPY_CASTING.NPY_SAFE_CASTING))
+                        throw new TypeError(
+                            $"Cannot cast {(mats[i].ndim == 0 ? "scalar" : "array data")} from {mats[i].dtype.ToString(true)} " +
+                            $"to {stringDescr.ToString(true)} according to the rule 'safe'");
+                }
             }
 
             NPTypeCode dtype = anyString ? NPTypeCode.String : ResolveChooseDtype(anyStrong, strong, weakRank, anyBeyondInt64);
@@ -458,6 +480,19 @@ namespace NumSharp
                 _ => NPTypeCode.Complex,
             };
         }
+
+        /// <summary>
+        ///     The NEP 50 weak rank of a C# number literal's 0-d array (<see cref="NDArray.WasPythonLiteral"/>): 1 for a Python
+        ///     <c>int</c> (an integer primitive), 2 for a <c>float</c> (<c>float</c> / <c>double</c>), 3 for a <c>complex</c>.
+        /// </summary>
+        /// <param name="literal">The literal array's dtype.</param>
+        /// <returns>The rank <see cref="ResolveChooseDtype"/> reads.</returns>
+        private static int WeakRankOfLiteral(NPTypeCode literal) => literal switch
+        {
+            NPTypeCode.Complex => 3,
+            NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Half => 2,
+            _ => 1,
+        };
 
         /// <summary>
         ///     Convert the index array to <c>int64</c> (NumPy's <c>PyArray_FROM_OT(ip, NPY_INTP)</c>) under

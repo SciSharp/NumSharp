@@ -171,6 +171,16 @@ namespace NumSharp
                             objs.Add(Operand.StrongScalar(item));
                             break;
 
+                        // A C# number literal that reached the key as its implicit 0-d array (an NDArray-typed entry):
+                        // NumPy's Python scalar (`type(item) in ScalarType` → result_type takes the scalar itself, WEAK),
+                        // exactly as the boxed literal above — np.r_[int8Array, (NDArray)1] stays int8.
+                        case NDArray lit when lit.WasPythonLiteral:
+                            objs.Add(Operand.Scalar(lit.Storage.GetAtIndex(0),
+                                lit.typecode == NPTypeCode.Complex ? WeakKind.Complex
+                                : lit.typecode is NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Half ? WeakKind.Float
+                                : WeakKind.Int));
+                            break;
+
                         default:
                             objs.Add(FromArrayLike(item, ndmin, trans1d));
                             break;
@@ -178,7 +188,16 @@ namespace NumSharp
                 }
 
                 NDArray[] arrays;
-                if (objs.Count != 0)
+                if (objs.Count != 0 && AnyText(objs))
+                {
+                    // A string entry: NumPy's result_type over DESCRIPTORS (the widest text, S + U giving U, a number widening
+                    // it to its text width, a Python number refused with DTypePromotionError), every entry converted to it.
+                    DType descr = ResolveTextDescr(objs);
+                    arrays = new NDArray[objs.Count];
+                    for (int i = 0; i < objs.Count; i++)
+                        arrays[i] = objs[i].MaterializeText(descr, ndmin);
+                }
+                else if (objs.Count != 0)
                 {
                     NPTypeCode final = ResolveDtype(objs);
                     arrays = new NDArray[objs.Count];
@@ -507,6 +526,34 @@ namespace NumSharp
                 public NPTypeCode Code => _code;
                 public WeakKind Weak => _weak;
 
+                /// <summary>True for a string array entry (fixed-width <c>S</c> / <c>U</c> or <c>StringDType</c>).</summary>
+                public bool IsText => _array is not null && _array.typecode == NPTypeCode.String;
+
+                /// <summary>
+                ///     The entry as <see cref="DTypePromotion.ResultType"/> reads it — NumPy's <c>result_type_objs</c> entry: an
+                ///     array (strong), or the scalar itself (a C# integer / float / complex literal is WEAK; a bool, char,
+                ///     Half or decimal is a strong dtype).
+                /// </summary>
+                public object PromotionOperand => _array is not null ? _array : _scalar;
+
+                /// <summary>
+                ///     The entry converted to the text descriptor <paramref name="descr"/> (an array cast, a scalar formatted as
+                ///     its <c>str()</c>), then given <paramref name="ndmin"/> dimensions.
+                /// </summary>
+                /// <param name="descr">The result's string descriptor.</param>
+                /// <param name="ndmin">The minimum dimensionality of the directive.</param>
+                /// <returns>The converted entry (a new array, or the entry's own array when it already is
+                ///     <paramref name="descr"/>).</returns>
+                /// <exception cref="UnicodeDecodeError">An <c>S</c> entry converted to a <c>U</c> result holds a byte at or
+                ///     above 0x80 (NumPy's S → U decode).</exception>
+                public NDArray MaterializeText(DType descr, int ndmin)
+                {
+                    NDArray arr = _array is not null
+                        ? (_array.dtype.Equals(descr) ? _array : _array.astype(descr))
+                        : asanyarray(_scalar).astype(descr);
+                    return AtLeastNdmin(arr, ndmin);
+                }
+
                 /// <summary>
                 ///     A weak integer literal too large for int64 — which lifts an all-literal key's
                 ///     default from int64 to uint64, as NumPy's <c>result_type(2**64-1)</c> does.
@@ -593,6 +640,36 @@ namespace NumSharp
                     // NumSharp has a single complex width, so complex64 collapses onto Complex.
                     _ => NPTypeCode.Complex
                 };
+            }
+
+            /// <summary>True when any entry is a string array (the result dtype is then a text descriptor).</summary>
+            /// <param name="objs">The entries.</param>
+            /// <returns>Whether an entry is text.</returns>
+            private static bool AnyText(List<Operand> objs)
+            {
+                foreach (var op in objs)
+                    if (op.IsText)
+                        return true;
+                return false;
+            }
+
+            /// <summary>
+            ///     NumPy's <c>final_dtype = result_type(*result_type_objs)</c> when an entry is text: arrays and NumSharp-only
+            ///     scalars contribute their descriptor, a C# number literal is a weak Python scalar — which has no common DType
+            ///     with text, so <c>np.r_[u, 1]</c> raises NumPy's <c>DTypePromotionError</c>; a strong number (a 0-d array, a
+            ///     bool) widens the text to its <c>str()</c> width (<c>np.r_[u, np.int64(1)]</c> is <c>&lt;U21</c>,
+            ///     <c>np.r_[u, True]</c> <c>&lt;U5</c>), and <c>StringDType</c> promotes only with <c>U</c>.
+            /// </summary>
+            /// <param name="objs">The entries.</param>
+            /// <returns>The result descriptor.</returns>
+            /// <exception cref="DTypePromotionError">No common DType (a Python number beside text; StringDType beside bytes or
+            ///     a number), NumPy's verbatim text with the entries' DTypes in order.</exception>
+            private static DType ResolveTextDescr(List<Operand> objs)
+            {
+                var operands = new object[objs.Count];
+                for (int i = 0; i < objs.Count; i++)
+                    operands[i] = objs[i].PromotionOperand;
+                return DTypePromotion.ResultType(operands);
             }
 
             /// <summary>

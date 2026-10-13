@@ -4250,30 +4250,29 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        ///     Converts <see cref="String"/> array to a <see cref="Complex"/> array.
+        ///     Converts <see cref="String"/> array to a <see cref="Complex"/> array, each element as NumPy's
+        ///     <c>str → complex128</c> conversion parses it (CPython's <c>complex()</c>).
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
-        /// <exception cref="FormatException">A string in sourceArray has an invalid complex format</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="sourceArray"/> is null.</exception>
+        /// <exception cref="ValueError">An element is not a complex literal (<c>complex() arg is a malformed string</c>),
+        ///     the empty string and whitespace included, as in NumPy.</exception>
+        /// <remarks>
+        ///     A null element is C#'s "no value" and converts to zero, as <see cref="Converts.ToComplex(string)"/> does. The
+        ///     empty string used to convert to zero too (and so did whitespace); NumPy raises for both, so this does now.
+        /// </remarks>
         [MethodImpl(Inline)]
         public static Complex[] ToComplex(String[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-            
+
             var length = sourceArray.Length;
             var output = new Complex[length];
 
             for (int i = 0; i < length; i++)
-            {
-                string input = sourceArray[i]?.Trim() ?? string.Empty;
-                if (string.IsNullOrEmpty(input))
-                {
-                    output[i] = Complex.Zero; // NullString save as zero.
-                    continue;
-                }
-                output[i] = py.complex(sourceArray[i]);
-            }
+                output[i] = Converts.ToComplex(sourceArray[i]);
             return output;
         }
 
@@ -4785,7 +4784,8 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new String[length];
             for (int i = 0; i < length; i++)
-                output[i] = sourceArray[i].ToString(CultureInfo.InvariantCulture);
+                // NumPy's str() of the element (Converts.NumPyText.cs): '-5', '0.1' for a float16, '(1+2j)'.
+                output[i] = Converts.ToString(sourceArray[i]);
             return output;
         }
 
@@ -4941,7 +4941,8 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new String[length];
             for (int i = 0; i < length; i++)
-                output[i] = sourceArray[i].ToString(CultureInfo.InvariantCulture);
+                // NumPy's str() of the element (Converts.NumPyText.cs): '-5', '0.1' for a float16, '(1+2j)'.
+                output[i] = Converts.ToString(sourceArray[i]);
             return output;
         }
 
@@ -5099,7 +5100,8 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new String[length];
             for (int i = 0; i < length; i++)
-                output[i] = sourceArray[i].ToString(CultureInfo.InvariantCulture);
+                // NumPy's str() of the element (Converts.NumPyText.cs): '-5', '0.1' for a float16, '(1+2j)'.
+                output[i] = Converts.ToString(sourceArray[i]);
             return output;
         }
 

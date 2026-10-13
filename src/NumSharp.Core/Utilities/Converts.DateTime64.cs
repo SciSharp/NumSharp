@@ -170,11 +170,26 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static DateTime64 ToDateTime64(TimeSpan value) => new DateTime64(value.Ticks);
 
+        /// <summary>
+        ///     Parses a datetime text into a <see cref="DateTime64"/>, culture-invariant: NumPy's datetime64 text is
+        ///     ISO-8601 and has no culture.
+        /// </summary>
+        /// <param name="value">The text: an ISO-8601 date / time (<see cref="DateTime64.ToString()"/>'s output), or
+        ///     <c>"NaT"</c>.</param>
+        /// <returns>The value; <see cref="DateTime64.NaT"/> for null, the empty string or <c>"NaT"</c> (NumPy's
+        ///     <c>np.datetime64('')</c> is NaT too).</returns>
+        /// <exception cref="FormatException">The text is not a date / time the invariant culture reads.</exception>
+        /// <remarks>
+        ///     This read the text in the CURRENT culture before, so the same text gave another date on another machine
+        ///     (<c>"01/02/2020"</c> is January 2 under en-US and February 1 under de-DE), unlike every other text → number
+        ///     conversion of <see cref="Converts"/>. A caller that wants a culture passes it to
+        ///     <see cref="ToDateTime64(string, IFormatProvider)"/>.
+        /// </remarks>
         public static DateTime64 ToDateTime64(string value)
         {
             if (string.IsNullOrEmpty(value) || value == "NaT")
                 return DateTime64.NaT;
-            return DateTime64.Parse(value, CultureInfo.CurrentCulture);
+            return DateTime64.Parse(value, CultureInfo.InvariantCulture);
         }
 
         public static DateTime64 ToDateTime64(string value, IFormatProvider provider)

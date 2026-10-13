@@ -6,6 +6,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Security;
 using System.Threading;
+using NumSharp.Backends.Printing;
 
 namespace NumSharp.Utilities
 {
@@ -107,8 +108,9 @@ namespace NumSharp.Utilities
                 case TypeCode.DateTime:
                     return ToDateTime(value, provider);
                 case TypeCode.String:
-                    // Half/Complex don't implement IConvertible; IFormattable covers every supported type.
-                    return value is IFormattable f ? f.ToString(null, provider) : value.ToString();
+                    // A NumSharp dtype value is written as NumPy's str() (culture-invariant, "1.0" / "1e+20" / "(1+2j)");
+                    // anything else (a DateTime, another object) keeps .NET's text through the provider.
+                    return NumPyStr(value) ?? (value is IFormattable f ? f.ToString(null, provider) : value.ToString());
                 case TypeCode.Object:
                     return value;
                 case TypeCode.DBNull:
@@ -121,7 +123,17 @@ namespace NumSharp.Utilities
         }
 
         // Conversions to Boolean
-        [MethodImpl(OptimizeAndInline)]
+        /// <summary>
+        ///     Converts a boxed value of any NumSharp dtype (or a Python <c>str</c>) to Boolean: a number by NumPy's cast rules
+        ///     (the element <c>astype</c> writes), a <see cref="string"/> by NumPy's text rules (<see cref="ToBoolean(string)"/>),
+        ///     anything else through its <see cref="IConvertible"/>.
+        /// </summary>
+        /// <param name="value">The value; null gives the default.</param>
+        /// <returns>The converted value.</returns>
+        /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
+        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
+[MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(object value)
         {
             if (value == null) return false;
@@ -145,6 +157,8 @@ namespace NumSharp.Utilities
                 DateTime64 d64 => ToBoolean(d64),
                 DateTime dt => ToBoolean(dt),
                 TimeSpan ts => ToBoolean(ts),
+                // A Python str converts by NumPy's text rules (Converts.NumPyText.cs), never .NET's culture parse.
+                string str => ToBoolean(str),
                 _ => ((IConvertible)value).ToBoolean(null)
             };
         }
@@ -222,21 +236,29 @@ namespace NumSharp.Utilities
             return value != 0;
         }
 
+        /// <summary>
+        ///     Converts a Python <c>str</c> to a bool as NumPy does (<c>np.array([text]).astype(bool)</c>, <c>BOOL_setitem</c>):
+        ///     the str's truth value, True for any non-empty text — <c>"False"</c> and <c>"0"</c> included.
+        /// </summary>
+        /// <param name="value">The text; null gives false (C#'s "no value", as <see cref="System.Convert"/> gives).</param>
+        /// <returns>The bool value.</returns>
         [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(string value)
         {
             if (value == null)
                 return false;
-            return bool.Parse(value);
+            return NumPyTextTruth(value);
         }
 
+        /// <summary>
+        ///     <see cref="ToBoolean(string)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored (the
+        ///     parameter keeps <see cref="System.Convert"/>'s signature).
+        /// </summary>
+        /// <param name="value">The text; null gives false.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The bool value.</returns>
         [MethodImpl(OptimizeAndInline)]
-        public static bool ToBoolean(string value, IFormatProvider provider)
-        {
-            if (value == null)
-                return false;
-            return bool.Parse(value);
-        }
+        public static bool ToBoolean(string value, IFormatProvider provider) => ToBoolean(value);
 
         [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(float value)
@@ -290,7 +312,17 @@ namespace NumSharp.Utilities
         // Conversions to Char
 
 
-        [MethodImpl(OptimizeAndInline)]
+        /// <summary>
+        ///     Converts a boxed value of any NumSharp dtype (or a Python <c>str</c>) to Char: a number by NumPy's cast rules
+        ///     (the element <c>astype</c> writes), a <see cref="string"/> by NumPy's text rules (<see cref="ToChar(string)"/>),
+        ///     anything else through its <see cref="IConvertible"/>.
+        /// </summary>
+        /// <param name="value">The value; null gives the default.</param>
+        /// <returns>The converted value.</returns>
+        /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
+        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
+[MethodImpl(OptimizeAndInline)]
         public static char ToChar(object value)
         {
             if (value == null) return (char)0;
@@ -314,6 +346,8 @@ namespace NumSharp.Utilities
                 DateTime64 d64 => ToChar(d64),
                 DateTime dt => ToChar(dt),
                 TimeSpan tsv => ToChar(tsv),
+                // A Python str converts by NumPy's text rules (Converts.NumPyText.cs), never .NET's culture parse.
+                string str => ToChar(str),
                 _ => ((IConvertible)value).ToChar(null)
             };
         }
@@ -393,24 +427,39 @@ namespace NumSharp.Utilities
         // @VariantSwitch
         // Remove FormatExceptions;
         //
+        /// <summary>
+        ///     Converts a Python <c>str</c> to char as NumPy stores it into a char array (<c>a[0] = text</c>):
+        ///     CPython's <c>int()</c> grammar (whitespace, a sign, underscores between digits, non-ASCII decimal digits), culture-invariant.
+        ///     NumSharp's <c>char</c> dtype is a 16-bit code unit that crosses to text as its uint16 number, so the text is
+        ///     a number (<c>"97"</c> → <c>'a'</c>), as <c>astype</c> of a <c>U</c> array to <c>char</c> reads it.
+        /// </summary>
+        /// <param name="value">The text; null gives the NUL char (C#'s "no value", as <see cref="System.Convert"/> gives).</param>
+        /// <returns>The char value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
+        /// <exception cref="OverflowException">The integer is outside char (NumPy's <c>Python integer 300 out of bounds for
+        ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(string value)
         {
-            return ToChar(value, null);
-        }
-
-        [MethodImpl(OptimizeAndInline)]
-        public static char ToChar(string value, IFormatProvider provider)
-        {
             if (value == null)
-                throw new ArgumentNullException(nameof(value));
-            Contract.EndContractBlock();
-
-            if (value.Length != 1)
-                throw new FormatException(("ResId.Format_NeedSingleChar"));
-
-            return value[0];
+                return (char)0;
+            return ParseNumPyText<char>(value, NPTypeCode.Char);
         }
+
+        /// <summary>
+        ///     <see cref="ToChar(string)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored (the
+        ///     parameter keeps <see cref="System.Convert"/>'s signature).
+        /// </summary>
+        /// <param name="value">The text; null gives the NUL char.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The char value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
+        /// <exception cref="OverflowException">The integer is outside char (NumPy's <c>Python integer 300 out of bounds for
+        ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
+        [MethodImpl(OptimizeAndInline)]
+        public static char ToChar(string value, IFormatProvider provider) => ToChar(value);
 
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(float value)
@@ -475,7 +524,17 @@ namespace NumSharp.Utilities
         // Conversions to SByte
 
 
-        [MethodImpl(OptimizeAndInline)]
+        /// <summary>
+        ///     Converts a boxed value of any NumSharp dtype (or a Python <c>str</c>) to SByte: a number by NumPy's cast rules
+        ///     (the element <c>astype</c> writes), a <see cref="string"/> by NumPy's text rules (<see cref="ToSByte(string)"/>),
+        ///     anything else through its <see cref="IConvertible"/>.
+        /// </summary>
+        /// <param name="value">The value; null gives the default.</param>
+        /// <returns>The converted value.</returns>
+        /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
+        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
+[MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(object value)
         {
             if (value == null) return 0;
@@ -499,6 +558,8 @@ namespace NumSharp.Utilities
                 DateTime64 d64 => ToSByte(d64),
                 DateTime dt => ToSByte(dt),
                 TimeSpan ts => ToSByte(ts),
+                // A Python str converts by NumPy's text rules (Converts.NumPyText.cs), never .NET's culture parse.
+                string str => ToSByte(str),
                 _ => ((IConvertible)value).ToSByte(null)
             };
         }
@@ -630,20 +691,38 @@ namespace NumSharp.Utilities
         }
 
 
+        /// <summary>
+        ///     Converts a Python <c>str</c> to int8 as NumPy stores it into a int8 array (<c>a[0] = text</c>):
+        ///     CPython's <c>int()</c> grammar (whitespace, a sign, underscores between digits, non-ASCII decimal digits), culture-invariant.
+        /// </summary>
+        /// <param name="value">The text; null gives 0 (C#'s "no value", as <see cref="System.Convert"/> gives).</param>
+        /// <returns>The int8 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
+        /// <exception cref="OverflowException">The integer is outside int8 (NumPy's <c>Python integer 300 out of bounds for
+        ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(string value)
         {
             if (value == null)
                 return 0;
-            return sbyte.Parse(value, CultureInfo.CurrentCulture);
+            return ParseNumPyText<sbyte>(value, NPTypeCode.SByte);
         }
 
 
+        /// <summary>
+        ///     <see cref="ToSByte(string)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored (the
+        ///     parameter keeps <see cref="System.Convert"/>'s signature).
+        /// </summary>
+        /// <param name="value">The text; null gives 0.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The int8 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
+        /// <exception cref="OverflowException">The integer is outside int8 (NumPy's <c>Python integer 300 out of bounds for
+        ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
-        public static sbyte ToSByte(string value, IFormatProvider provider)
-        {
-            return sbyte.Parse(value, NumberStyles.Integer, provider);
-        }
+        public static sbyte ToSByte(string value, IFormatProvider provider) => ToSByte(value);
 
 
         [MethodImpl(OptimizeAndInline)]
@@ -660,7 +739,17 @@ namespace NumSharp.Utilities
 
         // Conversions to Byte
 
-        [MethodImpl(OptimizeAndInline)]
+        /// <summary>
+        ///     Converts a boxed value of any NumSharp dtype (or a Python <c>str</c>) to Byte: a number by NumPy's cast rules
+        ///     (the element <c>astype</c> writes), a <see cref="string"/> by NumPy's text rules (<see cref="ToByte(string)"/>),
+        ///     anything else through its <see cref="IConvertible"/>.
+        /// </summary>
+        /// <param name="value">The value; null gives the default.</param>
+        /// <returns>The converted value.</returns>
+        /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
+        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
+[MethodImpl(OptimizeAndInline)]
         public static byte ToByte(object value)
         {
             if (value == null) return 0;
@@ -684,6 +773,8 @@ namespace NumSharp.Utilities
                 DateTime64 d64 => ToByte(d64),
                 DateTime dt => ToByte(dt),
                 TimeSpan ts => ToByte(ts),
+                // A Python str converts by NumPy's text rules (Converts.NumPyText.cs), never .NET's culture parse.
+                string str => ToByte(str),
                 _ => ((IConvertible)value).ToByte(null)
             };
         }
@@ -809,21 +900,37 @@ namespace NumSharp.Utilities
             return ToByte(value.Real);
         }
 
+        /// <summary>
+        ///     Converts a Python <c>str</c> to uint8 as NumPy stores it into a uint8 array (<c>a[0] = text</c>):
+        ///     CPython's <c>int()</c> grammar (whitespace, a sign, underscores between digits, non-ASCII decimal digits), culture-invariant.
+        /// </summary>
+        /// <param name="value">The text; null gives 0 (C#'s "no value", as <see cref="System.Convert"/> gives).</param>
+        /// <returns>The uint8 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
+        /// <exception cref="OverflowException">The integer is outside uint8 (NumPy's <c>Python integer 300 out of bounds for
+        ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(string value)
         {
             if (value == null)
                 return 0;
-            return byte.Parse(value, CultureInfo.CurrentCulture);
+            return ParseNumPyText<byte>(value, NPTypeCode.Byte);
         }
 
+        /// <summary>
+        ///     <see cref="ToByte(string)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored (the
+        ///     parameter keeps <see cref="System.Convert"/>'s signature).
+        /// </summary>
+        /// <param name="value">The text; null gives 0.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The uint8 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
+        /// <exception cref="OverflowException">The integer is outside uint8 (NumPy's <c>Python integer 300 out of bounds for
+        ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
-        public static byte ToByte(string value, IFormatProvider provider)
-        {
-            if (value == null)
-                return 0;
-            return byte.Parse(value, NumberStyles.Integer, provider);
-        }
+        public static byte ToByte(string value, IFormatProvider provider) => ToByte(value);
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(DateTime value)
@@ -839,7 +946,17 @@ namespace NumSharp.Utilities
 
         // Conversions to Int16
 
-        [MethodImpl(OptimizeAndInline)]
+        /// <summary>
+        ///     Converts a boxed value of any NumSharp dtype (or a Python <c>str</c>) to Int16: a number by NumPy's cast rules
+        ///     (the element <c>astype</c> writes), a <see cref="string"/> by NumPy's text rules (<see cref="ToInt16(string)"/>),
+        ///     anything else through its <see cref="IConvertible"/>.
+        /// </summary>
+        /// <param name="value">The value; null gives the default.</param>
+        /// <returns>The converted value.</returns>
+        /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
+        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
+[MethodImpl(OptimizeAndInline)]
         public static short ToInt16(object value)
         {
             if (value == null) return 0;
@@ -863,6 +980,8 @@ namespace NumSharp.Utilities
                 DateTime64 d64 => ToInt16(d64),
                 DateTime dt => ToInt16(dt),
                 TimeSpan ts => ToInt16(ts),
+                // A Python str converts by NumPy's text rules (Converts.NumPyText.cs), never .NET's culture parse.
+                string str => ToInt16(str),
                 _ => ((IConvertible)value).ToInt16(null)
             };
         }
@@ -986,21 +1105,37 @@ namespace NumSharp.Utilities
             return ToInt16(value.Real);
         }
 
+        /// <summary>
+        ///     Converts a Python <c>str</c> to int16 as NumPy stores it into a int16 array (<c>a[0] = text</c>):
+        ///     CPython's <c>int()</c> grammar (whitespace, a sign, underscores between digits, non-ASCII decimal digits), culture-invariant.
+        /// </summary>
+        /// <param name="value">The text; null gives 0 (C#'s "no value", as <see cref="System.Convert"/> gives).</param>
+        /// <returns>The int16 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
+        /// <exception cref="OverflowException">The integer is outside int16 (NumPy's <c>Python integer 300 out of bounds for
+        ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(string value)
         {
             if (value == null)
                 return 0;
-            return short.Parse(value, CultureInfo.CurrentCulture);
+            return ParseNumPyText<short>(value, NPTypeCode.Int16);
         }
 
+        /// <summary>
+        ///     <see cref="ToInt16(string)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored (the
+        ///     parameter keeps <see cref="System.Convert"/>'s signature).
+        /// </summary>
+        /// <param name="value">The text; null gives 0.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The int16 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
+        /// <exception cref="OverflowException">The integer is outside int16 (NumPy's <c>Python integer 300 out of bounds for
+        ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
-        public static short ToInt16(string value, IFormatProvider provider)
-        {
-            if (value == null)
-                return 0;
-            return short.Parse(value, NumberStyles.Integer, provider);
-        }
+        public static short ToInt16(string value, IFormatProvider provider) => ToInt16(value);
 
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(DateTime value)
@@ -1017,7 +1152,17 @@ namespace NumSharp.Utilities
         // Conversions to UInt16
 
 
-        [MethodImpl(OptimizeAndInline)]
+        /// <summary>
+        ///     Converts a boxed value of any NumSharp dtype (or a Python <c>str</c>) to UInt16: a number by NumPy's cast rules
+        ///     (the element <c>astype</c> writes), a <see cref="string"/> by NumPy's text rules (<see cref="ToUInt16(string)"/>),
+        ///     anything else through its <see cref="IConvertible"/>.
+        /// </summary>
+        /// <param name="value">The value; null gives the default.</param>
+        /// <returns>The converted value.</returns>
+        /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
+        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
+[MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(object value)
         {
             if (value == null) return 0;
@@ -1041,6 +1186,8 @@ namespace NumSharp.Utilities
                 DateTime64 d64 => ToUInt16(d64),
                 DateTime dt => ToUInt16(dt),
                 TimeSpan ts => ToUInt16(ts),
+                // A Python str converts by NumPy's text rules (Converts.NumPyText.cs), never .NET's culture parse.
+                string str => ToUInt16(str),
                 _ => ((IConvertible)value).ToUInt16(null)
             };
         }
@@ -1170,22 +1317,38 @@ namespace NumSharp.Utilities
         }
 
 
+        /// <summary>
+        ///     Converts a Python <c>str</c> to uint16 as NumPy stores it into a uint16 array (<c>a[0] = text</c>):
+        ///     CPython's <c>int()</c> grammar (whitespace, a sign, underscores between digits, non-ASCII decimal digits), culture-invariant.
+        /// </summary>
+        /// <param name="value">The text; null gives 0 (C#'s "no value", as <see cref="System.Convert"/> gives).</param>
+        /// <returns>The uint16 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
+        /// <exception cref="OverflowException">The integer is outside uint16 (NumPy's <c>Python integer 300 out of bounds for
+        ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(string value)
         {
             if (value == null)
                 return 0;
-            return ushort.Parse(value, CultureInfo.CurrentCulture);
+            return ParseNumPyText<ushort>(value, NPTypeCode.UInt16);
         }
 
 
+        /// <summary>
+        ///     <see cref="ToUInt16(string)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored (the
+        ///     parameter keeps <see cref="System.Convert"/>'s signature).
+        /// </summary>
+        /// <param name="value">The text; null gives 0.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The uint16 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
+        /// <exception cref="OverflowException">The integer is outside uint16 (NumPy's <c>Python integer 300 out of bounds for
+        ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
-        public static ushort ToUInt16(string value, IFormatProvider provider)
-        {
-            if (value == null)
-                return 0;
-            return ushort.Parse(value, NumberStyles.Integer, provider);
-        }
+        public static ushort ToUInt16(string value, IFormatProvider provider) => ToUInt16(value);
 
 
         [MethodImpl(OptimizeAndInline)]
@@ -1202,7 +1365,17 @@ namespace NumSharp.Utilities
 
         // Conversions to Int32
 
-        [MethodImpl(OptimizeAndInline)]
+        /// <summary>
+        ///     Converts a boxed value of any NumSharp dtype (or a Python <c>str</c>) to Int32: a number by NumPy's cast rules
+        ///     (the element <c>astype</c> writes), a <see cref="string"/> by NumPy's text rules (<see cref="ToInt32(string)"/>),
+        ///     anything else through its <see cref="IConvertible"/>.
+        /// </summary>
+        /// <param name="value">The value; null gives the default.</param>
+        /// <returns>The converted value.</returns>
+        /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
+        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
+[MethodImpl(OptimizeAndInline)]
         public static int ToInt32(object value)
         {
             if (value == null) return 0;
@@ -1226,6 +1399,8 @@ namespace NumSharp.Utilities
                 DateTime64 d64 => ToInt32(d64),
                 DateTime dt => ToInt32(dt),
                 TimeSpan ts => ToInt32(ts),
+                // A Python str converts by NumPy's text rules (Converts.NumPyText.cs), never .NET's culture parse.
+                string str => ToInt32(str),
                 _ => ((IConvertible)value).ToInt32(null)
             };
         }
@@ -1352,21 +1527,37 @@ namespace NumSharp.Utilities
             return ToInt32(value.Real);
         }
 
+        /// <summary>
+        ///     Converts a Python <c>str</c> to int32 as NumPy stores it into a int32 array (<c>a[0] = text</c>):
+        ///     CPython's <c>int()</c> grammar (whitespace, a sign, underscores between digits, non-ASCII decimal digits), culture-invariant.
+        /// </summary>
+        /// <param name="value">The text; null gives 0 (C#'s "no value", as <see cref="System.Convert"/> gives).</param>
+        /// <returns>The int32 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
+        /// <exception cref="OverflowException">The integer is outside int32 (NumPy's <c>Python integer 300 out of bounds for
+        ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(string value)
         {
             if (value == null)
                 return 0;
-            return int.Parse(value, CultureInfo.CurrentCulture);
+            return ParseNumPyText<int>(value, NPTypeCode.Int32);
         }
 
+        /// <summary>
+        ///     <see cref="ToInt32(string)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored (the
+        ///     parameter keeps <see cref="System.Convert"/>'s signature).
+        /// </summary>
+        /// <param name="value">The text; null gives 0.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The int32 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
+        /// <exception cref="OverflowException">The integer is outside int32 (NumPy's <c>Python integer 300 out of bounds for
+        ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
-        public static int ToInt32(string value, IFormatProvider provider)
-        {
-            if (value == null)
-                return 0;
-            return int.Parse(value, NumberStyles.Integer, provider);
-        }
+        public static int ToInt32(string value, IFormatProvider provider) => ToInt32(value);
 
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(DateTime value)
@@ -1383,7 +1574,17 @@ namespace NumSharp.Utilities
         // Conversions to UInt32
 
 
-        [MethodImpl(OptimizeAndInline)]
+        /// <summary>
+        ///     Converts a boxed value of any NumSharp dtype (or a Python <c>str</c>) to UInt32: a number by NumPy's cast rules
+        ///     (the element <c>astype</c> writes), a <see cref="string"/> by NumPy's text rules (<see cref="ToUInt32(string)"/>),
+        ///     anything else through its <see cref="IConvertible"/>.
+        /// </summary>
+        /// <param name="value">The value; null gives the default.</param>
+        /// <returns>The converted value.</returns>
+        /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
+        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
+[MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(object value)
         {
             if (value == null) return 0;
@@ -1408,6 +1609,8 @@ namespace NumSharp.Utilities
                 DateTime64 d64 => ToUInt32(d64),
                 DateTime dt => ToUInt32(dt),
                 TimeSpan ts => ToUInt32(ts),
+                // A Python str converts by NumPy's text rules (Converts.NumPyText.cs), never .NET's culture parse.
+                string str => ToUInt32(str),
                 _ => ((IConvertible)value).ToUInt32(null)
             };
         }
@@ -1547,22 +1750,38 @@ namespace NumSharp.Utilities
         }
 
 
+        /// <summary>
+        ///     Converts a Python <c>str</c> to uint32 as NumPy stores it into a uint32 array (<c>a[0] = text</c>):
+        ///     CPython's <c>int()</c> grammar (whitespace, a sign, underscores between digits, non-ASCII decimal digits), culture-invariant.
+        /// </summary>
+        /// <param name="value">The text; null gives 0 (C#'s "no value", as <see cref="System.Convert"/> gives).</param>
+        /// <returns>The uint32 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
+        /// <exception cref="OverflowException">The integer is outside uint32 (NumPy's <c>Python integer 300 out of bounds for
+        ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(string value)
         {
             if (value == null)
                 return 0;
-            return uint.Parse(value, CultureInfo.CurrentCulture);
+            return ParseNumPyText<uint>(value, NPTypeCode.UInt32);
         }
 
 
+        /// <summary>
+        ///     <see cref="ToUInt32(string)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored (the
+        ///     parameter keeps <see cref="System.Convert"/>'s signature).
+        /// </summary>
+        /// <param name="value">The text; null gives 0.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The uint32 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
+        /// <exception cref="OverflowException">The integer is outside uint32 (NumPy's <c>Python integer 300 out of bounds for
+        ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
-        public static uint ToUInt32(string value, IFormatProvider provider)
-        {
-            if (value == null)
-                return 0;
-            return uint.Parse(value, NumberStyles.Integer, provider);
-        }
+        public static uint ToUInt32(string value, IFormatProvider provider) => ToUInt32(value);
 
 
         [MethodImpl(OptimizeAndInline)]
@@ -1579,7 +1798,17 @@ namespace NumSharp.Utilities
 
         // Conversions to Int64
 
-        [MethodImpl(OptimizeAndInline)]
+        /// <summary>
+        ///     Converts a boxed value of any NumSharp dtype (or a Python <c>str</c>) to Int64: a number by NumPy's cast rules
+        ///     (the element <c>astype</c> writes), a <see cref="string"/> by NumPy's text rules (<see cref="ToInt64(string)"/>),
+        ///     anything else through its <see cref="IConvertible"/>.
+        /// </summary>
+        /// <param name="value">The value; null gives the default.</param>
+        /// <returns>The converted value.</returns>
+        /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
+        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
+[MethodImpl(OptimizeAndInline)]
         public static long ToInt64(object value)
         {
             if (value == null) return 0;
@@ -1603,6 +1832,8 @@ namespace NumSharp.Utilities
                 DateTime64 d64 => ToInt64(d64),
                 DateTime dt => ToInt64(dt),
                 TimeSpan ts => ToInt64(ts),
+                // A Python str converts by NumPy's text rules (Converts.NumPyText.cs), never .NET's culture parse.
+                string str => ToInt64(str),
                 _ => ((IConvertible)value).ToInt64(null)
             };
         }
@@ -1731,21 +1962,37 @@ namespace NumSharp.Utilities
             return ToInt64(value.Real);
         }
 
+        /// <summary>
+        ///     Converts a Python <c>str</c> to int64 as NumPy stores it into a int64 array (<c>a[0] = text</c>):
+        ///     CPython's <c>int()</c> grammar (whitespace, a sign, underscores between digits, non-ASCII decimal digits), culture-invariant.
+        /// </summary>
+        /// <param name="value">The text; null gives 0 (C#'s "no value", as <see cref="System.Convert"/> gives).</param>
+        /// <returns>The int64 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
+        /// <exception cref="OverflowException">The integer is outside int64 (NumPy's <c>Python integer 300 out of bounds for
+        ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(string value)
         {
             if (value == null)
                 return 0;
-            return long.Parse(value, CultureInfo.CurrentCulture);
+            return ParseNumPyText<long>(value, NPTypeCode.Int64);
         }
 
+        /// <summary>
+        ///     <see cref="ToInt64(string)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored (the
+        ///     parameter keeps <see cref="System.Convert"/>'s signature).
+        /// </summary>
+        /// <param name="value">The text; null gives 0.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The int64 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
+        /// <exception cref="OverflowException">The integer is outside int64 (NumPy's <c>Python integer 300 out of bounds for
+        ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
-        public static long ToInt64(string value, IFormatProvider provider)
-        {
-            if (value == null)
-                return 0;
-            return long.Parse(value, NumberStyles.Integer, provider);
-        }
+        public static long ToInt64(string value, IFormatProvider provider) => ToInt64(value);
 
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(DateTime value)
@@ -1762,7 +2009,17 @@ namespace NumSharp.Utilities
         // Conversions to UInt64
 
 
-        [MethodImpl(OptimizeAndInline)]
+        /// <summary>
+        ///     Converts a boxed value of any NumSharp dtype (or a Python <c>str</c>) to UInt64: a number by NumPy's cast rules
+        ///     (the element <c>astype</c> writes), a <see cref="string"/> by NumPy's text rules (<see cref="ToUInt64(string)"/>),
+        ///     anything else through its <see cref="IConvertible"/>.
+        /// </summary>
+        /// <param name="value">The value; null gives the default.</param>
+        /// <returns>The converted value.</returns>
+        /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
+        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
+[MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(object value)
         {
             if (value == null) return 0;
@@ -1786,6 +2043,8 @@ namespace NumSharp.Utilities
                 DateTime64 d64 => ToUInt64(d64),
                 DateTime dt => ToUInt64(dt),
                 TimeSpan ts => ToUInt64(ts),
+                // A Python str converts by NumPy's text rules (Converts.NumPyText.cs), never .NET's culture parse.
+                string str => ToUInt64(str),
                 _ => ((IConvertible)value).ToUInt64(null)
             };
         }
@@ -1948,22 +2207,38 @@ namespace NumSharp.Utilities
         }
 
 
+        /// <summary>
+        ///     Converts a Python <c>str</c> to uint64 as NumPy stores it into a uint64 array (<c>a[0] = text</c>):
+        ///     CPython's <c>int()</c> grammar (whitespace, a sign, underscores between digits, non-ASCII decimal digits), culture-invariant.
+        /// </summary>
+        /// <param name="value">The text; null gives 0 (C#'s "no value", as <see cref="System.Convert"/> gives).</param>
+        /// <returns>The uint64 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
+        /// <exception cref="OverflowException">The integer is outside uint64 (NumPy's <c>Python integer 300 out of bounds for
+        ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(string value)
         {
             if (value == null)
                 return 0;
-            return ulong.Parse(value, CultureInfo.CurrentCulture);
+            return ParseNumPyText<ulong>(value, NPTypeCode.UInt64);
         }
 
 
+        /// <summary>
+        ///     <see cref="ToUInt64(string)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored (the
+        ///     parameter keeps <see cref="System.Convert"/>'s signature).
+        /// </summary>
+        /// <param name="value">The text; null gives 0.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The uint64 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
+        /// <exception cref="OverflowException">The integer is outside uint64 (NumPy's <c>Python integer 300 out of bounds for
+        ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
-        public static ulong ToUInt64(string value, IFormatProvider provider)
-        {
-            if (value == null)
-                return 0;
-            return ulong.Parse(value, NumberStyles.Integer, provider);
-        }
+        public static ulong ToUInt64(string value, IFormatProvider provider) => ToUInt64(value);
 
 
         [MethodImpl(OptimizeAndInline)]
@@ -1980,7 +2255,17 @@ namespace NumSharp.Utilities
 
         // Conversions to Single
 
-        [MethodImpl(OptimizeAndInline)]
+        /// <summary>
+        ///     Converts a boxed value of any NumSharp dtype (or a Python <c>str</c>) to Single: a number by NumPy's cast rules
+        ///     (the element <c>astype</c> writes), a <see cref="string"/> by NumPy's text rules (<see cref="ToSingle(string)"/>),
+        ///     anything else through its <see cref="IConvertible"/>.
+        /// </summary>
+        /// <param name="value">The value; null gives the default.</param>
+        /// <returns>The converted value.</returns>
+        /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
+        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
+[MethodImpl(OptimizeAndInline)]
         public static float ToSingle(object value)
         {
             if (value == null) return 0f;
@@ -2004,6 +2289,8 @@ namespace NumSharp.Utilities
                 DateTime64 d64 => ToSingle(d64),
                 DateTime dt => ToSingle(dt),
                 TimeSpan ts => ToSingle(ts),
+                // A Python str converts by NumPy's text rules (Converts.NumPyText.cs), never .NET's culture parse.
+                string str => ToSingle(str),
                 _ => ((IConvertible)value).ToSingle(null)
             };
         }
@@ -2118,21 +2405,34 @@ namespace NumSharp.Utilities
             return (float)value.Real;
         }
 
+        /// <summary>
+        ///     Converts a Python <c>str</c> to float32 as NumPy stores it into a float32 array (<c>a[0] = text</c>):
+        ///     CPython's <c>float()</c> grammar (whitespace, underscores between digits, <c>inf</c> / <c>nan</c> in any case), culture-invariant.
+        ///     The parsed float64 is rounded once more into float32, as NumPy's store rounds it.
+        /// </summary>
+        /// <param name="value">The text; null gives 0 (C#'s "no value", as <see cref="System.Convert"/> gives).</param>
+        /// <returns>The float32 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(string value)
         {
             if (value == null)
                 return 0;
-            return float.Parse(value, CultureInfo.CurrentCulture);
+            return ParseNumPyText<float>(value, NPTypeCode.Single);
         }
 
+        /// <summary>
+        ///     <see cref="ToSingle(string)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored (the
+        ///     parameter keeps <see cref="System.Convert"/>'s signature).
+        /// </summary>
+        /// <param name="value">The text; null gives 0.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The float32 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
-        public static float ToSingle(string value, IFormatProvider provider)
-        {
-            if (value == null)
-                return 0;
-            return float.Parse(value, NumberStyles.Float | NumberStyles.AllowThousands, provider);
-        }
+        public static float ToSingle(string value, IFormatProvider provider) => ToSingle(value);
 
 
         [MethodImpl(OptimizeAndInline)]
@@ -2155,7 +2455,17 @@ namespace NumSharp.Utilities
 
         // Conversions to Double
 
-        [MethodImpl(OptimizeAndInline)]
+        /// <summary>
+        ///     Converts a boxed value of any NumSharp dtype (or a Python <c>str</c>) to Double: a number by NumPy's cast rules
+        ///     (the element <c>astype</c> writes), a <see cref="string"/> by NumPy's text rules (<see cref="ToDouble(string)"/>),
+        ///     anything else through its <see cref="IConvertible"/>.
+        /// </summary>
+        /// <param name="value">The value; null gives the default.</param>
+        /// <returns>The converted value.</returns>
+        /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
+        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
+[MethodImpl(OptimizeAndInline)]
         public static double ToDouble(object value)
         {
             if (value == null) return 0d;
@@ -2179,6 +2489,8 @@ namespace NumSharp.Utilities
                 DateTime64 d64 => ToDouble(d64),
                 DateTime dt => ToDouble(dt),
                 TimeSpan ts => ToDouble(ts),
+                // A Python str converts by NumPy's text rules (Converts.NumPyText.cs), never .NET's culture parse.
+                string str => ToDouble(str),
                 _ => ((IConvertible)value).ToDouble(null)
             };
         }
@@ -2294,21 +2606,33 @@ namespace NumSharp.Utilities
             return value.Real;
         }
 
+        /// <summary>
+        ///     Converts a Python <c>str</c> to float64 as NumPy stores it into a float64 array (<c>a[0] = text</c>):
+        ///     CPython's <c>float()</c> grammar (whitespace, underscores between digits, <c>inf</c> / <c>nan</c> in any case), culture-invariant.
+        /// </summary>
+        /// <param name="value">The text; null gives 0 (C#'s "no value", as <see cref="System.Convert"/> gives).</param>
+        /// <returns>The float64 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(string value)
         {
             if (value == null)
                 return 0;
-            return double.Parse(value, CultureInfo.CurrentCulture);
+            return ParseNumPyText<double>(value, NPTypeCode.Double);
         }
 
+        /// <summary>
+        ///     <see cref="ToDouble(string)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored (the
+        ///     parameter keeps <see cref="System.Convert"/>'s signature).
+        /// </summary>
+        /// <param name="value">The text; null gives 0.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The float64 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
-        public static double ToDouble(string value, IFormatProvider provider)
-        {
-            if (value == null)
-                return 0;
-            return double.Parse(value, NumberStyles.Float | NumberStyles.AllowThousands, provider);
-        }
+        public static double ToDouble(string value, IFormatProvider provider) => ToDouble(value);
 
         [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(bool value)
@@ -2330,7 +2654,17 @@ namespace NumSharp.Utilities
 
         // Conversions to Decimal
 
-        [MethodImpl(OptimizeAndInline)]
+        /// <summary>
+        ///     Converts a boxed value of any NumSharp dtype (or a Python <c>str</c>) to Decimal: a number by NumPy's cast rules
+        ///     (the element <c>astype</c> writes), a <see cref="string"/> by NumPy's text rules (<see cref="ToDecimal(string)"/>),
+        ///     anything else through its <see cref="IConvertible"/>.
+        /// </summary>
+        /// <param name="value">The value; null gives the default.</param>
+        /// <returns>The converted value.</returns>
+        /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
+        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
+[MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(object value)
         {
             if (value == null) return 0m;
@@ -2354,6 +2688,8 @@ namespace NumSharp.Utilities
                 DateTime64 d64 => ToDecimal(d64),
                 DateTime dt => ToDecimal(dt),
                 TimeSpan ts => ToDecimal(ts),
+                // A Python str converts by NumPy's text rules (Converts.NumPyText.cs), never .NET's culture parse.
+                string str => ToDecimal(str),
                 _ => ((IConvertible)value).ToDecimal(null)
             };
         }
@@ -2462,21 +2798,34 @@ namespace NumSharp.Utilities
             return ToDecimal(value.Real);
         }
 
+        /// <summary>
+        ///     Converts a Python <c>str</c> to decimal as NumPy stores it into a decimal array (<c>a[0] = text</c>):
+        ///     CPython's <c>float()</c> grammar (whitespace, underscores between digits, <c>inf</c> / <c>nan</c> in any case), culture-invariant.
+        ///     NumSharp's decimal (no NumPy analog) parses as a float64 and converts like the float64 → decimal cast.
+        /// </summary>
+        /// <param name="value">The text; null gives 0m (C#'s "no value", as <see cref="System.Convert"/> gives).</param>
+        /// <returns>The decimal value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(string value)
         {
             if (value == null)
                 return 0m;
-            return decimal.Parse(value, CultureInfo.CurrentCulture);
+            return ParseNumPyText<decimal>(value, NPTypeCode.Decimal);
         }
 
+        /// <summary>
+        ///     <see cref="ToDecimal(string)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored (the
+        ///     parameter keeps <see cref="System.Convert"/>'s signature).
+        /// </summary>
+        /// <param name="value">The text; null gives 0m.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The decimal value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
-        public static decimal ToDecimal(string value, IFormatProvider provider)
-        {
-            if (value == null)
-                return 0m;
-            return decimal.Parse(value, NumberStyles.Number, provider);
-        }
+        public static decimal ToDecimal(string value, IFormatProvider provider) => ToDecimal(value);
 
         [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(decimal value)
@@ -2505,7 +2854,17 @@ namespace NumSharp.Utilities
         // Conversions to Half (float16)
         // Note: Half doesn't implement IConvertible, so all conversions go through double
 
-        [MethodImpl(OptimizeAndInline)]
+        /// <summary>
+        ///     Converts a boxed value of any NumSharp dtype (or a Python <c>str</c>) to Half: a number by NumPy's cast rules
+        ///     (the element <c>astype</c> writes), a <see cref="string"/> by NumPy's text rules (<see cref="ToHalf(string)"/>),
+        ///     anything else through its <see cref="IConvertible"/>.
+        /// </summary>
+        /// <param name="value">The value; null gives the default.</param>
+        /// <returns>The converted value.</returns>
+        /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
+        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
+[MethodImpl(OptimizeAndInline)]
         public static Half ToHalf(object value)
         {
             if (value == null) return default;
@@ -2529,6 +2888,8 @@ namespace NumSharp.Utilities
                 DateTime64 d64 => ToHalf(d64),
                 DateTime dt => ToHalf(dt),
                 TimeSpan ts => ToHalf(ts),
+                // A Python str converts by NumPy's text rules (Converts.NumPyText.cs), never .NET's culture parse.
+                string str => ToHalf(str),
                 _ => (Half)((IConvertible)value).ToDouble(null)
             };
         }
@@ -2659,21 +3020,34 @@ namespace NumSharp.Utilities
             return ToHalf(value.Real);
         }
 
+        /// <summary>
+        ///     Converts a Python <c>str</c> to float16 as NumPy stores it into a float16 array (<c>a[0] = text</c>):
+        ///     CPython's <c>float()</c> grammar (whitespace, underscores between digits, <c>inf</c> / <c>nan</c> in any case), culture-invariant.
+        ///     The parsed float64 is rounded once more into float16, as NumPy's store rounds it.
+        /// </summary>
+        /// <param name="value">The text; null gives default (C#'s "no value", as <see cref="System.Convert"/> gives).</param>
+        /// <returns>The float16 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static Half ToHalf(string value)
         {
             if (value == null)
                 return default;
-            return Half.Parse(value, CultureInfo.CurrentCulture);
+            return ParseNumPyText<Half>(value, NPTypeCode.Half);
         }
 
+        /// <summary>
+        ///     <see cref="ToHalf(string)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored (the
+        ///     parameter keeps <see cref="System.Convert"/>'s signature).
+        /// </summary>
+        /// <param name="value">The text; null gives default.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The float16 value.</returns>
+        /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
+        ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
-        public static Half ToHalf(string value, IFormatProvider provider)
-        {
-            if (value == null)
-                return default;
-            return Half.Parse(value, provider);
-        }
+        public static Half ToHalf(string value, IFormatProvider provider) => ToHalf(value);
 
         [MethodImpl(OptimizeAndInline)]
         public static Half ToHalf(DateTime value)
@@ -2690,7 +3064,17 @@ namespace NumSharp.Utilities
         // Conversions to Complex (complex128)
         // Note: Complex and Half don't implement IConvertible
 
-        [MethodImpl(OptimizeAndInline)]
+        /// <summary>
+        ///     Converts a boxed value of any NumSharp dtype (or a Python <c>str</c>) to Complex: a number by NumPy's cast rules
+        ///     (the element <c>astype</c> writes), a <see cref="string"/> by NumPy's text rules (<see cref="ToComplex(string)"/>),
+        ///     anything else through its <see cref="IConvertible"/>.
+        /// </summary>
+        /// <param name="value">The value; null gives the default.</param>
+        /// <returns>The converted value.</returns>
+        /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
+        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
+[MethodImpl(OptimizeAndInline)]
         public static System.Numerics.Complex ToComplex(object value)
         {
             if (value == null) return default;
@@ -2714,6 +3098,8 @@ namespace NumSharp.Utilities
                 DateTime64 d64 => ToComplex(d64),
                 DateTime dt => ToComplex(dt),
                 TimeSpan ts => ToComplex(ts),
+                // A Python str converts by NumPy's text rules (Converts.NumPyText.cs), never .NET's culture parse.
+                string str => ToComplex(str),
                 _ => new Complex(((IConvertible)value).ToDouble(null), 0)
             };
         }
@@ -3153,15 +3539,30 @@ namespace NumSharp.Utilities
 
         // Conversions to String
 
+        /// <summary>
+        ///     The text of a boxed value (<see cref="ToString(object, IFormatProvider)"/> with no provider): NumPy's <c>str()</c>
+        ///     for a NumSharp dtype value, the value itself for a <see cref="string"/>.
+        /// </summary>
+        /// <param name="value">The value; null gives the empty string.</param>
+        /// <returns>The text.</returns>
         [MethodImpl(OptimizeAndInline)]
-        public static string ToString(object value)
-        {
-            return ToString(value, null);
-        }
+        public static string ToString(object value) => ToString(value, null);
 
+        /// <summary>
+        ///     The text of a boxed value: NumPy's <c>str()</c> for a value of one of NumSharp's dtypes (the text <c>astype('U')</c>
+        ///     writes for it, culture-invariant), the value itself for a <see cref="string"/>, and .NET's text through
+        ///     <paramref name="provider"/> for anything else (a <see cref="DateTime"/>, a <see cref="TimeSpan"/>, another object).
+        /// </summary>
+        /// <param name="value">The value; null gives the empty string.</param>
+        /// <param name="provider">The format provider for a value that is not a NumSharp dtype value; ignored otherwise.</param>
+        /// <returns>The text.</returns>
         [MethodImpl(OptimizeAndInline)]
         public static string ToString(object value, IFormatProvider provider)
         {
+            // NumPy's text for a dtype value: no culture, NumPy's float / complex forms ("1.0", "1e+20", "(1+2j)").
+            string numpy = NumPyStr(value);
+            if (numpy != null)
+                return numpy;
             switch (value)
             {
                 case IConvertible ic:
@@ -3173,195 +3574,296 @@ namespace NumSharp.Utilities
             }
         }
 
+        /// <summary>
+        ///     NumPy's <c>str()</c> of a bool value — the text <c>astype('U')</c> writes for it: <c>True</c> / <c>False</c>. Culture-invariant.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The text.</returns>
         [MethodImpl(OptimizeAndInline)]
-        public static string ToString(bool value)
+        public static string ToString(bool value) => NumPyStrBool(value);
+
+        /// <summary>
+        ///     <see cref="ToString(bool)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(bool value, IFormatProvider provider) => ToString(value);
+
+        /// <summary>
+        ///     NumPy's <c>str()</c> of a char value — the text <c>astype('U')</c> writes for it: its uint16 number (<c>'a'</c> → <c>"97"</c>): NumSharp's <c>char</c> dtype crosses to text as a uint16, as <c>astype('U')</c> writes it. Culture-invariant.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(char value) => NumPyStrUnsigned(value);
+
+        /// <summary>
+        ///     <see cref="ToString(char)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(char value, IFormatProvider provider) => ToString(value);
+
+
+        /// <summary>
+        ///     NumPy's <c>str()</c> of a int8 value — the text <c>astype('U')</c> writes for it: its decimal digits. Culture-invariant.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(sbyte value) => NumPyStrSigned(value);
+
+
+        /// <summary>
+        ///     <see cref="ToString(sbyte)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(sbyte value, IFormatProvider provider) => ToString(value);
+
+        /// <summary>
+        ///     NumPy's <c>str()</c> of a uint8 value — the text <c>astype('U')</c> writes for it: its decimal digits. Culture-invariant.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(byte value) => NumPyStrUnsigned(value);
+
+        /// <summary>
+        ///     <see cref="ToString(byte)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(byte value, IFormatProvider provider) => ToString(value);
+
+        /// <summary>
+        ///     NumPy's <c>str()</c> of a int16 value — the text <c>astype('U')</c> writes for it: its decimal digits. Culture-invariant.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(short value) => NumPyStrSigned(value);
+
+        /// <summary>
+        ///     <see cref="ToString(short)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(short value, IFormatProvider provider) => ToString(value);
+
+
+        /// <summary>
+        ///     NumPy's <c>str()</c> of a uint16 value — the text <c>astype('U')</c> writes for it: its decimal digits. Culture-invariant.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(ushort value) => NumPyStrUnsigned(value);
+
+
+        /// <summary>
+        ///     <see cref="ToString(ushort)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(ushort value, IFormatProvider provider) => ToString(value);
+
+        /// <summary>
+        ///     NumPy's <c>str()</c> of a int32 value — the text <c>astype('U')</c> writes for it: its decimal digits. Culture-invariant.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(int value) => NumPyStrSigned(value);
+
+        /// <summary>
+        ///     <see cref="ToString(int)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(int value, IFormatProvider provider) => ToString(value);
+
+
+        /// <summary>
+        ///     NumPy's <c>str()</c> of a uint32 value — the text <c>astype('U')</c> writes for it: its decimal digits. Culture-invariant.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(uint value) => NumPyStrUnsigned(value);
+
+
+        /// <summary>
+        ///     <see cref="ToString(uint)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(uint value, IFormatProvider provider) => ToString(value);
+
+        /// <summary>
+        ///     NumPy's <c>str()</c> of a int64 value — the text <c>astype('U')</c> writes for it: its decimal digits. Culture-invariant.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(long value) => NumPyStrSigned(value);
+
+        /// <summary>
+        ///     <see cref="ToString(long)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(long value, IFormatProvider provider) => ToString(value);
+
+
+        /// <summary>
+        ///     NumPy's <c>str()</c> of a uint64 value — the text <c>astype('U')</c> writes for it: its decimal digits. Culture-invariant.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(ulong value) => NumPyStrUnsigned(value);
+
+
+        /// <summary>
+        ///     <see cref="ToString(ulong)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(ulong value, IFormatProvider provider) => ToString(value);
+
+        /// <summary>
+        ///     NumPy's <c>str()</c> of a float32 value — the text <c>astype('U')</c> writes for it: its shortest round-trip digits as float32 (<c>0.1f</c> → <c>"0.1"</c>, <c>1e20f</c> → <c>"1e+20"</c>). Culture-invariant.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(float value) => NumPyStrFloat(value, FloatKind.Single);
+
+        /// <summary>
+        ///     <see cref="ToString(float)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(float value, IFormatProvider provider) => ToString(value);
+
+        /// <summary>
+        ///     NumPy's <c>str()</c> of a float64 value — the text <c>astype('U')</c> writes for it: Python's <c>repr</c> of the float (<c>1.0</c> → <c>"1.0"</c>, <c>1e20</c> → <c>"1e+20"</c>, NaN → <c>"nan"</c>). Culture-invariant.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(double value) => NumPyStrFloat(value, FloatKind.Double);
+
+        /// <summary>
+        ///     <see cref="ToString(double)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(double value, IFormatProvider provider) => ToString(value);
+
+        /// <summary>
+        ///     NumPy's <c>str()</c> of a decimal value — the text <c>astype('U')</c> writes for it: the float64 it converts to (NumSharp's decimal text rule; no NumPy analog). Culture-invariant.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(decimal value) => NumPyStrFloat(ToDouble(value), FloatKind.Double);
+
+        /// <summary>
+        ///     <see cref="ToString(decimal)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(decimal value, IFormatProvider provider) => ToString(value);
+
+        /// <summary>
+        ///     NumPy's <c>str()</c> of a float16 value — the text <c>astype('U')</c> writes for it: its shortest round-trip digits
+        ///     as float16 (<c>(Half)0.1</c> → <c>"0.1"</c>, <c>(Half)65504</c> → <c>"6.55e+04"</c>). Culture-invariant.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(Half value) => NumPyStrFloat((double)value, FloatKind.Half);
+
+        /// <summary>
+        ///     <see cref="ToString(Half)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(Half value, IFormatProvider provider) => ToString(value);
+
+        /// <summary>
+        ///     NumPy's <c>str()</c> of a complex128 value — the text <c>astype('U')</c> writes for it: <c>"(1+2j)"</c>, a pure
+        ///     imaginary value as <c>"2j"</c>, each part written like a float64 (<c>"(nan+infj)"</c>). Culture-invariant.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(System.Numerics.Complex value) => NumPyStrComplex(value);
+
+        /// <summary>
+        ///     <see cref="ToString(System.Numerics.Complex)"/>: NumPy's text has no culture, so <paramref name="provider"/> is
+        ///     ignored.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The text.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static string ToString(System.Numerics.Complex value, IFormatProvider provider) => ToString(value);
+
+        /// <summary>
+        ///     Converts a Python <c>str</c> to complex128 as NumPy stores it into a complex128 array (<c>a[0] = text</c>):
+        ///     CPython's <c>complex()</c> grammar (<c>"1+2j"</c>, <c>"(1+2j)"</c>, <c>"2j"</c>, <c>"inf"</c>, whitespace around), culture-invariant.
+        /// </summary>
+        /// <param name="value">The text; null gives zero (C#'s "no value").</param>
+        /// <returns>The complex128 value.</returns>
+        /// <exception cref="ValueError">The text is not a complex literal (CPython's <c>complex() arg is a malformed string</c>).</exception>
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(string value)
         {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString();
+            if (value == null)
+                return default;
+            return ParseNumPyText<System.Numerics.Complex>(value, NPTypeCode.Complex);
         }
 
+        /// <summary>
+        ///     <see cref="ToComplex(string)"/>: NumPy's text has no culture, so <paramref name="provider"/> is ignored.
+        /// </summary>
+        /// <param name="value">The text; null gives zero.</param>
+        /// <param name="provider">Ignored.</param>
+        /// <returns>The complex128 value.</returns>
+        /// <exception cref="ValueError">The text is not a complex literal.</exception>
         [MethodImpl(OptimizeAndInline)]
-        public static string ToString(bool value, IFormatProvider provider)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(provider);
-        }
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(char value)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return char.ToString(value);
-        }
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(char value, IFormatProvider provider)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(provider);
-        }
-
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(sbyte value)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(CultureInfo.CurrentCulture);
-        }
-
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(sbyte value, IFormatProvider provider)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(provider);
-        }
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(byte value)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(CultureInfo.CurrentCulture);
-        }
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(byte value, IFormatProvider provider)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(provider);
-        }
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(short value)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(CultureInfo.CurrentCulture);
-        }
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(short value, IFormatProvider provider)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(provider);
-        }
-
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(ushort value)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(CultureInfo.CurrentCulture);
-        }
-
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(ushort value, IFormatProvider provider)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(provider);
-        }
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(int value)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(CultureInfo.CurrentCulture);
-        }
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(int value, IFormatProvider provider)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(provider);
-        }
-
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(uint value)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(CultureInfo.CurrentCulture);
-        }
-
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(uint value, IFormatProvider provider)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(provider);
-        }
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(long value)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(CultureInfo.CurrentCulture);
-        }
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(long value, IFormatProvider provider)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(provider);
-        }
-
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(ulong value)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(CultureInfo.CurrentCulture);
-        }
-
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(ulong value, IFormatProvider provider)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(provider);
-        }
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(float value)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(CultureInfo.CurrentCulture);
-        }
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(float value, IFormatProvider provider)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(provider);
-        }
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(double value)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(CultureInfo.CurrentCulture);
-        }
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(double value, IFormatProvider provider)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(provider);
-        }
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(decimal value)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(CultureInfo.CurrentCulture);
-        }
-
-        [MethodImpl(OptimizeAndInline)]
-        public static string ToString(decimal value, IFormatProvider provider)
-        {
-            Contract.Ensures(Contract.Result<string>() != null);
-            return value.ToString(provider);
-        }
+        public static System.Numerics.Complex ToComplex(string value, IFormatProvider provider) => ToComplex(value);
 
         [MethodImpl(OptimizeAndInline)]
         public static string ToString(DateTime value)

@@ -88,6 +88,67 @@ namespace NumSharp
         internal string PythonStrText { get; private set; }
 
         /// <summary>
+        ///     The operand NEP 50 promotion (<see cref="DTypePromotion.ResultType"/>) reads for this array: the boxed C#
+        ///     literal a <see cref="WasPythonLiteral"/> array was made from — a WEAK Python <c>int</c> / <c>float</c> /
+        ///     <c>complex</c> that adopts the other operands' dtype —, else the array itself, which is STRONG (a 0-d array
+        ///     included, as in NumPy 2.x).
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///     This is how a function that promotes by NumPy's <c>result_type</c> reads the mark NumPy sets on the temporary
+        ///     array of a Python scalar argument (<c>NPY_ARRAY_WAS_PYTHON_LITERAL</c>). It matters most next to text: a Python
+        ///     number and a string array have no common DType, so <c>np.where(c, u, 1)</c> raises NumPy's
+        ///     <c>DTypePromotionError</c> (<c>The DType &lt;class 'numpy.dtypes.StrDType'&gt; could not be promoted by
+        ///     &lt;class 'numpy.dtypes._PyLongDType'&gt;</c>), where the 0-d int32 array of the literal, read as an array,
+        ///     promotes to <c>&lt;U11</c>.
+        ///     </para>
+        ///     <para>
+        ///     A bool, str, <see cref="Half"/> or <c>char</c> mark is not weak (NumPy's flag marks only int / float /
+        ///     complex): those arrays are returned as themselves, and promote as the strong dtype they hold.
+        ///     </para>
+        /// </remarks>
+        internal object Nep50Operand => WasPythonLiteral ? Storage.GetAtIndex(0) : this;
+
+        /// <summary>
+        ///     The 0-d array a boxed C# value stands for as a Python argument, marked the way its implicit conversion to
+        ///     <see cref="NDArray"/> marks it: an integer primitive, <c>float</c>, <c>double</c> or
+        ///     <see cref="System.Numerics.Complex"/> is a <see cref="WasPythonLiteral"/> array (a weak Python scalar), a
+        ///     <c>bool</c> a <see cref="WasPythonBool"/> array, a <see cref="string"/> a <see cref="WasPythonStr"/> array, a
+        ///     <see cref="Half"/> or <c>char</c> a <see cref="WasNumPyScalar"/> array. An <see cref="NDArray"/> is returned as
+        ///     it is; anything else (a <c>decimal</c>, a C# array or collection) is <c>np.asanyarray(value)</c>.
+        /// </summary>
+        /// <param name="value">The boxed argument (an <c>object</c> parameter's value).</param>
+        /// <returns>The array (a new one, except an <see cref="NDArray"/> argument).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="value"/> has no NumSharp array form.</exception>
+        /// <remarks>
+        ///     An <c>object</c> overload must give a boxed literal the same meaning the <see cref="NDArray"/> overload gives
+        ///     the literal itself: <c>np.where(c, u, (object)1)</c> and <c>np.where(c, u, 1)</c> are one NumPy call. The
+        ///     unmarked <c>np.asanyarray(1)</c> is a strong 0-d array, which a promotion by marks reads as a NumPy array.
+        /// </remarks>
+        internal static NDArray FromPythonOperand(object value) => value switch
+        {
+            null => throw new ArgumentNullException(nameof(value)),
+            NDArray nd => nd,
+            sbyte v => PythonLiteral(v),
+            byte v => PythonLiteral(v),
+            short v => PythonLiteral(v),
+            ushort v => PythonLiteral(v),
+            int v => PythonLiteral(v),
+            uint v => PythonLiteral(v),
+            long v => PythonLiteral(v),
+            ulong v => PythonLiteral(v),
+            float v => PythonLiteral(v),
+            double v => PythonLiteral(v),
+            System.Numerics.Complex v => PythonLiteral(v),
+            bool v => PythonBoolLiteral(v),
+            string v => PythonStrLiteral(v),
+            Half v => NumPyScalarLiteral(v),
+            char v => NumPyScalarLiteral(v),
+            _ => np.asanyarray(value),
+        };
+
+        /// <summary>
         ///     Creates the 0-d bool array of a C# <c>bool</c> literal, marked <see cref="WasPythonBool"/>. The implicit
         ///     <c>bool → NDArray</c> conversion calls it.
         /// </summary>
@@ -303,7 +364,12 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(value));
             if (value is NDArray nd)
                 return PackForStore(nd, destination, pyArrayPackRoute: false);
-            if (!IsStoreScalar(value) || destination == NPTypeCode.String || destination == NPTypeCode.Empty)
+            // A Python str into a NUMERIC destination: PyArray_FromAny(str, dtype, FORCECAST) runs the dtype's setitem on
+            // the str itself (PyArray_Pack: int() / float() / complex(), a bool takes the str's truth), so its errors quote
+            // the str ('1.5'), where converting it to a U array first and casting that would quote the array element
+            // (np.str_('1.5')). The values are the same either way.
+            bool numericText = value is string && destination != NPTypeCode.String && destination != NPTypeCode.Empty;
+            if (!numericText && (!IsStoreScalar(value) || destination == NPTypeCode.String || destination == NPTypeCode.Empty))
                 return np.asanyarray(value);
 
             byte* slot = stackalloc byte[ReductionInitial.SlotBytes];

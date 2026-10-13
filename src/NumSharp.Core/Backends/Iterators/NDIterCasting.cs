@@ -310,19 +310,25 @@ namespace NumSharp.Backends.Iteration
         /// Find common dtype for all operands (for COMMON_DTYPE flag).
         /// Returns the dtype that all operands can be safely promoted to.
         /// </summary>
+        /// <param name="operands">The operands (the first <paramref name="nop"/> are read; none may be null).</param>
+        /// <param name="nop">The operand count.</param>
+        /// <returns>NumPy's <c>np.result_type</c> of the operands' dtypes (float64 for no operand).</returns>
+        /// <exception cref="NotSupportedException">An operand is a string array (the numeric promotion refuses text).</exception>
+        /// <remarks>
+        ///     NumPy's <c>npyiter_get_common_dtype</c> is <c>PyArray_ResultType</c> over the operands, which does not depend
+        ///     on their order (<c>int8, uint8, float16</c> is float16 in every order); the operands are arrays, so all of them
+        ///     are strong (NEP 50). This folded <see cref="PromoteTypes"/> left to right before, whose own rules differed from
+        ///     NumPy's (int32 + float32 gave float32, bool + int8 gave int16).
+        /// </remarks>
         public static NPTypeCode FindCommonDtype(NDArray[] operands, int nop)
         {
             if (nop == 0)
                 return NPTypeCode.Double;
 
-            NPTypeCode result = operands[0].typecode;
-
-            for (int i = 1; i < nop; i++)
-            {
-                result = PromoteTypes(result, operands[i].typecode);
-            }
-
-            return result;
+            var codes = new NPTypeCode[nop];
+            for (int i = 0; i < nop; i++)
+                codes[i] = operands[i].typecode;
+            return np._FindCommonType_Array(codes);
         }
 
         /// <summary>
@@ -330,68 +336,23 @@ namespace NumSharp.Backends.Iteration
         /// can resolve the common dtype of VIRTUAL operands across null slots
         /// (FindCommonDtype assumes a dense non-null operand array).
         /// </summary>
+        /// <param name="a">The first type.</param>
+        /// <param name="b">The second type.</param>
+        /// <returns>NumPy's <c>np.promote_types(a, b)</c>: the array-array promotion table
+        ///     (<c>np._nptypemap_arr_arr</c>, gated against NumPy by the <c>dtype_text</c> oracle tier).</returns>
+        /// <exception cref="NotSupportedException">One type is the string lane and the other is not.</exception>
+        /// <remarks>
+        ///     This carried its own rules before, which differed from NumPy's on 30 of the 225 pairs of NumSharp's dtypes:
+        ///     a float beside a wider integer kept the float (int32 + float32 gave float32, int16 + float16 gave float16;
+        ///     NumPy: float64 and float32), bool + int8 gave int16 (NumPy: int8), and char + uint16 gave char (the table:
+        ///     uint16). A set of three or more types goes through <see cref="FindCommonDtype"/> (order-independent), never a
+        ///     fold of this.
+        /// </remarks>
         internal static NPTypeCode PromoteTypes(NPTypeCode a, NPTypeCode b)
         {
             if (a == b)
                 return a;
-
-            // Complex absorbs everything (highest kind).
-            if (IsComplex(a) || IsComplex(b))
-                return NPTypeCode.Complex;
-
-            // Float always wins over int
-            if (IsFloatingPoint(a) && !IsFloatingPoint(b))
-                return a;
-            if (IsFloatingPoint(b) && !IsFloatingPoint(a))
-                return b;
-
-            // Both float - use larger
-            if (IsFloatingPoint(a) && IsFloatingPoint(b))
-            {
-                int sizeA = InfoOf.GetSize(a);
-                int sizeB = InfoOf.GetSize(b);
-                return sizeA >= sizeB ? a : b;
-            }
-
-            // Both int - complex promotion rules
-            bool aIsSigned = IsSignedInteger(a);
-            bool bIsSigned = IsSignedInteger(b);
-            int sizeA2 = InfoOf.GetSize(a);
-            int sizeB2 = InfoOf.GetSize(b);
-
-            if (aIsSigned == bIsSigned)
-            {
-                // Same signedness - use larger
-                return sizeA2 >= sizeB2 ? a : b;
-            }
-
-            // Mixed signedness - promote to signed of larger size or double size
-            int maxSize = Math.Max(sizeA2, sizeB2);
-            if (aIsSigned)
-            {
-                // a is signed, b is unsigned
-                if (sizeA2 > sizeB2) return a;  // Signed is larger
-                // Need next larger signed
-                return maxSize switch
-                {
-                    1 => NPTypeCode.Int16,
-                    2 => NPTypeCode.Int32,
-                    4 => NPTypeCode.Int64,
-                    _ => NPTypeCode.Double  // Fallback
-                };
-            }
-            else
-            {
-                // b is signed, a is unsigned
-                if (sizeB2 > sizeA2) return b;
-                return maxSize switch
-                {
-                    1 => NPTypeCode.Int16,
-                    2 => NPTypeCode.Int32,
-                    4 => NPTypeCode.Int64,
-                    _ => NPTypeCode.Double
-                };
-            }
+            return np._FindCommonArrayType(a, b);
         }
 
         // =========================================================================

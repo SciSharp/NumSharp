@@ -843,17 +843,19 @@ namespace NumSharp.Tests.Casting
         // Group A: String target for Half/Complex sources.
         // Previously ChangeType<string>(Half/Complex) and ChangeType(Half/Complex, NPTypeCode.String)
         // cast to IConvertible which fails since Half/Complex don't implement it.
+        // The text is NumPy's str() of the scalar (Converts.NumPyText.cs): str(np.float16(1)) is '1.0',
+        // str(np.complex128(3+4j)) is '(3+4j)' — not .NET's "1" / "<3; 4>".
 
         [TestMethod]
         public void ChangeTypeGeneric_HalfToString_Works()
         {
-            Converts.ChangeType<string>(Half.One).Should().Be("1");
+            Converts.ChangeType<string>(Half.One).Should().Be("1.0");
         }
 
         [TestMethod]
         public void ChangeTypeGeneric_ComplexToString_Works()
         {
-            Converts.ChangeType<string>(new Complex(3, 4)).Should().Be("<3; 4>");
+            Converts.ChangeType<string>(new Complex(3, 4)).Should().Be("(3+4j)");
         }
 
         [TestMethod]
@@ -865,7 +867,7 @@ namespace NumSharp.Tests.Casting
         [TestMethod]
         public void ChangeType_ComplexToNPTypeCodeString_Works()
         {
-            Converts.ChangeType((object)new Complex(3, 4), NPTypeCode.String).Should().Be("<3; 4>");
+            Converts.ChangeType((object)new Complex(3, 4), NPTypeCode.String).Should().Be("(3+4j)");
         }
 
         // Group B: FindConverter<Half/Complex, string> routes through
@@ -875,14 +877,14 @@ namespace NumSharp.Tests.Casting
         public void FindConverter_HalfToString_Works()
         {
             var conv = Converts.FindConverter<Half, string>();
-            conv(Half.One).Should().Be("1");
+            conv(Half.One).Should().Be("1.0");
         }
 
         [TestMethod]
         public void FindConverter_ComplexToString_Works()
         {
             var conv = Converts.FindConverter<Complex, string>();
-            conv(new Complex(3, 4)).Should().Be("<3; 4>");
+            conv(new Complex(3, 4)).Should().Be("(3+4j)");
         }
 
         // Group C: .NET-style ChangeType(Object, TypeCode) and (Object, TypeCode, IFormatProvider).
@@ -944,7 +946,7 @@ namespace NumSharp.Tests.Casting
         [TestMethod]
         public void ChangeTypeTypeCode_ComplexToString_Works()
         {
-            Converts.ChangeType((object)new Complex(3, 4), TypeCode.String).Should().Be("<3; 4>");
+            Converts.ChangeType((object)new Complex(3, 4), TypeCode.String).Should().Be("(3+4j)");
         }
 
         [TestMethod]

@@ -124,7 +124,34 @@ namespace NumSharp.Backends.Iteration
         /// <summary>
         /// NEP50 array-array promotion over the 15 NumSharp dtypes.
         /// </summary>
+        /// <param name="a">The first dtype.</param>
+        /// <param name="b">The second dtype.</param>
+        /// <returns>The promoted dtype — the array-array table's answer (<c>np._nptypemap_arr_arr</c>).</returns>
+        /// <remarks>
+        ///     NumSharp's char dtype promotes as a uint16 (NumPy has no char), but where the uint16 answer IS the char's own
+        ///     width — char beside bool or uint8 — the table keeps char, so the result is char, not uint16 (char + uint16 is
+        ///     uint16). This returned uint16 for those two pairs before, so <c>np.select</c> / <c>np.choose</c> /
+        ///     <c>np.r_</c> / <c>np.evaluate</c> typed a char-and-bool operation uint16 where <c>np.where</c> and the ufuncs
+        ///     (the table) type it char.
+        /// </remarks>
         internal static NPTypeCode PromoteStrong(NPTypeCode a, NPTypeCode b)
+        {
+            NPTypeCode r = PromoteStrongNumeric(a, b);
+            // The uint16 a char operand was read as, beside a narrower unsigned / bool operand: the char itself.
+            if (r == NPTypeCode.UInt16 && (a == NPTypeCode.Char || b == NPTypeCode.Char)
+                && a != NPTypeCode.UInt16 && b != NPTypeCode.UInt16)
+                return NPTypeCode.Char;
+            return r;
+        }
+
+        /// <summary>
+        /// The NEP50 array-array promotion with NumSharp's char read as uint16 (<see cref="PromoteStrong"/> maps a uint16
+        /// result that is the char's own width back to char).
+        /// </summary>
+        /// <param name="a">The first dtype.</param>
+        /// <param name="b">The second dtype.</param>
+        /// <returns>The promoted dtype, a char operand counted as uint16.</returns>
+        private static NPTypeCode PromoteStrongNumeric(NPTypeCode a, NPTypeCode b)
         {
             if (a == b)
                 return a;

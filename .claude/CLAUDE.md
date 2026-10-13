@@ -85,6 +85,22 @@ parsed numbers). Overflow texts are the LP64 ones (`Python int too large to conv
 `astype`, setitem / `fill` / `full` / `ones` / `pad` / `copyto` / `np.array`, numeric ufuncs into a text `out=` (with
 `where=` the out's text is parsed into the loop dtype first, as NumPy's READWRITE buffer does), `np.add` under a string
 `dtype=` over numbers, numeric-`dtype=` reductions and `np.cov` over text (parsed first). 2.0–7.9× NumPy at 1K / 100K / 1M.
+**`Converts` and the other converter classes speak NumPy's text too, and promote like NumPy (2026-10-13).** Number → text is
+the scalar's `str()` and text → number NumPy's store of a Python str, culture-invariant, through ONE pair of helpers
+(`Utilities/Converts.NumPyText.cs`: `NumPyStr`, `ParseNumPyText<T>`, `NumPyTextTruth`) that every route reaches — the
+typed / object `To*` and `ToString`, every `ChangeType`, `FindConverter` / `Converts<T>` (a string source must never reach
+`CreateIntegerConverter`: its `IConvertible.ToDouble` parses in the CURRENT culture and truncates), `NonGenericConvert`,
+`TypelessConvert`, `ArrayConvert`, `py.complex` (CPython's `complex(str)`); an `IFormatProvider` is ignored for dtype values.
+A char target follows astype (numbers through the int32 intermediate; text as a uint16). `np.loadtxt` stores a converter's
+result by `PyArray_Pack` (`ReductionInitial.TryPack`), never `System.Convert` (which rounds). Promotion: every internal
+engine is the table (`NDIterCasting.PromoteTypes`, `NDExprTypeRules.PromoteStrong` — char beside bool / uint8 stays char)
+and a SET of three or more types is NumPy's order-independent `PyArray_PromoteDTypeSequence` (`_can_coerce_all`,
+`FindCommonDtype`, the iterator's VIRTUAL operand: `int8, uint8, float16` is float16, a left fold gives float32). A C#
+number literal is WEAK wherever a promotion reads the mark (`NDArray.Nep50Operand`; an `object` overload builds its operand
+with `NDArray.FromPythonOperand`), so text beside a literal is NumPy's `DTypePromotionError` in `np.where` / `np.choose` /
+`np.select` / `np.r_`, and a literal inside an `NDArray[]` stays weak in their numeric routes. Still the house rule
+(`[Misaligned]`, an owner decision for the next phase): the ufuncs and `np.where`'s numeric route read EVERY 0-d operand as
+weak. Gates `Casting/ConvertsNumPyTextTests`, `DTypes/PromotionEngineParityTests`, `APIs/Nep50LiteralPromotionTests`.
 **The NEP 55 `StringDType` descriptor exists (P1.2, 2026-10-12); its arrays come with P1.3.** `VStringDTypeMeta` is
 the class (`numpy.dtypes.StringDType`, kind / char `'T'`, num 2056, a 16-byte cell aligned to 8, parametric, NO singleton:
 every descriptor is fresh). It shares the `NPTypeCode.String` lane with `S` / `U` (decision D4: the descriptor's class

@@ -412,7 +412,9 @@ namespace NumSharp.Backends.Strings
         /// </remarks>
         internal static NDArray Where(NDArray condition, NDArray x, NDArray y, long[] dims)
         {
-            var descr = DTypePromotion.ResultType(x, y);
+            // A C# number literal is a WEAK Python scalar (Nep50Operand): np.where(c, t, 1) names _PyLongDType in NumPy's
+            // DTypePromotionError, not the literal's int32.
+            var descr = DTypePromotion.ResultType(x.Nep50Operand, y.Nep50Operand);
             var layout = Shape.NpyIterOutputShape((long[])dims.Clone(), new[] { condition.Shape, x.Shape, y.Shape });
             if (layout.size == 0)
                 return new NDArray(descr, layout, true);

@@ -524,19 +524,22 @@ namespace NumSharp.Backends.Iteration
                     else
                     {
                         // VIRTUAL: common dtype over the real operands (the
-                        // requested dtype was discarded, NumPy parity).
-                        allocDtype = NPTypeCode.Empty;
+                        // requested dtype was discarded, NumPy parity). NumPy's
+                        // np.result_type over them, which does not depend on their
+                        // order (a left fold of the pairwise promotion does: int8,
+                        // uint8, float16 is float16 in NumPy, float32 folded).
+                        var realCodes = new NPTypeCode[nop];
+                        int nreal = 0;
                         for (int j = 0; j < nop; j++)
                         {
                             if (op[j] is null)
                                 continue;
-                            allocDtype = allocDtype == NPTypeCode.Empty
-                                ? op[j].typecode
-                                : NDIterCasting.PromoteTypes(allocDtype, op[j].typecode);
+                            realCodes[nreal++] = op[j].typecode;
                         }
-                        if (allocDtype == NPTypeCode.Empty)
+                        if (nreal == 0)
                             throw new ArgumentException(
                                 "at least one array or dtype is required");
+                        allocDtype = np._FindCommonType_Array(realCodes[..nreal]);
                     }
 
                     // Determine output shape: for op_axes, filter out -1 entries

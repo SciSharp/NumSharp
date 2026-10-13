@@ -43,7 +43,7 @@ namespace NumSharp
         public static NDArray where(NDArray condition, object x, NDArray y)
         {
             using var plain = NDMatrixBoundary.PlainFor(condition, y);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return where_internal(condition, asanyarray(x), y);
+            return where_internal(condition, NDArray.FromPythonOperand(x), y);
         }
 
         /// <summary>
@@ -54,7 +54,7 @@ namespace NumSharp
         public static NDArray where(NDArray condition, NDArray x, object y)
         {
             using var plain = NDMatrixBoundary.PlainFor(condition, x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return where_internal(condition, x, asanyarray(y));
+            return where_internal(condition, x, NDArray.FromPythonOperand(y));
         }
 
         /// <summary>
@@ -65,7 +65,7 @@ namespace NumSharp
         public static NDArray where(NDArray condition, object x, object y)
         {
             using var plain = NDMatrixBoundary.PlainFor(condition);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return where_internal(condition, asanyarray(x), asanyarray(y));
+            return where_internal(condition, NDArray.FromPythonOperand(x), NDArray.FromPythonOperand(y));
         }
 
         /// <summary>
