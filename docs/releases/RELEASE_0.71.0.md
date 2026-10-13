@@ -10,7 +10,7 @@
   - `np.ma.*` - the masked-array module; `np.emath.*` - the automatic-domain math module.
 - **`DType` is NumPy's two-level dtype model** - `NDArray.dtype` returns a `numpy.dtype`-shaped descriptor, with `np.dtypes`, byte order and `datetime64` / `timedelta64` descriptors.
 - **Reductions on NumPy's own schedules** - `max`, `min`, `ptp`, `nanmax`, `nanmin`, `argmax` and the fused `np.evaluate` reductions match NumPy bit for bit, down to the sign of a ±0 tie and a NaN's payload, and most of them run faster.
-- **~60 NumPy-parity and memory-safety fixes**, **15 measured speedups** and **18 breaking changes** - every line traced to one of 142 cited commits out of the release's 348.
+- **~60 NumPy-parity and memory-safety fixes**, **15 measured speedups** and **20 breaking changes** - every line traced to one of 145 cited commits out of the release's 348.
 - **1 new NuGet package** - **NumSharp.Interop.System.Numerics.Tensors**, a zero-copy bridge to .NET's `Tensor<T>` / `TensorSpan<T>`.
 - **407,913 NumPy 2.4.2 oracle test cases** (0.70.0 shipped with 116K+) and 16,818 test methods.
 
@@ -172,6 +172,8 @@ One optional companion package ships for the first time, co-versioned with **Num
 - `np.evaluate` - flat and axis `Sum` / `Mean` / `Prod` / `Min` / `Max` follow NumPy's own schedules bit for bit (they matched the value only), a flat `Mean` of an integer child is NumPy's buffered float64 sum, NEP 50 typing gaps are closed, and two closures over one lambda no longer share a kernel - `53602da9`, `e1400974`, `129fbaba`, `df799381`.
 - pythonnet: an empty read-only source (`np.frombuffer(b'')`, an empty broadcast) imported as a writeable view; it is refused by default and non-writeable with `allowReadonly`, like a non-empty one, and an empty NumSharp broadcast exports as a read-only numpy array - `0409db83`.
 - .NET 8: string slicing (`nd["1:3"]`) re-parsed its pattern on every call because the static `Regex` cache thrashed - 9-18 µs -> 0.6-2.8 µs per parse - `28fa9d79`.
+- `None` (a C# `null` where NumPy passes `None`) stores NumPy's value through every store route - the indexers, `fill`, `np.full` / `np.full_like`, `np.copyto`, `np.put`, `np.putmask`, `np.place`, `np.insert`, `np.fill_diagonal`, the flat iterator, `np.put_along_axis`, `setfield`, `np.asarray` / `np.array` and numpy.ma's setitem: NaN (NumPy's positive quiet NaN) in float arrays, `nan+nanj` in complex, `False` in bool, `'None'` or the `StringDType` NA object in text, `int()`'s `TypeError` for integers; `np.full(shape, (object)null, float64)` returned zeros - `61dafa6b`.
+- numpy.ma over NEP 55 `StringDType` answers like NumPy - the `'N/A'` fill value; `Unsuitable type StringDType() for calculating minimum.` from every member that orders or extremizes (`min` / `max` / `argsort` / `sort` / `median` / `unique` and the set routines), raised before the mask is read; the ufunc members' and the legacy products' (`np.dot` / `np.inner` / `np.convolve` / `np.correlate`) refusal texts; the computations on the text (comparisons, `add`, the sums) wait for string computation - `cb3a4186`.
 
 ### 🧰 Testing & Tooling
 - Differential-fuzz oracle 116K+ -> 406,172 corpus cases: new tiers for every `numpy.polynomial` unit (139,882 cases), `np.ma` (68,860), `np.evaluate` (29,563), `np.emath`, `ndarray` instance members, and complex128 / Decimal coverage, with a dtype-spread gate (at least 4 dtypes per op) and an applicability gate - `57545200`, `67f8f96e`, `7a262afc`, `e84fd2f1`, `55a2a6a7`, `192f456c`, `1dd23bbe`.
@@ -200,5 +202,7 @@ One optional companion package ships for the first time, co-versioned with **Num
 - `np.asmatrix` / `np.bmat` return `NDMatrix` (was a plain 2-D `NDArray`): `*` is the matrix product, an index keeps two axes, and `np.*` functions return NumPy's matrix results for it (`np.sum(m, 0)` has shape `(1, N)`); take `.A` for the plain array - `201e9c7b`, `51bd91f8`.
 - An index-array assignment follows NumPy's value rule: a value that does not fit raises `ValueError` "shape mismatch: value array of shape (1,4) could not be broadcast to indexing result of shape (2,)" before anything is written (was `IncorrectShapeException`), and a `(1, N)` value now fits an `(N,)` selection - `201e9c7b`.
 - A boolean-mask assignment takes a 0-d or 1-d value: a 2-d value raises NumPy's `TypeError`, and a 1-d value whose length is neither 1 nor the number of true elements raises NumPy's `ValueError` - `201e9c7b`.
+- A C# `null` stored into an integer or `char` array raises NumPy's `TypeError` (`int() argument must be a string, a bytes-like object or a real number, not 'NoneType'`; was `ArgumentNullException`), and into a float / complex / bool array stores NaN / `nan+nanj` / `False` - `61dafa6b`.
+- numpy.ma: `.data` / `.mask` return a new view on every access, NumPy's (dispose or compare the array you hold, not the property); a C# number stored into a masked array is a Python number (`x[1] = 300` into int8 raises `OverflowError`, it wrapped); `np.ma.array(list, dtype: d)` converts the list into `d` (it converted, then cast) - `cb3a4186`.
 
 </details>
