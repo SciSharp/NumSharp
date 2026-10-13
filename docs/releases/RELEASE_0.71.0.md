@@ -170,6 +170,7 @@ One optional companion package ships for the first time, co-versioned with **Num
 - `SeedSequence` - a typed `null` seed array seeded the empty sequence (the same stream on every run; now fresh entropy, NumPy's `None`), and `SeedSequence(new[] { -1 })` silently seeded `0xFFFFFFFF` instead of raising - `0e39714b`, `65bdea7b`.
 - `result_type` of four or more operands dropped every other pair (`result_type(int8, int8, float64, int8)` was int8; it is float64) - `896f02b2`.
 - `np.evaluate` - flat and axis `Sum` / `Mean` / `Prod` / `Min` / `Max` follow NumPy's own schedules bit for bit (they matched the value only), a flat `Mean` of an integer child is NumPy's buffered float64 sum, NEP 50 typing gaps are closed, and two closures over one lambda no longer share a kernel - `53602da9`, `e1400974`, `129fbaba`, `df799381`.
+- pythonnet: an empty read-only source (`np.frombuffer(b'')`, an empty broadcast) imported as a writeable view; it is refused by default and non-writeable with `allowReadonly`, like a non-empty one, and an empty NumSharp broadcast exports as a read-only numpy array - `0409db83`.
 - .NET 8: string slicing (`nd["1:3"]`) re-parsed its pattern on every call because the static `Regex` cache thrashed - 9-18 µs -> 0.6-2.8 µs per parse - `28fa9d79`.
 
 ### 🧰 Testing & Tooling

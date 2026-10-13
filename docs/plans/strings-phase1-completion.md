@@ -339,3 +339,19 @@ After this plan, phase 2 loses P2.4 and gains the `T` forms of P2.1–P2.6 plus 
     7); engines 0 of 225 pairs and 0 of 5,197 sets; element APIs 0 of 815; text `where` / `choose` / `select` / `r_` 3 of 172
     (NumPy reads a bytes scalar in `r_` as a dtype spec; C# has no bytes scalar); numeric 74 of 420, all the house 0-d rule
     (28), complex64 (10) or probe artifacts (36).
+- 2026-10-13 — **P1.8 validated** (owner's request: "Validate and confirm the implementation, add integration tests,
+  covering edge cases and more"; `0409db83`).
+  - Two fixes. An EMPTY read-only source imported as a writeable view: the three view routes returned a fresh empty array
+    before they read the read-only flag. It is now refused by default and non-writeable on opt-in, like a non-empty one,
+    and an empty NumSharp broadcast exports as a read-only numpy array. A `StringDType` whose `na_object` is an `np.str_`
+    failed to import: pythonnet's `As<string>()` compares the type with `str` exactly, so the value is read through `str()`.
+  - Gate: `TextCrossingEdgeCaseTests` (14, live numpy, cells compared with numpy's own copy): cell histories (heap
+    rewrites, NA / `''` over arena text, a short text over an arena cell past 64 KiB keeping the old offset's bytes), UTF-8
+    sizes on every cell and prefix boundary, more NA objects both ways and NumSharp-born ones (int, short, byte, ulong,
+    float, Half, char), ranks 5–6, empty / read-only / broadcast sources, a 100,000-element arena, 240 seeded random arrays
+    and views, the codec pipeline, eight threads, and the non-text import routes the P1.8 routing change touched. Four
+    planted defects each turn at least one of them red.
+  - A scratch differential fuzzer ran 10,000 `T` and 10,000 fixed-width random cases (0–6-D, 19 NA kinds, histories,
+    random views, both `U` byte orders, random read-only): 0 failures after the empty fix, every live counter at
+    baseline. The interop suite: 683 / 683 on net10.0 and net8.0; the ecosystem run 94 passed, 1 skipped (no GPU).
+  - Unchanged: the long-string export stays 0.88–1.05× numpy's own copy (`NpyString_pack`, the work numpy's copy does).
