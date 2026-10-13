@@ -237,6 +237,10 @@ namespace NumSharp.Tests.Strings
             // Section tdtype (the NEP 55 StringDType descriptor, P1.2) decodes its descriptor requests in its own partial.
             if (TryInvokeVString(c.Op, p, ops, out var vstring))
                 return vstring;
+            // Sections cvtext / promote / storenone (Converts' text, promotion over many dtypes, Python objects stored into
+            // arrays) live in their own partial.
+            if (TryInvokeConversions(c.Op, p, ops, out var converted))
+                return converted;
             throw new InvalidOperationException($"the string oracle has no op '{c.Op}'");
         }
 
@@ -558,6 +562,8 @@ namespace NumSharp.Tests.Strings
         /// <returns>The NDArray operand.</returns>
         private static NDArray ToOperand(object v) => v switch
         {
+            // Python's None: the store decides (a text array stores 'None' or its NA object; a numeric one refuses).
+            null => null,
             NDArray nd => nd,
             string s => s,
             byte[] bytes => NDArray.Scalar(bytes),

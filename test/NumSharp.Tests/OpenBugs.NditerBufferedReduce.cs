@@ -142,6 +142,30 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
+        ///     A buffered reduction over the OUTER iteration axis (found 2026-10-13 by the string oracle's titer section):
+        ///     <c>np.nditer([a, out], ['reduce_ok', 'buffered'], op_axes=[[0, 1], [-1, 0]])</c> over a (3, 4) input and a (4,)
+        ///     output. NumPy 2.4.2 visits the input in C order, <c>0 1 2 … 11</c>, as the unbuffered iterator does; NumSharp's
+        ///     legacy double loop walks the reduced axis innermost, <c>0 4 8 1 5 9 2 6 10 3 7 11</c>. An order-free
+        ///     accumulation gives the same sums, but a trace, a <c>multi_index</c> read or any side effect per step sees
+        ///     another sequence (the oracle keeps these cases out until the buffered-reduce port).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "nditer-buffered-reduce")]
+        public void Nditer_BufferedReduce_ReducedOuterAxis_VisitsInCOrder()
+        {
+            using var a = np.arange(12.0).reshape(3, 4);
+            using var output = np.zeros(new Shape(4));
+            var visited = new System.Collections.Generic.List<double>();
+            using (var it = np.nditer(new[] { a, output }, new[] { "reduce_ok", "buffered" },
+                       new[] { new[] { "readonly" }, new[] { "readwrite" } }, op_axes: new[] { new[] { 0, 1 }, new[] { -1, 0 } }))
+            {
+                foreach (var v in it)
+                    visited.Add((double)v[0]);
+            }
+
+            visited.Should().Equal(0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0);
+        }
+
+        /// <summary>
         ///     A StringDType reduction through a cast buffer shorter than the reduced axis (buffer size 3, found 2026-10-13):
         ///     NumPy 2.4.2 concatenates the columns, <c>['ac', 'bd']</c>; NumSharp's legacy buffered-reduce loop gives
         ///     <c>['acc', '']</c> — the same short-buffer defect as the numeric pins above, reached by text.

@@ -6,7 +6,7 @@ namespace NumSharp.Tests.Creation
 {
     /// <summary>
     ///     <c>np.frombuffer</c> and <c>np.ndarray(shape, buffer=...)</c> with a fixed-width string dtype (<c>S</c>/<c>U</c>),
-    ///     against NumPy 2.4.2 (probed 2026-10-07). The string oracle tier (<c>strings.jsonl</c>, ops <c>frombuffer</c>,
+    ///     against NumPy 2.4.2 (probed 2026-10-07). The string oracle tier (<c>strings_creation.jsonl</c>, ops <c>frombuffer</c>,
     ///     <c>frombuffer_str</c> and <c>ndarray</c>) gates the byte[] matrix — values, checks in NumPy's order, flags; these
     ///     tests pin what the corpus cannot express: the other C# buffer kinds (span, segment, memory, typed array, pointer,
     ///     memoryview), lifetime and write-through, and the documented divergences.

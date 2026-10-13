@@ -353,17 +353,22 @@ def scan_oracle() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str,
     with zipfile.ZipFile(npy_path) as archive:
         npy_manifest = json.loads(archive.read("manifest.json"))
     npy_cases = len(npy_manifest.get("cases", []))
-    # The fixed-width string oracle (Stage D): its own schema (section-prefixed ids, a phase per case), replayed by
-    # NumSharp.Tests.Oracle/Strings. Phase-2 cases are NumPy computations on text, gated as "deferred" until NumSharp
-    # computes them; they are real replay contracts and count as cases.
-    strings_path = ROOT / "test" / "NumSharp.Tests.Oracle" / "Strings" / "corpus" / "strings.jsonl"
+    # The string oracle (Stage D): its own schema (section-prefixed ids, a phase per case), one file per section
+    # (strings_<section>.jsonl; a single strings.jsonl until 2026-10-13, split before it reached GitHub's 100 MiB
+    # limit), replayed by NumSharp.Tests.Oracle/Strings. Phase-2 cases are NumPy computations on text, gated as
+    # "deferred" until NumSharp computes them; they are real replay contracts and count as cases.
+    strings_dir = ROOT / "test" / "NumSharp.Tests.Oracle" / "Strings" / "corpus"
+    strings_paths = sorted(strings_dir.glob("strings_*.jsonl"))
+    if not strings_paths:
+        raise SystemExit(f"no string oracle section file (strings_*.jsonl) under {strings_dir}")
     string_cases = string_phase2 = 0
-    with strings_path.open(encoding="utf-8") as stream:
-        for line in stream:
-            if not line.strip():
-                continue
-            string_cases += 1
-            string_phase2 += json.loads(line).get("phase") == 2
+    for strings_path in strings_paths:
+        with strings_path.open(encoding="utf-8") as stream:
+            for line in stream:
+                if not line.strip():
+                    continue
+                string_cases += 1
+                string_phase2 += json.loads(line).get("phase") == 2
 
     specialized_cases = flags_rows + layout_rows + npy_cases + string_cases
     op_mapped_contract_rows = sum(row["cases"] for row in ops_rendered)

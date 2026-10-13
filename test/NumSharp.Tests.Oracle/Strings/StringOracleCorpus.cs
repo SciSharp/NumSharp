@@ -11,9 +11,9 @@ using NumSharp.Tests.Fuzz;
 namespace NumSharp.Tests.Strings
 {
     /// <summary>
-    ///     The committed NumPy 2.4.2 oracle for the fixed-width string dtypes (<c>Strings/corpus/strings.jsonl</c>, written by
-    ///     <c>test/oracle/gen_strings_oracle.py</c>): its case model, the exact reconstruction of every operand view from
-    ///     its raw bytes, and the decoding of the text values the generator stores as hex.
+    ///     The committed NumPy 2.4.2 oracle for the string dtypes (<c>Strings/corpus/strings_&lt;section&gt;.jsonl</c>, one
+    ///     file per section, written by <c>test/oracle/gen_strings_oracle.py</c>): its case model, the exact reconstruction
+    ///     of every operand view from its raw bytes, and the decoding of the text values the generator stores as hex.
     /// </summary>
     /// <remarks>
     ///     Text never travels as a JSON string: a Python <c>str</c> is <c>{"u": UTF-32LE hex}</c> and a <c>bytes</c> is
@@ -101,19 +101,37 @@ namespace NumSharp.Tests.Strings
             public JsonElement[] Values { get; set; }
         }
 
-        /// <summary>The corpus path next to the test assembly (copied there by the csproj rule).</summary>
-        internal static string CorpusPath =>
-            Path.Combine(AppContext.BaseDirectory, "Strings", "corpus", "strings.jsonl");
+        /// <summary>The corpus directory next to the test assembly (the csproj rule copies every <c>Strings\corpus\*.jsonl</c>).</summary>
+        internal static string CorpusDirectory => Path.Combine(AppContext.BaseDirectory, "Strings", "corpus");
 
-        /// <summary>Reads every case of the corpus.</summary>
-        /// <returns>The cases in file order.</returns>
-        /// <exception cref="FileNotFoundException">The corpus was not copied next to the test assembly.</exception>
+        /// <summary>
+        ///     The corpus files, one per section (<c>strings_&lt;section&gt;.jsonl</c>), in ordinal name order — the order
+        ///     <see cref="Load"/> reads them in, so a run is deterministic whatever order the file system lists them in.
+        /// </summary>
+        /// <exception cref="DirectoryNotFoundException">The corpus was not copied next to the test assembly.</exception>
+        internal static string[] CorpusFiles
+        {
+            get
+            {
+                var files = Directory.GetFiles(CorpusDirectory, "strings_*.jsonl");
+                Array.Sort(files, StringComparer.Ordinal);
+                return files;
+            }
+        }
+
+        /// <summary>Reads every case of every section file.</summary>
+        /// <returns>The cases, file by file (in <see cref="CorpusFiles"/> order) and in file order within a file.</returns>
+        /// <exception cref="FileNotFoundException">No section file was copied next to the test assembly.</exception>
         internal static List<Case> Load()
         {
+            var files = CorpusFiles;
+            if (files.Length == 0)
+                throw new FileNotFoundException($"no string oracle section file (strings_*.jsonl) under {CorpusDirectory}");
             var cases = new List<Case>();
-            foreach (var line in File.ReadLines(CorpusPath, Encoding.ASCII))
-                if (line.Length > 0)
-                    cases.Add(JsonSerializer.Deserialize<Case>(line, Json));
+            foreach (var file in files)
+                foreach (var line in File.ReadLines(file, Encoding.ASCII))
+                    if (line.Length > 0)
+                        cases.Add(JsonSerializer.Deserialize<Case>(line, Json));
             return cases;
         }
 

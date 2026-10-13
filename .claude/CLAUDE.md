@@ -151,6 +151,17 @@ owns the allocator, so views keep it alive). Rules a new route must keep:
   sub-arrays keep write access (`UnmanagedStorage.GetData`, the mirror rule `Alias` had), so a reduce operand's stride-0
   external-loop chunk takes `y[...] = v`; `None` into fixed-width text stores `'None'`; `__setitem__` stores what the
   indexer stores (a C# scalar is a Python scalar). Gates `StringDTypeIterationTests`, `TextNoneStoreTests`.
+- **The string oracle is one file per section** (`Strings/corpus/strings_<section>.jsonl`, 31 files, 63,133 cases since
+  2026-10-13; one `strings.jsonl` until it reached 96.6 MiB, near GitHub's 100 MiB file limit). `python
+  test/oracle/gen_strings_oracle.py --sections titer,cvtext` regenerates a subset, byte-identical to a full run; the
+  generator warns past 50 MiB per section. Sections `titer` (np.nditer over `T`; a trace is ASCII text, kind `text` with
+  `"a"`), `cvtext` (`Converts`' text routes, all routes must agree), `promote` (text beside numbers and weak literals),
+  `storenone` (Python objects stored into arrays). NumPy's `T` → complex bug stays invisible there by construction (the
+  cast reads only texts whose two parts are equal), and the open buffered-reduce bugs are kept out
+  (`OpenBugs.NditerBufferedReduce.cs`). Found by them: a broadcast view's empty-index sub-array dropped the view's offset
+  (`UnmanagedStorage.GetData`), so `np.broadcast_arrays(x[:, None], x)[0][1][...] = 9` wrote `x[0]`. Trap: NumPy's
+  `np.power` with a negative integer exponent under `where=` into a text out raises or not depending on calls made before
+  it in the process; generate such cases with non-negative exponents.
 - Still refused loudly (P1.7 / phase 2): `.npy`, `loadtxt` / `savetxt`, numpy.ma with `T`, and computation (comparisons,
   `np.sum`, sorting, `np.strings`). `None` into a NUMERIC array is refused too (NumPy stores NaN / False, TypeError for
   integers).

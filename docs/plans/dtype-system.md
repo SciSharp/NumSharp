@@ -371,7 +371,8 @@ Things learned while landing it that the design above did not anticipate:
   operands: `np.sum(u, dtype='f8')` is the add.reduce refusal), every other reduction parses (next phase).
 * **`.npy`.** `|S5` / `<U3` / `>U3` files read and write byte for byte (mmap included). **Breaking:** a `<U1` file reads
   back as a `<U1` string array, not `Char`; `Char` is still written as `<U1`.
-* **Gate.** The string oracle (`test/oracle/gen_strings_oracle.py` → `NumSharp.Tests.Oracle/Strings/corpus/strings.jsonl`,
+* **Gate.** The string oracle (`test/oracle/gen_strings_oracle.py` → `NumSharp.Tests.Oracle/Strings/corpus/strings.jsonl` — one
+  `strings_<section>.jsonl` file per section since 2026-10-13 —,
   14,175 cases at landing — 18,790 after the validation pass below, 21,552 after its numpy.ma pass, 12,569 of them NumPy
   errors compared by type map + verbatim text; 18 sections: dtype, creation, astype, views, movement, mutation, access,
   printing, ufuncs, reductions, strdtype, strprec, straxis, strcov, strshape, strvalid, strsurface, strma). A phase-2 case

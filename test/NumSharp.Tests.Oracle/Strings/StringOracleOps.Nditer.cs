@@ -61,11 +61,17 @@ namespace NumSharp.Tests.Strings
             string[][] opFlags = p.TryGetValue("op_flags", out var of)
                 ? of.EnumerateArray().Select(e => e.EnumerateArray().Select(x => x.GetString()).ToArray()).ToArray()
                 : null;
+            // A request is a dtype string or a StringDType request ({"T": {...}}: Spec builds both).
             DType[] dtypes = p.TryGetValue("op_dtypes", out var od)
-                ? od.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.Null ? null : np.dtype(e.GetString())).ToArray()
+                ? od.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.Null ? null : Spec(e)).ToArray()
+                : null;
+            int[][] opAxes = p.TryGetValue("op_axes", out var oa)
+                ? oa.EnumerateArray().Select(e => e.EnumerateArray().Select(x => x.GetInt32()).ToArray()).ToArray()
                 : null;
             List<object> writes = p.TryGetValue("writes", out var w) ? (List<object>)StringOracleCorpus.Decode(w) : null;
             int? copyTo = p.TryGetValue("copy_to", out var ct) ? ct.GetInt32() : null;
+            // The writes go through the iterator's setter (NumPy's it[0] = value) instead of the step's view.
+            bool setter = p.TryGetValue("setter", out var st) && st.GetBoolean();
 
             // A write-only operand is never read by the iterator (an allocated one starts uninitialized in NumPy): its step
             // values are rendered as "-", as the generator renders them. The defaults are NumPy's: readonly for an array,
@@ -78,7 +84,7 @@ namespace NumSharp.Tests.Strings
                 readable[i] = f.Contains("readonly") || f.Contains("readwrite");
             }
 
-            var it = np.nditer(full, flags, opFlags, dtypes, Str(p, "order")[0], Str(p, "casting"), null, null,
+            var it = np.nditer(full, flags, opFlags, dtypes, Str(p, "order")[0], Str(p, "casting"), opAxes, null,
                                p["buffersize"].GetInt64());
             var lines = new List<string> { "dtypes " + string.Join(" ", it.dtypes.Select(d => d.str)) };
             try
@@ -99,9 +105,14 @@ namespace NumSharp.Tests.Strings
                             row.Add("x" + it.index.ToString(CultureInfo.InvariantCulture));
                         row.AddRange(xs.Select((x, i) => readable[i] ? TraceValue(x) : "-"));
                         lines.Add(string.Join(" ", row));
-                        // NumPy's x[...] = value / y[...] = x.
+                        // NumPy's x[...] = value (or it[0] = value) / y[...] = x.
                         if (writes != null)
-                            AssignInto(xs[0], writes[k % writes.Count]);
+                        {
+                            if (setter)
+                                it[0] = SetterValue(writes[k % writes.Count]);
+                            else
+                                AssignInto(xs[0], writes[k % writes.Count]);
+                        }
                         if (copyTo != null)
                             AssignInto(xs[copyTo.Value], xs[0]);
                         k++;
@@ -135,7 +146,7 @@ namespace NumSharp.Tests.Strings
             int[][] axes = p["axes"].EnumerateArray().Select(e => e.EnumerateArray().Select(x => x.GetInt32()).ToArray()).ToArray();
             string[] flags = p.TryGetValue("flags", out var fl) ? fl.EnumerateArray().Select(e => e.GetString()).ToArray() : null;
             DType[] dtypes = p.TryGetValue("op_dtypes", out var od)
-                ? od.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.Null ? null : np.dtype(e.GetString())).ToArray()
+                ? od.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.Null ? null : Spec(e)).ToArray()
                 : null;
 
             var iters = np.nested_iters(view, axes, flags, null, dtypes);
@@ -174,8 +185,23 @@ namespace NumSharp.Tests.Strings
         /// <param name="value">A decoded <c>string</c> / <c>byte[]</c>, or an <see cref="NDArray"/>.</param>
         private static void AssignInto(NDArray view, object value)
         {
+            // A StringDType view takes NumPy's x[...] = value: StringDType's setitem for a Python object (None is the NA
+            // object or 'None', a number its str(), refused under coerce=False), a cast for an array.
+            if (view.Storage.IsVString && value is not NDArray)
+            {
+                view[Slice.Ellipsis] = SetterValue(value);
+                return;
+            }
+
             switch (value)
             {
+                case null:
+                    // Python's None into fixed-width text: str(None), truncated to the width.
+                    view[Slice.Ellipsis] = null;
+                    break;
+                case long or double or bool:
+                    view[Slice.Ellipsis] = NDArray.FromPythonOperand(value);
+                    break;
                 case string s:
                     np.copyto(view, s, casting: "unsafe");
                     break;
@@ -189,6 +215,21 @@ namespace NumSharp.Tests.Strings
                     throw new InvalidOperationException($"no write for {value?.GetType().Name ?? "null"}");
             }
         }
+
+        /// <summary>
+        ///     A trace write as the value of NumPy's <c>it[0] = value</c> / <c>x[...] = value</c>: a Python object a ported line
+        ///     passes as a C# literal (a str, an int, a float, a bool — NEP 50's Python scalars, <see cref="NDArray.FromPythonOperand"/>),
+        ///     bytes as a 0-d <c>S</c> array, null for <c>None</c>, an array as itself.
+        /// </summary>
+        /// <param name="value">A decoded write, or an array (another step's view).</param>
+        /// <returns>The value for the store (null for <c>None</c>).</returns>
+        private static NDArray SetterValue(object value) => value switch
+        {
+            null => null,
+            NDArray a => a,
+            byte[] b => NDArray.Scalar(b),
+            _ => NDArray.FromPythonOperand(value),
+        };
 
         /// <summary>
         ///     The Python exception name the generator records for <paramref name="e"/> (its first well-known class): NumSharp's
@@ -237,15 +278,17 @@ namespace NumSharp.Tests.Strings
             return "[" + string.Join(",", parts) + "]";
         }
 
-        /// <summary>One element as the generator renders it.</summary>
+        /// <summary>One element as the generator renders it (a StringDType element that is the NA object None is <c>N</c>).</summary>
         private static string TraceElement(object v) => v switch
         {
+            null => "N",
             string s => "u" + Utf32Hex(s),
             byte[] b => "b" + Convert.ToHexString(b).ToLowerInvariant(),
             bool bo => bo ? "B1" : "B0",
             double d => "f" + PythonFloatRepr(d),
             float f => "f" + PythonFloatRepr(f),
             Half h => "f" + PythonFloatRepr((double)h),
+            System.Numerics.Complex z => "c" + PythonFloatRepr(z.Real) + "," + PythonFloatRepr(z.Imaginary),
             IConvertible c => "i" + c.ToString(CultureInfo.InvariantCulture),
             _ => throw new InvalidOperationException($"untraceable value {v?.GetType().Name ?? "null"}"),
         };

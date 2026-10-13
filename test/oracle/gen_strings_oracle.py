@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """NumPy 2.4.2 oracle for NumSharp's string dtypes: the fixed-width 'S' (bytes) and 'U' (str), and NEP 55 StringDType ('T').
 
-Writes ``test/NumSharp.Tests.Oracle/Strings/corpus/strings.jsonl``: one case per line, replayed byte for byte by
-``StringOracleTests`` (no Python at test time).
+Writes ``test/NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl``, one file per section (the id's first
+component), one case per line, replayed byte for byte by ``StringOracleTests`` (no Python at test time). One file per
+section keeps every file far below GitHub's 100 MiB limit (the single ``strings.jsonl`` had reached 96.6 MiB); a full
+run rewrites every section file and removes the files of sections that no longer exist.
 
 Each case records what NumPy 2.4.2 returns for one call:
 
@@ -41,10 +43,39 @@ import numpy as np
 assert np.__version__ == "2.4.2", f"the string oracle is pinned to numpy 2.4.2, found {np.__version__}"
 
 HERE = Path(__file__).resolve().parent
-OUT = HERE.parent / "NumSharp.Tests.Oracle" / "Strings" / "corpus" / "strings.jsonl"
+CORPUS_DIR = HERE.parent / "NumSharp.Tests.Oracle" / "Strings" / "corpus"
+
+# GitHub refuses a file over 100 MiB and warns over 50 MiB: a section file past the warning size is an error here, and the
+# section is then split by the generator (a second id prefix), not committed.
+MAX_SECTION_BYTES = 50 * 1024 * 1024
+
+
+def section_path(section):
+    """The corpus file of one section.
+
+    :param section: the section name (a case id's first component).
+    :returns: ``CORPUS_DIR / "strings_<section>.jsonl"``.
+    """
+    return CORPUS_DIR / f"strings_{section}.jsonl"
 
 CASES = []
 _IDS = set()
+# The number of recorded cases per id prefix "section/op/": add() numbers the next case from it, and _pop_case() gives the
+# number back, so the ids are exactly what a scan of CASES gives (the generator used to count with that scan per add(),
+# quadratic in the corpus size).
+_OP_COUNT = {}
+
+
+def _pop_case():
+    """Drops the case just recorded and frees its id and its number (the next case of its op takes the number again).
+
+    :returns: the dropped case.
+    """
+    c = CASES.pop()
+    _IDS.discard(c["id"])
+    prefix = c["id"].rsplit("/", 1)[0] + "/"
+    _OP_COUNT[prefix] -= 1
+    return c
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -193,8 +224,16 @@ class _UninitData:
         self.r = r
 
 
+class _AsciiText(str):
+    """A text result that is ASCII by construction (a ``titer`` trace: every value in it is hex), stored as is:
+    ``{"kind": "text", "a": text}`` — the UTF-32 hex of ``{"kind": "text", "u": ...}`` would be eight times its size."""
+
+
 def expect_of(r, operands):
     """The expectation for any result NumPy returned."""
+    if isinstance(r, _AsciiText):
+        assert str(r).isascii(), "an _AsciiText result holds only ASCII"
+        return {"kind": "text", "a": str(r)}
     if isinstance(r, _UninitData):
         return masked_expect(r.r, uninit=True) if isinstance(r.r, np.ma.MaskedArray) and r.r is not np.ma.masked \
             else expect_of(r.r, operands)
@@ -250,7 +289,9 @@ def add(section, op, *, params=None, operands=(), call, phase=1, layout="", muta
     number, ``could not convert string to float``) included: text -> number conversion is phase 1 since P1.1.
     """
     views = [v for _, v in operands]
-    n = sum(1 for c in CASES if c["id"].startswith(f"{section}/{op}/")) + 1
+    prefix = f"{section}/{op}/"
+    n = _OP_COUNT.get(prefix, 0) + 1
+    _OP_COUNT[prefix] = n
     cid = f"{section}/{op}/{n}"
     assert cid not in _IDS
     _IDS.add(cid)
@@ -2794,9 +2835,12 @@ def _ma_str_disabled(x):
 # with "!Type: text"; a construction that raises is the case's error.
 
 def _it_val(v):
-    """One traced value: text / bytes as hex, numbers by kind, a 1-D chunk (external_loop) as a bracketed list."""
+    """One traced value: text / bytes as hex, numbers by kind, a 1-D chunk (external_loop) as a bracketed list, and a
+    StringDType element that is the NA object ``None`` as ``N`` (a NaN NA object is the float ``fnan``)."""
     if isinstance(v, list):
         return "[" + ",".join(_it_val(x) for x in v) + "]"
+    if v is None:
+        return "N"
     if isinstance(v, (str, np.str_)):
         return "u" + str(v).encode("utf-32-le", "surrogatepass").hex()
     if isinstance(v, (bytes, np.bytes_)):
@@ -2807,18 +2851,38 @@ def _it_val(v):
         return "i" + str(int(v))
     if isinstance(v, (float, np.floating)):
         return "f" + repr(float(v))
+    if isinstance(v, (complex, np.complexfloating)):
+        return "c" + repr(float(v.real)) + "," + repr(float(v.imag))
     raise TypeError(f"untraceable value {type(v)}")
 
 
 def _it_trace(views, flags=None, op_flags=None, op_dtypes=None, order="K", casting="safe", buffersize=0, writes=None,
-              copy_to=None, iterrange=None):
+              copy_to=None, iterrange=None, op_axes=None, setter=False):
+    """One iteration traced as text (see the section comment above).
+
+    :param views: the operands (None for an output the iterator allocates).
+    :param flags: the global flags.
+    :param op_flags: the per-operand flags.
+    :param op_dtypes: the requested descriptors: dtype strings or ``TSpec`` (StringDType) requests, None entries kept.
+    :param order: the iteration order.
+    :param casting: the casting rule.
+    :param buffersize: the buffer size (0: NumPy's default).
+    :param writes: values written into operand 0 at each step (cycled), or None.
+    :param copy_to: an operand that receives operand 0's view at each step (``y[...] = x``), or None.
+    :param iterrange: ``it.iterrange`` to set before the walk, or None.
+    :param op_axes: the per-operand axis maps, or None.
+    :param setter: write ``writes`` through the iterator's setter (``it[0] = w``) instead of the view (``x[...] = w``).
+    :returns: the trace.
+    """
     kw = {}
     if flags is not None:
         kw["flags"] = flags
     if op_flags is not None:
         kw["op_flags"] = op_flags
     if op_dtypes is not None:
-        kw["op_dtypes"] = [None if d is None else np.dtype(d) for d in op_dtypes]
+        kw["op_dtypes"] = [None if d is None else sbuild(d) for d in op_dtypes]
+    if op_axes is not None:
+        kw["op_axes"] = op_axes
     it = np.nditer(views if len(views) > 1 else views[0], order=order, casting=casting, buffersize=buffersize, **kw)
     lines = ["dtypes " + " ".join(d.str for d in it.dtypes)]
     # A write-only operand is never read by the iterator: an allocated one starts uninitialized (np.empty — an 'S'
@@ -2850,7 +2914,10 @@ def _it_trace(views, flags=None, op_flags=None, op_dtypes=None, order="K", casti
                 row += [_it_val(t.tolist()) if readable[i] else "-" for i, t in enumerate(xs)]
                 lines.append(" ".join(row))
                 if writes is not None:
-                    xs[0][...] = writes[k % len(writes)]
+                    if setter:
+                        it[0] = writes[k % len(writes)]
+                    else:
+                        xs[0][...] = writes[k % len(writes)]
                 if copy_to is not None:
                     xs[copy_to][...] = xs[0]
                 k += 1
@@ -2871,7 +2938,7 @@ def _nested_trace(view, axes, flags=None, op_flags=None, op_dtypes=None, buffers
     if op_flags is not None:
         kw["op_flags"] = op_flags
     if op_dtypes is not None:
-        kw["op_dtypes"] = [None if d is None else np.dtype(d) for d in op_dtypes]
+        kw["op_dtypes"] = [None if d is None else sbuild(d) for d in op_dtypes]
     iters = np.nested_iters(view, axes, buffersize=buffersize, **kw)
     outer, inner = iters[0], iters[-1]
     lines = ["dtypes " + " ".join(d.str for d in inner.dtypes)]
@@ -2889,14 +2956,19 @@ def _nested_trace(view, axes, flags=None, op_flags=None, op_dtypes=None, buffers
 
 
 def _it_params(flags=None, op_flags=None, op_dtypes=None, order="K", casting="safe", buffersize=0, writes=None,
-               copy_to=None, iterrange=None, none_ops=None):
+               copy_to=None, iterrange=None, none_ops=None, op_axes=None, setter=False):
     p = {"order": order, "casting": casting, "buffersize": buffersize}
     if flags is not None:
         p["flags"] = flags
     if op_flags is not None:
         p["op_flags"] = op_flags
     if op_dtypes is not None:
-        p["op_dtypes"] = op_dtypes
+        # A StringDType request travels as its TSpec encoding ({"T": {...}}), a dtype string as itself.
+        p["op_dtypes"] = [None if d is None else senc(d) for d in op_dtypes]
+    if op_axes is not None:
+        p["op_axes"] = op_axes
+    if setter:
+        p["setter"] = True
     if writes is not None:
         p["writes"] = enc(writes)
     if copy_to is not None:
@@ -2908,8 +2980,10 @@ def _it_params(flags=None, op_flags=None, op_dtypes=None, order="K", casting="sa
     return p
 
 
-def _it_add(name, pairs, phase=1, layout="", **kw):
-    """One nditer trace case: pairs are (base, view) operands, None entries the outputs NumPy allocates."""
+def _it_add(name, pairs, phase=1, layout="", section="striter", ascii_trace=False, **kw):
+    """One nditer trace case: pairs are (base, view) operands, None entries the outputs NumPy allocates; ``section``
+    names the case's section (``striter`` for the fixed-width traces, ``titer`` for StringDType); ``ascii_trace`` stores
+    the trace as ASCII text (``_AsciiText``) instead of UTF-32 hex."""
     views = [v for _, v in pairs]
     real = [(b, v) for b, v in pairs if b is not None]
     none_ops = [i for i, (b, _) in enumerate(pairs) if b is None] or None
@@ -2923,9 +2997,10 @@ def _it_add(name, pairs, phase=1, layout="", **kw):
             else:
                 it_views.append(rviews[j])
                 j += 1
-        return _it_trace(it_views, **kw)
+        trace = _it_trace(it_views, **kw)
+        return _AsciiText(trace) if ascii_trace else trace
 
-    add("striter", "nditer_" + name.replace("/", "_"), params=params, operands=real, call=call, phase=phase,
+    add(section, "nditer_" + name.replace("/", "_"), params=params, operands=real, call=call, phase=phase,
         layout=layout)
 
 
@@ -3529,8 +3604,7 @@ def _conv(section, op, **kw):
     add(section, op, **kw)
     c = CASES[-1]
     if "error" in c and _platform_text(c["error"]["text"]):
-        CASES.pop()
-        _IDS.discard(c["id"])
+        _pop_case()
 
 
 def _text_operand(values, spec):
@@ -3725,6 +3799,7 @@ def gen_strconv():
     f = num_operand(np.array([1.0, 2.5, -0.5, 4.0]))
     g = num_operand(np.array([1.0, 3.0, 0.5, 2.0]))
     ii = num_operand(np.array([1, 2, -3, 4]))
+    iip = num_operand(np.array([1, 2, 3, 4]))
     uu = plain(np.array(["ab", "c", "de", "f"]))
     vv = plain(np.array(["ab", "x", "dd", "f"]))
     calls = [("add", [f, g]), ("add", [ii, ii]), ("subtract", [ii, f]), ("multiply", [f, ii]), ("power", [ii, ii]),
@@ -3739,12 +3814,17 @@ def gen_strconv():
             _conv("strconv", "ufunc_kw", params={"name": name, "dtype": None, "nin": len(ins), "out": len(ins)},
                   operands=ins + [target(np.zeros(4, odt))], layout=f"out{odt}", mutate=None,
                   call=lambda *xs, f=fn, n=len(ins): f(*xs[:n], out=xs[n]))
-        # where= with an out whose text parses (selected slots written, masked-off kept) and one that does not.
+        # where= with an out whose text parses (selected slots written, masked-off kept) and one that does not. power
+        # reads non-negative exponents here: NumPy 2.4.2's answer to a negative integer exponent under where= with a text
+        # out depended on the process's history (the same call raised "Integers to negative integer powers are not
+        # allowed." alone and returned without raising after the other sections ran), so it cannot be a contract; the
+        # plain out= cases above keep that error.
+        wins = [iip if x is ii else x for x in ins] if name == "power" else ins
         for wname, text in (("ok", ["7", "8", "9", "1"]), ("bad", ["7", "x", "9", "1"]), ("truth", ["", "a", "b", ""])):
-            _conv("strconv", "ufunc_kw", params={"name": name, "dtype": None, "nin": len(ins), "out": len(ins),
-                                                 "where": len(ins) + 1},
-                  operands=ins + [target(np.array(text, dtype="U8")), num_operand(np.array([True, False, True, False]))],
-                  layout=f"where:{wname}", call=lambda *xs, f=fn, n=len(ins): f(*xs[:n], out=xs[n], where=xs[n + 1]))
+            _conv("strconv", "ufunc_kw", params={"name": name, "dtype": None, "nin": len(wins), "out": len(wins),
+                                                 "where": len(wins) + 1},
+                  operands=wins + [target(np.array(text, dtype="U8")), num_operand(np.array([True, False, True, False]))],
+                  layout=f"where:{wname}", call=lambda *xs, f=fn, n=len(wins): f(*xs[:n], out=xs[n], where=xs[n + 1]))
     # The out= broadcast (an out larger than the inputs) and a 0-d out.
     _conv("strconv", "ufunc_kw", params={"name": "add", "dtype": None, "nin": 2, "out": 2},
           operands=[f, num_operand(np.array(1.0)), target(np.zeros((3, 4), "U5"))], layout="out:bcast",
@@ -4211,7 +4291,7 @@ def _drop_platform_int_text():
     pins the LP64 text (unit-tested), the policy of ``_platform_text``."""
     err = CASES[-1].get("error")
     if err and err["text"].endswith(("is out of bounds for long", "is out of bounds for unsigned long")):
-        _IDS.discard(CASES.pop()["id"])
+        _pop_case()
 
 
 def _t_writes(spec, values, writes):
@@ -4902,42 +4982,588 @@ class _TProps:
         self.d = d
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Section titer: np.nditer and np.nested_iters over NEP 55 StringDType (strings phase 1, P1.7)
+# ----------------------------------------------------------------------------------------------------------------------
+#
+# The striter trace (_it_trace) over StringDType operands: a T base travels by value (_describe_t), an NA element is
+# traced as "N" (a NaN NA object as "fnan"), and a StringDType request is an encoded TSpec. NumPy 2.4.2 raises MemoryError
+# ("Failed to load string in StringDType getitem", then "String deallocation failed in clear loop" at close) for a
+# buffered iteration with a StringDType input and an ALLOCATED StringDType output; those cases are not recorded (a NumPy
+# bug: NumSharp's values are pinned by StringDTypeIterationTests).
+
+# Short texts (in the cell), arena texts (16+ UTF-8 bytes: the shortest ones, to keep the traces small), the empty
+# string, non-ASCII and supplementary-plane text.
+T_ITER_POOL = ["a", "bb", "abcdefghijklmnop", "", "é" * 8, "\U0001F600", "q" * 17, "x y"]
+# Texts NumPy parses as numbers (CPython int(): spaces, underscores and a sign allowed).
+T_NUM_POOL = ["12", "-7", "3", " 4 ", "1_0", "+5"]
+# The same numbers as complex texts whose two parts are equal, for a complex128 request: NumPy 2.4.2's StringDType ->
+# complex loop writes the REAL part into the imaginary part too (casts.cpp: npy_csetimagfunc(out, complex_value.real)),
+# so only a text with real == imag gives the value complex() parses — the value NumSharp writes (NDTextParse's
+# ParseVStringElement; the bug itself is pinned by unit tests, never recorded).
+T_CNUM_POOL = ["12+12j", "-7-7j", "(3+3j)", " 4+4j ", "1_0+1_0j", "+5+5j"]
+# The titer cases NumPy's allocated-output MemoryError removed (reported by main()).
+_TITER_DROPPED = []
+
+
+def _titer_add(name, pairs, **kw):
+    """One ``titer`` trace case (``_it_add`` into section ``titer``), dropped again when NumPy raises its StringDType
+    allocated-output MemoryError.
+
+    :param name: the case name (op key ``nditer_<name>``).
+    :param pairs: (base, view) operands, ``(None, None)`` for an output the iterator allocates.
+    :param kw: ``_it_trace`` arguments.
+    """
+    _it_add(name, pairs, section="titer", ascii_trace=True, **kw)
+    last = CASES[-1]
+    err = last.get("error")
+    exp = last.get("expected") or {}
+    text = exp.get("a", "") if exp.get("kind") == "text" else ""
+    if (err is not None and err["type"] == "MemoryError") or "!MemoryError" in text:
+        _pop_case()
+        _TITER_DROPPED.append(name)
+
+
+def _zerosize(view):
+    """The flag an empty operand needs: NumPy refuses to iterate a zero-size operand without ``zerosize_ok``.
+
+    :param view: the operand view.
+    :returns: ``["zerosize_ok"]`` for an empty view, else ``[]``.
+    """
+    return ["zerosize_ok"] if view.size == 0 else []
+
+
+def _t_op(spec, layout, seed, pool=None):
+    """A StringDType operand over ``T_ITER_POOL`` (or ``pool``), every fourth element NA for a descriptor with an NA
+    object: see ``t_operand``.
+
+    :param spec: the TSpec.
+    :param layout: a ``LAYOUTS`` name.
+    :param seed: the first pool index.
+    :param pool: the texts, or None for ``T_ITER_POOL``.
+    :returns: the (base, view) pair.
+    """
+    return t_operand(spec, layout, seed=seed, pool=pool or T_ITER_POOL)
+
+
+def _other_t(spec):
+    """The StringDType request that differs from ``spec``: the NA descriptor for one without an NA object, and
+    ``StringDType()`` for one with.
+
+    :param spec: the TSpec.
+    :returns: TDN or TD.
+    """
+    return TDN if spec.na is _ABSENT else TD
+
+
+def gen_titer():
+    """Section titer (strings phase 1, P1.7): np.nditer and np.nested_iters over StringDType operands — the value
+    stream of every layout, order and flag set; buffered casts out of and into StringDType (U, S, numbers, bool, complex,
+    the NA descriptors) under every casting rule and two buffer sizes; the copy routes; writes through the views and
+    through the iterator's setter (texts, arena and long strings, None, numbers, coerce=False refusals), plain, buffered
+    and through cast buffers; allocated StringDType outputs; operand pairs with common_dtype; reductions (op_axes, the
+    stride-0 external-loop chunk, a cast reduction operand, a float64 one); nested iterators; NumPy's refusals.
+    """
+    rok = ["refs_ok"]
+    specs = [TD, TDN]
+
+    # A. the value stream: every layout x both descriptors x the flag sets x three orders. (A buffered index is
+    # uninitialized memory in NumPy, so c_index runs unbuffered only.)
+    flag_sets = [rok, rok + ["multi_index"], rok + ["c_index"], rok + ["external_loop"], rok + ["buffered"],
+                 rok + ["buffered", "external_loop"]]
+    layouts = ["c1", "c2", "c3", "f2", "t3", "s1", "s2", "r1", "r2", "col", "nx", "bc", "bcol", "z0", "d5", "e2"]
+    for spec in specs:
+        for lname in layouts:
+            for flags in flag_sets:
+                # The orders differ only over two or more axes (a 1-D walk is the same in C and F; K follows memory).
+                op = _t_op(spec, lname, seed=len(lname))
+                orders = ("K", "C", "F") if op[1].ndim >= 2 else ("K", "C")
+                for order in orders:
+                    op = _t_op(spec, lname, seed=len(lname))
+                    _titer_add("values", [op], layout=lname, flags=flags + _zerosize(op[1]), order=order)
+
+    # B. buffered casts out of StringDType: texts, NA cells and number texts into the other StringDType descriptors, U / S
+    # of two widths, numbers, bool and complex. Every casting rule on one layout (the rule decides whether the cast runs);
+    # the cast that runs over every other layout, with the default buffer and one of two elements (a refill every two
+    # steps).
+    sources = [("t", TD, None), ("tn", TDN, None), ("tnum", TD, T_NUM_POOL), ("tnnum", TDN, T_NUM_POOL)]
+    requests = [TD, TDN, TDNAN, TDC, "<U5", "<U30", "|S5", "<i8", "<f8", "?", "<c16"]
+    for sname, spec, pool in sources:
+        for req in requests:
+            # A number source cast to complex128 reads complex texts with equal parts (T_CNUM_POOL: NumPy's bug is
+            # invisible there); the other texts raise complex()'s ValueError at their first element in both libraries.
+            rpool = T_CNUM_POOL if pool is T_NUM_POOL and req == "<c16" else pool
+            for casting in ("no", "safe", "same_kind", "unsafe"):
+                op = _t_op(spec, "c1", seed=1, pool=rpool)
+                _titer_add(f"cast_from/{sname}", [op], layout="c1", flags=rok + ["buffered"], op_dtypes=[req],
+                           casting=casting)
+            for lname in ("r2", "f2", "s2", "bc", "z0", "t3"):
+                for bs in (0, 2):
+                    op = _t_op(spec, lname, seed=1, pool=rpool)
+                    _titer_add(f"cast_from/{sname}", [op], layout=lname, flags=rok + ["buffered"], op_dtypes=[req],
+                               casting="unsafe", buffersize=bs)
+
+    # C. buffered casts into StringDType: numbers and bool become their str(), U / S text keeps its characters, and a
+    # NaN meets a NaN NA object.
+    num_sources = {
+        "i8": np.array([1, 22, -3, 0, 2 ** 40, -2 ** 63], dtype=np.int64),
+        "u1": np.array([7, 200, 0, 255, 1, 2], dtype=np.uint8),
+        "f8": np.array([1.5, -2.0, float("nan"), 1e20, -0.0, float("inf")]),
+        "f2": np.array([0.1, 65504, -1, 0.5, float("nan"), 2], dtype=np.float16),
+        "b1": np.array([True, False, True, True, False, False]),
+        "c16": np.array([1 + 2j, -1j, 0, complex(float("nan"), 1), 2, 3j]),
+    }
+    views = (("c1", lambda b: b), ("r1", lambda b: b[::-1]), ("s1", lambda b: b[::2]))
+    for sname, src in num_sources.items():
+        for req in (TD, TDN, TDNAN, TDC):
+            for casting in ("safe", "same_kind", "unsafe"):
+                for lname, view in views:
+                    for bs in (0, 2):
+                        base = src.copy()
+                        _titer_add(f"cast_to/{sname}", [(base, view(base))], layout=lname, flags=rok + ["buffered"],
+                                   op_dtypes=[req], casting=casting, buffersize=bs)
+    for spec, ascii_only in (("<U3", False), ("|S3", True)):
+        for req in (TD, TDN, TDC):
+            for casting in ("safe", "same_kind", "unsafe"):
+                for lname in ("c1", "r2", "f2", "bc", "z0"):
+                    for bs in (0, 2):
+                        op = operand(spec, lname, seed=3, ascii_only=ascii_only)
+                        _titer_add("cast_to/text", [op], layout=lname, flags=rok + ["buffered"], op_dtypes=[req],
+                                   casting=casting, buffersize=bs)
+
+    # D. the copy routes: a copy operand reads a temporary of the request, an updateifcopy one writes it back at close,
+    # a read-only 0-d operand is copied without being asked; StringDType requests over U operands too.
+    for spec in specs:
+        for lname in ("c1", "r2", "f2", "z0", "t3", "e2"):
+            for req in (_other_t(spec), "<U5", "<U30", "|S5"):
+                op = _t_op(spec, lname, seed=2)
+                _titer_add("copy_ro", [op], layout=lname, flags=rok + _zerosize(op[1]),
+                           op_flags=[["readonly", "copy"]], op_dtypes=[req], casting="unsafe")
+                op = _t_op(spec, lname, seed=2)
+                _titer_add("updateifcopy", [op], layout=lname, flags=rok + _zerosize(op[1]),
+                           op_flags=[["readwrite", "updateifcopy"]], op_dtypes=[req], casting="unsafe",
+                           writes=["XYZW", "ab", ""])
+                op = _t_op(spec, lname, seed=2)
+                _titer_add("zero_d_auto", [op], layout=lname, flags=rok + _zerosize(op[1]), op_dtypes=[req],
+                           casting="unsafe")
+    for lname in ("c1", "r2", "f2", "z0"):
+        for req in (TD, TDN):
+            op = operand("<U3", lname, seed=4)
+            _titer_add("copy_ro/text", [op], layout=lname, flags=rok, op_flags=[["readonly", "copy"]], op_dtypes=[req],
+                       casting="unsafe")
+            op = operand("<U3", lname, seed=4)
+            _titer_add("updateifcopy/text", [op], layout=lname, flags=rok, op_flags=[["readwrite", "updateifcopy"]],
+                       op_dtypes=[req], casting="unsafe", writes=["zz", "a much longer string than fits", ""])
+
+    # E. writes through the views and through the setter: texts, arena and long strings (a rewrite past the slot moves
+    # to the heap), None (the NA object, or 'None'), numbers and bool (their str(); refused under coerce=False), plain,
+    # buffered, through a StringDType or a U40 buffer, under external_loop.
+    write_sets = {
+        "same": ["Q", "RS", "TUVW"],
+        "long": ["a string past the slot", "", "h" * 40],
+        "na": [None, "x"],
+        "text": ["é", "\U0001F600", "a\x00b"],
+        "number": [5, 1.5, True],
+    }
+    modes = [("plain", [], None), ("buffered", ["buffered"], None), ("cast", ["buffered"], "other"),
+             ("castu", ["buffered"], "<U40"), ("ext", ["external_loop"], None)]
+    for spec in (TD, TDN, TDC):
+        for wname, w in write_sets.items():
+            for lname in ("c1", "c2", "r2", "f2", "s2", "z0", "t3"):
+                for mname, mflags, req in modes:
+                    for setter in (False, True):
+                        op = _t_op(spec, lname, seed=5)
+                        r = None if req is None else (_other_t(spec) if req == "other" else req)
+                        _titer_add(f"write/{wname}/{mname}", [op], layout=lname, flags=rok + mflags,
+                                   op_flags=[["readwrite"]], op_dtypes=None if r is None else [r], casting="unsafe",
+                                   writes=w, setter=setter)
+
+    # F. allocated outputs, filled from the input (a StringDType output buffered behind a StringDType input is NumPy's
+    # MemoryError, dropped by _titer_add).
+    for spec in specs:
+        for req in (None, TD, TDN, "<U5"):
+            for flags in (rok, rok + ["buffered"], rok + ["external_loop"]):
+                for lname in ("c1", "c2", "r2", "f2", "z0", "e2"):
+                    op = _t_op(spec, lname, seed=3)
+                    _titer_add("alloc", [op, (None, None)], layout=lname, flags=flags + _zerosize(op[1]),
+                               op_flags=[["readonly"], ["writeonly", "allocate"]], op_dtypes=[None, req],
+                               casting="unsafe", copy_to=1)
+    for req in (TD, TDN):
+        for flags in (rok, rok + ["buffered"]):
+            op = operand("<U3", "c2", seed=6)
+            _titer_add("alloc/text", [op, (None, None)], layout="c2", flags=flags,
+                       op_flags=[["readonly"], ["writeonly", "allocate"]], op_dtypes=[None, req], casting="unsafe",
+                       copy_to=1)
+
+    # G. operand pairs: a StringDType operand with U / S / numbers / bool / the other descriptor, each iterated as its
+    # own, or with common_dtype (U is cast to StringDType; numbers have no common DType with it).
+    others = {
+        "u3": lambda: operand("<U3", "c1", seed=7)[0][:4],
+        "s3": lambda: operand("|S3", "c1", seed=7, ascii_only=True)[0][:4],
+        "i8": lambda: np.arange(4, dtype=np.int64),
+        "f8": lambda: np.arange(4, dtype=np.float64) / 2,
+        "b1": lambda: np.array([True, False, True, False]),
+        "tn": lambda: np.array(["p", None, "q", "r"], dtype=TDN.build()),
+    }
+    for oname, make in others.items():
+        for flags in (rok, rok + ["common_dtype"], rok + ["common_dtype", "buffered"], rok + ["buffered"]):
+            a = _t_op(TD, "c2", seed=8)
+            b = make().copy()
+            _titer_add(f"pair/{oname}", [a, (b, b)], layout="pair", flags=flags, casting="unsafe")
+
+    # H. reductions: a StringDType reduction operand (op_axes; the output follows the iterator's axis 1, or axis 0),
+    # unbuffered with and without external_loop (the stride-0 chunk takes y[...] = x and keeps its last element),
+    # buffered at the default size, plain or through a cast buffer; a float64 reduction operand's stride-0 chunk takes
+    # the input chunk and a constant (through the view and through the setter). Two buffered shapes are the open
+    # buffered-reduce bug (OpenBugs.NditerBufferedReduce.cs) and are not recorded here: a buffer shorter than the reduced
+    # axis, and a reduction over the OUTER iteration axis (op_axes [-1, 0]: NumSharp's legacy double loop walks the
+    # reduced axis innermost, 0 4 8 1 5 9 ... where NumPy walks C order; the values agree, the visit order does not).
+    for spec in specs:
+        for axes, outn in (([[0, 1], [-1, 0]], 4), ([[0, 1], [0, -1]], 3)):
+            for flags, req in ((rok + ["reduce_ok"], None), (rok + ["reduce_ok", "external_loop"], None),
+                               (rok + ["reduce_ok", "buffered"], None),
+                               (rok + ["reduce_ok", "buffered"], "other"), (rok + ["reduce_ok", "buffered"], "<U8")):
+                if "buffered" in flags and axes[1] == [-1, 0]:
+                    continue
+                a = _t_op(spec, "c2", seed=9)
+                out = np.array([""] * outn, dtype=spec.build())
+                r = None if req is None else (_other_t(spec) if req == "other" else req)
+                _titer_add("reduce", [a, (out, out)], layout="reduce", flags=flags,
+                           op_flags=[["readonly"], ["readwrite"]], op_axes=axes, op_dtypes=[None, r],
+                           casting="unsafe", copy_to=1)
+    for axes, outn in (([[0, 1], [-1, 0]], 4), ([[0, 1], [0, -1]], 3)):
+        a = np.arange(12, dtype=np.float64)
+        out = np.zeros(outn)
+        _titer_add("reduce/f8", [(a, a.reshape(3, 4)), (out, out)], layout="reduce",
+                   flags=["reduce_ok", "external_loop"], op_flags=[["readonly"], ["readwrite"]], op_axes=axes,
+                   copy_to=1)
+        for setter in (False, True):
+            a = np.arange(12, dtype=np.float64)
+            out = np.zeros(outn)
+            _titer_add("reduce/f8_const", [(out, out), (a, a.reshape(3, 4))], layout="reduce",
+                       flags=["reduce_ok", "external_loop"], op_flags=[["readwrite"], ["readonly"]],
+                       op_axes=[axes[1], axes[0]], writes=[7.5], setter=setter)
+
+    # I. np.nested_iters over StringDType: plain, buffered, buffered through the other descriptor and through U30.
+    for spec in specs:
+        for lname, axes in (("c2", [[0], [1]]), ("c2", [[1], [0]]), ("f2", [[0], [1]]), ("c3", [[0], [1, 2]]),
+                            ("c3", [[2], [0, 1]]), ("t3", [[1], [0, 2]]), ("r2", [[1], [0]])):
+            for flags, req in ((rok, None), (rok + ["buffered"], None), (rok + ["buffered"], "other"),
+                               (rok + ["buffered"], "<U30")):
+                op = _t_op(spec, lname, seed=10)
+                r = None if req is None else (_other_t(spec) if req == "other" else req)
+                params = {"axes": axes, "flags": flags}
+                if r is not None:
+                    params["op_dtypes"] = [senc(r)]
+                add("titer", "nested_iters", params=params, operands=[op], layout=lname,
+                    call=lambda v, axes=axes, flags=flags, r=r: _AsciiText(_nested_trace(
+                        v, axes, flags=flags, op_dtypes=None if r is None else [r])))
+
+    # J. NumPy's refusals: no refs_ok (for an operand, for a request), a cast neither copied nor buffered (also between
+    # two StringDType descriptors), a read-only broadcast written, and the casting rules.
+    _titer_add("refuse/norefs", [_t_op(TD, "c2", seed=11)], layout="c2")
+    ints = np.arange(4)
+    _titer_add("refuse/norefs_request", [(ints, ints)], layout="c1", flags=["buffered"], op_dtypes=[TD])
+    for req in (TDN, "<U5", "<i8"):
+        _titer_add("refuse/unbuffered_cast", [_t_op(TD, "c2", seed=11)], layout="c2", flags=rok, op_dtypes=[req],
+                   casting="unsafe")
+    _titer_add("refuse/readonly_bcast", [_t_op(TD, "bc", seed=11)], layout="bc", flags=rok, op_flags=[["readwrite"]])
+    for req, casting in (("<U5", "safe"), ("<i8", "safe"), ("<U5", "no"), (TDN, "no"), (TDN, "equiv"), ("?", "safe")):
+        _titer_add("refuse/casting", [_t_op(TD, "c1", seed=11)], layout="c1", flags=rok + ["buffered"],
+                   op_dtypes=[req], casting=casting)
+    for casting in ("no", "equiv", "safe"):
+        op = operand("<U3", "c1", seed=11)
+        _titer_add("refuse/casting_text", [op], layout="c1", flags=rok + ["buffered"], op_dtypes=[TD], casting=casting)
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Section cvtext: NumSharp's Converts API against NumPy's text rules (2026-10-13)
+# ----------------------------------------------------------------------------------------------------------------------
+#
+# Converts (NumSharp's conversion helpers: the typed and object To* / ToString overloads, ChangeType by NPTypeCode and
+# generic) speaks NumPy's text. cv_tostring records str() of the NumPy scalar given by its bytes; cv_fromstring records
+# np.zeros(1, dtype) after a[0] = text (NumPy's store of a Python str: CPython int() / float() / complex(), NumPy's range
+# check, a bool target taking the str's truth) or NumPy's error. The replay runs every Converts route and requires
+# them to agree. A platform-dependent overflow text (Windows' C long) is dropped (_conv).
+
+CV_VALUES = {
+    "bool": [True, False],
+    "int8": [0, 1, -1, -128, 127],
+    "uint8": [0, 1, 255],
+    "int16": [-32768, 32767, 7],
+    "uint16": [65535, 0, 300],
+    "int32": [-2 ** 31, 2 ** 31 - 1, 42],
+    "uint32": [2 ** 32 - 1, 0, 123456],
+    "int64": [-2 ** 63, 2 ** 63 - 1, -5],
+    "uint64": [2 ** 64 - 1, 0, 2 ** 63],
+    "float16": [0.0, -0.0, 0.1, 1.0, 65504.0, 6e-08, 1e4, 1.5, 0.3333, 2048.0, 100.0, float("nan"), float("inf"),
+                float("-inf")],
+    "float32": [0.1, 1e20, 1e16, 1e15, 3.4028235e38, 1e-45, -0.0, 16777217.0, 123456.789, 1e-5, 1e-4, 1.0,
+                float("nan"), float("-inf")],
+    "float64": [0.1, 1e20, 1e16, 1e15, 1e-5, 1e-4, 1.7976931348623157e308, 5e-324, -0.0, 1 / 3, 2.5, 100.0,
+                12345678901234567890.0, float("nan"), float("inf")],
+    "complex128": [1 + 2j, complex(-0.0, -1), 2j, 1e20 + 1e-5j, complex(float("nan"), 0),
+                   complex(float("inf"), float("-inf")), 0j, complex(0.0, -0.0), 1.5 + 0j, complex(-1.5, 1e-300)],
+}
+
+CV_TEXTS = {
+    "int": ["12", " -7 ", "1_000", "+5", "٣٢", "1.5", "0x10", "", "300", "-1", "127", "-128", "255", "256",
+            "65535", "65536", "2147483647", "9223372036854775807", "18446744073709551615", "-9223372036854775808",
+            "1e3", "nan", " ", "12abc", "0b11", "1__0", "_1", "--1", "\t8\n"],
+    "float": ["1.5", " 2.5 ", "1e3", "-Infinity", "inf", "nan", "-nan", "1_000.5", "0x1p3", "1e400", "1e-400", "", "abc",
+              "65520", "65504", "0.1", "3.4028235e38", "3.5e38", "  -0  ", "1e-45", "infinity", "NaN", "+1.0", "1.",
+              ".5", "1e", "1_e3", "١.٥"],
+    "complex": ["1+2j", "(1+2j)", "2j", "j", "1+", "(1)", " 1+2j ", "inf+nanj", "1e3-2.5e-3j", "", "1 + 2j", "-j",
+                "(-0-0j)", "nan", "1+2J", "(1+2j", "1+2jj"],
+    "bool": ["", "False", "0", "True", " ", "no", "\x00"],
+}
+
+CV_TARGETS = {
+    "int": ["int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64"],
+    "float": ["float16", "float32", "float64"],
+    "complex": ["complex128"],
+    "bool": ["bool"],
+}
+
+
+def _cv_store(text, name):
+    """NumPy's store of a Python str into a one-element array of ``name`` (overflow warnings silenced).
+
+    :param text: the str.
+    :param name: the dtype name.
+    :returns: the array after ``a[0] = text``.
+    """
+    a = np.zeros(1, dtype=name)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        a[0] = text
+    return a
+
+
+def gen_cvtext():
+    """Section cvtext: Converts' number -> text (the NumPy scalar's str() of every dtype's edge values) and text ->
+    number (every integer width, the three float widths, complex and bool, over texts CPython's grammar accepts and
+    refuses, past each width's range and with the non-ASCII digits CPython reads)."""
+    for name, vals in CV_VALUES.items():
+        for v in vals:
+            raw = np.array([v], dtype=name).tobytes().hex()
+            add("cvtext", "cv_tostring", params={"dtype": name, "bits": raw},
+                call=lambda raw=raw, name=name: str(np.frombuffer(bytes.fromhex(raw), dtype=name)[0]))
+    for group, names in CV_TARGETS.items():
+        texts = CV_TEXTS[group] if group == "int" else CV_TEXTS[group] + CV_TEXTS["int"][:8]
+        for name in names:
+            for text in texts:
+                _conv("cvtext", "cv_fromstring", params={"dtype": name, "text": enc(text)},
+                      call=lambda text=text, name=name: _cv_store(text, name))
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Section promote: promotion over three or more dtypes, and NEP 50's weak Python scalar beside text and numbers
+# (2026-10-13)
+# ----------------------------------------------------------------------------------------------------------------------
+
+PROMO_DTYPES = ["bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float16", "float32",
+                "float64", "complex128"]
+
+# Literals a C# caller writes for a Python scalar: ints in and out of a small dtype's range, a float, a bool.
+PROMO_LITERALS = [1, -1, 300, 1000, 1.5, True]
+
+
+def gen_promote():
+    """Section promote: ``np.result_type`` of every ordered triple of the 13 NumPy dtypes and a stride of the ordered
+    quadruples (NumPy's order-independent sequence promotion); ``np.concatenate`` of every triple of one-element arrays
+    and ``np.stack`` / ``np.vstack`` / ``np.hstack`` of every fourth one; and a Python scalar (a C# literal) beside a
+    text or numeric array in ``np.where`` (either side), ``np.choose``, ``np.select``'s default and ``np.r_`` — text
+    beside a number is NumPy's DTypePromotionError, a number beside numbers is weak."""
+    import itertools
+    triples = list(itertools.product(PROMO_DTYPES, repeat=3))
+    for t in triples:
+        add("promote", "result_type", params={"specs": list(t)}, call=lambda t=t: np.result_type(*t))
+    for t in list(itertools.product(PROMO_DTYPES, repeat=4))[::47]:
+        add("promote", "result_type", params={"specs": list(t)}, call=lambda t=t: np.result_type(*t))
+    for i, t in enumerate(triples):
+        ops = [plain(np.array([v], dtype=d)) for v, d in zip((1, 2, 3), t)]
+        add("promote", "promote_concatenate", operands=ops, layout="three", call=lambda *v: np.concatenate(v))
+        if i % 4 == 0:
+            add("promote", "promote_stack", operands=ops, layout="three", call=lambda *v: np.stack(v))
+            add("promote", "promote_vstack", operands=ops, layout="three", call=lambda *v: np.vstack(v))
+            add("promote", "promote_hstack", operands=ops, layout="three", call=lambda *v: np.hstack(v))
+
+    arrays = {
+        "u3": lambda: np.array(["ab", "c", "def", ""], dtype="<U3"),
+        "s3": lambda: np.array([b"ab", b"c", b"def", b""], dtype="|S3"),
+        "t": lambda: np.array(["ab", "c", "def", ""], dtype=TD.build()),
+        "i1": lambda: np.array([1, -2, 3, 127], dtype=np.int8),
+        "u1": lambda: np.array([1, 2, 3, 255], dtype=np.uint8),
+        "f4": lambda: np.array([1.5, -2.0, 0.1, 3.0], dtype=np.float32),
+        "f2": lambda: np.array([1.5, -2.0, 0.1, 3.0], dtype=np.float16),
+        "b1": lambda: np.array([True, False, True, False]),
+    }
+    cond = np.array([True, False, False, True])
+    idx = np.array([0, 1, 0, 1])
+    for aname, make in arrays.items():
+        for lit in PROMO_LITERALS:
+            arr = make()
+            add("promote", "promote_where_lit", params={"literal": enc(lit), "side": "y"},
+                operands=[plain(cond), plain(arr)], layout=aname,
+                call=lambda c, a, lit=lit: np.where(c, a, lit))
+            arr = make()
+            add("promote", "promote_where_lit", params={"literal": enc(lit), "side": "x"},
+                operands=[plain(cond), plain(arr)], layout=aname,
+                call=lambda c, a, lit=lit: np.where(c, lit, a))
+            arr = make()
+            add("promote", "promote_choose_lit", params={"literal": enc(lit)}, operands=[plain(idx), plain(arr)],
+                layout=aname, call=lambda i, a, lit=lit: np.choose(i, [a, lit]))
+            arr = make()
+            add("promote", "promote_select_lit", params={"literal": enc(lit)}, operands=[plain(cond), plain(arr)],
+                layout=aname, call=lambda c, a, lit=lit: np.select([c], [a], default=lit))
+            arr = make()
+            add("promote", "promote_r_lit", params={"literal": enc(lit)}, operands=[plain(arr)], layout=aname,
+                call=lambda a, lit=lit: np.r_[a, lit])
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Section storenone: Python objects stored into arrays — None into text through every index form, ndarray.__setitem__,
+# and stores through a sub-array of a writeable broadcast (2026-10-13)
+# ----------------------------------------------------------------------------------------------------------------------
+
+STORE_INDICES_1D = [[{"int": 0}], [{"int": -1}], [{"ellipsis": True}], [{"slice": [None, 1, None]}],
+                    [{"slice": [None, None, 2]}], [{"arr": [1, 0]}], [{"mask": [True, False, True, False, False, True]}],
+                    [{"arr": []}], [{"int": 6}]]
+STORE_INDICES_2D = [[{"int": 1}], [{"int": 1}, {"int": 2}], [{"slice": [None, None, None]}, {"int": 0}],
+                    [{"mask2": [[True, False, False, True], [False] * 4, [True] * 4]}]]
+
+
+def _set(a, key, value):
+    """``a[key] = value`` with a one-entry key unwrapped (``a[(0,)]`` is ``a[0]`` for NumPy too, but the case reads
+    better).
+
+    :param a: the array.
+    :param key: the index tuple.
+    :param value: the value.
+    """
+    a[key if len(key) > 1 else key[0]] = value
+
+
+def gen_storenone():
+    """Section storenone: ``None`` stored into S / U arrays (``str(None)``, truncated to the width) and into StringDType
+    arrays (the NA object, ``'None'``, or coerce=False's ValueError) through integers, an ellipsis, slices, index arrays,
+    masks, an empty index and an out-of-range one, 1-D and 2-D; ``ndarray.__setitem__`` with an int or a slice and a
+    Python object (None, ints in and out of range, a float into an integer array, text into numbers and numbers into
+    text); and a store through a sub-array of an ``np.broadcast_arrays`` result whose stride is 0 (writeable, as NumPy's
+    views inherit WRITEABLE: the store writes the source)."""
+    for spec in ("<U2", "<U8", "|S2", "|S8"):
+        for lname, indices in (("c1", STORE_INDICES_1D), ("c2", STORE_INDICES_2D)):
+            for idx in indices:
+                key = tuple(_py_index(e) for e in idx)
+                op = operand(spec, lname, seed=1, ascii_only=True)
+                add("storenone", "setitem", params={"index": idx, "value": enc(None)}, operands=[op], layout=lname,
+                    mutate=0, call=lambda a, k=key: _set(a, k, None))
+    for spec in (TD, TDN, TDC):
+        for lname, indices in (("c1", STORE_INDICES_1D), ("c2", STORE_INDICES_2D)):
+            for idx in indices:
+                key = tuple(_py_index(e) for e in idx)
+                op = _t_op(spec, lname, seed=2)
+                add("storenone", "setitem", params={"index": idx, "value": enc(None)}, operands=[op], layout=lname,
+                    mutate=0, call=lambda a, k=key: _set(a, k, None))
+
+    # ndarray.__setitem__(key, value): the C# __setitem__(int / long / string, object) overloads.
+    targets = {
+        "u2": lambda: np.array(["ab", "cd", "ef"], dtype="<U2"),
+        "s2": lambda: np.array([b"ab", b"cd", b"ef"], dtype="|S2"),
+        "t": lambda: np.array(["ab", "cd", "ef"], dtype=TD.build()),
+        "tn": lambda: np.array(["ab", "cd", "ef"], dtype=TDN.build()),
+        "i1": lambda: np.array([1, 2, 3], dtype=np.int8),
+        "i4": lambda: np.array([1, 2, 3], dtype=np.int32),
+        "i8": lambda: np.array([1, 2, 3], dtype=np.int64),
+        "f8": lambda: np.array([1.0, 2.0, 3.0]),
+    }
+    values = [None, 5, 1000, -1, 2.9, "xyz", "12", True, ""]
+    keys = [{"int": 0}, {"int": -1}, {"slice": [None, 2, None]}, {"slice": [None, None, -1]}]
+    for tname, make in targets.items():
+        for key in keys:
+            for v in values:
+                if v is None and tname in ("i1", "i4", "i8", "f8"):
+                    continue  # NumPy stores NaN / raises TypeError; NumSharp refuses a null for numbers ([Misaligned])
+                arr = make()
+                # A 1-D text target is its own base, so the replay rebuilds its OWNDATA; a numeric one stays a view (the
+                # general corpus' reconstruction builds a view over the buffer): target()'s rule, with StringDType text.
+                op = own(arr) if arr.dtype.kind in "SUT" else plain(arr)
+                k = _py_index(key)
+                add("storenone", "setitem_method", params={"key": key, "value": enc(v)}, operands=[op], layout=tname,
+                    mutate=0, call=lambda a, k=k, v=v: a.__setitem__(k, v))
+
+    # A store through a sub-array of a writeable broadcast (np.broadcast_arrays' results are writeable in NumPy 2.4.2,
+    # with a DeprecationWarning, and their views inherit WRITEABLE even where the stride is 0).
+    for which in ("a", "b"):
+        for row in (0, 1, 2):
+            for value in (9, [7, 8, 9]):
+                x = np.arange(3, dtype=np.int64)
+
+                def store(x, which=which, row=row, value=value):
+                    """``broadcast_arrays(x[:, None], x)[which][row][...] = value``: a whole-view store through one row of
+                    a writeable broadcast. ``a``'s rows are stride-0 views of ``x[row]`` (the row's offset decides the
+                    element; every slot aliases it, so the last value stays), ``b``'s rows are views of all of ``x``.
+
+                    :param x: the int64 operand, mutated in place (the case records it).
+                    :param which: ``"a"`` (the stretched column) or ``"b"`` (the stretched row).
+                    :param row: the row index into the (3, 3) broadcast.
+                    :param value: a Python int or a list of three.
+                    """
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        a, b = np.broadcast_arrays(x[:, None], x)
+                        (a if which == "a" else b)[row][...] = value
+
+                add("storenone", "bcast_subview_store", params={"which": which, "row": row, "value": enc(value)},
+                    operands=[plain(x)], layout="c1", mutate=0, call=store)
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
-              gen_tmove, gen_tcast]
+              gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone]
 
 
 def main():
-    """Writes the whole corpus, or with ``--sections a,b`` regenerates only those sections' generators (``gen_<name>``)
-    and splices their cases into the existing corpus in place of the old ones — a development shortcut (the whole corpus
-    takes minutes); the committed corpus is always a full run."""
+    """Writes the whole corpus, one file per section, or with ``--sections a,b`` runs only those generators
+    (``gen_<name>``) and rewrites only the files of the sections they produce — a development shortcut (the whole corpus
+    takes minutes); the committed corpus is always a full run. A full run also removes the files of sections that no
+    longer exist (the pre-split ``strings.jsonl`` included).
+
+    :raises AssertionError: a section file larger than ``MAX_SECTION_BYTES``.
+    """
     only = None
     if len(sys.argv) > 2 and sys.argv[1] == "--sections":
         only = set(sys.argv[2].split(","))
     for gen in GENERATORS:
         if only is None or gen.__name__[len("gen_"):] in only:
             gen()
-    lines = [json.dumps(c, ensure_ascii=True, separators=(",", ":"), allow_nan=False).encode("ascii") + b"\n"
-             for c in CASES]
-    if only is not None:
-        # Keep the other sections' cases as they are; the regenerated sections replace their old cases.
-        regenerated = {c["id"].split("/")[0] for c in CASES} | only
-        kept = [ln for ln in open(OUT, "rb") if json.loads(ln)["id"].split("/")[0] not in regenerated]
-        lines = kept + lines
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    with open(OUT, "wb") as f:
-        # allow_nan=False above: a NaN / infinity in the params would be written as invalid JSON (Infinity); such a value
-        # travels as a string instead (_json_floats).
-        f.writelines(lines)
     by_section = {}
     for c in CASES:
-        sec = c["id"].split("/")[0]
-        by_section[sec] = by_section.get(sec, 0) + 1
+        by_section.setdefault(c["id"].split("/")[0], []).append(c)
+    CORPUS_DIR.mkdir(parents=True, exist_ok=True)
+    if only is None:
+        for old in CORPUS_DIR.glob("strings*.jsonl"):
+            if old.stem[len("strings_"):] not in by_section:
+                old.unlink()
+    sizes = {}
+    for sec, cases in by_section.items():
+        # allow_nan=False: a NaN / infinity in the params would be written as invalid JSON (Infinity); such a value
+        # travels as a string instead (_json_floats).
+        lines = [json.dumps(c, ensure_ascii=True, separators=(",", ":"), allow_nan=False).encode("ascii") + b"\n"
+                 for c in cases]
+        data = b"".join(lines)
+        assert len(data) <= MAX_SECTION_BYTES, f"section {sec} is {len(data)} bytes, past {MAX_SECTION_BYTES}: split it"
+        with open(section_path(sec), "wb") as f:
+            f.write(data)
+        sizes[sec] = len(data)
     errs = sum(1 for c in CASES if "error" in c)
     p2 = sum(1 for c in CASES if c["phase"] == 2)
-    print(f"wrote {len(CASES)} cases ({errs} NumPy errors, {p2} phase-2) to {OUT}")
-    print("  " + ", ".join(f"{k} {v}" for k, v in by_section.items()))
+    print(f"wrote {len(CASES)} cases ({errs} NumPy errors, {p2} phase-2) in {len(by_section)} files under {CORPUS_DIR}")
+    print("  " + ", ".join(f"{k} {len(v)} ({sizes[k] / 1048576:.1f} MiB)" for k, v in by_section.items()))
+    if _TITER_DROPPED:
+        print(f"  titer: {len(_TITER_DROPPED)} cases dropped for NumPy 2.4.2's StringDType allocated-output MemoryError")
 
 
 if __name__ == "__main__":

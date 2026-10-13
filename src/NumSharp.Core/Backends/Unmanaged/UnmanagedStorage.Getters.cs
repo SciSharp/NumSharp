@@ -184,8 +184,12 @@ namespace NumSharp.Backends
                 long sliceSize = shape.IsBroadcasted
                     ? (shape.BufferSize > 0 ? shape.BufferSize : shape.size)
                     : shape.size;
-                // Create shape with offset=0 since InternalArray.Slice already accounts for the offset
-                var adjustedShape = new Shape(shape.dimensions, shape.strides, 0, sliceSize);
+                // The slice below starts at the element GetSubshape names, so the view's shape starts at 0 — except for an
+                // EMPTY index list, where GetSubshape returns this shape itself with offset 0 (the slice then starts at the
+                // buffer's first element) and the shape's own offset must stay: a row of a broadcast at a non-zero offset
+                // (np.broadcast_arrays(x[:, None], x)[0][1] has stride 0 and offset 1) took its stores (`row[...] = v`,
+                // SetData) at element 0 when this offset was dropped.
+                var adjustedShape = new Shape(shape.dimensions, shape.strides, indices.Length == 0 ? shape.offset : 0, sliceSize);
                 // A sub-array of a read-only array is read-only (NumPy views inherit WRITEABLE): row 2 of a broadcast row
                 // keeps no stride-0 axis, so its fresh flags would otherwise call it writeable.
                 if (!this_shape.IsWriteable)
@@ -250,8 +254,12 @@ namespace NumSharp.Backends
                 long sliceSize = shape.IsBroadcasted
                     ? (shape.BufferSize > 0 ? shape.BufferSize : shape.size)
                     : shape.size;
-                // Create shape with offset=0 since InternalArray.Slice already accounts for the offset
-                var adjustedShape = new Shape(shape.dimensions, shape.strides, 0, sliceSize);
+                // The slice below starts at the element GetSubshape names, so the view's shape starts at 0 — except for an
+                // EMPTY index list, where GetSubshape returns this shape itself with offset 0 (the slice then starts at the
+                // buffer's first element) and the shape's own offset must stay: a row of a broadcast at a non-zero offset
+                // (np.broadcast_arrays(x[:, None], x)[0][1] has stride 0 and offset 1) took its stores (`row[...] = v`,
+                // SetData) at element 0 when this offset was dropped.
+                var adjustedShape = new Shape(shape.dimensions, shape.strides, indices.Length == 0 ? shape.offset : 0, sliceSize);
                 // A sub-array of a read-only array is read-only (NumPy views inherit WRITEABLE): row 2 of a broadcast row
                 // keeps no stride-0 axis, so its fresh flags would otherwise call it writeable.
                 if (!this_shape.IsWriteable)
@@ -341,8 +349,12 @@ namespace NumSharp.Backends
                 long sliceSize = shape.IsBroadcasted
                     ? (shape.BufferSize > 0 ? shape.BufferSize : shape.size)
                     : shape.size;
-                // Create shape with offset=0 since InternalArray.Slice already accounts for the offset
-                var adjustedShape = new Shape(shape.dimensions, shape.strides, 0, sliceSize);
+                // The slice below starts at the element GetSubshape names, so the view's shape starts at 0 — except for an
+                // EMPTY index list, where GetSubshape returns this shape itself with offset 0 (the slice then starts at the
+                // buffer's first element) and the shape's own offset must stay: a row of a broadcast at a non-zero offset
+                // (np.broadcast_arrays(x[:, None], x)[0][1] has stride 0 and offset 1) took its stores (`row[...] = v`,
+                // SetData) at element 0 when this offset was dropped.
+                var adjustedShape = new Shape(shape.dimensions, shape.strides, ndims == 0 ? shape.offset : 0, sliceSize);
                 // A sub-array of a read-only array is read-only (NumPy views inherit WRITEABLE): row 2 of a broadcast row
                 // keeps no stride-0 axis, so its fresh flags would otherwise call it writeable.
                 if (!this_shape.IsWriteable)
@@ -408,8 +420,12 @@ namespace NumSharp.Backends
                 long sliceSize = shape.IsBroadcasted
                     ? (shape.BufferSize > 0 ? shape.BufferSize : shape.size)
                     : shape.size;
-                // Create shape with offset=0 since InternalArray.Slice already accounts for the offset
-                var adjustedShape = new Shape(shape.dimensions, shape.strides, 0, sliceSize);
+                // The slice below starts at the element GetSubshape names, so the view's shape starts at 0 — except for an
+                // EMPTY index list, where GetSubshape returns this shape itself with offset 0 (the slice then starts at the
+                // buffer's first element) and the shape's own offset must stay: a row of a broadcast at a non-zero offset
+                // (np.broadcast_arrays(x[:, None], x)[0][1] has stride 0 and offset 1) took its stores (`row[...] = v`,
+                // SetData) at element 0 when this offset was dropped.
+                var adjustedShape = new Shape(shape.dimensions, shape.strides, ndims == 0 ? shape.offset : 0, sliceSize);
                 // A sub-array of a read-only array is read-only (NumPy views inherit WRITEABLE): row 2 of a broadcast row
                 // keeps no stride-0 axis, so its fresh flags would otherwise call it writeable.
                 if (!this_shape.IsWriteable)

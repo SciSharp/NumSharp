@@ -578,7 +578,7 @@ namespace NumSharp.Tests.Fuzz
         // they return the registry's class singletons, not array values, so the operand corpus
         // has nothing to bit-compare. A NEW property must be added here (with its gate) or fail.
         // BytesDType / StrDType (the fixed-width string classes) are gated by NpDtypesModuleTests and
-        // the string oracle's dtype section (Strings/corpus/strings.jsonl: descriptors, promotion, casts).
+        // the string oracle's dtype section (Strings/corpus/strings_dtype.jsonl: descriptors, promotion, casts).
         private static readonly HashSet<string> DtypesKnownProperties = new()
         {
             "BoolDType", "ByteDType", "BytesDType", "CLongDoubleDType", "CharDType", "Complex128DType",

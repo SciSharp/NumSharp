@@ -4,8 +4,8 @@ using System.Linq;
 namespace NumSharp.Tests.Ma
 {
     /// <summary>
-    ///     numpy.ma's own STATEMENTS for the members the string-oracle validation (the <c>strma</c> section of
-    ///     <c>strings.jsonl</c>) found NumSharp answering differently for every dtype, not only for text: what a result
+    ///     numpy.ma's own STATEMENTS for the members the string-oracle validation (the <c>strma</c> section,
+    ///     <c>strings_strma.jsonl</c>) found NumSharp answering differently for every dtype, not only for text: what a result
     ///     inherits (fill value, hard mask), when a mask is an array and when <see cref="MaskedArrayModule.nomask"/>, which
     ///     results are VIEWS, what the logical reductions and <c>count</c> return without a mask, and the statement order
     ///     of <c>trace</c>, <c>allclose</c>, <c>average</c>, the two-operand extrema and <c>unique</c>. Every expected value

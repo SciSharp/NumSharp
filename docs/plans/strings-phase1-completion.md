@@ -393,3 +393,34 @@ After this plan, phase 2 loses P2.4 and gains the `T` forms of P2.1–P2.6 plus 
   - Trap: a contiguous operand without a cast is iterated IN PLACE even with `buffered` (NumPy's BUFNEVER), so a
     "buffered" test over it never fills a buffer (the `copy()` mutant survived until the tests used a transpose walked in
     C order and a cast).
+- 2026-10-13 — **The oracle for everything `strings` has so far** (owner's request: "then to oracle to all features
+  developed so far in strings").
+  - One corpus file per section: `Strings/corpus/strings_<section>.jsonl` (31 files, 63,133 cases, 18,583 of them NumPy
+    errors, 2,997 phase-2 deferrals). The single `strings.jsonl` had reached 96.6 MiB, near GitHub's 100 MiB file limit;
+    the largest section is now `strcomp` (24.2 MiB), and the generator warns past 50 MiB (`MAX_SECTION_BYTES`).
+    `--sections a,b` regenerates a subset, byte-identical to a full run (case ids count per section and op). The
+    replay reads every section file (`StringOracleCorpus.CorpusFiles`); `test/inventory` counts them all.
+  - Four new sections, all strict. `titer` (3,275): np.nditer and np.nested_iters over `T` — the value stream of 16
+    layouts × the flag sets × the orders, buffered casts out of and into `T` under every casting rule and two buffer sizes,
+    the copy routes, writes through the views and the setter (texts, arena and long strings, None, numbers, coerce=False
+    refusals), allocated `T` outputs, operand pairs with `common_dtype`, reductions (op_axes, the stride-0 chunk, a cast
+    reduction operand, a float64 one), nested iterators, NumPy's refusals; a trace is ASCII (`{"kind": "text", "a": …}`),
+    since every value in it is hex. `cvtext` (442): the text of every number through each `Converts` route (all routes
+    must agree, the de-DE culture included) and each route's parse of NumPy's text grammars, bit for bit. `promote`
+    (6,892): `np.concatenate` / `stack` / `vstack` / `hstack` over many dtype pairs with text, and the weak C# literal
+    beside text and numbers in `np.where` / `np.choose` / `np.select` / `np.r_`. `storenone` (375): Python objects
+    (None, numbers, text, bool) stored by `__setitem__` into `S` / `U` / `T` / numeric targets through integer and
+    slice keys, and stores through rows of a writeable broadcast.
+  - Kept out of the corpus, each with its reason: NumPy's `T` → complex bug (casts.cpp line 1326 writes the real part
+    into the imaginary part; titer feeds that cast only texts whose two parts are equal, so the value is the one
+    `complex()` parses), its allocated-output `MemoryError` (30 traces), the open buffered-reduce bugs (a buffer shorter
+    than the reduced axis, and a reduction over the OUTER axis, which NumSharp visits in the wrong order — new pin
+    `Nditer_BufferedReduce_ReducedOuterAxis_VisitsInCOrder`), and `np.power` with a negative integer exponent under
+    `where=` into a text out (NumPy's outcome depends on the calls made before it in the process: `strconv` uses
+    non-negative exponents there).
+  - Found and fixed: the four `UnmanagedStorage.GetData` overloads dropped a broadcast view's own offset when no index
+    was given (`Shape.GetSubshape` returns the shape itself with offset 0 there), so a whole-view store or read of a
+    stretched row at a non-zero offset used element 0: `np.broadcast_arrays(x[:, None], x)[0][1][...] = 9` wrote `x[0]`
+    (NumPy: `x[1]`). Reachable for stores only since the P1.7 write-access rule; `GetData(new int[0])` read the wrong
+    element before that. Gate `StretchedSubArray_AtAnOffset_StoresIntoItsOwnElement`.
+  - Gate: `StringOracleTests` 33 / 33 on net10.0 and net8.0.

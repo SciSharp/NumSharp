@@ -129,5 +129,48 @@ namespace NumSharp.Tests.Creation
             x.GetInt64(1).Should().Be(2L);
             x.GetInt64(2).Should().Be(3L);
         }
+
+        /// <summary>
+        ///     A whole-view store into a stretched sub-array that starts at a NON-zero offset lands on that sub-array's own
+        ///     element (found 2026-10-13 by the string oracle's storenone section). With
+        ///     <c>a, b = np.broadcast_arrays(x[:, None], x)</c> and <c>x = np.arange(3)</c>, NumPy 2.4.2 gives
+        ///     <c>a[1][...] = 9</c> → <c>[0 9 2]</c>, <c>a[2][...] = [7, 8, 9]</c> → <c>[0 1 9]</c> (the stride-0 row keeps the
+        ///     last value), and <c>b[r][...] = 9</c> → <c>[9 9 9]</c> for every row. The sub-array view of an empty index list
+        ///     (the whole-view store's target) used to drop the row's offset, so every store wrote <c>x[0]</c>; only row 0, the
+        ///     case the test above covers, was right.
+        /// </summary>
+        [TestMethod]
+        public void StretchedSubArray_AtAnOffset_StoresIntoItsOwnElement()
+        {
+            foreach (var which in new[] { "a", "b" })
+            foreach (var row in new[] { 0, 1, 2 })
+            foreach (var form in new[] { "scalar", "array", "SetData" })
+            {
+                var x = np.arange(3L);
+                var (a, b) = np.broadcast_arrays(x[Slice.All, Slice.NewAxis], x);
+                var target = (which == "a" ? a : b)[row];
+                // The same empty-index sub-array, read through the coordinate shim: a's row reads x[row] three times.
+                using (var whole = target.GetData(new int[0]))
+                    whole.ToArray<long>().Should().Equal(which == "a" ? new long[] { row, row, row } : new long[] { 0, 1, 2 },
+                        $"{which}[{row}].GetData(()) reads its own elements");
+                switch (form)
+                {
+                    case "scalar": target[Slice.Ellipsis] = NDArray.Scalar(9L); break;
+                    case "array": target[Slice.Ellipsis] = np.array(new long[] { 7, 8, 9 }); break;
+                    default: target.SetData(NDArray.Scalar(9L)); break;
+                }
+
+                long[] expected;
+                if (which == "a")
+                {
+                    // a's rows are stride-0 views of x[row]: every slot aliases it, the last value stays.
+                    expected = new long[] { 0, 1, 2 };
+                    expected[row] = 9;
+                }
+                else
+                    expected = form == "array" ? new long[] { 7, 8, 9 } : new long[] { 9, 9, 9 };
+                x.ToArray<long>().Should().Equal(expected, $"{which}[{row}][...] = ({form})");
+            }
+        }
     }
 }

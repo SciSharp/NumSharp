@@ -11,7 +11,7 @@ using NumSharp.Backends;
 namespace NumSharp.Tests.Strings
 {
     /// <summary>
-    ///     Replays the NumPy 2.4.2 string oracle (<c>Strings/corpus/strings.jsonl</c>) against NumSharp's fixed-width
+    ///     Replays the NumPy 2.4.2 string oracle (<c>Strings/corpus/strings_&lt;section&gt;.jsonl</c>) against NumSharp's fixed-width
     ///     string dtypes, one test per corpus section. Every case is compared byte for byte: an array result by its
     ///     descriptor, shape, C-order bytes, strides, flags and memory sharing; an in-place call by its target AND the whole
     ///     base buffer around it; a value, text, bool, descriptor or attribute set exactly; an error by NumPy's exception
@@ -221,6 +221,40 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void StringDTypeCasts() => Run("tcast");
 
         /// <summary>
+        ///     Section titer (strings phase 1, P1.7): np.nditer and np.nested_iters over <c>StringDType</c> operands,
+        ///     recorded as traces — the value stream of every layout, order and flag set; buffered casts out of and into
+        ///     <c>StringDType</c> (<c>U</c>, <c>S</c>, numbers, bool, complex, the NA descriptors) under every casting rule; the
+        ///     copy routes; writes through the views and through the setter (texts, arena and long strings, None, numbers,
+        ///     coerce=False refusals), plain, buffered and through cast buffers; allocated outputs; operand pairs with
+        ///     common_dtype; reductions (the stride-0 external-loop chunk, a cast reduction operand, a float64 one); nested
+        ///     iterators; NumPy's refusals. Every case is strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeIteration() => Run("titer");
+
+        /// <summary>
+        ///     Section cvtext: NumSharp's <c>Converts</c> against NumPy's text — a number's text is the NumPy scalar's
+        ///     <c>str()</c>, a text becomes a number as NumPy stores a Python str (CPython's grammar, NumPy's range check, a
+        ///     bool target taking the str's truth), every Converts route agreeing. Every case is strict.
+        /// </summary>
+        [TestMethod] public void ConvertsText() => Run("cvtext");
+
+        /// <summary>
+        ///     Section promote: <c>np.result_type</c> of every triple (and a stride of the quadruples) of the 13 NumPy dtypes,
+        ///     <c>np.concatenate</c> / <c>np.stack</c> / <c>np.vstack</c> / <c>np.hstack</c> of three one-element arrays, and a
+        ///     Python scalar (a C# literal) beside text and numbers in <c>np.where</c>, <c>np.choose</c>, <c>np.select</c> and
+        ///     <c>np.r_</c> (NEP 50: weak; text beside a number is NumPy's DTypePromotionError). Every case is strict.
+        /// </summary>
+        [TestMethod] public void Promotion() => Run("promote");
+
+        /// <summary>
+        ///     Section storenone: <c>None</c> stored into <c>S</c> / <c>U</c> (its <c>str()</c>, truncated) and
+        ///     <c>StringDType</c> arrays (the NA object, <c>'None'</c>, or coerce=False's refusal) through every index form;
+        ///     <c>ndarray.__setitem__</c> with Python objects; a store through a sub-array of a writeable broadcast (stride 0,
+        ///     writeable as NumPy's views inherit WRITEABLE). Every case is strict.
+        /// </summary>
+        [TestMethod] public void StoresOfPythonObjects() => Run("storenone");
+
+        /// <summary>
         ///     Lifetime gate of the <c>StringDType</c> sections (strings phase 1, P1.9): once every case of tstore / tcreate /
         ///     tmove / tcast has been replayed and its arrays are garbage, no string allocator is left alive — every buffer the
         ///     replay made (operands, results, temporaries of the gathers, scatters and casts, failed operations) ran its clear
@@ -279,7 +313,8 @@ namespace NumSharp.Tests.Strings
             {
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
                 "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
-                "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast",
+                "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
+                "storenone",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)
@@ -574,10 +609,13 @@ namespace NumSharp.Tests.Strings
                 }
                 case "text":
                 {
-                    // The text travels as UTF-32 hex (a printed lone surrogate is not valid JSON text). An integer index into a
+                    // The text travels as UTF-32 hex (a printed lone surrogate is not valid JSON text), or as itself ("a")
+                    // when it is ASCII by construction (a titer trace: every value in it is hex). An integer index into a
                     // StringDType array is NumPy's Python str; NumSharp's indexer returns the element as a 0-d view, whose
                     // element is compared (only for StringDType, so a printing op that returns an array still fails).
-                    var want = StringOracleCorpus.Utf32HexToString(exp.GetProperty("u").GetString());
+                    var want = exp.TryGetProperty("a", out var ascii)
+                        ? ascii.GetString()
+                        : StringOracleCorpus.Utf32HexToString(exp.GetProperty("u").GetString());
                     var got = VStringElementOr(result);
                     if (got is not string gs || gs != want)
                         diffs.Add($"text {Show(got)} != NumPy {Show(want)}");
