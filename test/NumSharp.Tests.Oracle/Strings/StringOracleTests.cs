@@ -255,6 +255,17 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void StoresOfPythonObjects() => Run("storenone");
 
         /// <summary>
+        ///     Section tma (strings phase 1, P1.7d): numpy.ma over NEP 55 <c>StringDType</c> — strma's tables over <c>T</c>
+        ///     arguments (14 one-argument variants incl. the NA descriptors and <c>coerce=False</c>, 20 argument pairs beside
+        ///     <c>T</c> / <c>U</c> / <c>S</c> / numbers / values, and the <c>T</c> constructors), plus element access, stores,
+        ///     casts and attributes. A case NumPy answers without computing on the text is strict (movement, printing, the
+        ///     <c>'N/A'</c> fill value, masks, casts, and the refusals NumPy raises before reading a string: no loop,
+        ///     <c>Unsuitable type ... for calculating minimum</c>, <c>Cannot convert fill_value</c>); one that computed on the
+        ///     text (concatenating sums, comparisons, logical reductions) is the computational phase and passes as a deferral.
+        /// </summary>
+        [TestMethod] public void MaskedStringDType() => Run("tma");
+
+        /// <summary>
         ///     Lifetime gate of the <c>StringDType</c> sections (strings phase 1, P1.9): once every case of tstore / tcreate /
         ///     tmove / tcast has been replayed and its arrays are garbage, no string allocator is left alive — every buffer the
         ///     replay made (operands, results, temporaries of the gathers, scatters and casts, failed operations) ran its clear
@@ -302,7 +313,7 @@ namespace NumSharp.Tests.Strings
         private static readonly Dictionary<string, int> DeferralCeilings = new()
         {
             ["reductions"] = 32, ["straxis"] = 130, ["strshape"] = 190, ["strvalid"] = 5, ["strsurface"] = 67,
-            ["strma"] = 113,
+            ["strma"] = 113, ["tma"] = 437,
         };
 
         /// <summary>The corpus is complete: every section has cases and every case belongs to a section above.</summary>
@@ -314,7 +325,7 @@ namespace NumSharp.Tests.Strings
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
                 "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
-                "storenone",
+                "storenone", "tma",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)
@@ -539,7 +550,7 @@ namespace NumSharp.Tests.Strings
             // return NumPy's views of nonzero's / the interleaved index buffer, and their layout is compared.)
             // numpy.ma.compress_nd drops the masked columns of a 2-D array with `data[:, keep]`: a boolean index behind a
             // slice, which NumPy returns as its transposed MapIter VIEW and NumSharp as a fresh C-ordered copy.
-            if (c.Op == "ma1" && c.Layout == "MU2" && c.Params is not null && c.Params.TryGetValue("name", out var maName)
+            if (c.Op == "ma1" && c.Layout is "MU2" or "MT2" && c.Params is not null && c.Params.TryGetValue("name", out var maName)
                 && maName.GetString() is "compress_nd" or "compress_rowcols" or "compress_cols")
                 return "compress_nd's column selection is a fancy index behind a slice: NumPy's transposed MapIter view (OpenBugs.FancyIndex)";
             if (c.Op != "getitem" || c.Params is null || !c.Params.TryGetValue("index", out var index))
@@ -759,12 +770,21 @@ namespace NumSharp.Tests.Strings
                 diffs.Add($"shape ({string.Join(",", m.data.Shape.dimensions)}) != NumPy ({string.Join(",", wantShape)})");
                 return;
             }
-            // A null buffer is data NumPy left uninitialized (an S np.empty_like / masked_all): only its descriptor and
-            // shape are NumPy's.
-            var wantBuffer = exp.GetProperty("buffer");
-            var gotHex = Convert.ToHexString(StringOracleCorpus.CBytes(m.data)).ToLowerInvariant();
-            if (wantBuffer.ValueKind != JsonValueKind.Null && gotHex != wantBuffer.GetString())
-                diffs.Add($"data bytes {Shorten(gotHex)} != NumPy {Shorten(wantBuffer.GetString())} (as text: {Show(Text(m.data))})");
+            if (exp.TryGetProperty("values", out var tvalues))
+            {
+                // StringDType data (section tma): its elements by value and NA flag, masked slots included (the descriptor's
+                // str above already compared the NA object and coerce; the cells hold allocator offsets and pointers).
+                CompareVStringValues(tvalues, m.data, diffs, "data ");
+            }
+            else
+            {
+                // A null buffer is data NumPy left uninitialized (an S np.empty_like / masked_all): only its descriptor and
+                // shape are NumPy's.
+                var wantBuffer = exp.GetProperty("buffer");
+                var gotHex = Convert.ToHexString(StringOracleCorpus.CBytes(m.data)).ToLowerInvariant();
+                if (wantBuffer.ValueKind != JsonValueKind.Null && gotHex != wantBuffer.GetString())
+                    diffs.Add($"data bytes {Shorten(gotHex)} != NumPy {Shorten(wantBuffer.GetString())} (as text: {Show(Text(m.data))})");
+            }
             var wantMask = exp.GetProperty("mask");
             bool gotNomask = ReferenceEquals(m.mask, np.ma.nomask);
             if (wantMask.ValueKind == JsonValueKind.Null)

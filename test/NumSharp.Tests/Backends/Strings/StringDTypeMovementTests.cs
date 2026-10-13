@@ -811,8 +811,9 @@ namespace NumSharp.Tests.Backends.Strings
 
         /// <summary>
         ///     Computing on <c>StringDType</c> is phase 2: a comparison of two StringDType arrays (or StringDType with
-        ///     <c>U</c>) refuses with NumSharp's phase-2 text — except an EMPTY broadcast, which the shape decides — and a
-        ///     reduction refuses before reading the cells.
+        ///     <c>U</c>) refuses with NumSharp's phase-2 text — except an EMPTY broadcast, which the shape decides — and so
+        ///     does <c>np.sum</c>, whose <c>add.reduce</c> NumPy runs through StringDType's own <c>add</c> loop (the
+        ///     concatenation of the texts) once its checks pass.
         /// </summary>
         [TestMethod]
         public void Computation_IsPhaseTwo()
@@ -830,7 +831,7 @@ namespace NumSharp.Tests.Backends.Strings
                 r.dtype.Should().Be(np.@bool);
             }
             Action sum = () => np.sum(a);
-            sum.Should().Throw<NotSupportedException>().WithMessage("This operation does not support StringDType() arrays yet*");
+            sum.Should().Throw<StringComputationNotSupportedException>().WithMessage("sum is not supported for StringDType() arrays yet*");
         }
     }
 }

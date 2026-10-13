@@ -52,6 +52,10 @@ namespace NumSharp.Backends
             // NumPy validation order: where parse -> input coercion -> loop resolution -> out.
             ValidateWhereMask(where);
 
+            // A StringDType operand: the dispatcher's refusal naming the operand classes (and a dtype= request's class).
+            if (Strings.NDStringUfuncs.IsVString(x1) || Strings.NDStringUfuncs.IsVString(x2))
+                throw Strings.NDStringUfuncs.BinaryError(UfuncName(op), x1, x2, @out, typeCode, where);
+
             // Text has no loop either; a float dtype= request reports the input cast instead (the no-loop check for a
             // non-float request below stays first, as in NumPy).
             if (Strings.NDStringUfuncs.IsString(x1) || Strings.NDStringUfuncs.IsString(x2))

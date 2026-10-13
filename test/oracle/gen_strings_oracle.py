@@ -160,11 +160,12 @@ def own(arr):
 
 
 def target(arr):
-    """An in-place target or out= operand whose OWNDATA the replay reproduces: a 1-D string array, or an empty 1-D numeric
-    one, is its own base (``own``: the replay rebuilds those as the base); a non-empty numeric operand stays a view
-    (``plain``: the general corpus' reconstruction builds a view over the buffer)."""
+    """An in-place target or out= operand whose OWNDATA the replay reproduces: a 1-D string array (``S``, ``U`` or a
+    ``StringDType``), or an empty 1-D numeric one, is its own base (``own``: the replay rebuilds those as the base); a
+    non-empty numeric operand stays a view (``plain``: the general corpus' reconstruction builds a view over the
+    buffer)."""
     arr = np.asarray(arr)
-    if arr.ndim == 1 and (arr.dtype.kind in "SU" or arr.size == 0):
+    if arr.ndim == 1 and (arr.dtype.kind in "SUT" or arr.size == 0):
         return own(arr)
     return plain(arr)
 
@@ -207,9 +208,16 @@ def masked_expect(r, uninit=False):
     nomask, else the boolean bytes), the fill value its getter returns and the hard-mask flag. ``uninit`` marks data
     NumPy left UNINITIALIZED (``np.empty_like`` / ``masked_all`` / ``masked_all_like``): an ``S`` buffer then holds
     whatever the allocator recycled, so the buffer is recorded as ``None`` (not compared). A ``U`` buffer is still
-    recorded: its dtype carries ``NPY_NEEDS_INIT``, so NumPy's ``np.empty`` zero-fills it."""
+    recorded: its dtype carries ``NPY_NEEDS_INIT``, so NumPy's ``np.empty`` zero-fills it. A ``StringDType`` data array
+    (section tma) is recorded by its VALUES (``tvals``: NA cells marked) and its descriptor request (``t``), never by its
+    cells, which hold allocator offsets and heap pointers; its ``np.empty`` is zero-filled too (every element ``''``)."""
     data = np.asarray(r.data)
     m = r._mask
+    if data.dtype.kind == "T":
+        return {"kind": "masked", "dtype": data.dtype.str, "t": tspec_of(data.dtype),
+                "shape": [int(x) for x in data.shape], "values": tvals(data),
+                "mask": None if m is np.ma.nomask else np.ascontiguousarray(np.asarray(m, dtype=bool)).tobytes().hex(),
+                "fill": _enc_fill(r.fill_value), "hard": bool(r._hardmask)}
     buffer = None if uninit and data.dtype.kind == "S" else np.ascontiguousarray(data).tobytes().hex()
     return {"kind": "masked", "dtype": data.dtype.str, "shape": [int(x) for x in data.shape],
             "buffer": buffer,
@@ -2548,42 +2556,63 @@ def _enc_value(v):
 def _is_text_arg(a):
     """Whether a ``strma`` argument (an ``MArg``, an array or a Python value) is text."""
     if isinstance(a, MArg):
-        data = np.array(a.data, dtype=a.spec) if a.spec else np.array(a.data)
-        return data.dtype.kind in "SU"
+        data = np.array(a.data, dtype=a.spec) if a.spec is not None else np.array(a.data)
+        return data.dtype.kind in "SUT"
     if isinstance(a, np.ndarray):
-        return a.dtype.kind in "SU"
+        return a.dtype.kind in "SUT"
     return isinstance(a, (str, bytes))
 
 
-def add_ma(op, *, args, params=None, call, phase="compute", layout=""):
+def add_ma(op, *, args, params=None, call, phase="compute", layout="", section="strma", trace_t=False):
     """Record one numpy.ma call over masked arguments. Each ``MArg`` travels as a data operand plus (unless nomask or a
     bool) a boolean mask operand; ``params["mops"]`` says how to rebuild every argument (``{"d": data, "m": mask}``, a
-    plain array ``{"a": i}`` or a value ``{"v": ...}``) and the replay builds the same masked arrays."""
-    operands, mops = [], []
-    for a in args:
-        if isinstance(a, MArg):
-            data = np.array(a.data, dtype=a.spec) if a.spec else np.array(a.data)
-            entry = {"d": len(operands), "m": -1}
-            # ``target``: an operand whose flags the replay reproduces (a 1-D string operand is its own base, a non-empty
-            # numeric one a view), since a function may return the very array it was given (getmask, filled).
-            operands.append(target(data))
-            if isinstance(a.mask, bool):
-                entry["mbool"] = a.mask
-            elif a.mask is not None:
-                # ``target`` like the data: numpy.ma ADOPTS the array passed as ``mask=`` (getmask returns it), so its
-                # flags must be ones the replay reproduces (a non-empty bool operand is a view on both sides).
-                entry["m"] = len(operands)
-                operands.append(target(np.array(a.mask, dtype=bool)))
-            if a.fill is not None:
-                entry["fill"] = _enc_value(a.fill)
-            if a.hard:
-                entry["hard"] = True
-            mops.append(entry)
-        elif isinstance(a, np.ndarray):
-            mops.append({"a": len(operands)})
-            operands.append(target(a))
-        else:
-            mops.append({"v": _enc_value(a)})
+    plain array ``{"a": i}`` or a value ``{"v": ...}``) and the replay builds the same masked arrays.
+
+    :param op: the op key (``ma0`` / ``ma1`` / ``ma2``).
+    :param args: the arguments: ``MArg``s, plain arrays or Python values.
+    :param params: the case parameters (``name`` selects the function).
+    :param call: the NumPy call over the rebuilt arguments.
+    :param phase: the case's phase (``"compute"``: decided by NumPy's outcome, see ``add``).
+    :param layout: the variant label.
+    :param section: the corpus section (``strma`` for the fixed-width strings, ``tma`` for ``StringDType``).
+    :param trace_t: classify a ``"compute"`` case by whether NumPy COMPUTED on ``StringDType`` text (section tma): the
+        call is run a second time over fresh copies of the arguments whose ``StringDType`` arrays are ``_TTrace`` views,
+        and the case is phase 1 (NumSharp must answer it now) unless that run computed on text (phase 2). Without it a
+        ``"compute"`` case is phase 2 whenever NumPy returns a result.
+    """
+
+    def build():
+        """The operands and the rebuild instructions, from fresh copies of every argument (a call may mutate them)."""
+        operands, mops = [], []
+        for a in args:
+            if isinstance(a, MArg):
+                # ``is not None``: a dtype OBJECT (a StringDType instance) is falsy, len() of an unstructured dtype being 0.
+                data = np.array(a.data, dtype=a.spec) if a.spec is not None else np.array(a.data)
+                entry = {"d": len(operands), "m": -1}
+                # ``target``: an operand whose flags the replay reproduces (a 1-D string operand is its own base, a
+                # non-empty numeric one a view), since a function may return the very array it was given (getmask,
+                # filled).
+                operands.append(target(data))
+                if isinstance(a.mask, bool):
+                    entry["mbool"] = a.mask
+                elif a.mask is not None:
+                    # ``target`` like the data: numpy.ma ADOPTS the array passed as ``mask=`` (getmask returns it), so its
+                    # flags must be ones the replay reproduces (a non-empty bool operand is a view on both sides).
+                    entry["m"] = len(operands)
+                    operands.append(target(np.array(a.mask, dtype=bool)))
+                if a.fill is not None:
+                    entry["fill"] = _enc_value(a.fill)
+                if a.hard:
+                    entry["hard"] = True
+                mops.append(entry)
+            elif isinstance(a, np.ndarray):
+                mops.append({"a": len(operands)})
+                operands.append(target(a))
+            else:
+                mops.append({"v": _enc_value(a)})
+        return operands, mops
+
+    operands, mops = build()
     p = dict(params or {})
     p["mops"] = mops
     margs = [a for a in args]
@@ -2600,27 +2629,20 @@ def add_ma(op, *, args, params=None, call, phase="compute", layout=""):
                 objs.append(a)
         return call(*objs)
 
-    add("strma", op, params=p, operands=operands, call=wrapped, phase=phase, layout=layout)
+    add(section, op, params=p, operands=operands, call=wrapped, phase=phase, layout=layout)
+    if trace_t and phase == "compute":
+        _t_trace_phase(CASES[-1], build, wrapped)
 
 
-def gen_strma():
+def _strma_unary_table():
+    """The one-argument calls of sections strma and tma: every numpy.ma function applied to one masked array (the
+    masked ufuncs, the reductions and statistics, the mask / data / conversion / movement functions) plus the
+    method and attribute forms (``flatten``, ``fill_value``, ``repr`` ...), keyed by the name the replay switches on.
+
+    :returns: a dict of name -> ``f(x)``; ``empty_like`` / ``masked_all_like`` wrap their result in ``_UninitData``
+        (NumPy leaves an ``S`` buffer uninitialized).
+    """
     ma = np.ma
-    MU = MArg(["ab", "c", "de"], [1, 0, 0])
-    MUn = MArg(["ab", "c", "de"])
-    MU2 = MArg([["ab", "c"], ["de", "f"]], [[1, 0], [0, 0]])
-    MUe = MArg(np.zeros(0, "<U1"), np.zeros(0, bool))
-    MUe2 = MArg(np.zeros((0, 3), "<U1"))
-    MS = MArg([b"ab", b"c", b"de"], [1, 0, 0])
-    MU0 = MArg(np.array("ab"))
-    MU0m = MArg(np.array("ab"), True)
-    MUall = MArg(["ab", "c", "de"], True)
-    MUf = MArg(["ab", "c", "de"], [1, 0, 0], fill="zz")
-    MUh = MArg(["ab", "c", "de"], [1, 0, 0], hard=True)
-    MF = MArg([1.5, 2.0, 3.0], [0, 1, 0])
-    unary_variants = [("MU", MU), ("MUn", MUn), ("MU2", MU2), ("MUe", MUe), ("MUe2", MUe2), ("MS", MS), ("MU0", MU0),
-                      ("MU0m", MU0m), ("MUall", MUall), ("MUf", MUf)]
-
-    # ---- one masked text argument: every function numpy.ma applies to an array alone ----
     unary = {
         # masked ufuncs
         **{n: (lambda f: lambda x: f(x))(getattr(ma, n)) for n in (
@@ -2719,15 +2741,16 @@ def gen_strma():
     # np.empty_like / masked_all_like leave the data uninitialized: an S buffer is whatever the allocator recycled.
     unary["empty_like"] = lambda x: _UninitData(ma.empty_like(x))
     unary["masked_all_like"] = lambda x: _UninitData(ma.masked_all_like(x))
-    for name, fn in unary.items():
-        for key, arg in unary_variants:
-            add_ma("ma1", params={"name": name}, args=[arg], layout=key, call=lambda x, f=fn: f(x))
-    for key, arg in (("MUh", MUh), ("MU2", MU2)):
-        add_ma("ma1", params={"name": "putmask_text"}, args=[arg], layout=key, call=lambda x: unary["putmask_text"](x))
+    return unary
 
-    # ---- two arguments: the binary ufuncs, products, set routines, mask combination ----
-    F = np.array([1.5, 2.0, 3.0])
-    Ue1 = np.zeros(0, "<U1")
+
+def _strma_binary_table():
+    """The two-argument calls of sections strma and tma: the binary masked ufuncs, products, set routines, mask
+    combination, the masked_* family against a value, compress / filled and ``average`` with weights.
+
+    :returns: a dict of name -> ``f(x, y)``.
+    """
+    ma = np.ma
     binary = {n: (lambda f: lambda x, y: f(x, y))(getattr(ma, n)) for n in (
         "add", "subtract", "multiply", "divide", "true_divide", "floor_divide", "mod", "remainder", "fmod", "power",
         "hypot", "arctan2", "maximum", "minimum", "equal", "not_equal", "less", "less_equal", "greater", "greater_equal",
@@ -2738,6 +2761,38 @@ def gen_strma():
         "masked_greater_equal", "masked_less", "masked_less_equal", "masked_values", "masked_object", "compress",
         "filled")}
     binary["average"] = lambda x, y: ma.average(x, weights=y)
+    return binary
+
+
+def gen_strma():
+    ma = np.ma
+    MU = MArg(["ab", "c", "de"], [1, 0, 0])
+    MUn = MArg(["ab", "c", "de"])
+    MU2 = MArg([["ab", "c"], ["de", "f"]], [[1, 0], [0, 0]])
+    MUe = MArg(np.zeros(0, "<U1"), np.zeros(0, bool))
+    MUe2 = MArg(np.zeros((0, 3), "<U1"))
+    MS = MArg([b"ab", b"c", b"de"], [1, 0, 0])
+    MU0 = MArg(np.array("ab"))
+    MU0m = MArg(np.array("ab"), True)
+    MUall = MArg(["ab", "c", "de"], True)
+    MUf = MArg(["ab", "c", "de"], [1, 0, 0], fill="zz")
+    MUh = MArg(["ab", "c", "de"], [1, 0, 0], hard=True)
+    MF = MArg([1.5, 2.0, 3.0], [0, 1, 0])
+    unary_variants = [("MU", MU), ("MUn", MUn), ("MU2", MU2), ("MUe", MUe), ("MUe2", MUe2), ("MS", MS), ("MU0", MU0),
+                      ("MU0m", MU0m), ("MUall", MUall), ("MUf", MUf)]
+
+    # ---- one masked text argument: every function numpy.ma applies to an array alone ----
+    unary = _strma_unary_table()
+    for name, fn in unary.items():
+        for key, arg in unary_variants:
+            add_ma("ma1", params={"name": name}, args=[arg], layout=key, call=lambda x, f=fn: f(x))
+    for key, arg in (("MUh", MUh), ("MU2", MU2)):
+        add_ma("ma1", params={"name": "putmask_text"}, args=[arg], layout=key, call=lambda x: unary["putmask_text"](x))
+
+    # ---- two arguments: the binary ufuncs, products, set routines, mask combination ----
+    F = np.array([1.5, 2.0, 3.0])
+    Ue1 = np.zeros(0, "<U1")
+    binary = _strma_binary_table()
     # The bytes operand is a 0-d S array, not Python bytes: every function here reads its second argument as an
     # array_like (np.asarray(b'ab') is that same 0-d S2 array), and C#'s spelling of it is an NDArray -- a C# byte[] in an
     # array_like position is a uint8 ARRAY (the house map; byte[] is bytes only in VALUE positions: fills, compared
@@ -2821,6 +2876,437 @@ def _ma_str_disabled(x):
         return str(x)
     finally:
         np.ma.masked_print_option.enable(True)
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# tma: numpy.ma over NEP 55 StringDType (strings phase 1, P1.7d)
+# ----------------------------------------------------------------------------------------------------------------------
+#
+# The phase of a case is decided by whether NumPy COMPUTED on StringDType text, not by whether it returned: section tma's
+# masked arrays are rebuilt a second time over ``_TTrace`` views (``_t_trace_phase``), which record every ufunc call that
+# reaches a StringDType loop (an error the same call raises over benign texts is a setup error: dtype- or shape-decided,
+# no computation) and every text-reading method (sort, argsort, partition, searchsorted, nonzero, argmax / argmin, truth).
+# A case NumPy answers without computing on text is phase 1 — movement, printing, fills, masks, casts and the refusals
+# NumPy raises before it reads a string — and NumSharp must answer it now; a case that computed is phase 2 (a deferral
+# while NumSharp throws StringComputationNotSupportedException).
+
+_TMA_TRACE_MISMATCH = []
+
+# The calls NumPy computes on StringDType text through a path the tracer cannot see -- an unbound ndarray.sort on the
+# masked array itself (MaskedArray.sort without a mask, so ma.sort / ma.unique and the set routines built on them), a
+# plain np.asarray copy before the ufunc (np.outer), the truth of each text inside a C loop (nonzero, np.where's
+# condition, ma.compress's condition): a result is the computational phase (phase 2), an error the outcome-decided phase
+# (1, as in strma).
+_TMA_UNTRACEABLE = {"sort", "sort_end_false", "unique", "nonzero", "compress_self", "where_textcond", "outer",
+                    "outerproduct", "isin", "in1d", "intersect1d", "union1d", "setdiff1d", "setxor1d"}
+
+
+class _TTrace(np.ndarray):
+    """A ``StringDType`` array view that records whether NumPy COMPUTED on its text (section tma's phase rule).
+
+    ``computed`` is a class flag: ``_t_trace_phase`` clears it, runs the call over ``_TTrace`` views of the arguments,
+    and reads it. A ufunc call (any method: ``__call__``, ``reduce``, ``accumulate``, ...) with a ``StringDType`` input
+    that runs a loop sets it; a ufunc call that raises sets it only when the same call over benign texts (every element
+    ``'x'``, no NA) does not raise the same error (``Cannot add null that is not a nan-like value`` is decided by the
+    values; ``did not contain a loop`` / ``not reorderable`` / ``zero-size array to reduction`` by the dtypes and shapes).
+    The text-reading methods set it after they return.
+    """
+
+    computed = False
+
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        """Runs the ufunc over plain arrays and records a computation on text.
+
+        :param ufunc: the ufunc.
+        :param method: the ufunc method (``__call__``, ``reduce``, ``accumulate``, ``reduceat``, ``outer``, ``at``).
+        :param inputs: the inputs (``_TTrace`` views are unwrapped).
+        :param kwargs: the keywords (an ``out`` tuple's ``_TTrace`` views are unwrapped).
+        :returns: the ufunc's result (plain arrays).
+        :raises Exception: whatever the ufunc raises.
+        """
+        plain = tuple(np.asarray(x) if isinstance(x, _TTrace) else x for x in inputs)
+        if kwargs.get("out") is not None:
+            kwargs["out"] = tuple(np.asarray(o) if isinstance(o, _TTrace) else o for o in kwargs["out"])
+        text = any(isinstance(x, np.ndarray) and x.dtype.kind == "T" for x in plain)
+        try:
+            r = getattr(ufunc, method)(*plain, **kwargs)
+        except Exception as e:  # noqa: BLE001 -- re-raised; only classified here
+            if text and not _t_setup_error(ufunc, method, plain, kwargs, e):
+                _TTrace.computed = True
+            raise
+        if text:
+            _TTrace.computed = True
+        return r
+
+    @staticmethod
+    def _mark(x):
+        """Records a text-reading method of a ``StringDType`` array.
+
+        :param x: the array the method ran on.
+        """
+        if x.dtype.kind == "T":
+            _TTrace.computed = True
+
+    def sort(self, *a, **k):
+        """``ndarray.sort``, recorded as a computation once it returns."""
+        np.ndarray.sort(self, *a, **k)
+        _TTrace._mark(self)
+
+    def argsort(self, *a, **k):
+        """``ndarray.argsort``, recorded as a computation once it returns."""
+        r = np.ndarray.argsort(self, *a, **k)
+        _TTrace._mark(self)
+        return r
+
+    def partition(self, *a, **k):
+        """``ndarray.partition``, recorded as a computation once it returns."""
+        np.ndarray.partition(self, *a, **k)
+        _TTrace._mark(self)
+
+    def argpartition(self, *a, **k):
+        """``ndarray.argpartition``, recorded as a computation once it returns."""
+        r = np.ndarray.argpartition(self, *a, **k)
+        _TTrace._mark(self)
+        return r
+
+    def searchsorted(self, *a, **k):
+        """``ndarray.searchsorted``, recorded as a computation once it returns."""
+        r = np.ndarray.searchsorted(self, *a, **k)
+        _TTrace._mark(self)
+        return r
+
+    def nonzero(self):
+        """``ndarray.nonzero`` (the truth of each text), recorded as a computation once it returns."""
+        r = np.ndarray.nonzero(self)
+        _TTrace._mark(self)
+        return r
+
+    def argmax(self, *a, **k):
+        """``ndarray.argmax``, recorded as a computation once it returns."""
+        r = np.ndarray.argmax(self, *a, **k)
+        _TTrace._mark(self)
+        return r
+
+    def argmin(self, *a, **k):
+        """``ndarray.argmin``, recorded as a computation once it returns."""
+        r = np.ndarray.argmin(self, *a, **k)
+        _TTrace._mark(self)
+        return r
+
+    def __bool__(self):
+        """The truth of a one-element array (the truth of its text), recorded as a computation once it returns."""
+        r = np.ndarray.__bool__(self)
+        _TTrace._mark(self)
+        return r
+
+
+def _t_benign(x):
+    """A benign stand-in for a ufunc input: a ``StringDType`` array of the same descriptor and shape whose every element is
+    ``'x'`` (no NA, not empty); any other input as is.
+
+    :param x: the input.
+    :returns: the stand-in.
+    """
+    if isinstance(x, np.ndarray) and x.dtype.kind == "T":
+        return np.full(x.shape, "x", dtype=x.dtype)
+    return x
+
+
+def _t_setup_error(ufunc, method, inputs, kwargs, e):
+    """Whether a ufunc error over ``StringDType`` inputs is decided by the dtypes and shapes alone (no computation on the
+    text): the same call over benign texts raises the same error.
+
+    :param ufunc: the ufunc.
+    :param method: the ufunc method.
+    :param inputs: the plain inputs.
+    :param kwargs: the keywords (a ``StringDType`` ``out`` is replaced by a fresh one).
+    :param e: the error the real call raised.
+    :returns: True for a setup error.
+    """
+    kw = dict(kwargs)
+    if kw.get("out") is not None:
+        kw["out"] = tuple(np.empty_like(o) if isinstance(o, np.ndarray) and o.dtype.kind == "T" else o
+                          for o in kw["out"])
+    try:
+        getattr(ufunc, method)(*(_t_benign(x) for x in inputs), **kw)
+    except Exception as e2:  # noqa: BLE001 -- compared, not raised
+        return type(e2) is type(e) and str(e2) == str(e)
+    return False
+
+
+def _ma_traced_ufunc(self, ufunc, method, *inputs, **kwargs):
+    """The ``__array_ufunc__`` ``_t_trace_phase`` installs on ``MaskedArray`` for the traced run: a ufunc that receives a
+    masked array ITSELF (``ndarray.mean`` / ``var`` of a nomask masked array call ``umr_sum`` on the masked array, not on
+    its ``_TTrace`` data) is recorded like ``_TTrace.__array_ufunc__`` records it, and runs exactly as without the hook
+    (the hook removes itself for the call, so masked arrays keep their ``__array_wrap__`` semantics).
+
+    :param self: the masked array the ufunc dispatched on.
+    :param ufunc: the ufunc.
+    :param method: the ufunc method.
+    :param inputs: the inputs, unchanged.
+    :param kwargs: the keywords, unchanged.
+    :returns: the ufunc's result.
+    :raises Exception: whatever the ufunc raises.
+    """
+    text = any(isinstance(x, np.ndarray) and x.dtype.kind == "T" for x in inputs)
+    del np.ma.MaskedArray.__array_ufunc__
+    try:
+        r = getattr(ufunc, method)(*inputs, **kwargs)
+    except Exception as e:  # noqa: BLE001 -- re-raised; only classified here
+        plain = tuple(np.asarray(x) if isinstance(x, np.ndarray) else x for x in inputs)
+        if text and not _t_setup_error(ufunc, method, plain, kwargs, e):
+            _TTrace.computed = True
+        raise
+    finally:
+        np.ma.MaskedArray.__array_ufunc__ = _ma_traced_ufunc
+    if text:
+        _TTrace.computed = True
+    return r
+
+
+def _t_trace_phase(case, build, call):
+    """Sets a section-tma case's phase by whether NumPy computed on ``StringDType`` text: the call runs again over fresh
+    arguments (``build``) whose ``StringDType`` operands are ``_TTrace`` views, with ``_ma_traced_ufunc`` installed on
+    ``MaskedArray`` for the run; phase 2 when it computed, else 1. A case the outcome already made phase 2 for an error (a
+    parse error, ``_is_parse_error``) keeps it. When the traced run's outcome differs from the recorded one (the tracing
+    changed what NumPy does) the outcome-decided phase is kept and the case is listed in ``_TMA_TRACE_MISMATCH`` (main
+    prints them).
+
+    :param case: the case just recorded.
+    :param build: returns fresh (operands, mops) for the call.
+    :param call: the wrapped call over the operand views.
+    """
+    want = case.get("error")
+    if want is not None and case["phase"] == 2:
+        return
+    operands, _ = build()
+    views = [v.view(_TTrace) if v.dtype.kind == "T" else v for _, v in operands]
+    _TTrace.computed = False
+    assert "__array_ufunc__" not in np.ma.MaskedArray.__dict__, "MaskedArray must inherit ndarray's __array_ufunc__"
+    np.ma.MaskedArray.__array_ufunc__ = _ma_traced_ufunc
+    try:
+        call(*views)
+        got = None
+    except Exception as e:  # noqa: BLE001 -- a recorded outcome
+        got = err_info(e)
+    finally:
+        del np.ma.MaskedArray.__array_ufunc__
+    if (got is None) != (want is None) or (got is not None and got != want):
+        _TMA_TRACE_MISMATCH.append(case["id"])
+        return
+    case["phase"] = 2 if _TTrace.computed else 1
+
+
+def _tma_unary_extra():
+    """The one-argument calls section tma adds to strma's table: element access and stores (an NA store, a masked
+    store), ``tolist``, the ``data`` / ``mask`` attributes, casts to and from ``StringDType`` (another NA object, ``U`` /
+    ``S`` / numbers), filled with an explicit text, ``where`` / ``concatenate`` beside ``U`` text.
+
+    :returns: a dict of name -> ``f(x)``.
+    """
+    ma = np.ma
+
+    def store(x, k, v):
+        x[k] = v
+        return x
+
+    return {
+        "getitem_0": lambda x: x[0],
+        "getitem_1": lambda x: x[1],
+        "getitem_last": lambda x: x[-1],
+        "getitem_slice": lambda x: x[1:],
+        "getitem_rev": lambda x: x[::-1],
+        "getitem_mask": lambda x: x[np.ones(x.shape, bool)],
+        "getitem_fancy": lambda x: x[np.array([0, 0])],
+        "setitem_text": lambda x: store(x, 1, "zz"),
+        "setitem_long": lambda x: store(x, 0, "w" * 40),
+        "setitem_masked": lambda x: store(x, 1, ma.masked),
+        "setitem_none": lambda x: store(x, 1, None),
+        "setitem_slice": lambda x: store(x, slice(None), "y"),
+        "setitem_num": lambda x: store(x, 1, 5),
+        "tolist": lambda x: x.tolist(),
+        "data": lambda x: x.data,
+        "mask_attr": lambda x: x.mask,
+        "astype_T": lambda x: x.astype(np.dtypes.StringDType()),
+        "astype_TN": lambda x: x.astype(np.dtypes.StringDType(na_object=None)),
+        "astype_U3": lambda x: x.astype("U3"),
+        "astype_S3": lambda x: x.astype("S3"),
+        "astype_i8": lambda x: x.astype("i8"),
+        "astype_b": lambda x: x.astype(bool),
+        "filled_long": lambda x: x.filled("v" * 30),
+        "filled_none": lambda x: x.filled(None),
+        "concat_u": lambda x: ma.concatenate([x, ma.array(np.array(["q"]), mask=[True])]) if x.ndim == 1
+        else ma.concatenate([x, x]),
+        "where_text": lambda x: ma.where(np.ones(x.shape, bool), x, "zz"),
+        "copy_method": lambda x: x.copy(),
+        "view_method": lambda x: x.view(),
+        "reshape_method": lambda x: x.reshape(-1),
+        "swapaxes": lambda x: ma.swapaxes(x, 0, -1) if x.ndim else x,
+    }
+
+
+def gen_tma():
+    """Section tma (strings phase 1, P1.7d): numpy.ma over NEP 55 ``StringDType``. The strma tables over ``T`` arguments —
+    every numpy.ma function applied to one masked array (14 variants: 1-D / 2-D / empty / 0-d / all masked / a fill value /
+    long texts / the NA descriptors ``na_object=None`` / ``nan`` / ``'NA'`` with an NA element / ``coerce=False``), the
+    binary functions over ``T`` / ``U`` / ``S`` / numeric / value pairs, and the constructors (``T`` masks, fill values,
+    ``masked_all``, the default fill value ``'N/A'`` of every ``T`` descriptor, mask reconciliation) — plus the element
+    access, stores, casts and attributes of ``_tma_unary_extra``. The phase follows ``_t_trace_phase``: phase 1 unless
+    NumPy computed on the text.
+    """
+    ma = np.ma
+    T, TN, TNAN, TS, TC = (s.build() for s in (TD, TDN, TDNAN, TDS, TDC))
+    MT = MArg(["ab", "c", "de"], [1, 0, 0], spec=T)
+    MTn = MArg(["ab", "c", "de"], spec=T)
+    MT2 = MArg([["ab", "c"], ["de", "f"]], [[1, 0], [0, 0]], spec=T)
+    MTe = MArg(np.zeros(0, T), np.zeros(0, bool))
+    MTe2 = MArg(np.zeros((0, 3), T))
+    MT0 = MArg(np.array("ab", T))
+    MT0m = MArg(np.array("ab", T), True)
+    MTall = MArg(["ab", "c", "de"], True, spec=T)
+    MTf = MArg(["ab", "c", "de"], [1, 0, 0], spec=T, fill="zz")
+    MTh = MArg(["ab", "c", "de"], [1, 0, 0], spec=T, hard=True)
+    MTl = MArg(["m" * 16, "q" * 300, "é" * 8, ""], [0, 1, 0, 0], spec=T)
+    MTN = MArg(["ab", None, "de"], [1, 0, 0], spec=TN)
+    MTnan = MArg(["ab", float("nan"), "de"], [0, 0, 1], spec=TNAN)
+    MTs = MArg(["ab", "NA", "de"], [1, 0, 0], spec=TS)
+    MTc = MArg(["ab", "c", "de"], [1, 0, 0], spec=TC)
+    unary_variants = [("MT", MT), ("MTn", MTn), ("MT2", MT2), ("MTe", MTe), ("MTe2", MTe2), ("MT0", MT0),
+                      ("MT0m", MT0m), ("MTall", MTall), ("MTf", MTf), ("MTl", MTl), ("MTN", MTN), ("MTnan", MTnan),
+                      ("MTs", MTs), ("MTc", MTc)]
+
+    # ---- one masked StringDType argument ----
+    unary = _strma_unary_table()
+    unary.update(_tma_unary_extra())
+    for name, fn in unary.items():
+        for key, arg in unary_variants:
+            add_ma("ma1", params={"name": name}, args=[arg], layout=key, call=lambda x, f=fn: f(x), section="tma",
+                   trace_t=name not in _TMA_UNTRACEABLE)
+    for key, arg in (("MTh", MTh), ("MT2", MT2)):
+        for name in ("putmask_text", "setitem_text", "setitem_masked", "setitem_slice"):
+            add_ma("ma1", params={"name": name}, args=[arg], layout=key, call=lambda x, f=unary[name]: f(x),
+                   section="tma", trace_t=True)
+
+    # ---- two arguments ----
+    binary = _strma_binary_table()
+    F = np.array([1.5, 2.0, 3.0])
+    Te1 = np.zeros(0, T)
+    MU = MArg(["ab", "c", "de"], [1, 0, 0])
+    MS = MArg([b"ab", b"c", b"de"], [1, 0, 0])
+    MF = MArg([1.5, 2.0, 3.0], [0, 1, 0])
+    pairs = [("MT,MT", MT, MT), ("MT,MTn", MT, MTn), ("MT,F", MT, F), ("F,MT", F, MT), ("MF,MT", MF, MT),
+             ("MTe,MTe", MTe, MTe), ("MTe,Te", MTe, Te1), ("MT,'ab'", MT, "ab"), ("MT,1.5", MT, 1.5), ("MT,1", MT, 1),
+             ("MT,True", MT, True), ("MT,MU", MT, MU), ("MU,MT", MU, MT), ("MT,MS", MT, MS), ("MS,MT", MS, MT),
+             ("MT2,MT2", MT2, MT2), ("MTN,MTN", MTN, MTN), ("MT,MTN", MT, MTN), ("MTnan,MTnan", MTnan, MTnan),
+             ("MTe,1.5", MTe, 1.5)]
+    for name, fn in binary.items():
+        for key, x, y in pairs:
+            # ma.compress(condition, a): a TEXT condition selects the indices of its non-empty strings (np.compress's C
+            # loop, which the tracer cannot see): the computational phase, as in strma.
+            phase = 2 if name == "compress" and _is_text_arg(x) else "compute"
+            add_ma("ma2", params={"name": name}, args=[x, y], layout=key, phase=phase, call=lambda a, b, f=fn: f(a, b),
+                   section="tma", trace_t=name not in _TMA_UNTRACEABLE)
+
+    # ---- constructors over StringDType: masks, fill values, mask reconciliation ----
+    def t3(dt=T):
+        """A fresh ``['ab', 'c', 'de']`` array of the descriptor ``dt``."""
+        return np.array(["ab", "c", "de"], dt)
+
+    ctor = [
+        ("t_mask", lambda: ma.array(np.arange(3), mask=np.array(["a", "", "b"], T))),
+        ("t_mask_na", lambda: ma.array(np.arange(3), mask=np.array(["a", None, "b"], TN))),
+        ("t_mask_empty", lambda: ma.array(np.zeros(0), mask=np.zeros(0, T))),
+        ("t_mask_size", lambda: ma.array(np.arange(3), mask=np.array(["a", ""], T))),
+        ("mask_size", lambda: ma.array(t3(), mask=[True, False])),
+        ("mask_one", lambda: ma.array(t3(), mask=[True])),
+        ("mask_reshape", lambda: ma.array(np.array([["ab", "c", "x"], ["de", "f", "y"]], T), mask=np.zeros((3, 2), bool))),
+        ("mask_true", lambda: ma.array(t3(), mask=True)),
+        ("mask_false", lambda: ma.array(t3(), mask=False)),
+        ("keep_mask", lambda: ma.array(ma.array(t3(), mask=[1, 0, 0]), mask=[0, 1, 0])),
+        ("keep_mask_false", lambda: ma.array(ma.array(t3(), mask=[1, 0, 0]), mask=[0, 1, 0], keep_mask=False)),
+        ("fill_hello", lambda: ma.array(t3(), fill_value="hello")),
+        ("fill_long", lambda: ma.array(t3(), fill_value="f" * 40)),
+        ("fill_5", lambda: ma.array(t3(), fill_value=5)),
+        ("fill_15", lambda: ma.array(t3(), fill_value=1.5)),
+        ("fill_true", lambda: ma.array(t3(), fill_value=True)),
+        ("fill_bytes", lambda: ma.array(t3(), fill_value=b"xyz")),
+        ("fill_5_coerce_false", lambda: ma.array(t3(TC), fill_value=5)),
+        ("fill_text_coerce_false", lambda: ma.array(t3(TC), fill_value="q")),
+        ("fill_none_na", lambda: ma.array(t3(TN), fill_value="zz")),
+        ("fill_array_t", lambda: ma.array(t3(), fill_value=np.array(["xyz"], T))),
+        ("fill_array_u", lambda: ma.array(t3(), fill_value=np.array(["xyz"]))),
+        ("fill_0d_t", lambda: ma.array(t3(), fill_value=np.array("xyz", T))),
+        ("fill_t_into_u", lambda: ma.array(np.array(["ab", "c"]), fill_value=np.array("xyz", T))),
+        ("fill_t_into_f", lambda: ma.array(np.array([1.5]), fill_value=np.array("2.5", T))),
+        ("fill_inherit", lambda: ma.array(ma.array(t3(), fill_value="zz"))),
+        ("fill_inherit_dtype_u", lambda: ma.array(ma.array(t3(), fill_value="zz"), dtype="U1")),
+        ("fill_inherit_dtype_t", lambda: ma.array(ma.array(np.array(["ab"]), fill_value="zz"), dtype=T)),
+        ("fill_inherit_dtype_tn", lambda: ma.array(ma.array(t3(), fill_value="zz"), dtype=TN)),
+        ("hard_inherit", lambda: ma.array(ma.array(t3(), mask=[1, 0, 0], hard_mask=True))),
+        ("masked_all_t", lambda: ma.masked_all((3,), dtype=T)),
+        ("masked_all_tn", lambda: ma.masked_all((2, 2), dtype=TN)),
+        ("masked_all_tc", lambda: ma.masked_all((2,), dtype=TC)),
+        ("default_fill_t", lambda: ma.default_fill_value(T)),
+        ("default_fill_tn", lambda: ma.default_fill_value(TN)),
+        ("default_fill_tnan", lambda: ma.default_fill_value(TNAN)),
+        ("default_fill_tc", lambda: ma.default_fill_value(TC)),
+        ("default_fill_t_arr", lambda: ma.default_fill_value(t3())),
+        ("minimum_fill_t", lambda: ma.minimum_fill_value(t3())),
+        ("maximum_fill_t", lambda: ma.maximum_fill_value(t3(TN))),
+        ("make_mask_t", lambda: ma.make_mask(np.array(["a", ""], T))),
+        ("make_mask_t_empty", lambda: ma.make_mask(np.zeros(0, T), shrink=False)),
+        ("make_mask_tn", lambda: ma.make_mask(np.array(["a", None], TN))),
+        ("mask_or_t_bool", lambda: ma.mask_or(t3(), np.zeros(3, bool))),
+        ("mask_or_bool_t", lambda: ma.mask_or(np.zeros(3, bool), t3())),
+        ("mask_or_t_u", lambda: ma.mask_or(t3(), np.array(["a", "b", "c"]))),
+        ("mask_or_t_t", lambda: ma.mask_or(t3(), t3())),
+        ("mask_or_t_tn", lambda: ma.mask_or(t3(), t3(TN))),
+        ("masked_where_t", lambda: ma.masked_where(np.array(["a", "", "b"], T), np.arange(3))),
+        ("masked_where_t_short", lambda: ma.masked_where(np.array(["a", ""], T), np.arange(3))),
+        ("masked_where_short", lambda: ma.masked_where([True, False], t3())),
+        ("masked_where_allfalse", lambda: ma.masked_where([False, False, False], t3())),
+        ("masked_where_copy_false", lambda: ma.masked_where([True, False, False], t3(), copy=False)),
+        ("putmask_plain", lambda: ma.putmask(t3(), [True, False, True], "zz")),
+        ("compress_rows_1d", lambda: ma.compress_rows(t3())),
+        ("compress_cols_1d", lambda: ma.compress_cols(t3())),
+        ("mask_rows_1d", lambda: ma.mask_rows(t3())),
+        ("mask_cols_1d", lambda: ma.mask_cols(t3())),
+        ("common_fill_t_u", lambda: ma.common_fill_value(ma.array(t3()), ma.array(np.array(["a"])))),
+        ("common_fill_t_t", lambda: ma.common_fill_value(ma.array(t3()), ma.array(t3()))),
+        ("common_fill_t_tn", lambda: ma.common_fill_value(ma.array(t3()), ma.array(t3(TN)))),
+        ("common_fill_t_f", lambda: ma.common_fill_value(ma.array(t3()), ma.array(np.array([1.5])))),
+        ("array_list", lambda: ma.array(["ab", "c"], dtype=T, mask=[0, 1])),
+        ("array_list_na", lambda: ma.array(["ab", None], dtype=TN, mask=[0, 0])),
+        ("array_list_num", lambda: ma.array([1, 2.5], dtype=T)),
+        ("array_list_num_coerce_false", lambda: ma.array([1, 2.5], dtype=TC)),
+        ("masked_array_t", lambda: ma.masked_array(t3(), mask=[0, 0, 1], fill_value="w")),
+        ("asarray_t", lambda: ma.asarray(t3())),
+        ("asanyarray_t", lambda: ma.asanyarray(t3())),
+        ("filled_plain_t", lambda: ma.filled(t3())),
+        ("getdata_t", lambda: ma.getdata(t3())),
+        ("getmaskarray_t", lambda: ma.getmaskarray(t3())),
+        ("zeros_t", lambda: ma.zeros(3, dtype=T)),
+        ("ones_t", lambda: ma.ones(2, dtype=T)),
+        ("empty_t", lambda: ma.empty(2, dtype=T)),
+        ("masked_values_t", lambda: ma.masked_values(t3(), "c")),
+        ("masked_object_t", lambda: ma.masked_object(t3(), "c")),
+        ("masked_equal_t", lambda: ma.masked_equal(t3(), "c")),
+        ("fix_invalid_t", lambda: ma.fix_invalid(t3())),
+        ("masked_invalid_t", lambda: ma.masked_invalid(t3())),
+        ("concatenate_t_u", lambda: ma.concatenate([ma.array(t3(), mask=[1, 0, 0]), ma.array(np.array(["q"]))])),
+        ("concatenate_u_t", lambda: ma.concatenate([ma.array(np.array(["q"])), ma.array(t3(), mask=[1, 0, 0])])),
+        ("concatenate_t_tn", lambda: ma.concatenate([ma.array(t3()), ma.array(t3(TN))])),
+        ("concatenate_t_s", lambda: ma.concatenate([ma.array(t3()), ma.array(np.array([b"q"]))])),
+        ("stack_t", lambda: ma.stack([ma.array(t3(), mask=[1, 0, 0]), ma.array(t3())])),
+        ("where_t_u", lambda: ma.where([True, False, True], ma.array(t3(), mask=[1, 0, 0]), np.array(["q", "r", "s"]))),
+        ("where_t_num", lambda: ma.where([True, False, True], ma.array(t3()), 1.5)),
+    ]
+    for name, fn in ctor:
+        # No operand to trace: these build their arrays inside the call and none reads a text (casts, fills, stores and
+        # refusals are phase 1); the masked_values / masked_object / masked_equal of a text compare it (phase 2).
+        # Op tma0, not ma0: the names repeat strma's constructors over StringDType arrays, and the replay spells each.
+        phase = 2 if name in ("masked_values_t", "masked_object_t", "masked_equal_t", "mask_or_t_t") else 1
+        add_ma("tma0", params={"name": name}, args=[], layout="", call=fn, section="tma", phase=phase)
 
 
 
@@ -5746,7 +6232,7 @@ def _gen_none_routes():
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
-              gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone]
+              gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma]
 
 
 def main():
@@ -5788,6 +6274,9 @@ def main():
     print("  " + ", ".join(f"{k} {len(v)} ({sizes[k] / 1048576:.1f} MiB)" for k, v in by_section.items()))
     if _TITER_DROPPED:
         print(f"  titer: {len(_TITER_DROPPED)} cases dropped for NumPy 2.4.2's StringDType allocated-output MemoryError")
+    if _TMA_TRACE_MISMATCH:
+        print(f"  tma: {len(_TMA_TRACE_MISMATCH)} cases whose traced run differed (phase kept from the outcome): "
+              + ", ".join(_TMA_TRACE_MISMATCH[:20]))
 
 
 if __name__ == "__main__":

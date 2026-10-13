@@ -29,6 +29,10 @@ namespace NumSharp
         ///     the length swap), <c>object too deep for desired array</c> for an operand of two or more dimensions, or — for a
         ///     fixed-width string operand, after every check above — <c>data type must provide an itemsize</c> (NumPy's
         ///     result allocation for the string type number).</exception>
+        /// <exception cref="TypeError">A <c>StringDType</c> operand (after the emptiness checks and the swap): NumPy's
+        ///     legacy-only descriptor refusal, or Python's error from the first product of the OBJECT fallback.</exception>
+        /// <exception cref="NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy computes (an
+        ///     object array, which NumSharp does not have).</exception>
         [NDScoped]
         public NDArray convolve(NDArray v, string mode = "full")
         {
@@ -56,6 +60,11 @@ namespace NumSharp
             }
 
             var m = ParseSlidingMode(mode);
+
+            // A StringDType operand: PyArray_Correlate's descriptor lookup over (a, v[::-1]) comes before the depth check
+            // (the legacy-only refusal, or an OBJECT product whose own checks and first product answer).
+            if (Backends.Strings.NDStringUfuncs.IsVString(a) || Backends.Strings.NDStringUfuncs.IsVString(v))
+                throw Backends.Strings.NDStringUfuncs.VStringSlidingAnswer(a, v, (int)m, convolve: true);
 
             // PyArray_FromAny(op, typec, 1, 1): an operand of two or more dimensions is too deep.
             if (a.ndim != 1 || v.ndim != 1)

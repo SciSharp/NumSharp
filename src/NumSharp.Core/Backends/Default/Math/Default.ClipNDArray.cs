@@ -98,6 +98,21 @@ namespace NumSharp.Backends
             if (Strings.NDStringUfuncs.IsStringRequest(dtype))
                 throw Strings.NDStringUfuncs.ClipDTypeLoopError(dtype, lhs, min, max);
 
+            // ---- StringDType: the routed ufunc has no StringDType loop; each route reports the dispatcher's refusal,
+            //      naming the operand CLASSES (a 0-d number bound is the Python scalar it stands for: _PyLongDType /
+            //      _PyFloatDType / _PyComplexDType; a text bound is StrDType).
+            if (Strings.NDStringUfuncs.IsVString(lhs) || Strings.NDStringUfuncs.IsVString(min) || Strings.NDStringUfuncs.IsVString(max))
+            {
+                if (min is null && max is null)
+                    throw Strings.NDStringUfuncs.UnaryError("positive", lhs, typeCode);
+                if (min is null)
+                    throw Strings.NDStringUfuncs.BinaryError("minimum", lhs, max, @out, typeCode);
+                if (max is null)
+                    throw Strings.NDStringUfuncs.BinaryError("maximum", lhs, min, @out, typeCode);
+                throw Strings.NDStringUfuncs.VStringNoLoop("clip",
+                    new[] { ClipOperandClass(lhs), ClipOperandClass(min), ClipOperandClass(max) });
+            }
+
             // ---- Text: the routed ufunc has no string loop. The drop rule above only touches integer arrays with
             //      Python-int bounds, so it never moved a string operand; each route reports its own NumPy text
             //      (clip names all three operand descriptors).
@@ -777,6 +792,30 @@ namespace NumSharp.Backends
             if (tc == NPTypeCode.Complex)
                 return DType.From(NPTypeCode.Complex);
             return operand.dtype;
+        }
+
+        /// <summary>
+        /// The class clip's no-loop message names for an operand when a NEP 55 <c>StringDType</c> takes part (NumPy's
+        /// dispatcher refusal, which names DType CLASSES): a 0-d integer / float32 / float64 / complex operand is the
+        /// module's Python scalar (see <see cref="ClipOperandDescr"/>), named by NEP 50's abstract class
+        /// (<c>_PyLongDType</c> / <c>_PyFloatDType</c> / <c>_PyComplexDType</c>); every other operand by its descriptor's
+        /// class (an array, a 0-d text bound as <c>StrDType</c>, a bool as <c>BoolDType</c>).
+        /// </summary>
+        /// <param name="operand">The array being clipped or a kept bound.</param>
+        /// <returns>NumPy's repr of the class.</returns>
+        private static string ClipOperandClass(NDArray operand)
+        {
+            if (operand.ndim == 0)
+            {
+                var tc = operand.GetTypeCode;
+                if (NDExprTypeRules.IsIntegerKind(tc))
+                    return DTypeRegistry.PyLong.ToString();
+                if (tc == NPTypeCode.Single || tc == NPTypeCode.Double)
+                    return DTypeRegistry.PyFloat.ToString();
+                if (tc == NPTypeCode.Complex)
+                    return DTypeRegistry.PyComplex.ToString();
+            }
+            return operand.dtype.Meta.ToString();
         }
 
         /// <summary>

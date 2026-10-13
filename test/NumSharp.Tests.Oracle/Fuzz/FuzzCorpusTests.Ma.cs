@@ -521,7 +521,7 @@ namespace NumSharp.Tests.Fuzz
             if (exp.Raw == null)
                 return;
             var expected = FuzzCorpus.FromHex(exp.Raw);
-            var actual = FuzzCorpus.ResultBytes(result.data);
+            var actual = FuzzCorpus.ResultBytes(result._data);
             var diffs = BitDiff.Compare(expected, actual, tc, false);
             if (diffs.Count == 0)
                 return;
@@ -542,7 +542,7 @@ namespace NumSharp.Tests.Fuzz
             if (ReferenceEquals(r, np.ma.NDMasked))
                 return "masked";
             if (r._mask is null)
-                return r.data.ndim == 0 ? "scalar" : "nomask";
+                return r._data.ndim == 0 ? "scalar" : "nomask";
             return "mask";
         }
 

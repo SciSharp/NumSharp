@@ -66,7 +66,7 @@ namespace NumSharp.Tests.Fuzz
                 case "empty_like":
                 {
                     // "plain": NumPy's prototype is the operand's DATA (an ndarray), not a MaskedArray.
-                    object proto = p.ContainsKey("plain") ? ops[0].data : ops[0];
+                    object proto = p.ContainsKey("plain") ? ops[0]._data : ops[0];
                     var dt = SurfDType(p, "dtype");
                     var r = name == "zeros_like" ? np.ma.zeros_like(proto, dt)
                         : name == "ones_like" ? np.ma.ones_like(proto, dt) : np.ma.empty_like(proto, dt);
@@ -87,7 +87,7 @@ namespace NumSharp.Tests.Fuzz
                                               SurfDType(p, "dtype"));
 
                 // ---- predicates and queries -----------------------------------------------------------------------
-                case "getmask": return np.ma.getmask(p.ContainsKey("plain") ? ops[0].data : ops[0]);
+                case "getmask": return np.ma.getmask(p.ContainsKey("plain") ? ops[0]._data : ops[0]);
                 case "is_mask": return MaQuery(ops, p, x => np.ma.is_mask(x));
                 case "isarray": return MaQuery(ops, p, x => np.ma.isarray(x));
                 case "isMA": return MaQuery(ops, p, x => np.ma.isMA(x));
@@ -180,7 +180,7 @@ namespace NumSharp.Tests.Fuzz
                     if (p.ContainsKey("plain"))
                     {
                         // NumPy ignores a plain ndarray and returns None; the C# method returns nothing (void ≡ None).
-                        np.ma.set_fill_value(ops[0].data, MaPyValue(p["value"]));
+                        np.ma.set_fill_value(ops[0]._data, MaPyValue(p["value"]));
                         return "None";
                     }
                     np.ma.set_fill_value(ops[0], MaPyValue(p["value"]));
@@ -307,10 +307,10 @@ namespace NumSharp.Tests.Fuzz
         {
             if (!p.ContainsKey("facet"))
                 return r;
-            var zeros = np.zeros(new Shape(r.data.Shape.dimensions), r.data.dtype);
+            var zeros = np.zeros(new Shape(r._data.Shape.dimensions), r._data.dtype);
             // The uninitialized data is dropped (this replay owns it); the mask moves to the facet unchanged.
             var facet = new NDMaskedArray(zeros, r._mask);
-            r.data.Dispose();
+            r._data.Dispose();
             return facet;
         }
 
@@ -357,7 +357,7 @@ namespace NumSharp.Tests.Fuzz
             return arg switch
             {
                 "masked" => ops[0],
-                "data" => ops[0].data,
+                "data" => ops[0]._data,
                 "maskarray" => np.ma.getmaskarray(ops[0]),
                 "getmask" => np.ma.getmask(ops[0]),
                 "list" => new[] { true, false },
@@ -385,7 +385,7 @@ namespace NumSharp.Tests.Fuzz
             finally
             {
                 // Only a fresh getmaskarray is ours: the operand's own mask, the data, nomask and the singleton are not.
-                if (arg is NDArray built && !ReferenceEquals(built, ops[0]._mask) && !ReferenceEquals(built, ops[0].data)
+                if (arg is NDArray built && !ReferenceEquals(built, ops[0]._mask) && !ReferenceEquals(built, ops[0]._data)
                     && !ReferenceEquals(built, np.ma.nomask))
                     built.Dispose();
             }
@@ -432,8 +432,8 @@ namespace NumSharp.Tests.Fuzz
         /// own.</remarks>
         private static void ReleaseMaView(NDMaskedArray view, NDMaskedArray owner)
         {
-            if (!ReferenceEquals(view.data, owner.data))
-                view.data.Dispose();
+            if (!ReferenceEquals(view._data, owner._data))
+                view._data.Dispose();
             if (view._mask is not null && !ReferenceEquals(view._mask, owner._mask))
                 view._mask.Dispose();
             if (view._fill_value is not null && !ReferenceEquals(view._fill_value, owner._fill_value))
@@ -479,8 +479,8 @@ namespace NumSharp.Tests.Fuzz
                 }
                 finally
                 {
-                    if (!ReferenceEquals(cast.data, d))
-                        cast.data.Dispose();
+                    if (!ReferenceEquals(cast._data, d))
+                        cast._data.Dispose();
                     if (cast._mask is not null && !ReferenceEquals(cast._mask, m))
                         cast._mask.Dispose();
                 }
@@ -515,7 +515,7 @@ namespace NumSharp.Tests.Fuzz
             object values = p.TryGetValue("value", out var v)
                 ? (v.ValueKind == JsonValueKind.String && v.GetString() == "masked" ? np.ma.masked : MaPyValue(v))
                 : ops[2];
-            np.ma.putmask(a, ops[1].data, values);
+            np.ma.putmask(a, ops[1]._data, values);
             return a;
         }
 

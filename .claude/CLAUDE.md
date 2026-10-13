@@ -187,8 +187,35 @@ owns the allocator, so views keep it alive). Rules a new route must keep:
   `np.pad(constant_values: null)` is the omitted default (C# cannot tell an explicit null), `setfield` over `T` is still the
   phase-1 refusal (P1.7f). Gates: string-oracle section `storenone` (2,606 cases, every route × 13 numeric + 6 text
   targets) + `Backends/NoneStoreTests.cs`.
-- Still refused loudly (P1.7 / phase 2): `.npy`, `loadtxt` / `savetxt`, numpy.ma with `T`, and computation (comparisons,
-  `np.sum`, sorting, `np.strings`).
+- **numpy.ma over `StringDType` (P1.7d, 2026-10-13).** The fill value is `'N/A'` (`default_filler['T']`, stored as a
+  `<U3`, read back as a string); movement, printing (an NA element prints as its NA object), fills, masks and casts
+  answer. Every member that orders or extremizes (`min` / `max` / `ptp` / `argmin` / `argmax` / `argsort`, `sort` and
+  `median` with a mask, `unique` with a masked slot, the set routines) raises `Unsuitable type StringDType() for
+  calculating minimum.` BEFORE it reads the mask: numpy.ma's fill tables are keyed by the scalar type, and a
+  `StringDType`'s is Python's `str`. The ufunc members raise the dispatcher's refusal, which names DType CLASSES
+  (`NDStringUfuncs.VString.cs`: `(<class 'numpy.dtypes.StringDType'>, <class 'numpy.dtypes._PyFloatDType'>) -> None`; a C#
+  number literal is NEP 50's abstract class through its literal mark). Comparisons, `add`, the logical ufuncs, the sums
+  and sorting defer (phase 2). Decisions worth knowing:
+  - The set routines reach NumPy's refusal WITHOUT the uniques before it (`VStringSetOpDryRun`, stand-ins with the
+    operand's dtype, masked-ness and emptiness): `isin(MU, MT)` sorts `U` text in NumPy before refusing at `unique(MT)`.
+  - The legacy products (`dot`, `inner`, `convolve`, `correlate`): a `StringDType` first operand (or a `U` one beside it)
+    is the legacy-only refusal (`This function currently only supports native NumPy dtypes ...`); beside any other class
+    NumPy multiplies Python objects and its FIRST product decides (`can't multiply sequence by non-int of type 'float'`,
+    `unsupported operand type(s) for *: 'float' and 'NoneType'`); a product that does not raise is an object array, a
+    `NotSupportedException` (`VStringProductAnswer` / `VStringSlidingAnswer`).
+  - `np.unique` over `T` answers at most one element and refuses an axis over two or more dimensions with NumPy's two
+    texts; `np.vander` raises `promote_types`'s `DTypePromotionError`.
+  - Stores: a HARD mask's single-element store raises `'str' object has no attribute 'size'` (the element is a Python
+    object); a C# number stored into a masked array is a Python number (literal mark): `coerce=False` refuses it and an
+    integer out of range raises `OverflowError`, as in NumPy (it wrapped).
+  - `.data` / `.mask` return a NEW view per access (NumPy's; breaking). Read the `_data` / `_mask` FIELDS for identity or
+    disposal: the oracle adapters that disposed `x.data` disposed a fresh view instead, and the leak gate caught 513
+    families.
+  - Found and NOT fixed (pre-existing): `NDArray.view()` of a DISPOSED array returns a live view over the freed buffer
+    (`InitializeArc` ignores `TryAddRef`'s failure).
+  Gates: string-oracle section `tma` (4,167 cases, 437 deferred = the section's ceiling) + `Ma/np.ma.StringDType.Test.cs`.
+- Still refused loudly (P1.7 / phase 2): `.npy`, `loadtxt` / `savetxt`, and computation (comparisons, `np.sum`, sorting,
+  `np.strings`).
 - **The pythonnet bridge carries text (P1.8, 2026-10-13; owner's decision D7 = NumPy's C API).** `S` / `U` are ordinary
   buffers and VIEW both ways (`<U1` and a 4-byte `wchar_t` buffer import as `U1`, never `Char` — breaking; big-endian `U`
   copies byte-swapped; `np.str_` / `np.bytes_` are 0-d `U` / `S`). A `T` array crosses as an exact COPY through numpy's

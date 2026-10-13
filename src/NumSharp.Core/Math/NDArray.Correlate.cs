@@ -27,6 +27,11 @@ namespace NumSharp
         ///     deep for desired array</c> (two or more dimensions), <c>first array argument cannot be empty</c> /
         ///     <c>second array argument cannot be empty</c>, or — for a fixed-width string operand, after every check
         ///     above — <c>data type must provide an itemsize</c>.</exception>
+        /// <exception cref="TypeError">A <c>StringDType</c> operand: NumPy's legacy-only descriptor refusal (a
+        ///     <c>StringDType</c> first operand, or a <c>U</c> one beside it), or Python's error from the first product of the
+        ///     OBJECT fallback (<c>can't multiply sequence by non-int of type 'float'</c>).</exception>
+        /// <exception cref="NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy computes (an
+        ///     object array, which NumSharp does not have).</exception>
         [NDScoped]
         public NDArray correlate(NDArray v, string mode = "valid")
         {
@@ -34,6 +39,11 @@ namespace NumSharp
 
             // NumPy parses the mode during argument parsing, before touching the arrays.
             var m = ParseSlidingMode(mode);
+
+            // A StringDType operand: PyArray_Correlate2's descriptor lookup comes before every check below (the legacy-only
+            // refusal, or an OBJECT product whose own checks and first product answer).
+            if (Backends.Strings.NDStringUfuncs.IsVString(a) || Backends.Strings.NDStringUfuncs.IsVString(v))
+                throw Backends.Strings.NDStringUfuncs.VStringSlidingAnswer(a, v, (int)m, convolve: false);
 
             // NumPy's PyArray_FromAny(op, typec, 1, 1, ...) requires exactly 1-D operands (a 0-d
             // scalar or a 2-D array is rejected — correlate, unlike convolve, does not promote 0-d),

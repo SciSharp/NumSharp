@@ -21,6 +21,9 @@ namespace NumSharp
         ///     (the allocation's <c>negative dimensions are not allowed</c>).</exception>
         /// <exception cref="TypeError">A text <paramref name="x"/> with two or more columns: the powers come from
         ///     <c>multiply.accumulate</c>, which has no string loop.</exception>
+        /// <exception cref="DTypePromotionError">A 1-D <c>StringDType</c> <paramref name="x"/>: <c>promote_types(x.dtype,
+        ///     int)</c> finds no common DType (<c>The DTypes &lt;class 'numpy.dtypes.StringDType'&gt; and &lt;class
+        ///     'numpy.dtypes.Int64DType'&gt; do not have a common DType. ...</c>), whatever <paramref name="N"/>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.vander.html
         /// <para>NumPy's statements: <c>v = empty((len(x), N), dtype=promote_types(x.dtype, int))</c>; <c>if N &gt; 0:
         /// tmp[:, 0] = 1</c>; <c>if N &gt; 1: tmp[:, 1:] = x[:, None]; multiply.accumulate(tmp[:, 1:], ...)</c>. A text
@@ -37,6 +40,15 @@ namespace NumSharp
 
             long m = x.size;
             int n = N ?? checked((int)m);
+
+            // StringDType: `promote_types(x.dtype, int)` finds no common DType, a DTypePromotionError raised before the
+            // allocation (so for an empty x and for any N too). PromoteTypes raises NumPy's text itself.
+            if (Backends.Strings.NDStringUfuncs.IsVString(x))
+            {
+                DTypePromotion.PromoteTypes(x.dtype, np.int64);
+                // The promotion never succeeds for StringDType; this keeps the method total if that ever changes.
+                throw Backends.Strings.NDStringUfuncs.NextPhaseVString("vander", x.dtype);
+            }
 
             // NumPy: dtype = promote_types(x.dtype, int) — `int` is intp (int64 on 64-bit). Text absorbs int64 as a
             // 21-character string, and the powers come from multiply.accumulate, which has no string loop.

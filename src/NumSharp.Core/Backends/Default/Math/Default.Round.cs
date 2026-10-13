@@ -95,6 +95,12 @@ namespace NumSharp.Backends
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "rint", nd, null, @out);
             // NumPy's round: decimals == 0 is rint; a positive count first multiplies by 10**decimals (a float64 scalar,
             // so multiply(<U3, float64) has no loop); a negative count divides by 10**-decimals (divide refuses text).
+            // A StringDType input: rint's refusal, or PyArray_Round's multiply / true_divide by the Python float 10**|d|
+            // (the weak _PyFloatDType), both without a StringDType loop.
+            if (Strings.NDStringUfuncs.IsVString(nd))
+                throw decimals == 0 ? Strings.NDStringUfuncs.UnaryError("rint", nd, typeCode)
+                    : Strings.NDStringUfuncs.VStringNoLoop(decimals > 0 ? "multiply" : "divide",
+                        new[] { nd.dtype.Meta.ToString(), DTypeRegistry.PyFloat.ToString() });
             if (Strings.NDStringUfuncs.IsString(nd))
                 throw decimals == 0 ? Strings.NDStringUfuncs.UnaryError("rint", nd, typeCode)
                     : decimals > 0 ? Strings.NDStringUfuncs.NoLoop("multiply", nd.dtype, np.float64)

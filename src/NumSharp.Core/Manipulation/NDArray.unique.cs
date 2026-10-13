@@ -147,9 +147,10 @@ namespace NumSharp
             _ = sorted;
 
             // Text: NumPy's axis check, then it sorts the text (the next phase of the string support) — except where the
-            // shape decides the answer, which the bool stand-in computes and the input's own strings fill.
+            // shape decides the answer, which the bool stand-in computes and the input's own strings fill. StringDType is
+            // tested first: IsString refuses it (its fixed-width readers would misread the 16-byte cells).
             ThrowIfTextUnique(this, axis);
-            if (Backends.Strings.NDStringUfuncs.IsString(this))
+            if (Backends.Strings.NDStringUfuncs.IsVString(this) || Backends.Strings.NDStringUfuncs.IsString(this))
                 return UniqueTextByShape(this, return_index, return_inverse, return_counts, axis, equal_nan);
 
             // NumPy: `if axis is None or ar.ndim == 1` takes the flat path — a given axis normalized first — so a 1-D input
@@ -181,15 +182,63 @@ namespace NumSharp
         /// <param name="op">The NumPy function named in the next-phase message (<c>unique</c>, <c>unique_values</c>, …).</param>
         /// <exception cref="AxisError">A string array with an out-of-range <paramref name="axis"/> (<c>axis 9 is out of
         ///     bounds for array of dimension 1</c>; a 0-d array refuses every axis).</exception>
+        /// <exception cref="TypeError">A <c>StringDType</c> array of two or more dimensions with an axis (see
+        ///     <see cref="ThrowIfVStringUnique"/>).</exception>
         /// <exception cref="StringComputationNotSupportedException">A string array whose answer depends on the text.</exception>
         internal static void ThrowIfTextUnique(NDArray a, int? axis, string op = "unique")
         {
+            // StringDType first: IsString refuses it loudly (its callers are fixed-width routes).
+            if (Backends.Strings.NDStringUfuncs.IsVString(a))
+            {
+                ThrowIfVStringUnique(a, axis, op);
+                return;
+            }
             if (!Backends.Strings.NDStringUfuncs.IsString(a))
                 return;
             if (axis is { } ax && (ax < -a.ndim || ax >= a.ndim))
                 throw new AxisError(ax, a.ndim);
             if (!UniqueShapeDecides(a, axis))
                 throw Backends.Strings.NDStringUfuncs.NextPhase(op, a);
+        }
+
+        /// <summary>
+        ///     The guard of <c>np.unique</c> (and the Array-API family) over NEP 55 <c>StringDType</c> text, in NumPy 2.4.2's
+        ///     order. The flat path (<c>axis=None</c>, or a 1-D input whose axis passed <c>normalize_axis_index</c>) hashes the
+        ///     text, or argsorts it when an index output is asked for — a computation (phase 2) unless at most one element is
+        ///     ordered, which this lets through for <see cref="UniqueTextByShape"/>. An axis over two or more dimensions takes
+        ///     the structured path, which cannot hold <c>StringDType</c> fields.
+        /// </summary>
+        /// <param name="a">The <c>StringDType</c> array.</param>
+        /// <param name="axis">The axis, or null for the flattened array.</param>
+        /// <param name="op">The NumPy function named in the next-phase message.</param>
+        /// <exception cref="AxisError">The axis is out of bounds (<c>np.moveaxis</c>'s check re-raised as
+        ///     <c>AxisError(axis, ndim)</c>, or <c>normalize_axis_index</c> for a 1-D input: the same text).</exception>
+        /// <exception cref="TypeError">An axis over two or more dimensions: <c>The axis argument to unique is not supported
+        ///     for dtype StringDType()</c> (the structured view of the rows refuses <c>StringDType</c> fields), or — for rows of
+        ///     zero width, which skip that view — <c>Cannot change data-type for array of references.</c> (the field-less
+        ///     result's view back as <c>StringDType</c>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">Two or more elements to order (phase 2).</exception>
+        private static void ThrowIfVStringUnique(NDArray a, int? axis, string op)
+        {
+            if (axis is { } ax)
+            {
+                if (ax < -a.ndim || ax >= a.ndim)
+                    throw new AxisError(ax, a.ndim);
+                if (a.ndim != 1)
+                {
+                    // `ar = moveaxis(ar, axis, 0).reshape(n, prod(rest))`: the row width is every other axis's extent.
+                    int norm = ax < 0 ? ax + a.ndim : ax;
+                    long width = 1;
+                    for (int d = 0; d < a.ndim; d++)
+                        if (d != norm)
+                            width *= a.Shape.dimensions[d];
+                    if (width > 0)
+                        throw new TypeError($"The axis argument to unique is not supported for dtype {a.dtype}");
+                    throw new TypeError("Cannot change data-type for array of references.");
+                }
+            }
+            if (a.size > 1)
+                throw Backends.Strings.NDStringUfuncs.NextPhaseVString(op, a.dtype);
         }
 
         /// <summary>

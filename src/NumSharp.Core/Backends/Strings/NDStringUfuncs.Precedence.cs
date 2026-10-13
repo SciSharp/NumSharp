@@ -149,6 +149,17 @@ namespace NumSharp.Backends.Strings
         internal static void ThrowIfStringCall(string ufunc, DType dtype, NDArray x1, NDArray x2, NDArray @out, NDArray where)
         {
             bool request = IsStringRequest(dtype);
+            if (IsVString(x1) || IsVString(x2))
+            {
+                // A StringDType operand: NumPy's out= / where= parse first; a fixed-width string request then names its class
+                // as the output of a signature no StringDType loop has (the StringDType loops produce StringDType or bool).
+                // Without a request the caller's own guard gives the loop answer (ThrowIfUnary / ThrowIfBinary).
+                ThrowIfOutWhereInvalid(@out, where);
+                if (request)
+                    throw VStringNoLoop(ufunc, x2 is null ? new[] { DispatchClass(x1) } : new[] { DispatchClass(x1), DispatchClass(x2) },
+                        dtype.Meta.ToString(), UfuncOutputs(ufunc));
+                return;
+            }
             if (!request && !IsString(x1) && !IsString(x2))
                 return;
             ThrowIfOutWhereInvalid(@out, where);
@@ -674,6 +685,18 @@ namespace NumSharp.Backends.Strings
         ///     a numeric <paramref name="dtype"/> (a parse).</exception>
         internal static void ThrowIfReduce(string op, NDArray a, int? axis, DType dtype = null)
         {
+            if (IsVString(a))
+            {
+                // A StringDType input: the same argument checks in NumPy's order (the dtype= class check of a direct
+                // ufunc.reduce, the axis, the later class check of np.mean's family, an empty arg-reduction), then the
+                // StringDType loop resolution and the reduction's own checks.
+                PreReduceDTypeCheck(op, dtype);
+                ValidateReduceAxis(op, a.ndim, axis);
+                PostReduceDTypeCheck(op, dtype);
+                if (EmptyArgReductionError(op, a, axis) is { } emptyArg)
+                    throw emptyArg;
+                throw VStringReduceAnswer(op, a, ReducedAxes(a, axis), dtype);
+            }
             bool request = IsStringRequest(dtype);
             if (!request && !IsString(a))
                 return;
@@ -710,6 +733,21 @@ namespace NumSharp.Backends.Strings
         internal static void ThrowIfReduce(string op, NDArray a, int? axis, NDArray @out, DType dtype = null)
         {
             string ufunc = ReduceUfuncOf(op, out bool accumulate);
+            if (@out is not null && ufunc is not null && dtype is null && (IsVString(a) || IsVString(@out)))
+            {
+                // A StringDType input or out: the out's class takes the reduction signature's first slot (NumPy's order: a
+                // direct ufunc.reduce parses out= -- its read-only check -- before the axis, the accumulations after).
+                bool outFirst = AxisRuleOf(op) == ReduceAxisRule.UfuncReduce;
+                if (outFirst && !@out.Shape.IsWriteable)
+                    throw new ValueError("output array is read-only");
+                ValidateReduceAxis(op, a.ndim, axis);
+                if (!outFirst && !@out.Shape.IsWriteable)
+                    throw new ValueError("output array is read-only");
+                if (IsVString(a))
+                    throw VStringReduceAnswer(op, a, ReducedAxes(a, axis), null, @out);
+                // A numeric (or fixed-width) input into a StringDType out: no loop pairs them with StringDType.
+                throw VStringNoLoop(ufunc, new[] { DispatchClass(@out), DispatchClass(a) });
+            }
             if (@out is null || ufunc is null || IsStringRequest(dtype) || (!IsString(a) && !IsString(@out)))
             {
                 ThrowIfReduce(op, a, axis, dtype);
@@ -741,6 +779,19 @@ namespace NumSharp.Backends.Strings
         internal static void ThrowIfReduce(string op, NDArray a, int[] axes, NDArray @out, DType dtype = null)
         {
             string ufunc = ReduceUfuncOf(op, out bool accumulate);
+            if (@out is not null && ufunc is not null && dtype is null && (IsVString(a) || IsVString(@out)))
+            {
+                // The tuple-axis form of the StringDType branch above.
+                bool outFirst = AxisRuleOf(op) == ReduceAxisRule.UfuncReduce;
+                if (outFirst && !@out.Shape.IsWriteable)
+                    throw new ValueError("output array is read-only");
+                ValidateReduceAxes(op, a.ndim, axes);
+                if (!outFirst && !@out.Shape.IsWriteable)
+                    throw new ValueError("output array is read-only");
+                if (IsVString(a))
+                    throw VStringReduceAnswer(op, a, ReducedAxes(a, axes), null, @out);
+                throw VStringNoLoop(ufunc, new[] { DispatchClass(@out), DispatchClass(a) });
+            }
             if (@out is null || ufunc is null || IsStringRequest(dtype) || (!IsString(a) && !IsString(@out)))
             {
                 ThrowIfReduce(op, a, axes, dtype);
@@ -777,7 +828,9 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dtype"/>.</exception>
         internal static NDArray ParseForNumericReduce(string op, NDArray a, int? axis, DType dtype)
         {
-            if (dtype is null || !IsString(a) || IsStringRequest(dtype) || ReducesWithAdd(op))
+            // A StringDType input never parses here: NumPy's dispatcher refuses the dtype= request first (no StringDType loop
+            // produces a number), which the reduction guard that follows reports.
+            if (dtype is null || IsVString(a) || !IsString(a) || IsStringRequest(dtype) || ReducesWithAdd(op))
                 return null;
             PreReduceDTypeCheck(op, dtype);
             ValidateReduceAxis(op, a.ndim, axis);
@@ -882,6 +935,14 @@ namespace NumSharp.Backends.Strings
         ///     a numeric <paramref name="dtype"/> (a parse).</exception>
         internal static void ThrowIfReduce(string op, NDArray a, int[] axes, DType dtype = null)
         {
+            if (IsVString(a))
+            {
+                // The tuple-axis form of the StringDType branch of ThrowIfReduce(string, NDArray, int?, DType).
+                PreReduceDTypeCheck(op, dtype);
+                ValidateReduceAxes(op, a.ndim, axes);
+                PostReduceDTypeCheck(op, dtype);
+                throw VStringReduceAnswer(op, a, ReducedAxes(a, axes), dtype);
+            }
             bool request = IsStringRequest(dtype);
             if (!request && !IsString(a))
                 return;

@@ -118,6 +118,9 @@ namespace NumSharp.Backends.Strings
         internal static void ThrowIfBinary(string ufunc, NDArray x1, NDArray x2, NDArray @out = null, NPTypeCode? loop = null,
             NDArray where = null)
         {
+            // A StringDType operand first: the fixed-width test below refuses it loudly (its answers read fixed-width units).
+            if (IsVString(x1) || IsVString(x2))
+                throw VStringBinaryAnswer(ufunc, x1, x2, @out, loop, where, out _);
             if (!IsString(x1) && !IsString(x2))
                 return;
             throw BinaryError(ufunc, x1, x2, @out, loop, where);
@@ -152,6 +155,19 @@ namespace NumSharp.Backends.Strings
         internal static NDArray BinaryGuard(string ufunc, NDArray x1, NDArray x2, NDArray @out = null, NPTypeCode? loop = null,
             NDArray where = null)
         {
+            if (IsVString(x1) || IsVString(x2))
+            {
+                // A StringDType loop computes (phase 2) unless the broadcast is EMPTY: the shapes then decide NumPy's result,
+                // an empty array of the loop's output (or out= itself, untouched), exactly as for the fixed-width loops.
+                var vError = VStringBinaryAnswer(ufunc, x1, x2, @out, loop, where, out DType vComputed);
+                if (vComputed is not null)
+                {
+                    var vDims = BroadcastDims(x1, x2, @out, where);
+                    if (ShapeSize(vDims) == 0)
+                        return @out ?? new NDArray(vComputed, vDims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(vDims), true);
+                }
+                throw vError;
+            }
             if (!IsString(x1) && !IsString(x2))
                 return null;
             var error = BinaryAnswer(ufunc, x1, x2, @out, loop, where, out DType computed);
@@ -287,7 +303,9 @@ namespace NumSharp.Backends.Strings
         /// </remarks>
         internal static Exception BinaryError(string ufunc, NDArray x1, NDArray x2, NDArray @out, NPTypeCode? loop,
             NDArray where = null)
-            => BinaryAnswer(ufunc, x1, x2, @out, loop, where, out _);
+            => IsVString(x1) || IsVString(x2)
+                ? VStringBinaryAnswer(ufunc, x1, x2, @out, loop, where, out _)
+                : BinaryAnswer(ufunc, x1, x2, @out, loop, where, out _);
 
         /// <summary>
         ///     <see cref="BinaryError"/>, also reporting the descriptor of the loop NumPy would compute (the comparisons and the
@@ -392,6 +410,8 @@ namespace NumSharp.Backends.Strings
         internal static void ThrowIfUnary(string ufunc, NDArray x, NPTypeCode? loop = null, NDArray @out = null,
             NDArray where = null)
         {
+            if (IsVString(x))
+                throw VStringUnaryAnswer(ufunc, x, loop, @out, where);
             if (!IsString(x))
                 return;
             throw UnaryError(ufunc, x, loop, @out, where);
@@ -409,6 +429,8 @@ namespace NumSharp.Backends.Strings
         /// <returns>The exception to throw (never null).</returns>
         internal static Exception UnaryError(string ufunc, NDArray x, NPTypeCode? loop, NDArray @out = null, NDArray where = null)
         {
+            if (IsVString(x))
+                return VStringUnaryAnswer(ufunc, x, loop, @out, where);
             // NumPy parses out= and where= before it resolves the loop.
             var parse = OutWhereError(@out, where);
             if (parse is not null)
@@ -444,6 +466,8 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="StringComputationNotSupportedException">NumPy computes it on text (<see cref="NextPhase(string, NDArray)"/>).</exception>
         internal static void ThrowIfReduce(string op, NDArray a)
         {
+            if (IsVString(a))
+                throw VStringReduceAnswer(op, a, null, null);
             if (!IsString(a))
                 return;
             throw ReduceError(op, a);
@@ -613,6 +637,8 @@ namespace NumSharp.Backends.Strings
         ///     with signature matching types (dtype('&lt;U3'), dtype('float64')) -&gt; None</c>.</exception>
         internal static void ThrowIfIsClose(NDArray a, NDArray b)
         {
+            if (IsVString(a) || IsVString(b))
+                throw VStringIsCloseAnswer(a, b);
             if (!IsString(a) && !IsString(b))
                 return;
             // NEP 50's weak float has no common DType with text, so a string y raises here, with NumPy's text.
@@ -645,8 +671,14 @@ namespace NumSharp.Backends.Strings
         ///     datatype, number of dimensions, and be a C-Array)</c>, <c>output array has wrong dimensions</c>, or — for an
         ///     acceptable out — <c>dot not available for this type</c>; without: <c>data type must provide an
         ///     itemsize</c>.</exception>
+        /// <exception cref="NotSupportedException">A <c>StringDType</c> operand whose product NumPy computes over Python
+        ///     objects (see <see cref="VStringProductAnswer"/>).</exception>
         internal static void ThrowIfProduct(NDArray a, NDArray b, NDArray @out = null)
         {
+            // A StringDType operand: PyArray_MatrixProduct2's legacy-descriptor lookup refuses it (or, beside a class it has
+            // no common DType with, makes the product an OBJECT one), before any shape check.
+            if (IsVString(a) || IsVString(b))
+                throw VStringProductAnswer(a, b, @out);
             if (!IsString(a) && !IsString(b))
                 return;
             if (a.ndim == 0 || b.ndim == 0)

@@ -30,7 +30,10 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(z))
                 return NDMatrixBoundary.Wrapped((z, deg), static s => angle(s.z, s.deg));
-            // NumPy's angle of a non-complex input is arctan2(0, z), which has no string loop.
+            // NumPy's angle of a non-complex input is arctan2(0, z), which has no string loop: the Python int 0 is the
+            // weak _PyLongDType in the StringDType refusal, the fixed-width classes take the legacy resolver's text.
+            if (Backends.Strings.NDStringUfuncs.IsVString(z))
+                throw Backends.Strings.NDStringUfuncs.VStringNoLoop("arctan2", new[] { DTypeRegistry.PyLong.ToString(), z.dtype.Meta.ToString() });
             if (Backends.Strings.NDStringUfuncs.IsString(z)) throw Backends.Strings.NDStringUfuncs.NotSupportedForInputTypes("arctan2");
             NDArray a;
             if (z.typecode == NPTypeCode.Complex)

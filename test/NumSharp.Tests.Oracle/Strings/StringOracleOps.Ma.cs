@@ -21,9 +21,10 @@ namespace NumSharp.Tests.Strings
     /// </remarks>
     internal static partial class StringOracleOps
     {
-        /// <summary>Replays one section-N op, or reports that <paramref name="op"/> is not one of them.</summary>
-        /// <param name="op">The corpus op key: <c>ma0</c> (no argument), <c>ma1</c> (one masked argument) or <c>ma2</c>
-        ///     (two arguments).</param>
+        /// <summary>Replays one section-N (or section-tma) op, or reports that <paramref name="op"/> is not one of them.</summary>
+        /// <param name="op">The corpus op key: <c>ma0</c> (no argument), <c>ma1</c> (one masked argument), <c>ma2</c> (two
+        ///     arguments) — shared by strma and tma, whose arguments arrive as operands — or <c>tma0</c> (section tma's
+        ///     constructors, which build their <c>StringDType</c> arrays themselves; <see cref="TMa0"/>).</param>
         /// <param name="p">The case parameters (<c>name</c> selects the function, <c>mops</c> the arguments).</param>
         /// <param name="ops">The reconstructed operands.</param>
         /// <param name="result">The call's result.</param>
@@ -35,6 +36,9 @@ namespace NumSharp.Tests.Strings
             {
                 case "ma0":
                     result = Ma0(Str(p, "name"));
+                    return true;
+                case "tma0":
+                    result = TMa0(Str(p, "name"));
                     return true;
                 case "ma1":
                 {
@@ -312,6 +316,42 @@ namespace NumSharp.Tests.Strings
                 case "where_textcond": return ma.where(x, 1, 2);
                 case "sort_end_false": return ma.sort(x, endwith: false);
                 case "count_ax0": return ma.count(x, axis: 0);
+
+                // ---- section tma's additions (gen_strings_oracle._tma_unary_extra): element access, stores, tolist, the
+                // data / mask attributes, casts, filled with an explicit value, where / concatenate beside U text ----
+                case "getitem_0": return x[0];
+                case "getitem_1": return x[1];
+                case "getitem_last": return x[-1];
+                case "getitem_slice": return x["1:"];
+                case "getitem_rev": return x["::-1"];
+                case "getitem_mask": return x[Bools(x, true)];
+                case "getitem_fancy": return x[np.array(new long[] { 0, 0 })];
+                case "setitem_text": x[1] = "zz"; return x;
+                case "setitem_long": x[0] = new string('w', 40); return x;
+                case "setitem_masked": x[1] = ma.masked; return x;
+                case "setitem_none": x[1] = null; return x;
+                case "setitem_slice": x[":"] = "y"; return x;
+                case "setitem_num": x[1] = 5; return x;
+                case "tolist": return x.tolist();
+                case "data": return x.data;
+                case "mask_attr": return x.mask;
+                case "astype_T": return x.astype(np.dtypes.StringDType());
+                case "astype_TN": return x.astype(np.dtypes.StringDType(na_object: null));
+                case "astype_U3": return x.astype("U3");
+                case "astype_S3": return x.astype("S3");
+                case "astype_i8": return x.astype("i8");
+                case "astype_b": return x.astype(np.@bool);
+                case "filled_long": return x.filled(new string('v', 30));
+                case "filled_none": return x.filled(null);
+                case "concat_u":
+                    return x.ndim == 1
+                        ? ma.concatenate(new object[] { x, ma.array(np.array(new[] { "q" }), mask: new[] { true }) })
+                        : ma.concatenate(new object[] { x, x });
+                case "where_text": return ma.where(Bools(x, true), x, "zz");
+                case "copy_method": return x.copy();
+                case "view_method": return x.view();
+                case "reshape_method": return x.reshape(-1);
+                case "swapaxes": return x.ndim > 0 ? ma.swapaxes(x, 0, -1) : x;
                 default:
                     throw new InvalidOperationException($"strma ma1 has no function '{name}'");
             }
@@ -461,6 +501,129 @@ namespace NumSharp.Tests.Strings
                 case "common_fill_u_u1": return ma.common_fill_value(ma.array(U3()), ma.array(np.array(new[] { "a" })));
                 default:
                     throw new InvalidOperationException($"strma ma0 has no function '{name}'");
+            }
+        }
+
+        /// <summary>
+        ///     A constructor / mask-helper call of section tma (<c>gen_tma</c>'s <c>ctor</c> list): numpy.ma building masked
+        ///     arrays over NEP 55 <c>StringDType</c> data — <c>StringDType</c> masks (cast to bool), fill values of every
+        ///     kind into a <c>T</c> array (text, numbers, bytes, <c>T</c> / <c>U</c> arrays; <c>coerce=False</c> refusals),
+        ///     inherited fills and hard masks, <c>masked_all</c>, the default fill value of every <c>T</c> descriptor, mask
+        ///     reconciliation, <c>common_fill_value</c>, and joins beside <c>U</c> / <c>S</c> / numbers. The arrays are spelled
+        ///     here as the generator spells them.
+        /// </summary>
+        /// <param name="name">The table key.</param>
+        /// <returns>The call's result (null for <c>putmask</c>, which returns None).</returns>
+        /// <exception cref="InvalidOperationException">An unknown name.</exception>
+        private static object TMa0(string name)
+        {
+            var ma = np.ma;
+            // Fresh descriptors per call, as the generator's TSpec.build() makes them.
+            DType T() => np.dtypes.StringDType();
+            DType TN() => np.dtypes.StringDType(na_object: null);
+            DType TNAN() => np.dtypes.StringDType(na_object: double.NaN);
+            DType TC() => np.dtypes.StringDType(coerce: false);
+            NDArray T3(DType dt = null) => np.array(new[] { "ab", "c", "de" }, dt ?? T());
+            bool[] M(params int[] bits) => bits.Select(v => v != 0).ToArray();
+            switch (name)
+            {
+                case "t_mask": return ma.array(np.arange(3), mask: np.array(new[] { "a", "", "b" }, T()));
+                case "t_mask_na": return ma.array(np.arange(3), mask: np.array(new object[] { "a", null, "b" }, TN()));
+                case "t_mask_empty": return ma.array(np.zeros(new Shape(0L)), mask: np.zeros(new Shape(0L), T()));
+                case "t_mask_size": return ma.array(np.arange(3), mask: np.array(new[] { "a", "" }, T()));
+                case "mask_size": return ma.array(T3(), mask: M(1, 0));
+                case "mask_one": return ma.array(T3(), mask: M(1));
+                case "mask_reshape":
+                    return ma.array(np.array(new[,] { { "ab", "c", "x" }, { "de", "f", "y" } }, T()),
+                        mask: np.zeros(new Shape(3L, 2L), np.@bool));
+                case "mask_true": return ma.array(T3(), mask: true);
+                case "mask_false": return ma.array(T3(), mask: false);
+                case "keep_mask": return ma.array(ma.array(T3(), mask: M(1, 0, 0)), mask: M(0, 1, 0));
+                case "keep_mask_false": return ma.array(ma.array(T3(), mask: M(1, 0, 0)), mask: M(0, 1, 0), keep_mask: false);
+                case "fill_hello": return ma.array(T3(), fill_value: "hello");
+                case "fill_long": return ma.array(T3(), fill_value: new string('f', 40));
+                case "fill_5": return ma.array(T3(), fill_value: 5);
+                case "fill_15": return ma.array(T3(), fill_value: 1.5);
+                case "fill_true": return ma.array(T3(), fill_value: true);
+                case "fill_bytes": return ma.array(T3(), fill_value: B("xyz"));
+                case "fill_5_coerce_false": return ma.array(T3(TC()), fill_value: 5);
+                case "fill_text_coerce_false": return ma.array(T3(TC()), fill_value: "q");
+                case "fill_none_na": return ma.array(T3(TN()), fill_value: "zz");
+                case "fill_array_t": return ma.array(T3(), fill_value: np.array(new[] { "xyz" }, T()));
+                case "fill_array_u": return ma.array(T3(), fill_value: np.array(new[] { "xyz" }));
+                case "fill_0d_t": return ma.array(T3(), fill_value: np.array("xyz", T()));
+                case "fill_t_into_u": return ma.array(np.array(new[] { "ab", "c" }), fill_value: np.array("xyz", T()));
+                case "fill_t_into_f": return ma.array(np.array(new[] { 1.5 }), fill_value: np.array("2.5", T()));
+                case "fill_inherit": return ma.array(ma.array(T3(), fill_value: "zz"));
+                case "fill_inherit_dtype_u": return ma.array(ma.array(T3(), fill_value: "zz"), dtype: "U1");
+                case "fill_inherit_dtype_t": return ma.array(ma.array(np.array(new[] { "ab" }), fill_value: "zz"), dtype: T());
+                case "fill_inherit_dtype_tn": return ma.array(ma.array(T3(), fill_value: "zz"), dtype: TN());
+                case "hard_inherit": return ma.array(ma.array(T3(), mask: M(1, 0, 0), hard_mask: true));
+                case "masked_all_t": return ma.masked_all(new Shape(3L), T());
+                case "masked_all_tn": return ma.masked_all(new Shape(2L, 2L), TN());
+                case "masked_all_tc": return ma.masked_all(new Shape(2L), TC());
+                case "default_fill_t": return ma.default_fill_value(T());
+                case "default_fill_tn": return ma.default_fill_value(TN());
+                case "default_fill_tnan": return ma.default_fill_value(TNAN());
+                case "default_fill_tc": return ma.default_fill_value(TC());
+                case "default_fill_t_arr": return ma.default_fill_value(T3());
+                case "minimum_fill_t": return ma.minimum_fill_value(T3());
+                case "maximum_fill_t": return ma.maximum_fill_value(T3(TN()));
+                case "make_mask_t": return ma.make_mask(np.array(new[] { "a", "" }, T()));
+                case "make_mask_t_empty": return ma.make_mask(np.zeros(new Shape(0L), T()), shrink: false);
+                case "make_mask_tn": return ma.make_mask(np.array(new object[] { "a", null }, TN()));
+                case "mask_or_t_bool": return ma.mask_or(T3(), np.zeros(new Shape(3L), np.@bool));
+                case "mask_or_bool_t": return ma.mask_or(np.zeros(new Shape(3L), np.@bool), T3());
+                case "mask_or_t_u": return ma.mask_or(T3(), np.array(new[] { "a", "b", "c" }));
+                case "mask_or_t_t": return ma.mask_or(T3(), T3());
+                case "mask_or_t_tn": return ma.mask_or(T3(), T3(TN()));
+                case "masked_where_t": return ma.masked_where(np.array(new[] { "a", "", "b" }, T()), np.arange(3));
+                case "masked_where_t_short": return ma.masked_where(np.array(new[] { "a", "" }, T()), np.arange(3));
+                case "masked_where_short": return ma.masked_where(M(1, 0), T3());
+                case "masked_where_allfalse": return ma.masked_where(M(0, 0, 0), T3());
+                case "masked_where_copy_false": return ma.masked_where(M(1, 0, 0), T3(), copy: false);
+                case "putmask_plain":
+                    ma.putmask(T3(), M(1, 0, 1), "zz");
+                    return null;
+                case "compress_rows_1d": return ma.compress_rows(T3());
+                case "compress_cols_1d": return ma.compress_cols(T3());
+                case "mask_rows_1d": return ma.mask_rows(T3());
+                case "mask_cols_1d": return ma.mask_cols(T3());
+                case "common_fill_t_u": return ma.common_fill_value(ma.array(T3()), ma.array(np.array(new[] { "a" })));
+                case "common_fill_t_t": return ma.common_fill_value(ma.array(T3()), ma.array(T3()));
+                case "common_fill_t_tn": return ma.common_fill_value(ma.array(T3()), ma.array(T3(TN())));
+                case "common_fill_t_f": return ma.common_fill_value(ma.array(T3()), ma.array(np.array(new[] { 1.5 })));
+                case "array_list": return ma.array(new object[] { "ab", "c" }, dtype: T(), mask: M(0, 1));
+                case "array_list_na": return ma.array(new object[] { "ab", null }, dtype: TN(), mask: M(0, 0));
+                case "array_list_num": return ma.array(new object[] { 1, 2.5 }, dtype: T());
+                case "array_list_num_coerce_false": return ma.array(new object[] { 1, 2.5 }, dtype: TC());
+                case "masked_array_t": return ma.masked_array(T3(), mask: M(0, 0, 1), fill_value: "w");
+                case "asarray_t": return ma.asarray(T3());
+                case "asanyarray_t": return ma.asanyarray(T3());
+                case "filled_plain_t": return ma.filled(T3());
+                case "getdata_t": return ma.getdata(T3());
+                case "getmaskarray_t": return ma.getmaskarray(T3());
+                case "zeros_t": return ma.zeros(new Shape(3L), T());
+                case "ones_t": return ma.ones(new Shape(2L), T());
+                case "empty_t": return ma.empty(new Shape(2L), T());
+                case "masked_values_t": return ma.masked_values(T3(), "c");
+                case "masked_object_t": return ma.masked_object(T3(), "c");
+                case "masked_equal_t": return ma.masked_equal(T3(), "c");
+                case "fix_invalid_t": return ma.fix_invalid(T3());
+                case "masked_invalid_t": return ma.masked_invalid(T3());
+                case "concatenate_t_u":
+                    return ma.concatenate(new object[] { ma.array(T3(), mask: M(1, 0, 0)), ma.array(np.array(new[] { "q" })) });
+                case "concatenate_u_t":
+                    return ma.concatenate(new object[] { ma.array(np.array(new[] { "q" })), ma.array(T3(), mask: M(1, 0, 0)) });
+                case "concatenate_t_tn": return ma.concatenate(new object[] { ma.array(T3()), ma.array(T3(TN())) });
+                case "concatenate_t_s":
+                    return ma.concatenate(new object[] { ma.array(T3()), ma.array(np.array(new[] { "q" }).astype("S1")) });
+                case "stack_t": return ma.stack(new object[] { ma.array(T3(), mask: M(1, 0, 0)), ma.array(T3()) });
+                case "where_t_u":
+                    return ma.where(M(1, 0, 1), ma.array(T3(), mask: M(1, 0, 0)), np.array(new[] { "q", "r", "s" }));
+                case "where_t_num": return ma.where(M(1, 0, 1), ma.array(T3()), 1.5);
+                default:
+                    throw new InvalidOperationException($"tma tma0 has no function '{name}'");
             }
         }
     }

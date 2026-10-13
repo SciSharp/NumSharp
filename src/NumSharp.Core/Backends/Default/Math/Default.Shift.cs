@@ -54,7 +54,11 @@ namespace NumSharp.Backends
         {
             // The dtype= class check and NumPy's string answers (a string request's no-loop text; a string operand's
             // out= / where= parse) come before the operand-type validation, as NumPy resolves the signature first.
-            UfuncLoopCode(dtype, "left_shift", lhs, rhs, @out, where);
+            var leftLoop = UfuncLoopCode(dtype, "left_shift", lhs, rhs, @out, where);
+            // A StringDType operand: NumPy's dispatcher refusal names the operand classes (the legacy text below is the
+            // fixed-width classes' and the numbers').
+            if (Strings.NDStringUfuncs.IsVString(lhs) || Strings.NDStringUfuncs.IsVString(rhs))
+                throw Strings.NDStringUfuncs.BinaryError("left_shift", lhs, rhs, @out, leftLoop, where);
             ValidateShiftType(lhs, "left_shift");
             ValidateShiftType(rhs, "left_shift");
             return ExecuteShift(lhs, rhs, isLeftShift: true, dtype, @out, where);
@@ -74,7 +78,10 @@ namespace NumSharp.Backends
         {
             // The dtype= class check and NumPy's string answers (a string request's no-loop text; a string operand's
             // out= / where= parse) come before the operand-type validation, as NumPy resolves the signature first.
-            UfuncLoopCode(dtype, "right_shift", lhs, rhs, @out, where);
+            var rightLoop = UfuncLoopCode(dtype, "right_shift", lhs, rhs, @out, where);
+            // A StringDType operand: NumPy's dispatcher refusal names the operand classes.
+            if (Strings.NDStringUfuncs.IsVString(lhs) || Strings.NDStringUfuncs.IsVString(rhs))
+                throw Strings.NDStringUfuncs.BinaryError("right_shift", lhs, rhs, @out, rightLoop, where);
             ValidateShiftType(lhs, "right_shift");
             ValidateShiftType(rhs, "right_shift");
             return ExecuteShift(lhs, rhs, isLeftShift: false, dtype, @out, where);

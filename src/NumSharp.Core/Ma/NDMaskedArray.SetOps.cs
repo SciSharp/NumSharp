@@ -351,6 +351,8 @@ namespace NumSharp
         /// <param name="a">The masked operand.</param>
         /// <returns>The int64 permutation (of the flattened array from two dimensions on, NumPy's deprecated default).</returns>
         /// <exception cref="StringComputationNotSupportedException">A text operand with keys to compare.</exception>
+        /// <exception cref="TypeError">A <c>StringDType</c> operand, whatever it holds: <c>Unsuitable type StringDType() for
+        ///     calculating minimum.</c> (see <see cref="ThrowIfUnsuitableExtremum(NDArray,string)"/>).</exception>
         /// <remarks>
         ///     A text operand whose every element is masked needs no string comparison: every key is the array's fill
         ///     value, so the stable order is the identity. NumPy's <c>self.filled(None)</c> still reads the fill value
@@ -358,6 +360,8 @@ namespace NumSharp
         /// </remarks>
         private NDArray SetOpArgsort(NDMaskedArray a)
         {
+            // `fill_value = minimum_fill_value(self)` comes before the mask is read: StringDType has no extremum fill.
+            ThrowIfUnsuitableExtremum(a._data, "minimum");
             if (a._data.typecode == NPTypeCode.String && a._mask is not null && a.size > 0 && np.all(a._mask))
             {
                 // `fill_value = minimum_fill_value(self)` is None for text: `self.filled(None)` reads `self.fill_value`.
@@ -415,6 +419,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="x">A masked array no caller holds (a flattened or concatenated copy).</param>
         /// <exception cref="StringComputationNotSupportedException">A text operand with keys to compare.</exception>
+        /// <exception cref="TypeError">A <c>StringDType</c> operand with a mask: the argsort's <c>Unsuitable type</c>
+        ///     refusal (without a mask NumPy sorts the text: phase 2, or nothing to order).</exception>
         /// <remarks>
         ///     In place, not through <see cref="sort(object,int?,bool,object)"/>: that one sorts a COPY, which NumPy's
         ///     <c>np.array(a, copy=True, subok=True)</c> finalizes (converting a stored text fill to the dtype), while
@@ -430,6 +436,8 @@ namespace NumSharp
                     SortDataInPlace(x._data);
                 return;
             }
+            // `sidx = self.argsort(...)`: its minimum_fill_value refuses StringDType before the all-masked identity below.
+            ThrowIfUnsuitableExtremum(x._data, "minimum");
             NDArray sidx;
             if (x._data.typecode == NPTypeCode.String && x.size > 0 && np.all(x._mask))
             {
@@ -562,6 +570,11 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="assume_unique"/> with operands np.concatenate cannot join.</exception>
         /// <exception cref="StringComputationNotSupportedException">Text whose answer sorts or compares the strings, or
         ///     formats numbers into text.</exception>
+        /// <exception cref="TypeError">A <c>StringDType</c> operand: the argsort's <c>Unsuitable type ... for calculating
+        ///     minimum.</c> (of a masked <paramref name="ar1"/>'s inverse unique, of a masked <paramref name="ar2"/>'s sort, or
+        ///     of the concatenation), whichever NumPy reaches first.</exception>
+        /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand beside a class it has no common DType with
+        ///     (the concatenation), when no refusal comes first.</exception>
         /// <remarks>
         ///     NumPy's statements: <c>ar1, rev_idx = unique(ar1, return_inverse=True); ar2 = unique(ar2)</c>; <c>ar =
         ///     ma.concatenate((ar1, ar2))</c>; <c>order = ar.argsort(kind='mergesort')</c>; <c>sar = ar[order]</c>;
@@ -595,10 +608,16 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(ar1));
             if (ar2 is null)
                 throw new ArgumentNullException(nameof(ar2));
-            // An empty ar1 beside a text operand: NumPy reaches `flag[indx][rev_idx]` with an empty `indx` after
-            // formatting numbers into the joined text — the empty, unmasked flags, shaped like ar1.
+            // A StringDType operand: NumPy's statements always end in a refusal (the concatenation is StringDType, whose
+            // argsort refuses, unless it has no common DType at all) — found without computing the uniques before it.
+            if (!assume_unique && (HoldsVString(ar1) || HoldsVString(ar2)))
+                VStringSetOpDryRun(SetOpKind.In1d, ar1, ar2);
+            // An empty ar1 beside a fixed-width text operand: NumPy reaches `flag[indx][rev_idx]` with an empty `indx`
+            // after formatting numbers into the joined text — the empty, unmasked flags, shaped like ar1.
             var d1 = AsData(ar1);
-            if (!assume_unique && d1.size == 0 && (d1.typecode == NPTypeCode.String || AsData(ar2).typecode == NPTypeCode.String))
+            var d2 = AsData(ar2);
+            if (!assume_unique && d1.size == 0 && !d1.Storage.IsVString && !d2.Storage.IsVString
+                && (d1.typecode == NPTypeCode.String || d2.typecode == NPTypeCode.String))
                 return new NDMaskedArray(np.zeros(DimsOf(d1), np.@bool), null);
 
             object a1 = ar1, a2 = ar2;
@@ -686,6 +705,9 @@ namespace NumSharp
         /// <returns>The masked array of common values, in the promoted dtype.</returns>
         /// <exception cref="ArgumentNullException">An operand is null.</exception>
         /// <exception cref="StringComputationNotSupportedException">Text whose answer sorts or compares the strings.</exception>
+        /// <exception cref="TypeError">A <c>StringDType</c> operand: <c>Unsuitable type ... for calculating minimum.</c> (a
+        ///     masked operand's unique, or the joined copy's masked sort).</exception>
+        /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand beside a class it has no common DType with.</exception>
         /// <remarks>
         ///     NumPy's statements: <c>aux = ma.concatenate((unique(ar1), unique(ar2)))</c> (the operands themselves with
         ///     <paramref name="assume_unique"/>); <c>aux.sort()</c>; <c>aux[:-1][aux[1:] == aux[:-1]]</c>, the masked
@@ -697,6 +719,9 @@ namespace NumSharp
         public NDMaskedArray intersect1d(object ar1, object ar2, bool assume_unique = false)
         {
             using var scope = NDScope.Open();
+            // A StringDType operand: the refusals NumPy reaches before its first text comparison, without the uniques.
+            if (!assume_unique && (HoldsVString(ar1) || HoldsVString(ar2)))
+                VStringSetOpDryRun(SetOpKind.Intersect1d, ar1, ar2);
             var aux = assume_unique
                 ? concatenate(new[] { ar1, ar2 })
                 : concatenate(new object[] { UniqueCore(ar1, false, false, out _, out _), UniqueCore(ar2, false, false, out _, out _) });
@@ -716,6 +741,9 @@ namespace NumSharp
         /// <returns>The masked array of the symmetric difference, in the promoted dtype.</returns>
         /// <exception cref="ArgumentNullException">An operand is null.</exception>
         /// <exception cref="StringComputationNotSupportedException">Text whose answer sorts or compares the strings.</exception>
+        /// <exception cref="TypeError">A <c>StringDType</c> operand: <c>Unsuitable type ... for calculating minimum.</c> (a
+        ///     masked operand's unique, or the joined copy's masked sort).</exception>
+        /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand beside a class it has no common DType with.</exception>
         /// <remarks>
         ///     NumPy's statements: <c>ar1 = unique(ar1); ar2 = unique(ar2)</c>; <c>aux = ma.concatenate((ar1, ar2),
         ///     axis=None)</c>; an empty <c>aux</c> is the result; <c>aux.sort()</c>; <c>auxf = aux.filled()</c>; <c>flag =
@@ -728,6 +756,9 @@ namespace NumSharp
         public NDMaskedArray setxor1d(object ar1, object ar2, bool assume_unique = false)
         {
             using var scope = NDScope.Open();
+            // A StringDType operand: the refusals NumPy reaches before its first text comparison, without the uniques.
+            if (!assume_unique && (HoldsVString(ar1) || HoldsVString(ar2)))
+                VStringSetOpDryRun(SetOpKind.Setxor1d, ar1, ar2);
             object a1 = ar1, a2 = ar2;
             if (!assume_unique)
             {
@@ -777,6 +808,9 @@ namespace NumSharp
         /// <returns>The masked array of <paramref name="ar1"/>'s remaining values.</returns>
         /// <exception cref="ArgumentNullException">An operand is null.</exception>
         /// <exception cref="StringComputationNotSupportedException">Text whose answer sorts or compares the strings.</exception>
+        /// <exception cref="TypeError">A <c>StringDType</c> operand: <c>Unsuitable type ... for calculating minimum.</c> (a
+        ///     masked operand's unique, or in1d's argsort of the joined uniques).</exception>
+        /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand beside a class it has no common DType with.</exception>
         /// <remarks>
         ///     NumPy's statements: <c>ar1 = unique(ar1); ar2 = unique(ar2)</c>, then <c>ar1[in1d(ar1, ar2,
         ///     assume_unique=True, invert=True)]</c>, the masked flags selecting by their data. So a value of
@@ -787,6 +821,10 @@ namespace NumSharp
         public NDMaskedArray setdiff1d(object ar1, object ar2, bool assume_unique = false)
         {
             using var scope = NDScope.Open();
+            // A StringDType operand: NumPy's statements always end in a refusal (in1d's argsort of the StringDType join,
+            // unless something refuses first) — found without computing the uniques before it.
+            if (!assume_unique && (HoldsVString(ar1) || HoldsVString(ar2)))
+                VStringSetOpDryRun(SetOpKind.Setdiff1d, ar1, ar2);
             NDMaskedArray a1;
             object a2 = ar2;
             if (assume_unique)
@@ -796,11 +834,112 @@ namespace NumSharp
                 a1 = UniqueCore(ar1, false, false, out _, out _);
                 a2 = UniqueCore(ar2, false, false, out _, out _);
             }
-            // An empty ar1 selects nothing whatever in1d answers (its text formatting is the next phase).
-            if (a1.size == 0 && (a1.typecode == NPTypeCode.String || AsData(a2).typecode == NPTypeCode.String))
+            // An empty ar1 beside fixed-width text selects nothing whatever in1d answers (its text formatting is the next
+            // phase). StringDType is not shortcut: in1d's argsort refuses it even with nothing to select.
+            var d2 = AsData(a2);
+            if (a1.size == 0 && !a1._data.Storage.IsVString && !d2.Storage.IsVString
+                && (a1.typecode == NPTypeCode.String || d2.typecode == NPTypeCode.String))
                 return Yield(scope, a1);
             var keep = In1dCore(a1, a2, assume_unique: true, invert: true);
             return Yield(scope, MaskedTake(a1, keep._data));
+        }
+
+        /// <summary>The set routine a <see cref="VStringSetOpDryRun"/> follows.</summary>
+        private enum SetOpKind
+        {
+            /// <summary><c>in1d</c> / <c>isin</c>: <c>unique(ar1, return_inverse=True)</c>, <c>unique(ar2)</c>, the join,
+            ///     its argsort.</summary>
+            In1d,
+
+            /// <summary><c>setdiff1d</c>: <c>unique(ar1)</c>, <c>unique(ar2)</c>, then in1d's join and argsort.</summary>
+            Setdiff1d,
+
+            /// <summary><c>intersect1d</c>: <c>unique(ar1)</c>, <c>unique(ar2)</c>, the join, its sort.</summary>
+            Intersect1d,
+
+            /// <summary><c>setxor1d</c>: <c>unique(ar1)</c>, <c>unique(ar2)</c>, the flattened join (an empty one is
+            ///     returned), its sort.</summary>
+            Setxor1d,
+        }
+
+        /// <summary>Whether an operand of a set routine holds NEP 55 <c>StringDType</c> text (a masked array's data or a
+        ///     plain array; a C# string is a Python str, NumPy's <c>U</c>).</summary>
+        /// <param name="x">The operand.</param>
+        /// <returns>True for <c>StringDType</c> data.</returns>
+        private static bool HoldsVString(object x) => x switch
+        {
+            NDMaskedArray m => m._data.Storage.IsVString,
+            NDArray nd => nd.Storage.IsVString,
+            _ => false,
+        };
+
+        /// <summary>
+        ///     A dry run of NumPy's set-routine statements over a <c>StringDType</c> operand, up to its first comparison of
+        ///     text: raises the refusal NumPy reaches there, or returns when the routine goes on to compute (the real
+        ///     statements then run, deferring the computation or answering an empty input).
+        /// </summary>
+        /// <param name="kind">The routine.</param>
+        /// <param name="ar1">The first operand.</param>
+        /// <param name="ar2">The second operand.</param>
+        /// <exception cref="TypeError"><c>Unsuitable type ... for calculating minimum.</c> (a masked argsort or sort of
+        ///     <c>StringDType</c> data).</exception>
+        /// <exception cref="DTypePromotionError">The join of a <c>StringDType</c> unique with a class it has no common
+        ///     DType with.</exception>
+        /// <remarks>
+        ///     NumPy's <c>unique</c> calls compute (the hash of unmasked text, the sort of fixed-width text) before the
+        ///     refusals that decide these routines, and those computations cannot fail and cannot change the refusal: the
+        ///     refusals depend only on dtypes, on which operands are masked arrays, on whether a mask holds a True, and on
+        ///     emptiness. So each <c>unique</c> is replaced by a STAND-IN with exactly those properties — the operand
+        ///     flattened, its mask kept (<see cref="UniqueStandIn"/>) — after the refusal <c>unique</c> makes itself. The
+        ///     joins are NumPy's (<see cref="concatenate"/>: its promotion error and its mask), and the argsort / sort steps
+        ///     refuse as NumPy's do (<see cref="SetOpArgsort"/>, and <see cref="SortInPlace"/>'s rule: only with a True in
+        ///     the joined mask).
+        /// </remarks>
+        private void VStringSetOpDryRun(SetOpKind kind, object ar1, object ar2)
+        {
+            var a1 = UniqueStandIn(ar1, inverse: kind == SetOpKind.In1d);
+            var a2 = UniqueStandIn(ar2, inverse: false);
+            var joined = kind == SetOpKind.Setxor1d
+                ? concatenate(new object[] { a1, a2 }, axis: null)
+                : concatenate(new object[] { a1, a2 });
+            switch (kind)
+            {
+                case SetOpKind.In1d:
+                case SetOpKind.Setdiff1d:
+                    // `order = ar.argsort(kind='mergesort')` over the join (setdiff1d's in1d runs with assume_unique).
+                    SetOpArgsort(joined);
+                    return;
+                case SetOpKind.Setxor1d when joined.size == 0:
+                    // `if aux.size == 0: return aux` — the real statements return the empty join.
+                    return;
+                default:
+                    // `aux.sort()`: a mask holding a True takes the masked argsort, which refuses StringDType; without one
+                    // NumPy sorts the text (the real statements defer that, or order nothing).
+                    if (joined._mask is not null && np.any(joined._mask))
+                        ThrowIfUnsuitableExtremum(joined._data, "minimum");
+                    return;
+            }
+        }
+
+        /// <summary>
+        ///     The stand-in for <c>unique(x)</c> in <see cref="VStringSetOpDryRun"/>: the refusal NumPy's <c>_unique1d</c>
+        ///     makes for a masked <c>StringDType</c> operand, then the operand flattened with its mask — the dtype, the
+        ///     masked-ness and the emptiness of NumPy's unique result, which is all the later statements read.
+        /// </summary>
+        /// <param name="x">The operand (a masked array, a plain array or an array-like).</param>
+        /// <param name="inverse">True for <c>unique(x, return_inverse=True)</c> (in1d's first operand): the argsort path.</param>
+        /// <returns>The flattened masked stand-in.</returns>
+        /// <exception cref="TypeError">A masked <c>StringDType</c> operand that NumPy argsorts (with <paramref name="inverse"/>,
+        ///     or when a slot is masked: <c>ar.sort()</c> of a masked array is its argsort).</exception>
+        /// <remarks>A PLAIN <c>StringDType</c> operand goes through <c>np.unique</c> proper (ndarray's argsort / the hash),
+        ///     which computes without a refusal; an unmasked masked array takes the hash path. Both are stand-ins without a
+        ///     mask, as NumPy's results are. A mask with a True stays in the stand-in: NumPy's sorted unique keeps one masked
+        ///     slot, which is what the join's sort reads.</remarks>
+        private NDMaskedArray UniqueStandIn(object x, bool inverse)
+        {
+            if (x is NDMaskedArray m && m._data.Storage.IsVString && (inverse || m._mask is not null && np.any(m._mask)))
+                ThrowIfUnsuitableExtremum(m._data, "minimum");
+            return ravel(asarray(x));
         }
     }
 }

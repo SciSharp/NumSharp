@@ -229,7 +229,8 @@ namespace NumSharp
             // NumPy sorts (or hashes) text; string computation is the next phase of NumSharp's string support, so a
             // string array is refused here unless at most one element is ordered (the instance unique answers that).
             NDArray.ThrowIfTextUnique(x, null, "unique_values");
-            if (Backends.Strings.NDStringUfuncs.IsString(x))
+            // StringDType first: IsString refuses it loudly (its callers are fixed-width routes).
+            if (Backends.Strings.NDStringUfuncs.IsVString(x) || Backends.Strings.NDStringUfuncs.IsString(x))
                 return x.unique(return_index: false, return_inverse: false, return_counts: false, axis: null, equal_nan: false)[0];
             return x.uniqueValuesFast();
         }
@@ -255,7 +256,7 @@ namespace NumSharp
             // NumPy sorts text (the next phase of NumSharp's string support); at most one element orders nothing, and the
             // instance unique answers it.
             NDArray.ThrowIfTextUnique(x, null, "unique_counts");
-            var r = Backends.Strings.NDStringUfuncs.IsString(x)
+            var r = Backends.Strings.NDStringUfuncs.IsVString(x) || Backends.Strings.NDStringUfuncs.IsString(x)
                 ? x.unique(return_index: false, return_inverse: false, return_counts: true, axis: null, equal_nan: false)
                 : x.uniqueCountsFast();
             return new UniqueCountsResult(r[0], r[1]);

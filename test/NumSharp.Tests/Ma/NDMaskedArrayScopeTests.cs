@@ -65,10 +65,12 @@ namespace NumSharp.Tests.Ma
             }
 
             Assert.IsFalse(module.nomask.IsDisposed);
-            Assert.IsFalse(module.NDMasked.data.IsDisposed);
-            Assert.IsFalse(module.NDMasked.mask.IsDisposed);
+            // The singleton's own parts (the public data / mask properties are views, NumPy's: a view of a disposed
+            // buffer would read as alive).
+            Assert.IsFalse(module.NDMasked._data.IsDisposed);
+            Assert.IsFalse(module.NDMasked._mask.IsDisposed);
             Assert.IsFalse(module.nomask.GetAtIndex<bool>(0));
-            Assert.IsTrue(module.NDMasked.mask.GetAtIndex<bool>(0));
+            Assert.IsTrue(module.NDMasked._mask.GetAtIndex<bool>(0));
         }
 
         /// <summary>
@@ -263,7 +265,7 @@ namespace NumSharp.Tests.Ma
             // A collection proves the result does not merely survive by luck of timing.
             GcQuiescence.CollectSince(since);
 
-            Assert.IsFalse(r.data.IsDisposed);
+            Assert.IsFalse(r._data.IsDisposed);
             Assert.IsTrue(D(r).SequenceEqual(new double[] { 0, 0, 0, 1, 1, 1 }));
             Assert.IsTrue(ReferenceEquals(np.ma.getmask(r), np.ma.nomask));
         }
@@ -284,11 +286,12 @@ namespace NumSharp.Tests.Ma
                 var x = np.ma.array(np.array(new double[] { 1, 2, 3, 4 }).reshape(2, 2), np.array(new[] { false, true, false, false }).reshape(2, 2));
                 s = np.ma.sum(x, 0);
                 // Column 0: 1 + 3 = 4; column 1: only the 4 is unmasked.
-                Assert.IsFalse(s.data.IsDisposed);
+                Assert.IsFalse(s._data.IsDisposed);
                 Assert.IsTrue(D(s).SequenceEqual(new double[] { 4, 4 }));
             }
 
-            Assert.IsTrue(s.data.IsDisposed);
+            // The result's own data (the public data property is a fresh view per access, NumPy's).
+            Assert.IsTrue(s._data.IsDisposed);
         }
     }
 }

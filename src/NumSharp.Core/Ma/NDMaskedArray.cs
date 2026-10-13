@@ -203,14 +203,20 @@ namespace NumSharp
             return this;
         }
 
-        /// <summary>The underlying data array (NumPy's <c>MaskedArray.data</c>). Masked positions are included
-        /// with whatever value the producing op left; use <see cref="filled(object)"/> to substitute them.</summary>
-        public NDArray data => _data;
+        /// <summary>The underlying data array (NumPy's <c>MaskedArray.data</c>): a VIEW of the data, a new one per read
+        /// (<c>ndarray.view(self, self._baseclass)</c>), so it never owns its buffer (<c>flags.owndata</c> is False) and a
+        /// write through it reaches the masked array. Masked positions are included with whatever value the producing op
+        /// left; use <see cref="filled(object)"/> to substitute them.</summary>
+        /// <remarks>Each read allocates a view object; library code reads the field (<c>_data</c>) instead.</remarks>
+        public NDArray data => _data.view();
 
-        /// <summary>The boolean mask. Returns the shared <see cref="MaskedArrayModule.nomask"/> sentinel (a 0-d
-        /// <c>False</c>) when no element is masked, matching NumPy's <c>MaskedArray.mask</c> which yields
+        /// <summary>The boolean mask (NumPy's <c>MaskedArray.mask</c>): a VIEW of the mask array, a new one per read
+        /// (<c>self._mask.view()</c>, so the caller cannot change its dtype or shape in place), or the shared
+        /// <see cref="MaskedArrayModule.nomask"/> sentinel (a 0-d <c>False</c>) when no element is masked — NumPy yields
         /// <c>nomask</c> rather than a full <c>False</c> array in that case.</summary>
-        public NDArray mask => _mask ?? np.ma.nomask;
+        /// <remarks>A write through the view reaches the mask. Each read of an array mask allocates a view object; library
+        /// code reads the field (<c>_mask</c>) instead.</remarks>
+        public NDArray mask => _mask is null ? np.ma.nomask : _mask.view();
 
         /// <summary>The data shape as a <c>long[]</c> (NumPy's <c>.shape</c>; NumSharp dimensions are 64-bit).
         /// Data and mask share this shape.</summary>
@@ -425,8 +431,10 @@ namespace NumSharp
         /// <returns>The element's text.</returns>
         private static string ZeroDimElement(object value, NPTypeCode tc, bool reprForm)
         {
-            if (reprForm && tc == NPTypeCode.String)
-                return value is byte[] bytes ? PyRepr.Bytes(bytes) : PyRepr.Str((string)value);
+            // A text element prints as the Python object it is: a str / bytes by its repr in the repr body; a StringDType
+            // NA element is its NA object (None, nan, or the sentinel's own repr / str).
+            if (tc == NPTypeCode.String)
+                return reprForm ? NDPyObject.Repr(value) : NDPyObject.Str(value);
             return ArrayFormatter.ScalarStr(value, tc);
         }
 
@@ -525,7 +533,10 @@ namespace NumSharp
             DType ddt = _data.dtype;
             // `if self._fill_value.dtype.kind in ("S", "U") and self.dtype.kind == self._fill_value.dtype.kind:
             //  fill_repr = repr(self.fill_value.item())` — the default 'N/A' is <U3 whatever the data's width.
-            if (stored.typecode == NPTypeCode.String && _data.typecode == NPTypeCode.String && fdt.kind == ddt.kind)
+            // The kinds are 'S' / 'U' only: a StringDType fill (kind 'T') of StringDType data prints by the NEXT branch, the
+            // str of the stored 0-d array (fill_value=zz, unquoted).
+            if (stored.typecode == NPTypeCode.String && _data.typecode == NPTypeCode.String && fdt.kind == ddt.kind
+                && fdt.kind is 'S' or 'U')
             {
                 if (fv is NDArray arrayFill)
                 {
@@ -1330,6 +1341,11 @@ namespace NumSharp
         ///     slots like any plain value.</param>
         /// <exception cref="TypeError"><paramref name="value"/> is null and the data is an integer (or <c>decimal</c>) array:
         ///     Python's <c>int(None)</c>.</exception>
+        /// <exception cref="AttributeError">A HARD mask over <c>StringDType</c> data and an index that selects one element:
+        ///     NumPy's hard branch asks the element (a Python str or NA object) for its <c>size</c> (<c>'str' object has no
+        ///     attribute 'size'</c>).</exception>
+        /// <exception cref="ValueError">A C# number stored into <c>StringDType(coerce=False)</c> data (<c>StringDType only
+        ///     allows string data when string coercion is disabled.</c>).</exception>
         /// <remarks>
         ///     Scoped by <c>[NDScoped]</c> (a <c>void</c> method has no egress, so the weaver needs nothing from the
         ///     body): the 0-D True/False scalars, the value normalized from a scalar/array-like, and the hard-mask
@@ -1360,6 +1376,16 @@ namespace NumSharp
             // this correct for every index kind — the fancy/boolean SET scatters through the array (unlike the
             // COPY the getter returns), so the write always lands, and the restore is index-agnostic.
             bool hard = _hardmask && _mask is not null;
+            // NumPy's hard branch reads `dindx = self._data[indx]` and asks `dindx.size`: one StringDType ELEMENT is a Python
+            // object (a str, or the NA object: None / a float NaN / a str sentinel), which has no `size`. Raised before any
+            // write, whatever the value. (A boolean index takes NumPy's other hard branch; any index that keeps an axis
+            // reads a sub-array, which has a size.)
+            if (hard && _data.Storage.IsVString)
+            {
+                var element = _data[indices];
+                if (element.ndim == 0)
+                    throw new AttributeError($"'{ElementPythonTypeName(element.GetAtIndex(0))}' object has no attribute 'size'");
+            }
             NDArray savedMask = hard ? _mask.copy() : null;
             NDArray savedData = hard ? _data.copy() : null;
             // Whether the write below reached the MASK buffer; without such a write the mask still equals its
@@ -1387,8 +1413,15 @@ namespace NumSharp
                 // `np.ma.getdata` is the public face of the module's operand normalizer (scalar→0-d, array-like→array).
                 // A null is Python's None: NumPy's `dval = getattr(None, '_data', None)` is None itself, stored by the
                 // ndarray setter (NaN / nan+nanj / False / 'None', or int(None)'s TypeError), and `getmask(None)` is nomask,
-                // so the slots are unmasked like for any plain value.
-                _data[indices] = value is null ? null : np.ma.getdata(value);
+                // so the slots are unmasked like for any plain value. A C# scalar is the Python scalar NumPy's `dval` is:
+                // the literal mark lets the store apply setitem's rules (a StringDType(coerce=False) refuses a number, a
+                // Python int out of an integer dtype's range raises), where getdata's unmarked 0-d array would be CAST.
+                _data[indices] = value switch
+                {
+                    null => null,
+                    NDArray or NDMaskedArray or Array => np.ma.getdata(value),
+                    _ => NDArray.FromPythonOperand(value),
+                };
                 if (!hard && _mask is not null)
                     _mask[indices] = NDArray.Scalar(false);
             }
@@ -1408,6 +1441,21 @@ namespace NumSharp
                 np.copyto(_data, savedData, casting: "unsafe", where: _mask);
             }
         }
+
+        /// <summary>
+        ///     The Python type of one NEP 55 <c>StringDType</c> element as NumPy's scalar access returns it (the type a
+        ///     Python error quotes): <c>str</c> for a text, and for an NA element its NA object's type — <c>NoneType</c>,
+        ///     <c>float</c> for a NaN, <c>str</c> for a string sentinel.
+        /// </summary>
+        /// <param name="element">The element as the storage decodes it (a string, null, or the NA object).</param>
+        /// <returns>The Python type name.</returns>
+        private static string ElementPythonTypeName(object element) => element switch
+        {
+            string => "str",
+            null => "NoneType",
+            double or float => "float",
+            _ => element.GetType().Name,
+        };
 
         /// <summary>Promotes a <c>nomask</c> array to a real all-False boolean mask (NumPy's implicit
         /// <c>_mask = make_mask_none(...)</c> on the first masking write). No-op when a mask already exists.</summary>
@@ -2163,7 +2211,10 @@ namespace NumSharp
         ///     default false aliases them — a given boolean mask array of the data's shape is ADOPTED (the masked array then
         ///     writes into it, as NumPy's does, and <see cref="getmask"/> returns it), the data's own mask is shared through
         ///     a view.</param>
-        /// <param name="dtype">Optional dtype to cast the data to.</param>
+        /// <param name="dtype">Optional dtype: an array (or masked array) is CAST to it; a C# array-like is converted INTO it
+        ///     (NumPy's <c>np.array(data, dtype=dtype)</c>: <c>new object[] { "ab", null }</c> with
+        ///     <c>StringDType(na_object: null)</c> holds an NA element, numbers with <c>StringDType(coerce: false)</c> are
+        ///     refused).</param>
         /// <param name="hard_mask">True/false makes the result's mask HARD/soft (NumPy's <c>hard_mask=</c>: a hard mask
         ///     refuses a plain-value assignment's unmasking, see <see cref="NDMaskedArray.harden_mask()"/>); null inherits
         ///     <paramref name="data"/>'s hardness. The default is false, NumPy's <c>ma.array</c> FUNCTION
@@ -2177,6 +2228,8 @@ namespace NumSharp
         ///     (<c>Mask and data not compatible: data size is 3, mask size is 2.</c>).</exception>
         /// <exception cref="TypeError">A <see cref="string"/> <paramref name="fill_value"/> for numeric data (see
         ///     <see cref="CheckFillValue"/>).</exception>
+        /// <exception cref="ValueError">A C# array-like holding numbers with a <c>StringDType(coerce: false)</c>
+        ///     <paramref name="dtype"/> (<c>StringDType only allows string data when string coercion is disabled.</c>).</exception>
         /// <exception cref="StringComputationNotSupportedException">A non-empty text mask (NumPy reads the strings' truth
         ///     values), or a fill value that must be formatted as text or parsed as a number.</exception>
         /// <remarks>
@@ -2196,13 +2249,21 @@ namespace NumSharp
         {
             using var scope = NDScope.Open();
             var source = data as NDMaskedArray;
-            var d = AsData(data);
+            // A C# array-like with a dtype is NumPy's `np.array(data, dtype=dtype)`: the elements are discovered INTO the
+            // dtype (a None is a StringDType NA element, a number is setitem's str() — refused by StringDType(coerce=False)),
+            // where converting first would build an object array (None) or cast the numbers (which coerce=False allows).
+            bool discovered = dtype is not null && data is Array && data is not NDArray;
+            var d = discovered ? np.array((Array)data, dtype) : AsData(data);
             // dtype cast happens first (and subsumes the copy — astype makes a new buffer on a real cast, and
-            // copy=true forces one even when the dtype already matches); mask stays boolean regardless of dtype.
-            if (dtype != null)
-                d = d.astype(dtype, copy);
-            else if (copy)
-                d = d.copy();
+            // copy=true forces one even when the dtype already matches); mask stays boolean regardless of dtype. A
+            // discovered array is already new and of the dtype.
+            if (!discovered)
+            {
+                if (dtype != null)
+                    d = d.astype(dtype, copy);
+                else if (copy)
+                    d = d.copy();
+            }
             // np.array(masked, subok=True) keeps the data's mask: copied with the data (`_mask.copy()`), else a VIEW of it
             // (`__array_finalize__` over the same data: `_mask = _mask.view()`) — shared memory, not the same object.
             NDArray existing = source?._mask;
@@ -2519,6 +2580,11 @@ namespace NumSharp
                     // np.asarray(b'1.5', dtype=float64) packs the bytes object with the dtype's setitem (float(b'1.5')).
                     if (!textData)
                         return BytesFillToNumber(b, ndtype);
+                    // A Python bytes object into a StringDType(coerce=False): stringdtype_setitem accepts only a str, and its
+                    // ValueError is numpy.ma's TypeError (a StringDType that coerces decodes the bytes as an S cast does).
+                    if (ndtype.Meta is VStringDTypeMeta && !ndtype.coerce)
+                        throw new TypeError($"Cannot convert fill_value {PyRepr.Bytes(b)} to dtype {ndtype}",
+                            new ValueError(Backends.Unmanaged.VStringArraySlice.CoercionDisabledText));
                     using (var src = NDArray.Scalar(b))
                         return TextFillToDType(src, ndtype, PyRepr.Bytes(b));
                 case NDMaskedArray m:
@@ -2534,9 +2600,19 @@ namespace NumSharp
                     return ConvertNumericFill(nd, nd.WasPythonLiteral ? nd.Storage.GetAtIndex(0) : null, ndtype);
                 default:
                     // A C# number, bool, char, Half, decimal, Complex or BigInteger: into a text dtype NumPy formats it as
-                    // its str() (np.asarray(5, dtype='U3') is '5'), which cannot fail.
+                    // its str() (np.asarray(5, dtype='U3') is '5'), which fails only for a StringDType(coerce=False): its
+                    // setitem takes only a str, and numpy.ma turns that ValueError into its own TypeError.
                     if (textData)
-                        return NDStringArrays.FromScalar(fill_value, ndtype);
+                    {
+                        try
+                        {
+                            return NDStringArrays.FromScalar(fill_value, ndtype);
+                        }
+                        catch (ValueError e)
+                        {
+                            throw new TypeError($"Cannot convert fill_value {PolyIndexArgument.Format(fill_value)} to dtype {ndtype}", e);
+                        }
+                    }
                     return ConvertNumericFill(fill_value, NDArray.IsStoreScalar(fill_value) ? fill_value : null, ndtype);
             }
         }
@@ -3093,6 +3169,8 @@ namespace NumSharp
         ///     element of a <c>U</c> array starts with a unit above U+10FFFF.</exception>
         private static NDArray FlattenTextMask(NDArray data)
         {
+            if (data.Storage.IsVString)
+                return FlattenVStringMask(data);
             if (data.ndim == 0)
             {
                 using var scalar = Backends.Strings.NDStringTruth.Truth(data, Backends.Strings.NDStringTruth.Flavor.Cast);
@@ -3125,6 +3203,51 @@ namespace NumSharp
             var length = np.where(np.any(nonzero, axis: 1), width - fromEnd, (NDArray)0L);
             var keep = np.arange(width).reshape(1, width) < length.reshape(-1, 1);       // (n, width)
             return nonzero[keep];
+        }
+
+        /// <summary>
+        ///     NumPy's <c>flatten_mask</c> over NEP 55 <c>StringDType</c>: <c>_flatsequence</c> iterates the array, whose
+        ///     elements are Python objects — a text is a <c>str</c> (a non-empty one recurses forever: Python's RecursionError;
+        ///     an empty one iterates to nothing), an NA element is the descriptor's NA object (<c>None</c> and a float are not
+        ///     iterable and yield their truth: <c>None</c> False, <c>nan</c> True; a string NA object is a <c>str</c> again). A
+        ///     0-d array cannot be iterated, so it is the one element: its bool cast in a length-1 array.
+        /// </summary>
+        /// <param name="data">The <c>StringDType</c> array.</param>
+        /// <returns>The flattened bool array (fresh, 1-D): the truths of the NA elements, in C order.</returns>
+        /// <exception cref="RuntimeError">An element is a non-empty <c>str</c> (a text, or a string NA object): Python's
+        ///     <c>maximum recursion depth exceeded</c> (NumPy's RecursionError, a RuntimeError).</exception>
+        private static NDArray FlattenVStringMask(NDArray data)
+        {
+            if (data.ndim == 0)
+            {
+                // `np.array([a], dtype=bool)` of the 0-d array: the StringDType -> bool cast of its element.
+                using var truth = data.astype(np.@bool);
+                return truth.reshape(1).copy();
+            }
+            using var flat = np.ravel(data);
+            var bits = new List<bool>();
+            for (long i = 0; i < flat.size; i++)
+            {
+                switch (flat.Storage.GetAtIndex(i))
+                {
+                    case string text:
+                        // A str element (or a string NA object) recurses into its characters: forever when non-empty.
+                        if (text.Length != 0)
+                            throw new RuntimeError("maximum recursion depth exceeded");
+                        continue;
+                    case null:
+                        bits.Add(false);
+                        continue;
+                    case double d:
+                        bits.Add(d != 0.0 || double.IsNaN(d));
+                        continue;
+                    case var other:
+                        // Any other NA object yields itself; its truth is Python's bool() of it.
+                        bits.Add(Convert.ToBoolean(other, System.Globalization.CultureInfo.InvariantCulture));
+                        continue;
+                }
+            }
+            return np.array(bits.ToArray());
         }
 
         /// <summary>
@@ -3290,6 +3413,9 @@ namespace NumSharp
                 // size, and np.isfinite then refuses the text whatever the mask held. So the size check, then the TypeError.
                 if (mask is not null && !ReferenceEquals(mask, nomask) && mask is not bool)
                     CheckMaskFitsData(AsData(mask), source);
+                // np.isfinite's refusal: the dispatcher's class text for a StringDType, the legacy resolver's for S / U.
+                if (source.Storage.IsVString)
+                    throw NDStringUfuncs.VStringNoLoop("isfinite", new[] { source.dtype.Meta.ToString() });
                 throw NDStringUfuncs.NotSupportedForInputTypes("isfinite");
             }
             // masked_array(a, copy=copy, mask=mask): the given mask ORs with a's own (keep_mask) after NumPy's shape rules,
@@ -4342,6 +4468,10 @@ namespace NumSharp
                 fa = fa.astype(strongA, copy: false);
             if (BareScalarStrongDtype(n) is null)
                 StrongZeroDimOperands(ref fa, ref fn);
+            // A StringDType value: no shift loop takes it, and NumPy's refusal names a bare C# number by NEP 50's abstract
+            // Python class (_PyLongDType / _PyFloatDType), which only the literal mark carries (AsData's 0-d is unmarked).
+            if (fa.Storage.IsVString && n is not null && n is not NDArray && n is not NDMaskedArray)
+                fn = NDArray.FromPythonOperand(n);
             var raw = left ? np.left_shift(fa, fn) : np.right_shift(fa, fn);
             if (deferral is not null)
                 throw deferral;
@@ -4417,17 +4547,28 @@ namespace NumSharp
         ///     a masked slot can never win a min): +inf for float/complex, MaxValue for integers/decimal/char,
         ///     the integer <c>1</c> for bool, and null for a text dtype. NumPy's <c>minimum_fill_value</c>.
         /// </summary>
-        /// <param name="a">Array-like whose dtype selects the value.</param>
+        /// <param name="a">A <see cref="DType"/>, or an array-like whose dtype selects the value (NumPy's
+        ///     <c>_get_dtype_of</c>).</param>
         /// <returns>A boxed scalar castable into the dtype, or null for a text dtype.</returns>
         /// <remarks>NumPy's <c>min_filler</c> table holds <c>None</c> for <c>str_</c>/<c>bytes_</c> (no largest text), and its
         /// reductions then fill with the array's own fill value (<c>self.filled(None)</c>); the bool entry is the Python
         /// int <c>1</c>, which is why the result is a <see cref="long"/> rather than <c>true</c>.</remarks>
+        /// <exception cref="TypeError">A NEP 55 <c>StringDType</c> operand or dtype: <c>Unsuitable type StringDType() for
+        ///     calculating minimum.</c> (see <see cref="ThrowIfUnsuitableExtremum(DType,string)"/>).</exception>
         public object minimum_fill_value(object a)
         {
+            // `_get_dtype_of(obj)`: a dtype is the dtype itself (nothing to materialize).
+            if (a is DType dtype)
+            {
+                ThrowIfUnsuitableExtremum(dtype, "minimum");
+                return MinFill(dtype.typecode);
+            }
             // Scoped by hand (an object return): a scalar/array-like operand is materialized only to read its
             // dtype, and is reclaimed.
             using var scope = NDScope.Open();
-            return MinFill(AsData(a).typecode);
+            var d = AsData(a);
+            ThrowIfUnsuitableExtremum(d, "minimum");
+            return MinFill(d.typecode);
         }
 
         /// <summary>
@@ -4435,16 +4576,63 @@ namespace NumSharp
         ///     -inf for float/complex, MinValue for integers/decimal, the integer <c>0</c> for bool, and null for a text
         ///     dtype. NumPy's <c>maximum_fill_value</c>.
         /// </summary>
-        /// <param name="a">Array-like whose dtype selects the value.</param>
+        /// <param name="a">A <see cref="DType"/>, or an array-like whose dtype selects the value (NumPy's
+        ///     <c>_get_dtype_of</c>).</param>
         /// <returns>A boxed scalar castable into the dtype, or null for a text dtype.</returns>
         /// <remarks>See <see cref="minimum_fill_value"/>: NumPy's <c>max_filler</c> holds <c>None</c> for text and the
         /// Python int <c>0</c> for bool.</remarks>
+        /// <exception cref="TypeError">A NEP 55 <c>StringDType</c> operand or dtype: <c>Unsuitable type StringDType() for
+        ///     calculating maximum.</c> (see <see cref="ThrowIfUnsuitableExtremum(DType,string)"/>).</exception>
         public object maximum_fill_value(object a)
         {
+            // `_get_dtype_of(obj)`: a dtype is the dtype itself (nothing to materialize).
+            if (a is DType dtype)
+            {
+                ThrowIfUnsuitableExtremum(dtype, "maximum");
+                return MaxFill(dtype.typecode);
+            }
             // Scoped by hand (an object return): a scalar/array-like operand is materialized only to read its
             // dtype, and is reclaimed.
             using var scope = NDScope.Open();
-            return MaxFill(AsData(a).typecode);
+            var d = AsData(a);
+            ThrowIfUnsuitableExtremum(d, "maximum");
+            return MaxFill(d.typecode);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_extremum_fill_value</c> refusal: the fill tables (<c>min_filler</c> / <c>max_filler</c>, built from
+        ///     <c>sctypeDict</c>) are keyed by the dtype's SCALAR TYPE, and a NEP 55 <c>StringDType</c>'s type is Python's
+        ///     <c>str</c>, which no entry names (<c>np.str_</c> / <c>np.bytes_</c> map to None, so the fixed-width classes pass).
+        ///     The <c>KeyError</c> becomes <c>TypeError: Unsuitable type StringDType() for calculating minimum.</c>, the
+        ///     dtype by its str (the NA object and <c>coerce</c> included).
+        /// </summary>
+        /// <param name="data">The operand's data.</param>
+        /// <param name="extremum"><c>"minimum"</c> or <c>"maximum"</c>.</param>
+        /// <exception cref="TypeError"><paramref name="data"/> holds <c>StringDType</c> text.</exception>
+        /// <remarks>
+        ///     Every numpy.ma member that orders or extremizes an array asks for this fill FIRST, before it reads the mask:
+        ///     <c>min</c> / <c>max</c> / <c>ptp</c> / <c>argmin</c> / <c>argmax</c> / <c>argsort</c> / <c>sort</c> (with a mask) /
+        ///     <c>median</c> (with a mask) / <c>unique</c> and the set routines built on them — so all of them raise this for a
+        ///     <c>StringDType</c> array, whatever it holds.
+        /// </remarks>
+        private static void ThrowIfUnsuitableExtremum(NDArray data, string extremum)
+        {
+            if (data.Storage.IsVString)
+                throw new TypeError($"Unsuitable type {data.dtype} for calculating {extremum}.");
+        }
+
+        /// <summary>
+        ///     The refusal of <see cref="ThrowIfUnsuitableExtremum(NDArray,string)"/> for a dtype given as such (NumPy's
+        ///     <c>minimum_fill_value(np.dtypes.StringDType())</c>).
+        /// </summary>
+        /// <param name="dtype">The dtype.</param>
+        /// <param name="extremum"><c>"minimum"</c> or <c>"maximum"</c>.</param>
+        /// <exception cref="TypeError"><paramref name="dtype"/> is a <c>StringDType</c> (named by its str: NA object and
+        ///     <c>coerce</c> included).</exception>
+        private static void ThrowIfUnsuitableExtremum(DType dtype, string extremum)
+        {
+            if (dtype.Meta is VStringDTypeMeta)
+                throw new TypeError($"Unsuitable type {dtype} for calculating {extremum}.");
         }
 
         /// <summary>Per-dtype "largest" fill (for min/argmin) — see <see cref="minimum_fill_value"/>.</summary>
@@ -4591,6 +4779,19 @@ namespace NumSharp
         /// <returns><paramref name="data"/> itself, or a fresh K-order filled copy.</returns>
         private static NDArray FilledForReduction(NDArray data, NDArray mask, object fill)
         {
+            if (data.Storage.IsVString)
+            {
+                // `fill_value = _check_fill_value(fill_value, self.dtype)` runs before `m.any()`: a StringDType stores the
+                // identity as its str() ('0', '1', 'True'), and a StringDType(coerce=False) refuses it (numpy.ma's
+                // "Cannot convert fill_value 0 to dtype StringDType(coerce=False)"). The checked 0-d text is what fills.
+                using var checkedFill = fill is null ? null : MaskedArrayModule.CheckFillValue(fill, data.dtype);
+                if (!np.any(mask))
+                    return data;
+                var t = data.copy('K');
+                if (checkedFill is not null)
+                    np.copyto(t, checkedFill, where: mask);
+                return t;
+            }
             // `elif not m.any(): return self._data` — nothing to substitute, and no copy.
             if (!np.any(mask))
                 return data;
@@ -6365,6 +6566,12 @@ namespace NumSharp
         {
             using var scope = NDScope.Open();
             var data = AsData(a);
+            // `xnew = filled(x, value)` checks the value against the dtype first when x carries a mask (a nomask array
+            // returns its data unchecked): a StringDType(coerce=False) refuses a non-text value here, before the comparison.
+            // (A StringDType stores a number as its str(), a phase-1 cast; the fixed-width classes format it, which is why
+            // they are not checked here — the comparison below refuses them first, as NumPy's answer does.)
+            if (data.Storage.IsVString && a is NDMaskedArray { _mask: not null })
+                CheckFillValue(value, data.dtype);
             if (data.typecode == NPTypeCode.String && PythonScalarClass(value) is { } scalarClass)
                 throw ComparisonNoLoop("equal", data.dtype.Meta, scalarClass);
             // NumPy fills masked positions with `value` FIRST (xnew = filled(x, value)), THEN masks by
@@ -7426,7 +7633,9 @@ namespace NumSharp
         /// a slice makes that slice's median NaN, matching NumPy).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
         /// <exception cref="TypeError">A text operand: NumPy's <c>_median</c> averages the middles with <c>mean</c>, whose
-        ///     <c>add.reduce</c> has no string loop (<c>the resolved dtypes are not compatible with add.reduce</c>).</exception>
+        ///     <c>add.reduce</c> has no string loop (<c>the resolved dtypes are not compatible with add.reduce</c>); a
+        ///     <c>StringDType</c> operand with a mask (an all-False one included) stops earlier, at the masked sort's
+        ///     <c>Unsuitable type ... for calculating minimum.</c></exception>
         /// <remarks>Scoped by hand: the compressed copy, the masked sort, the middle-index arithmetic, the gathered
         /// middles and the NaN probe (see <see cref="MedianAxisMasked"/>) are all reclaimed here; only the median
         /// and its mask leave.</remarks>
@@ -7445,6 +7654,9 @@ namespace NumSharp
             {
                 if (axis is { } textAxis && (textAxis < -d.ndim || textAxis >= d.ndim))
                     throw new AxisError(textAxis, d.ndim);
+                // StringDType: _median's `sort(a, ...)` is the masked sort, whose argsort asks for minimum_fill_value
+                // before anything is ordered — NumPy's Unsuitable type refusal, an all-False mask included.
+                ThrowIfUnsuitableExtremum(d, "minimum");
                 np.mean(d);
                 // np.mean never returns for a string dtype; this keeps the method total if that ever changes.
                 throw NDStringUfuncs.NextPhase("median", d.dtype);
@@ -8856,6 +9068,10 @@ namespace NumSharp
         [NDScoped]
         public NDArray argsort(object a, int? axis, bool endwith = true, object fill_value = null)
         {
+            // `if fill_value is None: fill_value = minimum_fill_value(self)` runs before `self.filled(fill_value)` reads the
+            // mask: a StringDType masked array refuses there (Unsuitable type), with a mask or without one.
+            if (fill_value is null && a is NDMaskedArray { _data.Storage.IsVString: true })
+                _ = SortFill(a, endwith);
             var d = (a as NDMaskedArray)?._mask is null ? AsData(a) : ((NDMaskedArray)a).filled(fill_value ?? SortFill(a, endwith));
             // `filled.argsort(axis=None)` sorts the flattened array.
             return axis is null ? np.argsort(np.ravel(d), -1) : np.argsort(d, axis.Value);

@@ -104,6 +104,13 @@ namespace NumSharp.Backends.Strings
         ///     the strings and whose line kernel returns for a line of one element); otherwise take <see cref="ReduceStandIn(string, NDArray, int?)"/>.</remarks>
         internal static void ThrowIfComputes(string op, NDArray a, int? axis = null)
         {
+            if (IsVString(a))
+            {
+                // The StringDType form: the same checks, then the shape-decided answer or the phase-2 deferral (the caller's
+                // path handles the shape-decided text itself, as it does for the fixed-width classes).
+                VStringStandIn(op, a, axis).Dispose();
+                return;
+            }
             if (!IsString(a))
                 return;
             ValidateReduceAxis(op, a.ndim, axis);
@@ -132,6 +139,10 @@ namespace NumSharp.Backends.Strings
         ///     not yet (the sorts and arg-reductions).</exception>
         internal static NDArray ReduceStandIn(string op, NDArray a, int? axis = null)
         {
+            // A StringDType input: no truth route yet (a truth test reads the text, phase 2); the shape-decided answers run
+            // on the bool stand-in like the fixed-width ones.
+            if (IsVString(a))
+                return VStringStandIn(op, a, axis);
             if (!IsString(a))
                 return null;
             if (TruthFlavorOf(op) is { } flavor)
@@ -175,6 +186,14 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="StringComputationNotSupportedException"><paramref name="op"/> is not a truth test (no caller passes one).</exception>
         internal static NDArray ReduceStandIn(string op, NDArray a, int[] axes)
         {
+            if (IsVString(a))
+            {
+                // A tuple axis only reaches any / all: an empty input reads no element, anything else is a truth test.
+                ValidateReduceAxes(op, a.ndim, axes);
+                if (a.size != 0)
+                    throw NextPhaseVString(op, a.dtype);
+                return BoolStandIn(a);
+            }
             if (!IsString(a))
                 return null;
             ValidateReduceAxes(op, a.ndim, axes);

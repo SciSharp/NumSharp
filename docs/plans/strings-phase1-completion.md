@@ -149,7 +149,7 @@ Three rules keep that safe:
 | P1.4 | `T` movement: the reference-aware copy core (inline cells move as blocks; arena and heap strings are duplicated), behind every movement entry, and the loud refusal on every raw path. | P1.3 | L | yes |
 | P1.5 | `T` creation, element access and printing: `np.array` / `asarray` / `empty` / `zeros` / `ones` / `full` and the `_like` forms, the `setitem` coercion (uses P1.1), `item` / `tolist` / `foreach` / `AsStringArray` / `(Array)`, NA objects, `repr` / `str` / `array2string`. | P1.1, P1.3 | M | yes |
 | P1.6 | `T` casts: `T` ↔ `T` (NA rules), `T` ↔ `U` / `S`, `T` ↔ bool, `T` ↔ numbers (uses P1.1). | P1.1, P1.4 | M | yes |
-| P1.7 | `T` in the rest of the library: `np.nditer` (`refs_ok`, buffered casts), numpy.ma (fill `'N/A'`), `loadtxt` / `savetxt`, `.npy` (D3), the whole-surface sweep with `T` (NumPy's refusals and shape-decided answers in NumPy's order; computation deferred to phase 2). | P1.4–P1.6 | L | `np.nditer` done 2026-10-13; the rest prepared in §6 (packages P1.7b–P1.7g); P1.7b (`None` into numbers) done 2026-10-13 |
+| P1.7 | `T` in the rest of the library: `np.nditer` (`refs_ok`, buffered casts), numpy.ma (fill `'N/A'`), `loadtxt` / `savetxt`, `.npy` (D3), the whole-surface sweep with `T` (NumPy's refusals and shape-decided answers in NumPy's order; computation deferred to phase 2). | P1.4–P1.6 | L | `np.nditer` done 2026-10-13; the rest prepared in §6 (packages P1.7b–P1.7g); P1.7b (`None` into numbers) done 2026-10-13; P1.7d (numpy.ma) done 2026-10-13 |
 | P1.8 | Bridges and leftovers: pythonnet `S` / `U` zero-copy both ways and `T` as a copy (D7); D10 (D6). | — | M | done (D10 with P1.1, the bridge 2026-10-13) |
 | P1.9 | Gate, speed, docs: oracle sections for the new behavior with zero excuses; unit tests that cover all new phase-1 code; lifetime tests and runs under `FencedMemory` / guard pages; a mutation pass; a benchmark sheet (≥ 1.5× NumPy at 1K / 100K / 1M); docs. | with every package | M | yes |
 
@@ -450,6 +450,51 @@ After this plan, phase 2 loses P2.4 and gains the `T` forms of P2.1–P2.6 plus 
   - Kept: `np.pad(constant_values: null)` stays the omitted default; `setfield` over `T` stays the phase-1 refusal (P1.7f).
   - Gates: string-oracle section `storenone` 375 → 2,606 cases (every route × 13 numeric + 6 text targets, the orders,
     1,331 NumPy errors) + `Backends/NoneStoreTests.cs`; unit 19,241 / 19,240 and oracle 316 green on net10.0 / net8.0.
+- 2026-10-13 — **P1.7d: numpy.ma over `StringDType`** (owner's request: "P1.7d, numpy.ma with StringDType (medium): the
+  'N/A' fill value and every member. The min/max members raise NumPy's Unsuitable type error, and comparisons wait for
+  phase 2").
+  - New oracle section `tma` (4,167 cases): strma's two tables over 14 `T` variants (1-D, 2-D, empty, 0-d, all masked,
+    a fill value, long texts, the three NA descriptors with an NA element, `coerce=False`), the binary functions over
+    20 pairs (`T` / `U` / `S` / numeric / value), 87 constructors, and element access / stores / casts. The phase follows
+    whether NumPy COMPUTED on the text: the call runs a second time over `_TTrace` views, which record every ufunc that
+    reaches a `StringDType` loop (an error that benign texts raise too is a setup error) and every text-reading method;
+    calls the tracer cannot see (`_TMA_UNTRACEABLE`: the hash unique, `ndarray.sort` on the masked array, the C truth
+    loops) keep the outcome's phase. 437 cases defer (comparisons, `add`, the logical ufuncs, the sums, `cumsum`, `all` /
+    `any`, the truth loops, sorting); the section's deferral ceiling is that count.
+  - The fill: `'N/A'` stored as `<U3` (read back as a string); a `T` fill stored as `T`; `_check_fill_value` wraps
+    `coerce=False`'s ValueError as `Cannot convert fill_value 5 to dtype StringDType(coerce=False)` (bytes too); the repr
+    prints a `T` fill by its str; an NA element prints as its NA object; `flatten_mask` follows Python's iteration of each
+    element (a non-empty str recurses forever: RecursionError).
+  - The refusals: every member that orders or extremizes raises `Unsuitable type ... for calculating minimum.` (or
+    `maximum`) before it reads the mask, a dtype argument included (`minimum_fill_value(T)`); the ufunc members raise the
+    dispatcher's text naming DType classes and NEP 50's abstract classes for C# literals (new
+    `NDStringUfuncs.VString.cs`: unary / binary / reduction answers, the loops `T` has — the comparisons, `add`, `multiply`
+    by an integer, `maximum` / `minimum`, the logical ufuncs, `isnan` — defer, `isclose` promotes `y` first); `np.clip`,
+    the shifts, `hypot` / `logaddexp`, `np.angle`, `np.round` (`multiply` / `true_divide` by a Python float), `np.trace`
+    (the diagonal's reduction) each name their own ufunc and operands.
+  - The set routines run a DRY RUN first (`VStringSetOpDryRun`): each `unique` replaced by a stand-in with the operand's
+    dtype, masked-ness and emptiness, then NumPy's joins and sorts, so the refusal is reached without the computations
+    before it (`isin(MU, MT)` sorts `U` text in NumPy first). `np.unique` over `T`: one element or none is answered,
+    two or more defer, an axis over two or more dimensions is `The axis argument to unique is not supported for dtype
+    StringDType()` (zero-width rows: `Cannot change data-type for array of references.`).
+  - The legacy products: `PyArray_ObjectType` refuses a `StringDType` first operand (and a `U` one beside it: their
+    promotion is a `StringDType`) with the two-line legacy-only text; beside any other class the promotion fails, NumPy
+    continues with OBJECT, and the first Python product decides (`1.5 * 'x'`, `b'a' * 'x'`, `1.5 * None`, `'x' * 1.5`
+    after `np.correlate`'s swap); NumSharp models NumPy's order up to that product (`np.dot`'s 0-d multiply and `out=`,
+    the alignment, `new_array_for_sum`; `PyArray_FromAny`'s depth and the emptiness checks for the sliding products) and
+    refuses a product that does not raise (an object array). `np.vander` raises `promote_types`'s DTypePromotionError.
+  - Stores and construction: a hard mask's single-element store raises `'str' object has no attribute 'size'`
+    (`'NoneType'` / `'float'` for an NA element); a C# number stored into a masked array is a Python number (breaking for
+    every dtype: `x[1] = 300` into int8 raises OverflowError, it wrapped); `masked_values` checks the fill before the
+    comparison; `ma.array(list, dtype=...)` converts the list into the dtype (`None` an NA element, `coerce=False` refuses
+    numbers).
+  - `.data` / `.mask` return a NEW view per access, NumPy's `ndarray.view(self, self._baseclass)` / `self._mask.view()`
+    (breaking). The oracle adapters that disposed `x.data` disposed a fresh view instead: the leak gate failed with 513
+    families until they read the `_data` field.
+  - Found, not fixed (pre-existing, every dtype): `NDArray.view()` of a disposed array returns a live view over the freed
+    buffer (`InitializeArc` ignores `TryAddRef`'s failure), so a `.data` read after a scope closed reads freed memory.
+  - Gates: section `tma` 4,167 / 4,167 (437 deferred), every string section green; unit 19,252 / 19,251 and oracle 317
+    green on net10.0 / net8.0; `Ma/np.ma.StringDType.Test.cs` (11).
 
 ## 6. The next round: the rest of P1.7, so that phase 1 is complete
 

@@ -164,7 +164,7 @@ namespace NumSharp.Tests.Fuzz
                 case "compressed": return np.ma.compressed(ops[0]);
                 case "getdata": return np.ma.getdata(ops[0]);
                 // ma_surface.jsonl's getmask cases pass the operand's plain data when "plain" is set.
-                case "getmask": return p.ContainsKey("plain") ? np.ma.getmask(ops[0].data) : np.ma.getmask(ops[0]);
+                case "getmask": return p.ContainsKey("plain") ? np.ma.getmask(ops[0]._data) : np.ma.getmask(ops[0]);
                 case "getmaskarray": return np.ma.getmaskarray(ops[0]);
                 case "filled": return np.ma.filled(ops[0], p.TryGetValue("fill", out var fv) ? (object)fv.GetDouble() : null);
 
@@ -190,7 +190,7 @@ namespace NumSharp.Tests.Fuzz
                 case "copy": return np.ma.copy(ops[0]);
 
                 // ---- selection -> masked (put/putmask -> mutated operand) -------------------------
-                case "take": return np.ma.take(ops[0], ops[1].data, ParseAxis(p),
+                case "take": return np.ma.take(ops[0], ops[1]._data, ParseAxis(p),
                                                 p.TryGetValue("mode", out var tm) ? tm.GetString() : "raise");
                 case "choose": return np.ma.choose(ops[0], ops.Skip(1).Cast<object>().ToArray(),
                                                    p.TryGetValue("mode", out var cm) ? cm.GetString() : "raise");
@@ -207,13 +207,13 @@ namespace NumSharp.Tests.Fuzz
                     // Both arms cast to object: a conditional of NDArray and NDMaskedArray takes one arm's type, and the implicit
                     // NDArray -> NDMaskedArray conversion would wrap the plain target in a NEW masked array (whose filled data
                     // then hid the slots the put masked).
-                    object target = Flag(p, "plain") ? (object)ops[0].data : ops[0];
+                    object target = Flag(p, "plain") ? (object)ops[0]._data : ops[0];
                     if (Flag(p, "hard"))
                         ops[0].harden_mask();
                     var values = PutValues(p, ops, out var valuesCopy);
                     try
                     {
-                        np.ma.put(target, ops[1].data, values, p.TryGetValue("mode", out var pm) ? pm.GetString() : "raise");
+                        np.ma.put(target, ops[1]._data, values, p.TryGetValue("mode", out var pm) ? pm.GetString() : "raise");
                     }
                     finally
                     {
@@ -261,7 +261,7 @@ namespace NumSharp.Tests.Fuzz
                 case "isMaskedArray": return p.ContainsKey("arg") ? ApplyMaskedSurface(name, p, ops) : np.ma.isMaskedArray(ops[0]);
                 case "allclose": return np.ma.allclose(ops[0], ops[1]);
                 case "allequal": return np.ma.allequal(ops[0], ops[1]);
-                case "make_mask": return np.ma.make_mask(ops[0].data);
+                case "make_mask": return np.ma.make_mask(ops[0]._data);
                 case "make_mask_none": return np.ma.make_mask_none(new Shape(ParseLongArray(p["shape"])));
                 case "mask_or": return np.ma.mask_or(np.ma.getmaskarray(ops[0]), np.ma.getmaskarray(ops[1]));
                 case "flatten_mask":
@@ -337,7 +337,7 @@ namespace NumSharp.Tests.Fuzz
         private static object SetOpOperand(IReadOnlyDictionary<string, JsonElement> p, NDMaskedArray[] ops, int i)
         {
             if (Listed(p, "plain", i))
-                return ops[i].data;
+                return ops[i]._data;
             if (Listed(p, "hard", i))
                 ops[i].harden_mask();
             return ops[i];
@@ -513,7 +513,7 @@ namespace NumSharp.Tests.Fuzz
                 "cumsum" => np.ma.cumsum(x),
                 "take" => np.ma.take(x, Temp(np.array(new long[] { 0, 1 }))),
                 "clip" => x.clip(0, 5),
-                "masked_where" => np.ma.masked_where(Temp(np.greater(x.data, 1)), x),
+                "masked_where" => np.ma.masked_where(Temp(np.greater(x._data, 1)), x),
                 _ => throw new NotSupportedException($"ma.fill derive '{how}'"),
             };
         }
@@ -616,12 +616,12 @@ namespace NumSharp.Tests.Fuzz
                 case "array":
                     // copy('K') keeps the operand's layout (an F-order array stays F, whose memory order the resize keeps).
                     if (!Flag(p, "vown"))
-                        return ops[2].data;
-                    copy = ops[2].data.copy('K');
+                        return ops[2]._data;
+                    copy = ops[2]._data.copy('K');
                     return copy;
                 case "list":
                 {
-                    var d = ops[2].data;
+                    var d = ops[2]._data;
                     return d.typecode switch
                     {
                         NPTypeCode.Int64 => d.ToArray<long>(),
@@ -688,7 +688,7 @@ namespace NumSharp.Tests.Fuzz
                 "npf32" => NDArray.Scalar((float)m.GetProperty("value").GetDouble()),
                 "npf64" => NDArray.Scalar(m.GetProperty("value").GetDouble()),
                 // The harness wraps every operand in a masked array; an ndarray mean= passes its data, as NumPy's does.
-                "array" => ops[1].data,
+                "array" => ops[1]._data,
                 "masked" => ops[1],
                 var k => throw new NotSupportedException($"ma mean= kind '{k}' not registered in OpRegistry.ParseMaMean"),
             };

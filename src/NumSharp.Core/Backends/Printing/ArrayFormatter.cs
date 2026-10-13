@@ -366,7 +366,9 @@ namespace NumSharp.Backends.Printing
             /// 2026-10-08; found by the ma_fill tier's repr cases).</remarks>
             public string Format(object value) => _tc switch
             {
-                NPTypeCode.String => value is byte[] bytes ? PyRepr.Bytes(bytes) : PyRepr.Str((string)value),
+                // A str / bytes element by its repr; a StringDType NA element is its NA object (an object array holds the
+                // na_object itself: None, nan, or a sentinel's repr).
+                NPTypeCode.String => Strings.NDPyObject.Repr(value),
                 NPTypeCode.Half => PythonFloatRepr((double)(Half)value, FloatKind.Double),
                 NPTypeCode.Single => PythonFloatRepr((double)(float)value, FloatKind.Double),
                 _ => ScalarStr(value, _tc),
