@@ -67,14 +67,68 @@ namespace NumSharp.Tests.Interop
             }
         }
 
+        /// <summary>
+        ///     A pandas text column whose <c>to_numpy()</c> is an object array of <c>str</c> — the <c>'str'</c> and
+        ///     <c>object</c> dtypes, a frame of text columns — crosses as a NumSharp <c>StringDType()</c> COPY (text with no
+        ///     buffer to share; View declines), while a text column holding a missing value (<c>NaN</c> for <c>'str'</c>,
+        ///     <c>pd.NA</c> for <c>'string'</c>) is refused with the offending element named: the bridge never guesses an NA
+        ///     object for it.
+        /// </summary>
         [TestMethod]
-        public void ObjectStringDatetimeTimedeltaAndNestedIndex_AreDirectedUnsupportedFailures()
+        public void StringColumns_CrossAsStringDTypeCopies_MissingValuesRefused()
+        {
+            RequirePandas();
+            int imports = NDArrayPythonInterop.LiveImports;
+            PyExec(
+                "pd_text_str = pd.Series(['a', 'bb'], dtype='str')\n" +
+                "pd_text_obj = pd.Series(['a', 'bb'], dtype=object)\n" +
+                "pd_text_frame = pd.DataFrame({'a': ['x', 'y'], 'b': ['z', 'a text longer than fifteen bytes']})\n" +
+                "pd_text_nan = pd.Series(['a', None], dtype='str')\n" +
+                "pd_text_na = pd.Series(['a', None], dtype='string')");
+
+            using (Gil())
+            {
+                foreach (string name in new[] { "pd_text_str", "pd_text_obj" })
+                {
+                    using PyObject series = Scope.Get(name);
+                    using NDArray copy = series.ToNDArray(requireGIL: false);
+                    copy.dtype.Should().Be(np.dtypes.StringDType(), name);
+                    copy.GetValue(0).Should().Be("a", name);
+                    copy.GetValue(1).Should().Be("bb", name);
+                    new Action(() => { using var _ = series.AsNDArray(allowReadonly: true, requireGIL: false); })
+                        .Should().Throw<NotSupportedException>($"{name}: an object array has nothing to share");
+                }
+
+                using (PyObject frame = Scope.Get("pd_text_frame"))
+                using (NDArray copy = frame.ToNDArray(requireGIL: false))
+                {
+                    copy.Shape.Dimensions.Should().Equal(new long[] { 2, 2 });
+                    copy.GetValue(1, 1).Should().Be("a text longer than fifteen bytes");
+                }
+
+                using (PyObject nan = Scope.Get("pd_text_nan"))
+                    new Action(() => { using var _ = nan.ToNDArray(requireGIL: false); })
+                        .Should().Throw<NotSupportedException>().WithMessage("*float at flat index 1 (nan)*not a str*");
+                using (PyObject na = Scope.Get("pd_text_na"))
+                    new Action(() => { using var _ = na.ToNDArray(requireGIL: false); })
+                        .Should().Throw<NotSupportedException>().WithMessage("*NAType at flat index 1 (<NA>)*not a str*");
+            }
+
+            NDArrayPythonInterop.LiveImports.Should().Be(imports, "a copy and a refusal lease nothing");
+        }
+
+        /// <summary>
+        ///     Pandas values with no NumSharp dtype — an object frame mixing numbers and text, datetimes (naive and
+        ///     tz-aware), timedeltas, a nullable boolean with <c>pd.NA</c>, periods, a MultiIndex and an IntervalIndex — are
+        ///     refused by both paths with a directed message, and lease nothing.
+        /// </summary>
+        [TestMethod]
+        public void MixedObjectDatetimeTimedeltaAndNestedIndex_AreDirectedUnsupportedFailures()
         {
             RequirePandas();
             int imports = NDArrayPythonInterop.LiveImports;
             PyExec(
                 "pd_unsupported = [\n" +
-                "  pd.Series(['a','b'], dtype='str'),\n" +
                 "  pd.DataFrame({'a': [1,2], 'b': ['x','y']}),\n" +
                 "  pd.Series(pd.date_range('2020-01-01', periods=2)),\n" +
                 "  pd.Series(pd.date_range('2020-01-01', periods=2, tz='UTC')),\n" +
@@ -355,8 +409,16 @@ namespace NumSharp.Tests.Interop
                 using (autoCopy)
                     autoCopy.typecode.Should().Be(NPTypeCode.Double);
 
-                auto.TryDecode(objects, out NDArray unsupported).Should().BeFalse();
-                unsupported.Should().BeNull();
+                // A pandas 'str' column's to_numpy() is an object array of str: View declines (nothing to share), Auto and
+                // Copy copy it as text (StringDType()).
+                viewOnly.TryDecode(objects, out NDArray noTextView).Should().BeFalse();
+                noTextView.Should().BeNull();
+                auto.TryDecode(objects, out NDArray text).Should().BeTrue();
+                using (text)
+                {
+                    text.dtype.Should().Be(np.dtypes.StringDType());
+                    text.GetValue(1).Should().Be("b");
+                }
             }
         }
 

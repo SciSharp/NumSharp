@@ -3,11 +3,12 @@
 // Outside this repository, replace the #:project line with the NuGet package:
 //   #:package NumSharp.Interop.pythonnet@0.60.0
 //
-// 04 — Dtypes. Fourteen of NumSharp's fifteen dtypes cross bit-exactly in both directions; the
-//      public maps (ToNumpyDtypeStr / FromNumpyDtypeStr / ToBufferFormat / FromBufferFormat) spell
-//      the correspondence, and four element types get converted rather than misrepresented:
-//      Decimal (-> float64 on export), complex64 (widened on copy), UCS-4 text (narrowed on copy),
-//      big-endian (byte-swapped on copy).
+// 04 — Dtypes. Fourteen of NumSharp's fifteen numeric dtypes cross bit-exactly in both directions, and
+//      so does text: numpy's fixed-width S / U are NumSharp's own string dtypes (zero-copy views), and
+//      NEP 55 StringDType crosses as an exact copy. The public maps (ToNumpyDtypeStr / FromNumpyDtypeStr
+//      / ToBufferFormat / FromBufferFormat) spell the correspondence, and three element types get
+//      converted rather than misrepresented: Decimal (-> float64 on export), complex64 (widened on
+//      copy), big-endian (byte-swapped on copy).
 //
 //      Read it top to bottom; the comments state what each line leaves behind. The same steps, with
 //      every statement asserted, are test/NumSharp.Tests.Interop/Examples/Example04_Dtypes.cs.
@@ -116,14 +117,30 @@ using (Py.GIL())
     Exception? noStr = Throws(() => NDArrayPythonInterop.FromNumpyDtypeStr("<c8"));   // the map says the same
 }
 
-// UCS-4 text: numpy '<U1' (4-byte code points) — narrowed to Char (UTF-16) on copy
+// text: numpy's fixed-width S / U ARE NumSharp's string dtypes (the same bytes), so they view zero-copy;
+//       NEP 55 StringDType keeps its text outside the array buffer, so it crosses as an exact copy
 using (Py.GIL())
 {
-    using PyObject u1 = py.Eval("np.array(['a', 'Z', '\\u00e9'], dtype='U1')");
-    Exception? noView = Throws(() => u1.AsNDArray());                             // NotSupportedException: buffer format '1w' (itemsize 4) is UCS-4 text ... a zero-copy view is impossible
-    NDArray narrowed = u1.ToNDArray();                                            // typecode Char: 'a', 'Z', 'é'
-    using PyObject astral = py.Eval("np.array(['\\U0001F600'], dtype='U1')");
-    Exception? nonBmp = Throws(() => astral.ToNDArray());                         // NotSupportedException: ... non-BMP code point U+1F600 ... needs a surrogate pair
+    using PyObject u1 = py.Eval("np.array(['a', 'Z', '\\u00e9', '\\U0001F600'], dtype='U1')");
+    NDArray letters = u1.AsNDArray();                                             // dtype <U1 — NOT Char: one 4-byte UCS-4 code point per element, shared zero-copy
+    string grinning = (string)letters.GetValue(3);                                // "😀": an astral code point is ONE unit (.NET reads it as a surrogate pair)
+    letters[1] = "q";                                                             // u1[1] is now 'q' — the view shares numpy's memory
+    using PyObject s2 = py.Eval("np.array([b'ab', b'\\x80'], dtype='S2')");
+    NDArray raw = s2.AsNDArray();                                                 // dtype |S2: bytes, not text — b'\x80' stays as it is
+
+    using PyObject beText = py.Eval("np.array(['ab'], dtype='>U2')");
+    Exception? beView = Throws(() => beText.AsNDArray());                         // NotSupportedException: big-endian UCS-4 buffer format '>2w' ... ToNDArray byte-swaps it into a native U2 copy
+    NDArray swappedText = beText.ToNDArray();                                     // <U2: 'ab'
+
+    using PyObject t = py.Eval("np.array(['short', 'a text longer than fifteen bytes', None], dtype=np.dtypes.StringDType(na_object=None))");
+    Exception? tView = Throws(() => t.AsNDArray());                               // NotSupportedException: StringDType(na_object=None) has no buffer form ... It crosses as an exact copy
+    NDArray texts = t.ToNDArray();                                                // dtype StringDType(na_object=None); texts[2] is null — NA stays NA
+    py.texts = texts;                                                             // the codec copies it back: a numpy StringDType(na_object=None) array, equal element for element
+
+    using PyObject strs = py.Eval("np.array(['x', 'y'], dtype=object)");
+    NDArray fromObjects = strs.ToNDArray();                                       // dtype StringDType(): an object array whose every element is a str crosses as text
+    using PyObject notStrs = py.Eval("np.array(['x', None], dtype=object)");
+    Exception? notText = Throws(() => notStrs.ToNDArray());                       // NotSupportedException: the object array holds a NoneType at flat index 1 (None), which is not a str ...
 
     long wcharSize = py.Eval("__import__('array').array('u').itemsize");
     if (wcharSize == 2)                                                           // a 2-byte wchar_t buffer (Windows) is UTF-16 already: it views zero-copy as Char
@@ -132,7 +149,7 @@ using (Py.GIL())
         NDArray chars = py.wide;                                                  // typecode Char; chars[1] == 'i'
         chars[0] = 'H';                                                           // wide.tounicode() is now "Hi!"
     }
-    // (a 4-byte wchar_t platform takes the UCS-4 copy route above)
+    // (a 4-byte wchar_t platform holds UCS-4 code points: array.array('u') views as U1 there)
 }
 
 // big-endian: no zero-copy view (a native read would swap every value) — byte-reversed on copy

@@ -25,6 +25,11 @@ namespace NumSharp.Interop.PythonNet
 
             try
             {
+                // An ndarray / bytes / bytearray / memoryview / array.array is never a tensor: answered from the type's name
+                // without the MRO walk, which every import of those (the common case) would otherwise pay.
+                if (PythonArrayAdapterRegistry.IsPlainBufferExporter(objectType))
+                    return false;
+
                 // Walk the MRO so torch.nn.Parameter and user Tensor subclasses are accepted too.
                 using PyObject mro = objectType.GetAttr("__mro__");
                 using var types = PyTuple.AsTuple(mro);

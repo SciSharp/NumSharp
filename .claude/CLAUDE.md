@@ -127,6 +127,19 @@ owns the allocator, so views keep it alive). Rules a new route must keep:
   real part into the imaginary part, a short cell copied onto itself (`a[...] = a[:1]`) becomes `''`.
 - Still refused loudly (P1.7 / phase 2): np.nditer buffering or casting a `T` operand (allocating one works), `.npy`,
   `loadtxt` / `savetxt`, numpy.ma with `T`, and computation (comparisons, `np.sum`, sorting, `np.strings`).
+- **The pythonnet bridge carries text (P1.8, 2026-10-13; owner's decision D7 = NumPy's C API).** `S` / `U` are ordinary
+  buffers and VIEW both ways (`<U1` and a 4-byte `wchar_t` buffer import as `U1`, never `Char` — breaking; big-endian `U`
+  copies byte-swapped; `np.str_` / `np.bytes_` are 0-d `U` / `S`). A `T` array crosses as an exact COPY through numpy's
+  `_ARRAY_API` capsule (`src/NumSharp.Interop.pythonnet/NumpyStringApi.cs`: slots 313 load, 314 pack, 315 pack_null, 316
+  acquire, 318 release, 160 `PyArray_GetPtr` for the data address) with `NpyString_dup`'s rules, so its cells equal numpy's
+  own copy's; an object array of `str` copies to `StringDType()`, any other is refused, and so is an NA object with no C#
+  form (`pd.NA`). Traps: numpy's `na_eq_cmp` is not reflexive for an `np.float16` NaN (only identity matches), so write a
+  `T` array's NA with `descr.na_object` — a second boxed `Half.NaN` is the TEXT `'nan'`; pythonnet's `As<double>()` refuses
+  an `np.float16` (convert through Python's `float()`); `np.empty(shape, T)` gives the result a NEW descriptor instance
+  with its own allocator, so lock `result.dtype`'s allocator, not the descriptor passed in; a failed `memoryview` through
+  pythonnet costs ~10 µs of .NET exceptions, so the import routes probe with `PythonRuntimeInterop.TryMemoryview` (Python's
+  own `try`, `None` on failure). Gates `TextFixedWidthCrossingTests` + `TextStringDTypeCrossingTests` (live numpy, every
+  NA kind × `coerce` × layout); speed in `docs/website-src/docs/interop/pythonnet-numpy.md` → "How does text cross?".
 - **Speed rules** (NPY/NS geomean 5.35×, minimum 1.80×, over copy / arena copy / stepped copy / take / mask / concatenate /
   where / repeat / `np.array(list)` / `U → T` / `T → U8` at 1K / 100K / 1M): allocator memory is reported through the
   pool's coarse accounting (`SizeBucketedBufferPool.AccountForeignAllocation` / `AccountForeignRelease`), never one

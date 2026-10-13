@@ -109,13 +109,29 @@ namespace NumSharp.Tests.Interop
                 "np.arange(24, dtype='>i4').reshape(2, 3, 4).transpose(1, 0, 2)[::-1]", NPTypeCode.Int32);
         }
 
+        /// <summary>
+        ///     Byteswap rescues every element type that HAS a NumSharp dtype — big-endian UCS-4 text included (each 4-byte
+        ///     code point reversed into a native <c>U</c> copy, the view refused) — while a big-endian type with no NumSharp
+        ///     counterpart at any byte order (structured) is still refused by the copy.
+        /// </summary>
         [TestMethod]
-        public void Copy_BigEndian_WithNoNumSharpDtype_StillRefused()
+        public void Copy_BigEndian_TextByteSwaps_StructuredStillRefused()
         {
-            // Byteswap only rescues element types that HAVE a NumSharp dtype. A big-endian type with no
-            // NumSharp counterpart at any byte order (UCS-4 text, structured) is still refused by the copy.
-            ((Action)(() => ImportOf("np.array(['a', 'b'], dtype='>U1')")))
-                .Should().Throw<NotSupportedException>("big-endian UCS-4 has no NumSharp dtype");
+            using (NDArray text = ImportOf("np.array(['a', '\\U0001F600', 'xyz'], dtype='>U3')"))
+            {
+                text.dtype.Should().Be(np.dtype("U3"), "the copy is native-endian UCS-4");
+                text.GetValue(0).Should().Be("a");
+                text.GetValue(1).Should().Be("\U0001F600");
+                text.GetValue(2).Should().Be("xyz");
+                using (Py.GIL())
+                {
+                    using PyObject native = Python.np.eval("np.array(['a', '\\U0001F600', 'xyz'], dtype='<U3')");
+                    ByteContract.AssertSameBytes(text, native, "each 4-byte code point reversed into native order");
+                }
+            }
+
+            ((Action)(() => ViewOf("np.array(['a', 'b'], dtype='>U1')", allowReadonly: true).Dispose()))
+                .Should().Throw<NotSupportedException>().WithMessage("*big-endian UCS-4*byte-swaps*", "a native-endian view of big-endian text is impossible");
             ((Action)(() => ImportOf("np.zeros(2, dtype=[('x', '>i4'), ('y', '>f8')])")))
                 .Should().Throw<NotSupportedException>("a structured dtype has no NumSharp dtype");
         }

@@ -425,6 +425,31 @@ np.load_npy(stream);    // array(['cat', 'dog', 'bird'], dtype='<U4')
 
 ---
 
+## Crossing to Python
+
+With [`NumSharp.Interop.pythonnet`](../interop/pythonnet-numpy.md#how-does-text-cross), text crosses to an embedded NumPy the way numbers do, and a `StringDType` array as an exact copy:
+
+| Array | NumSharp → NumPy | NumPy → NumSharp |
+|-------|------------------|------------------|
+| `S<n>`, `U<n>` | `ToNumpy()` shares the bytes (`\|S<n>`, `<U<n>`) | `AsNDArray()` shares numpy's bytes |
+| `StringDType` | `ToNumpyCopy()` copies, NA values and descriptor included | `ToNDArray()` copies, NA values and descriptor included |
+| NumPy object array of `str` | - | `ToNDArray()` copies as `StringDType()` |
+
+```csharp
+var words = np.array(new object[] { "cat", null }, np.dtypes.StringDType(na_object: null));
+using (Py.GIL())
+{
+    using PyObject u = names.ToNumpy();       // array(['cat', 'dog', 'bird'], dtype='<U4'), the same memory
+    using PyObject t = words.ToNumpyCopy();   // array(['cat', None], dtype=StringDType(na_object=None))
+}
+```
+
+A `StringDType` array has no shared form: NumPy keeps each element's text in an allocator its descriptor owns, so the bridge copies it element by element through NumPy's own `NpyString` C API. The missing-data object crosses when C# can hold it (`None`, `bool`, `int`, `float`, `complex`, `str`, `bytes`, `np.float16`); any other object, such as `pd.NA`, is refused.
+
+> **Breaking change:** NumPy's `<U1` (and a 4-byte `wchar_t` buffer) now imports as a `U1` view, not as a `Char` copy. A `U1` element is a 4-byte code point and holds an astral character that a `char` cannot.
+
+---
+
 ## The `Char` dtype
 
 `NPTypeCode.Char` wraps .NET's `System.Char`, a **2-byte UTF-16 code unit**. It stores characters as numbers, not text:
@@ -530,4 +555,5 @@ A `U` to `S` cast encodes ASCII only, as NumPy does. Keep non-ASCII text in a `U
 - [Data types](../dtypes.md) - the full dtype set and the `Char` quirks.
 - [Structured arrays](structured-arrays.md) - a NumPy dtype family NumSharp does not implement.
 - [Any library via np.frombuffer](../interop/np-frombuffer.md) - the byte-buffer bridge.
+- [Python & numpy](../interop/pythonnet-numpy.md#how-does-text-cross) - text arrays crossing to an embedded NumPy.
 - [NumPy strings-and-bytes guide](https://numpy.org/doc/stable/user/basics.strings.html) - the upstream article.

@@ -59,7 +59,8 @@ namespace NumSharp.Tests.Interop
 
         /// <summary>
         ///     "`ToNumpyDtypeStr` is public and total over the dtypes numpy can express" — every
-        ///     mappable dtype yields a string numpy itself parses; only Decimal refuses.
+        ///     mappable dtype yields a string numpy itself parses, the fixed-width S / U text dtypes included; only Decimal
+        ///     and StringDType (whose text lives outside the buffer) refuse.
         /// </summary>
         [TestMethod]
         public void DtypeStrings_AreTotalOverNumpyExpressibleDtypes()
@@ -80,7 +81,17 @@ namespace NumSharp.Tests.Interop
             }
 
             ((Action)(() => NDArrayPythonInterop.ToNumpyDtypeStr(NPTypeCode.Decimal)))
-                .Should().Throw<NotSupportedException>("Decimal is the one dtype numpy cannot express");
+                .Should().Throw<NotSupportedException>("Decimal is the one numeric dtype numpy cannot express");
+
+            // Fixed-width text maps too (numpy parses each spelling back to the same width); StringDType has no typestr.
+            foreach (string spelling in new[] { "S1", "S5", "U1", "U5" })
+            {
+                string s = NDArrayPythonInterop.ToNumpyDtypeStr(np.dtype(spelling));
+                PyStr($"np.dtype('{s}').str").Should().Be(s, $"numpy must parse '{s}' ({spelling})");
+            }
+
+            ((Action)(() => NDArrayPythonInterop.ToNumpyDtypeStr(np.dtypes.StringDType())))
+                .Should().Throw<NotSupportedException>("a StringDType array crosses only as a copy");
         }
 
         // ============================  ## What it costs  =========================================
@@ -182,8 +193,8 @@ namespace NumSharp.Tests.Interop
         }
 
         /// <summary>
-        ///     The dtype table: fourteen of fifteen dtypes cross, both maps agree with the table, and
-        ///     numpy's own name for each dtype string is the one printed.
+        ///     The dtype table: fourteen of fifteen numeric dtypes and the fixed-width S / U text dtypes cross, both maps
+        ///     agree with the table, numpy's own name for each dtype string is the one printed, and StringDType refuses.
         /// </summary>
         [TestMethod]
         public void DtypeMaps_CoverEveryDtypeExceptDecimal()
@@ -212,6 +223,25 @@ namespace NumSharp.Tests.Interop
                 NDArrayPythonInterop.ToBufferFormat(tc).Should().Be(pep, $"the table maps {tc} -> '{pep}'");
                 PyStr($"np.dtype('{numpy}').name").Should().Be(numpyName, $"numpy calls {numpy} '{numpyName}'");
             }
+
+            // The text rows: S<n> / U<n> map with their width (the table's S5 / U5 examples), StringDType has no buffer form.
+            var text = new (string Spelling, string Numpy, string Pep, string NumpyName)[]
+            {
+                ("S5", "|S5", "5s", "bytes40"),
+                ("U5", "<U5", "5w", "str160"),
+            };
+            foreach (var (spelling, numpy, pep, numpyName) in text)
+            {
+                DType descr = np.dtype(spelling);
+                NDArrayPythonInterop.ToNumpyDtypeStr(descr).Should().Be(numpy, $"the table maps {spelling} -> {numpy}");
+                NDArrayPythonInterop.ToBufferFormat(descr).Should().Be(pep, $"the table maps {spelling} -> '{pep}'");
+                PyStr($"np.dtype('{numpy}').name").Should().Be(numpyName, $"numpy calls {numpy} '{numpyName}'");
+            }
+
+            ((Action)(() => NDArrayPythonInterop.ToNumpyDtypeStr(np.dtypes.StringDType())))
+                .Should().Throw<NotSupportedException>().WithMessage("*has no buffer form*");
+            ((Action)(() => NDArrayPythonInterop.ToBufferFormat(np.dtypes.StringDType())))
+                .Should().Throw<NotSupportedException>().WithMessage("*has no buffer form*");
         }
 
         /// <summary>
@@ -237,17 +267,18 @@ namespace NumSharp.Tests.Interop
         // ============================  ## Reading Python's memory  ===============================
 
         /// <summary>
-        ///     The import census table: 8 of the 12 probes view (one of them read-only); complex64,
-        ///     UCS-4 and big-endian fall to copies (widen / narrow / byteswap); datetime64 — which has
-        ///     no NumSharp dtype at any byte order — is refused outright.
+        ///     The import census table: 10 of the 15 probes view (one of them read-only) — the fixed-width text arrays among
+        ///     them; complex64, big-endian data and the two text forms without a buffer (StringDType, an object array of
+        ///     str) fall to copies (widen / byteswap / copy); datetime64 — which has no NumSharp dtype at any byte order —
+        ///     is refused outright.
         /// </summary>
         [TestMethod]
         public void Import_ViewsEveryExporterVariety()
         {
             PyExec("import ctypes, io");
 
-            // the 8 view rows — each really shares (write-crossing checked for the writable ones)
-            var viewRows = new (string Expr, NPTypeCode Tc, bool Writable)[]
+            // the 10 view rows — each really shares (write-crossing checked for the writable ones)
+            var viewRows = new (string Expr, DType Dtype, bool Writable)[]
             {
                 ("np.arange(4, dtype='f4')", NPTypeCode.Single, true),
                 ("bytearray(b'abcd')", NPTypeCode.Byte, true),
@@ -257,18 +288,24 @@ namespace NumSharp.Tests.Interop
                 ("io.BytesIO(b'12345678').getbuffer()", NPTypeCode.Byte, true),
                 ("np.arange(6).reshape(2, 3).T", NPTypeCode.Int64, true),
                 ("np.broadcast_to(np.arange(3), (2, 3))", NPTypeCode.Int64, false),
+                ("np.array(['a', 'bc'], dtype='U2')", np.dtype("U2"), true),
+                ("np.array([b'ab', b'c'], dtype='S2')", np.dtype("S2"), true),
             };
 
-            foreach (var (expr, tc, writable) in viewRows)
+            foreach (var (expr, dtype, writable) in viewRows)
             {
                 NDArray v = ViewOf(expr, allowReadonly: true);
-                v.typecode.Should().Be(tc, expr);
+                v.dtype.Should().Be(dtype, expr);
                 v.Shape.IsWriteable.Should().Be(writable, expr);
                 v.Dispose();
             }
 
-            // the 3 copy rows — the view path declines, the copy path converts (widen / narrow / byteswap)
-            foreach (string expr in new[] { "np.array([1+2j], dtype='c8')", "np.array(['a', 'b'], dtype='U1')", "np.arange(4, dtype='>i4')" })
+            // the 4 copy rows — the view path declines, the copy path converts (widen / byteswap / copy the text)
+            foreach (string expr in new[]
+                     {
+                         "np.array([1+2j], dtype='c8')", "np.arange(4, dtype='>i4')",
+                         "np.array(['a', 'bb'], dtype=np.dtypes.StringDType())", "np.array(['a', 'bb'], dtype=object)",
+                     })
             {
                 ((Action)(() => ViewOf(expr, allowReadonly: true).Dispose()))
                     .Should().Throw<NotSupportedException>($"{expr} has no zero-copy representation");
@@ -285,11 +322,12 @@ namespace NumSharp.Tests.Interop
         }
 
         /// <summary>
-        ///     "The first two widen or narrow on copy": complex64 pairs become <see cref="Complex"/>
-        ///     values, UCS-4 code points become <see cref="char"/>s — values preserved, never a view.
+        ///     "complex64 widens on copy": complex64 pairs become <see cref="Complex"/> values — values preserved, never a
+        ///     view; and numpy's <c>'&lt;U1'</c> is not a width mismatch at all: it is NumSharp's own <c>U1</c>, the same
+        ///     4-byte code points, so it views.
         /// </summary>
         [TestMethod]
-        public void Import_WidensComplex64AndNarrowsUcs4OnCopy()
+        public void Import_WidensComplex64OnCopy_TextViewsAsItsOwnDtype()
         {
             PyExec("c8 = np.array([1+2j, 3+4j], dtype='c8')");
             NDArray widened = ImportOf("c8");
@@ -299,11 +337,11 @@ namespace NumSharp.Tests.Interop
             widened.Dispose();
 
             PyExec("u1 = np.array(['a', 'b'], dtype='U1')");
-            NDArray narrowed = ImportOf("u1");
-            narrowed.typecode.Should().Be(NPTypeCode.Char, "UCS-4 text narrows to Char (UTF-16)");
-            ReadAt<char>(narrowed, 0).Should().Be('a');
-            ReadAt<char>(narrowed, 1).Should().Be('b');
-            narrowed.Dispose();
+            NDArray text = ViewOf("u1");
+            text.dtype.Should().Be(np.dtype("U1"), "numpy '<U1' is NumSharp's U1 (a Char is a 2-byte UTF-16 unit)");
+            text.GetValue(0).Should().Be("a");
+            text.GetValue(1).Should().Be("b");
+            text.Dispose();
         }
 
         /// <summary>

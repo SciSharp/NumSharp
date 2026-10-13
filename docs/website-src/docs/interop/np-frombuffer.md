@@ -144,7 +144,8 @@ memoryview covers exactly that window, not the parent buffer. The two ways out o
 
 ### Dtype mapping
 
-Fourteen of NumSharp's fifteen dtypes cross. Both maps are public, so you never hard-code a string:
+Fourteen of NumSharp's fifteen numeric dtypes cross, and so does fixed-width text. Both maps are
+public, so you never hard-code a string:
 
 | NumSharp | `ToNumpyDtypeStr` | `ToBufferFormat` | numpy calls it |
 |---|---|---|---|
@@ -156,6 +157,9 @@ Fourteen of NumSharp's fifteen dtypes cross. Both maps are public, so you never 
 | `Half` / `Single` / `Double` | `<f2` / `<f4` / `<f8` | `e` / `f` / `d` | `float16` / `float32` / `float64` |
 | `Complex` | `<c16` | `Zd` | `complex128` |
 | `Char` | `<u2` | `H` | `uint16` - a C# `char` is a UTF-16 code unit; numpy has no char dtype |
+| `S<n>` (bytes) | `\|S<n>` | `<n>s` | `bytes<8n>` - e.g. `S5` is `bytes40` |
+| `U<n>` (text) | `<U<n>` | `<n>w` | `str<32n>` - e.g. `U5` is `str160`, five UCS-4 code points |
+| `StringDType(...)` | *throws* | *throws* | `StringDType` - its text lives outside the buffer; it crosses only as a copy ([pythonnet page](pythonnet-numpy.md#how-does-text-cross)) |
 | `Decimal` | *throws* | *throws* | - |
 
 `Decimal` is sixteen bytes of non-IEEE decimal float. Nothing in numpy or PEP 3118 describes it, so
@@ -198,25 +202,30 @@ convention, and both accept **any** exporter, not just numpy arrays:
 | `io.BytesIO(...).getbuffer()` | view · `Byte[8]` · writable |
 | `np.arange(6).reshape(2,3).T` | view · `Int64[3,2]` · writable |
 | `np.broadcast_to(np.arange(3), (2,3))` | view · `Int64[2,3]` · **read-only** |
+| `np.array(['a','bc'], dtype='U2')` | view · `U2[2]` · writable |
+| `np.array([b'ab',b'c'], dtype='S2')` | view · `S2[2]` · writable |
 | `np.array([1+2j], dtype='c8')` | **copy** - complex64 widens to `Complex` |
-| `np.array(['a','b'], dtype='U1')` | **copy** - UCS-4 text narrows to `Char` |
 | `np.arange(4, dtype='>i4')` | **copy** - big-endian byte-reversed to native |
+| `np.array(['a','bb'], dtype=StringDType())` | **copy** - no buffer; copied as `StringDType` |
+| `np.array(['a','bb'], dtype=object)` | **copy** - an object array of `str`, copied as `StringDType` |
 
 Strided sources view too, including transposes and negative strides: NumSharp reconstructs the
-layout rather than flattening it. Only three things stop a zero-copy *view*, and each is a width or
-byte-order mismatch that no reinterpretation can fix - complex64 is two 4-byte floats where
-NumSharp's `Complex` is two 8-byte doubles, `<U1` is a 4-byte code point where `Char` is a 2-byte
-UTF-16 unit, and big-endian data would byte-swap every value if read natively. But the **copy**
-path (`ToNDArray`) handles all three: complex64 widens, UCS-4 narrows, and big-endian byte-reverses
-each element to a value-correct native array. Only the *view* path still refuses big-endian - a
-native-endian shared view is impossible - with the fix in the message:
+layout rather than flattening it, and fixed-width text views like any number - numpy's `<U1` is
+NumSharp's own `U1`, the same 4-byte code points. Only three things stop a zero-copy *view*:
+complex64 is two 4-byte floats where NumSharp's `Complex` is two 8-byte doubles, big-endian data
+would byte-swap every value if read natively, and text without a buffer has nothing to share - a
+NEP 55 `StringDType` array keeps its text in an allocator outside the buffer, an object array holds
+Python objects. The **copy** path (`ToNDArray`) handles all three: complex64 widens, big-endian
+byte-reverses each element to a value-correct native array, and text copies to a NumSharp
+`StringDType` array (an object array only when every element is a `str`). Only the *view* path
+still refuses big-endian - a native-endian shared view is impossible - with the fix in the message:
 
 ```text
 NotSupportedException: big-endian buffer format '>l' cannot be mapped onto a native-endian
 NumSharp buffer. Byte-swap first: arr.astype(arr.dtype.newbyteorder('<')).
 ```
 
-<sub>See here [`Import_ViewsEveryExporterVariety`][gate], [`Import_WidensComplex64AndNarrowsUcs4OnCopy`][gate], [`Import_ViewRefusesBigEndian_CopyByteSwaps`][gate]</sub>
+<sub>See here [`Import_ViewsEveryExporterVariety`][gate], [`Import_WidensComplex64OnCopy_TextViewsAsItsOwnDtype`][gate], [`Import_ViewRefusesBigEndian_CopyByteSwaps`][gate]</sub>
 
 ### Can I view a read-only object?
 
@@ -494,13 +503,13 @@ you want one.
 | # | Claim | Evidence | Gate |
 |---|---|---|---|
 | 1 | `np.frombuffer` over an exported memoryview shares NumSharp's memory | `a[0,0] = -5.0` → `nd[0,0] == -5.0` | [`Recipe_RoundTripsThroughFrombuffer`][gate] |
-| 2 | `ToNumpyDtypeStr` covers every numpy-expressible dtype | 14 dtypes map; `Decimal` throws | [`DtypeStrings_AreTotalOverNumpyExpressibleDtypes`][gate] |
+| 2 | `ToNumpyDtypeStr` covers every numpy-expressible dtype | 14 numeric dtypes and `S` / `U` map; `Decimal` and `StringDType` throw | [`DtypeStrings_AreTotalOverNumpyExpressibleDtypes`][gate] |
 | 3 | The buffer route is flat in *n*; copying is linear | 0.0073 → 0.0070 ms vs 0.0031 → 12.82 ms across 10⁴× | [`BufferRoute_IsFlatInN_WhileCopyIsLinear`][gate] |
 | 4 | `ToMemoryView` refuses non-contiguous layouts | `InvalidOperationException`, verbatim text | [`MemoryView_RefusesNonContiguousLayouts`][gate] |
 | 5 | Contiguous windows, scalars and empties export | 192 / 96 / 8 / 0 bytes | [`MemoryView_AcceptsContiguousWindowsScalarsAndEmpty`][gate] |
 | 6 | `Decimal` is refused with conversion guidance | verbatim `NotSupportedException` | [`Decimal_ThrowsWithConversionGuidance`][gate] |
-| 7 | Every buffer-exporter variety imports as a view | 8 of 12 probes view, incl. strided and transposed | [`Import_ViewsEveryExporterVariety`][gate] |
-| 8 | complex64 widens, UCS-4 narrows - on copy, never as a view | `c8` → `Complex`, `<U1` → `Char` | [`Import_WidensComplex64AndNarrowsUcs4OnCopy`][gate] |
+| 7 | Every buffer-exporter variety imports as a view | 10 of 15 probes view, incl. strided, transposed and fixed-width text | [`Import_ViewsEveryExporterVariety`][gate] |
+| 8 | complex64 widens on copy, never as a view; `<U1` views as NumSharp's own `U1` | `c8` → `Complex`; `<U1` → `U1` | [`Import_WidensComplex64OnCopy_TextViewsAsItsOwnDtype`][gate] |
 | 9 | Big-endian: the view refuses, the copy byte-reverses to native | view throws; copy round-trips value-exact | [`Import_ViewRefusesBigEndian_CopyByteSwaps`][gate] |
 | 10 | Read-only sources are refused by default, viewable on opt-in | throws; then `IsWriteable == false` | [`ReadonlySource_RefusedByDefault_ViewableOnOptIn`][gate] |
 | 11 | Writing a read-only view throws instead of corrupting | `assignment destination is read-only` | [`ReadonlyView_ThrowsOnGuardedWrite`][gate] |

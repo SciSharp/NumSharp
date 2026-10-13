@@ -18,7 +18,12 @@ namespace NumSharp.Interop.PythonNet
         ///     same strides; broadcast (stride-0) views become read-only numpy views, matching NumSharp's
         ///     own write protection. Scalars become 0-d arrays. <see cref="NPTypeCode.Char"/> is exported
         ///     as <c>uint16</c> (UTF-16 code units); <see cref="NPTypeCode.Decimal"/> has no numpy dtype
-        ///     and throws — convert first.</para>
+        ///     and is exported as a view of a float64 conversion (the export owns the temporary).</para>
+        ///
+        ///     <para><b>Text:</b> a fixed-width <c>S&lt;n&gt;</c> / <c>U&lt;n&gt;</c> array is shared like any
+        ///     number, as numpy <c>|S&lt;n&gt;</c> / <c>&lt;U&lt;n&gt;</c> over the same bytes (NUL padding
+        ///     included). A <c>StringDType</c> array keeps its text outside its buffer, so it has no view and
+        ///     is refused with the copy route (<see cref="ToNumpyCopy"/>).</para>
         ///
         ///     <para><b>Lifetime:</b> this export takes its own atomic reference on the NumSharp buffer, so
         ///     the memory stays valid even if the source <see cref="NDArray"/> — and the returned
@@ -38,6 +43,11 @@ namespace NumSharp.Interop.PythonNet
         ///     <c>false</c>: no GIL management — the calling thread must ALREADY hold the GIL;
         ///     <c>null</c> (default): follow <see cref="RequireGIL"/>.
         /// </param>
+        /// <returns>The numpy view (owned by the caller; disposing it never frees the NumSharp buffer).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
+        /// <exception cref="NotSupportedException">The array is a <c>StringDType</c> array, which has no buffer
+        ///     form (the message names <see cref="ToNumpyCopy"/>).</exception>
+        /// <exception cref="ObjectDisposedException">The NumSharp buffer was already released.</exception>
         public static unsafe PyObject ToNumpy(this NDArray source, bool? requireGIL = null)
         {
             if (source is null) throw new ArgumentNullException(nameof(source));
@@ -62,7 +72,10 @@ namespace NumSharp.Interop.PythonNet
             if (source.typecode == NPTypeCode.Decimal)
                 source = converted = source.astype(NPTypeCode.Double);
 
-            _ = ToNumpyDtypeStr(source.typecode);   // dtype gate (Decimal already converted above)
+            // dtype gate (Decimal already converted above). A fixed-width S / U array is an ordinary buffer and is shared
+            // like a numeric one; a StringDType array has no buffer form (its text lives in its allocator), so this
+            // zero-copy verb refuses it with the copy route (ToNumpyCopy, or the codec's Auto mode, copies it exactly).
+            _ = ToNumpyDtypeStr(source.dtype);
 
             using (AcquireGil(requireGIL))
             {
@@ -72,7 +85,7 @@ namespace NumSharp.Interop.PythonNet
                     // Nothing to share — an empty array of the right dtype/shape IS the view.
                     using var emptyDims = MakeTuple(shape.Dimensions);
                     converted?.Dispose();
-                    return np.empty(emptyDims, source.typecode);
+                    return np.empty(emptyDims, source.dtype);
                 }
 
                 // Pin the buffer for the whole build; on success ownership of this reference
@@ -136,11 +149,28 @@ namespace NumSharp.Interop.PythonNet
         public static PyObject ToPython(this NDArray source, bool? requireGIL = null) => ToNumpy(source, requireGIL);
 
         /// <summary>
-        ///     Copy a NumSharp array into an independent, C-contiguous numpy array (no shared memory, no
-        ///     lifetime coupling). Values follow the source's logical layout, so sliced / transposed /
-        ///     broadcast views copy element-exact. Same dtype mapping as <see cref="ToNumpy(NDArray, bool?)"/>.
+        ///     Copy a NumSharp array into an independent numpy array that owns writeable memory (no shared
+        ///     memory, no lifetime coupling). Values follow the source's logical layout, so sliced / transposed /
+        ///     broadcast views copy element-exact. Same dtype mapping as <see cref="ToNumpy(NDArray, bool?)"/>,
+        ///     plus the two copy-only ones: a Decimal array arrives as float64, and a <c>StringDType</c> array as
+        ///     an exact numpy <c>StringDType</c> array with the same <c>na_object</c> and <c>coerce</c>.
         /// </summary>
-        /// <inheritdoc cref="ToNumpy(NDArray, bool?)"/>
+        /// <remarks>
+        ///     numpy makes the copy (<c>np.array</c> over the zero-copy view, order <c>'K'</c>), so the result's
+        ///     memory order is numpy's: a C-contiguous source copies C-contiguous, an F-contiguous source or a
+        ///     transposed C array copies F-contiguous, and a reversed or stepped view copies in the order of its
+        ///     axes' memory. A <c>StringDType</c> copy is always C-contiguous: it is written element by element
+        ///     through numpy's <c>NpyString</c> C API into a fresh <c>np.empty</c>. Call
+        ///     <c>np.ascontiguousarray</c> on the result when a consumer needs C order.
+        /// </remarks>
+        /// <inheritdoc cref="ToNumpy(NDArray, bool?)" path="/param"/>
+        /// <returns>The independent numpy array (owned by the caller).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
+        /// <exception cref="ObjectDisposedException">The NumSharp buffer was already released.</exception>
+        /// <exception cref="NotSupportedException">A <c>StringDType</c> array whose <c>na_object</c> has no Python
+        ///     form, or a running numpy without <c>StringDType</c> (NumPy 1.x).</exception>
+        /// <exception cref="OutOfMemoryException">numpy's allocator could not hold a <c>StringDType</c> array's text;
+        ///     the half-built numpy array is released.</exception>
         public static unsafe PyObject ToNumpyCopy(this NDArray source, bool? requireGIL = null)
         {
             if (source is null) throw new ArgumentNullException(nameof(source));
@@ -159,7 +189,29 @@ namespace NumSharp.Interop.PythonNet
             if (converted is not null)
                 source = converted;
 
-            _ = ToNumpyDtypeStr(source.typecode);   // dtype gate (Decimal already converted above)
+            // A StringDType array is copied element by element through NumPy's own NpyString C API (the only way to write
+            // numpy's StringDType cells): the result is an exact, C-contiguous numpy StringDType array with the same
+            // na_object and coerce.
+            if (source.dtype.Meta is VStringDTypeMeta)
+            {
+                using (AcquireGil(requireGIL))
+                {
+                    IArraySlice cells = source.Storage.InternalArray;
+                    if (!cells.TryAddRef())
+                        throw new ObjectDisposedException(nameof(source), "the NumSharp buffer has already been released.");
+                    try
+                    {
+                        return ExportStringDType(source);
+                    }
+                    finally
+                    {
+                        cells.Release();
+                        GC.KeepAlive(source);
+                    }
+                }
+            }
+
+            _ = ToNumpyDtypeStr(source.dtype);   // dtype gate (Decimal already converted above)
 
             using (AcquireGil(requireGIL))
             {
@@ -167,7 +219,7 @@ namespace NumSharp.Interop.PythonNet
                 if (shape.Size == 0)
                 {
                     using var emptyDims = MakeTuple(shape.Dimensions);
-                    return np.empty(emptyDims, source.typecode);
+                    return np.empty(emptyDims, source.dtype);
                 }
 
                 // Guard the buffer against a concurrent Dispose for the duration of the copy only.
@@ -209,7 +261,9 @@ namespace NumSharp.Interop.PythonNet
             PythonRuntimeInterop.EnsureEngine();
             PythonRuntimeInterop.DrainPending();
 
-            _ = ToBufferFormat(source.typecode);   // dtype gate (Decimal throws)
+            // dtype gate: Decimal throws; a fixed-width S / U array is raw bytes like any other buffer; a StringDType array
+            // throws numpy's own refusal (its cells point into its allocator, so its bytes are not its text).
+            _ = ToBufferFormat(source.dtype);
 
             var shape = source.Shape;
             if (!shape.IsContiguous)
@@ -286,7 +340,8 @@ namespace NumSharp.Interop.PythonNet
             try
             {
                 ctBuf = ctypes.c_char.mul(tailBytes).from_address(dataPtr);
-                flat = np.frombuffer(ctBuf, source.typecode);
+                // The DESCRIPTOR names numpy's dtype: a string array's width ('|S5', '<U5') is not in its type code.
+                flat = np.frombuffer(ctBuf, source.dtype);
 
                 // The trivial paths require the view to cover its backing window EXACTLY: a contiguous
                 // offset-0 slice like ring["0:16"] keeps the full base block as its InternalArray

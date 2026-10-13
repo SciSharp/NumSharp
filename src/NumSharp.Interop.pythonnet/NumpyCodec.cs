@@ -15,15 +15,15 @@ namespace NumSharp.Interop.PythonNet
         ///     view is impossible.</b> Shared memory whenever it is achievable, a safe copy as the
         ///     fallback — never a blanket copy.
         ///
-        ///     <para>On <b>decode</b> the fallback is real: complex64 (widened), UCS-4 text (narrowed to
-        ///     Char, BMP only), and sub-item strides (linearized) have no zero-copy NumSharp
-        ///     representation and transparently become copies, while contiguous / strided / non-numpy
-        ///     exporter sources stay zero-copy views (read-only sources become NON-WRITEABLE views);
-        ///     big-endian multi-byte data is refused by BOTH paths rather than silently byte-swapped.
-        ///     On <b>encode</b> a view and a copy have identical dtype coverage — both need a
-        ///     numpy-expressible dtype — so Auto always yields a view, and the only unrepresentable
-        ///     dtype (<see cref="NPTypeCode.Decimal"/>) falls through to pythonnet's CLR wrapping
-        ///     either way.</para>
+        ///     <para>On <b>decode</b> the fallback is real: complex64 (widened), big-endian multi-byte data
+        ///     (byte-reversed), sub-item strides (linearized), and text without a buffer — a NEP 55
+        ///     <c>StringDType</c> array or an object array of <c>str</c>, copied as a NumSharp
+        ///     <c>StringDType</c> array — have no zero-copy NumSharp representation and transparently become
+        ///     copies, while contiguous / strided / non-numpy exporter sources, fixed-width <c>S</c> /
+        ///     <c>U</c> text included, stay zero-copy views (read-only sources become NON-WRITEABLE views).
+        ///     On <b>encode</b> every array has a view but one: a <c>StringDType</c> array keeps its text
+        ///     outside its buffer, so Auto copies it (<see cref="NDArrayPythonInterop.ToNumpyCopy"/>);
+        ///     <see cref="NPTypeCode.Decimal"/> is converted to a float64 numpy array in every mode.</para>
         /// </summary>
         Auto = 0,
 
@@ -55,10 +55,10 @@ namespace NumSharp.Interop.PythonNet
         ///     How <see cref="NDArray"/> values crossing INTO Python are materialized. Default
         ///     <see cref="NumpyCodecMode.Auto"/> — a zero-copy numpy view
         ///     (<see cref="NDArrayPythonInterop.ToNumpy(NDArray, bool?)"/> — shared mutation, source
-        ///     rooted). On encode a view and a copy have the same dtype coverage, so
-        ///     <see cref="NumpyCodecMode.Auto"/> and <see cref="NumpyCodecMode.View"/> behave identically
-        ///     and only <see cref="NumpyCodecMode.Copy"/> forces
-        ///     <see cref="NDArrayPythonInterop.ToNumpyCopy"/>.
+        ///     rooted), or a copy for the one array a view cannot express: a <c>StringDType</c> array,
+        ///     whose text lives outside its buffer. <see cref="NumpyCodecMode.View"/> declines that array
+        ///     (pythonnet then wraps it as a CLR object) and is otherwise identical to Auto;
+        ///     <see cref="NumpyCodecMode.Copy"/> forces <see cref="NDArrayPythonInterop.ToNumpyCopy"/>.
         /// </summary>
         public NumpyCodecMode EncodeMode { get; init; } = NumpyCodecMode.Auto;
 
@@ -152,8 +152,9 @@ namespace NumSharp.Interop.PythonNet
     ///     path include library arrays such as <c>torch.Tensor</c> and Pandas containers without
     ///     duplicating memory code.
     ///
-    ///     <para>Encoding falls back to pythonnet's default CLR-object wrapping for arrays it cannot
-    ///     express as numpy (<see cref="NPTypeCode.Decimal"/>), instead of failing the conversion.</para>
+    ///     <para>Encoding falls back to pythonnet's default CLR-object wrapping for an array the chosen
+    ///     mode cannot express (a <c>StringDType</c> array under <see cref="NumpyCodecMode.View"/>),
+    ///     instead of failing the conversion.</para>
     /// </summary>
     public sealed class NumpyCodec : IPyObjectEncoder, IPyObjectDecoder
     {
@@ -193,9 +194,9 @@ namespace NumSharp.Interop.PythonNet
                     case NumpyCodecMode.View:
                         encoded = NDArrayPythonInterop.ToNumpy(nd);
                         break;
-                    default: // Auto: view-first, copy-fallback. On encode both need a numpy dtype, so the
-                             // fallback is a no-op today (every dtype encodes — Decimal converts to
-                             // float64); kept for a uniform contract and any future dtype divergence.
+                    default: // Auto: view-first, copy-fallback. A StringDType array is the array that takes
+                             // the fallback: its text lives outside its buffer, so ToNumpy refuses it and
+                             // ToNumpyCopy copies it through numpy's NpyString C API.
                         try { encoded = NDArrayPythonInterop.ToNumpy(nd); }
                         catch (NotSupportedException) { encoded = NDArrayPythonInterop.ToNumpyCopy(nd); }
                         break;
@@ -205,9 +206,8 @@ namespace NumSharp.Interop.PythonNet
             }
             catch (NotSupportedException)
             {
-                // Defensive: every NumSharp dtype now encodes (Decimal converts to float64 in ToNumpy),
-                // so this is unreachable today. Should a future dtype have no numpy expression at all, we
-                // let pythonnet wrap the NDArray as a plain CLR object, still usable from Python.
+                // The chosen mode cannot express this array (a StringDType array in View mode, or a missing-value object
+                // with no Python form): let pythonnet wrap the NDArray as a plain CLR object, still usable from Python.
                 return null;
             }
         }

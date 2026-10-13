@@ -109,7 +109,8 @@ opt-in, not ordinary Pandas-to-Pandas CoW isolation.
 | nullable integer with `pd.NA` | no | typically float64 with NaN |
 | numeric categorical / sparse | no | categorical values / dense numeric values |
 | complex64 | no NumSharp view | widens to NumSharp complex128 on copy |
-| object, string, datetime, timedelta, timezone, `MultiIndex` values | unsupported | unsupported: no corresponding NumSharp dtype |
+| text column of `str` (`'str'`, `object`) | no: `to_numpy()` is an object array, nothing to share | a NumSharp `StringDType()` copy |
+| text with a missing value (`NaN`, `pd.NA`), mixed object, datetime, timedelta, timezone, `MultiIndex` values | unsupported | unsupported: no corresponding NumSharp dtype (the refusal names the first non-`str` element) |
 
 Axis labels, names, duplicate columns, and hierarchical row labels are Pandas metadata. The adapter
 returns only the two-dimensional value matrix, exactly like `DataFrame.to_numpy()`.
@@ -166,7 +167,8 @@ because the name already exists.
 | 6 | numeric Index and nullable-without-missing extension storage are stable views | [`IndexAndNullableExtensionWithoutMissingValues_AreStableViews`][gate] |
 | 7 | mixed numeric frame copies, detaches, and follows Pandas' common-dtype upcast | [`MixedNumericFrame_OrdinaryCopyAndImplicitAutoAreDetachedAndUpcastByPandas`][gate] |
 | 8 | materializing numeric families reject View but succeed through Copy | [`MaterializingPandasObjects_RejectView_ButNumericCopiesPreservePandasValues`][gate-edge] |
-| 9 | object/string/time/nested-index values fail without leases | [`ObjectStringDatetimeTimedeltaAndNestedIndex_AreDirectedUnsupportedFailures`][gate-edge] |
+| 9 | mixed-object/time/nested-index values fail without leases | [`MixedObjectDatetimeTimedeltaAndNestedIndex_AreDirectedUnsupportedFailures`][gate-edge] |
+| 9b | a text column of `str` copies as `StringDType()`; one with a missing value is refused | [`StringColumns_CrossAsStringDTypeCopies_MissingValuesRefused`][gate-edge] |
 | 10 | complex64 copy-widens while View declines | [`Complex64ViewDeclines_AndCopyWidensToNumSharpComplex128`][gate-edge] |
 | 11 | empty and degenerate ranks/shapes/dtypes are preserved | [`EmptyAndDegenerateShapes_PreserveRankShapeAndResolvedDtype`][gate-edge] |
 | 12 | positive and negative Series strides preserve logical values | [`PositiveAndNegativeStridedSeries_PreserveLogicalOffsetsAndStrides`][gate-edge] |

@@ -22,10 +22,18 @@ namespace NumSharp.Interop.PythonNet
         ///     lifetime coupling to the source.
         ///
         ///     <para>0-d exporters produce scalar NDArrays. complex64 buffers (format 'Zf') are widened
-        ///     to <see cref="NPTypeCode.Complex"/> (complex128) during the copy. UCS-4 text buffers
-        ///     (format 'w' / 4-byte 'u' — numpy '&lt;U1', linux/macOS <c>array.array('u')</c>) are narrowed
-        ///     to <see cref="NPTypeCode.Char"/> (UTF-16) during the copy; non-BMP code points throw, as a
-        ///     single <see cref="char"/> cannot hold a surrogate pair.</para>
+        ///     to <see cref="NPTypeCode.Complex"/> (complex128) during the copy, and big-endian multi-byte
+        ///     elements are byte-reversed to native order.</para>
+        ///
+        ///     <para><b>Text.</b> Fixed-width text copies as NumSharp's own sized dtype with the same bytes:
+        ///     numpy <c>S&lt;n&gt;</c> / <c>U&lt;n&gt;</c> (format <c>'&lt;n&gt;s'</c> / <c>'&lt;n&gt;w'</c>), a
+        ///     4-byte <c>wchar_t</c> buffer as <c>U1</c> (a 2-byte one as <see cref="NPTypeCode.Char"/>), a
+        ///     big-endian <c>&gt;U&lt;n&gt;</c> byte-reversed per code point, and <c>np.str_</c> / <c>np.bytes_</c>
+        ///     scalars as the 0-d <c>U&lt;n&gt;</c> / <c>S&lt;n&gt;</c> numpy reads (an empty one as a one-character
+        ///     <c>''</c>). A NEP 55 <c>StringDType</c> array, which has no buffer, is copied element by element
+        ///     through numpy's <c>NpyString</c> C API into a NumSharp <c>StringDType</c> array with the same
+        ///     <c>na_object</c> and <c>coerce</c> (every NA value stays NA). An object array whose every
+        ///     element is a <c>str</c> copies to <c>StringDType()</c>; any other object array is refused.</para>
         /// </summary>
         /// <param name="obj">The buffer exporter or registered-adapter source to copy.</param>
         /// <param name="requireGIL">
@@ -54,37 +62,100 @@ namespace NumSharp.Interop.PythonNet
                     ? PythonArrayAdapterRegistry.TryAdapt(obj, allowCopy: true)
                     : null;
                 PyObject source = adapted ?? obj;
-                using PyObject mv = OpenMemoryView(source);
-
-                string format = mv.format;
-                long itemsize = mv.itemsize;
-                DtypeCompatibilityKind kind = ResolveDtypeCompatibility(format, itemsize, out NPTypeCode tc, out int swapUnit);
-
-                long[] dims = mv.shape;
-                Shape shape = dims.Length == 0 ? new Shape() : new Shape(dims);
-                if (shape.Size == 0)
-                    return new NDArray(tc, shape, fillZeros: false);
-
-                var dest = new NDArray(tc, shape, fillZeros: false);
-                long expectedSourceBytes = shape.Size * itemsize;
-
-                if (mv.c_contiguous)
+                PyObject opened = TryOpenMemoryView(source);
+                if (opened is null)
                 {
-                    // Read through the MEMORYVIEW, not the raw object — same reason as the view path:
-                    // pythonnet 3.0.x's obj.GetBuffer is per-exporter buggy (a raw ctypes array
-                    // hard-crashes it on every flag), while the memoryview over the same memory is
-                    // uniformly safe. Only a read-only SIMPLE lock is needed here; it is released as
-                    // soon as the bytes are blitted.
-                    using PyBuffer buf = mv.GetBuffer(PyBUF.SIMPLE);
-                    CopyBuffer((void*)buf.Buffer, buf.Length, dest, expectedSourceBytes, kind, swapUnit);
+                    // NEP 55 StringDType exports no buffer (its text lives in its allocator): numpy's own NpyString C API
+                    // copies it exactly, NA values and every layout included. Asked only after the buffer failed, so the
+                    // numeric paths pay nothing for it; anything else re-raises the exporter's own error with guidance.
+                    if (IsStringDTypeArray(source))
+                        return ImportStringDType(source);
+                    opened = OpenMemoryView(source);
+                }
+
+                string format;
+                long itemsize;
+                long[] dims;
+                bool contiguous;
+                try
+                {
+                    format = opened.format;
+                    itemsize = opened.itemsize;
+                    dims = opened.shape;
+                    contiguous = opened.c_contiguous;
+                }
+                catch
+                {
+                    opened.Dispose();
+                    throw;
+                }
+
+                if (format == "O")
+                {
+                    // An object array: refused, except an array of str — text that cannot be viewed, so it is copied as a
+                    // StringDType array. The buffer lock is released first (the conversion reads the objects itself).
+                    opened.Dispose();
+                    return ImportObjectArrayOfStr(source);
+                }
+
+                using PyObject mv = opened;
+                DtypeCompatibilityKind kind;
+                DType descr;
+                int swapUnit;
+                long sourceItemsize = itemsize;
+                if (IsNumpyBytesScalar(source, format, dims))
+                {
+                    // numpy reads an np.bytes_ (a bytes subclass exporting its n bytes) as the 0-d |S<n> it is:
+                    // np.asarray(np.bytes_(b'ab')) is dtype 'S2', not two uint8 values. A plain bytes object stays raw bytes.
+                    descr = TextDescr('S', dims[0]);
+                    sourceItemsize = dims[0];
+                    dims = Array.Empty<long>();
+                    kind = DtypeCompatibilityKind.Blit;
+                    swapUnit = 0;
                 }
                 else
                 {
-                    // Linearize through CPython (correct for every stride pattern incl. suboffsets),
-                    // then blit the C-ordered bytes. The bytes object is a plain contiguous exporter.
-                    using PyObject bytesObj = mv.tobytes("C");
-                    using PyBuffer buf = bytesObj.GetBuffer(PyBUF.SIMPLE);
-                    CopyBuffer((void*)buf.Buffer, buf.Length, dest, expectedSourceBytes, kind, swapUnit);
+                    kind = ResolveDtypeCompatibility(format, itemsize, out descr, out swapUnit);
+                }
+
+                Shape shape = dims.Length == 0 ? new Shape() : new Shape(dims);
+                // An empty np.str_ / np.bytes_ is a zero-width element; numpy grows it to one character (np.asarray(np.str_(''))
+                // is '<U1'), and so does the copy — a NumSharp string element always has a positive width.
+                DType destinationDescr = GrowZeroWidthText(descr);
+                if (shape.Size == 0)
+                    return new NDArray(destinationDescr, shape, fillZeros: false);
+                if (!ReferenceEquals(destinationDescr, descr))
+                    return new NDArray(destinationDescr, shape);   // every element is '' (zero-filled); nothing to read
+
+                // Every byte is written below, so the destination skips the zero fill a U allocation otherwise gets.
+                var dest = NDArray.ForOverwrite(descr, shape);
+                long expectedSourceBytes = shape.Size * sourceItemsize;
+                try
+                {
+                    if (contiguous)
+                    {
+                        // Read through the MEMORYVIEW, not the raw object — same reason as the view path:
+                        // pythonnet 3.0.x's obj.GetBuffer is per-exporter buggy (a raw ctypes array
+                        // hard-crashes it on every flag), while the memoryview over the same memory is
+                        // uniformly safe. Only a read-only SIMPLE lock is needed here; it is released as
+                        // soon as the bytes are blitted.
+                        using PyBuffer buf = mv.GetBuffer(PyBUF.SIMPLE);
+                        CopyBuffer((void*)buf.Buffer, buf.Length, dest, expectedSourceBytes, kind, swapUnit);
+                    }
+                    else
+                    {
+                        // Linearize through CPython (correct for every stride pattern incl. suboffsets),
+                        // then blit the C-ordered bytes. The bytes object is a plain contiguous exporter.
+                        using PyObject bytesObj = mv.tobytes("C");
+                        using PyBuffer buf = bytesObj.GetBuffer(PyBUF.SIMPLE);
+                        CopyBuffer((void*)buf.Buffer, buf.Length, dest, expectedSourceBytes, kind, swapUnit);
+                    }
+                }
+                catch
+                {
+                    // The half-written copy is this call's own; release its buffer now rather than at a finalizer.
+                    dest.Dispose();
+                    throw;
                 }
 
                 return dest;
@@ -143,9 +214,14 @@ namespace NumSharp.Interop.PythonNet
         ///         pointer comes from a <c>PyBUF.STRIDED</c> buffer and the exact shape/strides from the
         ///         <c>memoryview</c> itself, reconstructing the strided view (incl. negative strides) —
         ///         so a view is produced whenever the layout is representable, not only for numpy. Only
-        ///         genuinely irreducible layouts (complex64, UCS-4 text, big-endian, non-element strides)
-        ///         decline.</item>
+        ///         genuinely irreducible layouts (complex64, big-endian, non-element strides) decline.</item>
         ///     </list>
+        ///
+        ///     <para><b>Text.</b> Fixed-width numpy <c>S&lt;n&gt;</c> / <c>U&lt;n&gt;</c> arrays (<c>&lt;U1</c> is
+        ///     NumSharp's <c>U1</c>, the same 4-byte code points) and <c>np.str_</c> / <c>np.bytes_</c> scalars
+        ///     view through these routes like numbers. Text without a buffer — a NEP 55 <c>StringDType</c>
+        ///     array, an object array — and an empty text scalar (no byte to share) are refused with the copy
+        ///     route (<see cref="ToNDArray"/>) in the message.</para>
         ///
         ///     <para><b>Lifetime:</b> the lease is released when the LAST NumSharp view over the memory —
         ///     including derived views like <c>nd["1:"]</c> — is disposed or garbage-collected (NumSharp's
@@ -206,15 +282,15 @@ namespace NumSharp.Interop.PythonNet
                 PyObject mv = null;
                 try
                 {
-                    try
+                    mv = TryOpenMemoryView(source);
+                    if (mv is null)
                     {
+                        // No buffer protocol but numpy-interface metadata exists (e.g. exotic dtypes, a StringDType
+                        // array, fail memoryview with a numpy-side error) — let the interface path decide; anything else
+                        // re-raises the exporter's own error with guidance.
+                        if (source.HasAttr(PythonRuntimeInterop.NameArrayInterface))
+                            return ViewViaArrayInterface(source, allowReadonly);
                         mv = OpenMemoryView(source);
-                    }
-                    catch (NotSupportedException) when (source.HasAttr("__array_interface__"))
-                    {
-                        // No buffer protocol but numpy-interface metadata exists (e.g. exotic dtypes
-                        // fail memoryview with a numpy-side error) — let the interface path decide.
-                        return ViewViaArrayInterface(source, allowReadonly);
                     }
 
                     if (!mv.c_contiguous)
@@ -245,12 +321,32 @@ namespace NumSharp.Interop.PythonNet
 
                     string format = mv.format;
                     long itemsize = mv.itemsize;
-                    NPTypeCode tc = FromBufferFormat(format, itemsize);   // 'Zf' (complex64) throws with copy guidance
-
                     long[] dims = mv.shape;
+                    DType descr;
+                    if (IsNumpyBytesScalar(source, format, dims))
+                    {
+                        // numpy reads an np.bytes_ as the 0-d |S<n> it is (its n bytes are ONE element), so the view
+                        // is that element over the same bytes. A plain bytes object stays raw uint8 bytes.
+                        descr = TextDescr('S', dims[0]);
+                        dims = Array.Empty<long>();
+                    }
+                    else
+                    {
+                        descr = FromBufferFormat(format, itemsize);   // 'Zf' (complex64) / big-endian / 'O' throw with copy guidance
+                    }
+
+                    // A zero-width text element (an empty np.str_ / np.bytes_) has no byte to share; the copy grows it to
+                    // one character, as numpy does.
+                    if (descr.Meta is StringDTypeMeta && descr.itemsize == 0)
+                        throw new NotSupportedException(
+                            "a zero-width text element (an empty np.str_ / np.bytes_) has no byte a NumSharp view could share. Use ToNDArray (copy): numpy reads it as a one-character '' element.");
+
                     Shape shape = dims.Length == 0 ? new Shape() : new Shape(dims);
                     if (shape.Size == 0)
-                        return new NDArray(tc, shape, fillZeros: false);
+                        return new NDArray(descr, shape, fillZeros: false);
+                    // The element width comes from the descriptor: an np.bytes_ buffer reports 1-byte items for its one
+                    // n-byte element.
+                    long elementBytes = descr.itemsize;
 
                     // Read writeability from the metadata view: it is the authoritative signal and lets
                     // AcquireBuffer AVOID probing PyBUF.WRITABLE on a read-only source. That probe is not
@@ -274,9 +370,9 @@ namespace NumSharp.Interop.PythonNet
                     var lease = new ImportLease(buf, holder: null, bytes: buf.Length);
                     try
                     {
-                        if (buf.Length != shape.Size * itemsize)
+                        if (buf.Length != shape.Size * elementBytes)
                             throw new InvalidOperationException(
-                                $"exporter reported {buf.Length} bytes but shape {shape} x itemsize {itemsize} needs {shape.Size * itemsize}.");
+                                $"exporter reported {buf.Length} bytes but shape {shape} x itemsize {elementBytes} needs {shape.Size * elementBytes}.");
 
                         // numpy marks arrays over read-only buffers writeable=False; carry the same
                         // flag so NumSharp's guarded write paths raise "assignment destination is
@@ -285,7 +381,7 @@ namespace NumSharp.Interop.PythonNet
                         if (readOnly)
                             shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
 
-                        IArraySlice slice = WrapExternal(tc, (void*)buf.Buffer, shape.Size, lease.Release);
+                        IArraySlice slice = WrapExternal(descr, (void*)buf.Buffer, shape.Size, lease.Release);
                         // Alias() so the storage reports VIEW semantics (numpy: flags.owndata == False
                         // for foreign buffers): ndarray.resize then refuses to reallocate ("cannot
                         // resize this array: it does not own its data") instead of silently detaching
@@ -319,6 +415,32 @@ namespace NumSharp.Interop.PythonNet
 
         // ---- zero-copy import internals ----------------------------------------------------------
 
+        /// <summary>
+        ///     <c>memoryview(obj)</c>, or <see langword="null"/> when <paramref name="obj"/> exports no PEP 3118 buffer.
+        ///     Call under the GIL.
+        /// </summary>
+        /// <param name="obj">The candidate exporter.</param>
+        /// <returns>A new memoryview the caller owns, or <see langword="null"/>.</returns>
+        /// <remarks>
+        ///     The failure is caught inside Python (<see cref="PythonRuntimeInterop.TryMemoryview"/>), so the routes that
+        ///     go on after it — a <c>StringDType</c> copy, the <c>__array_interface__</c> view — pay no .NET exception;
+        ///     a caller that has nothing else to try calls <see cref="OpenMemoryView"/>, which raises the exporter's own
+        ///     error with the bridge's guidance.
+        /// </remarks>
+        private static PyObject TryOpenMemoryView(PyObject obj)
+        {
+            PyObject mv = PythonRuntimeInterop.TryMemoryview.Invoke(obj);
+            if (!mv.IsNone())
+                return mv;
+            mv.Dispose();
+            return null;
+        }
+
+        /// <summary><c>memoryview(obj)</c>, raising when <paramref name="obj"/> exports no buffer. Call under the GIL.</summary>
+        /// <param name="obj">The candidate exporter.</param>
+        /// <returns>A new memoryview the caller owns.</returns>
+        /// <exception cref="NotSupportedException">The object exports no PEP 3118 buffer; the message carries Python's own
+        ///     error and names the objects that do convert.</exception>
         private static PyObject OpenMemoryView(PyObject obj)
         {
             try
@@ -382,16 +504,17 @@ namespace NumSharp.Interop.PythonNet
         /// </summary>
         private static unsafe NDArray ViewViaBufferStrides(PyObject obj, string format, long itemsize, long[] dims, long[] byteStrides, bool sourceReadonly, bool allowReadonly)
         {
-            NPTypeCode tc = FromBufferFormat(format, itemsize);   // 'Zf' (complex64) / big-endian throw → copy fallback in Auto
-            if (tc.SizeOf() != itemsize)
+            DType descr = FromBufferFormat(format, itemsize);   // 'Zf' (complex64) / big-endian / 'O' throw → copy fallback in Auto
+            // Also refuses a zero-width text element (itemsize 0): there is no byte to share, and no stride to divide by.
+            if (descr.itemsize != itemsize || itemsize == 0)
                 throw new NotSupportedException(
-                    $"buffer itemsize {itemsize} does not match NumSharp dtype {tc} ({tc.SizeOf()} bytes); a zero-copy view is not possible. Use ToNDArray (copy).");
+                    $"buffer itemsize {itemsize} does not match NumSharp dtype {descr} ({descr.itemsize} bytes); a zero-copy view is not possible. Use ToNDArray (copy).");
 
             long sizeFromDims = 1;
             for (int i = 0; i < dims.Length; i++)
                 sizeFromDims *= dims[i];
             if (sizeFromDims == 0)
-                return new NDArray(tc, dims.Length == 0 ? new Shape() : new Shape(dims), fillZeros: false);
+                return new NDArray(descr, dims.Length == 0 ? new Shape() : new Shape(dims), fillZeros: false);
 
             if (byteStrides is null || byteStrides.Length != dims.Length)
                 throw new NotSupportedException(
@@ -427,7 +550,7 @@ namespace NumSharp.Interop.PythonNet
                 if (readOnly)
                     shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
 
-                IArraySlice slice = WrapExternal(tc, (void*)basePtr, spanElements, lease.Release);
+                IArraySlice slice = WrapExternal(descr, (void*)basePtr, spanElements, lease.Release);
                 // The strided shape's logical size differs from the physical span, so Alias a flat
                 // storage with the strided shape (as ViewViaArrayInterface / NumSharp slicing do).
                 var storage = new UnmanagedStorage(slice, Shape.Vector(spanElements)).Alias(shape);
@@ -457,8 +580,13 @@ namespace NumSharp.Interop.PythonNet
 
             string typestr;
             using (PyObject t = ai[PythonRuntimeInterop.NameTypestr]) typestr = t.As<string>();
-            NPTypeCode tc = FromNumpyDtypeStr(typestr);   // rejects big-endian / datetime / object dtypes
-            int itemsize = tc.SizeOf();
+            // Rejects big-endian / datetime / object / StringDType (copy-only) dtypes; a fixed-width string maps to its sized
+            // descriptor, whose item size is the element stride unit below.
+            DType descr = FromNumpyDtypeStr(typestr);
+            int itemsize = descr.itemsize;
+            if (itemsize == 0)
+                throw new NotSupportedException(
+                    $"numpy dtype '{typestr}' has zero-width elements; no NumSharp view can share them. Use ToNDArray (copy).");
 
             long dataPtr;
             bool readOnly;
@@ -504,7 +632,7 @@ namespace NumSharp.Interop.PythonNet
             for (int i = 0; i < dims.Length; i++)
                 sizeFromDims *= dims[i];
             if (sizeFromDims == 0)
-                return new NDArray(tc, new Shape(dims), fillZeros: false);
+                return new NDArray(descr, dims.Length == 0 ? new Shape() : new Shape(dims), fillZeros: false);
 
             // A non-empty array must name a real address to share. numpy rejects a NULL data pointer
             // here ("data is NULL but array contains data"); without this guard a null (or otherwise
@@ -579,7 +707,7 @@ namespace NumSharp.Interop.PythonNet
             var lease = new ImportLease(buffer: null, holder: holder, bytes: spanElements * itemsize);
             try
             {
-                IArraySlice slice = WrapExternal(tc, (void*)basePtr, spanElements, lease.Release);
+                IArraySlice slice = WrapExternal(descr, (void*)basePtr, spanElements, lease.Release);
                 // The strided shape's logical size differs from the physical span, so the
                 // validating (slice, shape) ctor cannot be used — build a flat storage over the
                 // span and Alias it with the strided shape, exactly how NumSharp's own slicing
@@ -606,12 +734,18 @@ namespace NumSharp.Interop.PythonNet
 
         /// <summary>
         ///     How <see cref="ToNDArray"/> materializes one PEP 3118 element type into a NumSharp dtype.
-        ///     A source whose element type is bit-identical to a NumSharp dtype is a straight blit; the
-        ///     two element types whose only NumSharp counterpart is a DIFFERENT width need an
-        ///     element-wise conversion during the copy (and so can never be a zero-copy view — the view
-        ///     path lets <see cref="FromBufferFormat"/> throw the copy guidance instead). Resolved once
-        ///     per import by <see cref="ResolveDtypeCompatibility"/> and consumed by <see cref="CopyBuffer"/>.
+        ///     A source whose element type is bit-identical to a NumSharp dtype is a straight blit (possibly
+        ///     byte-reversed per unit for a big-endian source); complex64, whose only NumSharp counterpart
+        ///     is a DIFFERENT width, needs an element-wise conversion during the copy (and so can never be a
+        ///     zero-copy view — the view path lets <see cref="FromBufferFormat"/> throw the copy guidance
+        ///     instead). Resolved once per import by <see cref="ResolveDtypeCompatibility"/> and consumed by
+        ///     <see cref="CopyBuffer"/>.
         /// </summary>
+        /// <remarks>
+        ///     UCS-4 text used to be a third kind (narrowed to <see cref="NPTypeCode.Char"/>, BMP only). Since NumSharp
+        ///     has fixed-width string dtypes, numpy's <c>'&lt;U1'</c> is NumSharp's <c>U1</c> — the same bytes — so text is
+        ///     a blit like any other buffer.
+        /// </remarks>
         private enum DtypeCompatibilityKind
         {
             /// <summary>Element type is bit-identical to its NumSharp dtype — a straight byte blit.</summary>
@@ -619,26 +753,30 @@ namespace NumSharp.Interop.PythonNet
 
             /// <summary>complex64 ('Zf'): widen each (float32, float32) pair to a 16-byte <see cref="Complex"/>.</summary>
             WidenComplex64,
-
-            /// <summary>UCS-4 text ('w' / '1w' / 4-byte 'u'): narrow each code point to a UTF-16 <see cref="char"/> (BMP only).</summary>
-            NarrowUcs4,
         }
 
         /// <summary>
         ///     Classify a PEP 3118 element type by the <see cref="DtypeCompatibilityKind"/> path
-        ///     <see cref="ToNDArray"/> must take, hand back the destination <paramref name="tc"/> the
+        ///     <see cref="ToNDArray"/> must take, hand back the destination <paramref name="descr"/> the
         ///     path implies, and report the sub-element byte width <paramref name="swapUnit"/> that
         ///     <see cref="CopyBuffer"/> must byte-reverse (0 = no swap — native-endian source).
         ///
         ///     <para><b>Big-endian is the copy path's alone.</b> A zero-copy VIEW over big-endian memory
         ///     is impossible on a native-endian NumSharp buffer, so <see cref="FromBufferFormat"/> — the
         ///     view path's dtype gate — refuses every big-endian multi-byte format. The COPY path,
-        ///     however, can byte-reverse each element as it blits, exactly as it widens complex64 and
-        ///     narrows UCS-4; so a big-endian source decodes to a byteswapped copy here rather than
-        ///     failing outright. Single-byte big-endian formats ('&gt;b', '&gt;B', '&gt;?') are
-        ///     byte-order-irrelevant and fall through to <see cref="FromBufferFormat"/> unchanged.</para>
+        ///     however, can byte-reverse each element as it blits, exactly as it widens complex64;
+        ///     so a big-endian source decodes to a byteswapped copy here rather than failing outright.
+        ///     Single-byte big-endian formats ('&gt;b', '&gt;B', '&gt;?') are byte-order-irrelevant and
+        ///     fall through to <see cref="FromBufferFormat"/> unchanged.</para>
         /// </summary>
-        private static DtypeCompatibilityKind ResolveDtypeCompatibility(string format, long itemsize, out NPTypeCode tc, out int swapUnit)
+        /// <param name="format">The source's <c>memoryview.format</c>.</param>
+        /// <param name="itemsize">The source's <c>memoryview.itemsize</c>.</param>
+        /// <param name="descr">Receives the destination descriptor.</param>
+        /// <param name="swapUnit">Receives the byte width each reversed group spans (0: no swap).</param>
+        /// <returns>The materialization kind.</returns>
+        /// <exception cref="NotSupportedException">The format has no NumSharp dtype at any byte order (see
+        ///     <see cref="FromBufferFormat"/> / <see cref="ResolveBigEndianBlitDtype"/>).</exception>
+        private static DtypeCompatibilityKind ResolveDtypeCompatibility(string format, long itemsize, out DType descr, out int swapUnit)
         {
             swapUnit = 0;
             bool bigEndian = IsBigEndianFormat(format);
@@ -649,24 +787,18 @@ namespace NumSharp.Interop.PythonNet
                 // to WidenComplex64 before the format ever reaches the endian-aware FromBufferFormat, so
                 // a big-endian '>Zf' was previously widened by reading its float32 halves as native —
                 // silent data corruption. Byte-reverse each 4-byte half first when the source is BE.
-                tc = NPTypeCode.Complex;
+                descr = DType.Complex;
                 if (bigEndian) swapUnit = 4;
                 return DtypeCompatibilityKind.WidenComplex64;
             }
 
-            if (IsUcs4TextFormat(format, itemsize))   // little-endian UCS-4 only (IsUcs4TextFormat rejects '>'/'!')
-            {
-                tc = NPTypeCode.Char;
-                return DtypeCompatibilityKind.NarrowUcs4;
-            }
-
             if (bigEndian && itemsize > 1)
             {
-                tc = ResolveBigEndianBlitDtype(format, itemsize, out swapUnit);
+                descr = ResolveBigEndianBlitDtype(format, itemsize, out swapUnit);
                 return DtypeCompatibilityKind.Blit;
             }
 
-            tc = FromBufferFormat(format, itemsize);
+            descr = FromBufferFormat(format, itemsize);
             return DtypeCompatibilityKind.Blit;
         }
 
@@ -684,35 +816,54 @@ namespace NumSharp.Interop.PythonNet
         }
 
         /// <summary>
-        ///     Map a BIG-ENDIAN, multi-byte PEP 3118 numeric format to its native NumSharp dtype and the
+        ///     Map a BIG-ENDIAN, multi-byte PEP 3118 format to its native NumSharp descriptor and the
         ///     sub-element byte width <see cref="ByteSwapCopy"/> must reverse. Reached ONLY by
         ///     <see cref="ToNDArray"/> (the copy path): the view path's <see cref="FromBufferFormat"/>
         ///     refuses big-endian because a native-endian zero-copy view is impossible. complex128 ('Zd')
         ///     reverses each 8-byte half independently (real, then imag) — never the 16-byte element as
-        ///     one unit. Formats with no NumSharp dtype at ANY byte order (UCS-4 text, extended-precision
-        ///     long double, structured) throw, matching <see cref="FromBufferFormat"/>'s refusals.
+        ///     one unit; UCS-4 text ('&gt;5w', numpy's '&gt;U5') reverses each 4-byte code point; a byte
+        ///     string ('&gt;5s') has no byte order and is copied as it is.
         /// </summary>
-        private static NPTypeCode ResolveBigEndianBlitDtype(string format, long itemSize, out int swapUnit)
+        /// <param name="format">The big-endian format (it starts with '&gt;' or '!').</param>
+        /// <param name="itemSize">The element size in bytes.</param>
+        /// <param name="swapUnit">Receives the byte width of each reversed group (0 for a byte string).</param>
+        /// <returns>The native NumSharp descriptor.</returns>
+        /// <exception cref="NotSupportedException">The format has no NumSharp dtype at ANY byte order
+        ///     (extended-precision long double, structured, a text count that disagrees with the itemsize) —
+        ///     matching <see cref="FromBufferFormat"/>'s refusals.</exception>
+        private static DType ResolveBigEndianBlitDtype(string format, long itemSize, out int swapUnit)
         {
             string code = format.Substring(1);   // starts with '>' or '!' — guaranteed by IsBigEndianFormat
+            if (TryParseCountedText(code, out char textCode, out long count))
+            {
+                long width = textCode == 'w' ? count * 4 : count;
+                if (width == itemSize)
+                {
+                    // A UCS-4 code point is a 4-byte unit; a byte string's characters are single bytes (no order).
+                    swapUnit = textCode == 'w' ? 4 : 0;
+                    return TextDescr(textCode == 'w' ? 'U' : 'S', count);
+                }
+            }
+
             switch (code)
             {
-                case "h": swapUnit = 2; return NPTypeCode.Int16;
-                case "H": swapUnit = 2; return NPTypeCode.UInt16;
-                case "i": case "l": swapUnit = (int)itemSize; return itemSize == 8 ? NPTypeCode.Int64 : NPTypeCode.Int32;
-                case "I": case "L": swapUnit = (int)itemSize; return itemSize == 8 ? NPTypeCode.UInt64 : NPTypeCode.UInt32;
-                case "n": case "q": swapUnit = 8; return NPTypeCode.Int64;
-                case "N": case "Q": swapUnit = 8; return NPTypeCode.UInt64;
-                case "e": swapUnit = 2; return NPTypeCode.Half;
-                case "f": swapUnit = 4; return NPTypeCode.Single;
-                case "d": swapUnit = 8; return NPTypeCode.Double;
+                case "h": swapUnit = 2; return DType.Int16;
+                case "H": swapUnit = 2; return DType.UInt16;
+                case "i": case "l": swapUnit = (int)itemSize; return itemSize == 8 ? DType.Int64 : DType.Int32;
+                case "I": case "L": swapUnit = (int)itemSize; return itemSize == 8 ? DType.UInt64 : DType.UInt32;
+                case "n": case "q": swapUnit = 8; return DType.Int64;
+                case "N": case "Q": swapUnit = 8; return DType.UInt64;
+                case "e": swapUnit = 2; return DType.Half;
+                case "f": swapUnit = 4; return DType.Single;
+                case "d": swapUnit = 8; return DType.Double;
                 case "g":                                      // C long double: IEEE double only at width 8 (MSVC)
-                    if (itemSize == 8) { swapUnit = 8; return NPTypeCode.Double; }
+                    if (itemSize == 8) { swapUnit = 8; return DType.Double; }
                     break;
-                case "u":                                      // wchar_t text unit: a 2-byte BE unit is a UTF-16 code unit
-                    if (itemSize == 2) { swapUnit = 2; return NPTypeCode.Char; }
-                    break;                                     // 4-byte 'u' is UCS-4 (no BE view/copy); 1-byte never reaches here
-                case "Zd": swapUnit = 8; return NPTypeCode.Complex;   // complex128 — each 8-byte half reversed
+                case "u":                                      // wchar_t text unit: a 2-byte BE unit is a UTF-16 code unit,
+                    if (itemSize == 2) { swapUnit = 2; return DType.Char; }
+                    if (itemSize == 4) { swapUnit = 4; return TextDescr('U', 1); }   // a 4-byte one a UCS-4 code point
+                    break;                                     // 1-byte never reaches here (itemsize > 1)
+                case "Zd": swapUnit = 8; return DType.Complex;   // complex128 — each 8-byte half reversed
             }
 
             swapUnit = 0;
@@ -720,6 +871,18 @@ namespace NumSharp.Interop.PythonNet
                 $"big-endian buffer format '{format}' (itemsize {itemSize}) has no NumSharp dtype.");
         }
 
+        /// <summary>
+        ///     Materializes <paramref name="srcBytes"/> source bytes (C-ordered elements) into the fresh
+        ///     destination by the resolved <paramref name="kind"/>: a straight or byte-reversing blit, or the
+        ///     complex64 widening.
+        /// </summary>
+        /// <param name="src">The first source byte.</param>
+        /// <param name="srcBytes">The source byte count.</param>
+        /// <param name="dest">The fresh C-contiguous destination (every byte is overwritten).</param>
+        /// <param name="expectedSourceBytes">The byte count the shape and the source element size imply.</param>
+        /// <param name="kind">The materialization kind.</param>
+        /// <param name="swapUnit">The byte width of each reversed group (0 or 1: no swap).</param>
+        /// <exception cref="InvalidOperationException">The exporter produced another byte count than its shape implies.</exception>
         private static unsafe void CopyBuffer(void* src, long srcBytes, NDArray dest, long expectedSourceBytes, DtypeCompatibilityKind kind, int swapUnit)
         {
             if (srcBytes != expectedSourceBytes)
@@ -751,23 +914,7 @@ namespace NumSharp.Interop.PythonNet
                     break;
                 }
 
-                case DtypeCompatibilityKind.NarrowUcs4:
-                {
-                    var s = (uint*)src;
-                    var d = (char*)dest.Storage.Address;
-                    long n = dest.size;
-                    for (long i = 0; i < n; i++)
-                    {
-                        uint cp = s[i];
-                        if (cp > 0xFFFF)
-                            throw new NotSupportedException(
-                                $"UCS-4 text contains non-BMP code point U+{cp:X} at element {i}; a NumSharp Char is a single UTF-16 code unit (this code point needs a surrogate pair).");
-                        d[i] = (char)cp;
-                    }
-                    break;
-                }
-
-                default:   // Blit — bit-identical (native) or byte-reversed-per-element (big-endian)
+                default:   // Blit — bit-identical (native) or byte-reversed-per-unit (big-endian)
                 {
                     long destBytes = (long)dest.size * dest.dtypesize;
                     if (swapUnit > 1)
@@ -784,8 +931,8 @@ namespace NumSharp.Interop.PythonNet
         ///     reversing every consecutive <paramref name="unit"/>-byte group — the big-endian → native
         ///     blit. <paramref name="srcBytes"/> is always a whole multiple of <paramref name="unit"/> (a
         ///     buffer holds an integral number of elements, and <paramref name="unit"/> divides the element
-        ///     size: it IS the element size for real types, and half of it for complex128, whose two IEEE
-        ///     halves are byte-reversed independently).
+        ///     size: it IS the element size for real types, half of it for complex128, whose two IEEE
+        ///     halves are byte-reversed independently, and one code point for UCS-4 text).
         /// </summary>
         private static unsafe void ByteSwapCopy(byte* src, byte* dest, long srcBytes, int unit)
         {
@@ -807,25 +954,6 @@ namespace NumSharp.Interop.PythonNet
                 return false;
             int i = "<>=@!".IndexOf(format[0]) >= 0 ? 1 : 0;
             return format.Substring(i) == "Zf";
-        }
-
-        /// <summary>
-        ///     True for elementwise UCS-4 text formats — 'w' (PEP 3118 UCS-4; numpy '&lt;U1' exports the
-        ///     count-prefixed '1w') and 4-byte 'u' (linux/macOS wchar_t). Big-endian markers return
-        ///     false so <see cref="FromBufferFormat"/> raises its byte-swap guidance instead of the
-        ///     narrow path reading swapped code points. Multi-char text ('3w' — numpy '&lt;U3') stays
-        ///     false: each element is a whole string, not one code point.
-        /// </summary>
-        private static bool IsUcs4TextFormat(string format, long itemSize)
-        {
-            if (string.IsNullOrEmpty(format) || itemSize != 4)
-                return false;
-            char c0 = format[0];
-            if (c0 == '>' || c0 == '!')
-                return false;
-            int i = "<=@".IndexOf(c0) >= 0 ? 1 : 0;
-            string code = format.Substring(i);
-            return code == "w" || code == "1w" || code == "u";
         }
 
         private static long[] TupleToLongs(PyObject tupleLike)

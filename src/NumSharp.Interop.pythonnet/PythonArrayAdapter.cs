@@ -99,6 +99,36 @@ namespace NumSharp.Interop.PythonNet
             return false;
         }
 
+        /// <summary>
+        ///     Whether <paramref name="objectType"/> is one of the plain buffer exporters most imports see — numpy's exact
+        ///     <c>ndarray</c>, <c>bytes</c>, <c>bytearray</c>, <c>memoryview</c>, <c>array.array</c> — which no library-array
+        ///     adapter applies to (an adapter exists for objects WITHOUT a buffer). Call under the GIL.
+        /// </summary>
+        /// <param name="objectType">The Python type an import was asked about.</param>
+        /// <returns>True for exactly those five types.</returns>
+        /// <remarks>
+        ///     The built-in adapters ask this first. Their own test walks the type's MRO with four Python attribute reads
+        ///     per class — about 2.5 µs for an <c>ndarray</c>, paid by every import, numeric or text, before any byte is
+        ///     copied (5.3 of the 9.2 µs a 1,000-element float64 <c>ToNDArray</c> took) — while this is one read of the
+        ///     type's name (<c>tp_name</c>). A SUBCLASS has a name of its own, so <c>np.matrix</c>, a memmap or a user's
+        ///     <c>ndarray</c> subclass still takes the walk. User adapters are asked as before.
+        /// </remarks>
+        internal static bool IsPlainBufferExporter(PyType objectType)
+        {
+            string name = objectType.Name;
+            return name == "numpy.ndarray" || name == "bytes" || name == "bytearray" || name == "memoryview" || name == "array.array";
+        }
+
+        /// <summary>
+        ///     The first registered adapter's canonical array for <paramref name="source"/>, or <see langword="null"/> when no
+        ///     adapter applies (the common case: the source is already a buffer exporter). Call under the GIL.
+        /// </summary>
+        /// <param name="source">The object an import verb was given.</param>
+        /// <param name="allowCopy">Whether the adapter may detach / transfer / materialize (the copy verbs) or must
+        ///     preserve shared memory (the view verbs).</param>
+        /// <returns>A new wrapper the caller disposes, or <see langword="null"/>.</returns>
+        /// <remarks>An adapter whose capability test throws is skipped; one whose <c>Adapt</c> returns null declines and
+        ///     the next one is asked.</remarks>
         internal static PyObject TryAdapt(PyObject source, bool allowCopy)
         {
             using PyObject typeObject = source.GetPythonType();

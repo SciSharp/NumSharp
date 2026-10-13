@@ -35,7 +35,7 @@
 | D4 | Storage lane for `T`. | **Use `NPTypeCode.String` and rely on the dtype information.** `T` shares the lane of `S` / `U`; the descriptor's meta class tells them apart (see §3). |
 | D5 | `na_object` in C#. | **Yes:** `null` = Python `None`, a float NaN = `nan`, a `string` = a string NA, any other object = an "other" NA. Two factory overloads, `StringDType(bool coerce = true)` and `StringDType(object na_object, bool coerce = true)`, keep "not given" different from `null`. |
 | D6 | D10: the numeric parse in the implicit `string → NDArray` conversion. | **Remove it.** A C# string is NumPy's `np.array(str)`: a 0-d `U`. |
-| D7 | pythonnet crossing for `T` (NumPy has no buffer protocol for `T`). | Open (belongs to P1.8). |
+| D7 | pythonnet crossing for `T` (NumPy has no buffer protocol for `T`). | **NumPy's C API** (2026-10-13): an exact copy in both directions through the `NpyString_*` functions of the `_ARRAY_API` capsule. With it, the owner decided: NumPy's `<U1` imports as `U1`, a dtype of its own (a C# `char` is 2 bytes; `Char` keeps exporting as `<u2`); a NumPy object array is refused, except one whose every element is a `str`, which is copied (it cannot be viewed); a missing-data object with no C# form (`pd.NA`, an arbitrary object) is refused. |
 | D8 | ML.NET text columns and Parquet string columns as `T`. | Open (later). |
 | D9 | Branch base. | Done: the owner rebased `strings` onto journey4 `f6086479`. |
 
@@ -150,7 +150,7 @@ Three rules keep that safe:
 | P1.5 | `T` creation, element access and printing: `np.array` / `asarray` / `empty` / `zeros` / `ones` / `full` and the `_like` forms, the `setitem` coercion (uses P1.1), `item` / `tolist` / `foreach` / `AsStringArray` / `(Array)`, NA objects, `repr` / `str` / `array2string`. | P1.1, P1.3 | M | yes |
 | P1.6 | `T` casts: `T` ↔ `T` (NA rules), `T` ↔ `U` / `S`, `T` ↔ bool, `T` ↔ numbers (uses P1.1). | P1.1, P1.4 | M | yes |
 | P1.7 | `T` in the rest of the library: `np.nditer` (`refs_ok`, buffered casts), numpy.ma (fill `'N/A'`), `loadtxt` / `savetxt`, `.npy` (D3), the whole-surface sweep with `T` (NumPy's refusals and shape-decided answers in NumPy's order; computation deferred to phase 2). | P1.4–P1.6 | L | later |
-| P1.8 | Bridges and leftovers: pythonnet `S` / `U` zero-copy both ways and `T` as a copy (D7); D10 (D6). | — | M | D10 only, with P1.1 |
+| P1.8 | Bridges and leftovers: pythonnet `S` / `U` zero-copy both ways and `T` as a copy (D7); D10 (D6). | — | M | done (D10 with P1.1, the bridge 2026-10-13) |
 | P1.9 | Gate, speed, docs: oracle sections for the new behavior with zero excuses; unit tests that cover all new phase-1 code; lifetime tests and runs under `FencedMemory` / guard pages; a mutation pass; a benchmark sheet (≥ 1.5× NumPy at 1K / 100K / 1M); docs. | with every package | M | yes |
 
 Order: P1.1 and P1.2 → P1.3 → P1.4 → P1.5 and P1.6 → P1.9's closing pass. Each package ends in its own commit with its
@@ -267,3 +267,32 @@ After this plan, phase 2 loses P2.4 and gains the `T` forms of P2.1–P2.6 plus 
 - 2026-10-13 — **This round (P1.1–P1.6 and P1.9) is complete.** Later rounds: P1.7 (`T` in np.nditer's buffering and
   casting, numpy.ma, `loadtxt` / `savetxt`, `.npy`, the whole-surface sweep) and P1.8 (pythonnet `S` / `U` zero-copy
   both ways, `T` as a copy). Then phase 2 (computation on text).
+- 2026-10-13 — **P1.8 done** (the pythonnet bridge; D7 answered with three companion decisions, §1).
+  - `S` / `U` are ordinary buffers: `ToNumpy` / `AsNDArray` share them both ways in every layout (the dtype maps and
+    `WrapExternal` carry the sized descriptor); `<U1`, `array('w')` and a 4-byte `wchar_t` buffer view as `U1`, a 2-byte one
+    as `Char`; big-endian `>U<n>` copies byte-swapped; `np.str_` / `np.bytes_` are 0-d `U` / `S`, an empty one copies to
+    `''`. `FromNumpyDtypeStr` / `FromBufferFormat` return `DType`.
+  - `T` copies through `NumpyStringApi` (slots 313 load, 314 pack, 315 pack_null, 316 acquire, 318 release, 160
+    `PyArray_GetPtr`) with `NpyString_dup`'s rules. Import: one pass settles NA / empty / short cells and sums the arena,
+    one reservation, a second pass duplicates the long cells; the cells equal numpy's own C-order copy's. Export: one pass
+    into a fresh `np.empty(shape, StringDType(...))`, locking the RESULT's descriptor allocator; the cells equal
+    `np.array(list, dtype)`'s. `na_object` and `coerce` cross; an NA object with no C# / Python form is refused.
+  - An object array of `str` (a pandas text column) copies as `StringDType()` through numpy's own
+    `astype(StringDType(coerce=False))`; any other object array is refused, naming the first non-`str` element.
+  - The codec: Auto decode copies `T` and object-of-`str`; Auto encode copies `T` (View declines it). `ToTorch` refuses text.
+  - Fixed on the way: every import paid two .NET exceptions for a failed `memoryview` (~28 µs; now a Python-side `try`,
+    `PythonRuntimeInterop.TryMemoryview`), and every import paid the built-in Torch / Pandas adapters' MRO walk (5.3 µs;
+    `PythonArrayAdapterRegistry.IsPlainBufferExporter` answers for ndarray / bytes / bytearray / memoryview / array.array
+    from the type's name). A 1,000-element float64 `ToNDArray` went 9.2 → 3.7 µs.
+  - Gates (live NumPy 2.4.2): `TextFixedWidthCrossingTests` (10), `TextStringDTypeCrossingTests` (9: every NA kind × both
+    `coerce` × every layout, both directions, cells compared, fault injection, lifetime), the docs page's census (55
+    varieties: 50 view, 4 copy, 1 rejected) and troubleshooting rows. The interop suite: 669 / 669 on net10.0 and net8.0
+    (numpy only), the ecosystem run 94 passed, 1 skipped (no GPU) on both.
+  - Speed (µs, minimum of three pinned runs of best-of-9; NumPy's `a.copy()` / the Python `tolist()` route / ToNDArray /
+    ToNumpyCopy): short 1K 17.0 / 160 / 9.5 / 11.7, 100K 1,874 / 17,112 / 826 / 1,216, 1M 18,353 / 171,185 / 7,875 /
+    11,840; long 1K 43.4 / 188 / 36.0 / 49.5, 100K 7,749 / 25,023 / 4,285 / 8,284, 1M 79,156 / 258,126 / 41,217 / 85,795;
+    mixed with 10 % NA 1K 30.0 / 190 / 22.8 / 28.9, 100K 3,590 / 21,359 / 2,503 / 3,422, 1M 46,093 / 222,544 / 23,958 /
+    44,835. Against the Python route every cell is 3–22×. Against NumPy's own copy the import is 1.2–2.3× and the
+    short-string export 1.45–1.55×; the long-string export is 0.88–1.05×: numpy's allocator stores each long string
+    through `NpyString_pack`, the same work its own copy does, and the C API has no way to reserve numpy's arena.
+    Fixed-width views are flat: `ToNumpy` 5.7–6.6 µs, `AsNDArray` 4.0–4.1 µs from 1K to 1M elements.

@@ -215,7 +215,7 @@ window - is where the export's `weakref.finalize` is rooted, which is why every 
 
 ### Which Python objects can NumSharp view without copying?
 
-**Almost all of them - 47 of the 50 exporter varieties in the census below.** `AsNDArray` /
+**Almost all of them - 50 of the 55 exporter varieties in the census below.** `AsNDArray` /
 `ToNDArrayView` takes one of three routes, chosen by what the exporter is:
 
 1. **C-contiguous PEP 3118 exporters** - any object: numpy arrays, `bytes`, `bytearray`,
@@ -237,15 +237,17 @@ using (Py.GIL())
 }
 ```
 
-The census, re-measured on every test run - 50 exporter varieties across builtins, `array.array`'s
-twelve typecodes, ctypes element types, numpy dtypes, numpy layouts and memoryview forms:
-**47 view, 2 copy, 1 rejected.** The two copies are complex64 (widened to `Complex`) and a
-sub-element-stride `as_strided` window (linearized); the one rejection is `datetime64`, whose element
-type has no NumSharp dtype at any byte order. **Big-endian multi-byte data is a third copy** - the
+The census, re-measured on every test run - 55 exporter varieties across builtins, `array.array`'s
+twelve typecodes, ctypes element types, numpy dtypes, numpy layouts, memoryview forms and text:
+**50 view, 4 copy, 1 rejected.** The four copies are complex64 (widened to `Complex`), a
+sub-element-stride `as_strided` window (linearized), and the two text forms with no buffer - a
+`StringDType` array and an object array of `str`, both copied to a NumSharp `StringDType` array
+([How does text cross?](#how-does-text-cross)); fixed-width `U` and `S` arrays view. The one rejection
+is `datetime64`, whose element type has no NumSharp dtype at any byte order. **Big-endian multi-byte data is a third copy** - the
 view path refuses it (a native-endian shared view is impossible), but `ToNDArray` byte-reverses each
 element into a value-correct native array, exactly as it widens complex64.
 
-<sub>See here [`Import_ThreeRoutes_EachYieldsAView`][gate], [`Import_Census_47Of50VarietiesView`][gate]</sub>
+<sub>See here [`Import_ThreeRoutes_EachYieldsAView`][gate], [`Import_Census_50Of55VarietiesView`][gate]</sub>
 
 ### Can I view something read-only, like `bytes`?
 
@@ -418,8 +420,8 @@ impossible.** `NumpyCodecOptions` sets one of three modes per direction:
 
 | Mode | On decode | On encode |
 |---|---|---|
-| `Auto` (default) | view when representable, else copy (complex64 widens, UCS-4 narrows, sub-element strides linearize) | always a view |
-| `View` | view or **decline** - never a silent copy | view |
+| `Auto` (default) | view when representable, else copy (complex64 widens, big-endian byte-swaps, `StringDType` and object arrays of `str` copy, sub-element strides linearize) | a view; a copy for a `StringDType` array, which has no buffer |
+| `View` | view or **decline** - never a silent copy | view, or **decline** (a `StringDType` array stays a CLR object) |
 | `Copy` | always an independent snapshot; never locks the source | always a copy |
 
 Read-only sources decode as non-writeable views under `Auto`/`View`. `Decimal` has no numpy dtype,
@@ -496,8 +498,10 @@ the GIL itself, so the opt-out never applies to it.
 
 ## Dtypes
 
-Fourteen of NumSharp's fifteen dtypes cross, and the maps are public
-(`ToNumpyDtypeStr` / `FromNumpyDtypeStr` / `ToBufferFormat` / `FromBufferFormat`):
+Fourteen of NumSharp's fifteen numeric dtypes cross, and so does text: fixed-width `S` and `U` as
+views in both directions, NEP 55 `StringDType` as an exact copy. The maps are public
+(`ToNumpyDtypeStr` / `FromNumpyDtypeStr` / `ToBufferFormat` / `FromBufferFormat`; the two `From…`
+maps return a `DType`, because a text dtype carries its width):
 
 | NumSharp | numpy | PEP 3118 | numpy calls it |
 |---|---|---|---|
@@ -509,26 +513,109 @@ Fourteen of NumSharp's fifteen dtypes cross, and the maps are public
 | `Half` / `Single` / `Double` | `<f2` / `<f4` / `<f8` | `e` / `f` / `d` | `float16` / `float32` / `float64` |
 | `Complex` | `<c16` | `Zd` | `complex128` |
 | `Char` | `<u2` | `H` | `uint16` - a C# `char` is a UTF-16 code unit; numpy has no char dtype |
+| `S<n>` (bytes) | `\|S<n>` | `<n>s` | `bytes<8n>` - `n` bytes, NUL-padded |
+| `U<n>` (text) | `<U<n>` | `<n>w` | `str<32n>` - `n` UCS-4 code points, NUL-padded |
+| `StringDType(...)` | `StringDType(...)` | *none - copies* | `StringDType` - NEP 55 variable-width UTF-8 |
 | `Decimal` | *throws* | *throws* | 16 bytes, non-IEEE; the maps refuse honestly, but `ToNumpy`/`ToNumpyCopy` auto-convert it to `float64` |
 
-Four element types deserve their fine print, all four handled by conversion rather than
+Four numeric element types deserve their fine print, all four handled by conversion rather than
 misrepresentation:
 
 - **complex64** (`c8` / `Zf`) - two 4-byte floats where `Complex` is two 8-byte doubles. No view is
   possible; `ToNDArray` widens each pair during the copy.
-- **UCS-4 text** (`<U1`, 4-byte `wchar_t`) - a 4-byte code point where `Char` is a 2-byte UTF-16
-  unit. `ToNDArray` narrows on copy; non-BMP code points throw (they need a surrogate pair). A
-  **2-byte** `wchar_t` buffer (`array.array('u')` on Windows) *is* UTF-16 and views zero-copy as
-  `Char`.
-- **big-endian** (`>i4`, `!H`, …) - no zero-copy *view* for multi-byte types (a native read would
-  byte-swap every value), so the view path refuses it with the byte-swap fix in the message. But
-  `ToNDArray` **byte-reverses each element during the copy** - complex128 reverses each 8-byte half,
-  complex64 reverses then widens - so big-endian data crosses value-correct as a copy. Single-byte
-  dtypes (`>i1`, `\|u1`, `\|b1`) view zero-copy regardless - byte order is meaningless at one byte.
+- **wide characters** (`wchar_t`) - a 2-byte `wchar_t` buffer (`array.array('u')` and
+  `ctypes.c_wchar` on Windows) *is* UTF-16 and views zero-copy as `Char`; a 4-byte one
+  (`array.array('w')`, and `array('u')` / `c_wchar` on Linux and macOS) holds UCS-4 code points and
+  views as `U1`.
+- **big-endian** (`>i4`, `!H`, `>U2`, …) - no zero-copy *view* for multi-byte types (a native read
+  would byte-swap every value), so the view path refuses it with the byte-swap fix in the message.
+  But `ToNDArray` **byte-reverses each element during the copy** - complex128 reverses each 8-byte
+  half, complex64 reverses then widens, `U` reverses each 4-byte code point - so big-endian data
+  crosses value-correct as a copy. Single-byte dtypes (`>i1`, `\|u1`, `\|b1`, `S`) view zero-copy
+  regardless - byte order is meaningless at one byte.
 - **long double** (`g`) - MSVC's 8-byte long double is IEEE double and views as `Double`; the
   extended-precision widths have no NumSharp dtype and throw with `astype(np.float64)` guidance.
 
 <sub>See here [`Dtypes_EveryRowRoundTrips`][gate]</sub>
+
+### How does text cross?
+
+**Fixed-width `S` and `U` arrays are ordinary buffers and share memory both ways; a `StringDType`
+array has nothing to share and crosses as an exact copy.**
+
+```csharp
+using (Py.GIL())
+{
+    Scope.Exec("u = np.array(['ab', 'cde'], dtype='U3')");
+    using PyObject u = Scope.Get("u");
+    using NDArray view = u.AsNDArray();          // U3, a view over numpy's buffer
+    Scope.Exec("u[0] = 'zz'");                   // ...so numpy's write shows in view
+
+    Scope.Exec("t = np.array(['short', 'a string longer than 15 bytes', None], " +
+               "dtype=np.dtypes.StringDType(na_object=None))");
+    using PyObject t = Scope.Get("t");
+    using NDArray copy = t.ToNDArray();          // StringDType(na_object=None), NA kept
+}
+```
+
+```text
+view.GetValue(0)    "zz"
+copy.dtype          StringDType(na_object=None)
+copy.GetValue(2)    null  (the NA value)
+```
+
+- **`S<n>` and `U<n>`** cross like numbers: `ToNumpy` and `AsNDArray` share the bytes, NUL padding
+  included, with every layout of the [export table](#what-does-numpy-see-when-i-export-a-slice-or-a-transpose)
+  and every [import route](#which-python-objects-can-numsharp-view-without-copying); the copies carry
+  the same bytes. `<U1` is the one-character `U1`, never `Char`: a code point is 4 bytes and a C#
+  `char` 2, so `U1` holds an astral character (`'😀'`) that a `char` cannot. Values read the way
+  numpy reads them - trailing NULs are padding, an embedded NUL is kept, a `U` element that is not a
+  Unicode scalar value crosses as its raw 4-byte unit.
+- **`np.str_` and `np.bytes_` scalars** are the 0-d `U<n>` and `S<n>` they are
+  (`np.asarray(np.bytes_(b'ab'))` is `S2`, not two bytes). An empty one has no byte to share, so
+  `ToNDArray` copies it to the one-character `''` numpy reads, and the view refuses.
+- **`StringDType`** (`T`) keeps the text of every element longer than 15 bytes in an allocator its
+  descriptor owns, outside the array buffer. `ToNDArray` and `ToNumpyCopy` copy it through numpy's
+  own `NpyString` C API, element by element with `NpyString_dup`'s rules: an NA value stays NA, an
+  empty string stays empty, embedded and trailing NULs and non-BMP text are kept, any layout
+  (strided, reversed, broadcast, 0-d). The copy keeps the descriptor's `na_object` and `coerce`, and
+  its cells are byte-for-byte the cells numpy's own copy builds. `ToNumpy`, `AsNDArray` and
+  `ToMemoryView` refuse it with that copy route in the message.
+- **The missing-value object** crosses when it has a C# form: `None` ↔ `null`, `bool`, `int` ↔
+  `long` (`BigInteger` past it), `float` ↔ `double`, `complex` ↔ `Complex`, `str` ↔ `string`,
+  `bytes` ↔ `byte[]`, `np.float16` ↔ `Half`. Any other object (`pd.NA`, a class of your own) is
+  refused in both directions, rather than guessed.
+- **Object arrays** of `str` - what pandas text columns hold - copy to `StringDType()`. Any other
+  object array (a `None`, a NaN, a number among the strings) is refused with the first such element
+  named; convert it in Python first, e.g. `np.array(arr, dtype=np.dtypes.StringDType(na_object=None))`.
+- **PyTorch** has no string tensors: `ToTorch` refuses a text array before exporting anything.
+
+**What a `StringDType` copy costs.** Microseconds per call, minimum of three runs of best-of-9
+rounds, pinned to two cores, on the stack in the banner; *short* is 2–5 characters (held in the
+16-byte cell), *long* 21–40 (held in the allocator's arena), *mixed* adds 10 % NA:
+
+| Data, n | numpy `a.copy()` | Python route (`tolist()` + rebuild) | `ToNDArray` | `ToNumpyCopy` |
+|---|---:|---:|---:|---:|
+| short, 1 000 | 17.0 | 160 | 9.5 | 11.7 |
+| short, 100 000 | 1 874 | 17 112 | 826 | 1 216 |
+| short, 1 000 000 | 18 353 | 171 185 | 7 875 | 11 840 |
+| long, 1 000 | 43.4 | 188 | 36.0 | 49.5 |
+| long, 100 000 | 7 749 | 25 023 | 4 285 | 8 284 |
+| long, 1 000 000 | 79 156 | 258 126 | 41 217 | 85 795 |
+| mixed, 1 000 | 30.0 | 190 | 22.8 | 28.9 |
+| mixed, 100 000 | 3 590 | 21 359 | 2 503 | 3 422 |
+| mixed, 1 000 000 | 46 093 | 222 544 | 23 958 | 44 835 |
+
+Against the Python route - one Python `str` per element, the only way to move this text without the
+bridge - both copies are 3–22× faster at every size. Against numpy's own in-memory `copy()`, the
+import is 1.2–2.3× faster (it reserves its arena once, where numpy's grows by 25 % steps) and the
+export of short strings 1.5× (a short string moves as its 16-byte cell); the export of long and
+mixed strings runs at 0.88–1.05× numpy's speed, because numpy's allocator stores each one through
+`NpyString_pack` - the same per-element work its own copy does, and the only public way to write
+numpy's cells. A fixed-width view does not grow with *n*: `ToNumpy` takes 5.7–6.6 µs and
+`AsNDArray` 4.0–4.1 µs for `U10` / `S10` arrays from a thousand to a million elements.
+
+<sub>See here [`TextFixedWidthCrossingTests`][gate-text-fixed], [`TextStringDTypeCrossingTests`][gate-text-vstring], [`Text_FixedWidthViews_StringDTypeCopies`][gate]</sub>
 
 ---
 
@@ -581,6 +668,11 @@ import route works uniformly across pythonnet 3.0.x.
 | `cannot resize an array that references or is referenced by another array in this way` | A live Python export (or another NumSharp view) pins the buffer. Release it, or copy first |
 | `cannot resize this array: it does not own its data` | Import views never own their memory. `np.require(view, null, "O")` for an owning copy |
 | `big-endian dtype '>f8' cannot be shared with a native-endian NumSharp buffer` | Only the zero-copy *view* refuses big-endian. `ToNDArray()` copies it and byte-reverses each value; or byte-swap on the Python side first: `arr.astype(arr.dtype.newbyteorder('<'))` |
+| `big-endian UCS-4 text '>U2' cannot be shared with a native-endian NumSharp buffer` | Only the zero-copy *view* refuses big-endian text. `ToNDArray()` copies it and byte-reverses each code point into a native `U2` |
+| `StringDType() has no buffer form` | A `StringDType` array keeps its text outside its buffer, so no view can share it. `ToNDArray()` / `ToNumpyCopy()` copy it exactly, NA values included |
+| `the object array holds a NoneType at flat index 1 (None), which is not a str` | Only an object array whose every element is a `str` crosses (as a `StringDType` copy). Convert it in Python first: `np.array(arr, dtype=np.dtypes.StringDType(na_object=None))` |
+| `the StringDType's na_object … has no C# form in NumSharp` | The missing-value object is `pd.NA` or another object with no C# counterpart. Rebuild the array with `None`, NaN or a string as its NA: `arr.astype(np.dtypes.StringDType(na_object=None))` |
+| `PyTorch has no string tensors` | Text has no tensor form. Cross it to numpy instead (`ToNumpy` / `ToNumpyCopy`) |
 | `decimal has no numpy dtype (16-byte, non-IEEE)` | Nothing in numpy describes it. `nd.astype(NPTypeCode.Double)` first |
 | `the object does not export a PEP 3118 buffer` | Not every object is an exporter - a `dict`, a PIL `Image`. `np.asarray(obj)` first if numpy understands it |
 | A Python write did not show up in NumSharp | You copied. `ToNumpy`/`AsNDArray` share; `ToNumpyCopy`/`ToNDArray` do not |
@@ -602,7 +694,7 @@ import route works uniformly across pythonnet 3.0.x.
 | 7 | Every export layout keeps its strides and flags | strides/flags per table row; `shares_memory == True` | [`Export_TableRows_KeepStridesAndFlags`][gate] |
 | 8 | Exports chain to a ctypes base; strided exports via `as_strided` | base types `c_char_Array_N` / `DummyArray`; `OWNDATA=False` | [`Export_BaseChain_EndsAtTheCtypesWindow`][gate] |
 | 9 | All three import routes produce writable views | a write crosses back on each route | [`Import_ThreeRoutes_EachYieldsAView`][gate] |
-| 10 | 47 of 50 exporter varieties view; 2 copy; 1 rejected | census constants, re-measured each run | [`Import_Census_47Of50VarietiesView`][gate] |
+| 10 | 50 of 55 exporter varieties view; 4 copy; 1 rejected | census constants, re-measured each run | [`Import_Census_50Of55VarietiesView`][gate] |
 | 11 | Read-only sources: refused by default, non-writeable on opt-in | verbatim refusal; `IsWriteable == false` | [`Import_ReadonlyRefusedByDefault_OptInIsNonWriteable`][gate] |
 | 12 | Import views own nothing; `require("O")` detaches | resize refusal text; detached write | [`ImportView_OwnsNothing_ResizeRefusesAndRequireOCopies`][gate] |
 | 13 | An export outlives every managed reference | `Dispose()` + GC, then Python reads and writes | [`Lifetime_ExportOutlivesItsSource`][gate] |
@@ -620,6 +712,11 @@ import route works uniformly across pythonnet 3.0.x.
 | 25 | Every quoted Troubleshooting symptom is the message actually raised | verbatim assertion per row | [`Troubleshooting_SymptomsAreVerbatim`][gate] |
 | 26 | C# tuples cross as Python tuples and back, through the registered codec | `numpy.zeros((2, 3))` takes the shape; `(long, long) = a.shape` decodes | [`Encode_ValueTupleShape_ReachesNumpyAsATuple`][gate-tuples], [`Decode_ShapeAndStrides_IntoValueTuples_ThroughDynamic`][gate-tuples] |
 | 27 | An implicit encode's wrapper is released at the next encode / conversion, so a rebinding loop keeps one export live | 150 rebindings peak ≤ 2 above baseline; `sys.getrefcount` shows no lingering wrapper | [`RebindingANameThroughTheCodec_KeepsTheLiveExportCountBounded`][gate-handoff], [`TheHandedOffWrapperIsRedundant_PythonnetHoldsItsOwnReference`][gate-handoff] |
+| 28 | Fixed-width `S` / `U` arrays share memory both ways in every layout; `<U1` is `U1`; big-endian `U` copies byte-swapped; text scalars are 0-d | C-order bytes, write-through both ways and flags per layout, against live numpy | [`Export_EveryLayout_IsAViewWithTheSameBytes`][gate-text-fixed], [`Import_EveryLayout_ViewsAndCopiesWithTheSameBytes`][gate-text-fixed], [`BigEndianText_CopiesByteSwapped_ViewRefused`][gate-text-fixed], [`TextScalars_AreZeroDText_EmptyOnesCopy`][gate-text-fixed] |
+| 29 | A `StringDType` array crosses as an exact copy both ways: the descriptor, the values with NA identity, and numpy's own cells | every NA kind × both `coerce` × every layout against live numpy; `tobytes()` equal | [`Import_EveryNAKind_EveryLayout_SameDescriptorValuesAndCells`][gate-text-vstring], [`Export_EveryNAKind_EveryLayout_SameDescriptorValuesAndCells`][gate-text-vstring], [`RoundTrip_NumSharpToNumpyToNumSharp_IsIdentical`][gate-text-vstring] |
+| 30 | An object array of `str` copies to `StringDType()`; any other object array, and an NA object with no C# / Python form, is refused | verbatim refusals naming the element | [`ObjectArrays_OfStr_Copy_AnythingElseRefused`][gate-text-vstring], [`ForeignNAObjects_AreRefusedBothWays`][gate-text-vstring] |
+| 31 | A `StringDType` copy holds no lease and survives its source; an allocation failure mid-copy leaves nothing behind | counters at baseline; injected failure releases the half-built copy | [`Copies_AreIndependentOfTheSourcesLifetime`][gate-text-vstring], [`FaultInjection_DuringImport_ReleasesTheHalfBuiltCopy`][gate-text-vstring] |
+| 32 | The page's text example: a `U3` import is a view, a `StringDType` import a copy with its NA | the three output lines | [`Text_FixedWidthViews_StringDTypeCopies`][gate] |
 
 ---
 
@@ -646,3 +743,5 @@ import route works uniformly across pythonnet 3.0.x.
 [gate-shutdown]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/ShutdownLeakTests.cs
 [gate-tuples]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/TupleCodecTests.cs
 [gate-handoff]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/EncoderHandoffTests.cs
+[gate-text-fixed]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/TextFixedWidthCrossingTests.cs
+[gate-text-vstring]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/TextStringDTypeCrossingTests.cs

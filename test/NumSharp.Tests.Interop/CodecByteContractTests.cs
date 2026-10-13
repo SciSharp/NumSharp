@@ -211,13 +211,24 @@ namespace NumSharp.Tests.Interop
             DecodeCopyByteExact("np.zeros(8, dtype='<c8')[::2]", NPTypeCode.Complex, "np.zeros(4, dtype='<c16')");   // strided c8
         }
 
+        /// <summary>
+        ///     numpy's <c>'&lt;U1'</c> (one UCS-4 code point per element) decodes as NumSharp's own <c>U1</c> — the same 4-byte
+        ///     units, astral code points included — both as a copy and as a zero-copy view; a wider <c>U</c> and an <c>S</c>
+        ///     array the same way.
+        /// </summary>
         [TestMethod]
-        public void Decode_Ucs4Text_NarrowsToCharUint16_ByteExact()
+        public void Decode_Ucs4Text_IsTheSameStringDtype_ByteExact()
         {
-            // numpy '<U1' holds one UCS-4 code point per element; NumSharp narrows to a 2-byte Char, which is
-            // byte-identical to the code points taken as uint16 (BMP).
-            DecodeCopyByteExact("np.array(['a', 'Z', '\\u05d0'], dtype='<U1')", NPTypeCode.Char,
-                "np.array([ord('a'), ord('Z'), 0x05d0], dtype='<u2')");
+            DecodeCopyByteExact("np.array(['a', 'Z', '\\u05d0', '\\U0001F600'], dtype='<U1')", NPTypeCode.String);
+            DecodeViewByteExact("np.array(['a', 'Z', '\\u05d0', '\\U0001F600'], dtype='<U1')", NPTypeCode.String);
+            DecodeCopyByteExact("np.array(['ab', '', 'xyz\\U0001F600'], dtype='<U4')", NPTypeCode.String);
+            DecodeViewByteExact("np.array([b'ab', b'', b'\\x80\\xff\\x00z'], dtype='S4')", NPTypeCode.String);
+            using (Py.GIL())
+            {
+                using PyObject a = Python.np.eval("np.array(['a'], dtype='<U1')");
+                using NDArray nd = a.ToNDArray();
+                nd.dtype.Should().Be(np.dtype("U1"), "numpy '<U1' is NumSharp's U1, a dtype of its own (a Char is a 2-byte UTF-16 unit)");
+            }
         }
 
         // ==============================  decode: buffer exporters (non-numpy)  ==================

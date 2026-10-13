@@ -123,7 +123,11 @@ namespace NumSharp.Tests.Interop.Examples
                 catCopy.GetInt64(1).Should().Be(1);
 
                 using PyObject text = py.text;
-                Throws(() => text.ToNDArray()).Should().BeOfType<NotSupportedException>("object/string columns have no NumSharp dtype");
+                Throws(() => text.AsNDArray(allowReadonly: true)).Should().BeOfType<NotSupportedException>("an object column has nothing to share");
+                NDArray textCopy = text.ToNDArray();
+                textCopy.dtype.Should().Be(np.dtypes.StringDType(), "an object column of str crosses as text");
+                textCopy.GetValue(0).Should().Be("a");
+                textCopy.GetValue(1).Should().Be("b");
                 py.Exec("del mixed, with_na, cat, text");
             }
         }

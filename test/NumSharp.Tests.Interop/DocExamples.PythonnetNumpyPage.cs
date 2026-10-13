@@ -328,11 +328,16 @@ namespace NumSharp.Tests.Interop
         }
 
         /// <summary>
-        ///     "The census, re-measured on every test run — 50 exporter varieties …: 47 view, 2 copy,
+        ///     "The census, re-measured on every test run — 55 exporter varieties …: 50 view, 4 copy,
         ///     1 rejected." The totals the page quotes are what this test measures.
         /// </summary>
+        /// <remarks>
+        ///     The five text varieties (strings phase 1, P1.8): fixed-width <c>U</c> and <c>S</c> arrays, <c>&lt;U1</c>
+        ///     included, are ordinary buffers and VIEW; a NEP 55 <c>StringDType</c> array and an object array of <c>str</c>
+        ///     have no buffer form and COPY (to a NumSharp <c>StringDType</c> array).
+        /// </remarks>
         [TestMethod]
-        public void Import_Census_47Of50VarietiesView()
+        public void Import_Census_50Of55VarietiesView()
         {
             PyExec("import io, ctypes");
 
@@ -375,6 +380,13 @@ namespace NumSharp.Tests.Interop
             Add("memoryview form", "offset [1::2]", "memoryview(bytearray(range(16)))[1::2]");
             Add("memoryview form", "reversed [::-1]", "memoryview(bytearray(range(16)))[::-1]");
 
+            // --- text: fixed-width U / S are buffers (views); StringDType and object-of-str are not (copies)
+            Add("text", "numpy 'U5'", "np.array(['ab', 'cde'], dtype='U5')");
+            Add("text", "numpy 'S5'", "np.array([b'ab', b'cde'], dtype='S5')");
+            Add("text", "numpy '<U1'", "np.array(['a', 'b'], dtype='<U1')");
+            Add("unviewable", "numpy StringDType", "np.array(['ab', 'a longer string than fifteen bytes'], dtype=np.dtypes.StringDType())");
+            Add("unviewable", "object array of str", "np.array(['ab', 'cde'], dtype=object)");
+
             // --- the genuinely unviewable ones
             Add("unviewable", "numpy complex64", "np.array([1+2j, 3+4j], dtype='c8')");
             Add("unviewable", "sub-item stride (as_strided)",
@@ -398,13 +410,16 @@ namespace NumSharp.Tests.Interop
             int rejected = results.Count(r => r.Outcome == "rejected");
 
             // ---- the numbers the page quotes ----------------------------------------------------
-            results.Count.Should().Be(50, "the page describes a census of 50 exporter varieties");
-            views.Should().Be(47, "the page claims 47 of the 50 varieties share memory");
-            copies.Should().Be(2, "the page claims exactly 2 varieties fall back to a copy");
+            results.Count.Should().Be(55, "the page describes a census of 55 exporter varieties");
+            views.Should().Be(50, "the page claims 50 of the 55 varieties share memory");
+            copies.Should().Be(4, "the page claims exactly 4 varieties fall back to a copy");
             rejected.Should().Be(1, "datetime64 has no NumSharp dtype at any byte order");
 
             results.Single(r => r.Name == "numpy complex64").Outcome.Should().Be("copy", "widened");
             results.Single(r => r.Name == "sub-item stride (as_strided)").Outcome.Should().Be("copy", "linearized");
+            results.Single(r => r.Name == "numpy StringDType").Outcome.Should().Be("copy", "NEP 55 text lives in an allocator, not the buffer");
+            results.Single(r => r.Name == "object array of str").Outcome.Should().Be("copy", "every element is a str, so it copies as StringDType");
+            results.Where(r => r.Category == "text").Should().OnlyContain(r => r.Outcome == "view", "fixed-width text is an ordinary buffer");
             results.Single(r => r.Name == "datetime64 (no NumSharp dtype)").Outcome.Should().Be("rejected", "no NumSharp dtype");
         }
 
@@ -748,8 +763,9 @@ namespace NumSharp.Tests.Interop
         // ============================  ## Dtypes  ================================================
 
         /// <summary>
-        ///     Every row of the dtype table in both directions, plus the four specials: complex64
-        ///     widens on copy, UCS-4 narrows on copy (BMP only), big-endian is refused with the fix,
+        ///     Every row of the dtype table in both directions, plus the specials: complex64 widens on
+        ///     copy, the text dtypes map to NumSharp's own (<c>'&lt;U1'</c> is <c>U1</c>, astral code points
+        ///     included; <c>StringDType</c> copies with its NA object), big-endian is refused with the fix,
         ///     and 8-byte long double views as Double.
         /// </summary>
         [TestMethod]
@@ -782,16 +798,23 @@ namespace NumSharp.Tests.Interop
             widened.typecode.Should().Be(NPTypeCode.Complex);
             widened.Dispose();
 
-            // 2-byte wchar IS UTF-16 and views as Char; UCS-4 narrows on copy, astral refuses.
+            // 2-byte wchar IS UTF-16 and views as Char; numpy's text dtypes are NumSharp's own: '<U1' is U1, astral
+            // code points included, and S/U view zero-copy; StringDType crosses as an exact copy both ways.
             NDArrayPythonInterop.FromBufferFormat("u", 2).Should().Be(NPTypeCode.Char);
-            PyExec("du1 = np.array(['a', 'b'], dtype='U1')");
-            NDArray narrowed = ImportOf("du1");
-            narrowed.typecode.Should().Be(NPTypeCode.Char);
-            ReadAt<char>(narrowed, 1).Should().Be('b');
-            narrowed.Dispose();
-            PyExec("dastral = np.array(['\\U0001F600'], dtype='U1')");
-            ((Action)(() => ImportOf("dastral").Dispose()))
-                .Should().Throw<NotSupportedException>("an astral code point needs a surrogate pair");
+            NDArrayPythonInterop.ToNumpyDtypeStr(np.dtype("U5")).Should().Be("<U5");
+            NDArrayPythonInterop.ToNumpyDtypeStr(np.dtype("S5")).Should().Be("|S5");
+            NDArrayPythonInterop.FromNumpyDtypeStr("<U5").Should().Be(np.dtype("U5"));
+            PyExec("du1 = np.array(['a', 'b', '\\U0001F600'], dtype='U1')");
+            NDArray text = ViewOf("du1");
+            text.dtype.Should().Be(np.dtype("U1"));
+            text.GetValue(1).Should().Be("b");
+            text.GetValue(2).Should().Be(char.ConvertFromUtf32(0x1F600));
+            text.Dispose();
+            PyExec("dt = np.array(['a', None], dtype=np.dtypes.StringDType(na_object=None))");
+            NDArray vtext = ImportOf("dt");
+            vtext.dtype.Should().Be(np.dtypes.StringDType((object)null));
+            vtext.GetValue(1).Should().BeNull("an NA element stays NA (None)");
+            vtext.Dispose();
 
             // big-endian: rejected with the byte-swap fix — which works.
             ((Action)(() => NDArrayPythonInterop.FromNumpyDtypeStr(">i4")))
@@ -806,6 +829,34 @@ namespace NumSharp.Tests.Interop
             NDArrayPythonInterop.FromBufferFormat("g", 8).Should().Be(NPTypeCode.Double);
             ((Action)(() => NDArrayPythonInterop.FromBufferFormat("g", 16)))
                 .Should().Throw<NotSupportedException>().WithMessage("*astype(np.float64)*");
+        }
+
+        /// <summary>
+        ///     "How does text cross?" — the page's example, verbatim: a fixed-width <c>U3</c> array imports as a view (numpy's
+        ///     later write shows through it), a <c>StringDType(na_object=None)</c> array imports as a copy that keeps its
+        ///     descriptor and its NA value.
+        /// </summary>
+        [TestMethod]
+        public void Text_FixedWidthViews_StringDTypeCopies()
+        {
+            using (Gil())
+            {
+                Scope.Exec("u = np.array(['ab', 'cde'], dtype='U3')");
+                using PyObject u = Scope.Get("u");
+                using NDArray view = u.AsNDArray();          // U3, a view over numpy's buffer
+                Scope.Exec("u[0] = 'zz'");                   // ...so numpy's write shows in view
+
+                Scope.Exec("t = np.array(['short', 'a string longer than 15 bytes', None], " +
+                           "dtype=np.dtypes.StringDType(na_object=None))");
+                using PyObject t = Scope.Get("t");
+                using NDArray copy = t.ToNDArray();          // StringDType(na_object=None), NA kept
+
+                view.dtype.Should().Be(np.dtype("U3"));
+                view.GetValue(0).Should().Be("zz", "the page's first output line");
+                copy.dtype.ToString().Should().Be("StringDType(na_object=None)", "the page's second output line");
+                copy.GetValue(2).Should().BeNull("the page's third output line: the NA value");
+                copy.GetValue(1).Should().Be("a string longer than 15 bytes");
+            }
         }
 
         // ============================  ## Versions  ==============================================
@@ -884,6 +935,44 @@ namespace NumSharp.Tests.Interop
             ((Action)(() => NDArrayPythonInterop.FromNumpyDtypeStr(">f8")))
                 .Should().Throw<NotSupportedException>()
                 .WithMessage("big-endian dtype '>f8' cannot be shared with a native-endian NumSharp buffer.*");
+
+            // "big-endian UCS-4 text '>U2' cannot be shared with a native-endian NumSharp buffer" — and the copy the row
+            // names reads the code points back in native order.
+            ((Action)(() => NDArrayPythonInterop.FromNumpyDtypeStr(">U2")))
+                .Should().Throw<NotSupportedException>()
+                .WithMessage("big-endian UCS-4 text '>U2' cannot be shared with a native-endian NumSharp buffer*");
+            using (NDArray swapped = ImportOf("np.array(['ab', 'c'], dtype='>U2')"))
+            {
+                swapped.dtype.Should().Be(np.dtype("U2"));
+                swapped.GetValue(0).Should().Be("ab");
+            }
+
+            // "StringDType() has no buffer form" — the view refuses; the copy the row names works.
+            PyExec("t_sd = np.array(['a', 'a string longer than fifteen bytes'], dtype=np.dtypes.StringDType())");
+            ((Action)(() => ViewOf("t_sd", allowReadonly: true).Dispose()))
+                .Should().Throw<NotSupportedException>().WithMessage("StringDType() has no buffer form*");
+            using (NDArray copied = ImportOf("t_sd"))
+                copied.GetValue(1).Should().Be("a string longer than fifteen bytes");
+
+            // "the object array holds a NoneType at flat index 1 (None), which is not a str" — and the conversion the row
+            // gives crosses.
+            ((Action)(() => ImportOf("np.array(['a', None], dtype=object)").Dispose()))
+                .Should().Throw<NotSupportedException>()
+                .WithMessage("the object array holds a NoneType at flat index 1 (None), which is not a str.*");
+            using (NDArray converted = ImportOf("np.array(np.array(['a', None], dtype=object), dtype=np.dtypes.StringDType(na_object=None))"))
+                converted.GetValue(1).Should().BeNull("None became the NA value");
+
+            // "the StringDType's na_object … has no C# form in NumSharp" — and the cast the row gives keeps the NA cells NA.
+            PyExec("class _TsNA:\n    def __repr__(self): return 'NA()'\n" +
+                   "t_na = np.array(['a', 'b'], dtype=np.dtypes.StringDType(na_object=_TsNA()))\nt_na[1] = t_na.dtype.na_object");
+            ((Action)(() => ImportOf("t_na").Dispose()))
+                .Should().Throw<NotSupportedException>().WithMessage("the StringDType's na_object NA() (_TsNA) has no C# form in NumSharp*");
+            using (NDArray recast = ImportOf("t_na.astype(np.dtypes.StringDType(na_object=None))"))
+                recast.GetValue(1).Should().BeNull("the cast keeps an NA value NA");
+
+            // "PyTorch has no string tensors" — refused before anything is exported (no torch needed to see it).
+            using (NDArray text = np.array(new[] { "a" }))
+                ((Action)(() => text.ToTorch())).Should().Throw<NotSupportedException>().WithMessage("PyTorch has no string tensors*");
 
             // "decimal has no numpy dtype (16-byte, non-IEEE)"
             ((Action)(() => NDArrayPythonInterop.ToNumpyDtypeStr(NPTypeCode.Decimal)))

@@ -26,6 +26,11 @@ namespace NumSharp.Interop.PythonNet
 
             try
             {
+                // An ndarray / bytes / bytearray / memoryview / array.array is never a Pandas object: answered from the
+                // type's name without the MRO walk, which every import of those (the common case) would otherwise pay.
+                if (PythonArrayAdapterRegistry.IsPlainBufferExporter(objectType))
+                    return false;
+
                 // Walk the MRO so RangeIndex, Pandas extension arrays, and user/geopandas subclasses
                 // are recognized through Pandas' public base types rather than private concrete names.
                 using PyObject mro = objectType.GetAttr("__mro__");

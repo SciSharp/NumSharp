@@ -7,14 +7,16 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.Backends;
 using NumSharp.Interop.PythonNet;
+using Python.Runtime;
 
 namespace NumSharp.Tests.Interop
 {
     /// <summary>
     ///     The complete import decision map. Every exporter scenario the bridge can meet is pinned to
     ///     its outcome — <b>view</b> (zero-copy, shared memory), <b>copy</b> (<c>ToNDArray</c>
-    ///     materializes an owning array, widening complex64 / narrowing UCS-4 text where the dtype
-    ///     demands it), or <b>rejected</b> (both paths refuse, with guidance).
+    ///     materializes an owning array, widening complex64, byte-swapping big-endian data or copying
+    ///     text that has no buffer form — StringDType, an object array of str — where the dtype demands
+    ///     it), or <b>rejected</b> (both paths refuse, with guidance).
     ///
     ///     <para>The docs census (<see cref="DocExamples_ZeroCopyModelPage"/>) pins the HEADLINE
     ///     numbers the documentation quotes; this matrix pins the OUTCOME PER SCENARIO, including the
@@ -24,8 +26,9 @@ namespace NumSharp.Tests.Interop
     ///
     ///     <para>Platform-dependent scenarios compute their expectation at runtime: a 2-byte
     ///     <c>wchar_t</c> (windows) makes <c>array.array('u')</c> / <c>ctypes.c_wchar</c> a zero-copy
-    ///     <see cref="NPTypeCode.Char"/> view, a 4-byte one (linux/macOS) narrows as a copy; a 16-byte
-    ///     <c>np.longdouble</c> (linux) is rejected while the 8-byte alias (windows) views as Double.</para>
+    ///     <see cref="NPTypeCode.Char"/> view, a 4-byte one (linux/macOS) a zero-copy <c>U1</c> view (one UCS-4
+    ///     code point per element — numpy's own <c>'&lt;U1'</c>); a 16-byte <c>np.longdouble</c> (linux) is
+    ///     rejected while the 8-byte alias (windows) views as Double.</para>
     /// </summary>
     [TestClass]
     public class ViewabilityMatrixTests : InteropTestBase
@@ -96,7 +99,7 @@ namespace NumSharp.Tests.Interop
                    "if_bytes = BufferObjectData(); if_nodata = MissingData(); if_short = ShortDataTuple()");
 
             long wcharSize = PyLong("ctypes.sizeof(ctypes.c_wchar)");                     // 2 windows, 4 linux/macOS
-            string wcharOutcome = wcharSize == 2 ? "view" : "copy";
+            string wcharOutcome = "view";                                                 // 2 bytes: a Char view, 4 bytes: a U1 view
             long longdoubleSize = PyLong("np.dtype(np.longdouble).itemsize");             // 8 windows (== f8), 16 linux
             string longdoubleOutcome = longdoubleSize == 8 ? "view" : "rejected";
             bool hasUcs4ArrayCode = PyBool("sys.version_info >= (3, 13)");                // array.array('w') is 3.13+
@@ -126,7 +129,7 @@ namespace NumSharp.Tests.Interop
                 Add("array.array", $"array('{tc}')", $"array.array('{tc}', [1,2,3,4])", "view");
             Add("array.array", $"array('u') wchar={wcharSize}", "array.array('u', 'hi')", wcharOutcome);
             if (hasUcs4ArrayCode)
-                Add("array.array", "array('w') UCS-4", "array.array('w', 'hi')", "copy");
+                Add("array.array", "array('w') UCS-4", "array.array('w', 'hi')", "view");
 
             // --- ctypes ---------------------------------------------------------------------------
             foreach (string ct in new[] { "c_int", "c_double", "c_ubyte", "c_int16", "c_uint32", "c_int64", "c_bool" })
@@ -164,10 +167,24 @@ namespace NumSharp.Tests.Interop
             Add("numpy scalar", "complex64 (widens)", "np.complex64(1+2j)", "copy");
 
             // --- text buffers ----------------------------------------------------------------------
-            Add("text", "numpy U1 (UCS-4 narrow)", "np.array(['a','b'], dtype='U1')", "copy");
-            Add("text", "numpy U1 strided [::2]", "np.array(['a','b','c','d'], dtype='U1')[::2]", "copy");
-            Add("text", "numpy U3 (multi-char)", "np.array(['abc'], dtype='U3')", "rejected");
-            Add("text", "numpy U1 non-BMP", "np.array(['\\U0001F600'], dtype='U1')", "rejected");
+            // S / U are ordinary buffers (views); text without a buffer form (StringDType, an object array of str) copies.
+            Add("text", "numpy U1", "np.array(['a','b'], dtype='U1')", "view");
+            Add("text", "numpy U1 strided [::2]", "np.array(['a','b','c','d'], dtype='U1')[::2]", "view");
+            Add("text", "numpy U3 (multi-char)", "np.array(['abc'], dtype='U3')", "view");
+            Add("text", "numpy U3 reversed [::-1]", "np.array(['ab', 'c', 'def'], dtype='U3')[::-1]", "view");
+            Add("text", "numpy U2 transposed", "np.array([['a','b'],['c','d']], dtype='U2').T", "view");
+            Add("text", "numpy S5", "np.array([b'ab', b'cde'], dtype='S5')", "view");
+            Add("text", "numpy S1 broadcast", "np.broadcast_to(np.array([b'x'], dtype='S1'), (2, 3))", "view");
+            Add("text", "numpy U2 field (stride 12)", "np.zeros(3, dtype=[('a','U2'),('b','i4')])['a']", "copy");
+            Add("text", "numpy U2 unaligned field (stride 9)", "np.zeros(3, dtype=np.dtype([('x','u1'),('a','U2')]))['a']", "copy");
+            Add("text", "np.str_ scalar", "np.str_('hi')", "view");
+            Add("text", "np.bytes_ scalar", "np.bytes_(b'hi')", "view");
+            Add("text", "np.str_ empty (zero width)", "np.str_('')", "copy");
+            Add("text", "StringDType", "np.array(['a', 'bb'], dtype=np.dtypes.StringDType())", "copy");
+            Add("text", "StringDType strided", "np.array(['a', 'bb', 'c'], dtype=np.dtypes.StringDType())[::2]", "copy");
+            Add("text", "object array of str", "np.array(['a', 'bb'], dtype=object)", "copy");
+            Add("text", "object array with None", "np.array(['a', None], dtype=object)", "rejected");
+            Add("text", "numpy U1 non-BMP", "np.array(['\\U0001F600'], dtype='U1')", "view");
 
             // --- the genuinely uncopyable / unviewable ---------------------------------------------
             Add("unviewable", "complex64 array", "np.array([1+2j, 3+4j], dtype='c8')", "copy");
@@ -179,7 +196,7 @@ namespace NumSharp.Tests.Interop
             Add("byteswap-copy", "big-endian '>c16'", "np.arange(4, dtype='>c16')", "copy");
             Add("byteswap-copy", "big-endian '>c8' (widen+swap)", "np.array([1+2j, 3+4j], dtype='>c8')", "copy");
             Add("byteswap-copy", "big-endian strided '>i4'[::2]", "np.arange(8, dtype='>i4')[::2]", "copy");
-            Add("rejected", "big-endian UCS-4 '>U1'", "np.array(['a', 'b'], dtype='>U1')", "rejected");
+            Add("byteswap-copy", "big-endian UCS-4 '>U1'", "np.array(['a', 'b'], dtype='>U1')", "copy");
             Add("rejected", "datetime64", "np.array(['2021-01-01'], dtype='M8[D]')", "rejected");
             Add("rejected", "timedelta64", "np.array([1,2], dtype='m8[s]')", "rejected");
             Add("rejected", "object dtype", "np.array([{}, {}], dtype=object)", "rejected");
@@ -210,8 +227,13 @@ namespace NumSharp.Tests.Interop
 
         // =====================  text units: the Char routes  ===================================
 
+        /// <summary>
+        ///     <c>array.array('u')</c> maps by the platform's <c>wchar_t</c>: 2-byte units (windows) ARE UTF-16 code units, a
+        ///     zero-copy <see cref="NPTypeCode.Char"/> view; 4-byte units (linux/macOS) are UCS-4 code points, a zero-copy
+        ///     <c>U1</c> view (numpy's own <c>'&lt;U1'</c>). Both share the array's memory.
+        /// </summary>
         [TestMethod]
-        public void WcharArray_TwoByteUnits_ViewAsChar_FourByteUnits_CopyNarrowToChar()
+        public void WcharArray_TwoByteUnits_ViewAsChar_FourByteUnits_ViewAsU1()
         {
             PyExec("import ctypes");
             long unit = PyLong("array.array('u').itemsize");
@@ -230,19 +252,21 @@ namespace NumSharp.Tests.Interop
             }
             else
             {
-                // linux/macOS wchar_t: UCS-4 — no zero-copy Char view exists; ToNDArray narrows a copy.
-                ((Action)(() => { using var _ = ViewOf("ua"); }))
-                    .Should().Throw<NotSupportedException>().WithMessage("*UCS-4*", "a 4-byte text unit cannot alias a 2-byte Char");
-                NDArray c = ImportOf("ua");
-                c.typecode.Should().Be(NPTypeCode.Char);
-                ReadAt<char>(c, 0).Should().Be('h');
-                ReadAt<char>(c, 2).Should().Be('!');
-                WriteAt(c, 'H', 0);
-                PyStr("ua[0]").Should().Be("h", "the narrow import is an independent copy");
-                c.Dispose();
+                // linux/macOS wchar_t: UCS-4 — each unit is one code point, NumSharp's U1, shared zero-copy.
+                NDArray v = ViewOf("ua");
+                v.dtype.Should().Be(np.dtype("U1"), "a 4-byte wchar buffer is a UCS-4 (U1) buffer");
+                v.GetValue(0).Should().Be("h");
+                v.GetValue(2).Should().Be("!");
+                v.SetValue("H", 0);
+                PyStr("ua[0]").Should().Be("H", "the view shares the array's memory");
+                v.Dispose();
             }
         }
 
+        /// <summary>
+        ///     <c>ctypes.c_wchar</c> arrays follow the same width rule as <c>array.array('u')</c>: a <see cref="NPTypeCode.Char"/>
+        ///     view for 2-byte units, a <c>U1</c> view for 4-byte ones.
+        /// </summary>
         [TestMethod]
         public void CtypesWchar_FollowsTheSameWidthRule()
         {
@@ -250,36 +274,70 @@ namespace NumSharp.Tests.Interop
             PyExec("cw = (ctypes.c_wchar * 3)(); cw[0] = 'a'; cw[1] = 'b'; cw[2] = 'c'");
             long unit = PyLong("ctypes.sizeof(ctypes.c_wchar)");
 
-            NDArray nd = unit == 2 ? ViewOf("cw") : ImportOf("cw");
-            nd.typecode.Should().Be(NPTypeCode.Char);
-            ReadAt<char>(nd, 0).Should().Be('a');
-            ReadAt<char>(nd, 2).Should().Be('c');
+            NDArray nd = ViewOf("cw");
+            if (unit == 2)
+            {
+                nd.typecode.Should().Be(NPTypeCode.Char);
+                ReadAt<char>(nd, 0).Should().Be('a');
+                ReadAt<char>(nd, 2).Should().Be('c');
+            }
+            else
+            {
+                nd.dtype.Should().Be(np.dtype("U1"));
+                nd.GetValue(0).Should().Be("a");
+                nd.GetValue(2).Should().Be("c");
+            }
+
             nd.Dispose();
         }
 
+        /// <summary>
+        ///     numpy's <c>'&lt;U1'</c> is NumSharp's <c>U1</c>: the same 4-byte code points, so it is a zero-copy view (writes
+        ///     cross both ways) and a byte-identical copy; neither is a <see cref="NPTypeCode.Char"/> (a 2-byte UTF-16 unit —
+        ///     converting to one is an explicit cast).
+        /// </summary>
         [TestMethod]
-        public void NumpyU1_CopyNarrowsToChar_BmpExact()
+        public void NumpyU1_ViewsAsU1_WritesCrossBothWays()
         {
             PyExec("us = np.array(['a', 'Z', '\\u05d0'], dtype='U1')");   // hebrew aleph — BMP, non-latin
-            NDArray c = ImportOf("us");
-            c.typecode.Should().Be(NPTypeCode.Char, "numpy '<U1' holds one UCS-4 code point per element");
-            ReadAt<char>(c, 0).Should().Be('a');
-            ReadAt<char>(c, 1).Should().Be('Z');
-            ReadAt<char>(c, 2).Should().Be('\u05D0');
-            c.Dispose();
+            string aleph = ((char)0x05D0).ToString();
+            using (NDArray v = ViewOf("us"))
+            {
+                v.dtype.Should().Be(np.dtype("U1"), "numpy '<U1' holds one UCS-4 code point per element, as NumSharp's U1 does");
+                v.GetValue(2).Should().Be(aleph);
+                v.SetValue("q", 1);
+                PyStr("us[1]").Should().Be("q", "the view shares numpy's memory");
+                PyExec("us[0] = 'w'");
+                v.GetValue(0).Should().Be("w", "numpy's write is visible through the view");
+            }
 
-            ((Action)(() => { using var _ = ViewOf("us"); }))
-                .Should().Throw<NotSupportedException>().WithMessage("*UCS-4*ToNDArray*",
-                    "numpy U1 exports the count-prefixed '1w' — viewable never, narrowable as a copy");
+            using (NDArray c = ImportOf("us"))
+            {
+                c.dtype.Should().Be(np.dtype("U1"));
+                c.GetValue(2).Should().Be(aleph);
+                c.SetValue("x", 0);
+                PyStr("us[0]").Should().Be("w", "the copy is independent");
+            }
         }
 
+        /// <summary>
+        ///     An astral code point is ONE UCS-4 unit, so it crosses whole — as a view and as a copy — and reads back as its
+        ///     .NET surrogate pair (it used to be refused, when <c>'&lt;U1'</c> narrowed to a 2-byte Char).
+        /// </summary>
         [TestMethod]
-        public void NumpyU1_NonBmpCodePoint_RefusesTheNarrow()
+        public void NumpyU1_AstralCodePoint_CrossesWhole()
         {
-            PyExec("astral = np.array(['\\U0001F600'], dtype='U1')");
-            ((Action)(() => { using var _ = ImportOf("astral"); }))
-                .Should().Throw<NotSupportedException>().WithMessage("*non-BMP*surrogate*",
-                    "a single Char cannot hold an astral code point — silently emitting half a pair would corrupt text");
+            PyExec("astral = np.array(['\\U0001F600', 'a'], dtype='U1')");
+            string grinning = char.ConvertFromUtf32(0x1F600);
+            using (NDArray v = ViewOf("astral"))
+                v.GetValue(0).Should().Be(grinning);
+            using (NDArray c = ImportOf("astral"))
+            {
+                c.GetValue(0).Should().Be(grinning);
+                using (Py.GIL())
+                using (PyObject src = Scope.Eval("astral"))
+                    ByteContract.AssertSameBytes(c, src, "the code point crosses as its one 4-byte unit");
+            }
         }
 
         // =====================  __array_interface__ robustness  ================================
