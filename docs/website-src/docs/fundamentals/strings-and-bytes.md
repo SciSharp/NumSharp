@@ -390,6 +390,8 @@ np.array(new[] { 1.5, 2.0 }).astype(np.dtypes.StringDType());     // ['1.5', '2.
 
 A copy moves a short text's cell as one block and reserves the destination's arena once for the longer texts. Measured against NumPy 2.4.2 on the same machine, copies, gathers (`np.take`, a boolean mask), `np.concatenate`, `np.where`, `np.repeat`, `np.array` from a list and the casts between `U` and `StringDType` run 1.8 to 31 times as fast as NumPy, for 1,000 to 1,000,000 elements.
 
+To an embedded NumPy and back, a `StringDType` array crosses as an exact copy through NumPy's own C API, with its NA values, `na_object` and `coerce`; see [Crossing to Python](#crossing-to-python).
+
 ### What `StringDType` refuses
 
 | Call | NumSharp |
