@@ -31,7 +31,7 @@
 |---|---|---|
 | D1 | Move number ↔ text conversion (phase-2 P2.4) into phase 1. | **Yes.** `T` cannot store a number without it: its default `coerce=True` write is `str(value)`. |
 | D2 | Storage layout for `T`. | **Port NumPy's 16-byte packed cell and arena exactly.** `itemsize`, `nbytes` and strides match NumPy, an all-zero cell reads `''` (so `np.zeros` / `np.empty` cost nothing), and `tobytes()` of a freshly built array can match NumPy byte for byte. |
-| D3 | `.npy` / `.npz` for `T` (NumPy writes a pickle with descr `'|O'`). | Open (belongs to P1.7). |
+| D3 | `.npy` / `.npz` for `T` (NumPy writes a pickle with descr `'|O'`). | Open (belongs to P1.7; options in §6.2). |
 | D4 | Storage lane for `T`. | **Use `NPTypeCode.String` and rely on the dtype information.** `T` shares the lane of `S` / `U`; the descriptor's meta class tells them apart (see §3). |
 | D5 | `na_object` in C#. | **Yes:** `null` = Python `None`, a float NaN = `nan`, a `string` = a string NA, any other object = an "other" NA. Two factory overloads, `StringDType(bool coerce = true)` and `StringDType(object na_object, bool coerce = true)`, keep "not given" different from `null`. |
 | D6 | D10: the numeric parse in the implicit `string → NDArray` conversion. | **Remove it.** A C# string is NumPy's `np.array(str)`: a 0-d `U`. |
@@ -149,7 +149,7 @@ Three rules keep that safe:
 | P1.4 | `T` movement: the reference-aware copy core (inline cells move as blocks; arena and heap strings are duplicated), behind every movement entry, and the loud refusal on every raw path. | P1.3 | L | yes |
 | P1.5 | `T` creation, element access and printing: `np.array` / `asarray` / `empty` / `zeros` / `ones` / `full` and the `_like` forms, the `setitem` coercion (uses P1.1), `item` / `tolist` / `foreach` / `AsStringArray` / `(Array)`, NA objects, `repr` / `str` / `array2string`. | P1.1, P1.3 | M | yes |
 | P1.6 | `T` casts: `T` ↔ `T` (NA rules), `T` ↔ `U` / `S`, `T` ↔ bool, `T` ↔ numbers (uses P1.1). | P1.1, P1.4 | M | yes |
-| P1.7 | `T` in the rest of the library: `np.nditer` (`refs_ok`, buffered casts), numpy.ma (fill `'N/A'`), `loadtxt` / `savetxt`, `.npy` (D3), the whole-surface sweep with `T` (NumPy's refusals and shape-decided answers in NumPy's order; computation deferred to phase 2). | P1.4–P1.6 | L | `np.nditer` done 2026-10-13; the rest later |
+| P1.7 | `T` in the rest of the library: `np.nditer` (`refs_ok`, buffered casts), numpy.ma (fill `'N/A'`), `loadtxt` / `savetxt`, `.npy` (D3), the whole-surface sweep with `T` (NumPy's refusals and shape-decided answers in NumPy's order; computation deferred to phase 2). | P1.4–P1.6 | L | `np.nditer` done 2026-10-13; the rest prepared in §6 (packages P1.7b–P1.7g) |
 | P1.8 | Bridges and leftovers: pythonnet `S` / `U` zero-copy both ways and `T` as a copy (D7); D10 (D6). | — | M | done (D10 with P1.1, the bridge 2026-10-13) |
 | P1.9 | Gate, speed, docs: oracle sections for the new behavior with zero excuses; unit tests that cover all new phase-1 code; lifetime tests and runs under `FencedMemory` / guard pages; a mutation pass; a benchmark sheet (≥ 1.5× NumPy at 1K / 100K / 1M); docs. | with every package | M | yes |
 
@@ -424,3 +424,53 @@ After this plan, phase 2 loses P2.4 and gains the `T` forms of P2.1–P2.6 plus 
     (NumPy: `x[1]`). Reachable for stores only since the P1.7 write-access rule; `GetData(new int[0])` read the wrong
     element before that. Gate `StretchedSubArray_AtAnOffset_StoresIntoItsOwnElement`.
   - Gate: `StringOracleTests` 33 / 33 on net10.0 and net8.0.
+- 2026-10-13 — **The next round is prepared** (§6, owner's request: "prepare to next phase and ask user to start"). Not
+  started: it waits for the owner's start and for the decisions of §6.2.
+
+## 6. The next round: the rest of P1.7, so that phase 1 is complete
+
+Phase 1 makes text DATA for `S`, `U` and `T`; phase 2 computes on it. The owner's order (2026-10-10) is phase 1 first,
+and what phase 1 still lacks is the rest of P1.7: `T` in the file formats, in numpy.ma, and on the whole surface. This
+section records what NumPy 2.4.2 does there and what NumSharp does today (both probed on 2026-10-13), the decisions
+the owner must take, and the packages.
+
+### 6.1 What is left, measured
+
+| Item | NumPy 2.4.2 | NumSharp today |
+|---|---|---|
+| `np.save` / `np.savez` of a `T` array | Writes a PICKLE behind the header `{'descr': '|O', ...}` (and a `UserWarning: Custom dtypes are saved as python objects using the pickle protocol`). The pickle is protocol 4 (`_format_impl.write_array`): `numpy._core.multiarray._reconstruct(numpy.ndarray, (0,), b'b')`, then `BUILD` with the state `(1, shape, dtype, is_fortran, [the elements as Python str, an NA element as the na_object])`, the dtype pickled as `numpy._core._internal._convert_to_stringdtype_kwargs(coerce[, na_object])`. `allow_pickle=False` raises `ValueError: Object arrays cannot be saved when allow_pickle=False`. An F-ordered array writes `'fortran_order': True`. | `ArgumentException` from `DtypeToDescr` ("NPTypeCode.String names no single dtype"): not NumPy's text, and no file. |
+| `np.load` of such a file | `allow_pickle=False` (the default) raises `ValueError: Object arrays cannot be loaded when allow_pickle=False`; `allow_pickle=True` unpickles a `T` array with its `na_object` and `coerce`; `mmap_mode` raises `ValueError: Array can't be memory-mapped: Python objects in dtype.`; `.npz` members the same. | Refuses any `'|O'` header. |
+| `np.loadtxt(..., dtype=T)` | Works with every option (usecols, quotechar, converters, empty fields, `coerce=False`, an `na_object`); `np.genfromtxt` too. | `InvalidCastException` (`VStringDTypeMeta` cast to `StringDTypeMeta`). `genfromtxt` does not exist in NumSharp. |
+| `np.savetxt` of a `T` array | `fmt='%s'` (and widths, `%5s`) writes the text; an NA element writes `str(na_object)` (`None`, `nan`); a numeric spec raises `TypeError: Mismatch between array dtype ('StringDType()') and format specifier ('%d')`. | `%s` and widths match; an NA element throws `NullReferenceException`; the mismatch text matches. |
+| `tofile` / `fromfile` / `fromstring` | `tofile` binary: `OSError: cannot write object arrays to a file in binary mode`; `tofile(sep=...)` writes each `str`; `np.fromfile(..., T)`: `ValueError: Cannot read into object array`; `np.fromstring(..., T)`: `ValueError: Cannot create an object array from a string`. | `tofile(sep=...)` matches; the other three throw `NotSupportedException` with NumSharp's texts. |
+| numpy.ma with `T` | Fill value `np.str_('N/A')` (also with an NA descriptor); `filled` / `compressed` / `repr` / `str` (`--` for a masked element, an NA element printed as itself); movement (`concatenate`, `where`, `reshape`, `.T`, the indexers) and `zeros_like` / `empty_like` (`''`, mask kept); `astype`; `set_fill_value`. `ma.sort` / `argsort` / `min` / `max` / `unique` raise `TypeError: Unsuitable type StringDType() for calculating minimum.` (`maximum` for max); `masked_invalid` / `fix_invalid` raise `isfinite`'s `UFuncTypeError`; comparisons and `+` compute (phase 2). | Construction, `filled`, `fill_value`, `compressed` and printing work; the members that reach a not-yet-ported route throw the generic phase-1 `NotSupportedException` (`masked_equal`, `ma.sort`, …). |
+| The whole surface | A NumPy-side estimate re-ran the 7,111 `<U` cases of the surface generators (`gen_refusals`, `gen_string_requests`, `gen_text_precedence`, `gen_shape_decided`, `gen_validation_order`, `gen_surface`) with `T` operands: 3,681 raise the same exception type as `<U`, 1,399 another type (texts of their own: ufunc loop names with `StringDType`, `This function currently only supports native NumPy dtypes and old-style user dtypes, but the dtype was StringDType().`, `The axis argument to unique is not supported for dtype StringDType()`, reductions without an identity, `DTypePromotionError`s that name `StringDType`), 1,702 return in both, 188 return only for `T` (the `add` / `maximum` / `minimum` loops `T` has: `np.sum`, `np.max`, …) and 141 raise only for `T`. NumPy 2.4.2 CRASHES the process (segmentation fault) on `np.place` (known) and on `ndarray.byteswap()` over `T`. | Most of these routes throw the generic phase-1 `NotSupportedException` ("does not support StringDType() arrays yet"): `np.sort`, `np.unique`, `np.max`, `np.sum`, `np.argsort`, `np.strings.*`; comparisons throw `StringComputationNotSupportedException`; `ndarray.byteswap()` throws `InvalidCastException`. |
+| `None` into a numeric array | Floats store NaN, complex `nan+nanj`, bool `False`; integers raise `TypeError: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'` — through setitem, `x[...] = None`, `fill(None)`, `np.full(shape, None, dtype)` and `np.array([None, 1.0], dtype=...)`. | `ArgumentNullException` everywhere (`[Misaligned]`), and `np.full(shape, (object)null, float64)` silently returns ZEROS. |
+| `np.nditer` buffered reduction (not `T`-specific) | The core / outer buffering of `npyiter_find_buffering_setup` and `npyiter_buffered_reduce_iternext`: right sums at every buffer size, C-order visits. | The legacy double loop: wrong sums with a short buffer, raw bytes written for a cast reduction operand, and a reduction over the outer axis visited with that axis innermost (6 pins in `OpenBugs.NditerBufferedReduce.cs`); `grow_inner` is not honored (pinned). |
+
+### 6.2 Decisions for the owner
+
+| # | Decision | Options (recommendation first) |
+|---|---|---|
+| D3 | `.npy` / `.npz` for `T`. | **(A) NumPy's pickle, exactly, for a `T` array only:** `np.save` writes the bytes NumPy writes (the protocol-4 stream above, byte for byte, with NumPy's `allow_pickle` texts), and `np.load(allow_pickle: true)` reads that stream and no other (any other pickle refused by name). Files cross both ways; NumSharp gains no general unpickler. **(B)** Refuse: NumPy's `allow_pickle=False` texts, and a `NotSupportedException` for `allow_pickle: true`. No interoperability. |
+| D11 | The NEP 50 rule for 0-d operands in the ufuncs and `np.where`'s numeric route (open since `8fb0e23d`). | **(A) Keep the house rule** (every 0-d operand weak) for this round, because it is not about text and ~373 library sites build their scalars with `NDArray.Scalar` and rely on it; **(B)** NumPy's rule (a 0-d array or a NumPy scalar is strong, a C# literal weak through its mark), a breaking change and its own round. |
+| D12 | What the next round is. | **(A) The rest of P1.7** (this section), then phase 2; **(B)** phase 2 first (P2.2 sorting / searching / set routines, P2.4's remainder, P2.5 `np.strings`), the P1.7 items later. |
+| D13 | The `np.nditer` buffered-reduce port (NumPy's core / outer buffering) in this round. | **(A) Yes, as the last package:** it fixes the 6 pins for every dtype and lets the `titer` section record the buffered reductions it keeps out today; **(B)** later, on its own. |
+| D14 | `ndarray.byteswap()` over `T`, where NumPy crashes. | **(A) Return a copy** (a `T` cell has no byte order: the descriptor's `byteorder` is `'|'`); **(B)** refuse with a `NotSupportedException` that names NumPy's crash. |
+| D8 | ML.NET text columns and Parquet string columns as `T`. | Still open; not part of this round. |
+
+### 6.3 Packages (order: P1.7b → P1.7c → P1.7d → P1.7e → P1.7f → P1.7g → the closing pass)
+
+| ID | Work | Size | Gate |
+|---|---|---|---|
+| P1.7b | `None` into numeric arrays: NaN / `nan+nanj` / `False` / NumPy's `TypeError`, through every store route; the silent zeros of `np.full(..., null)` (breaking: `ArgumentNullException` becomes NumPy's `TypeError` for integers). | S | `storenone` gains the numeric targets (today they are kept out); unit tests. |
+| P1.7c | Text I/O for `T`: `loadtxt` (every option, NA objects, `coerce=False`), `savetxt` (the NA element, every `%s` form), `tofile` / `fromfile` / `fromstring` with NumPy's texts. `genfromtxt` stays out (NumSharp has none). | M | New oracle section `tio`; unit tests for the file-handle and encoding forms. |
+| P1.7d | numpy.ma with `T`: the fill value `'N/A'` as an `np.str_`, every member over `T` (movement and printing answer, the minimum / maximum fill members raise `Unsuitable type`, the `isfinite` members raise NumPy's `UFuncTypeError`, comparisons and arithmetic defer to phase 2). | M | `strma`'s generators with `T` arguments (a `tma` section). |
+| P1.7e | `.npy` / `.npz` for `T` per D3 (A: a protocol-4 pickle writer for exactly NumPy's layout and a reader for it, NumPy's `allow_pickle` / mmap texts). | M | The `.npy` oracle (`gen_npy_oracle.py`) gains `T` cases (byte-exact writes, reads, the refusals); reverse interop through `verify_npy_interop.py`. |
+| P1.7f | The whole surface with `T`: every route answers like NumPy where dtypes, shapes or movement decide, refuses with NumPy's text in NumPy's order where NumPy refuses, and throws `StringComputationNotSupportedException` where NumPy computes on the text (phase 2); `byteswap` per D14. No route keeps the generic phase-1 refusal. | L | New oracle section `tsurface`: the surface generators re-run with `T` operands (≈ 7,100 cases; `np.place` / `byteswap` in a child process, as the generator already does for `np.place`); its phase-2 cases pass as deferrals, like the fixed-width ones. |
+| P1.7g | Per D13: the `np.nditer` buffered-reduce port (core / outer split, the reduce outer loop in the buffer copies, `npyiter_buffered_reduce_iternext`, `npyiter_goto_iterindex`'s core offset) and `grow_inner`. | L | The 6 `OpenBugs.NditerBufferedReduce.cs` pins and the `grow_inner` pin become tests; the `nditer_protocol` tier and `titer` record buffered reductions. |
+| close | The P1.9 pass for this round: coverage of the new lines, a mutation pass, `FencedMemory` and guard-page runs, a speed sheet (≥ 1.5× NumPy at 1K / 100K / 1M for `loadtxt` / `savetxt` / `np.save` / `np.load` of `T`), docs, the state log. | M | — |
+
+After this round phase 1 is complete: every route treats `T` text as data, and every computation on text defers to
+phase 2 (which then gains the `T` forms of P2.1–P2.6 and the loops only `T` has: `np.sum`, `np.max` / `np.min`,
+`np.cumsum`).
