@@ -249,6 +249,9 @@ bool writable = ro.Shape.IsWriteable;   // false
 ro[0] = (NDArray)(byte)7;               // NumSharpException: assignment destination is read-only
 ```
 
+An empty read-only source (`np.frombuffer(b'')`, an empty slice of `bytes`) gets the same answer: refused by
+default, non-writeable on opt-in.
+
 <sub>See here [`ReadonlySource_RefusedByDefault_ViewableOnOptIn`][gate], [`ReadonlyView_ThrowsOnGuardedWrite`][gate]</sub>
 
 ---

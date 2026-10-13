@@ -178,7 +178,7 @@ NumSharp layout in numpy's own terms: dimension sizes, byte strides, and the wri
 | F-order (`np.asfortranarray`) | strides `(8, 32)`, `F_CONTIGUOUS=True` |
 | broadcast `(3,) → (2,3)` | strides `(0, 8)`, **`WRITEABLE=False`** |
 | 0-d scalar | `shape=()`; `x[()] = 7.5` writes through |
-| empty `(0,3)` | `shape=(0, 3)` - a fresh array; there are no bytes to share |
+| empty `(0,3)` | `shape=(0, 3)` - a fresh array (there are no bytes to share), `WRITEABLE=False` when the source is read-only (an empty broadcast) |
 
 The table is exhaustive over the layout classes NumSharp produces. Broadcast views are read-only on
 the numpy side because they are read-only in NumSharp - one element pretending to be many corrupts
@@ -264,7 +264,12 @@ With `allowReadonly: true` the view's `Shape.IsWriteable` is `false` - numpy's `
 carried across - and a write raises `assignment destination is read-only` instead of corrupting
 the source.
 
-<sub>See here [`Import_ReadonlyRefusedByDefault_OptInIsNonWriteable`][gate]</sub>
+The size does not change the answer: an empty read-only source (`np.frombuffer(b'')`, an empty
+broadcast, an empty slice of `bytes`) is refused the same way and views non-writeable on opt-in, and
+an empty NumSharp broadcast exports as a read-only numpy array. A copy (`ToNDArray`) is always
+writeable.
+
+<sub>See here [`Import_ReadonlyRefusedByDefault_OptInIsNonWriteable`][gate], [`EmptyReadOnlySources_KeepTheirWriteability_BothWays`][gate-text-edge]</sub>
 
 ### Does an imported view own its memory?
 
@@ -583,8 +588,11 @@ copy.GetValue(2)    null  (the NA value)
   `ToMemoryView` refuse it with that copy route in the message.
 - **The missing-value object** crosses when it has a C# form: `None` ↔ `null`, `bool`, `int` ↔
   `long` (`BigInteger` past it), `float` ↔ `double`, `complex` ↔ `Complex`, `str` ↔ `string`,
-  `bytes` ↔ `byte[]`, `np.float16` ↔ `Half`. Any other object (`pd.NA`, a class of your own) is
-  refused in both directions, rather than guessed.
+  `bytes` ↔ `byte[]`, `np.float16` ↔ `Half`. numpy's `np.float64`, `np.complex128`, `np.str_` and
+  `np.bytes_` cross as the Python type they subclass (the descriptor's repr loses the `np.`); from
+  NumSharp, every C# integer type, `float` and `char` cross too and come back as `long` (or
+  `BigInteger`), `double` and a one-character `string`. Any other object (`pd.NA`, `np.int64`, a
+  class of your own) is refused in both directions, rather than guessed.
 - **Object arrays** of `str` - what pandas text columns hold - copy to `StringDType()`. Any other
   object array (a `None`, a NaN, a number among the strings) is refused with the first such element
   named; convert it in Python first, e.g. `np.array(arr, dtype=np.dtypes.StringDType(na_object=None))`.
@@ -717,6 +725,7 @@ import route works uniformly across pythonnet 3.0.x.
 | 30 | An object array of `str` copies to `StringDType()`; any other object array, and an NA object with no C# / Python form, is refused | verbatim refusals naming the element | [`ObjectArrays_OfStr_Copy_AnythingElseRefused`][gate-text-vstring], [`ForeignNAObjects_AreRefusedBothWays`][gate-text-vstring] |
 | 31 | A `StringDType` copy holds no lease and survives its source; an allocation failure mid-copy leaves nothing behind | counters at baseline; injected failure releases the half-built copy | [`Copies_AreIndependentOfTheSourcesLifetime`][gate-text-vstring], [`FaultInjection_DuringImport_ReleasesTheHalfBuiltCopy`][gate-text-vstring] |
 | 32 | The page's text example: a `U3` import is a view, a `StringDType` import a copy with its NA | the three output lines | [`Text_FixedWidthViews_StringDTypeCopies`][gate] |
+| 33 | Text edge cases cross exactly: cells with a history (heap rewrites, NA or `''` over arena text, a short text over an arena cell keeping the old offset's bytes), UTF-8 sizes on every cell and prefix boundary, more NA objects, ranks 5–6, empty and read-only sources, a 64 KiB+ arena, the codec pipeline, eight threads | cells equal numpy's own copy; 240 seeded random arrays and views; planted defects each turn a test red | [`StringDType_CellHistories_CrossAsNumpysOwnCopy`][gate-text-edge], [`StringDType_RandomizedDifferential`][gate-text-edge], [`FixedWidthText_RandomizedDifferential`][gate-text-edge], [`Concurrency_ManyThreadsCrossText`][gate-text-edge] |
 
 ---
 
@@ -745,3 +754,4 @@ import route works uniformly across pythonnet 3.0.x.
 [gate-handoff]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/EncoderHandoffTests.cs
 [gate-text-fixed]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/TextFixedWidthCrossingTests.cs
 [gate-text-vstring]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/TextStringDTypeCrossingTests.cs
+[gate-text-edge]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/TextCrossingEdgeCaseTests.cs

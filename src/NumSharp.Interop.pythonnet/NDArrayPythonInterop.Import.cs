@@ -236,7 +236,8 @@ namespace NumSharp.Interop.PythonNet
         ///     NON-WRITEABLE view (<see cref="Shape.IsWriteable"/> is <c>false</c>; guarded write paths
         ///     raise NumPy's "assignment destination is read-only") — exactly how numpy marks arrays
         ///     over read-only buffers <c>writeable=False</c>. Default <c>false</c>: read-only sources
-        ///     throw with guidance instead.
+        ///     throw with guidance instead. The size does not matter: an EMPTY read-only source
+        ///     (<c>np.frombuffer(b'')</c>, an empty broadcast) is refused or non-writeable the same way.
         /// </param>
         /// <param name="requireGIL">
         ///     <c>true</c>: acquire the GIL for this call (re-entrant under an outer <see cref="Py.GIL"/>);
@@ -342,18 +343,19 @@ namespace NumSharp.Interop.PythonNet
                             "a zero-width text element (an empty np.str_ / np.bytes_) has no byte a NumSharp view could share. Use ToNDArray (copy): numpy reads it as a one-character '' element.");
 
                     Shape shape = dims.Length == 0 ? new Shape() : new Shape(dims);
-                    if (shape.Size == 0)
-                        return new NDArray(descr, shape, fillZeros: false);
-                    // The element width comes from the descriptor: an np.bytes_ buffer reports 1-byte items for its one
-                    // n-byte element.
-                    long elementBytes = descr.itemsize;
 
                     // Read writeability from the metadata view: it is the authoritative signal and lets
                     // AcquireBuffer AVOID probing PyBUF.WRITABLE on a read-only source. That probe is not
                     // merely wasteful — GetBuffer(PyBUF.WRITABLE) on a read-only *memoryview* HARD-CRASHES
                     // pythonnet 3.0.5 (bytes throws cleanly, a memoryview segfaults), so it must never be
-                    // attempted when we already know the source is read-only.
+                    // attempted when we already know the source is read-only. Read before the empty case too, which
+                    // carries it (an empty read-only source is refused or non-writeable, like any other).
                     bool sourceReadonly = GetBool(mv, PythonRuntimeInterop.NameReadonly);
+                    if (shape.Size == 0)
+                        return EmptyView(descr, shape, sourceReadonly, allowReadonly);
+                    // The element width comes from the descriptor: an np.bytes_ buffer reports 1-byte items for its one
+                    // n-byte element.
+                    long elementBytes = descr.itemsize;
 
                     // Take the lease buffer FROM THE MEMORYVIEW WRAPPER, not the raw object. The
                     // memoryview is CPython's canonical, uniformly-behaved buffer exporter, so acquiring
@@ -486,11 +488,41 @@ namespace NumSharp.Interop.PythonNet
             }
 
             if (!allowReadonly)
-                throw new InvalidOperationException(
-                    "the exporter's buffer is read-only; writing through a NumSharp view would corrupt an immutable Python object. " +
-                    "Use ToNDArray (copy), or pass allowReadonly:true to take a NON-WRITEABLE view (guarded writes through it throw).");
+                throw ReadonlyBufferRefusal();
             readOnly = true;
             return obj.GetBuffer(readonlyFlag);
+        }
+
+        /// <summary>
+        ///     The refusal of a writable view over a read-only exporter (<c>bytes</c>, a <c>writeable=False</c> numpy array,
+        ///     a read-only memoryview), naming the two routes that work. Shared by the buffer request and the empty view, so
+        ///     an empty read-only source is refused with the same text as a non-empty one.
+        /// </summary>
+        /// <returns>The exception to throw.</returns>
+        private static InvalidOperationException ReadonlyBufferRefusal()
+            => new InvalidOperationException(
+                "the exporter's buffer is read-only; writing through a NumSharp view would corrupt an immutable Python object. " +
+                "Use ToNDArray (copy), or pass allowReadonly:true to take a NON-WRITEABLE view (guarded writes through it throw).");
+
+        /// <summary>
+        ///     The view of an EMPTY exporter: a fresh empty array of the descriptor and shape (no byte exists to share), with the
+        ///     source's writeability — numpy's own view of empty read-only memory (<c>np.frombuffer(b'')</c>, an empty
+        ///     broadcast) is <c>writeable=False</c>, and the read-only refusal does not depend on the size.
+        /// </summary>
+        /// <param name="descr">The element descriptor.</param>
+        /// <param name="shape">The shape (at least one dimension is 0).</param>
+        /// <param name="sourceReadonly">Whether the exporter reported its memory read-only.</param>
+        /// <param name="allowReadonly">The caller's opt-in to a non-writeable view.</param>
+        /// <returns>The empty array, non-writeable when the source is read-only.</returns>
+        /// <exception cref="InvalidOperationException">The source is read-only and <paramref name="allowReadonly"/> is false.</exception>
+        private static NDArray EmptyView(DType descr, Shape shape, bool sourceReadonly, bool allowReadonly)
+        {
+            if (sourceReadonly && !allowReadonly)
+                throw ReadonlyBufferRefusal();
+            var nd = new NDArray(descr, shape, fillZeros: false);
+            if (sourceReadonly)
+                nd.setflags(write: false);
+            return nd;
         }
 
         /// <summary>
@@ -514,7 +546,7 @@ namespace NumSharp.Interop.PythonNet
             for (int i = 0; i < dims.Length; i++)
                 sizeFromDims *= dims[i];
             if (sizeFromDims == 0)
-                return new NDArray(descr, dims.Length == 0 ? new Shape() : new Shape(dims), fillZeros: false);
+                return EmptyView(descr, dims.Length == 0 ? new Shape() : new Shape(dims), sourceReadonly, allowReadonly);
 
             if (byteStrides is null || byteStrides.Length != dims.Length)
                 throw new NotSupportedException(
@@ -632,7 +664,7 @@ namespace NumSharp.Interop.PythonNet
             for (int i = 0; i < dims.Length; i++)
                 sizeFromDims *= dims[i];
             if (sizeFromDims == 0)
-                return new NDArray(descr, dims.Length == 0 ? new Shape() : new Shape(dims), fillZeros: false);
+                return EmptyView(descr, dims.Length == 0 ? new Shape() : new Shape(dims), readOnly, allowReadonly);
 
             // A non-empty array must name a real address to share. numpy rejects a NULL data pointer
             // here ("data is NULL but array contains data"); without this guard a null (or otherwise

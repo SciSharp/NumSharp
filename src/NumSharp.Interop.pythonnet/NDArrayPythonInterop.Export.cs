@@ -16,7 +16,9 @@ namespace NumSharp.Interop.PythonNet
         ///     <para><b>Layout fidelity:</b> every NumSharp layout is exported zero-copy — C-contiguous,
         ///     sliced, transposed, Fortran-order and negative-stride views become numpy views with the
         ///     same strides; broadcast (stride-0) views become read-only numpy views, matching NumSharp's
-        ///     own write protection. Scalars become 0-d arrays. <see cref="NPTypeCode.Char"/> is exported
+        ///     own write protection. Scalars become 0-d arrays. An empty array has no byte to share and
+        ///     becomes a fresh empty numpy array of its shape, read-only when the source is (an empty
+        ///     broadcast). <see cref="NPTypeCode.Char"/> is exported
         ///     as <c>uint16</c> (UTF-16 code units); <see cref="NPTypeCode.Decimal"/> has no numpy dtype
         ///     and is exported as a view of a float64 conversion (the export owns the temporary).</para>
         ///
@@ -82,10 +84,25 @@ namespace NumSharp.Interop.PythonNet
                 var shape = source.Shape;
                 if (shape.Size == 0)
                 {
-                    // Nothing to share — an empty array of the right dtype/shape IS the view.
+                    // Nothing to share — an empty array of the right dtype/shape IS the view. It keeps the source's
+                    // writeability (an empty broadcast is read-only), as a non-empty export does.
                     using var emptyDims = MakeTuple(shape.Dimensions);
                     converted?.Dispose();
-                    return np.empty(emptyDims, source.dtype);
+                    PyObject empty = np.empty(emptyDims, source.dtype);
+                    if (!shape.IsWriteable)
+                    {
+                        try
+                        {
+                            empty.setflags(write: false);
+                        }
+                        catch
+                        {
+                            empty.Dispose();
+                            throw;
+                        }
+                    }
+
+                    return empty;
                 }
 
                 // Pin the buffer for the whole build; on success ownership of this reference

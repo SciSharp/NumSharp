@@ -154,8 +154,17 @@ owns the allocator, so views keep it alive). Rules a new route must keep:
   an `np.float16` (convert through Python's `float()`); `np.empty(shape, T)` gives the result a NEW descriptor instance
   with its own allocator, so lock `result.dtype`'s allocator, not the descriptor passed in; a failed `memoryview` through
   pythonnet costs ~10 µs of .NET exceptions, so the import routes probe with `PythonRuntimeInterop.TryMemoryview` (Python's
-  own `try`, `None` on failure). Gates `TextFixedWidthCrossingTests` + `TextStringDTypeCrossingTests` (live numpy, every
-  NA kind × `coerce` × layout); speed in `docs/website-src/docs/interop/pythonnet-numpy.md` → "How does text cross?".
+  own `try`, `None` on failure); pythonnet's `As<string>()` compares the type with `str` EXACTLY, so it refuses an
+  `np.str_` (read a possible `str` subclass through Python's `str()`); an EMPTY source keeps its writeability like any
+  other (a read-only empty one is refused by default, non-writeable on opt-in; an empty broadcast exports read-only).
+  numpy facts for phase 2: `np.strings.upper` / `lower` / `title` / … call the `str` method per element (`_vec_string`), so
+  they raise on any NA that is not a `str`; the `np.strings` ufuncs (`add`, …) carry a NaN-like NA through, treat a `str` NA
+  as its text, and raise on any other (`None`: `Cannot add null that is not a nan-like value`). A `T` cell written short
+  over an arena string keeps the old offset's high bytes behind its text, and numpy's `NpyString_dup` (so its own copy)
+  moves them: compare cells, and they must move too. Gates `TextFixedWidthCrossingTests` + `TextStringDTypeCrossingTests`
+  (live numpy, every NA kind × `coerce` × layout) + `TextCrossingEdgeCaseTests` (cell histories, UTF-8 size boundaries,
+  ranks 5–6, empty / read-only sources, a 64 KiB+ arena, 240 seeded random arrays and views, the codec, eight threads);
+  speed in `docs/website-src/docs/interop/pythonnet-numpy.md` → "How does text cross?".
 - **Speed rules** (NPY/NS geomean 5.35×, minimum 1.80×, over copy / arena copy / stepped copy / take / mask / concatenate /
   where / repeat / `np.array(list)` / `U → T` / `T → U8` at 1K / 100K / 1M): allocator memory is reported through the
   pool's coarse accounting (`SizeBucketedBufferPool.AccountForeignAllocation` / `AccountForeignRelease`), never one

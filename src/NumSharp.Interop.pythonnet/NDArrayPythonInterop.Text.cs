@@ -410,8 +410,15 @@ namespace NumSharp.Interop.PythonNet
                     return new Complex(real.As<double>(), imag.As<double>());
                 }
                 case "str":
-                case "numpy.str_":
                     return na.As<string>();
+                case "numpy.str_":
+                {
+                    // pythonnet's string conversion compares the object's type with str exactly, so it refuses a subclass
+                    // ("'numpy.str_' value cannot be converted to System.String"): str() returns the text as a plain str.
+                    using PyObject asStr = PythonRuntimeInterop.Builtins.GetAttr("str");
+                    using PyObject value = asStr.Invoke(na);
+                    return value.As<string>();
+                }
                 case "bytes":
                 case "numpy.bytes_":
                 {
