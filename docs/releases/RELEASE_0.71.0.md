@@ -10,7 +10,7 @@
   - `np.ma.*` - the masked-array module; `np.emath.*` - the automatic-domain math module.
 - **`DType` is NumPy's two-level dtype model** - `NDArray.dtype` returns a `numpy.dtype`-shaped descriptor, with `np.dtypes`, byte order and `datetime64` / `timedelta64` descriptors.
 - **Reductions on NumPy's own schedules** - `max`, `min`, `ptp`, `nanmax`, `nanmin`, `argmax` and the fused `np.evaluate` reductions match NumPy bit for bit, down to the sign of a ±0 tie and a NaN's payload, and most of them run faster.
-- **~60 NumPy-parity and memory-safety fixes**, **14 measured speedups** and **14 breaking changes** - every line traced to one of 138 cited commits out of the release's 348.
+- **~60 NumPy-parity and memory-safety fixes**, **15 measured speedups** and **18 breaking changes** - every line traced to one of 142 cited commits out of the release's 348.
 - **1 new NuGet package** - **NumSharp.Interop.System.Numerics.Tensors**, a zero-copy bridge to .NET's `Tensor<T>` / `TensorSpan<T>`.
 - **407,913 NumPy 2.4.2 oracle test cases** (0.70.0 shipped with 116K+) and 16,818 test methods.
 
@@ -111,6 +111,7 @@ One optional companion package ships for the first time, co-versioned with **Num
   - `np.ndenumerate<T>(a).AsRef()`, `np.ndindex(...).AsSpans()` - allocation-free enumeration - `afb0d5ce`.
   - `nd.Unsafe.Span<T>()`, `Memory<T>()`, `Bytes()`, `Pointer<T>()`, `TryGetSpan<T>()`, `TryGetMemory<T>()` - zero-copy BCL views of the buffer (they do not keep it alive: hold the `NDArray`); `nd.AsEnumerable<T>()` and the typed iterators' `ToArray()` / `CopyTo(Span<T>)` - safe copies - `37a112be`.
 - `Py.RegisterNumSharpCodec()` (**NumSharp.Interop.pythonnet**) - the one-call codec registration, spelled on pythonnet's own `Py` (a C# 14 extension member) - `f18aaa23` (+ `b648ee53`).
+- Text crosses **NumSharp.Interop.pythonnet** - fixed-width `S` / `U` arrays share memory with numpy in both directions and every layout, a NEP 55 `StringDType` array crosses as an exact copy through numpy's own `NpyString` C API (NA values, `na_object` and `coerce` kept; the cells equal numpy's own copy's), and an object array of `str` - a pandas text column - copies as `StringDType` - `748acccb`.
 - `NumSharp.Collections` - `ConcurrentOrderedDictionary<TKey,TValue>`, `ConcurrentOrderedCompactDictionary<TKey,TValue>` (about a third of the memory) and the lock-free `OrderedDictionary<TKey,TValue>`: insertion-ordered, index-addressable dictionaries, plus a vendored `NumSharp.Collections.Concurrent.ConcurrentDictionary<TKey,TValue>` with by-ref access - `39e5ba17`, `47c12604`, `ba5c347d` (+ `04677203`, `873900b1`, `478b5310`).
 
 ### 🧩 ndarray surface
@@ -134,6 +135,7 @@ One optional companion package ships for the first time, co-versioned with **Num
 - `x1.0->x22.2` - `np.evaluate` mixed-dtype trees vectorize through lane groups (`i4*2+f8` x14.2 and `f4*f8+f4` x22.2 at 100K; 1K cells sit at the per-call floor) - `3631fcc7`.
 - `x0.86->x53` - `np.evaluate` reductions stream block by block instead of materializing their child, and `Any` / `All` stop at the deciding block (`any(a > b, axis=0)` was x0.37; `count_nonzero(a > b)` at 100K sits at the read-bandwidth ceiling) - `ee639862`, `0f8819b7`, `129fbaba`, `78692d91`, `ceac36f2`, `0f78f6e2`.
 - `x2.06` - a small `np.evaluate` call skips the iterator like NumPy's trivial loop: `a*b+c` at n=8 runs in 255 ns vs NumPy's 526 (`out=`: 75 ns) - `30dbfe0d` (+ `df799381`).
+- `x0.88->x2.33` - pythonnet `StringDType` copies against numpy's own `a.copy()` (`ToNDArray` x1.21-x2.33; `ToNumpyCopy` x1.45-x1.55 for short strings and x0.88-x1.05 for long ones, which numpy's allocator stores through `NpyString_pack` - the work its own copy does) and x3.0-x21.7 the Python `tolist()` route; every small pythonnet import got 2.45x faster (a 1,000-element float64 `ToNDArray` 9.15 -> 3.73 us: the built-in Torch / Pandas adapters walked the type's MRO on every call) - `748acccb`.
 
 ### 🎯 Parity & Fixes
 - `np.max` / `np.min` / `np.ptp`, flat and along an axis, run NumPy's own reduction schedules - the sign of a ±0 tie and a canonical-vs-payload NaN now match on every non-broadcast layout - `1d79ce61` (+ `129fbaba`, `f8f91b3d`).
@@ -181,6 +183,7 @@ One optional companion package ships for the first time, co-versioned with **Num
   - Each dtype parameter takes one `DType`: the `Type` / `NPTypeCode` twins are gone (a `Type`, `NPTypeCode` or dtype string still converts implicitly), and `linspace` / `nancumsum`'s `typeCode:` is `dtype:`.
   - The promotion family (`result_type`, `promote_types`, `find_common_type`, `common_type`, ...) returns `DType`, and `isdtype` rejects `issubdtype`'s vocabulary (`"floating"`), as NumPy does.
 - `finfo.dtype` / `iinfo.dtype` return `DType` (were `NPTypeCode`), and the pythonnet dtype maps take `DType` - `ea080d8e`.
+- pythonnet text: numpy's `<U1` and a 4-byte `wchar_t` buffer import as a `U1` view (were a `Char` copy, which refused astral characters); `np.bytes_` imports as a 0-d `S<n>` (was `n` uint8 values); `FromNumpyDtypeStr` / `FromBufferFormat` return `DType` (were `NPTypeCode`); an object array of `str` (a pandas text column) decodes as a `StringDType` copy (it failed); the codec's Auto encode of a `StringDType` array is a copy, and `ToTorch` refuses text - `748acccb`.
 - Casting-rule strings are case-sensitive like NumPy (`"Safe"` raises `ValueError`) - `896f02b2`.
 - On Windows, `np.int32` / `np.int64` report the local NumPy's LLP64 type numbers and chars (`7` / `'l'` and `9` / `'q'`; they were hard-coded to Linux's `5` / `'i'` and `7` / `'l'`) - `72e4d29c`.
 - A write to a read-only array raises NumPy's `ValueError` (was `NumSharpException`); it derives from `ArgumentException`, so `catch (NumSharpException)` no longer catches it - `f319b657`.
