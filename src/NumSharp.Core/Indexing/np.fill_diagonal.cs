@@ -11,8 +11,10 @@ namespace NumSharp
         /// <param name="a">Array whose diagonal is to be filled; it is modified in place.</param>
         /// <param name="val">
         ///     Value(s) to write into the diagonal. A scalar is repeated; a sequence is raveled
-        ///     and then <b>tiled cyclically</b> (and truncated) to the diagonal's length. For a NEP 55
-        ///     <c>StringDType</c> array, null is Python's <c>None</c> (its NA object, or <c>'None'</c>).
+        ///     and then <b>tiled cyclically</b> (and truncated) to the diagonal's length. <c>null</c> is
+        ///     Python's <c>None</c>: NaN (NumPy's positive <c>NPY_NAN</c>) for a float array, <c>nan+nanj</c>
+        ///     for complex, <c>False</c> for bool, <c>'None'</c> (truncated) for <c>S</c> / <c>U</c>, a
+        ///     <c>StringDType</c>'s NA object or <c>'None'</c>.
         /// </param>
         /// <param name="wrap">
         ///     For tall matrices the diagonal "wraps" after N columns and continues on the row
@@ -23,9 +25,11 @@ namespace NumSharp
         ///     (ndim &gt; 2 with a non-hyper-cubic shape), or <c>underlying array is read-only</c>
         ///     — all verbatim NumPy <c>ValueError</c> texts.
         /// </exception>
-        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null, or <paramref name="val"/> is null for an array that
-        ///     is not <c>StringDType</c>.</exception>
-        /// <exception cref="ValueError">A <c>StringDType(coerce=False)</c> array given a value that is not text.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="TypeError"><paramref name="val"/> is null (<c>None</c>) and <paramref name="a"/> is an integer (or
+        ///     <c>decimal</c>) array — Python's <c>int(None)</c>, raised even for an empty diagonal.</exception>
+        /// <exception cref="ValueError">A <c>StringDType(coerce=False)</c> array given a value that is not text
+        ///     (<c>None</c> included).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.fill_diagonal.html
         ///     <para>
@@ -93,12 +97,14 @@ namespace NumSharp
             if (!a.Shape.IsWriteable)
                 throw new ArgumentException("underlying array is read-only");
 
+            // Python's None: the flat setter's PyArray_FromAny(None, dtype, FORCECAST) is one element of None's setitem value
+            // (NaN, nan+nanj, False, 'None' truncated to an S / U width), converted HERE — after the read-only check and
+            // before the empty-diagonal return, so an integer array raises int(None)'s TypeError even when nothing is
+            // written (np.fill_diagonal(np.zeros((0, 0), int), None) raises, probed 2.4.2). A StringDType array stores None
+            // through its own branch below (the NA object, 'None', or coerce=False's refusal).
+            NDArray scalarValue = null;
             if (val is null && !a.Storage.IsVString)
-                // NumPy's `None` reaches the dtype's converter: nan for a float array, TypeError
-                // for an integral one. In C# a null `val` is a caller bug either way, and
-                // silently writing nan/zero would hide it. A StringDType array is the exception:
-                // None is stored by its setitem (the NA object, 'None', or coerce=False's refusal).
-                throw new ArgumentNullException(nameof(val));
+                scalarValue = NDArray.NoneForStore(a.dtype);
 
             // The overwhelmingly common call is a SCALAR fill. A C# number is a Python (or NumPy) scalar in the
             // boundary map, and the flat setter converts it with PyArray_FromAny(val, dtype, FORCECAST): PyArray_Pack's
@@ -108,9 +114,13 @@ namespace NumSharp
             // supplies the `count` copies for free. A C# literal's 0-d array (an NDArray passed as object) packs the same
             // way; any other array, and a C# array / List (NumPy's list-valued `val`, which must tile), take the general
             // path below.
-            NDArray scalarValue = null;
             if (a.typecode != NPTypeCode.String && (NDArray.IsStoreScalar(val) || val is NDArray { WasPythonLiteral: true }))
                 scalarValue = NDArray.AsStoreValue(val, a.typecode);
+
+            // A StringDType target: NumPy's a.flat[...] = val converts val with the array's descriptor — Python objects (and
+            // a list's elements) by setitem, an ndarray by the cast (NDVStringMove.StoreValue) — BEFORE the slice is walked,
+            // so a value coerce=False refuses (None included) raises even for an empty diagonal.
+            NDArray text = a.Storage.IsVString ? Backends.Strings.NDVStringMove.StoreValue(val, a.dtype) : null;
 
             if (end <= 0 || step <= 0)
                 return;
@@ -119,14 +129,11 @@ namespace NumSharp
             if (count <= 0)
                 return;
 
-            if (a.Storage.IsVString)
+            if (text is not null)
             {
                 // A StringDType target: the value in its descriptor (a number becomes its str()), then the same fill on
                 // marks (the value's element numbers, tiled cyclically by the numeric fill) and the marked diagonal elements
                 // receive the strings — never the raw strided-store kernel.
-                // NumPy's a.flat[...] = val converts val with the array's descriptor: Python objects (and a list's elements)
-                // by setitem, an ndarray by the cast (NDVStringMove.StoreValue).
-                var text = Backends.Strings.NDVStringMove.StoreValue(val, a.dtype);
                 if (text.size == 0)
                     return; // NumPy: assigning an empty sequence leaves the diagonal untouched.
                 var flatText = text.ravel();

@@ -416,6 +416,11 @@ public class PutAlongAxisTests
         act.Should().Throw<IndexError>().WithMessage("index 0 is out of bounds for axis 1 with size 0");
     }
 
+    /// <summary>
+    ///     A null array or index array is a caller error; a null VALUES array is Python's <c>None</c> (P1.7b), which an int32
+    ///     target refuses with <c>int(None)</c>'s TypeError, as <c>np.put_along_axis(int_array, idx, None, axis=1)</c> does in
+    ///     NumPy 2.4.2, and a float target stores NaN.
+    /// </summary>
     [TestMethod]
     public void Error_NullArguments()
     {
@@ -423,7 +428,13 @@ public class PutAlongAxisTests
         var idx = np.array(new int[,] { { 0 }, { 0 } });
         ((Action)(() => np.put_along_axis(null, idx, (NDArray)1, axis: 1))).Should().Throw<ArgumentNullException>();
         ((Action)(() => np.put_along_axis(a, null, (NDArray)1, axis: 1))).Should().Throw<ArgumentNullException>();
-        ((Action)(() => np.put_along_axis(a, idx, null, axis: 1))).Should().Throw<ArgumentNullException>();
+        ((Action)(() => np.put_along_axis(a, idx, null, axis: 1))).Should().Throw<TypeError>()
+            .WithMessage("int() argument must be a string, a bytes-like object or a real number, not 'NoneType'");
+        var f = A().astype(NPTypeCode.Double);
+        np.put_along_axis(f, idx, null, axis: 1);
+        double.IsNaN(f.GetDouble(0, 0)).Should().BeTrue();
+        double.IsNaN(f.GetDouble(1, 0)).Should().BeTrue();
+        f.GetDouble(0, 1).Should().Be(30.0);
     }
 
     // ===================================================================

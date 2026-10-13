@@ -39,9 +39,12 @@ namespace NumSharp
         ///     element — so a read-only destination raises the read-only error even for a bad value, and an
         ///     out-of-range value raises even on an EMPTY array. Both orderings are reproduced.
         /// </summary>
-        /// <param name="value">The scalar to fill with. A C# primitive (weak) or a 0-d <see cref="NDArray"/> (strong).</param>
-        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null (NumSharp house convention,
-        ///     as in <see cref="np.fill_diagonal"/>; NumPy instead yields NaN for a float array / TypeError otherwise).</exception>
+        /// <param name="value">The scalar to fill with. A C# primitive (weak) or a 0-d <see cref="NDArray"/> (strong);
+        ///     <c>null</c> is Python's <c>None</c>: NaN for a float array (NumPy's positive <c>NPY_NAN</c>), <c>nan+nanj</c>
+        ///     for complex, <c>False</c> for bool, <c>'None'</c> (truncated to the width) for <c>S</c> / <c>U</c>, a
+        ///     <c>StringDType</c>'s NA object or <c>'None'</c>.</param>
+        /// <exception cref="TypeError"><paramref name="value"/> is null and this is an integer (or <c>decimal</c>) array:
+        ///     Python's <c>int(None)</c> — raised even for an EMPTY array, as NumPy packs the scalar first.</exception>
         /// <exception cref="ValueError">This array is read-only (broadcast view / read-only memmap);
         ///     raises NumPy's exact <c>ValueError: assignment destination is read-only</c>.</exception>
         /// <exception cref="OverflowException">A weak integer/float value is out of range for an integer dtype,
@@ -99,9 +102,9 @@ namespace NumSharp
         ///     descriptor, then the broadcast copy of that one element into every position (any layout).
         /// </summary>
         /// <param name="value">A <see cref="string"/>, a <c>byte[]</c>, a <see cref="char"/>, a number (stored as its
-        ///     <c>str()</c>, truncated to the width), or a 0-d array.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null (the house convention of
-        ///     <see cref="fill"/>).</exception>
+        ///     <c>str()</c>, truncated to the width), a 0-d array, or <c>null</c> — Python's <c>None</c>, stored as its
+        ///     <c>str()</c>, <c>'None'</c>, truncated to the width (NumPy's <c>STRING_setitem</c> / <c>UNICODE_setitem</c>
+        ///     take any object by its <c>str()</c>).</param>
         /// <exception cref="ValueError">An array of one or more dimensions, of any size and dtype (<c>setting an array
         ///     element with a sequence</c> — WITHOUT the period NumPy's numeric targets put there: its string pack path
         ///     words it differently, probed 2.4.2).</exception>
@@ -109,8 +112,7 @@ namespace NumSharp
         /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into a str (<c>U</c>) array.</exception>
         private void FillText(object value)
         {
-            if (value is null)
-                throw new ArgumentNullException(nameof(value));
+            // A null falls through to FromScalar below, whose element writer stores str(None) = 'None' in this class.
             if (value is NDArray nd)
             {
                 // A one-element 1-D array is a sequence too: PyArray_Pack takes only a 0-d value.
@@ -269,9 +271,10 @@ namespace NumSharp
         ///     <c>PyArray_Pack</c> of the value (<see cref="ReductionInitial.TryPack"/>) — and returns it boxed as the
         ///     dtype's EXACT C# type, the form the typed fill routes consume.
         /// </summary>
-        /// <param name="value">The fill value.</param>
+        /// <param name="value">The fill value; <c>null</c> is Python's <c>None</c> (<see cref="ReductionInitial.BoxNone"/>).</param>
         /// <returns>The element every slot receives.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null (house convention, see <see cref="fill"/>).</exception>
+        /// <exception cref="TypeError"><paramref name="value"/> is null and the dtype is an integer (or <c>decimal</c>) one:
+        ///     Python's <c>int(None)</c>.</exception>
         /// <exception cref="OverflowException">A Python int (any C# integer, or a C# literal's 0-d array) out of an integer
         ///     dtype's range — "Python integer 300 out of bounds for int8", or past the C <c>long</c> the LP64 text "Python int
         ///     too large to convert to C long" —; a float infinity into an integer ("cannot convert float infinity to
@@ -299,9 +302,9 @@ namespace NumSharp
         private unsafe object CoerceFillValue(object value)
         {
             if (value is null)
-                // NumPy reaches its dtype converter (float → NaN, else TypeError); NumSharp treats a null
-                // scalar as a caller bug, matching np.fill_diagonal's deliberate divergence.
-                throw new ArgumentNullException(nameof(value), "fill() value must not be null.");
+                // Python's None: PyArray_FillWithScalar packs it with the dtype's setitem — NaN, nan+nanj, False, or the
+                // TypeError of int(None) for an integer dtype (before any element is written, an empty array included).
+                return ReductionInitial.BoxNone(typecode);
 
             // Fast path: a number already of the exact dtype IS the stored representation — it always fits
             // and needs no coercion (the hot `int32.fill(42)` / `float64.fill(3.5)` case, no allocation). Only a

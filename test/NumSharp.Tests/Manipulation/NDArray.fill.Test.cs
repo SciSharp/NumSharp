@@ -237,12 +237,20 @@ namespace NumSharp.Tests.Manipulation
             act.Should().Throw<ValueError>().WithMessage("*setting an array element with a sequence*");
         }
 
+        /// <summary>
+        ///     A null value is Python's <c>None</c> (P1.7b): an int32 array raises <c>int(None)</c>'s TypeError (NumPy 2.4.2's
+        ///     <c>np.zeros(3, np.int32).fill(None)</c>), an empty one too, and the array is untouched.
+        /// </summary>
         [TestMethod]
         public void Fill_Null_Throws()
         {
             var a = np.zeros(new Shape(3), NPTypeCode.Int32);
             Action act = () => a.fill(null);
-            act.Should().Throw<ArgumentNullException>();
+            act.Should().Throw<TypeError>()
+                .WithMessage("int() argument must be a string, a bytes-like object or a real number, not 'NoneType'");
+            a.ToArray<int>().Should().Equal(0, 0, 0);
+            Action empty = () => np.zeros(new Shape(0), NPTypeCode.Int32).fill(null);
+            empty.Should().Throw<TypeError>();
         }
 
         // ---- write-through across memory layouts ------------------------------------------

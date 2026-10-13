@@ -185,6 +185,127 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     The TypeError Python's <c>int()</c> raises for <c>None</c> — what NumPy's integer setitem (and NumSharp's
+        ///     <c>char</c>, NumPy's uint16) raises when <c>None</c> is stored into an integer array.
+        /// </summary>
+        internal const string NoneIntoIntegerText =
+            "int() argument must be a string, a bytes-like object or a real number, not 'NoneType'";
+
+        /// <summary>
+        ///     The TypeError Python's <c>decimal.Decimal(None)</c> raises — NumSharp's answer for <c>None</c> stored into a
+        ///     <c>decimal</c> array, a dtype NumPy does not have and one that cannot hold a NaN.
+        /// </summary>
+        internal const string NoneIntoDecimalText = "conversion from NoneType to Decimal is not supported";
+
+        /// <summary>
+        ///     Packs Python's <c>None</c> into one element of <paramref name="loop"/> — the element NumPy's setitem stores
+        ///     for <c>None</c>, written at the start of <paramref name="slot"/>. This is the store-side meaning of a C#
+        ///     <c>null</c> value (<see cref="TryPack"/> reads a null as a reduction's "no initial value" instead).
+        /// </summary>
+        /// <param name="loop">The destination dtype (a numeric one: text destinations store <c>str(None)</c> or their NA
+        ///     object through their own setitem).</param>
+        /// <param name="slot">Receives the element; at least <see cref="SlotBytes"/> bytes.</param>
+        /// <exception cref="TypeError">An integer destination (<c>char</c> included) — Python's <c>int(None)</c>
+        ///     (<see cref="NoneIntoIntegerText"/>) — or a <c>decimal</c> one (<see cref="NoneIntoDecimalText"/>).</exception>
+        /// <exception cref="ArgumentException"><paramref name="slot"/> is shorter than <see cref="SlotBytes"/>.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="loop"/> is a string or the empty dtype.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy's setitem functions read <c>None</c> through Python's number protocols, probed against NumPy 2.4.2 for
+        ///     every store route (setitem, <c>fill</c>, <c>np.full</c>, <c>np.put</c>, <c>np.place</c>, <c>np.putmask</c>,
+        ///     <c>np.insert</c>, <c>np.copyto(casting='unsafe')</c>, the flat iterator, <c>setfield</c>,
+        ///     <c>np.array([None], dtype)</c>):
+        ///     <list type="bullet">
+        ///     <item>a float dtype — <c>MyPyFloat_AsDouble(None)</c> is <c>NPY_NAN</c>, the POSITIVE quiet NaN, narrowed
+        ///     exactly: float64 <c>0x7ff8000000000000</c>, float32 <c>0x7fc00000</c>, float16 <c>0x7e00</c> (.NET's
+        ///     <see cref="double.NaN"/> has the sign bit set, so the bits are written, not the constant);</item>
+        ///     <item>complex — <c>@NAME@_setitem</c> special-cases <c>None</c> as <c>NPY_NAN + NPY_NAN j</c>, both parts
+        ///     positive;</item>
+        ///     <item>bool — <c>BOOL_setitem</c> takes <c>PyObject_IsTrue(None)</c>, which is <c>False</c>;</item>
+        ///     <item>every integer dtype — <c>int(None)</c> raises the TypeError above, after the store's index checks
+        ///     (<c>a[10] = None</c> on a 4-element array is the IndexError).</item>
+        ///     </list>
+        ///     </para>
+        /// </remarks>
+        internal static void PackNone(NPTypeCode loop, Span<byte> slot)
+        {
+            if (slot.Length < SlotBytes)
+                throw new ArgumentException($"The None slot needs {SlotBytes} bytes.", nameof(slot));
+
+            slot.Clear();
+            switch (loop)
+            {
+                case NPTypeCode.Boolean:
+                    // PyObject_IsTrue(None) is False: the cleared slot already holds it.
+                    return;
+                case NPTypeCode.Half:
+                    // npy_double_to_half(NPY_NAN): the positive quiet NaN of float16.
+                    Unsafe.WriteUnaligned(ref slot[0], (ushort)0x7E00);
+                    return;
+                case NPTypeCode.Single:
+                    Unsafe.WriteUnaligned(ref slot[0], 0x7FC0_0000u);
+                    return;
+                case NPTypeCode.Double:
+                    Unsafe.WriteUnaligned(ref slot[0], 0x7FF8_0000_0000_0000UL);
+                    return;
+                case NPTypeCode.Complex:
+                    // Two positive quiet NaNs, real part first (Complex's layout is NumPy's: re, im).
+                    Unsafe.WriteUnaligned(ref slot[0], 0x7FF8_0000_0000_0000UL);
+                    Unsafe.WriteUnaligned(ref slot[8], 0x7FF8_0000_0000_0000UL);
+                    return;
+                case NPTypeCode.Decimal:
+                    // A decimal has no NaN: Python's own decimal type refuses None with this text.
+                    throw new TypeError(NoneIntoDecimalText);
+                case NPTypeCode.String:
+                case NPTypeCode.Empty:
+                    throw new NotSupportedException(
+                        $"ReductionInitial.PackNone: {loop} is not a numeric dtype (text destinations store None through their own setitem).");
+                default:
+                    // Every integer dtype and char: int(None).
+                    throw new TypeError(NoneIntoIntegerText);
+            }
+        }
+
+        /// <summary>
+        ///     Packs a STORED value into one element of <paramref name="loop"/>: <see cref="PackNone"/> for <c>null</c>
+        ///     (Python's <c>None</c>), <see cref="TryPack"/> for anything else — NumPy's <c>PyArray_Pack</c> of the value
+        ///     an assignment receives.
+        /// </summary>
+        /// <param name="value">The value of the store; <c>null</c> is <c>None</c>.</param>
+        /// <param name="loop">The destination dtype (numeric).</param>
+        /// <param name="slot">Receives the element; at least <see cref="SlotBytes"/> bytes.</param>
+        /// <exception cref="TypeError"><c>None</c> into an integer or <c>decimal</c> destination, or
+        ///     <see cref="TryPack"/>'s TypeErrors.</exception>
+        /// <exception cref="OverflowException">See <see cref="TryPack"/>.</exception>
+        /// <exception cref="ValueError">See <see cref="TryPack"/>.</exception>
+        /// <remarks>Use this, never <see cref="TryPack"/> directly, on a store path: <see cref="TryPack"/> returns
+        ///     <c>false</c> for <c>null</c> and leaves the slot untouched, the reduction's <c>initial=None</c>.</remarks>
+        internal static void PackStore(object value, NPTypeCode loop, Span<byte> slot)
+        {
+            if (value is null)
+                PackNone(loop, slot);
+            else
+                TryPack(value, loop, slot);
+        }
+
+        /// <summary>
+        ///     The element <c>None</c> stores into <paramref name="loop"/>, boxed as the dtype's exact CLR type
+        ///     (<see cref="PackNone"/> read back through <see cref="Box"/>) — for the store paths that write a boxed element
+        ///     (<c>SetValue</c>, <c>SetAtIndex</c>, <c>fill</c>, <c>np.full</c>).
+        /// </summary>
+        /// <param name="loop">The destination dtype (numeric).</param>
+        /// <returns>The boxed element: a positive-NaN <see cref="double"/> / <see cref="float"/> / <see cref="Half"/>, a
+        ///     <c>nan+nanj</c> <see cref="Complex"/>, or <c>false</c>.</returns>
+        /// <exception cref="TypeError">An integer or <c>decimal</c> destination (see <see cref="PackNone"/>).</exception>
+        /// <exception cref="NotSupportedException"><paramref name="loop"/> is a string or the empty dtype.</exception>
+        internal static object BoxNone(NPTypeCode loop)
+        {
+            Span<byte> slot = stackalloc byte[SlotBytes];
+            PackNone(loop, slot);
+            return Box(slot, loop);
+        }
+
+        /// <summary>
         ///     Reads the packed element of <paramref name="slot"/> as <typeparamref name="T"/>.
         /// </summary>
         /// <typeparam name="T">The loop dtype's element type.</typeparam>

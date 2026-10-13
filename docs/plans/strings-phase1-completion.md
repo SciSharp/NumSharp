@@ -149,7 +149,7 @@ Three rules keep that safe:
 | P1.4 | `T` movement: the reference-aware copy core (inline cells move as blocks; arena and heap strings are duplicated), behind every movement entry, and the loud refusal on every raw path. | P1.3 | L | yes |
 | P1.5 | `T` creation, element access and printing: `np.array` / `asarray` / `empty` / `zeros` / `ones` / `full` and the `_like` forms, the `setitem` coercion (uses P1.1), `item` / `tolist` / `foreach` / `AsStringArray` / `(Array)`, NA objects, `repr` / `str` / `array2string`. | P1.1, P1.3 | M | yes |
 | P1.6 | `T` casts: `T` ↔ `T` (NA rules), `T` ↔ `U` / `S`, `T` ↔ bool, `T` ↔ numbers (uses P1.1). | P1.1, P1.4 | M | yes |
-| P1.7 | `T` in the rest of the library: `np.nditer` (`refs_ok`, buffered casts), numpy.ma (fill `'N/A'`), `loadtxt` / `savetxt`, `.npy` (D3), the whole-surface sweep with `T` (NumPy's refusals and shape-decided answers in NumPy's order; computation deferred to phase 2). | P1.4–P1.6 | L | `np.nditer` done 2026-10-13; the rest prepared in §6 (packages P1.7b–P1.7g) |
+| P1.7 | `T` in the rest of the library: `np.nditer` (`refs_ok`, buffered casts), numpy.ma (fill `'N/A'`), `loadtxt` / `savetxt`, `.npy` (D3), the whole-surface sweep with `T` (NumPy's refusals and shape-decided answers in NumPy's order; computation deferred to phase 2). | P1.4–P1.6 | L | `np.nditer` done 2026-10-13; the rest prepared in §6 (packages P1.7b–P1.7g); P1.7b (`None` into numbers) done 2026-10-13 |
 | P1.8 | Bridges and leftovers: pythonnet `S` / `U` zero-copy both ways and `T` as a copy (D7); D10 (D6). | — | M | done (D10 with P1.1, the bridge 2026-10-13) |
 | P1.9 | Gate, speed, docs: oracle sections for the new behavior with zero excuses; unit tests that cover all new phase-1 code; lifetime tests and runs under `FencedMemory` / guard pages; a mutation pass; a benchmark sheet (≥ 1.5× NumPy at 1K / 100K / 1M); docs. | with every package | M | yes |
 
@@ -426,6 +426,30 @@ After this plan, phase 2 loses P2.4 and gains the `T` forms of P2.1–P2.6 plus 
   - Gate: `StringOracleTests` 33 / 33 on net10.0 and net8.0.
 - 2026-10-13 — **The next round is prepared** (§6, owner's request: "prepare to next phase and ask user to start"). Not
   started: it waits for the owner's start and for the decisions of §6.2.
+- 2026-10-13 — **P1.7b: `None` into numeric arrays, through every store route** (owner's request: "P1.7b, None into
+  numeric arrays (small): store NaN, nan+nanj or False, and raise NumPy's TypeError for integers").
+  - NumPy 2.4.2, probed on 25 routes × 14 dtypes and the text targets: setitem stores `NPY_NAN` (the positive quiet NaN)
+    for a float dtype, `nan+nanj` for complex, `False` for bool, and raises `int() argument must be a string, a bytes-like
+    object or a real number, not 'NoneType'` for every integer dtype; the conversion runs at each route's own point, so
+    its order against the route's other errors is part of the contract.
+  - One primitive: `ReductionInitial.PackNone` / `PackStore` / `BoxNone` and `NDArray.NoneForStore(descr)`; `decimal`
+    (no NaN) raises Python's `decimal.Decimal(None)` TypeError, `char` the int() text. Routes converted:
+    the indexers (basic, mask, fancy, `__setitem__`, `SetData` / `SetValue` / `SetAtIndex`), `fill`, `np.full` /
+    `np.full_like` (they returned ZEROS), `np.copyto` (an object scalar: `'unsafe'` only; converted up front for more than
+    one element, per selected element otherwise, never for an empty destination; `StringDType` per element), `np.put`,
+    `np.putmask`, `np.place`, `np.insert` (an empty position list converts too), `np.fill_diagonal` (its documented
+    `ArgumentNullException` divergence is gone), the flat iterator, `np.put_along_axis`, `setfield`, `np.asarray` /
+    `np.asanyarray` with a dtype (refused without one: NumPy's object array), `np.array` of an object list holding None
+    (it threw `ArgumentOutOfRangeException`), numpy.ma's setitem (stores the value, unmasks the slot).
+  - Text targets gained the routes they lacked (`fill` for `S` / `U`, `copyto`, `put`, `putmask`, `place`, `insert`,
+    `fill_diagonal`, the flat iterator, `put_along_axis`, `setfield`, `asanyarray`): `'None'` truncated, a `StringDType`
+    NA object or `'None'`, `coerce=False`'s ValueError. Found on the way and fixed: the flat iterator failed for EVERY
+    text base ("String is not a parse target") and resolved slice / list positions before converting the value (NumPy
+    converts first: `a.flat[[9]] = None` on an integer array is the TypeError); `np.full` / `fill_diagonal` over a
+    `StringDType(coerce=False)` converted None for an empty result / did not convert it before an empty diagonal.
+  - Kept: `np.pad(constant_values: null)` stays the omitted default; `setfield` over `T` stays the phase-1 refusal (P1.7f).
+  - Gates: string-oracle section `storenone` 375 → 2,606 cases (every route × 13 numeric + 6 text targets, the orders,
+    1,331 NumPy errors) + `Backends/NoneStoreTests.cs`; unit 19,241 / 19,240 and oracle 316 green on net10.0 / net8.0.
 
 ## 6. The next round: the rest of P1.7, so that phase 1 is complete
 

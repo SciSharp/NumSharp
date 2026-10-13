@@ -256,7 +256,9 @@ namespace NumSharp
         /// <param name="index">Index along the first axis.</param>
         /// <param name="value">Value to set — an NDArray, a C# scalar (NumPy's Python scalar), a C# array or list, or null
         ///     (Python's <c>None</c>); see <see cref="SetItemValue"/>.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null and this is a numeric array.</exception>
+        /// <exception cref="TypeError"><paramref name="value"/> is null (Python's <c>None</c>) and this is an integer (or
+        ///     <c>decimal</c>) array: <c>int(None)</c>'s text, after the index's bounds check. A float array stores NaN,
+        ///     complex <c>nan+nanj</c>, bool <c>False</c>, text <c>'None'</c> or a <c>StringDType</c> NA object.</exception>
         /// <exception cref="OverflowException">A C# integer outside this array's integer dtype (NumPy's OverflowError).</exception>
         /// <exception cref="ValueError">The value does not broadcast to the selection, or does not parse into its dtype.</exception>
         public void __setitem__(int index, object value)
@@ -280,7 +282,9 @@ namespace NumSharp
         /// <param name="index">Index along the first axis.</param>
         /// <param name="value">Value to set — an NDArray, a C# scalar (NumPy's Python scalar), a C# array or list, or null
         ///     (Python's <c>None</c>); see <see cref="SetItemValue"/>.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null and this is a numeric array.</exception>
+        /// <exception cref="TypeError"><paramref name="value"/> is null (Python's <c>None</c>) and this is an integer (or
+        ///     <c>decimal</c>) array: <c>int(None)</c>'s text, after the index's bounds check. A float array stores NaN,
+        ///     complex <c>nan+nanj</c>, bool <c>False</c>, text <c>'None'</c> or a <c>StringDType</c> NA object.</exception>
         /// <exception cref="OverflowException">A C# integer outside this array's integer dtype (NumPy's OverflowError).</exception>
         /// <exception cref="ValueError">The value does not broadcast to the selection, or does not parse into its dtype.</exception>
         public void __setitem__(long index, object value)
@@ -304,7 +308,9 @@ namespace NumSharp
         /// <param name="slice">Slice specification.</param>
         /// <param name="value">Value to set — an NDArray, a C# scalar (NumPy's Python scalar), a C# array or list, or null
         ///     (Python's <c>None</c>); see <see cref="SetItemValue"/>.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null and this is a numeric array.</exception>
+        /// <exception cref="TypeError"><paramref name="value"/> is null (Python's <c>None</c>) and this is an integer (or
+        ///     <c>decimal</c>) array: <c>int(None)</c>'s text, after the index's bounds check. A float array stores NaN,
+        ///     complex <c>nan+nanj</c>, bool <c>False</c>, text <c>'None'</c> or a <c>StringDType</c> NA object.</exception>
         /// <exception cref="OverflowException">A C# integer outside this array's integer dtype (NumPy's OverflowError).</exception>
         /// <exception cref="ValueError">The value does not broadcast to the selection, or does not parse into its dtype.</exception>
         public void __setitem__(string slice, object value)
@@ -330,8 +336,9 @@ namespace NumSharp
         ///     where a plain 0-d int32 array would wrap to 44); a C# <see cref="Half"/> or <see cref="char"/> as the NumPy
         ///     scalar it stands for; any other object (a C# array, a list) through <c>np.asanyarray</c>.
         /// </summary>
-        /// <param name="value">The value, or null for Python's <c>None</c> (passed on as null: a text array stores it, a numeric
-        ///     array refuses it).</param>
+        /// <param name="value">The value, or null for Python's <c>None</c> (passed on as null: every store converts it into
+        ///     the array's dtype — NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c>, a <c>StringDType</c> NA object — or
+        ///     raises <c>int(None)</c>'s TypeError for an integer array).</param>
         /// <returns>The value as an array, or null.</returns>
         private static NDArray SetItemValue(object value)
             => value is null ? null : FromPythonOperand(value);

@@ -245,11 +245,20 @@ public class np_asarray_BattleTests
 
     // ─── error paths ────────────────────────────────────────────────────
 
+    /// <summary>
+    ///     A null is Python's <c>None</c> (P1.7b): without a dtype NumPy builds an object array, which NumSharp refuses; with
+    ///     one it is the 0-d value <c>np.asarray(None, dtype)</c> gives, and <c>copy=False</c> refuses it (a new array).
+    /// </summary>
     [TestMethod]
     public void Asarray_NullInput_ThrowsArgumentNullException()
     {
         Action act = () => np.asarray((NDArray)null);
-        act.Should().Throw<ArgumentNullException>();
+        act.Should().Throw<NotSupportedException>();
+        var b = np.asarray((NDArray)null, np.@bool);
+        b.ndim.Should().Be(0);
+        b.GetBoolean().Should().BeFalse();
+        Action noCopy = () => np.asarray((NDArray)null, np.float64, copy: false);
+        noCopy.Should().Throw<ArgumentException>().WithMessage("Unable to avoid copy*");
     }
 
     // ─── edge: 0-D scalar ───────────────────────────────────────────────

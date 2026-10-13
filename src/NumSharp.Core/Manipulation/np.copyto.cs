@@ -24,7 +24,10 @@ namespace NumSharp
         ///     compatibility rule), so a <c>(1, 3)</c> source fills a <c>(3,)</c> destination. A 0-d array is a SCALAR
         ///     source (NumPy's <c>PyArray_AssignRawScalar</c>): cast once, then written to every selected element. An
         ///     <see cref="NDArray"/> is always NumPy's ndarray (STRONG); a C# number binds
-        ///     <see cref="copyto{T}(NDArray, T, string, NDArray)"/> instead, which is NumPy's Python scalar (weak).</param>
+        ///     <see cref="copyto{T}(NDArray, T, string, NDArray)"/> instead, which is NumPy's Python scalar (weak). A null
+        ///     (<c>(NDArray)null</c>) is Python's <c>None</c>: NumPy's 0-d OBJECT array, castable only under
+        ///     <c>casting='unsafe'</c>, where it stores NaN / <c>nan+nanj</c> / <c>False</c> / <c>'None'</c> / a
+        ///     <c>StringDType</c> NA object, or raises <c>int(None)</c>'s TypeError for an integer destination.</param>
         /// <param name="casting">Which casts from <paramref name="src"/>'s dtype to <paramref name="dst"/>'s are allowed:
         ///     <c>"no"</c>, <c>"equiv"</c>, <c>"safe"</c>, <c>"same_kind"</c> (the default) or <c>"unsafe"</c>.</param>
         /// <param name="where">A bool mask broadcast to <paramref name="dst"/>'s shape: elements are written only where it
@@ -43,8 +46,11 @@ namespace NumSharp
         /// <exception cref="InvalidCastException">The cast from <paramref name="src"/>'s dtype to <paramref name="dst"/>'s is
         ///     not allowed under <paramref name="casting"/>: "Cannot cast array data from dtype('float64') to dtype('int32')
         ///     according to the rule 'same_kind'" ("Cannot cast scalar from …" for a 0-d source) — NumPy's TypeError text,
-        ///     under the house type of every cast check (astype, concatenate, NDIter).</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="dst"/> or <paramref name="src"/> is <c>null</c>.</exception>
+        ///     under the house type of every cast check (astype, concatenate, NDIter); a <c>None</c> source under any rule but
+        ///     <c>'unsafe'</c> ("Cannot cast scalar from dtype('O') to …").</exception>
+        /// <exception cref="TypeError">A <c>None</c> source (<paramref name="src"/> null) under <c>casting='unsafe'</c> into
+        ///     an integer or <c>decimal</c> destination with an element to convert: Python's <c>int(None)</c>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="dst"/> is <c>null</c>.</exception>
         /// <remarks>
         ///     <para><b>NumPy's checks, in NumPy's order</b> (each probed on 2.4.2): the casting name, the where mask's
         ///     dtype, then — for an array source — a redundant self-copy returns at once (the same data, dtype, shape and
@@ -76,14 +82,84 @@ namespace NumSharp
 
             if (dst is null)
                 throw new ArgumentNullException(nameof(dst));
-            if (src is null)
-                throw new ArgumentNullException(nameof(src));
 
             // array_copyto converts the mask (PyArray_FromAny with a bool descr: the 'safe' rule) before
             // PyArray_AssignArray, so a bad mask wins over a read-only destination and over a bad cast.
             DefaultEngine.ValidateWhereMask(@where);
 
+            // A null source is Python's None, which PyArray_FromAny makes a 0-d OBJECT array (CopytoNone).
+            if (src is null)
+            {
+                CopytoNone(dst, @where, rule);
+                return;
+            }
+
             CopytoAssignArray(dst, src, @where, rule);
+        }
+
+        /// <summary>
+        ///     <c>np.copyto(dst, None, casting, where)</c>: NumPy's <c>PyArray_FromAny(None)</c> is a 0-d OBJECT array, so
+        ///     <c>PyArray_AssignArray</c> hands it to <c>PyArray_AssignRawScalar</c>, whose object-to-dtype cast is the dtype's
+        ///     setitem of <c>None</c> (<see cref="NDArray.NoneForStore"/>).
+        /// </summary>
+        /// <param name="dst">The destination.</param>
+        /// <param name="where">The validated bool mask, or <c>null</c>.</param>
+        /// <param name="casting">The casting level.</param>
+        /// <exception cref="ValueError">A read-only destination (<c>assignment destination is read-only</c>), a mask that
+        ///     does not broadcast, or <c>None</c> into a <c>StringDType(coerce=False)</c> element.</exception>
+        /// <exception cref="InvalidCastException"><paramref name="casting"/> is not <c>'unsafe'</c>: an object cast is unsafe
+        ///     for every dtype — "Cannot cast scalar from dtype('O') to dtype('float64') according to the rule 'same_kind'"
+        ///     (the destination named by its repr: <c>StringDType()</c> for a <c>StringDType</c>), NumPy's TypeError text under
+        ///     the house cast-check type.</exception>
+        /// <exception cref="TypeError">An integer (or <c>decimal</c>) destination with an element to convert: Python's
+        ///     <c>int(None)</c>.</exception>
+        /// <remarks>
+        ///     <para><b>NumPy's order</b> (<c>PyArray_AssignRawScalar</c>, probed 2.4.2): the read-only check; the cast rule;
+        ///     then, when the destination holds MORE THAN ONE element (and is not a <c>StringDType</c>, whose descriptor needs
+        ///     reference handling — <c>PyDataType_REFCHK</c>), the value is cast ONCE up front, so an integer destination
+        ///     raises even under an all-false mask and before a mask that does not broadcast; then the mask's broadcast;
+        ///     then the assignment, whose per-element cast converts <c>None</c> only for a selected element — so a
+        ///     one-element integer destination under a false mask, a <c>StringDType(coerce=False)</c> under an all-false
+        ///     mask, and every empty destination are no-ops.</para>
+        /// </remarks>
+        private static void CopytoNone(NDArray dst, NDArray @where, NPY_CASTING casting)
+        {
+            NumSharpException.ThrowIfNotWriteable(dst.Shape);
+
+            // can_cast_scalar_to(object, dst, casting): only 'unsafe' admits an object source.
+            if (casting != NPY_CASTING.NPY_UNSAFE_CASTING)
+                throw new InvalidCastException(
+                    $"Cannot cast scalar from dtype('O') to {dst.dtype.ToString(true)} according to the rule '{DTypeCasting.CastingToString(casting)}'");
+
+            // The up-front cast of AssignRawScalar ("a different dtype than 'dst' ... more than one element ... not REFCHK").
+            long size = dst.size;
+            NDArray none = size > 1 && !dst.Storage.IsVString ? NDArray.NoneForStore(dst.dtype) : null;
+            try
+            {
+                // broadcast_strides(..., "where mask", ...) of the masked assignment.
+                if (@where is not null)
+                    CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
+                        "where mask", stripLeadingUnitAxes: false);
+
+                if (size == 0)
+                    return;
+
+                if (none is null)
+                {
+                    // The per-element cast converts None only into a selected element (raw_array_wheremasked_assign_scalar
+                    // runs the cast for the unmasked runs): with nothing selected, nothing is converted and nothing raises.
+                    if (@where is not null && !np.any(@where))
+                        return;
+                    none = NDArray.NoneForStore(dst.dtype);
+                }
+
+                // The converted value is a 0-d array of dst's own descriptor: the scalar assignment copies it, cast-free.
+                CopytoAssignArray(dst, none, @where, NPY_CASTING.NPY_UNSAFE_CASTING);
+            }
+            finally
+            {
+                none?.Dispose();
+            }
         }
 
         /// <summary>

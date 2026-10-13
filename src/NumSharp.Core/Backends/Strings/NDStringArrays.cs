@@ -40,11 +40,14 @@ namespace NumSharp.Backends.Strings
         /// <summary>
         ///     Whether <c>np.array</c> should take the string route for <paramref name="array"/>: its elements are text
         ///     (<see cref="string"/>), the requested dtype is a string dtype, or an <c>object</c> array holds text at any
-        ///     nesting depth (a C# spelling of a Python list of lists: <c>new object[] { new[] { "a", "b" }, new[] { "c" } }</c>).
+        ///     nesting depth (a C# spelling of a Python list of lists: <c>new object[] { new[] { "a", "b" }, new[] { "c" } }</c>)
+        ///     — or holds a <c>null</c> (Python's <c>None</c>) under a requested numeric dtype: that list too is built element
+        ///     by element with the dtype's setitem (<see cref="BuildNumeric"/>: <c>np.array([None, 1.0], dtype=float)</c> is
+        ///     <c>[nan, 1.]</c>, an integer dtype raises <c>int(None)</c>'s TypeError at the first <c>None</c> in C order).
         /// </summary>
         /// <param name="array">The managed input (any rank, rectangular or jagged).</param>
         /// <param name="dtype">The requested dtype, or null.</param>
-        /// <returns>True for the string route.</returns>
+        /// <returns>True for the string route (the element-by-element builder).</returns>
         public static bool IsTextInput(Array array, DType dtype)
         {
             var elementType = array.GetType().GetElementType();
@@ -56,7 +59,37 @@ namespace NumSharp.Backends.Strings
             // setitem) and the bytes values of a byte[][]; a typed numeric array is an ndarray, which np.array casts.
             if (NDStringStorage.IsString(dtype) || dtype?.Meta is VStringDTypeMeta)
                 return elementType == typeof(object) || elementType == typeof(byte[]);
-            return elementType == typeof(object) && ContainsText(array);
+            // An object list with None under a requested dtype: NumPy packs each element with the dtype's setitem, which the
+            // typed conversion of the numeric route cannot do for a null (it threw ArgumentOutOfRangeException). Without a
+            // dtype, None makes NumPy's object array, which the numeric route refuses as before.
+            return elementType == typeof(object) && (ContainsText(array) || (dtype is not null && ContainsNull(array)));
+        }
+
+        /// <summary>
+        ///     Whether an <c>object</c> array holds a <c>null</c> (Python's <c>None</c>) directly or inside a nested array, the
+        ///     way <c>Collect</c> will walk it. Stops at the first one.
+        /// </summary>
+        /// <param name="array">The array to search.</param>
+        /// <returns>True when a null element is found.</returns>
+        private static bool ContainsNull(Array array)
+        {
+            foreach (var item in array)
+            {
+                switch (item)
+                {
+                    case null:
+                        return true;
+                    case string _:
+                    case byte[] _:
+                        // A text or bytes value is one element, never a level to search.
+                        break;
+                    case Array child:
+                        if (ContainsNull(child))
+                            return true;
+                        break;
+                }
+            }
+            return false;
         }
 
         /// <summary>
@@ -876,42 +909,18 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy's setitem of one creation value into a numeric dtype: <see cref="ReductionInitial.TryPack"/>, plus the
-        ///     <c>None</c> rules it leaves to its caller — <c>MyPyFloat_AsDouble(None)</c> is NaN for a float dtype,
-        ///     <c>CDOUBLE_setitem(None)</c> NaN+NaNj, <c>PyObject_IsTrue(None)</c> False, and <c>int(None)</c> a TypeError.
+        ///     NumPy's setitem of one creation value into a numeric dtype: <see cref="ReductionInitial.PackStore"/> —
+        ///     <see cref="ReductionInitial.TryPack"/> for a value, <see cref="ReductionInitial.PackNone"/> for <c>None</c>
+        ///     (<c>MyPyFloat_AsDouble(None)</c> is the positive NaN for a float dtype, <c>CDOUBLE_setitem(None)</c> NaN+NaNj,
+        ///     <c>PyObject_IsTrue(None)</c> False, and <c>int(None)</c> a TypeError).
         /// </summary>
         /// <param name="value">The value (null is None).</param>
         /// <param name="tc">The numeric dtype.</param>
         /// <param name="slot">Receives the element.</param>
-        /// <exception cref="TypeError">None into an integer dtype.</exception>
+        /// <exception cref="TypeError">None into an integer or <c>decimal</c> dtype (a decimal holds no NaN: Python's
+        ///     <c>decimal.Decimal(None)</c> text), or a value <see cref="ReductionInitial.TryPack"/> refuses.</exception>
         private static void PackNumeric(object value, NPTypeCode tc, Span<byte> slot)
-        {
-            if (value is not null)
-            {
-                ReductionInitial.TryPack(value, tc, slot);
-                return;
-            }
-            slot.Clear();
-            switch (tc)
-            {
-                case NPTypeCode.Boolean:
-                    return;
-                case NPTypeCode.Half:
-                case NPTypeCode.Single:
-                case NPTypeCode.Double:
-                case NPTypeCode.Decimal:
-                case NPTypeCode.Complex:
-                    // NPY_NAN is the POSITIVE quiet NaN (.NET's double.NaN has the sign bit set).
-                    double nan = BitConverter.UInt64BitsToDouble(0x7FF8_0000_0000_0000UL);
-                    if (tc == NPTypeCode.Complex)
-                        System.Runtime.CompilerServices.Unsafe.WriteUnaligned(ref slot[0], new System.Numerics.Complex(nan, nan));
-                    else
-                        ReductionInitial.TryPack(nan, tc, slot);
-                    return;
-                default:
-                    throw new TypeError("int() argument must be a string, a bytes-like object or a real number, not 'NoneType'");
-            }
-        }
+            => ReductionInitial.PackStore(value, tc, slot);
 
         /// <summary>
         ///     Flattens a managed array of any rank into C-ordered element values and records its shape: a rectangular

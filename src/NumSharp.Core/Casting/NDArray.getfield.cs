@@ -75,7 +75,8 @@ namespace NumSharp
         /// <param name="value">
         ///     Value(s) to place into the field. A scalar is broadcast; an array must broadcast to this array's
         ///     shape. Cast to <paramref name="dtype"/> with NumPy's assignment ('unsafe') rule (float → int
-        ///     truncates toward zero).
+        ///     truncates toward zero). <c>null</c> is Python's <c>None</c>: NaN / <c>nan+nanj</c> / <c>False</c> /
+        ///     <c>'None'</c> in the field's dtype, int()'s TypeError for an integer field.
         /// </param>
         /// <param name="dtype">The dtype of the field being set (its itemsize must be ≤ this array's itemsize).</param>
         /// <param name="offset">Byte offset of the field within each element.</param>
@@ -87,7 +88,9 @@ namespace NumSharp
         ///     the dtype/offset validation), matching NumPy's <c>PyArray_SetField</c>.
         ///     </para>
         /// </remarks>
-        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> or <paramref name="value"/> is <c>null</c>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is <c>null</c>.</exception>
+        /// <exception cref="TypeError"><paramref name="value"/> is <c>null</c> (<c>None</c>) and <paramref name="dtype"/> is
+        ///     an integer (or <c>decimal</c>) dtype.</exception>
         /// <exception cref="ValueError">
         ///     <c>assignment destination is read-only</c> (this array is not writeable), or one of
         ///     <c>getfield</c>'s three dtype/offset <see cref="ValueError"/>s.
@@ -103,16 +106,17 @@ namespace NumSharp
             if (!Shape.IsWriteable)
                 throw new ValueError("assignment destination is read-only");
 
-            if (value is null)
-                throw new ArgumentNullException(nameof(value));
-
             // Build the byte-reinterpreting field view (validates dtype/offset), then copy value into it.
             NDArray view = getfield(dtype, offset);
+
+            // Python's None: PyArray_CopyObject packs it ONCE into the field's descriptor (PyArray_Pack of a scalar, before
+            // any broadcast), so an integer field raises int(None)'s TypeError even when the array is empty; a float field
+            // stores NaN's bits into the field (f8.setfield(None, f4) writes 0x7fc00000 into the low four bytes).
+            NDArray src = value is null ? NDArray.NoneForStore(view.dtype) : value as NDArray;
 
             // Convert value → NDArray. Genuine scalars build a 0-d array of their natural dtype (broadcast
             // by copyto); arrays / collections / Half / Complex go through asanyarray — mirroring how
             // fill_diagonal coerces its object-typed value.
-            NDArray src = value as NDArray;
             if (src is null)
             {
                 // A byte[] into a string field is ONE bytes value (NumPy's b'X'), not a uint8 sequence: NDArray.Scalar

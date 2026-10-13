@@ -5,6 +5,18 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
+        ///     NumPy's <c>ValueError</c> text (<c>npy_no_copy_err_msg</c>) for <c>copy=False</c> when the conversion has to
+        ///     make a new array — a cast, a relayout, a C# literal's pack or <c>None</c>'s; NumSharp raises it as an
+        ///     <see cref="ArgumentException"/> on the <c>copy</c> parameter.
+        /// </summary>
+        private const string UnableToAvoidCopyText =
+            "Unable to avoid copy while creating an array as requested.\n" +
+            "If using `np.array(obj, copy=False)` replace it with `np.asarray(obj)` " +
+            "to allow a copy when needed (no behavior change in NumPy 1.x).\n" +
+            "For more details, see " +
+            "https://numpy.org/devdocs/numpy_2_0_migration_guide.html#adapting-to-changes-in-the-copy-keyword.";
+
+        /// <summary>
         ///     NumPy's <c>np.asarray('abc')</c>: a 0-d fixed-width Unicode array holding <paramref name="data"/> (see
         ///     <see cref="array(string)"/>).
         /// </summary>
@@ -60,13 +72,17 @@ namespace NumSharp
         /// <param name="like">Reference array for array-function dispatch — accepted for NumPy parity but has no observable effect in NumSharp.</param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted.</param>
         /// <returns>NDArray with the requested dtype and memory layout. Returns <paramref name="a"/> when no copy is needed.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="a"/> is null (Python's <c>None</c>) and
+        ///     <paramref name="dtype"/> is null: NumPy builds an object array, a dtype NumSharp does not have. With a dtype,
+        ///     <c>None</c> is the 0-d array of its setitem value (NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c>, a
+        ///     <c>StringDType</c> NA object).</exception>
         /// <exception cref="ArgumentException">An unsupported <paramref name="device"/>, or <paramref name="copy"/> is
-        ///     <c>false</c> and a copy (or a C# literal's conversion) is required.</exception>
+        ///     <c>false</c> and a copy (or a C# literal's or <c>None</c>'s conversion) is required.</exception>
         /// <exception cref="OverflowException">A C# literal out of <paramref name="dtype"/>'s integer range (NumPy's
         ///     OverflowError texts).</exception>
         /// <exception cref="ValueError">A float NaN literal into an integer <paramref name="dtype"/>.</exception>
-        /// <exception cref="TypeError">A complex literal into a real <paramref name="dtype"/>.</exception>
+        /// <exception cref="TypeError">A complex literal into a real <paramref name="dtype"/>, or <c>None</c> into an integer
+        ///     (or <c>decimal</c>) <paramref name="dtype"/>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
         public static NDArray asarray(
             NDArray a,
@@ -79,8 +95,6 @@ namespace NumSharp
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Plain((a, dtype, order, copy, like, device), static s => asarray(s.a, s.dtype, s.order, s.copy, s.like, s.device));
-            if (a is null)
-                throw new ArgumentNullException(nameof(a));
 
             // Only "cpu" is supported (matches NumPy 2.x). null is treated as "default".
             if (device != null && !string.Equals(device, "cpu", StringComparison.Ordinal))
@@ -91,6 +105,19 @@ namespace NumSharp
             // `like` exists for NumPy's __array_function__ dispatch protocol. NumSharp has
             // no array-subclass dispatch, so the value is accepted but never read.
             _ = like;
+
+            // Python's None: a Python object, so np.asarray(None, dtype) builds a NEW 0-d array of its setitem value (NaN,
+            // nan+nanj, False, 'None', a StringDType NA object; int(None)'s TypeError) — which copy=false refuses before
+            // anything is converted (PyArray_FromAny's NPY_ARRAY_ENSURENOCOPY check precedes the pack). Without a dtype
+            // NumPy's discovery gives the object dtype.
+            if (a is null)
+            {
+                if (dtype is null)
+                    throw NDArray.NoneWithoutDtype("np.asarray");
+                if (copy == false)
+                    throw new ArgumentException(UnableToAvoidCopyText, nameof(copy));
+                return NDArray.NoneForStore(dtype);
+            }
 
             // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar, which np.asarray(value, dtype=...) converts
             // with PyArray_Pack into a NEW array: np.asarray(1000, dtype=np.int8) raises "Python integer 1000 out of bounds
@@ -104,13 +131,7 @@ namespace NumSharp
                     if (copy == false)
                     {
                         packed.Dispose();
-                        throw new ArgumentException(
-                            "Unable to avoid copy while creating an array as requested.\n" +
-                            "If using `np.array(obj, copy=False)` replace it with `np.asarray(obj)` " +
-                            "to allow a copy when needed (no behavior change in NumPy 1.x).\n" +
-                            "For more details, see " +
-                            "https://numpy.org/devdocs/numpy_2_0_migration_guide.html#adapting-to-changes-in-the-copy-keyword.",
-                            nameof(copy));
+                        throw new ArgumentException(UnableToAvoidCopyText, nameof(copy));
                     }
 
                     return packed;
@@ -136,13 +157,7 @@ namespace NumSharp
             }
 
             if (copy == false && !noCopyNeeded)
-                throw new ArgumentException(
-                    "Unable to avoid copy while creating an array as requested.\n" +
-                    "If using `np.array(obj, copy=False)` replace it with `np.asarray(obj)` " +
-                    "to allow a copy when needed (no behavior change in NumPy 1.x).\n" +
-                    "For more details, see " +
-                    "https://numpy.org/devdocs/numpy_2_0_migration_guide.html#adapting-to-changes-in-the-copy-keyword.",
-                    nameof(copy));
+                throw new ArgumentException(UnableToAvoidCopyText, nameof(copy));
 
             // NumPy (_array_fromobject_generic) returns the array itself when no dtype was given or the requested descriptor
             // IS the array's — a builtin singleton, or an unsized string class, which adapts to the array's own descriptor;

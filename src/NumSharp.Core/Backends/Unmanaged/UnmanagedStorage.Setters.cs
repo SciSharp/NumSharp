@@ -49,9 +49,26 @@ namespace NumSharp.Backends
             *((T*)Address + _shape.TransformOffset(index)) = value;
         }
 
+        /// <summary>
+        ///     Writes one boxed element at a logical flat index (resolved through the shape's strides and offset). The
+        ///     value must be the dtype's exact CLR type — an explicit unboxing, never a conversion — except <c>null</c>,
+        ///     which is Python's <c>None</c> and stores what NumPy's setitem stores for it.
+        /// </summary>
+        /// <param name="value">The element, boxed as this storage's exact type; <c>null</c> is <c>None</c> (NaN for a float
+        ///     dtype, <c>nan+nanj</c> for complex, <c>False</c> for bool, <c>'None'</c> or a <c>StringDType</c> NA object for
+        ///     text).</param>
+        /// <param name="index">The logical flat index (C order).</param>
+        /// <exception cref="ValueError">The storage is read-only (<c>assignment destination is read-only</c>), or <c>None</c>
+        ///     into a <c>StringDType(coerce=False)</c> storage.</exception>
+        /// <exception cref="TypeError"><c>None</c> into an integer or <c>decimal</c> storage (Python's <c>int(None)</c>).</exception>
+        /// <exception cref="InvalidCastException">A non-null value that is not the dtype's exact CLR type.</exception>
         public unsafe void SetAtIndex(object value, long index)
         {
             ThrowIfNotWriteable();
+            // None into a number: its setitem value (ReductionInitial.PackNone), boxed as the exact type the switch below
+            // unboxes. A text storage stores None through its own setitem (WriteElement's str(None), StringDType's NA rules).
+            if (value is null && _typecode != NPTypeCode.String)
+                value = ReductionInitial.BoxNone(_typecode);
             switch (_typecode)
             {
                 // //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
@@ -160,9 +177,17 @@ namespace NumSharp.Backends
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
+        /// <exception cref="ValueError">The storage is read-only, or <c>None</c> into a <c>StringDType(coerce=False)</c>
+        ///     storage.</exception>
+        /// <exception cref="TypeError"><c>None</c> (a null <paramref name="value"/>) into an integer or <c>decimal</c>
+        ///     storage; a float storage stores NaN, complex <c>nan+nanj</c>, bool <c>False</c>.</exception>
+        /// <exception cref="InvalidCastException">A non-null value that is not the dtype's exact CLR type.</exception>
         public unsafe void SetValue(object value, int[] indices)
         {
             ThrowIfNotWriteable();
+            // None into a number: its setitem value, boxed as the exact type the switch unboxes (text stores None itself).
+            if (value is null && _typecode != NPTypeCode.String)
+                value = ReductionInitial.BoxNone(_typecode);
             switch (_typecode)
             {
                 // //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
@@ -237,9 +262,17 @@ namespace NumSharp.Backends
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
+        /// <exception cref="ValueError">The storage is read-only, or <c>None</c> into a <c>StringDType(coerce=False)</c>
+        ///     storage.</exception>
+        /// <exception cref="TypeError"><c>None</c> (a null <paramref name="value"/>) into an integer or <c>decimal</c>
+        ///     storage; a float storage stores NaN, complex <c>nan+nanj</c>, bool <c>False</c>.</exception>
+        /// <exception cref="InvalidCastException">A non-null value that is not the dtype's exact CLR type.</exception>
         public unsafe void SetValue(object value, params long[] indices)
         {
             ThrowIfNotWriteable();
+            // None into a number: its setitem value, boxed as the exact type the switch unboxes (text stores None itself).
+            if (value is null && _typecode != NPTypeCode.String)
+                value = ReductionInitial.BoxNone(_typecode);
             switch (_typecode)
             {
                 case NPTypeCode.Boolean:
@@ -304,6 +337,10 @@ namespace NumSharp.Backends
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
+        /// <exception cref="ValueError">The storage is read-only, or <c>None</c> into a <c>StringDType(coerce=False)</c>
+        ///     storage.</exception>
+        /// <exception cref="TypeError"><c>None</c> (a null <paramref name="value"/>) into an integer or <c>decimal</c>
+        ///     storage, raised after the coordinates' bounds check (<see cref="SetData(NDArray, int[])"/>).</exception>
         public void SetData(object value, int[] indices)
         {
             ThrowIfNotWriteable();
@@ -312,6 +349,10 @@ namespace NumSharp.Backends
                 return;
             switch (value)
             {
+                case null:
+                    // Python's None: the NDArray overload checks the coordinates first, then stores None's setitem value.
+                    SetData((NDArray)null, indices);
+                    return;
                 case NDArray nd:
                     SetData(nd, indices);
                     return;
@@ -342,23 +383,23 @@ namespace NumSharp.Backends
         /// <exception cref="OverflowException">A C# literal out of this dtype's range (NumPy's OverflowError texts).</exception>
         /// <exception cref="ValueError">A float NaN literal into an integer dtype, a sequence into one element, or a value
         ///     that does not broadcast to the selection.</exception>
-        /// <exception cref="TypeError">A complex literal into a real dtype.</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null and this is a numeric storage. Python's
-        ///     <c>None</c> is stored by text storages only: a NEP 55 <c>StringDType</c> storage stores its NA object, or
-        ///     <c>'None'</c>, and a fixed-width text storage stores <c>'None'</c>, truncated to its width. NumPy also stores None
-        ///     into numbers (NaN into floats, <c>False</c> into bool, <c>TypeError</c> for integers); NumSharp refuses it.</exception>
+        /// <exception cref="TypeError">A complex literal into a real dtype; <c>None</c> (a null <paramref name="value"/>)
+        ///     into an integer or <c>decimal</c> storage — Python's <c>int(None)</c> text, raised after the coordinates'
+        ///     bounds check (<c>a[10] = None</c> on a 4-element array is NumPy's IndexError) and for an empty selection too.
+        ///     A null is Python's <c>None</c> everywhere: a float storage stores NaN (NumPy's positive <c>NPY_NAN</c>), complex
+        ///     <c>nan+nanj</c>, bool <c>False</c>, a NEP 55 <c>StringDType</c> storage its NA object or <c>'None'</c>, and a
+        ///     fixed-width text storage <c>'None'</c>, truncated to its width.</exception>
+        /// <exception cref="ValueError"><c>None</c> into a <c>StringDType(coerce=False)</c> storage.</exception>
         public void SetData(NDArray value, int[] indices)
         {
             ThrowIfNotWriteable();
-            // A null value is Python's None. StringDType's setitem stores it (SetDataVString below); a fixed-width text element
-            // stores its str() — STRING_setitem / UNICODE_setitem take any object by its str(), so 'None', truncated to the
-            // width (TrySetTextScalar packs it into a 0-d array of this class); a numeric storage refuses it.
-            if (ReferenceEquals(value, null) && !IsVString)
-            {
-                if (_typecode == NPTypeCode.String && TrySetTextScalar(null, indices))
-                    return;
-                throw new ArgumentNullException(nameof(value));
-            }
+            // A null value is Python's None. A fixed-width text element stores its str() — STRING_setitem / UNICODE_setitem
+            // take any object by its str(), so 'None', truncated to the width (TrySetTextScalar packs it into a 0-d array of
+            // this class and re-enters with it, where the coordinates are checked). StringDType's setitem stores it in
+            // SetDataVString below, and a numeric storage converts it in PackForStore below — both AFTER the coordinates'
+            // bounds check, as NumPy's integer-index assignment checks the index before it converts the value.
+            if (ReferenceEquals(value, null) && _typecode == NPTypeCode.String && !IsVString && TrySetTextScalar(null, indices))
+                return;
 
             // Wrap negative coordinates to [0, dim) and bounds-check each axis, exactly as the
             // getter's GetData(int[]) does. WITHOUT this, a negative scalar-index assignment
@@ -381,7 +422,8 @@ namespace NumSharp.Backends
             // included (a[5:] = 1000 raises), as NumPy's integer-index and view assignments do. The packed 0-d is an
             // ordinary value of this dtype from here on. An integer index and a view assignment reach the element through
             // PyArray_Pack itself, so a C# Half / char value (a NumPy scalar) is int()-converted into a signed integer
-            // here too (a[0] = (Half)300 on int8 raises), where the fancy routes cast it.
+            // here too (a[0] = (Half)300 on int8 raises), where the fancy routes cast it. A null (None) is converted here
+            // the same way: NaN / nan+nanj / False, or int()'s TypeError for an integer storage.
             var packed = NDArray.PackForStore(value, _typecode, pyArrayPackRoute: true);
             if (!ReferenceEquals(packed, value))
             {
@@ -606,6 +648,12 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Set a value at given <see cref="indices"/> (long version).
         /// </summary>
+        /// <param name="value">An <see cref="NDArray"/>, an <see cref="IArraySlice"/>, a C# array, a boxed scalar, or
+        ///     <c>null</c> — Python's <c>None</c> (see <see cref="SetData(NDArray, int[])"/>).</param>
+        /// <param name="indices">The leading coordinates.</param>
+        /// <exception cref="ValueError">The storage is read-only, or <c>None</c> into a <c>StringDType(coerce=False)</c>
+        ///     storage.</exception>
+        /// <exception cref="TypeError"><c>None</c> into an integer or <c>decimal</c> storage.</exception>
         public void SetData(object value, params long[] indices)
         {
             ThrowIfNotWriteable();
@@ -619,6 +667,10 @@ namespace NumSharp.Backends
             }
             switch (value)
             {
+                case null:
+                    // Python's None: the NDArray overload checks the coordinates first, then stores None's setitem value.
+                    SetData((NDArray)null, indices);
+                    return;
                 case NDArray nd:
                     SetData(nd, indices);
                     return;
@@ -638,10 +690,10 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Set a <see cref="NDArray"/> at given <see cref="indices"/> (long version).
         /// </summary>
-        /// <param name="value">The value; null is Python's <c>None</c>, which only a text storage stores (a NEP 55
-        ///     <c>StringDType</c> storage its NA object or <c>'None'</c>, a fixed-width one <c>'None'</c>, truncated).</param>
+        /// <param name="value">The value; null is Python's <c>None</c>: a float storage stores NaN, complex <c>nan+nanj</c>,
+        ///     bool <c>False</c>, a NEP 55 <c>StringDType</c> storage its NA object or <c>'None'</c>, a fixed-width one
+        ///     <c>'None'</c>, truncated; an integer storage raises <c>int(None)</c>'s TypeError.</param>
         /// <param name="indices">The leading coordinates.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null and this is a numeric storage.</exception>
         /// <exception cref="OverflowException">A coordinate outside the <c>int</c> range.</exception>
         /// <exception cref="Exception">The <see cref="SetData(NDArray, int[])"/> overload's errors.</exception>
         public void SetData(NDArray value, params long[] indices)
@@ -652,10 +704,8 @@ namespace NumSharp.Backends
             // ValueError. This overload previously wrote only the FIRST element for a scalar and
             // linear-copied a larger/smaller value WITHOUT validation — reachable via the
             // object[] single-int setter (b[(object)0] = v) and the long[] coordinate shim.
-            // A null value is Python's None for a text storage (the int[] overload stores it after the index's bounds check,
-            // so an out-of-range index still reports NumPy's IndexError first); a numeric storage refuses it here.
-            if (ReferenceEquals(value, null) && _typecode != NPTypeCode.String)
-                throw new ArgumentNullException(nameof(value));
+            // A null value is Python's None: the int[] overload stores it after the index's bounds check, so an out-of-range
+            // index still reports NumPy's IndexError first.
             var intIndices = new int[indices.Length];
             for (int i = 0; i < indices.Length; i++)
                 intIndices[i] = checked((int)indices[i]);

@@ -59,7 +59,20 @@ namespace NumSharp
         /// </param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full.html</remarks>
+        /// <exception cref="NotSupportedException"><paramref name="fill_value"/> is null (Python's <c>None</c>) and
+        ///     <paramref name="dtype"/> is null: NumPy builds an object array there, a dtype NumSharp does not have.</exception>
+        /// <exception cref="TypeError"><paramref name="fill_value"/> is null and <paramref name="dtype"/> is an integer (or
+        ///     <c>decimal</c>) dtype, for a non-empty shape: Python's <c>int(None)</c>, raised by NumPy's
+        ///     <c>copyto(a, None, casting='unsafe')</c> (an empty result converts nothing and returns).</exception>
+        /// <exception cref="ValueError"><paramref name="fill_value"/> is null and <paramref name="dtype"/> is a
+        ///     <c>StringDType(coerce=False)</c>.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.full.html
+        ///     <para>A null <paramref name="fill_value"/> is Python's <c>None</c>, filled the way NumPy's
+        ///     <c>a = empty(shape, dtype); copyto(a, None, casting='unsafe')</c> fills it: NaN (the positive <c>NPY_NAN</c>) for
+        ///     a float dtype, <c>nan+nanj</c> for complex, <c>False</c> for bool, <c>'None'</c> (truncated) for <c>S</c> /
+        ///     <c>U</c>, a <c>StringDType</c>'s NA object or <c>'None'</c>. Before NumSharp stored None, this returned ZEROS.</para>
+        /// </remarks>
         public static NDArray full(Shape shape, object fill_value, DType dtype = null, string device = null)
         {
             ValidateDevice(device);
@@ -71,6 +84,10 @@ namespace NumSharp
             // (np.full(2, 'abc', dtype='S') is [b'a', b'a']), and the value is truncated / converted by the copy.
             if (Backends.Strings.NDStringStorage.IsString(dtype) || (dtype == null && (fill_value is string || fill_value is byte[])))
                 return Backends.Strings.NDStringArrays.Full(shape, fill_value, dtype);
+            // None with no dtype: NumPy's `fill_value = asarray(fill_value)` makes an object array, whose dtype the result
+            // takes. NumSharp has none, so the call is refused (it used to throw a NullReferenceException here).
+            if (fill_value is null && dtype is null)
+                throw NDArray.NoneWithoutDtype("np.full");
             // When dtype is explicitly provided, use it; when null, infer from fill_value.
             var typeCode = dtype != null ? dtype.GetTypeCode() : fill_value.GetType().GetTypeCode();
             return FullCore(shape, fill_value, typeCode);
@@ -97,7 +114,7 @@ namespace NumSharp
             // product is the only way to see it.
             AllocationGuard.CheckDimensions(shape.dimensions, typeCode);
 
-            object fill = FullFillElement(fill_value, typeCode);
+            object fill = FullFillElement(fill_value, typeCode, shape.size);
 
             // The wrapping constructor installs the shape as given, so the fresh-layout rule of the allocating funnel has
             // to be applied here: a view's Shape (np.full(x.Shape, v) for x = a[::4]) would otherwise address past the
@@ -110,16 +127,30 @@ namespace NumSharp
         ///     casting='unsafe')</c> of a scalar (<see cref="TryCopytoUnsafeScalarElement"/>), boxed as
         ///     <paramref name="typeCode"/>'s exact CLR type.
         /// </summary>
-        /// <param name="fill_value">The caller's fill value.</param>
+        /// <param name="fill_value">The caller's fill value; <c>null</c> is Python's <c>None</c>.</param>
         /// <param name="typeCode">The new array's dtype.</param>
+        /// <param name="size">The new array's element count: <c>None</c> is converted only when there is an element to
+        ///     write.</param>
         /// <returns>The boxed element; for a value that is not a scalar (a list, an array with dimensions), the house
         ///     conversion <see cref="Converts.ChangeType(object, NPTypeCode)"/> of it.</returns>
         /// <exception cref="OverflowException">A Python int out of the dtype's integer range (NumPy's OverflowError texts):
         ///     the copy is unsafe, but the Python scalar is packed first.</exception>
-        /// <remarks>A value of the dtype's own C# type is already the stored element (<c>np.full(3, 0.5)</c>,
-        ///     <c>np.full(3, 7, dtype: np.int32)</c>): it returns as is, with no packing.</remarks>
-        internal static object FullFillElement(object fill_value, NPTypeCode typeCode)
+        /// <exception cref="TypeError"><c>None</c> into a non-empty integer (or <c>decimal</c>) array.</exception>
+        /// <remarks>
+        ///     <para>A value of the dtype's own C# type is already the stored element (<c>np.full(3, 0.5)</c>,
+        ///     <c>np.full(3, 7, dtype: np.int32)</c>): it returns as is, with no packing.</para>
+        ///     <para><c>None</c> reaches NumPy's <c>copyto(a, None, casting='unsafe')</c> as a 0-d OBJECT array, not a
+        ///     Python scalar: nothing packs it up front, and the object-to-dtype cast runs once per element written — so
+        ///     an empty result never converts it (<c>np.full((0,), None, dtype=int)</c> returns an empty array) while one
+        ///     element of an integer dtype raises <c>int(None)</c>'s TypeError (probed 2.4.2). It used to fall to the
+        ///     house conversion below, which turned null into ZERO.</para>
+        /// </remarks>
+        internal static object FullFillElement(object fill_value, NPTypeCode typeCode, long size)
         {
+            if (fill_value is null)
+                // The empty result never writes its fill element, so the dtype's zero stands for it (a fresh slot is zeroed).
+                return size == 0 ? ReductionInitial.Box(new byte[ReductionInitial.SlotBytes], typeCode) : ReductionInitial.BoxNone(typeCode);
+
             // Only a number qualifies (Type.GetTypeCode unwraps an array type to its element type).
             if (NDArray.IsStoreScalar(fill_value) && fill_value.GetType().GetTypeCode() == typeCode)
                 return fill_value;

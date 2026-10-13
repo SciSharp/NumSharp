@@ -30,7 +30,9 @@ namespace NumSharp
         ///     <c>(Ni..., J, Nk...)</c>: right-aligned, with extra leading size-1 dimensions
         ///     stripped. Where several index positions collapse onto one <paramref name="arr"/>
         ///     element (a size-1 <paramref name="arr"/> dimension, or duplicate indices in a slice),
-        ///     the last write in C-order wins.
+        ///     the last write in C-order wins. <c>null</c> is Python's <c>None</c>, converted into
+        ///     <paramref name="arr"/>'s dtype (NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c>, a <c>StringDType</c>
+        ///     NA object; int()'s TypeError for an integer array, before the indices' bounds are checked).
         /// </param>
         /// <param name="axis">
         ///     The axis to place 1-D slices along (no default — required, as in NumPy). When
@@ -41,7 +43,9 @@ namespace NumSharp
         ///     <c>np.array(arr.flat)</c> yields a read-only copy there, so the assignment fails
         ///     (probed 2.4.2). <paramref name="indices"/> must then be 1-D.
         /// </param>
-        /// <exception cref="ArgumentNullException"><paramref name="arr"/>, <paramref name="indices"/> or <paramref name="values"/> is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="indices"/> is null.</exception>
+        /// <exception cref="TypeError"><paramref name="values"/> is null (<c>None</c>) and <paramref name="arr"/> is an integer
+        ///     (or <c>decimal</c>) array.</exception>
         /// <exception cref="ValueError">
         ///     <paramref name="axis"/> is <c>null</c> and <paramref name="indices"/> is not 1-D; the
         ///     dimension counts of <paramref name="arr"/> and <paramref name="indices"/> differ; or
@@ -62,7 +66,7 @@ namespace NumSharp
             using var plain = NDMatrixBoundary.PlainFor(arr, indices, values);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
-            if (values is null) throw new ArgumentNullException(nameof(values));
+            // A null `values` is Python's None, converted where NumPy's fancy assignment converts values (PutAlongAxisCore).
 
             // Boundary scope: reclaims the axis=null contiguous reshape view, the int64 index cast,
             // the values astype/overlap-snapshot, and the stride arrays at exit — and strong-roots the
@@ -147,8 +151,10 @@ namespace NumSharp
             // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar: the fancy assignment converts the value
             // with PyArray_FromAny(values, arr.dtype, FORCECAST), which packs it with PyArray_Pack's range checks
             // (put_along_axis(int8, idx, 1000, 0) raises "Python integer 1000 out of bounds for int8") after the read-only
-            // check and BEFORE the index arrays are broadcast or bounds-checked. The packed 0-d is the caller's scope's.
-            values = NDArray.PackForStore(values, arr.typecode, pyArrayPackRoute: false);
+            // check and BEFORE the index arrays are broadcast or bounds-checked. The packed 0-d is the caller's scope's. A null
+            // is Python's None, converted at the same point into arr's descriptor (NaN, nan+nanj, False, 'None' truncated, a
+            // StringDType NA object; int(None)'s TypeError for an integer array, before an out-of-bounds index is seen).
+            values = NDArray.PackForStore(values, arr.dtype, pyArrayPackRoute: false);
 
             int ndim = arr.ndim;
             long[] arrShape = arr.Shape.dimensions;

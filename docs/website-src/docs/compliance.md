@@ -110,6 +110,14 @@ labels these as aliases instead of pretending that their names are exact.
 Removed NumPy 1.x aliases are not counted as current NumPy 2.4.2 requirements. Ported code should
 prefer the current names such as `prod`, `any`, and `all`.
 
+A C# `null` stored as a VALUE is Python's `None`: `a[i] = null`, `a.fill(null)`,
+`np.full(shape, null, dtype)`, `np.put`, `np.putmask`, `np.place`, `np.insert`, `np.fill_diagonal`,
+the flat iterator and `np.copyto(dst, (NDArray)null, casting: "unsafe")` write what NumPy writes for
+`None`: NaN in a float array (NumPy's positive quiet NaN), `nan+nanj` in a complex one, `False` in a
+bool one, `'None'` in a text one. An integer array raises NumPy's `TypeError: int() argument must be a
+string, a bytes-like object or a real number, not 'NoneType'`. Without a dtype, `None` would make
+NumPy build an object array, which NumSharp does not have, so `np.full(shape, null)` is refused.
+
 ---
 
 ## Dtypes

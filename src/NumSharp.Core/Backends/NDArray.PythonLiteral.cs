@@ -213,7 +213,10 @@ namespace NumSharp
         ///     <see cref="Half"/> / <c>char</c> value (<see cref="WasNumPyScalar"/>) the way it packs a NumPy scalar; any
         ///     other value is returned unchanged, for the caller's usual cast.
         /// </summary>
-        /// <param name="value">The value of the assignment; <c>null</c> passes through for the caller to reject.</param>
+        /// <param name="value">The value of the assignment; <c>null</c> is Python's <c>None</c>: a NUMERIC destination
+        ///     receives None's setitem value (<see cref="NoneForStore"/>: NaN, <c>nan+nanj</c>, <c>False</c>, or int()'s
+        ///     TypeError), a string destination gets <c>null</c> back for its text route, which stores <c>str(None)</c> or
+        ///     its NA object itself (<see cref="PackForStore(NDArray, DType, bool)"/> resolves it for any dtype).</param>
         /// <param name="destination">The destination's dtype.</param>
         /// <param name="pyArrayPackRoute">
         ///     True when NumPy reaches the element through <c>PyArray_Pack</c> directly — an integer index, a view assignment
@@ -236,11 +239,17 @@ namespace NumSharp
         ///     into a float ("int too large to convert to float").</exception>
         /// <exception cref="ValueError">A float NaN into an integer: "cannot convert float NaN to integer".</exception>
         /// <exception cref="TypeError">A complex into a real or integer destination: Python's <c>float()</c> /
-        ///     <c>int()</c> texts.</exception>
+        ///     <c>int()</c> texts; <c>None</c> (a null <paramref name="value"/>) into an integer or <c>decimal</c>
+        ///     destination.</exception>
         /// <remarks>
         ///     <para>
         ///     A NumPy-scalar mark packs by <see cref="ReductionInitial.PackNumPyScalar"/> instead: int()-converted with the
         ///     range check into a SIGNED integer destination, cast into every other.
+        ///     </para>
+        ///     <para>
+        ///     A null <paramref name="value"/> is converted HERE, at the point each caller packs a literal, which is where
+        ///     NumPy converts <c>None</c> too: after an integer index's bounds check, before a fancy index's, and for an
+        ///     empty selection (<c>a[5:] = None</c> on an integer array raises).
         ///     </para>
         ///     <para>
         ///     The conversion is <see cref="ReductionInitial.TryPack"/>, NumPy's element setter: an int is range-checked
@@ -257,9 +266,14 @@ namespace NumSharp
         /// </remarks>
         internal static unsafe NDArray PackForStore(NDArray value, NPTypeCode destination, bool pyArrayPackRoute)
         {
+            // None into a number: NumPy's setitem of None (NaN, nan+nanj, False, or int()'s TypeError). A string destination's
+            // None is its text route's business (str(None), or a StringDType NA object), so null goes back to it.
+            if (value is null)
+                return destination == NPTypeCode.String || destination == NPTypeCode.Empty ? null : NoneForStore(destination);
+
             // A NumPy scalar on a PyArray_FromAny route is cast like any 0-d array: the caller's cast applies. A Python str
             // into a string destination is the text route's own business (it converts text itself).
-            if (value is null || !(value.WasPythonLiteral || value.WasPythonStr || (value.WasNumPyScalar && pyArrayPackRoute))
+            if (!(value.WasPythonLiteral || value.WasPythonStr || (value.WasNumPyScalar && pyArrayPackRoute))
                 || destination == value.typecode || destination == NPTypeCode.String || destination == NPTypeCode.Empty)
                 return value;
 
@@ -277,6 +291,83 @@ namespace NumSharp
             Buffer.MemoryCopy(slot, (byte*)packed.Address, packed.dtypesize, packed.dtypesize);
             return packed;
         }
+
+        /// <summary>
+        ///     <see cref="PackForStore(NDArray, NPTypeCode, bool)"/> for a destination known by its full descriptor, which
+        ///     also resolves <c>None</c> for a text destination: a null <paramref name="value"/> becomes
+        ///     <see cref="NoneForStore"/> of <paramref name="destination"/> (<c>'None'</c> truncated to an <c>S</c> /
+        ///     <c>U</c> width, a <c>StringDType</c>'s NA object or <c>'None'</c>, NaN / <c>nan+nanj</c> / <c>False</c> for
+        ///     numbers), any other value packs as the typecode overload packs it.
+        /// </summary>
+        /// <param name="value">The value of the assignment; <c>null</c> is Python's <c>None</c>.</param>
+        /// <param name="destination">The destination array's descriptor.</param>
+        /// <param name="pyArrayPackRoute">See <see cref="PackForStore(NDArray, NPTypeCode, bool)"/>.</param>
+        /// <returns><paramref name="value"/> itself, or a NEW 0-d array the caller disposes
+        ///     (<c>!ReferenceEquals(result, value)</c>) or creates inside an <c>[NDScoped]</c> member.</returns>
+        /// <exception cref="TypeError"><c>None</c> into an integer or <c>decimal</c> destination, or the literal packing
+        ///     errors of the typecode overload.</exception>
+        /// <exception cref="ValueError"><c>None</c> into a <c>StringDType(coerce=False)</c> destination, or the literal
+        ///     packing errors of the typecode overload.</exception>
+        /// <exception cref="OverflowException">See <see cref="PackForStore(NDArray, NPTypeCode, bool)"/>.</exception>
+        internal static NDArray PackForStore(NDArray value, DType destination, bool pyArrayPackRoute)
+            => value is null ? NoneForStore(destination) : PackForStore(value, destination.typecode, pyArrayPackRoute);
+
+        /// <summary>
+        ///     Python's <c>None</c> as the value of a store into an array of <paramref name="descr"/>: a NEW 0-d array of
+        ///     exactly <paramref name="descr"/> holding what NumPy's setitem stores for <c>None</c> — the conversion
+        ///     <c>PyArray_FromAny(None, descr, FORCECAST)</c> / <c>PyArray_Pack(descr, item, None)</c> performs on every store
+        ///     route.
+        /// </summary>
+        /// <param name="descr">The destination's descriptor.</param>
+        /// <returns>The 0-d value: NaN (the POSITIVE quiet NaN, NumPy's <c>NPY_NAN</c>) for a float dtype, <c>nan+nanj</c>
+        ///     for complex, <c>False</c> for bool, <c>str(None)</c> = <c>'None'</c> encoded and truncated to an <c>S</c> /
+        ///     <c>U</c> width (<c>'No'</c> for <c>&lt;U2</c>; an unsized class discovers <c>&lt;U4</c> / <c>|S4</c>), and
+        ///     for a <c>StringDType</c> its NA element when its NA object is <c>None</c>, else <c>'None'</c>. The caller
+        ///     disposes it or creates it inside an <c>[NDScoped]</c> member.</returns>
+        /// <exception cref="TypeError">An integer dtype (<c>char</c> included) — Python's <c>int(None)</c> — or a
+        ///     <c>decimal</c> one (<see cref="ReductionInitial.PackNone"/>).</exception>
+        /// <exception cref="ValueError">A <c>StringDType(coerce=False)</c> descriptor (<c>StringDType only allows string data
+        ///     when string coercion is disabled.</c>).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="descr"/> is null.</exception>
+        /// <remarks>
+        ///     The caller decides WHEN it converts: at NumPy's conversion point of its route, so the errors keep NumPy's
+        ///     order (<c>np.put(int_array, [10], None)</c> raises the TypeError before the index's bounds are checked,
+        ///     <c>np.insert(int_array, 10, None)</c> the IndexError first). <c>np.copyto</c> is the one route whose None is an
+        ///     OBJECT scalar cast per element (<c>casting='unsafe'</c> only), and it calls this only where NumPy casts.
+        /// </remarks>
+        internal static unsafe NDArray NoneForStore(DType descr)
+        {
+            if (descr is null)
+                throw new ArgumentNullException(nameof(descr));
+
+            // StringDType: stringdtype_setitem of None (the NA object when it is None, 'None' under coercion, refused under
+            // coerce=False).
+            if (descr.Meta is VStringDTypeMeta)
+                return PackForVStringStore(null, descr);
+            // S / U: STRING_setitem / UNICODE_setitem take any object by its str(), so 'None', encoded and truncated to the
+            // width (an unsized class discovers its width from the text, as np.asarray(None, dtype='U') is <U4).
+            if (descr.Meta is StringDTypeMeta)
+                return Backends.Strings.NDStringArrays.FromScalar(null, descr);
+
+            NPTypeCode tc = descr.typecode;
+            byte* slot = stackalloc byte[ReductionInitial.SlotBytes];
+            ReductionInitial.PackNone(tc, new Span<byte>(slot, ReductionInitial.SlotBytes));
+            var none = new NDArray(tc, Shape.Scalar, false);
+            // (System.Runtime.CompilerServices.Unsafe is shadowed by NDArray.Unsafe inside this class.)
+            Buffer.MemoryCopy(slot, (byte*)none.Address, none.dtypesize, none.dtypesize);
+            return none;
+        }
+
+        /// <summary>
+        ///     The refusal for <c>None</c> where NumPy would DISCOVER the dtype from it: NumPy builds an object array
+        ///     (<c>np.full(2, None)</c>, <c>np.asarray(None)</c>), and NumSharp has no object dtype.
+        /// </summary>
+        /// <param name="function">The NumPy function, as the message names it (<c>"np.full"</c>).</param>
+        /// <returns>The exception to throw.</returns>
+        internal static NotSupportedException NoneWithoutDtype(string function)
+            => new NotSupportedException(
+                $"{function} with None and no dtype builds an object array in NumPy, a dtype NumSharp does not have. Pass a " +
+                "dtype: a float or complex dtype stores NaN, bool stores False, a text dtype stores 'None'.");
 
         /// <summary>
         ///     The value of a store into a NEP 55 <c>StringDType</c> array: a C# literal (NumPy's Python scalar or Python
@@ -341,11 +432,15 @@ namespace NumSharp
         ///     anything else (a C# array or collection — a Python list —, text) is <c>np.asanyarray(value)</c>, for the
         ///     caller's own array cast.
         /// </summary>
-        /// <param name="value">The value of the store.</param>
+        /// <param name="value">The value of the store; <c>null</c> is Python's <c>None</c>, which a NUMERIC destination
+        ///     stores as <see cref="NoneForStore"/> gives it (NaN, <c>nan+nanj</c>, <c>False</c>, or int()'s TypeError).</param>
         /// <param name="destination">The destination's dtype.</param>
         /// <returns>A NEW array, except an <see cref="NDArray"/> that <see cref="PackForStore"/> returns unchanged. The
         ///     caller disposes a new array or creates it inside an <c>[NDScoped]</c> member.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null and <paramref name="destination"/> is a
+        ///     string dtype: <c>None</c> into text needs the destination's full descriptor (its width, its NA object), so
+        ///     such a caller converts it with <see cref="NoneForStore"/> instead.</exception>
+        /// <exception cref="TypeError"><c>None</c> into an integer or <c>decimal</c> destination.</exception>
         /// <exception cref="OverflowException">See <see cref="PackForStore"/>; also a NumPy scalar (<see cref="Half"/>,
         ///     <c>char</c>) whose int() does not fit a SIGNED integer destination.</exception>
         /// <exception cref="ValueError">See <see cref="PackForStore"/>.</exception>
@@ -361,7 +456,12 @@ namespace NumSharp
         internal static unsafe NDArray AsStoreValue(object value, NPTypeCode destination)
         {
             if (value is null)
-                throw new ArgumentNullException(nameof(value));
+            {
+                // None into a number is its setitem value; a text destination's caller holds the descriptor this needs.
+                if (destination == NPTypeCode.String || destination == NPTypeCode.Empty)
+                    throw new ArgumentNullException(nameof(value), "None into a text array is converted with the array's descriptor (NDArray.NoneForStore).");
+                return NoneForStore(destination);
+            }
             if (value is NDArray nd)
                 return PackForStore(nd, destination, pyArrayPackRoute: false);
             // A Python str into a NUMERIC destination: PyArray_FromAny(str, dtype, FORCECAST) runs the dtype's setitem on

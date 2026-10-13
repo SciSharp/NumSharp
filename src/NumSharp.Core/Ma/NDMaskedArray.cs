@@ -1325,7 +1325,11 @@ namespace NumSharp
         /// <c>__setitem__</c>: <c>masked</c> masks (data untouched), a plain value unmasks, a masked value
         /// propagates its mask.</summary>
         /// <param name="indices">The index expression.</param>
-        /// <param name="value">Scalar/array/NDArray/NDMaskedArray/the masked singleton.</param>
+        /// <param name="value">Scalar/array/NDArray/NDMaskedArray/the masked singleton, or <c>null</c> — Python's
+        ///     <c>None</c>, stored by the data's setter (NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c>) and unmasking the
+        ///     slots like any plain value.</param>
+        /// <exception cref="TypeError"><paramref name="value"/> is null and the data is an integer (or <c>decimal</c>) array:
+        ///     Python's <c>int(None)</c>.</exception>
         /// <remarks>
         ///     Scoped by <c>[NDScoped]</c> (a <c>void</c> method has no egress, so the weaver needs nothing from the
         ///     body): the 0-D True/False scalars, the value normalized from a scalar/array-like, and the hard-mask
@@ -1381,7 +1385,10 @@ namespace NumSharp
             {
                 // `x[i] = value` (scalar/array-like/NDArray): write the data and UNMASK the assigned slots (soft).
                 // `np.ma.getdata` is the public face of the module's operand normalizer (scalar→0-d, array-like→array).
-                _data[indices] = np.ma.getdata(value);
+                // A null is Python's None: NumPy's `dval = getattr(None, '_data', None)` is None itself, stored by the
+                // ndarray setter (NaN / nan+nanj / False / 'None', or int(None)'s TypeError), and `getmask(None)` is nomask,
+                // so the slots are unmasked like for any plain value.
+                _data[indices] = value is null ? null : np.ma.getdata(value);
                 if (!hard && _mask is not null)
                     _mask[indices] = NDArray.Scalar(false);
             }

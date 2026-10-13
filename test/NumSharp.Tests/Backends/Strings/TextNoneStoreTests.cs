@@ -119,19 +119,26 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     <c>None</c> into a numeric array: NumPy stores NaN into floats (<c>nan+nanj</c> into complex), False into bool
-        ///     and raises TypeError for integers; NumSharp refuses the null for every numeric dtype.
+        ///     <c>None</c> into a numeric array (P1.7b): NumPy stores NaN into floats (<c>nan+nanj</c> into complex), False into
+        ///     bool and raises <c>int(None)</c>'s TypeError for integers, and NumSharp now does the same through the indexer and
+        ///     <c>__setitem__</c> (every other route: <see cref="NoneStoreTests"/>).
         /// </summary>
         [TestMethod]
-        [Misaligned]
         public void None_IntoNumbers_IsRefused()
         {
             using var f = np.array(new[] { 1.0, 2.0 });
-            Action store = () => f[0] = null;
-            store.Should().Throw<ArgumentNullException>();
-            Action setItem = () => f.__setitem__(0, null);
-            setItem.Should().Throw<ArgumentNullException>();
-            V(f).Should().Equal(1.0, 2.0);
+            f[0] = null;
+            f.__setitem__(1, null);
+            BitConverter.DoubleToInt64Bits(f.GetDouble(0)).Should().Be(0x7FF8_0000_0000_0000L);
+            BitConverter.DoubleToInt64Bits(f.GetDouble(1)).Should().Be(0x7FF8_0000_0000_0000L);
+
+            using var i = np.array(new[] { 1, 2 });
+            Action store = () => i[0] = null;
+            store.Should().Throw<TypeError>()
+                .WithMessage("int() argument must be a string, a bytes-like object or a real number, not 'NoneType'");
+            Action setItem = () => i.__setitem__(0, null);
+            setItem.Should().Throw<TypeError>();
+            V(i).Should().Equal(1, 2);
         }
     }
 }

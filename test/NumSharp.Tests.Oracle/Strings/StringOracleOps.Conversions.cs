@@ -79,10 +79,113 @@ namespace NumSharp.Tests.Strings
                     BroadcastSubviewStore(ops[0], p);
                     result = null;
                     return true;
+                case "none_store":
+                    result = NoneStore(p, ops);
+                    return true;
             }
 
             result = null;
             return false;
+        }
+
+        /// <summary>
+        ///     <c>none_store</c> (P1.7b): Python's <c>None</c> through ONE store route, spelled the way a ported NumPy line
+        ///     spells it in C# — a <c>null</c> where NumPy passes <c>None</c> (cast to the parameter type where a bare
+        ///     <c>null</c> would be ambiguous).
+        /// </summary>
+        /// <param name="p">The route and its parameters (<c>"route"</c>, plus the indices, mask, casting, dtype, … it takes).</param>
+        /// <param name="ops">The target (none for the creation routes).</param>
+        /// <returns>The created array for <c>full</c> / <c>full_like</c> / <c>insert</c> / <c>asanyarray</c> /
+        ///     <c>asarray</c> / <c>array_list</c>; null for an in-place route (the case compares the mutated target).</returns>
+        /// <exception cref="InvalidOperationException">A route the replay does not know.</exception>
+        /// <exception cref="Exception">The route's own error, compared with NumPy's (type and text).</exception>
+        private static object NoneStore(Dictionary<string, JsonElement> p, NDArray[] ops)
+        {
+            NDArray a = ops.Length > 0 ? ops[0] : null;
+            switch (Str(p, "route"))
+            {
+                case "fill":
+                    a.fill(null);
+                    return null;
+                case "full":
+                    return np.full(ShapeOf(p, "dims"), null, Spec(p["dtype"]));
+                case "full_like":
+                    return np.full_like(a, null);
+                case "copyto":
+                {
+                    // `where` is NumPy's True (absent), a 0-d bool, or a bool list.
+                    NDArray where = p["where"].ValueKind == JsonValueKind.Null ? null : RawArray(p["where"]);
+                    np.copyto(a, (NDArray)null, Str(p, "casting"), where);
+                    return null;
+                }
+                case "put":
+                    np.put(a, np.array(Longs(p["indices"])), (NDArray)null, Str(p, "mode"));
+                    return null;
+                case "putmask":
+                    np.putmask(a, RawArray(p["mask"]), (NDArray)null);
+                    return null;
+                case "place":
+                    np.place(a, RawArray(p["mask"]), (NDArray)null);
+                    return null;
+                case "insert":
+                    return NoneInsert(a, p["obj"], NullableInt(p, "axis"));
+                case "flat_int":
+                    a.flatiter[p["index"].GetInt64()] = null;
+                    return null;
+                case "flat_slice":
+                    a.flatiter[Str(p, "index")] = null;
+                    return null;
+                case "flat_fancy":
+                    a.flatiter[Longs(p["index"])] = null;
+                    return null;
+                case "fill_diagonal":
+                    np.fill_diagonal(a, null, p["wrap"].GetBoolean());
+                    return null;
+                case "put_along_axis":
+                    np.put_along_axis(a, RawArray(p["indices"]), null, NullableInt(p, "axis"));
+                    return null;
+                case "setfield":
+                    a.setfield(null, Spec(p["dtype"]), Int(p, "offset"));
+                    return null;
+                case "asanyarray":
+                    // The bare `null` NumPy's np.asanyarray(None, dtype) ports to binds the MemoryView overload in C#.
+                    return np.asanyarray(null, Spec(p["dtype"]));
+                case "asarray":
+                    return np.asarray((NDArray)null, Spec(p["dtype"]));
+                case "array_list":
+                    // A Python list holding None: an object array of the list's shape (np.array's per-element setitem).
+                    return np.array((Array)ManagedArray(StringOracleCorpus.Decode(p["values"])), Spec(p["dtype"]));
+                default:
+                    throw new InvalidOperationException($"none_store has no route {Str(p, "route")}");
+            }
+        }
+
+        /// <summary>
+        ///     <c>np.insert(a, obj, None, axis)</c> with <c>obj</c> in the C# form a ported NumPy line takes: an int, an
+        ///     <c>int[]</c> (a Python list), a <see cref="Slice"/>, an int64 index array or a bool mask array.
+        /// </summary>
+        /// <param name="a">The array inserted into.</param>
+        /// <param name="obj">The generator's position entry (<c>{"int"}</c>, <c>{"list"}</c>, <c>{"slice"}</c>,
+        ///     <c>{"arr"}</c>, <c>{"mask"}</c>).</param>
+        /// <param name="axis">The axis, or null for the flattened array.</param>
+        /// <returns>The new array.</returns>
+        /// <exception cref="InvalidOperationException">A position encoding the replay does not know.</exception>
+        private static NDArray NoneInsert(NDArray a, JsonElement obj, int? axis)
+        {
+            if (obj.TryGetProperty("int", out var i))
+                return np.insert(a, i.GetInt32(), (object)null, axis);
+            if (obj.TryGetProperty("list", out var list))
+                return np.insert(a, list.EnumerateArray().Select(x => x.GetInt32()).ToArray(), (object)null, axis);
+            if (obj.TryGetProperty("slice", out var s))
+            {
+                var f = s.EnumerateArray().Select(x => x.ValueKind == JsonValueKind.Null ? (long?)null : x.GetInt64()).ToArray();
+                return np.insert(a, new Slice(f[0], f[1], f[2] ?? 1), (object)null, axis);
+            }
+            if (obj.TryGetProperty("arr", out var arr))
+                return np.insert(a, np.array(Longs(arr)), (object)null, axis);
+            if (obj.TryGetProperty("mask", out var mask))
+                return np.insert(a, RawArray(mask), (object)null, axis);
+            throw new InvalidOperationException($"none_store insert has no position {obj}");
         }
 
         /// <summary>

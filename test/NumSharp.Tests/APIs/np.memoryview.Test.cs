@@ -289,12 +289,17 @@ namespace NumSharp.Tests.APIs
             Assert.AreEqual(2L, S(c.GetValue(1, 2)));
         }
 
+        /// <summary>
+        ///     A null MemoryView is refused — except by <c>np.asanyarray</c>, whose MemoryView overload is where C# binds a
+        ///     bare <c>np.asanyarray(null, dtype)</c>, the port of NumPy's <c>np.asanyarray(None, dtype)</c>: there a null is
+        ///     Python's <c>None</c> (P1.7b), and without a dtype NumPy's object array, which NumSharp refuses.
+        /// </summary>
         [TestMethod]
         public void Roundtrip_NullBuffer_Throws()
         {
             Assert.ThrowsException<ArgumentNullException>(() => np.array((np.MemoryView)null));
             Assert.ThrowsException<ArgumentNullException>(() => np.asarray((np.MemoryView)null));
-            Assert.ThrowsException<ArgumentNullException>(() => np.asanyarray((np.MemoryView)null));
+            Assert.ThrowsException<NotSupportedException>(() => np.asanyarray((np.MemoryView)null));
             Assert.ThrowsException<ArgumentNullException>(() => np.ascontiguousarray((np.MemoryView)null));
             Assert.ThrowsException<ArgumentNullException>(() => np.asfortranarray((np.MemoryView)null));
         }

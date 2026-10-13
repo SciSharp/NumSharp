@@ -415,13 +415,25 @@ namespace NumSharp.Tests.Indexing
             h.GetValue<Half>(2, 2).Should().Be((Half)2);
         }
 
+        /// <summary>
+        ///     A null value is Python's <c>None</c> (P1.7b), as in NumPy 2.4.2: an int32 array raises <c>int(None)</c>'s
+        ///     TypeError (an empty one too: the flat setter converts the value first), a float array stores NaN on the
+        ///     diagonal.
+        /// </summary>
         [TestMethod]
         public void FillDiagonal_NullValue_Throws()
         {
-            // NumPy's None reaches the dtype converter (nan for float, TypeError for int); a null
-            // here is a caller bug, and silently writing nan/zero would hide it.
             var a = np.zeros(new Shape(3, 3), NPTypeCode.Int32);
-            new Action(() => np.fill_diagonal(a, null)).Should().Throw<ArgumentNullException>();
+            new Action(() => np.fill_diagonal(a, null)).Should().Throw<TypeError>()
+                .WithMessage("int() argument must be a string, a bytes-like object or a real number, not 'NoneType'");
+            var empty = np.zeros(new Shape(0, 0), NPTypeCode.Int32);
+            new Action(() => np.fill_diagonal(empty, null)).Should().Throw<TypeError>();
+
+            var f = np.zeros(new Shape(3, 3), NPTypeCode.Double);
+            np.fill_diagonal(f, null);
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 3; j++)
+                    double.IsNaN(f.GetDouble(i, j)).Should().Be(i == j);
         }
 
         [TestMethod]

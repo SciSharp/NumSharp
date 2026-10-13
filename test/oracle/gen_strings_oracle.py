@@ -5483,8 +5483,7 @@ def gen_storenone():
     for tname, make in targets.items():
         for key in keys:
             for v in values:
-                if v is None and tname in ("i1", "i4", "i8", "f8"):
-                    continue  # NumPy stores NaN / raises TypeError; NumSharp refuses a null for numbers ([Misaligned])
+                # None into a number is NaN / False / int()'s TypeError in NumPy and NumSharp alike since P1.7b.
                 arr = make()
                 # A 1-D text target is its own base, so the replay rebuilds its OWNDATA; a numeric one stays a view (the
                 # general corpus' reconstruction builds a view over the buffer): target()'s rule, with StringDType text.
@@ -5517,6 +5516,231 @@ def gen_storenone():
 
                 add("storenone", "bcast_subview_store", params={"which": which, "row": row, "value": enc(value)},
                     operands=[plain(x)], layout="c1", mutate=0, call=store)
+
+    _gen_none_routes()
+
+
+# P1.7b: None into NUMERIC arrays (and into text through the routes the index forms above do not reach). NumPy's setitem of
+# None is NaN for a float dtype (NPY_NAN, the POSITIVE quiet NaN: the corpus compares bytes, so the sign is checked),
+# nan+nanj for complex, False for bool, and int()'s TypeError for every integer dtype.
+NONE_NUM_SPECS = ["?", "i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "f2", "f4", "f8", "c16"]
+NONE_TEXT_SPECS = ["<U4", "<U2", "|S2", TD, TDN, TDC]
+
+
+def _none_num_op(spec, layout):
+    """A numeric operand for the None routes: the base holds 1, 2, 3, ... (bool: alternating), so a stored NaN / False is
+    visible against it. The replay rebuilds a non-empty numeric operand as a VIEW over its buffer (``target``'s rule), so
+    a layout whose view IS the base is given as a reshape view (OWNDATA False on both sides), and an empty operand only as
+    the 1-D base itself (``e1``: the replay owns it, as NumPy's base does) — ``e2`` / ``e3`` map to ``e1``.
+
+    :param spec: a numeric dtype string.
+    :param layout: a ``LAYOUTS`` name.
+    :returns: the (base, view) pair.
+    """
+    if layout in ("e2", "e3"):
+        layout = "e1"
+    n, build = LAYOUTS[layout]
+    base = (np.arange(n) % 2 == 1) if spec == "?" else np.arange(1, n + 1).astype(spec)
+    view = build(base)
+    if view is base and base.size > 0:
+        view = base.reshape(base.shape)
+    return base, view
+
+
+def _none_op(spec, layout):
+    """An operand of any None-route target: numeric (``_none_num_op``), fixed-width text (ASCII pool values, so the
+    stored ``'None'`` and its truncation are the only text that varies) or StringDType (``_t_op``).
+
+    :param spec: a dtype string or a TSpec.
+    :param layout: a ``LAYOUTS`` name.
+    :returns: the (base, view) pair.
+    """
+    if isinstance(spec, TSpec):
+        return _t_op(spec, layout, seed=2, pool=T_SHORT)
+    if np.dtype(spec).kind in "SU":
+        return operand(spec, layout, seed=1, ascii_only=True)
+    return _none_num_op(spec, layout)
+
+
+def _none_shaped(spec, shape):
+    """A C-ordered operand of ``shape`` for the fill_diagonal / put_along_axis routes.
+
+    :param spec: a dtype string or a TSpec.
+    :param shape: the dimensions.
+    :returns: the (base, view) pair.
+    """
+    n = int(np.prod(shape))
+    text = isinstance(spec, TSpec) or np.dtype(spec).kind in "SU"
+    if isinstance(spec, TSpec):
+        base = np.array([T_SHORT[i % len(T_SHORT)] for i in range(n)], dtype=spec.build())
+    elif text:
+        base = np.array([U_ASCII[(i + 1) % len(U_ASCII)] for i in range(n)], dtype=spec)
+    elif spec == "?":
+        base = np.arange(n) % 2 == 1
+    else:
+        base = np.arange(1, n + 1).astype(spec)
+    # The replay rebuilds a 1-D text operand with its base's shape as the base itself (OWNDATA True), a numeric one
+    # as a view over the buffer: the same objects here.
+    return base, (base if text and len(shape) == 1 else base.reshape(shape))
+
+
+def _none_spec_name(spec):
+    """The layout label of a target spec (a TSpec has no string of its own).
+
+    :param spec: a dtype string or a TSpec.
+    :returns: the label.
+    """
+    if isinstance(spec, TSpec):
+        return {id(TD): "T", id(TDN): "Tna", id(TDC): "Tnc"}[id(spec)]
+    return spec
+
+
+def _gen_none_routes():
+    """None through every store route NumPy has, into numbers and text: the index forms (numeric targets: the text ones
+    are above), ``fill``, ``np.full`` / ``np.full_like``, ``np.copyto`` (every casting rule; ``'unsafe'`` with each mask form
+    and destination size, which decide whether the object cast runs up front, per selected element, or not at all),
+    ``np.put`` (in-bounds, negative, out-of-bounds, empty), ``np.putmask``, ``np.place`` (not StringDType: NumPy 2.4.2 crashes
+    there), ``np.insert`` (scalar, sequence, empty, slice, array and mask positions, axes, an out-of-bounds index), the flat
+    iterator (an integer index rewords any failure as "Error setting single item of array.", a slice or index list does
+    not), ``np.fill_diagonal`` (2-D, tall with wrap, 3-D, empty), ``np.put_along_axis``, ``ndarray.setfield``,
+    ``np.asanyarray`` / ``np.asarray`` with a dtype, and ``np.array`` of a list holding None. Every case records NumPy's
+    outcome: the mutated operand (bytes, so NaN's sign is compared) or the result, or NumPy's error and its order against
+    the other checks (read-only, bounds, mask size)."""
+    num = NONE_NUM_SPECS
+    alls = NONE_NUM_SPECS + NONE_TEXT_SPECS
+
+    def ns(route, spec, layout_label, operands, call, mutate=0, **params):
+        add("storenone", "none_store", params={"route": route, **params}, operands=operands,
+            layout=f"{_none_spec_name(spec)}/{layout_label}", mutate=mutate, call=call)
+
+    # The index forms beyond the store-index lists: views, 0-d, empty, read-only, F-ordered, transposed.
+    for spec in num:
+        for lname, idx in (("c1", [{"int": 6}]), ("s1", [{"ellipsis": True}]), ("r1", [{"int": 0}]),
+                           ("col", [{"slice": [1, None, None]}]), ("z0", [{"ellipsis": True}]),
+                           ("e2", [{"ellipsis": True}]), ("bc", [{"int": 0}]), ("f2", [{"int": 1}]),
+                           ("t3", [{"slice": [None, None, None]}, {"int": 0}]), ("c1", [{"slice": [6, None, None]}]),
+                           ("c1", [{"arr": [6]}]), ("c1", [{"mask": [True, False, True]}])):
+            key = tuple(_py_index(e) for e in idx)
+            add("storenone", "setitem", params={"index": idx, "value": enc(None)},
+                operands=[_none_num_op(spec, lname)], layout=f"{spec}/{lname}", mutate=0,
+                call=lambda a, k=key: _set(a, k, None))
+        for lname, indices in (("c1", STORE_INDICES_1D), ("c2", STORE_INDICES_2D)):
+            for idx in indices:
+                key = tuple(_py_index(e) for e in idx)
+                add("storenone", "setitem", params={"index": idx, "value": enc(None)},
+                    operands=[_none_num_op(spec, lname)], layout=f"{spec}/{lname}", mutate=0,
+                    call=lambda a, k=key: _set(a, k, None))
+
+    for spec in alls:
+        # fill: PyArray_FillWithScalar packs first (an empty integer array raises), then writes every element.
+        for lname in ("c1", "c2", "s1", "r2", "z0", "e1", "e2", "bc"):
+            ns("fill", spec, lname, [_none_op(spec, lname)], lambda a: a.fill(None))
+
+        # np.full / np.full_like: empty(...) then copyto(..., None, casting='unsafe') — nothing is converted for an empty
+        # result.
+        dt = sbuild(spec)
+        for dims in ([2], [2, 3], [], [0], [0, 3], [1]):
+            ns("full", spec, "-", [], lambda dims=dims, dt=dt: np.full(tuple(dims), None, dtype=dt), mutate=None,
+               dims=dims, dtype=senc(spec))
+        for lname in ("c1", "f2", "s1", "e2"):
+            ns("full_like", spec, lname, [_none_op(spec, lname)], lambda a: np.full_like(a, None), mutate=None)
+
+        # np.copyto(dst, None): a 0-d OBJECT source — only 'unsafe' casts it; more than one destination element converts
+        # it up front (an integer destination raises under any mask), one element per selected element, none for empty.
+        for casting in ("no", "equiv", "safe", "same_kind"):
+            ns("copyto", spec, "c1", [_none_op(spec, "c1")], lambda a, c=casting: np.copyto(a, None, casting=c),
+               casting=casting, where=None)
+        masks = {"c1": [None, [True, False, True, False, False, True], [False] * 6, True, False, [True, False, True]],
+                 "one": [None, [True], [False], [True, False, True]],
+                 "z0": [None, True, False],
+                 "e1": [None, [True, False, True]]}
+        for lname, wheres in masks.items():
+            for w in wheres:
+                ns("copyto", spec, lname, [_none_op(spec, lname)],
+                   # where=None would be NumPy's mask None (False: nothing copied), so no mask passes no where=.
+                   lambda a, w=w: np.copyto(a, None, casting="unsafe") if w is None
+                   else np.copyto(a, None, casting="unsafe", where=np.array(w)),
+                   casting="unsafe", where=w)
+        for casting in ("same_kind", "unsafe"):
+            ns("copyto", spec, "bc", [_none_op(spec, "bc")], lambda a, c=casting: np.copyto(a, None, casting=c),
+               casting=casting, where=None)
+
+        # np.put: the values are converted after the read-only, index-cast and empty-target checks and before the bounds.
+        for lname, idx, mode in (("c1", [0, 2], "raise"), ("c1", [-1], "raise"), ("c1", [6], "raise"), ("c1", [], "raise"),
+                                 ("c1", [6], "wrap"), ("c1", [-9], "clip"), ("s1", [0, 2], "raise"), ("e1", [0], "raise"),
+                                 ("e1", [], "raise"), ("bc", [0], "raise")):
+            ns("put", spec, lname, [_none_op(spec, lname)], lambda a, i=idx, m=mode: np.put(a, i, None, mode=m),
+               indices=idx, mode=mode)
+
+        # np.putmask / np.place: the mask's size is checked first, then None is converted whatever the mask holds.
+        for lname, mask in (("c1", [True, False, True, False, False, True]), ("c1", [False] * 6), ("c1", [True, False, True]),
+                            ("c2", [[True, False, False, True], [False] * 4, [True] * 4]), ("s1", [True] * 6),
+                            ("bc", [True] * 12)):
+            ns("putmask", spec, lname, [_none_op(spec, lname)], lambda a, m=mask: np.putmask(a, np.array(m), None), mask=mask)
+            if not isinstance(spec, TSpec):
+                ns("place", spec, lname, [_none_op(spec, lname)], lambda a, m=mask: np.place(a, np.array(m), None), mask=mask)
+
+        # np.insert: a scalar position is bounds-checked before the values are converted; a sequence's values are
+        # converted by the fancy assignment (an empty sequence too) after its positions are checked.
+        for lname, obj, axis in (("c1", {"int": 1}, None), ("c1", {"int": -1}, None), ("c1", {"int": 10}, None),
+                                 ("c1", {"list": [1, 3]}, None), ("c1", {"list": []}, None), ("c1", {"list": [2]}, None),
+                                 ("c1", {"slice": [1, 3, None]}, None), ("c1", {"arr": [1, 2]}, None),
+                                 ("c1", {"mask": [True, False, True, False, False, True]}, None),
+                                 ("c2", {"int": 1}, 0), ("c2", {"int": 1}, 1), ("c2", {"int": 2}, None)):
+            pyobj = (obj["int"] if "int" in obj else list(obj["list"]) if "list" in obj else slice(*obj["slice"])
+                     if "slice" in obj else np.array(obj["arr"], dtype=np.int64) if "arr" in obj else np.array(obj["mask"]))
+            ns("insert", spec, lname, [_none_op(spec, lname)],
+               lambda a, o=pyobj, ax=axis: np.insert(a, o, None, axis=ax), mutate=None, obj=obj, axis=axis)
+
+        # The flat iterator: an integer index rewords any failure; a slice or an index list keeps the setitem's own error.
+        for lname, kind, idx in (("c1", "int", 1), ("c1", "int", -1), ("c1", "int", 6), ("r2", "int", 1),
+                                 ("c1", "slice", "1:3"), ("c1", "slice", "::2"), ("c1", "slice", "4:4"),
+                                 ("c1", "fancy", [1, 3]), ("c1", "fancy", [6]), ("c1", "fancy", []), ("bc", "int", 0)):
+            if kind == "slice":
+                pyk = slice(*[None if s == "" else int(s) for s in idx.split(":")])
+            else:
+                pyk = idx
+            ns("flat_" + kind, spec, lname, [_none_op(spec, lname)],
+               lambda a, k=pyk: a.flat.__setitem__(k, None), index=idx)
+
+        # np.fill_diagonal: `a.flat[:end:step] = None` (a slice: the setitem's own errors), even over an empty diagonal.
+        for shape, wrap in (((3, 3), False), ((3, 4), False), ((5, 2), True), ((5, 2), False), ((2, 2, 2), False),
+                            ((0, 0), False)):
+            op = _none_shaped(spec, shape)
+            # An empty target is compared by its outcome alone: the replay rebuilds an empty numeric operand as an
+            # owning array, where a NumPy reshape of an empty base is a view.
+            ns("fill_diagonal", spec, "x".join(map(str, shape)), [op],
+               lambda a, w=wrap: np.fill_diagonal(a, None, wrap=w), mutate=None if 0 in shape else 0, wrap=wrap)
+
+        # np.put_along_axis: the fancy assignment converts None before the indices' bounds are checked.
+        for shape, idx, axis in (((3, 4), [[0], [1], [2]], 1), ((4,), [1], 0), ((2, 2), [0, 3], None),
+                                 ((4,), [10], 0)):
+            op = _none_shaped(spec, shape)
+            ns("put_along_axis", spec, "x".join(map(str, shape)), [op],
+               lambda a, i=idx, ax=axis: np.put_along_axis(a, np.array(i), None, axis=ax), indices=idx, axis=axis)
+
+        # np.asanyarray / np.asarray(None, dtype): the 0-d setitem value; np.array of a list holding None.
+        ns("asanyarray", spec, "-", [], lambda dt=dt: np.asanyarray(None, dtype=dt), mutate=None, dtype=senc(spec))
+        ns("asarray", spec, "-", [], lambda dt=dt: np.asarray(None, dtype=dt), mutate=None, dtype=senc(spec))
+        for values in ([None, 1], [[None, 1], [2, None]], [1, None]):
+            ns("array_list", spec, "-", [], lambda v=values, dt=dt: np.array(v, dtype=dt), mutate=None,
+               values=enc(values), dtype=senc(spec))
+
+    # ndarray.setfield(None, dtype, offset): None is packed into the FIELD's dtype (NumSharp refuses setfield over
+    # StringDType for now: the whole-surface package P1.7f).
+    for spec in num + ["<U4", "|S2"]:
+        ns("setfield", spec, "c1", [_none_op(spec, "c1")], lambda a, s=spec: a.setfield(None, np.dtype(s), 0),
+           dtype=spec, offset=0)
+    for spec, field, offset in (("f8", "f4", 0), ("f8", "i4", 4), ("i8", "?", 0), ("c16", "f8", 8), ("c16", "c16", 0),
+                                ("u8", "f2", 2)):
+        ns("setfield", spec, f"c1/{field}@{offset}", [_none_op(spec, "c1")],
+           lambda a, f=field, o=offset: a.setfield(None, np.dtype(f), o), dtype=field, offset=offset)
+
+    # Mixed lists: the elements are packed in C order, the first failure wins.
+    for spec, values in (("i1", [1e300, None]), ("i1", [None, 1e300]), ("i1", ["x", None]), ("i1", [None, "x"]),
+                         ("f8", [None, "1.5"]), ("?", [None, "x", 0])):
+        ns("array_list", spec, "mixed", [], lambda v=values, s=spec: np.array(v, dtype=s), mutate=None,
+           values=enc(values), dtype=spec)
 
 
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,

@@ -1637,12 +1637,17 @@ public class SelectionTests
         a.ToArray<int>().Should().Equal(9, 1, 9, 3, 9, 5);
     }
 
+    /// <summary>
+    ///     A null array or mask is a caller error; a null VALUES argument is Python's <c>None</c> (P1.7b): the int64 target
+    ///     refuses it with <c>int(None)</c>'s TypeError, as <c>np.putmask(int_array, mask, None)</c> does in NumPy 2.4.2.
+    /// </summary>
     [TestMethod]
     public void PutMask_NullArgs_Throw()
     {
         var a = np.arange(3);
         ((Action)(() => np.putmask(null, np.ones(3, np.@bool), 1))).Should().Throw<ArgumentNullException>();
         ((Action)(() => np.putmask(a, null, 1))).Should().Throw<ArgumentNullException>();
-        ((Action)(() => np.putmask(a, np.ones(3, np.@bool), null))).Should().Throw<ArgumentNullException>();
+        ((Action)(() => np.putmask(a, np.ones(3, np.@bool), null))).Should().Throw<TypeError>()
+            .WithMessage("int() argument must be a string, a bytes-like object or a real number, not 'NoneType'");
     }
 }

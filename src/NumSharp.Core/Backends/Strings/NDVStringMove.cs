@@ -625,7 +625,8 @@ namespace NumSharp.Backends.Strings
         /// <param name="fillValue">The fill value (null is <c>None</c>).</param>
         /// <param name="descr">The <c>StringDType</c> descriptor.</param>
         /// <returns>The filled array.</returns>
-        /// <exception cref="ValueError"><c>None</c> under <c>coerce=False</c>, or a fill value that does not broadcast.</exception>
+        /// <exception cref="ValueError"><c>None</c> under <c>coerce=False</c> when the result has an element to write, or a
+        ///     fill value that does not broadcast.</exception>
         /// <exception cref="System.Exception">The cast's own errors (a non-UTF-8 <c>bytes</c> value).</exception>
         internal static NDArray Full(Shape shape, object fillValue, DType descr)
         {
@@ -635,7 +636,10 @@ namespace NumSharp.Backends.Strings
             {
                 if (fillValue is null)
                 {
-                    Fill(result, null);
+                    // None is NumPy's 0-d OBJECT array, cast into each element the copy writes: an EMPTY result writes none,
+                    // so it never converts None (np.full((0,), None, dtype=StringDType(coerce=False)) returns, probed 2.4.2).
+                    if (result.size > 0)
+                        Fill(result, null);
                     return result;
                 }
                 if (fillValue is NDArray nd)

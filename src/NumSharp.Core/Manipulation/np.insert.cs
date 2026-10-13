@@ -57,7 +57,8 @@ namespace NumSharp
             if (NDMatrixBoundary.Sees(arr))
                 return NDMatrixBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
-            if (values is null) throw new ArgumentNullException(nameof(values));
+            // A null `values` is Python's None, converted where NumPy converts the values: after the index checks
+            // (CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
 
             var ctx = PrepareAxisContext(arr, axis);
             return WithSourceOrder(arr, InsertSingleIndex(ctx.work, obj, values, ctx.axis, scalarObj: true));
@@ -74,7 +75,8 @@ namespace NumSharp
         ///     dtype.</param>
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the value(s) inserted (F-ordered when <paramref name="arr"/> is).</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="arr"/>, <paramref name="obj"/> or <paramref name="value"/> is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null (a null <paramref name="value"/> is Python's <c>None</c>: NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c> or a
+        ///     <c>StringDType</c> NA object, converted after the index checks; int()'s TypeError for an integer array).</exception>
         /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
         /// <remarks>
         ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="value"/> is built in THIS frame,
@@ -118,7 +120,8 @@ namespace NumSharp
                 return NDMatrixBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
-            if (values is null) throw new ArgumentNullException(nameof(values));
+            // A null `values` is Python's None, converted where NumPy converts the values: after the index checks
+            // (CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
 
             var ctx = PrepareAxisContext(arr, axis);
             long N = ctx.work.Shape.dimensions[ctx.axis];
@@ -139,7 +142,8 @@ namespace NumSharp
         ///     dtype.</param>
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the value(s) inserted (F-ordered when <paramref name="arr"/> is).</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="arr"/>, <paramref name="obj"/> or <paramref name="value"/> is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null (a null <paramref name="value"/> is Python's <c>None</c>: NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c> or a
+        ///     <c>StringDType</c> NA object, converted after the index checks; int()'s TypeError for an integer array).</exception>
         /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
         /// <remarks>
         ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="value"/> is built in THIS frame,
@@ -169,7 +173,8 @@ namespace NumSharp
         /// <param name="values">The values to insert, cast to <paramref name="arr"/>'s dtype.</param>
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
-        /// <exception cref="ArgumentNullException">An argument is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null (a null <paramref name="values"/> is Python's <c>None</c>, converted after the index checks: int()'s TypeError for an
+        ///     integer array).</exception>
         /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
         /// <remarks>
         ///     A ONE-element sequence takes NumPy's <c>indices.size == 1</c> branch (every value inserted at that one
@@ -186,7 +191,8 @@ namespace NumSharp
                 return NDMatrixBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
-            if (values is null) throw new ArgumentNullException(nameof(values));
+            // A null `values` is Python's None, converted where NumPy converts the values: after the index checks
+            // (CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
 
             var longs = new long[obj.Length];
             for (int i = 0; i < obj.Length; i++) longs[i] = obj[i];
@@ -207,7 +213,8 @@ namespace NumSharp
         ///     dtype.</param>
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the value(s) inserted (F-ordered when <paramref name="arr"/> is).</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="arr"/>, <paramref name="obj"/> or <paramref name="value"/> is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null (a null <paramref name="value"/> is Python's <c>None</c>: NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c> or a
+        ///     <c>StringDType</c> NA object, converted after the index checks; int()'s TypeError for an integer array).</exception>
         /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
         /// <remarks>
         ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="value"/> is built in THIS frame,
@@ -238,7 +245,8 @@ namespace NumSharp
         /// <param name="values">The values to insert, cast to <paramref name="arr"/>'s dtype.</param>
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
-        /// <exception cref="ArgumentNullException">An argument is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null (a null <paramref name="values"/> is Python's <c>None</c>, converted after the index checks: int()'s TypeError for an
+        ///     integer array).</exception>
         /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
         [NDScoped] // same transient set as the long-obj overload
         public static NDArray insert(NDArray arr, long[] obj, NDArray values, int? axis = null)
@@ -248,7 +256,8 @@ namespace NumSharp
                 return NDMatrixBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
-            if (values is null) throw new ArgumentNullException(nameof(values));
+            // A null `values` is Python's None, converted where NumPy converts the values: after the index checks
+            // (CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
 
             var ctx = PrepareAxisContext(arr, axis);
             if (obj.Length == 1)
@@ -266,7 +275,8 @@ namespace NumSharp
         ///     dtype.</param>
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the value(s) inserted (F-ordered when <paramref name="arr"/> is).</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="arr"/>, <paramref name="obj"/> or <paramref name="value"/> is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null (a null <paramref name="value"/> is Python's <c>None</c>: NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c> or a
+        ///     <c>StringDType</c> NA object, converted after the index checks; int()'s TypeError for an integer array).</exception>
         /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
         /// <remarks>
         ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="value"/> is built in THIS frame,
@@ -297,7 +307,8 @@ namespace NumSharp
         ///     dtype.</param>
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the value(s) inserted (F-ordered when <paramref name="arr"/> is).</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="arr"/>, <paramref name="obj"/> or <paramref name="value"/> is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null (a null <paramref name="value"/> is Python's <c>None</c>: NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c> or a
+        ///     <c>StringDType</c> NA object, converted after the index checks; int()'s TypeError for an integer array).</exception>
         /// <exception cref="ValueError">See <see cref="insert(NDArray, NDArray, NDArray, int?)"/>.</exception>
         /// <exception cref="TypeError">See <see cref="insert(NDArray, NDArray, NDArray, int?)"/>.</exception>
         /// <exception cref="IndexError">See <see cref="insert(NDArray, NDArray, NDArray, int?)"/>.</exception>
@@ -337,7 +348,8 @@ namespace NumSharp
         ///     insertion slot.</param>
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
-        /// <exception cref="ArgumentNullException">An argument is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null (a null <paramref name="values"/> is Python's <c>None</c>, converted after the index checks: int()'s TypeError for an
+        ///     integer array).</exception>
         /// <exception cref="ValueError"><paramref name="obj"/> is a boolean mask that is not 1-D, or an index array of more
         ///     than one dimension (NumPy's two texts).</exception>
         /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
@@ -358,7 +370,8 @@ namespace NumSharp
                 return NDMatrixBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
-            if (values is null) throw new ArgumentNullException(nameof(values));
+            // A null `values` is Python's None, converted where NumPy converts the values: after the index checks
+            // (CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
 
             var ctx = PrepareAxisContext(arr, axis);
 
@@ -472,7 +485,14 @@ namespace NumSharp
             // not isinstance(obj, np.ndarray); we always normalise empty regardless,
             // which matches NumPy when obj wasn't an ndarray with shape (0,)).
             if (indices.Length == 0)
+            {
+                // NumPy still runs `new[tuple(slobj)] = values` with the empty index, whose fancy setitem converts the values
+                // into arr's dtype first: None and a C# literal are packed even though nothing is inserted
+                // (np.insert(int_array, [], None) raises int(None)'s TypeError, np.insert(int8_array, [], 1000) the
+                // OverflowError, probed 2.4.2). The packed 0-d is the caller's scope's.
+                NDArray.PackForStore(values, arr.dtype, pyArrayPackRoute: false);
                 return DuplicateArray(arr);
+            }
 
             // Normalize and validate indices.
             for (int i = 0; i < indices.Length; i++)
@@ -615,11 +635,12 @@ namespace NumSharp
         ///     accept an unboxed scalar so callers don't have to construct
         ///     a 0-D ndarray themselves.
         /// </summary>
-        /// <param name="value">The scalar, C# array or collection, or an <see cref="NDArray"/> passed as object.</param>
+        /// <param name="value">The scalar, C# array or collection, or an <see cref="NDArray"/> passed as object; <c>null</c>
+        ///     is Python's <c>None</c>.</param>
         /// <param name="dtype">The target array's dtype.</param>
-        /// <returns><paramref name="value"/> itself when it is an <see cref="NDArray"/>; otherwise its conversion,
-        ///     cast to <paramref name="dtype"/> when the inferred dtype differs.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
+        /// <returns><paramref name="value"/> itself when it is an <see cref="NDArray"/>; <c>null</c> for <c>None</c> (the
+        ///     array overload converts it AFTER the index checks, NumPy's order: <c>np.insert(int_array, 10, None)</c> is the
+        ///     IndexError); otherwise its conversion, cast to <paramref name="dtype"/> when the inferred dtype differs.</returns>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: its callers are the <c>[NDScoped]</c> object-value
         ///     <c>insert</c> overloads, so the conversion that a cast supersedes, and the returned conversion itself,
         ///     are released by the caller's scope. An <see cref="NDArray"/> returned as-is is the caller's and is never
@@ -627,6 +648,8 @@ namespace NumSharp
         [NDScopedCovered]
         private static NDArray ScalarValueAsArray(object value, DType dtype)
         {
+            // None stays null: the array overload's value coercion converts it after the index checks.
+            if (value is null) return null;
             if (value is NDArray nd) return nd; // the caller's array, built before the scope opened: never disposed
             // A StringDType target: NumPy's array(values, dtype=arr.dtype) stores Python objects by setitem.
             if (dtype.Meta is VStringDTypeMeta)
@@ -676,10 +699,13 @@ namespace NumSharp
             // another width is truncated / NUL-padded to arr's (insert('QQQQQQ') into <U4 stores 'QQQQ'). A C# literal
             // (NDArray.WasPythonLiteral) is NumPy's Python scalar, which array(..., dtype=) packs with PyArray_Pack's range
             // checks (np.insert(int8, 1, 1000) raises) after the index check; the packed 0-d is the scope's. A StringDType
-            // target stores a literal by setitem and casts an ndarray (NDVStringMove.StoreValue).
-            NDArray v = arr.Storage.IsVString
-                ? Backends.Strings.NDVStringMove.StoreValue(values, arr.dtype)
-                : NDArray.PackForStore(values, arr.typecode, pyArrayPackRoute: false);
+            // target stores a literal by setitem and casts an ndarray (NDVStringMove.StoreValue). A null is Python's None,
+            // array(None, dtype=arr.dtype): NaN / nan+nanj / False / 'None' / a StringDType NA object, or int(None)'s TypeError.
+            NDArray v = values is null
+                ? NDArray.NoneForStore(arr.dtype)
+                : arr.Storage.IsVString
+                    ? Backends.Strings.NDVStringMove.StoreValue(values, arr.dtype)
+                    : NDArray.PackForStore(values, arr.typecode, pyArrayPackRoute: false);
             if (!v.HasSameElementType(arr))
             {
                 v = v.astype(arr.dtype, copy: true);
@@ -783,10 +809,13 @@ namespace NumSharp
             // Cast dtype — by ELEMENT type (a string's class and width), NumPy's array(values, dtype=arr.dtype). A C#
             // literal (NDArray.WasPythonLiteral) is NumPy's Python scalar: NumPy assigns it through new[tuple(slobj)] =
             // values, whose fancy setitem packs it with PyArray_Pack's range checks; the packed 0-d is the scope's. A
-            // StringDType target stores a literal by setitem and casts an ndarray (NDVStringMove.StoreValue).
-            NDArray v = arr.Storage.IsVString
-                ? Backends.Strings.NDVStringMove.StoreValue(values, arr.dtype)
-                : NDArray.PackForStore(values, arr.typecode, pyArrayPackRoute: false);
+            // StringDType target stores a literal by setitem and casts an ndarray (NDVStringMove.StoreValue). A null is
+            // Python's None, converted into arr's descriptor by that same setitem (int(None)'s TypeError for integers).
+            NDArray v = values is null
+                ? NDArray.NoneForStore(arr.dtype)
+                : arr.Storage.IsVString
+                    ? Backends.Strings.NDVStringMove.StoreValue(values, arr.dtype)
+                    : NDArray.PackForStore(values, arr.typecode, pyArrayPackRoute: false);
             if (!v.HasSameElementType(arr))
             {
                 v = v.astype(arr.dtype, copy: true);

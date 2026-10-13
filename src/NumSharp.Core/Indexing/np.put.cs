@@ -20,13 +20,18 @@ namespace NumSharp
         /// <param name="values">
         ///     Values to write, read in C order. Cast to <paramref name="a"/>'s dtype (NumPy's FORCECAST); a C# literal is
         ///     packed as the Python scalar it stands for (range-checked, never wrapped). Cycles modulo its size — shorter
-        ///     than <paramref name="indices"/> is fine; an empty array writes nothing (NumPy's no-op).
+        ///     than <paramref name="indices"/> is fine; an empty array writes nothing (NumPy's no-op). <c>null</c> is
+        ///     Python's <c>None</c>, converted into <paramref name="a"/>'s dtype (<see cref="NDArray.NoneForStore"/>: NaN,
+        ///     <c>nan+nanj</c>, <c>False</c>, <c>'None'</c>, a <c>StringDType</c> NA object; int()'s TypeError for an integer
+        ///     array — raised before the indices' bounds and even for an empty index array, as NumPy converts first).
         /// </param>
         /// <param name="mode">
         ///     Boundary mode: <c>"raise"</c> (default), <c>"wrap"</c>, or <c>"clip"</c>; <c>null</c> is NumPy's <c>None</c>
         ///     (raise).
         /// </param>
-        /// <exception cref="ArgumentNullException">An argument is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="indices"/> is null.</exception>
+        /// <exception cref="TypeError"><paramref name="values"/> is null (<c>None</c>) and <paramref name="a"/> is an integer
+        ///     (or <c>decimal</c>) array.</exception>
         /// <exception cref="ValueError">A bad <paramref name="mode"/> (NumPy's <c>clipmode_parser</c> texts, see
         ///     <see cref="ClipModeConverter"/>) — reported first, as NumPy parses it with the arguments —, then a read-only
         ///     <paramref name="a"/> (<c>put: output array is read-only</c>).</exception>
@@ -54,8 +59,8 @@ namespace NumSharp
             using var plain = NDMatrixBoundary.PlainFor(a, indices, values);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
-            if (values is null) throw new ArgumentNullException(nameof(values));
 
+            // A null `values` is Python's None: PutTo converts it at NumPy's conversion point (PutValuesLikeNumPy).
             PutTo(a, indices, values, mode);
         }
 
@@ -65,10 +70,13 @@ namespace NumSharp
         /// <param name="a">Target array (modified in place).</param>
         /// <param name="index">The flat index into the C-order flattening of <paramref name="a"/>.</param>
         /// <param name="value">The value to write. A C# number is packed into <paramref name="a"/>'s dtype by NumPy's
-        ///     <c>PyArray_Pack</c> rules for its kind (<see cref="NDArray.AsStoreValue"/>); anything else is converted with
+        ///     <c>PyArray_Pack</c> rules for its kind (<see cref="NDArray.AsStoreValue"/>); <c>null</c> is Python's
+        ///     <c>None</c> (<see cref="NDArray.NoneForStore"/>); anything else is converted with
         ///     <see cref="np.asanyarray(in object, DType, string)"/> and cast.</param>
         /// <param name="mode">Boundary mode: <c>"raise"</c> (default), <c>"wrap"</c>, or <c>"clip"</c>.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="value"/> is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="TypeError"><paramref name="value"/> is null (<c>None</c>) and <paramref name="a"/> is an integer
+        ///     (or <c>decimal</c>) array.</exception>
         /// <exception cref="ValueError">A bad <paramref name="mode"/>, then a read-only <paramref name="a"/>.</exception>
         /// <exception cref="IndexError"><paramref name="a"/> is empty, or <paramref name="index"/> is out of bounds under
         ///     <c>mode="raise"</c>.</exception>
@@ -86,10 +94,9 @@ namespace NumSharp
         {
             using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (a is null) throw new ArgumentNullException(nameof(a));
-            if (value is null) throw new ArgumentNullException(nameof(value));
 
             // NumPy converts the index (a Python int) and the value inside PyArray_PutTo, after the mode, the
-            // writeability and the empty-target checks: PutTo runs them in that order.
+            // writeability and the empty-target checks: PutTo runs them in that order (a null value is None, converted there).
             PutTo(a, NDArray.Scalar(index), value, mode);
         }
 
@@ -208,6 +215,11 @@ namespace NumSharp
         [NDScopedCovered]
         private static NDArray PutValuesLikeNumPy(object values, NDArray a)
         {
+            // Python's None: PyArray_FromAny(None, a.dtype, FORCECAST) is one element of None's setitem value in a's
+            // descriptor (any dtype: NaN, nan+nanj, False, 'None' truncated, a StringDType NA object; int(None)'s TypeError).
+            if (values is null)
+                return NDArray.NoneForStore(a.dtype);
+
             // A StringDType target: Python objects (literals, boxed values, a list's elements) are stored by setitem, an
             // ndarray is cast (NDVStringMove.StoreValue).
             if (a.Storage.IsVString)

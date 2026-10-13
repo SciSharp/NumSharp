@@ -297,12 +297,23 @@ namespace NumSharp.Tests.Casting
             act.Should().Throw<ValueError>().WithMessage("new type is larger than original type");
         }
 
+        /// <summary>
+        ///     A null value is Python's <c>None</c> (P1.7b): packed into the FIELD's dtype — an int16 field raises
+        ///     <c>int(None)</c>'s TypeError (NumPy 2.4.2: <c>w.setfield(None, np.int16, 0)</c>), a float32 field of a float64
+        ///     array stores float32 NaN's bits (0x7fc00000) in the low four bytes of each element.
+        /// </summary>
         [TestMethod]
         public void SetField_NullValue_Raises()
         {
             var w = np.array(new int[] { 1, 2, 3 });
             Action act = () => w.setfield(null, NPTypeCode.Int16, 0);
-            act.Should().Throw<ArgumentNullException>();
+            act.Should().Throw<TypeError>()
+                .WithMessage("int() argument must be a string, a bytes-like object or a real number, not 'NoneType'");
+
+            var d = np.zeros(new Shape(2), NPTypeCode.Double);
+            d.setfield(null, NPTypeCode.Single, 0);
+            BitConverter.DoubleToInt64Bits(d.GetDouble(0)).Should().Be(0x7FC00000L);
+            BitConverter.DoubleToInt64Bits(d.GetDouble(1)).Should().Be(0x7FC00000L);
         }
 
         // ---- dtype overloads ---------------------------------------------------------------------

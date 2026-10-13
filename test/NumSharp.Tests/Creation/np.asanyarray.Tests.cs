@@ -494,10 +494,19 @@ namespace NumSharp.Tests.Creation
 
         #region Error cases
 
+        /// <summary>
+        ///     A null is Python's <c>None</c> (P1.7b): without a dtype NumPy builds an object array, which NumSharp refuses
+        ///     (<see cref="NotSupportedException"/>); with one it is <c>np.asanyarray(None, dtype)</c>'s 0-d value — NaN for
+        ///     float64 (the positive quiet NaN), <c>int(None)</c>'s TypeError for an integer dtype.
+        /// </summary>
         [TestMethod]
         public void Null_ThrowsArgumentNullException()
         {
-            Assert.ThrowsException<ArgumentNullException>(() => np.asanyarray(null));
+            Assert.ThrowsException<NotSupportedException>(() => np.asanyarray(null));
+            var nan = np.asanyarray(null, np.float64);
+            nan.ndim.Should().Be(0);
+            BitConverter.DoubleToInt64Bits(nan.GetDouble()).Should().Be(0x7FF8_0000_0000_0000L);
+            Assert.ThrowsException<TypeError>(() => np.asanyarray(null, np.int32));
         }
 
         [TestMethod]

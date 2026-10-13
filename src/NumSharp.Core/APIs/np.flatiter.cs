@@ -186,12 +186,13 @@ namespace NumSharp
             /// </summary>
             /// <param name="flat">A normalized flat C-order position.</param>
             /// <param name="value">The value: a C# number (a Python or NumPy scalar in the boundary map), a 0-d array, a
-            ///     C# literal's 0-d array.</param>
+            ///     C# literal's 0-d array, or <c>null</c> — Python's <c>None</c> (NaN, <c>nan+nanj</c>, <c>False</c>,
+            ///     <c>'None'</c>, a <c>StringDType</c> NA object; an integer dtype's <c>int(None)</c> failure is the same
+            ///     "Error setting single item of array." as any other).</param>
             /// <exception cref="ValueError">The base is read-only ("underlying array is read-only"), or the value cannot be
             ///     packed into the base's dtype — a Python int out of range, a float NaN / infinity into an integer, a
             ///     complex into a real dtype, a sequence — all "Error setting single item of array." as in NumPy, the
             ///     specific error kept as the inner exception.</exception>
-            /// <exception cref="ArgumentNullException"><paramref name="value"/> is null (house convention).</exception>
             /// <remarks>An exact-dtype value goes straight to the stride-aware <c>SetAtIndex</c> (no packing, no
             ///     allocation — the hot path); <c>SetAtIndex</c> itself never converts.</remarks>
             private unsafe void SetScalar(long flat, object value)
@@ -208,19 +209,32 @@ namespace NumSharp
                     return;
                 }
 
-                // A null value is a caller bug in NumSharp (house convention, as in fill and np.fill_diagonal); NumPy would
-                // store NaN into a float array (float(None) is NaN in its setitem) and raise for the rest.
-                if (value is null)
-                    throw new ArgumentNullException(nameof(value));
-
                 var tc = _base.typecode;
+                if (tc == NPTypeCode.String)
+                {
+                    // A text element: its own setitem packs the value (S / U: a str encoded and truncated, a number's or
+                    // None's str(); StringDType: stringdtype_setitem — the NA object, a str, or a value's str() under
+                    // coercion), and any failure is the pack failure NumPy rewords (a non-ASCII str into S, coerce=False's
+                    // refusal, a sequence). PyArray_Pack is the same element setter, so no numeric packing applies here.
+                    try
+                    {
+                        _base.SetAtIndex(value, flat);
+                    }
+                    catch (Exception e) when (e is OverflowException || e is ValueError || e is TypeError)
+                    {
+                        throw new ValueError("Error setting single item of array.", e);
+                    }
+                    return;
+                }
+
                 byte* slot = stackalloc byte[ReductionInitial.SlotBytes];
                 try
                 {
-                    // PyArray_Pack (ReductionInitial.TryPack): a Python int range-checked, a float truncated then
+                    // PyArray_Pack (ReductionInitial.PackStore): a Python int range-checked, a float truncated then
                     // range-checked, a NumPy scalar (Half, char) int()-converted into a SIGNED integer and cast into the
-                    // rest, a bool dtype takes the value's truth, a 0-d array cast.
-                    ReductionInitial.TryPack(value, tc, new Span<byte>(slot, ReductionInitial.SlotBytes));
+                    // rest, a bool dtype takes the value's truth, a 0-d array cast, None its setitem value (NaN,
+                    // nan+nanj, False — or int(None)'s TypeError, which the catch below rewords like every pack error).
+                    ReductionInitial.PackStore(value, tc, new Span<byte>(slot, ReductionInitial.SlotBytes));
                 }
                 catch (Exception e) when (e is OverflowException || e is ValueError || e is TypeError)
                 {
@@ -240,35 +254,43 @@ namespace NumSharp
             public object this[long i]
             {
                 get => GetScalar(Normalize(i));
-                set => SetScalar(Normalize(i), value);
+                set
+                {
+                    // iter_ass_subscript checks the base's writeability FIRST, then the index's bounds, then packs.
+                    NumSharpException.ThrowIfNotWriteable(_base.Shape, "underlying array");
+                    SetScalar(Normalize(i), value);
+                }
             }
 
-            /// <summary>Fancy get/set by a slice string (NumPy's <c>f["1:4"]</c> / <c>f["::2"]</c>). Set writes through.</summary>
+            /// <summary>Fancy get/set by a slice string (NumPy's <c>f["1:4"]</c> / <c>f["::2"]</c>). Set writes through;
+            ///     the value is converted BEFORE the slice is resolved, as NumPy's <c>iter_ass_subscript</c> does.</summary>
             public NDArray this[string range]
             {
                 get => Gather(ResolveSlice(range));
-                set => Scatter(ResolveSlice(range), value);
+                set => Scatter(() => ResolveSlice(range), value);
             }
 
-            /// <summary>Fancy get/set by integer indices (NumPy's <c>f[[1,3,5]]</c>). Negatives wrap; set writes through.</summary>
+            /// <summary>Fancy get/set by integer indices (NumPy's <c>f[[1,3,5]]</c>). Negatives wrap; set writes through;
+            ///     the value is converted BEFORE the indices are bounds-checked (<c>a.flat[[9]] = None</c> on an integer array
+            ///     is the TypeError, as in NumPy).</summary>
             public NDArray this[int[] indices]
             {
                 get => Gather(NormalizeMany(indices));
-                set => Scatter(NormalizeMany(indices), value);
+                set => Scatter(() => NormalizeMany(indices), value);
             }
 
             /// <inheritdoc cref="this[int[]]"/>
             public NDArray this[long[] indices]
             {
                 get => Gather(NormalizeMany(indices));
-                set => Scatter(NormalizeMany(indices), value);
+                set => Scatter(() => NormalizeMany(indices), value);
             }
 
             /// <inheritdoc cref="this[int[]]"/>
             public NDArray this[NDArray indices]
             {
                 get => Gather(NormalizeMany(indices));
-                set => Scatter(NormalizeMany(indices), value);
+                set => Scatter(() => NormalizeMany(indices), value);
             }
 
             /// <summary>
@@ -338,36 +360,47 @@ namespace NumSharp
             ///     rather than range-checks) into the given flat positions, through the base's strides; a
             ///     single value is broadcast to every position.
             /// </summary>
-            /// <param name="positions">Validated flat C-order positions (from <see cref="ResolveSlice"/> /
-            /// <see cref="NormalizeMany(long[])"/>).</param>
-            /// <param name="values">The caller's values — one, or exactly one per position; never released here.</param>
+            /// <param name="resolvePositions">Resolves the validated flat C-order positions (<see cref="ResolveSlice"/> /
+            /// <see cref="NormalizeMany(long[])"/>) — called AFTER the value's conversion, NumPy's order: its
+            /// <c>iter_ass_subscript</c> converts the value at <c>skip:</c> before it reads the slice or the index array, so a
+            /// value's error wins over an out-of-bounds index (<c>a.flat[[9]] = None</c> on an integer array is the
+            /// TypeError).</param>
+            /// <param name="values">The caller's values — one, or exactly one per position; never released here.
+            /// <c>null</c> is Python's <c>None</c> (one value, <see cref="NDArray.NoneForStore"/>).</param>
             /// <exception cref="ValueError">The base is read-only ("underlying array is read-only", raised even
             /// for zero positions, like NumPy's <c>iter_ass_subscript</c>), or the value count is neither 1 nor
             /// the position count.</exception>
-            private void Scatter(long[] positions, NDArray values)
+            /// <exception cref="TypeError"><paramref name="values"/> is null and the base is an integer (or
+            /// <c>decimal</c>) array: <c>int(None)</c>'s own text, raised even for zero positions.</exception>
+            /// <exception cref="IndexError">A position is out of bounds (raised by <paramref name="resolvePositions"/>).</exception>
+            private void Scatter(Func<long[]> resolvePositions, NDArray values)
             {
                 // Raised at ENTRY like NumPy's iter_ass_subscript — even a zero-length fancy set on a
-                // read-only base refuses (SetScalar's own guard would never run for n == 0).
+                // read-only base refuses.
                 NumSharpException.ThrowIfNotWriteable(_base.Shape, "underlying array");
 
                 // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar: iter_ass_subscript converts the value
                 // with PyArray_FromAny(val, dtype, FORCECAST), which packs a Python scalar with PyArray_Pack's range checks
                 // (a.flat[1:3] = 1000 on int8 raises "Python integer 1000 out of bounds for int8", even for zero
-                // positions). An ndarray value is cast below.
-                var packed = NDArray.PackForStore(values, _base.typecode, pyArrayPackRoute: false);
+                // positions). An ndarray value is cast below. A null is Python's None, converted the same way into the
+                // base's descriptor (its own errors, NOT reworded: only the integer index rewords them).
+                var packed = NDArray.PackForStore(values, _base.dtype, pyArrayPackRoute: false);
                 try
                 {
+                    long[] positions = resolvePositions();
                     long n = positions.Length;
                     bool broadcast = packed.size == 1;
                     if (!broadcast && packed.size != n)
                         throw new ValueError(
                             $"cannot assign {packed.size} input values to the {n} output values where the mask is true");
-                    // Cast to the base dtype once (numpy casts on flat assignment); SetValue does not convert.
+                    // Cast to the base dtype once (numpy casts on flat assignment); SetAtIndex does not convert.
                     // astype(dtype) always COPIES, so the cast is this method's temp: every element is boxed
                     // out of it below, and it is released on exit instead of stranding a buffer per set.
                     using var casted = packed.astype(_base.dtype);
+                    // Each element is already the base's dtype (a text element the base's own class and width, or a
+                    // StringDType element / NA object), so it is stored as it is — no packing, and no rewording of errors.
                     for (long k = 0; k < n; k++)
-                        SetScalar(positions[k], broadcast ? casted.GetAtIndex(0) : casted.GetAtIndex(k));
+                        _base.SetAtIndex(broadcast ? casted.GetAtIndex(0) : casted.GetAtIndex(k), positions[k]);
                 }
                 finally
                 {
