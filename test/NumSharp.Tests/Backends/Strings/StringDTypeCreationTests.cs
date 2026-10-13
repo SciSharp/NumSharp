@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using NumSharp.Backends;
 
@@ -265,11 +266,17 @@ namespace NumSharp.Tests.Backends.Strings
                 it[1]["..."] = "w"; // the current element's 0-d view
             V(output).Should().Equal(new object[] { "w", "w" });
 
-            // Buffering or casting a StringDType operand is a later package (P1.7): refused loudly.
-            Action buffered = () => np.nditer(t, flags: new[] { "refs_ok", "buffered" });
-            buffered.Should().Throw<NotSupportedException>().WithMessage("An iterator that buffers or casts a StringDType operand*");
-            Action cast = () => np.nditer(new NDArray[] { t }, flags: new[] { "refs_ok" }, op_dtypes: new DType[] { TN });
-            cast.Should().Throw<NotSupportedException>().WithMessage("An iterator that buffers or casts a StringDType operand*");
+            // Buffering a StringDType operand works (strings phase 1, P1.7; StringDTypeIterationTests has the matrix), and a
+            // cast to another StringDType descriptor needs a copy or a buffer, as in NumPy (the descriptors differ).
+            using (var buffered = np.nditer(t, flags: new[] { "refs_ok", "buffered" }))
+            {
+                var seen = new List<object>();
+                foreach (var step in buffered)
+                    seen.Add(step[0].item());
+                seen.Should().Equal("a", "b");
+            }
+            Action cast = () => np.nditer(new NDArray[] { t }, flags: new[] { "refs_ok" }, op_dtypes: new DType[] { TN }).Dispose();
+            cast.Should().Throw<TypeError>().WithMessage("Iterator operand required copying or buffering, but neither copying nor buffering was enabled");
         }
 
         /// <summary>

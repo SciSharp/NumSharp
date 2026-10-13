@@ -108,5 +108,26 @@ namespace NumSharp.Tests.Creation
             p[0] = 111L;
             c.GetInt64(0).Should().Be(111L);
         }
+
+        /// <summary>
+        ///     A sub-array of a stretched result keeps its write access even where it is still broadcast (NumPy views
+        ///     inherit WRITEABLE): with <c>a, b = np.broadcast_arrays(x[:, None], x)</c>, <c>a[0]</c> has stride <c>(0,)</c>,
+        ///     reports <c>writeable=True</c>, and <c>a[0][...] = 9</c> writes x[0] (NumPy: <c>[9 2 3]</c>). It used to be
+        ///     flagged read-only, so the store raised "assignment destination is read-only".
+        /// </summary>
+        [TestMethod]
+        public void StretchedSubArray_InheritsWriteable()
+        {
+            var x = np.array(new long[] { 1, 2, 3 });
+            var (a, b) = np.broadcast_arrays(x[Slice.All, Slice.NewAxis], x);
+            var row = a[0];
+            row.Shape.strides.Should().Equal(new long[] { 0 });
+            row.Shape.IsBroadcasted.Should().BeTrue();
+            row.Shape.IsWriteable.Should().BeTrue("a sub-array of a writeable broadcast result inherits its write access");
+            row[Slice.Ellipsis] = 9L;
+            x.GetInt64(0).Should().Be(9L);
+            x.GetInt64(1).Should().Be(2L);
+            x.GetInt64(2).Should().Be(3L);
+        }
     }
 }

@@ -113,5 +113,53 @@ namespace NumSharp.Tests
 
             output.flatten().ToArray<long>().Should().Equal(NditerReduceExpected);
         }
+
+        /// <summary>
+        ///     The reduction operand ITSELF cast (a float64 output iterated through a float32 buffer, found 2026-10-13 while
+        ///     adding StringDType buffering): NumPy 2.4.2 sums the columns, <c>[3.0, 5.0, 7.0]</c>, and with the output on the
+        ///     iterator's axis 0 the rows, <c>[3.0, 12.0]</c>. NumSharp's reduce write-back
+        ///     (<c>NDIter.CopyReduceBuffersToArrays</c>) copies the buffer's BYTES into the output without the cast, so the
+        ///     float32 sums land as float64 bit patterns (<c>[2048.0004901885986, 5.4E-315, 0.0]</c>): silent garbage. A
+        ///     StringDType or fixed-width text reduction operand takes the cast there (the string run transfer).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "nditer-buffered-reduce")]
+        public void Nditer_BufferedReduce_CastReductionOperand_WritesTheCastSums()
+        {
+            foreach (var (axes, expected) in new (int[], double[])[] { (new[] { -1, 0 }, new[] { 3.0, 5.0, 7.0 }), (new[] { 0, -1 }, new[] { 3.0, 12.0 }) })
+            {
+                using var a = np.arange(6.0).reshape(2, 3);
+                using var output = np.zeros(new Shape(expected.Length));
+                using (var it = np.nditer(new[] { a, output }, new[] { "buffered", "reduce_ok" },
+                           new[] { new[] { "readonly" }, new[] { "readwrite" } }, op_axes: new[] { new[] { 0, 1 }, axes },
+                           op_dtypes: new DType[] { null, "f4" }, casting: "unsafe"))
+                {
+                    foreach (var v in it)
+                        v[1][Slice.Ellipsis] = v[1] + v[0];
+                }
+
+                output.ToArray<double>().Should().Equal(expected, $"op_axes [{string.Join(", ", axes)}]");
+            }
+        }
+
+        /// <summary>
+        ///     A StringDType reduction through a cast buffer shorter than the reduced axis (buffer size 3, found 2026-10-13):
+        ///     NumPy 2.4.2 concatenates the columns, <c>['ac', 'bd']</c>; NumSharp's legacy buffered-reduce loop gives
+        ///     <c>['acc', '']</c> — the same short-buffer defect as the numeric pins above, reached by text.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "nditer-buffered-reduce")]
+        public void Nditer_BufferedReduce_StringDType_SmallBuffer_ConcatenatesTheColumns()
+        {
+            using var a = np.array(new[,] { { "a", "b" }, { "c", "d" } }, np.dtypes.StringDType());
+            using var output = np.array(new[] { "", "" }, np.dtypes.StringDType());
+            using (var it = np.nditer(new[] { a, output }, new[] { "refs_ok", "buffered", "reduce_ok" },
+                       new[] { new[] { "readonly" }, new[] { "readwrite" } }, op_axes: new[] { new[] { 0, 1 }, new[] { -1, 0 } },
+                       op_dtypes: new DType[] { null, np.dtypes.StringDType(na_object: null) }, casting: "unsafe", buffersize: 3))
+            {
+                foreach (var v in it)
+                    v[1][Slice.Ellipsis] = (string)v[1].item() + (string)v[0].item();
+            }
+
+            NDArray.AsStringArray(output).Should().Equal("ac", "bd");
+        }
     }
 }

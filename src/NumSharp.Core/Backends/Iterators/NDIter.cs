@@ -248,11 +248,9 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        ///     NumPy's reference check of <c>npyiter_prepare_one_operand</c>, plus the refusal of what NumSharp's iterator cannot
-        ///     do with such operands yet: an operand (or requested descriptor) that HOLDS REFERENCES — a NEP 55 <c>StringDType</c>
-        ///     array, whose 16-byte cells point into their buffer's allocator — needs <see cref="NDIterGlobalFlags.REFS_OK"/>;
-        ///     with it, the iterator may walk the operand in place, but its buffers and casts copy elements as raw bytes, which
-        ///     would move cells away from their allocator.
+        ///     NumPy's reference check of <c>npyiter_prepare_one_operand</c>: an operand (or requested descriptor) that HOLDS
+        ///     REFERENCES — a NEP 55 <c>StringDType</c> array, whose 16-byte cells point into their buffer's allocator — needs
+        ///     <see cref="NDIterGlobalFlags.REFS_OK"/>.
         /// </summary>
         /// <param name="nop">The number of operands.</param>
         /// <param name="op">The operands (null entries are allocated).</param>
@@ -260,23 +258,20 @@ namespace NumSharp.Backends.Iteration
         /// <param name="opDescrs">The requested descriptors, or null.</param>
         /// <exception cref="TypeError">A reference operand without <see cref="NDIterGlobalFlags.REFS_OK"/> (NumPy's text:
         ///     <c>Iterator operand or requested dtype holds references, but the NPY_ITER_REFS_OK flag was not enabled</c>).</exception>
-        /// <exception cref="NotSupportedException">A <c>StringDType</c> operand under <see cref="NDIterGlobalFlags.BUFFERED"/>,
-        ///     or one cast to another descriptor (the iterator's buffered casts of StringDType are strings phase 1, P1.7).</exception>
+        /// <remarks>
+        ///     With the flag, a <c>StringDType</c> operand iterates in place, buffered and cast like any other: its buffer
+        ///     transfers duplicate each string into the destination's allocator, or run the <c>StringDType</c> cast of the pair
+        ///     (<see cref="NDIterVStringContext"/>, attached once the operands are final). This refused buffering and casting
+        ///     until strings phase 1, P1.7.
+        /// </remarks>
         private static void ThrowIfReferenceOperandsUnsupported(int nop, NDArray[] op, NDIterGlobalFlags flags, DType[]? opDescrs)
         {
             for (int i = 0; i < nop; i++)
             {
-                var operandDescr = op[i] is null ? null : op[i].dtype;
                 var requested = opDescrs != null && i < opDescrs.Length ? opDescrs[i] : null;
                 bool refs = (op[i] is not null && op[i].Storage.IsVString) || requested?.Meta is VStringDTypeMeta;
-                if (!refs)
-                    continue;
-                if ((flags & NDIterGlobalFlags.REFS_OK) == 0)
+                if (refs && (flags & NDIterGlobalFlags.REFS_OK) == 0)
                     throw new TypeError("Iterator operand or requested dtype holds references, but the NPY_ITER_REFS_OK flag was not enabled");
-                bool cast = operandDescr is not null && requested is not null && !requested.Equals(operandDescr);
-                if ((flags & NDIterGlobalFlags.BUFFERED) != 0 || cast)
-                    throw UnmanagedStorage.VStringNotSupported(operandDescr ?? requested,
-                        "An iterator that buffers or casts a StringDType operand");
             }
         }
 
@@ -1251,6 +1246,12 @@ namespace NumSharp.Backends.Iteration
 
             // Update contiguity flags
             UpdateContiguityFlags();
+
+            // NEP 55 StringDType operands: the descriptors and allocators of their transfers, attached once the operands are
+            // final (an allocated output, a copy-route temporary or a COPY_IF_OVERLAP copy already in its slot) and before the
+            // first buffer allocation, which gives a StringDType buffer an allocator of its own.
+            if (plan != null)
+                NDIterVStringContext.AttachIfNeeded(ref *_state, _operands ?? op, plan.IterDescrs);
 
             // Set up buffering if requested
             if ((flags & NDIterGlobalFlags.BUFFERED) != 0)
@@ -3868,8 +3869,13 @@ namespace NumSharp.Backends.Iteration
                 // Just copy CoreSize elements from buffer to array
                 if ((opFlags & NDIterOpFlags.REDUCE) != 0)
                 {
-                    // Simple copy - buffer[0:CoreSize] to dst[0:CoreSize]
-                    Buffer.MemoryCopy(buffer, dst, copyCount * elemSize, copyCount * elemSize);
+                    // Simple copy - buffer[0:CoreSize] to dst[0:CoreSize]. A string operand moves through the string run
+                    // transfer: a fixed-width cast changes the element width, and a StringDType cell means nothing outside
+                    // its buffer's allocator (each string is duplicated into the array's).
+                    if (_state->IsStringOp(op))
+                        NDIterBufferManager.CopyStringRun(ref *_state, op, (byte*)buffer, 1, (byte*)dst, 1, copyCount, toBuffer: false);
+                    else
+                        Buffer.MemoryCopy(buffer, dst, copyCount * elemSize, copyCount * elemSize);
                 }
                 else
                 {
@@ -4828,6 +4834,7 @@ namespace NumSharp.Backends.Iteration
 
                 // Copy per-operand arrays
                 int nop = _state->NOp;
+                var vstrings = NDIterVStringContext.Of(ref *_state);
                 for (int op = 0; op < nop; op++)
                 {
                     newStatePtr->DataPtrs[op] = _state->DataPtrs[op];
@@ -4855,7 +4862,10 @@ namespace NumSharp.Backends.Iteration
                             throw new OutOfMemoryException("Failed to allocate iterator copy buffer.");
 
                         var bytes = _state->BufferSize * _state->ElementSizes[op];
-                        Buffer.MemoryCopy(sourceBuffer, buffer, bytes, bytes);
+                        // A StringDType buffer's cells point into the source buffer's allocator: they are duplicated below
+                        // into a new allocator (CloneForCopy), never copied as bytes.
+                        if (vstrings == null || !vstrings.IsBufferVString(op))
+                            Buffer.MemoryCopy(sourceBuffer, buffer, bytes, bytes);
                         newStatePtr->Buffers[op] = (long)buffer;
 
                         var dataPtr = _state->DataPtrs[op];
@@ -4865,6 +4875,10 @@ namespace NumSharp.Backends.Iteration
                             newStatePtr->DataPtrs[op] = (long)buffer + (dataPtr - bufferStart);
                     }
                 }
+
+                // The copy's StringDType context: the same descriptors and array allocators, and its own allocator per
+                // StringDType buffer with every buffered string duplicated (NumPy's copy duplicates its buffers too).
+                vstrings?.CloneForCopy(ref *_state, ref *newStatePtr);
 
                 // Create new iterator owning the state
                 return new NDIterRef

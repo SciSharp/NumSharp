@@ -141,8 +141,19 @@ owns the allocator, so views keep it alive). Rules a new route must keep:
 - NumPy 2.4.2 bugs on `T` that NumSharp does not reproduce (pinned by unit tests, kept out of the corpus): `np.place`
   segfaults, `np.choose` / `np.put` / `np.putmask` copy cells raw, `bytes → T` skips UTF-8 validation, `T → complex` puts the
   real part into the imaginary part, a short cell copied onto itself (`a[...] = a[:1]`) becomes `''`.
-- Still refused loudly (P1.7 / phase 2): np.nditer buffering or casting a `T` operand (allocating one works), `.npy`,
-  `loadtxt` / `savetxt`, numpy.ma with `T`, and computation (comparisons, `np.sum`, sorting, `np.strings`).
+- **np.nditer buffers and casts a `T` operand (P1.7, 2026-10-13).** Each buffer of a `T` side owns a `VStringAllocator`
+  (NumPy's allocator belongs to the descriptor, NumSharp's to the cells' memory block): `NDIterVStringContext`
+  (`Backends/Iterators/NDIter.VString.cs`), held by the state as a GCHandle and freed in `FreeDimArrays`; transfers are
+  `NDVStringCasting.TransferRun` (duplicate, or the cast of the pair); `copy()` duplicates the buffered strings. The
+  setter `it[i] = value` is `a[...] = value`. Trap: a contiguous operand without a cast is iterated IN PLACE even with
+  `buffered` (BUFNEVER) — test buffers with a transpose walked in C order or a cast. NumPy 2.4.2 raises `MemoryError` for
+  a buffered `T` input with an allocated `T` output; NumSharp returns the values. Rode along: a WRITEABLE broadcast storage's
+  sub-arrays keep write access (`UnmanagedStorage.GetData`, the mirror rule `Alias` had), so a reduce operand's stride-0
+  external-loop chunk takes `y[...] = v`; `None` into fixed-width text stores `'None'`; `__setitem__` stores what the
+  indexer stores (a C# scalar is a Python scalar). Gates `StringDTypeIterationTests`, `TextNoneStoreTests`.
+- Still refused loudly (P1.7 / phase 2): `.npy`, `loadtxt` / `savetxt`, numpy.ma with `T`, and computation (comparisons,
+  `np.sum`, sorting, `np.strings`). `None` into a NUMERIC array is refused too (NumPy stores NaN / False, TypeError for
+  integers).
 - **The pythonnet bridge carries text (P1.8, 2026-10-13; owner's decision D7 = NumPy's C API).** `S` / `U` are ordinary
   buffers and VIEW both ways (`<U1` and a 4-byte `wchar_t` buffer import as `U1`, never `Char` — breaking; big-endian `U`
   copies byte-swapped; `np.str_` / `np.bytes_` are 0-d `U` / `S`). A `T` array crosses as an exact COPY through numpy's

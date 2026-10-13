@@ -254,34 +254,87 @@ namespace NumSharp
         /// Python-compatible __setitem__ method with integer index.
         /// </summary>
         /// <param name="index">Index along the first axis.</param>
-        /// <param name="value">Value to set (scalar or NDArray).</param>
+        /// <param name="value">Value to set — an NDArray, a C# scalar (NumPy's Python scalar), a C# array or list, or null
+        ///     (Python's <c>None</c>); see <see cref="SetItemValue"/>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null and this is a numeric array.</exception>
+        /// <exception cref="OverflowException">A C# integer outside this array's integer dtype (NumPy's OverflowError).</exception>
+        /// <exception cref="ValueError">The value does not broadcast to the selection, or does not parse into its dtype.</exception>
         public void __setitem__(int index, object value)
         {
-            var arr = value as NDArray ?? np.asanyarray(value);
-            this[index] = arr;
+            var arr = SetItemValue(value);
+            try
+            {
+                this[index] = arr;
+            }
+            finally
+            {
+                // The 0-d array made for a C# scalar is this call's own temporary (the store copies from it).
+                if (!ReferenceEquals(arr, value))
+                    arr?.Dispose();
+            }
         }
 
         /// <summary>
         /// Python-compatible __setitem__ method with long index.
         /// </summary>
         /// <param name="index">Index along the first axis.</param>
-        /// <param name="value">Value to set (scalar or NDArray).</param>
+        /// <param name="value">Value to set — an NDArray, a C# scalar (NumPy's Python scalar), a C# array or list, or null
+        ///     (Python's <c>None</c>); see <see cref="SetItemValue"/>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null and this is a numeric array.</exception>
+        /// <exception cref="OverflowException">A C# integer outside this array's integer dtype (NumPy's OverflowError).</exception>
+        /// <exception cref="ValueError">The value does not broadcast to the selection, or does not parse into its dtype.</exception>
         public void __setitem__(long index, object value)
         {
-            var arr = value as NDArray ?? np.asanyarray(value);
-            this[index] = arr;
+            var arr = SetItemValue(value);
+            try
+            {
+                this[index] = arr;
+            }
+            finally
+            {
+                // The 0-d array made for a C# scalar is this call's own temporary (the store copies from it).
+                if (!ReferenceEquals(arr, value))
+                    arr?.Dispose();
+            }
         }
 
         /// <summary>
         /// Python-compatible __setitem__ method with slice string.
         /// </summary>
         /// <param name="slice">Slice specification.</param>
-        /// <param name="value">Value to set (scalar or NDArray).</param>
+        /// <param name="value">Value to set — an NDArray, a C# scalar (NumPy's Python scalar), a C# array or list, or null
+        ///     (Python's <c>None</c>); see <see cref="SetItemValue"/>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null and this is a numeric array.</exception>
+        /// <exception cref="OverflowException">A C# integer outside this array's integer dtype (NumPy's OverflowError).</exception>
+        /// <exception cref="ValueError">The value does not broadcast to the selection, or does not parse into its dtype.</exception>
         public void __setitem__(string slice, object value)
         {
-            var arr = value as NDArray ?? np.asanyarray(value);
-            this[slice] = arr;
+            var arr = SetItemValue(value);
+            try
+            {
+                this[slice] = arr;
+            }
+            finally
+            {
+                // The 0-d array made for a C# scalar is this call's own temporary (the store copies from it).
+                if (!ReferenceEquals(arr, value))
+                    arr?.Dispose();
+            }
         }
+
+        /// <summary>
+        ///     The value of a <c>__setitem__</c> call as NumPy's <c>ndarray.__setitem__</c> receives it, so that
+        ///     <c>a.__setitem__(i, v)</c> stores exactly what <c>a[i] = v</c> stores: an <see cref="NDArray"/> as it is; a C#
+        ///     number, bool or string as the Python scalar it stands for (<see cref="FromPythonOperand"/>: NEP 50 weak, stored
+        ///     by setitem's range-checked pack — <c>__setitem__(0, 300)</c> into an int8 array raises NumPy's OverflowError
+        ///     where a plain 0-d int32 array would wrap to 44); a C# <see cref="Half"/> or <see cref="char"/> as the NumPy
+        ///     scalar it stands for; any other object (a C# array, a list) through <c>np.asanyarray</c>.
+        /// </summary>
+        /// <param name="value">The value, or null for Python's <c>None</c> (passed on as null: a text array stores it, a numeric
+        ///     array refuses it).</param>
+        /// <returns>The value as an array, or null.</returns>
+        private static NDArray SetItemValue(object value)
+            => value is null ? null : FromPythonOperand(value);
 
         #endregion
     }

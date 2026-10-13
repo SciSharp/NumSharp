@@ -212,6 +212,16 @@ namespace NumSharp.Backends.Iteration
         /// <summary><see cref="OpStringKinds"/> bit: the operand array's own descriptor is <c>U</c> (UCS-4 units).</summary>
         public const byte StringSourceUnicode = 2;
 
+        /// <summary>
+        ///     <see cref="OpStringKinds"/> bit: the operand's iteration (buffer) descriptor is a NEP 55 <c>StringDType</c>. Its
+        ///     16-byte cells look like an <c>|S16</c> element to the type code and the element size, so this bit is what keeps a
+        ///     buffer transfer from moving them as bytes (a cell means nothing without its buffer's allocator).
+        /// </summary>
+        public const byte StringBufferVString = 4;
+
+        /// <summary><see cref="OpStringKinds"/> bit: the operand array's own descriptor is a NEP 55 <c>StringDType</c>.</summary>
+        public const byte StringSourceVString = 8;
+
         /// <summary>Element sizes for each operand (based on buffer dtype). Size = NOp.</summary>
         public int* ElementSizes;
 
@@ -257,6 +267,13 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>Buffer strides (always element size for contiguous buffers). Size = NOp.</summary>
         public long* BufStrides;
+
+        /// <summary>
+        ///     A <see cref="System.Runtime.InteropServices.GCHandle"/> to the iterator's <see cref="NDIterVStringContext"/> (the
+        ///     descriptors and allocators of its NEP 55 <c>StringDType</c> operands), or zero when no operand has a
+        ///     <c>StringDType</c> side. Released by <see cref="FreeDimArrays"/>, the step every teardown of a state runs.
+        /// </summary>
+        public IntPtr VStringContext;
 
         // =========================================================================
         // Buffered Reduction Data (when BUFFERED + REDUCE flags are set)
@@ -557,6 +574,10 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public void FreeDimArrays()
         {
+            // Every teardown of a state runs this (Dispose, FreeState, a failed construction or copy), after the buffers were
+            // freed: the StringDType context's handle goes with it, before ResetForRecycle zeroes the field.
+            NDIterVStringContext.Detach(ref this);
+
             // Free dimension arrays block
             if (_dimArraysBlock != null)
             {
@@ -703,14 +724,17 @@ namespace NumSharp.Backends.Iteration
             OpDTypes[op] = (byte)code;
             if (code == NPTypeCode.String)
             {
+                // A StringDType iteration side is a 16-byte cell (its itemsize) and carries its own bit: the class and the
+                // element size alone would read it as |S16.
                 ElementSizes[op] = descr.itemsize;
-                OpStringKinds[op] = (byte)((OpStringKinds[op] & ~StringBufferUnicode) |
-                                           (descr.kind == 'U' ? StringBufferUnicode : 0));
+                OpStringKinds[op] = (byte)((OpStringKinds[op] & ~(StringBufferUnicode | StringBufferVString)) |
+                                           (descr.kind == 'U' ? StringBufferUnicode : 0) |
+                                           (descr.Meta is VStringDTypeMeta ? StringBufferVString : 0));
             }
             else
             {
                 ElementSizes[op] = InfoOf.GetSize(code);
-                OpStringKinds[op] = (byte)(OpStringKinds[op] & ~StringBufferUnicode);
+                OpStringKinds[op] = (byte)(OpStringKinds[op] & ~(StringBufferUnicode | StringBufferVString));
             }
         }
 
@@ -729,13 +753,14 @@ namespace NumSharp.Backends.Iteration
             if (code == NPTypeCode.String)
             {
                 SrcElementSizes[op] = descr.itemsize;
-                OpStringKinds[op] = (byte)((OpStringKinds[op] & ~StringSourceUnicode) |
-                                           (descr.kind == 'U' ? StringSourceUnicode : 0));
+                OpStringKinds[op] = (byte)((OpStringKinds[op] & ~(StringSourceUnicode | StringSourceVString)) |
+                                           (descr.kind == 'U' ? StringSourceUnicode : 0) |
+                                           (descr.Meta is VStringDTypeMeta ? StringSourceVString : 0));
             }
             else
             {
                 SrcElementSizes[op] = InfoOf.GetSize(code);
-                OpStringKinds[op] = (byte)(OpStringKinds[op] & ~StringSourceUnicode);
+                OpStringKinds[op] = (byte)(OpStringKinds[op] & ~(StringSourceUnicode | StringSourceVString));
             }
         }
 
@@ -747,21 +772,41 @@ namespace NumSharp.Backends.Iteration
             => (NPTypeCode)OpDTypes[op] == NPTypeCode.String || (NPTypeCode)OpSrcDTypes[op] == NPTypeCode.String;
 
         /// <summary>
+        ///     Whether either side of operand <paramref name="op"/> is a NEP 55 <c>StringDType</c> — its transfers then go through
+        ///     the iterator's <see cref="NDIterVStringContext"/> (each string duplicated into the destination's allocator), never
+        ///     as bytes.
+        /// </summary>
+        /// <param name="op">The operand index.</param>
+        /// <returns>True for a <c>StringDType</c> array or iteration side.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        public bool IsVStringOp(int op)
+            => (OpStringKinds[op] & (StringBufferVString | StringSourceVString)) != 0;
+
+        /// <summary>
         ///     The descriptor of operand <paramref name="op"/>'s ITERATION (buffer) side, rebuilt from its type code, element
         ///     size and string class — the state stores no descriptor objects, and a string's width and class are exactly the
         ///     two facts a type code drops. Byte order is not stored (buffers are native), so a non-native request reads back
-        ///     native.
+        ///     native. A <c>StringDType</c> side is the descriptor instance the iterator's <see cref="NDIterVStringContext"/>
+        ///     keeps (its <c>na_object</c> and <c>coerce</c> are not facts of the state).
         /// </summary>
         /// <param name="op">The operand index.</param>
         /// <returns>A sized descriptor (for messages and debug output; not cached).</returns>
         public DType GetOpDescr(int op)
-            => DescrOf((NPTypeCode)OpDTypes[op], ElementSizes[op], (OpStringKinds[op] & StringBufferUnicode) != 0);
+        {
+            if ((OpStringKinds[op] & StringBufferVString) != 0 && NDIterVStringContext.Of(ref this) is { } ctx && ctx.BufferDescrs[op] != null)
+                return ctx.BufferDescrs[op];
+            return DescrOf((NPTypeCode)OpDTypes[op], ElementSizes[op], (OpStringKinds[op] & StringBufferUnicode) != 0);
+        }
 
         /// <summary>The descriptor of operand <paramref name="op"/>'s ARRAY side — the counterpart of <see cref="GetOpDescr"/>.</summary>
         /// <param name="op">The operand index.</param>
         /// <returns>A sized descriptor (for messages and debug output; not cached).</returns>
         public DType GetOpSrcDescr(int op)
-            => DescrOf((NPTypeCode)OpSrcDTypes[op], SrcElementSizes[op], (OpStringKinds[op] & StringSourceUnicode) != 0);
+        {
+            if ((OpStringKinds[op] & StringSourceVString) != 0 && NDIterVStringContext.Of(ref this) is { } ctx && ctx.ArrayDescrs[op] != null)
+                return ctx.ArrayDescrs[op];
+            return DescrOf((NPTypeCode)OpSrcDTypes[op], SrcElementSizes[op], (OpStringKinds[op] & StringSourceUnicode) != 0);
+        }
 
         /// <summary>A descriptor from a stored (type code, element size, unicode bit) triple.</summary>
         /// <param name="code">The storage lane.</param>
@@ -811,7 +856,12 @@ namespace NumSharp.Backends.Iteration
             int kinds = OpStringKinds[op];
             bool srcUnicode = (kinds & StringSourceUnicode) != 0;
             bool bufUnicode = (kinds & StringBufferUnicode) != 0;
-            return SrcElementSizes[op] != ElementSizes[op] || srcUnicode != bufUnicode;
+            // A StringDType side against a fixed-width one is a cast whatever the sizes (an |S16 element is 16 bytes too).
+            // Two StringDType sides are not one here: the transfer duplicates each string either way, and the NA rule between
+            // two descriptors is the transfer's own (NDVStringCasting.TransferRun).
+            bool srcVString = (kinds & StringSourceVString) != 0;
+            bool bufVString = (kinds & StringBufferVString) != 0;
+            return SrcElementSizes[op] != ElementSizes[op] || srcUnicode != bufUnicode || srcVString != bufVString;
         }
 
         /// <summary>Get operand flags.</summary>

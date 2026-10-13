@@ -43,14 +43,22 @@ namespace NumSharp
         ///     length must equal the <paramref name="op_axes"/> entries' (without <paramref name="op_axes"/> it sets the rank).</param>
         /// <param name="buffersize">Buffer size to use when buffering is enabled; 0 selects the default.</param>
         /// <returns>The iterator (dispose it: <see cref="NDIterator.close"/> resolves its write-backs).</returns>
-        /// <exception cref="ValueError">NumPy's argument and flag errors (verbatim texts).</exception>
+        /// <exception cref="ValueError">NumPy's argument and flag errors (verbatim texts), or a text that does not parse as the
+        ///     number a copy or the first buffer fill reads it into (NumPy's <c>int()</c> / <c>float()</c> texts).</exception>
         /// <exception cref="TypeError">A refused cast, or a cast operand neither copied nor buffered.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A conversion between text and numbers that NumPy computes
-        ///     (the string dtypes' computational phase).</exception>
+        /// <exception cref="OverflowException">A text read into an integer dtype by a copy or the first buffer fill holds a
+        ///     number outside that dtype (NumPy's OverflowError).</exception>
+        /// <exception cref="OutOfMemoryException">A NEP 55 <c>StringDType</c> copy or buffer transfer cannot allocate a string
+        ///     (NumPy's <c>MemoryError</c> texts).</exception>
         /// <remarks>
         ///     Fixed-width strings (<c>S</c>, <c>U</c>) iterate like any dtype: each step yields 0-d <c>&lt;U3</c> views (1-D
         ///     chunks under <c>external_loop</c>), a buffered <c>op_dtypes</c> request widens, truncates or converts between
         ///     <c>S</c> and <c>U</c> (ASCII only, NumPy's Unicode errors otherwise), and a <c>readwrite</c> view writes through.
+        ///     Text and numbers convert both ways with NumPy's rules (a number's <c>str()</c>; a text parsed by <c>int()</c> /
+        ///     <c>float()</c>, NumPy's <c>ValueError</c> when it does not parse). A NEP 55 <c>StringDType</c> operand (with
+        ///     <c>refs_ok</c>) is buffered and cast like any other: each buffer has its own string allocator, a transfer
+        ///     duplicates every string or runs the <c>StringDType</c> cast of the pair (NA values follow the cast's NA rules),
+        ///     and the views read and write the strings of the memory they are on.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.nditer.html
         /// </remarks>
         public static NDIterator nditer(
@@ -235,11 +243,13 @@ namespace NumSharp
             /// <param name="buffersize">The buffer size (0 = <c>np.getbufsize()</c>).</param>
             /// <exception cref="ValueError">NumPy's argument, flag, op_axes, shape-pass and stride-pass errors (verbatim
             ///     texts: a broadcast mismatch, an invalid or duplicate axis, a stretched no_broadcast operand, a refused
-            ///     reduction).</exception>
+            ///     reduction), or a text that does not parse as the number a copy or the first buffer fill reads it into.</exception>
             /// <exception cref="TypeError">A malformed <paramref name="op_dtypes"/> sequence, a refused cast, or a cast
             ///     operand neither copied nor buffered.</exception>
-            /// <exception cref="StringComputationNotSupportedException">A conversion between text and numbers that NumPy
-            ///     computes (the computational phase of the string dtypes).</exception>
+            /// <exception cref="OverflowException">A text read into an integer dtype by a copy or the first buffer fill holds
+            ///     a number outside that dtype.</exception>
+            /// <exception cref="OutOfMemoryException">A <c>StringDType</c> copy or buffer transfer cannot allocate a string
+            ///     (NumPy's <c>MemoryError</c> texts).</exception>
             internal NDIterator(
                 NDArray[] op,
                 string[] flags,
@@ -1458,11 +1468,13 @@ namespace NumSharp
             /// <exception cref="IndexError">No operand <paramref name="i"/>: "Iterator operand index i is out of
             ///     bounds".</exception>
             /// <exception cref="RuntimeError">Setting a read-only operand: "Iterator operand i is not writeable".</exception>
-            /// <exception cref="ArgumentNullException">Setting null (NumPy's <c>None</c> fails converting to the dtype; a
-            ///     C# null is refused before that).</exception>
+            /// <exception cref="ArgumentNullException">Setting null (Python's <c>None</c>) into a numeric operand: NumPy stores
+            ///     NaN into a float operand, <c>False</c> into a bool one and raises <c>TypeError</c> for an integer one; NumSharp
+            ///     refuses the null for every numeric dtype, as its indexer's store does.</exception>
             /// <exception cref="OverflowException">Setting a 0-d integer value that does not fit the operand's dtype (NumPy's
             ///     OverflowError texts).</exception>
             /// <remarks>
+            ///     <para>
             ///     The setter is NumPy's <c>npyiter_seq_ass_item</c>: the value is copied into a 1-D view of the current
             ///     inner loop (one element without <c>external_loop</c>). A 0-d value is a SCALAR there (<c>PyArray_Pack</c>:
             ///     a C# number is NumPy's Python scalar — range-checked, a float truncated into an integer operand, a string
@@ -1470,6 +1482,15 @@ namespace NumSharp
             ///     with unsafe casting and broadcast to the view ("could not broadcast input array from shape (2,) into shape
             ///     (1,)"). NumSharp cannot tell an explicit 0-d array from a literal, so <c>np.array(300)</c> also raises
             ///     where NumPy's 0-d ndarray would wrap.
+            ///     </para>
+            ///     <para>
+            ///     A view of NEP 55 <c>StringDType</c> memory (the operand, or its buffer under a buffered cast to
+            ///     <c>StringDType</c>) takes the store <c>a[...] = value</c> makes, which is the same <c>PyArray_CopyObject</c>:
+            ///     a C# literal goes through <c>StringDType</c>'s setitem (a number stores its <c>str()</c>, null stores the NA
+            ///     object, or <c>'None'</c> under <c>coerce=True</c>, and both raise "StringDType only allows string data when
+            ///     string coercion is disabled." under <c>coerce=False</c>), and an array is cast. A null into fixed-width text
+            ///     memory stores <c>str(None)</c>, truncated to the width (<c>'No'</c> for <c>&lt;U2</c>), as NumPy's setitem does.
+            ///     </para>
             /// </remarks>
             public NDArray this[int i]
             {
@@ -1482,8 +1503,8 @@ namespace NumSharp
                     var dtype = _state->GetOpDType(op);
                     // A fixed-width string view needs its width and class: the descriptor of the side the pointer is on (the
                     // buffer under a buffered cast, the operand otherwise — the same descriptor without one).
-                    var stringDescr = dtype == NPTypeCode.String ? OperandStringDescr(op) : null;
-                    var vstrings = VStringAllocatorOf(op, stringDescr);
+                    var stringDescr = dtype == NPTypeCode.String ? OperandStringDescr(op, ptr) : null;
+                    var vstrings = VStringAllocatorOf(op, stringDescr, ptr);
                     NDArray view;
                     if (!it.HasExternalLoop)
                     {
@@ -1523,13 +1544,18 @@ namespace NumSharp
                     int op = CheckedOperandIndex(i);
                     if ((_state->GetOpFlags(op) & NDIterOpFlags.WRITE) == 0)
                         throw new RuntimeError($"Iterator operand {i} is not writeable");
-                    if (value is null)
-                        throw new ArgumentNullException(nameof(value));
 
                     var it = Borrow();
                     void* ptr = _state->GetDataPtr(op);
                     var dtype = _state->GetOpDType(op);
-                    var stringDescr = dtype == NPTypeCode.String ? OperandStringDescr(op) : null;
+                    var stringDescr = dtype == NPTypeCode.String ? OperandStringDescr(op, ptr) : null;
+                    var vstrings = VStringAllocatorOf(op, stringDescr, ptr);
+
+                    // A null value is Python's None. Text memory stores it (StringDType's setitem, or str(None) into a
+                    // fixed-width element); a numeric operand refuses it before anything is written, as the indexer's store
+                    // does — NumPy's NaN / False / TypeError for numeric dtypes is not modelled.
+                    if (value is null && stringDescr is null)
+                        throw new ArgumentNullException(nameof(value));
 
                     // npyiter_seq_ass_item's temporary: a 1-D view of the current inner loop — one element without
                     // external_loop, and a 0-d iteration has no inner axis to read (GetInnerLoopSizePtr would read Shape[-1]).
@@ -1540,32 +1566,64 @@ namespace NumSharp
                         stride = it.GetInnerLoopElementStride(op);
                     }
 
-                    using var target = AliasView(ptr, dtype, stringDescr, count, stride, scalar: false, VStringAllocatorOf(op, stringDescr));
+                    using var target = AliasView(ptr, dtype, stringDescr, count, stride, scalar: false, vstrings);
+
+                    // NumPy creates the temporary with NPY_ARRAY_WRITEABLE, so a reduce operand's external-loop chunk (stride
+                    // 0, which NumSharp's shape flags as a read-only broadcast) still takes the store: every element of it is
+                    // the one slot, written once per element in order, so the slot keeps the value's LAST element.
+                    if (!target.Shape.IsWriteable)
+                        target.Storage.SetShapeUnsafe(target.Shape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE));
+
+                    if (vstrings != null || value is null)
+                    {
+                        // PyArray_CopyObject(temporary, value) is the store `a[...] = value` makes, so the storage's own store
+                        // runs it. StringDType memory: setitem for a C# literal or null (the NA object, its str(), or
+                        // coerce=False's ValueError) and a cast for an array, each overwritten string freed through the
+                        // allocator of the memory the view is on (the operand's, or the buffer's own). A null into
+                        // fixed-width text (numeric memory refused it above): str(None), 'None' truncated to the width.
+                        target.Storage.SetData(value, Array.Empty<int>());
+                        return;
+                    }
                     AssignToIteratorView(target, value);
                 }
             }
 
             /// <summary>
-            ///     The descriptor of operand <paramref name="op"/>'s string memory, for its views: a NEP 55 <c>StringDType</c>
-            ///     operand's own descriptor (the iterator state keeps only a type code and an element size per operand, which
-            ///     would rebuild a 16-byte <c>'|S16'</c> and expose the raw cells), a fixed-width operand's buffer-side
-            ///     descriptor (the buffer under a buffered cast, the operand otherwise).
+            ///     The descriptor of the string memory operand <paramref name="op"/>'s data pointer <paramref name="ptr"/> is on,
+            ///     for its views: with a NEP 55 <c>StringDType</c> side, the iteration descriptor inside the operand's buffer and
+            ///     the array's descriptor elsewhere (the iterator's <see cref="NDIterVStringContext"/> keeps both instances — the
+            ///     state's type code and element size would rebuild a 16-byte <c>'|S16'</c> and expose the raw cells); a
+            ///     fixed-width operand's buffer-side descriptor (the buffer under a buffered cast, the operand otherwise).
             /// </summary>
             /// <param name="op">The operand index (a string operand).</param>
+            /// <param name="ptr">The operand's current data pointer.</param>
             /// <returns>The descriptor.</returns>
-            private DType OperandStringDescr(int op)
-                => _operands[op] is { } a && a.Storage.IsVString ? a.dtype : _state->GetOpDescr(op);
+            private DType OperandStringDescr(int op, void* ptr)
+            {
+                if (NDIterVStringContext.Of(ref *_state) is { } ctx && ctx.DescrAt(ref *_state, op, ptr) is { } descr)
+                    return descr;
+                return _operands[op] is { } a && a.Storage.IsVString ? a.dtype : _state->GetOpDescr(op);
+            }
 
             /// <summary>
-            ///     The allocator of a NEP 55 <c>StringDType</c> operand's cells, for its iterator views. The iterator never buffers
-            ///     or casts a <c>StringDType</c> operand (refused at construction), so its data pointer is always inside the
-            ///     operand's own cells (the caller's array, or the COPY_IF_OVERLAP copy that replaced it in the operand list).
+            ///     The allocator of the NEP 55 <c>StringDType</c> cells operand <paramref name="op"/>'s data pointer
+            ///     <paramref name="ptr"/> is on, for its iterator views: the buffer's own allocator inside a buffer with a
+            ///     <c>StringDType</c> iteration side, else the operand's (the caller's array, an allocated output, or the copy that
+            ///     replaced it in the operand list).
             /// </summary>
             /// <param name="op">The operand index.</param>
-            /// <param name="stringDescr">The operand's string descriptor, or null for a numeric operand.</param>
-            /// <returns>The allocator, or null when the operand is not <c>StringDType</c>.</returns>
-            private Backends.Strings.VStringAllocator VStringAllocatorOf(int op, DType stringDescr)
-                => stringDescr?.Meta is VStringDTypeMeta ? _operands[op].Storage.VStringSlice.Allocator : null;
+            /// <param name="stringDescr">The descriptor of that memory (<see cref="OperandStringDescr"/>), or null for a numeric
+            ///     operand.</param>
+            /// <param name="ptr">The operand's current data pointer.</param>
+            /// <returns>The allocator, or null when that memory is not <c>StringDType</c>.</returns>
+            private Backends.Strings.VStringAllocator VStringAllocatorOf(int op, DType stringDescr, void* ptr)
+            {
+                if (stringDescr?.Meta is not VStringDTypeMeta)
+                    return null;
+                if (NDIterVStringContext.Of(ref *_state) is { } ctx && ctx.AllocatorAt(ref *_state, op, ptr) is { } allocator)
+                    return allocator;
+                return _operands[op].Storage.VStringSlice.Allocator;
+            }
 
             /// <summary>
             ///     NumPy's operand-index checks of <c>it[i]</c> (<c>npyiter_seq_item</c> / <c>npyiter_seq_ass_item</c>), in

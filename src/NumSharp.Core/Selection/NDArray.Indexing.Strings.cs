@@ -179,7 +179,8 @@ namespace NumSharp
         ///     formatting them is the computational phase), then its unit view is assigned to the selection of this array's
         ///     unit view.
         /// </summary>
-        /// <param name="value">The value (a string array, any shape broadcastable to the selection; or numbers).</param>
+        /// <param name="value">The value (a string array, any shape broadcastable to the selection; or numbers; or null —
+        ///     Python's <c>None</c>, stored as the text <c>'None'</c>, truncated to the width).</param>
         /// <param name="onUnits">The assignment, applied to (unit array, unit value).</param>
         /// <param name="onProxy">The same assignment applied to numeric arrays of this array's and the value's shapes;
         ///     replayed when the unit route raises, and run FIRST for a value converted while the selection is written.</param>
@@ -199,7 +200,14 @@ namespace NumSharp
         {
             ThrowIfNotWriteable();
             if (value is null)
-                throw new ArgumentNullException(nameof(value));
+            {
+                // Python's None: STRING_setitem / UNICODE_setitem store any object by its str(), so None is the text 'None'
+                // (truncated to the width) at every selected element. It is a scalar, converted before the index is
+                // resolved like any text literal, and its conversion cannot fail.
+                using var none = NDStringArrays.FromScalar(null, ((StringDTypeMeta)dtype.Meta).Singleton);
+                StringAdvancedSet(none, onUnits, onProxy);
+                return;
+            }
 
             bool text = value.Storage.IsString;
             bool same = text && value.dtype.Meta == dtype.Meta && value.dtype.itemsize == dtype.itemsize;

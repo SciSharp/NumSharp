@@ -85,6 +85,7 @@ names.astype("S4").item(1);        // byte[] { 100, 111, 103 } - b'dog'
 NDArray.AsStringArray(names);      // { "cat", "dog", "bird" }
 names[1];                          // array('dog', dtype='<U4') - a 0-d view
 names[1] = "zebras";               // the array is now ['cat', 'zebr', 'bird']: cut to 4 characters
+names[2] = null;                   // NumPy's None is stored as its str(): ['cat', 'zebr', 'None']
 ```
 
 `GetString`, `SetString`, `GetStringAt` and `SetStringAt` belong to the `Char` dtype: they read a vector of UTF-16 chars as one string. They refuse a `U` or `S` array with an `InvalidOperationException`.
@@ -392,13 +393,26 @@ A copy moves a short text's cell as one block and reserves the destination's are
 
 To an embedded NumPy and back, a `StringDType` array crosses as an exact copy through NumPy's own C API, with its NA values, `na_object` and `coerce`; see [Crossing to Python](#crossing-to-python).
 
+### Iterating with `np.nditer`
+
+`np.nditer` iterates a `StringDType` operand when you give it `refs_ok`, as NumPy requires. Buffering and casting work as they do for any other dtype: each buffer has its own string allocator, a buffer fill duplicates every string or runs the cast of the pair (`StringDType` to `U`, `S`, bool or numbers and back; an NA value follows the cast's NA rules), and a written operand gets its strings back when the iterator moves on or closes. `it[i] = value` stores like `a[...] = value`: `null` is the NA object, or `'None'` without one.
+
+```csharp
+var t = np.array(new[] { "a", "a long string over fifteen" }, np.dtypes.StringDType());
+using (var it = np.nditer(t, new[] { "refs_ok", "buffered" }, op_dtypes: new DType[] { "U5" }, casting: "unsafe"))
+    foreach (var x in it)
+        Console.WriteLine(x[0].item());                       // a, then a lon (cut to U5)
+using (var it = np.nditer(t, new[] { "refs_ok", "buffered" }, new[] { "readwrite" }))
+    foreach (var x in it)
+        x[0][Slice.Ellipsis] = (string)x[0].item() + "!";      // t is ['a!', 'a long string over fifteen!']
+```
+
 ### What `StringDType` refuses
 
 | Call | NumSharp |
 |------|----------|
 | `view(another dtype)`, `memoryview` (`.data`), `np.frombuffer(..., "T")` | NumPy's errors: a cell is not raw text |
 | `np.ndarray(shape, "T", buffer: ...)` | `ArgumentException`. NumPy reads the bytes as cells; a cell holds an arena offset or a heap pointer, so NumSharp refuses |
-| `np.nditer` that buffers or casts a `StringDType` operand | `NotSupportedException` (a later package; `refs_ok` without buffering works) |
 | `.npy` files, `loadtxt` / `savetxt`, numpy.ma with `StringDType` | not yet (a later package) |
 | Computation: `==`, `np.sum`, `np.sort`, `np.strings.*` | `StringComputationNotSupportedException` or `NotSupportedException` (phase 2) |
 
@@ -409,6 +423,7 @@ NumPy 2.4.2 has bugs on `StringDType` that NumSharp does not reproduce; NumSharp
 - The `bytes` to `StringDType` cast does not validate UTF-8, so a later read of the element raises. NumSharp raises the `UnicodeDecodeError` at the cast.
 - The `StringDType` to `complex` cast writes the real part into the imaginary part too.
 - A short string copied onto itself (`a[...] = a[:1]`) becomes `''`.
+- A buffered `np.nditer` with a `StringDType` input and an allocated `StringDType` output raises `MemoryError: Failed to load string in StringDType getitem` when the loop reads its own output, and `String deallocation failed in clear loop` when the iterator closes.
 
 ---
 

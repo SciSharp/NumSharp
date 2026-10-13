@@ -86,6 +86,8 @@ namespace NumSharp.Tests.Documentation
 
             names[1] = "zebras";
             names.ToString(true).Should().Be("array(['cat', 'zebr', 'bird'], dtype='<U4')", "a longer value is cut to the width");
+            names[2] = null;
+            names.ToString(true).Should().Be("array(['cat', 'zebr', 'None'], dtype='<U4')", "None is stored as its str()");
         }
 
         [TestMethod]
@@ -425,7 +427,26 @@ namespace NumSharp.Tests.Documentation
                 .Should().Be("array(['1.5', '2.0'], dtype=StringDType())");
         }
 
-        /// <summary>The "What StringDType refuses" table: the raw-buffer routes, buffering np.nditer, computation.</summary>
+        /// <summary>
+        ///     The "Iterating with np.nditer" snippet: a buffered cast to <c>U5</c> cuts the long text, and a buffered
+        ///     <c>readwrite</c> pass writes every string back.
+        /// </summary>
+        [TestMethod]
+        public void StringDType_Nditer()
+        {
+            var t = np.array(new[] { "a", "a long string over fifteen" }, np.dtypes.StringDType());
+            var seen = new System.Collections.Generic.List<object>();
+            using (var it = np.nditer(t, new[] { "refs_ok", "buffered" }, op_dtypes: new DType[] { "U5" }, casting: "unsafe"))
+                foreach (var x in it)
+                    seen.Add(x[0].item());
+            seen.Should().Equal("a", "a lon");
+            using (var it = np.nditer(t, new[] { "refs_ok", "buffered" }, new[] { "readwrite" }))
+                foreach (var x in it)
+                    x[0][Slice.Ellipsis] = (string)x[0].item() + "!";
+            t.ToString(true).Should().Be("array(['a!', 'a long string over fifteen!'], dtype=StringDType())");
+        }
+
+        /// <summary>The "What StringDType refuses" table: the raw-buffer routes and computation.</summary>
         [TestMethod]
         public void StringDType_Refusals()
         {
@@ -437,7 +458,6 @@ namespace NumSharp.Tests.Documentation
             ((Action)(() => np.frombuffer(new byte[16], "T"))).Should().Throw<ValueError>()
                 .WithMessage("cannot create an OBJECT array from memory buffer");
             ((Action)(() => np.ndarray(new Shape(1), np.dtype("T"), new byte[16]))).Should().Throw<ArgumentException>();
-            ((Action)(() => np.nditer(t, flags: new[] { "refs_ok", "buffered" }))).Should().Throw<NotSupportedException>();
             ((Action)(() => { var _ = t == t; })).Should().Throw<StringComputationNotSupportedException>();
         }
 

@@ -264,17 +264,43 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     <c>this[indices] = value</c> for a C# text scalar into a string storage: the value becomes a 0-d array of this
-        ///     storage's CLASS (its width discovered, so a value longer than the element is truncated by the copy, exactly as
-        ///     NumPy's setitem truncates), then broadcasts over the target.
+        ///     <c>this[indices] = value</c> for a C# text scalar into a string storage. A fixed-width storage takes the value as a
+        ///     0-d array of its CLASS (its width discovered, so a value longer than the element is truncated by the copy, exactly
+        ///     as NumPy's setitem truncates; null is Python's <c>None</c>, whose <c>str()</c> is <c>'None'</c>), broadcast over
+        ///     the target. A NEP 55 <c>StringDType</c> storage takes a text or null by <c>StringDType</c>'s setitem
+        ///     (<see cref="SetDataVString"/>: the NA object or <c>'None'</c> for null, refused under <c>coerce=False</c>), and
+        ///     a <c>byte[]</c> as an <c>S</c> value it decodes.
         /// </summary>
-        /// <param name="value">A <see cref="string"/>, <see cref="char"/>, <c>byte[]</c> or null (None).</param>
+        /// <param name="value">A <see cref="string"/>, <see cref="char"/> (one character), <c>byte[]</c> or null (None).</param>
         /// <param name="indices">The leading coordinates (normalised by the array path).</param>
         /// <returns>True when <paramref name="value"/> was a text scalar and has been assigned.</returns>
+        /// <exception cref="UnicodeEncodeError">Non-ASCII text into an <c>S</c> storage.</exception>
+        /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into a <c>U</c> storage, or bytes that are not UTF-8 into a
+        ///     <c>StringDType</c> storage.</exception>
+        /// <exception cref="ValueError">A null into a <c>coerce=False</c> <c>StringDType</c> storage, or a value that does not
+        ///     broadcast to the target.</exception>
         internal bool TrySetTextScalar(object value, int[] indices)
         {
             if (!(value is string || value is char || value is byte[] || value is null))
                 return false;
+
+            if (IsVString)
+            {
+                // A StringDType storage has no fixed-width class to encode into (its descriptor is a VStringDTypeMeta, so the
+                // cast below would throw). A str or a None is the Python object StringDType's setitem receives; a char is a
+                // one-character str (NumSharp's text model). Bytes are an S value, which the store casts (UTF-8 decoded).
+                // SetData normalises the coordinates (negative ones wrap, out-of-range ones raise) before SetDataVString.
+                if (value is byte[] bytes)
+                {
+                    using var raw = NDStringArrays.FromScalar(bytes, DTypeRegistry.Bytes.Singleton);
+                    SetData(raw, indices);
+                    return true;
+                }
+                using var item = value is null ? null : NDArray.PythonStrLiteral(value is char c ? c.ToString() : (string)value);
+                SetData(item, indices);
+                return true;
+            }
+
             // The class of THIS array decides how the value is encoded (str into S is ASCII-encoded, bytes into U decoded).
             var cls = (StringDTypeMeta)Descr.Meta;
             using var scalar = NDStringArrays.FromScalar(value, cls.Singleton);

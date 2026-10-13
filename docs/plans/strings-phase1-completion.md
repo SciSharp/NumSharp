@@ -149,7 +149,7 @@ Three rules keep that safe:
 | P1.4 | `T` movement: the reference-aware copy core (inline cells move as blocks; arena and heap strings are duplicated), behind every movement entry, and the loud refusal on every raw path. | P1.3 | L | yes |
 | P1.5 | `T` creation, element access and printing: `np.array` / `asarray` / `empty` / `zeros` / `ones` / `full` and the `_like` forms, the `setitem` coercion (uses P1.1), `item` / `tolist` / `foreach` / `AsStringArray` / `(Array)`, NA objects, `repr` / `str` / `array2string`. | P1.1, P1.3 | M | yes |
 | P1.6 | `T` casts: `T` ↔ `T` (NA rules), `T` ↔ `U` / `S`, `T` ↔ bool, `T` ↔ numbers (uses P1.1). | P1.1, P1.4 | M | yes |
-| P1.7 | `T` in the rest of the library: `np.nditer` (`refs_ok`, buffered casts), numpy.ma (fill `'N/A'`), `loadtxt` / `savetxt`, `.npy` (D3), the whole-surface sweep with `T` (NumPy's refusals and shape-decided answers in NumPy's order; computation deferred to phase 2). | P1.4–P1.6 | L | later |
+| P1.7 | `T` in the rest of the library: `np.nditer` (`refs_ok`, buffered casts), numpy.ma (fill `'N/A'`), `loadtxt` / `savetxt`, `.npy` (D3), the whole-surface sweep with `T` (NumPy's refusals and shape-decided answers in NumPy's order; computation deferred to phase 2). | P1.4–P1.6 | L | `np.nditer` done 2026-10-13; the rest later |
 | P1.8 | Bridges and leftovers: pythonnet `S` / `U` zero-copy both ways and `T` as a copy (D7); D10 (D6). | — | M | done (D10 with P1.1, the bridge 2026-10-13) |
 | P1.9 | Gate, speed, docs: oracle sections for the new behavior with zero excuses; unit tests that cover all new phase-1 code; lifetime tests and runs under `FencedMemory` / guard pages; a mutation pass; a benchmark sheet (≥ 1.5× NumPy at 1K / 100K / 1M); docs. | with every package | M | yes |
 
@@ -355,3 +355,41 @@ After this plan, phase 2 loses P2.4 and gains the `T` forms of P2.1–P2.6 plus 
     random views, both `U` byte orders, random read-only): 0 failures after the empty fix, every live counter at
     baseline. The interop suite: 683 / 683 on net10.0 and net8.0; the ecosystem run 94 passed, 1 skipped (no GPU).
   - Unchanged: the long-string export stays 0.88–1.05× numpy's own copy (`NpyString_pack`, the work numpy's copy does).
+- 2026-10-13 — **P1.7, the `np.nditer` part, done.** A `StringDType` operand (with `refs_ok`) is buffered and cast like any
+  other.
+  - Design. NumPy's string allocator belongs to the descriptor; NumSharp's belongs to the cells' memory block, so each
+    buffer of a `T` side owns a `VStringAllocator`. `NDIterVStringContext` (`Backends/Iterators/NDIter.VString.cs`) holds
+    the array and buffer descriptors and allocators; the unmanaged state holds it as a GCHandle (`VStringContext`), freed
+    in `FreeDimArrays`, which every teardown runs (a failed construction included). Two string-kind bits
+    (`StringBufferVString`, `StringSourceVString`) mark a `T` side, so a `T` buffer is never read as `|S16`.
+  - Transfers (`NDVStringCasting.TransferRun`): `T` → `T` duplicates every string (`NDVStringCopy.CopyRun`, the NA name
+    when the destination has no NA object); into `T` the unicode / bytes / bool / number runs (a NaN becomes NA for a NaN
+    NA object); out of `T` the cast runs. Fills, flushes and the reduce write-back (it copied raw cells) go through
+    `CopyStringRun`. `copy()` gives the copy its own buffer allocators and duplicates the buffered strings.
+  - Views read and write the strings of the memory they are on: the buffer's descriptor and allocator inside a buffer,
+    the operand's elsewhere. The setter `it[i] = value` is `a[...] = value`: `T` memory takes the storage's own store
+    (setitem for a C# literal or null, a cast for an array), null into fixed-width text is `'None'`, and the temporary is
+    writeable even with stride 0.
+  - Library fixes found on the way. (1) A broadcast sub-array of a WRITEABLE broadcast storage keeps its write access
+    (`UnmanagedStorage.GetData`'s broadcast branches; `Alias` already had this mirror rule): a store into a reduce
+    operand's stride-0 external-loop chunk (`y[...] = v`, `it[1] = v`) and `a[0][...] = v` on a stretched
+    `np.broadcast_arrays` result raised "assignment destination is read-only" where NumPy writes. (2) `None` into
+    fixed-width text stores `'None'`, truncated, through every index form (it raised `ArgumentNullException`). (3)
+    `__setitem__` stores what the indexer stores: a C# scalar is a Python scalar (`__setitem__(0, 300)` into int8 raises
+    NumPy's OverflowError, it wrapped to 44), null is `None`, and the scalar's temporary is disposed. (4)
+    `SetData((object)…)` of a text, char, bytes or null on a `T` array threw `InvalidCastException`. (5) The np.nditer
+    docs no longer claim a refusal of text ↔ number conversions.
+  - A NumPy 2.4.2 bug NumSharp does not reproduce: a buffered iterator with a `T` input and an allocated `T` output raises
+    `MemoryError: Failed to load string in StringDType getitem` when the loop reads its own output.
+  - Open (not `T`-specific): the buffered reduction is the legacy double loop (pinned; two new pins: a cast reduction
+    operand's write-back copies raw bytes, so float32 sums land as float64 bit patterns, and a `T` reduction through a
+    buffer shorter than the reduced axis); `grow_inner` (pinned); `None` into numbers (NumPy stores NaN / False and raises
+    TypeError for integers; NumSharp refuses, `[Misaligned]`).
+  - Gates: `Backends/Strings/StringDTypeIterationTests` (25), `TextNoneStoreTests` (5), `np.broadcast_arrays.Writeable`
+    (+1), the docs page's `StringDType_Nditer`. Probes against NumPy 2.4.2: the setter matrix (71 lines), the iterator
+    protocol (45), the copy / mask / reduce routes (15), the stride-0 stores (12), all identical except NumPy's MemoryError
+    and the open bugs above. Self-consistency: 0 of 973 checks fail over 9 layouts × 3 orders × 6 buffer sizes × 2 loop
+    forms × read / cast / readwrite, with no allocator alive after. Mutation: 12 planted, 12 killed.
+  - Trap: a contiguous operand without a cast is iterated IN PLACE even with `buffered` (NumPy's BUFNEVER), so a
+    "buffered" test over it never fills a buffer (the `copy()` mutant survived until the tests used a transpose walked in
+    C order and a cast).

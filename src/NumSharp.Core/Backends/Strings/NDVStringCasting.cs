@@ -516,6 +516,90 @@ namespace NumSharp.Backends.Strings
         internal delegate void RunAction(byte* src, long srcStride, byte* dst, long dstStride, long count);
 
         /// <summary>
+        ///     The per-run body of a transfer between two descriptors of which at least one is <c>StringDType</c>, for a caller
+        ///     that walks its own runs (the iterator's buffer fills and flushes, <see cref="NDIterVStringContext"/>): NumPy's
+        ///     <c>string_to_string</c> between two <c>StringDType</c> descriptors (<see cref="NDVStringCopy.CopyRun"/>, an NA cell
+        ///     becoming the source NA object's text when the destination has none), else the <c>StringDType</c> cast loop of the
+        ///     pair — the bodies <see cref="NDVStringCopy.Copy"/> and <see cref="Copy"/> run over their own walks.
+        /// </summary>
+        /// <param name="from">The source descriptor.</param>
+        /// <param name="fromAllocator">The allocator of the source cells for a <c>StringDType</c> source, else null.</param>
+        /// <param name="to">The destination descriptor.</param>
+        /// <param name="toAllocator">The allocator of the destination cells for a <c>StringDType</c> destination, else null.</param>
+        /// <returns>The run body. The caller locks the allocators around each call (NumPy's
+        ///     <c>NpyString_acquire_allocators</c> around a cast loop call).</returns>
+        /// <exception cref="ArgumentNullException">A descriptor is null.</exception>
+        /// <exception cref="ArgumentException">Neither descriptor is <c>StringDType</c>, or a <c>StringDType</c> side has no
+        ///     allocator.</exception>
+        /// <remarks>
+        ///     The run bodies raise what the cast loops raise (a text that does not parse into a number, an NA element into a
+        ///     number, a non-ASCII text into <c>S</c>, a bool byte other than 0 / 1, NumPy's <c>MemoryError</c> texts), at the
+        ///     element NumPy's loop reaches.
+        /// </remarks>
+        internal static RunAction TransferRun(DType from, VStringAllocator fromAllocator, DType to, VStringAllocator toAllocator)
+        {
+            if (from is null) throw new ArgumentNullException(nameof(from));
+            if (to is null) throw new ArgumentNullException(nameof(to));
+            bool fromV = from.Meta is VStringDTypeMeta, toV = to.Meta is VStringDTypeMeta;
+            if (!fromV && !toV)
+                throw new ArgumentException("A StringDType transfer needs a StringDType side.");
+            if ((fromV && fromAllocator == null) || (toV && toAllocator == null))
+                throw new ArgumentException("A StringDType side of a transfer needs the allocator of its cells.");
+
+            if (fromV && toV)
+            {
+                // string_to_string: NumPy's in_has_null && !out_has_null turns an NA cell into the NA object's str().
+                var fp = from.VString;
+                byte[] naName = fp.HasNAObject && !to.VString.HasNAObject ? NDUtf8.Encode(fp.NAName) : null;
+                return (s, ss, d, ds, n) => NDVStringCopy.CopyRun(s, ss, d, ds, n, fromAllocator, toAllocator, naName);
+            }
+
+            if (toV)
+            {
+                // Into StringDType: the setup of IntoVString, keyed on the source DESCRIPTOR (no source storage here).
+                if (from.Meta is StringDTypeMeta)
+                {
+                    bool unicode = from.kind == 'U';
+                    int chars = unicode ? from.itemsize / 4 : from.itemsize;
+                    if (unicode)
+                    {
+                        // One scratch per run body: the widest element's UTF-8 form (4 bytes per code point at most). The
+                        // iterator never runs two transfers of one operand at once, so the body may reuse it.
+                        byte[] scratch = new byte[Math.Max(4 * chars, 1)];
+                        return (s, ss, d, ds, n) => UnicodeRun(s, ss, chars, d, ds, n, toAllocator, scratch);
+                    }
+                    return (s, ss, d, ds, n) => BytesRun(s, ss, chars, d, ds, n, toAllocator);
+                }
+                NPTypeCode src = from.GetTypeCode();
+                if (src == NPTypeCode.Boolean)
+                    return (s, ss, d, ds, n) => BoolRun(s, ss, d, ds, n, toAllocator);
+                // Only a float64 NaN compares equal to a float NaN NA object (see IntoVString).
+                bool nanToNA = to.VString.HasNanNA && src == NPTypeCode.Double;
+                return (s, ss, d, ds, n) => NumberRun(s, ss, src, d, ds, n, toAllocator, nanToNA);
+            }
+
+            // From StringDType: the setup of FromVString, keyed on the destination DESCRIPTOR.
+            var p = from.VString;
+            byte[] naText = NDUtf8.Encode(p.HasNAObject && !p.HasStringNA ? p.NAName : p.DefaultString);
+            if (to.Meta is StringDTypeMeta)
+            {
+                int chars = to.kind == 'U' ? to.itemsize / 4 : to.itemsize;
+                return to.kind == 'U'
+                    ? (s, ss, d, ds, n) => ToUnicodeRun(s, ss, d, ds, n, chars, fromAllocator, naText)
+                    : (s, ss, d, ds, n) => ToBytesRun(s, ss, d, ds, n, chars, fromAllocator, naText);
+            }
+            NPTypeCode dst = to.GetTypeCode();
+            if (dst == NPTypeCode.Boolean)
+            {
+                byte naTruth = p.HasNAObject && !p.HasStringNA
+                    ? (p.HasNanNA ? (byte)1 : (byte)0)
+                    : (byte)(p.DefaultString.Length == 0 ? 1 : 0);
+                return (s, ss, d, ds, n) => ToBoolRun(s, ss, d, ds, n, fromAllocator, naTruth);
+            }
+            return (s, ss, d, ds, n) => ToNumberRun(s, ss, d, ds, n, dst, fromAllocator);
+        }
+
+        /// <summary>
         ///     NumPy's raw assignment walk: the axes sorted by the destination's strides (<see cref="RawArrayIter.PrepareThree"/>),
         ///     the source broadcast (a higher-rank source's extra leading axes are extent 1 and are dropped), one
         ///     <paramref name="run"/> call per innermost run.

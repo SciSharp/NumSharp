@@ -191,7 +191,10 @@ namespace NumSharp.Backends.Iteration
         /// <exception cref="TypeError">A cast operand is neither copied nor buffered (NumPy's text).</exception>
         /// <exception cref="UnicodeEncodeError">A copy from <c>U</c> to <c>S</c> meets a code point at or above 128.</exception>
         /// <exception cref="UnicodeDecodeError">A copy from <c>S</c> to <c>U</c> meets a byte at or above <c>0x80</c>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A copy between text and numbers (the computational phase).</exception>
+        /// <exception cref="ValueError">A copy from text to numbers meets a text that does not parse (NumPy's <c>int()</c> /
+        ///     <c>float()</c> texts).</exception>
+        /// <exception cref="OverflowException">A copy from text to an integer dtype meets a number outside it.</exception>
+        /// <exception cref="OutOfMemoryException">A copy into or out of <c>StringDType</c> cannot allocate a string.</exception>
         /// <remarks>
         ///     Runs between the axis reorder and the coalescing, so the temporaries' dense strides take part in the coalescing
         ///     exactly as NumPy's do. On any failure the temporaries made so far are released and no write-back is registered

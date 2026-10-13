@@ -190,6 +190,13 @@ namespace NumSharp.Backends
                 // keeps no stride-0 axis, so its fresh flags would otherwise call it writeable.
                 if (!this_shape.IsWriteable)
                     adjustedShape = adjustedShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+                // The mirror half, as Alias(Shape) applies it: a broadcast sub-array of a WRITEABLE broadcast parent
+                // (np.broadcast_arrays' results, ndarray.setflags(write: true), an np.nditer view of a reduce operand's
+                // stride-0 chunk) keeps the parent's write access — its computed read-only flag came from the broadcastness
+                // it inherited, not from a protection decision. Without it a store into such a parent (`y[...] = v`, whose
+                // copy takes this sub-array) raised "assignment destination is read-only" where NumPy writes.
+                else if (adjustedShape.IsBroadcasted && !adjustedShape.IsWriteable)
+                    adjustedShape = adjustedShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
@@ -249,6 +256,13 @@ namespace NumSharp.Backends
                 // keeps no stride-0 axis, so its fresh flags would otherwise call it writeable.
                 if (!this_shape.IsWriteable)
                     adjustedShape = adjustedShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+                // The mirror half, as Alias(Shape) applies it: a broadcast sub-array of a WRITEABLE broadcast parent
+                // (np.broadcast_arrays' results, ndarray.setflags(write: true), an np.nditer view of a reduce operand's
+                // stride-0 chunk) keeps the parent's write access — its computed read-only flag came from the broadcastness
+                // it inherited, not from a protection decision. Without it a store into such a parent (`y[...] = v`, whose
+                // copy takes this sub-array) raised "assignment destination is read-only" where NumPy writes.
+                else if (adjustedShape.IsBroadcasted && !adjustedShape.IsWriteable)
+                    adjustedShape = adjustedShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
@@ -333,6 +347,13 @@ namespace NumSharp.Backends
                 // keeps no stride-0 axis, so its fresh flags would otherwise call it writeable.
                 if (!this_shape.IsWriteable)
                     adjustedShape = adjustedShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+                // The mirror half, as Alias(Shape) applies it: a broadcast sub-array of a WRITEABLE broadcast parent
+                // (np.broadcast_arrays' results, ndarray.setflags(write: true), an np.nditer view of a reduce operand's
+                // stride-0 chunk) keeps the parent's write access — its computed read-only flag came from the broadcastness
+                // it inherited, not from a protection decision. Without it a store into such a parent (`y[...] = v`, whose
+                // copy takes this sub-array) raised "assignment destination is read-only" where NumPy writes.
+                else if (adjustedShape.IsBroadcasted && !adjustedShape.IsWriteable)
+                    adjustedShape = adjustedShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
@@ -393,6 +414,13 @@ namespace NumSharp.Backends
                 // keeps no stride-0 axis, so its fresh flags would otherwise call it writeable.
                 if (!this_shape.IsWriteable)
                     adjustedShape = adjustedShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+                // The mirror half, as Alias(Shape) applies it: a broadcast sub-array of a WRITEABLE broadcast parent
+                // (np.broadcast_arrays' results, ndarray.setflags(write: true), an np.nditer view of a reduce operand's
+                // stride-0 chunk) keeps the parent's write access — its computed read-only flag came from the broadcastness
+                // it inherited, not from a protection decision. Without it a store into such a parent (`y[...] = v`, whose
+                // copy takes this sub-array) raised "assignment destination is read-only" where NumPy writes.
+                else if (adjustedShape.IsBroadcasted && !adjustedShape.IsWriteable)
+                    adjustedShape = adjustedShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
