@@ -385,3 +385,49 @@ test('metadata publishes oracle totals and rejects a classification drift', () =
   api.initializeMetadata(data);
   assert.equal(element('cov-oracle-reference').textContent, '', 'pre-1.10 artifacts render without the oracle line');
 });
+
+// The site renders whatever the data branch's inventory/latest holds, and master's CI publishes the
+// inventory its own generator writes. A generator without the oracle join (master's 1.6.0) records no
+// `oracle` field on any row: the page must not read that as "no contracts" for every API (it showed
+// "Oracle-verified parity 0.0% (0 of 560)" and an "Available, no oracle contracts" filter).
+test('an artifact without oracle evidence (generator < 1.10) hides every oracle element', () => {
+  const { api, element } = dashboard();
+  api.state.rows = oracleRows().map(({ oracle, ...rest }) => rest);
+  api.initializeMetadata({
+    numpy_version: '2.4.2', numsharp_assembly_version: '0.70.0.0', schema_version: 1,
+    summary: { default_scope: { total: 5, available: 4 }, catalog_rows: 7 },
+  });
+  assert.equal(api.state.hasOracle, false);
+  assert.ok(api.state.rows.every((item) => api.parityClass(item) === 'none'), 'no row reads as unverified');
+  assert.equal(element('cov-oracle-reference').textContent, '');
+  assert.equal(element('cov-lede-oracle').hidden, true, 'the lede no longer promises oracle contracts');
+  assert.equal(element('cov-oracle-explainer').hidden, true, 'the reading guide drops the oracle paragraph');
+  api.changeScope();
+  assert.match(element('cov-metrics').innerHTML, /Scoped API availability/);
+  assert.doesNotMatch(element('cov-metrics').innerHTML, /Oracle-verified parity/);
+  assert.doesNotMatch(element('cov-surface-grid').innerHTML, /oracle-verified/);
+  assert.doesNotMatch(element('cov-category-grid').innerHTML, /oracle-verified/);
+  assert.doesNotMatch(api.tooltipContent({ dataset: { tooltipGroup: 'surface:np' } }), /oracle-verified/);
+  assert.deepEqual(Array.from(element('cov-oracle').options, (item) => item.value), ['all', 'none']);
+  element('cov-search').value = 'numpy.histogram';
+  api.filterRows();
+  assert.equal(api.state.filtered.length, 1);
+  assert.doesNotMatch(element('cov-detail').innerHTML, /[Oo]racle/, 'no oracle fact and no "no contracts" block');
+  assert.doesNotMatch(element('cov-results').innerHTML, /cov-result-oracle/);
+});
+
+test('an artifact with oracle evidence keeps the oracle elements after metadata', () => {
+  const { api, element } = dashboard();
+  api.state.rows = oracleRows();
+  api.initializeMetadata({
+    numpy_version: '2.4.2', numsharp_assembly_version: 'test', schema_version: 1, oracle: { contracts: 251498 },
+    summary: { default_scope: { total: 5, available: 4, oracle_verified: 3 }, catalog_rows: 7 },
+  });
+  assert.equal(api.state.hasOracle, true);
+  assert.equal(element('cov-lede-oracle').hidden, false);
+  assert.equal(element('cov-oracle-explainer').hidden, false);
+  api.changeScope();
+  assert.match(element('cov-metrics').innerHTML, /Oracle-verified parity/);
+  assert.match(element('cov-surface-grid').innerHTML, /3 oracle-verified/);
+  assert.match(api.tooltipContent({ dataset: { tooltipGroup: 'surface:np' } }), /3 oracle-verified/);
+});
