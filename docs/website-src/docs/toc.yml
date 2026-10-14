@@ -89,7 +89,7 @@
   - name: Dashboard
     href: tests-oracle-dashboard.md
   - name: Generated Summary
-    href: ../../../test/inventory/generated/summary.md
+    href: ../../../refs/data/tests-oracle/latest/summary.md
 - name: Benchmarks
   href: benchmarks-dashboard.md
   expanded: false
@@ -100,20 +100,20 @@
     expanded: false
     items:
     - name: Snapshot Manifest
-      href: ../../../benchmark/history/latest/MANIFEST.md
+      href: ../../../refs/data/benchmark/latest/MANIFEST.md
     - name: Unified Benchmark Report
-      href: ../../../benchmark/history/latest/benchmark-report.md
+      href: ../../../refs/data/benchmark/latest/benchmark-report.md
     - name: API Coverage Ledger
-      href: ../../../benchmark/coverage/generated/summary.md
+      href: ../../../refs/data/benchmark-coverage/latest/summary.md
     - name: Cast Matrix
-      href: ../../../benchmark/history/latest/cast_results.md
+      href: ../../../refs/data/benchmark/latest/cast_results.md
     - name: Fusion Results
-      href: ../../../benchmark/history/latest/fusion_results.md
+      href: ../../../refs/data/benchmark/latest/fusion_results.md
     - name: Layout Matrix
-      href: ../../../benchmark/history/latest/layout_results.md
+      href: ../../../refs/data/benchmark/latest/layout_results.md
     - name: NDIter Results
-      href: ../../../benchmark/history/latest/nditer_results.md
+      href: ../../../refs/data/benchmark/latest/nditer_results.md
     - name: Operand Layouts
-      href: ../../../benchmark/history/latest/operand_results.md
+      href: ../../../refs/data/benchmark/latest/operand_results.md
     - name: OpenBLAS & LAPACK
-      href: ../../../benchmark/history/latest/openblas_results.md
+      href: ../../../refs/data/benchmark/latest/openblas_results.md

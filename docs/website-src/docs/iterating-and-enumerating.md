@@ -39,7 +39,7 @@ Boxed spellings, kept for NumPy parity and LINQ - **not for hot loops** (slowest
 | `np.nested_iters(a, axes)` | ~110 ms | ~83 MB | `NDIterator[]` per level | - (advanced/parity; no typed form) |
 | `np.nditer(a, flags: …)` (the full flag object) | ~114 ms | ~44 MB | `NDArray[]` (live views) | `np.nditer<T>` / `np.nditer_chunks<T>` for value walks; the object only when you need flags/multi-operand |
 
-> \* Min time / allocation for one full walk of a **100,000-element `float64`** array (**C-contiguous unless noted**), measured on the [Iteration benchmark](../../../benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Iteration/IterationBenchmarks.cs) - see [Benchmark results](#benchmark-results) for the full per-layout numbers. The typed `ref`/`Span` walks allocate a flat **64 B** at any size and layout; the boxed forms allocate **megabytes**.
+> \* Min time / allocation for one full walk of a **100,000-element `float64`** array (**C-contiguous unless noted**), measured on the [Iteration benchmark](https://github.com/SciSharp/NumSharp/blob/master/benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Iteration/IterationBenchmarks.cs) - see [Benchmark results](#benchmark-results) for the full per-layout numbers. The typed `ref`/`Span` walks allocate a flat **64 B** at any size and layout; the boxed forms allocate **megabytes**.
 > † `np.ndindex().AsSpans()` walks the **index space** (coordinates), not values: the walk itself is allocation-free and ~0-cost; the ~700 µs / ~3.8 MB shown is `GetValue` reading each element. Use it for coordinates, and `np.nditer<T>` / `np.ndenumerate<T>().AsRef()` to read values.
 > ‡ `foreach` yields sub-array **views** along axis 0 (cheap); the ~760 µs is then walking every element with a nested `foreach` that boxes each scalar - use a typed walk for the elements.
 
@@ -527,7 +527,7 @@ Dispose it (`using` or `close()`). Buffered and overlap write-backs flush on dis
 
 ## Benchmark results
 
-Measured by the companion benchmark, [`IterationBenchmarks.cs`](../../../benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Iteration/IterationBenchmarks.cs) - every technique × 5 memory layouts × 3 sizes, self-verifying (each walk folds all N elements into an identical checksum, so nothing can look fast by skipping work). BenchmarkDotNet 0.15.8, .NET 10, i9-13900K (clock-locked, one P-core), `MemoryDiagnoser` on, `Min` of 50 iterations. Rows are **ordered by the Contiguous column** (fastest first). Regenerate with `dotnet run -c Release -f net10.0 -- --filter "*Iteration*"`; the file's header block also carries the N=1 and N=1,000 tables.
+Measured by the companion benchmark, [`IterationBenchmarks.cs`](https://github.com/SciSharp/NumSharp/blob/master/benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Iteration/IterationBenchmarks.cs) - every technique × 5 memory layouts × 3 sizes, self-verifying (each walk folds all N elements into an identical checksum, so nothing can look fast by skipping work). BenchmarkDotNet 0.15.8, .NET 10, i9-13900K (clock-locked, one P-core), `MemoryDiagnoser` on, `Min` of 50 iterations. Rows are **ordered by the Contiguous column** (fastest first). Regenerate with `dotnet run -c Release -f net10.0 -- --filter "*Iteration*"`; the file's header block also carries the N=1 and N=1,000 tables.
 
 **MIN time - N = 100,000 (throughput)**
 
