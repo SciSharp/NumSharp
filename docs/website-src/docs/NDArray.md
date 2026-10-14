@@ -455,7 +455,7 @@ Both work on every layout (contiguous, F-order, transposed, reversed, sliced, br
 - **Order is `'K'` (memory order)**, matching `np.nditer`. On a reversed view that is not the logical order - pass `order: 'C'` if you need the order `np.ndenumerate` uses.
 - **`np.nditer_chunks<T>` needs a unit-stride inner loop**, since a `Span<T>` is contiguous by definition. A stepped view like `a[":, ::2"]` is rejected up front; use `np.nditer<T>`, which handles any stride.
 
-Full reference: [NDIter → Typed iteration](NDIter.md#typed-iteration--unboxed-elements-and-span-chunks).
+Full reference: [NDIter → Typed iteration](NDIter.md#typed-iteration---unboxed-elements-and-span-chunks).
 
 ---
 
@@ -527,7 +527,7 @@ Three ways to get a typed wrapper:
 
 ## Saving, Loading, and Interop
 
-NumSharp reads **and** writes NumPy's `.npy` / `.npz` formats and raw binary. The `.npy`/`.npz` stack is a port of NumPy 2.4.2's format code (NEP-01), so a file written by `np.save` is **byte-for-byte identical** to what NumPy itself writes - data moves between Python and C# in both directions, losslessly. To wrap an existing in-memory byte buffer (file bytes, a network packet, a native pointer) see [`np.frombuffer`](#wrapping-existing-buffers--npfrombuffer) above.
+NumSharp reads **and** writes NumPy's `.npy` / `.npz` formats and raw binary. The `.npy`/`.npz` stack is a port of NumPy 2.4.2's format code (NEP-01), so a file written by `np.save` is **byte-for-byte identical** to what NumPy itself writes - data moves between Python and C# in both directions, losslessly. To wrap an existing in-memory byte buffer (file bytes, a network packet, a native pointer) see [`np.frombuffer`](#wrapping-existing-buffers---npfrombuffer) above.
 
 ```csharp
 // .npy - a single array (byte-identical to NumPy's np.save)

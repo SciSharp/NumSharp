@@ -60,7 +60,7 @@ np.evaluate((NDExpr)a * 2 + 1, @out: a);   // fused: one pass, no temporaries (N
 double s = (double)np.sum(a);              // reduction kernel (np.sum returns a 0-d NDArray → cast out)
 ```
 
-If you need the raw buffer in .NET vector code, `nd.Unsafe.Span<T>()` hands SIMD the array's memory with **no copy and no walk** - the true floor (see [.NET interop](#net-interop--spant--memoryt--arrays--ienumerablet), the next section). When you *do* need to walk elements yourself, `np.nditer_chunks<T>` / `np.nditer<T>` are the fast choices; the boxed `np.nditer` `it[0]` per-element loop is the slowest (it allocates an `NDArray` view per element). See [NDIter → Fused kernels](NDIter.md#fused-kernels-in-production) and [`np.evaluate`](NDIter.md#general-expression-fusion--npevaluate).
+If you need the raw buffer in .NET vector code, `nd.Unsafe.Span<T>()` hands SIMD the array's memory with **no copy and no walk** - the true floor (see [.NET interop](#net-interop---spant--memoryt--arrays--ienumerablet), the next section). When you *do* need to walk elements yourself, `np.nditer_chunks<T>` / `np.nditer<T>` are the fast choices; the boxed `np.nditer` `it[0]` per-element loop is the slowest (it allocates an `NDArray` view per element). See [NDIter → Fused kernels](NDIter.md#fused-kernels-in-production) and [`np.evaluate`](NDIter.md#general-expression-fusion---npevaluate).
 
 ---
 
@@ -194,7 +194,7 @@ NDArray f = t.flatiter.copy();           // a fresh 1-D C-order copy
 ```
 
 - **`a.flat` copies when non-contiguous** (it reshapes), so `a.T.flat[i] = v` is silently lost - that's exactly the defect `a.flatiter` (and `np.flat<T>`) fixes.
-- The `flatiter[i]`/slice/fancy **setters** do NumPy's NEP50 scalar coercion (a weak out-of-range value raises rather than wrapping - see [Getting & Setting Values → flatiter](getting-and-setting-values.md#10-ndarrayflatiter--write-through-the-flat-iterator-any-layout)); the typed `ref` walk can't coerce (a `ref` can't convert), so use these setters when you need the coercion and `np.flat<T>` when you need speed.
+- The `flatiter[i]`/slice/fancy **setters** do NumPy's NEP50 scalar coercion (a weak out-of-range value raises rather than wrapping - see [Getting & Setting Values → flatiter](getting-and-setting-values.md#10-ndarrayflatiter---write-through-the-flat-iterator-any-layout)); the typed `ref` walk can't coerce (a `ref` can't convert), so use these setters when you need the coercion and `np.flat<T>` when you need speed.
 - A *captured* `flatiter` is its own iterator (NumPy's `iter(f) is f`): its cursor is shared with `index`/`coords`, so `next()`/a second pass **resume**. `a.flatiter` builds a fresh one per access.
 
 ---

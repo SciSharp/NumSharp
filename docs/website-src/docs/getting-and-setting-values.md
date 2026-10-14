@@ -26,7 +26,7 @@ c[0] = 0;                // a[2] stays 999
 | Boolean mask (read) - `a[mask]` | **copy** | no - but `a[mask] = v` (the setter) *does* touch the parent |
 | Broadcasted view - `np.broadcast_to(a, shape)` | **read-only view** | writes throw (`assignment destination is read-only`) |
 
-The asymmetry on fancy/boolean indexing is deliberate and matches NumPy: **reading** `a[mask]` gathers into a fresh array (writing into *that* array does nothing to `a`), but **assigning** `a[mask] = value` scatters back into `a` through the setter. See [NDArray → Views vs Copies](NDArray.md#views-vs-copies--most-important-rule).
+The asymmetry on fancy/boolean indexing is deliberate and matches NumPy: **reading** `a[mask]` gathers into a fresh array (writing into *that* array does nothing to `a`), but **assigning** `a[mask] = value` scatters back into `a` through the setter. See [NDArray → Views vs Copies](NDArray.md#views-vs-copies---most-important-rule).
 
 ---
 
@@ -117,7 +117,7 @@ double total = 0;
 foreach (ref double e in np.nditer<double>(a)) total += e;
 ```
 
-For high-throughput reads use `np.nditer<T>` (unboxed, by reference) or `np.nditer_chunks<T>` (a `Span<T>` per inner loop). See [NDArray → Fast element iteration](NDArray.md#fast-element-iteration--npnditert-unboxed) and [NDIter](NDIter.md).
+For high-throughput reads use `np.nditer<T>` (unboxed, by reference) or `np.nditer_chunks<T>` (a `Span<T>` per inner loop). See [NDArray → Fast element iteration](NDArray.md#fast-element-iteration---npnditert-unboxed) and [NDIter](NDIter.md).
 
 ---
 
