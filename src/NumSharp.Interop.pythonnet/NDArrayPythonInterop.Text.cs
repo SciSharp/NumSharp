@@ -195,44 +195,86 @@ namespace NumSharp.Interop.PythonNet
         /// <param name="array">The numpy object array.</param>
         /// <returns>The owning NumSharp copy, descriptor <c>StringDType()</c> (no missing-data object, coercion on).</returns>
         /// <remarks>
-        ///     numpy's own conversion validates and converts in one C pass: <c>astype(StringDType(coerce=False))</c> accepts a
-        ///     <c>str</c> (or <c>np.str_</c>) element and raises for any other object — <c>None</c>, NaN, numbers, <c>pd.NA</c>
-        ///     — so nothing is coerced to text and no missing-value object is guessed.
+        ///     <para>
+        ///     numpy's own conversion validates and converts in one C pass: <c>astype(StringDType(coerce=False))</c> accepts an
+        ///     exact <c>str</c> or <c>np.str_</c> element and raises for any other object — <c>None</c>, NaN, numbers,
+        ///     <c>pd.NA</c> — so nothing is coerced to text and no missing-value object is guessed.
+        ///     </para>
+        ///     <para>
+        ///     A <c>str</c> SUBCLASS is a <c>str</c> too, but numpy's <c>coerce=False</c> refuses it (<c>as_pystring</c> takes
+        ///     only the exact type). When that cast fails and every element is still a <c>str</c> instance, the array goes
+        ///     through numpy's coercing cast instead, which stores <c>str(x)</c> of a subclass element — what
+        ///     <c>np.array(arr, dtype=StringDType())</c> stores, so a subclass that overrides <c>__str__</c> crosses as that
+        ///     text. Nothing that is not a <c>str</c> reaches the coercing cast.
+        ///     </para>
         /// </remarks>
         /// <exception cref="NotSupportedException">An element is not a <c>str</c> (the message names the first one by flat
         ///     C-order index, type and repr), or a <c>str</c> holds a lone surrogate (UTF-8 cannot encode it, so neither
-        ///     numpy nor NumSharp can store it), or the running numpy has no <c>StringDType</c>.</exception>
+        ///     numpy nor NumSharp can store it), or a <c>str</c> subclass's <c>__str__</c> raises, or the running numpy has no
+        ///     <c>StringDType</c>.</exception>
         private static NDArray ImportObjectArrayOfStr(PyObject array)
         {
             NumpyStringApi.EnsureAvailable();
             PyObject converted;
             try
             {
-                using PyObject astype = array.GetAttr(PythonRuntimeInterop.NameAstype);
-                using PyObject strict = NewNumpyStringDType(hasNA: false, na: null, coerce: false);
-                converted = astype.Invoke(strict);
+                converted = ObjectArrayAsStringDType(array, coerce: false);
             }
-            catch (PythonException e)
+            catch (PythonException strictError)
             {
-                throw new NotSupportedException(DescribeObjectArrayRefusal(array, e.Message), e);
+                string notStr = DescribeFirstElementThatIsNotStr(array, strictError.Message);
+                if (notStr != null)
+                    throw new NotSupportedException(notStr + ObjectArrayGuidance, strictError);
+                try
+                {
+                    // Every element is a str instance: the strict cast refused a str subclass (or text UTF-8 cannot hold).
+                    converted = ObjectArrayAsStringDType(array, coerce: true);
+                }
+                catch (PythonException e)
+                {
+                    string how = e.Type?.Name == "UnicodeEncodeError" ? "as UTF-8" : "as text";
+                    throw new NotSupportedException(
+                        $"the object array holds only str elements, but numpy cannot store one of them {how} ({e.Message})." +
+                        ObjectArrayGuidance, e);
+                }
             }
 
             using (converted)
                 return ImportStringDType(converted, global::NumSharp.np.dtypes.StringDType());
         }
 
+        /// <summary>The guidance every object-array refusal ends with: what crosses, and the conversion that makes the rest
+        ///     cross.</summary>
+        private const string ObjectArrayGuidance =
+            " Only an object array whose every element is a str crosses (as a StringDType copy); " +
+            "convert it in Python first, e.g. np.array(arr, dtype=np.dtypes.StringDType(na_object=None)).";
+
         /// <summary>
-        ///     The refusal text of an object array that is not an array of <c>str</c>: the first element that is not a
-        ///     <c>str</c> (flat C-order index, type and a short repr), or numpy's own error when every element is a
-        ///     <c>str</c> (a lone surrogate). Runs only on the failure path.
+        ///     <c>array.astype(StringDType(coerce=coerce))</c> — numpy's own conversion of an object array to text. Call under
+        ///     the GIL.
         /// </summary>
         /// <param name="array">The numpy object array.</param>
-        /// <param name="numpyError">numpy's message from the failed conversion.</param>
-        /// <returns>The message.</returns>
-        private static string DescribeObjectArrayRefusal(PyObject array, string numpyError)
+        /// <param name="coerce">numpy's <c>coerce</c>: false takes only an exact <c>str</c> or <c>np.str_</c> element; true
+        ///     stores <c>str(x)</c> of anything else.</param>
+        /// <returns>The new numpy <c>StringDType()</c> array (owned by the caller).</returns>
+        /// <exception cref="PythonException">numpy refuses an element (its error, unchanged).</exception>
+        private static PyObject ObjectArrayAsStringDType(PyObject array, bool coerce)
         {
-            const string Guidance = " Only an object array whose every element is a str crosses (as a StringDType copy); " +
-                                    "convert it in Python first, e.g. np.array(arr, dtype=np.dtypes.StringDType(na_object=None)).";
+            using PyObject astype = array.GetAttr(PythonRuntimeInterop.NameAstype);
+            using PyObject descr = NewNumpyStringDType(hasNA: false, na: null, coerce: coerce);
+            return astype.Invoke(descr);
+        }
+
+        /// <summary>
+        ///     The refusal text of an object array that is not an array of <c>str</c>: the first element that is not a
+        ///     <c>str</c> instance (flat C-order index, type and a short repr). Runs only on the failure path.
+        /// </summary>
+        /// <param name="array">The numpy object array.</param>
+        /// <param name="numpyError">numpy's message from the failed conversion (for an element whose <c>repr()</c> raises).</param>
+        /// <returns>The text without the guidance, or <see langword="null"/> when every element is a <c>str</c> instance (a
+        ///     <c>str</c> subclass or <c>np.str_</c> included).</returns>
+        private static string DescribeFirstElementThatIsNotStr(PyObject array, string numpyError)
+        {
             try
             {
                 using PyModule scope = Py.CreateScope();
@@ -242,17 +284,18 @@ namespace NumSharp.Interop.PythonNet
                     "_bad = None if _bad is None else (_bad[0], _bad[1], _bad[2] if len(_bad[2]) <= 60 else _bad[2][:57] + '...')\n");
                 using PyObject bad = scope.Get("_bad");
                 if (bad.IsNone())
-                    return $"the object array holds only str elements, but numpy cannot store one of them as UTF-8 ({numpyError})." + Guidance;
+                    return null;
                 using var tuple = PyTuple.AsTuple(bad);
                 using PyObject index = tuple[0];
                 using PyObject typeName = tuple[1];
                 using PyObject repr = tuple[2];
-                return $"the object array holds a {typeName.As<string>()} at flat index {index.As<long>()} ({repr.As<string>()}), which is not a str." + Guidance;
+                return $"the object array holds a {typeName.As<string>()} at flat index {index.As<long>()} ({repr.As<string>()}), which is not a str.";
             }
             catch (PythonException)
             {
-                // The description is a courtesy; the refusal itself must survive an object whose repr() raises.
-                return $"the object array holds an element that is not a str ({numpyError})." + Guidance;
+                // The description is a courtesy; the refusal itself must survive an object whose repr() raises (only a
+                // non-str element's repr is taken, so one exists).
+                return $"the object array holds an element that is not a str ({numpyError}).";
             }
         }
 

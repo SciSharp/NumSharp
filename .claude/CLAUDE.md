@@ -75,7 +75,10 @@ variable-size memcpy per copy and loses to that 2–4×) driven by `Backends/Str
 casts, byte for byte: a number becomes its scalar's `str()` (`Backends/Strings/NDTextFormat.cs`: the float positional /
 scientific windows per type, float16 / float32 shortest digits, complex forms; an unsized `'U'` / `'S'` takes
 `REQUIRED_STR_LEN`, 21 for int64, 32 for the floats, 64 for complex; NumSharp's `char` converts as uint16, `decimal` as
-float64), a text is parsed by CPython 3.12's `int()` / `float()` / `complex()` (`NDTextParse.cs`, with the pinned Unicode
+float64; a Python int — a C# `BigInteger` — goes through `NDTextFormat.FormatPythonInt`, which refuses more than 4300
+digits with CPython's `str()` ValueError, so a `U` / `S` / coercing `T` store of one, an unsized discovery and
+`StringDType(na_object=10**4300)` raise as in NumPy, where they printed the digits and a `U8` store kept the first eight
+until 2026-10-14), a text is parsed by CPython 3.12's `int()` / `float()` / `complex()` (`NDTextParse.cs`, with the pinned Unicode
 tables of `Utilities/PyUnicode.cs`: decimal digits of every script, `str.isspace()`, the 4300-digit limit, strict UTF-8
 for `S → complex`). `NDTextConversion.cs` walks NumPy's raw assignment order and commits blocks of 128 (a failing
 element leaves the earlier blocks written, as NumPy does), converts only the selected runs under a mask, and quotes the
@@ -258,7 +261,9 @@ owns the allocator, so views keep it alive). Rules a new route must keep:
   copies byte-swapped; `np.str_` / `np.bytes_` are 0-d `U` / `S`). A `T` array crosses as an exact COPY through numpy's
   `_ARRAY_API` capsule (`src/NumSharp.Interop.pythonnet/NumpyStringApi.cs`: slots 313 load, 314 pack, 315 pack_null, 316
   acquire, 318 release, 160 `PyArray_GetPtr` for the data address) with `NpyString_dup`'s rules, so its cells equal numpy's
-  own copy's; an object array of `str` copies to `StringDType()`, any other is refused, and so is an NA object with no C#
+  own copy's; an object array of `str` copies to `StringDType()` (a `str` SUBCLASS element too: numpy's `coerce=False`
+  cast takes only an exact `str` / `np.str_`, so such an array goes through the coercing cast, which stores `str(x)` as
+  `np.array(arr, dtype=StringDType())` does), any other is refused, and so is an NA object with no C#
   form (`pd.NA`). Traps: numpy's `na_eq_cmp` is not reflexive for an `np.float16` NaN (only identity matches), so write a
   `T` array's NA with `descr.na_object` — a second boxed `Half.NaN` is the TEXT `'nan'`; pythonnet's `As<double>()` refuses
   an `np.float16` (convert through Python's `float()`); `np.empty(shape, T)` gives the result a NEW descriptor instance
@@ -273,7 +278,9 @@ owns the allocator, so views keep it alive). Rules a new route must keep:
   over an arena string keeps the old offset's high bytes behind its text, and numpy's `NpyString_dup` (so its own copy)
   moves them: compare cells, and they must move too. Gates `TextFixedWidthCrossingTests` + `TextStringDTypeCrossingTests`
   (live numpy, every NA kind × `coerce` × layout) + `TextCrossingEdgeCaseTests` (cell histories, UTF-8 size boundaries,
-  ranks 5–6, empty / read-only sources, a 64 KiB+ arena, 240 seeded random arrays and views, the codec, eight threads);
+  ranks 5–6, empty / read-only sources, a 64 KiB+ arena, 240 seeded random arrays and views, the codec, eight threads;
+  round 2: `str` subclasses, corrupt cells on both sides failing cleanly with numpy's allocator lock released, all-zero /
+  all-NA / all-empty / 16 MiB cells, 64 dimensions both ways and numpy's own refusal of 65, the 4300-digit int NA);
   speed in `docs/website-src/docs/interop/pythonnet-numpy.md` → "How does text cross?".
 - **Speed rules** (NPY/NS geomean 5.35×, minimum 1.80×, over copy / arena copy / stepped copy / take / mask / concatenate /
   where / repeat / `np.array(list)` / `U → T` / `T → U8` at 1K / 100K / 1M): allocator memory is reported through the

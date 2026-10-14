@@ -891,5 +891,293 @@ namespace NumSharp.Tests.Interop
 
             PyExec("del sub, mat, masked, iface, _strided, released, fake, tsub");
         }
+
+        // ============================================================================================ round 2
+
+        /// <summary>
+        ///     An object array of <c>str</c> SUBCLASS instances copies like any array of <c>str</c> (fixed with this test: it
+        ///     was refused with a false UTF-8 message, because numpy's <c>coerce=False</c> cast takes only an exact
+        ///     <c>str</c> and <c>np.str_</c>). The copy holds what numpy's coercing cast stores — <c>str(x)</c>, so a
+        ///     subclass that overrides <c>__str__</c> crosses as that text, as in <c>np.array(arr, dtype=StringDType())</c>.
+        ///     A non-<c>str</c> element after a subclass is still named; a subclass whose <c>__str__</c> raises is refused
+        ///     with Python's error.
+        /// </summary>
+        [TestMethod]
+        public void ObjectArrays_OfStrSubclasses_CopyAsNumpysCoercingCast()
+        {
+            PyExec(Helpers);
+            PyExec("""
+                Plain = type('Plain', (str,), {})
+                Loud = type('Loud', (str,), {'__str__': lambda self: 'LOUD:' + str.__str__(self)})
+                def _boom(self):
+                    raise RuntimeError('no text for you')
+                Broken = type('Broken', (str,), {'__str__': _boom})
+                subs = np.array([Plain('ab'), Loud('cd'), np.str_('e\x00f'), 'a medium text over fifteen bytes', Plain('')], dtype=object)
+                subs2d = np.array([[Plain('x'), 'y'], [Loud('z'), 'w']], dtype=object).T
+                mixed = np.array([Plain('ok'), None], dtype=object)
+                broken = np.array(['ok', Broken('b')], dtype=object)
+                """);
+            foreach (string name in new[] { "subs", "subs2d" })
+            {
+                using NDArray copy = ImportOf(name);
+                copy.dtype.Should().Be(np.dtypes.StringDType(), name);
+                copy.Shape.Dimensions.Should().Equal(PyDims(name), name);
+                Encode(copy).Should().Equal(PyStrings($"_enc({name}.astype(StringDType()))"), $"{name}: numpy's coercing cast");
+            }
+
+            using (NDArray copy = ImportOf("subs"))
+                copy.GetValue(1).Should().Be("LOUD:cd", "the __str__ override is what numpy's cast stores");
+            ((Action)(() => ImportOf("mixed").Dispose()))
+                .Should().Throw<NotSupportedException>().WithMessage("*NoneType at flat index 1 (None), which is not a str*");
+            ((Action)(() => ImportOf("broken").Dispose()))
+                .Should().Throw<NotSupportedException>().WithMessage("*only str elements, but numpy cannot store one of them as text*no text for you*");
+            PyExec("del Plain, Loud, Broken, subs, subs2d, mixed, broken");
+        }
+
+        /// <summary>
+        ///     A cell its own library cannot load stops the copy with a clear exception and leaves nothing behind: on import, a
+        ///     numpy cell that claims an arena string in an array without an arena (<c>NpyString_load</c> fails); on export, the
+        ///     same NumSharp cell (NumSharp's load fails). numpy's allocator is released (numpy keeps working on the array, so
+        ///     its lock was not left held), no allocator / export / import leaks, and once the cell is restored both copies
+        ///     succeed.
+        /// </summary>
+        [TestMethod]
+        public unsafe void StringDType_CorruptCells_FailCleanly_BothWays()
+        {
+            long allocators = VStringAllocator.LiveAllocators;
+            PyExec(Helpers);
+            PyExec("cr = np.array(['a', 'b', 'c'], dtype=StringDType())");
+            byte* numpyCell = (byte*)PyLong("cr.__array_interface__['data'][0]") + 16;
+            byte[] saved = new ReadOnlySpan<byte>(numpyCell, 16).ToArray();
+            CorruptToArenaString(numpyCell);
+            try
+            {
+                ((Action)(() => ImportOf("cr").Dispose()))
+                    .Should().Throw<InvalidOperationException>().WithMessage("numpy could not load a StringDType element*corrupt cell*");
+            }
+            finally
+            {
+                saved.CopyTo(new Span<byte>(numpyCell, 16));
+            }
+
+            PyStr("repr(np.strings.add(cr, '!'))").Should().Be("array(['a!', 'b!', 'c!'], dtype=StringDType())",
+                "numpy's allocator was released: numpy acquires it again");
+            using (NDArray copy = ImportOf("cr"))
+                copy.GetValue(1).Should().Be("b");
+
+            using NDArray m = np.array(new object[] { "x", "y", "z" }, np.dtypes.StringDType());
+            byte* nsCell = (byte*)m.Storage.Address + 16;
+            saved = new ReadOnlySpan<byte>(nsCell, 16).ToArray();
+            CorruptToArenaString(nsCell);
+            try
+            {
+                ((Action)(() =>
+                {
+                    using (Gil())
+                    using (PyObject x = m.ToNumpyCopy())
+                    {
+                    }
+                })).Should().Throw<InvalidOperationException>().WithMessage("NumSharp could not load a StringDType element*corrupt cell*");
+            }
+            finally
+            {
+                saved.CopyTo(new Span<byte>(nsCell, 16));
+            }
+
+            using (Gil())
+            using (PyObject x = m.ToNumpyCopy())
+                x.Repr().Should().Be("array(['x', 'y', 'z'], dtype=StringDType())");
+            PyExec("del cr");
+            WaitFor(() => { Pump(); return VStringAllocator.LiveAllocators <= allocators + 1; })
+                .Should().BeTrue("only m's allocator is alive: the failed copies left none");
+        }
+
+        /// <summary>
+        ///     Writes the header of a medium ARENA string (offset 0, size 20, flags <c>INITIALIZED</c>) over a 16-byte cell —
+        ///     in an array whose strings are all short, so it has no arena, the load of that cell fails.
+        /// </summary>
+        /// <param name="cell">The cell's first byte.</param>
+        private static unsafe void CorruptToArenaString(byte* cell)
+        {
+            new Span<byte>(cell, 16).Clear();
+            cell[8] = 20;     // the size, little-endian bytes 8..14
+            cell[15] = 0x40;  // INITIALIZED, inside the arena, medium
+        }
+
+        /// <summary>
+        ///     Cells that need no arena and cells that need a huge one: <c>np.empty(5, T)</c> (all-zero cells, read as
+        ///     <c>''</c>), 1,000 NA cells, 1,000 empty strings, and one 16 MiB string (an eight-byte size prefix far past any
+        ///     other case) — each import equals numpy's own copy cell for cell, and each comes back.
+        /// </summary>
+        [TestMethod]
+        public void StringDType_UninitializedEmptyNaAndHugeStrings()
+        {
+            PyExec(Helpers);
+            PyExec("""
+                ue = np.empty(5, dtype=StringDType(na_object=None))
+                an = np.array([None] * 1000, dtype=StringDType(na_object=None))
+                ae = np.array([''] * 1000, dtype=StringDType())
+                big1 = np.array(['q' * (16 << 20), 's'], dtype=StringDType())
+                """);
+            using (NDArray copy = ImportOf("ue"))
+                Encode(copy).Should().Equal(Enumerable.Repeat("s:", 5), "np.empty's all-zero cells read as ''");
+            foreach (string name in new[] { "ue", "an", "ae", "big1" })
+                AssertImportsAsNumpysCopyAndBack(name, name);
+            using (NDArray copy = ImportOf("big1"))
+                ((string)copy.GetValue(0)).Length.Should().Be(16 << 20);
+            PyExec("del ue, an, ae, big1");
+        }
+
+        /// <summary>
+        ///     numpy's dimension limit: 64-dimensional <c>StringDType</c> arrays (and a transposed, reversed view of one) copy
+        ///     both ways, a 64-dimensional <c>U</c> array views both ways; a 65-dimensional NumSharp array of any dtype is
+        ///     refused by numpy itself (its own text) with nothing exported or leaked.
+        /// </summary>
+        [TestMethod]
+        public void Text_MaximumRank_AndTooManyDimensions()
+        {
+            PyExec(Helpers);
+            PyExec("""
+                d64 = np.array(['x', 'a long text over fifteen bytes', None], dtype=StringDType(na_object=None)).reshape((1,) * 63 + (3,))
+                u64 = np.array(['ab', 'c', 'def'], dtype='U3').reshape((3,) + (1,) * 63)
+                """);
+            AssertImportsAsNumpysCopyAndBack("d64", "64-D");
+            AssertImportsAsNumpysCopyAndBack("d64.T[::-1]", "64-D transposed and reversed");
+            using (NDArray view = ViewOf("u64"))
+            {
+                view.ndim.Should().Be(64);
+                view.GetValue(Enumerable.Repeat(0L, 64).Select((_, i) => i == 0 ? 2L : 0L).ToArray()).Should().Be("def");
+                using (Gil())
+                using (PyObject back = view.ToNumpy())
+                {
+                    Scope.Set("u64b", back);
+                }
+            }
+
+            PyBool("u64b.ndim == 64 and np.shares_memory(u64b, u64) and (u64b == u64).all()").Should().BeTrue("the view comes back as the same memory");
+            PyExec("del u64b");
+
+            var shape65 = new Shape(Enumerable.Repeat(1L, 65).ToArray());
+            using NDArray t65 = np.array(new object[] { "x" }, np.dtypes.StringDType()).reshape(shape65);
+            using NDArray u65 = np.array(new[] { "xy" }).astype(np.dtype("U2")).reshape(shape65);
+            using NDArray f65 = np.zeros(shape65, NPTypeCode.Double);
+            foreach (var (name, nd) in new[] { ("T", t65), ("U2", u65), ("float64", f65) })
+            {
+                ((Action)(() =>
+                {
+                    using (Gil())
+                    using (PyObject x = name == "T" ? nd.ToNumpyCopy() : nd.ToNumpy())
+                    {
+                    }
+                })).Should().Throw<PythonException>().WithMessage("*maximum supported dimension for an ndarray is currently 64, found 65*", name);
+            }
+
+            PyExec("del d64, u64");
+        }
+
+        /// <summary>
+        ///     A TEXT cell equal to a string missing-data object is not missing: numpy's <c>U → T</c> cast does not check for
+        ///     the NA object, so <c>np.array(['NA', 'b'], 'U2').astype(StringDType(na_object='NA'))</c> holds the text
+        ///     <c>'NA'</c>, while a store of <c>'NA'</c> makes a missing cell. Both kinds cross as they are, and the cells equal
+        ///     numpy's own copy.
+        /// </summary>
+        [TestMethod]
+        public void StringDType_TextEqualToStringNA_StaysText()
+        {
+            PyExec(Helpers);
+            PyExec("""
+                ut = np.array(['NA', 'b', 'NA'], dtype='U2').astype(StringDType(na_object='NA'))
+                ut[2] = 'NA'
+                ut_flags = [ut[i] is ut.dtype.na_object for i in range(3)]
+                """);
+            PyStr("str(ut_flags)").Should().Be("[False, False, True]", "the cast keeps text, the store makes NA");
+            AssertImportsAsNumpysCopyAndBack("ut", "text vs NA");
+            using NDArray copy = ImportOf("ut");
+            copy.tobytes().AsSpan(15, 1)[0].Should().NotBe(copy.tobytes()[47], "cell 0 is text, cell 2 is NA");
+            using (Gil())
+            using (PyObject back = copy.ToNumpyCopy())
+            {
+                Scope.Set("utb", back);
+            }
+
+            PyStr("str([utb[i] is utb.dtype.na_object for i in range(3)])").Should().Be("[False, False, True]");
+            PyExec("del ut, ut_flags, utb");
+        }
+
+        /// <summary>
+        ///     The 4300-digit boundary of a Python int missing-data object, live: numpy refuses to build
+        ///     <c>StringDType(na_object=10**4300)</c> (it takes the object's <c>str()</c>, which CPython refuses past 4300
+        ///     digits) and NumSharp refuses with the same ValueError text, so neither side can hold one; a 4300-digit object
+        ///     crosses both ways as a <see cref="BigInteger"/> with its NA cells.
+        /// </summary>
+        [TestMethod]
+        public void PythonIntNA_4300DigitBoundary_MatchesNumpy()
+        {
+            PyExec(Helpers);
+            PyExec("""
+                ok = 10**4300 - 1
+                try:
+                    StringDType(na_object=10**4300)
+                    refusal = None
+                except ValueError as e:
+                    refusal = str(e)
+                bnd = np.array(['a', ok, 'a long text over fifteen bytes'], dtype=StringDType(na_object=ok))
+                """);
+            string numpyRefusal = PyStr("refusal");
+            numpyRefusal.Should().StartWith("Exceeds the limit (4300 digits) for integer string conversion");
+            ((Action)(() => np.dtypes.StringDType(BigInteger.Pow(10, 4300)))).Should().Throw<ValueError>().WithMessage(numpyRefusal);
+
+            BigInteger ok = BigInteger.Pow(10, 4300) - 1;
+            using NDArray copy = ImportOf("bnd");
+            copy.dtype.na_object.Should().Be(ok);
+            copy.GetValue(1).Should().Be(ok, "the NA cell reads as the NA object");
+            copy.tobytes().Should().Equal(PyBytes("np.array(bnd, copy=True).tobytes()"));
+            using (Gil())
+            using (PyObject back = copy.ToNumpyCopy())
+            {
+                Scope.Set("bndb", back);
+            }
+
+            PyBool("bndb.dtype.na_object == ok and bndb[1] is bndb.dtype.na_object and bndb[2] == bnd[2]").Should().BeTrue();
+            PyExec("del ok, refusal, bnd, bndb");
+        }
+
+        /// <summary>
+        ///     <c>FromArrayLike</c> over text: numpy's <c>np.asarray</c> makes a list of <c>str</c> a <c>U</c> array, a nested
+        ///     list a 2-D one and a Python <c>str</c> a 0-d <c>U</c>, all copied; a list with <c>None</c> becomes an object
+        ///     array, refused with the element named.
+        /// </summary>
+        [TestMethod]
+        public void FromArrayLike_OfText()
+        {
+            using (Gil())
+            {
+                using PyObject list = Scope.Eval("['a', 'bc', 'def']");
+                using (NDArray a = list.FromArrayLike())
+                {
+                    a.dtype.Should().Be(np.dtype("U3"));
+                    a.GetValue(2).Should().Be("def");
+                }
+
+                using PyObject nested = Scope.Eval("[['a', 'bb'], ['c', 'dd']]");
+                using (NDArray a = nested.FromArrayLike())
+                {
+                    a.Shape.Dimensions.Should().Equal(new long[] { 2, 2 });
+                    a.GetValue(1L, 1L).Should().Be("dd");
+                }
+
+                using PyObject text = Scope.Eval("'hello'");
+                using (NDArray a = text.FromArrayLike())
+                {
+                    a.ndim.Should().Be(0);
+                    a.dtype.Should().Be(np.dtype("U5"));
+                    a.GetValue().Should().Be("hello");
+                }
+
+                using PyObject withNone = Scope.Eval("['a', None]");
+                ((Action)(() => withNone.FromArrayLike().Dispose()))
+                    .Should().Throw<NotSupportedException>().WithMessage("*NoneType at flat index 1 (None)*");
+            }
+        }
     }
 }

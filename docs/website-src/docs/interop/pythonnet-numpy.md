@@ -593,9 +593,11 @@ copy.GetValue(2)    null  (the NA value)
   NumSharp, every C# integer type, `float` and `char` cross too and come back as `long` (or
   `BigInteger`), `double` and a one-character `string`. Any other object (`pd.NA`, `np.int64`, a
   class of your own) is refused in both directions, rather than guessed.
-- **Object arrays** of `str` - what pandas text columns hold - copy to `StringDType()`. Any other
-  object array (a `None`, a NaN, a number among the strings) is refused with the first such element
-  named; convert it in Python first, e.g. `np.array(arr, dtype=np.dtypes.StringDType(na_object=None))`.
+- **Object arrays** of `str` - what pandas text columns hold - copy to `StringDType()`. An element of a
+  `str` subclass copies as `str(x)`, the text `np.array(arr, dtype=np.dtypes.StringDType())` stores.
+  Any other object array (a `None`, a NaN, a number among the strings) is refused with the first
+  such element named; convert it in Python first, e.g.
+  `np.array(arr, dtype=np.dtypes.StringDType(na_object=None))`.
 - **PyTorch** has no string tensors: `ToTorch` refuses a text array before exporting anything.
 
 **What a `StringDType` copy costs.** Microseconds per call, minimum of three runs of best-of-9
@@ -726,6 +728,7 @@ import route works uniformly across pythonnet 3.0.x.
 | 31 | A `StringDType` copy holds no lease and survives its source; an allocation failure mid-copy leaves nothing behind | counters at baseline; injected failure releases the half-built copy | [`Copies_AreIndependentOfTheSourcesLifetime`][gate-text-vstring], [`FaultInjection_DuringImport_ReleasesTheHalfBuiltCopy`][gate-text-vstring] |
 | 32 | The page's text example: a `U3` import is a view, a `StringDType` import a copy with its NA | the three output lines | [`Text_FixedWidthViews_StringDTypeCopies`][gate] |
 | 33 | Text edge cases cross exactly: cells with a history (heap rewrites, NA or `''` over arena text, a short text over an arena cell keeping the old offset's bytes), UTF-8 sizes on every cell and prefix boundary, more NA objects, ranks 5–6, empty and read-only sources, a 64 KiB+ arena, the codec pipeline, eight threads | cells equal numpy's own copy; 240 seeded random arrays and views; planted defects each turn a test red | [`StringDType_CellHistories_CrossAsNumpysOwnCopy`][gate-text-edge], [`StringDType_RandomizedDifferential`][gate-text-edge], [`FixedWidthText_RandomizedDifferential`][gate-text-edge], [`Concurrency_ManyThreadsCrossText`][gate-text-edge] |
+| 34 | More edges: `str`-subclass object arrays copy as numpy's coercing cast; a corrupt cell on either side fails with a clear exception and releases numpy's allocator; all-zero / all-NA / all-empty / 16 MiB cells, 64 dimensions both ways; numpy's own refusal of 65 dimensions and of a 4300+-digit int NA leaves nothing behind | numpy keeps working on the array after the failure; counters at baseline; NumSharp refuses the 4301-digit NA with numpy's text | [`ObjectArrays_OfStrSubclasses_CopyAsNumpysCoercingCast`][gate-text-edge], [`StringDType_CorruptCells_FailCleanly_BothWays`][gate-text-edge], [`Text_MaximumRank_AndTooManyDimensions`][gate-text-edge], [`PythonIntNA_4300DigitBoundary_MatchesNumpy`][gate-text-edge] |
 
 ---
 
