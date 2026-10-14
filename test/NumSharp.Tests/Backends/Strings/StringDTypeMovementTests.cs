@@ -833,5 +833,61 @@ namespace NumSharp.Tests.Backends.Strings
             Action sum = () => np.sum(a);
             sum.Should().Throw<StringComputationNotSupportedException>().WithMessage("sum is not supported for StringDType() arrays yet*");
         }
+
+        /// <summary>
+        ///     <c>ndarray.byteswap</c> over <c>StringDType</c> is the identity (owner's decision D14): a cell has no byte order.
+        ///     NumPy 2.4.2 crashes the process on this call (a segmentation fault after its writeable check), so the expected
+        ///     values are NumPy's own steps before the crash: <c>inplace=False</c> is <c>PyArray_NewCopy(self, ANYORDER)</c> —
+        ///     a copy with the same texts and NA values in its own allocator, F-ordered only for an F-contiguous-and-not-C
+        ///     source — and <c>inplace=True</c> passes the writeable check (NumPy's text for a read-only array) and returns the
+        ///     array itself with its cells unchanged.
+        /// </summary>
+        [TestMethod]
+        public void Byteswap_IsTheIdentity()
+        {
+            using var a = np.array(new object[] { "a", L('x'), null, "\U0001F600é" }, TN);
+            using (var copy = a.byteswap())
+            {
+                V(copy).Should().Equal(new object[] { "a", L('x'), null, "\U0001F600é" });
+                copy.dtype.Should().Be(a.dtype);
+                ReferenceEquals(copy, a).Should().BeFalse();
+                // A copy: a store into it leaves the source alone (the arena string was duplicated, not shared).
+                copy[1] = "changed";
+                V(a)[1].Should().Be(L('x'));
+            }
+
+            // inplace: the same instance, every cell as it was (the cells' raw bytes are compared, offsets included).
+            var before = a.tobytes();
+            a.byteswap(inplace: true).Should().BeSameAs(a);
+            a.tobytes().Should().Equal(before);
+
+            // ANYORDER: an F-contiguous-and-not-C source gives an F-ordered copy; a C one, or a strided view, a C copy.
+            using var m = np.array(new[,] { { "p", L('q') }, { "r", "s" } }, T);
+            using (var f = m.T.byteswap())
+            {
+                f.Shape.IsFContiguous.Should().BeTrue();
+                f.Shape.IsContiguous.Should().BeFalse();
+                V(f).Should().Equal(new object[] { "p", "r", L('q'), "s" });
+            }
+            using (var s = m[":, ::-1"].byteswap())
+            {
+                s.Shape.IsContiguous.Should().BeTrue();
+                V(s).Should().Equal(new object[] { L('q'), "p", "s", "r" });
+            }
+
+            // A read-only array: the copy is fine, the in-place call raises NumPy's text (its check runs before the swap).
+            using var ro = np.broadcast_to(A("z", L('w')), new Shape(2, 2));
+            using (var c = ro.byteswap())
+            {
+                c.Shape.IsWriteable.Should().BeTrue();
+                V(c).Should().Equal(new object[] { "z", L('w'), "z", L('w') });
+            }
+            Action inplace = () => ro.byteswap(inplace: true);
+            inplace.Should().Throw<ValueError>().WithMessage("array to be byte-swapped is read-only");
+
+            using var empty = np.array(new string[0], T);
+            using (var e = empty.byteswap())
+                e.size.Should().Be(0);
+        }
     }
 }

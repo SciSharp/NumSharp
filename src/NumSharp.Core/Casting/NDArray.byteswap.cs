@@ -33,6 +33,16 @@ namespace NumSharp
         //   (the result holds code points NumPy itself cannot decode); an 'S' element
         //   is N single bytes, so it is a value no-op (still a copy unless inplace).
         //
+        //   A NEP 55 StringDType ('T') element has NO byte order (its descriptor's
+        //   byteorder is '|': a cell holds UTF-8 text, an arena offset or a heap
+        //   pointer that belong to its buffer's allocator). NumPy 2.4.2 CRASHES the
+        //   process here (its copyswapn for StringDType is not usable), so NumSharp
+        //   takes the owner's decision D14 (docs/plans/strings-phase1-completion.md):
+        //   the swap is the identity, so inplace=True leaves the cells alone and
+        //   returns self (after NumPy's writeable check), and inplace=False returns
+        //   PyArray_NewCopy(self, NPY_ANYORDER), the step NumPy runs before it crashes.
+        //   Swapping a cell's bytes would corrupt its offset or pointer.
+        //
         //   inplace=False (default): return a fresh COPY (never shares memory) in
         //     NumPy's PyArray_NewCopy(ANYORDER) layout — F iff the source is
         //     F-contiguous-and-not-C, else C — then swap it. Even a 1-byte dtype
@@ -73,9 +83,29 @@ namespace NumSharp
         /// <exception cref="ValueError">
         ///     When <paramref name="inplace"/> is <c>true</c> and the array is not writeable (e.g. a broadcast view).
         /// </exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.byteswap.html</remarks>
+        /// <remarks>
+        ///     <para>
+        ///     A NEP 55 <c>StringDType</c> array has no byte order to toggle, so the swap is the identity: <c>inplace</c>
+        ///     returns this instance with its strings untouched (a read-only array still raises NumPy's
+        ///     <see cref="ValueError"/>), and the default returns a copy in NumPy's <c>ANYORDER</c> layout (F only for an
+        ///     F-contiguous-and-not-C source), each string duplicated into the copy's own allocator. NumPy 2.4.2
+        ///     crashes the process on this call (owner's decision D14, <c>docs/plans/strings-phase1-completion.md</c>).
+        ///     </para>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.byteswap.html</para>
+        /// </remarks>
         public NDArray byteswap(bool inplace = false)
         {
+            // A StringDType cell is text in its buffer's allocator, never a byte-ordered number: the swap is the identity.
+            // The writeable check runs first, as NumPy's PyArray_FailUnlessWriteable does before the swap it cannot make.
+            if (Storage.IsVString)
+            {
+                if (!inplace)
+                    return this.copy(Shape.Order);
+                if (!Shape.IsWriteable)
+                    throw new ValueError("array to be byte-swapped is read-only");
+                return this;
+            }
+
             int itemsize = this.itemsize;
             // Complex swaps each component (real/imag) independently — half the itemsize per unit; a string swaps
             // each character (4 bytes for 'U', 1 for 'S').
