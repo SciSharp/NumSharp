@@ -581,6 +581,24 @@ After this plan, phase 2 loses P2.4 and gains the `T` forms of P2.1–P2.6 plus 
     (`np.add(f64, f64, out=f32, where=m)` with runs of length 1) takes 1.0 ms at 100K, NumPy 0.64 ms.
   - This round's packages are done except P1.7c (text I/O for `T`) and P1.7f (the whole surface with `T`), which wait for
     the owner (D12).
+- 2026-10-14 — **P1.8 edge cases, round 2** (owner's request: "Try further edge cases coverage and fixes"; `4240a365`,
+  `ce69b201`).
+  - Core: a Python int (a C# `BigInteger`) of more than 4300 decimal digits has no text, as in CPython
+    (`NDTextFormat.FormatPythonInt`). A `U` / `S` / coercing `T` store of one, an unsized `'U'` / `'S'` discovery and
+    `StringDType(na_object=10**4300)` raise CPython's ValueError, where NumSharp printed the digits and a `U8` store kept
+    the first eight. Found through the bridge: numpy refuses to build that descriptor at all.
+  - Bridge: an object array of `str` SUBCLASS instances copies like any array of `str` (numpy's `coerce=False` cast takes
+    only an exact `str` / `np.str_`; when every element is still a `str`, the coercing cast stores `str(x)`), where it was
+    refused with a false UTF-8 message.
+  - Pinned as right by `TextCrossingEdgeCaseTests` (14 → 21): a corrupt cell on either side stops the copy and releases
+    numpy's allocator; all-zero (`np.empty`), all-NA, all-empty and 16 MiB cells; 64 dimensions both ways and numpy's own
+    refusal of 65; a text cell equal to a string NA stays text; the 4300-digit int NA; `FromArrayLike` over text. Planted
+    defects: 4 of 4 caught. A scratch fuzz sweep of 2,000 `T` + 2,000 fixed-width cases: 0 failures. Unit 19,542 /
+    19,541 (net10.0 / net8.0), oracle 344, interop 690 / 690 on both, ecosystem 94 + 1 skipped.
+  - Reported, not changed: NumSharp's `VStringAllocator.Load` (like numpy's `NpyString_load`) does not bound-check an arena
+    offset, so a cell corrupted by raw writes reads outside the arena; the codec's array-like decode still excludes a
+    Python `str`, whose stated reason (no string dtype) phase 1 made stale — accepting it is the owner's call (pythonnet
+    would then convert a `str` argument into an `NDArray` parameter).
 
 ## 6. The next round: the rest of P1.7, so that phase 1 is complete
 
