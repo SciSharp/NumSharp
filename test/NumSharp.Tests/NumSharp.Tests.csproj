@@ -76,6 +76,16 @@
     </None>
   </ItemGroup>
 
+  <!-- numpy.dtype / DType-class oracle: real NumPy 2.4.2 member names, descriptor attributes, errors, comparisons,
+       promotions, class attributes and casting resolutions, one file per C long model (llp64 = Windows NumPy,
+       lp64 = Linux NumPy), replayed by DTypeOracleTests (no Python in CI). Regenerate:
+       python test/oracle/gen_dtype_oracle.py, and the same under WSL's Linux NumPy for lp64. -->
+  <ItemGroup>
+    <None Update="DTypes\corpus\dtype_oracle.*.jsonl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
   <!-- ndarray.flags / ndarray.setflags oracle: real NumPy 2.4.2 flag records + verbatim errors,
        replayed by FlagsOracleTests (no Python in CI). Regenerate: python test/oracle/gen_flags_oracle.py -->
   <ItemGroup>

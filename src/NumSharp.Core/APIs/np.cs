@@ -140,7 +140,7 @@ namespace NumSharp
         ///     no C# <see cref="Type"/> spelling — <c>typeof(byte[])</c> is a <c>uint8</c> array, as for every C# array type — so
         ///     this field, <c>"S"</c>/<c>"S5"</c> or <see cref="dtypes.BytesDType"/> are the ways to request it.
         /// </summary>
-        public static readonly DType bytes_ = DTypeRegistry.Bytes.Singleton;
+        public static readonly DType bytes_ = DTypeRegistry.Bytes.singleton;
 
         public static DType chars => throw new NotSupportedException("Please use char with extra dimension.");
 

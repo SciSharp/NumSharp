@@ -38,7 +38,7 @@ namespace NumSharp
         public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
             loopDescrs[0] = givenDescrs[0];
-            loopDescrs[1] = givenDescrs[1] ?? From.EnsureCanonical(loopDescrs[0]);
+            loopDescrs[1] = givenDescrs[1] ?? From.ensure_canonical(loopDescrs[0]);
             viewOffset = NoView;
 
             if (loopDescrs[0].itemsize < loopDescrs[1].itemsize)
@@ -157,10 +157,10 @@ namespace NumSharp
 
             /* The legacy loop can handle mismatching itemsizes */
             loopDescrs[1] = givenDescrs[1] == null
-                ? new DType(toMeta, DType.NativeByteOrder, null, (int)size, toMeta.TypeChar)
-                : To.EnsureCanonical(givenDescrs[1]);
+                ? new DType(toMeta, DType.NPY_NATIVE, null, (int)size, toMeta.TypeChar)
+                : To.ensure_canonical(givenDescrs[1]);
             /* Set the input one as well (late for easier error management) */
-            loopDescrs[0] = From.EnsureCanonical(givenDescrs[0]);
+            loopDescrs[0] = From.ensure_canonical(givenDescrs[0]);
 
             if (Casting == NPY_CASTING.NPY_UNSAFE_CASTING)
                 return Casting; // U -> S: unsafe whatever the lengths
@@ -254,10 +254,10 @@ namespace NumSharp
                     : DatetimeIsoStrLen(givenDescrs[0].DatetimeMetadata.Value.Base);
                 if (toMeta.IsUnicode)
                     size *= 4;
-                loopDescrs[1] = new DType(toMeta, DType.NativeByteOrder, null, size, toMeta.TypeChar);
+                loopDescrs[1] = new DType(toMeta, DType.NPY_NATIVE, null, size, toMeta.TypeChar);
             }
 
-            loopDescrs[0] = From.EnsureCanonical(givenDescrs[0]);
+            loopDescrs[0] = From.ensure_canonical(givenDescrs[0]);
             return NPY_CASTING.NPY_UNSAFE_CASTING;
         }
     }
@@ -290,7 +290,7 @@ namespace NumSharp
         public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
             viewOffset = NoView;
-            loopDescrs[1] = givenDescrs[1] == null ? To.DefaultDescr() : To.EnsureCanonical(givenDescrs[1]);
+            loopDescrs[1] = givenDescrs[1] == null ? To.default_descr() : To.ensure_canonical(givenDescrs[1]);
             loopDescrs[0] = givenDescrs[0];
             return NPY_CASTING.NPY_UNSAFE_CASTING;
         }

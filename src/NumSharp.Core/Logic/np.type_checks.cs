@@ -121,7 +121,7 @@ namespace NumSharp
             if (dtype is null) throw new ArgumentNullException(nameof(dtype));
             ThrowIfNotNumPyDType(dtype);
             if (kind is null) throw new TypeError("kind argument must be comprised of NumPy dtypes or strings only, but is a null.");
-            if (!kind.Meta.IsLegacy)
+            if (!kind.Meta._legacy)
                 throw new TypeError($"kind argument must be comprised of NumPy dtypes or strings only, but is a {kind.Meta}.");
             return ReferenceEquals(dtype.Meta, kind.Meta);
         }
@@ -136,7 +136,7 @@ namespace NumSharp
         ///     dtype, but it is a &lt;class 'numpy.dtypes.StringDType'&gt;.</c></exception>
         private static void ThrowIfNotNumPyDType(DType dtype)
         {
-            if (!dtype.Meta.IsLegacy)
+            if (!dtype.Meta._legacy)
                 throw new TypeError($"dtype argument must be a NumPy dtype, but it is a {dtype.Meta}.");
         }
 

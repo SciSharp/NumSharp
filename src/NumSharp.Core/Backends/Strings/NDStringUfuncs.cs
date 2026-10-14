@@ -803,7 +803,7 @@ namespace NumSharp.Backends.Strings
                         $"according to the rule '{casting}'");
             }
 
-            var output = unsized ? dtype.Meta.DefaultDescr() : loop;
+            var output = unsized ? dtype.Meta.default_descr() : loop;
             if (!DTypeCasting.CanCastTypeTo(DType.Boolean, output, NPY_CASTING.NPY_SAFE_CASTING))
                 // NumPy's PyArray_AssignRawScalar of the bool zero into the output raises TypeError, like the operand
                 // cast above (np.copyto keeps the house InvalidCastException for its own scalar casts).

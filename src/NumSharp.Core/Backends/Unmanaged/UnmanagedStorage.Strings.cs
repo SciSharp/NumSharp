@@ -292,7 +292,7 @@ namespace NumSharp.Backends
                 // SetData normalises the coordinates (negative ones wrap, out-of-range ones raise) before SetDataVString.
                 if (value is byte[] bytes)
                 {
-                    using var raw = NDStringArrays.FromScalar(bytes, DTypeRegistry.Bytes.Singleton);
+                    using var raw = NDStringArrays.FromScalar(bytes, DTypeRegistry.Bytes.singleton);
                     SetData(raw, indices);
                     return true;
                 }
@@ -303,7 +303,7 @@ namespace NumSharp.Backends
 
             // The class of THIS array decides how the value is encoded (str into S is ASCII-encoded, bytes into U decoded).
             var cls = (StringDTypeMeta)Descr.Meta;
-            using var scalar = NDStringArrays.FromScalar(value, cls.Singleton);
+            using var scalar = NDStringArrays.FromScalar(value, cls.singleton);
             SetData(scalar, indices);
             return true;
         }
@@ -336,7 +336,7 @@ namespace NumSharp.Backends
         /// <param name="requested">The requested CLR type, or null for "keep this storage's type".</param>
         /// <returns>A string descriptor (possibly unsized).</returns>
         private DType StringRequest(Type requested)
-            => requested == null && _descr?.Meta is StringDTypeMeta ? _descr : DTypeRegistry.Str.Singleton;
+            => requested == null && _descr?.Meta is StringDTypeMeta ? _descr : DTypeRegistry.Str.singleton;
 
         /// <summary>
         ///     A fresh buffer of <paramref name="count"/> elements of THIS storage's element type — the descriptor's width for

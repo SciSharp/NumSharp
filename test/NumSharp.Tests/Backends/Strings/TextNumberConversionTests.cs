@@ -1025,10 +1025,10 @@ namespace NumSharp.Tests.Backends.Strings
             double v = 12.5;
             NDTextFormat.StrLength(TextNumberKind.Double, (byte*)&v).Should().Be(4);
             var strMeta = np.dtype("U").Meta;
-            strMeta.DiscoverDescrFromObject(null).str.Should().Be("<U4");
-            strMeta.DiscoverDescrFromObject(12345L).str.Should().Be("<U5");
-            strMeta.IsKnownScalarType(typeof(string)).Should().BeTrue();
-            strMeta.IsKnownScalarType(typeof(Half)).Should().BeFalse("a NumPy scalar is discovered through its own dtype");
+            strMeta.discover_descr_from_pyobject(null).str.Should().Be("<U4");
+            strMeta.discover_descr_from_pyobject(12345L).str.Should().Be("<U5");
+            strMeta.is_known_scalar_type(typeof(string)).Should().BeTrue();
+            strMeta.is_known_scalar_type(typeof(Half)).Should().BeFalse("a NumPy scalar is discovered through its own dtype");
             Action nullString = () => { NDArray _ = (string)null; };
             nullString.Should().Throw<ArgumentNullException>();
         }

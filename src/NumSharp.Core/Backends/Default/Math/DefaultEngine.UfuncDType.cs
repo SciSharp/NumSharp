@@ -87,9 +87,9 @@ namespace NumSharp.Backends
         ///     (<see cref="NewStyleDTypeInstanceText"/>, checked first, as in NumPy).</exception>
         internal static void ThrowIfNotGeneralDType(DType dtype)
         {
-            if (!dtype.Meta.IsLegacy)
+            if (!dtype.Meta._legacy)
                 throw new TypeError(NewStyleDTypeInstanceText);
-            var singleton = dtype.Meta.Singleton;
+            var singleton = dtype.Meta.singleton;
             if (ReferenceEquals(singleton, dtype))
                 return;
             if (singleton is null || !DTypeCasting.EquivTypes(singleton, dtype))

@@ -3,7 +3,7 @@ using System;
 namespace NumSharp.Tests.Creation
 {
     /// <summary>
-    ///     Core <see cref="np.dtype(string)"/> smoke tests. Full NumPy-parity coverage lives in
+    ///     Core <see cref="np.dtype(string, bool, bool, System.Collections.Generic.IReadOnlyDictionary{string, object})"/> smoke tests. Full NumPy-parity coverage lives in
     ///     <c>DTypeStringParityTests</c>.
     /// </summary>
     [TestClass]

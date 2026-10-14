@@ -7,7 +7,7 @@ namespace NumSharp
     ///     NumPy's two fixed-width string DType classes — <c>numpy.dtypes.BytesDType</c> (kind <c>'S'</c>, type number 18,
     ///     one byte per character, NumPy's <c>np.bytes_</c>) and <c>numpy.dtypes.StrDType</c> (kind <c>'U'</c>, type number
     ///     19, one UCS-4 code point = 4 bytes per character, NumPy's <c>np.str_</c>). Both are PARAMETRIC: the length lives
-    ///     on the descriptor (<c>S5</c> → <c>itemsize</c> 5, <c>U5</c> → 20), so promotion runs <see cref="CommonInstance"/>
+    ///     on the descriptor (<c>S5</c> → <c>itemsize</c> 5, <c>U5</c> → 20), so promotion runs <see cref="common_instance"/>
     ///     (the longer string wins) and every cast resolves the destination length (<see cref="ToStringCastingImpl"/>,
     ///     <see cref="StringToStringCastingImpl"/>).
     /// </summary>
@@ -48,7 +48,7 @@ namespace NumSharp
             : base(isUnicode ? "StrDType" : "BytesDType", "numpy.dtypes", isUnicode ? 19 : 18,
                 isUnicode ? typeof(string) : typeof(byte[]), isUnicode ? "str_" : "bytes_", NPTypeCode.String,
                 isUnicode ? 'U' : 'S', isUnicode ? 'U' : 'S', itemSize: 0, alignment: isUnicode ? 4 : 1,
-                DTypeFlags.Legacy | DTypeFlags.Parametric)
+                DTypeFlags.NPY_DT_LEGACY | DTypeFlags.NPY_DT_PARAMETRIC)
         {
             IsUnicode = isUnicode;
         }
@@ -92,7 +92,7 @@ namespace NumSharp
                 throw new ArgumentOutOfRangeException(nameof(chars), chars, "A string length cannot be negative.");
             if (chars > MaxChars)
                 throw new TypeError($"string of length {chars} is too large to store inside array.");
-            return new DType(this, DType.NativeByteOrder, null, (int)(chars * UnitSize), TypeChar);
+            return new DType(this, DType.NPY_NATIVE, null, (int)(chars * UnitSize), TypeChar);
         }
 
         /// <summary>
@@ -101,7 +101,7 @@ namespace NumSharp
         ///     <c>np.array([], dtype='S')</c> is <c>|S1</c>). It is NOT the unsized singleton, which only names the class.
         /// </summary>
         /// <returns>A new <c>S1</c> / <c>U1</c> descriptor.</returns>
-        public override DType DefaultDescr() => Descr(1);
+        public override DType default_descr() => Descr(1);
 
         /// <summary>
         ///     <c>string_unicode_common_dtype</c>: a string class is the common class of itself and any NUMERIC legacy class
@@ -113,16 +113,16 @@ namespace NumSharp
         /// <param name="other">The class to promote with.</param>
         /// <returns>This class, or null when it does not know <paramref name="other"/>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="other"/> is null.</exception>
-        public override DTypeMeta CommonDType(DTypeMeta other)
+        public override DTypeMeta common_dtype(DTypeMeta other)
         {
             if (other == null)
                 throw new ArgumentNullException(nameof(other));
             if (ReferenceEquals(other, this))
                 return this;
-            bool otherIsNumber = other.IsLegacy && other.IsNumeric;
+            bool otherIsNumber = other._legacy && other._is_numeric;
             bool unicodeOverBytes = IsUnicode && other is StringDTypeMeta otherString && !otherString.IsUnicode;
             /* Not numeric so defer unless cls is unicode and other is string */
-            if (!other.IsLegacy || (!otherIsNumber && !unicodeOverBytes))
+            if (!other._legacy || (!otherIsNumber && !unicodeOverBytes))
                 return null;
             /*
              * The builtin types are ordered by complexity (aside from object) here.
@@ -140,11 +140,11 @@ namespace NumSharp
         /// <param name="descr2">A descriptor of this class.</param>
         /// <returns>The canonical form of the longer one.</returns>
         /// <exception cref="ArgumentNullException">Either descriptor is null.</exception>
-        public override DType CommonInstance(DType descr1, DType descr2)
+        public override DType common_instance(DType descr1, DType descr2)
         {
             if (descr1 == null) throw new ArgumentNullException(nameof(descr1));
             if (descr2 == null) throw new ArgumentNullException(nameof(descr2));
-            return descr1.itemsize >= descr2.itemsize ? EnsureCanonical(descr1) : EnsureCanonical(descr2);
+            return descr1.itemsize >= descr2.itemsize ? ensure_canonical(descr1) : ensure_canonical(descr2);
         }
 
         /// <summary>
@@ -160,7 +160,7 @@ namespace NumSharp
         /// <c>string too large to store inside array.</c>).</exception>
         /// <exception cref="NotSupportedException">A value that is neither text, bytes, a number nor None (a C# object has no
         /// Python <c>str()</c>).</exception>
-        public override DType DiscoverDescrFromObject(object obj)
+        public override DType discover_descr_from_pyobject(object obj)
         {
             long length;
             switch (obj)
@@ -193,7 +193,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="type">The C# type of a candidate element value.</param>
         /// <returns>True for the Python builtin scalar types.</returns>
-        public override bool IsKnownScalarType(Type type)
+        public override bool is_known_scalar_type(Type type)
             => type == typeof(string) || type == typeof(byte[]) || type == typeof(bool)
                || type == typeof(sbyte) || type == typeof(byte) || type == typeof(short) || type == typeof(ushort)
                || type == typeof(int) || type == typeof(uint) || type == typeof(long) || type == typeof(ulong)
@@ -230,7 +230,7 @@ namespace NumSharp
             }
             if (size > int.MaxValue)
                 throw new TypeError("Strings too large to store inside array.");
-            return new DType(this, DType.NativeByteOrder, null, (int)size, TypeChar);
+            return new DType(this, DType.NPY_NATIVE, null, (int)size, TypeChar);
         }
     }
 }

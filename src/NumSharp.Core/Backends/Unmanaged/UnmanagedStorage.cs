@@ -304,7 +304,7 @@ namespace NumSharp.Backends
                     var meta = DTypeRegistry.FromTypeCode(_typecode);
                     if (meta is null)
                         return null;
-                    _descr = descr = meta.Singleton;
+                    _descr = descr = meta.singleton;
                 }
 
                 return descr;
@@ -557,7 +557,7 @@ namespace NumSharp.Backends
             _dtype = _typecode.AsType();
             _descr = descr.Meta is StringDTypeMeta
                 ? NDStringStorage.AllocationDescr(descr)
-                : descr.isnative ? descr : descr.Meta.EnsureCanonical(descr);
+                : descr.isnative ? descr : descr.Meta.ensure_canonical(descr);
         }
 
         private UnmanagedStorage(object value)
@@ -1496,7 +1496,7 @@ namespace NumSharp.Backends
             AllocationGuard.CheckDimensions(shape.dimensions, typeCode);
 
             _Allocate(shape.ForFreshAllocation(), ArraySlice.Allocate(typeCode, shape.size, fillZeros));
-            _descr = dtype.isnative ? dtype : dtype.Meta.EnsureCanonical(dtype);
+            _descr = dtype.isnative ? dtype : dtype.Meta.ensure_canonical(dtype);
         }
 
         /// <summary>

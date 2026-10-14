@@ -318,9 +318,9 @@ namespace NumSharp.Tests.DTypes
             np.dtypes.StringDType(na_object: false).na_object.Should().Be(false);
             np.dtypes.StringDType(coerce: false).coerce.Should().BeFalse();
             DTypeRegistry.VString.Instantiate().Should().Be(np.dtypes.StringDType());
-            DTypeRegistry.VString.DefaultDescr().Should().Be(np.dtypes.StringDType());
-            ReferenceEquals(DTypeRegistry.VString.DefaultDescr(), DTypeRegistry.VString.DefaultDescr()).Should().BeFalse();
-            DTypeRegistry.VString.Singleton.Should().BeNull("the class has no builtin instance");
+            DTypeRegistry.VString.default_descr().Should().Be(np.dtypes.StringDType());
+            ReferenceEquals(DTypeRegistry.VString.default_descr(), DTypeRegistry.VString.default_descr()).Should().BeFalse();
+            DTypeRegistry.VString.singleton.Should().BeNull("the class has no builtin instance");
             DTypeRegistry.FromName("StringDType").Should().BeSameAs(DTypeRegistry.VString);
             DTypeRegistry.FromTypeNum(2056).Should().BeSameAs(DTypeRegistry.VString);
             DTypeRegistry.FromTypeCode(NPTypeCode.String).Should().BeSameAs(DTypeRegistry.Str, "the lane belongs to StrDType");
@@ -342,8 +342,8 @@ namespace NumSharp.Tests.DTypes
             native.Should().Throw<TypeError>().WithMessage("Cannot use DescrNewByteOrder for this new style DTypes.");
             Action bad = () => t.newbyteorder("x");
             bad.Should().Throw<ValueError>().WithMessage("byteorder not recognized (got 'x')");
-            DTypeRegistry.VString.EnsureCanonical(t).Should().BeSameAs(t);
-            Action nul = () => DTypeRegistry.VString.EnsureCanonical(null);
+            DTypeRegistry.VString.ensure_canonical(t).Should().BeSameAs(t);
+            Action nul = () => DTypeRegistry.VString.ensure_canonical(null);
             nul.Should().Throw<ArgumentNullException>();
             t.WithByteOrder('>').Should().Be(t, "an internal byte-order copy keeps the parameters and the '|' order");
             t.WithByteOrder('>').byteorder.Should().Be('|');
@@ -476,7 +476,7 @@ namespace NumSharp.Tests.DTypes
             Action b = () => np.promote_types(np.dtypes.StringDType("NA"), np.dtypes.StringDType("NB"));
             b.Should().Throw<TypeError>().WithMessage(
                 "Cannot find common instance for incompatible dtypes 'StringDType(na_object='NA')' and 'StringDType(na_object='NB')'");
-            Action c = () => DTypeRegistry.VString.CommonInstance(np.dtype("U5"), np.dtype("T"));
+            Action c = () => DTypeRegistry.VString.common_instance(np.dtype("U5"), np.dtype("T"));
             c.Should().Throw<ArgumentException>();
         }
 
@@ -530,15 +530,15 @@ namespace NumSharp.Tests.DTypes
         public void CommonDType_Slot()
         {
             var v = DTypeRegistry.VString;
-            v.CommonDType(v).Should().BeSameAs(v);
-            v.CommonDType(DTypeRegistry.Str).Should().BeSameAs(v);
-            v.CommonDType(DTypeRegistry.Bytes).Should().BeNull();
-            v.CommonDType(DTypeRegistry.Double).Should().BeNull();
-            v.CommonDType(DTypeRegistry.PyLong).Should().BeNull();
-            DTypeRegistry.Str.CommonDType(v).Should().BeNull("StrDType defers to a non-legacy class");
-            DTypeRegistry.PyFloat.CommonDType(v).Should().BeNull();
+            v.common_dtype(v).Should().BeSameAs(v);
+            v.common_dtype(DTypeRegistry.Str).Should().BeSameAs(v);
+            v.common_dtype(DTypeRegistry.Bytes).Should().BeNull();
+            v.common_dtype(DTypeRegistry.Double).Should().BeNull();
+            v.common_dtype(DTypeRegistry.PyLong).Should().BeNull();
+            DTypeRegistry.Str.common_dtype(v).Should().BeNull("StrDType defers to a non-legacy class");
+            DTypeRegistry.PyFloat.common_dtype(v).Should().BeNull();
             DTypePromotion.CommonDType(DTypeRegistry.Str, v).Should().BeSameAs(v);
-            Action a = () => v.CommonDType(null);
+            Action a = () => v.common_dtype(null);
             a.Should().Throw<ArgumentNullException>();
         }
 
@@ -679,18 +679,18 @@ namespace NumSharp.Tests.DTypes
             var v = DTypeRegistry.VString;
             foreach (var type in new[] { typeof(string), typeof(char), typeof(byte[]), typeof(bool), typeof(int), typeof(ulong), typeof(BigInteger),
                                          typeof(float), typeof(double), typeof(Half), typeof(decimal), typeof(Complex), typeof(sbyte), typeof(short) })
-                v.IsKnownScalarType(type).Should().BeTrue(type.Name);
-            v.IsKnownScalarType(typeof(object)).Should().BeFalse();
-            v.IsKnownScalarType(typeof(NDArray)).Should().BeFalse();
-            v.DiscoverDescrFromObject("abc").Should().Be(np.dtypes.StringDType());
-            v.DiscoverDescrFromObject(3.5).Should().Be(np.dtypes.StringDType());
-            v.DiscoverDescrFromObject(new byte[] { 0xC3, 0xA9 }).Should().Be(np.dtypes.StringDType());
-            Action bad = () => v.DiscoverDescrFromObject(new byte[] { 0x80 });
+                v.is_known_scalar_type(type).Should().BeTrue(type.Name);
+            v.is_known_scalar_type(typeof(object)).Should().BeFalse();
+            v.is_known_scalar_type(typeof(NDArray)).Should().BeFalse();
+            v.discover_descr_from_pyobject("abc").Should().Be(np.dtypes.StringDType());
+            v.discover_descr_from_pyobject(3.5).Should().Be(np.dtypes.StringDType());
+            v.discover_descr_from_pyobject(new byte[] { 0xC3, 0xA9 }).Should().Be(np.dtypes.StringDType());
+            Action bad = () => v.discover_descr_from_pyobject(new byte[] { 0x80 });
             bad.Should().Throw<UnicodeDecodeError>().WithMessage("'utf-8' codec can't decode byte 0x80 in position 0: invalid start byte");
             v.HasReferences.Should().BeTrue();
-            v.IsLegacy.Should().BeFalse();
-            v.IsParametric.Should().BeTrue();
-            v.GetClearLoop(np.dtype("T")).Should().BeNull("the clear loop arrives with the storage (P1.3)");
+            v._legacy.Should().BeFalse();
+            v._parametric.Should().BeTrue();
+            v.get_clear_loop(np.dtype("T")).Should().BeNull("the clear loop arrives with the storage (P1.3)");
         }
 
         /// <summary>

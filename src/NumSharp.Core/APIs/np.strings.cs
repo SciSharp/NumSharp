@@ -184,7 +184,7 @@ namespace NumSharp
             /// <summary>
             ///     NumPy's <c>f"{a.dtype.char}{buffersizes.max()}"</c> descriptor: the class letter followed by the largest
             ///     size printed as NumPy prints that scalar (<c>6</c> for an int64 size, <c>6.0</c> for a float64 one), parsed
-            ///     by <see cref="np.dtype(string)"/>. A size of 0 is NumPy's unsized <c>'U0'</c>, which an allocation turns
+            ///     by <see cref="np.dtype(string, bool, bool, System.Collections.Generic.IReadOnlyDictionary{string, object})"/>. A size of 0 is NumPy's unsized <c>'U0'</c>, which an allocation turns
             ///     into width 1.
             /// </summary>
             /// <param name="text">The text operand's descriptor (its class letter).</param>

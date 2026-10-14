@@ -56,7 +56,7 @@ namespace NumSharp
         /// <summary>Builds the class. Called once by <see cref="DTypeRegistry"/>.</summary>
         internal VStringDTypeMeta()
             : base("StringDType", "numpy.dtypes", 2056, typeof(string), "str", NPTypeCode.String,
-                kind: 'T', typeChar: 'T', itemSize: CellSize, alignment: CellAlignment, DTypeFlags.Parametric)
+                kind: 'T', typeChar: 'T', itemSize: CellSize, alignment: CellAlignment, DTypeFlags.NPY_DT_PARAMETRIC)
         {
         }
 
@@ -80,7 +80,7 @@ namespace NumSharp
         ///     class, because each descriptor instance owns its own string allocator.
         /// </summary>
         /// <returns>A new default descriptor.</returns>
-        public override DType DefaultDescr() => new DType(this, VStringParameters.Default);
+        public override DType default_descr() => new DType(this, VStringParameters.Default);
 
         /// <summary>
         ///     A new descriptor with the given parameters — NumPy's <c>new_stringdtype_instance(na_object, coerce)</c>.
@@ -92,13 +92,13 @@ namespace NumSharp
         /// <exception cref="UnicodeEncodeError">A string missing-data object (or the <c>str()</c> of another one) holds a
         ///     lone surrogate (NumPy keeps both as UTF-8).</exception>
         internal DType Descr(bool hasNAObject, object naObject, bool coerce)
-            => hasNAObject || !coerce ? new DType(this, new VStringParameters(hasNAObject, naObject, coerce)) : DefaultDescr();
+            => hasNAObject || !coerce ? new DType(this, new VStringParameters(hasNAObject, naObject, coerce)) : default_descr();
 
         /// <summary><c>stringdtype_ensure_canonical</c>: every <c>StringDType</c> descriptor is canonical (it is returned as is).</summary>
         /// <param name="descr">A descriptor of this class.</param>
         /// <returns><paramref name="descr"/> itself.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="descr"/> is null.</exception>
-        public override DType EnsureCanonical(DType descr) => descr ?? throw new ArgumentNullException(nameof(descr));
+        public override DType ensure_canonical(DType descr) => descr ?? throw new ArgumentNullException(nameof(descr));
 
         /// <summary>
         ///     NumPy's <c>common_dtype</c> slot: <c>StrDType</c> promotes to <c>StringDType</c> (there is a cast from it);
@@ -108,7 +108,7 @@ namespace NumSharp
         /// <param name="other">The class to promote with.</param>
         /// <returns>This class for <c>StrDType</c> (and for itself), else null.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="other"/> is null.</exception>
-        public override DTypeMeta CommonDType(DTypeMeta other)
+        public override DTypeMeta common_dtype(DTypeMeta other)
         {
             if (other == null)
                 throw new ArgumentNullException(nameof(other));
@@ -136,7 +136,7 @@ namespace NumSharp
         ///     promotion engine casts both operands to this class first).</exception>
         /// <exception cref="TypeError">Both have missing-data objects and they differ: NumPy's
         ///     <c>Cannot find common instance for incompatible dtypes 'StringDType(na_object=None)' and 'StringDType(na_object=nan)'</c>.</exception>
-        public override DType CommonInstance(DType descr1, DType descr2)
+        public override DType common_instance(DType descr1, DType descr2)
         {
             if (descr1 == null) throw new ArgumentNullException(nameof(descr1));
             if (descr2 == null) throw new ArgumentNullException(nameof(descr2));
@@ -155,11 +155,11 @@ namespace NumSharp
         /// <param name="obj">An element value.</param>
         /// <returns>A fresh <c>StringDType()</c>.</returns>
         /// <exception cref="UnicodeDecodeError">A <c>byte[]</c> that is not valid UTF-8 (CPython's decoder error).</exception>
-        public override DType DiscoverDescrFromObject(object obj)
+        public override DType discover_descr_from_pyobject(object obj)
         {
             if (obj is byte[] b)
                 NDUtf8.ThrowIfInvalid(b); // assume UTF-8 encoding: an invalid byte raises the decoder's error
-            return DefaultDescr();
+            return default_descr();
         }
 
         /// <summary>
@@ -171,7 +171,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="type">The C# type of a candidate element value.</param>
         /// <returns>True for those types.</returns>
-        public override bool IsKnownScalarType(Type type)
+        public override bool is_known_scalar_type(Type type)
             => type == typeof(string) || type == typeof(char) || type == typeof(byte[]) || type == typeof(bool)
                || type == typeof(sbyte) || type == typeof(byte) || type == typeof(short) || type == typeof(ushort)
                || type == typeof(int) || type == typeof(uint) || type == typeof(long) || type == typeof(ulong)
@@ -180,6 +180,6 @@ namespace NumSharp
 
         /// <summary>The class call with no arguments, <c>StringDType()</c>: a fresh default descriptor.</summary>
         /// <returns>A new <c>StringDType()</c>.</returns>
-        public override DType Instantiate() => DefaultDescr();
+        public override DType Instantiate() => default_descr();
     }
 }

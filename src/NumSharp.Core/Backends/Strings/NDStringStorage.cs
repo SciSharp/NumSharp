@@ -41,8 +41,8 @@ namespace NumSharp.Backends.Strings
             if (descr?.Meta is not StringDTypeMeta meta)
                 throw new ArgumentException($"{descr?.ToString(true) ?? "null"} is not a fixed-width string dtype.", nameof(descr));
             if (descr.itemsize == 0)
-                return meta.DefaultDescr();
-            return descr.isnative ? descr : meta.EnsureCanonical(descr);
+                return meta.default_descr();
+            return descr.isnative ? descr : meta.ensure_canonical(descr);
         }
 
         /// <summary>Whether <paramref name="descr"/> is a fixed-width string descriptor (<c>S</c> or <c>U</c>).</summary>

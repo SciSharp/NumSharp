@@ -91,7 +91,7 @@ namespace NumSharp
         /// <returns>The cast's fixed safety.</returns>
         public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
-            loopDescrs[1] = givenDescrs[1] ?? To.DefaultDescr();
+            loopDescrs[1] = givenDescrs[1] ?? To.default_descr();
             loopDescrs[0] = givenDescrs[0];
             viewOffset = NoView;
             return _resolveSafety;
@@ -180,7 +180,7 @@ namespace NumSharp
             {
                 if (To is DatetimeDTypeMeta)
                     throw new TypeError("Casting from StringDType to datetimes without a unit is not currently supported");
-                loopDescrs[1] = To.DefaultDescr();
+                loopDescrs[1] = To.default_descr();
             }
             else
             {

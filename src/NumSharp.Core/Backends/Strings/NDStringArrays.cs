@@ -274,7 +274,7 @@ namespace NumSharp.Backends.Strings
         {
             using var value = fillValue is NDArray nd
                 ? nd.copy()
-                : FromScalar(fillValue, dtype?.Meta is StringDTypeMeta cls ? cls.Singleton : null);
+                : FromScalar(fillValue, dtype?.Meta is StringDTypeMeta cls ? cls.singleton : null);
             var descr = dtype ?? value.dtype;
             // The shape's own layout is kept when it describes a fresh buffer (np.full_like's KEEPORDER / F layouts); the
             // allocator re-lays a view's layout out in C order (Shape.ForFreshAllocation).
@@ -831,7 +831,7 @@ namespace NumSharp.Backends.Strings
             }
             if (width > cls.MaxChars)
                 throw new TypeError("string too large to store inside array.");
-            return width == 0 ? cls.Singleton : cls.Descr(width);
+            return width == 0 ? cls.singleton : cls.Descr(width);
         }
 
         /// <summary>

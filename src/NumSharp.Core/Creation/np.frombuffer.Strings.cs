@@ -244,7 +244,7 @@ namespace NumSharp
 
         /// <summary>
         ///     The string descriptor a dtype STRING names (<c>'S3'</c>, <c>'&lt;U2'</c>, <c>'c'</c>, <c>'a5'</c>,
-        ///     <c>'str'</c>), or null when it names another dtype or nothing <see cref="np.dtype(string)"/> parses. The
+        ///     <c>'str'</c>), or null when it names another dtype or nothing <see cref="np.dtype(string, bool, bool, System.Collections.Generic.IReadOnlyDictionary{string, object})"/> parses. The
         ///     string-spelled overloads ask this before their own parser, which knows only the fixed-size codes and once
         ///     read <c>'c'</c> and <c>'S1'</c> as NumSharp's 2-byte <c>Char</c> (NumPy: one-byte strings).
         /// </summary>

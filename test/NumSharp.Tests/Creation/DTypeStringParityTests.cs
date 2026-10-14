@@ -4,7 +4,7 @@ using System.Numerics;
 namespace NumSharp.Tests.Creation
 {
     /// <summary>
-    ///     Exhaustive NumPy 2.x parity tests for <see cref="np.dtype(string)"/> string parsing.
+    ///     Exhaustive NumPy 2.x parity tests for <see cref="np.dtype(string, bool, bool, System.Collections.Generic.IReadOnlyDictionary{string, object})"/> string parsing.
     ///
     ///     Every expectation here is verified against NumPy's actual output via
     ///     <c>python -c "import numpy as np; np.dtype(...)"</c>. NumPy types NumSharp doesn't

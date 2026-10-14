@@ -86,7 +86,7 @@ namespace NumSharp
         {
             const string numpy = "numpy.dtypes";
             const string numsharp = "numsharp.dtypes";
-            const DTypeFlags builtin = DTypeFlags.Legacy | DTypeFlags.Numeric;
+            const DTypeFlags builtin = DTypeFlags.NPY_DT_LEGACY | DTypeFlags.NPY_DT_NUMERIC;
 
             string[] longAliases32 = CLongIs32Bit ? new[] { "IntDType", "LongDType" } : new[] { "IntDType" };
             string[] ulongAliases32 = CLongIs32Bit ? new[] { "UIntDType", "ULongDType" } : new[] { "UIntDType" };
@@ -131,15 +131,15 @@ namespace NumSharp
             Str = new StringDTypeMeta(isUnicode: true);
             Add(Bytes);
             Add(Str);
-            Bytes.Singleton = new DType(Bytes, DType.NotApplicableByteOrder, null, 0, Bytes.TypeChar);
-            Str.Singleton = new DType(Str, DType.NativeByteOrder, null, 0, Str.TypeChar);
+            Bytes.singleton = new DType(Bytes, DType.NPY_IGNORE, null, 0, Bytes.TypeChar);
+            Str.singleton = new DType(Str, DType.NPY_NATIVE, null, 0, Str.TypeChar);
 
             DateTime64 = new DatetimeDTypeMeta(isTimedelta: false);
             TimeDelta64 = new DatetimeDTypeMeta(isTimedelta: true);
             Add(DateTime64);
             Add(TimeDelta64);
-            DateTime64.Singleton = DateTime64.Descr(DatetimeMetaData.Generic);
-            TimeDelta64.Singleton = TimeDelta64.Descr(DatetimeMetaData.Generic);
+            DateTime64.singleton = DateTime64.Descr(DatetimeMetaData.Generic);
+            TimeDelta64.singleton = TimeDelta64.Descr(DatetimeMetaData.Generic);
 
             // NEP 55 StringDType: a NEW-STYLE class (no builtin singleton — each descriptor instance is its own, as in
             // NumPy where every instance carries a string allocator). It shares the NPTypeCode.String lane with S / U
@@ -168,22 +168,22 @@ namespace NumSharp
             char kind, char typeChar, int itemSize, int alignment, DTypeFlags flags, string[] aliases)
         {
             var meta = new LegacyBuiltinDTypeMeta(name, module, typeNum, code, scalar, scalarName, kind, typeChar, itemSize, alignment, flags, aliases);
-            meta.Singleton = new DType(meta, DType.NativeByteOrder, null);
+            meta.singleton = new DType(meta, DType.NPY_NATIVE, null);
             Add(meta);
             return meta;
         }
 
         private static void Add(DTypeMeta meta)
         {
-            if (_byTypeNum.ContainsKey(meta.TypeNum))
-                throw new InvalidOperationException($"A DType with type number {meta.TypeNum} is already registered ({_byTypeNum[meta.TypeNum]}).");
+            if (_byTypeNum.ContainsKey(meta.type_num))
+                throw new InvalidOperationException($"A DType with type number {meta.type_num} is already registered ({_byTypeNum[meta.type_num]}).");
             if (_byName.ContainsKey(meta.Name))
                 throw new InvalidOperationException($"A DType named '{meta.Name}' is already registered.");
             foreach (var alias in meta.Aliases)
                 if (_byName.ContainsKey(alias))
                     throw new InvalidOperationException($"A DType named '{alias}' is already registered.");
 
-            _byTypeNum[meta.TypeNum] = meta;
+            _byTypeNum[meta.type_num] = meta;
             _byName[meta.Name] = meta;
             foreach (var alias in meta.Aliases)
                 _byName[alias] = meta;
@@ -199,8 +199,8 @@ namespace NumSharp
                 _byCode[code] = meta;
             }
             // Likewise a C# type maps back to one class; BytesDType opts out so byte[] keeps meaning "a uint8 array".
-            if (meta.ScalarType != null && meta.OwnsScalarType && !_byScalarType.ContainsKey(meta.ScalarType))
-                _byScalarType[meta.ScalarType] = meta;
+            if (meta.type != null && meta.OwnsScalarType && !_byScalarType.ContainsKey(meta.type))
+                _byScalarType[meta.type] = meta;
             _all.Add(meta);
         }
 
