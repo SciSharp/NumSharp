@@ -15,7 +15,9 @@ read from NumPy's own headers: refs/numpy of this repository, or the source root
 Record kinds (field "kind"):
   members  the names NumPy defines for the two objects: numpy.dtype's public attributes and dunders, numpy._DTypeMeta's
            own attributes, numpy.dtypes' public names, the C fields and slots of the DType class, the NPY_DT_* flag
-           values and the byte-order macros. The replay asserts each exists in C# under NumPy's spelling.
+           values and the byte-order macros; and the C fields of the other structs the DTypes folder ports: the
+           ArrayMethod (PyArrayMethodObject, PyBoundArrayMethodObject), its call context (PyArrayMethod_Context) and
+           the datetime unit (PyArray_DatetimeMetaData). The replay asserts each exists in C# under NumPy's spelling.
   descr    one descriptor built by a recipe and every numpy.dtype attribute of it, plus str / repr / len, the class
            name and the KeyError text of d[0].
   error    a recipe NumPy refuses: the exception type and str(e).
@@ -153,21 +155,44 @@ def descr_record(cid, recipe):
 # members
 # ---------------------------------------------------------------------------------------------------------------------
 
+def top_level_commas(decl):
+    """Splits one C declaration at the commas that separate its declarators (`int nin, nout` -> two parts); a comma
+    inside parentheses or brackets (a function pointer's parameters, an array size) does not split."""
+    parts, depth, start = [], 0, 0
+    for i, ch in enumerate(decl):
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            parts.append(decl[start:i])
+            start = i + 1
+    parts.append(decl[start:])
+    return parts
+
+
 def struct_fields(text, typedef_name):
-    """The member names of `typedef struct { ... } <typedef_name>;` (function pointers and arrays included)."""
+    """The member names of `typedef struct [tag] { ... } <typedef_name>;` (function pointers and arrays included).
+
+    Comments and preprocessor lines are dropped first: a field inside `#if ... #endif` (PyArrayMethod_Context's
+    NumPy 2.4 fields) is a field of the NumPy the oracle is generated with, and a declaration of several fields
+    (`int nin, nout;`) yields each of them."""
     # [^{}]* keeps the match inside ONE struct body (a lazy .*? would run on from an earlier typedef struct).
     m = re.search(r"typedef struct[^{}]*\{([^{}]*)\}\s*" + re.escape(typedef_name) + r"\s*;", text, re.S)
     if not m:
         raise SystemExit(f"struct {typedef_name} not found in NumPy's headers")
     body = re.sub(r"/\*.*?\*/", "", m.group(1), flags=re.S)
+    body = re.sub(r"//[^\n]*", "", body)
+    body = "\n".join(line for line in body.split("\n") if not line.strip().startswith("#"))
     names = []
-    for line in body.split(";"):
-        line = line.strip()
-        if not line or line.startswith("#"):
+    for decl in body.split(";"):
+        decl = decl.strip()
+        if not decl:
             continue
-        mm = re.search(r"\*?\s*(\w+)\s*(\[[^\]]*\])?\s*$", line)
-        if mm:
-            names.append(mm.group(1))
+        for part in top_level_commas(decl):
+            mm = re.search(r"\*?\s*(\w+)\s*(\[[^\]]*\])?\s*$", part)
+            if mm:
+                names.append(mm.group(1))
     return names
 
 
@@ -181,6 +206,16 @@ def members():
         flags[m.group(1)] = 1 << int(m.group(2))
     meta_fields = [f for f in struct_fields(api, "PyArray_DTypeMeta") if f != "super"]
     slot_fields = struct_fields(meta_h, "NPY_DType_Slots")
+    src = os.path.join(NUMPY_SRC, "numpy", "_core")
+    method_h = open(os.path.join(src, "src", "multiarray", "array_method.h"), encoding="utf-8").read()
+    types_h = open(os.path.join(src, "include", "numpy", "ndarraytypes.h"), encoding="utf-8").read()
+    # PyObject_HEAD is a macro, not a field: struct_fields reads it as the type of the first field, so it never shows.
+    struct_records = {
+        "PyArrayMethodObject": struct_fields(method_h, "PyArrayMethodObject"),
+        "PyBoundArrayMethodObject": struct_fields(method_h, "PyBoundArrayMethodObject"),
+        "PyArrayMethod_Context": struct_fields(api, "PyArrayMethod_Context"),
+        "PyArray_DatetimeMetaData": struct_fields(types_h, "PyArray_DatetimeMetaData"),
+    }
 
     d = np.dtype("f8")
     obj = set(dir(object))
@@ -195,6 +230,7 @@ def members():
     emit("members", "all",
          dtype_public=public, dtype_dunders=dunders, dtypemeta_own=meta_own, dtypes_module=module,
          dt_slots=slots, dtypemeta_fields=meta_fields, dtype_slot_fields=slot_fields, dt_flags=flags,
+         struct_fields=struct_records,
          byteorder_macros={"NPY_LITTLE": "<", "NPY_BIG": ">", "NPY_NATIVE": "=", "NPY_SWAP": "s", "NPY_IGNORE": "|",
                            "NPY_NATBYTE": native, "NPY_OPPBYTE": swapped})
 

@@ -168,7 +168,7 @@ namespace NumSharp.Tests.DTypes
                                         Report($"cast {s}->{d} disappeared after it was seen");
                                 }
                                 else if (!ReferenceEquals(got, casts[s, d]))
-                                    Report($"cast {s}->{d} resolved to {got.Name}");
+                                    Report($"cast {s}->{d} resolved to {got.name}");
                                 else
                                     seen[s, d] = true;
                             }
@@ -283,7 +283,7 @@ namespace NumSharp.Tests.DTypes
                 if (winners != 1)
                     problems.Add($"round {r}: {winners} registrations returned");
                 else if (!ReferenceEquals(froms[r].GetCastingImpl(tos[r]), winner))
-                    problems.Add($"round {r}: the pair resolves to {froms[r].GetCastingImpl(tos[r])?.Name ?? "null"}, not to the registration that returned ({winner.Name})");
+                    problems.Add($"round {r}: the pair resolves to {froms[r].GetCastingImpl(tos[r])?.name ?? "null"}, not to the registration that returned ({winner.name})");
                 else if (withinDType && !ReferenceEquals(froms[r].within_dtype_castingimpl, winner))
                     problems.Add($"round {r}: within_dtype_castingimpl is not the registration that returned");
             }
@@ -332,7 +332,7 @@ namespace NumSharp.Tests.DTypes
             /// <param name="viewOffset">Never assigned.</param>
             /// <returns>Never returns.</returns>
             /// <exception cref="NotSupportedException">Always.</exception>
-            public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
+            public override NPY_CASTING resolve_descriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
                 => throw new NotSupportedException("a probe cast is only registered and looked up");
         }
     }

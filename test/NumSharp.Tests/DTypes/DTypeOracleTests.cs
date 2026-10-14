@@ -15,7 +15,9 @@ namespace NumSharp.Tests.DTypes
     /// <summary>
     ///     Replays the committed NumPy 2.4.2 oracle of <c>numpy.dtype</c> and the DType classes
     ///     (<c>DTypes/corpus/dtype_oracle.&lt;model&gt;.jsonl</c>, written by <c>test/oracle/gen_dtype_oracle.py</c>)
-    ///     against <see cref="DType"/>, <see cref="DTypeMeta"/>, <see cref="DTypeFlags"/> and <c>np.dtypes</c>: every member
+    ///     against <see cref="DType"/>, <see cref="DTypeMeta"/>, <see cref="DTypeFlags"/>, <c>np.dtypes</c> and the other
+    ///     NumPy structs the DTypes folder ports (<see cref="ArrayMethod"/>, <see cref="ArrayMethodContext"/>,
+    ///     <see cref="DatetimeMetaData"/>): every member
     ///     NumPy names must exist here under NumPy's exact spelling, and every probed value, error, comparison, promotion,
     ///     class attribute and casting resolution must equal NumPy's. No Python runs at test time.
     /// </summary>
@@ -145,6 +147,45 @@ namespace NumSharp.Tests.DTypes
         };
 
         /// <summary>
+        ///     The NumPy C structs that a class of the DTypes folder ports, each with the fields that class does not port and
+        ///     why. Every other field the generator reads from NumPy's headers (the <c>struct_fields</c> of the
+        ///     <c>members</c> record) must be a public member of the class under the field's exact name; a listed field must
+        ///     stay absent, so porting one turns the test red until its entry is removed. A struct in the record that is not
+        ///     here fails too: deciding which class ports it is part of adding it to the generator.
+        /// </summary>
+        private static readonly Dictionary<string, (Type Port, Dictionary<string, string> NotPorted)> StructPorts = new(StringComparer.Ordinal)
+        {
+            ["PyArrayMethodObject"] = (typeof(ArrayMethod), new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["static_data"] = "the data a NumPy loop reads (a function pointer); a NumSharp loop is a delegate that captures what it needs",
+                ["resolve_descriptors_with_scalars"] = "the NEP 50 scalar-aware resolver of ufunc loops; only casts register as ArrayMethods (Stage A)",
+                ["get_reduction_initial"] = "reductions do not run through ArrayMethod yet (Stage C)",
+                ["strided_loop"] = "a default loop get_strided_loop picks from; no ArrayMethod provides loops yet (Stage C)",
+                ["contiguous_loop"] = "a default loop get_strided_loop picks from; no ArrayMethod provides loops yet (Stage C)",
+                ["unaligned_strided_loop"] = "a default loop get_strided_loop picks from; no ArrayMethod provides loops yet (Stage C)",
+                ["unaligned_contiguous_loop"] = "a default loop get_strided_loop picks from; no ArrayMethod provides loops yet (Stage C)",
+                ["contiguous_indexed_loop"] = "the indexed loop of ufunc.at; no ArrayMethod provides loops yet (Stage C)",
+                ["wrapped_meth"] = "the umath method a wrapping ArrayMethod reuses for a new DType; NumSharp wraps no methods",
+                ["wrapped_dtypes"] = "the classes of a wrapped umath method; NumSharp wraps no methods",
+                ["translate_given_descrs"] = "the descriptor translation of a wrapping method; NumSharp wraps no methods",
+                ["translate_loop_descrs"] = "the descriptor translation of a wrapping method; NumSharp wraps no methods",
+                ["legacy_initial"] = "the initial-value storage of NumPy's legacy ufunc fallback; NumSharp has no legacy fallback",
+            }),
+            ["PyBoundArrayMethodObject"] = (typeof(ArrayMethod), new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["method"] = "NumSharp's ArrayMethod is its own bound method: it holds its operand classes (dtypes) itself",
+            }),
+            ["PyArrayMethod_Context"] = (typeof(ArrayMethodContext), new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["caller"] = "the ufunc a NumPy loop is called for; a NumSharp loop has no caller object",
+                ["_reserved"] = "NumPy 2.4's reserved space",
+                ["flags"] = "NumPy 2.4's per-call loop flags (NPY_SAME_VALUE_CONTEXT_FLAG); no NumSharp loop reads them",
+                ["parameters"] = "NumPy 2.4's run-time loop parameters (used by sorting); no NumSharp loop reads them",
+            }),
+            ["PyArray_DatetimeMetaData"] = (typeof(DatetimeMetaData), new Dictionary<string, string>(StringComparer.Ordinal)),
+        };
+
+        /// <summary>
         ///     The numpy.dtypes classes NumSharp has no storage for. Each must stay absent from <c>np.dtypes</c> (absent,
         ///     not stubbed); adding one makes this test fail until the entry moves to the compared classes.
         /// </summary>
@@ -167,8 +208,10 @@ namespace NumSharp.Tests.DTypes
 
         /// <summary>
         ///     Every name NumPy gives <c>numpy.dtype</c>, <c>numpy._DTypeMeta</c>, the DType class's C fields and NEP 42
-        ///     slots, the <c>NPY_DT_*</c> flags, the byte-order macros and <c>numpy.dtypes</c> exists in C# under NumPy's
-        ///     spelling (case-sensitive), or is an explicit exemption that is still absent.
+        ///     slots, the <c>NPY_DT_*</c> flags, the byte-order macros, <c>numpy.dtypes</c> and the fields of the other
+        ///     structs the DTypes folder ports (<see cref="StructPorts"/>: <see cref="ArrayMethod"/>,
+        ///     <see cref="ArrayMethodContext"/>, <see cref="DatetimeMetaData"/>) exists in C# under NumPy's spelling
+        ///     (case-sensitive), or is an explicit exemption that is still absent.
         /// </summary>
         [TestMethod]
         public void Members_ExistUnderNumPysNames()
@@ -219,6 +262,35 @@ namespace NumSharp.Tests.DTypes
                     problems.Add($"DType slot/field '{name}': no DTypeMeta member '{member}'");
                 }
             }
+
+            // The other NumPy structs the DTypes folder ports: each field is a member of its port, or a listed exemption
+            // that is still absent. GetMember reads the C# identifier without its '@', so DatetimeMetaData's `@base`
+            // is found as "base".
+            var structsSeen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var st in m.GetProperty("struct_fields").EnumerateObject())
+            {
+                structsSeen.Add(st.Name);
+                if (!StructPorts.TryGetValue(st.Name, out var port))
+                {
+                    problems.Add($"struct {st.Name}: a NumPy struct this test does not map (add it to StructPorts)");
+                    continue;
+                }
+                foreach (var field in st.Value.EnumerateArray().Select(e => e.GetString()))
+                {
+                    bool present = HasMember(port.Port, field);
+                    if (port.NotPorted.ContainsKey(field))
+                    {
+                        if (present)
+                            problems.Add($"{st.Name}.{field} is now ported by {port.Port.Name}: remove it from StructPorts' exemptions");
+                    }
+                    else if (!present)
+                    {
+                        problems.Add($"{st.Name}.{field}: no {port.Port.Name} member '{field}'");
+                    }
+                }
+            }
+            foreach (var mapped in StructPorts.Keys.Where(k => !structsSeen.Contains(k)))
+                problems.Add($"StructPorts maps {mapped}, which the oracle no longer records");
 
             foreach (var flag in m.GetProperty("dt_flags").EnumerateObject())
             {
@@ -492,7 +564,7 @@ namespace NumSharp.Tests.DTypes
 
         /// <summary>
         ///     For every ordered pair of classes, <see cref="DTypeMeta.GetCastingImpl"/> has an implementation exactly when
-        ///     NumPy has one, under NumPy's name, and its <see cref="ArrayMethod.ResolveDescriptors"/> gives NumPy's casting
+        ///     NumPy has one, under NumPy's name, and its <see cref="ArrayMethod.resolve_descriptors"/> gives NumPy's casting
         ///     level, loop descriptors and view offset for every given pair. NumPy 2.4's <c>NPY_SAME_VALUE_CASTING_FLAG</c>
         ///     (64, reported by the numeric casts) is masked off: NumSharp has no same-value casting.
         /// </summary>
@@ -514,7 +586,7 @@ namespace NumSharp.Tests.DTypes
                 }
                 if (impl == null)
                     continue;
-                Check(problems, id, "name", impl.Name, rec.GetProperty("name").GetString());
+                Check(problems, id, "name", impl.name, rec.GetProperty("name").GetString());
 
                 var given = rec.GetProperty("given");
                 if (given.ValueKind == JsonValueKind.Null)
@@ -530,7 +602,7 @@ namespace NumSharp.Tests.DTypes
                 long view;
                 try
                 {
-                    casting = impl.ResolveDescriptors(givenDescrs, loop, out view);
+                    casting = impl.resolve_descriptors(givenDescrs, loop, out view);
                 }
                 catch (Exception e)
                 {

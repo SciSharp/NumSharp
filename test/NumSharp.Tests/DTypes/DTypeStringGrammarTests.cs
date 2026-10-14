@@ -180,8 +180,8 @@ namespace NumSharp.Tests.DTypes
         public void DatetimeMetaData_Struct_Api()
         {
             var m = DatetimeMetaData.Parse("[10ns]");
-            m.Base.Should().Be(NPY_DATETIMEUNIT.NPY_FR_ns);
-            m.Num.Should().Be(10);
+            m.@base.Should().Be(NPY_DATETIMEUNIT.NPY_FR_ns);
+            m.num.Should().Be(10);
             m.UnitString.Should().Be("ns");
             m.ToString().Should().Be("[10ns]");
             m.ToString(skipBrackets: true).Should().Be("10ns");

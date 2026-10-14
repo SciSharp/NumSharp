@@ -404,7 +404,7 @@ namespace NumSharp
             if (impl == null)
                 throw new ArgumentNullException(nameof(impl));
             if (!ReferenceEquals(impl.From, this))
-                throw new ArgumentException($"casting implementation '{impl.Name}' casts from {impl.From}, not from {this}", nameof(impl));
+                throw new ArgumentException($"casting implementation '{impl.name}' casts from {impl.From}, not from {this}", nameof(impl));
 
             if (ReferenceEquals(impl.To, this))
             {

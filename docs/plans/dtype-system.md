@@ -113,8 +113,8 @@ NumSharp.DType                    (sealed) — the descriptor INSTANCE (was the 
 NumSharp.DTypeRegistry            static — NPTypeCode/Type/type_num/char/name → DTypeMeta; Register().
 NumSharp.DTypePromotion           static — CommonDType, PromoteDTypeSequence, PromoteTypes, ResultType,
                                   CastDescrToDType, CastToDTypeAndPromoteDescriptors (NEP 42 + NEP 50).
-NumSharp.ArrayMethod              (abstract, NEP 43) name/nin/nout/Casting/Flags/DTypes,
- └─ CastingImpl                     ResolveDescriptors(given → loop, view_offset) + GetStridedLoop(...).
+NumSharp.ArrayMethod              (abstract, NEP 43) name/nin/nout/casting/flags/dtypes,
+ └─ CastingImpl                     resolve_descriptors(given → loop, view_offset) + get_strided_loop(...).
     ├─ BuiltinCastingImpl           builtin→builtin (safety from the promotion table + kind order; loop =
     │                               the existing IL cast kernels — the engine still drives them directly)
     └─ TimeToTime/DatetimeToTimedelta/NumericToTime/TimeToNumeric CastingImpls (descriptor-level)
@@ -222,7 +222,7 @@ type; `UnmanagedStorage` gains a `Descr` field (today it is derived from `_typec
 NumPy analysis): `NPTypeCode.DateTime64/TimeDelta64`, an int64 slice lane, the NaT sentinel, the
 arithmetic/comparison/min-max ufunc loops registered as `ArrayMethod`s against the datetime metas
 (NEP 43 dispatch for non-legacy dtypes), ISO-8601 parse/format, `arange`, `astype` between units, the
-`.npy` descr. The `ArrayMethod.GetStridedLoop` contract is `NDInnerLoopFunc` — NumSharp's existing
+`.npy` descr. The `ArrayMethod.get_strided_loop` contract is `NDInnerLoopFunc` — NumSharp's existing
 `PyUFuncGenericFunction` analog — so NDIter drives new loops without a new driver.
 
 **Stage D — strings.** `StrDType` (`U`) / `BytesDType` (`S`) as parametric legacy metas (itemsize
@@ -319,9 +319,9 @@ Things learned while landing it that the design above did not anticipate:
   plan expected to rewrite needed no change. The cost is `(Type)a.dtype` / `a.dtype.type` wherever a `Type` is required by
   signature (kernel-factory lookups, `Convert.ChangeType`, `Type.Name` in messages → `dtype.type.Name`).
 * **A static-initialization cycle had to be broken.** `np`'s field initializers now run `DType.From` → `DTypeRegistry`'s
-  constructor, which registered the 15×15 `BuiltinCastingImpl`s whose minimal `Casting` read `np._nptypemap_arr_arr` — filled by
+  constructor, which registered the 15×15 `BuiltinCastingImpl`s whose minimal `casting` read `np._nptypemap_arr_arr` — filled by
   `static np()` AFTER the field initializers — so the registry saw null and the process died with
-  `TypeInitializationException`. `ArrayMethod.Casting` is `virtual` and `BuiltinCastingImpl` computes it on first read (a
+  `TypeInitializationException`. `ArrayMethod.casting` is `virtual` and `BuiltinCastingImpl` computes it on first read (a
   constant; the laziness is unobservable). The `static np()` tables are built as `Dictionary<(DType, DType), DType>` (the
   aliases ARE descriptors) and the frozen `Type`/`NPTypeCode`-keyed maps are derived. Both orders are probed in fresh
   processes (np-first and registry-first).
@@ -347,6 +347,15 @@ Things learned while landing it that the design above did not anticipate:
   `DTypeFlags`: `NPY_DT_LEGACY` / `_ABSTRACT` / `_PARAMETRIC` / `_NUMERIC`. `DType`: the byte-order characters `NPY_NATIVE`,
   `NPY_IGNORE`, `NPY_SWAP`, `NPY_LITTLE`, `NPY_BIG`, `NPY_NATBYTE`, `NPY_OPPBYTE` (were `NativeByteOrder`…). C function names
   keep NumPy's PascalCase after the `PyArray_` prefix (`GetCastingImpl`, `AddCastingImpl`, `DTypePromotion.*`).
+* **The other ports of the folder (2026-10-15).** `ArrayMethod`: the fields of NumPy's `PyArrayMethodObject` and
+  `PyBoundArrayMethodObject`, `name`, `nin`, `nout`, `casting`, `flags`, `dtypes`, `resolve_descriptors()`,
+  `get_strided_loop()` (were `Name`, `NIn`, `NOut`, `Casting`, `Flags`, `DTypes`, `ResolveDescriptors()`,
+  `GetStridedLoop()`); `ArrayMethodContext`: `PyArrayMethod_Context`'s `method`, `descriptors`; `DatetimeMetaData`:
+  `PyArray_DatetimeMetaData`'s `@base`, `num` (were `Base`, `Num`). Kept: members with no NumPy name
+  (`CastingImpl.From`/`To`/`IsWithinDType`, `ArrayMethod.NoView`) and the helpers that port NumPy-internal C functions
+  (`DatetimeMetaData.Parse`/`Divides`/`GreatestCommonDivisor`/`CanCast*`, `DTypeCasting.ParseCasting`/`CastingToString`).
+  The oracle's `members` record carries each struct's fields as NumPy's headers have them, and the replay's
+  `StructPorts` holds the C# class to them, listing every unported field with its reason (self-retiring).
 * **Ported:** `dtype.isalignedstruct`, `len(dtype)` (`__len__`, 0 fields), `dtype[key]` (`__getitem__`, NumPy's KeyError),
   `dtype.metadata` and `np.dtype(dtype, align, copy, metadata)` (`arraydescr_new`'s statements: `copy` copies only a
   singleton, `metadata` always copies and merges without overwriting existing keys).

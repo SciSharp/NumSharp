@@ -2289,7 +2289,7 @@ object per class with the NEP 42 slots as virtuals under NumPy's own names — `
 reservations `HasReferences`/`get_clear_loop`/`get_fill_zero_loop` — the C fields `singleton`/`type_num`/`flags`, the
 Python class attributes `type`/`_abstract`/`_parametric`/`_legacy`/`_is_numeric`, and the per-class-pair **`CastingImpl`**
 table (`castingimpls` + `within_dtype_castingimpl`, looked up by `GetCastingImpl` = `PyArray_GetCastingImpl`; NEP 43
-`ArrayMethod`: `ResolveDescriptors` + `GetStridedLoop`, the latter unused until Stage C; `Casting` is the impl's
+`ArrayMethod`: `resolve_descriptors` + `get_strided_loop`, the latter unused until Stage C; `casting` is the impl's
 minimal safety). A **`DType`** is the INSTANCE (the descriptor, `numpy.dtype`): `Meta` + `byteorder` + the parametric
 payload (`DatetimeMetadata`), with NumPy's whole surface — `num`/`kind`/`char`/`itemsize`/`alignment`/`name`/`str`/
 `descr`/`isbuiltin`/`isnative`/`hasobject`/`flags`/`newbyteorder`, `ToString()` = `str(dtype)` and `ToString(true)` =
@@ -2366,6 +2366,11 @@ fields and NEP 42 slots as `dtype_api.h` / `dtypemeta.h` have them (`singleton`,
 `DType.NPY_NATIVE`/`NPY_IGNORE`/`NPY_SWAP`/`NPY_LITTLE`/`NPY_BIG`/`NPY_NATBYTE`/`NPY_OPPBYTE`), C function names keep NumPy's
 PascalCase after the `PyArray_` prefix (`GetCastingImpl`, `DTypePromotion.CommonDType`). PascalCase members (`Name`,
 `ModulePath`, `TypeCode`, `Kind`, `Instantiate()` for the class call, `Meta`, `DatetimeMetadata`) have no NumPy name.
+The other ports in `DTypes/` follow the same rule (2026-10-15): `ArrayMethod` has the fields of NumPy's `PyArrayMethodObject`
+and `PyBoundArrayMethodObject` (`name`, `nin`, `nout`, `casting`, `flags`, `dtypes`, `resolve_descriptors()`,
+`get_strided_loop()`), `ArrayMethodContext` those of `PyArrayMethod_Context` (`method`, `descriptors`), `DatetimeMetaData`
+those of `PyArray_DatetimeMetaData` (`@base`, `num`); `CastingImpl.From`/`To`/`IsWithinDType` and the static helpers that
+port NumPy-internal C functions (`DatetimeMetaData.Divides`, `DTypeCasting.ParseCasting`, …) keep their names.
 Ported with the pass: `isalignedstruct` (False), `__len__()` (0 fields), `__getitem__(key)` (NumPy's KeyError, quoted like
 Python's `str(KeyError)`), `metadata` + `np.dtype(dtype, align, copy, metadata)` (`copy` copies only a singleton;
 `metadata` always copies and merges without overwriting existing keys; equality/hash/printing ignore it). Fixed with it:
@@ -2374,7 +2379,8 @@ Python's `str(KeyError)`), `metadata` + `np.dtype(dtype, align, copy, metadata)`
 `repr` takes the short form whenever the stored byte order is explicit, `ensure_canonical` returns a FRESH native copy
 (never the singleton: `np.result_type(np.dtype('>f8')).isbuiltin` is 0), `promote_types`' fast path is pointer identity.
 **Gate:** `test/oracle/gen_dtype_oracle.py` → `test/NumSharp.Tests/DTypes/corpus/dtype_oracle.{llp64,lp64}.jsonl` (4,683
-records each: NumPy's member names incl. the C slots parsed from the headers, 1,014 descriptors × every attribute + str /
+records each: NumPy's member names incl. the C slots parsed from the headers and the fields of the structs `ArrayMethod`,
+`ArrayMethodContext` and `DatetimeMetaData` port (`StructPorts`, each unported field listed with its reason), 1,014 descriptors × every attribute + str /
 repr / len / `d[0]`, 98 errors, 784 comparison pairs, 812 promotions, 33 classes, 1,941 casting resolutions), one file per
 C `long` model (Windows NumPy / Linux NumPy under WSL — regenerate both), replayed by `DTypes/DTypeOracleTests.cs`, which
 picks the host's model; 8/8 planted bugs killed. Exemptions are listed with reasons and self-retire (each must stay
@@ -2413,8 +2419,8 @@ target is "better" when both directions convert). One-way implicit is what makes
 `.dtype.type` / `(Type)` (Convert.ChangeType, kernel-factory lookups, `Type.Name` in messages → `dtype.type.Name`;
 `DTypeDescriptorTests.TypeConversion_IsExplicit_SoTypeEqualityResolvesToDType`). (2) **Static-initialization cycle:** `np`'s
 field initializers now run `DType.From` → `DTypeRegistry`'s cctor, which registers the 15×15 `BuiltinCastingImpl`s whose
-minimal `Casting` read `np._nptypemap_arr_arr` — a table `static np()` fills AFTER the field initializers, so the registry saw
-it as null → `TypeInitializationException` on first use. `ArrayMethod.Casting` is now `virtual` and `BuiltinCastingImpl`
+minimal `casting` read `np._nptypemap_arr_arr` — a table `static np()` fills AFTER the field initializers, so the registry saw
+it as null → `TypeInitializationException` on first use. `ArrayMethod.casting` is now `virtual` and `BuiltinCastingImpl`
 computes it on FIRST READ (a per-impl constant, so laziness is unobservable); both orders (np-first, registry-first) are
 probed. The `static np()` tables themselves are built as `Dictionary<(DType, DType), DType>` (the aliases ARE descriptors) and
 the frozen `Type`/`NPTypeCode`-keyed maps derived from them. (3) **`isdtype` folded to the NumPy-exact `DType` overloads** — the
