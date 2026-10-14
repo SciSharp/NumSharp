@@ -17,8 +17,10 @@ which measures benchmark wiring rather than API presence.
 
 ## Consumed by the docs site
 
-- `coverage-support-dashboard.md` fetches `coverage.json`.
-- `compliance.md` narrates the same numbers (its snapshot table is hand-maintained).
+- `coverage-support-dashboard.md` fetches `coverage.json`. The oracle-verified columns need an artifact
+  from generator 1.10 or later (`summary.default_scope.oracle_verified` and a per-row `oracle` record);
+  for an older artifact the page hides every oracle element.
+- `compliance.md` links the dashboard for the current numbers and keeps no copy of them.
 
 ## Regenerate
 
