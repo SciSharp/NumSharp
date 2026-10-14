@@ -104,6 +104,7 @@ One optional companion package ships for the first time, co-versioned with **Num
 - `DType` system - NumPy's NEP 40-50 two-level dtype model (dtype classes and dtype instances), the descriptor every dtype parameter and `NDArray.dtype` now use - `896f02b2`, `c916c579`, `72e4d29c`.
   - `np.dtypes` (`Float64DType` and the other dtype classes), `np.datetime_data` - the class module.
   - `num`, `kind`, `char`, `itemsize`, `str`, `descr`, `byteorder`, `newbyteorder`, `isbuiltin`, `isnative`, `flags`, `type_num` (`NPY_TYPES`) - the full `numpy.dtype` surface.
+  - `isalignedstruct`, `metadata`, `len(dtype)` / `dtype[key]` (`__len__` / `__getitem__`) and `np.dtype(dtype, align, copy, metadata)`; the dtype classes under NumPy's own names (`type`, `_abstract`, `_parametric`, `_legacy`, `_is_numeric`, `singleton`, `type_num`, `default_descr()`, `common_dtype()`, `ensure_canonical()`, `castingimpls`, `DTypeFlags.NPY_DT_*`, `DType.NPY_NATIVE` and the other byte-order macros) - `6f11dc5a`.
   - Non-native byte orders (`np.dtype(">i4")`) and `datetime64` / `timedelta64` descriptors that parse, print, promote and cast-check (no datetime storage yet).
   - `promote_types`, `result_type`, `can_cast`, `issubdtype`, `isdtype` - `DType` overloads with NEP 50 weak scalars.
 - Typed iteration and .NET interop -
@@ -174,6 +175,7 @@ One optional companion package ships for the first time, co-versioned with **Num
 - Differential-fuzz oracle 116K+ -> 406,172 corpus cases: new tiers for every `numpy.polynomial` unit (139,882 cases), `np.ma` (68,860), `np.evaluate` (29,563), `np.emath`, `ndarray` instance members, and complex128 / Decimal coverage, with a dtype-spread gate (at least 4 dtypes per op) and an applicability gate - `57545200`, `67f8f96e`, `7a262afc`, `e84fd2f1`, `55a2a6a7`, `192f456c`, `1dd23bbe`.
 - The random-API oracle replays every public `np.random` overload against NumPy 2.4.2 by its exact C# signature (493 members, 5 engines x 10 seeds, the full post-call state), with coverage gates and a nightly soak under 10 fresh seeds - `20a5b60d`, `1c7ac693`, `8f70af7c`, `ecdab2fb`.
 - The coverage join credits each API from the oracle contracts that name it, strictly: a new op key or corpus file that resolves to nothing fails the docs build - `fd058f03`.
+- The `numpy.dtype` / dtype-class oracle replays 4,683 NumPy 2.4.2 records per C `long` model (Windows and Linux NumPy): the member names (the C slots included), every attribute of 1,014 descriptors, comparisons, promotions, the dtype classes and 1,941 casting resolutions - `6f11dc5a`.
 
 ### 💥 Breaking Changes
 - `DType` replaces `System.Type` as the dtype currency - `c916c579`, `68a02258`.
