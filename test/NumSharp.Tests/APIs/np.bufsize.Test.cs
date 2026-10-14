@@ -178,12 +178,36 @@ namespace NumSharp.Tests.APIs
             NDIterBufferManager.CurrentBufferSize.Should().Be(320L);
         }
 
+        /// <summary>
+        ///     NumPy 2.4.2 (probed): np.nditer hands NpyIter a buffersize of 0, which the buffering setup reads as NPY_BUFSIZE
+        ///     (8192) — np.setbufsize changes the UFUNC buffers only. An (8, 8) int64 array without a cast coalesces to one run of
+        ///     64 and is one fill of 64 either way (debug_print's <c>BufferSize: 64</c>, the setup's size, for both 16 and 8192).
+        /// </summary>
         [TestMethod]
-        public void SetBufsize_ChangesNdIterBuffer()
+        public void SetBufsize_DoesNotReachNdIter()
         {
-            // Functional wiring, not a no-op: a buffered nditer's BufferSize follows setbufsize.
-            ObserveNdIterBufferSize(16).Should().Be(16L);
-            ObserveNdIterBufferSize(8192).Should().Be(8192L);
+            ObserveNdIterBufferSize(16).Should().Be(64L);
+            ObserveNdIterBufferSize(8192).Should().Be(64L);
+        }
+
+        /// <summary>
+        ///     Functional wiring, not a no-op: the engine's own buffered iterators (the ufunc out= / where= routes, which build
+        ///     theirs with a buffer size of 0) follow np.setbufsize, as NumPy's ufunc machinery hands its iterator the extobj
+        ///     buffer size. A cast iteration of 100 elements fills 16 at a time under np.setbufsize(16), 100 at once under the
+        ///     default.
+        /// </summary>
+        [TestMethod]
+        public unsafe void SetBufsize_ChangesTheEngineIteratorBuffer()
+        {
+            foreach (var (bufsize, expected) in new[] { (16L, 16L), (8192L, 100L) })
+            {
+                np.setbufsize(bufsize);
+                using var a = np.arange(100);
+                using var iter = NDIterRef.MultiNew(1, new[] { a },
+                    NDIterGlobalFlags.BUFFERED | NDIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER,
+                    NPY_CASTING.NPY_SAFE_CASTING, new[] { NDIterPerOpFlags.READONLY }, new[] { NPTypeCode.Double });
+                (*iter.GetInnerLoopSizePtr()).Should().Be(expected, $"np.setbufsize({bufsize})");
+            }
         }
 
         private static long ObserveNdIterBufferSize(long bufsize)

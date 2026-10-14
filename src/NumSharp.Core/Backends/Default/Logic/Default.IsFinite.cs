@@ -44,7 +44,7 @@ namespace NumSharp.Backends
 
             // ufunc out=/where=: rides the shared unary Into-path with a
             // Boolean loop dtype (the predicate body emits bool at the INPUT
-            // dtype); a non-bool out engages the windowed bool→X flush. Returns
+            // dtype); a non-bool out engages the buffered bool→X write-back. Returns
             // the provided out (no MakeGeneric — out may be any numeric dtype).
             return ExecuteUnaryOp(a, UnaryOp.IsFinite, NPTypeCode.Boolean, @out, where);
         }

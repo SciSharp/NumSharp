@@ -3239,5 +3239,94 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.AreEqual(4, firstVisitPositions[1], "First visit at position 4");
             Assert.AreEqual(8, firstVisitPositions[2], "First visit at position 8");
         }
+
+        /// <summary>
+        ///     NumPy's <c>NpyIter_IsFirstVisit</c> in the buffered reduce double loop, at its OUTER level: a reduce operand
+        ///     whose core repeats per outer step (a (4,) output on the inner axis of a (3, 4) input, the outer axis reduced, so
+        ///     its outer stride is 0) is seen for the first time only during the first outer step — True at positions 0 to 3,
+        ///     False at every element of the later rows (the iterator's coordinates stay at the buffer's start, so only the
+        ///     reduce position tells the rows apart).
+        /// </summary>
+        [TestMethod]
+        public void BufferedReduction_IsFirstVisit_FalseAfterTheFirstOuterStep()
+        {
+            var x = np.arange(12).reshape(3, 4);
+            var y = np.zeros(new Shape(4), NPTypeCode.Int64);
+
+            using var iter = NDIterRef.AdvancedNew(
+                2,
+                new[] { x, y },
+                NDIterGlobalFlags.REDUCE_OK | NDIterGlobalFlags.BUFFERED,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READWRITE },
+                null,
+                2,
+                new[] { new[] { 0, 1 }, new[] { -1, 0 } },
+                new long[] { 3, 4 });
+
+            var firstVisitPositions = new List<int>();
+            int position = 0;
+            do
+            {
+                if (iter.IsFirstVisit(1))
+                    firstVisitPositions.Add(position);
+                position++;
+            } while (iter.Iternext());
+
+            Assert.AreEqual(12, position, "the walk visits every element");
+            CollectionAssert.AreEqual(new List<int> { 0, 1, 2, 3 }, firstVisitPositions);
+        }
+
+        /// <summary>
+        ///     The kernel drivers (<see cref="NDIterRef.ForEach"/>) apply NumPy's buffer reuse rule in the reduce double loop, as
+        ///     np.nditer's iternext does: an int64 output summed through float64 buffers, over the outer axis of a (4, 4) input
+        ///     of 0.4, with a buffer of 8 (a core of one row, fills of two rows). The output's column buffer stays at the same
+        ///     array position, so the second fill reuses it and keeps the fraction: 1.6 per column, written back as 1 (NumPy
+        ///     2.4.2's np.nditer: <c>[1, 1, 1, 1]</c>). A refill from the array would read back each fill's truncated sum
+        ///     (0.8 -> 0) and end at <c>[0, 0, 0, 0]</c>.
+        /// </summary>
+        [TestMethod]
+        public unsafe void BufferedReduction_KernelDriver_ReusesTheReduceBuffer()
+        {
+            var x = np.full(new Shape(4, 4), 0.4);
+            var y = np.zeros(new Shape(4), NPTypeCode.Int64);
+
+            using (var iter = NDIterRef.AdvancedNew(
+                       2,
+                       new[] { x, y },
+                       NDIterGlobalFlags.REDUCE_OK | NDIterGlobalFlags.BUFFERED | NDIterGlobalFlags.EXTERNAL_LOOP,
+                       NPY_ORDER.NPY_KEEPORDER,
+                       NPY_CASTING.NPY_UNSAFE_CASTING,
+                       new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READWRITE },
+                       new[] { NPTypeCode.Double, NPTypeCode.Double },
+                       2,
+                       new[] { new[] { 0, 1 }, new[] { -1, 0 } },
+                       null,
+                       bufferSize: 8))
+            {
+                iter.ForEach(AccumulateF64);
+            }
+
+            CollectionAssert.AreEqual(new long[] { 1, 1, 1, 1 }, y.ToArray<long>());
+        }
+
+        /// <summary>The reduction kernel <c>y[i] += x[i]</c> over one inner loop of two float64 operands.</summary>
+        /// <param name="dataptrs">The operands' current pointers (x, y).</param>
+        /// <param name="strides">Their byte strides along the inner loop.</param>
+        /// <param name="count">The inner loop's length.</param>
+        /// <param name="auxdata">Unused.</param>
+        private static unsafe void AccumulateF64(void** dataptrs, long* strides, long count, void* auxdata)
+        {
+            byte* px = (byte*)dataptrs[0];
+            byte* py = (byte*)dataptrs[1];
+            long sx = strides[0], sy = strides[1];
+            for (long i = 0; i < count; i++)
+            {
+                *(double*)py += *(double*)px;
+                px += sx;
+                py += sy;
+            }
+        }
     }
 }

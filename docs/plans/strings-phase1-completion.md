@@ -152,7 +152,7 @@ Three rules keep that safe:
 | P1.4 | `T` movement: the reference-aware copy core (inline cells move as blocks; arena and heap strings are duplicated), behind every movement entry, and the loud refusal on every raw path. | P1.3 | L | yes |
 | P1.5 | `T` creation, element access and printing: `np.array` / `asarray` / `empty` / `zeros` / `ones` / `full` and the `_like` forms, the `setitem` coercion (uses P1.1), `item` / `tolist` / `foreach` / `AsStringArray` / `(Array)`, NA objects, `repr` / `str` / `array2string`. | P1.1, P1.3 | M | yes |
 | P1.6 | `T` casts: `T` ↔ `T` (NA rules), `T` ↔ `U` / `S`, `T` ↔ bool, `T` ↔ numbers (uses P1.1). | P1.1, P1.4 | M | yes |
-| P1.7 | `T` in the rest of the library: `np.nditer` (`refs_ok`, buffered casts), numpy.ma (fill `'N/A'`), `loadtxt` / `savetxt`, `.npy` (D3), the whole-surface sweep with `T` (NumPy's refusals and shape-decided answers in NumPy's order; computation deferred to phase 2). | P1.4–P1.6 | L | `np.nditer` done 2026-10-13; the rest prepared in §6 (packages P1.7b–P1.7g); P1.7b (`None` into numbers) done 2026-10-13; P1.7d (numpy.ma) done 2026-10-13; P1.7e (`.npy`, D3) and `byteswap` (D14) done 2026-10-14 |
+| P1.7 | `T` in the rest of the library: `np.nditer` (`refs_ok`, buffered casts), numpy.ma (fill `'N/A'`), `loadtxt` / `savetxt`, `.npy` (D3), the whole-surface sweep with `T` (NumPy's refusals and shape-decided answers in NumPy's order; computation deferred to phase 2). | P1.4–P1.6 | L | `np.nditer` done 2026-10-13; the rest prepared in §6 (packages P1.7b–P1.7g); P1.7b (`None` into numbers) done 2026-10-13; P1.7d (numpy.ma) done 2026-10-13; P1.7e (`.npy`, D3), `byteswap` (D14) and P1.7g (the `np.nditer` buffered-reduce port, D13) done 2026-10-14; P1.7c and P1.7f wait |
 | P1.8 | Bridges and leftovers: pythonnet `S` / `U` zero-copy both ways and `T` as a copy (D7); D10 (D6). | — | M | done (D10 with P1.1, the bridge 2026-10-13) |
 | P1.9 | Gate, speed, docs: oracle sections for the new behavior with zero excuses; unit tests that cover all new phase-1 code; lifetime tests and runs under `FencedMemory` / guard pages; a mutation pass; a benchmark sheet (≥ 1.5× NumPy at 1K / 100K / 1M); docs. | with every package | M | yes |
 
@@ -543,6 +543,44 @@ After this plan, phase 2 loses P2.4 and gains the `T` forms of P2.1–P2.6 plus 
     9.5×, `np.load` 4.1× / 2.3× / 2.9× (with an NA object: 2.9× / 2.1× / 3.1×).
   - Next: P1.7g (D13, the buffered-reduce port) as the last package of this round. P1.7c and P1.7f wait (D12 was not
     answered as such).
+- 2026-10-14 — **P1.7g (D13, the `np.nditer` buffered-reduce port) done.** Every buffered NDIter — `np.nditer` and the
+  engine's own iterators (the ufunc `out=` / `where=` casts, np.clip / np.power's iterator routes) — runs a port of NumPy
+  2.4.2's buffering (`Backends/Iterators/NDIterBufferManager.Buffering.cs`): `npyiter_find_buffering_setup` (the core /
+  outer split by NumPy's cost model, the per-operand BUFNEVER / single-stride / reduce decisions, the inner and
+  reduce-outer strides, the cap in whole cores and its `grow_inner` exemption), `npyiter_copy_to_buffers` /
+  `npyiter_copy_from_buffers` (the outer-block cap, the reduce outer size, the buffer reuse rule, the masked write-back),
+  `npyiter_buffered_iternext` / `npyiter_buffered_reduce_iternext`, `npyiter_goto_iterindex`'s core offset and the
+  `NPY_ITER_CONTIG` → CAST rule. It replaced the windowed buffering and the legacy double loop.
+  - The 7 `OpenBugs.NditerBufferedReduce.cs` pins and the 2 `OpenBugs.NditerGrowInner.cs` pins pass and are regression
+    tests (the files keep their names, headers rewritten to FIXED).
+  - NumPy's edges kept where memory-safe: a fill started inside a core loses the partial core's write-back; a reset that
+    finds a buffer at the range start keeps it even when its reduce outer steps reach past a new range end (iteration
+    then ends with that fill — `NDIterRef.Iternext`'s range-end pre-check now spares an iterator that holds a buffer);
+    `remove_multi_index` keeps the setup chosen before the merge where it still walks the right elements.
+  - NOT kept (four `[Misaligned]` tests in `APIs/np.nditer.BufferedReduce.Test.cs`): iternext before a delayed allocation
+    (NumPy writes through its NULL buffers and crashes for a cast); a ranged reduce fill of one core and a part (NumPy
+    runs its inner loop past the core — wrong sums, or past the output: the oracle generator itself died of NumPy's heap
+    corruption, `0xC0000374`); and a partial `remove_multi_index` merge below the setup's outer position (NumPy walks wrong
+    elements — 36 of 40 sums left at 0 — or reads its stale axis data and crashes; NumSharp reruns the setup). The first
+    model of NumPy's stale setup wrote past the output in that last case: found by the mutation pass's survivors.
+  - Oracle: `nditer_protocol.jsonl` 1,219 → 2,987 cases (`_gen_nditer_protocol_buffered`: the reduce double loop at
+    buffer sizes 0 / 3 / 5 / 7 / 13 with and without casts, inner and outer reductions, seeks and ranges inside a core,
+    copies, delayed allocation, `remove_multi_index` (ranged starts, 4-D partial merges), external-loop chunking with and
+    without `grow_inner` over 20 layouts, two-operand casts, CONTIG, a readwrite reduce-loop operand, the reuse rule
+    through a truncating cast, WRITEMASKED; a new step `setwalk:k:v`); the strings `titer` section records buffered
+    reductions at buffer sizes 0 / 2 / 3 / 8 (3,275 → 3,333). Zero excuses; NumPy's crashing and garbage cases stay out of
+    the generator (`heap_probe.py` pattern: each case 20–60 times in its own process with heap churn).
+  - Gates: unit 19,541 / 19,540 and oracle 346 green on net10.0 / net8.0, also under `NUMSHARP_DEBUG_GUARD_PAGES=1` (the
+    iterator tests and tiers). Mutation: 39 planted bugs, 30 killed, 1 obsolete (the unsafe refresh path, removed), 8
+    survivors equivalent (an exact cost tie, the stride of a read-only contig reduce operand, the reuse of a fully
+    broadcast read-only buffer, one vs N copies of a stride-0 element, StringDType buffer reuse with copied cells, the
+    zero-core guard of an empty iteration, and two over-strict checks of the new rerun rule whose fallback is correct).
+  - Speed (two pinned P-cores, A/B against the build before the port): the engine's buffered routes (out= / where= casts,
+    np.clip, `np.nditer` external loop) within ±6% at 1K / 100K / 1M; a (1000, 7) array plus a row into a float64 out=
+    39.3 → 13.8 µs (NumPy's setup fills several rows at once). Found on the way, not changed: a masked cast add
+    (`np.add(f64, f64, out=f32, where=m)` with runs of length 1) takes 1.0 ms at 100K, NumPy 0.64 ms.
+  - This round's packages are done except P1.7c (text I/O for `T`) and P1.7f (the whole surface with `T`), which wait for
+    the owner (D12).
 
 ## 6. The next round: the rest of P1.7, so that phase 1 is complete
 
@@ -563,7 +601,7 @@ the owner must take, and the packages.
 | numpy.ma with `T` | Fill value `np.str_('N/A')` (also with an NA descriptor); `filled` / `compressed` / `repr` / `str` (`--` for a masked element, an NA element printed as itself); movement (`concatenate`, `where`, `reshape`, `.T`, the indexers) and `zeros_like` / `empty_like` (`''`, mask kept); `astype`; `set_fill_value`. `ma.sort` / `argsort` / `min` / `max` / `unique` raise `TypeError: Unsuitable type StringDType() for calculating minimum.` (`maximum` for max); `masked_invalid` / `fix_invalid` raise `isfinite`'s `UFuncTypeError`; comparisons and `+` compute (phase 2). | Construction, `filled`, `fill_value`, `compressed` and printing work; the members that reach a not-yet-ported route throw the generic phase-1 `NotSupportedException` (`masked_equal`, `ma.sort`, …). |
 | The whole surface | A NumPy-side estimate re-ran the 7,111 `<U` cases of the surface generators (`gen_refusals`, `gen_string_requests`, `gen_text_precedence`, `gen_shape_decided`, `gen_validation_order`, `gen_surface`) with `T` operands: 3,681 raise the same exception type as `<U`, 1,399 another type (texts of their own: ufunc loop names with `StringDType`, `This function currently only supports native NumPy dtypes and old-style user dtypes, but the dtype was StringDType().`, `The axis argument to unique is not supported for dtype StringDType()`, reductions without an identity, `DTypePromotionError`s that name `StringDType`), 1,702 return in both, 188 return only for `T` (the `add` / `maximum` / `minimum` loops `T` has: `np.sum`, `np.max`, …) and 141 raise only for `T`. NumPy 2.4.2 CRASHES the process (segmentation fault) on `np.place` (known) and on `ndarray.byteswap()` over `T`. | Most of these routes throw the generic phase-1 `NotSupportedException` ("does not support StringDType() arrays yet"): `np.sort`, `np.unique`, `np.max`, `np.sum`, `np.argsort`, `np.strings.*`; comparisons throw `StringComputationNotSupportedException`; `ndarray.byteswap()` throws `InvalidCastException`. |
 | `None` into a numeric array | Floats store NaN, complex `nan+nanj`, bool `False`; integers raise `TypeError: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'` — through setitem, `x[...] = None`, `fill(None)`, `np.full(shape, None, dtype)` and `np.array([None, 1.0], dtype=...)`. | `ArgumentNullException` everywhere (`[Misaligned]`), and `np.full(shape, (object)null, float64)` silently returns ZEROS. |
-| `np.nditer` buffered reduction (not `T`-specific) | The core / outer buffering of `npyiter_find_buffering_setup` and `npyiter_buffered_reduce_iternext`: right sums at every buffer size, C-order visits. | The legacy double loop: wrong sums with a short buffer, raw bytes written for a cast reduction operand, and a reduction over the outer axis visited with that axis innermost (6 pins in `OpenBugs.NditerBufferedReduce.cs`); `grow_inner` is not honored (pinned). |
+| `np.nditer` buffered reduction (not `T`-specific) | The core / outer buffering of `npyiter_find_buffering_setup` and `npyiter_buffered_reduce_iternext`: right sums at every buffer size, C-order visits. | The legacy double loop: wrong sums with a short buffer, raw bytes written for a cast reduction operand, and a reduction over the outer axis visited with that axis innermost (6 pins in `OpenBugs.NditerBufferedReduce.cs`); `grow_inner` is not honored (pinned). **Done 2026-10-14 (P1.7g): NumPy's buffering, ported; the pins are regression tests.** |
 
 ### 6.2 Decisions for the owner
 

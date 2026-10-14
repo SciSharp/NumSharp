@@ -3,7 +3,7 @@ using System;
 namespace NumSharp.Tests
 {
     // =====================================================================
-    // OPEN BUGS — a BUFFERED reduction through np.nditer computes wrong values
+    // FIXED (2026-10-14) — a BUFFERED reduction through np.nditer computed wrong values (regression pins)
     // =====================================================================
     //
     // Found 2026-10-08 while fixing the open-bugs rundown's bug 6 (np.nditer over strings), by a probe of NumPy's
@@ -19,22 +19,19 @@ namespace NumSharp.Tests
     //
     // NumPy 2.4.2 returns the sum over the last axis, [[6, 22, 38], [54, 70, 86]] for a = arange(24).reshape(2, 3, 4),
     // at EVERY buffer size (0 / 3 / 5 / 7 / 13 probed, with and without op_dtypes=float64), with an allocated or a given
-    // output. NumSharp's buffered REDUCE path is a homegrown double loop that predates the windowed buffering
-    // (NDIter.SetupBufferedReduction / BufferedReduceIternext / CopyReduceBuffersToArrays): it supports one non-reduce
-    // axis, writes a stale buffer element back over the accumulated output ([[0, 22, 38], ...] at the default buffer size
-    // after the reset), and loses or misplaces partial sums when a buffer is smaller than the iteration
-    // ([[12, 21, 30], [87, 57, 66]] at buffer size 3). The UNBUFFERED idiom is right (NDIterNumPyParityTests and the
-    // nditer_protocol oracle tier's "reduce" section gate it).
+    // output. NumSharp's buffered REDUCE path was a homegrown double loop that predated the windowed buffering
+    // (NDIter.SetupBufferedReduction / BufferedReduceIternext / CopyReduceBuffersToArrays): it supported one non-reduce
+    // axis, wrote a stale buffer element back over the accumulated output ([[0, 22, 38], ...] at the default buffer size
+    // after the reset), lost or misplaced partial sums when a buffer was smaller than the iteration ([[12, 21, 30],
+    // [87, 57, 66]] at buffer size 3), copied a cast reduction operand's bytes without the cast, and visited a reduction
+    // over the outer axis with that axis innermost.
     //
-    // The fix is a port of NumPy 2.4.2's buffered-reduce design, a separate piece of work: npyiter_find_buffering_setup's
-    // core / outer split (coresize, outerdim, per-operand BUFNEVER / single-stride / reduce flags, the inner and
-    // reduce-outer strides), npyiter_copy_to_buffers / npyiter_copy_from_buffers with the reduce outer loop and the
-    // reusable-buffer rule, npyiter_buffered_reduce_iternext, and npyiter_goto_iterindex's core offset. No internal
-    // NumSharp caller builds a BUFFERED + REDUCE iterator (every reduction runs its own engine), so only np.nditer reaches
-    // the legacy path.
-    //
-    // EXPECTED (when fixed): each test passes; remove its [OpenBugs] and add the buffered cases to the oracle's
-    // nditer_protocol "reduce" section (gen_oracle.py gen_nditer_protocol), which leaves buffering out until then.
+    // FIXED by the port of NumPy 2.4.2's buffered iteration itself (NDIterBufferManager.Buffering.cs, strings phase 1
+    // package P1.7g, the owner's decision D13): npyiter_find_buffering_setup's core / outer split and cost model,
+    // npyiter_copy_to_buffers / npyiter_copy_from_buffers with the reduce outer loop and the buffer reuse rule,
+    // npyiter_buffered_reduce_iternext, and npyiter_goto_iterindex's core offset. Every test below passes with NumPy's
+    // values; the oracle's nditer_protocol tier (its reduce_buf / reduce2d / reduce_seek / reduce_copy / reduce_delayed /
+    // rmi_reduce / writemasked sections) and the strings titer section record buffered reductions at every buffer size.
     // =====================================================================
     public partial class OpenBugs
     {
@@ -70,8 +67,11 @@ namespace NumSharp.Tests
             return flat.ToArray<double>();
         }
 
-        /// <summary>The delayed-allocation idiom at the default buffer size (the whole iteration fits one buffer).</summary>
-        [TestMethod, OpenBugs(IssueUrl = "nditer-buffered-reduce")]
+        /// <summary>
+        ///     The delayed-allocation idiom at the default buffer size (the whole iteration fits one buffer). The legacy loop
+        ///     wrote a stale buffer element back over the first sum.
+        /// </summary>
+        [TestMethod]
         public void Nditer_BufferedReduce_DelayedIdiom_DefaultBufferSize_SumsTheLastAxis()
         {
             RunDelayedReduceIdiom(0, castToDouble: false).Should().Equal(Array.ConvertAll(NditerReduceExpected, v => (double)v));
@@ -79,26 +79,26 @@ namespace NumSharp.Tests
 
         /// <summary>
         ///     The same idiom with a buffer of 3 elements (shorter than the reduced axis): NumPy's iterator then walks the
-        ///     reduced axis in chunks and still sums it.
+        ///     reduced axis in chunks and still sums it; the legacy loop lost and misplaced partial sums.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "nditer-buffered-reduce")]
+        [TestMethod]
         public void Nditer_BufferedReduce_DelayedIdiom_SmallBuffer_SumsTheLastAxis()
         {
             RunDelayedReduceIdiom(3, castToDouble: false).Should().Equal(Array.ConvertAll(NditerReduceExpected, v => (double)v));
         }
 
         /// <summary>The idiom with a float64 loop over the int64 input (a buffered cast), buffer size 5.</summary>
-        [TestMethod, OpenBugs(IssueUrl = "nditer-buffered-reduce")]
+        [TestMethod]
         public void Nditer_BufferedReduce_DelayedIdiom_CastLoop_SumsTheLastAxis()
         {
             RunDelayedReduceIdiom(5, castToDouble: true).Should().Equal(Array.ConvertAll(NditerReduceExpected, v => (double)v));
         }
 
         /// <summary>
-        ///     A given zeroed output (no delayed allocation), buffer size 7: NumPy returns the same sums; NumSharp loses
+        ///     A given zeroed output (no delayed allocation), buffer size 7: NumPy returns the same sums; the legacy loop lost
         ///     partial sums at the buffer boundaries.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "nditer-buffered-reduce")]
+        [TestMethod]
         public void Nditer_BufferedReduce_GivenOutput_SmallBuffer_SumsTheLastAxis()
         {
             using var a = NditerReduceInput();
@@ -117,12 +117,11 @@ namespace NumSharp.Tests
         /// <summary>
         ///     The reduction operand ITSELF cast (a float64 output iterated through a float32 buffer, found 2026-10-13 while
         ///     adding StringDType buffering): NumPy 2.4.2 sums the columns, <c>[3.0, 5.0, 7.0]</c>, and with the output on the
-        ///     iterator's axis 0 the rows, <c>[3.0, 12.0]</c>. NumSharp's reduce write-back
-        ///     (<c>NDIter.CopyReduceBuffersToArrays</c>) copies the buffer's BYTES into the output without the cast, so the
-        ///     float32 sums land as float64 bit patterns (<c>[2048.0004901885986, 5.4E-315, 0.0]</c>): silent garbage. A
-        ///     StringDType or fixed-width text reduction operand takes the cast there (the string run transfer).
+        ///     iterator's axis 0 the rows, <c>[3.0, 12.0]</c>. The legacy reduce write-back copied the buffer's BYTES into the
+        ///     output without the cast, so the float32 sums landed as float64 bit patterns
+        ///     (<c>[2048.0004901885986, 5.4E-315, 0.0]</c>); the port's write-back casts through the run transfers.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "nditer-buffered-reduce")]
+        [TestMethod]
         public void Nditer_BufferedReduce_CastReductionOperand_WritesTheCastSums()
         {
             foreach (var (axes, expected) in new (int[], double[])[] { (new[] { -1, 0 }, new[] { 3.0, 5.0, 7.0 }), (new[] { 0, -1 }, new[] { 3.0, 12.0 }) })
@@ -144,12 +143,11 @@ namespace NumSharp.Tests
         /// <summary>
         ///     A buffered reduction over the OUTER iteration axis (found 2026-10-13 by the string oracle's titer section):
         ///     <c>np.nditer([a, out], ['reduce_ok', 'buffered'], op_axes=[[0, 1], [-1, 0]])</c> over a (3, 4) input and a (4,)
-        ///     output. NumPy 2.4.2 visits the input in C order, <c>0 1 2 … 11</c>, as the unbuffered iterator does; NumSharp's
-        ///     legacy double loop walks the reduced axis innermost, <c>0 4 8 1 5 9 2 6 10 3 7 11</c>. An order-free
-        ///     accumulation gives the same sums, but a trace, a <c>multi_index</c> read or any side effect per step sees
-        ///     another sequence (the oracle keeps these cases out until the buffered-reduce port).
+        ///     output. NumPy 2.4.2 visits the input in C order, <c>0 1 2 … 11</c>, as the unbuffered iterator does (the reduce
+        ///     outer loop steps the outer axis); the legacy double loop walked the reduced axis innermost,
+        ///     <c>0 4 8 1 5 9 2 6 10 3 7 11</c>.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "nditer-buffered-reduce")]
+        [TestMethod]
         public void Nditer_BufferedReduce_ReducedOuterAxis_VisitsInCOrder()
         {
             using var a = np.arange(12.0).reshape(3, 4);
@@ -167,10 +165,10 @@ namespace NumSharp.Tests
 
         /// <summary>
         ///     A StringDType reduction through a cast buffer shorter than the reduced axis (buffer size 3, found 2026-10-13):
-        ///     NumPy 2.4.2 concatenates the columns, <c>['ac', 'bd']</c>; NumSharp's legacy buffered-reduce loop gives
+        ///     NumPy 2.4.2 concatenates the columns, <c>['ac', 'bd']</c>; the legacy buffered-reduce loop gave
         ///     <c>['acc', '']</c> — the same short-buffer defect as the numeric pins above, reached by text.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "nditer-buffered-reduce")]
+        [TestMethod]
         public void Nditer_BufferedReduce_StringDType_SmallBuffer_ConcatenatesTheColumns()
         {
             using var a = np.array(new[,] { { "a", "b" }, { "c", "d" } }, np.dtypes.StringDType());

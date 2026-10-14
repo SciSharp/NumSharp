@@ -194,8 +194,8 @@ owns the allocator, so views keep it alive). Rules a new route must keep:
   generator warns past 50 MiB per section. Sections `titer` (np.nditer over `T`; a trace is ASCII text, kind `text` with
   `"a"`), `cvtext` (`Converts`' text routes, all routes must agree), `promote` (text beside numbers and weak literals),
   `storenone` (Python objects stored into arrays). NumPy's `T` → complex bug stays invisible there by construction (the
-  cast reads only texts whose two parts are equal), and the open buffered-reduce bugs are kept out
-  (`OpenBugs.NditerBufferedReduce.cs`). Found by them: a broadcast view's empty-index sub-array dropped the view's offset
+  cast reads only texts whose two parts are equal); the buffered reductions it kept out until the buffering port
+  (2026-10-14, P1.7g) are recorded at buffer sizes 0 / 2 / 3 / 8. Found by them: a broadcast view's empty-index sub-array dropped the view's offset
   (`UnmanagedStorage.GetData`), so `np.broadcast_arrays(x[:, None], x)[0][1][...] = 9` wrote `x[0]`. Trap: NumPy's
   `np.power` with a negative integer exponent under `where=` into a text out raises or not depending on calls made before
   it in the process; generate such cases with non-negative exponents.
@@ -3342,13 +3342,38 @@ extent other than 1, and the reduction rule (a ZERO-length iteration axis stretc
 checked `no_broadcast`, the reduction length and the reduction rule in four separate passes, so with two refusals it
 named the other operand. The wrapper hands the shape it computed to the engine (the internal
 `NDIterRef.AdvancedNew(..., shapeValidated: true)` overload), which then skips its own broadcast computation and
-`ValidateIterShape` — running both cost +30–170 ns a construction. **Open:** a BUFFERED reduction computes wrong values
-for every dtype (the legacy double loop; `OpenBugs.NditerBufferedReduce.cs`) — a port of NumPy's buffered-reduce design
-is the fix; and
-`grow_inner` does not grow an uncast operand past the buffer size (NumPy walks `arange(10)` with a buffer of 3 as one
-chunk of 10, NumSharp as 3, 3, 3, 1; values are right, only the chunking differs; `OpenBugs.NditerGrowInner.cs`) — the
-fix is `npyiter_find_buffering_setup`'s core-size search in the general iterator's window sizing.
-Gates: `nditer_construct.jsonl` (9,574), `nditer_protocol.jsonl` (1,219), the string oracle's `striter` section,
+`ValidateIterShape` — running both cost +30–170 ns a construction.
+**Buffered iteration is NumPy's own (2026-10-14, strings phase 1 package P1.7g, the owner's decision D13).** A buffered
+NDIter — `np.nditer` and every internal engine iterator (the ufunc `out=` / `where=` routes, the clip / power iterator
+routes, buffered casts) — runs a statement-for-statement port of NumPy 2.4.2's buffering
+(`Backends/Iterators/NDIterBufferManager.Buffering.cs`): `npyiter_find_buffering_setup` (the core / outer split by the
+cost model `(1 + buffered operands) / elements per fill`, per-operand BUFNEVER / single-stride / reduce decisions, the
+inner and reduce-outer strides, the cap in whole cores and its `grow_inner` exemption), `npyiter_copy_to_buffers` /
+`npyiter_copy_from_buffers` (a fill never crosses the outer block, the reduce double loop's outer size, the buffer reuse
+rule, the masked write-back), `npyiter_buffered_iternext` / `npyiter_buffered_reduce_iternext` and
+`npyiter_goto_iterindex`'s core offset; `NPY_ITER_CONTIG` makes a non-contiguous operand a CAST operand (TypeError
+without buffering). It replaced the windowed buffering (`ComputeTransferSize` / `FillBufferWindow`) and the legacy
+buffered-reduce double loop, which computed wrong values for every dtype (`OpenBugs.NditerBufferedReduce.cs`, 7 pins, and
+`OpenBugs.NditerGrowInner.cs`, 2 pins, now regression tests). Mapping: NumPy numbers axes from the innermost (idim 0 =
+NumSharp axis `NDim - 1`), keeps byte strides (the port compares element strides per operand), its USERPTRS are
+`DataPtrs` and its NIT_DATAPTRS `ArrayWritebackPtrs`; the construction's REDUCE flags stay, the setup's choice is
+`BUFREDUCE` / `BUF_REDUCE`; `np.nditer` passes a buffer size of 8192 when given 0 (NumPy's NPY_BUFSIZE: `np.setbufsize`
+reaches only the engine's ufunc iterators, as in NumPy). NumPy's own edges are KEPT where they are memory-safe: a fill
+started inside a core (a seek, a range) has a reduce outer size of 0 and writes nothing back (a buffered operand loses
+that partial core); a reset that finds a buffer starting at the range start keeps it even when its reduce outer steps
+reach past a new range end (its early return compares only the first core's end), and the iteration then ends with that
+fill — which is why `NDIterRef.Iternext`'s range-end pre-check now spares an iterator that still holds a buffer;
+`remove_multi_index` keeps the setup chosen for the uncoalesced axes where it still walks the right elements — every
+axis merged into one (the stale extent of the merged outer axis included: an external loop afterwards hands out the old
+core's chunks, `[4, 4, 4]` where a fresh iterator gives `[5, 5, 2]`), merges above the setup's outer position, or one
+core per fill. NOT kept, all NumPy memory or value errors: iternext before a delayed allocation (NumPy copies into its
+NULL buffers and crashes for a cast operand; the port moves and copies nothing); a ranged reduce fill of one core and a
+part (NumPy runs its inner loop past the core — into the next core's reduce element, or past the output with a non-zero
+inner stride, a heap corruption the generator hit; the port runs one core per inner loop); and any other partial
+`remove_multi_index` merge (NumPy's kept setup walks wrong elements — a cast sum over axis 1 of a (2, 3, 4, 5) input
+leaves 36 of 40 sums at 0 — or reads stale axis data and crashes; the port reruns the setup, `RebuildBufferingSetup`;
+an earlier model of NumPy's stale setup wrote past the output there). `[Misaligned]` pins: `APIs/np.nditer.BufferedReduce.Test.cs`.
+Gates: `nditer_construct.jsonl` (9,574), `nditer_protocol.jsonl` (2,987 since its buffered sections), the string oracle's `striter` and `titer` sections,
 `APIs/np.nditer.NumPyParity.Test.cs`, and the unit suites `APIs/np.nditer.{Construction,Protocol,Strings}.Test.cs`
 (2026-10-09; 51 / 94 / 59 tests from probed NumPy 2.4.2 output — the flag, argument, shape-pass, stride-pass and casting
 checks, allocation, op_axes, itershape, seeks, ranges, setters, copies, buffering, axis removal and all 15 dtypes;
@@ -3698,11 +3723,13 @@ the per-element view entirely instead.
 
 **Gates:** unit tests from probed NumPy 2.4.2 output — `Indexing/np.ndindex.Test.cs` (22),
 `Indexing/np.ndenumerate.Test.cs` (26), `APIs/np.nditer.Test.cs` (47), `APIs/np.nditer.NumPyParity.Test.cs` (24) and
-`APIs/np.nditer.{Construction,Protocol,Strings}.Test.cs` (51 / 94 / 59, 2026-10-09) — and the oracle tiers that
-materialize the protocols into comparable results: `iter.jsonl` (value streams, multi_index, c_index / f_index and
-external-loop chunk lengths), `nditer_construct.jsonl` and `nditer_protocol.jsonl` (state traces as text). The unit
-suites hold what a trace does not reach: the setters, copies, closed-state errors, buffered write-back and the
-`no_broadcast` / `grow_inner` rules.
+`APIs/np.nditer.{Construction,Protocol,Strings}.Test.cs` (51 / 94 / 59, 2026-10-09), `APIs/np.nditer.BufferedReduce.Test.cs`
+(10, 2026-10-14: the buffering port's kept NumPy edges and its four `[Misaligned]` divergences) — and the
+oracle tiers that materialize the protocols into comparable results: `iter.jsonl` (value streams, multi_index, c_index /
+f_index and external-loop chunk lengths), `nditer_construct.jsonl` and `nditer_protocol.jsonl` (state traces as text;
+its buffered sections record the reduce double loop, the chunking with and without `grow_inner`, CONTIG and WRITEMASKED).
+The unit suites hold what a trace does not reach: the setters, copies, closed-state errors, buffered write-back and the
+`no_broadcast` rules.
 
 ### Typed iteration — `np.nditer<T>` / `np.nditer_chunks<T>` (NumSharp extension)
 

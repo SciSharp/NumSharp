@@ -437,8 +437,9 @@ namespace NumSharp.Tests.Backends.Strings
         ///     A T reduction operand (the output's axis 0 mapped to the iterator's axis 1) accumulates concatenations, buffered
         ///     and unbuffered (NumPy: <c>['ac', 'bd']</c>), also when the reduction operand is cast (a TN, U8 or T buffer over a
         ///     T or U8 output: the buffer is written back through the cast of the pair); two operands over one T array alias
-        ///     it. A reduction buffer shorter than the reduced axis is the open buffered-reduction bug (pinned in
-        ///     <c>OpenBugs.NditerBufferedReduce.cs</c>), so the buffer sizes here hold the whole reduction.
+        ///     it. The buffer sizes here hold the whole reduction; a buffer shorter than the reduced axis is gated by
+        ///     <c>OpenBugs.NditerBufferedReduce.cs</c> (fixed by the port of NumPy's buffered iteration, 2026-10-14) and the
+        ///     oracle's <c>titer</c> section.
         /// </summary>
         [TestMethod]
         public void Reductions_AndAliasedOperands()
@@ -828,10 +829,13 @@ namespace NumSharp.Tests.Backends.Strings
         ///     An allocation failure while a buffer is filled — at construction (the first fill) or at a later step — raises
         ///     NumPy's <c>MemoryError</c> text of the string copy, and the iterator's buffers and their allocators are released
         ///     with it (the live allocator count returns to its baseline). Two buffered routes: a cast to another
-        ///     <c>StringDType</c> descriptor, and a transposed operand walked in C order (no cast, but no constant stride either,
-        ///     so it is buffered — a contiguous operand without a cast is read in place and allocates nothing). The texts grow
-        ///     from fill to fill, so the second fill cannot reuse the arena space the first one freed: every string of the walk
-        ///     is a new allocation, and failing the third or fourth one fails the second fill.
+        ///     <c>StringDType</c> descriptor (fills of 2 strings), and a 3-D operand whose two inner axes are transposed, walked in
+        ///     C order with a buffer of 4 (no cast, but NumPy's buffering setup buffers it: one stride cannot walk it across
+        ///     the core of 2 x 2 it chose, and every fill covers one block of the outer axis — 2 fills of 4 strings). A
+        ///     single-stride operand without a cast is read in place and allocates nothing: the 2-D transpose with a buffer of 2
+        ///     this test used before is one such case (NumPy marks it BUFNEVER). The texts grow from fill to fill, so the second
+        ///     fill cannot reuse the arena space the first one freed: every string of the walk is a new allocation, and failing
+        ///     one past the first fill's count fails the second fill.
         /// </summary>
         [TestMethod]
         public void BufferFill_AllocationFailure_ReleasesTheBuffers()
@@ -839,14 +843,23 @@ namespace NumSharp.Tests.Backends.Strings
             var texts = new[] { new string('a', 16), new string('b', 17), new string('c', 60), new string('d', 61) };
             using var a = np.array(texts, T);
             using var flat = np.array(texts, T);
-            using var m = flat.reshape(2, 2);
-            var routes = new (string Name, Func<np.NDIterator> Open)[]
+            var texts3 = new[]
             {
-                ("cast to TN", () => np.nditer(a, new[] { "refs_ok", "buffered" }, op_dtypes: new[] { TN }, buffersize: 2)),
-                ("transposed in C order", () => np.nditer(m.T, new[] { "refs_ok", "buffered" }, order: 'C', buffersize: 2)),
+                new string('e', 16), new string('f', 17), new string('g', 18), new string('h', 19),
+                new string('i', 60), new string('j', 61), new string('k', 62), new string('l', 63),
+            };
+            using var flat3 = np.array(texts3, T);
+            using var m3 = flat3.reshape(2, 2, 2);
+            var routes = new (string Name, Func<np.NDIterator> Open, int[] Successes)[]
+            {
+                ("cast to TN", () => np.nditer(a, new[] { "refs_ok", "buffered" }, op_dtypes: new[] { TN }, buffersize: 2),
+                    new[] { 0, 1, 2, 3 }),
+                ("inner axes transposed in C order",
+                    () => np.nditer(m3.transpose(new[] { 0, 2, 1 }), new[] { "refs_ok", "buffered" }, order: 'C', buffersize: 4),
+                    new[] { 0, 1, 3, 4, 5, 7 }),
             };
             foreach (var route in routes)
-            foreach (var successes in new[] { 0, 1, 2, 3 })
+            foreach (var successes in route.Successes)
             {
                 for (int attempt = 0; ; attempt++)
                 {
@@ -880,6 +893,7 @@ namespace NumSharp.Tests.Backends.Strings
             }
             V(a).Should().Equal(texts);
             V(flat).Should().Equal(texts);
+            V(flat3).Should().Equal(texts3);
         }
     }
 }

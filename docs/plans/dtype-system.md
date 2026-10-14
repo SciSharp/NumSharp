@@ -491,8 +491,9 @@ oracle sections closed the gaps between "NumPy refuses" and "NumPy computes":
   2026-10-08 — the iterator carries descriptors: 0-d `S` / `U` views, buffered and copy-route conversions between
   widths and between `S` and `U` (ASCII; NumPy's Unicode errors otherwise), write-back at close, `np.nested_iters`'
   per-level split; the string oracle's `striter` section, the numeric `nditer_construct` / `nditer_protocol` tiers;
-  a conversion between text and numbers is phase 2's `StringComputationNotSupportedException`, and a BUFFERED
-  reduction through `np.nditer` is wrong for every dtype, `OpenBugs.NditerBufferedReduce.cs`.) (`argwhere` /
+  a conversion between text and numbers is phase 2's `StringComputationNotSupportedException`; a BUFFERED reduction
+  through `np.nditer` is NumPy's since 2026-10-14 — the port of NumPy's buffering, strings phase 1 package P1.7g —
+  where it was wrong for every dtype, `OpenBugs.NditerBufferedReduce.cs` now regression pins.) (`argwhere` /
   `flatnonzero` / `unravel_index` return NumPy's views since 2026-10-08 — the string oracle no longer excuses their layout;
   plan `api-parameter-parity.md` X37. An empty matrix's QR / SVD — every factorisation of an empty matrix or a zero-size
   batch — is NumPy's answer without a backend since 2026-10-08: `Backends/Default/LinearAlgebra/LinAlgEmpty.cs`, the

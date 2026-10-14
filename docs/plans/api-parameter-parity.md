@@ -1234,7 +1234,9 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     - a stale `[OpenBugs]` (the buffered refill, T1.2) checked by reflection for a method name; it now iterates.
   - Not changed: a BUFFERED reduction through np.nditer computes wrong values for every dtype (the legacy double loop;
     `OpenBugs.NditerBufferedReduce.cs`, 4 pins with NumPy's values) — the fix is a port of NumPy's buffered-reduce
-    design (`npyiter_find_buffering_setup`'s core / outer split and the reduce double loop). A buffered iterator's
+    design (`npyiter_find_buffering_setup`'s core / outer split and the reduce double loop) — FIXED 2026-10-14 on branch
+    `strings` (strings phase 1 package P1.7g: the port of NumPy's buffering, `NDIterBufferManager.Buffering.cs`; the
+    pins are regression tests and `nditer_protocol.jsonl` records buffered reductions). A buffered iterator's
     `index` is uninitialized memory in NumPy (left out of the tiers). Conversions between text and numbers raise
     phase 2's `StringComputationNotSupportedException`. A null `it[i] = null` is ArgumentNullException (NumPy's
     `int()` TypeError).
@@ -1485,7 +1487,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
       one chunk of 10, NumSharp as 3, 3, 3, 1; a contiguous `(100, 100)` as one chunk of 10,000, NumSharp as 8192 and
       1808). Values are right; only the chunking differs. Pinned in `OpenBugs.NditerGrowInner.cs` (2 tests). The fix is
       `npyiter_find_buffering_setup`'s core-size search in the general iterator's window sizing, which changes the
-      chunking every buffered caller sees — its own item;
+      chunking every buffered caller sees — its own item (FIXED 2026-10-14 on branch `strings`, P1.7g, with the
+      buffered reduction below);
     - the buffered reduction (X35, `OpenBugs.NditerBufferedReduce.cs`);
     - NumPy's texts reachable only from its C API (`oa_ndim == 0` without op_axes; the plain "shapes … and requested
       shape" form: np.nditer always passes op_axes with an itershape).

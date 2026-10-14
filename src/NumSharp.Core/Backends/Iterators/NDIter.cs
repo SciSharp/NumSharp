@@ -1253,62 +1253,44 @@ namespace NumSharp.Backends.Iteration
             if (plan != null)
                 NDIterVStringContext.AttachIfNeeded(ref *_state, _operands ?? op, plan.IterDescrs);
 
-            // Set up buffering if requested
+            // NumPy's NPY_ITER_CONTIG rule for the callers without descriptors (np.nditer applies it at the copy-route seam,
+            // MaterializeDescriptorRoutes, before the coalescing, as NumPy does): a contiguous-requested operand whose
+            // innermost stride is not its element size becomes a CAST operand, buffered whatever the cost model says.
+            if (plan == null && NDIterBufferManager.ApplyContigRule(ref *_state, _state->NDim - 1) &&
+                (flags & NDIterGlobalFlags.BUFFERED) == 0)
+                throw new TypeError(
+                    "Iterator operand required buffering, to be contiguous as requested, but buffering is not enabled");
+
+            // Buffering — the tail of NumPy's NpyIter_AdvancedNew: npyiter_find_buffering_setup (the core / outer split,
+            // who is buffered, the strides each inner loop sees, whether the reduce double loop runs), the transfer checks
+            // of npyiter_allocate_transfer_functions, then — unless allocation is delayed — npyiter_allocate_buffers and the
+            // first npyiter_copy_to_buffers. See NDIterBufferManager.Buffering.cs.
             if ((flags & NDIterGlobalFlags.BUFFERED) != 0)
             {
                 _state->ItFlags |= (uint)NDIterFlags.BUFFER;
-                // An explicit buffersize wins; otherwise use the per-thread ufunc default
-                // (np.getbufsize()/np.setbufsize()), which is 8192 unless the caller changed it.
-                _state->BufferSize = bufferSize > 0 ? bufferSize : NDIterBufferManager.CurrentBufferSize;
 
-                bool isReduce = (_state->ItFlags & (uint)NDIterFlags.REDUCE) != 0;
+                // An explicit buffersize wins; otherwise the per-thread ufunc default (np.getbufsize() / np.setbufsize(),
+                // 8192 unless the caller changed it) — the size NumPy's ufunc machinery hands its iterator. np.nditer passes
+                // NumPy's NPY_BUFSIZE itself for its own default (np.setbufsize does not reach np.nditer in NumPy).
+                long maximumSize = bufferSize > 0 ? bufferSize : NDIterBufferManager.CurrentBufferSize;
+                NDIterBufferManager.FindBufferingSetup(ref *_state, maximumSize);
+                NDIterBufferManager.ValidateWriteMaskedTransfers(ref *_state);
 
-                if (!isReduce && (flags & NDIterGlobalFlags.DELAY_BUFALLOC) != 0)
+                if ((flags & NDIterGlobalFlags.DELAY_BUFALLOC) != 0)
                 {
-                    // DELAY_BUFALLOC: defer allocation + first fill until first
-                    // use. NumPy demands an explicit Reset before iterating
-                    // (ValueError otherwise); NumSharp auto-ensures at the
-                    // execution entry points (EnsureBuffersReady) instead, so
-                    // construction stays allocation-free for the common
-                    // construct-then-execute pattern. Ignored for buffered
-                    // REDUCE, whose double-loop setup is construction-bound.
+                    // DELAY_BUFALLOC: no buffer until a reset allocates them (NumPy's contract — the element views refuse
+                    // until then, so an allocated output can be initialized before the first fill reads it). NumSharp's
+                    // execution entry points perform that reset themselves (EnsureBuffersReady), so the construct-then-
+                    // execute pattern of the internal callers stays allocation-free until the kernel runs.
                     _state->ItFlags |= (uint)NDIterFlags.DELAYBUF;
-                }
-                else if (!isReduce)
-                {
-                    // Windowed buffered iteration (non-reduce): allocate and
-                    // prime the first window. FillBufferWindow swaps buffered
-                    // operands' DataPtrs to their buffers and records the
-                    // array write-back positions.
-                    NDIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize);
-                    NDIterBufferManager.FillBufferWindow(ref *_state,
-                        NDIterBufferManager.ComputeTransferSize(ref *_state));
                 }
                 else
                 {
-                    // Buffered REDUCE keeps its dedicated double-loop machinery
-                    // (BufferedReduceIternext) and legacy initial fill. NOTE:
-                    // that machinery predates masked copy-back; construction
-                    // with WRITEMASKED succeeds (NumPy parity — 2.4.2 accepts
-                    // the aligned-mask pattern) but the legacy write-back
-                    // refuses loudly in CopyReduceBuffersToArrays instead of
-                    // silently writing unmasked slots. Proper masked support
-                    // lands with reductions-through-core (roadmap Wave 5).
-                    NDIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize);
+                    if (!NDIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize))
+                        throw new OutOfMemoryException("Could not allocate the iterator's buffers");
 
-                    // Copy initial data to buffers (with casting if needed)
-                    long copyCount = Math.Min(_state->IterSize, _state->BufferSize);
-                    for (int op1 = 0; op1 < nop; op1++)
-                    {
-                        var opFlag = _state->GetOpFlags(op1);
-                        if ((opFlag & NDIterOpFlags.READ) != 0 || (opFlag & NDIterOpFlags.READWRITE) != 0)
-                        {
-                            NDIterBufferManager.CopyToBuffer(ref *_state, op1, copyCount);
-                        }
-                    }
-
-                    _state->BufIterEnd = copyCount;
-                    SetupBufferedReduction(copyCount);
+                    // The first fill: the position is the range start (the state's pointers are on the arrays).
+                    NDIterBufferManager.CopyToBuffers(ref *_state, reusePrevious: false);
                 }
             }
 
@@ -2559,174 +2541,6 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Set up buffered reduction double-loop parameters.
-        /// Implements NumPy's pattern from nditer_api.c lines 2142-2149.
-        ///
-        /// The double-loop separates iteration into:
-        /// - Inner loop: CoreSize elements (non-reduce dimensions)
-        /// - Outer loop: ReduceOuterSize iterations (reduce dimension)
-        ///
-        /// Key insight: reduce operands have ReduceOuterStride=0, so their pointer
-        /// stays fixed while input advances, accumulating values without re-buffering.
-        /// </summary>
-        private void SetupBufferedReduction(long transferSize)
-        {
-            // Find the outermost reduce dimension (dimension with stride=0 for a reduce operand)
-            // For simplicity, we use the outermost dimension with any reduce operand having stride=0
-            int outerDim = -1;
-            for (int d = 0; d < _state->NDim; d++)
-            {
-                for (int op = 0; op < _state->NOp; op++)
-                {
-                    var opFlags = _state->GetOpFlags(op);
-                    if ((opFlags & NDIterOpFlags.REDUCE) != 0)
-                    {
-                        long stride = _state->GetStride(d, op);
-                        if (stride == 0 && _state->Shape[d] > 1)
-                        {
-                            outerDim = d;
-                            break;  // Found reduce dimension
-                        }
-                    }
-                }
-                if (outerDim >= 0)
-                    break;
-            }
-
-            if (outerDim < 0)
-            {
-                // No actual reduce dimension found, treat as normal buffering
-                _state->CoreSize = transferSize;
-                _state->ReduceOuterSize = 1;
-                _state->ReducePos = 0;
-                _state->OuterDim = 0;
-                return;
-            }
-
-            _state->OuterDim = outerDim;
-
-            // Count non-reduce axes. The double-loop (inner reduce-axis, outer non-reduce-axis)
-            // only supports ONE non-reduce axis. For multiple non-reduce axes, the outer
-            // advance needs multi-axis carry which single-stride double-loop can't express.
-            int nonReduceAxisCount = 0;
-            int firstNonReduceAxis = -1;
-            for (int d = 0; d < _state->NDim; d++)
-            {
-                if (d != outerDim && _state->Shape[d] > 1)
-                {
-                    nonReduceAxisCount++;
-                    if (firstNonReduceAxis < 0) firstNonReduceAxis = d;
-                }
-            }
-
-            // When the iteration fits entirely in the buffer AND has >1 non-reduce axis,
-            // defer to the regular N-D Advance() path (which correctly carries multiple
-            // non-reduce axes via Coords + per-axis strides). Setting CoreSize = 0
-            // short-circuits the BUFFER+REDUCE fast path in Iternext().
-            if (nonReduceAxisCount > 1)
-            {
-                _state->CoreSize = 0;
-                _state->ReduceOuterSize = 1;
-                _state->ReducePos = 0;
-                _state->CorePos = 0;
-                return;
-            }
-
-            // CoreSize = size of the REDUCE dimension (how many inputs accumulate per output).
-            // Inner loop iterates CoreSize times along the reduce axis, with the reduce
-            // operand fixed (stride=0) and non-reduce operands advancing along that axis.
-            long coreSize = _state->Shape[outerDim];
-            if (coreSize < 1)
-                coreSize = 1;
-
-            _state->CoreSize = coreSize;
-
-            // ReduceOuterSize = number of output slots = total iterations / inputs per output
-            _state->ReduceOuterSize = transferSize / coreSize;
-            if (_state->ReduceOuterSize < 1)
-                _state->ReduceOuterSize = 1;
-
-            // Reset reduce position and core position
-            _state->ReducePos = 0;
-            _state->CorePos = 0;
-
-            // Identify a non-reduce axis: any axis with Shape > 1 that is not the reduce axis.
-            // For 2D single-reduce cases this is unambiguous. For higher-dim cases, NumPy
-            // splits across multiple levels; we pick the first non-reduce axis found (limited
-            // support for >2D reduce — caller should broadcast into 2D when possible).
-            int nonReduceAxis = -1;
-            for (int d = 0; d < _state->NDim; d++)
-            {
-                if (d != outerDim && _state->Shape[d] > 1)
-                {
-                    nonReduceAxis = d;
-                    break;
-                }
-            }
-
-            int stridesNDim = _state->StridesNDim;
-
-            // Set up per-operand strides for the double-loop.
-            //
-            // Inner loop (BufStride): advances along the REDUCE axis (outerDim).
-            //   - Reduce operand: stride 0 on reduce axis → BufStride = 0 (stays on same output)
-            //   - Non-reduce operand: array stride along reduce axis (in bytes)
-            //
-            // Outer loop (ReduceOuterStride): advances along the NON-reduce axis.
-            //   - Reduce operand: stride along non-reduce axis (in bytes) — moves to next output
-            //   - Non-reduce operand: stride along non-reduce axis (in bytes) — moves to next input column
-            //
-            // Matches NumPy nditer_api.c:npyiter_copy_to_buffers buffered-reduce path.
-            for (int op = 0; op < _state->NOp; op++)
-            {
-                int elemSize = _state->GetElementSize(op);
-
-                long innerElemStride = _state->Strides[op * stridesNDim + outerDim];
-                long outerElemStride = nonReduceAxis >= 0
-                    ? _state->Strides[op * stridesNDim + nonReduceAxis]
-                    : 0;
-
-                _state->SetBufStride(op, innerElemStride * elemSize);
-                _state->SetReduceOuterStride(op, outerElemStride * elemSize);
-            }
-
-            // Set buffer iteration end
-            // When bufferSize < coreSize, we can't fit a full core in one buffer
-            // In this case, use bufferSize as the inner loop size, not coreSize
-            long effectiveInnerSize = Math.Min(_state->BufferSize, coreSize);
-            _state->BufIterEnd = effectiveInnerSize;
-
-            // Recalculate ReduceOuterSize based on what fits in buffer
-            // This represents how many complete output positions we can process per buffer
-            // When buffer is smaller than core, ReduceOuterSize = 1 (one partial core at a time)
-            if (_state->BufferSize < coreSize)
-            {
-                _state->ReduceOuterSize = 1;  // Process one (partial) output at a time
-            }
-
-            // Save current array positions for writeback BEFORE overwriting with buffer pointers
-            // DataPtrs currently point to array positions (from initialization)
-            for (int op = 0; op < _state->NOp; op++)
-            {
-                _state->SetArrayWritebackPtr(op, _state->GetDataPtr(op));
-            }
-
-            // For buffered reduce, DataPtrs need to point into buffers, not original arrays
-            // BufferedReduceAdvance will update these using BufStrides
-            for (int op = 0; op < _state->NOp; op++)
-            {
-                var buffer = _state->GetBuffer(op);
-                if (buffer != null)
-                {
-                    _state->SetDataPtr(op, buffer);
-                }
-            }
-
-            // Initialize reduce outer pointers from current data pointers (now pointing to buffers)
-            _state->InitReduceOuterPtrs();
-        }
-
-        /// <summary>
         ///     The reduction semantics of the op_axes-mapped operands — the op_axes branch of NumPy's
         ///     <c>npyiter_fill_axisdata</c>. The strides are already set by the operand setup; this marks the reduction
         ///     axes and raises NumPy's errors, in NumPy's order.
@@ -2901,8 +2715,18 @@ namespace NumSharp.Backends.Iteration
         // =========================================================================
 
         /// <summary>
-        /// Get the iteration-advance function.
+        ///     The iteration-advance function for the iterator's flags — NumPy's <c>NpyIter_GetIterNext</c>: a single iteration,
+        ///     the buffered reduce double loop (<c>npyiter_buffered_reduce_iternext</c>), plain buffering
+        ///     (<c>npyiter_buffered_iternext</c>), an external loop, or one element at a time.
         /// </summary>
+        /// <returns>The advance function (cached until a flag change clears the cache).</returns>
+        /// <remarks>
+        ///     The buffered functions honor the external-loop flag themselves, as NumPy's do: with it a step hands out the next
+        ///     inner loop, without it the next element of the current inner loop (the buffer is written back and refilled at its
+        ///     end). The reduce double loop is chosen by the buffering setup (<see cref="NDIterFlags.BUFREDUCE"/>), not by the
+        ///     presence of a reduction operand: NumPy walks a reduction whose split does not use the double loop with the plain
+        ///     buffered steps.
+        /// </remarks>
         public NDIterNextFunc GetIterNext()
         {
             if (_cachedIterNext != null)
@@ -2912,16 +2736,10 @@ namespace NumSharp.Backends.Iteration
 
             if ((itflags & NDIterFlags.ONEITERATION) != 0)
                 _cachedIterNext = SingleIterationNext;
-            else if ((itflags & NDIterFlags.BUFFER) != 0 && (itflags & NDIterFlags.REDUCE) == 0)
-            {
-                // NumPy protocol split (nditer_templ.c.src): with EXTERNAL_LOOP
-                // the user consumes one buffer fill per iternext (window jump);
-                // without it, iternext presents ONE ELEMENT at a time, walking
-                // the buffer by BufStrides and refilling at the window edge.
-                _cachedIterNext = (itflags & NDIterFlags.EXLOOP) != 0
-                    ? BufferedNext
-                    : BufferedElementNext;
-            }
+            else if ((itflags & NDIterFlags.BUFFER) != 0)
+                _cachedIterNext = (itflags & NDIterFlags.BUFREDUCE) != 0
+                    ? NDIterBufferManager.BufferedReduceIternext
+                    : NDIterBufferManager.BufferedIternext;
             else if ((itflags & NDIterFlags.EXLOOP) != 0)
                 _cachedIterNext = ExternalLoopNext;
             else
@@ -2936,68 +2754,6 @@ namespace NumSharp.Backends.Iteration
                 return false;
             state.IterIndex = state.IterEnd;
             return false;
-        }
-
-        /// <summary>
-        /// iternext for windowed buffered (non-reduce) iteration. Matches
-        /// NumPy's npyiter_buffered_iternext (nditer_templ.c.src): flush the
-        /// current window's WRITE operands back to their arrays, advance to the
-        /// window end, reposition into the source arrays, and fill the next
-        /// window. Returns false when iteration is complete — by which point
-        /// the final window has been flushed.
-        /// </summary>
-        private static bool BufferedNext(ref NDIterState state)
-        {
-            NDIterBufferManager.FlushBufferWindow(ref state);
-
-            state.IterIndex = state.BufIterEnd;
-            if (state.IterIndex >= state.IterEnd)
-                return false;
-
-            // Reposition DataPtrs into the source arrays at the new index
-            // (GotoIterIndex computes from ResetDataPtrs — the array bases).
-            state.GotoIterIndex(state.IterIndex);
-
-            long count = NDIterBufferManager.ComputeTransferSize(ref state);
-            NDIterBufferManager.FillBufferWindow(ref state, count);
-            return true;
-        }
-
-        /// <summary>
-        /// Per-element iternext for buffered (non-reduce) iteration WITHOUT
-        /// EXTERNAL_LOOP — NumPy's user-facing nditer protocol: each call
-        /// advances one element, walking the current buffer window via
-        /// BufStrides; at the window edge the WRITE operands are flushed and
-        /// the next window is filled. (NumPy nditer_templ.c.src buffered
-        /// specialization + npyiter_buffered_iternext slow path.)
-        /// </summary>
-        private static bool BufferedElementNext(ref NDIterState state)
-        {
-            long next = state.IterIndex + 1;
-            if (next < state.BufIterEnd)
-            {
-                state.IterIndex = next;
-                for (int op = 0; op < state.NOp; op++)
-                    state.DataPtrs[op] += state.BufStrides[op];
-                return true;
-            }
-
-            // Window exhausted — flush, then refill at the next position.
-            // NOTE: FlushBufferWindow relies on Coords still describing the
-            // fill start; per-element stepping above only moved DataPtrs.
-            NDIterBufferManager.FlushBufferWindow(ref state);
-
-            // NumPy increments the position first (++NIT_ITERINDEX) and refills there. That is the window end whenever a
-            // window was filled; while buffer allocation is still DELAYED no window exists (BufIterEnd stays 0), and the
-            // position must still advance — np.nditer(..., delay_bufalloc).iternext() moves iterindex to 1, as NumPy's.
-            state.IterIndex = next;
-            if (state.IterIndex >= state.IterEnd)
-                return false;
-
-            state.GotoIterIndex(state.IterIndex);
-            long count = NDIterBufferManager.ComputeTransferSize(ref state);
-            NDIterBufferManager.FillBufferWindow(ref state, count);
-            return true;
         }
 
         /// <summary>
@@ -3069,8 +2825,8 @@ namespace NumSharp.Backends.Iteration
         /// <summary>
         /// True when the iterator's advance function would resolve to
         /// <see cref="ExternalLoopNext"/> (see <see cref="GetIterNext"/>): EXTERNAL_LOOP, not
-        /// a single iteration, and not windowed-buffered. The kernel drivers use it to call
-        /// the advancer directly instead of through the delegate.
+        /// a single iteration, and not buffered (a buffered iterator steps through its buffers).
+        /// The kernel drivers use it to call the advancer directly instead of through the delegate.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool IsPlainExternalLoopAdvance()
@@ -3080,7 +2836,7 @@ namespace NumSharp.Backends.Iteration
                 return false;
             if ((f & (uint)NDIterFlags.ONEITERATION) != 0)
                 return false;
-            if ((f & (uint)NDIterFlags.BUFFER) != 0 && (f & (uint)NDIterFlags.REDUCE) == 0)
+            if ((f & (uint)NDIterFlags.BUFFER) != 0)
                 return false;
             return true;
         }
@@ -3113,33 +2869,40 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Get pointer to inner loop size.
+        ///     A pointer to the current inner loop's element count — NumPy's <c>NpyIter_GetInnerLoopSizePtr</c>: the buffer's
+        ///     inner loop size for a buffered iterator (<see cref="NDIterState.BufTransferSize"/>, one core inside the reduce
+        ///     double loop), the innermost extent otherwise.
         /// </summary>
+        /// <returns>The pointer (it stays valid for the iterator's life; the value changes as the iteration moves).</returns>
+        /// <remarks>Do not call it on an unbuffered 0-d iteration: there is no innermost extent (it would read
+        ///     <c>Shape[-1]</c>).</remarks>
         public long* GetInnerLoopSizePtr()
         {
             if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
-            {
-                // Buffered REDUCE keeps its legacy double-loop semantics where
-                // BufIterEnd doubles as the inner count; the windowed non-reduce
-                // path exposes the fill size (NumPy's NBF_SIZE).
-                if ((_state->ItFlags & (uint)NDIterFlags.REDUCE) != 0)
-                    return &_state->BufIterEnd;
                 return &_state->BufTransferSize;
-            }
 
             // Return pointer to innermost shape dimension
             return &_state->Shape[_state->NDim - 1];
         }
 
         /// <summary>
-        /// Reset iterator to the beginning. For windowed buffered iterators this
-        /// flushes the pending window (NumPy flushes in NDIter_Reset too),
-        /// materializes DELAY_BUFALLOC buffers, and primes the first window.
+        ///     Moves the iterator to the start of its range — NumPy's <c>NpyIter_Reset</c>. A buffered iterator first allocates
+        ///     delayed buffers (DELAY_BUFALLOC) or writes the current buffer back, then fills the buffers at the start.
         /// </summary>
+        /// <returns>True; false only when delayed buffers could not be allocated.</returns>
+        /// <exception cref="ValueError">A string operand's conversion fails during the write-back or the fill.</exception>
+        /// <exception cref="OverflowException">A text converted into an integer holds a number outside it.</exception>
+        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> transfer cannot allocate a string.</exception>
+        /// <remarks>
+        ///     NumPy leaves a buffer that already starts at the range start (and lies inside the range) alone: writing it back
+        ///     and refilling it would not be a no-op, because a write-only operand's buffer is never read from its array — after
+        ///     a first reset it still holds the previous buffer's data, and a second write-back would put that data over the
+        ///     range's first elements.
+        /// </remarks>
         public bool Reset()
         {
             uint f = _state->ItFlags;
-            if ((f & (uint)NDIterFlags.BUFFER) != 0 && (f & (uint)NDIterFlags.REDUCE) == 0)
+            if ((f & (uint)NDIterFlags.BUFFER) != 0)
             {
                 if ((f & (uint)NDIterFlags.DELAYBUF) != 0)
                 {
@@ -3149,20 +2912,16 @@ namespace NumSharp.Backends.Iteration
                 }
                 else
                 {
-                    // NpyIter_Reset: a window that already starts at IterStart and lies inside the range is left alone.
-                    // Flushing and refilling it would not be a no-op: a write-only operand's buffer is never read from
-                    // its array, so after a first reset it still holds the PREVIOUS window's data, and a second flush
-                    // would write that data over the elements at the start of the range.
                     if (_state->IterIndex == _state->IterStart &&
                         _state->BufIterEnd <= _state->IterEnd &&
                         _state->BufTransferSize > 0)
                         return true;
-                    NDIterBufferManager.FlushBufferWindow(ref *_state);
+                    NDIterBufferManager.CopyFromBuffers(ref *_state);
                 }
 
-                _state->Reset();
-                NDIterBufferManager.FillBufferWindow(ref *_state,
-                    NDIterBufferManager.ComputeTransferSize(ref *_state));
+                _state->FlatIndex = 0;
+                NDIterBufferManager.GotoIterIndex(ref *_state, _state->IterStart);
+                NDIterBufferManager.CopyToBuffers(ref *_state, reusePrevious: false);
                 return true;
             }
 
@@ -3171,21 +2930,27 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Materialize DELAY_BUFALLOC buffers and prime the first window. No-op
-        /// unless BUFFER+DELAYBUF are pending. NumPy requires an explicit Reset
-        /// before iterating a delay-allocated iterator; NumSharp auto-ensures at
-        /// the execution entry points instead.
+        ///     Performs the reset a DELAY_BUFALLOC iterator needs before its first use — allocates the buffers and fills them at
+        ///     the current position. A no-op unless buffer allocation is still pending. NumPy requires an explicit reset there;
+        ///     NumSharp's execution entry points (ForEach, ExecuteGeneric, ExecuteReducing, ExecuteBinary) call this instead.
         /// </summary>
+        /// <exception cref="OutOfMemoryException">The buffers could not be allocated.</exception>
+        /// <exception cref="ValueError">A string operand's conversion fails during the fill.</exception>
+        /// <exception cref="OverflowException">A text converted into an integer holds a number outside it.</exception>
         public void EnsureBuffersReady()
         {
             uint f = _state->ItFlags;
             if ((f & (uint)NDIterFlags.BUFFER) == 0 || (f & (uint)NDIterFlags.DELAYBUF) == 0)
                 return;
 
-            NDIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize);
+            if (!NDIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize))
+                throw new OutOfMemoryException("Could not allocate the iterator's delayed buffers");
             _state->ItFlags &= ~(uint)NDIterFlags.DELAYBUF;
-            NDIterBufferManager.FillBufferWindow(ref *_state,
-                NDIterBufferManager.ComputeTransferSize(ref *_state));
+
+            // Reposition first: an iternext taken while the allocation was delayed left the buffered operands on their
+            // arrays, and the fill must start from the array positions of the current index.
+            NDIterBufferManager.GotoIterIndex(ref *_state, _state->IterIndex);
+            NDIterBufferManager.CopyToBuffers(ref *_state, reusePrevious: false);
         }
 
         /// <summary>
@@ -3233,7 +2998,12 @@ namespace NumSharp.Backends.Iteration
             if ((itf & (uint)NDIterFlags.GROWINNER) != 0) writer.Write("GROWINNER ");
             if ((itf & (uint)NDIterFlags.ONEITERATION) != 0) writer.Write("ONEITERATION ");
             if ((itf & (uint)NDIterFlags.DELAYBUF) != 0) writer.Write("DELAYBUF ");
-            if ((itf & (uint)NDIterFlags.REDUCE) != 0) writer.Write("REDUCE ");
+            // NumPy prints its REDUCE flag as the buffering setup left it: for a buffered iterator, only when the reduce
+            // double loop runs (NumSharp keeps the construction's flag apart, NDIterFlags.BUFREDUCE holds the setup's).
+            bool showReduce = (itf & (uint)NDIterFlags.BUFFER) != 0
+                ? (itf & (uint)NDIterFlags.BUFREDUCE) != 0
+                : (itf & (uint)NDIterFlags.REDUCE) != 0;
+            if (showReduce) writer.Write("REDUCE ");
             if ((itf & (uint)NDIterFlags.REUSE_REDUCE_LOOPS) != 0) writer.Write("REUSE_REDUCE_LOOPS ");
             writer.WriteLine();
 
@@ -3293,7 +3063,11 @@ namespace NumSharp.Backends.Iteration
                 if ((of & NDIterOpFlags.WRITE) != 0) writer.Write("WRITE ");
                 if ((of & NDIterOpFlags.CAST) != 0) writer.Write("CAST ");
                 if ((of & NDIterOpFlags.BUFNEVER) != 0) writer.Write("BUFNEVER ");
-                if ((of & NDIterOpFlags.REDUCE) != 0) writer.Write("REDUCE ");
+                // As the iterator flag: a buffered iterator's operand prints REDUCE when the double loop iterates it so.
+                bool opReduce = (itf & (uint)NDIterFlags.BUFFER) != 0
+                    ? (of & NDIterOpFlags.BUF_REDUCE) != 0
+                    : (of & NDIterOpFlags.REDUCE) != 0;
+                if (opReduce) writer.Write("REDUCE ");
                 if ((of & NDIterOpFlags.VIRTUAL) != 0) writer.Write("VIRTUAL ");
                 if ((of & NDIterOpFlags.WRITEMASKED) != 0) writer.Write("WRITEMASKED ");
                 if ((of & NDIterOpFlags.BUF_SINGLESTRIDE) != 0) writer.Write("BUF_SINGLESTRIDE ");
@@ -3308,9 +3082,10 @@ namespace NumSharp.Backends.Iteration
             {
                 writer.WriteLine("| BufferData:");
                 writer.WriteLine($"|   BufferSize: {_state->BufferSize}");
+                writer.WriteLine($"|   Size: {_state->BufTransferSize}");
                 writer.WriteLine($"|   BufIterEnd: {_state->BufIterEnd}");
-                writer.WriteLine($"|   CoreSize: {_state->CoreSize}");
-                if ((itf & (uint)NDIterFlags.REDUCE) != 0)
+                writer.WriteLine($"|   BUFFER CoreSize: {_state->CoreSize}");
+                if ((itf & (uint)NDIterFlags.BUFREDUCE) != 0)
                 {
                     writer.WriteLine($"|   REDUCE Pos: {_state->ReducePos}");
                     writer.WriteLine($"|   REDUCE OuterSize: {_state->ReduceOuterSize}");
@@ -3320,7 +3095,7 @@ namespace NumSharp.Backends.Iteration
                 for (int iop = 0; iop < nop; iop++)
                     writer.Write($"{_state->BufStrides[iop]} ");
                 writer.WriteLine();
-                if ((itf & (uint)NDIterFlags.REDUCE) != 0)
+                if ((itf & (uint)NDIterFlags.BUFREDUCE) != 0)
                 {
                     writer.Write("|   REDUCE Outer Strides: ");
                     for (int iop = 0; iop < nop; iop++)
@@ -3573,7 +3348,8 @@ namespace NumSharp.Backends.Iteration
 
             uint itFlags = _state->ItFlags;
 
-            // If buffering, handle pending buffer state first
+            // If buffering, handle pending buffer state first (NumPy: delayed buffers are allocated, otherwise the current
+            // buffer is written back to the OLD arrays before the pointers change).
             if ((itFlags & (uint)NDIterFlags.BUFFER) != 0)
             {
                 if ((itFlags & (uint)NDIterFlags.DELAYBUF) != 0)
@@ -3585,15 +3361,9 @@ namespace NumSharp.Backends.Iteration
                     }
                     _state->ItFlags &= ~(uint)NDIterFlags.DELAYBUF;
                 }
-                else if ((itFlags & (uint)NDIterFlags.REDUCE) != 0)
-                {
-                    // Flush any pending writes before replacing pointers
-                    CopyReduceBuffersToArrays();
-                }
                 else
                 {
-                    // Windowed path: flush the pending window before replacing pointers
-                    NDIterBufferManager.FlushBufferWindow(ref *_state);
+                    NDIterBufferManager.CopyFromBuffers(ref *_state);
                 }
             }
 
@@ -3604,34 +3374,16 @@ namespace NumSharp.Backends.Iteration
                 _state->ResetDataPtrs[iop] = (long)baseptrs[iop] + _state->BaseOffsets[iop];
             }
 
-            // Reposition to IterStart using the new base pointers.
-            _state->GotoIterIndex(_state->IterStart);
-
-            // Re-prime buffers if buffered
+            // Reposition to IterStart using the new base pointers, and (buffered) fill the buffers there — NumPy runs
+            // npyiter_goto_iterindex then npyiter_copy_to_buffers, without NpyIter_Reset's early return.
             if ((itFlags & (uint)NDIterFlags.BUFFER) != 0)
             {
-                if ((itFlags & (uint)NDIterFlags.REDUCE) == 0)
-                {
-                    // Windowed path: prime a fresh window at the new position.
-                    NDIterBufferManager.FillBufferWindow(ref *_state,
-                        NDIterBufferManager.ComputeTransferSize(ref *_state));
-                }
-                else
-                {
-                    long remaining = _state->IterEnd - _state->IterIndex;
-                    long copyCount = Math.Min(remaining, _state->BufferSize);
-                    if (copyCount > 0)
-                    {
-                        for (int iop = 0; iop < _state->NOp; iop++)
-                        {
-                            var opFlags = _state->GetOpFlags(iop);
-                            if ((opFlags & NDIterOpFlags.READ) != 0)
-                            {
-                                NDIterBufferManager.CopyToBuffer(ref *_state, iop, copyCount);
-                            }
-                        }
-                    }
-                }
+                NDIterBufferManager.GotoIterIndex(ref *_state, _state->IterStart);
+                NDIterBufferManager.CopyToBuffers(ref *_state, reusePrevious: false);
+            }
+            else
+            {
+                _state->GotoIterIndex(_state->IterStart);
             }
 
             return true;
@@ -3670,28 +3422,31 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Advance to next position and return whether more iterations remain.
-        /// Matches NumPy's iternext() behavior.
-        /// Returns true if more elements exist, false when iteration is complete.
-        ///
-        /// When BUFFERED + REDUCE flags are set, uses the double-loop pattern
-        /// from NumPy's npyiter_buffered_reduce_iternext (nditer_templ.c.src lines 131-210).
+        ///     Advances to the next position and returns whether the iteration continues — NumPy's <c>iternext()</c>: the next
+        ///     element, or with an external loop the next inner loop. A buffered iterator writes its buffer back and fills the
+        ///     next one at a buffer's end; in the reduce double loop it first steps through the fill's outer steps
+        ///     (<see cref="NDIterBufferManager.BufferedReduceIternext"/>).
         /// </summary>
+        /// <returns>True while elements remain; false when the iteration is complete (the last buffer written back).</returns>
+        /// <exception cref="ValueError">A string operand's conversion fails during a buffer transfer.</exception>
+        /// <exception cref="OverflowException">A text converted into an integer holds a number outside it.</exception>
+        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> transfer cannot allocate a string.</exception>
+        /// <remarks>
+        ///     A buffered reduction can run past the range end, as NumPy's does: when a range is set (or a reset kept the
+        ///     buffer) while the current fill already reaches past the new end in its outer steps, the iteration ends with
+        ///     that fill, not at the range end. Every element it visits lies in the operands.
+        /// </remarks>
         public bool Iternext()
         {
-            if (_state->IterIndex >= _state->IterEnd)
+            // Past the range end the iteration is over — except while a buffered iterator still holds a buffer: NumPy's
+            // iternext has no such pre-check and ends where the buffer ends. That is observable after NpyIter_Reset's early
+            // return (it compares only the first core's end, BufIterEnd, with the range end), which keeps a reduce fill
+            // whose outer steps reach past a new range end: NumPy iterates that whole fill and writes it back at its end.
+            // Stopping here instead would skip the write-back. A finished buffered iteration holds no buffer
+            // (BufTransferSize 0), so it still stops here.
+            if (_state->IterIndex >= _state->IterEnd &&
+                ((_state->ItFlags & (uint)NDIterFlags.BUFFER) == 0 || _state->BufTransferSize == 0))
                 return false;
-
-            // Check for buffered reduce path
-            // Use double-loop for any buffered reduction (even when ReduceOuterSize = 1)
-            // because we need to use BufStrides which has 0 for reduce operands
-            uint itFlags = _state->ItFlags;
-            if ((itFlags & (uint)NDIterFlags.BUFFER) != 0 &&
-                (itFlags & (uint)NDIterFlags.REDUCE) != 0 &&
-                _state->CoreSize > 0)
-            {
-                return BufferedReduceIternext();
-            }
 
             // Respect EXLOOP / ONEITERATION. The kernel processes the innermost
             // loop, so a plain one-element Advance() over-steps an external-loop
@@ -3702,191 +3457,6 @@ namespace NumSharp.Backends.Iteration
             // the common (non-EXLOOP, non-ONEITERATION) case, so this is a strict
             // correction with no behavior change there.
             return GetIterNext()(ref *_state);
-        }
-
-        /// <summary>
-        /// Buffered reduce iteration using NumPy's double-loop pattern.
-        /// Avoids re-buffering during reduction by separating iteration into:
-        /// - Inner loop: CoreSize elements
-        /// - Outer loop: ReduceOuterSize iterations
-        /// </summary>
-        private bool BufferedReduceIternext()
-        {
-            int result = _state->BufferedReduceAdvance();
-
-            if (result == 1)
-            {
-                // More elements in current buffer
-                return true;
-            }
-
-            if (result == -1)
-            {
-                // Iteration complete - write back remaining buffer contents
-                CopyReduceBuffersToArrays();
-                return false;
-            }
-
-            // result == 0: Buffer exhausted, need to refill
-
-            // Write back reduce buffers to arrays
-            CopyReduceBuffersToArrays();
-
-            // Check if we're past the end
-            if (_state->IterIndex >= _state->IterEnd)
-            {
-                return false;
-            }
-
-            // Move to next buffer position - this updates DataPtrs to current array positions
-            _state->GotoIterIndex(_state->IterIndex);
-
-            // Calculate how much to copy for next buffer
-            long remaining = _state->IterEnd - _state->IterIndex;
-            long copyCount = Math.Min(remaining, _state->BufferSize);
-
-            // Copy to buffers
-            // For reduce operands, check if we're at a NEW output position
-            // (i.e., the reduce operand's array pointer changed from the previous writeback position)
-            for (int op = 0; op < _state->NOp; op++)
-            {
-                var opFlags = _state->GetOpFlags(op);
-
-                // For reduce operands, only reload if at a new output position
-                if ((opFlags & NDIterOpFlags.REDUCE) != 0)
-                {
-                    void* currentArrayPos = _state->GetDataPtr(op);
-                    void* previousWritebackPos = _state->GetArrayWritebackPtr(op);
-
-                    // If pointer changed, we're at a new output position - reload
-                    // If same, we're continuing the same output - skip reload
-                    if (currentArrayPos == previousWritebackPos)
-                    {
-                        continue;  // Same output position, keep accumulating
-                    }
-                }
-
-                if ((opFlags & NDIterOpFlags.READ) != 0 || (opFlags & NDIterOpFlags.READWRITE) != 0)
-                {
-                    NDIterBufferManager.CopyToBuffer(ref *_state, op, copyCount);
-                }
-            }
-
-            // Save current array positions for writeback (after checking but before buffer overwrite)
-            // These are the positions where CopyReduceBuffersToArrays will write
-            for (int op = 0; op < _state->NOp; op++)
-            {
-                _state->SetArrayWritebackPtr(op, _state->GetDataPtr(op));
-            }
-
-            // Reset DataPtrs to point to buffer start (BufferedReduceAdvance uses these)
-            for (int op = 0; op < _state->NOp; op++)
-            {
-                var buffer = _state->GetBuffer(op);
-                if (buffer != null)
-                {
-                    _state->SetDataPtr(op, buffer);
-                }
-            }
-
-            // For small buffer handling, set ReduceOuterSize based on buffer capacity
-            _state->ReduceOuterSize = 1;
-            _state->ReducePos = 0;
-            _state->CorePos = 0;
-
-            // Set buffer iteration end
-            _state->BufIterEnd = _state->IterIndex + copyCount;
-
-            // Initialize reduce outer pointers (pointing to buffer start)
-            _state->InitReduceOuterPtrs();
-
-            return true;
-        }
-
-        /// <summary>
-        /// Copy reduce buffers back to original arrays.
-        /// For reduce operands, only copies CoreSize elements (the accumulated results).
-        /// For non-reduce operands, copies CoreSize * ReduceOuterSize elements.
-        /// Uses ArrayWritebackPtrs (saved during buffer fill) as destination.
-        /// </summary>
-        private void CopyReduceBuffersToArrays()
-        {
-            for (int op = 0; op < _state->NOp; op++)
-            {
-                var opFlags = _state->GetOpFlags(op);
-
-                // Only copy WRITE or READWRITE operands
-                if ((opFlags & NDIterOpFlags.WRITE) == 0 && (opFlags & NDIterOpFlags.READWRITE) == 0)
-                    continue;
-
-                var buffer = _state->GetBuffer(op);
-                if (buffer == null)
-                    continue;
-
-                // The legacy reduce write-back predates masked copy-back: it
-                // would write the buffer's unmasked slots too, silently
-                // violating WRITEMASKED. Refuse at the exact corruption point
-                // (construction succeeds, NumPy parity). Masked reduce
-                // write-back lands with reductions-through-core (roadmap Wave 5);
-                // the windowed non-reduce path already enforces masks
-                // (NDIterBufferManager.FlushBufferWindow).
-                if ((opFlags & NDIterOpFlags.WRITEMASKED) != 0)
-                {
-                    throw new NotSupportedException(
-                        "WRITEMASKED write-back is not supported on a buffered REDUCE " +
-                        "iterator yet (legacy buffered-reduce machinery; roadmap Wave 5). " +
-                        "Use an unbuffered iterator (mask enforcement is then the " +
-                        "kernel's responsibility, matching NumPy) or drop REDUCE.");
-                }
-
-                // Get array writeback pointer (saved at buffer start)
-                // Falls back to ResetDataPtr if ArrayWritebackPtr not set
-                void* dst = _state->GetArrayWritebackPtr(op);
-                if (dst == null)
-                    dst = _state->GetResetDataPtr(op);
-                if (dst == null)
-                    continue;
-
-                int elemSize = _state->GetElementSize(op);
-
-                // For reduce operands, buffer has ReduceOuterSize unique output positions
-                // For non-reduce operands, buffer has full CoreSize * ReduceOuterSize elements
-                long copyCount;
-                if ((opFlags & NDIterOpFlags.REDUCE) != 0)
-                {
-                    // Reduce operand: ReduceOuterSize unique output positions
-                    // (each position accumulated CoreSize inputs)
-                    copyCount = _state->ReduceOuterSize;
-                }
-                else
-                {
-                    // Non-reduce operand: full buffer contents
-                    copyCount = _state->CoreSize * _state->ReduceOuterSize;
-                }
-
-                // For reduce operands, we have stride=0 in the reduce dimension
-                // which means all output goes to the same position(s)
-                // Just copy CoreSize elements from buffer to array
-                if ((opFlags & NDIterOpFlags.REDUCE) != 0)
-                {
-                    // Simple copy - buffer[0:CoreSize] to dst[0:CoreSize]. A string operand moves through the string run
-                    // transfer: a fixed-width cast changes the element width, and a StringDType cell means nothing outside
-                    // its buffer's allocator (each string is duplicated into the array's).
-                    if (_state->IsStringOp(op))
-                        NDIterBufferManager.CopyStringRun(ref *_state, op, (byte*)buffer, 1, (byte*)dst, 1, copyCount, toBuffer: false);
-                    else
-                        Buffer.MemoryCopy(buffer, dst, copyCount * elemSize, copyCount * elemSize);
-                }
-                else
-                {
-                    // Non-reduce: need strided copy (handled by existing logic)
-                    // Temporarily set DataPtr to array position for CopyFromBuffer
-                    void* savedDataPtr = _state->GetDataPtr(op);
-                    _state->SetDataPtr(op, dst);
-                    NDIterBufferManager.CopyFromBuffer(ref *_state, op, copyCount);
-                    _state->SetDataPtr(op, savedDataPtr);
-                }
-            }
         }
 
         /// <summary>
@@ -3932,26 +3502,37 @@ namespace NumSharp.Backends.Iteration
         public bool IsRanged => (_state->ItFlags & (uint)NDIterFlags.RANGE) != 0;
 
         /// <summary>
-        /// Jump to a specific iteration index.
+        ///     Moves the iterator to <paramref name="iterindex"/> — NumPy's <c>NpyIter_GotoIterIndex</c>: inside the current
+        ///     buffer's inner loop only the pointers move (outside the reduce double loop), anywhere else a buffered iterator
+        ///     writes its buffer back and fills a new one there.
         /// </summary>
+        /// <param name="iterindex">The target iteration index (the callers check it against the range).</param>
+        /// <exception cref="ValueError">A string operand's conversion fails during the write-back or the fill.</exception>
+        /// <exception cref="OverflowException">A text converted into an integer holds a number outside it.</exception>
+        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> transfer cannot allocate a string.</exception>
+        /// <remarks>
+        ///     A position inside a core starts the next fill there: it covers only the rest of that core (NumPy's core
+        ///     offset), and in the reduce double loop such a fill writes every buffered operand's partial result back as
+        ///     zero elements, which loses it — NumPy 2.4.2's behavior, kept (it reads and writes nothing outside the
+        ///     operands).
+        /// </remarks>
         public void GotoIterIndex(long iterindex)
         {
-            // A windowed buffered iterator holds the current window in its buffers (NumPy's NpyIter_GotoIterIndex):
-            //  - a position INSIDE the current window only moves the pointers by the buffer strides — the coordinates go
-            //    on describing the window's start, which is why a buffered multi_index reads the window start's
-            //    coordinates after such a seek, as NumPy's does;
-            //  - any other position flushes the window (written elements reach the array) and primes a new one at the
-            //    destination. Moving only the state's pointers there would leave them on ARRAY memory that the views read
-            //    as buffer elements (a buffered cast, or a string widened in its buffer, then read garbage).
-            // Delayed buffers have no window yet: the state moves alone.
+            // A buffered iterator holds the current buffer (NumPy's NpyIter_GotoIterIndex):
+            //  - outside the reduce double loop, a position INSIDE the current inner loop only moves the pointers by the
+            //    buffer strides — the coordinates go on describing the buffer's start, which is why a buffered multi_index
+            //    reads the start's coordinates after such a seek, as NumPy's does;
+            //  - any other position writes the buffer back (written elements reach the array), moves there (the core
+            //    offset included) and fills a new buffer. Moving only the state's pointers would leave them on ARRAY memory
+            //    that the views read as buffer elements (a buffered cast, or a string widened in its buffer).
+            // Delayed buffers have no buffer yet: the state moves alone (NumPy would fill through its NULL buffers).
             uint f = _state->ItFlags;
-            bool windowed = (f & (uint)NDIterFlags.BUFFER) != 0 &&
-                            (f & (uint)(NDIterFlags.REDUCE | NDIterFlags.DELAYBUF)) == 0;
-            if (windowed)
+            bool buffered = (f & (uint)NDIterFlags.BUFFER) != 0 && (f & (uint)NDIterFlags.DELAYBUF) == 0;
+            if (buffered)
             {
                 long size = _state->BufTransferSize;
                 long bufIterEnd = _state->BufIterEnd;
-                if (iterindex < bufIterEnd && iterindex >= bufIterEnd - size)
+                if ((f & (uint)NDIterFlags.BUFREDUCE) == 0 && iterindex < bufIterEnd && iterindex >= bufIterEnd - size)
                 {
                     long delta = iterindex - _state->IterIndex;
                     for (int op = 0; op < _state->NOp; op++)
@@ -3960,12 +3541,16 @@ namespace NumSharp.Backends.Iteration
                     return;
                 }
 
-                NDIterBufferManager.FlushBufferWindow(ref *_state);
+                NDIterBufferManager.CopyFromBuffers(ref *_state);
+                NDIterBufferManager.GotoIterIndex(ref *_state, iterindex);
+                NDIterBufferManager.CopyToBuffers(ref *_state, reusePrevious: false);
+                return;
             }
 
-            _state->GotoIterIndex(iterindex);
-            if (windowed)
-                NDIterBufferManager.FillBufferWindow(ref *_state, NDIterBufferManager.ComputeTransferSize(ref *_state));
+            if ((f & (uint)NDIterFlags.BUFFER) != 0)
+                NDIterBufferManager.GotoIterIndex(ref *_state, iterindex);
+            else
+                _state->GotoIterIndex(iterindex);
         }
 
         /// <summary>
@@ -4441,37 +4026,11 @@ namespace NumSharp.Backends.Iteration
             if ((uint)operand >= (uint)_state->NOp)
                 throw new ArgumentOutOfRangeException(nameof(operand));
 
-            uint itFlags = _state->ItFlags;
-
-            // If buffering is enabled and we have a buffer, use it
-            if ((itFlags & (uint)NDIterFlags.BUFFER) != 0)
-            {
-                var buffer = _state->GetBuffer(operand);
-                if (buffer != null)
-                {
-                    // REDUCE mode: DataPtrs track the current array/buffer position.
-                    // - With CoreSize > 0 (double-loop active): BufferedReduceAdvance maintains DataPtrs.
-                    // - With CoreSize == 0 (fallback to regular Advance): DataPtrs maintained by
-                    //   Advance() using per-axis strides (stride=0 on reduce axis keeps pointer fixed).
-                    // In both cases, DataPtrs is correct; don't override via IterIndex-indexed buffer.
-                    if ((itFlags & (uint)NDIterFlags.REDUCE) != 0)
-                    {
-                        return _state->GetDataPtr(operand);
-                    }
-
-                    // Windowed buffered iteration keeps DataPtrs correct at all
-                    // times: FillBufferWindow swaps buffered operands' pointers to
-                    // their buffers and BufferedElementNext walks them by
-                    // BufStrides. The legacy recomputation that used to live here
-                    // (IterIndex - (BufIterEnd - BufferSize)) silently broke on
-                    // the PARTIAL final window — e.g. 20005 elements with the
-                    // default 8192 buffer put the third window's start at
-                    // 20005-8192=11813 instead of 16384, reading stale data from
-                    // the previous fill. DataPtrs is the single source of truth.
-                    return _state->GetDataPtr(operand);
-                }
-            }
-
+            // DataPtrs is the single source of truth in every mode: NumPy's user pointers while buffering (a fill points the
+            // buffered operands at their buffers, the steps move them by BufStrides, the reduce double loop by the reduce
+            // outer strides), the array pointers otherwise. A legacy recomputation from the iteration index that used to live
+            // here ((IterIndex - (BufIterEnd - BufferSize)) into the buffer) silently broke on a PARTIAL last fill — 20005
+            // elements with the default 8192 buffer put the third fill's start at 11813 instead of 16384.
             return _state->GetDataPtr(operand);
         }
 
@@ -4618,10 +4177,24 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Remove multi-index tracking and enable coalescing.
-        /// Matches NumPy's NDIter_RemoveMultiIndex behavior.
-        /// Note: Resets iterator position to the beginning.
+        ///     Stops tracking the multi-index and merges the axes that can be walked as one — NumPy's
+        ///     <c>NpyIter_RemoveMultiIndex</c>: the iterator is reset first (a buffer written back, delayed buffers allocated),
+        ///     then coalesced, and starts again at the range start.
         /// </summary>
+        /// <returns>True when a multi-index was removed; false when none was tracked (the reset still happened) or delayed
+        ///     buffers could not be allocated.</returns>
+        /// <exception cref="OutOfMemoryException">A partly merged buffered iteration's new buffers cannot be allocated.</exception>
+        /// <exception cref="NotSupportedException">A WRITEMASKED operand the rerun buffering setup buffers has a mask that is
+        ///     not bool or uint8.</exception>
+        /// <exception cref="ValueError">A string operand's conversion fails during the write-back or a fill.</exception>
+        /// <remarks>
+        ///     A buffered iterator keeps NumPy's buffering setup — the one chosen for the axes before the merge — wherever it
+        ///     still walks the right elements: when nothing merged, when everything merged into one axis (the old cores then
+        ///     run along it: an external loop hands out the OLD core's chunks, as NumPy's does), when the merges happened above
+        ///     the setup's outer position, and when the setup fills one core at a time (no reduce loop). Otherwise NumPy's kept
+        ///     setup walks wrong elements or reads stale axis data, and NumSharp runs the setup again over the merged axes
+        ///     (<see cref="NDIterBufferManager.RebuildBufferingSetup"/>).
+        /// </remarks>
         public bool RemoveMultiIndex()
         {
             // NpyIter_RemoveMultiIndex resets the iterator FIRST, whether or not a multi-index is tracked: a buffered
@@ -4635,6 +4208,20 @@ namespace NumSharp.Backends.Iteration
             // Clear the multi-index flag
             _state->ItFlags &= ~(uint)NDIterFlags.HASMULTIINDEX;
 
+            // A buffered iterator keeps its buffering setup across the merge (NumPy does not run npyiter_find_buffering_setup
+            // again): the setup's outer index then names whatever axis sits at that position after the merge — or no axis at
+            // all, when the merge took the rank below it, and NumPy reads that axis's stale storage at every later fill. When
+            // everything merged into ONE axis, the vanished outer axis's remaining extent is kept (StaleOuterRemaining) so the
+            // later fills read what NumPy's read; see the buffered branch below for the partial merges.
+            bool buffered = (_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0;
+            long staleRemaining = -1;
+            int ndimBefore = _state->NDim;
+            if (buffered && ndimBefore > 1 && _state->StaleOuterRemaining < 0 && _state->OuterDim < ndimBefore)
+            {
+                int outerAxis = ndimBefore - 1 - _state->OuterDim;
+                staleRemaining = _state->Shape[outerAxis] - _state->Coords[outerAxis];
+            }
+
             // NpyIter_RemoveMultiIndex only COALESCES: the axes were ordered (and flipped) at construction, with or without
             // a multi-index, and that order is the iteration order the caller asked for (a forced C or F order included).
             // Sorting them again by stride walked a forced-order iterator in memory order instead (np.nditer(c_array,
@@ -4644,17 +4231,46 @@ namespace NumSharp.Backends.Iteration
             if (_state->NDim > 1)
                 NDIterCoalescing.CoalesceAxesIterationOrder(ref *_state);
 
-            // Reset iterator to beginning (NumPy behavior). A windowed buffered iterator was flushed and refilled by the
-            // reset above; the coalesced axes walk the same elements in the same order, but the window bookkeeping is laid
-            // out by the axes, so it is primed again under the new ones (nothing was written since the first fill, so
-            // there is nothing to flush). Rewinding the state alone would point the data pointers back at ARRAY memory
-            // that the views then read as buffer elements.
-            uint f = _state->ItFlags;
-            bool windowed = (f & (uint)NDIterFlags.BUFFER) != 0 &&
-                            (f & (uint)(NDIterFlags.REDUCE | NDIterFlags.DELAYBUF)) == 0;
-            _state->Reset();
-            if (windowed)
-                NDIterBufferManager.FillBufferWindow(ref *_state, NDIterBufferManager.ComputeTransferSize(ref *_state));
+            if (buffered)
+            {
+                // NumPy leaves the buffer the reset filled, and every pointer into it, as they are; only the coordinates the
+                // next write-back and fill walk from must describe the merged axes (they are the range start's). A 0-d
+                // iteration has no axes to merge (its single NumPy axis keeps stride 0, as the setup recorded).
+                _state->RecomputeCoords();
+                if (_state->NDim == 0 || ndimBefore <= 1 || _state->NDim == ndimBefore)
+                {
+                    // Nothing was merged: the setup still describes the axes.
+                }
+                else if (_state->NDim == 1 && _state->OuterDim >= 1)
+                {
+                    // Everything merged into one axis, the setup's outer axis with it: NumPy's later fills read that axis's
+                    // stale slot (its extent minus its coordinate at the merge). Kept: every operand now walks the whole
+                    // iteration with one stride, so the old cores and outer steps stay inside it (np.nditer(a2d, ['buffered',
+                    // 'multi_index'], op_dtypes=['f8'], buffersize=5) then remove_multi_index + enable_external_loop hands
+                    // out the old core's chunks, [4, 4, 4], as NumPy does).
+                    if (staleRemaining >= 0)
+                        _state->StaleOuterRemaining = staleRemaining;
+                }
+                else if (!NDIterBufferManager.SetupStillDescribesTheAxes(ref *_state) &&
+                         !NDIterBufferManager.SetupFillsCoreByCore(ref *_state))
+                {
+                    // Partly merged, and the setup's outer position now names another axis (or none) while its fills span
+                    // more than a core. NumPy keeps that setup and walks wrong elements (2.4.2: a buffered cast sum over axis
+                    // 1 of a (2, 3, 4, 5) input, op_axes=[None, [0, -1, 1, 2]], leaves 36 of the 40 sums at 0), or reads its
+                    // stale axis data and crashes (the same input reduced over axis 0, buffersize=40); reproducing the old
+                    // setup's pointer steps over the new axes wrote past the output. NumSharp runs the setup again over the
+                    // merged axes instead (NOT NumPy; the results are the right ones).
+                    NDIterBufferManager.RebuildBufferingSetup(ref *_state);
+                }
+                // Otherwise NumPy's kept setup walks the right elements: the merges happened above its outer position (the
+                // outer axis keeps its strides, the cores still align with the axes), or it fills one core at a time, which
+                // never leaves a core (an external loop then hands out the old core's chunks, as NumPy's does).
+            }
+            else
+            {
+                // Reset iterator to beginning (NumPy behavior): the coordinates and pointers of the merged axes.
+                _state->Reset();
+            }
 
             // Clear cached iteration function
             _cachedIterNext = null;
@@ -4730,6 +4346,17 @@ namespace NumSharp.Backends.Iteration
         ///
         /// Matches NumPy's NDIter_IsFirstVisit behavior.
         /// </summary>
+        /// <param name="operand">The operand index.</param>
+        /// <returns>Whether the operand's current element is visited for the first time.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="operand"/> is not an operand index.</exception>
+        /// <remarks>
+        ///     Buffered, the coordinates are the current buffer's start (NumPy's), and the reduce double loop adds NumPy's
+        ///     outer-level test: after the first outer step of a fill, an operand whose core repeats (outer stride 0) is not
+        ///     seen first. NumPy meant the function for the external-loop mode, where a caller also checks the inner stride;
+        ///     without an external loop NumSharp applies that check itself (an inner stride of 0 repeats the element along the
+        ///     inner loop, so only its first position is a first visit) — NumPy's per-element answers there "may be
+        ///     incorrect", NumSharp's are exact.
+        /// </remarks>
         public bool IsFirstVisit(int operand)
         {
             if ((uint)operand >= (uint)_state->NOp)
@@ -4753,14 +4380,21 @@ namespace NumSharp.Backends.Iteration
                     return false;
             }
 
-            // Part 2: Check buffer positions (buffered reduction check)
-            // When BUFFERED flag is set, use CorePos to determine first visit
-            // CorePos = 0 means we're at the start of a new output element
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0 && _state->CoreSize > 0)
+            // Part 2: the buffered double loop (NumPy checks only its outer level, since the function is meant for the
+            // external-loop mode): a reduce operand whose core repeats per outer step (outer stride 0) is not seen for the
+            // first time at any outer step after the first. ReduceOuterStrides holds long.MinValue outside the reduce loop,
+            // and ReducePos is 0 there.
+            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
             {
-                // For buffered reduce, first visit is only when CorePos = 0
-                // (at the start of accumulation for each output element)
-                if (_state->CorePos != 0)
+                if (_state->ReducePos != 0 && _state->ReduceOuterStrides[operand] == 0)
+                    return false;
+
+                // NumSharp's per-element extension: without an external loop the caller cannot apply NumPy's "check the
+                // inner stride" advice, so the iterator does — an operand whose inner stride is 0 repeats its element along
+                // the inner loop, and only the inner loop's first position sees it first. With an external loop the
+                // position is always the inner loop's start, which leaves NumPy's answer unchanged.
+                if ((_state->ItFlags & (uint)NDIterFlags.EXLOOP) == 0 && _state->BufStrides[operand] == 0 &&
+                    _state->IterIndex != _state->BufIterEnd - _state->BufTransferSize)
                     return false;
             }
 
@@ -4768,10 +4402,19 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Create an independent copy of the iterator at its current position.
-        /// Matches NumPy's NDIter_Copy behavior.
-        /// The copy has its own state and can be advanced independently.
+        ///     Creates an independent copy of the iterator at its current position — NumPy's <c>NpyIter_Copy</c>. The copy has
+        ///     its own state and buffers and is advanced independently (dispose it separately).
         /// </summary>
+        /// <returns>The copy (it owns its state; it shares the operand arrays).</returns>
+        /// <exception cref="OutOfMemoryException">The copy's state or buffers could not be allocated, or a <c>StringDType</c>
+        ///     fill cannot allocate a string.</exception>
+        /// <exception cref="ValueError">A string operand's conversion fails while the copy's buffers are filled.</exception>
+        /// <remarks>
+        ///     A buffered copy gets fresh buffers FILLED FROM THE ARRAYS at the current position, as NumPy's does
+        ///     (<c>npyiter_goto_iterindex</c> + <c>npyiter_copy_to_buffers</c> on the copy): it starts a new buffer at the
+        ///     current element (inside a core when the position is), and it does not see what the original wrote into its
+        ///     buffer and has not written back yet. A copy taken before the first fill or after the end holds no buffer either.
+        /// </remarks>
         public NDIterRef Copy()
         {
             // Allocate new state on heap (single block + arena, like AdvancedNew)
@@ -4794,18 +4437,20 @@ namespace NumSharp.Backends.Iteration
                 newStatePtr->DType = _state->DType;
                 newStatePtr->StridesNDim = _state->StridesNDim;
                 newStatePtr->BufferSize = _state->BufferSize;
+                newStatePtr->MaxBufferSize = _state->MaxBufferSize;
                 newStatePtr->BufIterEnd = _state->BufIterEnd;
                 newStatePtr->BufTransferSize = _state->BufTransferSize;
-                newStatePtr->BufFlushed = _state->BufFlushed;
                 newStatePtr->ReducePos = _state->ReducePos;
                 newStatePtr->ReduceOuterSize = _state->ReduceOuterSize;
                 newStatePtr->CoreSize = _state->CoreSize;
-                newStatePtr->CorePos = _state->CorePos;
                 newStatePtr->OuterDim = _state->OuterDim;
                 newStatePtr->CoreOffset = _state->CoreOffset;
 
                 // ALWAYS allocate new arrays (both dimension and operand arrays are dynamic now)
                 newStatePtr->AllocateDimArrays(_state->NDim, _state->NOp, _state->StridesNDim);
+
+                // After AllocateDimArrays, which initializes it: a vanished outer axis of a remove_multi_index merge.
+                newStatePtr->StaleOuterRemaining = _state->StaleOuterRemaining;
 
                 // Copy dimension arrays (if NDim > 0)
                 if (_state->NDim > 0)
@@ -4851,34 +4496,40 @@ namespace NumSharp.Backends.Iteration
                     newStatePtr->ReduceOuterStrides[op] = _state->ReduceOuterStrides[op];
                     newStatePtr->ReduceOuterPtrs[op] = _state->ReduceOuterPtrs[op];
                     newStatePtr->ArrayWritebackPtrs[op] = _state->ArrayWritebackPtrs[op];
+                    newStatePtr->OuterAxisStrides[op] = _state->OuterAxisStrides[op];
 
                     var sourceBuffer = (void*)_state->Buffers[op];
                     if (sourceBuffer != null)
                     {
                         // Sized by the stored element size, which a fixed-width string's buffer needs (the String
-                        // lane names no width).
-                        var buffer = NDIterBufferManager.AllocateAligned(_state->BufferSize, _state->ElementSizes[op]);
+                        // lane names no width); at least one element, as AllocateBuffers does.
+                        var buffer = NDIterBufferManager.AllocateAligned(Math.Max(_state->BufferSize, 1), _state->ElementSizes[op]);
                         if (buffer == null)
                             throw new OutOfMemoryException("Failed to allocate iterator copy buffer.");
-
-                        var bytes = _state->BufferSize * _state->ElementSizes[op];
-                        // A StringDType buffer's cells point into the source buffer's allocator: they are duplicated below
-                        // into a new allocator (CloneForCopy), never copied as bytes.
-                        if (vstrings == null || !vstrings.IsBufferVString(op))
-                            Buffer.MemoryCopy(sourceBuffer, buffer, bytes, bytes);
                         newStatePtr->Buffers[op] = (long)buffer;
 
+                        // A pointer into the source's buffer moves to the same offset of the copy's: the refill below
+                        // replaces it whenever a buffer is held, and a copy without one (finished, or before its first
+                        // fill) must not keep pointing into memory the original frees.
+                        var bytes = _state->BufferSize * _state->ElementSizes[op];
                         var dataPtr = _state->DataPtrs[op];
                         var bufferStart = _state->Buffers[op];
-                        var bufferEnd = bufferStart + bytes;
-                        if (dataPtr >= bufferStart && dataPtr < bufferEnd)
+                        if (dataPtr >= bufferStart && dataPtr < bufferStart + bytes)
                             newStatePtr->DataPtrs[op] = (long)buffer + (dataPtr - bufferStart);
                     }
                 }
 
-                // The copy's StringDType context: the same descriptors and array allocators, and its own allocator per
-                // StringDType buffer with every buffered string duplicated (NumPy's copy duplicates its buffers too).
-                vstrings?.CloneForCopy(ref *_state, ref *newStatePtr);
+                // The copy's StringDType context: the same descriptors and array allocators, and its own (zeroed) allocator
+                // per StringDType buffer — the refill below duplicates every string it reads into it.
+                vstrings?.CloneForCopy(ref *_state, ref *newStatePtr, duplicateBufferStrings: false);
+
+                // NumPy's NpyIter_Copy re-buffers the copy at the current position rather than copying the buffers: the
+                // array positions of IterIndex (the core offset included) and a fresh fill from the arrays.
+                if ((newStatePtr->ItFlags & (uint)NDIterFlags.BUFFER) != 0 && newStatePtr->BufTransferSize > 0)
+                {
+                    NDIterBufferManager.GotoIterIndex(ref *newStatePtr, newStatePtr->IterIndex);
+                    NDIterBufferManager.CopyToBuffers(ref *newStatePtr, reusePrevious: false);
+                }
 
                 // Create new iterator owning the state
                 return new NDIterRef
@@ -4908,18 +4559,14 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public void Dispose()
         {
-            // Windowed buffered iteration: flush the pending window so kernels
-            // that consumed the final fill without a trailing iternext (e.g. the
-            // single-inner-loop fast path) still land their writes (NumPy
-            // resolves pending buffer write-backs in NDIter_Deallocate too).
-            // Must run BEFORE ResolveWritebacks so the buffer contents reach the
-            // forced-copy temp before that temp is copied to the user's array.
+            // A buffered iteration stopped before its end still holds a buffer: write it back (NumPy's NpyIter_Deallocate
+            // runs npyiter_copy_from_buffers; after the end nothing is held, so this writes nothing). Must run BEFORE
+            // ResolveWritebacks so the buffer contents reach a forced-copy temp before that temp is copied to the user's array.
             if (_state != null &&
                 (_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0 &&
-                (_state->ItFlags & (uint)NDIterFlags.REDUCE) == 0 &&
                 (_state->ItFlags & (uint)NDIterFlags.DELAYBUF) == 0)
             {
-                NDIterBufferManager.FlushBufferWindow(ref *_state);
+                NDIterBufferManager.CopyFromBuffers(ref *_state);
             }
 
             // COPY_IF_OVERLAP write-backs must resolve regardless of state

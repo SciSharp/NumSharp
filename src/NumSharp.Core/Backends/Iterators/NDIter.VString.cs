@@ -30,8 +30,8 @@ namespace NumSharp.Backends.Iteration
     ///     <b>Lifetime.</b> Attached once the operands are final (after the copy routes and COPY_IF_OVERLAP replaced any of them,
     ///     before the first buffer allocation); released by <see cref="NDIterState.FreeDimArrays"/>, the step every teardown of a
     ///     state runs (<c>Dispose</c>, <c>FreeState</c>, a failed construction or copy). <see cref="NDIterRef.Copy"/> gives the
-    ///     copy a context of its own (<see cref="CloneForCopy"/>): the same array descriptors and allocators, new buffer allocators,
-    ///     each buffered string duplicated.
+    ///     copy a context of its own (<see cref="CloneForCopy"/>): the same array descriptors and allocators, new buffer allocators
+    ///     over zeroed buffers, which the copy's first fill (NumPy's re-buffering at the copy's position) fills from the arrays.
     ///     </para>
     /// </remarks>
     internal sealed unsafe class NDIterVStringContext
@@ -247,14 +247,18 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>
         ///     A context for <see cref="NDIterRef.Copy"/>'s new state: the same descriptors and array allocators, and for every
-        ///     <c>StringDType</c> buffer a new allocator over the copy's buffer with each string of the source buffer duplicated
-        ///     into it (the copy's cells never point into the source's allocator).
+        ///     <c>StringDType</c> buffer a new allocator over the copy's (zeroed) buffer — with each string of the source buffer
+        ///     duplicated into it when <paramref name="duplicateBufferStrings"/> is set (the copy's cells never point into the
+        ///     source's allocator either way).
         /// </summary>
         /// <param name="source">The source state.</param>
         /// <param name="copy">The new state, its buffers allocated (raw bytes) but not filled.</param>
+        /// <param name="duplicateBufferStrings">True to duplicate the source buffers' strings into the copy's; false to leave
+        ///     the copy's buffers empty (every cell the empty string) for a refill from the arrays — what NumPy's
+        ///     <c>NpyIter_Copy</c> does, and what <see cref="NDIterRef.Copy"/> asks for.</param>
         /// <returns>The new context, attached to <paramref name="copy"/>.</returns>
         /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
-        internal NDIterVStringContext CloneForCopy(ref NDIterState source, ref NDIterState copy)
+        internal NDIterVStringContext CloneForCopy(ref NDIterState source, ref NDIterState copy, bool duplicateBufferStrings = true)
         {
             int nop = ArrayDescrs.Length;
             var ctx = new NDIterVStringContext(nop);
@@ -269,6 +273,8 @@ namespace NumSharp.Backends.Iteration
                 if (from == null || to == null || !ctx.IsBufferVString(op) || BufferAllocators[op] == null)
                     continue;
                 ctx.AllocateBuffer(op, to, copy.BufferSize);
+                if (!duplicateBufferStrings)
+                    continue;   // the zeroed cells wait for the refill
                 var fromAllocator = BufferAllocators[op];
                 var toAllocator = ctx.BufferAllocators[op];
                 VStringAllocator.AcquirePair(fromAllocator, toAllocator);

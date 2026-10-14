@@ -200,14 +200,6 @@ namespace NumSharp
             /// </summary>
             private bool _hasGetMultiIndex;
 
-            /// <summary>
-            ///     A buffered REDUCTION built with <c>delay_bufalloc</c>: NumSharp's reduce setup is construction-bound and
-            ///     allocates at once, but NumPy's contract is still the delayed one — <see cref="has_delayed_bufalloc"/>
-            ///     reads true and the element views refuse until <see cref="reset"/> — so the wrapper keeps that state
-            ///     itself (the engine's <c>DELAYBUF</c> flag carries it for every other buffered iterator).
-            /// </summary>
-            private bool _reduceDelayPending;
-
             // --- np.nested_iters support (NumPy's nested_child chain) ---
             // A nested group's levels share NumPy's advance-on-entry protocol (npyiter_next's `started` flag) with the plain
             // iterator; what nesting adds is the child re-base cascade (npyiter_resetbasepointers), run after every advance
@@ -240,7 +232,8 @@ namespace NumSharp
             /// <param name="op_axes">The per-operand axis maps (null entries for natural broadcasting).</param>
             /// <param name="itershape">The iteration shape, or null: a negative entry is deduced from the operands; without
             ///     <paramref name="op_axes"/> it sets the rank and every operand is right-aligned into it.</param>
-            /// <param name="buffersize">The buffer size (0 = <c>np.getbufsize()</c>).</param>
+            /// <param name="buffersize">The buffer size in elements (0 = NumPy's <c>NPY_BUFSIZE</c>, 8192 — as in NumPy,
+            ///     <see cref="np.setbufsize(long)"/> does not change it).</param>
             /// <exception cref="ValueError">NumPy's argument, flag, op_axes, shape-pass and stride-pass errors (verbatim
             ///     texts: a broadcast mismatch, an invalid or duplicate axis, a stretched no_broadcast operand, a refused
             ///     reduction), or a text that does not parse as the number a copy or the first buffer fill reads it into.</exception>
@@ -301,22 +294,19 @@ namespace NumSharp
                 for (int i = 0; i < nop; i++)
                     op_typecodes[i] = descrs[i] is null ? NPTypeCode.Empty : descrs[i].GetTypeCode();
 
+                // NumPy's nditer hands a buffersize of 0 to NpyIter_AdvancedNew, whose buffering setup reads it as NPY_BUFSIZE
+                // (8192): np.setbufsize changes the ufuncs' buffers, never np.nditer's. The engine's own 0 means the per-thread
+                // np.getbufsize() (the ufunc machinery's size), so the wrapper passes NumPy's constant itself.
+                long engineBufferSize = buffersize > 0 ? buffersize : NDIterBufferManager.DefaultBufferSize;
                 var iter = NDIterRef.AdvancedNew(
                     nop, op, globalFlags, npyOrder, npyCasting, perOpFlags, op_typecodes,
-                    oaNDim, op_axes, broadcast, buffersize, descrs, shapeValidated: true);
+                    oaNDim, op_axes, broadcast, engineBufferSize, descrs, shapeValidated: true);
 
                 _state = iter.Detach(out var detachedOperands, out var detachedWritebacks, out var detachedReleaseOnly);
                 _operands = detachedOperands;
                 _writebackOriginals = detachedWritebacks;
                 _releaseOnlyOriginals = detachedReleaseOnly;
                 _iterDescrs = descrs;
-
-                // A buffered reduction's delayed allocation is kept by the wrapper (see _reduceDelayPending): the engine
-                // allocated it at construction, NumPy's contract says it is still pending.
-                const NDIterGlobalFlags delayedBuffering = NDIterGlobalFlags.BUFFERED | NDIterGlobalFlags.DELAY_BUFALLOC;
-                _reduceDelayPending = (globalFlags & delayedBuffering) == delayedBuffering &&
-                                      (_state->ItFlags & (uint)NDIterFlags.REDUCE) != 0 &&
-                                      (_state->ItFlags & (uint)NDIterFlags.DELAYBUF) == 0;
 
                 // The end of npyiter_init: npyiter_cache_values, then an empty iteration starts both started and finished
                 // (its first pull ends at once), any other starts fresh.
@@ -1065,11 +1055,10 @@ namespace NumSharp
                 "Iterator construction used delayed buffer allocation, and no reset has been done yet";
 
             /// <summary>
-            ///     Whether buffer allocation is still pending a reset — the engine's <c>DELAYBUF</c> flag, or the wrapper's
-            ///     own flag for a buffered reduction (<see cref="_reduceDelayPending"/>). Requires an open iterator.
+            ///     Whether buffer allocation is still pending a reset — the engine's <c>DELAYBUF</c> flag (a buffered reduction
+            ///     delays its allocation too, as NumPy's does). Requires an open iterator.
             /// </summary>
-            private bool DelayedBufAlloc =>
-                (_state->ItFlags & (uint)NDIterFlags.DELAYBUF) != 0 || _reduceDelayPending;
+            private bool DelayedBufAlloc => (_state->ItFlags & (uint)NDIterFlags.DELAYBUF) != 0;
 
             /// <summary>
             ///     NumPy's <c>self->iter == NULL || self->finished</c> guard of the position getters and the element views.
@@ -1398,11 +1387,10 @@ namespace NumSharp
                     if (value.End < value.Start)
                         throw new ValueError($"Invalid range [{value.Start}, {value.End}) passed to ResetToIterIndexRange");
 
-                    // The engine sets the range and resets to its start (NpyIter_Reset: a windowed buffer is written back
-                    // and refilled for the new range, delayed buffers are allocated).
+                    // The engine sets the range and resets to its start (NpyIter_Reset: the buffer is written back and
+                    // refilled for the new range unless NumPy's early return keeps it, delayed buffers are allocated).
                     if (!it.ResetToIterIndexRange(value.Start, value.End))
                         throw new OutOfMemoryException("Could not allocate the iterator's delayed buffers");
-                    _reduceDelayPending = false;
 
                     _cachedNext = it.PeekCachedIterNext();
                     // NumPy's npyiter_iterrange_set: an empty range is finished at once, any other starts fresh, and the
@@ -1728,7 +1716,6 @@ namespace NumSharp
                 var it = Borrow();
                 if (!it.Reset())
                     throw new OutOfMemoryException("Could not allocate the iterator's delayed buffers");
-                _reduceDelayPending = false;
                 _cachedNext = it.PeekCachedIterNext();
                 // npyiter_reset: an empty iteration is finished again at once, and the multi-index getter exists now.
                 _started = _finished = it.IterSize == 0;
@@ -1756,7 +1743,6 @@ namespace NumSharp
                     _iterDescrs = (DType[])_iterDescrs.Clone(),
                     _started = _started,
                     _finished = _finished,
-                    _reduceDelayPending = _reduceDelayPending,
                 };
                 // npyiter_copy runs npyiter_cache_values on the copy: no multi-index getter while allocation is delayed.
                 duplicate.CacheValues();
@@ -1804,8 +1790,6 @@ namespace NumSharp
             {
                 var it = Borrow();
                 it.RemoveMultiIndex();
-                // NpyIter_RemoveMultiIndex starts with NpyIter_Reset, which allocates delayed buffers.
-                _reduceDelayPending = false;
                 _cachedNext = it.PeekCachedIterNext();
                 // RemoveMultiIndex resets the iterator: the next pull yields the first element (NumPy's started = 0).
                 CacheValues();
@@ -1823,8 +1807,6 @@ namespace NumSharp
             {
                 var it = Borrow();
                 it.EnableExternalLoop();
-                // NpyIter_EnableExternalLoop ends with NpyIter_Reset, which allocates delayed buffers.
-                _reduceDelayPending = false;
                 _cachedNext = it.PeekCachedIterNext();
                 // EnableExternalLoop resets the iterator: the next pull yields the first chunk (NumPy's started = 0).
                 CacheValues();
@@ -1868,14 +1850,13 @@ namespace NumSharp
                 _state = null;
                 _cachedNext = null;
 
-                // Flush a pending buffered window before the write-backs, so buffer contents
-                // reach a forced-copy temp before that temp is copied out (NDIterRef.Dispose
-                // orders it the same way).
+                // Write a held buffer back before the write-backs, so buffer contents reach a forced-copy temp before that
+                // temp is copied out (NDIterRef.Dispose orders it the same way; NumPy's NpyIter_Deallocate runs
+                // npyiter_copy_from_buffers). After the iteration's end no buffer is held and nothing is written.
                 if ((state->ItFlags & (uint)NDIterFlags.BUFFER) != 0 &&
-                    (state->ItFlags & (uint)NDIterFlags.REDUCE) == 0 &&
                     (state->ItFlags & (uint)NDIterFlags.DELAYBUF) == 0)
                 {
-                    NDIterBufferManager.FlushBufferWindow(ref *state);
+                    NDIterBufferManager.CopyFromBuffers(ref *state);
                 }
 
                 // Write-backs (updateifcopy / copy_if_overlap temporaries) copy back into their originals; read-only copy

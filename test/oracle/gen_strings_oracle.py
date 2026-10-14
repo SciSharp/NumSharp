@@ -5698,25 +5698,24 @@ def gen_titer():
             _titer_add(f"pair/{oname}", [a, (b, b)], layout="pair", flags=flags, casting="unsafe")
 
     # H. reductions: a StringDType reduction operand (op_axes; the output follows the iterator's axis 1, or axis 0),
-    # unbuffered with and without external_loop (the stride-0 chunk takes y[...] = x and keeps its last element),
-    # buffered at the default size, plain or through a cast buffer; a float64 reduction operand's stride-0 chunk takes
-    # the input chunk and a constant (through the view and through the setter). Two buffered shapes are the open
-    # buffered-reduce bug (OpenBugs.NditerBufferedReduce.cs) and are not recorded here: a buffer shorter than the reduced
-    # axis, and a reduction over the OUTER iteration axis (op_axes [-1, 0]: NumSharp's legacy double loop walks the
-    # reduced axis innermost, 0 4 8 1 5 9 ... where NumPy walks C order; the values agree, the visit order does not).
+    # unbuffered with and without external_loop (the stride-0 chunk takes y[...] = x and keeps its last element), and
+    # buffered, plain or through a cast buffer: NumPy's reduce double loop at the default size (one fill of 3 rows) and
+    # with a buffer of 8 (fills of 2 rows, then 1), and buffers of 2 and 3 elements, shorter than a row (no double loop:
+    # the core is one element); a float64 reduction operand's stride-0 chunk takes the input chunk and a constant
+    # (through the view and through the setter).
     for spec in specs:
         for axes, outn in (([[0, 1], [-1, 0]], 4), ([[0, 1], [0, -1]], 3)):
             for flags, req in ((rok + ["reduce_ok"], None), (rok + ["reduce_ok", "external_loop"], None),
                                (rok + ["reduce_ok", "buffered"], None),
-                               (rok + ["reduce_ok", "buffered"], "other"), (rok + ["reduce_ok", "buffered"], "<U8")):
-                if "buffered" in flags and axes[1] == [-1, 0]:
-                    continue
-                a = _t_op(spec, "c2", seed=9)
-                out = np.array([""] * outn, dtype=spec.build())
-                r = None if req is None else (_other_t(spec) if req == "other" else req)
-                _titer_add("reduce", [a, (out, out)], layout="reduce", flags=flags,
-                           op_flags=[["readonly"], ["readwrite"]], op_axes=axes, op_dtypes=[None, r],
-                           casting="unsafe", copy_to=1)
+                               (rok + ["reduce_ok", "buffered"], "other"), (rok + ["reduce_ok", "buffered"], "<U8"),
+                               (rok + ["reduce_ok", "buffered", "external_loop"], "other")):
+                for bs in ((0, 2, 3, 8) if "buffered" in flags else (0,)):
+                    a = _t_op(spec, "c2", seed=9)
+                    out = np.array([""] * outn, dtype=spec.build())
+                    r = None if req is None else (_other_t(spec) if req == "other" else req)
+                    _titer_add("reduce", [a, (out, out)], layout="reduce", flags=flags,
+                               op_flags=[["readonly"], ["readwrite"]], op_axes=axes, op_dtypes=[None, r],
+                               casting="unsafe", copy_to=1, buffersize=bs)
     for axes, outn in (([[0, 1], [-1, 0]], 4), ([[0, 1], [0, -1]], 3)):
         a = np.arange(12, dtype=np.float64)
         out = np.zeros(outn)

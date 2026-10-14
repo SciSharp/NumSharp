@@ -2442,7 +2442,7 @@ ZERO excuses and to STRICT error types (valueclasses `nditer_construct` / `ndite
   order, buffered casts and the advance-on-entry protocol, over every NumPy dtype and the layout catalog. Each case
   records the value stream, the operand after construction and the array after close. Its ranged section
   (`nditer_ranged`) walks a buffered cast over `[start, end)` for every source dtype.
-- **`nditer_protocol.jsonl`** (1,219 cases): scripted traces of the state between construction and close —
+- **`nditer_protocol.jsonl`** (2,987 cases; 1,219 at delivery): scripted traces of the state between construction and close —
   nditer_pywrap's started / finished flags, "Iterator is past the end", the delayed-allocation and closed-iterator
   texts, seeks (`iterindex` / `index` / `multi_index` / `iterrange`), `remove_axis`, `remove_multi_index`,
   `enable_external_loop`, `copy`, element reads and `it[i] = v` writes (NumPy's Python-int packing, the views' write
@@ -2462,9 +2462,32 @@ broadcast or reduction operand fell back to C order where NumPy's `npyiter_find_
 stride as ambiguous (the descriptor path now runs NumPy's sort); the op_axes reduction checks raised NumSharp's own
 texts and an explicit reduction axis demanded `reduce_ok` (NumPy marks it without the flag); and a construction that
 failed after allocating an output leaked that output's pooled buffer to the finalizer (found by the leak gate on the
-`reduce` section's error cases). The tiers leave out a BUFFERED reduction, which NumSharp computes wrongly — pinned
-in `OpenBugs.NditerBufferedReduce.cs`, a port of NumPy's buffered-reduce design to come — and a buffered iterator's
-`index` (NumPy's is uninitialized memory there).
+`reduce` section's error cases). The tiers leave out a buffered iterator's `index` (NumPy's is uninitialized memory
+there).
+
+**The buffered sections (2026-10-14, strings phase 1 package P1.7g).** NumSharp's buffered NDIter is a port of NumPy
+2.4.2's buffering (`NDIterBufferManager.Buffering.cs`), and `gen_oracle.py`'s `_gen_nditer_protocol_buffered` adds
+1,768 traces of it: `reduce_buf` (the reduce double loop over C / F / permuted 3-D inputs, four `op_axes` maps, plain /
+external loop / multi-index walks, buffer sizes 0 / 3 / 5 / 7 / 13, with and without a float64 cast, allocated and
+given outputs), `reduce2d` (inner and OUTER reductions, cast reduction operands in both directions), `reduce_seek`
+(seeks and ranges inside a core: NumPy's lost partial cores, recorded as NumPy's answer), `reduce_copy` / `reduce_delayed`,
+`rmi_buf` / `rmi_reduce` / `rmi_ranged` / `rmi_reduce4` (the setup `remove_multi_index` leaves behind: an external loop
+afterwards hands out the OLD core's chunks; a ranged start leaves a smaller stale extent; the partial 4-D merges where
+NumPy's kept setup walks wrong elements or reads stale axis data — `_RMI_NUMPY_WRONG` — stay out, NumSharp reruns the
+setup there), `reduce_rw` (a readwrite operand iterated unbuffered as a reduce operand: a write reaches the array at
+once), `reduce_reuse` (the buffer reuse rule through a truncating cast), `chunk` / `chunk2` (the external-loop chunks of every layout with and without `grow_inner`, forced orders,
+two operands of which one is cast), `contig` / `contig_rw` (the CONTIG → CAST rule and its TypeError), and `writemasked`
+(a WRITEMASKED operand is masked at the BUFFERED write-back only). A new step, `setwalk:k:v`, writes `v` through operand
+`k`'s view at every step. Every case was bit-exact on the first replay but four, which found a NumSharp pre-check in
+`NDIterRef.Iternext` that stopped a held buffer at the range end and skipped its write-back (NumPy's iternext has none:
+after `NpyIter_Reset`'s early return keeps a reduce fill reaching past a new range end, NumPy iterates that whole fill).
+**Generator trap — NumPy corrupts its own heap:** a ranged buffered reduction whose range end lies inside the SECOND core
+of a fill (fill = one core and a part) runs NumPy's inner loop past the core; with a non-zero inner stride on the reduce
+operand it writes past the output (`0xC0000374`, reported at a later free, so the generator dies at a random later
+case, Git Bash exit 127). Such ranges stay out of the corpus; NumSharp runs one core per inner loop there (a
+`[Misaligned]` divergence pinned in `APIs/np.nditer.BufferedReduce.Test.cs`). Find such a case with a probe that runs
+each case 20–50 times in its own process and churns small allocations after it (`heap_probe.py` pattern), never
+in-process.
 
 ### The axis arguments of every axis-taking function (`axis_args` tier) — 2026-10-08
 

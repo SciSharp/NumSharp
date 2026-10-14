@@ -32,8 +32,8 @@ namespace NumSharp.Backends
     /// iterator as a trailing ARRAYMASK operand and <see cref="NDIterRef.ForEach"/>
     /// decomposes each inner chunk into mask-true runs, invoking the unmasked
     /// kernel per run. A dtype-mismatched out additionally engages the
-    /// Wave-4 windowed buffer machinery (kernel writes the loop dtype into the
-    /// out operand's buffer; the flush casts — and, under WRITEMASKED, masks).
+    /// iterator's buffering (NumPy's, NDIterBufferManager.Buffering.cs: the kernel writes the loop dtype into the
+    /// out operand's buffer; the write-back casts — and, under WRITEMASKED, masks).
     /// </summary>
     public partial class DefaultEngine
     {
@@ -579,8 +579,8 @@ namespace NumSharp.Backends
             var cacheKey = InnerLoopKernelKey.Binary(op, lhsType, rhsType, resultType);
 
             // Iterator config. A dtype-mismatched out becomes a CAST operand:
-            // the kernel writes the loop dtype into its buffer and the windowed
-            // flush casts to the array (Wave 4 machinery); casting was already
+            // the kernel writes the loop dtype into its buffer and the buffer
+            // write-back casts to the array (NDIterBufferManager); casting was already
             // validated as same_kind above, so the iterator runs UNSAFE exactly
             // like NumPy (loop dtypes are resolved by then; ufunc_object.c
             // passes the user casting to the iterator the same way).
@@ -651,7 +651,7 @@ namespace NumSharp.Backends
         /// dtype is Boolean: the kernel compares at result_type(lhs, rhs)
         /// INSIDE the body (fused per-element converts — the Wave-4 measured
         /// winner for cheap ops) and emits bool; a non-bool out is a CAST
-        /// operand handled by the windowed flush. bool casts same_kind to
+        /// operand handled by the buffer write-back. bool casts same_kind to
         /// EVERY numeric dtype (probed: less(f8,f8,out=complex128) works,
         /// True→1), so <see cref="ValidateOutCast"/> is structural here.
         /// The scalar body and npy_cmp_* cache key are shared with
@@ -932,7 +932,7 @@ namespace NumSharp.Backends
 
             // Buffering engages when the input promotes (bufferedPromoting) or
             // the out dtype differs from the compute dtype — both are CAST
-            // operands handled by the windowed machinery.
+            // operands handled by the iterator's buffering.
             bool outNeedsCast = target.typecode != outputType;
             var globalFlags = NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP;
             var casting = NPY_CASTING.NPY_SAFE_CASTING;

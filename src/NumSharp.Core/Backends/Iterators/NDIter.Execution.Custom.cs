@@ -206,7 +206,7 @@ namespace NumSharp.Backends.Iteration
         private bool Is2DElementwiseShape()
         {
             uint f = _state->ItFlags;
-            if ((f & (uint)NDIterFlags.BUFFER) != 0) return false;        // cast/promote → windowed path
+            if ((f & (uint)NDIterFlags.BUFFER) != 0) return false;        // cast/promote → buffered path
             if ((f & (uint)NDIterFlags.EXLOOP) == 0) return false;        // need the coalesced inner axis
             if ((f & (uint)NDIterFlags.ONEITERATION) != 0) return false;  // single chunk is already optimal
             int ndim = _state->NDim;

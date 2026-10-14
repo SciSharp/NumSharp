@@ -355,7 +355,7 @@ namespace NumSharp.Backends
             if (outNeedsCast)
             {
                 // The kernel writes the resolved dtype into the out operand's
-                // buffer; the windowed flush casts (same_kind was validated, so
+                // buffer; the buffer write-back casts (same_kind was validated, so
                 // the iterator runs UNSAFE exactly like NumPy's ufunc layer, and
                 // under WRITEMASKED the same flush also honours the mask).
                 globalFlags |= NDIterGlobalFlags.BUFFERED

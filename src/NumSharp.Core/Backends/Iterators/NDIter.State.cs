@@ -236,36 +236,59 @@ namespace NumSharp.Backends.Iteration
         public long* InnerStrides;
 
         // =========================================================================
-        // Buffer Data (when BUFFERED flag is set)
+        // Buffer Data (when BUFFERED flag is set) — NumPy's NpyIter_BufferData
+        // =========================================================================
+        // The buffered iteration is a port of NumPy 2.4.2's (nditer_constr.c npyiter_find_buffering_setup,
+        // nditer_api.c npyiter_copy_to_buffers / npyiter_copy_from_buffers / npyiter_goto_iterindex, nditer_templ.c.src
+        // npyiter_buffered_iternext / npyiter_buffered_reduce_iternext), carried out by NDIterBufferManager. The roles of
+        // NumPy's pointer arrays during a buffer:
+        //   * DataPtrs           = NIT_USERPTRS: what the user and the kernels read — a buffer for a buffered operand,
+        //                          the array for a BUFNEVER one — advanced by BufStrides inside an inner loop;
+        //   * ArrayWritebackPtrs = NIT_DATAPTRS: each operand's ARRAY position at the start of the current buffer, where
+        //                          the write-back lands (Coords stay at that start for the whole buffer, as NAD_INDEX does);
+        //   * ResetDataPtrs      = NIT_RESETDATAPTR: the base every reposition (GotoIterIndex) starts from.
         // =========================================================================
 
-        /// <summary>Buffer size (elements per buffer).</summary>
+        /// <summary>
+        ///     Elements one buffer fill may cover — NumPy's <c>NBF_BUFFERSIZE</c>. Holds the requested maximum until
+        ///     <c>NDIterBufferManager.FindBufferingSetup</c> runs, then the setup's <c>best_size</c>: a whole number of
+        ///     <see cref="CoreSize"/> cores at most the requested maximum, except that GROWINNER over operands that need no
+        ///     buffer keeps the whole outer block (the inner loop may then exceed the requested size). Every buffer holds
+        ///     this many elements.
+        /// </summary>
         public long BufferSize;
 
-        /// <summary>Current buffer iteration end.</summary>
+        /// <summary>
+        ///     The buffer size the iterator was built with (its <c>buffersize</c> argument, 0 resolved to NumPy's 8192), as
+        ///     <c>NDIterBufferManager.FindBufferingSetup</c> received it. NumPy keeps no such field (it runs the setup once);
+        ///     NumSharp needs it for the one place it runs the setup again — <c>RemoveMultiIndex</c> over a partly merged
+        ///     buffered iteration, where NumPy's stale setup would walk wrong elements and can write outside an operand.
+        /// </summary>
+        public long MaxBufferSize;
+
+        /// <summary>
+        ///     The iteration index one past the current inner loop — NumPy's <c>NBF_BUFITEREND</c>. In the reduce double loop
+        ///     it marks the end of the current CORE (not of the whole fill), and moves by <see cref="BufTransferSize"/> per
+        ///     outer step.
+        /// </summary>
         public long BufIterEnd;
 
         /// <summary>
-        /// Number of elements in the current buffer fill (the inner-loop count
-        /// the kernel must process). Matches NumPy's NBF_SIZE. For the
-        /// non-reduce buffered path, <see cref="BufIterEnd"/> = fill-start
-        /// IterIndex + BufTransferSize.
+        ///     The current inner loop's element count — NumPy's <c>NBF_SIZE</c>, what <c>GetInnerLoopSizePtr</c> exposes.
+        ///     The whole fill outside the reduce double loop; one core inside it when the fill holds more than one core (the
+        ///     fill is then <c>BufTransferSize * ReduceOuterSize</c> elements). Zero before the first fill and after the
+        ///     iteration ended, which is what makes a second write-back of the same buffer a no-op.
         /// </summary>
         public long BufTransferSize;
 
-        /// <summary>
-        /// 1 when the current fill's WRITE operands have been flushed back to
-        /// their arrays (or no fill is pending). Lets flush be idempotent so
-        /// iternext, the single-inner-loop fast path, and Dispose can all call
-        /// it safely. Matches the role of NumPy's "buffers written" tracking
-        /// in npyiter_copy_from_buffers.
-        /// </summary>
-        public byte BufFlushed;
-
-        /// <summary>Buffer pointers for each operand. Size = NOp.</summary>
+        /// <summary>Buffer pointers for each operand (null for a BUFNEVER operand, and while allocation is delayed). Size = NOp.</summary>
         public long* Buffers;
 
-        /// <summary>Buffer strides (always element size for contiguous buffers). Size = NOp.</summary>
+        /// <summary>
+        ///     Each operand's inner-loop stride in BYTES — NumPy's <c>NBF_STRIDES</c>: the buffer element size for a buffered
+        ///     operand (0 for a buffer holding a single repeated element, and for a reduce operand whose element repeats along
+        ///     the core), the operand's own innermost array stride for a BUFNEVER one. Size = NOp.
+        /// </summary>
         public long* BufStrides;
 
         /// <summary>
@@ -276,77 +299,93 @@ namespace NumSharp.Backends.Iteration
         public IntPtr VStringContext;
 
         // =========================================================================
-        // Buffered Reduction Data (when BUFFERED + REDUCE flags are set)
+        // The core / outer split and the reduce double loop (when BUFFERED is set)
         // =========================================================================
-        // NumPy uses a double-loop pattern for buffered reduction:
-        // - Inner loop: iterates through CoreSize elements (non-reduce dimensions)
-        // - Outer loop: iterates ReduceOuterSize times (reduce dimension)
+        // npyiter_find_buffering_setup picks an OUTER dimension: the axes inside it form the CORE (CoreSize elements), and
+        // every buffer fill covers whole cores of one outer block (never crossing into the next block of the axes beyond
+        // it). When that outer dimension is where a reduction operand's stride flips between zero and non-zero, the fill
+        // is walked as a double loop (NDIterFlags.BUFREDUCE): ReduceOuterSize inner loops of one core each, every operand
+        // stepping by its ReduceOuterStrides between them — a reduce operand's element (or its core) repeating while the
+        // inputs move on.
         //
-        // The key insight: reduce operands have ReduceOuterStride=0, so their
-        // pointer stays fixed while input advances, accumulating values.
-        //
-        // Reference: numpy/_core/src/multiarray/nditer_templ.c.src lines 131-210
+        // Reference: numpy/_core/src/multiarray/nditer_constr.c (npyiter_find_buffering_setup) and
+        // nditer_templ.c.src (npyiter_buffered_reduce_iternext).
         // =========================================================================
 
         /// <summary>
-        /// Current position in reduce outer loop [0, ReduceOuterSize).
-        /// Used by IsFirstVisit for buffered reduction.
+        ///     The current outer step of the reduce double loop, in <c>[0, ReduceOuterSize)</c> — NumPy's
+        ///     <c>NBF_REDUCE_POS</c>. Zero outside the reduce loop. <c>IsFirstVisit</c> reads it: a reduce operand whose
+        ///     outer stride is 0 repeats its core at every step after the first.
         /// </summary>
         public long ReducePos;
 
         /// <summary>
-        /// Size of reduce outer loop (transfersize / CoreSize).
-        /// Number of times to iterate the reduce dimension within buffer.
+        ///     The number of outer steps of the current fill — NumPy's <c>NBF_REDUCE_OUTERSIZE</c>: the fill's size divided by
+        ///     <see cref="CoreSize"/>, rounded down. Zero for a fill shorter than one core (a fill that starts inside a core),
+        ///     which NumPy's write-back then multiplies into a zero-element transfer.
         /// </summary>
         public long ReduceOuterSize;
 
         /// <summary>
-        /// Inner loop size (number of inputs per output element).
-        /// When reducing, Size is set to CoreSize and we iterate ReduceOuterSize times.
+        ///     The elements of one core — NumPy's <c>NBF_CORESIZE</c>: the product of the extents of the axes inside the outer
+        ///     dimension. At least 1.
         /// </summary>
         public long CoreSize;
 
         /// <summary>
-        /// Current position within core [0, CoreSize).
-        /// Reset to 0 when advancing to next outer iteration.
-        /// Used by IsFirstVisit - returns true only when CorePos = 0.
-        /// </summary>
-        public long CorePos;
-
-        /// <summary>
-        /// Which dimension is the reduce outer dimension.
-        /// Used for stride calculation.
+        ///     The buffering setup's outer dimension in NumPy's numbering — the axis index counted from the INNERMOST axis
+        ///     (NumPy's <c>NBF_OUTERDIM</c>), not a NumSharp axis index: NumSharp axis <c>NDim - 1 - OuterDim</c>. Kept in NumPy's
+        ///     numbering because <c>remove_multi_index</c> coalesces the axes after the setup and NumPy keeps using that index
+        ///     on the merged axes (see <see cref="StaleOuterRemaining"/>).
         /// </summary>
         public int OuterDim;
 
         /// <summary>
-        /// Offset into core (for partial buffer fills).
+        ///     The position inside its core of the iteration index the iterator was last moved to — NumPy's
+        ///     <c>coreoffset</c>, set by every reposition (<c>iterindex % CoreSize</c>). A fill starting inside a core covers
+        ///     only the rest of that core and never reuses a buffer.
         /// </summary>
         public long CoreOffset;
 
         /// <summary>
-        /// Outer strides for reduction (stride per reduce outer iteration).
-        /// Layout: [op0_reduce_stride, op1_reduce_stride, ...]
-        /// When stride is 0, the operand is a reduction target for that axis.
-        /// Size = NOp.
+        ///     Each operand's pointer step between the outer steps of the reduce double loop, in BYTES — NumPy's
+        ///     <c>NBF_REDUCE_OUTERSTRIDES</c>: 0 for a reduce operand whose core repeats, the element size for a buffered reduce
+        ///     operand whose element repeats along the core, a whole core for any other buffered operand, the array stride along
+        ///     the outer axis for a BUFNEVER one. <see cref="long.MinValue"/> (NumPy's <c>NPY_MIN_INTP</c>, "invalid") when the
+        ///     iteration does not use the reduce loop. Size = NOp.
         /// </summary>
         public long* ReduceOuterStrides;
 
         /// <summary>
-        /// Reset pointers for outer loop iteration.
-        /// After completing inner loop, we advance these by ReduceOuterStrides.
-        /// Layout: [op0_ptr, op1_ptr, ...]
-        /// Size = NOp.
+        ///     Each operand's pointer at the start of the current outer step of the reduce double loop — NumPy's
+        ///     <c>NBF_REDUCE_OUTERPTRS</c>: the buffer start (or the array position for a BUFNEVER operand) after a fill, then
+        ///     advanced by <see cref="ReduceOuterStrides"/> at every outer step. Size = NOp.
         /// </summary>
         public long* ReduceOuterPtrs;
 
         /// <summary>
-        /// Array positions at buffer start, used for writeback.
-        /// Stored separately from ResetDataPtrs which is the base for GotoIterIndex.
-        /// Layout: [op0_ptr, op1_ptr, ...]
-        /// Size = NOp.
+        ///     Each operand's ARRAY position at the start of the current buffer — NumPy's <c>NIT_DATAPTRS</c> while buffering:
+        ///     the source of the fill and the destination of the write-back, and what the next fill of the reduce double loop
+        ///     compares with to decide whether a buffer still holds its operand's data (NumPy's reuse rule). Size = NOp.
         /// </summary>
         public long* ArrayWritebackPtrs;
+
+        /// <summary>
+        ///     Each operand's array stride along the buffering setup's outer axis, in BYTES — NumPy's
+        ///     <c>NAD_STRIDES(outer_axisdata)</c>, which the fills, the write-backs and the reuse rule of the reduce double loop
+        ///     read. Filled by the setup and kept across a <c>remove_multi_index</c> merge that leaves the setup in place (a
+        ///     merge into one axis, or above the outer position, where the outer axis keeps these strides); a partial merge
+        ///     below the outer position runs the setup again (<c>NDIterBufferManager.RebuildBufferingSetup</c>). Size = NOp.
+        /// </summary>
+        public long* OuterAxisStrides;
+
+        /// <summary>
+        ///     <c>-1</c>, or — after <c>remove_multi_index</c> merged every axis into one, the setup's outer axis with them, so
+        ///     that <see cref="OuterDim"/> no longer names an axis — the remaining extent of the vanished outer axis at the merge
+        ///     (its extent minus its coordinate), which NumPy then reads from that axis's stale storage at every fill: no
+        ///     reposition updates it.
+        /// </summary>
+        public long StaleOuterRemaining;
 
         // =========================================================================
         // Private allocation tracking
@@ -465,7 +504,7 @@ namespace NumSharp.Backends.Iteration
             //
             // long arrays (8 bytes each element):
             //   DataPtrs, ResetDataPtrs, BaseOffsets, InnerStrides, Buffers, BufStrides,
-            //   ReduceOuterStrides, ReduceOuterPtrs, ArrayWritebackPtrs = 9 arrays
+            //   ReduceOuterStrides, ReduceOuterPtrs, ArrayWritebackPtrs, OuterAxisStrides = 10 arrays
             // int arrays (4 bytes each element):
             //   ElementSizes, SrcElementSizes = 2 arrays
             // ushort arrays (2 bytes each element):
@@ -473,7 +512,7 @@ namespace NumSharp.Backends.Iteration
             // byte arrays (1 byte each element):
             //   OpDTypes, OpSrcDTypes, OpStringKinds = 3 arrays
 
-            long longArraysBytes = 9L * nop * sizeof(long);
+            long longArraysBytes = 10L * nop * sizeof(long);
             long intArraysBytes = 2L * nop * sizeof(int);
             long ushortArraysBytes = 1L * nop * sizeof(ushort);
             long byteArraysBytes = 3L * nop * sizeof(byte);
@@ -542,7 +581,7 @@ namespace NumSharp.Backends.Iteration
             // Lay out the per-operand arrays
             // =========================================================================
 
-            // Assign long* arrays (9 arrays, each nop elements)
+            // Assign long* arrays (10 arrays, each nop elements)
             long* longPtr = (long*)opBlock;
             DataPtrs = longPtr; longPtr += nop;
             ResetDataPtrs = longPtr; longPtr += nop;
@@ -552,7 +591,11 @@ namespace NumSharp.Backends.Iteration
             BufStrides = longPtr; longPtr += nop;
             ReduceOuterStrides = longPtr; longPtr += nop;
             ReduceOuterPtrs = longPtr; longPtr += nop;
-            ArrayWritebackPtrs = longPtr;
+            ArrayWritebackPtrs = longPtr; longPtr += nop;
+            OuterAxisStrides = longPtr;
+
+            // No vanished outer axis until remove_multi_index merges one away (see StaleOuterRemaining).
+            StaleOuterRemaining = -1;
 
             // Assign int* arrays (2 arrays, each nop elements)
             int* intPtr = (int*)(opBlock + intArraysStart);
@@ -610,6 +653,7 @@ namespace NumSharp.Backends.Iteration
                 ReduceOuterStrides = null;
                 ReduceOuterPtrs = null;
                 ArrayWritebackPtrs = null;
+                OuterAxisStrides = null;
             }
         }
 
@@ -1050,107 +1094,36 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Buffered reduce iteration advance.
-        /// Implements NumPy's double-loop pattern for efficient buffered reduction.
-        ///
-        /// Returns:
-        /// - 1: More elements in current buffer (inner or outer loop)
-        /// - 0: Buffer exhausted, need to refill
-        /// - -1: Iteration complete
-        ///
-        /// Reference: numpy/_core/src/multiarray/nditer_templ.c.src lines 131-210
+        ///     Moves the position to <see cref="IterStart"/> (which may be above 0 for a ranged iterator): the coordinates,
+        ///     the tracked flat index and the ARRAY pointers — the axis half of NumPy's <c>NpyIter_Reset</c>
+        ///     (<c>npyiter_goto_iterindex(ITERSTART)</c>).
         /// </summary>
-        public int BufferedReduceAdvance()
-        {
-            // === INNER LOOP INCREMENT ===
-            // Check if we can advance within the current core (inner loop)
-            if (++IterIndex < BufIterEnd)
-            {
-                // Still within core - advance pointers by buffer strides
-                // Also track position within core for IsFirstVisit
-                CorePos++;
-
-                for (int op = 0; op < NOp; op++)
-                {
-                    DataPtrs[op] += BufStrides[op];
-                }
-                return 1;  // More elements
-            }
-
-            // === OUTER LOOP INCREMENT (the double-loop magic) ===
-            // Inner loop exhausted, try advancing the reduce outer loop
-            if (++ReducePos < ReduceOuterSize)
-            {
-                // Reset core position for new outer iteration
-                CorePos = 0;
-
-                // Advance to next reduce position without re-buffering
-                for (int op = 0; op < NOp; op++)
-                {
-                    // Advance outer pointer by reduce outer stride
-                    long ptr = ReduceOuterPtrs[op] + ReduceOuterStrides[op];
-                    DataPtrs[op] = ptr;       // Current pointer
-                    ReduceOuterPtrs[op] = ptr;      // Save for next outer iteration
-                }
-
-                // Reset inner loop bounds
-                // Note: Size holds CoreSize when reducing
-                BufIterEnd = IterIndex + CoreSize;
-                return 1;  // More elements (restart inner loop)
-            }
-
-            // === BUFFER EXHAUSTED ===
-            // Both inner and outer loops exhausted
-            // Check if we're past the end
-            if (IterIndex >= IterEnd)
-            {
-                return -1;  // Iteration complete
-            }
-
-            // Need to refill buffers - return 0 to signal caller
-            return 0;
-        }
-
-        /// <summary>
-        /// Initialize reduce outer pointers from current data pointers.
-        /// Called after buffer fill to set up the outer loop start positions.
-        /// </summary>
-        public void InitReduceOuterPtrs()
-        {
-            for (int op = 0; op < NOp; op++)
-            {
-                ReduceOuterPtrs[op] = DataPtrs[op];
-            }
-        }
-
-        /// <summary>
-        /// Reset iterator to IterStart (which may be >0 for ranged iterators).
-        /// Matches NumPy's NDIter_Reset + npyiter_goto_iterindex(ITERSTART) semantics.
-        /// </summary>
+        /// <remarks>
+        ///     A buffered iterator's buffers are not touched: <c>NDIterRef.Reset</c> writes the current buffer back first and
+        ///     fills the next one after, as NumPy's reset does. The buffer-reuse marks (<see cref="NDIterOpFlags.BUF_REUSABLE"/>)
+        ///     are left alone too: the next fill decides reuse itself, from the previous buffer's start positions.
+        /// </remarks>
         public void Reset()
         {
             // Delegate to GotoIterIndex so Coords, FlatIndex, and DataPtrs all
             // agree with IterStart (critical for ranged iterators where IterStart > 0).
             FlatIndex = 0;
             GotoIterIndex(IterStart);
-            InvalidateAllBufferReuse();
         }
 
         /// <summary>
-        /// Invalidate buffer reuse flags for all operands.
-        /// Called when iterator position changes (Reset, GotoIterIndex).
+        ///     Moves the position to <paramref name="iterindex"/>: the coordinates (decomposed innermost axis first), the
+        ///     tracked flat index, and every operand's ARRAY pointer from its reset pointer — NumPy's axis half of
+        ///     <c>npyiter_goto_iterindex</c>.
         /// </summary>
-        private void InvalidateAllBufferReuse()
-        {
-            for (int op = 0; op < NOp; op++)
-            {
-                OpItFlags[op] = (ushort)(OpItFlags[op] & ~(ushort)NDIterOpFlags.BUF_REUSABLE);
-            }
-        }
-
-        /// <summary>
-        /// Jump to a specific iteration index.
-        /// </summary>
+        /// <param name="iterindex">The target iteration index (not range-checked: the callers check).</param>
+        /// <remarks>
+        ///     The data pointers then point into the operands' arrays, never into buffers: a buffered iterator follows this with
+        ///     <c>NDIterBufferManager.CopyToBuffers</c> (which records these array positions as the buffer's write-back targets
+        ///     and switches the buffered operands' pointers to their buffers), and sets <see cref="CoreOffset"/> through
+        ///     <c>NDIterBufferManager.GotoIterIndex</c>. The buffer-reuse marks are NOT cleared here: NumPy's reduce loop moves
+        ///     the position between a write-back and the next fill, and the fill's reuse rule needs the marks of the previous one.
+        /// </remarks>
         public void GotoIterIndex(long iterindex)
         {
             IterIndex = iterindex;
@@ -1192,9 +1165,33 @@ namespace NumSharp.Backends.Iteration
                 }
                 DataPtrs[op] = ResetDataPtrs[op] + offset * SrcElementSizes[op];
             }
+        }
 
-            // Invalidate all buffer reuse flags since position changed
-            InvalidateAllBufferReuse();
+        /// <summary>
+        ///     Recomputes the coordinates of the current <see cref="IterIndex"/> over the current axes WITHOUT moving any pointer —
+        ///     for <c>remove_multi_index</c> on a buffered iterator, which merges the axes while a buffer is held: the buffer and
+        ///     the pointers into it stay (NumPy keeps them), but the coordinates the next write-back and fill walk from must
+        ///     describe the merged axes.
+        /// </summary>
+        /// <remarks>
+        ///     An extent-0 axis keeps coordinate 0 (an empty iteration has no position to decompose), as
+        ///     <see cref="GotoIterIndex"/> does.
+        /// </remarks>
+        internal void RecomputeCoords()
+        {
+            long remaining = IterIndex;
+            for (int d = NDim - 1; d >= 0; d--)
+            {
+                long dimSize = Shape[d];
+                if (dimSize == 0)
+                {
+                    Coords[d] = 0;
+                    continue;
+                }
+
+                Coords[d] = remaining % dimSize;
+                remaining /= dimSize;
+            }
         }
 
         /// <summary>

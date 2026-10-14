@@ -10,7 +10,7 @@ namespace NumSharp.Backends.Iteration
     /// Buffer management for NDIter.
     /// Handles allocation, copy-in, and copy-out of iteration buffers.
     /// </summary>
-    public static unsafe class NDIterBufferManager
+    public static unsafe partial class NDIterBufferManager
     {
         /// <summary>
         /// Built-in default buffer size (number of elements) — NumPy's <c>NPY_BUFSIZE</c>.
@@ -121,115 +121,52 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Allocate buffers for all operands that need buffering.
-        ///
-        /// Buffering criterion (NumPy nditer parity): an operand is buffered when
-        /// it needs a CAST, when the user requested CONTIG, or when its memory is
-        /// not a single linear walk across the whole (coalesced) iteration space
-        /// (<see cref="IsOperandIterLinear"/>). Linear operands — contiguous OR
-        /// constant-stride 1-D views OR fully-broadcast scalars — stay unbuffered
-        /// (BUFNEVER-style) and the kernel reads/writes the array directly through
-        /// its true stride, which the Tier-3B kernels handle (incl. AVX2 gather).
-        ///
-        /// For unbuffered operands, <see cref="NDIterState.BufStrides"/> is set to
-        /// the operand's TRUE inner-axis byte stride so that
-        /// <c>GetInnerLoopByteStrides()</c> exposes one consistent stride array to
-        /// kernels under BUFFER. (Buffered operands get the tight element size.)
+        ///     NumPy's <c>npyiter_allocate_buffers</c>: one buffer of <see cref="NDIterState.BufferSize"/> elements for every
+        ///     operand the buffering setup did not mark <see cref="NDIterOpFlags.BUFNEVER"/>; an operand that already has its
+        ///     buffer keeps it. A <c>StringDType</c> buffer starts zeroed (every cell the empty string, owning nothing — NumPy's
+        ///     <c>NPY_NEEDS_INIT</c> memset) with an allocator of its own.
         /// </summary>
+        /// <param name="state">The iterator state, after <see cref="FindBufferingSetup"/> (which decides who is buffered and
+        ///     how many elements a fill covers).</param>
+        /// <param name="bufferSize">The element count for a state the setup never sized (a caller outside the iterator's own
+        ///     construction): used only when <see cref="NDIterState.BufferSize"/> is not positive, and then recorded there
+        ///     (0 or less picks <see cref="DetermineBufferSize"/>'s heuristic).</param>
+        /// <returns>True when every buffer exists; false when an allocation failed (every buffer allocated so far is freed
+        ///     again, as NumPy's failure path does).</returns>
+        /// <remarks>
+        ///     The strides an inner loop sees are the setup's (<see cref="NDIterState.BufStrides"/>): a buffered operand's buffer
+        ///     element size, an unbuffered operand's own array stride. This method only provides the memory. A buffer is
+        ///     allocated for at least one element, so an empty iteration (a zero-element fill) still owns valid pointers.
+        /// </remarks>
         public static bool AllocateBuffers(ref NDIterState state, long bufferSize)
         {
-            if (bufferSize <= 0)
-                bufferSize = DetermineBufferSize(ref state, 0);
+            if (state.BufferSize <= 0)
+                state.BufferSize = bufferSize > 0 ? bufferSize : DetermineBufferSize(ref state, 0);
 
-            state.BufferSize = bufferSize;
-
+            long elements = state.BufferSize;
+            var vstrings = NDIterVStringContext.Of(ref state);
             for (int op = 0; op < state.NOp; op++)
             {
-                var opFlags = state.GetOpFlags(op);
-                var dtype = state.GetOpDType(op);
-
-                // Skip if operand doesn't need buffering
-                if ((opFlags & NDIterOpFlags.BUFNEVER) != 0)
-                {
-                    SetUnbufferedBufStride(ref state, op);
+                if ((state.GetOpFlags(op) & NDIterOpFlags.BUFNEVER) != 0 || state.GetBuffer(op) != null)
                     continue;
-                }
 
-                // Buffered REDUCE keeps the historical criterion (its double-loop
-                // machinery owns BufStrides/DataPtr swapping for every operand,
-                // incl. the stride-0 accumulator slot). The windowed non-reduce
-                // path uses the linearity criterion so linear strided operands
-                // stay unbuffered and keep their true strides.
-                bool reduceIter = (state.ItFlags & (uint)NDIterFlags.REDUCE) != 0;
-                bool needsBuffer =
-                    state.NeedsCast(op) ||
-                    (opFlags & (NDIterOpFlags.CAST | NDIterOpFlags.CONTIG | NDIterOpFlags.REDUCE)) != 0 ||
-                    (reduceIter ? !IsOperandContiguous(ref state, op)
-                                : !IsOperandIterLinear(ref state, op));
-
-                if (needsBuffer)
+                // Sized by the stored element size (a fixed-width string's item size included).
+                var buffer = AllocateAligned(Math.Max(elements, 1), state.GetElementSize(op));
+                if (buffer == null)
                 {
-                    // A buffered WRITEMASKED write means the flush will be a
-                    // MASKED copy-back reading the ARRAYMASK operand byte-wise.
-                    // NumPy validates the mask dtype when it builds that masked
-                    // transfer function (nditer_constr.c:3470-3494 →
-                    // dtype_transfer.c, TypeError) — same here, same text. Both
-                    // the mask's array dtype and its buffer dtype must be a
-                    // 1-byte nonzero-test type or the byte-wise reads are junk.
-                    if ((opFlags & NDIterOpFlags.WRITEMASKED) != 0 &&
-                        (opFlags & NDIterOpFlags.WRITE) != 0 &&
-                        state.MaskOp >= 0)
-                    {
-                        var maskSrcType = state.GetOpSrcDType(state.MaskOp);
-                        var maskBufType = state.GetOpDType(state.MaskOp);
-                        if ((maskSrcType != NPTypeCode.Boolean && maskSrcType != NPTypeCode.Byte) ||
-                            (maskBufType != NPTypeCode.Boolean && maskBufType != NPTypeCode.Byte))
-                        {
-                            throw new NotSupportedException(
-                                "Only bool and uint8 masks are supported.");
-                        }
-                    }
-
-                    // Sized by the stored element size (a fixed-width string's item size included).
-                    var buffer = AllocateAligned(bufferSize, state.GetElementSize(op));
-                    if (buffer == null)
-                    {
-                        // Cleanup already allocated buffers
-                        FreeBuffers(ref state);
-                        return false;
-                    }
-
-                    state.SetBuffer(op, buffer);
-                    state.BufStrides[op] = state.GetElementSize(op);
-
-                    // A StringDType iteration side: zeroed cells (the empty string, owning nothing) and an allocator of the
-                    // buffer's own (NDIterVStringContext.AllocateBuffer).
-                    if (state.IsVStringOp(op))
-                        NDIterVStringContext.Of(ref state)?.AllocateBuffer(op, buffer, bufferSize);
+                    FreeBuffers(ref state);
+                    return false;
                 }
-                else
-                {
-                    SetUnbufferedBufStride(ref state, op);
-                }
+
+                state.SetBuffer(op, buffer);
+
+                // A StringDType iteration side: zeroed cells (the empty string, owning nothing) and an allocator of the
+                // buffer's own (NDIterVStringContext.AllocateBuffer).
+                if (state.IsVStringOp(op))
+                    vstrings?.AllocateBuffer(op, buffer, elements);
             }
 
             return true;
-        }
-
-        /// <summary>
-        /// Record the true inner-axis byte stride for an operand that is NOT
-        /// buffered, so kernels see correct strides via BufStrides under BUFFER.
-        /// </summary>
-        private static void SetUnbufferedBufStride(ref NDIterState state, int op)
-        {
-            if (state.NDim == 0)
-            {
-                state.BufStrides[op] = 0;
-                return;
-            }
-
-            long innerElemStride = state.GetStride(state.NDim - 1, op);
-            state.BufStrides[op] = innerElemStride * state.GetSrcElementSize(op);
         }
 
         /// <summary>
@@ -283,40 +220,6 @@ namespace NumSharp.Backends.Iteration
                     state.SetBuffer(op, null);
                 }
             }
-        }
-
-        /// <summary>
-        /// Check if an operand is contiguous in the current iteration space.
-        /// </summary>
-        private static bool IsOperandContiguous(ref NDIterState state, int op)
-        {
-            if (state.NDim == 0)
-                return true;
-
-            long expected = 1;
-
-            // Access dynamically allocated arrays directly (not fixed arrays)
-            var shape = state.Shape;
-            var strides = state.Strides;
-            int stridesNDim = state.StridesNDim;
-
-            for (int axis = state.NDim - 1; axis >= 0; axis--)
-            {
-                long dim = shape[axis];
-                if (dim == 0)
-                    return true;
-
-                long stride = strides[op * stridesNDim + axis];
-
-                if (dim != 1)
-                {
-                    if (stride != expected)
-                        return false;
-                    expected *= dim;
-                }
-            }
-
-            return true;
         }
 
         /// <summary>
@@ -641,412 +544,6 @@ namespace NumSharp.Backends.Iteration
             }
         }
 
-        // =========================================================================
-        // Windowed buffered iteration (NumPy npyiter_copy_to_buffers /
-        // npyiter_copy_from_buffers / npyiter_buffered_iternext equivalents)
-        // =========================================================================
-        // A "window" is one buffer fill: BufTransferSize elements starting at the
-        // iterator's current position (IterIndex/Coords — which stay parked at the
-        // fill start while the kernel consumes the window; BufferedNext flushes,
-        // jumps, and refills).
-        //
-        // Per-operand semantics per fill (matching NumPy):
-        //   • buffered + READ      → strided/casting copy into the buffer
-        //   • buffered + WRITEONLY → no copy-in; kernel produces the contents
-        //   • buffered + WRITE     → flushed back to the array on iternext/Dispose
-        //   • unbuffered (linear)  → DataPtr stays in the array; BufStrides holds
-        //                            its true inner byte stride
-        //
-        // Fills are capped at BufferSize and, for NDim > 1, row-aligned (end on an
-        // inner-dimension boundary) — observed NumPy behavior: a (100,100) strided
-        // source with buffersize=4096 fills in chunks of 4000/4000/2000, with and
-        // without GROWINNER.
-        // =========================================================================
-
-        /// <summary>
-        /// Number of elements the next buffer fill should cover, from the
-        /// iterator's current position. Capped at <see cref="NDIterState.BufferSize"/>;
-        /// for multi-dim iterations the window ends on an inner-row boundary
-        /// unless a single row exceeds the buffer (then a partial row is used).
-        /// </summary>
-        public static long ComputeTransferSize(ref NDIterState state)
-        {
-            long remaining = state.IterEnd - state.IterIndex;
-            if (remaining <= 0)
-                return 0;
-
-            long cap = Math.Min(remaining, state.BufferSize);
-            if (state.NDim <= 1 || cap == remaining)
-                return cap;
-
-            long inner = state.Shape[state.NDim - 1];
-            if (inner <= 0)
-                return cap;
-
-            long posInRow = state.Coords[state.NDim - 1];
-            long firstRun = inner - posInRow;
-            if (cap <= firstRun)
-                return cap;  // can't finish the current row — partial-row fill
-
-            long wholeRows = (cap - firstRun) / inner;
-            return firstRun + wholeRows * inner;
-        }
-
-        /// <summary>
-        /// Fill all buffered READ operands from the iterator's current position
-        /// for <paramref name="count"/> elements, record the array write-back
-        /// positions, swap buffered operands' DataPtrs to their buffers, and set
-        /// the window bookkeeping (BufTransferSize / BufIterEnd / BufFlushed).
-        /// </summary>
-        public static void FillBufferWindow(ref NDIterState state, long count)
-        {
-
-            // Save the array positions of the fill start: flush targets, and the
-            // restore points for unbuffered operands are simply unchanged.
-            for (int op = 0; op < state.NOp; op++)
-                state.SetArrayWritebackPtr(op, state.GetDataPtr(op));
-
-            for (int op = 0; op < state.NOp; op++)
-            {
-                var buffer = state.GetBuffer(op);
-                if (buffer == null)
-                    continue;
-
-                if ((state.GetOpFlags(op) & NDIterOpFlags.READ) != 0 && count > 0)
-                    CopyWindowToBuffer(ref state, op, count);
-
-                state.SetDataPtr(op, buffer);
-            }
-
-            state.BufTransferSize = count;
-            state.BufIterEnd = state.IterIndex + count;
-            state.BufFlushed = 0;
-        }
-
-        /// <summary>
-        /// Write the current window's buffered WRITE operands back to their
-        /// arrays. Idempotent (BufFlushed) so iternext, the single-inner-loop
-        /// fast paths, and Dispose can all call it.
-        /// </summary>
-        public static void FlushBufferWindow(ref NDIterState state)
-        {
-            if (state.BufFlushed != 0)
-                return;
-            state.BufFlushed = 1;
-
-            long count = state.BufTransferSize;
-            if (count <= 0)
-                return;
-
-            for (int op = 0; op < state.NOp; op++)
-            {
-                var buffer = state.GetBuffer(op);
-                if (buffer == null)
-                    continue;
-
-                var opFlags = state.GetOpFlags(op);
-                if ((opFlags & NDIterOpFlags.WRITE) != 0)
-                {
-                    // WRITEMASKED: only elements whose ARRAYMASK byte is true
-                    // reach the array; everything else in the buffer is
-                    // discarded. This is the ONLY place masking is enforced —
-                    // an unbuffered WRITEMASKED operand writes the array
-                    // directly and the mask is the kernel's contract, exactly
-                    // like NumPy (verified 2.4.2: 'buffered' + contiguous
-                    // same-dtype operands write unmasked slots too).
-                    // NumPy npyiter_copy_from_buffers (nditer_api.c:2001-2026).
-                    if ((opFlags & NDIterOpFlags.WRITEMASKED) != 0 && state.MaskOp >= 0)
-                        CopyWindowFromBufferMasked(ref state, op, count);
-                    else
-                        CopyWindowFromBuffer(ref state, op, count);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Strided/casting gather of <paramref name="count"/> elements from the
-        /// operand's array (starting at the fill-start position recorded in
-        /// ArrayWritebackPtrs, walking the iteration space from the current
-        /// Coords) into its tight contiguous buffer. Decomposes the window into
-        /// inner-axis runs and uses the SIMD IL cast kernels per run.
-        /// </summary>
-        private static void CopyWindowToBuffer(ref NDIterState state, int op, long count)
-        {
-            var srcType = state.GetOpSrcDType(op);
-            var dstType = state.GetOpDType(op);
-            int srcSize = state.GetSrcElementSize(op);
-            int dstSize = state.GetElementSize(op);
-            // A fixed-width string on either side takes the string run transfer (widths and classes from the state).
-            bool stringOp = state.IsStringOp(op);
-
-            byte* src = (byte*)state.GetArrayWritebackPtr(op);
-            byte* dst = (byte*)state.GetBuffer(op);
-
-            if (state.NDim <= 1)
-            {
-                long stride = state.NDim == 0 ? 0 : state.GetStride(0, op);
-                if (stringOp)
-                    CopyStringRun(ref state, op, src, stride, dst, 1, count, toBuffer: true);
-                else
-                    CopyRunToBuffer(src, stride, srcType, srcSize, dst, dstType, count);
-                return;
-            }
-
-            int ndim = state.NDim;
-            int innerAxis = ndim - 1;
-            long innerLen = state.Shape[innerAxis];
-            long innerStride = state.GetStride(innerAxis, op);
-
-            // Local walk state — must NOT mutate the iterator's Coords.
-            long* coords;
-            long* coordsHeap = null;
-            if (ndim <= NDIterState.StackAllocThreshold)
-            {
-                long* coordsStack = stackalloc long[ndim];
-                coords = coordsStack;
-            }
-            else
-            {
-                coordsHeap = (long*)NativeMemory.Alloc((nuint)(ndim * sizeof(long)));
-                coords = coordsHeap;
-            }
-            try
-            {
-                for (int d = 0; d < ndim; d++)
-                    coords[d] = state.Coords[d];
-
-                long remaining = count;
-                while (remaining > 0)
-                {
-                    long run = Math.Min(remaining, innerLen - coords[innerAxis]);
-                    if (stringOp)
-                        CopyStringRun(ref state, op, src, innerStride, dst, 1, run, toBuffer: true);
-                    else
-                        CopyRunToBuffer(src, innerStride, srcType, srcSize, dst, dstType, run);
-
-                    dst += run * dstSize;
-                    remaining -= run;
-                    if (remaining <= 0)
-                        break;
-
-                    // Row finished — ripple-carry to the next position, adjusting
-                    // the source pointer incrementally (same math as Advance()).
-                    src += run * innerStride * srcSize;
-                    coords[innerAxis] += run;
-
-                    for (int d = innerAxis; d >= 0; d--)
-                    {
-                        if (coords[d] < state.Shape[d])
-                            break;
-
-                        coords[d] = 0;
-                        src -= state.GetStride(d, op) * state.Shape[d] * srcSize;
-                        if (d == 0)
-                            break;
-                        coords[d - 1]++;
-                        src += state.GetStride(d - 1, op) * srcSize;
-                    }
-                }
-            }
-            finally
-            {
-                if (coordsHeap != null)
-                    NativeMemory.Free(coordsHeap);
-            }
-        }
-
-        /// <summary>
-        /// Scatter of <paramref name="count"/> elements from the operand's tight
-        /// contiguous buffer back into its array — the mirror of
-        /// <see cref="CopyWindowToBuffer"/> (same window: ArrayWritebackPtrs +
-        /// current Coords, which still describe the fill start).
-        /// </summary>
-        private static void CopyWindowFromBuffer(ref NDIterState state, int op, long count)
-        {
-            var bufType = state.GetOpDType(op);
-            var arrType = state.GetOpSrcDType(op);
-            int bufSize = state.GetElementSize(op);
-            int arrSize = state.GetSrcElementSize(op);
-            bool stringOp = state.IsStringOp(op);
-
-            byte* buf = (byte*)state.GetBuffer(op);
-            byte* dst = (byte*)state.GetArrayWritebackPtr(op);
-
-            if (state.NDim <= 1)
-            {
-                long stride = state.NDim == 0 ? 0 : state.GetStride(0, op);
-                if (stringOp)
-                    CopyStringRun(ref state, op, buf, 1, dst, stride, count, toBuffer: false);
-                else
-                    CopyRunFromBuffer(buf, bufType, bufSize, dst, stride, arrType, count);
-                return;
-            }
-
-            int ndim = state.NDim;
-            int innerAxis = ndim - 1;
-            long innerLen = state.Shape[innerAxis];
-            long innerStride = state.GetStride(innerAxis, op);
-
-            long* coords;
-            long* coordsHeap = null;
-            if (ndim <= NDIterState.StackAllocThreshold)
-            {
-                long* coordsStack = stackalloc long[ndim];
-                coords = coordsStack;
-            }
-            else
-            {
-                coordsHeap = (long*)NativeMemory.Alloc((nuint)(ndim * sizeof(long)));
-                coords = coordsHeap;
-            }
-            try
-            {
-                for (int d = 0; d < ndim; d++)
-                    coords[d] = state.Coords[d];
-
-                long remaining = count;
-                while (remaining > 0)
-                {
-                    long run = Math.Min(remaining, innerLen - coords[innerAxis]);
-                    if (stringOp)
-                        CopyStringRun(ref state, op, buf, 1, dst, innerStride, run, toBuffer: false);
-                    else
-                        CopyRunFromBuffer(buf, bufType, bufSize, dst, innerStride, arrType, run);
-
-                    buf += run * bufSize;
-                    remaining -= run;
-                    if (remaining <= 0)
-                        break;
-
-                    dst += run * innerStride * arrSize;
-                    coords[innerAxis] += run;
-
-                    for (int d = innerAxis; d >= 0; d--)
-                    {
-                        if (coords[d] < state.Shape[d])
-                            break;
-
-                        coords[d] = 0;
-                        dst -= state.GetStride(d, op) * state.Shape[d] * arrSize;
-                        if (d == 0)
-                            break;
-                        coords[d - 1]++;
-                        dst += state.GetStride(d - 1, op) * arrSize;
-                    }
-                }
-            }
-            finally
-            {
-                if (coordsHeap != null)
-                    NativeMemory.Free(coordsHeap);
-            }
-        }
-
-        /// <summary>
-        /// Masked mirror of <see cref="CopyWindowFromBuffer"/> for WRITEMASKED
-        /// operands: scatters the window back to the array but ONLY where the
-        /// ARRAYMASK operand's byte is nonzero. The mask is read from its
-        /// buffer when it was buffered, else from its array at the window's
-        /// fill-start position (ArrayWritebackPtrs — saved for every operand
-        /// by <see cref="FillBufferWindow"/>) — NumPy chooses the same way by
-        /// BUFNEVER (nditer_api.c:2002-2014). The mask byte stride is
-        /// <see cref="NDIterState.BufStrides"/>: the tight element size for a
-        /// buffered mask, the TRUE single linear byte stride for an unbuffered
-        /// one (unbuffered ⇒ IsOperandIterLinear, so window element k sits at
-        /// exactly k strides from the window start — incl. stride 0 for a
-        /// fully-broadcast mask).
-        /// </summary>
-        private static void CopyWindowFromBufferMasked(ref NDIterState state, int op, long count)
-        {
-            int maskOp = state.MaskOp;
-            byte* maskBuffer = (byte*)state.GetBuffer(maskOp);
-            byte* mask = maskBuffer != null ? maskBuffer : (byte*)state.GetArrayWritebackPtr(maskOp);
-            long maskStride = maskBuffer != null
-                ? state.GetElementSize(maskOp)
-                : state.BufStrides[maskOp];
-
-            var bufType = state.GetOpDType(op);
-            var arrType = state.GetOpSrcDType(op);
-            int bufSize = state.GetElementSize(op);
-            int arrSize = state.GetSrcElementSize(op);
-            bool stringOp = state.IsStringOp(op);
-
-            byte* buf = (byte*)state.GetBuffer(op);
-            byte* dst = (byte*)state.GetArrayWritebackPtr(op);
-
-            if (state.NDim <= 1)
-            {
-                long stride = state.NDim == 0 ? 0 : state.GetStride(0, op);
-                if (stringOp)
-                    CopyStringRunFromBufferMasked(ref state, op, buf, dst, stride, count, mask, maskStride);
-                else
-                    CopyRunFromBufferMasked(buf, bufType, bufSize, dst, stride, arrType, arrSize,
-                        count, mask, maskStride);
-                return;
-            }
-
-            int ndim = state.NDim;
-            int innerAxis = ndim - 1;
-            long innerLen = state.Shape[innerAxis];
-            long innerStride = state.GetStride(innerAxis, op);
-
-            long* coords;
-            long* coordsHeap = null;
-            if (ndim <= NDIterState.StackAllocThreshold)
-            {
-                long* coordsStack = stackalloc long[ndim];
-                coords = coordsStack;
-            }
-            else
-            {
-                coordsHeap = (long*)NativeMemory.Alloc((nuint)(ndim * sizeof(long)));
-                coords = coordsHeap;
-            }
-            try
-            {
-                for (int d = 0; d < ndim; d++)
-                    coords[d] = state.Coords[d];
-
-                long remaining = count;
-                while (remaining > 0)
-                {
-                    long run = Math.Min(remaining, innerLen - coords[innerAxis]);
-                    if (stringOp)
-                        CopyStringRunFromBufferMasked(ref state, op, buf, dst, innerStride, run, mask, maskStride);
-                    else
-                        CopyRunFromBufferMasked(buf, bufType, bufSize, dst, innerStride, arrType, arrSize,
-                            run, mask, maskStride);
-
-                    buf += run * bufSize;
-                    mask += run * maskStride;
-                    remaining -= run;
-                    if (remaining <= 0)
-                        break;
-
-                    dst += run * innerStride * arrSize;
-                    coords[innerAxis] += run;
-
-                    for (int d = innerAxis; d >= 0; d--)
-                    {
-                        if (coords[d] < state.Shape[d])
-                            break;
-
-                        coords[d] = 0;
-                        dst -= state.GetStride(d, op) * state.Shape[d] * arrSize;
-                        if (d == 0)
-                            break;
-                        coords[d - 1]++;
-                        dst += state.GetStride(d - 1, op) * arrSize;
-                    }
-                }
-            }
-            finally
-            {
-                if (coordsHeap != null)
-                    NativeMemory.Free(coordsHeap);
-            }
-        }
-
         /// <summary>
         /// One masked inner-axis run: tight buffer → array, writing only where
         /// the mask byte is nonzero. Decomposes the run into contiguous TRUE
@@ -1055,7 +552,8 @@ namespace NumSharp.Backends.Iteration
         /// same structure as NumPy's _strided_masked_wrapper
         /// (dtype_transfer.c: skip false runs via mask scan, transfer true runs).
         /// The mask reads are 1-byte nonzero tests, guaranteed by the
-        /// bool/uint8 mask validation in <see cref="AllocateBuffers"/>.
+        /// bool/uint8 mask validation of the construction
+        /// (<see cref="ValidateWriteMaskedTransfers"/>).
         /// </summary>
         private static void CopyRunFromBufferMasked(
             byte* buf, NPTypeCode bufType, int bufSize,
@@ -1340,10 +838,12 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        ///     The buffered-REDUCE transfer of a fixed-width string operand: <paramref name="count"/> elements from the
-        ///     operand's current data pointer, walking the iteration space from coordinate zero — the layout
+        ///     The from-the-start transfer of a fixed-width string operand behind <see cref="CopyToBuffer(ref NDIterState, int, long)"/>
+        ///     / <see cref="CopyFromBuffer(ref NDIterState, int, long)"/>: <paramref name="count"/> elements from the operand's
+        ///     current data pointer, walking the iteration space from coordinate zero — the layout
         ///     <see cref="CopyToBuffer{T}"/> / <see cref="CopyFromBuffer{T}"/> assume — in inner-axis runs of
-        ///     <see cref="CopyStringRun"/>.
+        ///     <see cref="CopyStringRun"/>. (The iterator's own buffered iteration walks from the buffer start's coordinates
+        ///     instead: <c>TransferBuffer</c> in NDIterBufferManager.Buffering.cs.)
         /// </summary>
         /// <param name="state">The iterator state.</param>
         /// <param name="op">The string operand.</param>
@@ -1450,18 +950,24 @@ namespace NumSharp.Backends.Iteration
 
         // NOTE: the pre-Wave-4 GROWINNER block sizing (CalculateGrowInnerSize) and
         // its PrepareBuffers/FinalizeBuffers drivers were removed. They had no
-        // callers after the windowed machinery (ComputeTransferSize +
-        // FillBufferWindow/FlushBufferWindow) replaced them, and
+        // callers after the windowed machinery replaced them, and
         // CalculateGrowInnerSize carried a latent bug: its expectedStride
         // accumulator was declared outside the per-operand loop, so operand 2+
-        // was checked against operand 1's accumulated stride product.
+        // was checked against operand 1's accumulated stride product. The windowed
+        // machinery (ComputeTransferSize / FillBufferWindow / FlushBufferWindow, fills
+        // of whole inner rows up to the buffer size) and the legacy buffered-reduce
+        // double loop were in turn replaced by the port of NumPy's buffering itself
+        // (NDIterBufferManager.Buffering.cs): NumPy's core / outer split, the reduce
+        // double loop, the reuse rule, GROWINNER.
 
         // =========================================================================
         // Buffer Reuse Tracking
         // =========================================================================
         // The BUF_REUSABLE flag indicates that a buffer's contents are still valid
-        // and can be reused without re-copying from the source array. This is useful
-        // for reduction operations where the same input is used multiple times.
+        // and can be reused without re-copying from the source array. The iterator's
+        // own fills set and read it (CopyToBuffers: NumPy's reuse rule of the reduce
+        // double loop); these helpers expose the flag to callers that drive buffers
+        // themselves.
         // =========================================================================
 
         /// <summary>

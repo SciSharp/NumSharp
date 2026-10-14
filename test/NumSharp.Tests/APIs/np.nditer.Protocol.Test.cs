@@ -763,7 +763,7 @@ namespace NumSharp.Tests.APIs
         /// <summary>
         ///     <c>grow_inner</c> cannot grow a CAST operand: its chunks stay buffer-sized (<c>3 3 3 1</c> for ten elements and
         ///     a buffer of 3), as without the flag. (The operand that needs NO buffer, which NumPy grows into one chunk, is
-        ///     pinned in <c>OpenBugs.NditerGrowInner.cs</c>.)
+        ///     gated by <c>OpenBugs.NditerGrowInner.cs</c>, fixed by the port of NumPy's buffering setup, 2026-10-14.)
         /// </summary>
         [TestMethod]
         public void GrowInner_CastOperand_KeepsBufferSizedChunks()

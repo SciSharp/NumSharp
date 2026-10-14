@@ -333,6 +333,18 @@ namespace NumSharp.Tests.Fuzz
                     foreach (var xs in it)
                         np.add(xs[1], xs[0], @out: xs[1]);
                     return "None";
+                case "setwalk":
+                {
+                    // `for xs in it: xs[k][...] = v`: a write through every remaining step's view. NumPy packs the Python int
+                    // into the view's dtype (np.copyto's weak-scalar overload); the write reaches the array through the
+                    // buffer write-back, which a WRITEMASKED operand masks.
+                    int sep = arg.IndexOf(':');
+                    int k = int.Parse(arg.Substring(0, sep), inv);
+                    long v = long.Parse(arg.Substring(sep + 1), inv);
+                    foreach (var xs in it)
+                        np.copyto(xs[k], v, casting: "unsafe");
+                    return "None";
+                }
                 default:
                     throw new NotSupportedException("unknown protocol step " + step);
             }

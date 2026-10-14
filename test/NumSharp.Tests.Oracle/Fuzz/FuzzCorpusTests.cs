@@ -1126,7 +1126,7 @@ namespace NumSharp.Tests.Fuzz
             ["matmul_parity.jsonl"] = 470,
             ["linalg_parity.jsonl"] = 340,   // +90: LU family (solve/inv/det/slogdet/tensorinv/tensorsolve) + matrix_power(n<0)
             ["nditer_construct.jsonl"] = 9000,   // np.nditer's descriptor construction, cast checks, copy routes, check order, protocol (9,574 at delivery, 2026-10-08)
-            ["nditer_protocol.jsonl"] = 1150,  // np.nditer's state contract, setters, delayed allocation, index coalescing, op_axes reductions (1,219 at delivery, 2026-10-08)
+            ["nditer_protocol.jsonl"] = 2800,  // np.nditer's state contract, setters, delayed allocation, index coalescing, op_axes reductions (1,219 at delivery, 2026-10-08); + the buffered setup: reduce double loop, chunking / grow_inner, contig, writemasked, repositioning, remove_multi_index (2,987, 2026-10-14)
             ["linalg_empty.jsonl"] = 4800,   // every np.linalg factorisation over empty operands / zero-size batches, portable (5,066 at delivery, 2026-10-08)
             ["axis_args.jsonl"] = 4900,      // every axis argument of every axis-taking function, strict error types (5,184 at delivery, 2026-10-08)
             ["poly.jsonl"] = 60,

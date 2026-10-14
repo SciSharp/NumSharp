@@ -177,7 +177,9 @@ namespace NumSharp.Backends.Iteration
         ///     Executes the plan's copy routes once the iteration order is final — the operand loop of NumPy's
         ///     <c>npyiter_allocate_arrays</c>: each temporary is allocated dense in the iterator's order, filled from its
         ///     operand (unsafe casting, NumPy's <c>PyArray_CopyInto</c>) when the operand is read, and swapped into the axis
-        ///     data (<see cref="ReplaceAxisData"/>); a cast operand left to the buffers raises when there are none.
+        ///     data (<see cref="ReplaceAxisData"/>); a cast operand left to the buffers raises when there are none. Each
+        ///     operand's loop step ends with NumPy's <c>contig</c> check: an operand flagged <c>contig</c> whose innermost
+        ///     stride is not its element size becomes a CAST operand (the buffering setup then buffers it).
         /// </summary>
         /// <param name="plan">The construction's plan (its cast check already passed).</param>
         /// <param name="opFlags">The per-operand flags.</param>
@@ -188,7 +190,8 @@ namespace NumSharp.Backends.Iteration
         ///     before <see cref="NDIterCoalescing.CoalesceAxes"/>), false for the iteration representation (axis
         ///     <c>NDim - 1</c> innermost).
         /// </param>
-        /// <exception cref="TypeError">A cast operand is neither copied nor buffered (NumPy's text).</exception>
+        /// <exception cref="TypeError">A cast operand is neither copied nor buffered, or an operand flagged <c>contig</c> is not
+        ///     contiguous along the innermost axis and buffering is not enabled (NumPy's texts).</exception>
         /// <exception cref="UnicodeEncodeError">A copy from <c>U</c> to <c>S</c> meets a code point at or above 128.</exception>
         /// <exception cref="UnicodeDecodeError">A copy from <c>S</c> to <c>U</c> meets a byte at or above <c>0x80</c>.</exception>
         /// <exception cref="ValueError">A copy from text to numbers meets a text that does not parse (NumPy's <c>int()</c> /
@@ -205,7 +208,18 @@ namespace NumSharp.Backends.Iteration
         {
             int nop = _state->NOp;
             bool buffered = (flags & NDIterGlobalFlags.BUFFERED) != 0;
+            int innermostAxis = innermostFirst ? 0 : _state->NDim - 1;
             NDArray[]? temps = null;
+
+            // NumPy's NPY_ITER_CONTIG check, which closes the operand loop of npyiter_allocate_arrays ("Here we can finally
+            // check for contiguous iteration", after the operand's copy route, before the coalescing): a contiguous-requested
+            // operand whose innermost stride is not its element size becomes a CAST operand — buffered, or refused without
+            // buffering. An allocated output is checked once it has its layout (the second loop below).
+            NDIterState* state = _state;
+            void CheckContig(int i) => CheckContigOperand(state, i, innermostAxis, buffered);
+
+            bool IsAllocated(int i) => plan.Allocated != null && plan.Allocated[i];
+
             try
             {
                 for (int i = 0; i < nop; i++)
@@ -216,10 +230,15 @@ namespace NumSharp.Backends.Iteration
                         if (!buffered)
                             throw new TypeError(
                                 "Iterator operand required copying or buffering, but neither copying nor buffering was enabled");
+                        CheckContig(i);
                         continue;
                     }
                     if (route != DescriptorRoute.ScalarCopy && route != DescriptorRoute.TempCopy)
+                    {
+                        if (!IsAllocated(i))
+                            CheckContig(i);
                         continue;
+                    }
 
                     var original = _operands[i];
                     var descr = plan.IterDescrs[i];
@@ -237,6 +256,7 @@ namespace NumSharp.Backends.Iteration
                         np.copyto(temp, original, casting: "unsafe");
 
                     ReplaceAxisData(i, temp, opAxisMap);
+                    CheckContig(i);
                 }
             }
             catch
@@ -266,13 +286,29 @@ namespace NumSharp.Backends.Iteration
                 if (preallocated.Shape.offset == 0 && StridesEqual(preallocated.Shape.strides, strides))
                 {
                     ReplaceAxisData(i, preallocated, opAxisMap);
-                    continue;
+                }
+                else
+                {
+                    var laidOut = NewTempLikeIterator(preallocated, plan.IterDescrs[i], opAxisMap, innermostFirst, fillZeros: true);
+                    ReplaceAxisData(i, laidOut, opAxisMap);
+                    _operands[i] = laidOut;
+                    preallocated.Dispose();
                 }
 
-                var laidOut = NewTempLikeIterator(preallocated, plan.IterDescrs[i], opAxisMap, innermostFirst, fillZeros: true);
-                ReplaceAxisData(i, laidOut, opAxisMap);
-                _operands[i] = laidOut;
-                preallocated.Dispose();
+                // The allocated output's CONTIG check, now that it has its layout (an innermost extent-1 axis gives it
+                // stride 0 there, which NumPy reads as not contiguous). A refusal releases the copy-route temporaries made
+                // above (their write-backs are not registered yet).
+                try
+                {
+                    CheckContig(i);
+                }
+                catch
+                {
+                    if (temps != null)
+                        foreach (var t in temps)
+                            t?.Dispose();
+                    throw;
+                }
             }
 
             // The ordering is settled: every operand counts again.
@@ -302,6 +338,34 @@ namespace NumSharp.Backends.Iteration
                     (_releaseOnlyOriginals ??= new NDArray?[nop])[i] = original;
                 }
             }
+        }
+
+        /// <summary>
+        ///     NumPy's <c>NPY_ITER_CONTIG</c> check for one operand (the end of its step in <c>npyiter_allocate_arrays</c>): an
+        ///     operand flagged <c>contig</c> whose innermost stride is not its iteration element size becomes a CAST operand,
+        ///     which the buffering setup then copies through a buffer.
+        /// </summary>
+        /// <param name="state">The iterator state (the axes ordered, not yet coalesced).</param>
+        /// <param name="op">The operand.</param>
+        /// <param name="innermostAxis">The NumSharp axis that is innermost in the current representation (ignored for a 0-d
+        ///     iteration, whose single NumPy axis has stride 0).</param>
+        /// <param name="buffered">Whether the iterator is buffered.</param>
+        /// <exception cref="TypeError">The operand needs a buffer and buffering is not enabled: "Iterator operand required
+        ///     buffering, to be contiguous as requested, but buffering is not enabled" (NumPy's text).</exception>
+        /// <remarks>
+        ///     NumPy checks before it coalesces the axes, so an innermost axis of extent 1 (stride 0 for every operand) makes even
+        ///     a contiguous array a CAST operand — its own note calls the place of the check "the wrong place in case of axes
+        ///     reorder"; this follows NumPy there too.
+        /// </remarks>
+        private static void CheckContigOperand(NDIterState* state, int op, int innermostAxis, bool buffered)
+        {
+            // The rule's test is shared with the engine's construction path (NDIterBufferManager.ApplyContigRule).
+            if (!NDIterBufferManager.ViolatesContig(ref *state, op, innermostAxis))
+                return;
+            state->SetOpFlags(op, state->GetOpFlags(op) | NDIterOpFlags.CAST);
+            if (!buffered)
+                throw new TypeError(
+                    "Iterator operand required buffering, to be contiguous as requested, but buffering is not enabled");
         }
 
         /// <summary>

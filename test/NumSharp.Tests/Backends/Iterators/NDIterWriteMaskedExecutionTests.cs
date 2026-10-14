@@ -380,19 +380,19 @@ public class NDIterWriteMaskedExecutionTests
         Assert.AreEqual(1, it.MaskOp);
     }
 
+    /// <summary>
+    ///     A WRITEMASKED reduction operand of a buffered reduction (the port of NumPy's buffering, strings phase 1 P1.7g;
+    ///     the legacy double loop refused this write-back). NumPy 2.4.2, probed: <c>np.nditer([x, mask, y], ['reduce_ok',
+    ///     'buffered'], [['readonly'], ['readonly', 'arraymask'], ['readwrite', 'writemasked']], op_axes=[[0, 1], [-1, 0],
+    ///     [-1, 0]])</c> writing 7 through every step leaves <c>y = [7, 7, 7, 7]</c> when <c>y</c> needs no cast — it is never
+    ///     buffered (BUFNEVER), so the writes reach it directly and the mask is the loop's own contract — and
+    ///     <c>[7, 0, 7, 0]</c> when <c>y</c> is iterated through an int64 buffer: the write-back of that buffer is masked.
+    /// </summary>
     [TestMethod]
-    [Misaligned]
-    public void BufferedReduce_WriteMasked_WriteBackRefusesLoudly()
+    public void BufferedReduce_WriteMasked_WriteBackIsMaskedOnlyWhenBuffered()
     {
-        // NumPy 2.4.2 supports masked write-back on buffered reductions (it
-        // restricts the reduce double-loop split). NumSharp's legacy
-        // buffered-reduce machinery predates masked copy-back; rather than
-        // silently writing unmasked slots it refuses at the write-back point.
-        // Construction succeeds (NumPy parity); proper support lands with
-        // reductions-through-core (roadmap Wave 5).
         var x = np.arange(12).reshape(3, 4).astype(np.int32);
         var mask = np.array(new[] { true, false, true, false });
-        var y = np.zeros(new int[] { 4 }, np.int32);
 
         var opAxes = new[]
         {
@@ -407,24 +407,33 @@ public class NDIterWriteMaskedExecutionTests
             NDIterPerOpFlags.READWRITE | NDIterPerOpFlags.WRITEMASKED,
         };
 
-        var ex = Assert.ThrowsException<NotSupportedException>(() =>
+        foreach (bool cast in new[] { false, true })
         {
-            using var it = NDIterRef.AdvancedNew(
-                nop: 3,
-                op: new[] { x, mask, y },
-                flags: NDIterGlobalFlags.REDUCE_OK | NDIterGlobalFlags.BUFFERED,
-                order: NPY_ORDER.NPY_KEEPORDER,
-                casting: NPY_CASTING.NPY_SAFE_CASTING,
-                opFlags: opFlags,
-                opDtypes: null,
-                opAxesNDim: 2,
-                opAxes: opAxes);
+            var y = np.zeros(new int[] { 4 }, np.int32);
+            using (var it = NDIterRef.AdvancedNew(
+                       nop: 3,
+                       op: new[] { x, mask, y },
+                       flags: NDIterGlobalFlags.REDUCE_OK | NDIterGlobalFlags.BUFFERED,
+                       order: NPY_ORDER.NPY_KEEPORDER,
+                       casting: cast ? NPY_CASTING.NPY_UNSAFE_CASTING : NPY_CASTING.NPY_SAFE_CASTING,
+                       opFlags: opFlags,
+                       opDtypes: cast ? new[] { NPTypeCode.Int32, NPTypeCode.Empty, NPTypeCode.Int64 } : null,
+                       opAxesNDim: 2,
+                       opAxes: opAxes))
+            {
+                Assert.IsTrue(it.IsReduction, "the output is a reduction operand");
+                do
+                {
+                    if (cast)
+                        it.SetValue(7L, 2);
+                    else
+                        it.SetValue(7, 2);
+                } while (it.Iternext());
+            }
 
-            Assert.IsTrue(it.IsReduction, "construction must succeed (NumPy parity)");
-            do { it.SetValue(7, 2); } while (it.Iternext());
-        });
-
-        StringAssert.Contains(ex.Message, "WRITEMASKED write-back is not supported on a buffered REDUCE");
+            y.ToArray<int>().Should().Equal(cast ? new[] { 7, 0, 7, 0 } : new[] { 7, 7, 7, 7 },
+                cast ? "a buffered WRITEMASKED operand's write-back is masked" : "an unbuffered one is written directly");
+        }
     }
 
     // =====================================================================

@@ -75,7 +75,7 @@ namespace NumSharp.Backends
             }
 
             // ufunc out=/where= path: the predicate body emits bool at the INPUT dtype; a non-bool out
-            // engages the windowed bool→X flush. Returns the provided out (may be any numeric dtype).
+            // engages the buffered bool→X write-back. Returns the provided out (may be any numeric dtype).
             return ExecuteUnaryOp(a, UnaryOp.SignBit, NPTypeCode.Boolean, @out, where);
         }
     }

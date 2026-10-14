@@ -34,7 +34,7 @@ using NumSharp.Backends.Kernels;
 //          output = oc++ for kept axes, -1 for reduced axes (stride 0 ⇒ REDUCE)
 //
 // This is non-buffered REDUCE+EXTERNAL_LOOP, which is N-D capable via Advance
-// (it sidesteps the 2-D-only buffered reduce double-loop). The inner loop the
+// (no cast, so no buffer and no buffered reduce double loop). The inner loop the
 // kernel sees is one contiguous stripe of the iteration's innermost axis; the
 // output stride is 0 (pinned) when the reduced axis is innermost, else nonzero
 // (slab) when a kept axis is innermost.

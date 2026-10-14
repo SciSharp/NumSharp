@@ -21026,6 +21026,16 @@ def _np_protocol_step(it_holder, step):
         for xs in it:
             xs[1][...] += xs[0]
         return "None"
+    if name == "setwalk":
+        # `for xs in it: xs[k][...] = v` over the rest of the iteration: a write through every step's view (a Python int,
+        # packed into the view's dtype). It reaches the array through the buffer write-back, which a WRITEMASKED operand
+        # masks.
+        k, _, v = arg.partition(":")
+        value = _np_parse_value(v)
+        for xs in it:
+            xs = (xs,) if it.nop == 1 else xs
+            xs[int(k)][...] = value
+        return "None"
     raise ValueError(f"unknown protocol step {step!r}")
 
 
@@ -21096,6 +21106,323 @@ def _np_resolve_script(script, ndim, shape):
             step = "set_multi_index:" + ",".join(str(c) for c in coords)
         out.append(step)
     return out
+
+
+# remove_multi_index over a buffered 4-D reduction whose merge is partial: the (op_axes, cast, buffersize) combinations
+# where NumPy 2.4.2's kept setup walks wrong elements and NumSharp, which reruns the setup there, gives the right sums.
+# Kept out of the corpus; np.nditer.BufferedReduce.Test.cs pins NumPy's answer for one of them.
+#   * axis 1 reduced ([0, -1, 1, 2]): NumPy adds the next block's elements into the sums (or, without the probing walks
+#     of the trace, leaves 36 of the 40 sums at 0), with and without a cast;
+#   * axis 0 reduced ([-1, 0, 1, 2]) with buffersize 40: NumPy's fills read its stale axis data — the trace shows heap
+#     words as output elements, and with a cast the process sometimes dies (a segmentation fault, or Windows'
+#     0xC0000374 heap corruption at a later free; found by the heap probe, never run that case in-process).
+_RMI_NUMPY_WRONG = {
+    ((0, -1, 1, 2), False, 0), ((0, -1, 1, 2), False, 40), ((0, -1, 1, 2), True, 0), ((0, -1, 1, 2), True, 40),
+    ((-1, 0, 1, 2), False, 40), ((-1, 0, 1, 2), True, 40),
+}
+
+
+def _gen_nditer_protocol_buffered(add, red_inputs, red_axes, layouts, base1, base2, base3, fbase2, fbase3):
+    """np.nditer's BUFFERED iteration as NumPy 2.4.2 runs it — nditer_constr.c npyiter_find_buffering_setup,
+    nditer_api.c npyiter_copy_to_buffers / npyiter_copy_from_buffers / npyiter_goto_iterindex, nditer_templ.c.src
+    npyiter_buffered_iternext / npyiter_buffered_reduce_iternext: the reduce double loop, the external-loop chunking (the
+    core, the outer block a fill never crosses, the cap in whole cores, grow_inner), the CONTIG rule, a WRITEMASKED
+    write-back, repositioning inside a core, copies, delayed allocation, and the setup remove_multi_index leaves behind.
+
+    Every case is a scripted protocol trace (gen_nditer_protocol's add). No script renders a buffered reduce operand while
+    its fill started inside a core: NumPy's buffer then holds the previous fill's memory, or uninitialized memory."""
+    red_buf_flags = (("buf", ["reduce_ok", "buffered"]),
+                     ("bufext", ["reduce_ok", "buffered", "external_loop"]),
+                     ("bufmulti", ["reduce_ok", "buffered", "multi_index"]))
+
+    # A. The reduce double loop over 3-D inputs (C / F / permuted), one or two reduced axes in any position, at buffer
+    #    sizes that cut the core, the reduce outer dimension and the outer block, with and without a float64 cast of both
+    #    operands (casting='unsafe' writes the float64 sums back into the int64 output). An allocated output needs
+    #    delay_bufalloc: zero_out must reach the output before the first fill reads it.
+    for iname, (b, v) in red_inputs.items():
+        for aname, axes in red_axes.items():
+            oshape = tuple(v.shape[i] for i, ax in enumerate(axes) if ax >= 0)
+            for fname, fl in red_buf_flags:
+                for bs in (0, 3, 5, 7, 13):
+                    for cast in (False, True):
+                        extra = {"buffersize": bs}
+                        if cast:
+                            extra.update({"op_dtypes": ["float64", "float64"], "casting": "unsafe"})
+                        tag = f"{fname}/bs{bs}" + ("+f8" if cast else "")
+                        params = dict(extra, flags=fl + ["delay_bufalloc"],
+                                      op_flags=[["readonly"], ["readwrite", "allocate"]], op_axes=[None, axes],
+                                      none_ops=[1])
+                        add(f"reduce_buf/alloc/{tag}/{aname}/{iname}", [(b, v), (None, None)], params,
+                            ["shape", "ndim", "zero_out:1", "reset", "walk:4", "reset", "accumwalk", "operands"], iname)
+                        out = np.zeros(oshape, dtype=np.int64)
+                        params = dict(extra, flags=fl, op_flags=[["readonly"], ["readwrite"]], op_axes=[None, axes])
+                        add(f"reduce_buf/given/{tag}/{aname}/{iname}", [(b, v), (out, out)], params,
+                            ["shape", "ndim", "walk:4", "reset", "accumwalk", "operands"], iname)
+
+    # B. A 2-D reduction over the inner or the OUTER iteration axis: the walk visits the input in C order either way (the
+    #    reduce outer loop steps the outer axis), and a reduction operand of another dtype goes through its cast buffer in
+    #    both directions (a float64 output summed in float32, an int64 output summed in float64).
+    for oname, oaxes in (("inner", [0, -1]), ("outer", [-1, 0])):
+        oshape = (3,) if oname == "inner" else (4,)
+        for odt, ndt, opd in (("i8", np.int64, None), ("f8", np.float64, None),
+                              ("f8@f4", np.float64, [None, "float32"]), ("i8@f8", np.int64, ["float64", "float64"])):
+            for fname, fl in red_buf_flags:
+                for bs in (0, 2, 3, 5):
+                    out = np.zeros(oshape, dtype=ndt)
+                    params = {"flags": fl, "op_flags": [["readonly"], ["readwrite"]], "op_axes": [[0, 1], oaxes],
+                              "buffersize": bs}
+                    if opd:
+                        params.update({"op_dtypes": opd, "casting": "unsafe"})
+                    add(f"reduce2d/{oname}/{odt}/{fname}/bs{bs}", [(base2, base2), (out, out)], params,
+                        ["walk", "reset", "accumwalk", "operands"], "c2")
+
+    # C. Repositioning a buffered reduction inside a core: a seek (iterindex) or a range whose ends are not core
+    #    boundaries. NumPy refills from the core offset with a reduce outer size of 0, so a BUFFERED operand's partial
+    #    core is never written back (nor the part of a core a range end cuts off): NumPy 2.4.2's defect, recorded as its
+    #    answer. A range end inside the SECOND core of a fill stays out: NumPy then runs its inner loop past the core
+    #    (the next core's elements land in this core's reduce element, or past the output's end — a heap corruption),
+    #    where NumSharp runs one core at a time (np.nditer.BufferedReduce.Test.cs pins both). With buffersize 0 the
+    #    (3, 4) input's core is a row of 4 and a fill holds 3 rows; with 3 the core is one element.
+    for oname, oaxes in (("inner", [0, -1]), ("outer", [-1, 0])):
+        oshape = (3,) if oname == "inner" else (4,)
+        for cast in (False, True):
+            for sname, fl, script in (
+                    ("seek2", ["reduce_ok", "buffered"], ["set_iterindex:2", "iterindex", "accumwalk", "operands"]),
+                    ("seek4", ["reduce_ok", "buffered"], ["set_iterindex:4", "accumwalk", "operands"]),
+                    ("seek6", ["reduce_ok", "buffered"], ["set_iterindex:6", "accumwalk", "operands"]),
+                    ("seek11", ["reduce_ok", "buffered"], ["set_iterindex:11", "accumwalk", "operands"]),
+                    ("range2_12", ["reduce_ok", "buffered", "ranged"], ["set_iterrange:2,12", "accumwalk", "operands"]),
+                    ("range4_8", ["reduce_ok", "buffered", "ranged"],
+                     ["set_iterrange:4,8", "iterrange", "accumwalk", "operands"]),
+                    ("range1_3", ["reduce_ok", "buffered", "ranged"], ["set_iterrange:1,3", "accumwalk", "operands"]),
+                    ("range5_12", ["reduce_ok", "buffered", "ranged"], ["set_iterrange:5,12", "accumwalk", "operands"]),
+                    ("range0_9", ["reduce_ok", "buffered", "ranged"], ["set_iterrange:0,9", "accumwalk", "operands"]),
+                    ("range6_11", ["reduce_ok", "buffered", "ranged"], ["set_iterrange:6,11", "accumwalk", "operands"]),
+                    ("range_reset", ["reduce_ok", "buffered", "ranged"],
+                     ["set_iterrange:3,12", "accumwalk", "reset", "accumwalk", "operands"])):
+                for bs in (0, 3):
+                    out = np.zeros(oshape, dtype=np.int64)
+                    params = {"flags": fl, "op_flags": [["readonly"], ["readwrite"]], "op_axes": [[0, 1], oaxes],
+                              "buffersize": bs}
+                    if cast:
+                        params.update({"op_dtypes": ["float64", "float64"], "casting": "unsafe"})
+                    add(f"reduce_seek/{oname}/{sname}/bs{bs}" + ("+f8" if cast else ""),
+                        [(base2, base2), (out, out)], params, script, "c2")
+
+    # D. copy() of a buffered reduction at a core boundary (the copy re-buffers from the arrays at the current position),
+    #    and delay_bufalloc without a cast: iternext moves the position before the allocating reset (NumPy writes nothing
+    #    there; with a cast operand NumPy 2.4.2 writes through its NULL buffers and crashes, so those stay out).
+    for oname, oaxes in (("inner", [0, -1]), ("outer", [-1, 0])):
+        oshape = (3,) if oname == "inner" else (4,)
+        for fname, fl in red_buf_flags:
+            for bs in (0, 3):
+                for cast in (False, True):
+                    out = np.zeros(oshape, dtype=np.int64)
+                    params = {"flags": fl, "op_flags": [["readonly"], ["readwrite"]], "op_axes": [[0, 1], oaxes],
+                              "buffersize": bs}
+                    if cast:
+                        params.update({"op_dtypes": ["float64", "float64"], "casting": "unsafe"})
+                    add(f"reduce_copy/{oname}/{fname}/bs{bs}" + ("+f8" if cast else ""), [(base2, base2), (out, out)],
+                        params, ["walk:1", "copywalk", "walk:4", "copywalk", "accumwalk", "operands"], "c2")
+    for aname in ("last", "first"):
+        for bs in (0, 3):
+            params = {"flags": ["reduce_ok", "buffered", "delay_bufalloc"],
+                      "op_flags": [["readonly"], ["readwrite", "allocate"]], "op_axes": [None, red_axes[aname]],
+                      "none_ops": [1], "buffersize": bs}
+            add(f"reduce_delayed/{aname}/bs{bs}/c3", [(base3, base3), (None, None)], params,
+                ["has_delayed_bufalloc", "iternext", "iterindex", "zero_out:1", "reset", "has_delayed_bufalloc",
+                 "accumwalk", "operands"], "c3")
+
+    # E. remove_multi_index after a buffered multi-index iteration: NumPy coalesces the axes but keeps the buffering setup
+    #    it chose for the uncoalesced ones (its core, its outer dimension and the stale extent of an outer axis the
+    #    coalescing merged away), so an external loop enabled afterwards hands out chunks of the OLD core.
+    nb = np.arange(40, dtype=np.int64).reshape(2, 4, 5)
+    rmi_layouts = {
+        "c2": (base2, base2), "c3": (base3, base3), "f3": (fbase3, fbase3.transpose(2, 1, 0)),
+        "nonco3": (nb, nb[:, :3, :4]), "w3": (nb, nb[:, :3, :]), "step2": (base2, base2[:, ::2]),
+    }
+    for lname, (b, v) in rmi_layouts.items():
+        for bs in (0, 5, 7):
+            for cast in (False, True):
+                params = {"flags": ["buffered", "multi_index"], "buffersize": bs}
+                if cast:
+                    params["op_dtypes"] = ["float64"]
+                add(f"rmi_buf/{lname}/bs{bs}" + ("+f8" if cast else ""), [(b, v)], params,
+                    ["walk:2", "remove_multi_index", "shape", "itersize", "enable_external_loop", "walk", "reset",
+                     "walk", "copywalk"], lname)
+    for iname, (b, v) in red_inputs.items():
+        for aname in ("last", "first"):
+            axes = red_axes[aname]
+            oshape = tuple(v.shape[i] for i, ax in enumerate(axes) if ax >= 0)
+            for bs in (0, 5):
+                for cast in (False, True):
+                    out = np.zeros(oshape, dtype=np.int64)
+                    params = {"flags": ["reduce_ok", "buffered", "multi_index"],
+                              "op_flags": [["readonly"], ["readwrite"]], "op_axes": [None, axes], "buffersize": bs}
+                    if cast:
+                        params.update({"op_dtypes": ["float64", "float64"], "casting": "unsafe"})
+                    add(f"rmi_reduce/{aname}/bs{bs}" + ("+f8" if cast else "") + f"/{iname}", [(b, v), (out, out)],
+                        params, ["walk:2", "remove_multi_index", "shape", "enable_external_loop", "walk", "reset",
+                                 "accumwalk", "operands"], iname)
+
+    #    ... with a range that starts inside the outer axis (the stale extent is what remains of it at the range start:
+    #    NumPy chunks c3 from index 8 with a buffer of 8 as [4, 4, 4, 4]), and over 4-D reductions whose merge is partial
+    #    (NumSharp reruns the setup where NumPy's kept setup no longer describes the axes; the cases where NumPy's kept
+    #    setup walks wrong elements stay out — _RMI_NUMPY_WRONG, pinned in np.nditer.BufferedReduce.Test.cs).
+    for lname, (b, v) in (("c3", (base3, base3)), ("f3", (fbase3, fbase3.transpose(2, 1, 0)))):
+        for bs in (8, 12):
+            for start, end in ((4, 24), (8, 24), (12, 24), (8, 20)):
+                params = {"flags": ["buffered", "multi_index", "ranged"], "buffersize": bs, "op_dtypes": ["float64"]}
+                add(f"rmi_ranged/{lname}/bs{bs}/{start}_{end}", [(b, v)], params,
+                    [f"set_iterrange:{start},{end}", "remove_multi_index", "enable_external_loop", "walk"], lname)
+    x4 = np.arange(120, dtype=np.int64).reshape(2, 3, 4, 5)
+    for axes in ([0, -1, 1, 2], [0, 1, -1, 2], [-1, 0, 1, 2], [0, 1, 2, -1], [0, -1, -1, 2]):
+        oshape = tuple(x4.shape[i] for i, ax in enumerate(axes) if ax >= 0)
+        for cast in (False, True):
+            for bs in (0, 40):
+                if (tuple(axes), cast, bs) in _RMI_NUMPY_WRONG:
+                    continue
+                out = np.zeros(oshape, dtype=np.int64)
+                params = {"flags": ["reduce_ok", "buffered", "multi_index"], "op_flags": [["readonly"], ["readwrite"]],
+                          "op_axes": [None, axes], "buffersize": bs}
+                if cast:
+                    params.update({"op_dtypes": ["float64", "float64"], "casting": "unsafe"})
+                add(f"rmi_reduce4/{''.join('r' if a < 0 else str(a) for a in axes)}/bs{bs}" + ("+f8" if cast else ""),
+                    [(x4, x4), (out, out)], params,
+                    ["walk:2", "remove_multi_index", "shape", "enable_external_loop", "walk", "reset", "accumwalk",
+                     "operands"], "c4")
+
+    # F. Buffered external-loop chunking (npyiter_find_buffering_setup's cost model): the core, the outer block a fill
+    #    never crosses, the cap at the buffer size in whole cores, and grow_inner, which lets an iteration whose operands
+    #    all stay unbuffered run a whole outer block past the buffer size as one chunk (a cast operand keeps buffer-sized
+    #    chunks). The walk renders every chunk, so their lengths are the contract.
+    big = np.arange(10, dtype=np.int64)
+    chunk_layouts = dict(layouts)
+    chunk_layouts.update({
+        "c10": (big, big), "rev10": (big, big[::-1]), "step10": (big, big[::2]),
+        "nonco3": (nb, nb[:, :3, :4]), "w3": (nb, nb[:, :3, :]), "st3": (base3, base3[:, :, ::2]),
+        "tr3": (base3, base3.transpose(0, 2, 1)), "bcast": (base2[0], np.broadcast_to(base2[0], (3, 4))),
+        "bcol": (base1[:3].reshape(3, 1), np.broadcast_to(base1[:3].reshape(3, 1), (3, 4))),
+    })
+    for lname, (b, v) in chunk_layouts.items():
+        for gname, fl in (("ext", ["buffered", "external_loop"]), ("grow", ["buffered", "external_loop", "grow_inner"])):
+            for bs in (0, 3, 5, 7, 12):
+                for cast in (False, True):
+                    params = {"flags": fl, "buffersize": bs}
+                    if cast:
+                        params["op_dtypes"] = ["float64"]
+                    add(f"chunk/{gname}/bs{bs}" + ("+f8" if cast else "") + f"/{lname}", [(b, v)], params,
+                        ["walk", "reset", "walk:1", "iterindex", "copywalk"], lname)
+        # The forced orders reorder the axes before the setup runs (a transposed or F operand does not coalesce in C).
+        for order in ("C", "F"):
+            for bs in (0, 5):
+                params = {"flags": ["buffered", "external_loop", "grow_inner"], "buffersize": bs, "order": order}
+                add(f"chunk/order{order}/bs{bs}/{lname}", [(b, v)], params, ["walk"], lname)
+
+    # G. Two operands, one cast and one not: the uncast operand stays unbuffered exactly while one stride walks it across
+    #    the core, and the cost model weighs the buffered ones (1 + their number) against the elements per fill.
+    fl64 = np.arange(12, dtype=np.float64).reshape(3, 4)
+    ffl64 = np.ascontiguousarray(fl64.T)
+    wide64 = np.arange(24, dtype=np.float64).reshape(3, 8)
+    row64 = np.arange(4, dtype=np.float64)
+    seconds = {
+        "c": (fl64, fl64), "f": (ffl64, ffl64.T), "rev": (fl64, fl64[::-1, ::-1]), "step": (wide64, wide64[:, ::2]),
+        "bcast": (row64, np.broadcast_to(row64, (3, 4))),
+    }
+    for f1name, (b1, v1) in (("c2", (base2, base2)), ("f2", (fbase2, fbase2.T)), ("rev2", (base2, base2[::-1, ::-1]))):
+        for s2name, (b2, v2) in seconds.items():
+            for gname, fl in (("ext", ["buffered", "external_loop"]),
+                              ("grow", ["buffered", "external_loop", "grow_inner"])):
+                for bs in (0, 3, 5):
+                    params = {"flags": fl, "buffersize": bs, "op_dtypes": ["float64", None]}
+                    add(f"chunk2/{gname}/bs{bs}/{f1name}+{s2name}", [(b1, v1), (b2, v2)], params, ["walk"],
+                        f"{f1name}+{s2name}")
+
+    # H. op_flags 'contig': a buffered iterator copies an operand whose inner stride is not its item size into its buffer
+    #    even without a cast (NumPy's CONTIG -> CAST rule), a read-only one never with a zero stride; an unbuffered
+    #    iterator refuses such an operand with NumPy's TypeError. A readwrite contig operand writes back through the
+    #    buffer.
+    contig_layouts = dict(layouts)
+    contig_layouts.update({"rev10": (big, big[::-1]), "step10": (big, big[::2]),
+                           "bcast": (base2[0], np.broadcast_to(base2[0], (3, 4)))})
+    for lname, (b, v) in contig_layouts.items():
+        for fname, fl in (("plain", None), ("ext", ["external_loop"]), ("buf", ["buffered"]),
+                          ("bufext", ["buffered", "external_loop"]),
+                          ("bufgrow", ["buffered", "external_loop", "grow_inner"])):
+            for bs in ((0, 3) if fl and "buffered" in fl else (0,)):
+                params = {"flags": fl, "op_flags": [["readonly", "contig"]], "buffersize": bs}
+                add(f"contig/{fname}/bs{bs}/{lname}", [(b, v)], params, ["walk", "reset", "walk:1"], lname)
+
+    def fresh(lname):
+        # A new writable operand per case: a readwrite trace changes it (describe() has serialized it already).
+        wb = np.arange(12, dtype=np.int64).reshape(3, 4)
+        return {"c2": (wb, wb), "t2": (wb, wb.T), "rev2": (wb, wb[::-1, ::-1]), "step2": (wb, wb[:, ::2])}[lname]
+
+    for lname in ("c2", "t2", "rev2", "step2"):
+        for fname, fl in (("buf", ["buffered"]), ("bufext", ["buffered", "external_loop"])):
+            for bs in (0, 3):
+                params = {"flags": fl, "op_flags": [["readwrite", "contig"]], "buffersize": bs}
+                add(f"contig_rw/{fname}/bs{bs}/{lname}", [fresh(lname)], params,
+                    ["walk:1", "write:0:99", "walk:2", "write:0:77", "walk", "operands"], lname)
+
+    # I. A readwrite operand that one stride walks only across the core (a (3, 4) window of a (3, 5) array): in the reduce
+    #    double loop NumPy iterates it UNBUFFERED as a reduce operand (its outer step is its own row stride), so a write
+    #    through its view reaches the array at once; through a cast it is buffered and the write lands at the write-back.
+    #    (With buffersize 3 the core is one element and no double loop runs.)
+    for fname, fl in (("buf", ["reduce_ok", "buffered"]), ("bufext", ["reduce_ok", "buffered", "external_loop"])):
+        for bs in (0, 3):
+            for cast in (False, True):
+                y = np.zeros(3, dtype=np.int64)
+                zbase = np.arange(15, dtype=np.int64).reshape(3, 5)
+                params = {"flags": fl, "op_flags": [["readonly"], ["readwrite"], ["readwrite"]],
+                          "op_axes": [[0, 1], [0, -1], [0, 1]], "buffersize": bs}
+                if cast:
+                    params.update({"op_dtypes": ["float64", "float64", "float64"], "casting": "unsafe"})
+                add(f"reduce_rw/{fname}/bs{bs}" + ("+f8" if cast else ""),
+                    [(base2, base2), (y, y), (zbase, zbase[:, :4])], params,
+                    ["walk:1", "write:2:99", "operands", "accumwalk", "operands"], "c2")
+
+    # J. The buffer reuse rule, observable through a cast: an int64 output summed in a float64 buffer keeps the fraction
+    #    of its partial sums while the next fill reuses the buffer (a reduce operand whose core repeats per outer step and
+    #    whose array position did not move), and loses it where the buffer is read again from the array, which truncates
+    #    each fill's write-back. 0.4 summed over 4 rows: NumPy gives 1 per column at buffersize 0 / 8 / 12 (the reduce
+    #    loop reuses the column buffer) and 0 at buffersize 4 (no double loop: every fill reads the output again).
+    frac = np.full((4, 4), 0.4)
+    for oname, oaxes, osize in (("outer", [-1, 0], 4), ("inner", [0, -1], 4)):
+        for fname, fl in (("buf", ["reduce_ok", "buffered"]), ("bufext", ["reduce_ok", "buffered", "external_loop"])):
+            for bs in (0, 4, 8, 12):
+                y = np.zeros(osize, dtype=np.int64)
+                params = {"flags": fl, "op_flags": [["readonly"], ["readwrite"]], "op_axes": [[0, 1], oaxes],
+                          "op_dtypes": ["float64", "float64"], "casting": "unsafe", "buffersize": bs}
+                add(f"reduce_reuse/{oname}/{fname}/bs{bs}", [(frac, frac), (y, y)], params,
+                    ["accumwalk", "operands"], "c2")
+
+    # K. A WRITEMASKED operand with its ARRAYMASK operand: NumPy applies the mask at the BUFFERED write-back only, so a
+    #    cast (buffered) output keeps its masked-off elements while an uncast one, written through the array, takes every
+    #    write — a reduction (the output on the input's columns) and an elementwise iteration.
+    xw = np.arange(12, dtype=np.int32).reshape(3, 4)
+    mask = np.array([True, False, True, False])
+    x1 = np.arange(6, dtype=np.int32)
+    m1 = np.array([True, False, False, True, True, False])
+    wm_flags = [["readonly"], ["readonly", "arraymask"], ["readwrite", "writemasked"]]
+    for cast in (False, True):
+        for fname, fl in (("plain", ["reduce_ok"]), ("buf", ["reduce_ok", "buffered"]),
+                          ("bufext", ["reduce_ok", "buffered", "external_loop"])):
+            for bs in ((0, 2, 3) if "buffered" in fl else (0,)):
+                y = np.zeros(4, dtype=np.int32)
+                params = {"flags": fl, "op_flags": wm_flags, "op_axes": [[0, 1], [-1, 0], [-1, 0]], "buffersize": bs}
+                if cast:
+                    params.update({"op_dtypes": ["int32", None, "int64"], "casting": "unsafe"})
+                add(f"writemasked/reduce/{fname}/bs{bs}" + ("+i8" if cast else ""), [(xw, xw), (mask, mask), (y, y)],
+                    params, ["setwalk:2:7", "operands"], "wm")
+        for fname, fl in (("plain", None), ("buf", ["buffered"]), ("bufext", ["buffered", "external_loop"])):
+            for bs in ((0, 4) if fl else (0,)):
+                y = np.zeros(6, dtype=np.int32)
+                params = {"flags": fl, "op_flags": wm_flags, "buffersize": bs}
+                if cast:
+                    params.update({"op_dtypes": ["int32", None, "int64"], "casting": "unsafe"})
+                add(f"writemasked/elementwise/{fname}/bs{bs}" + ("+i8" if cast else ""), [(x1, x1), (m1, m1), (y, y)],
+                    params, ["setwalk:2:7", "operands"], "wm")
 
 
 def gen_nditer_protocol():
@@ -21225,10 +21552,10 @@ def gen_nditer_protocol():
             for order in ("K", "C", "F", "A"):
                 add(f"coalesce/{fname}/{order}/{lname}", [(b, v)], {"flags": fl, "order": order}, script, lname)
 
-    # Reductions through op_axes (reduce_ok, unbuffered — the buffered double loop is pinned in
-    # OpenBugs.NditerBufferedReduce.cs): an allocated or given output with -1 entries, over C / F / transposed inputs,
-    # walked plainly, with an external loop (the chunks show the axis order: an allocated output does not vote in it)
-    # and with a multi-index; the reduction idiom accumulates through the views.
+    # Reductions through op_axes (reduce_ok, unbuffered here; the buffered double loop is the next section): an
+    # allocated or given output with -1 entries, over C / F / transposed inputs, walked plainly, with an external loop
+    # (the chunks show the axis order: an allocated output does not vote in it) and with a multi-index; the reduction
+    # idiom accumulates through the views.
     red_inputs = {
         "c3": (base3, base3),
         "f3": (fbase3, fbase3.transpose(2, 1, 0)),
@@ -21261,6 +21588,8 @@ def gen_nditer_protocol():
         add(f"reduce/no_reduce_ok/{iname}", [(b, v), (None, None)],
             {"flags": None, "op_flags": [["readonly"], ["readwrite", "allocate"]],
              "op_axes": [None, [0, 1, -1]], "none_ops": [1]}, ["shape"], iname)
+
+    _gen_nditer_protocol_buffered(add, red_inputs, red_axes, layouts, base1, base2, base3, fbase2, fbase3)
 
     # Empty iterations (zerosize_ok): finished from the start, every position getter refuses.
     e = np.zeros((0, 3), dtype=np.int64)

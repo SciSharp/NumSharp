@@ -48,7 +48,6 @@ namespace NumSharp
                     child._cachedNext = cit.PeekCachedIterNext();
                     // NpyIter_ResetBasePointers allocates delayed buffers; npyiter_resetbasepointers then restarts the child:
                     // finished (and started) at once when it has nothing to visit.
-                    child._reduceDelayPending = false;
                     child._started = child._finished = cit.IterSize == 0;
 
                     parent = child;

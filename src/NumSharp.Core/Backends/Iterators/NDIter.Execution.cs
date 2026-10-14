@@ -148,16 +148,15 @@ namespace NumSharp.Backends.Iteration
             if (IsSingleInnerLoop())
             {
                 InvokeInner(kernel, dataptrs, byteStrides, innerSize, auxdata, maskOp, nop);
-                // Windowed buffered single-fill: no iternext runs, so flush here.
+                // Buffered single fill: no iternext runs, so the buffer is written back (and released) here.
                 FlushIfBuffered();
                 return;
             }
 
-            // Windowed buffered (non-reduce): the kernel consumes one whole
-            // fill per call, so advance by WINDOW regardless of EXLOOP (the
-            // per-element protocol is only for user-facing Iternext walks).
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0 &&
-                (_state->ItFlags & (uint)NDIterFlags.REDUCE) == 0)
+            // Buffered: the kernel consumes one whole inner loop per call (a fill, or one core of the reduce double loop),
+            // so the driver advances by INNER LOOP regardless of EXLOOP (the per-element protocol is only for user-facing
+            // Iternext walks). The inner loop's size is re-read per call: the last fill is shorter.
+            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
             {
                 long* bufSize = GetInnerLoopSizePtr();
                 do
@@ -183,18 +182,8 @@ namespace NumSharp.Backends.Iteration
 
             var iternext = GetIterNext();
 
-            // Buffered (reduce) fills can change size at the tail, so re-read per call.
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
-            {
-                long* bufSize = GetInnerLoopSizePtr();
-                do
-                {
-                    InvokeInner(kernel, dataptrs, byteStrides, *bufSize, auxdata, maskOp, nop);
-                } while (iternext(ref *_state));
-                return;
-            }
-
-            // EXLOOP and non-EXLOOP both have a stable innerSize across iterations.
+            // Unbuffered: EXLOOP and non-EXLOOP both have a stable innerSize across iterations (every buffered iterator took
+            // the inner-loop driver above).
             do
             {
                 InvokeInner(kernel, dataptrs, byteStrides, innerSize, auxdata, maskOp, nop);
@@ -443,9 +432,7 @@ namespace NumSharp.Backends.Iteration
         {
             uint f = _state->ItFlags;
             if ((f & (uint)NDIterFlags.BUFFER) != 0)
-                return (f & (uint)NDIterFlags.REDUCE) != 0
-                    ? _state->BufIterEnd          // legacy reduce double-loop semantics
-                    : _state->BufTransferSize;    // windowed fill size (NumPy NBF_SIZE)
+                return _state->BufTransferSize;   // the inner loop's size (NumPy's NBF_SIZE; one core in the reduce loop)
             // 0-d (scalar) iteration has no inner axis — Shape[NDim-1] would read
             // Shape[-1] (AV). One element, one call. Previously unreachable: the
             // scalar×scalar engine bypass kept 0-d out of ForEach until the ufunc
@@ -484,7 +471,7 @@ namespace NumSharp.Backends.Iteration
         private void ExecuteGenericSingle<TKernel>(TKernel kernel) where TKernel : struct, INDInnerLoop
         {
             kernel.Execute(GetDataPtrArray(), GetInnerLoopByteStrides(), ResolveInnerLoopCount());
-            // Windowed buffered single-fill: no iternext runs, so flush here.
+            // A buffered iteration consumed in one fill: no iternext runs, so it is written back here.
             FlushIfBuffered();
         }
 
@@ -495,8 +482,8 @@ namespace NumSharp.Backends.Iteration
             void** dataptrs = GetDataPtrArray();
             long* byteStrides = GetInnerLoopByteStrides();
 
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0 &&
-                (_state->ItFlags & (uint)NDIterFlags.REDUCE) == 0)
+            // Buffered: one kernel call per inner loop (a fill, or one core of the reduce double loop).
+            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
             {
                 long* winSize = GetInnerLoopSizePtr();
                 do
@@ -507,7 +494,7 @@ namespace NumSharp.Backends.Iteration
             }
 
             // Unbuffered EXTERNAL_LOOP: direct (inlined) advance, no delegate per chunk.
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) == 0 && IsPlainExternalLoopAdvance())
+            if (IsPlainExternalLoopAdvance())
             {
                 long exlInnerSize = ResolveInnerLoopCount();
                 do
@@ -518,16 +505,6 @@ namespace NumSharp.Backends.Iteration
             }
 
             var iternext = GetIterNext();
-
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
-            {
-                long* bufSize = GetInnerLoopSizePtr();
-                do
-                {
-                    kernel.Execute(dataptrs, byteStrides, *bufSize);
-                } while (iternext(ref *_state));
-                return;
-            }
 
             long innerSize = ResolveInnerLoopCount();
             do
@@ -544,18 +521,16 @@ namespace NumSharp.Backends.Iteration
         private bool IsSingleInnerLoop()
         {
             uint f = _state->ItFlags;
-            // Windowed buffered iteration overrides the EXLOOP/coalesce shortcut:
-            // even a fully-coalesced 1-D iterator needs one kernel call PER
-            // WINDOW when the iteration is larger than the buffer. Single only
-            // when the first window already covers the whole range.
-            if ((f & (uint)NDIterFlags.BUFFER) != 0 && (f & (uint)NDIterFlags.REDUCE) == 0)
+            // Buffered iteration overrides the EXLOOP/coalesce shortcut: even a fully-coalesced 1-D iterator needs one
+            // kernel call PER INNER LOOP when the iteration is larger than a fill. Single only when the first inner loop
+            // already reaches the range end — in the reduce double loop that means the whole range is one core, since
+            // BufIterEnd then marks the end of the first core.
+            if ((f & (uint)NDIterFlags.BUFFER) != 0)
                 return _state->BufIterEnd >= _state->IterEnd;
             // ONEITERATION: iter size <= 1.
             if ((f & (uint)NDIterFlags.ONEITERATION) != 0) return true;
             // Fully coalesced to one axis + EXLOOP: whole iteration is one inner loop.
             if ((f & (uint)NDIterFlags.EXLOOP) != 0 && _state->NDim <= 1) return true;
-            // Buffered (reduce) and whole iteration fits in one buffer fill.
-            if ((f & (uint)NDIterFlags.BUFFER) != 0 && _state->BufIterEnd >= _state->IterEnd) return true;
             return false;
         }
 
@@ -581,8 +556,9 @@ namespace NumSharp.Backends.Iteration
                 return accum;
             }
 
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0 &&
-                (_state->ItFlags & (uint)NDIterFlags.REDUCE) == 0)
+            // Buffered: one kernel call per inner loop. An early exit leaves the current buffer held — Dispose writes it back,
+            // as NumPy's deallocation does.
+            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
             {
                 long* winSize = GetInnerLoopSizePtr();
                 do
@@ -594,7 +570,7 @@ namespace NumSharp.Backends.Iteration
             }
 
             // Unbuffered EXTERNAL_LOOP: direct (inlined) advance, no delegate per chunk.
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) == 0 && IsPlainExternalLoopAdvance())
+            if (IsPlainExternalLoopAdvance())
             {
                 long exlInnerSize = ResolveInnerLoopCount();
                 do
@@ -606,17 +582,6 @@ namespace NumSharp.Backends.Iteration
             }
 
             var iternext = GetIterNext();
-
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
-            {
-                long* bufSize = GetInnerLoopSizePtr();
-                do
-                {
-                    if (!kernel.Execute(dataptrs, byteStrides, *bufSize, ref accum))
-                        break;
-                } while (iternext(ref *_state));
-                return accum;
-            }
 
             long innerSize = ResolveInnerLoopCount();
             do
@@ -682,7 +647,7 @@ namespace NumSharp.Backends.Iteration
                     $"ExecuteBinary requires 3 operands (in0, in1, out); got {_state->NOp}.");
 
             // Buffered path first: a buffered (possibly strided/cast) output is
-            // legal there — the windowed write-back honors the array's true
+            // legal there — the buffer write-back honors the array's true
             // strides, so the contiguous-output guard below must not apply.
             if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
             {
@@ -792,12 +757,16 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Reduction variant that honors REDUCE + BUFFER: uses
-        /// <see cref="NDIterState.BufferedReduceAdvance"/> and
-        /// <see cref="IsFirstVisit"/> to initialize the accumulator once per
-        /// output slot. This is the NumPy-parity path for axis reductions that
-        /// span multiple output elements.
+        ///     Reduction variant over a BUFFER + REDUCE iterator: one kernel call per inner loop — a core of NumPy's reduce
+        ///     double loop when the buffering setup chose it (the reduce operand's element repeats along the core, or its core
+        ///     repeats per outer step), else a plain fill — with <see cref="IsFirstVisit"/> telling the kernel when an output
+        ///     slot starts. The NumPy-parity path for axis reductions that span multiple output elements.
         /// </summary>
+        /// <typeparam name="TKernel">The inner-loop kernel.</typeparam>
+        /// <typeparam name="TAccum">The kernel's accumulator type (threaded through every call).</typeparam>
+        /// <param name="kernel">The kernel; returning false ends the walk early (the held buffer is written back at Dispose).</param>
+        /// <exception cref="InvalidOperationException">The iterator is not buffered or has no reduction operand.</exception>
+        /// <exception cref="ValueError">A string operand's conversion fails during a buffer transfer.</exception>
         public void BufferedReduce<TKernel, TAccum>(TKernel kernel)
             where TKernel : struct, INDReducingInnerLoop<TAccum>
             where TAccum : unmanaged
@@ -809,20 +778,21 @@ namespace NumSharp.Backends.Iteration
                     "BufferedReduce requires BUFFER + REDUCE flags on the iterator.");
             }
 
+            EnsureBuffersReady();   // DELAY_BUFALLOC: allocate + fill the first buffer
+
             void** dataptrs = GetDataPtrArray();
             long* strides = GetInnerLoopByteStrides();
             long* innerSize = GetInnerLoopSizePtr();
 
-            // The reduce-accumulator operand's pointer stays pinned while input
-            // advances, so *dataptrs[reduce_op] is the accumulator slot.
-            // Caller sees current output slot via IsFirstVisit(reduce_op).
+            // The reduce-accumulator operand's pointer stays pinned (inner stride 0) or steps per outer step, so
+            // *dataptrs[reduce_op] is the accumulator slot; the caller sees the current output slot via IsFirstVisit.
             TAccum accum = default;
             do
             {
                 // Kernel decides whether to re-init (IsFirstVisit) or continue.
                 if (!kernel.Execute(dataptrs, strides, *innerSize, ref accum))
                     break;
-            } while (Iternext());  // Iternext picks BufferedReduceIternext internally.
+            } while (BufferedWindowAdvance());   // a whole inner loop per call, EXLOOP or not
         }
 
         /// <summary>
@@ -1091,7 +1061,7 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         private void RunBufferedBinary(BinaryOp op)
         {
-            // Windowed contract: DataPtrs point at tight buffers for buffered
+            // Buffered contract: DataPtrs point at tight buffers for buffered
             // operands and at the array position for unbuffered (linear) ones;
             // BufStrides holds each operand's effective inner byte stride.
             // The whole-array MixedType kernel needs dense (elemSize) or
@@ -1153,39 +1123,27 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Flush the pending windowed-buffer write-backs (no-op for unbuffered,
-        /// reduce-buffered, or already-flushed iterators).
+        ///     Advances a buffered iterator past the inner loop the kernel just consumed, regardless of EXTERNAL_LOOP — used by
+        ///     the kernel drivers, whose kernels always consume whole inner loops: the reduce double loop's next outer step, or
+        ///     the write-back, the move to the next fill and the fill (<see cref="NDIterBufferManager.BufferedNextInnerLoop"/>).
         /// </summary>
-        /// <summary>
-        /// Advance the windowed buffered iterator by one whole fill (flush →
-        /// jump → refill), regardless of EXTERNAL_LOOP — used by the kernel
-        /// drivers, whose kernels always consume entire windows.
-        /// </summary>
+        /// <returns>True while the iteration continues; false at its end (the last buffer written back).</returns>
+        /// <exception cref="ValueError">A string operand's conversion fails during a buffer transfer.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private bool BufferedWindowAdvance()
-        {
-            NDIterBufferManager.FlushBufferWindow(ref *_state);
+        private bool BufferedWindowAdvance() => NDIterBufferManager.BufferedNextInnerLoop(ref *_state);
 
-            _state->IterIndex = _state->BufIterEnd;
-            if (_state->IterIndex >= _state->IterEnd)
-                return false;
-
-            _state->GotoIterIndex(_state->IterIndex);
-            long count = NDIterBufferManager.ComputeTransferSize(ref *_state);
-            NDIterBufferManager.FillBufferWindow(ref *_state, count);
-            return true;
-        }
-
+        /// <summary>
+        ///     Ends a buffered iteration a kernel consumed in one inner loop: the buffers are written back and released, the
+        ///     state NumPy's last iternext leaves (a no-op for an unbuffered iterator, delayed buffers, or a buffered iteration
+        ///     that already ended).
+        /// </summary>
+        /// <exception cref="ValueError">A string operand's conversion fails during the write-back.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private void FlushIfBuffered()
         {
             uint f = _state->ItFlags;
-            if ((f & (uint)NDIterFlags.BUFFER) != 0 &&
-                (f & (uint)NDIterFlags.REDUCE) == 0 &&
-                (f & (uint)NDIterFlags.DELAYBUF) == 0)
-            {
-                NDIterBufferManager.FlushBufferWindow(ref *_state);
-            }
+            if ((f & (uint)NDIterFlags.BUFFER) != 0 && (f & (uint)NDIterFlags.DELAYBUF) == 0)
+                NDIterBufferManager.FinishBufferedLoop(ref *_state);
         }
 
         // =====================================================================
