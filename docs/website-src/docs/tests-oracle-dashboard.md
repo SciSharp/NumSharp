@@ -441,8 +441,8 @@ html[data-bs-theme="dark"] .ns-bench-dashboard {
   <section>
     <div class="section-head"><h2>Full Reports</h2><p class="section-note">Generated data and the human-maintained oracle ledgers</p></div>
     <ul class="report-list">
-      <li><a href="../../../test/inventory/generated/tests-oracle-report.csv">Full unit test inventory CSV</a> - one row per reflected unit-test method.</li>
-      <li><a href="../../../test/inventory/generated/summary.md">Generated inventory summary</a> - headline counts and strength queue.</li>
+      <li><a href="../../../refs/data/tests-oracle/latest/tests-oracle-report.csv">Full unit test inventory CSV</a> - one row per reflected unit-test method.</li>
+      <li><a href="../../../refs/data/tests-oracle/latest/summary.md">Generated inventory summary</a> - headline counts and strength queue.</li>
       <li><a href="https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/README.md">Oracle architecture and divergence ledger</a>.</li>
       <li><a href="https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/COVERAGE_GAPS.md">Coverage map and expansion techniques</a>.</li>
       <li><a href="https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/JOURNEY3_TOUCHED_FUNCTIONS.md">Journey3 touched-function receipt</a>.</li>
