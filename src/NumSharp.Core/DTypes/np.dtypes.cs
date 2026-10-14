@@ -134,6 +134,10 @@ namespace NumSharp
             /// <exception cref="UnicodeEncodeError">A string sentinel (or the <c>str()</c> of another sentinel) holds a lone
             ///     surrogate: NumPy stores it as UTF-8 and raises CPython's
             ///     <c>'utf-8' codec can't encode character '\ud800' in position 0: surrogates not allowed</c>.</exception>
+            /// <exception cref="ValueError">The sentinel is a Python int (<see cref="System.Numerics.BigInteger"/>) of more
+            ///     than 4300 decimal digits: NumPy takes its <c>str()</c> while building the descriptor and CPython refuses it,
+            ///     <c>Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to
+            ///     increase the limit</c>.</exception>
             /// <remarks>
             ///     Pass a <see cref="bool"/> sentinel BY NAME (<c>StringDType(na_object: true)</c>): a positional bool binds
             ///     the <see cref="StringDType(bool)"/> overload and means <c>coerce</c>.

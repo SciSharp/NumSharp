@@ -115,10 +115,12 @@ namespace NumSharp.Backends.Strings
         /// <param name="value">The number (boxed).</param>
         /// <returns>The number of characters.</returns>
         /// <exception cref="NotSupportedException"><paramref name="value"/> is not a number NumSharp knows.</exception>
+        /// <exception cref="ValueError"><paramref name="value"/> is a Python int (<see cref="BigInteger"/>) of more than 4300
+        ///     decimal digits: NumPy takes its <c>str()</c> to size the dtype, and CPython refuses it.</exception>
         internal static int StrLength(object value)
         {
             if (value is BigInteger big)
-                return big.ToString(CultureInfo.InvariantCulture).Length;
+                return NDTextFormat.FormatPythonInt(big).Length;
             Span<char> buf = stackalloc char[NDTextFormat.MaxTextLength];
             return FormatNumber(value, buf);
         }
@@ -133,12 +135,16 @@ namespace NumSharp.Backends.Strings
         /// <param name="chars">The element width in characters.</param>
         /// <param name="value">The number (boxed).</param>
         /// <exception cref="NotSupportedException"><paramref name="value"/> is not a number NumSharp knows.</exception>
+        /// <exception cref="ValueError"><paramref name="value"/> is a Python int (<see cref="BigInteger"/>) of more than 4300
+        ///     decimal digits: CPython's <c>str()</c> refuses it, so NumPy's store raises instead of truncating the text (the
+        ///     element is not written).</exception>
         private static void WriteNumber(byte* dst, bool unicode, int chars, object value)
         {
             if (value is BigInteger big)
             {
-                // A Python int of any size: its decimal digits (a value past 64 bits can exceed MaxTextLength).
-                NDTextFormat.Store(big.ToString(CultureInfo.InvariantCulture).AsSpan(), dst, unicode, chars);
+                // A Python int of any size: its decimal digits (a value past 64 bits can exceed MaxTextLength), refused past
+                // 4300 digits before the element is touched, as NumPy's UNICODE_setitem fails in PyObject_Str.
+                NDTextFormat.Store(NDTextFormat.FormatPythonInt(big).AsSpan(), dst, unicode, chars);
                 return;
             }
             Span<char> buf = stackalloc char[NDTextFormat.MaxTextLength];

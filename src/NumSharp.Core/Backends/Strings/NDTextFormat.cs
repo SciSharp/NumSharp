@@ -185,6 +185,42 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
+        ///     CPython's <c>str()</c> of a Python int of any size (a C# <see cref="BigInteger"/>, the boundary map's Python
+        ///     int): its decimal digits, a leading <c>-</c> when negative — refused past <c>sys.get_int_max_str_digits()</c>
+        ///     digits, as CPython's <c>long_to_decimal_string</c> refuses it. Every store and every <c>str()</c> /
+        ///     <c>repr()</c> port that turns a Python int into text goes through here.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The text.</returns>
+        /// <exception cref="ValueError">The value has more than 4300 decimal digits: CPython's <c>Exceeds the limit (4300
+        ///     digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit</c>. NumPy raises
+        ///     it wherever it takes such an int's <c>str()</c> or <c>repr()</c> — a store into a <c>U</c> / <c>S</c> array or
+        ///     a coercing <c>StringDType</c> array, a cast that writes a missing-data object as text, the repr of a
+        ///     <c>StringDType</c> whose missing-data object it is.</exception>
+        /// <remarks>
+        ///     The limit counts the digits without the sign: <c>-(10**4300 - 1)</c> prints, <c>10**4300</c> does not. A value
+        ///     whose bit length alone proves more than 4300 digits is refused before any digit is computed (CPython makes the
+        ///     same early test), so a huge value costs nothing; the decimal conversion of .NET grows faster than linearly.
+        /// </remarks>
+        internal static string FormatPythonInt(BigInteger value)
+        {
+            // 2^(L-1) <= |v| < 2^L for a bit length L, and 2^14285 > 10^4300 (14285 * log10(2) = 4300.2): a bit length of
+            // 14286 or more cannot have 4300 digits or fewer. Below that the digits are counted.
+            if (BigInteger.Abs(value).GetBitLength() >= 14286)
+                throw MaxStrDigitsExceeded();
+            string text = value.ToString(CI);
+            if (text.Length - (value.Sign < 0 ? 1 : 0) > NDTextParse.MaxStrDigits)
+                throw MaxStrDigitsExceeded();
+            return text;
+        }
+
+        /// <summary>CPython's refusal of an int → text conversion past <c>sys.get_int_max_str_digits()</c> digits.</summary>
+        /// <returns>The exception (<c>_MAX_STR_DIGITS_ERROR_FMT_TO_STR</c> in <c>longobject.c</c>; its parsing twin, which
+        ///     also names the digit count, is <see cref="NDTextParse"/>'s).</returns>
+        private static ValueError MaxStrDigitsExceeded() => new ValueError(
+            $"Exceeds the limit ({NDTextParse.MaxStrDigits} digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit");
+
+        /// <summary>
         ///     <c>str()</c> of a NumPy float scalar of the given precision (see the class remarks for the rule).
         /// </summary>
         /// <param name="value">The value, exactly representable in <paramref name="kind"/> (a float16 / float32 value

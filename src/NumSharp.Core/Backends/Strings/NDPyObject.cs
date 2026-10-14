@@ -46,6 +46,9 @@ namespace NumSharp.Backends.Strings
         /// </summary>
         /// <param name="obj">The C# value standing in for a Python object.</param>
         /// <returns>The text <c>str()</c> returns.</returns>
+        /// <exception cref="ValueError"><paramref name="obj"/> is a Python int (<see cref="BigInteger"/>) of more than 4300
+        ///     decimal digits, which CPython's <c>str()</c> refuses — NumPy's casts of such a missing-data object to text and
+        ///     its coercing stores of such an int raise the same.</exception>
         public static string Str(object obj)
         {
             switch (obj)
@@ -78,6 +81,9 @@ namespace NumSharp.Backends.Strings
         /// </summary>
         /// <param name="obj">The C# value standing in for a Python object.</param>
         /// <returns>The text <c>repr()</c> returns.</returns>
+        /// <exception cref="ValueError"><paramref name="obj"/> is (or a container holds) a Python int of more than 4300
+        ///     decimal digits, which CPython's <c>repr()</c> refuses — so the repr of a <c>StringDType</c> whose missing-data
+        ///     object it is raises, as NumPy's does.</exception>
         public static string Repr(object obj)
         {
             switch (obj)
@@ -615,6 +621,8 @@ namespace NumSharp.Backends.Strings
         /// <param name="obj">The value.</param>
         /// <param name="text">The text, when it is a number.</param>
         /// <returns>True when <paramref name="obj"/> is a number.</returns>
+        /// <exception cref="ValueError"><paramref name="obj"/> is a <see cref="BigInteger"/> of more than 4300 decimal
+        ///     digits (CPython's <c>sys.get_int_max_str_digits()</c>; see <see cref="NDTextFormat.FormatPythonInt"/>).</exception>
         private static bool TryFormatNumber(object obj, out string text)
         {
             switch (obj)
@@ -623,7 +631,8 @@ namespace NumSharp.Backends.Strings
                     text = v ? "True" : "False";
                     return true;
                 case BigInteger big:
-                    text = big.ToString(CultureInfo.InvariantCulture);
+                    // CPython's str() of an int refuses past 4300 digits (ValueError), and so does every NumPy path here.
+                    text = NDTextFormat.FormatPythonInt(big);
                     return true;
                 case sbyte or short or int or long:
                     text = Convert.ToInt64(obj, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture);

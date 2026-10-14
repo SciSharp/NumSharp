@@ -93,6 +93,59 @@ namespace NumSharp.Tests.Backends.Strings
             np.array(new[] { "1.5", " 2 " }).astype(np.@decimal).ToArray<decimal>().Should().Equal(1.5m, 2m);
         }
 
+        /// <summary>
+        ///     A Python int (a C# <see cref="BigInteger"/>) of more than 4300 decimal digits has no text: CPython's
+        ///     <c>str()</c> refuses it (<c>sys.get_int_max_str_digits()</c>), so NumPy raises CPython's ValueError where it
+        ///     would format one — a <c>U</c> / <c>S</c> / coercing <c>StringDType</c> store (the element keeps its old value),
+        ///     an unsized <c>'U'</c> / <c>'S'</c> discovery, a <c>StringDType</c> whose missing-data object it is (built with
+        ///     its <c>str()</c>). Before this test NumSharp printed the digits (and a <c>U8</c> store kept the first eight).
+        ///     4300 digits print, the sign does not count, and a value whose size alone proves the excess is refused at once.
+        /// </summary>
+        [TestMethod]
+        public void PythonIntToText_RefusedPast4300Digits_AsCPythonDoes()
+        {
+            const string Message =
+                "Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit";
+            BigInteger ok = BigInteger.Pow(10, 4300) - 1, over = BigInteger.Pow(10, 4300);
+
+            // Fixed-width stores: the 4300-digit value is cut to the width; the 4301-digit one raises before the write.
+            foreach (string dt in new[] { "U8", "S8" })
+            {
+                using NDArray a = np.array(new[] { "keep" }).astype(dt);
+                a.SetValue(ok, 0);
+                NDArray.AsStringArray(a.astype("U")).Should().Equal(new[] { "99999999" }, dt);
+                a.SetValue("keep", 0);
+                ((Action)(() => a.SetValue(over, 0))).Should().Throw<ValueError>().WithMessage(Message, dt);
+                ((Action)(() => a.SetValue(-over, 0))).Should().Throw<ValueError>().WithMessage(Message, dt);
+                NDArray.AsStringArray(a.astype("U")).Should().Equal(new[] { "keep" }, $"{dt}: a refused store writes nothing");
+            }
+
+            // Unsized discovery takes the str() to size the dtype.
+            np.array(new object[] { ok }, dtype: "U").dtype.str.Should().Be("<U4300");
+            ((Action)(() => np.array(new object[] { over }, dtype: "U"))).Should().Throw<ValueError>().WithMessage(Message);
+            ((Action)(() => np.array(new object[] { over }, dtype: "S"))).Should().Throw<ValueError>().WithMessage(Message);
+
+            // A coercing StringDType store: the sign is not a digit.
+            using (NDArray t = np.array(new object[] { "keep", -ok }, np.dtypes.StringDType()))
+            {
+                ((string)t.GetValue(1)).Length.Should().Be(4301);
+                ((Action)(() => t.SetValue(over, 0))).Should().Throw<ValueError>().WithMessage(Message);
+                t.GetValue(0).Should().Be("keep", "a refused store writes nothing");
+            }
+
+            ((Action)(() => np.array(new object[] { over }, np.dtypes.StringDType()))).Should().Throw<ValueError>().WithMessage(Message);
+
+            // The missing-data object: NumPy builds na_name = str(na) with the descriptor.
+            np.dtypes.StringDType(ok).ToString().Length.Should().Be(4323, "StringDType(na_object=<4300 digits>)");
+            ((Action)(() => np.dtypes.StringDType(over))).Should().Throw<ValueError>().WithMessage(Message);
+            ((Action)(() => np.dtypes.StringDType(-over))).Should().Throw<ValueError>().WithMessage(Message);
+
+            // A value whose bit length alone proves the excess is refused without formatting a million digits.
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            ((Action)(() => np.dtypes.StringDType(BigInteger.Pow(2, 3_000_000)))).Should().Throw<ValueError>().WithMessage(Message);
+            sw.ElapsedMilliseconds.Should().BeLessThan(2000, "the early bit-length test refuses before any digit is computed");
+        }
+
         // ================================================================================== text to numbers
 
         /// <summary>Text parses by CPython's <c>int()</c> / <c>float()</c> / <c>complex()</c>: signs, whitespace,

@@ -43,6 +43,10 @@ namespace NumSharp
         /// <exception cref="UnicodeEncodeError">The missing-data object is a string holding a lone surrogate, or its
         ///     <c>str()</c> does: NumPy stores both as UTF-8 (<c>PyUnicode_AsUTF8AndSize</c>) and raises CPython's text,
         ///     <c>'utf-8' codec can't encode character '\ud800' in position 0: surrogates not allowed</c>.</exception>
+        /// <exception cref="ValueError">The missing-data object is a Python int (<see cref="System.Numerics.BigInteger"/>) of
+        ///     more than 4300 decimal digits: NumPy takes its <c>str()</c> for <c>na_name</c> here, and CPython refuses it
+        ///     (<c>Exceeds the limit (4300 digits) for integer string conversion; ...</c>), so
+        ///     <c>StringDType(na_object=10**4300)</c> cannot be built in either library.</exception>
         internal VStringParameters(bool hasNAObject, object naObject, bool coerce)
         {
             HasNAObject = hasNAObject;
