@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
 using NumSharp.Backends.Iteration;
 
 namespace NumSharp
@@ -42,7 +44,32 @@ namespace NumSharp
     /// </remarks>
     public abstract class DTypeMeta
     {
-        private readonly Dictionary<DTypeMeta, CastingImpl> _castingImpls = new Dictionary<DTypeMeta, CastingImpl>();
+        /// <summary>
+        ///     The casts from this class to every OTHER class, keyed by the destination class — NumPy's per-DType
+        ///     <c>castingimpls</c> dict. A <see cref="ConcurrentDictionary{TKey,TValue}"/> so <see cref="GetCastingImpl"/>
+        ///     reads it without taking a lock (every <c>np.can_cast</c> over descriptors lands there, and so does promotion
+        ///     whenever the common class is parametric), while a registration can still run at any time: the public
+        ///     <see cref="DTypeRegistry.AddCastingImpl"/> admits a user cast after the registry is built.
+        /// </summary>
+        /// <remarks>
+        ///     Keys compare by reference, because no <see cref="DTypeMeta"/> overrides <see cref="object.Equals(object)"/>;
+        ///     that is NumPy's rule too, whose dict is keyed by the class object itself. The constructor arguments are
+        ///     deliberate: <c>concurrencyLevel: 1</c> gives the dictionary ONE write lock, which is enough because writes
+        ///     are rare (the registry's static constructor, the occasional user registration) and reads never take it;
+        ///     <c>capacity: 31</c> holds every class's registrations (16 at most today) without a resize. The default
+        ///     constructor would allocate one lock object per CPU for each class, and on a many-core host (one lock per
+        ///     bucket or so) it would also grow its table and its lock array while the registry's static constructor
+        ///     registers the casts.
+        /// </remarks>
+        private readonly ConcurrentDictionary<DTypeMeta, CastingImpl> _castingImpls =
+            new ConcurrentDictionary<DTypeMeta, CastingImpl>(concurrencyLevel: 1, capacity: 31);
+
+        /// <summary>
+        ///     The cast between two instances of this class, held in its own slot as NumPy holds
+        ///     <c>NPY_DT_SLOTS(DType)-&gt;within_dtype_castingimpl</c>. Written at most once, by the compare-exchange in
+        ///     <see cref="AddCastingImpl"/>, and read through <see cref="Volatile.Read{T}"/>, so a reader on another
+        ///     thread sees either null or the implementation, never a stale value cached across a registration.
+        /// </summary>
         private CastingImpl _withinDTypeCastingImpl;
         private DType _singleton;
 
@@ -234,21 +261,61 @@ namespace NumSharp
         /// <summary>
         ///     The <see cref="CastingImpl"/> from this class to <paramref name="to"/> (the within-dtype implementation when
         ///     <paramref name="to"/> is this class), or null when no cast exists — NumPy's <c>PyArray_GetCastingImpl</c>.
+        ///     Every cast question of <see cref="DTypeCasting"/> starts here (each <c>np.can_cast</c> over descriptors and
+        ///     each <see cref="DType"/> <c>&lt;</c> / <c>&lt;=</c> / <c>&gt;</c> / <c>&gt;=</c> comparison), and so does
+        ///     <see cref="DTypePromotion.CastDescrToDType"/> whenever the common class is parametric (datetime64,
+        ///     timedelta64).
         /// </summary>
+        /// <param name="to">The destination class, compared by reference.</param>
+        /// <returns>
+        ///     The registered implementation, or null when none is registered for the pair — an impossible cast, which
+        ///     <see cref="DTypeCasting.GetCastInfo"/> reports as null and <see cref="DTypeCasting.CheckCastSafety"/> as false.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="to"/> is null.</exception>
+        /// <remarks>
+        ///     Takes no lock: <see cref="ConcurrentDictionary{TKey,TValue}.TryGetValue"/> reads the dictionary without its
+        ///     write lock and the within-dtype slot is a volatile read, so concurrent cast and promotion queries never
+        ///     contend with each other or with a registration. A query racing the registration of the same pair returns
+        ///     either null or the registered implementation.
+        /// </remarks>
         public CastingImpl GetCastingImpl(DTypeMeta to)
         {
             if (to == null)
                 throw new ArgumentNullException(nameof(to));
             if (ReferenceEquals(to, this))
-                return _withinDTypeCastingImpl;
-            lock (_castingImpls)
-                return _castingImpls.TryGetValue(to, out var impl) ? impl : null;
+                return Volatile.Read(ref _withinDTypeCastingImpl);
+            return _castingImpls.TryGetValue(to, out var impl) ? impl : null;
         }
 
-        /// <summary>The casting implementation between two instances of this class (<c>within_dtype_castingimpl</c>).</summary>
-        public CastingImpl WithinDTypeCastingImpl => _withinDTypeCastingImpl;
+        /// <summary>
+        ///     The casting implementation between two instances of this class (<c>within_dtype_castingimpl</c>): the one
+        ///     <see cref="DTypeCasting"/> consults when both descriptors belong to this class (a byte-order change, a
+        ///     datetime unit change, a plain copy).
+        /// </summary>
+        /// <value>The registered within-dtype cast, or null when the class registered none (the abstract NEP 50 scalar
+        ///     classes and the vestigial string slot). Read without a lock, like <see cref="GetCastingImpl"/>.</value>
+        public CastingImpl WithinDTypeCastingImpl => Volatile.Read(ref _withinDTypeCastingImpl);
 
-        /// <summary>Registers <paramref name="impl"/> (whose <see cref="CastingImpl.From"/> must be this class) — <c>PyArray_AddCastingImplementation</c>.</summary>
+        /// <summary>
+        ///     Registers <paramref name="impl"/> (whose <see cref="CastingImpl.From"/> must be this class) — NumPy's
+        ///     <c>PyArray_AddCastingImplementation</c>. Each class pair is registered once: a second registration for the
+        ///     same destination raises instead of replacing the first, so a user cast can never silently displace a
+        ///     builtin one.
+        /// </summary>
+        /// <param name="impl">The cast to register; its <see cref="CastingImpl.To"/> is the key it is stored under.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="impl"/> is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="impl"/> casts from another class.</exception>
+        /// <exception cref="InvalidOperationException">
+        ///     A cast from this class to <see cref="CastingImpl.To"/> is already registered (for a within-dtype
+        ///     <paramref name="impl"/>: a cast within this class).
+        /// </exception>
+        /// <remarks>
+        ///     Takes no lock of its own. The within-dtype slot is claimed by one
+        ///     <see cref="Interlocked.CompareExchange{T}(ref T, T, T)"/> and every other pair by
+        ///     <see cref="ConcurrentDictionary{TKey,TValue}.TryAdd"/>, which serialises writers on the dictionary's
+        ///     single write lock and never blocks a reader. Each check-and-store is one atomic step, so when several
+        ///     threads register the same pair, exactly one succeeds and every other one raises.
+        /// </remarks>
         internal void AddCastingImpl(CastingImpl impl)
         {
             if (impl == null)
@@ -258,18 +325,17 @@ namespace NumSharp
 
             if (ReferenceEquals(impl.To, this))
             {
-                if (_withinDTypeCastingImpl != null)
+                // A null check followed by a plain store would let two racing registrations both pass the check, and the
+                // later one would silently replace the earlier instead of raising. The compare-exchange checks and stores
+                // in one step, and it publishes the implementation fully built to the volatile readers.
+                if (Interlocked.CompareExchange(ref _withinDTypeCastingImpl, impl, null) != null)
                     throw new InvalidOperationException($"A cast within {this} is already registered.");
-                _withinDTypeCastingImpl = impl;
                 return;
             }
 
-            lock (_castingImpls)
-            {
-                if (_castingImpls.ContainsKey(impl.To))
-                    throw new InvalidOperationException($"A cast from {this} to {impl.To} is already registered.");
-                _castingImpls.Add(impl.To, impl);
-            }
+            // TryAdd is ContainsKey + Add as one atomic step: false means another registration of this pair got there first.
+            if (!_castingImpls.TryAdd(impl.To, impl))
+                throw new InvalidOperationException($"A cast from {this} to {impl.To} is already registered.");
         }
 
         /// <summary>NumPy's rendering of the class object: <c>&lt;class 'numpy.dtypes.Int32DType'&gt;</c>.</summary>
