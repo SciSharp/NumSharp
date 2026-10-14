@@ -26,7 +26,7 @@ The essential types for working with NumSharp.
 using NumSharp;
 
 // Create arrays
-var a = np.array(new[] { 1, 2, 3, 4, 5 });
+var a = np.array([1, 2, 3, 4, 5]);
 var b = np.zeros((3, 4));
 var c = np.arange(10);
 
@@ -188,8 +188,8 @@ Functions for changing array shape and dimensions.
 | `np.moveaxis(a, src, dst)` | Move axes to new positions |
 | `np.rollaxis(a, axis)` | Roll axis backwards |
 | `np.flip(a, axis)` | Reverse element order along axes (returns view) |
-| `np.fliplr(a)` | Flip left/right — reverse axis 1 (returns view) |
-| `np.flipud(a)` | Flip up/down — reverse axis 0 (returns view) |
+| `np.fliplr(a)` | Flip left/right - reverse axis 1 (returns view) |
+| `np.flipud(a)` | Flip up/down - reverse axis 0 (returns view) |
 | `np.atleast_1d(a)` | Convert to at least 1-D |
 | `np.atleast_2d(a)` | Convert to at least 2-D |
 | `np.atleast_3d(a)` | Convert to at least 3-D |
@@ -224,7 +224,7 @@ a["..., -1"]     // Ellipsis fills dimensions
 ### Boolean Masking
 
 ```csharp
-var a = np.array(new[] { 1, 2, 3, 4, 5 });
+var a = np.array([1, 2, 3, 4, 5]);
 var mask = a > 2;        // [false, false, true, true, true]
 var filtered = a[mask];  // [3, 4, 5]
 ```
@@ -344,7 +344,7 @@ These types are for advanced users extending NumSharp or understanding its inter
 |------|-------------|
 | @NumSharp.Backends.Iteration.NDIterRef | NumPy-aligned multi-operand iterator (broadcasting, buffering, casting, reductions); drives every kernel |
 | @NumSharp.Backends.Iteration.NDFlatIterator | Flat C-order element iterator; backs `np.broadcast(...).iters` |
-| @NumSharp.np.Broadcast | Broadcast result object — N operands, iterable, with `.iters` / `.index` / `.reset()` |
+| @NumSharp.np.Broadcast | Broadcast result object - N operands, iterable, with `.iters` / `.index` / `.reset()` |
 
 ### Memory Management
 

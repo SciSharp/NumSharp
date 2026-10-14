@@ -199,9 +199,210 @@ particular specification revision with NumPy API aliases and became stale.
 NumSharp implements both NumPy random APIs:
 
 - The legacy `np.random`/`RandomState` surface uses MT19937, including NumPy-compatible state,
-  array seeding, cached Gaussian state, and legacy distribution algorithms.
+  array seeding, cached Gaussian state, and legacy distribution algorithms (`randint`'s masked
+  per-dtype sampler, `shuffle`/`permutation`/`choice` with the legacy messages and the C `long`
+  dtype, modelled as int64 — see below).
+  An unseeded `RandomState()` draws OS entropy through `SeedSequence`, as NumPy's does.
+- Every legacy distribution is a line-by-line port of NumPy's frozen `legacy-distributions.c` (and
+  the shared `distributions.c` samplers it calls: Poisson PTRS, BTPE binomial, HRUA hypergeometric,
+  `random_loggam`, …), so `RandomState(seed).<method>(...)` is byte-identical to NumPy for every
+  sampler, including `gamma` with `shape < 1`, `binomial`, `negative_binomial`, `f`, `pareto`,
+  `standard_cauchy`, `multinomial` (which shares `binomial`'s setup cache, as NumPy's does) and
+  `dirichlet`. Parameters are validated with NumPy's constraints and messages (`ValueError: scale < 0`,
+  `-0.0` rejected where NumPy tests the sign bit, NaN accepted where NumPy accepts it) before anything
+  is drawn. `multivariate_normal` follows NumPy's SVD algorithm and is byte-identical when
+  `NumSharp.Interop.OpenBLAS` supplies LAPACK's `gesdd`; without it a managed Jacobi SVD stands in and
+  a singular vector's sign can differ.
+- The legacy integers are C `long` in NumPy, and NumSharp models ONE width for all of them: a 64-bit
+  `long`, NumPy's Linux/macOS (LP64) build, which it matches exactly. That covers `randint`'s default
+  dtype, `random_integers`, `permutation(n)`, `choice`'s indices and `multinomial`'s counts (all int64),
+  the discrete samplers, and the integer parameters (`multinomial`'s `n`, `binomial`'s `n`, the counts
+  of `hypergeometric`). NumPy's Windows build (32-bit `long`) returns the same values as int32 wherever
+  both builds accept the input, but it rejects bounds past `2**31` (`randint(0, 2**40)`,
+  `random_integers(0, 2**31)`, `choice(2**40)`), raises for `multinomial(2**31, …)`, and differs where
+  that width overflows inside a sampler (`zipf` near `a = 1`, `poisson` above `2**31`, `tomaxint`'s
+  range, `negative_binomial` with an infinite mean). `permutation(n)` also reproduces NumPy's arange
+  length arithmetic at the int64 edge: a length whose double rounds to `2**63` gives an empty range, as
+  on NumPy's x86 builds.
+- `RandomState(bit_generator)` runs the legacy samplers on any bit generator
+  (`np.random.RandomState(new PCG64(42))`), with NumPy's `str()` (`RandomState(PCG64)`), `seed()`
+  refused on a non-MT19937 engine (`TypeError`), and both state forms: `get_state()` returns the legacy
+  MT19937 tuple, `get_state(legacy: false)` the dict (`NumPyRandom.State`: the bit generator's state
+  plus the cached Gaussian), and `set_state` accepts either. Consuming the cached Gaussian zeroes it,
+  as NumPy's `legacy_gauss` does. `get_bit_generator()` and `set_bit_generator(bitgen)` read and
+  hot-swap the `np.random` singleton's engine (the swap discards the cached Gaussian), and after a swap
+  the module's `np.random.seed(x)` re-seeds the new engine as NumPy's module function does
+  (`engine.state = type(engine)(x).state`, the cached Gaussian kept) — only that singleton: any other
+  `RandomState` over a non-MT19937 engine refuses to re-seed, NumPy's method behaviour. `Seed` records
+  the last legacy seed as a `uint`, NumPy's `[0, 2**32 - 1]`. `tomaxint`, `ranf` and `sample` (each also
+  taking the size as one `Shape`, as NumPy's `random_sample(size)` does) complete the legacy surface. Two
+  NumPy inputs never return (`zipf(a)` for `a >= 1025`, `vonmises` once `4*kappa^2` overflows); NumSharp
+  returns the distribution's limit there instead of hanging.
+- Sized legacy draws are fast without changing a bit.
+  - **Read-ahead uniforms.** They come through a buffer bulk-filled by the bit generator's vectorized `FillDouble`, which never draws past what NumPy's per-value calls would.
+  - **Setup hoisted.** Per-parameter setup that NumPy recomputes for every value runs once per call: Marsaglia-Tsang's `1/sqrt(9b)`, `exp(-lam)` and the PTRS constants, `log(1-p)`, `2^(a-1)`, the von Mises envelope, and HRUA's `sqrt` and four `loggam`s.
+  - **Memoized sub-terms.** Deterministic sub-terms are memoized: the binomial inversion's CDF walk, BTPE's Step50 and Step52 bounds, HRUA's per-candidate `loggam` sums, zipf's acceptance power and the small-sample urn walk's ratios. `multinomial` also memoizes the per-category binomial setups that NumPy's single-entry cache thrashes on.
+  - **Two-phase Gaussian fills.** The polar Gaussian fills (`standard_normal`, `normal`, `lognormal`, `standard_cauchy`, `wald`) run in two phases, so their `log`/`sqrt` chains overlap.
+
+  Every memoized value is the same expression over the same inputs, so the streams stay byte-identical. Measured against NumPy 2.4.2 (NPY/NS, one pinned P-core, turbo off, min over repeated sweeps):
+  - **Most samplers: 1.5–5.6×.** HRUA hypergeometric 4–5.6×, zipf 2–2.7×, poisson 1.6–2.3×, `lognormal` ~2×, the gamma family, chi-square, F and t with shapes ≥ 1 at 1.5–1.7×.
+  - **BTPE-sized `binomial`, and `multinomial` with such categories: ~1.4–1.5×.**
+  - **CRT-bound samplers: 1.2–1.5×.** This covers `weibull`, `power`, `vonmises` and gamma with shape < 1 (Johnk's algorithm), plus what builds on that gamma: `beta` with a shape ≤ 1, `standard_t` with `df < 2`, `negative_binomial` with `n < 1` and `dirichlet` with `alpha < 1`. Their remaining work is the same MSVC `pow`/`log`/`exp`/`cos` call NumPy makes per value, and a bit-identical faster one does not exist.
 - `np.random.default_rng(seed)` returns a `Generator` backed by `PCG64` and `SeedSequence`, with the
   modern ziggurat and bounded-integer algorithms used by NumPy 2.4.2.
+- The `Generator` has NumPy's whole distribution surface, on NumPy's modern algorithms rather than the
+  legacy ones. That covers `beta`, `binomial`, `chisquare`, `dirichlet`, `f`, `geometric`, `gumbel`,
+  `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`,
+  `multivariate_hypergeometric`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`,
+  `noncentral_f`, `pareto`, `poisson`, `power`, `rayleigh`, `standard_cauchy`, `standard_t`,
+  `triangular`, `vonmises`, `wald`, `weibull` and `zipf`. The modern details are reproduced:
+  - Ziggurat normals and exponentials under the gamma family.
+  - beta's tiny-shape and log-space paths.
+  - The HRUA hypergeometric with its `logfactorial` table, and an int64 zipf with its acceptance window.
+  - vonmises' wrapped-normal fallback above `kappa = 1e6`.
+  - noncentral chi-square's NaN short-circuit.
+  - Int64 integer outputs.
+
+  Every sampler matches `default_rng(seed)` bit for bit. The oracle checks 100 branch-reaching
+  parameter sets, 222 constraint corners (NumPy's messages and check order), 66 streams of 20000 draws
+  and 185 byte-parity corpus cases. `multinomial` has NumPy's vector path: counts broadcast against the
+  probabilities' leading axes, with `size` required to equal the broadcast shape. Array parameters pass
+  NumPy's `'safe'` casting gate, so a float or uint64 count, or complex probabilities, raise NumPy's
+  `TypeError`. Two documented exceptions:
+  - **`pareto` and `power`.** They call the C runtime's `expm1`. NumSharp reproduces it exactly outside
+    `[-ln 2, ln 1.5]`, but inside that band Windows' ucrtbase uses a closed approximation. Values there
+    can differ by up to 2 ulp for `pareto`. `power` raises the result to `1/a`, which scales the
+    difference: measured ≤1 ulp at `a = 2.5` and 9 ulp at `a = 0.3`.
+  - **`multivariate_normal`.** It is byte-identical with `NumSharp.Interop.OpenBLAS`, which supplies
+    NumPy's own `gesdd`/`syevd`/`potrf`. Without it, managed factorizations are exact for diagonal
+    covariances and agree to rounding for `cholesky`. For `svd`/`eigh` they may pick the other sign of
+    an eigenvector: still a valid sample, but not NumPy's.
+
+  The sized draws use the legacy sampler's techniques (read-ahead draws, per-fill setups, memoized
+  deterministic sub-terms) without changing a bit. Two are specific to the modern algorithms: HRUA's
+  setup is hoisted and each candidate's `logfactorial` sum memoized, and the urn walk keeps its
+  32-bit read-ahead in registers. Measured against NumPy 2.4.2 (NPY/NS, one pinned P-core, turbo off,
+  min over repeated sweeps):
+  - **1.5–3.1×.** `zipf` 2.3–3.1×, `standard_cauchy` 2.3–2.5×, `multinomial` 2.1–2.3×, HRUA
+    `hypergeometric` 2.1–2.2×, `geometric` inversion 2–2.3×, `multivariate_normal` 2–2.3×, `standard_t`
+    2×, `lognormal` 1.9×, `noncentral_f` and `noncentral_chisquare` (`df > 1`) 1.8–1.9×, `dirichlet`
+    (`alpha >= 0.1`) up to 1.8×, and `chisquare`, `f`, `beta` with shapes above 1 and small-mean
+    `binomial` at 1.5–1.7×.
+  - **1.1–1.5×.** BTPE `binomial` 1.4–1.5×, the urn-walk `hypergeometric` 1.35–1.4×, `logseries`,
+    `poisson`, the `geometric` search, `triangular`, `wald`, `laplace`, `gumbel`, `logistic` and
+    `rayleigh`, `multivariate_hypergeometric` 1–1.3×.
+  - **About 1× (the CRT ceiling).** `pareto`, `power`, `weibull`, `vonmises`, and Johnk's gamma/beta
+    (a shape below 1), with what builds on them: `dirichlet` with tiny alphas, `noncentral_chisquare`
+    with `df <= 1`, `negative_binomial`. They measure 0.96–1.2×. Each value's cost is the
+    `pow`/`log`/`exp`/`cos`/`expm1` call NumPy makes too.
+  - **`multinomial`'s broadcast path when every position brings a new `(count, probability)` pair: about
+    0.9×.** This is the same per-position BTPE setup NumPy runs. When pairs recur, it measures 2.2×.
+- Every sampler that takes parameters accepts them as arrays, on both `RandomState` and `Generator`, broadcast
+  the way NumPy broadcasts them. That covers `beta`, `binomial`, `chisquare`, `exponential`, `f`, `gamma`,
+  `geometric`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`,
+  `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `poisson`, `power`,
+  `rayleigh`, `standard_gamma`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull` and
+  `zipf`: `rs.normal(locs, 2.0)`, `g.poisson(column, new Shape(k, k))`. The flow is NumPy's `cont`/`disc`:
+  - Each parameter converts under NumPy's `'safe'` rule, so a complex parameter or a float count raises NumPy's
+    `TypeError`. When every parameter is 0-d the call takes the scalar path, so a 0-d array behaves exactly
+    like a number. A `null` stands for Python's `None`: the default where NumPy has one (`loc`, `scale`,
+    `lam`, …), otherwise NumPy's `None` handling.
+  - Constraints are checked over the whole array before anything is drawn, in NumPy's order and with its
+    array messages: `lam value too large` for a NaN mean, `-0.0` rejected wherever NumPy tests the sign bit.
+  - The output shape is `size` when given, else the parameters' broadcast shape. NumPy's `shape mismatch` and
+    `Output size (1,) is not compatible with broadcast dimensions of inputs (3,).` errors are reproduced;
+    `default` stands for `size=None` and `Shape.Scalar` for `size=()`. A given `size` is allocated before the
+    parameters are broadcast against it, as NumPy's `np.empty(size)` is. So a size that is too big to allocate
+    and also incompatible reports `array is too big`, not the shape mismatch.
+  - One value is drawn per output position, in C order, with that position's parameters, so the values and
+    the stream position after the call are byte-identical to NumPy. The oracle replays 834 legacy and 851
+    Generator array-parameter cases, 507 of them NumPy's constraint and broadcast errors. A mutation sweep
+    over the read-ahead decisions, the constraint scans and the per-run setup sharing is caught in full.
+  - The legacy samplers keep mtrand's own rules where they differ from the Generator's. `uniform` accepts
+    reversed bounds (only the range must be finite), `hypergeometric` checks `ngood + nbad < nsample` first
+    and has no `10^9` caps, `negative_binomial` has no Poisson-mean bound, and `binomial`'s `n` is a C `long`.
+    `laplace`, `gumbel` and `logistic` run the modern samplers on the MT19937 stream, as mtrand does.
+  - Legacy integer results model NumPy's LP64 `long`, as the scalar samplers do. NumPy's Windows build
+    (32-bit `long`) truncates or rejects some of those inputs, and its legacy HRUA `hypergeometric` never
+    returns for a population past `2**31` (`hypergeometric(2e9, 1.5e9, 12)`).
+  - NumPy's legacy samplers never return for two inputs: `zipf` with `a >= 1025` and `vonmises` with
+    `kappa >= 2**511`, where `4*kappa*kappa` overflows. NumSharp returns the distribution's limit there
+    without drawing, as its scalar samplers do.
+
+  Measured against NumPy 2.4.2 (NPY/NS, one pinned P-core, turbo off, best of 7, 1K / 100K / 1M values):
+  - **Parameters that repeat along the walk: the scalar samplers' speed.** This is a column against a row, or
+    a parameter stretched over a larger `size`. It is drawn run by run, each run of equal parameters like a
+    scalar fill: NumPy's per-call statements are computed once per run, and a long run also gets HRUA's,
+    zipf's and the urn walk's memos. Most samplers measure 1.5–5.3× (legacy HRUA `hypergeometric` 5.3×,
+    `uniform` 3.6–4.4×, `zipf` 2.9×, `binomial` 2.6–2.8×, `normal` 2.4–3.6×). The Generator's `poisson`, `f`,
+    `wald` and `negative_binomial` measure 1.1–1.4×, and the CRT-bound `vonmises`, `power` and `pareto`
+    1.06–1.35×, as their scalar fills do.
+  - **One transform per value: 1.3–4.4×.** This covers `normal`, `lognormal`, `exponential`, `uniform`,
+    `laplace`, `logistic`, `gumbel`, `rayleigh`, `triangular`, `wald` and `standard_t`, with any parameter
+    layout.
+  - **A new parameter at every position: 0.88–1.8×, per-call parity.** NumPy recomputes each sampler's
+    per-call setup for every value (`sqrt`/`log`/`exp`, and PTRS's, BTPE's or HRUA's constants), and so does
+    NumSharp. The fill's advantages (shared setups, memos) do not apply. The Generator's cells sit at the low
+    end because NumPy's PCG64 call path is cheap: `hypergeometric` 0.88–1.1×, `poisson` 0.91–1×, and `beta`,
+    `zipf`, `logseries`, `vonmises` and `power` 0.95–1.2×. Legacy `binomial` measures 0.91–1×. Its setups go
+    through RandomState's single-entry binomial cache, kept exactly as NumPy's because what one call leaves
+    in it is visible to the next. The Generator's `binomial` keeps a per-fill memo of recurring keys and
+    measures 1.2–2.4×.
+- All five NumPy bit generators exist — `PCG64`, `PCG64DXSM`, `Philox`, `SFC64` and `MT19937` — each a
+  `BitGenerator` with NumPy's surface: `random_raw`, `state` (typed `PCG64.State`, `Philox.State`, …),
+  `seed_seq`, `lock` and `spawn`. NumPy's spelling `np.random.Generator(np.random.Philox(seed))` works
+  verbatim — `np.random` carries a factory for every class NumPy's module exposes (`MT19937`, `PCG64`,
+  `PCG64DXSM`, `Philox`, `SFC64`, `SeedSequence`, `Generator`), each mirroring every constructor overload —
+  as does `new Generator(new Philox(seed))`, and either reproduces NumPy's stream byte for byte. `PCG64`,
+  `PCG64DXSM` and `Philox` have `advance(delta)` (any `BigInteger`, wrapped like NumPy's `wrap_int`)
+  and `jumped(n)`; `Philox` also takes an explicit `key`/`counter` (`new Philox(key: 5)`, NumPy's
+  integer and array forms and error texts included). As in NumPy, `new MT19937(42)` seeds through
+  `SeedSequence`; the legacy stream of `RandomState(42)` is `mt._legacy_seeding(42)`, and
+  `MT19937.jumped(n)` advances a copy by `n * 2**128` draws with NumPy's jump polynomial.
+- `SeedSequence` has NumPy's whole surface, with NumPy's types: `spawn(n)` (child `spawn_key`s — Python
+  ints, so `BigInteger`s — and `n_children_spawned`, a `uint32_t`), `pool_size` (a `Py_ssize_t`: `long`),
+  `pool` and `generate_state(n_words, dtype)` (uint32/uint64 `NDArray`s over a 64-bit count, with
+  NumPy's allocation errors), `state`, `entropy` (the 128-bit OS entropy of an unseeded sequence, to
+  log for reproducibility) and NumPy's repr. Entropy and spawn keys coerce exactly as NumPy's
+  `_coerce_to_uint32_array` does: nested sequences flatten, a `"0x…"` string is hex and a string that
+  starts with a digit is decimal (`"012"` is 12 — there is no octal reading), a string key is a
+  sequence of one-character strings. `BitGenerator.spawn(n)` and `Generator.spawn(n)` derive
+  independent children from it — the recommended way to hand streams to parallel workers. Any
+  `ISeedSequence` is accepted as a bit generator's seed (a `SeedlessSeedSequence` is refused as NumPy
+  refuses it: `seedless SeedSequences cannot generate state`); every engine names its parameter `seed` as
+  NumPy does, and a null one — a `null` literal or a typed null array alike — is NumPy's `seed=None` (fresh OS
+  entropy).
+- `default_rng` accepts every NumPy seed form: an integer (up to any `BigInteger`), a sequence or
+  integer array, a `SeedSequence`, a `BitGenerator` (wrapped), a `Generator` (passed through) or a
+  legacy `RandomState` (its engine is wrapped, as `default_rng(RandomState)` does). Every overload names
+  its parameter `seed`, NumPy's only parameter, and a null argument of any type is `default_rng(None)`.
+- `Generator.integers` and the legacy `randint` take NumPy's array bounds (`g.integers(lows, highs)`,
+  `rs.randint(0, highs, dtype: np.uint8)`) through NumPy's own broadcast path: each bound is checked against the
+  dtype and against the other in NumPy's order and words (`low is out of bounds for uint64`, `high <= 0`,
+  `low >= high`, `cannot convert float NaN to integer`) before anything is drawn, the draws continue one buffered
+  stream across positions, and NumPy's two quirks carry over — a `size` smaller than the bounds' broadcast takes the
+  first positions, and 64-bit float bounds in a non-C layout come out in NumPy's scrambled order. Bounds past
+  `long`/`ulong` are `BigInteger`s, NumPy's Python ints: `g.integers(0, BigInteger.Pow(2, 64), dtype: np.uint64)` is
+  the full-range idiom, and anything beyond a dtype raises NumPy's out-of-bounds message.
+- Every `Generator` and `RandomState` draw holds the bit generator's `lock`, so one generator (or
+  several over the same bit generator) can be shared between threads: each call consumes a contiguous
+  piece of the one stream.
+- **The whole random surface is oracle-checked, overload by overload.** Every public member — each
+  overload of `RandomState`, `Generator`, the five bit generators and their `State` classes,
+  `SeedSequence`, `SeedlessSeedSequence` and `default_rng`, 493 in all (four NumSharp-only members
+  exempt) — is replayed against NumPy 2.4.2 by its exact C# signature: every legacy sampler on the legacy
+  MT19937 and on `RandomState(engine)` for each engine, every `Generator` member on all five engines,
+  under 10 fixed seeds, comparing NumPy's result AND the generator's full state after the call (so drawing
+  one value too many or too few fails, not only a wrong value). CI gates prove the coverage itself —
+  every overload, every parameter (omitted, non-default, null, every accepted `dtype`/`method` value,
+  NumPy's parameter names in NumPy's order), every engine, every seed — and a nightly job replays the same
+  families under 10 fresh seeds. About 26,600 cases; the few intended differences (the modern
+  `pareto`/`power` within a few ULP where the Windows CRT's in-band `expm1` differs, and states NumPy
+  would store and then read outside an array) are listed in the fuzz README. A replay that invokes
+  overloads by reflection cannot tell whether NumPy's CALL compiles in C# and binds the right overload, so
+  1,793 of NumPy's spellings were also compiled verbatim and compared: every legacy sampler whose parameters
+  all default takes `size:` alone or any keyword subset, a `null` seed binds everywhere, and NumPy's
+  `size=None` is spelled `size: default` (a `Shape` is a struct, so `size: null` cannot compile).
 
 The familiar legacy example matches NumPy:
 
@@ -292,7 +493,15 @@ The complete 18-callable `np.fft` inventory is implemented in Core: complex, rea
 of NumPy 2.4.2's vendored pocketfft engine; it does not require OpenBLAS.
 
 The double/`complex128` path preserves pocketfft's operation order and is covered by byte-parity
-oracles across contiguous, transposed, strided, negative-stride, and broadcast-read inputs.
+oracles across contiguous, transposed, strided, negative-stride, and broadcast-read inputs. NumSharp
+evaluates pocketfft the way NumPy's x86-64 wheels do: each product rounded separately, with twiddle
+factors from the platform's math library. On x86-64 it therefore matches the NumPy running beside it,
+checked live on Windows and Linux. NumPy's own arm64 wheels are the exception. They are compiled with
+the compiler's default floating-point contraction for a baseline that has fused multiply-add, so
+pocketfft's twiddle and butterfly multiply-adds round once there. Most bins of an arm64 NumPy transform
+sit an ULP or so from NumSharp's, which is the literal evaluation. Because the twiddles come from the
+platform's math library, whose last bits differ between operating systems, a large transform's exact
+bits can also differ between hosts. NumSharp's are no exception.
 NumSharp also has a single-precision pocketfft engine, but it has no `complex64` storage dtype:
 `float16`/`float32` transform results are therefore exposed as `complex128`, where NumPy exposes
 `complex64`. The FFT oracle treats that as a documented dtype divergence while still checking the
@@ -350,9 +559,9 @@ scalar, and dtype edge cases.
 
 ## References
 
-- [NumPy API Coverage & Support](coverage-support-dashboard.md) — generated compiled-API inventory
-- [Unit Tests & Oracle](tests-oracle-dashboard.md) — generated correctness-evidence inventory
-- [Dtypes](dtypes.md) — NumSharp dtype and casting details
+- [NumPy API Coverage & Support](coverage-support-dashboard.md) - generated compiled-API inventory
+- [Unit Tests & Oracle](tests-oracle-dashboard.md) - generated correctness-evidence inventory
+- [Dtypes](dtypes.md) - NumSharp dtype and casting details
 - [NumPy 2.0 migration guide](https://numpy.org/doc/stable/numpy_2_0_migration_guide.html)
 - [NEP 50: Promotion rules for Python scalars](https://numpy.org/neps/nep-0050-scalar-promotion.html)
 - [NEP 52: Python API cleanup for NumPy 2.0](https://numpy.org/neps/nep-0052-python-api-cleanup.html)

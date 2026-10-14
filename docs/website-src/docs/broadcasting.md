@@ -1,6 +1,6 @@
 # Broadcasting
 
-Broadcasting allows arithmetic operations between arrays of different shapes. When you add a `(3, 4)` matrix to a `(4,)` vector, NumSharp automatically "broadcasts" the vector across each row—no explicit loops or copying required.
+Broadcasting allows arithmetic operations between arrays of different shapes. When you add a `(3, 4)` matrix to a `(4,)` vector, NumSharp automatically "broadcasts" the vector across each row-no explicit loops or copying required.
 
 ---
 
@@ -17,11 +17,11 @@ NumSharp follows NumPy's broadcasting rules exactly:
 ```csharp
 // (3, 4) + (4,) → (3, 4) + (1, 4) → (3, 4)
 var matrix = np.ones((3, 4));
-var row = np.array(new[] {1, 2, 3, 4});
+var row = np.array([1, 2, 3, 4]);
 var result = matrix + row;  // Shape: (3, 4)
 ```
 
-Broadcasting creates **views, not copies**. The stretched array doesn't allocate new memory—it uses stride tricks to repeat values virtually.
+Broadcasting creates **views, not copies**. The stretched array doesn't allocate new memory-it uses stride tricks to repeat values virtually.
 
 ---
 
@@ -58,7 +58,7 @@ Incompatible shapes throw `IncorrectShapeException`.
 Broadcasts an array to a specific shape. Returns a read-only view.
 
 ```csharp
-var a = np.array(new[] {1, 2, 3});
+var a = np.array([1, 2, 3]);
 var b = np.broadcast_to(a, (4, 3));
 // b.shape: (4, 3)
 // b[0]: [1, 2, 3]
@@ -77,7 +77,7 @@ np.broadcast_to(np.ones((1, 3)), (4, 3)); // OK: stretches 1 to 4
 Broadcasts multiple arrays against each other, returning views with a common shape.
 
 ```csharp
-var a = np.array(new[] {1, 2, 3});        // (3,)
+var a = np.array([1, 2, 3]);        // (3,)
 var b = np.array(new[,] {{1}, {2}});      // (2, 1)
 
 var (a_bc, b_bc) = np.broadcast_arrays(a, b);
@@ -91,11 +91,11 @@ NDArray[] results = np.broadcast_arrays(arr1, arr2, arr3);
 
 ### `np.broadcast(array1, array2, ...)`
 
-Returns an object that *encapsulates* the broadcast of its operands — NumSharp's port of NumPy's `numpy.broadcast`. It resolves the common shape without materializing data and exposes a flat iterator per operand.
+Returns an object that *encapsulates* the broadcast of its operands - NumSharp's port of NumPy's `numpy.broadcast`. It resolves the common shape without materializing data and exposes a flat iterator per operand.
 
 ```csharp
-var a = np.array(new long[] { 1, 2, 3 });        // (3,)
-var b = np.array(new long[,] { { 10 }, { 20 } });  // (2, 1)
+var a = np.array([1L, 2L, 3L]);        // (3,)
+var b = np.array([[10L], [20L]]);      // (2, 1)
 var bc = np.broadcast(a, b);
 
 bc.shape;     // (2, 3)
@@ -121,7 +121,7 @@ bc.index;     // 6  (== size, exhausted)
 bc.reset();   // bc.index == 0 again
 ```
 
-`np.broadcast` accepts **any number of operands** — NumPy caps the multi-iterator at 64 (`NPY_MAXARGS`); NumSharp imposes no cap, matching its `NDIter`. With zero operands it is a 0-d broadcast (`size` 1, `numiter` 0). Unlike NumPy's one-shot flatiters, the `.iters` are re-enumerable.
+`np.broadcast` accepts **any number of operands** - NumPy caps the multi-iterator at 64 (`NPY_MAXARGS`); NumSharp imposes no cap, matching its `NDIter`. With zero operands it is a 0-d broadcast (`size` 1, `numiter` 0). Unlike NumPy's one-shot flatiters, the `.iters` are re-enumerable.
 
 ### Implicit Broadcasting
 
@@ -129,7 +129,7 @@ All arithmetic operators broadcast automatically:
 
 ```csharp
 var a = np.ones((3, 4));
-var b = np.array(new[] {1, 2, 3, 4});
+var b = np.array([1, 2, 3, 4]);
 
 a + b;   // (3, 4)
 a - b;   // (3, 4)
@@ -144,7 +144,7 @@ a / b;   // (3, 4)
 Broadcasted arrays are **views** that share memory with the original:
 
 ```csharp
-var small = np.array(new[] {1, 2, 3});           // 3 elements
+var small = np.array([1, 2, 3]);           // 3 elements
 var big = np.broadcast_to(small, (1000000, 3));  // Appears as 3M elements
 
 // big.size == 3_000_000
@@ -167,10 +167,10 @@ NumSharp implements broadcasting through stride manipulation. When a dimension i
 - The **shape** shows the expanded size
 - The **stride** for that dimension is set to 0
 
-A stride of 0 means the index doesn't advance in memory—the same element is read repeatedly.
+A stride of 0 means the index doesn't advance in memory-the same element is read repeatedly.
 
 ```csharp
-var a = np.array(new[] {1, 2, 3});
+var a = np.array([1, 2, 3]);
 var b = np.broadcast_to(a, (4, 3));
 
 // b's internal representation:
@@ -202,7 +202,7 @@ var normalized = centered / std;             // (100, 5)
 ### Outer Product
 
 ```csharp
-var row = np.array(new[] {1, 2, 3});         // (3,)
+var row = np.array([1, 2, 3]);         // (3,)
 var col = np.array(new[,] {{10}, {20}});     // (2, 1)
 var outer = row * col;                       // (2, 3)
 ```
@@ -240,7 +240,7 @@ If you get a larger shape than expected, you may have accidentally broadcast:
 ```csharp
 var a = np.ones((10, 1));
 var b = np.ones((1, 10));
-var c = a + b;  // (10, 10) — both stretched!
+var c = a + b;  // (10, 10) - both stretched!
 ```
 
 ### Row vs Column Vector
@@ -248,7 +248,7 @@ var c = a + b;  // (10, 10) — both stretched!
 A 1-D array `(n,)` broadcasts as a **row** `(1, n)`, not a column:
 
 ```csharp
-var vec = np.array(new[] {1, 2, 3});  // (3,) — not (1, 3) or (3, 1)
+var vec = np.array([1, 2, 3]);  // (3,) - not (1, 3) or (3, 1)
 
 // To broadcast as column:
 var col = vec.reshape(3, 1);          // (3, 1)
@@ -265,7 +265,7 @@ var col = vec[np.newaxis].T;          // (3, 1)
 | `np.broadcast_to(arr, shape)` | Broadcast array to specific shape (returns view) |
 | `np.broadcast_arrays(a, b)` | Broadcast two arrays to common shape (returns tuple) |
 | `np.broadcast_arrays(params NDArray[])` | Broadcast multiple arrays (returns array) |
-| `np.broadcast(a, b, …)` | Broadcast object — common shape + per-operand `.iters`, iterable with `.index`/`.reset()` (NumPy's `numpy.broadcast`) |
+| `np.broadcast(a, b, …)` | Broadcast object - common shape + per-operand `.iters`, iterable with `.index`/`.reset()` (NumPy's `numpy.broadcast`) |
 
 | Property | Description |
 |----------|-------------|
