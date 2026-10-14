@@ -29,7 +29,7 @@ invocation's completion. Choosing the wrong attribute is a build error, not a si
 [Retained arguments (`[NDScopedExit]`)](#retained-arguments--ndscopedexit) ·
 [The `NDScope` API](#the-ndscope-api) · [Hand-scoping](#hand-scoping) ·
 [How the build step works](#how-the-build-step-works) · [When to use it](#when-to-use-it) ·
-[Leak detection (NDW012 / NDW013)](#leak-detection--ndw012--ndw013) ·
+[Leak detection (NDW012 / NDW013)](#leak-detection---ndw012--ndw013) ·
 [Escape hatches](#escape-hatches) · [Troubleshooting](#troubleshooting)
 
 > Mono.Cecil transform, invoked after each per-`TargetFramework` compile · net8.0 / net10.0.
@@ -166,7 +166,7 @@ Property`), and "method" is broader than it sounds:
 | property **getters** (property-level attribute resolves to the getter; NDW006 if setter-only) and accessors directly | ✔ woven |
 | **local functions** | ✔ woven - the attribute lands on the compiler-generated method and the weaver collects it |
 | `async` methods / async iterators / `yield return` iterators | ✔ woven through their state machines (see below) |
-| **virtual / abstract / interface members** | ✔ the attribute is a **contract**: every override and implementation is woven (see [Inheritance](#inheritance--virtual-abstract-and-interface-members)); the abstract/interface declaration itself has no body and is never woven - and never an error |
+| **virtual / abstract / interface members** | ✔ the attribute is a **contract**: every override and implementation is woven (see [Inheritance](#inheritance---virtual-abstract-and-interface-members)); the abstract/interface declaration itself has no body and is never woven - and never an error |
 | **constructors / finalizers** | ✘ not an attribute target (C# rejects it) - and a ctor's egress is typically a *field*, which the weave cannot express; [hand-scope](#hand-scoping) with `_field = scope.Returns(...)` |
 | lambdas | ✘ not attributable - a lambda that runs *while* the scope is open is covered by the ambient scope; one that **escapes and runs later** (a stored delegate, deferred LINQ) runs unscoped (finalizer backstop) |
 
@@ -387,7 +387,7 @@ assembly, before it is copied to the output:
   *referenced* NumSharp assembly, so the target hands the weaver the compiler's own reference list
   (a response file of `@(ReferencePathWithRefAssemblies)`); the weaver resolves the types through
   it and emits cross-assembly member references. The same list is how an override's base chain and
-  interfaces are walked for an [inherited](#inheritance--virtual-abstract-and-interface-members)
+  interfaces are walked for an [inherited](#inheritance---virtual-abstract-and-interface-members)
   attribute, which is why the target spawns the tool for every compile that references NumSharp -
   an override-only assembly has no attribute text for the cheap pre-scan to find. NumSharp.Core's
   self-weave runs the same target; there the types are in-module, so the list is merely the
@@ -582,7 +582,7 @@ there, which makes it present whenever they could be used and lets it fire when 
   `PackageReference` compile reports NDW013 **at each member the weaver would have woven** - with a
   source location, in the IDE as well as on the command line - when the build has declared the weaver
   inactive: a method or property carrying `[NDScoped]`/`[NDScopedAsync]` itself, an override or
-  implementation [inheriting](#inheritance--virtual-abstract-and-interface-members) one from a
+  implementation [inheriting](#inheritance---virtual-abstract-and-interface-members) one from a
   declaration in the same assembly or another (the shape no text scan can see - the override spells no
   attribute of its own), and a method with an own or inherited `[NDScopedExit]` parameter. Abstract and
   interface declarations are contracts (nothing is woven there; their inheritors are warned one by one),
@@ -691,7 +691,7 @@ Same code, same fix, whichever layer fires.
 | `NDW002` | a `ref`/`in` parameter over any NDArray-carrying shape (`ref NDArray`(`[]`), a tuple with an `NDArray` component, a carrier struct, a `List<NDArray>`) - a hidden egress | [hand-scope](#hand-scoping) and yield it explicitly |
 | `NDW003` | an unsupported carrier return (a bespoke reference type, a collection, a struct without `INDArrayCarrier`, a nested `Task<Task<…>>`, or a tuple with an unsupported ND-carrying component) | implement `INDArrayCarrier` on the struct, or hand-scope |
 | `NDW004` | an async/iterator state machine the weaver does not recognize (not compiled by Roslyn/C#: no `MoveNext`, no `<>t__builder` / `<>2__current`) | compile the method with the C# compiler, or don't scope it (real C# async/iterator methods weave fine) |
-| `NDW005` | the method has no body **and no inheritors** - an `extern` (an abstract or interface declaration carrying the attribute is the [contract its overrides inherit](#inheritance--virtual-abstract-and-interface-members), not an error) | remove the attribute |
+| `NDW005` | the method has no body **and no inheritors** - an `extern` (an abstract or interface declaration carrying the attribute is the [contract its overrides inherit](#inheritance---virtual-abstract-and-interface-members), not an error) | remove the attribute |
 | `NDW006` | `[NDScoped]`/`[NDScopedAsync]` on a setter-only property | put the attribute on the getter accessor |
 | `NDW007` | the body contains a tail-call prefix | (the C# compiler does not emit these; refuse rather than mis-weave) |
 | `NDW008` | an async/iterator/Task-shaped target, but the referenced NumSharp predates the async scope seam | update the `NumSharp` package |
@@ -699,7 +699,7 @@ Same code, same fix, whichever layer fires.
 | `NDW010` | a plain synchronous method or a **synchronous** iterator marked `[NDScopedAsync]` | mark it `[NDScoped]` (synchronous bodies and synchronous iterators are its job) |
 | `NDW011` | a method carries BOTH `[NDScoped]` and `[NDScopedAsync]` | keep only the one that matches the method's scoping model |
 | [`NDW012`](#ndw012) | an NDArray is created but never returned, out/ref'd, stored, disposed, or yielded to an `NDScope` - a transient left to the finalizer | mark the method `[NDScoped]`/`[NDScopedAsync]`, dispose it (`using`/`.Dispose()`), yield it via `scope.Returns(...)`, or hand it to an egress; tune via `.editorconfig` (`dotnet_diagnostic.NDW012.severity`) |
-| [`NDW013`](#ndw013) | `[NDScoped]`/`[NDScopedAsync]`/`[NDScopedExit]` used - carried by the member itself, or [inherited](#inheritance--virtual-abstract-and-interface-members) from a declaration in this or another assembly - but the `NumSharp.Build` package is not installed (or `-p:SkipNDScopeWeave=true`): the attributes are inert and the temporaries leak. Reported per member by the analyzer; project-wide by the MSBuild fallback scan when no analyzer runs | install `NumSharp.Build`, or remove the attributes (mark an inheriting override `[NDScopedCovered]`; detach a retained argument by hand with `NDScope.Detach`) and dispose by hand; suppress with `-p:NumSharpDisableWeaverMissingWarning=true` |
+| [`NDW013`](#ndw013) | `[NDScoped]`/`[NDScopedAsync]`/`[NDScopedExit]` used - carried by the member itself, or [inherited](#inheritance---virtual-abstract-and-interface-members) from a declaration in this or another assembly - but the `NumSharp.Build` package is not installed (or `-p:SkipNDScopeWeave=true`): the attributes are inert and the temporaries leak. Reported per member by the analyzer; project-wide by the MSBuild fallback scan when no analyzer runs | install `NumSharp.Build`, or remove the attributes (mark an inheriting override `[NDScopedCovered]`; detach a retained argument by hand with `NDScope.Detach`) and dispose by hand; suppress with `-p:NumSharpDisableWeaverMissingWarning=true` |
 | `NDW014` | `[NDScopedExit]` on an unsupported parameter type (a `ref`/`out`/`in`, a scalar, a bare buffer, an `INDArrayCarrier` struct, or a tuple with an ND-carrying component `Detach` cannot see through) | hand-detach with `NDScope.Detach` |
 | `NDW015` | an `out` parameter whose NDArray-carrying shape the out-escape cannot yield (`out List<NDArray>`, `out Task<NDArray>`, `out NDArray[,]`, `out T` with `T : NDArray`) | [hand-scope](#hand-scoping) and yield the final value explicitly |
 | [`NDW016`](#ndw016) | a class/struct stores NDArrays (a field or auto-property holding an NDArray, an array/tuple/collection/generic of them, a carrier struct, or another NDArray-owning type - ownership is contagious) but implements neither `IDisposable` nor `IAsyncDisposable` | implement `IDisposable`/`IAsyncDisposable` and dispose the members, make a transient result struct an `INDArrayCarrier`, give a `ref struct` a `Dispose()`, or mark a member / the type `[NDBorrowed]` when the arrays are owned elsewhere |
