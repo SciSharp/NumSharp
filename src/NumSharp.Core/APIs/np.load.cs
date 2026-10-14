@@ -26,8 +26,10 @@ namespace NumSharp
         /// </param>
         /// <param name="allow_pickle">
         ///     Whether to trust the file. Default false, as in NumPy since 1.16.3: an object array is a
-        ///     Python pickle, and unpickling untrusted data can execute arbitrary code. NumSharp cannot
-        ///     unpickle at all, so this only selects the error message — and, per NumPy, lifts
+        ///     Python pickle, and unpickling untrusted data can execute arbitrary code in NumPy. With true,
+        ///     NumSharp reads the one pickle it can represent — NumPy's pickle of a NEP 55 <c>StringDType</c>
+        ///     array, in a <c>.npy</c> file, an <c>.npz</c> member or a bare pickle file — without executing
+        ///     anything it names, and refuses every other pickle. Per NumPy it also lifts
         ///     <paramref name="max_header_size"/>.
         /// </param>
         /// <param name="fix_imports">
@@ -49,7 +51,13 @@ namespace NumSharp
         ///     <para>An <see cref="NpzFile"/> owns a file handle and must be disposed.</para>
         /// </returns>
         /// <exception cref="EndOfStreamException">The file is empty.</exception>
-        /// <exception cref="FormatException">The content is not a .npy or .npz file, or is malformed.</exception>
+        /// <exception cref="FormatException">The content is not a .npy or .npz file, or is malformed; or it is a pickle and
+        ///     <paramref name="allow_pickle"/> is false (NumPy's texts).</exception>
+        /// <exception cref="NotSupportedException">A pickle that is not NumPy's pickle of a <c>StringDType</c> array.</exception>
+        /// <exception cref="ValueError"><c>Array can't be memory-mapped: Python objects in dtype.</c> (a pickled file with a
+        ///     <paramref name="mmap_mode"/>).</exception>
+        /// <exception cref="UnicodeError">A <c>.npy</c> pickle whose text is not UTF-8: NumPy's <c>Unpickling a python object
+        ///     failed: UnicodeDecodeError(...)</c> text (a <see cref="ValueError"/>, as in Python).</exception>
         /// <example>
         /// <code>
         /// var arr = (NDArray)np.load("data.npy");
@@ -140,7 +148,11 @@ namespace NumSharp
         /// <param name="file">Path to a <c>.npy</c> file.</param>
         /// <param name="allow_pickle">Whether the file is trusted; see <see cref="load(string, string, bool, bool, string, long)"/>.</param>
         /// <param name="max_header_size">Reject headers larger than this.</param>
-        /// <exception cref="FormatException">The file is not a .npy file, or is malformed.</exception>
+        /// <exception cref="FormatException">The file is not a .npy file, or is malformed; or it holds a pickle (a
+        ///     <c>StringDType</c> array) and <paramref name="allow_pickle"/> is false.</exception>
+        /// <exception cref="NotSupportedException">A pickle that is not NumPy's pickle of a <c>StringDType</c> array.</exception>
+        /// <exception cref="UnicodeError">A pickled text that is not UTF-8 (NumPy's <c>Unpickling a python object failed</c>
+        ///     text).</exception>
         public static NDArray load_npy(string file, bool allow_pickle = false, long max_header_size = NpyFormat.MaxHeaderSize)
         {
             if (file == null) throw new ArgumentNullException(nameof(file));
@@ -310,17 +322,14 @@ namespace NumSharp
                 return NpyFormat.ReadArray(stream, allowPickle, maxHeaderSize);
             }
 
-            // Neither magic matched. NumPy assumes a bare pickle here and tries to unpickle it;
-            // NumSharp has no pickle reader, so both branches end in an error — but the allow_pickle=False
-            // one is NumPy's verbatim message, which is what a user porting code will recognize.
+            // Neither magic matched. NumPy assumes a bare pickle here and unpickles it when allowed; NumSharp reads the
+            // pickle it can represent (NumPy's pickle of a StringDType array, protocols 2-5) and refuses any other.
             if (!allowPickle)
                 throw new FormatException(
                     "This file contains pickled (object) data. If you trust the file you can load it unsafely " +
                     "using the `allow_pickle=` keyword argument or `pickle.load()`.");
 
-            throw new NotSupportedException(
-                "This file is not a .npy or .npz file. NumPy would try to unpickle it, which NumSharp cannot do: " +
-                "the Python pickle protocol is not implemented. Re-save the data from NumPy with np.save.");
+            return NpyPickle.ReadStringDTypeArray(stream);
         }
 
         private static void CheckEncoding(string encoding)

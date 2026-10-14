@@ -139,8 +139,45 @@ owns the allocator, so views keep it alive). Rules a new route must keep:
 - The oracle carries `T` values as values, never cells (`"t"` + `"values"`, `{"na": true}`), and compares `tobytes()`
   cells with the heap pointers masked; sections `tstore` / `tcreate` / `tmove` / `tcast` (8,324 strict).
 - NumPy 2.4.2 bugs on `T` that NumSharp does not reproduce (pinned by unit tests, kept out of the corpus): `np.place`
-  segfaults, `np.choose` / `np.put` / `np.putmask` copy cells raw, `bytes → T` skips UTF-8 validation, `T → complex` puts the
-  real part into the imaginary part, a short cell copied onto itself (`a[...] = a[:1]`) becomes `''`.
+  segfaults, `ndarray.byteswap()` segfaults (NumSharp returns a copy, or the array itself with `inplace: true`: a cell has
+  no byte order — owner's decision D14, 2026-10-14), `np.choose` / `np.put` / `np.putmask` copy cells raw, `bytes → T`
+  skips UTF-8 validation, `T → complex` puts the real part into the imaginary part, a short cell copied onto itself
+  (`a[...] = a[:1]`) becomes `''`.
+- **`.npy` / `.npz` hold a `T` array as NumPy's pickle (P1.7e, 2026-10-14; owner's decision D3).** NumPy writes the header
+  `'descr': '|O'` and `pickle.dump(array, protocol=4)`; `IO/NpyPickle.cs` writes the same bytes and reads them back,
+  for a `T` array ONLY (NumSharp has no general unpickler):
+  - **Writer** = CPython 3.12's C pickler for that object graph: a frame is committed at the first `save()` that finds it at
+    64 KiB or more (EVERY save starts with that boundary check, atoms too), a frame under 4 bytes loses its header, a payload
+    of 64 KiB or more goes outside the frames, `MEMOIZE` per memoized object, `BINGET` only where CPython hands out the SAME
+    object (its cached strings `''` and one character below U+0100, and the na_object), `MARK … APPENDS` per 1000 items (a
+    one-element list is item + `APPEND`). Elements in C logical order; `is_fortran` for an F-and-not-C array. The writer
+    refuses an na_object with no pickle form it writes (`Half`, `decimal`).
+  - **Reader** = the binary opcodes of protocols 2–5 over inert values (a global is two names, a `REDUCE` a record, nothing
+    is ever called), then exactly NumPy's graph (`_reconstruct(ndarray, (0,), b'b')` + `(1, shape,
+    _convert_to_stringdtype_kwargs(coerce[, na]), is_fortran, [elements])`); any other pickle is refused by name. The whole
+    pickle sits in ONE buffer from `SizeBucketedBufferPool` (raw `NativeMemory` there failed the oracle gate
+    `EveryRawNativeAllocation_IsAKnownChokepoint`), each text is an offset into it, and its UTF-8 bytes are packed straight
+    into its cell (validated strictly when read; a string na_object compared by bytes), with the arena reserved once — no
+    string per element: 1M elements load in 80 ms (NumPy 230 ms; the string-per-element reader took 341 ms). The buffer
+    grows only by what the stream delivers (a frame claiming 1 TB is a FormatException, never an allocation). An F array is
+    filled in C order at F positions (the arena order NumPy's `_setlist_pkl` gives). A sparse `LONG_BINPUT` goes to a
+    dictionary and counts towards `memo_len` as in CPython.
+  - **NumPy's texts:** `Object arrays cannot be loaded when allow_pickle=False` (house FormatException), `Object arrays cannot
+    be saved when allow_pickle=False` (ValueError, after the header), `Array can't be memory-mapped: Python objects in
+    dtype.`, and `read_array`'s `UnicodeError: Unpickling a python object failed: UnicodeDecodeError('utf-8', b'\xff', 0, 1,
+    'invalid start byte')` + its `encoding=` line for a text that is not UTF-8 (`UnicodeDecodeError` now carries CPython's
+    five arguments for that repr). NumPy ignores the header's shape and order for a pickle; so does NumSharp.
+  - Speed (NPY/NS, two pinned P-cores; 1K / 100K / 1M): `np.save` 3.5× / 6.5× / 9.5×, `np.load` 4.1× / 2.3× / 2.9×.
+  - Gates: the `.npy` oracle (`gen_npy_oracle.py` section 12: `tpickle` 39 byte-exact writes + reads with memory-order
+    cells, `tpickle_raw` protocols 2–5 and an F source, `tnpz`; 404 cases), `IO/NpyOracleStringDTypeTests.cs`,
+    `IO/NpyStringDTypePickleTests.cs` (several pickles in one stream, hostile lengths, the memo, refusals), the reverse
+    gate `python test/oracle/verify_npy_interop.py` (NumPy reads 7 `T` files and an `.npz` member NumSharp wrote, each
+    byte-identical to NumPy's own `write_array`), a mutation pass over the final code (19 planted bugs, 10 in the writer
+    and 9 in the reader, all killed), and a guard-page run of the `.npy` tests.
+  - Traps: `_data + Take(n)` reads the buffer pointer BEFORE the call that can move it (C# evaluates left to right): take
+    the offset into a local first. `zipfile.writestr(name, bytes)` stamps the CURRENT time, so a generator that writes
+    `.npz` files that way is not reproducible: use `ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))`. A base64 or hex
+    literal split by hand across lines silently changes; generate the chunks.
 - **np.nditer buffers and casts a `T` operand (P1.7, 2026-10-13).** Each buffer of a `T` side owns a `VStringAllocator`
   (NumPy's allocator belongs to the descriptor, NumSharp's to the cells' memory block): `NDIterVStringContext`
   (`Backends/Iterators/NDIter.VString.cs`), held by the state as a GCHandle and freed in `FreeDimArrays`; transfers are
@@ -214,7 +251,7 @@ owns the allocator, so views keep it alive). Rules a new route must keep:
   - Found and NOT fixed (pre-existing): `NDArray.view()` of a DISPOSED array returns a live view over the freed buffer
     (`InitializeArc` ignores `TryAddRef`'s failure).
   Gates: string-oracle section `tma` (4,167 cases, 437 deferred = the section's ceiling) + `Ma/np.ma.StringDType.Test.cs`.
-- Still refused loudly (P1.7 / phase 2): `.npy`, `loadtxt` / `savetxt`, and computation (comparisons, `np.sum`, sorting,
+- Still refused loudly (P1.7 / phase 2): `loadtxt` / `savetxt`, and computation (comparisons, `np.sum`, sorting,
   `np.strings`).
 - **The pythonnet bridge carries text (P1.8, 2026-10-13; owner's decision D7 = NumPy's C API).** `S` / `U` are ordinary
   buffers and VIEW both ways (`<U1` and a 4-byte `wchar_t` buffer import as `U1`, never `Char` — breaking; big-endian `U`

@@ -6,7 +6,7 @@ Conversion between text and numbers works as in NumPy: a number written into a t
 
 Computing on text arrives in stages. Comparisons, truth values, concatenation and repetition compute now, with NumPy's results. Sorting, searching and the other `np.strings` functions throw `StringComputationNotSupportedException` until their stage lands. Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
 
-NumPy 2's variable-width `StringDType` (`T`) stores, reads, writes, copies, casts and prints as in NumPy too; computing on it is the next phase (see [Variable-width text: `StringDType`](#variable-width-text-stringdtype)). NumPy's raw `void` (`V`) and `object` (`O`) dtypes stay unsupported.
+NumPy 2's variable-width `StringDType` (`T`) stores, reads, writes, copies, casts, prints and goes to `.npy` files as in NumPy too; computing on it is the next phase (see [Variable-width text: `StringDType`](#variable-width-text-stringdtype)). NumPy's raw `void` (`V`) and `object` (`O`) dtypes stay unsupported.
 
 <!-- Tests: NumSharp.Tests.Documentation.FundamentalsStringsBytesDocTests - every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/FundamentalsStringsBytesDocTests.cs. Section → method(s):
      The two string dtypes → TwoStringDtypes_WidthAndItemSize, TwoStringDtypes_RawBytes
@@ -17,8 +17,8 @@ NumPy 2's variable-width `StringDType` (`T`) stores, reads, writes, copies, cast
      Converting between text and numbers → Converting_NumbersToText, Converting_TextToNumbers, Converting_StoresAndUfuncs, Converting_CSharpStringIsText
      Printing → Printing_StrAndRepr
      Computing on text → Computing_Comparisons, Computing_TruthValues, Computing_ConcatenationAndRepetition, Computing_NumPyRefusals, Computing_NextPhase, Computing_NeverEqualToNumbers, Computing_ChecksInNumPysOrder
-     Variable-width text: StringDType → StringDType_Creating, StringDType_NAObjects, StringDType_WritingElements, StringDType_MovingAndCasting, StringDType_Refusals
-     .npy files → Npy_RoundTrip, Npy_CharWritesAsU1
+     Variable-width text: StringDType → StringDType_Creating, StringDType_NAObjects, StringDType_WritingElements, StringDType_MovingAndCasting, StringDType_Nditer, StringDType_Refusals, StringDType_ByteswapIsACopy
+     .npy files → Npy_RoundTrip, Npy_CharWritesAsU1, Npy_StringDTypeIsNumPysPickle
      The Char dtype → Char_IsTwoByteUtf16CodeUnit
      Byte streams via np.frombuffer → Bytes_ViaFrombuffer -->
 
@@ -413,12 +413,13 @@ using (var it = np.nditer(t, new[] { "refs_ok", "buffered" }, new[] { "readwrite
 |------|----------|
 | `view(another dtype)`, `memoryview` (`.data`), `np.frombuffer(..., "T")` | NumPy's errors: a cell is not raw text |
 | `np.ndarray(shape, "T", buffer: ...)` | `ArgumentException`. NumPy reads the bytes as cells; a cell holds an arena offset or a heap pointer, so NumSharp refuses |
-| `.npy` files, `loadtxt` / `savetxt`, numpy.ma with `StringDType` | not yet (a later package) |
+| `loadtxt` / `savetxt` with `StringDType` | not yet (a later package) |
 | Computation: `==`, `np.sum`, `np.sort`, `np.strings.*` | `StringComputationNotSupportedException` or `NotSupportedException` (phase 2) |
 
 NumPy 2.4.2 has bugs on `StringDType` that NumSharp does not reproduce; NumSharp gives the correct answer:
 
 - `np.place` over a `StringDType` array crashes the process (a segmentation fault).
+- `ndarray.byteswap()` over a `StringDType` array crashes the process (a segmentation fault). A cell has no byte order (the descriptor's `byteorder` is `'|'`), so NumSharp returns a copy, and with `inplace: true` the array itself.
 - `np.choose`, `np.put` and `np.putmask` copy the cells raw: an arena string gives garbage.
 - The `bytes` to `StringDType` cast does not validate UTF-8, so a later read of the element raises. NumSharp raises the `UnicodeDecodeError` at the cast.
 - The `StringDType` to `complex` cast writes the real part into the imaginary part too.
@@ -439,6 +440,20 @@ np.save(stream, names);
 stream.Position = 0;
 np.load_npy(stream);    // array(['cat', 'dog', 'bird'], dtype='<U4')
 ```
+
+A `StringDType` array has no fixed-size bytes to write, so NumPy writes a pickle: the header names `|O`, and the data is `pickle.dump(array, protocol=4)`. `np.save` writes the same bytes as `numpy.save`, and `np.load(allow_pickle: true)` reads them, NA values, `na_object` and `coerce` included. As in NumPy, loading without `allow_pickle` refuses. `.npz` archives hold `StringDType` members the same way.
+
+```csharp
+var words = np.array(new object[] { "cat", null }, np.dtypes.StringDType(na_object: null));
+var stream = new MemoryStream();
+np.save(stream, words);                     // the bytes numpy.save writes
+stream.Position = 0;
+np.load_npy(stream, allow_pickle: true);    // array(['cat', None], dtype=StringDType(na_object=None))
+stream.Position = 0;
+np.load_npy(stream);                        // FormatException: Object arrays cannot be loaded when allow_pickle=False
+```
+
+NumSharp reads only the pickle NumPy writes for a `StringDType` array. It has no general unpickler: a pickle of anything else (an object array, a Python `dict`, a call to a Python function) is refused, and nothing in the file runs. `np.save(..., allow_pickle: false)` raises NumPy's `ValueError: Object arrays cannot be saved when allow_pickle=False`, and `mmap_mode` raises `ValueError: Array can't be memory-mapped: Python objects in dtype.`
 
 ---
 

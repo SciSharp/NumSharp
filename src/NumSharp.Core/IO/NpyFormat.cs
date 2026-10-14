@@ -46,7 +46,10 @@ namespace NumSharp.IO
     ///       <item><c>'&lt;c8'</c> (complex64) widens to <see cref="System.Numerics.Complex"/> on read;
     ///             writing always emits <c>'&lt;c16'</c>.</item>
     ///       <item><c>Decimal</c> has no NumPy dtype and cannot be written.</item>
-    ///       <item>Object arrays, structured dtypes, datetime64/timedelta64 and void are parsed but rejected
+    ///       <item>A NEP 55 <c>StringDType</c> array is written as NumPy writes it: the header says <c>'|O'</c>
+    ///             and the data is NumPy's protocol-4 pickle of the array, byte for byte; such a file (and NumPy's)
+    ///             loads with <c>allow_pickle=True</c> (<see cref="NpyPickle"/>, decision D3).</item>
+    ///       <item>Other object arrays, structured dtypes, datetime64/timedelta64 and void are parsed but rejected
     ///             with a precise message (see the issue's "What We're Not Doing").</item>
     ///     </list>
     /// </remarks>
@@ -275,19 +278,25 @@ namespace NumSharp.IO
 
         /// <summary>
         ///     The <c>descr</c> string for a NumSharp descriptor — NumPy's <c>dtype_to_descr</c>: a fixed-width string
-        ///     descriptor writes its own <c>str</c> (<c>'|S5'</c>, <c>'&lt;U3'</c>, native order as NumSharp stores it),
-        ///     every other dtype the descr of its storage lane (<see cref="DtypeToDescr(NPTypeCode)"/>).
+        ///     descriptor writes its own <c>str</c> (<c>'|S5'</c>, <c>'&lt;U3'</c>, native order as NumSharp stores it), a
+        ///     NEP 55 <c>StringDType</c> descriptor <c>'|O'</c> (NumPy "lies that the dtype is object" and pickles the array,
+        ///     because a new-style dtype has no array-interface descr), every other dtype the descr of its storage lane
+        ///     (<see cref="DtypeToDescr(NPTypeCode)"/>).
         /// </summary>
         /// <param name="dtype">The descriptor of the array being written.</param>
         /// <returns>The header's descr.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
         /// <exception cref="NotSupportedException">The dtype has no NumPy equivalent (Decimal).</exception>
+        /// <remarks>NumPy also warns <c>UserWarning: Custom dtypes are saved as python objects using the pickle
+        ///     protocol</c> for a <c>StringDType</c>; NumSharp has no warnings channel and writes the same file silently.</remarks>
         public static string DtypeToDescr(DType dtype)
         {
             if (dtype is null)
                 throw new ArgumentNullException(nameof(dtype));
             if (dtype.Meta is StringDTypeMeta)
                 return dtype.isnative ? dtype.str : dtype.newbyteorder("=").str;
+            if (dtype.Meta is VStringDTypeMeta)
+                return "|O";
             return DtypeToDescr(dtype.GetTypeCode());
         }
 
@@ -780,10 +789,14 @@ namespace NumSharp.IO
         /// <param name="array">The array to write. Any layout; non-contiguous is materialized C-order.</param>
         /// <param name="version">The format version, or null (default) for the oldest that fits.</param>
         /// <param name="allowPickle">
-        ///     Present for NumPy parity. NumSharp has no object dtype, so no array can reach the pickle
-        ///     path and this parameter never changes the outcome.
+        ///     Whether a pickle may be written. Only a NEP 55 <c>StringDType</c> array needs one (NumPy pickles it behind a
+        ///     <c>'|O'</c> header); with <c>false</c> such an array raises NumPy's error AFTER its header is written, as
+        ///     NumPy's <c>write_array</c> does. Every other dtype ignores it.
         /// </param>
-        /// <exception cref="NotSupportedException">The dtype has no NumPy equivalent (Decimal).</exception>
+        /// <exception cref="NotSupportedException">The dtype has no NumPy equivalent (Decimal), or a <c>StringDType</c>
+        ///     missing-data object has no pickle form NumSharp writes (see <see cref="NpyPickle"/>).</exception>
+        /// <exception cref="ValueError"><c>Object arrays cannot be saved when allow_pickle=False</c>: a <c>StringDType</c>
+        ///     array with <paramref name="allowPickle"/> false (the header is already in <paramref name="stream"/>).</exception>
         public static void WriteArray(Stream stream, NDArray array, FormatVersion? version = null, bool allowPickle = true)
         {
             if (stream == null) throw new ArgumentNullException(nameof(stream));
@@ -791,6 +804,16 @@ namespace NumSharp.IO
             if (version.HasValue) CheckVersion(version.Value);
 
             WriteArrayHeader(stream, HeaderDataFromArray(array), version);
+
+            // A StringDType array is NumPy's "object" case: its cells hold allocator offsets and pointers, so NumPy writes
+            // a pickle of the array instead of raw bytes, and checks allow_pickle only once the header is out.
+            if (array.Storage.IsVString)
+            {
+                if (!allowPickle)
+                    throw new ValueError("Object arrays cannot be saved when allow_pickle=False");
+                NpyPickle.WriteStringDTypeArray(stream, array);
+                return;
+            }
 
             // NumPy writes an F-contiguous array as its transpose in C-order — the transpose of an
             // F-contiguous array is C-contiguous, so this streams the same bytes the file needs.
@@ -869,11 +892,20 @@ namespace NumSharp.IO
         /// </summary>
         /// <param name="stream">A stream positioned at the magic string.</param>
         /// <param name="allowPickle">
-        ///     Whether the caller trusts this file. NumSharp cannot unpickle either way, but this
-        ///     selects which error an object array produces and, per NumPy, lifts
-        ///     <paramref name="maxHeaderSize"/>.
+        ///     Whether the caller trusts this file. A <c>'|O'</c> file holds a pickle: without it NumPy's error, with it
+        ///     NumSharp reads NumPy's pickle of a <c>StringDType</c> array (and refuses any other pickle). Per NumPy it also
+        ///     lifts <paramref name="maxHeaderSize"/>.
         /// </param>
         /// <param name="maxHeaderSize">Reject headers larger than this. Ignored when <paramref name="allowPickle"/>.</param>
+        /// <returns>The array; for a pickled file the shape and layout the PICKLE states (NumPy ignores the header's for an
+        ///     object array).</returns>
+        /// <exception cref="FormatException">A malformed file, or <c>Object arrays cannot be loaded when
+        ///     allow_pickle=False</c>.</exception>
+        /// <exception cref="NotSupportedException">A dtype NumSharp cannot represent, or a pickle that is not NumPy's pickle
+        ///     of a <c>StringDType</c> array.</exception>
+        /// <exception cref="UnicodeError">A pickled text that is not UTF-8: NumPy's <c>Unpickling a python object failed:
+        ///     UnicodeDecodeError('utf-8', b'\xff', 0, 1, 'invalid start byte')</c> text (and its line about
+        ///     <c>encoding=</c>), with the <see cref="UnicodeDecodeError"/> as the inner exception.</exception>
         public static NDArray ReadArray(Stream stream, bool allowPickle = false, long maxHeaderSize = MaxHeaderSize)
         {
             if (stream == null) throw new ArgumentNullException(nameof(stream));
@@ -892,9 +924,22 @@ namespace NumSharp.IO
             {
                 if (!allowPickle)
                     throw new FormatException("Object arrays cannot be loaded when allow_pickle=False");
-                throw new NotSupportedException(
-                    "Object arrays are stored as a Python pickle stream, which NumSharp cannot read. " +
-                    "Re-save the array from NumPy with a concrete numeric dtype.");
+                // NumPy unpickles whatever the file holds and returns it, ignoring the header's shape and order; NumSharp
+                // reads the one pickle it can represent, NumPy's pickle of a StringDType array (decision D3).
+                try
+                {
+                    return NpyPickle.ReadStringDTypeArray(stream);
+                }
+                catch (UnicodeError err)
+                {
+                    // read_array's "friendlier error message" around the unpickler's UnicodeError (a text that is not
+                    // UTF-8), raised from it as NumPy does.
+                    string repr = err is UnicodeDecodeError decode
+                        ? decode.PythonRepr()
+                        : $"{err.GetType().Name}({NumSharp.Backends.Printing.PyRepr.Str(err.Message)})";
+                    throw new UnicodeError(
+                        $"Unpickling a python object failed: {repr}\nYou may need to pass the encoding= option to numpy.load", err);
+                }
             }
 
             foreach (long dim in header.Shape)
@@ -1261,7 +1306,16 @@ namespace NumSharp.IO
         ///     reports the CLAIMED size, exactly as NumPy's does.
         /// </remarks>
         /// <exception cref="FormatException">The stream ended early.</exception>
-        private static byte[] ReadBytes(Stream stream, long count, string what)
+        /// <summary>
+        ///     Reads exactly <paramref name="count"/> bytes, allocating no more than the stream can still deliver (a length
+        ///     field is attacker-controlled: a 28-byte file can claim a 4 GB header).
+        /// </summary>
+        /// <param name="stream">The stream.</param>
+        /// <param name="count">The byte count.</param>
+        /// <param name="what">What is being read, for the EOF text.</param>
+        /// <returns>The bytes.</returns>
+        /// <exception cref="FormatException">The stream ends first.</exception>
+        internal static byte[] ReadBytes(Stream stream, long count, string what)
         {
             if (count == 0)
                 return Array.Empty<byte>();

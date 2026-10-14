@@ -56,7 +56,7 @@ var big = (NDArray)np.load("huge.npy", mmap_mode: "r");   // read-only view
 var rw  = (NDArray)np.load("huge.npy", mmap_mode: "r+");  // read-write, flushes to disk
 ```
 
-Modes match what NumPy does through `np.load`: `"r"`/`"readonly"`, `"r+"` (read-write), `"c"` (copy-on-write). mmap needs a real file **path** (a stream/`byte[]` cannot be mapped), and NumSharp refuses to map files it would otherwise transform on read (big-endian, `<c8`) with a clear `NotSupportedException`. Fixed-width string files (`|S5`, `<U3`) map like numeric ones.
+Modes match what NumPy does through `np.load`: `"r"`/`"readonly"`, `"r+"` (read-write), `"c"` (copy-on-write). mmap needs a real file **path** (a stream/`byte[]` cannot be mapped), and NumSharp refuses to map files it would otherwise transform on read (big-endian, `<c8`) with a clear `NotSupportedException`. Fixed-width string files (`|S5`, `<U3`) map like numeric ones. A `StringDType` file holds a pickle, which has no fixed-size elements to map: NumPy and NumSharp raise `ValueError: Array can't be memory-mapped: Python objects in dtype.`
 
 ### The dtype map
 
@@ -67,9 +67,10 @@ Modes match what NumPy does through `np.load`: `"r"`/`"readonly"`, `"r+"` (read-
 | `<c16` | Complex | `<c8` (complex64) widens to Complex on read |
 | `\|S5`, `<U3`, `>U3` | fixed-width strings (`S`, `U`) | byte for byte; a `>U3` file is byte-swapped per code point |
 | `<U1` (written) | Char | a `Char` array is written as `<U1` (2-byte UTF-16 → 4-byte UCS-4; non-BMP rejected) |
+| `\|O` with NumPy's pickle | `StringDType` (`T`) | NumPy's protocol-4 pickle of the array, byte for byte; loading needs `allow_pickle: true` (see [`.npy` files](strings-and-bytes.md#npy-files)) |
 | - | Decimal | **`NotSupportedException`** - no NumPy dtype |
 
-Big-endian files are byte-swapped to native on read. A `<U1` file reads back as a `<U1` string array, not as `Char` (**breaking**: it read as `Char` before the string dtypes existed). Object arrays, structured/subarray dtypes, `datetime64`/`timedelta64`, `V`, zero-width `S0`/`U0`, `<f16`/`<c32` parse and then raise a precise message.
+Big-endian files are byte-swapped to native on read. A `<U1` file reads back as a `<U1` string array, not as `Char` (**breaking**: it read as `Char` before the string dtypes existed). Object arrays other than a `StringDType` array's pickle, structured/subarray dtypes, `datetime64`/`timedelta64`, `V`, zero-width `S0`/`U0`, `<f16`/`<c32` parse and then raise a precise message. NumSharp has no general unpickler: it reads only the pickle NumPy writes for a `StringDType` array, and it never runs a Python function that a file names.
 
 ---
 
@@ -182,10 +183,10 @@ Decimal has no NumPy dtype, so it cannot be written to `.npy`. Cast to `Double` 
 
 | Function | Purpose |
 |----------|---------|
-| `np.save(path, arr)` | write one array to `.npy` (byte-exact with NumPy) |
+| `np.save(path, arr, allow_pickle)` | write one array to `.npy` (byte-exact with NumPy; a `StringDType` array as NumPy's pickle) |
 | `np.savez(path, …)` / `np.savez_compressed(path, …)` | write an `.npz` archive (optionally compressed) |
 | `np.load(path, mmap_mode, allow_pickle, max_header_size)` | read `.npy`/`.npz` → `object` |
-| `np.load_npy(path)` / `np.load_npz(path)` | typed loads → `NDArray` / `NpzFile` |
+| `np.load_npy(path, allow_pickle)` / `np.load_npz(path, allow_pickle)` | typed loads → `NDArray` / `NpzFile` |
 | `np.savetxt(fname, X, fmt, delimiter, …)` | write delimited text (byte-exact) |
 | `np.loadtxt(fname, dtype, delimiter, skiprows, usecols, …)` | read delimited text |
 | `np.fromstring(s, dtype, count, sep)` | parse numbers from a string |

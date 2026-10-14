@@ -31,12 +31,15 @@
 |---|---|---|
 | D1 | Move number ↔ text conversion (phase-2 P2.4) into phase 1. | **Yes.** `T` cannot store a number without it: its default `coerce=True` write is `str(value)`. |
 | D2 | Storage layout for `T`. | **Port NumPy's 16-byte packed cell and arena exactly.** `itemsize`, `nbytes` and strides match NumPy, an all-zero cell reads `''` (so `np.zeros` / `np.empty` cost nothing), and `tobytes()` of a freshly built array can match NumPy byte for byte. |
-| D3 | `.npy` / `.npz` for `T` (NumPy writes a pickle with descr `'|O'`). | Open (belongs to P1.7; options in §6.2). |
+| D3 | `.npy` / `.npz` for `T` (NumPy writes a pickle with descr `'|O'`). | **NumPy's exact pickle, for `T` arrays only** (2026-10-13, §6.2 option A): `np.save` writes the bytes NumPy writes and `np.load(allow_pickle: true)` reads that stream and no other. |
 | D4 | Storage lane for `T`. | **Use `NPTypeCode.String` and rely on the dtype information.** `T` shares the lane of `S` / `U`; the descriptor's meta class tells them apart (see §3). |
 | D5 | `na_object` in C#. | **Yes:** `null` = Python `None`, a float NaN = `nan`, a `string` = a string NA, any other object = an "other" NA. Two factory overloads, `StringDType(bool coerce = true)` and `StringDType(object na_object, bool coerce = true)`, keep "not given" different from `null`. |
 | D6 | D10: the numeric parse in the implicit `string → NDArray` conversion. | **Remove it.** A C# string is NumPy's `np.array(str)`: a 0-d `U`. |
 | D7 | pythonnet crossing for `T` (NumPy has no buffer protocol for `T`). | **NumPy's C API** (2026-10-13): an exact copy in both directions through the `NpyString_*` functions of the `_ARRAY_API` capsule. With it, the owner decided: NumPy's `<U1` imports as `U1`, a dtype of its own (a C# `char` is 2 bytes; `Char` keeps exporting as `<u2`); a NumPy object array is refused, except one whose every element is a `str`, which is copied (it cannot be viewed); a missing-data object with no C# form (`pd.NA`, an arbitrary object) is refused. |
 | D8 | ML.NET text columns and Parquet string columns as `T`. | Open (later). |
+| D11 | The NEP 50 rule for 0-d operands in the ufuncs and `np.where`'s numeric route. | **Keep the house rule** (every 0-d operand weak) for this round (2026-10-13, §6.2 option A). |
+| D13 | The `np.nditer` buffered-reduce port in this round. | **Yes, as the last package** (2026-10-13, §6.2 option A). |
+| D14 | `ndarray.byteswap()` over `T`, where NumPy crashes. | **Return a copy** (2026-10-13, §6.2 option A): a `T` cell has no byte order. |
 | D9 | Branch base. | Done: the owner rebased `strings` onto journey4 `f6086479`. |
 
 ## 2. NumPy 2.4.2 facts for `StringDType`
@@ -149,7 +152,7 @@ Three rules keep that safe:
 | P1.4 | `T` movement: the reference-aware copy core (inline cells move as blocks; arena and heap strings are duplicated), behind every movement entry, and the loud refusal on every raw path. | P1.3 | L | yes |
 | P1.5 | `T` creation, element access and printing: `np.array` / `asarray` / `empty` / `zeros` / `ones` / `full` and the `_like` forms, the `setitem` coercion (uses P1.1), `item` / `tolist` / `foreach` / `AsStringArray` / `(Array)`, NA objects, `repr` / `str` / `array2string`. | P1.1, P1.3 | M | yes |
 | P1.6 | `T` casts: `T` ↔ `T` (NA rules), `T` ↔ `U` / `S`, `T` ↔ bool, `T` ↔ numbers (uses P1.1). | P1.1, P1.4 | M | yes |
-| P1.7 | `T` in the rest of the library: `np.nditer` (`refs_ok`, buffered casts), numpy.ma (fill `'N/A'`), `loadtxt` / `savetxt`, `.npy` (D3), the whole-surface sweep with `T` (NumPy's refusals and shape-decided answers in NumPy's order; computation deferred to phase 2). | P1.4–P1.6 | L | `np.nditer` done 2026-10-13; the rest prepared in §6 (packages P1.7b–P1.7g); P1.7b (`None` into numbers) done 2026-10-13; P1.7d (numpy.ma) done 2026-10-13 |
+| P1.7 | `T` in the rest of the library: `np.nditer` (`refs_ok`, buffered casts), numpy.ma (fill `'N/A'`), `loadtxt` / `savetxt`, `.npy` (D3), the whole-surface sweep with `T` (NumPy's refusals and shape-decided answers in NumPy's order; computation deferred to phase 2). | P1.4–P1.6 | L | `np.nditer` done 2026-10-13; the rest prepared in §6 (packages P1.7b–P1.7g); P1.7b (`None` into numbers) done 2026-10-13; P1.7d (numpy.ma) done 2026-10-13; P1.7e (`.npy`, D3) and `byteswap` (D14) done 2026-10-14 |
 | P1.8 | Bridges and leftovers: pythonnet `S` / `U` zero-copy both ways and `T` as a copy (D7); D10 (D6). | — | M | done (D10 with P1.1, the bridge 2026-10-13) |
 | P1.9 | Gate, speed, docs: oracle sections for the new behavior with zero excuses; unit tests that cover all new phase-1 code; lifetime tests and runs under `FencedMemory` / guard pages; a mutation pass; a benchmark sheet (≥ 1.5× NumPy at 1K / 100K / 1M); docs. | with every package | M | yes |
 
@@ -495,6 +498,51 @@ After this plan, phase 2 loses P2.4 and gains the `T` forms of P2.1–P2.6 plus 
     buffer (`InitializeArc` ignores `TryAddRef`'s failure), so a `.data` read after a scope closed reads freed memory.
   - Gates: section `tma` 4,167 / 4,167 (437 deferred), every string section green; unit 19,252 / 19,251 and oracle 317
     green on net10.0 / net8.0; `Ma/np.ma.StringDType.Test.cs` (11).
+- 2026-10-14 — **D14 and P1.7e (`.npy` / `.npz` for `T`, decision D3) done** (owner's answer to §6.2: "Do these", D13
+  "Yes, as the last package", D14 "Return a copy. A StringDType cell has no byte order.", D11 "Keep the current rule
+  (every 0-d operand is weak) for this round.", D3 "Read and write NumPy's exact pickle, for StringDType arrays only.").
+  - D14: `ndarray.byteswap()` of a `T` array returns a copy in the source's order (`copy(Shape.Order)`); with
+    `inplace: true` it returns the array itself, and a read-only array raises NumPy's `array to be byte-swapped is
+    read-only`. NumPy 2.4.2 segfaults there.
+  - D11: no code. The house rule stays: every 0-d operand is weak in the ufuncs and in `np.where`'s numeric route.
+  - P1.7e, the writer (`IO/NpyPickle.cs`, `Pickler`): CPython 3.12's C pickler (`_pickle.c`) replayed for NumPy's graph.
+    The frame boundary check runs at the start of every `save()`, atoms included. A frame under 4 bytes loses its header,
+    and a payload of 64 KiB or more goes outside the frames (the frame before it is committed). Only CPython's cached
+    strings (`''`, one character below U+0100) and the na_object come back as `BINGET`. A one-element list is item +
+    `APPEND`, a longer one `MARK … APPENDS` per 1000, the last batch too. An integer is `BININT1` / `BININT2` / `BININT` /
+    `LONG1` as CPython chooses, a float `BINFLOAT` (big-endian bits, so a NaN payload survives). `is_fortran` is
+    `PyArray_ISFORTRAN`, and the elements go in C logical order. `np.save(..., allow_pickle: false)` raises after the
+    header, as NumPy leaves a partial file.
+  - P1.7e, the reader (`PickleReader`): the opcodes of protocols 2–5 over inert values (nothing is called), then exactly
+    NumPy's graph; every other pickle is refused by name, protocol 0 / 1 too. The pickle sits in one pooled buffer and
+    each text is an offset into it. The text's bytes are validated as strict UTF-8 when the opcode is read, then packed
+    straight into the cell, with the arena reserved once; a string na_object is compared by bytes. The first version made
+    a string per element and loaded 1M elements in 341 ms (NumPy 230 ms); the buffer version takes 80 ms. A frame or
+    payload length is honored only as the stream delivers it, and the memo is CPython's: a far `LONG_BINPUT` index goes to
+    a dictionary and counts towards `memo_len`. NumPy's header shape and order are ignored for a pickle, so NumSharp
+    ignores them too. An F array is filled in C logical order at its F positions (`_setlist_pkl`), which gives NumPy's
+    arena order.
+  - NumPy's texts: the two `allow_pickle=False` refusals, `Array can't be memory-mapped: Python objects in dtype.`, and,
+    new on the way, `read_array`'s `UnicodeError: Unpickling a python object failed: UnicodeDecodeError(...)` for a text
+    that is not UTF-8 (`UnicodeDecodeError` keeps CPython's five arguments for its repr). A surrogate text gives the same
+    error; NumPy raises a `SystemError` there (a NumPy bug).
+  - Found and fixed on the way: `gen_npy_oracle.py` wrote `.npz` members with `zipfile.writestr(name, bytes)`, which
+    stamps the current time, so the corpus changed on every run. The members now take `ZipInfo(name, date_time=(1980, 1,
+    1, 0, 0, 0))`; two runs give the same bytes.
+  - Gates: the `.npy` oracle's section 12 (`tpickle` 39 cases: byte-exact writes, and reads compared value by value and
+    cell by cell in memory order; `tpickle_raw`, 5: protocols 2–5 and an F source; `tnpz`, 2; the corpus has 404 cases),
+    `IO/NpyOracleStringDTypeTests.cs` (6), `IO/NpyStringDTypePickleTests.cs` (12), `Byteswap_IsTheIdentity`, two doc
+    tests, and the reverse gate `verify_npy_interop.py`: NumPy reads 40 files NumSharp wrote, among them 7 `T` files and
+    an `.npz` member, and each `.npy` is byte-identical to NumPy's own `write_array` (183 checks). Mutation: 19 planted
+    bugs over the final code (10 in the writer, 9 in the reader), all killed. Guard pages: the `.npy` tests pass with
+    every pooled buffer ending at an inaccessible page.
+  - The reader's buffer first came from `NativeMemory.Realloc`; the oracle gate
+    `EveryRawNativeAllocation_IsAKnownChokepoint` refused the new raw allocation site, so the buffer comes from
+    `SizeBucketedBufferPool` (take, copy, return to grow). The speed did not change.
+  - Speed (NPY/NS, two pinned P-cores, best of 15; 1K / 100K / 1M elements, a third short): `np.save` 3.5× / 6.5× /
+    9.5×, `np.load` 4.1× / 2.3× / 2.9× (with an NA object: 2.9× / 2.1× / 3.1×).
+  - Next: P1.7g (D13, the buffered-reduce port) as the last package of this round. P1.7c and P1.7f wait (D12 was not
+    answered as such).
 
 ## 6. The next round: the rest of P1.7, so that phase 1 is complete
 
@@ -518,6 +566,10 @@ the owner must take, and the packages.
 | `np.nditer` buffered reduction (not `T`-specific) | The core / outer buffering of `npyiter_find_buffering_setup` and `npyiter_buffered_reduce_iternext`: right sums at every buffer size, C-order visits. | The legacy double loop: wrong sums with a short buffer, raw bytes written for a cast reduction operand, and a reduction over the outer axis visited with that axis innermost (6 pins in `OpenBugs.NditerBufferedReduce.cs`); `grow_inner` is not honored (pinned). |
 
 ### 6.2 Decisions for the owner
+
+Answered on 2026-10-13: D3, D11, D13 and D14 take option A (the owner: "Do these", over the four rows). D12 was
+not answered as such: this session does P1.7e (D3), `byteswap` (D14) and P1.7g (D13); a parallel session did P1.7b
+and P1.7d (state log, `61dafa6b`, `cb3a4186`); P1.7c and P1.7f wait.
 
 | # | Decision | Options (recommendation first) |
 |---|---|---|

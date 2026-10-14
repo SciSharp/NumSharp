@@ -149,7 +149,8 @@ namespace NumSharp.Backends.Strings
         internal static UnicodeDecodeError DecodeError(ReadOnlySpan<byte> bytes, int start, int end, string reason)
             => new UnicodeDecodeError(end - start == 1
                 ? $"'utf-8' codec can't decode byte 0x{bytes[start]:x2} in position {start}: {reason}"
-                : $"'utf-8' codec can't decode bytes in position {start}-{end - 1}: {reason}");
+                : $"'utf-8' codec can't decode bytes in position {start}-{end - 1}: {reason}",
+                "utf-8", bytes.ToArray(), start, end, reason);
 
         /// <summary>
         ///     CPython 3.12's strict UTF-8 decoder diagnosis (<c>stringlib/codecs.h</c>, <c>utf8_decode</c>,

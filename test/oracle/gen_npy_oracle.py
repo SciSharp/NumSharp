@@ -39,12 +39,22 @@ Case schema:
 
 NPZ cases carry `entries`: {name -> {ns_dtype, shape, ns_bytes}} instead of a single array.
 
+NEP 55 StringDType cases (section 12; NumPy pickles such an array behind the descr '|O', decision D3):
+  "tpickle"      a .npy file: `t_spec` (coerce + na_object), `t_values` (C-order texts, {"na": true} for an NA cell),
+                 `t_build` (how NumSharp rebuilds it for the byte-exact write: C / F / strided / reversed), `t_cells`
+                 (the memory-order cells np.load(allow_pickle=True) returns), `nopickle_file` (the header-only file
+                 write_array leaves with allow_pickle=False) + `nopickle_error`, and `nopickle_load_error`.
+  "tpickle_raw"  a bare pickle file (pickle.dumps, protocols 2-5) that np.load unpickles with allow_pickle=True.
+  "tnpz"         an archive with a StringDType member: `t_entries`, every member's own .npy bytes (`t_members`) and
+                 the error a StringDType member raises without allow_pickle (`t_member_error`).
+
 Regenerate (deterministic; needs numpy==2.4.2):
     python test/oracle/gen_npy_oracle.py
 """
 import io
 import json
 import os
+import pickle
 import struct
 import sys
 import warnings
@@ -811,7 +821,9 @@ def add_npz_names(name, member_names, note=""):
         for i, n in enumerate(member_names):
             m = io.BytesIO()
             fmt.write_array(m, np.array([i], dtype=np.int8))
-            zf.writestr(n, m.getvalue())
+            # A fixed date_time keeps the case byte-stable across regenerations (writestr with a bare name stamps the
+            # current time, which changed these archives on every run).
+            zf.writestr(zipfile.ZipInfo(n, date_time=(1980, 1, 1, 0, 0, 0)), m.getvalue())
     raw = buf.getvalue()
 
     with np.load(io.BytesIO(raw)) as z:  # real NumPy decides the expectations
@@ -855,8 +867,10 @@ _mixed = io.BytesIO()
 with zipfile.ZipFile(_mixed, "w", zipfile.ZIP_DEFLATED) as zf:
     b = io.BytesIO()
     fmt.write_array(b, np.arange(3, dtype=np.int32))
-    zf.writestr("data.npy", b.getvalue())
-    zf.writestr("readme.txt", b"not a numpy file")
+    zf.writestr(zipfile.ZipInfo("data.npy", date_time=(1980, 1, 1, 0, 0, 0)), b.getvalue(),
+                compress_type=zipfile.ZIP_DEFLATED)
+    zf.writestr(zipfile.ZipInfo("readme.txt", date_time=(1980, 1, 1, 0, 0, 0)), b"not a numpy file",
+                compress_type=zipfile.ZIP_DEFLATED)
 CASES.append({
     "name": "npz_non_npy_member", "file": "cases/npz_non_npy_member.npz", "kind": "npz",
     "bytes": _mixed.getvalue(), "compressed": True,
@@ -894,6 +908,231 @@ CASES.append({
 
 
 # ---------------------------------------------------------------------------------------------
+# 12. NEP 55 StringDType: NumPy writes a protocol-4 PICKLE behind the header {'descr': '|O', ...}
+#     (dtype_to_descr "lies that the dtype is object"), and np.load reads it back with allow_pickle=True.
+#     NumSharp writes the same bytes and reads NumPy's (the owner's decision D3).
+# ---------------------------------------------------------------------------------------------
+TD = np.dtypes.StringDType
+
+# The texts of a StringDType case: short cells, arena strings (16+ UTF-8 bytes), the empty string, non-ASCII,
+# CJK and supplementary-plane text, and a 300-byte string (BINUNICODE rather than SHORT_BINUNICODE).
+T_POOL = ["a", "bb", "abcdefghijklmnopq", "", "é", "中文", "\U0001F600", "x" * 300, "it's", "Ünï"]
+
+
+def _t_spec(dt):
+    """A StringDType descriptor as the manifest stores it: coerce, and the na_object when one is set (None, a float by
+    its bits so a NaN keeps its sign and payload, a str, a bool or an int)."""
+    spec = {"coerce": bool(dt.coerce)}
+    if hasattr(dt, "na_object"):
+        na = dt.na_object
+        if na is None:
+            spec["na"] = {"none": True}
+        elif isinstance(na, bool):
+            spec["na"] = {"bool": na}
+        elif isinstance(na, int):
+            spec["na"] = {"int": na}
+        elif isinstance(na, float):
+            spec["na"] = {"float_bits": struct.pack("<d", na).hex()}
+        elif isinstance(na, str):
+            spec["na"] = {"str": na}
+        else:
+            raise TypeError(f"unsupported na_object {na!r}")
+    return spec
+
+
+def _t_values(arr):
+    """The logical values of a StringDType array in C order: the text, or {"na": true} for an NA cell (getitem returns
+    the descriptor's na_object itself for one, so identity tells it apart from a text equal to the na_object)."""
+    dt = arr.dtype
+    has_na = hasattr(dt, "na_object")
+    out = []
+    for v in np.ravel(arr, order="C").tolist():
+        if has_na and (v is dt.na_object or (isinstance(v, float) and isinstance(dt.na_object, float) and v != v)):
+            out.append({"na": True})
+        else:
+            out.append(v)
+    return out
+
+
+def add_tpickle(name, arr, *, build="C", version=None, note=""):
+    """A StringDType .npy case: NumPy's np.save bytes (write_exact for NumSharp's writer), the partial file NumPy leaves
+    with allow_pickle=False (the header only) and its error, the load error without allow_pickle, and what np.load
+    returns with it: the descriptor, shape, layout, values and memory-order cells (a fresh unpickled array holds no
+    heap strings, so its cells are deterministic arena offsets).
+
+    :param build: how NumSharp rebuilds the array for the write test: "C", "F", "strided" (base[::2]) or "reversed".
+    """
+    buf = io.BytesIO()
+    fmt.write_array(buf, arr, version=version)
+    raw = buf.getvalue()
+    nb = io.BytesIO()
+    try:
+        fmt.write_array(nb, arr, version=version, allow_pickle=False)
+        raise AssertionError("write_array accepted allow_pickle=False for a StringDType array")
+    except ValueError as e:
+        nopickle_error = str(e)
+    try:
+        np.load(io.BytesIO(raw))
+        raise AssertionError("np.load read a pickled file without allow_pickle")
+    except ValueError as e:
+        nopickle_load_error = str(e)
+    loaded = np.load(io.BytesIO(raw), allow_pickle=True)
+    fortran = bool(loaded.flags.f_contiguous and not loaded.flags.c_contiguous)
+    cells = (loaded.T if fortran else loaded).tobytes()
+    major = raw[6]
+    hlen_size = 2 if major == 1 else 4
+    CASES.append({
+        "name": name,
+        "file": f"cases/{name}.npy",
+        "kind": "tpickle",
+        "bytes": raw,
+        "extra_files": {f"cases/{name}.nopickle": nb.getvalue()},
+        "nopickle_file": f"cases/{name}.nopickle",
+        "nopickle_error": nopickle_error,
+        "nopickle_load_error": nopickle_load_error,
+        "descr": "|O", "np_dtype": None, "ns_dtype": None,
+        "shape": [int(d) for d in arr.shape],
+        "fortran_order": fortran,
+        "version": [raw[6], raw[7]],
+        "data_offset": 8 + hlen_size + int.from_bytes(raw[8:8 + hlen_size], "little"),
+        "ns_bytes": None, "write_exact": False, "load_error": None,
+        "t_spec": _t_spec(arr.dtype),
+        "t_values": _t_values(arr),
+        "t_build": build,
+        "t_cells": cells.hex(),
+        "t_explicit_version": list(version) if version else None,
+        "note": note,
+    })
+
+
+def _t(values, dt=None, shape=None):
+    """A C-ordered StringDType array of `values` (reshaped to `shape`)."""
+    a = np.array(values, dtype=dt if dt is not None else TD())
+    return a.reshape(shape) if shape is not None else a
+
+
+add_tpickle("t_1d", _t(T_POOL), note="short, arena, empty, non-ASCII, CJK, emoji, a 300-byte text (BINUNICODE)")
+add_tpickle("t_2d_c", _t(T_POOL[:6], shape=(2, 3)), note="TUPLE2 shape, C order")
+add_tpickle("t_2d_f", np.asfortranarray(_t(T_POOL[:6], shape=(2, 3))), build="F",
+            note="is_fortran True (NEWTRUE) and fortran_order True; the list is in C logical order")
+add_tpickle("t_strided", _t(T_POOL)[::2], build="strided",
+            note="a strided view pickles like its C copy (is_fortran False, the C-order list)")
+add_tpickle("t_reversed", _t(T_POOL)[::-1], build="reversed", note="a reversed view: the list in logical order")
+add_tpickle("t_0d", np.array("zero-d text value", dtype=TD()), note="EMPTY_TUPLE shape (never memoized), one item + APPEND")
+add_tpickle("t_empty", np.array([], dtype=TD()), note="an empty list: EMPTY_LIST and no APPENDS")
+add_tpickle("t_empty_2d", np.zeros((0, 3), dtype=TD()), note="zero-size, two dimensions")
+add_tpickle("t_one", _t(["only"]), note="a one-element list is the item and APPEND, not MARK ... APPENDS")
+add_tpickle("t_3d", _t((T_POOL * 3)[:24], shape=(2, 3, 4)), note="TUPLE3 shape")
+add_tpickle("t_4d", _t((T_POOL * 2)[:16], shape=(2, 2, 2, 2)), note="a 4-D shape: MARK ... TUPLE")
+add_tpickle("t_singletons", _t(["", "", "a", "a", "é", "é", "中", "中", "ab", "ab", "\x00", "\x00", "ÿ", "ÿ"]),
+            note="CPython's cached strings ('' and one character below U+0100) come back as BINGET; '中' and 'ab' "
+                 "are fresh objects written in full")
+add_tpickle("t_memo_long", _t([f"s{i:04d}" for i in range(300)] + ["z", "z"]),
+            note="memo index past 255: the second 'z' is LONG_BINGET")
+add_tpickle("t_memo_boundary", _t([f"m{i:04d}" for i in range(238)] + ["z", "y", "z", "y"]),
+            note="memo hits at exactly 255 (BINGET) and 256 (LONG_BINGET): 'z' is memoized at 255, 'y' at 256")
+add_tpickle("t_batches_1001", _t([f"t{i}" for i in range(1001)]),
+            note="1000 + 1 items: a last batch of one still uses MARK ... APPENDS (CPython's batch_list_exact)")
+add_tpickle("t_frames", _t([f"string number {i:06d}" for i in range(9000)]),
+            note="about 230 KB of pickle: frames committed at the first save() past 64 KiB")
+add_tpickle("t_dims_bigint", _t(["q"] * 70000, shape=(70000, 1)),
+            note="a 70000 dimension (BININT), 70 batches, every element the cached 'q' (BINGET)")
+add_tpickle("t_dims_binint2", _t(["w", "ww"] * 150, shape=(300,)), note="a 300 dimension (BININT2)")
+add_tpickle("t_huge_middle", _t(["a", "x" * 70000, "b"]),
+            note="a text of 64 KiB or more commits the frame and is written outside any frame")
+add_tpickle("t_huge_first", _t(["é" * 40000, "tail"]), note="a 80000-byte UTF-8 text as the first element")
+add_tpickle("t_huge_pair", _t(["x" * 70000, "y" * 70000]),
+            note="two large texts in a row: the frame between them holds only the first one's MEMOIZE, and a frame "
+                 "under 4 bytes loses its header (_Pickler_CommitFrame)")
+add_tpickle("t_boundary_65535", _t(["p" * 65535, "q"]), note="65535 bytes: still framed")
+add_tpickle("t_boundary_65536", _t(["p" * 65536, "q"]), note="65536 bytes: the first unframed size")
+add_tpickle("t_short_255_256", _t(["k" * 255, "m" * 256]), note="SHORT_BINUNICODE up to 255 bytes, BINUNICODE from 256")
+add_tpickle("t_na_none", _t(["x", None, "y", None], TD(na_object=None)), note="na_object=None: NONE elements")
+add_tpickle("t_na_nan", _t(["x", np.nan, "y"], TD(na_object=np.nan)), note="na_object=nan: BINFLOAT elements")
+add_tpickle("t_na_str", _t(["x", None, "NA"], TD(na_object="NA")),
+            note="a string na_object: memoized in the dtype's reduce, every NA element a BINGET to it "
+                 "(the text 'NA' stored by setitem IS the NA value)")
+add_tpickle("t_na_str_cached", _t(["a", None, "a", "b"], TD(na_object="a")),
+            note="a one-character na_object is CPython's cached 'a': NA elements and the text 'a' share its memo entry")
+add_tpickle("t_na_empty_str", _t(["", None, "x"], TD(na_object="")), note="na_object='' is the cached empty string")
+add_tpickle("t_na_cjk", _t(["中", None, "中"], TD(na_object="中")),
+            note="a one-character na_object above U+00FF is not cached: the text '中' is a fresh object")
+add_tpickle("t_na_int", _t(["x", None], TD(na_object=7)), note="na_object=7: BININT1 elements")
+add_tpickle("t_na_negint", _t(["x", None], TD(na_object=-1)), note="na_object=-1: BININT (4 bytes) elements")
+add_tpickle("t_na_bigint", _t(["x", None], TD(na_object=2 ** 40)), note="na_object=2**40: LONG1 elements")
+add_tpickle("t_na_bool", _t(["x", None], TD(na_object=True)), note="na_object=True: NEWTRUE elements")
+add_tpickle("t_coerce_false", _t(["x", "yy"], TD(coerce=False)), note="coerce=False: the dtype's reduce passes 0")
+add_tpickle("t_na_coerce_false", _t(["x", None], TD(na_object=None, coerce=False)), note="both parameters")
+add_tpickle("t_na_2d_f", np.asfortranarray(_t(["a", None, "bcdefghijklmnopqrs", "d", None, "f"],
+                                              TD(na_object=None), shape=(2, 3))), build="F",
+            note="NA cells in an F-ordered array: NumPy setitem()s the list in C order into F memory")
+add_tpickle("t_v2", _t(T_POOL[:4]), version=(2, 0), note="an explicit format version 2.0")
+add_tpickle("t_v3", _t(T_POOL[:4]), version=(3, 0), note="an explicit format version 3.0")
+
+
+def add_tpickle_raw(name, arr, protocol, note=""):
+    """A BARE pickle file (no .npy magic) of a StringDType array: np.load unpickles it with allow_pickle=True."""
+    raw = pickle.dumps(arr, protocol=protocol)
+    loaded = np.load(io.BytesIO(raw), allow_pickle=True)
+    fortran = bool(loaded.flags.f_contiguous and not loaded.flags.c_contiguous)
+    CASES.append({
+        "name": name, "file": f"cases/{name}.pkl", "kind": "tpickle_raw", "bytes": raw,
+        "descr": None, "np_dtype": None, "ns_dtype": None, "shape": [int(d) for d in arr.shape],
+        "fortran_order": fortran, "version": None, "data_offset": None, "ns_bytes": None,
+        "write_exact": False, "load_error": None,
+        "t_spec": _t_spec(arr.dtype), "t_values": _t_values(arr),
+        "t_cells": (loaded.T if fortran else loaded).tobytes().hex(),
+        "pickle_protocol": protocol, "note": note,
+    })
+
+
+for _p in (2, 3, 4, 5):
+    add_tpickle_raw(f"t_raw_p{_p}", _t(["a", None, "bcdefghijklmnopqrstu", "a", "é"], TD(na_object=None)), _p,
+                    note=f"pickle.dumps(protocol={_p}): GLOBAL / BINPUT before protocol 4, STACK_GLOBAL / MEMOIZE / "
+                         "FRAME from 4")
+add_tpickle_raw("t_raw_p3_f", np.asfortranarray(_t(T_POOL[:6], shape=(3, 2))), 3, note="protocol 3, F-ordered")
+
+
+def add_tnpz(name, arrays, *, compressed=False, note=""):
+    """An .npz archive holding a StringDType member: NumPy's archive (read with allow_pickle=True), each member's own
+    .npy bytes (NumSharp's archive members must equal them), and the error a member raises without allow_pickle."""
+    buf = io.BytesIO()
+    (np.savez_compressed if compressed else np.savez)(buf, **arrays)
+    raw = buf.getvalue()
+    members = {}
+    with zipfile.ZipFile(io.BytesIO(raw)) as z:
+        for info in z.infolist():
+            members[info.filename] = z.read(info.filename).hex()
+    entries = {}
+    for k, v in arrays.items():
+        if v.dtype.kind == "T":
+            loaded = np.load(io.BytesIO(raw), allow_pickle=True)[k]
+            entries[k] = {"t_spec": _t_spec(v.dtype), "t_values": _t_values(v), "shape": [int(d) for d in v.shape],
+                          "t_cells": loaded.tobytes().hex()}
+        else:
+            entries[k] = {"ns_dtype": _ns_dtype_of(v), "ns_descr": _ns_descr_of(v), "shape": [int(d) for d in v.shape],
+                          "ns_bytes": _ns_bytes(v)}
+    try:
+        with np.load(io.BytesIO(raw)) as z:
+            _ = z[next(k for k, v in arrays.items() if v.dtype.kind == "T")]
+        raise AssertionError("an npz StringDType member loaded without allow_pickle")
+    except ValueError as e:
+        member_error = str(e)
+    CASES.append({
+        "name": name, "file": f"cases/{name}.npz", "kind": "tnpz", "bytes": raw, "compressed": compressed,
+        "descr": None, "np_dtype": None, "ns_dtype": None, "shape": None, "fortran_order": None, "version": None,
+        "data_offset": None, "ns_bytes": None, "write_exact": False, "load_error": None,
+        "t_entries": entries, "t_members": members, "t_member_error": member_error, "note": note,
+    })
+
+
+add_tnpz("tnpz_mixed", {"t": _t(T_POOL), "f": np.arange(3.0)}, note="a StringDType member beside a float one")
+add_tnpz("tnpz_na_compressed", {"names": _t(["a", None, "bcdefghijklmnopqrstu"], TD(na_object=None)),
+                                "n": np.array([1, 2, 3], dtype=np.int32)},
+         compressed=True, note="savez_compressed with an NA member")
+
+
+# ---------------------------------------------------------------------------------------------
 # Emit
 # ---------------------------------------------------------------------------------------------
 def main():
@@ -910,6 +1149,12 @@ def main():
             info.external_attr = 0o644 << 16
             zf.writestr(info, raw)
             case["size"] = len(raw)
+            # A case's extra entries (a StringDType case's header-only file for allow_pickle=False).
+            for entry, extra in case.pop("extra_files", {}).items():
+                xinfo = zipfile.ZipInfo(entry, date_time=(1980, 1, 1, 0, 0, 0))
+                xinfo.compress_type = zipfile.ZIP_DEFLATED
+                xinfo.external_attr = 0o644 << 16
+                zf.writestr(xinfo, extra)
             manifest.append(case)
 
         info = zipfile.ZipInfo("manifest.json", date_time=(1980, 1, 1, 0, 0, 0))

@@ -552,7 +552,7 @@ arr.tofile("data.bin");
 var raw = np.fromfile("data.bin", np.float64);
 ```
 
-Format versions 1.0 / 2.0 / 3.0, C- and Fortran-order, and big-endian files all load; the writer emits the byte-exact, 64-byte-aligned, mmap-ready layout NumPy produces. `np.load` returns `object` because - like NumPy - it yields an array for a `.npy` and an archive for a `.npz`, decided by the file's contents rather than its name; prefer the typed `np.load_npy` / `np.load_npz` when you know the kind. `allow_pickle` defaults to `false` (NumPy's security default), so object-array files are rejected with a clear message instead of executed. See [NumPy Compliance](compliance.md) for the full dtype map and the handful of unsupported types.
+Format versions 1.0 / 2.0 / 3.0, C- and Fortran-order, and big-endian files all load; the writer emits the byte-exact, 64-byte-aligned, mmap-ready layout NumPy produces. `np.load` returns `object` because - like NumPy - it yields an array for a `.npy` and an archive for a `.npz`, decided by the file's contents rather than its name; prefer the typed `np.load_npy` / `np.load_npz` when you know the kind. `allow_pickle` defaults to `false` (NumPy's security default), so pickled files are rejected with a clear message instead of executed. With `allow_pickle: true`, NumSharp reads the one pickle NumPy writes for a `StringDType` array, and no other. See [NumPy Compliance](compliance.md) for the full dtype map and the handful of unsupported types.
 
 Interop with standard .NET arrays:
 

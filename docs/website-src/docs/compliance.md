@@ -451,9 +451,12 @@ bytes as NumPy's writer.
 - `bool`, all eight integer widths, `float16`, `float32`, `float64`, `complex128`, and the
   fixed-width string dtypes (`|S5`, `<U3`) have round-trip mappings. `complex64` loads by widening
   to `complex128`. `Char` is written as `<U1`, which reads back as a `<U1` string array.
-- Decimal cannot be saved because NumPy has no decimal dtype. Object/pickle, structured, subarray,
-  datetime/timedelta, void, zero-width string, and unsupported extended-precision descriptors are
-  rejected with a capability-specific error.
+- A `StringDType` array is written as NumPy writes it: a `'|O'` header and NumPy's protocol-4 pickle
+  of the array, byte for byte (frames, memo and batches included). It loads with `allow_pickle: true`,
+  with its NA values, `na_object` and `coerce`. `.npz` members follow the same rules.
+- Decimal cannot be saved because NumPy has no decimal dtype. Other object arrays (any pickle that is
+  not a `StringDType` array's), structured, subarray, datetime/timedelta, void, zero-width string, and
+  unsupported extended-precision descriptors are rejected with a capability-specific error.
 - `np.load(..., mmap_mode: ...)` supports read-only, read-write, and copy-on-write mapping for a
   `.npy` file path. Streams and byte arrays cannot be memory-mapped.
 
@@ -462,9 +465,15 @@ opens members lazily and caches loaded arrays; the returned `NpzFile` owns resou
 disposed. `np.load` detects `.npy` versus `.npz` from magic bytes and returns either `NDArray` or
 `NpzFile`, while `np.load_npy` and `np.load_npz` provide typed entry points.
 
-`allow_pickle` defaults to `false`. NumSharp cannot execute Python pickle data even when
-`allow_pickle: true`; the flag changes validation/error behavior but does not add an object dtype or
-an unpickler.
+`allow_pickle` defaults to `false` for loading and to `true` for saving, as in NumPy. With
+`allow_pickle: true`, NumSharp reads exactly one kind of pickle: the one NumPy writes for a
+`StringDType` array (`numpy._core.multiarray._reconstruct` with the array's state, and
+`_convert_to_stringdtype_kwargs` for its descriptor). Any other pickle is refused, with a message
+that names it. NumSharp has no general unpickler, adds no object dtype, and never calls a Python
+function that a file names. Without `allow_pickle`, loading such a file raises NumPy's text
+`Object arrays cannot be loaded when allow_pickle=False`, and `np.save(..., allow_pickle: false)` of a
+`StringDType` array raises `ValueError: Object arrays cannot be saved when allow_pickle=False` after
+the header, as NumPy does. A `StringDType` file cannot be memory-mapped.
 
 ---
 

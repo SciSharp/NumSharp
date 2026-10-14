@@ -21,6 +21,8 @@ Directory.CreateDirectory(outDir);
 
 var manifest = new List<Dictionary<string, object>>();
 
+// "pickle" marks a StringDType array: NumPy (and NumSharp) write it as a pickle behind a '|O' header, so the
+// reader must pass allow_pickle=True, and its descriptor is compared by str() (StringDType(na_object=None)).
 void Npy(string name, NDArray arr, string expect)
 {
     np.save(Path.Combine(outDir, name + ".npy"), arr);
@@ -28,6 +30,7 @@ void Npy(string name, NDArray arr, string expect)
     {
         ["file"] = name + ".npy", ["kind"] = "npy", ["expect"] = expect,
         ["dtype"] = arr.typecode.ToString(), ["descr"] = arr.dtype.str, ["shape"] = arr.shape,
+        ["pickle"] = arr.dtype.kind == 'T',
     });
 }
 
@@ -43,6 +46,7 @@ void Npz(string name, Dictionary<string, NDArray> arrays, bool compressed, strin
         ["entries"] = arrays.ToDictionary(kv => kv.Key, kv => (object)new Dictionary<string, object>
         {
             ["dtype"] = kv.Value.typecode.ToString(), ["descr"] = kv.Value.dtype.str, ["shape"] = kv.Value.shape,
+            ["pickle"] = kv.Value.dtype.kind == 'T',
         }),
     });
 }
@@ -68,6 +72,22 @@ Npy("str_u", np.array(new[] { "ab", "", "dé", "😀x" }), "['ab', '', 'dé', '�
 Npy("str_s", np.array(new[] { "ab", "c" }, dtype: "S3"), "[b'ab', b'c'] as |S3");
 Npy("str_u_fortran", np.array(new[,] { { "a", "bb" }, { "ccc", "d" } }).copy('F'), "F-order <U3");
 Npy("str_s_strided", np.array(new[] { "a", "b", "c", "d" }, dtype: "S1")["::2"], "strided |S1 -> C-order copy");
+
+// --- StringDType (T): NumPy's protocol-4 pickle behind a '|O' header (frames, memo, batches, NA objects) ---
+Npy("vstr", np.array(new[] { "cat", "a much longer text over fifteen bytes", "dé😀", "" }, np.dtypes.StringDType()),
+    "StringDType(): short, arena and empty texts");
+Npy("vstr_na", np.array(new object[] { "x", null, "y" }, np.dtypes.StringDType(na_object: null)),
+    "StringDType(na_object=None) with an NA element");
+Npy("vstr_na_nan", np.array(new object[] { "x", double.NaN }, np.dtypes.StringDType(na_object: double.NaN)),
+    "StringDType(na_object=nan) with an NA element");
+Npy("vstr_na_str", np.array(new object[] { "a", "NA" }, np.dtypes.StringDType(na_object: "NA", coerce: false)),
+    "StringDType(na_object='NA', coerce=False)");
+Npy("vstr_fortran", np.array(new[,] { { "a", "bb long text over the fifteen" }, { "ccc", "d" } })
+    .astype(np.dtypes.StringDType()).copy('F'), "F-order StringDType, is_fortran in the pickle");
+Npy("vstr_strided", np.array(new[] { "a", "b long text over fifteen", "c", "d" }, np.dtypes.StringDType())["::2"],
+    "strided StringDType -> C-order list");
+Npy("vstr_large", np.array(Enumerable.Range(0, 100_000).Select(i => $"text number {i}").ToArray(), np.dtypes.StringDType()),
+    "100k StringDType elements: many 64 KiB frames, 100 MARK...APPENDS batches");
 
 // --- shapes ---
 Npy("scalar", np.array(42), "0-d, shape ()");
@@ -98,6 +118,11 @@ Npz("npz_multi", new()
 }, false, "mixed dtypes");
 Npz("npz_compressed", new() { ["big"] = np.zeros(new Shape(50_000), NPTypeCode.Double) }, true, "deflated");
 Npz("npz_fortran", new() { ["f"] = np.arange(6).reshape(2, 3).copy('F') }, false, "F-order inside npz");
+Npz("npz_vstr", new()
+{
+    ["names"] = np.array(new object[] { "cat", null, "a much longer text over fifteen bytes" }, np.dtypes.StringDType(na_object: null)),
+    ["nums"] = np.array(new[] { 1.5, 2.5 }),
+}, true, "a StringDType member beside a numeric one, deflated");
 
 File.WriteAllText(Path.Combine(outDir, "manifest.json"),
     JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));

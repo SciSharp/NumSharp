@@ -364,6 +364,48 @@ namespace NumSharp.Tests.Documentation
             np.load_npy(stream).ToString(true).Should().Be("array(['a', 'b'], dtype='<U1')");
         }
 
+        /// <summary>
+        ///     The ".npy files" <c>StringDType</c> snippet: <c>np.save</c> writes the bytes <c>numpy.save</c> writes
+        ///     (NumPy's protocol-4 pickle behind a <c>'|O'</c> header, captured from NumPy 2.4.2), <c>allow_pickle: true</c>
+        ///     reads them back with the NA object, and the three refusals the paragraph names carry NumPy's texts.
+        /// </summary>
+        [TestMethod]
+        public void Npy_StringDTypeIsNumPysPickle()
+        {
+            // numpy.save(f, np.array(['cat', None], dtype=np.dtypes.StringDType(na_object=None))) under NumPy 2.4.2.
+            const string NumPysBytes =
+                "k05VTVBZAQB2AHsnZGVzY3InOiAnfE8nLCAnZm9ydHJhbl9vcmRlcic6IEZhbHNlLCAnc2hhcGUnOiAoMiwpLCB9ICAgICAgICAgICAg" +
+                "ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAqABJWjAAAAAAAAAIwWbnVtcHkuX2NvcmUubXVs" +
+                "dGlhcnJheZSMDF9yZWNvbnN0cnVjdJSTlIwFbnVtcHmUjAduZGFycmF5lJOUSwCFlEMBYpSHlFKUKEsBSwKFlIwVbnVtcHkuX2NvcmUu" +
+                "X2ludGVybmFslIweX2NvbnZlcnRfdG9fc3RyaW5nZHR5cGVfa3dhcmdzlJOUSwFOhpRSlIldlCiMA2NhdJROZXSUYi4=";
+            var words = np.array(new object[] { "cat", null }, np.dtypes.StringDType(na_object: null));
+            var stream = new MemoryStream();
+            np.save(stream, words);
+            Convert.ToBase64String(stream.ToArray()).Should().Be(NumPysBytes);
+
+            stream.Position = 0;
+            np.load_npy(stream, allow_pickle: true).ToString(true)
+              .Should().Be("array(['cat', None], dtype=StringDType(na_object=None))");
+            stream.Position = 0;
+            ((Action)(() => np.load_npy(stream))).Should().Throw<FormatException>()
+                .WithMessage("Object arrays cannot be loaded when allow_pickle=False");
+            ((Action)(() => np.save(new MemoryStream(), words, allow_pickle: false))).Should().Throw<ValueError>()
+                .WithMessage("Object arrays cannot be saved when allow_pickle=False");
+
+            // mmap_mode needs a file on disk; NumPy refuses before it reads the pickle, whatever allow_pickle says.
+            var path = Path.Combine(Path.GetTempPath(), $"numsharp-doc-{Guid.NewGuid():N}.npy");
+            try
+            {
+                np.save(path, words);
+                ((Action)(() => np.load(path, mmap_mode: "r", allow_pickle: true))).Should().Throw<ValueError>()
+                    .WithMessage("Array can't be memory-mapped: Python objects in dtype.");
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
         // ── The Char dtype ────────────────────────────────────────────────────────────────────────
 
         [TestMethod]
@@ -459,6 +501,22 @@ namespace NumSharp.Tests.Documentation
                 .WithMessage("cannot create an OBJECT array from memory buffer");
             ((Action)(() => np.ndarray(new Shape(1), np.dtype("T"), new byte[16]))).Should().Throw<ArgumentException>();
             ((Action)(() => { var _ = t == t; })).Should().Throw<StringComputationNotSupportedException>();
+        }
+
+        /// <summary>
+        ///     The NumPy-bug list's <c>byteswap</c> line: NumPy 2.4.2 crashes; a cell has no byte order (the descriptor's
+        ///     <c>byteorder</c> is <c>'|'</c>), so NumSharp returns a copy with its own buffer and the same texts, and with
+        ///     <c>inplace: true</c> the array itself.
+        /// </summary>
+        [TestMethod]
+        public void StringDType_ByteswapIsACopy()
+        {
+            var t = np.array(new[] { "a", "a long string over fifteen" }, np.dtypes.StringDType());
+            t.dtype.byteorder.Should().Be('|');
+            var copy = t.byteswap();
+            copy.ToString(true).Should().Be(t.ToString(true));
+            np.shares_memory(copy, t).Should().BeFalse("a copy owns its cells and its arena");
+            ReferenceEquals(t.byteswap(inplace: true), t).Should().BeTrue();
         }
 
         // ── Byte streams via np.frombuffer ────────────────────────────────────────────────────────

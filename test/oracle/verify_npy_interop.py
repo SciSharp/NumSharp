@@ -18,6 +18,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import warnings
 
 import numpy as np
 
@@ -45,10 +46,24 @@ def check(cond, case, msg):
         failures.append(f"{case}: {msg}")
 
 
+def refuses_without_pickle(path):
+    """True when NumPy refuses to load the file without allow_pickle, with its own ValueError text."""
+    try:
+        np.load(path)
+    except ValueError as e:
+        return "Object arrays cannot be loaded when allow_pickle=False" in str(e)
+    return False
+
+
 def verify_array(name, arr, meta):
-    # A fixed-width string array names its own descriptor ('<U3', '|S5'); every other dtype its lane.
-    want = np.dtype(meta["descr"]) if meta["dtype"] == "String" else EXPECT_DTYPE[meta["dtype"]]
-    check(arr.dtype == want, name, f"dtype {arr.dtype} != {want}")
+    if meta.get("pickle"):
+        # A StringDType array: np.dtype() cannot parse 'StringDType(na_object=None)', so compare str(), which is how
+        # NumPy names the NA object and coerce (NumSharp's dtype.str is the same text).
+        check(str(arr.dtype) == meta["descr"], name, f"dtype {arr.dtype} != {meta['descr']}")
+    else:
+        # A fixed-width string array names its own descriptor ('<U3', '|S5'); every other dtype its lane.
+        want = np.dtype(meta["descr"]) if meta["dtype"] == "String" else EXPECT_DTYPE[meta["dtype"]]
+        check(arr.dtype == want, name, f"dtype {arr.dtype} != {want}")
     check(list(arr.shape) == meta["shape"], name, f"shape {list(arr.shape)} != {meta['shape']}")
 
 
@@ -74,7 +89,11 @@ def main():
         name = case["file"]
 
         if case["kind"] == "npy":
-            arr = np.load(path)  # allow_pickle=False: nothing NumSharp writes may need it
+            # allow_pickle stays False for every file but a StringDType array's, which NumPy itself writes as a pickle:
+            # a numeric or fixed-width file that needed it would be a NumSharp bug.
+            if case.get("pickle"):
+                check(refuses_without_pickle(path), name, "NumPy loaded a pickled file without allow_pickle")
+            arr = np.load(path, allow_pickle=bool(case.get("pickle")))
             verify_array(name, arr, case)
 
             # The layout claims must survive: an F-order file is F-contiguous once NumPy reads it.
@@ -123,18 +142,45 @@ def main():
                 check(np.array_equal(arr, np.arange(100_000, dtype=np.float64)), name, "100k values differ")
             elif name == "2d.npy":
                 check(np.array_equal(arr, np.arange(6).reshape(2, 3)), name, f"values {arr}")
+            elif name == "vstr.npy":
+                check(arr.tolist() == ["cat", "a much longer text over fifteen bytes", "dé😀", ""], name,
+                      f"values {arr.tolist()}")
+            elif name == "vstr_na.npy":
+                check(arr.tolist() == ["x", None, "y"] and arr.dtype.na_object is None, name,
+                      f"values {arr.tolist()}, na_object {arr.dtype.na_object!r}")
+            elif name == "vstr_na_nan.npy":
+                v = arr.tolist()
+                check(v[0] == "x" and isinstance(v[1], float) and np.isnan(v[1]) and np.isnan(arr.dtype.na_object),
+                      name, f"values {v}, na_object {arr.dtype.na_object!r}")
+            elif name == "vstr_na_str.npy":
+                check(arr.tolist() == ["a", "NA"] and arr.dtype.na_object == "NA" and arr.dtype.coerce is False,
+                      name, f"values {arr.tolist()}, dtype {arr.dtype!r}")
+            elif name == "vstr_fortran.npy":
+                check(arr.flags.f_contiguous and not arr.flags.c_contiguous, name, "expected F-contiguous")
+                check(arr.tolist() == [["a", "bb long text over the fifteen"], ["ccc", "d"]], name,
+                      f"values {arr.tolist()}")
+            elif name == "vstr_strided.npy":
+                check(arr.flags.c_contiguous and arr.tolist() == ["a", "c"], name, f"values {arr.tolist()}")
+            elif name == "vstr_large.npy":
+                check(arr.tolist() == [f"text number {i}" for i in range(100_000)], name, "100k texts differ")
 
-            # The header must be exactly what NumPy's own writer would emit for this array.
+            # The header must be exactly what NumPy's own writer would emit for this array (for a StringDType array:
+            # NumPy's pickle of it, byte for byte).
             with open(path, "rb") as fh:
                 raw = fh.read()
             import io
             mine = io.BytesIO()
-            np.lib.format.write_array(mine, arr)
+            with warnings.catch_warnings():
+                # NumPy warns that a custom dtype is saved as a pickle; the warning is not part of the bytes.
+                warnings.simplefilter("ignore", UserWarning)
+                np.lib.format.write_array(mine, arr)
             check(mine.getvalue() == raw, name,
                   "file is not byte-identical to NumPy's own np.save output for the same array")
 
         else:  # npz
-            with np.load(path) as z:
+            # A member that is a StringDType array is a pickle inside the archive; only then may NumPy unpickle.
+            pickled = any(meta.get("pickle") for meta in case["entries"].values())
+            with np.load(path, allow_pickle=pickled) as z:
                 check(sorted(z.files) == sorted(case["entries"]), name,
                       f".files {sorted(z.files)} != {sorted(case['entries'])}")
                 for key, meta in case["entries"].items():
@@ -155,6 +201,10 @@ def main():
                     check(np.array_equal(f, np.arange(6).reshape(2, 3)), name, "values differ")
                 elif name == "npz_compressed.npz":
                     check(np.array_equal(z["big"], np.zeros(50_000)), name, "values differ")
+                elif name == "npz_vstr.npz":
+                    check(z["names"].tolist() == ["cat", None, "a much longer text over fifteen bytes"], name,
+                          f"names {z['names'].tolist()}")
+                    check(list(z["nums"]) == [1.5, 2.5], name, "nums differ")
 
     print(f"\n{len(manifest)} files, {checked} checks")
     if failures:
