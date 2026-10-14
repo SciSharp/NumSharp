@@ -378,7 +378,7 @@
   <section class="cov-intro" aria-labelledby="cov-dashboard-title">
     <div class="cov-kicker">NumPy 2.x parity · compiled API inventory</div>
     <h2 class="cov-title" id="cov-dashboard-title">See the supported surface. Find the next gap.</h2>
-    <p class="cov-lede">Explore the NumPy catalog across functions, modules, and object members, with NumSharp equivalents, known limitations, C# overloads, and the committed NumPy-oracle contracts that prove each API's parity. The page is generated from the same artifact published by CI.</p>
+    <p class="cov-lede">Explore the NumPy catalog across functions, modules, and object members, with NumSharp equivalents, known limitations, C# overloads<span id="cov-lede-oracle">, and the committed NumPy-oracle contracts that prove each API's parity</span>. The page is generated from the same artifact published by CI.</p>
     <div class="cov-meta" id="cov-meta" aria-label="Artifact metadata"></div>
   </section>
 
@@ -393,7 +393,7 @@
     <section class="cov-metrics" id="cov-metrics" aria-label="Coverage summary"></section>
     <div class="cov-definition">
       <strong>Coverage math</strong>
-      <p><span id="cov-headline-reference"></span> Summaries, cards, and the explorer follow the selected scope. Availability is <code>available ÷ NumPy APIs in that scope</code>; supporting types, constants, modules, and NumSharp-only APIs do not enter this percentage. “Available” means an exact public member or a reviewed alias exists and is not marked partial/unsupported. The headline comparison also excludes extended APIs. API presence is not a blanket edge-case, dtype, layout, or signature parity claim. <strong>Oracle-verified</strong> is that claim's evidence: committed NumPy 2.4.2 output (the differential-fuzz corpus plus the .npy, flags and layout oracles) that CI replays against NumSharp, bit-exact or a documented divergence, resolved to the API directly or through an identity or reviewed delegation alias. <span id="cov-oracle-reference"></span> <span id="cov-applicability-note"></span></p>
+      <p><span id="cov-headline-reference"></span> Summaries, cards, and the explorer follow the selected scope. Availability is <code>available ÷ NumPy APIs in that scope</code>; supporting types, constants, modules, and NumSharp-only APIs do not enter this percentage. “Available” means an exact public member or a reviewed alias exists and is not marked partial/unsupported. The headline comparison also excludes extended APIs. API presence is not a blanket edge-case, dtype, layout, or signature parity claim. <span id="cov-oracle-explainer"><strong>Oracle-verified</strong> is that claim's evidence: committed NumPy 2.4.2 output (the differential-fuzz corpus plus the .npy, flags and layout oracles) that CI replays against NumSharp, bit-exact or a documented divergence, resolved to the API directly or through an identity or reviewed delegation alias.</span> <span id="cov-oracle-reference"></span> <span id="cov-applicability-note"></span></p>
     </div>
     <section class="cov-section" aria-labelledby="cov-status-heading">
       <div class="cov-section-head">
@@ -469,7 +469,13 @@
     ? row.id.replace("numpy.ndarray.", "ndarray.")
     : row.id.startsWith("numpy.") ? row.id.replace("numpy.", "np.") : row.id;
 
-  const state = { rows: [], filtered: [], selectedId: null, visible: 120, tooltipInstances: [], activeTooltip: null };
+  // hasOracle: whether the loaded artifact records oracle evidence at all. Generator 1.10+ publishes
+  // default_scope.oracle_verified, and a row without an `oracle` record then means "no contracts".
+  // An older artifact (the generator on a branch without the oracle join, e.g. master's 1.6.0) has
+  // no such record on ANY row, so reading it the same way would show 0.0% oracle-verified and
+  // "no contracts" for every API; initializeMetadata clears the flag and every oracle element hides.
+  // It defaults to true so a caller that renders without metadata keeps the evidence view.
+  const state = { rows: [], filtered: [], selectedId: null, visible: 120, tooltipInstances: [], activeTooltip: null, hasOracle: true };
 
   function surfaceLabel(surface) {
     if (surfaceLabels[surface]) return surfaceLabels[surface];
@@ -489,7 +495,11 @@
 
   // Mirrors coverage/oracle_evidence.py classify(), the generator's single definition. The two must
   // agree: initializeMetadata recounts the headline with this and refuses a mismatched artifact.
+  // An artifact without oracle evidence (state.hasOracle false) classifies every row as "none":
+  // its rows lack the record because the generator predates the join, not because no contract
+  // exists, so "unverified" would be a false claim.
   function parityClass(row) {
+    if (!state.hasOracle) return "none";
     const record = row.oracle;
     const credited = creditedStatuses.has(row.status);
     if (record) {
@@ -613,7 +623,7 @@
       <div class="cov-card-stat is-available"><strong>${counts.available}</strong><span>available</span></div>
       <div class="cov-card-stat is-partial"><strong>${counts.partial}</strong><span>partial</span></div>
       <div class="cov-card-stat is-missing"><strong>${gaps}</strong><span>gaps</span></div>
-    </div><div class="cov-small cov-card-foot">${counts.oracle} oracle-verified · ${counts.exact} direct names · ${counts.alias} aliases · ${counts.total} total${counts.extension ? ` · ${counts.extension} NumSharp-only` : ""}</div>`;
+    </div><div class="cov-small cov-card-foot">${state.hasOracle ? `${counts.oracle} oracle-verified · ` : ""}${counts.exact} direct names · ${counts.alias} aliases · ${counts.total} total${counts.extension ? ` · ${counts.extension} NumSharp-only` : ""}</div>`;
   }
 
   function compactCardBreakdown(counts) {
@@ -628,14 +638,16 @@
   }
 
   function initializeMetadata(data) {
-    const stats = summarize(defaultRows());
     const published = data.summary.default_scope;
+    // Artifacts from generator 1.10+ publish oracle counts; recounting them here catches a drift
+    // between parityClass and the generator's classify before a wrong percentage is displayed.
+    // The flag is set before the recount because parityClass reads it.
+    state.hasOracle = published.oracle_verified !== undefined;
+    const hasOracle = state.hasOracle;
+    const stats = summarize(defaultRows());
     if (stats.total !== number(published.total) || stats.available !== number(published.available)) {
       throw new Error("Coverage summary does not match its row inventory.");
     }
-    // Artifacts from generator 1.10+ publish oracle counts; recounting them here catches a drift
-    // between parityClass and the generator's classify before a wrong percentage is displayed.
-    const hasOracle = published.oracle_verified !== undefined;
     if (hasOracle && stats.oracle !== number(published.oracle_verified)) {
       throw new Error("Coverage oracle summary does not match its row evidence.");
     }
@@ -652,6 +664,9 @@
     byId("cov-oracle-reference").textContent = hasOracle
       ? `Headline oracle-verified: ${percent(stats.oracle, stats.total).toFixed(1)}% (${stats.oracle}/${stats.total} APIs; ${stats.oracleUnverified} available APIs without contracts).`
       : "";
+    // The lede and the reading guide describe the oracle evidence; an artifact without it shows none.
+    byId("cov-lede-oracle").hidden = !hasOracle;
+    byId("cov-oracle-explainer").hidden = !hasOracle;
   }
 
   function renderSummary() {
@@ -666,7 +681,8 @@
 
     byId("cov-metrics").innerHTML = [
       metricCard("Scoped API availability", coverageLabel(stats), stats.numpy ? `${stats.availableApis} of ${stats.numpy} comparable NumPy APIs` : "No comparable NumPy APIs in this scope"),
-      metricCard("Oracle-verified parity", stats.numpy ? `${stats.oracleCoverage.toFixed(1)}%` : "-", stats.numpy ? `${stats.oracleApis} of ${stats.numpy} replay committed NumPy oracle contracts · ${stats.oracleUnverified} available without` : `${stats.oracle} oracle-verified entries in this scope`, stats.oracle ? "oracle" : ""),
+      // Without oracle evidence in the artifact the card would read 0.0% for every scope: omit it.
+      ...(state.hasOracle ? [metricCard("Oracle-verified parity", stats.numpy ? `${stats.oracleCoverage.toFixed(1)}%` : "-", stats.numpy ? `${stats.oracleApis} of ${stats.numpy} replay committed NumPy oracle contracts · ${stats.oracleUnverified} available without` : `${stats.oracle} oracle-verified entries in this scope`, stats.oracle ? "oracle" : "")] : []),
       metricCard("Exact names", stats.exact.toLocaleString(), `${stats.alias} reviewed aliases bridge C#/NumPy naming`, stats.exact ? "exact" : ""),
       metricCard("Open gaps", (stats.missing + stats.unsupported).toLocaleString(), `${stats.partial} additional API${stats.partial === 1 ? " is" : "s are"} partial`, "gaps"),
       metricCard("Entries in scope", stats.total.toLocaleString(), `${surfaces.length} public surfaces · ${categories.length} capability areas`)
@@ -737,6 +753,10 @@
     const parities = [...new Set(rows.map(parityClass))].sort((a, b) => parityOrder.indexOf(a) - parityOrder.indexOf(b));
     if (parities.some((value) => value.startsWith("verified"))) parities.unshift("verified");
     populateSelect("cov-oracle", parities, oracleLabels);
+    // The oracle filter has nothing to filter on in an artifact without evidence: hide its control.
+    // `closest` is optional because the test harness's element stubs do not implement it.
+    const oracleControl = byId("cov-oracle").closest?.(".cov-control");
+    if (oracleControl) oracleControl.hidden = !state.hasOracle;
   }
 
   function currentFilters() {
@@ -846,7 +866,7 @@
         <div class="cov-detail-fact"><div class="cov-detail-label">Availability</div><div class="cov-detail-value">${escapeHtml(mapping)}</div></div>
         <div class="cov-detail-fact"><div class="cov-detail-label">Inventory group</div><div class="cov-detail-value">${row.in_default_scope ? "Headline comparison" : isComparableApi(row) ? "Extended NumPy API" : row.origin === "numsharp" ? "NumSharp-only API" : "Supporting NumPy export"}${row.disposition ? ` · ${escapeHtml(dispositionLabels[row.disposition] || row.disposition)}` : ""}</div></div>
         ${row.applicability ? `<div class="cov-detail-fact"><div class="cov-detail-label">NumPy applicability</div><div class="cov-detail-value">${escapeHtml(row.applicability === "not_applicable" ? "NumPy rejects this ufunc method" : row.applicability === "conditional" ? "Depends on operands and dtype" : row.applicability)}</div></div>` : ""}
-        <div class="cov-detail-fact"><div class="cov-detail-label">NumPy oracle</div><div class="cov-detail-value">${escapeHtml(oracleSummary(row))}</div></div>
+        ${state.hasOracle ? `<div class="cov-detail-fact"><div class="cov-detail-label">NumPy oracle</div><div class="cov-detail-value">${escapeHtml(oracleSummary(row))}</div></div>` : ""}
       </div>
       ${oracleSection(row)}
       ${row.origin === "numpy" ? `<h4>NumPy signature</h4><div class="cov-code-block">${escapeHtml(row.numpy_signature)}</div>` : ""}
@@ -916,7 +936,7 @@
     const tabs = [["available", "Available", available], ["gaps", "Gaps", gaps]];
     if (other.length) tabs.push(["other", "Partial / NumSharp-only", other]);
     const initialTab = tabs.find(([, , items]) => items.length)?.[0] || "available";
-    return `<div class="ns-cov-tip"><div class="ns-cov-tip-head"><strong>${escapeHtml(title)}</strong><span>${counts.total} entries · ${counts.numpy ? `${counts.availableApis}/${counts.numpy} NumPy APIs available · ${coverageLabel(counts)} · ${counts.oracleApis} oracle-verified` : "No comparable NumPy APIs"}</span></div>
+    return `<div class="ns-cov-tip"><div class="ns-cov-tip-head"><strong>${escapeHtml(title)}</strong><span>${counts.total} entries · ${counts.numpy ? `${counts.availableApis}/${counts.numpy} NumPy APIs available · ${coverageLabel(counts)}${state.hasOracle ? ` · ${counts.oracleApis} oracle-verified` : ""}` : "No comparable NumPy APIs"}</span></div>
       <div class="ns-cov-tip-tabs" role="tablist">${tabs.map(([key, label, items]) => `<button class="ns-cov-tip-tab" role="tab" aria-selected="${key === initialTab}" data-tip-tab="${key}">${label} (${items.length})</button>`).join("")}</div>
       ${tabs.map(([key, , items]) => `<div class="ns-cov-tip-panel" data-tip-panel="${key}"${key === initialTab ? "" : " hidden"}>${tooltipRowsHtml(items)}</div>`).join("")}</div>`;
   }
