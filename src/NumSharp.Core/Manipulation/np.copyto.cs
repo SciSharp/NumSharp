@@ -286,7 +286,7 @@ namespace NumSharp
 
             if (original != NPTypeCode.Empty && common.TypeCode == original)
                 return original;
-            return common.DefaultDescr().Meta.TypeCode;
+            return common.default_descr().Meta.TypeCode;
         }
 
         /// <summary>

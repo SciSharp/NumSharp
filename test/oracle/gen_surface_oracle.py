@@ -1544,8 +1544,6 @@ GAPS = {
     "SU15": "np.iinfo(bool) returns an iinfo; NumPy raises ValueError \"Invalid integer data type 'b'.\"",
     "SU16": "np.iinfo of a float / complex dtype raises \"Invalid integer data type 'float64'\"; NumPy's text names the "
             "kind character and ends with a period: \"Invalid integer data type 'f'.\"",
-    "SU17": "dtype.newbyteorder() of a big-endian descriptor returns the canonical native descriptor (repr "
-            "dtype('int32')); NumPy keeps the explicit '<' byte order (repr dtype('<i4'))",
     "SU18": "np.format_float_positional / np.format_float_scientific (unique=True, trim='k') keep the zeros a precision "
             "cutoff carries into: format_float_positional(1.99999, precision=2) is '2.00' and format_float_scientific"
             "(0.0995, precision=1) '1.0e-01'; NumPy's Dragon4 drops the carried digits ('2.', '1.e-01')",
@@ -1814,8 +1812,6 @@ def _gap_of(case):
             return "SU14"
     if op.startswith("iinfo.") and err:
         return "SU15" if dt == "bool" else "SU16"
-    if op == "dtype.newbyteorder" and p["dtype"] in (">i4", ">c16"):
-        return "SU17"
     if op == "broadcast.iters" and p.get("steps", 0) > 0:
         return "SU20"
     if op == "get_printoptions" and p["key"] in (None, "formatter", "override_repr"):

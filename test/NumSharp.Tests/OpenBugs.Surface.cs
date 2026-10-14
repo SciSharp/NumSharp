@@ -30,7 +30,7 @@ namespace NumSharp.Tests
     //   * Refusals NumPy makes and NumSharp does not (or the reverse), and error texts: SU1, SU2, SU4, SU8, SU10, SU11,
     //     SU15, SU16, SU22, SU28, SU29, SU32-SU35, SU40.
     //   * Reporting: np.nditer.shape's axis order (SU26), index tracking blocking coalescing (SU27), get_printoptions'
-    //     missing keys (SU21), edgeitems=0 summarization (SU23), dtype.newbyteorder's repr (SU17), the datetime
+    //     missing keys (SU21), edgeitems=0 summarization (SU23), the datetime
     //     dtype.type (SU24), complex histogram edges (SU3).
     //
     // Not reproduced here: SU7 (the float formatters take only a double — an API shape, not a defect of a call) and
@@ -274,16 +274,6 @@ namespace NumSharp.Tests
         }
 
         // ----- dtype -----
-
-        /// <summary>
-        ///     <c>repr(np.dtype('&gt;i4').newbyteorder())</c> is <c>dtype('&lt;i4')</c> in NumPy (the swapped descriptor keeps
-        ///     an explicit '&lt;'); NumSharp returns the canonical native descriptor, <c>dtype('int32')</c> (gap SU17).
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU17")]
-        public void Surface_DtypeNewbyteorder_KeepsTheExplicitByteOrder()
-        {
-            np.dtype(">i4").newbyteorder().ToString(true).Should().Be("dtype('<i4')");
-        }
 
         /// <summary>
         ///     <c>np.dtype('M8[ms]').type</c> is <c>numpy.datetime64</c>; NumSharp's is null (no CLR element type before

@@ -100,8 +100,8 @@ legacy classes refuse (`DateTime64DType()` → "Preliminary-API: … can only be
 ```
 NumSharp.DTypeMeta                (abstract) — the DType CLASS. One live object per dtype class.
  ├─ LegacyBuiltinDTypeMeta        the 15 storage-backed types + the vestigial NPTypeCode.String; data-driven
- │                                (name, TypeNum, TypeCode, ScalarType, Kind, TypeChar, ItemSize, Alignment,
- │                                flags, aliases). common_dtype = the existing frozen promotion table.
+ │                                (Name, type_num, TypeCode, type, Kind, TypeChar, ItemSize, Alignment,
+ │                                flags, Aliases). common_dtype = the existing frozen promotion table.
  ├─ PyScalarDTypeMeta (internal)  _PyLongDType/_PyFloatDType/_PyComplexDType — NEP 50 weak C# literals
  └─ DatetimeDTypeMeta             DateTime64DType / TimeDelta64DType — PARAMETRIC; unit metadata on the
                                   instance; GCD promotion; unit casting rules. (descriptor-level in stage A)
@@ -195,7 +195,7 @@ float64 12, complex128 15, half 23, str 19, datetime 21, timedelta 22, Decimal 2
 **`NPY_TYPES` (the identity enum) landed alongside `NPTypeCode` (the computational switch).** `Creation/np.dtype.cs`
 now carries `public enum NPY_TYPES` — a byte-identical mirror of NumPy's C `NPY_TYPES` (`ndarraytypes.h`), sibling to
 the existing `NPY_TYPECHAR`, plus the NumSharp user-range extras `NUMSHARP_DECIMAL`(256)/`NUMSHARP_CHAR`(257).
-`DType.type_num` returns it (`(NPY_TYPES)Meta.TypeNum`); `DType.num` stays `int` (NumPy's `.num` is an int);
+`DType.type_num` returns it (`(NPY_TYPES)Meta.type_num`); `DType.num` stays `int` (NumPy's `.num` is an int);
 `DType.From(NPY_TYPES)` is the `PyArray_DescrFromType` reverse (rejecting a number with no NumSharp class on the
 platform). `NPTypeCode` is untouched — it remains the storage/kernel discriminator every backend `switch`/IL generator
 dispatches on; the `DType` descriptor is served ALONGSIDE it into the kernels (Stage C). Gate: `DTypeDescriptorTests`
@@ -235,11 +235,11 @@ already declared on `DTypeMeta`).
 | NEP | Requirement | NumSharp |
 |---|---|---|
 | 40 | legacy dtype layout is what to move away from | `NPTypeCode` demoted to a per-meta storage key |
-| 41 | dtypes are classes; scalars are not dtype instances; `np.dtype[np.float64]` class getter | `DTypeMeta` instances are the classes; `DType.type`/`Meta.ScalarType` is the C# scalar type; `DTypeRegistry.FromScalarType(typeof(double))` ≙ `np.dtype[np.float64]` |
+| 41 | dtypes are classes; scalars are not dtype instances; `np.dtype[np.float64]` class getter | `DTypeMeta` instances are the classes; `DType.type`/`Meta.type` is the C# scalar type; `DTypeRegistry.FromScalarType(typeof(double))` ≙ `np.dtype[np.float64]` |
 | 42 | `__common_dtype__`/`__common_instance__`/`default_descr`/`discover_descr_from_pyobject`/`is_known_scalar_type`/`ensure_canonical`/`getitem`/`setitem`; abstract & parametric flags; `CastingImpl.resolve_descriptors`; `np.dtype('S')`-class-vs-instance | the same slots as virtual methods; `DTypeFlags`; `CastingImpl`; unsized/generic descriptors stand for the class |
 | 43 | `ArrayMethod` (`resolve_descriptors`, `get_loop`, context, flags, casting), promoters keyed on DType classes | `ArrayMethod`/`CastingImpl`/`ArrayMethodContext`; loop contract = `NDInnerLoopFunc`; flags = existing `NDArrayMethodFlags` |
 | 50 | weak Python scalars; `result_type(int8, 300) → int8`; 0-D arrays are strong | `PyScalarDTypeMeta` for C# literals; `np.result_type(params object[])` treats every `NDArray` as strong (the operator path's 0-D weakness stays the documented `[Misaligned]`) |
-| 55 | variable-width `StringDType` | slots reserved (`HasReferences`/`GetClearLoop`), num 2056 reserved, stage D |
+| 55 | variable-width `StringDType` | slots reserved (`HasReferences`/`get_clear_loop`), num 2056 reserved, stage D |
 | 56 | `np.isdtype`, `np.dtypes` namespace, `promote_types`/`result_type` on dtypes | `np.dtypes` facade; `DType` overloads |
 
 ## 5. Implementation status
@@ -336,5 +336,33 @@ Things learned while landing it that the design above did not anticipate:
 * **Breaking (accepted):** `Type t = a.dtype` / `Type t = np.float64` need a cast; `a.dtype.Name` → `a.dtype.name` (NumPy) or
   `a.dtype.type.Name` (C#); `np.X` where a `Type` is required by signature → `np.X.type`; reflection over
   `np.array(Array, Type, …)` → `typeof(DType)`; `np.isdtype(x, "floating")` raises.
+
+**NumPy's names and a probed oracle (2026-10-14).**
+
+* **Every member NumPy names keeps NumPy's spelling, case for case** (the owner's rule: only class names take the house
+  `ND*` style). `DTypeMeta`: the Python class attributes `type` (was `ScalarType`), `_abstract`, `_parametric`, `_legacy`,
+  `_is_numeric` (were `IsAbstract`…); the C fields `singleton`, `type_num`, `flags`; the NEP 42 slots `default_descr`,
+  `common_dtype`, `common_instance`, `ensure_canonical`, `discover_descr_from_pyobject`, `is_known_scalar_type`,
+  `get_clear_loop`, `get_fill_zero_loop`; `within_dtype_castingimpl` and the new read-only `castingimpls` view.
+  `DTypeFlags`: `NPY_DT_LEGACY` / `_ABSTRACT` / `_PARAMETRIC` / `_NUMERIC`. `DType`: the byte-order characters `NPY_NATIVE`,
+  `NPY_IGNORE`, `NPY_SWAP`, `NPY_LITTLE`, `NPY_BIG`, `NPY_NATBYTE`, `NPY_OPPBYTE` (were `NativeByteOrder`…). C function names
+  keep NumPy's PascalCase after the `PyArray_` prefix (`GetCastingImpl`, `AddCastingImpl`, `DTypePromotion.*`).
+* **Ported:** `dtype.isalignedstruct`, `len(dtype)` (`__len__`, 0 fields), `dtype[key]` (`__getitem__`, NumPy's KeyError),
+  `dtype.metadata` and `np.dtype(dtype, align, copy, metadata)` (`arraydescr_new`'s statements: `copy` copies only a
+  singleton, `metadata` always copies and merges without overwriting existing keys).
+* **Fixed:** `newbyteorder` is `PyArray_ByteorderConverter` + `PyArray_DescrNewByteorder` (a requested host order stays an
+  explicit `'<'`; a swap of a non-native descriptor gives the explicit host order — surface gap SU17; the error quotes the
+  whole string, `None` is TypeError); `isnative` is `PyArray_ISNBO`; equality and hashing read `'='` as the host order;
+  `repr` uses the short `'<f8'` form whenever the stored byte order is explicit; the parser folds an explicit host order
+  into `'='` and returns the datetime LETTERS as the builtin singletons (`np.dtype('M').isbuiltin == 1`); `ensure_canonical`
+  returns a fresh native copy, never the singleton (`np.result_type(np.dtype('>f8')).isbuiltin == 0`); `promote_types`'
+  fast path is pointer identity, so equal-but-distinct inputs come back as the singleton.
+* **Gate:** `test/oracle/gen_dtype_oracle.py` writes `test/NumSharp.Tests/DTypes/corpus/dtype_oracle.{llp64,lp64}.jsonl`
+  (4,683 records: member names incl. the C slots read from `dtype_api.h` / `dtypemeta.h`, 1,014 descriptors × every
+  attribute, 98 errors, 784 comparison pairs, 812 promotions, 33 classes, 1,941 casting resolutions), one per C `long`
+  model, from Windows NumPy and WSL's Linux NumPy; `DTypes/DTypeOracleTests.cs` replays the host's model (8/8 planted bugs
+  killed; the LP64 file verified under Linux .NET). Self-retiring exemptions: the dunders C# has no use for, the unported
+  slots (`setitem`, `getitem`, `finalize_descr`, `get_constant`, ArrFuncs, `sort_meth`/`argsort_meth`), the absent classes,
+  the collapsed C-integer / long-double classes, the datetime `type` (Stage C) and the asymmetric `M8[1000ms] == M8[s]`.
 
 **Not yet** (unchanged from §3): datetime storage/kernels/NaT/ISO (C — `docs/plans/datetime64.md`), strings (D).

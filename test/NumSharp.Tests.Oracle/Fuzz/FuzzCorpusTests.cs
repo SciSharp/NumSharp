@@ -1123,8 +1123,9 @@ namespace NumSharp.Tests.Fuzz
             ["relayout.jsonl"] = 14000,    // 14,964 variants of the portable tiers, 19 kinds
             ["relayout_host.jsonl"] = 1600, // 1,728 variants of the host-libm tiers
             // The surface tier (gen_surface_oracle.py, 2026-10-08): the APIs the coverage inventory listed as available
-            // but unproven. Delivered count (the 986 carved gaps live in corpus/gaps/surface_gaps.jsonl):
-            ["surface.jsonl"] = 14700,     // 15,482 cases over 139 op keys
+            // but unproven. Delivered count (the 984 carved gaps live in corpus/gaps/surface_gaps.jsonl; SU17's 2 cases
+            // returned to the gate when it was fixed, 2026-10-14):
+            ["surface.jsonl"] = 14700,     // 15,484 cases over 139 op keys
             // The matrix tier (gen_matrix_oracle.py, 2026-10-09): numpy.matrix as NDMatrix. Delivered count (the 172
             // carved gaps of the array library below the class live in corpus/gaps/matrix_gaps.jsonl):
             ["matrix.jsonl"] = 25400,      // 26,761 cases over 87 op keys: values, result class, memory facet, errors

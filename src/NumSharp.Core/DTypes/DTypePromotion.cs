@@ -35,7 +35,7 @@ namespace NumSharp
             if (ReferenceEquals(dtype1, dtype2))
                 return dtype1;
 
-            var common = dtype1.CommonDType(dtype2) ?? dtype2.CommonDType(dtype1);
+            var common = dtype1.common_dtype(dtype2) ?? dtype2.common_dtype(dtype1);
             if (common == null)
                 throw new DTypePromotionError(
                     $"The DTypes {dtype1} and {dtype2} do not have a common DType. " +
@@ -86,7 +86,7 @@ namespace NumSharp
                 return null;
             }
 
-            if (other.TypeNum > cls.TypeNum)
+            if (other.type_num > cls.type_num)
             {
                 /*
                  * Let the more generic (larger type number) DType handle this
@@ -108,7 +108,7 @@ namespace NumSharp
                  * timedelta64 — except a 64-bit unsigned one — so those pairs promote to timedelta64; datetime64
                  * promotes with nothing numeric.
                  */
-                if (dtm.IsTimedelta && other.IsLegacy && other.IsNumeric
+                if (dtm.IsTimedelta && other._legacy && other._is_numeric
                     && (other.Kind == 'b' || other.Kind == 'i' || (other.Kind == 'u' && other.ItemSize < 8)))
                     return cls;
             }
@@ -139,7 +139,7 @@ namespace NumSharp
                 }
                 else
                 {
-                    res = dtypes[low].CommonDType(dtypes[high]);
+                    res = dtypes[low].common_dtype(dtypes[high]);
                     notImplemented = res == null;
                 }
 
@@ -214,7 +214,7 @@ namespace NumSharp
                  * a higher category). We assume that the result is not in a lower
                  * category.
                  */
-                var promotion = mainDType.CommonDType(dtypes[i]);
+                var promotion = mainDType.common_dtype(dtypes[i]);
                 if (promotion == null)
                 {
                     throw new DTypePromotionError(
@@ -239,26 +239,37 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>PyArray_PromoteTypes</c>: the smallest descriptor both inputs cast to safely. An identical
-        ///     native legacy input is returned as is (metadata preserved); otherwise the common CLASS decides — a
-        ///     non-parametric class yields its default descriptor, a parametric one casts both inputs to itself
+        ///     NumPy's <c>PyArray_PromoteTypes</c>: the smallest descriptor both inputs cast to safely. The SAME native
+        ///     legacy descriptor object passed twice is returned as is (metadata and an explicit byte order preserved);
+        ///     otherwise the common CLASS decides — a non-parametric class yields its default descriptor (the singleton:
+        ///     metadata and an explicit host byte order are dropped), a parametric one casts both inputs to itself
         ///     (<see cref="CastDescrToDType"/>) and takes their <c>common_instance</c>.
         /// </summary>
+        /// <param name="type1">The first descriptor.</param>
+        /// <param name="type2">The second descriptor.</param>
+        /// <returns>The promoted descriptor.</returns>
+        /// <exception cref="ArgumentNullException">Either descriptor is null.</exception>
+        /// <exception cref="DTypePromotionError">The two classes have no common class.</exception>
+        /// <exception cref="TypeError">A parametric common class cannot represent an input, or the units have no common divisor.</exception>
         public static DType PromoteTypes(DType type1, DType type2)
         {
             if (type1 == null) throw new ArgumentNullException(nameof(type1));
             if (type2 == null) throw new ArgumentNullException(nameof(type2));
 
             /* Fast path for identical inputs (NOTE: This path preserves metadata!) */
-            if (type1.Equals(type2) && type1.Meta.IsLegacy && type1.isnative)
+            // NumPy tests POINTER identity (`type1 == type2`), not equality: two equal descriptors that are different
+            // objects (a copy, one with metadata, one with an explicit host byte order) take the common-class path and
+            // come back as the singleton, so np.promote_types(np.dtype('f8').newbyteorder('<'), np.dtype('f8')) is
+            // dtype('float64'), isbuiltin 1.
+            if (ReferenceEquals(type1, type2) && type1.Meta._legacy && type1.isnative)
                 return type1;
 
             var commonDType = CommonDType(type1.Meta, type2.Meta);
 
-            if (!commonDType.IsParametric)
+            if (!commonDType._parametric)
             {
                 /* Note that this path loses all metadata */
-                return commonDType.DefaultDescr();
+                return commonDType.default_descr();
             }
 
             /* Cast the input types to the common DType if necessary */
@@ -269,7 +280,7 @@ namespace NumSharp
              * And find the common instance of the two inputs
              * NOTE: Common instance preserves metadata (normally and of one input)
              */
-            return commonDType.CommonInstance(d1, d2);
+            return commonDType.common_instance(d1, d2);
         }
 
         /// <summary>
@@ -287,13 +298,13 @@ namespace NumSharp
 
             if (ReferenceEquals(descr.Meta, givenDType))
                 return descr;
-            if (!givenDType.IsParametric)
+            if (!givenDType._parametric)
             {
                 /*
                  * Don't actually do anything, the default is always the result
                  * of any cast.
                  */
-                return givenDType.DefaultDescr();
+                return givenDType.default_descr();
             }
 
             var impl = descr.Meta.GetCastingImpl(givenDType);
@@ -326,15 +337,15 @@ namespace NumSharp
             var result = CastDescrToDType(descrs[0], dtype);
             if (descrs.Count == 1)
                 return result;
-            if (!dtype.IsParametric)
+            if (!dtype._parametric)
             {
                 /* Note that this "fast" path loses all metadata */
-                return dtype.DefaultDescr();
+                return dtype.default_descr();
             }
             for (int i = 1; i < descrs.Count; i++)
             {
                 var curr = CastDescrToDType(descrs[i], dtype);
-                result = dtype.CommonInstance(result, curr);
+                result = dtype.common_instance(result, curr);
             }
             return result;
         }
@@ -364,26 +375,26 @@ namespace NumSharp
             if (n == 1)
             {
                 /* If the input is a single value, skip promotion. */
-                return allDescriptors[0] != null ? allDTypes[0].EnsureCanonical(allDescriptors[0]) : allDTypes[0].DefaultDescr();
+                return allDescriptors[0] != null ? allDTypes[0].ensure_canonical(allDescriptors[0]) : allDTypes[0].default_descr();
             }
 
             var commonDType = PromoteDTypeSequence(allDTypes);
 
-            if (commonDType.IsAbstract)
+            if (commonDType._abstract)
             {
                 /* (ab)use default descriptor to define a default */
-                commonDType = commonDType.DefaultDescr().Meta;
+                commonDType = commonDType.default_descr().Meta;
             }
 
             DType result = null;
-            if (commonDType.IsParametric)
+            if (commonDType._parametric)
             {
                 for (int i = 0; i < n; i++)
                 {
                     if (allDescriptors[i] == null)
                         continue; /* originally a python scalar/literal */
                     var curr = CastDescrToDType(allDescriptors[i], commonDType);
-                    result = result == null ? curr : commonDType.CommonInstance(result, curr);
+                    result = result == null ? curr : commonDType.common_instance(result, curr);
                 }
             }
 
@@ -391,7 +402,7 @@ namespace NumSharp
              * If the DType is not parametric, or all were weak scalars,
              * a result may not yet be set.
              */
-            return result ?? commonDType.DefaultDescr();
+            return result ?? commonDType.default_descr();
         }
 
         /// <summary>

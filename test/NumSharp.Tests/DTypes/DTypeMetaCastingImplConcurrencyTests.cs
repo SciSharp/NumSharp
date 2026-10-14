@@ -32,7 +32,7 @@ namespace NumSharp.Tests.DTypes
 
             from.GetCastingImpl(to).Should().BeNull("nothing is registered yet");
             from.GetCastingImpl(from).Should().BeNull("no within-dtype cast is registered yet");
-            from.WithinDTypeCastingImpl.Should().BeNull();
+            from.within_dtype_castingimpl.Should().BeNull();
 
             var cast = new ProbeCastingImpl(from, to, "first");
             DTypeRegistry.AddCastingImpl(cast);
@@ -47,13 +47,13 @@ namespace NumSharp.Tests.DTypes
             var within = new ProbeCastingImpl(from, from, "within");
             DTypeRegistry.AddCastingImpl(within);
             from.GetCastingImpl(from).Should().BeSameAs(within);
-            from.WithinDTypeCastingImpl.Should().BeSameAs(within);
+            from.within_dtype_castingimpl.Should().BeSameAs(within);
             from.GetCastingImpl(to).Should().BeSameAs(cast, "the within-dtype slot and the table are separate");
 
             Action withinAgain = () => DTypeRegistry.AddCastingImpl(new ProbeCastingImpl(from, from, "within2"));
             withinAgain.Should().Throw<InvalidOperationException>()
                 .WithMessage("A cast within <class 'numsharp.tests.ContractFrom'> is already registered.");
-            from.WithinDTypeCastingImpl.Should().BeSameAs(within, "a refused registration leaves the first one in place");
+            from.within_dtype_castingimpl.Should().BeSameAs(within, "a refused registration leaves the first one in place");
 
             Action nullTo = () => from.GetCastingImpl(null);
             nullTo.Should().Throw<ArgumentNullException>().WithParameterName("to");
@@ -284,8 +284,8 @@ namespace NumSharp.Tests.DTypes
                     problems.Add($"round {r}: {winners} registrations returned");
                 else if (!ReferenceEquals(froms[r].GetCastingImpl(tos[r]), winner))
                     problems.Add($"round {r}: the pair resolves to {froms[r].GetCastingImpl(tos[r])?.Name ?? "null"}, not to the registration that returned ({winner.Name})");
-                else if (withinDType && !ReferenceEquals(froms[r].WithinDTypeCastingImpl, winner))
-                    problems.Add($"round {r}: WithinDTypeCastingImpl is not the registration that returned");
+                else if (withinDType && !ReferenceEquals(froms[r].within_dtype_castingimpl, winner))
+                    problems.Add($"round {r}: within_dtype_castingimpl is not the registration that returned");
             }
             problems.Should().BeEmpty();
         }
@@ -300,18 +300,18 @@ namespace NumSharp.Tests.DTypes
             /// <param name="name">The class name, which the duplicate-registration messages quote.</param>
             public ProbeDTypeMeta(string name)
                 : base(name, "numsharp.tests", typeNum: -1, scalarType: null, scalarName: null, NPTypeCode.Empty,
-                    kind: 'V', typeChar: 'V', itemSize: -1, alignment: 1, DTypeFlags.Abstract)
+                    kind: 'V', typeChar: 'V', itemSize: -1, alignment: 1, DTypeFlags.NPY_DT_ABSTRACT)
             {
             }
 
             /// <summary>Not used by these tests: a probe class has no descriptors.</summary>
             /// <returns>Always null.</returns>
-            public override DType DefaultDescr() => null;
+            public override DType default_descr() => null;
 
             /// <summary>Not used by these tests: a probe class takes part in no promotion.</summary>
             /// <param name="other">Ignored.</param>
             /// <returns>Always null (NumPy's <c>NotImplemented</c>).</returns>
-            public override DTypeMeta CommonDType(DTypeMeta other) => null;
+            public override DTypeMeta common_dtype(DTypeMeta other) => null;
         }
 
         /// <summary>A cast whose identity is all the tests read: it is registered and looked up, never resolved.</summary>

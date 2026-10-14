@@ -884,6 +884,8 @@ namespace NumSharp.Tests.Fuzz
             E(l, "DType.GetTypeCode", "code", f => Box(np.float64.GetTypeCode()));
             E(l, "DType.ToString", "str + repr", f => np.float64.ToString() + np.float64.ToString(true));
             E(l, "DType.newbyteorder", "swap", f => np.float64.newbyteorder('>'));
+            E(l, "DType.__len__", "field count of a non-structured dtype", f => Box(np.float64.__len__()));
+            T(l, "DType.__getitem__", "by design: NumPy's KeyError (a non-structured dtype has no fields)", f => np.float64.__getitem__(0));
             // DType's operators are pure descriptor logic (registry lookups, the safe-cast table) and must
             // read zero pool traffic — an allocation here would be one per dtype comparison, everywhere.
             E(l, "DType.op_Implicit", "Type / NPTypeCode / NPTypeCode? / string / NPY_TYPES -> DType, DType -> NPTypeCode", f =>

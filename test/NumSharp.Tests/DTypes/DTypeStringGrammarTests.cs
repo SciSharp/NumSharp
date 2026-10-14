@@ -3,7 +3,7 @@ using System;
 namespace NumSharp.Tests.DTypes
 {
     /// <summary>
-    ///     The dtype-string grammar of <see cref="np.dtype(string)"/> — the port of <c>descriptor.c::_convert_from_str</c>
+    ///     The dtype-string grammar of <see cref="np.dtype(string, bool, bool, System.Collections.Generic.IReadOnlyDictionary{string, object})"/> — the port of <c>descriptor.c::_convert_from_str</c>
     ///     plus the datetime metadata grammar of <c>datetime.c</c>. Every expectation (values AND error texts) was probed
     ///     against <c>numpy==2.4.2</c>; <c>DTypeStringParityTests</c> keeps the pre-existing name/code table, this file
     ///     covers what the new grammar adds: datetime typestrs, divisors, byte-order retention, NumPy's error wording,

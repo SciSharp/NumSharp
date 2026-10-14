@@ -69,7 +69,7 @@ namespace NumSharp
         {
             const string numpy = "numpy.dtypes";
             const string numsharp = "numsharp.dtypes";
-            const DTypeFlags builtin = DTypeFlags.Legacy | DTypeFlags.Numeric;
+            const DTypeFlags builtin = DTypeFlags.NPY_DT_LEGACY | DTypeFlags.NPY_DT_NUMERIC;
 
             string[] longAliases32 = CLongIs32Bit ? new[] { "IntDType", "LongDType" } : new[] { "IntDType" };
             string[] ulongAliases32 = CLongIs32Bit ? new[] { "UIntDType", "ULongDType" } : new[] { "UIntDType" };
@@ -108,14 +108,14 @@ namespace NumSharp
             Char = Legacy("CharDType", numsharp, 257, NPTypeCode.Char, typeof(char), "char", 'u', (char)NPY_TYPECHAR.NPY_CHARLTR, 2, 2, builtin, null);
             // The vestigial string slot is NumPy's UNSIZED `U0`: itemsize 0, so it renders as `<U0` / dtype('<U') and never
             // masquerades as a 1-byte type (NPTypeCode.String.SizeOf() still reports 1 for the old char-based code paths).
-            Str = Legacy("StrDType", numpy, 19, NPTypeCode.String, typeof(string), "str", 'U', 'U', 0, 1, DTypeFlags.Legacy | DTypeFlags.Parametric, null);
+            Str = Legacy("StrDType", numpy, 19, NPTypeCode.String, typeof(string), "str", 'U', 'U', 0, 1, DTypeFlags.NPY_DT_LEGACY | DTypeFlags.NPY_DT_PARAMETRIC, null);
 
             DateTime64 = new DatetimeDTypeMeta(isTimedelta: false);
             TimeDelta64 = new DatetimeDTypeMeta(isTimedelta: true);
             Add(DateTime64);
             Add(TimeDelta64);
-            DateTime64.Singleton = DateTime64.Descr(DatetimeMetaData.Generic);
-            TimeDelta64.Singleton = TimeDelta64.Descr(DatetimeMetaData.Generic);
+            DateTime64.singleton = DateTime64.Descr(DatetimeMetaData.Generic);
+            TimeDelta64.singleton = TimeDelta64.Descr(DatetimeMetaData.Generic);
 
             PyLong = new PyScalarDTypeMeta("_PyLongDType", PyScalarKind.Int, NPTypeCode.Int64);
             PyFloat = new PyScalarDTypeMeta("_PyFloatDType", PyScalarKind.Float, NPTypeCode.Double);
@@ -135,22 +135,22 @@ namespace NumSharp
             char kind, char typeChar, int itemSize, int alignment, DTypeFlags flags, string[] aliases)
         {
             var meta = new LegacyBuiltinDTypeMeta(name, module, typeNum, code, scalar, scalarName, kind, typeChar, itemSize, alignment, flags, aliases);
-            meta.Singleton = new DType(meta, DType.NativeByteOrder, null);
+            meta.singleton = new DType(meta, DType.NPY_NATIVE, null);
             Add(meta);
             return meta;
         }
 
         private static void Add(DTypeMeta meta)
         {
-            if (_byTypeNum.ContainsKey(meta.TypeNum))
-                throw new InvalidOperationException($"A DType with type number {meta.TypeNum} is already registered ({_byTypeNum[meta.TypeNum]}).");
+            if (_byTypeNum.ContainsKey(meta.type_num))
+                throw new InvalidOperationException($"A DType with type number {meta.type_num} is already registered ({_byTypeNum[meta.type_num]}).");
             if (_byName.ContainsKey(meta.Name))
                 throw new InvalidOperationException($"A DType named '{meta.Name}' is already registered.");
             foreach (var alias in meta.Aliases)
                 if (_byName.ContainsKey(alias))
                     throw new InvalidOperationException($"A DType named '{alias}' is already registered.");
 
-            _byTypeNum[meta.TypeNum] = meta;
+            _byTypeNum[meta.type_num] = meta;
             _byName[meta.Name] = meta;
             foreach (var alias in meta.Aliases)
                 _byName[alias] = meta;
@@ -163,8 +163,8 @@ namespace NumSharp
                     throw new InvalidOperationException($"NPTypeCode {meta.TypeCode} is already registered ({_byCode[code]}).");
                 _byCode[code] = meta;
             }
-            if (meta.ScalarType != null && !_byScalarType.ContainsKey(meta.ScalarType))
-                _byScalarType[meta.ScalarType] = meta;
+            if (meta.type != null && !_byScalarType.ContainsKey(meta.type))
+                _byScalarType[meta.type] = meta;
             _all.Add(meta);
         }
 

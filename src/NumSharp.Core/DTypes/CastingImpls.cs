@@ -71,7 +71,7 @@ namespace NumSharp
         internal static NPY_CASTING LegacySameDTypeResolveDescriptors(CastingImpl impl, DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
             loopDescrs[0] = givenDescrs[0];
-            loopDescrs[1] = givenDescrs[1] ?? impl.From.EnsureCanonical(givenDescrs[0]);
+            loopDescrs[1] = givenDescrs[1] ?? impl.From.ensure_canonical(givenDescrs[0]);
 
             /*
              * Legacy dtypes (except datetime) only have byte-order and elsize as
@@ -92,8 +92,8 @@ namespace NumSharp
         /// </summary>
         internal static NPY_CASTING SimpleCastResolveDescriptors(CastingImpl impl, DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
-            loopDescrs[0] = impl.From.EnsureCanonical(givenDescrs[0]);
-            loopDescrs[1] = givenDescrs[1] != null ? impl.To.EnsureCanonical(givenDescrs[1]) : impl.To.DefaultDescr();
+            loopDescrs[0] = impl.From.ensure_canonical(givenDescrs[0]);
+            loopDescrs[1] = givenDescrs[1] != null ? impl.To.ensure_canonical(givenDescrs[1]) : impl.To.default_descr();
 
             viewOffset = NoView;
             if (impl.Casting != NPY_CASTING.NPY_NO_CASTING)
@@ -126,7 +126,7 @@ namespace NumSharp
         {
             /* This is a within-dtype cast, which currently must handle byteswapping */
             loopDescrs[0] = givenDescrs[0];
-            loopDescrs[1] = givenDescrs[1] ?? From.EnsureCanonical(givenDescrs[0]);
+            loopDescrs[1] = givenDescrs[1] ?? From.ensure_canonical(givenDescrs[0]);
             viewOffset = NoView;
 
             bool isTimedelta = ((DatetimeDTypeMeta)From).IsTimedelta;
@@ -210,10 +210,10 @@ namespace NumSharp
         /// <inheritdoc/>
         public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
-            loopDescrs[0] = From.EnsureCanonical(givenDescrs[0]);
+            loopDescrs[0] = From.ensure_canonical(givenDescrs[0]);
             loopDescrs[1] = givenDescrs[1] == null
                 ? ((DatetimeDTypeMeta)To).Descr(givenDescrs[0].DatetimeMetadata.Value)
-                : To.EnsureCanonical(givenDescrs[1]);
+                : To.ensure_canonical(givenDescrs[1]);
             viewOffset = NoView;
             /*
              * Mostly NPY_UNSAFE_CASTING is not true, the cast will fail.
