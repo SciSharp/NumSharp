@@ -1649,7 +1649,7 @@ Several APIs use focused kernels because their loop shape is more specific than 
 | `np.diff` / `DirectILKernelGenerator.AdjacentDiff.cs` | Computes `out[i] = a[i+1] - a[i]` from overlapping loads in one whole-array pass, avoiding two slice views and generic binary iteration | `n == 1`, no prepend/append, C-contiguous non-broadcast input, innermost axis, non-Boolean dtype | The unified 100K `float64` case is **0.04747 ms** and **0.490× NumPy**; the 1K case is **0.00306 ms** and **1.343× NumPy**. It is a real fused route, but the larger current case remains a performance gap. |
 | `np.asarray_chkfinite` / `FiniteScan.cs` | Fuses `isfinite(a)` and `all(...)` into one NaN-poison scan with no Boolean temporary | Float-family dtypes; contiguous SIMD plus strided/transposed/negative-stride/broadcast handling | The unified 100K `float64` case is **0.01176 ms**, **1.814× faster than NumPy**. |
 
-The last column uses the [unified benchmark report](https://scisharp.github.io/NumSharp/docs/reports/benchmark-report.html), where the ratio is **NumPy ÷ NumSharp**. Do not compare those ratios directly with the dedicated fusion table's unfused-NumSharp baseline.
+The last column uses the [unified benchmark report](https://scisharp.github.io/NumSharp/docs/benchmark-matrix.html), where the ratio is **NumPy ÷ NumSharp**. Do not compare those ratios directly with the dedicated fusion table's unfused-NumSharp baseline.
 
 ---
 
