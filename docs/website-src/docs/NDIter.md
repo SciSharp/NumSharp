@@ -10,7 +10,7 @@ The implementation claims below were rechecked against the local NumPy source cl
 
 - [Overview](#overview)
 - [Public Iteration Surface](#public-iteration-surface)
-  - [Typed iteration - `np.nditer<T>` / `np.nditer_chunks<T>`](#typed-iteration--unboxed-elements-and-span-chunks)
+  - [Typed iteration - `np.nditer<T>` / `np.nditer_chunks<T>`](#typed-iteration---unboxed-elements-and-span-chunks)
   - [Managed `np.nditer` contract](#managed-npnditer-contract)
 - [What NDIter Is](#what-nditer-is)
   - [Subsystem map and evidence](#subsystem-map-and-evidence)
@@ -28,17 +28,17 @@ The implementation claims below were rechecked against the local NumPy source cl
   - [Quick reference](#quick-reference)
   - [Decision tree](#decision-tree)
   - [Measured behavior](#measured-behavior)
-  - [Cache state - separate families and lifetimes](#cache-state--separate-families-and-lifetimes)
-  - [Layer 1 - Canonical Inner-Loop API](#layer-1--canonical-inner-loop-api)
-  - [Layer 2 - Struct-Generic Dispatch](#layer-2--struct-generic-dispatch)
-  - [Layer 3 - Typed ufunc Dispatch](#layer-3--typed-ufunc-dispatch)
+  - [Cache state - separate families and lifetimes](#cache-state---separate-families-and-lifetimes)
+  - [Layer 1 - Canonical Inner-Loop API](#layer-1---canonical-inner-loop-api)
+  - [Layer 2 - Struct-Generic Dispatch](#layer-2---struct-generic-dispatch)
+  - [Layer 3 - Typed ufunc Dispatch](#layer-3---typed-ufunc-dispatch)
   - [Custom Operations (Tier 3A / 3B / 3C)](#custom-operations-tier-3a--3b--3c)
-    - [Tier 3A - Raw IL](#tier-3a--raw-il)
-    - [Tier 3B - Templated Inner Loop](#tier-3b--templated-inner-loop)
-    - [Tier 3C - Expression DSL](#tier-3c--expression-dsl)
+    - [Tier 3A - Raw IL](#tier-3a---raw-il)
+    - [Tier 3B - Templated Inner Loop](#tier-3b---templated-inner-loop)
+    - [Tier 3C - Expression DSL](#tier-3c---expression-dsl)
       - [Node catalog](#node-catalog)
       - [Operator overloads](#operator-overloads)
-      - [Call - invoke supported .NET numeric methods](#call--invoke-supported-net-numeric-methods)
+      - [Call - invoke supported .NET numeric methods](#call---invoke-supported-net-numeric-methods)
       - [Type discipline](#type-discipline)
       - [SIMD coverage rules](#simd-coverage-rules)
       - [Caching and auto-keys](#caching-and-auto-keys)
@@ -50,7 +50,7 @@ The implementation claims below were rechecked against the local NumPy source cl
 - [Path Detection](#path-detection)
 - [Production consumers and legacy surfaces](#production-consumers-and-legacy-surfaces)
 - [Fused kernels in production](#fused-kernels-in-production)
-  - [General expression fusion - `np.evaluate`](#general-expression-fusion--npevaluate)
+  - [General expression fusion - `np.evaluate`](#general-expression-fusion---npevaluate)
   - [Measured fused versus unfused performance](#measured-fused-versus-unfused-performance)
   - [Specialized production fusions](#specialized-production-fusions)
 - [Worked Examples](#worked-examples)
@@ -86,7 +86,7 @@ NumSharp.Core remains managed C#, but the iterator owns explicitly allocated unm
 | You want | Use | Notes |
 |----------|-----|-------|
 | Every element of one array, C-order | `foreach (var x in ndarray)` or `ndarray.GetAtIndex(i)` | Resolves slices, strides, offset, and stride-0 broadcast; no intermediate copy. |
-| Every element **unboxed / by reference** | `foreach (ref T x in np.nditer<T>(a))` | The fast path. See [Typed iteration](#typed-iteration--unboxed-elements-and-span-chunks). |
+| Every element **unboxed / by reference** | `foreach (ref T x in np.nditer<T>(a))` | The fast path. See [Typed iteration](#typed-iteration---unboxed-elements-and-span-chunks). |
 | A **`Span<T>` per inner loop**, to vectorize | `foreach (Span<T> c in np.nditer_chunks<T>(a))` | Hands the chunk straight to `TensorPrimitives` / `Vector<T>`. A contiguous array is one chunk. |
 | NumPy's `nditer` object, with its full flag surface | `using var it = np.nditer(a, flags: …)` | `multi_index`, `external_loop`, `buffered`, `op_axes`, `itviews`, `copy()`, … - the parity surface. |
 | Nested loops over disjoint axis groups | `var levels = np.nested_iters(a, axes)` | Returns linked `NDIterator` objects; advancing an outer level re-bases and resets its child. |
@@ -133,7 +133,7 @@ The performance reason for these extensions is structural rather than a fixed mu
 - **Re-enumeration restarts.** The value returned by `np.nditer<T>(…)` holds no unmanaged state; each `foreach` builds a fresh iterator. This is deliberately unlike the class-based `np.nditer`, which is its own iterator (NumPy's `iter(x) is x`) and therefore *resumes*.
 - **Disposal is automatic under `foreach`** - C# disposes a `ref struct` enumerator through the same pattern that drives it, and that is what frees the iterator state. If you drive `MoveNext()` by hand, dispose it yourself.
 
-Being `ref struct`s, the enumerators cannot escape to a field, a lambda or an `async` frame - the compiler enforces the lifetime the `ref`/`Span` needs. For fusing several operations into one pass instead of walking elements yourself, see [Tier 3C - Expression DSL](#tier-3c--expression-dsl) and `np.evaluate`.
+Being `ref struct`s, the enumerators cannot escape to a field, a lambda or an `async` frame - the compiler enforces the lifetime the `ref`/`Span` needs. For fusing several operations into one pass instead of walking elements yourself, see [Tier 3C - Expression DSL](#tier-3c---expression-dsl) and `np.evaluate`.
 
 ### Managed `np.nditer` contract
 
@@ -1131,7 +1131,7 @@ NaN semantics match IEEE 754: any comparison involving NaN produces 0 (false). `
 | `Call(MethodInfo staticMethod, params NDExpr[] args)` | Invoke a reflection-obtained static method. |
 | `Call(MethodInfo instanceMethod, object target, params NDExpr[] args)` | Invoke a reflection-obtained instance method against `target`. |
 
-See [Call - invoke supported .NET numeric methods](#call--invoke-supported-net-numeric-methods) below for dispatch paths, auto-conversion rules, supported signatures, performance envelope, and overload-disambiguation guidance.
+See [Call - invoke supported .NET numeric methods](#call---invoke-supported-net-numeric-methods) below for dispatch paths, auto-conversion rules, supported signatures, performance envelope, and overload-disambiguation guidance.
 
 ##### Operator overloads
 
@@ -1660,7 +1660,7 @@ Nineteen worked examples grouped by execution shape.
 **Chunk drivers and whole-array helpers:**
 1. [Three-operand binary over a 3-D contiguous array](#1-three-operand-binary-over-a-3-d-contiguous-array)
 2. [Array × scalar with broadcast detection](#2-array--scalar-with-broadcast-detection)
-3. [Sliced view - non-contiguous input](#3-sliced-view--non-contiguous-input)
+3. [Sliced view - non-contiguous input](#3-sliced-view---non-contiguous-input)
 4. [Fused hypot via Layer 1](#4-fused-hypot-via-layer-1)
 5. [Early-exit Any over 1M elements](#5-early-exit-any-over-1m-elements)
 
