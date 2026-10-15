@@ -1,33 +1,48 @@
-# Fixed-width strings, phase 2 — computing on text (S / U): implementation plan
+# Strings, phase 2 — computing on text (S / U / StringDType): implementation plan
 
-> Plan for Stage D phase 2 of `docs/plans/dtype-system.md`: every computation NumPy 2.4.2 runs on fixed-width text
-> (`bytes_` = `S`, `str_` = `U`). Phase 1 (branch `strings`, commits `25709496` … `77b68d89`) stores, moves, casts
-> between string dtypes, saves and prints text byte for byte, and defers every computation with
-> `StringComputationNotSupportedException` (91 call sites). This plan replaces those deferrals with computation.
+> Plan for Stage D phase 2 of `docs/plans/dtype-system.md`: every computation NumPy 2.4.2 runs on text — the fixed-width
+> dtypes (`bytes_` = `S`, `str_` = `U`) and, since the owner's direction of 2026-10-10, NEP 55 `StringDType` (`T`).
+> Phase 1 (`docs/plans/strings-phase1-completion.md`) holds text as data for all three dtypes and defers every
+> computation with `StringComputationNotSupportedException`. This plan replaces those deferrals with computation.
 >
-> It splits the work into eight subphases, each a family of functions that share one technique (§4). Every technique
-> choice rests on a measurement taken for this plan (§2): NumPy's own timings, and C# prototypes of the candidate
-> kernels on the same data and the same pinned cores.
+> The work is split into stages, each a family of functions that share one technique (§4). Every technique choice
+> rests on a measurement taken for this plan: NumPy's own timings and C# prototypes of the candidate kernels on the
+> same data and the same pinned cores — first for the subphases of 2026-10-09 (§2.1–§2.4), then, on 2026-10-15, for
+> EVERY function still to implement, over `S`, `U` and `T` data (§2.5): which of the existing machineries (the IL text
+> kernels, NDIter, whole-array IL kernels, NDExpr fusion, hand-written SIMD) gives the fastest exact result, for every
+> NDArray layout, flag, storage state and kind of data. §3.2 records the decisions that discovery took, §4 the stages
+> re-planned around them, Appendix C the implementation of every function and Appendix D the route of every NDArray case.
 >
-> Source of truth: `refs/numpy/` (**2.4.2**) — `numpy/_core/src/umath/string_ufuncs.cpp`, `string_buffer.h`,
-> `numpy/_core/strings.py`, `numpy/_core/defchararray.py`, `numpy/_core/src/npysort/{quicksort,mergesort,timsort,
-> heapsort}.cpp`, `numpy/_core/src/multiarray/{arraytypes.c.src,scalartypes.c.src}`, `numpy/lib/_arraysetops_impl.py`.
+> Source of truth: `refs/numpy/` (**2.4.2**) — `numpy/_core/src/umath/{string_ufuncs.cpp, stringdtype_ufuncs.cpp,
+> string_buffer.h, string_fastsearch.h}`, `numpy/_core/src/multiarray/stringdtype/{dtype.c, static_string.c}`,
+> `numpy/_core/src/multiarray/unique.cpp`, `numpy/_core/strings.py`, `numpy/_core/defchararray.py`,
+> `numpy/_core/src/npysort/{quicksort,mergesort,timsort,heapsort}.cpp`,
+> `numpy/_core/src/multiarray/{arraytypes.c.src,scalartypes.c.src}`, `numpy/lib/_arraysetops_impl.py`.
 > All behaviors and timings below were probed against `numpy==2.4.2` on CPython 3.12.12 (win-amd64, i9-13900K,
-> two P-cores pinned with `start /affinity 14`) on 2026-10-09.
+> two P-cores pinned with `start /affinity 14`) on 2026-10-09 and 2026-10-15.
 
 ---
 
-## 0. Where phase 1 leaves us
+## 0. Where phase 2 stands (2026-10-15, `strings` at `c3915f2a`)
+
+Commit hashes in this plan: the branch was rebased onto journey4 on 2026-10-12, so the hashes of §0's first edition and
+of the 2026-10-09 state-log entries are the OLD ones; `git log -1 --format=%B a8d7f17c | grep -- '->'` translates them
+(`7c817644` → `62f41584`, `cc8b103f` → `68348bcf`, `31368171` → `f18ae600`, `3eb9cca5` → `b4983b7a`). The counts
+below were taken at `545818b0`; the commits after it up to `c3915f2a` are dtype work (the lock-free cast table
+`07903e85`; NumPy's member names in the DTypes folder, `8de98557` = journey4's `6f11dc5a`, `ea8174aa`, `c3915f2a`; the
+release notes `a911607a`) and change none of them.
 
 | Part | State |
 |---|---|
-| Storage, dtypes, movement, string↔string casts, `.npy`, printing | Done, byte-identical (phase 1). |
-| Iteration | `np.nditer` and `NDIter` carry string operands with NumPy's descriptors (`5477074f`): element sizes, string buffers, S↔U buffer casts. This is the iteration base of every phase-2 kernel. |
-| Refusals | Where NumPy has no string loop, NumSharp raises NumPy's type and text, after NumPy's earlier checks in NumPy's order (`Backends/Strings/NDStringUfuncs{,.Precedence,.ShapeDecided}.cs`). These stay. |
-| Shape-decided answers | Empty inputs, lines of one element and pairs the `==` operator cannot compare are answered from the shape (bool stand-in). These stay. |
-| Deferrals | 91 code sites throw `StringComputationNotSupportedException` (counted at `40f2d20f`): 48 compute calls (`NDStringUfuncs.NextPhase`), 29 text↔number casts (`NDStringCasting.TextConversion`), 6 number-to-text stores (`NDStringStorage.NumberToText`), 2 mixed copies (`NDStringCopy.MixedKinds`), 6 direct throws. Appendix A maps each site to a subphase. |
-| The gate | The string oracle (`test/oracle/gen_strings_oracle.py` → `NumSharp.Tests.Oracle/Strings/corpus/strings.jsonl`, one `strings_<section>.jsonl` file per section since 2026-10-13; 27,308 cases at `40f2d20f`, 14,427 of them NumPy errors). 3,342 of them are phase 2: they pass as "deferred" only while NumSharp throws the deferral exception, and become strict as soon as a site computes. Appendix B breaks them down. |
-| Phase-1 leftovers | Closed by other sessions on this branch: `np.nditer` over strings (`5477074f`), the argwhere / flatnonzero / unravel_index views (`b87ff919`), an empty QR / SVD without a backend (`2202cdac`), `ma.put` with a hard mask (`23a51194`), numpy.ma fill values (`de07ca81`). |
+| Phase 1 (text as data for `S`, `U`, `T`) | Done except P1.7c (text I/O for `T`) and P1.7f (the whole surface with `T`), which wait for the owner's decision D12 (`strings-phase1-completion.md` §6). P1.7f's `tsurface` oracle section is where the `np.*` calls that compute on `T` get their deferred cases (today only numpy.ma reaches them, section `tma`). |
+| P2.0 foundations | Done (`62f41584`): the IL text kernels (`Backends/Kernels/ILKernelGenerator.Text{,.Emit}.cs`): one DynamicMethod per (operation, unit, widths, operand order), emit-time chunk plans, broadcast-pattern stages. The Unicode tables moved to the stage that first reads them (§4, P2.A). |
+| P2.1 comparisons and truth | Done for `S` / `U` (`62f41584`, `68348bcf`; oracle section `strcomp`, 8,796 cases, zero excuses). Left: the `T` forms (§4, P2.T) and `np.char`'s stripping comparisons (`np-char.md` C1). |
+| P2.3 concatenation and repetition | Done for `S` / `U` (`f18ae600`; section `strarith`, 2,046 cases). Left: the `T` forms (P2.T), `np.char.add` / `np.char.multiply` (`np-char.md` C0 / C4). |
+| P2.4 casts between text and numbers | Moved to phase 1 by the owner (2026-10-10) and done there (P1.1 for `S` / `U`, P1.6 for `T`). The parse-fed numerics, the random bounds and seeds, numpy.ma's number fills and the bool → text cast all compute now. |
+| Deferral sites | 42 call sites left (counted at `545818b0`): 33 `NDStringUfuncs.NextPhase` (fixed width) and 9 `NDStringUfuncs.NextPhaseVString` (`T`). `NDStringCasting.TextConversion` and `NDStringCopy.MixedKinds` have no caller since P1.1. Appendix A maps every site to a stage. |
+| The gate | The string oracle (`test/oracle/gen_strings_oracle.py` → `NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl`, 32 sections, 69,589 cases). 974 of them still pass only as deferrals (the per-section ceilings of `StringOracleTests.DeferralCeilings`): 537 `S` / `U` cases of sorting, searching, set routines, histograms and quantiles, and 437 `T` cases reached through numpy.ma. Appendix B lists them by stage. |
+| Iteration and machinery | `np.nditer` and `NDIter` carry string operands with NumPy's descriptors (`4d5b9f26`) and, since P1.7g (`97a168bf`), NumPy's own buffering: element sizes, string buffers, casts between every string dtype and the numbers, `T` buffers with their own allocators. This is the iteration base of every phase-2 kernel. |
+| Refusals and shape-decided answers | Where NumPy has no string loop, NumSharp raises NumPy's type and text, after NumPy's earlier checks in NumPy's order (`Backends/Strings/NDStringUfuncs{,.Precedence,.ShapeDecided,.VString}.cs`); empty inputs, lines of one element and pairs the `==` operator cannot compare are answered from the shape. These stay. |
 
 ---
 
@@ -80,7 +95,8 @@ Nine `np.strings` functions and `np.char.join` run per element through CPython's
   (median of three, `SMALL_QUICKSORT = 15`, insertion sort, `string_aheapsort_` past depth `2·msb(n)`), comparing with
   `STRING_LT` / `UNICODE_LT` (unsigned units over the item width). It is NOT stable: with duplicates the index order
   is the algorithm's (probed: `[29, 15, 13, 21, …]` where a stable sort gives `[1, 3, 5, 7, …]`). `kind='heapsort'` gives
-  the same permutation as the default (probed). `kind='stable'` / `'mergesort'` use the stable string sorts.
+  the same permutation as the default for `S` / `U` (probed; over `T` it raises, §1.9). `kind='stable'` / `'mergesort'`
+  use the stable string sorts.
 - `np.partition` / `np.argpartition`: no selection loop for strings, so `PyArray_ArgPartition` falls back to the
   GENERIC `npy_aquicksort` with the dtype's compare function (`item_selection.c`). Its scans carry an extra
   `pi < pj` guard, which stops them exactly where `string_aquicksort_`'s unguarded scans stop (the element at the old
@@ -117,6 +133,68 @@ all read a string's truth value through the text → bool cast. `logical_not` ha
 ### 1.7 Unicode data
 
 `Py_UNICODE_IS*` and the case mappings come from the running CPython's database: 3.12.12 → Unicode **15.0.0**.
+
+### 1.8 `StringDType` (`T`) loops (`stringdtype_ufuncs.cpp`, `stringdtype/dtype.c`, `unique.cpp`)
+
+NumPy registers `T` loops for: the six comparisons, `isnan`, the nine predicates (`isalpha` … `islower`, `isdecimal`,
+`isnumeric`), `str_len`, `add`, `multiply` (both orders), `maximum` / `minimum`, `find` / `rfind` / `index` / `rindex` /
+`count`, `startswith` / `endswith`, the six strip loops, `_replace`, `_expandtabs`, `_center` / `_ljust` / `_rjust`,
+`_zfill`, `_partition` / `_rpartition` and `_slice`. Every loop works one element at a time: `NpyString_load` of each
+operand cell (the 16-byte cell of `static_string.c`: a short string inside it, a medium / long one in the per-buffer
+arena or on the heap), a `Buffer<UTF8>` over the bytes, and for an output a `load_new_string` / `NpyString_pack` through
+the output's allocator (acquired once per call). Positions and lengths are in CODE POINTS (`str_len('é中😀')` is 3,
+`find` returns a code-point index), so a non-ASCII element is decoded or counted.
+
+The Python layer calls the `T` ufunc directly — no size pass, no `out=` (`multiply`: `a * i`; `center`: `_center(a, width,
+fillchar)`; `replace`: `_replace(arr, old, new, count)`; `expandtabs`, `zfill`, `partition`). `upper`, `lower`,
+`swapcase`, `capitalize`, `title`, `translate`, `mod`, `encode`, `decode` and the `np.char` object functions go through
+`_vec_string` over Python `str` objects, as for `U`.
+
+Sorting is generic: `npy_quicksort_impl` / `npy_mergesort_impl` (and the `a` forms) over the 16-byte cells with
+`_sort_compare` → `_compare` (an `NpyString_load` of both cells per comparison, the allocator held for the whole sort);
+`np.argmax` / `np.argmin` call `compare` (which acquires and releases the allocator per comparison); `np.unique` hashes
+(`unique_vstring`: FNV-1a over the UTF-8 bytes into a `std::unordered_set`, then a sort).
+
+**Missing values** (probed on 2026-10-15; `nan` = a NaN-like `na_object`, `None` = any other non-string object, `'NA'`
+= a string `na_object`):
+
+| Call | `nan` | `None` | `'NA'` |
+|---|---|---|---|
+| `==` / `!=` / `<` … | every comparison with an NA is `False` (`!=` too) | `==` / `!=` by null-ness (two NAs equal); ordering raises `'less' not supported for null values that are not nan-like or strings.` | the NA is the string `'NA'` |
+| `np.sort` / `argsort` / `np.unique` / `np.max` | NA sorts last; `np.max` is `nan` | `ValueError: Cannot compare null that is not a nan-like value` (only when a comparison happens: one element sorts fine) | `'NA'` |
+| `add` / `np.sum` | NA propagates (`np.sum` is `nan`) | `ValueError: Cannot add null that is not a nan-like value` | `'NA'` concatenated |
+| `str_len` | `ValueError: The length of a null string is undefined` | the same | 2 |
+| `isalpha` (predicates) | `False` for the NA | `ValueError: Cannot use the isalpha function with a null that is not a nan-like value` | the predicate of `'NA'` |
+| `find` family | `ValueError: 'find' not supported for null values that are not strings.` | the same | the search in `'NA'` |
+| `center` / `strip` / `replace` | NA propagates | `Cannot _center null …` / `Can only strip null values …` / `Only string or NaN-like null strings can be used as search strings for replace` | `'NA'` processed |
+| `upper` (the `_vec_string` path) | `TypeError: descriptor 'upper' for 'str' objects doesn't apply to a 'float' object` | `… a 'NoneType' object` | `'NA'` upper-cased |
+| `astype(bool)` / `isnan` | `True` / `True` | `False` / `False` | `False` / `False` |
+
+### 1.9 NumPy behaviors the 2026-10-15 discovery found
+
+- **`np.sum` over `T` is quadratic.** `add.reduce` writes the accumulator back through the `add` loop, so every step
+  copies the whole running string: 0.48 / 2.1 / 34 / 507 ms at 1K / 4K / 16K / 64K elements of 1–8 characters (a 288 KB
+  result). A linear concatenation gives the same string (§3.2 D18).
+- **`np.strings.partition(t, 'a')` raises** `UFuncTypeError: ufunc '_partition' did not contain a loop with signature
+  matching types (<class 'numpy.dtypes.StringDType'>, <class 'numpy.dtypes.StrDType'>) -> (None, None, None)`: the `T`
+  partition loops take a `T` separator only (`np.array('a', dtype=T)` works). Reproduce the refusal.
+- **An `S` array with a `str` argument** (`np.strings.find(s, 'ab')`, `strip(s, 'ab')`, `startswith`, `count`, `rfind`,
+  `endswith`) is NumPy's `UFuncTypeError` (no `(S, U)` loop): the `S` forms take `bytes`.
+- **`np.unique(t, sorted=False)`** returns NumPy's hash order (first occurrence in the probe), which C# does not
+  reproduce; NumSharp returns sorted values, the documented divergence of the numeric `unique_values`.
+- **`T` sorting, `argmax` and `max` follow `_compare`'s asymmetric answer for NaN-like NAs.** `_compare` returns 1
+  ("greater") whenever its FIRST argument is a NaN-like NA, another NA included, so two NAs have no consistent order
+  (probed at 40 / 1K / 100K elements): `np.argsort(t)` (the generic introsort) puts the NAs last in the order its own
+  comparison sequence leaves them (`[36, 34, 33, 3, 4, 30, …]`); `kind='stable'` / `'mergesort'` (the generic mergesort,
+  which only asks whether the later element is less than the earlier one) keeps them in input order; `np.argmax`
+  returns the LAST NA (`['b', nan, 'c', nan, 'a']` → 3: the generic loop takes index `i` when
+  `compare(x[i], x[max]) > 0`, and every later NA answers 1); `np.argmin` the first smallest text (all NA → 0). The NA is
+  the greatest element: `np.max` / `maximum` return it, `np.min` / `minimum` the smallest text. With a `None` NA each of
+  them raises `ValueError: Cannot compare null that is not a nan-like value` at its first comparison; a string NA is
+  its default string.
+- **`kind='heapsort'` over `T` raises** `RuntimeError: unsupported sort kind` (`np.sort`, `np.argsort`, `ndarray.sort`):
+  NumPy's `T` sort ArrayMethod (`stringdtype_get_sort_loop` / `stringdtype_get_argsort_loop`) accepts only the default
+  kind (the generic introsort) and the stable kind (the generic mergesort). `S` / `U` accept it.
 
 ---
 
@@ -203,9 +281,103 @@ CPython defines `islower` / `isupper` by the derived Lowercase / Uppercase prope
 mappings. And the two target frameworks ship different Unicode versions, so .NET's APIs would make net8.0 and
 net10.0 disagree with each other.
 
+### 2.5 The 2026-10-15 discovery: every function left, over `S`, `U` and `T`
+
+**Method.** NumPy: every remaining function at 1K / 100K / 1M elements, best of rounds after a 250 ms warm-up, on data
+variants that separate the cases the kernels branch on — `u8` / `s8` / `t8` (random lowercase ASCII, 1–8 characters),
+`u8n` / `t8n` (the same with 20 % of the characters from `é ß α ω א 中 😀 Ж`), `u40` / `t40` (20–40 characters: `T`
+arena strings), `u10s` (1–6 letters with 0–2 spaces on each side), `u8d` (digits), `u8tab` (tabs), `u8cat` (100 distinct
+values), `tna` (`na_object=nan`, 10 % NA). C#: six rounds of prototypes, each a raw-pointer kernel over the SAME arrays
+(loaded through `np.load_npy`, `T` arrays through NumSharp's own cells and arenas), checked against a scalar reference of
+NumPy's semantics before it is timed, warmed to tier 1 (250 ms, a 100 ms sleep, three calls), both sides pinned to two
+P-cores. The prototypes exclude NumSharp's per-call driver; measured on the existing comparison route, that driver adds
+0.7 µs at 1K and nothing measurable at 100K / 1M ("What the machinery measured" below). The scripts are in the 2026-10-15
+session's scratchpad (`disc/np_bench*.py`, `disc/proto{,2..6}.cs`, not tracked).
+
+**What NumPy costs** (ns per element at 100K; 1M is within ±15 % except where noted; "1K µs" = the whole call at 1K,
+where Python-level compositions dominate):
+
+| Family | `U8` | `S8` | `T8` | NumPy's implementation |
+|---|---|---|---|---|
+| `str_len` | 13.5 | 12.9 | 14.6 (`T8n` 34.6, `T40` 60.8) | C loop (`T`: UTF-8 count) |
+| predicates (`isalpha` … `isnumeric`) | 18–34 | 16–26 | 20–47 (`T8n` 61) | C loop, `Py_UNICODE_IS*` per unit, early exit |
+| `find` / `rfind` / `count` / `startswith` / `endswith` | 15–31 (`U40` 69–71) | 15–32 | 26–47 (`T40` 250–259) | C loop, `fastsearch` |
+| `upper` / `lower` / `swapcase` / `capitalize` / `title` | 298–345 (`U8n` 369–371) | 111–117 | 155–197 (`T8n` 308–312) | `_vec_string` |
+| `strip` family (whitespace, chars) | 30–45 | 29–42 | 90–106 | C loop |
+| `center` / `ljust` / `rjust` / `zfill` | 61–77 (1K 35–51 µs) | 38–42 | 73–80 | Python sizing + C loop (`T`: C loop) |
+| `replace` | 95–107 (1K 80–84 µs) | 106 | 118–121 | Python sizing + C loop |
+| `partition` / `rpartition` | 101 (1K 82 µs) | 96–97 | 85–88 | Python sizing + C loop into a structured array |
+| `slice` (`1:5`, `::-1`) | 27.5–28.4 | 22.5–23 | 52–66 | C loop |
+| `expandtabs` | 118 | 71 | 197 | Python sizing + C loop |
+| `translate` / `mod` / `encode` / `decode` | 840 / 579–836 / 634–703 / — | 189 / — / — / 516 | 687 / — / 500 / — | `_vec_string` |
+| `T` comparisons; `add` / `multiply` / `maximum` | — | — | 10.7–11.1 (`T40` `==` 31.7); 34–42 / 49 / 28 | C loop |
+| `T` `max` / `min` / `argmax`; `isnan` / `astype(bool)` / `nonzero` | — | — | 11.3 / 11.2 / 53.7; 2.5 / 1.6 / 5.6 | reduce loop / generic argmax / C loops |
+| `T` `np.sum` / `np.cumsum` | — | — | quadratic (1K: 178 µs / 2,514 µs) | `add.reduce` / `add.accumulate` |
+| `sort` / `argsort` / stable `argsort` | 167 / 167 / 211 (1M 200 / 244 / 393) | 160 / 159 / 176 | 381 / 337 / 686 (1M 459 / 473 / 420) | introsort (string compare); `T` generic over cells |
+| `unique` / `searchsorted` / `isin` (100) / `partition` (k) / `lexsort` | 408 / 363 / 269 / 220 / 607 (1M: 563 / 1,640 / 364 / 272 / 1,167) | 254 / 252 / 233 / 195 / — | 1,162 / 1,303 / 2,639 / 1,025 / — | hash + sort; binary search; compositions |
+| `argmax` | 1.8 | 3.0 | 53.7 | `STRING_argmax` / `UNICODE_argmax`; `T` generic |
+
+**What the candidate techniques measured** (kernel only; NPY/NS = NumPy ÷ prototype at 1K / 100K / 1M; the chosen
+technique of each row first):
+
+| Function | Technique | NPY/NS 1K / 100K / 1M |
+|---|---|---|
+| `str_len` `U8` / `S8` | emit-time-width chunks + leading-zero count / one 64-bit read + leading-zero count | 2.6 / 9.7 / 7.6 · 4.9 / 16.4 / 18.4 |
+| `str_len` `T8` / `T40` | two short cells per `Vector256` (size byte broadcast in each half by `vpshufb`, continuation bytes counted) / overlapping 16-byte chunks over the arena text (a scalar tail instead: 8.3 / 3.4 / 3.4) | 5.7 / 11.3 / 11.4 · 18 / 7.6 / 7.3 |
+| `isalpha` `U8` (ASCII) | emit-time width / a masked-load width class (C#, one `vpmaskmovd` per element) | 8.7 / 10.7 / 9.4 · 8.3 / 10.0 / 8.7 |
+| `isalpha` `U8n` (non-ASCII) | one `vpgatherdd` per element from a flags word per BMP code point / a scalar two-stage table on every lane / a table on the non-ASCII lanes only / .NET `Rune` | 5.8 / 4.2 / 4.0 · 1.7 / 2.2 / 2.2 · 4.8 / 1.8 / 1.7 · 3.3 / 1.1 / 1.1 |
+| `isalpha` `S8` / `T8` | four elements per `Vector256` / two cells per `Vector256` | 8.4 / 12.1 / 12.2 · 21.6 / 21.7 / 21.8 |
+| `find('ab')` `U8` / `S8` / `T8` | AND of the two lane-equality masks, the second shifted one lane / the same, four elements per vector / one `Vector128` per short cell + the continuation bytes before the match | 7.8 / 11.6 / 9.3 · 7.6 / 12.8 / 13.1 · 23.1 / 23.8 / 23.6 |
+| `find('ab')` `U40` / `T40` | 64-bit masks over five vectors / span search + code-point count | 4.5 / 5.7 / 4.8 · 35 / 20.8 / 20.6 |
+| `count('a')` / `startswith('ab')` `U8` | popcount of the equality mask / one masked vector compare | 17.7 / 22.0 / 13.5 · 12.1 / 14.1 / 9.8 |
+| `upper` `U8` / `S8` / `T8` (ASCII) | a-z flipped in the lanes / 32 bytes per vector / two cells per vector, in the cell | 208 / 156 / 105 · 554 / 413 / 232 · 257 / 186 / 119 |
+| `upper` `U8n` | ASCII flip + a table lookup per non-ASCII lane | 155 / 32 / 28 |
+| `strip` `U10` (whitespace) | whitespace / length masks, then a masked load from the first kept unit / register permutes / a stack row (store, reload at the offset) | 2.2 / 5.9 / 5.8 · 1.5 / 4.0 / 4.0 · 1.5 / 4.2 / 4.2 |
+| `center(12)` `U8` → `U12` | register permutes (`vpermd` by lane − left) / masked loads from element − left / a stack row | 12.5 / 18.8 / 16.4 · 9.8 / 14.5 / 14.2 · 6.7 / 9.1 / 8.8 |
+| `replace('a', 'xy')` `U8` | fused count + size pass, then segment copies (a permute and a whole-vector store per match) / a branch-free unit loop / a branchy unit loop | 7.6 / 9.9 / 8.8 · 6.7 / 4.7 / 4.5 · 10.4 / 4.6 / 4.5 |
+| `T8 ==` / `T8 <` | two cells per `Vector256` (text masked to its size, byte 15 kept: the cell IS the order) / one 128-bit number per cell (scalar) / a branch on the first differing byte | 8.4 / 7.2 / 6.5 · 4.7 / 4.2 / 4.0 (scalar: 2.7 / 1.5 / 1.5; branch: 3.4 / 0.7 / 0.7) |
+| `T8` `max` / `sum` | the winner's index by comparisons only, one copy at the end / one size pass, one buffer, 16-byte cell copies | — / 6.2 / 6.0 · 89 at 1K (NumPy quadratic; 1M: 3.1 ms) |
+| `argsort` `T8` / `U8` | (64-bit key, size, index) records sorted by NumPy's introsort control flow / the same records from `<U8` | 8.0 / 3.2 / 3.9 · 1.8 / 1.9 / 2.2 |
+
+The `U8` `argsort` row read 2.6 / 2.5 / 3.0 on 2026-10-09 with the same algorithm: the host's clock is not constant
+(2.8–3.4 GHz under load), so a technique is compared with another within ONE run, never across sessions.
+
+**What the machinery measured.**
+- **Emit-time widths.** A C# kernel with the width as a loop bound costs 25 % (`str_len`) to 50 % (`isalpha`) against the
+  emit-time-width kernel; one masked load per element with a per-call lane mask (`vpmaskmovd`) costs 7 % (`isalpha`
+  `U8` 2.7 against 2.5 ns per element; `U5` 2.9 ns). The IL text kernel itself runs at the hand-written C# kernel's speed
+  (`u8 == u8b`: 152 / 2,884 µs through the public operator against 157 / 2,817 µs for the C# prototype at 100K / 1M,
+  the IL-vs-C# finding of the polynomial work).
+- **Narrow rows.** `m[:, :3] == "abc"` over a (1000, 100) `U8` matrix (3,000 elements): 19.3 µs through NDIter — one
+  kernel call per 3-element row, about 15 ns per row (the iterator step and the kernel's per-call prologue, which also
+  re-hoists the broadcast needle); a copy then the contiguous compare 8.2 µs; one call per row without an iterator 4.3 µs;
+  one call for all the rows, the kernel walking them, 2.4 µs. NumPy: 60.6 µs.
+- **`where=`.** `np.equal(u8, u8b, out, where=mask)` (two thirds true, random) at 100K: 426 µs through NDIter's per-run
+  calls (4.3 ns per element against 1.5 unmasked); 32 results computed and blended with the mask in one vector store:
+  173 µs (1.7 ns).
+- **Fusion.** `(u8 == "abc") & (ints > 50000)` takes 157.7 µs at 100K unfused, of which the text comparison is 129.4 and
+  the integer comparison 18.4: one fused pass can save at most ~18 % (1K: 4.8 against 2.4 + 1.1 µs; 1M: 2,619 against
+  1,928 + 237 µs).
+- **Branches on the data.** The first scalar `T` comparison branched on which byte was smaller and ran at 14.5 ns per
+  element, slower than NumPy (0.7×); the branch-free scalar forms reach 7–9 ns, the two-cells-per-vector form 1.5. A
+  per-element branch into a table path on `u8n` (about 58 % of its elements hold a non-ASCII unit) cost 16 ns per
+  element against 7 for the branch-free gather. The JIT compiles C# ternaries over the data (`Math.Min`,
+  `s >= 8 ? a : b`) to branches: read the disassembly (`DOTNET_JitDisasm`) of every per-element body.
+- **Memory round trips.** Storing a vector and reloading it at a data-dependent offset (a stack row, the first `strip` /
+  `center` prototypes) stalls on store forwarding: 8.5–11 ns per element where the register permute or masked-load form
+  takes 4–8.
+
 ---
 
 ## 3. Technique decisions
+
+### 3.1 The decisions of 2026-10-09 (D1–D10)
+
+Kept as written, with their status: D1–D5 and D9 stand and are extended by §3.2 (D11, D12, D14, D19); D7 is refined
+by D15 (the output width in one fused pass; NumPy's statements kept only where they decide an error or a dtype) and by
+D11 / D13 (the search and shifting techniques); D6 (casts) moved to phase 1 with P2.4 and is done there; D8 (no fusion)
+is confirmed by measurement (D20); D10 (a C# `string` operand) was decided in phase 1 (decision D6 there: a C# `string`
+is a 0-d `U` array everywhere).
 
 Phase 2 adds text kernels and parsers; everything around them already exists and is fast:
 
@@ -219,7 +391,7 @@ Phase 2 adds text kernels and parsers; everything around them already exists and
 | The bool machinery: `nonzero` (count + bit scan), `count_nonzero`, the `any` / `all` reductions and their prologue, `np.where`, `compress` | truth values (D5) |
 | The numeric ufuncs (`maximum`, `where`, `multiply`, `max`) | the `np.strings` size passes (D7) |
 | `RandomSampling/PythonInt.cs` (CPython `int()`), the Dragon4 / `format_float_*` ports (`Backends/Printing`), `PyRepr`, `PrintfFormatter` (Python `%`) | text → int, the number → text layout rules, `np.str_('…')` in error texts, `np.strings.mod` |
-| The text↔number `CastingImpl`s (`DTypes/StringCastingImpls.cs`, `DTypes/CastingImpls.cs`: descriptor resolution) and the `ArrayMethod.GetStridedLoop` seam | the cast loops (D6) |
+| The text↔number `CastingImpl`s (`DTypes/StringCastingImpls.cs`, `DTypes/CastingImpls.cs`: descriptor resolution) and the `ArrayMethod.get_strided_loop` seam | the cast loops (D6) |
 | The set-routine and `unique` compositions (`np.setops.cs`, `NDArray.unique*.cs`) | P2.2, over the new text sort / compare primitives |
 
 **D1. Elementwise text work = IL-emitted inner loops driven by NDIter.** One `DynamicMethod` per (operation,
@@ -264,7 +436,7 @@ ufuncs unchanged.
 
 **D6. Casts = NDIter-driven cast loops with per-element format / parse helpers that read and write code units
 directly** (no managed `string` per element). The loop comes from the NEP 43 seam phase 1 already declared and left
-unused: `ArrayMethod.GetStridedLoop` of the text↔number `CastingImpl`s, which already resolve the descriptors
+unused: `ArrayMethod.get_strided_loop` of the text↔number `CastingImpl`s, which already resolve the descriptors
 (`ToStringCastingImpl` in `DTypes/StringCastingImpls.cs` for number → text, `LegacyWrappingCastingImpl` in
 `DTypes/CastingImpls.cs` for text → number, both registered by `DTypeRegistry.InitializeStringCasts`). Its consumers
 are the routes the string↔string casts take today: `NDIter.CopyAs`
@@ -303,152 +475,325 @@ operand of an `object`-typed operator / `np.*` parameter goes through the legacy
 `string` operand NumPy's `str` scalar (0-d `U`) — at least in text contexts, preferably in `np.asanyarray(string)`
 itself, which is a breaking change of the legacy conversion. A `byte[]` stays a numeric `uint8` array except in
 parameters that are text by definition (`np.strings` `sub`, `prefix`, `suffix`, `chars`, `old`, `new`, `sep`,
-`fillchar`), where it is NumPy's `bytes`. **Owner decision needed** (§6).
+`fillchar`), where it is NumPy's `bytes`. **Decided in phase 1** (decision D6 of `strings-phase1-completion.md`, done
+with P1.1): a C# `string` is NumPy's 0-d `U` array everywhere, `np.asanyarray(string)` included.
+
+### 3.2 The decisions of 2026-10-15 (D11–D21)
+
+Every decision below rests on a row of §2.5.
+
+**D11. The kernel structure.** Every text loop is an NDIter-driven inner loop (`NDInnerLoopFunc`) emitted by
+`ILKernelGenerator` — the house rule for `np.*` loops (NDIter or ILKernelGenerator, no struct kernels) — and called ONCE
+over the whole array when the operands are trivially iterable (NumPy's trivial loop, no iterator: the comparison
+driver's `TryTrivial`, which every family gets, unary forms included), otherwise once per inner chunk. The IL owns what
+emit-time constants pay for: the chunk plans of the simple scans (`str_len`, the predicates' ASCII test, the
+comparisons, `startswith`, `find` with a short needle), the widths, the operand slots, the stride patterns and the
+hoisted broadcast operands (a 25–50 % speedup over a width loop). A per-element body that is a data-dependent
+algorithm — case maps with tables, `replace`'s segments, `partition`, `expandtabs`, the `chars` sets of `strip`, the `T`
+cell paths — is a C# helper (`[MethodImpl(OptimizeAndInline)]`) that the IL calls (the "helper call vs inline IL" rule),
+written once per WIDTH CLASS: one masked load per 8 units for `U` (a per-call lane mask, `vpmaskmovd`: 7 % from an
+emit-time width), overlapping chunks for `S`. Each broadcast pattern and width class is its own DynamicMethod stage, so
+no method exhausts the JIT's inline budget. Without dynamic code the same helpers run from a C# loop: full speed for the
+complex families, the managed per-unit loops only for the simple scans.
+
+**D12. `StringDType` kernels: two cells per `Vector256`.** A short cell (at most 15 bytes) is a 16-byte value. Two cells
+fill a `Vector256`; `vpshufb` spreads each cell's byte 15 over its half; the text is masked to its size and byte 15 is
+kept, so the cell IS the 128-bit big-endian number whose order is `NpyString_cmp`'s for short strings (equality is
+"16 equal bytes"; less is the unsigned less-than bit at the first differing byte; a proper prefix pads with zeros and
+then has the smaller size byte). `str_len`, the predicates, `upper` / `lower`, `strip`, `slice` and `find` run on short
+ASCII cells the same way, and an output of at most 15 bytes is written into its cell with no allocator call. A pair
+with any other cell — arena, heap, NA, the uninitialized all-zero cell, or non-ASCII text where the operation decodes —
+takes the per-pair scalar path (`NpyString_load`'s semantics). A missing value follows the descriptor's kind (§1.8). An
+output longer than 15 bytes goes through the output allocator (locked once per call); when a pass already knows every
+output size (`add`, `multiply`, `np.sum`, the widths of `center` / `zfill`) the arena is reserved exactly first (the P1.9
+copy lesson). Hosts without AVX2: one cell per `Vector128` (`Vector128.Shuffle`), the same bits.
+
+**D13. The shifting families: masked loads and register permutes, never a memory round trip.** `strip`, `slice` (step 1),
+the three parts of `partition`, `center` / `ljust` / `rjust` / `zfill`, `expandtabs`'s copies and `replace`'s segments
+move text inside an element. `U`: a masked load from the first kept unit (`vpmaskmovd` reads only the kept lanes — no
+read past the element, so no read past a buffer's end, and no store-forwarding stall) or a `vpermd` permute; `S`:
+`vpshufb` over windows of at most 16 bytes (overlapping chunks for wider elements). Stores are whole vectors into the
+output element or its row (fixed size; a later store overwrites the overhang). A reversed slice is a lane-reversing
+permute. Hosts without AVX2: `Vector128.Shuffle` and overlapping chunks.
+
+**D14. Unicode data: ASCII first, the gather second, decided per call.** Each element's vector pass also tests "a unit at
+or above 0x80 inside the length". While every element is ASCII the call stays on the ASCII kernel (range compares, lane
+flips); at the first non-ASCII element the REST OF THE CALL switches to the general kernel — a sticky escalation, with
+no pre-scan pass and no per-element misprediction on mixed data. The general kernel reads every lane through one
+`vpgatherdd` from a table holding one 32-bit flags word per BMP code point (all of D9's properties in one word: alpha,
+decimal, digit, numeric, space, lower, upper, title, cased, case-ignorable — 256 KB, generated from CPython 3.12 like
+D9's tables); a unit above U+FFFF reads D9's two-stage table, a unit above U+10FFFF CPython's record 0 (no property).
+Case maps: lane flips for ASCII, a table lookup per non-ASCII unit, the SpecialCasing expansions and the final sigma on
+a scalar path, cut to the input width for `U` / `S`. `S` uses ASCII rules only. `T` decodes UTF-8 (ASCII cells stay on
+the two-cell path). Hosts without AVX2: the two-stage table per unit.
+
+**D15. The output width of `S` / `U` results: one fused size pass.** NumPy's `strings.py` sizes `out=` with numeric
+ufuncs (`str_len`, `maximum`, `where`, `count`, `max`) and then runs the loop. NumSharp keeps NumPy's statements where
+they decide an error or a dtype (the integer checks, `Overflow encountered in string multiply`, an empty input's
+`zero-size array to reduction operation maximum which has no identity`, the `'U6.0'` descriptor of a uint64 count) and
+computes the WIDTH in one NDIter pass that reduces the per-element output size to its maximum: no int64 temporaries,
+no second Python-level pass. `replace`'s fill pass recounts its matches (NumPy's loop does too), so the counts are not
+stored.
+
+**D16. Narrow rows: the rows contract.** The text kernels get the 2-D block form of the numeric kernels
+(`ND2DElementwiseKernel`): when the iteration is many short inner rows (an inner extent below ~16 elements that does not
+coalesce), NDIter hands one call per block of rows with the outer strides, and the kernel walks the rows with its
+broadcast operands hoisted once per block.
+
+**D17. `where=` for cheap kernels: compute, then blend.** A kernel whose element costs less than ~3 ns (comparisons,
+predicates, `str_len`, `startswith`, `find` with a short needle) gets a masked variant: 32 results into a stack block,
+then ONE vector blend with the mask bytes into the output (masked-off positions keep their contents, NumPy's READWRITE
+`out=`). Kernels that write text keep NDIter's per-run calls; their element cost dwarfs the call.
+
+**D18. `T` reductions are linear.** `np.sum` / `add.reduce`: per output lane one pass sums the sizes (NumPy's NA rules
+first), one allocation, one copy per element (a 16-byte cell copy for a short cell) — NumPy's result, not its quadratic
+cost. `np.cumsum` / `add.accumulate`: each output is the previous output's text plus the element (the output itself is
+quadratic in size). `np.max` / `np.min` / `maximum.reduce`: the winner's index by comparisons only (a key prefilter),
+one copy at the end; `argmax` / `argmin` the same without the copy. A NaN-like NA is the greatest element and every
+later NA beats the current one, as NumPy's loops compare (§1.9: `argmax` returns the LAST NA, `np.min` the smallest
+text). The output positions and their lanes (one axis, a
+tuple of axes, all axes) come from a lane walker — `AxisSort.DriveAllButAxis`'s, generalized to a tuple — not from
+NDIter's REDUCE operand, whose contract accumulates in place (the quadratic shape).
+
+**D19. Sorting, searching and sets over `S`, `U` and `T`** (extends D3 / D4). `T` keys: the first 8 UTF-8 bytes
+big-endian — UTF-8 byte order is code-point order, so no per-call key width — with the size in the record (texts of at
+most 8 bytes are decided without reading them: `'ab'` against `'ab\0'`), extracted two cells per vector. Missing values:
+a NaN-like NA sorts after every text (a key flag), a string NA takes its default string's key, any other NA raises
+NumPy's `ValueError` at the first comparison (one element sorts without error). The unstable kinds run NumPy's exact
+introsort port over the records (ties exact) after a DISTINCT-STRINGS SHORTCUT: a stable radix pass on the keys comes
+first (the runs of equal keys ordered by full compares), and when no two adjacent strings are equal its permutation is
+NumPy's (every correct sort gives the one order), so the port is skipped; when duplicates exist the port runs. Two
+NaN-like NAs count as duplicates: their order is the one NumPy's comparison sequence produces under `_compare`'s
+asymmetric answer (§1.9), which only the port reproduces, so the port asks NumPy's questions and answers them as
+`_compare` does. The stable kinds (`T`: NumPy's generic mergesort; `S` / `U`: the stable string sorts) give one
+permutation for any input, ties and NAs in input order: the radix with a tie pass. `kind='heapsort'` over `T` raises
+NumPy's `RuntimeError` (§1.9). `np.unique` (values, index, inverse, counts) is the stable order deduplicated — its
+result is sorted, so NumPy's hash table is not reproduced (`sorted=False` returns sorted values, the numeric
+`unique_values` divergence). `searchsorted`: the haystack's keys, a binary search on keys, a full compare on equal keys,
+the monotonic carry; `argmax` / `argmin`: a key filter, with `T`'s NA rules (§1.9).
+
+**D20. No fusion in phase 2** (D8, now measured). The text kernel is ~82 % of a typical filter expression, so a fused
+`np.evaluate` text leaf saves at most ~18 %. `np.evaluate` keeps refusing a text operand, with a message that says so
+(P2.7); text leaves are a later extension.
+
+**D21. Every SIMD acceleration has an exact portable twin, and is tested for it.** The AVX2 forms (`vpmaskmovd`,
+`vpgatherdd`, `vpermd`, `vpshufb` in 256-bit halves) are x64 accelerations; arm64 (the macOS CI leg) and hosts without
+AVX2 run `Vector128` shuffles, overlapping chunks and scalar table lookups that give the same bits. Every family is
+tested with `DOTNET_EnableAVX2=0` and `DOTNET_EnableHWIntrinsic=0`, under `FencedMemory` (the masked loads' "nothing
+past the element" claim, views that end at their buffer's last byte) and with `NUMSHARP_DEBUG_GUARD_PAGES=1`, and the
+disassembly of its per-element body is checked for branches on the data (§2.5).
+
+### 3.3 The machinery of each family
+
+| Family | Driver | Kernel | Reason (§2.5) |
+|---|---|---|---|
+| Scans to a number or bool: `str_len`, predicates, `find` family, `startswith` / `endswith`, comparisons, truth | NumPy's trivial loop; NDIter `EXTERNAL_LOOP`; the rows contract (D16); the masked blend (D17) | IL chunk-plan kernels with emit-time widths and broadcast stages; the non-ASCII path a C# gather helper (D14) | emit-time widths 25–50 % faster than a width loop; the driver costs 0.7 µs at 1K |
+| Same-width transforms: case maps, `translate`, `strip`, `slice` | the same | IL shell + C# width-class helpers (masked loads, permutes, table paths) | a width class is within 7 %; no memory round trips (D13) |
+| `S` / `U` results of computed width: `center` family, `zfill`, `replace`, `expandtabs`, `partition`, `multiply` | the fused size pass (an NDIter max reduction), then NDIter into the sized `out=` | IL shell + C# helpers | NumPy's Python statements cost 35–84 µs at 1K |
+| `T` elementwise (every family above over `T`) | the trivial loop or NDIter over the 16-byte cells; arena bases and the output allocator through auxdata | IL shell + C# two-cell helpers + the per-pair scalar path (D12) | two cells per vector: 1.4–2.8 ns against 7–9 scalar |
+| `T` reductions: `sum`, `cumsum`, `max`, `min`, `argmax`, `argmin` | the `DriveAllButAxis` lane walker | C# helpers (D18) | linear against NumPy's quadratic `sum` |
+| Sorting, searching, sets | `AxisSort` lanes (`sort` / `argsort` / `partition`); flat (`unique`, `searchsorted`, the set routines) | key records + NumPy's introsort port + `RadixSort.ArgSortU64` (D3, D19) | §2.2 and §2.5 |
+| Object-path functions: `mod`, `encode`, `decode`, `np.char`'s `join` / `split` family | NDIter, results in C order (NumPy's `_vec_string` layout) | C# helpers per element (.NET encoders with ASCII fast paths, `PrintfFormatter`) | NumPy 500–860 ns per element |
+| `np.evaluate` text leaves | — | not in phase 2 (D20) | at most ~18 % |
+| Whole-array (Direct) IL kernels | not used for text | — | the trivial loop already calls the NDIter kernel once over a contiguous array; the rows contract covers narrow rows |
 
 ---
 
-## 4. Subphases
+## 4. Stages
 
-Each subphase ships its kernels, its NumPy entry points with NumPy's parameters, unit tests from NumPy output, a new
-string-oracle section with zero excuses, the phase-2 cases it unlocks turned strict, benchmark rows at 1K / 100K / 1M
-across layouts, and its documentation. Every oracle section covers the ndarray kinds of the relayout tiers (C, F,
-permuted, stepped, reversed, offset views, row / column / outer broadcasts, 0-d, one-element, empty, empty views)
-up to 5-D, both encodings, widths from 1 to past the specialization cap, and the special units (embedded and trailing
-NULs, bytes ≥ 0x80, U units above `U+10FFFF`).
+Each stage ships its kernels, its NumPy entry points with NumPy's parameters, unit tests from NumPy output, a new
+string-oracle section with zero excuses, the deferred cases it unlocks turned strict, benchmark rows at 1K / 100K / 1M
+across layouts AND data kinds (ASCII, non-ASCII, `T` arena strings, `T` with NA), and its documentation. Every oracle
+section covers the ndarray kinds of the relayout tiers (C, F, permuted, stepped, reversed, offset views, row / column /
+outer broadcasts, 0-d, one-element, empty, empty views) up to 5-D, all three dtypes, widths from 1 to past the
+specialization cap, the special units (embedded and trailing NULs, bytes ≥ 0x80, `U` units above `U+10FFFF`, lone
+surrogates) and, for `T`, every cell state (short, arena, heap, NA of each kind, the all-zero cell). Every stage also
+runs D21's portability and memory checks, a mutation pass, and reads the disassembly of its per-element bodies for
+branches on the data. Appendix D lists the route each NDArray case takes.
 
-### P2.0 Foundations (no new public API)
+### Done
 
-- The D2 element primitives (`Backends/Kernels/Direct/DirectILKernelGenerator.TextElement.cs`).
-- The text ufunc executor: NDIter construction for `(x1[, x2], out[, where])` with string operands, kernel selection
-  by (operation, encoding, widths, stride pattern, out dtype), the trivial-loop bypass, result allocation, 0-d results.
-- The D9 table generator, the runtime lookup (`Backends/Strings/PyUnicodeData`), the pin test.
-- Gate: primitive tests over widths 1–64 (and a few beyond the cap) × S / U × random, embedded / trailing NULs,
-  bytes ≥ 0x80, U units > 0x10FFFF (reachable through views; NumPy compares them unsigned), against a scalar
-  reference of NumPy's `Buffer` semantics.
-- Size: medium. Prerequisite of every other subphase.
+- **P2.0 Foundations** (`62f41584`): the IL text kernels, the chunk plans, the broadcast stages, the text ufunc executor
+  with NumPy's trivial loop. The Unicode tables moved to P2.A.
+- **P2.1 Comparisons and truth values, `S` / `U`** (`62f41584`, `68348bcf`): the six comparisons with `out=` / `where=` /
+  `dtype=`, the operators, the text → bool cast and every truth reader. Left: the `T` forms (P2.T) and `np.char`'s
+  stripping comparisons (`np-char.md` C1).
+- **P2.3 Concatenation and repetition, `S` / `U`** (`f18ae600`). Left: the `T` forms (P2.T), `np.char.add` /
+  `np.char.multiply` (`np-char.md`).
+- **P2.4 Casts between text and numbers**: moved to phase 1 and done there (P1.1 `S` / `U`, P1.6 `T`).
 
-### P2.1 Comparisons and truth values
+### P2.A Shared machinery (medium; prerequisite of every stage below)
 
-- `np.equal`, `not_equal`, `less`, `less_equal`, `greater`, `greater_equal` for (S,S) and (U,U), with `out=`, `where=`,
-  `dtype=bool`; the operators `==` `!=` `<` `<=` `>` `>=` (C# string operands per D10); broadcasting and N-D; the
-  rstrip comparisons of `np.char` (`compare_chararrays`, `np.char.equal`, …).
-- The text → bool cast and through it (D5): `astype(bool)`, `nonzero`, `count_nonzero`, `argwhere`, `flatnonzero`,
-  `np.where(cond)`, `any` / `all`, `logical_and` / `or` / `xor`, `array_equal`, `array_equiv`, `trim_zeros`,
-  `compress` / `extract`, the `place` / `putmask` masks, the histogram bin-order checks, the numpy.ma truth members.
-- Kernels: 6 comparisons × 2 encodings × widths × stride patterns; the truth kernel.
-- Targets (§2.1): ≥ 4× at every size (memory-bound floor at 1M strided ~4×).
-- Size: medium.
+What §2.5 found missing in the drivers, built once for every family:
+- The unary text driver: NumPy's trivial loop and the NDIter route for one text operand with broadcast parameters
+  (`sub`, `start`, `end`, `prefix`, `chars`, `width`, `fillchar`, `old`, `new`, `count`), the comparison driver's twin;
+  a fresh result in NumPy's layout (`Shape.NpyIterOutputShape`).
+- The rows contract (D16) and the masked blend (D17), retrofitted first to the existing comparison and truth kernels
+  (`m[:, :3] == "abc"` 19.3 µs → ~2.4; `np.equal(u, v, out, where=m)` 426 µs → ~173 at 100K).
+- The width-class C# helpers and their stage layout (D11): masked loads for `U`, overlapping chunks for `S`, the
+  portable twins (D21).
+- The `T` kernel shell (D12): two cells per `Vector256`, the per-pair scalar path, the NA kinds of §1.8, arena bases and
+  the output allocator through auxdata, exact arena reservation.
+- The Unicode tables (D9, D14): `tools/gen_unicode_tables.py` over CPython 3.12's `unicodedata` 15.0.0 → the two-stage
+  property table, the BMP flags-word table for the gather, the case-mapping tables with SpecialCasing and the final
+  sigma, the decimal / digit values; the runtime lookup (`Backends/Strings/PyUnicodeData`); a pin test (Unicode version
+  and table hash). `PyUnicode.cs` (P1.1's decimal and space tables) and `PyRepr.IsPrintable` move onto them.
+- The sticky escalation (D14) as one reusable protocol (an auxdata flag the kernels set and the driver reads).
+- Gate: unit tests per primitive over widths 1 to past the cap, `S` / `U` / every `T` cell state, against scalar
+  references of NumPy's `Buffer` / `NpyString` semantics; `FencedMemory` for every masked load and shuffle; the AVX2-off
+  and intrinsics-off sweeps; the retrofitted kernels' oracle sections (`strcomp`, `strarith`) unchanged.
 
-### P2.2 Sorting, searching, set routines
+### P2.T `StringDType`: the computations done for `S` / `U`, and the loops only `T` has (medium)
 
-- `np.sort` / `ndarray.sort`, `np.argsort` (all kinds), `np.lexsort`, `np.partition` / `argpartition` (full sort, as
+- The six comparisons over (`T`, `T`) and (`T`, `U`) (a `U` operand promotes to `T`; `T` with `S` or a number is
+  NumPy's `DTypePromotionError`), the operators, `out=` / `where=` / `dtype=`; the NA rules of §1.8.
+- Truth: `astype(bool)`, `nonzero`, `count_nonzero`, `any` / `all`, `argwhere`, `flatnonzero`, `logical_and` / `or` /
+  `xor`, `np.where(cond)`, `isnan`.
+- `add` (`T + T`, `T + U`, scalars on either side), `multiply` (both orders, NumPy's overflow checks), `maximum` /
+  `minimum`.
+- Reductions (D18): `np.sum` / `np.cumsum` (and `add.reduce` / `add.accumulate`), `np.max` / `np.min` (`maximum` /
+  `minimum.reduce`), `argmax` / `argmin` (the last NaN-like NA wins `argmax`, §1.9), along every axis, with `keepdims`,
+  `out=`, `where=`, `initial=` as NumPy takes them.
+- numpy.ma's members over `T` that compute (the 437 deferred `tma` cases).
+- Technique: D12, D18.
+- Gate: oracle sections `tcomp`, `tarith`, `treduce`; `tma` strict (437 → 0); P1.7f's `tsurface` phase-2 cases when it
+  has landed.
+- Targets (§2.5): `==` ≥ 6×, `<` ≥ 4×, `max` ≥ 6×, `sum` linear (NumPy is quadratic); truth readers ≥ 3× (NumPy's
+  `astype(bool)` costs 1.6 ns per element, close to the memory floor); `add` / `multiply` ≥ 5× (projected: NumPy 34–49 ns
+  per element, a two-cell build of short outputs).
+- Depends on P2.A. Size: medium.
+
+### P2.2 Sorting, searching, set routines (`S` / `U` / `T`; large)
+
+- `np.sort` / `ndarray.sort`, `np.argsort` (all kinds), `np.lexsort`, `np.partition` / `argpartition` (a full sort, as
   NumPy), `np.argmax` / `argmin` / `nanargmax` / `nanargmin` (axis, keepdims, `out=`), `np.searchsorted` (`side`,
-  `sorter`), `np.unique` (all flags) and the Array-API forms, `np.isin` / `in1d`, `intersect1d`, `union1d`,
-  `setdiff1d`, `setxor1d`, `np.digitize`, `np.histogram` / `histogram_bin_edges` / `histogramdd` / `histogram2d` with
-  text bins, `np.sort_complex` (needs P2.4's parse).
-- Technique: D3 / D4.
-- Targets: argsort 2.5–3.7× (exact unstable), stable kinds and `np.sort` ≥ 7× from 100K (a small-size algorithm below
-  the radix cutoff), argmax ≥ 1.9× to 100K and the 1.29× bandwidth floor at 1M (documented), searchsorted ≥ 10×
-  (NumPy 1.4 µs per needle at 1M).
-- Size: large.
+  `sorter`), `np.unique` (all flags) and the Array-API forms, `np.isin` / `in1d`, `intersect1d`, `union1d`, `setdiff1d`,
+  `setxor1d`, `np.digitize`, `np.histogram` / `histogram_bin_edges` / `histogramdd` / `histogram2d` with text bins, the
+  discontinuous `quantile` / `percentile` methods, `np.sort_complex`; all over `T` too (`kind='heapsort'` over `T` is
+  NumPy's `RuntimeError`; NaN-like NAs ordered as §1.9 records for each kind).
+- Technique: D3, D4, D19.
+- Targets: `argsort` through the exact port 1.9–2.5× (`U`, the port's ceiling: its branches follow the data) and
+  3.2–3.9× (`T`); through the distinct-strings shortcut and the stable kinds 7–13× (radix); `np.unique` and
+  `searchsorted` ≥ 10× (NumPy: 254–1,640 ns per element); `argmax` ≥ 1.9× to 100K, the memory-bandwidth floor at 1M.
+- Unlocks the 537 deferred `S` / `U` cases (Appendix B).
+- Depends on P2.A; the `T` part on P2.T's comparison primitive. Size: large.
 
-### P2.3 Concatenation and repetition
-
-- `np.add`, `+` (incl. `u + "xy"` and `"p" + u`), `np.strings.add`, `np.char.add`: width `w1 + w2`, `out=` narrower
-  (truncation through the buffered cast, probed) or wider (zero pad), `where=`, the S + U TypeError, the
-  "addition result string of length … is too large" TypeError.
-- `np.multiply(text, int, out=)`, `np.strings.multiply` (the two-pass wrapper, `Overflow encountered in string
-  multiply`), `np.char.multiply`.
-- Kernels: concatenation (two loads, three stores at `<U8`; §2.1 9–13×), repetition (a one-character fill fast path).
-- Size: small.
-
-### P2.4 Casts between text and numbers
-
-- Every numeric dtype ↔ S / U (D6) through `astype` and the casting rules; `np.array` of mixed lists (`['a', 1]` →
-  `<U21`, `['a', 1.5, True]` → `<U32`); `np.ones` / `np.full` / `ones_like` with a text dtype (`'1'`); numbers stored
-  into text arrays (`u[0] = 5` → `'5'`, `1.5` into `<U2` → `'1.'`) and text into numeric ones; `copyto`,
-  `concatenate`, `where`, `choose`, `place`, `putmask`, `fill`, `np.pad` constants, the NDIter buffered casts,
-  `ToMuliDimArray`, the implicit C# conversions of a 0-d text array, the numpy.ma fill values (`filled(5)`).
-- The numeric functions NumPy feeds parsed text: `linalg.norm`, `cov`, `quantile` / `percentile`, `i0`, `poly` /
-  `roots`, the random integer bounds, `SeedSequence` / Philox / `default_rng` seeds, `np.fft`.
-- Targets: integers ≥ 7× (§2.3); floats ≥ 3× once the fast formatter and parser land (the .NET routines alone give
-  1.6–1.8×).
-- Size: large (the float formatter and parser are self-contained sub-units with their own exhaustive tests).
-
-### P2.5 `np.strings`: length, search, strip, pad, replace, partition, slice
+### P2.5 `np.strings`: length, search, strip, pad, replace, partition, slice (`S` / `U` / `T`; large)
 
 - `str_len`, `find`, `rfind`, `index`, `rindex`, `count`, `startswith`, `endswith`, `strip` / `lstrip` / `rstrip`
-  (whitespace and `chars`), `replace` (`count`), `expandtabs`, `center` / `ljust` / `rjust` (the S-buffer / U-fill
-  rule), `zfill`, `partition` / `rpartition` (tuple), `slice`; the wrappers' TypeErrors and ValueErrors.
-- Technique: D7. U whitespace needs P2.0's tables.
-- Targets (NumPy at 100K per element): `str_len` 14 ns, `find` 29, `startswith` 15, `strip` 36, `replace` 112,
-  `center` 76, `multiply` 63 → ≥ 3× each.
-- Size: large (many small functions on one engine).
+  (whitespace and `chars`), `replace` (`count`), `expandtabs`, `center` / `ljust` / `rjust` (the `S`-buffer / `U`-fill
+  rule), `zfill`, `partition` / `rpartition` (tuple), `slice`; the wrappers' TypeErrors and ValueErrors; every one over
+  `T` (no size pass: outputs into cells or the arena), `T`'s refusal of a `str` partition separator (§1.9), the NA rules
+  of §1.8.
+- `partition` / `rpartition` of `S` / `U` return three arrays where NumPy returns three field views of one structured
+  array (NumSharp has no structured dtype): the values are NumPy's, OWNDATA and strides are not (`[Misaligned]`).
+- Technique: D11, D13, D15 (`T`: D12).
+- Targets (§2.5): `str_len` ≥ 7×, `find` ≥ 9× (`U40` ≥ 4.5×), `count` / `startswith` ≥ 9×, `strip` ≥ 5×, `center`
+  family ≥ 14×, `replace` ≥ 8×; the `T` forms ≥ 7× (NumPy's `T` loops cost 2–6× its `U` loops).
+- Depends on P2.A. Size: large (many functions on one engine).
 
-### P2.6 `np.strings`: Unicode properties and case; the object-path functions; `np.char` extras
+### P2.6 Unicode properties and case; the object-path functions (`S` / `U` / `T`; large)
 
-- `isalpha`, `isdigit`, `isspace`, `isalnum`, `islower`, `isupper`, `istitle`, `isdecimal`, `isnumeric` (S: ASCII
-  rules; no S loop for the last two); `upper`, `lower`, `swapcase`, `capitalize`, `title` (CPython's full mappings,
-  final sigma, the cut to the input width; NumPy's SystemError for U units > 0x10FFFF); `translate`; `mod` (the
-  existing `PrintfFormatter`, values broadcast; tuple values need object arrays and stay out); `encode` / `decode`
-  (the codecs .NET has natively under Python's names, `strict` / `ignore` / `replace` at least, Python's
-  UnicodeError texts, `LookupError: unknown encoding` for the rest); `np.char.join`, `np.char.partition` /
-  `rpartition` (stacked), `np.char.multiply`.
-- Technique: per-element scalar transforms over the D9 tables, with ASCII fast paths (all units < 0x80: SIMD case
-  conversion).
-- Targets: NumPy's `_vec_string` costs ~310 ns per element (`upper`) → ≥ 10×.
-- Size: large.
+- `isalpha`, `isdigit`, `isspace`, `isalnum`, `islower`, `isupper`, `istitle`, `isdecimal`, `isnumeric` (`S`: ASCII
+  rules; no `S` loop for the last two); `upper`, `lower`, `swapcase`, `capitalize`, `title` (CPython's full mappings, the
+  final sigma, the cut to the input width; NumPy's SystemError for `U` units above `0x10FFFF`); `translate`; `mod` (the
+  existing `PrintfFormatter`, values broadcast; tuple values need object arrays and stay out); `encode` / `decode` (the
+  codecs .NET has natively under Python's names, `strict` / `ignore` / `replace` at least, Python's UnicodeError texts,
+  `LookupError: unknown encoding` for the rest); every one over `T`.
+- Technique: D14 (ASCII first, the gather second, per call), D11, D12.
+- Targets (§2.5): predicates ≥ 9× on ASCII data, ≥ 4× on non-ASCII data; case maps ≥ 100× on ASCII, ≥ 28× on non-ASCII;
+  `translate` / `mod` / `encode` / `decode` ≥ 20× (projected: NumPy's `_vec_string` costs 189–860 ns per element).
+- Depends on P2.A's tables. Size: large.
 
-### P2.7 numpy.ma over text, the remaining sites, the switch-over
+### P2.7 The switch-over (medium)
 
-- The numpy.ma deferrals (masked sort keys, `median`, truth members, number fill values formatted into text) — most
-  unlock with P2.1–P2.4; the rest are numpy.ma's own statements.
-- The remaining sites (Appendix A), including `np.evaluate` with a text operand (a NumSharp extension: refuse with a
-  clear message or support text leaves, D8).
-- The whole corpus strict: zero deferred phase-2 cases. `StringComputationNotSupportedException` stays only for what
-  remains out of scope (§5).
+- numpy.ma's remaining statements over text (`median`, masked sort keys), `np.pad`'s `linear_ramp` over text, and
+  `np.evaluate`'s refusal of a text operand with a message that says why (D20).
+- The whole corpus strict: zero deferred cases. `StringComputationNotSupportedException` stays only for §5's scope; the
+  deferral constructors without a caller go with the last deferral.
 - Docs (`docs/website-src/docs/fundamentals/strings-and-bytes.md` "Computing on text", `.claude/CLAUDE.md`,
-  `docs/plans/dtype-system.md` §5), a `benchmark/strings/` subsystem with the NPY/NS sheet, the release notes.
-- Size: medium.
+  `docs/plans/dtype-system.md` §5), a `benchmark/strings/` subsystem built from the discovery's twin scripts (§2.5), the
+  release notes.
 
 ### Order
 
-`P2.0 → P2.1 → { P2.2, P2.3, P2.4 } → P2.5 → P2.6 → P2.7`. P2.2, P2.3 and P2.4 are independent once P2.1's
-compare primitives exist; P2.2's `sort_complex` and P2.4's int parser need P2.0's digit tables.
+`P2.A → P2.T → P2.2 → P2.5 → P2.6 → P2.7`. P2.5 and P2.6 are independent of each other once P2.A exists; P2.2's `S` / `U`
+part needs only P2.A and can run beside P2.T. Phase 1 comes first by the owner's direction (2026-10-10): P1.7c and P1.7f
+wait for the owner's decision D12 (`strings-phase1-completion.md` §6.2), and P1.7f's `tsurface` section is where the
+`np.*` calls that compute on `T` get their deferred cases — without it, P2.T's own sections must cover them.
+
+`numpy.char` (`docs/plans/np-char.md`) follows the stages: C1 (the stripping comparisons) after P2.A (they are a flavor
+of the comparison kernels with the same rows / masked variants), C3 and C4 after P2.5, C2 / C5 as their phase-2
+dependencies land; C0 waits for the owner's decision C-D1, C3 for C-D3.
 
 ---
 
 ## 5. Out of scope
 
-- NEP 55 `StringDType` (variable width, UTF-8, missing values) as data, and P2.4 (casts between text and numbers):
-  moved to phase 1 by the owner on 2026-10-10 (`docs/plans/strings-phase1-completion.md`). The `T` forms of the
-  phase-2 computations stay here.
-- The object-array functions `np.char.split`, `rsplit`, `splitlines`, and `np.strings.mod` with tuple values:
-  NumSharp has no object dtype.
-- The `np.char.chararray` subclass (auto-rstrip semantics): NumSharp has no ndarray subclasses.
-- `np.max` / `np.min` / `np.sum` / … of text: NumPy refuses them too (phase 1 answers).
+- `np.strings.mod` with tuple values (one tuple per element) and object-array inputs: NumSharp has no object dtype.
+  `np.char.split` / `rsplit` / `splitlines` (object arrays of lists) and the `chararray` subclass are planned in
+  `docs/plans/np-char.md` (C3 behind the owner's decision C-D3, C2).
+- `np.max` / `np.min` / `np.sum` / … of `S` / `U` text: NumPy refuses them too (phase 1 answers). Over `T` NumPy
+  computes them, and P2.T does.
 
 ---
 
 ## 6. Risks and open questions
 
-1. **D10, the C# `string` operand (owner decision).** Changing `np.asanyarray(string)` to a 0-d `U` array is
-   NumPy's answer and breaks the legacy `NDArray x = "[1, 2, 3]"` conversion.
-2. **Exact `argsort` tie order.** The plan ports NumPy's introsort (§3 D3) rather than following the numeric precedent
-   (a stable radix plus the oracle's tie-order excuse); the measurements show no speed cost.
-3. **The Unicode version follows the oracle's Python.** CPython 3.12 → Unicode 15.0.0; moving the oracle to 3.13 or
-   3.14 regenerates the tables and the oracle together.
-4. **Kernel cache growth.** One kernel per (operation, widths) pair; the specialization cap (D1) bounds it.
-5. **NumPy answers that depend on call history** (the ufunc dispatch cache, phase 1 trap): the corpus records a fresh
+1. **Exact `argsort` tie order.** The plan ports NumPy's introsort (D3) and skips it only when the distinct-strings
+   shortcut proves no tie exists (D19; two NaN-like NAs are a tie, ordered by `_compare`'s asymmetric answer, §1.9). The
+   port's speed is bounded by its data-dependent branches (1.9–2.5× for `U`).
+2. **The Unicode version follows the oracle's Python.** CPython 3.12 → Unicode 15.0.0; moving the oracle to 3.13 or 3.14
+   regenerates the tables and the oracle together.
+3. **Kernel cache growth.** One kernel per (operation, widths) pair; the specialization cap (D1) bounds it, and the
+   width classes (D11) keep the complex families to one helper per class.
+4. **NumPy answers that depend on call history** (the ufunc dispatch cache, phase 1 trap): the corpus records a fresh
    process.
-6. **Codec coverage** for `encode` / `decode` (P2.6) — which codecs and error handlers ship.
-7. **Float formatter / parser exactness** (P2.4): the shortest digits must equal Dragon4's unique mode on every input
-   NumPy can format; exhaustive float16 / float32 checks are cheap, float64 needs a large random + boundary set.
+5. **Codec coverage** for `encode` / `decode` (P2.6): which codecs and error handlers ship.
+6. **Masked loads at a page boundary.** `vpmaskmovd` never faults on a masked-off lane, but a masked load whose
+   masked-off lanes fall on an unmapped page can take a microcode assist (slow, still correct) on some CPUs. It can only
+   happen at a buffer's last element; the FencedMemory tests prove correctness, the benchmarks measure the cost.
+7. **NumPy's own defects, reproduced or not.** `np.sum` over `T` is quadratic in NumPy and linear here (same result);
+   `np.strings.partition(t, 'a')` raises in NumPy (reproduced: it is NumPy's answer, not a crash); NumPy 2.4.2 crashes
+   on `np.place` and `ndarray.byteswap` over `T` (phase 1: not reproduced).
+8. **Hosts without AVX2** (arm64 runs the macOS CI leg): the portable twins (D21) are slower, and their speed is not
+   gated against NumPy on that host; only their results are.
 
 ---
 
 ## 7. State log
 
+- **2026-10-15 — The discovery: the fastest exact implementation of every function left, and the stages re-planned**
+  (owner's request: "do a discovery, looking at all the kinds of functions we will be implementing in phase 2, checking
+  what will be the fastest best implementation for every function … We must have the best impl for all NDArray cases,
+  states, flags and data. Learn, understand and update the plan's stages"). No code changed; this plan was rewritten.
+  1. **Learned:** the IL text kernels and their drivers (`ILKernelGenerator.Text{,.Emit,.Concat}.cs`,
+     `NDStringComparison`, `NDStringArithmetic`), NDIter's `ForEach` (trivial, external-loop, buffered and masked routes),
+     the 2-D block kernel of the numeric engine, NDExpr's leaf binding (a text leaf is refused), the `T` allocator and copy
+     core, the sorting machinery (`AxisSort`, `RadixSort`, the 2026-10-09 key-record prototype), and NumPy's sources for
+     every remaining loop (`string_ufuncs.cpp`, `stringdtype_ufuncs.cpp`, `string_buffer.h`, `strings.py`, `stringdtype/
+     dtype.c`, `unique.cpp`).
+  2. **Measured:** NumPy 2.4.2 over 189 (function, data variant) pairs at three sizes, and six rounds of C# prototypes (79
+     kernels, each checked against a scalar reference before it was timed, plus 12 calls of NumSharp's existing public
+     routes for the driver's cost) on the same arrays and cores (§2.5).
+  3. **Decided:** D11–D21 (§3.2), the machinery of each family (§3.3), the stages (§4: P2.A shared machinery and P2.T
+     `StringDType` added; P2.2, P2.5, P2.6, P2.7 extended to `T`), the implementation of every function (Appendix C) and
+     the route of every NDArray case (Appendix D); Appendices A and B refreshed (42 deferral sites, 974 deferred cases).
+  4. **Found on the way:** NumPy's `np.sum` over `T` is quadratic (§1.9); NumPy's `T` `partition` refuses a `str`
+     separator (§1.9); NumPy's `_compare` answers "greater" for a first-argument NaN-like NA, another NA included, which
+     orders the NAs of a `T` `argsort` by its comparison sequence, keeps them in input order under the stable kind and
+     makes `argmax` return the last NA; `kind='heapsort'` over `T` is NumPy's `RuntimeError` (§1.9; probed with
+     `disc/na_sort_probe.py` and `disc/na_argmax_probe.py`); `NDStringCasting.TextConversion` and
+     `NDStringCopy.MixedKinds` have no caller since P1.1; the
+     existing comparison driver spends ~15 ns per row on narrow rows and 2.8 ns per element on `where=` masks (P2.A
+     retrofits both); the NA semantics of every `T` function family (§1.8).
+  5. **Traps:** (a) the JIT compiles C# ternaries over the data (`Math.Min`, `s >= 8 ? a : b`) to branches: the first
+     scalar `T` comparison lost to NumPy (0.7×) on a branch whose outcome is the data's — read `DOTNET_JitDisasm` of each
+     per-element body; (b) storing a vector and reloading it at a data-dependent offset stalls on store forwarding
+     (8.5–11 ns per element) — use masked loads or permutes; (c) the host's clock moves between sessions (the same
+     `U8` `argsort` read 1.9× today and 2.5× on 2026-10-09) — compare techniques within one run; (d) a prototype's scalar
+     fallback must handle every cell state (a `T8n` check caught a fallback that assumed short cells); (e) the NumPy
+     benchmark itself must pass `bytes` arguments to `S` functions (a `str` needle is NumPy's `UFuncTypeError`).
 - **2026-10-09 — P2.3: concatenation and repetition** (this commit). Implemented, every statement probed against
   NumPy 2.4.2:
   1. **`np.add` over two strings of one class** (NumPy's `string_add`) and its spellings: the `+` operator with an array
@@ -548,25 +893,106 @@ compare primitives exist; P2.2's `sort_complex` and P2.4's int parser need P2.0'
   module, P2.5), the numpy.ma members that fill text with `True` (`alltrue` …: the bool → text cast, P2.4), and a
   zero-excuse oracle section for comparisons and truth over the relayout kinds.
 
-## Appendix A — deferral sites by subphase (91)
+## Appendix A — the 42 deferral sites by stage (2026-10-15)
 
-| Subphase | Sites |
+The first edition counted 91 sites at the old `40f2d20f`; P2.0, P2.1 and P2.3 removed their sites and P1.1 the 43
+conversion sites. Left at `545818b0`: 33 `NDStringUfuncs.NextPhase` (fixed width) and 9 `NextPhaseVString` (`T`).
+
+| Stage | Sites |
 |---|---|
-| P2.1 | `NDStringUfuncs.cs` compute answers for the comparisons and logical ufuncs; `NDStringUfuncs.Precedence.cs` computing loops (shared with P2.3); `np.array_equal`, `np.array_equiv`; the masks of `np.place` / `np.putmask`; `np.histogram` / `np.histogramdd` bin-order checks ("greater"); `np.trim_zeros`. |
-| P2.2 | `AxisSort` ("sort"), `AxisPartition` (×2), `NDArray.unique`, `np.isin` (×2), `np.intersect1d`, `np.setdiff1d` (×3), `np.setxor1d` (×3), `np.union1d`, `np.digitize`, `np.lexsort`, `np.nanargmax` family, `np.searchsorted`, `np.sort_complex`, `np.histogram` text data (×3), `np.histogramdd` searchsorted. |
-| P2.3 | Done (2026-10-09): `NDStringUfuncs.cs` `multiply` with `out=`; the `add` computing answer. (`np.add` of numbers with a string `dtype=` stays deferred: it formats numbers as text, P2.4.) |
-| P2.4 | All 29 `TextConversion` sites (`NDStringCasting`, `NDIterBufferManager`, `np.flatiter`, `NDStringArrays` ×2, `ToMuliDimArray` ×2, `np.concatenate.Strings` ×2, `np.vander`, `np.choose`, `np.place` ×2, `np.putmask`, `NDArray.fill`, `np.copyto(.Strings)` ×5, the indexing setter ×2, `NDMaskedArray` ×7); all 6 `NumberToText` sites; both `MixedKinds` sites; all 6 direct throws (`np.ones`, `StringDTypeMeta`, `NDStringArrays` ×2, `NDArray.Indexing.Strings`, `np.pad` with a number constant); `np.ones_like`; the implicit conversions; the parse-fed numerics (`linalg.norm`, `cov`, `i0`, `poly`, `roots`, `np.fft`). |
-| P2.7 | `np.evaluate` (×2), `np.pad` `linear_ramp`, `NDMaskedArray` median, anything left. |
+| P2.2 (27) | `AxisSort` (`sort`), `AxisPartition` ×2, `NDArray.unique` (fixed width; and `T` through `NextPhaseVString`), `np.isin` ×2, `np.intersect1d`, `np.setdiff1d` ×3, `np.setxor1d` ×3, `np.union1d`, `np.digitize`, `np.lexsort`, the `np.nanargmax` family, `np.searchsorted`, `np.sort_complex`, `np.histogram` ×3, `np.histogramdd` (its `searchsorted`), `NDStringUfuncs` (the reduction guard's answer for `argmax` / `argmin` and the sorting family), the discontinuous `quantile` methods ×2 (`NDStringUfuncs`, `NDStringUfuncs.Precedence`) |
+| P2.T (8) | `NDStringUfuncs` (`T` `==` / `!=`), `NDStringUfuncs.ShapeDecided` (a `T` computing call), `NDStringUfuncs.VString` ×5 (the `T` loops: comparisons, `add`, `multiply`, `maximum` / `minimum`, the logical ufuncs, `isnan`, the reductions), `np.vander` over `T` |
+| P2.7 (7) | `np.evaluate` ×2 (`np.evaluate`, `NDExpr.Evaluate`), `np.pad` `linear_ramp`, `NDMaskedArray` `median`, `np.fft` (a guard behind NumPy's own `DTypePromotionError`: unreachable), and two computing answers of the fixed-width guards whose computation now exists (`NDStringUfuncs` `multiply` with a reduce `out=`, `NDStringUfuncs.Precedence.ComputeAnswer`): check that they are unreachable or answer them |
 
-## Appendix B — the 3,342 phase-2 oracle cases
+`NDStringCasting.TextConversion` and `NDStringCopy.MixedKinds` construct the deferral but have no caller since P1.1.
 
-| Group (generator op) | Cases | Unlocked by |
+## Appendix B — the 974 deferred oracle cases by stage (2026-10-15)
+
+The first edition counted 3,342 phase-2 cases: P2.0 / P2.1 made 2,201 of them strict, P2.3 171 and P1.1 433 (970 → 537);
+P1.7d's `tma` section added 437 `T` cases. Listed with `NUMSHARP_STRING_ORACLE_DEFERRED=1` (each case's refusal names
+the function).
+
+| Stage | Cases by function | Sections |
 |---|---|---|
-| numpy.ma (`ma0`, `ma1`, `ma2`) | 1,352 | P2.1 / P2.2 / P2.4 / P2.7 (truth members, set routines, number fill values) |
-| `hist`, `hdd_bins` | 467 | P2.1 (bin order) + P2.2 (searchsorted) |
-| `reduce`, `shape_reduce`, `call`, `index_search`, `argreduce_out` | 506 | P2.1 (any / all / count_nonzero / nonzero) + P2.2 (sorts, argmax family) |
-| random bounds and seeds (`randint`, `seed_seq`, `philox_counter`, `seed_spawn`, `default_rng`, `randint_onearg`) | 279 | P2.4 (CPython `int()` on text) |
-| `linalg1`, `quantile`, `cov`, `poly`, `einsum`, `interp`, `reduce_out` | 192 | P2.4 (text parsed to float) |
-| `ufunc`, `ufunc_dtype`, `ufunc_kw`, `operator`, `equality` | 162 | P2.1 + P2.3 |
-| sort / set / search (`shape_sort`, `setop`, `unique`, `unique_api`, `isin`, `searchsorted_kw`, `partition`, `lexsort`, `sort_complex`, `digitize`, `trim_zeros`) | 158 | P2.2 |
-| casts and stores (`pad`, `astype`, `ones_like`, `ones`, `full`, `setitem`, `setitem_array`, `copyto`, `concat_kw`, `concatenate`, `where`, `where3`, `place_arr`, `putmask_arr`, `choose_mode`, `array`, `repeat_arr`, `insert_obj`, `delete_obj`, `nditer_fromnumber`, `nditer_tonumber`, `nditer_pair`, `to_scalar`, `can_cast_arr`, `min_scalar_type`, `common_type`, `unravel_ix`) | 226 | P2.4 |
+| P2.2, `S` / `U` (537) | `argsort` 118, `argmax` 60, `argmin` 59, the `histogram` family 54, `partition` 28, `argpartition` 28, `percentile` 25, `quantile` 25, `sort` 24, `unique` 21, `setxor1d` 17, `isin` 15, `intersect1d` 14, `searchsorted` 14, `union1d` 9, `lexsort` 5, `setdiff1d` 5, the Array-API `unique_*` 12, `digitize` 3, `sort_complex` 1 | `reductions` 32, `straxis` 130, `strshape` 190, `strvalid` 5, `strsurface` 67, `strma` 113 |
+| P2.T (432) | `==` 72, `np.sum` 60, `<` 39, `logical_or` 35, `>=` 30, `>` 27, `all` 22, `any` 22, `flatnonzero` 21, `!=` 18, `<=` 18, `logical_and` 17, `logical_xor` 17, `np.cumsum` 13, `nonzero` 9, `add` 9, `multiply` 3 | `tma` |
+| P2.2, `T` (5) | `median` 2, `sort` 2, `unique` 1 | `tma` |
+
+## Appendix C — the implementation of every function
+
+NumPy's cost is ns per element at 100K for `U8` / `S8` / `T8` (§2.5); NPY/NS is `m` measured on a prototype (kernel only,
+§2.5) or `p` projected from NumPy's cost and the measured technique of a sibling.
+
+| Function | NumPy | NumSharp's technique | Stage | NPY/NS at 100K |
+|---|---|---|---|---|
+| `str_len` | C loop: 13.5 / 12.9 / 14.6 | the IL chunk plan + leading-zero count (`ILKernelGenerator.Text.Concat`); `S`: one 64-bit read; `T`: two cells per vector, arena text by overlapping 16-byte chunks | P2.5 (`T`: P2.T) | m: 9.7 / 16.4 / 11.3 (`T40` 7.6) |
+| `isalpha`, `isdigit`, `isspace`, `isalnum`, `islower`, `isupper`, `istitle`, `isdecimal`, `isnumeric` | C loop, `Py_UNICODE_IS*` per unit: 18–34 / 16–26 / 20–47 | the ASCII vector test inside the element pass; sticky escalation to one `vpgatherdd` from the BMP flags word (D14); `S`: ASCII rules; `T`: two cells per vector, decode on non-ASCII; `istitle`: the cased state across units by shifted masks | P2.6 | m: 10.7 / 12.1 / 21.7; non-ASCII `U` 4.2 |
+| `find`, `rfind`, `index`, `rindex`, `count` | `fastsearch`: 15–31 / 15–32 / 26–47 | the needle hoisted once per call; candidates = AND of k lane-equality masks shifted by j (64-bit masks across chunks); `start` / `end` as lane masks; `rfind` the highest candidate bit; `count` the non-overlapping walk of the bits; needles over 8 units: first-unit candidates + verify; per-element needles: the general path; `T`: a byte search + the code-point index (continuation bytes before the match) | P2.5 | m: 11.6 / 12.8 / 23.8 (`U40` 5.7, `T40` 20.8); `count('a')` 22 |
+| `startswith`, `endswith` | `tailmatch`: 15 / 14.7 / 26–27 | one masked compare at the start / at `len − k` | P2.5 | m: 14.1 (`U8`) |
+| `upper`, `lower`, `swapcase` | `_vec_string`: 298–342 / 111–117 / 155–192 | ASCII lane flips; a table lookup per non-ASCII unit; SpecialCasing and the final sigma on the scalar path; cut to the width (`U` / `S`); `T`: in the cell for short ASCII, else decode → map → encode → a new cell | P2.6 | m: 156 / 413 / 186; non-ASCII `U` 32 |
+| `capitalize`, `title` | `_vec_string`: 324–345 / 110–117 / 187–197 | as above, with the word-boundary state (previous character cased) | P2.6 | p: ≥ 100 |
+| `translate` | `_vec_string`: 840 / 189 / 687 | the table as a dense map (code points below 256) or a hash; per unit; `S`: the 256-byte table and `deletechars` | P2.6 | p: ≥ 30 |
+| `strip`, `lstrip`, `rstrip` | C loop: 30–45 / 29–42 / 90–106 | whitespace + length masks, a masked load from the first kept unit, whole stores (D13); `chars`: k compares OR-ed (short sets) or a table; `T`: the in-cell shift (`vpshufb`) | P2.5 | m: 5.9 (`U10`) |
+| `slice` | C loop: 27.5 / 22.5 / 52 | step 1: a masked load; step −1: a lane reversal; other steps: `vpermd` / `vpshufb` with a stepped index | P2.5 | p: ≥ 5 |
+| `center`, `ljust`, `rjust`, `zfill` | Python sizing + C loop: 61–77 / 38–42 / 73–80 | the fused size pass (D15); register permutes by lane − left with the fill blended in; `zfill`'s sign rule; `T`: outputs in the cell or the arena (exact reservation) | P2.5 | m: 18.8 (`center`, `U8`) |
+| `replace` | Python sizing + C loop: 95–107 / 106 / 118–121 | the fused count + size pass; segment copies (a permute and a whole store per match); the `count` limit applied in the fill pass | P2.5 | m: 9.9 |
+| `expandtabs` | Python sizing + C loop: 118 / 71 / 197 | tab-free elements copied whole (one vector test); elements with tabs walked per unit (the column state) | P2.5 | p: ≥ 5 |
+| `partition`, `rpartition` | Python sizing + C loop: 101 / 96 / 85–88 | the `find` kernel, then three masked-load copies; `S` / `U`: three arrays where NumPy returns structured-field views (`[Misaligned]` layout) | P2.5 | p: ≥ 5 |
+| `mod` | `_vec_string`: 579–836 | `PrintfFormatter` per element into a scratch row; the longest result sizes the output (two passes) | P2.6 | p: ≥ 20 |
+| `encode`, `decode` | `_vec_string`: 634–703 / 516 / 500 | an ASCII fast path (ASCII text is its own UTF-8, Latin-1 and ASCII: narrow / widen); .NET's encoders otherwise; Python's error handlers and texts | P2.6 | p: ≥ 30 |
+| `==` `!=` `<` `<=` `>` `>=` over `T` | C loop: 10.7–11.1 | two cells per vector, the per-pair scalar path, the NA rules (D12) | P2.T | m: 7.2 (`==`), 4.2 (`<`) |
+| `astype(bool)`, `nonzero`, `any` / `all`, `logical_*`, `isnan` over `T` | C loops: `astype(bool)` 1.6, `nonzero` 5.6, `isnan` 2.5 (`T8`) | the size / flag byte tests, two cells per vector | P2.T | p: ≥ 3 |
+| `add`, `multiply` over `T` | C loop: 34–42 / 49 | the sizes first; short outputs built in the cell (two cells → one by `vpshufb`); long outputs into the arena (exact reservation) | P2.T | p: ≥ 5 |
+| `maximum`, `minimum` over `T` | C loop: 28 | the two-cell compare + a copy of the winner (a short cell is one 16-byte copy) | P2.T | p: ≥ 5 |
+| `np.sum`, `np.cumsum` over `T` | `add.reduce` / `add.accumulate`: quadratic | the lane walker: sizes, one allocation, copies (D18) | P2.T | m: 89 at 1K, growing with N |
+| `np.max`, `np.min`, `argmax`, `argmin` over `T` | `T8` only: `max` 11.3, `min` 11.2, `argmax` 53.7 | the winner by comparisons only (key prefilter), one copy (D18) | P2.T | m: 6.2 (`max`) |
+| `sort`, `argsort` | introsort, generic over `T` cells: 167 / 160 / 381 | key records; NumPy's introsort port (ties exact) after the distinct-strings shortcut; stable kinds: radix + tie pass (D3, D19) | P2.2 | m: 1.9–2.2 (`U8` port), 3.2–3.9 (`T8` port); radix 9–13 (§2.2) |
+| `partition`, `argpartition` | a full sort: 220 / 195 / 1,025 | the same port (NumPy's generic partition gives its sort's permutation, §1.4) | P2.2 | p: ≥ 2 (`U`), ≥ 4 (`T`) |
+| `lexsort` | stable argsorts: 607 | radix passes per key | P2.2 | p: ≥ 5 |
+| `argmax`, `argmin`, `nanargmax`, `nanargmin` | 1.8 / 3.0 / 53.7 | a first-unit (`U` / `S`) or key (`T`) filter, a full compare of the candidates | P2.2 | §2.2: 1.9 (`U8`; the bandwidth floor 1.3 at 1M); `T` p: ≥ 10 |
+| `searchsorted` | binary search: 363 / 252 / 1,303 | the haystack's keys, a binary search on them, the monotonic carry | P2.2 | p: ≥ 10 |
+| `unique` and the Array-API forms | hash + sort: 408 / 254 / 1,162 | the stable radix order, deduplicated (D19) | P2.2 | p: ≥ 10 |
+| `isin`, the set routines, `digitize`, the histograms, the discontinuous quantiles | compositions: 233–2,639 | NumPy's statements over the primitives above | P2.2 | inherit |
+| `np.evaluate` with a text operand | — | refused with a message (D20) | P2.7 | — |
+
+## Appendix D — the route of every NDArray case
+
+| Case | Route |
+|---|---|
+| **Layouts** | |
+| C-contiguous operands of the result's shape, or single elements (1-D or N-D) | NumPy's trivial loop: one kernel call over the whole result, no iterator |
+| All operands F-contiguous | the trivial loop in memory order; a fresh result is F (NpyIter's output layout) |
+| 1-D strided or reversed (negative stride) | the trivial loop with each operand's byte stride (NumPy's `PyArray_TRIVIALLY_ITERABLE` takes every 1-D operand) |
+| N-D non-contiguous, transposed, mixed orders | NDIter `EXTERNAL_LOOP` (axes sorted and coalesced, negative strides flipped): one kernel call per inner row |
+| Many short inner rows (an inner extent below ~16 that does not coalesce) | the rows contract: one call per block of rows (D16) |
+| A broadcast operand (stride 0: a scalar needle, `sub`, `fillchar`, `width`, `prefix`, `chars`; a row or column) | the kernel's broadcast stage: the operand's chunks or needle masks hoisted once per call (per block under the rows contract) |
+| 0-d operands or result | the trivial loop with one element; a 0-d result is a 0-d array |
+| Empty inputs | shape-decided answers, no kernel; the computed-width functions raise NumPy's `zero-size array to reduction operation maximum which has no identity` from the size pass |
+| Offset views (a slice, an `np.split` child) | every element pointer is `Address + Shape.offset × itemsize`, never the storage base (the phase-1 lesson) |
+| More than 2³¹ elements | element counts are `long`; per-element sizes are `int` |
+| **Flags and operands** | |
+| `out=` of the loop's descriptor | written in place; an `out=` that may overlap an input goes through NDIter's `COPY_IF_OVERLAP` (the trivial loop declines when the memory may be shared) |
+| `out=` of another dtype (`str_len` into int8, a predicate into float64, a narrower text) | NDIter's buffered cast (P1.7g's port of NumPy's buffering) |
+| `where=` | cheap kernels: the masked blend (D17); kernels that write text: NDIter's per-run calls; masked-off positions keep their contents |
+| A read-only `out=` / read-only inputs | NumPy's ValueError before any element / no restriction (broadcast views included) |
+| An unaligned `U` view (an element at a byte address not divisible by 4) | unaligned vector loads; `vpmaskmovd` has no alignment requirement |
+| A non-native byte order | none: storage is always native (a big-endian file is swapped at load, a `>U` descriptor allocates native) |
+| The result's layout | NumPy's: `Shape.NpyIterOutputShape` for the ufuncs, `np.empty_like(a, shape=…)` for the computed-width functions, C order for the object-path functions (NumPy's `_vec_string`) |
+| **`StringDType` storage states** | |
+| A short cell (at most 15 bytes) | two cells per vector (D12) |
+| A short cell with non-ASCII text | the vector path where bytes decide (comparisons, `str_len` by continuation bytes, `find` by bytes); decoded where code points decide (predicates, case maps, the widths of `center`) |
+| An arena or heap cell | the per-pair scalar path (arena base + offset, or the heap pointer) |
+| An NA cell | the descriptor's NA kind (§1.8): NaN-like, string (its default string), other (NumPy's errors) |
+| The all-zero (never written) cell | `''` |
+| An output cell | at most 15 bytes in the cell; longer through the output allocator (locked once per call, reserved exactly when the sizes are known) |
+| **Data** | |
+| ASCII text | the ASCII kernels (range compares, lane flips) |
+| Non-ASCII text | `U`: sticky escalation to the gather kernel for the rest of the call; `T`: decode; `S`: ASCII rules regardless |
+| `U` units above `U+10FFFF` | no property (CPython's record 0), compared unsigned; NumPy's SystemError where NumPy builds a Python `str` from one (case maps, the lone-unit bool cast) |
+| Lone surrogates in `U` | code points like any other (no property; case maps keep them) |
+| Embedded / trailing NULs | embedded NULs are characters (not alphabetic, not whitespace); trailing NULs never count (`num_codepoints`) |
+| `S` bytes at or above 0x80 | ASCII rules (not alphabetic, case unchanged) |
+| Widths beyond the specialization cap (256 bytes) | the loop form of the chunk plan / the loop width class |
+| Duplicates (sorting; two NaN-like NAs count as duplicates) / all distinct strings | NumPy's introsort port / the radix shortcut (D19) |
+| **Hosts** | |
+| AVX2 / no AVX2, arm64 / no dynamic code (NativeAOT) | the vector forms / the portable twins (D21) / the C# helpers from a C# loop (the simple scans fall back to managed per-unit loops) |
