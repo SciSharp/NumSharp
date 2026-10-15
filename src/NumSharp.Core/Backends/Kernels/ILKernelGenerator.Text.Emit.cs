@@ -132,22 +132,50 @@ namespace NumSharp.Backends.Kernels
             var dm = NewTextKernelMethod($"NDTextTruth_u{key.Unit}_{key.Width}{(key.CheckCodePoints ? "_cast" : "")}");
             var il = dm.GetILGenerator();
             var frame = EmitTextFrame(il, new[] { 0, 1 });
+            var invalid = DeclareTextTruthFlag(il, key);
+            EmitTextTruthLoop(il, key, frame, invalid);
+            // The 1-D form's auxdata is argument 3.
+            EmitTextTruthFlagStore(il, invalid, auxArgument: 3);
+            il.Emit(OpCodes.Ret);
+            return (NDInnerLoopFunc)dm.CreateDelegate(typeof(NDInnerLoopFunc));
+        }
+
+        /// <summary>
+        ///     Declares and zeroes the cast flavor's call-wide flag: NumPy raises at the first failing element, and the caller
+        ///     raises once after the kernel (the partial output is discarded), so one flag spans every element of the call —
+        ///     every row of a rows kernel included.
+        /// </summary>
+        /// <param name="il">The kernel's generator.</param>
+        /// <param name="key">The truth kernel identity.</param>
+        /// <returns>The int flag local, or null when the kernel does not test code points (the nonzero flavor, <c>S</c>,
+        ///     or a width-0 element, which is <c>''</c> and never fails).</returns>
+        private static LocalBuilder DeclareTextTruthFlag(ILGenerator il, TextTruthKey key)
+        {
+            if (!key.CheckCodePoints || key.Width == 0)
+                return null;
+            var invalid = il.DeclareLocal(typeof(int));
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Stloc, invalid);
+            return invalid;
+        }
+
+        /// <summary>
+        ///     Emits the truth element loop over a frame whose pointers are (text, out): <c>out = any unit nonzero</c> per
+        ///     element, plus the cast flavor's lone-unit test into <paramref name="invalid"/>. The 1-D kernel emits it once;
+        ///     the rows kernel emits it inside its row loop (the loop runs <c>innerCount</c> elements from the current row
+        ///     pointers either way: both signatures carry the element count in argument 2).
+        /// </summary>
+        /// <param name="il">The kernel's generator.</param>
+        /// <param name="key">The truth kernel identity.</param>
+        /// <param name="frame">The frame (text and out pointers and strides).</param>
+        /// <param name="invalid">The cast flavor's flag (<see cref="DeclareTextTruthFlag"/>), or null.</param>
+        private static void EmitTextTruthLoop(ILGenerator il, TextTruthKey key, TextFrame frame, LocalBuilder invalid)
+        {
             var plan = PlanTextRange(0, key.Width, key.Unit);
             // The truth is a plain OR of the units, so the vector lane type is irrelevant: byte lanes.
             var lane = typeof(byte);
-
-            // The cast flavor's flag spans the whole call: NumPy raises at the first failing element, and the caller raises
-            // once after the loop (the partial output is discarded). An empty element (width 0) is '' and never fails.
-            LocalBuilder invalid = null;
-            TextChunkPlan rest = default;
-            if (key.CheckCodePoints && key.Width > 0)
-            {
-                invalid = il.DeclareLocal(typeof(int));
-                il.Emit(OpCodes.Ldc_I4_0);
-                il.Emit(OpCodes.Stloc, invalid);
-                // The units after the first: all zero is what makes a first unit above U+10FFFF a one-unit string.
-                rest = PlanTextRange(4, key.Width - 4, 4);
-            }
+            // The units after the first: all zero is what makes a first unit above U+10FFFF a one-unit string.
+            var rest = invalid is null ? default : PlanTextRange(4, key.Width - 4, 4);
 
             var acc = new TextAccumulators(il);
             acc.Declare(plan.Kind, lane);
@@ -172,21 +200,27 @@ namespace NumSharp.Backends.Kernels
                 if (invalid is not null)
                     EmitTextLoneUnitCheck(il, frame.Pointers[0], rest, invalid);
             });
+        }
 
-            if (invalid is not null)
-            {
-                // *(int*)auxdata = 1 when an element of the call is one unit above U+10FFFF.
-                var clean = il.DefineLabel();
-                il.Emit(OpCodes.Ldloc, invalid);
-                il.Emit(OpCodes.Brfalse, clean);
-                il.Emit(OpCodes.Ldarg_3);
-                il.Emit(OpCodes.Ldc_I4_1);
-                il.Emit(OpCodes.Stind_I4);
-                il.MarkLabel(clean);
-            }
-
-            il.Emit(OpCodes.Ret);
-            return (NDInnerLoopFunc)dm.CreateDelegate(typeof(NDInnerLoopFunc));
+        /// <summary>
+        ///     Emits <c>*(int*)auxdata = 1</c> when the cast flavor's flag is set (an element of the call is one unit above
+        ///     U+10FFFF); nothing when the kernel has no flag.
+        /// </summary>
+        /// <param name="il">The kernel's generator.</param>
+        /// <param name="invalid">The flag local, or null.</param>
+        /// <param name="auxArgument">The index of the kernel's auxdata argument: 3 in the 1-D signature
+        ///     (<see cref="NDInnerLoopFunc"/>), 5 in the rows signature (<see cref="NDInnerLoop2DFunc"/>).</param>
+        private static void EmitTextTruthFlagStore(ILGenerator il, LocalBuilder invalid, int auxArgument)
+        {
+            if (invalid is null)
+                return;
+            var clean = il.DefineLabel();
+            il.Emit(OpCodes.Ldloc, invalid);
+            il.Emit(OpCodes.Brfalse, clean);
+            il.Emit(OpCodes.Ldarg_S, (byte)auxArgument);
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Stind_I4);
+            il.MarkLabel(clean);
         }
 
         /// <summary>
@@ -222,15 +256,36 @@ namespace NumSharp.Backends.Kernels
         // =============================================================================================================
 
         /// <summary>
-        ///     Emits the comparison element loop over a frame whose pointers are (A, B, out): hoists the broadcast operands'
-        ///     chunks, then for each element computes the bool result and stores it.
+        ///     Emits the comparison element loop over a frame whose pointers are (A, B, out) — or (A, B, out, mask) for the
+        ///     masked form: hoists the broadcast operands' chunks, then for each element computes the bool result and stores
+        ///     it, or (masked) blends it into <c>out</c> under the mask byte.
         /// </summary>
         /// <param name="il">The kernel's generator.</param>
         /// <param name="key">The kernel identity.</param>
-        /// <param name="frame">The frame (pointers and strides of A, B, out).</param>
+        /// <param name="frame">The frame (pointers and strides of A, B, out, and the mask when <paramref name="mask"/> is
+        ///     given).</param>
         /// <param name="hoistA">A is broadcast in this loop: its chunks are read once, its pointer never advances.</param>
         /// <param name="hoistB">B is broadcast in this loop.</param>
-        private static void EmitTextCompareLoop(ILGenerator il, TextCompareKey key, TextFrame frame, bool hoistA, bool hoistB)
+        /// <param name="mask">The masked form's mask pointer (the frame's fourth pointer), or null for the plain store.</param>
+        /// <remarks>
+        ///     <para>
+        ///     <b>The masked form computes, then blends.</b> NumPy's masked loop leaves a masked-off element of <c>out=</c>
+        ///     as it was. The per-run driver (<see cref="NDIterRef.ForEach"/> over an ARRAYMASK operand) gets that by calling
+        ///     the kernel once per mask run, which costs a call per run (2.8 ns per element on a random mask, discovery §2.5);
+        ///     this form instead computes EVERY element and writes <c>out = mask ? result : out</c> branch-free, so the cost
+        ///     is one extra load of <c>out</c> and four integer operations per element, whatever the mask looks like. A
+        ///     masked-off element is rewritten with the value it already holds, which no observer can tell from leaving it
+        ///     alone (the output is a writeable, never-broadcast operand; the caller keeps the per-run route for a cast
+        ///     <c>out=</c>, whose buffer round trip would change such an element).
+        ///     </para>
+        ///     <para>
+        ///     <b>Hoisting inside a rows kernel.</b> When the caller emits this loop inside a row loop, the hoisting below
+        ///     runs once per ROW: a column-broadcast operand (inner stride 0, a different element per row) is re-read at
+        ///     every row start, and a scalar operand pays one redundant chunk load per row.
+        ///     </para>
+        /// </remarks>
+        private static void EmitTextCompareLoop(ILGenerator il, TextCompareKey key, TextFrame frame, bool hoistA, bool hoistB,
+                                                LocalBuilder mask = null)
         {
             int wA = key.WidthA, wB = key.WidthB;
             var prefix = PlanTextRange(0, Math.Min(wA, wB), key.Unit);
@@ -251,8 +306,16 @@ namespace NumSharp.Backends.Kernels
             if (tail.Count > 0)
                 accumulators.Declare(tail.Kind, lane);
             var result = il.DeclareLocal(typeof(int));
+            LocalBuilder old = mask is null ? null : il.DeclareLocal(typeof(int));
 
-            EmitTextElementLoop(il, frame, advance: new[] { !hoistA, !hoistB, true }, body: () =>
+            // Every operand after A and B (the output, and the masked form's mask) advances by its stride.
+            var advance = new bool[frame.Pointers.Length];
+            advance[0] = !hoistA;
+            advance[1] = !hoistB;
+            for (int k = 2; k < advance.Length; k++)
+                advance[k] = true;
+
+            EmitTextElementLoop(il, frame, advance, body: () =>
             {
                 if (ordering)
                     EmitTextOrderBody(il, key, a, b, prefix, tail, lane, result);
@@ -267,10 +330,47 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Stloc, result);
                 }
 
-                il.Emit(OpCodes.Ldloc, frame.Pointers[2]);
-                il.Emit(OpCodes.Ldloc, result);
-                il.Emit(OpCodes.Stind_I1);
+                if (mask is null)
+                {
+                    il.Emit(OpCodes.Ldloc, frame.Pointers[2]);
+                    il.Emit(OpCodes.Ldloc, result);
+                    il.Emit(OpCodes.Stind_I1);
+                }
+                else
+                    EmitTextMaskedStore(il, frame.Pointers[2], mask, result, old);
             });
+        }
+
+        /// <summary>
+        ///     Emits <c>*out = mask != 0 ? result : *out</c> without a branch: <c>old ^ ((old ^ result) &amp; sel)</c> with
+        ///     <c>sel = -(mask != 0)</c> (all ones or zero). Any nonzero mask byte selects, as NumPy's masked transfer reads a
+        ///     bool mask (a bool view over arbitrary bytes included).
+        /// </summary>
+        /// <param name="il">The generator.</param>
+        /// <param name="output">The output element pointer local.</param>
+        /// <param name="mask">The mask element pointer local.</param>
+        /// <param name="result">The int local holding the element's result (0 or 1).</param>
+        /// <param name="old">A scratch int local for the output's current byte.</param>
+        private static void EmitTextMaskedStore(ILGenerator il, LocalBuilder output, LocalBuilder mask, LocalBuilder result,
+                                                LocalBuilder old)
+        {
+            il.Emit(OpCodes.Ldloc, output);
+            il.Emit(OpCodes.Ldind_U1);
+            il.Emit(OpCodes.Stloc, old);
+
+            il.Emit(OpCodes.Ldloc, output);      // the store address
+            il.Emit(OpCodes.Ldloc, old);
+            il.Emit(OpCodes.Ldloc, old);
+            il.Emit(OpCodes.Ldloc, result);
+            il.Emit(OpCodes.Xor);                // old ^ result
+            il.Emit(OpCodes.Ldloc, mask);
+            il.Emit(OpCodes.Ldind_U1);
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Cgt_Un);             // mask != 0 → 1 / 0
+            il.Emit(OpCodes.Neg);                // → -1 / 0
+            il.Emit(OpCodes.And);
+            il.Emit(OpCodes.Xor);                // old ^ ((old ^ result) & sel)
+            il.Emit(OpCodes.Stind_I1);
         }
 
         /// <summary>

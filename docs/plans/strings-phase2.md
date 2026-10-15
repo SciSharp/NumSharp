@@ -39,6 +39,7 @@ lock-free cast table `07903e85`; NumPy's member names in the DTypes folder, `8de
 | P2.0 foundations | Done (`62f41584`): the IL text kernels (`Backends/Kernels/ILKernelGenerator.Text{,.Emit}.cs`): one DynamicMethod per (operation, unit, widths, operand order), emit-time chunk plans, broadcast-pattern stages. The Unicode tables moved to the stage that first reads them (§4, P2.A). |
 | P2.1 comparisons and truth | Done for `S` / `U` (`62f41584`, `68348bcf`; oracle section `strcomp`, 8,796 cases, zero excuses). Left: the `T` forms (§4, P2.T) and `np.char`'s stripping comparisons (`np-char.md` C1). |
 | P2.3 concatenation and repetition | Done for `S` / `U` (`f18ae600`; section `strarith`, 2,046 cases). Left: the `T` forms (P2.T), `np.char.add` / `np.char.multiply` (`np-char.md` C0 / C4). |
+| P2.A shared machinery | Part 1 done (2026-10-15, the rows contract D16 and the masked blend D17, retrofitted to the shipped comparison and truth kernels; state log). Left: the unary text driver and width-class helpers (with P2.5), the `T` kernel shell (with P2.T), the Unicode tables and the sticky escalation (with P2.6) — each lands with its first consumer, the roadmap's recommended order. |
 | P2.4 casts between text and numbers | Moved to phase 1 by the owner (2026-10-10) and done there (P1.1 for `S` / `U`, P1.6 for `T`). The parse-fed numerics, the random bounds and seeds, numpy.ma's number fills and the bool → text cast all compute now. |
 | Deferral sites | 42 call sites left (counted at `545818b0`): 33 `NDStringUfuncs.NextPhase` (fixed width) and 9 `NDStringUfuncs.NextPhaseVString` (`T`). `NDStringCasting.TextConversion` and `NDStringCopy.MixedKinds` have no caller since P1.1. Appendix A maps every site to a stage. |
 | The gate | The string oracle (`test/oracle/gen_strings_oracle.py` → `NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl`, 33 sections, 77,892 cases since P1.7c's `tio`). 974 of them still pass only as deferrals (the per-section ceilings of `StringOracleTests.DeferralCeilings`): 537 `S` / `U` cases of sorting, searching, set routines, histograms and quantiles, and 437 `T` cases reached through numpy.ma. Appendix B lists them by stage. |
@@ -691,7 +692,10 @@ What §2.5 found missing in the drivers, built once for every family:
   (`sub`, `start`, `end`, `prefix`, `chars`, `width`, `fillchar`, `old`, `new`, `count`), the comparison driver's twin;
   a fresh result in NumPy's layout (`Shape.NpyIterOutputShape`).
 - The rows contract (D16) and the masked blend (D17), retrofitted first to the existing comparison and truth kernels
-  (`m[:, :3] == "abc"` 19.3 µs → ~2.4; `np.equal(u, v, out, where=m)` 426 µs → ~173 at 100K).
+  (`m[:, :3] == "abc"` 19.3 µs → ~2.4; `np.equal(u, v, out, where=m)` 426 µs → ~173 at 100K). **Done 2026-10-15**
+  (state log): `NDIterRef.ForEachRows` + `NDInnerLoop2DFunc` (`Backends/Iterators/NDIter.Execution.Rows.cs`), the rows
+  and masked kernel forms (`ILKernelGenerator.Text.Rows.cs`), the comparison and truth drivers; NPY/NS over the shipped
+  kernels' narrow-row and masked cells 1.61–117× (were 0.75–50×), every cell ≥ 1.5×.
 - The width-class C# helpers and their stage layout (D11): masked loads for `U`, overlapping chunks for `S`, the
   portable twins (D21).
 - The `T` kernel shell (D12): two cells per `Vector256`, the per-pair scalar path, the NA kinds of §1.8, arena bases and
@@ -832,6 +836,51 @@ dependencies land; C0 waits for the owner's decision C-D1, C3 for C-D3.
 
 ## 7. State log
 
+- **2026-10-15 — P2.A part 1: the rows contract (D16) and the masked blend (D17) for the shipped comparison and truth
+  kernels** (owner's direction: P2.A first, then P2.2; the other P2.A parts land with their first consumers, the
+  roadmap's recommended order).
+  1. **The rows driver.** `NDIterRef.CanRunRows` / `ForEachRows(NDInnerLoop2DFunc, auxdata)`
+     (`Backends/Iterators/NDIter.Execution.Rows.cs`): an unbuffered, unmasked `EXTERNAL_LOOP` iteration of two or more
+     axes after coalescing, at its start and not ranged, runs as blocks of rows — the trailing axes every operand walks
+     contiguously fold into one (rows, outer stride) block, the leading ones are walked by an odometer, one kernel call
+     per block. `NDInnerLoop2DFunc` is the numeric 2-D block signature plus `auxdata` (the truth kernel's flag).
+  2. **The kernel forms** (`Backends/Kernels/ILKernelGenerator.Text.Rows.cs`): rows forms of the comparison (plain and
+     masked) and truth kernels — the broadcast-pattern dispatch once per call, then a row loop around the SAME element
+     emitters (`EmitTextCompareLoop`, `EmitTextTruthLoop`, extracted from the 1-D truth generator), a broadcast operand
+     hoisted at every row start (a column-broadcast comparand differs per row); the 1-D masked comparison kernel. The
+     masked forms compute every element and store `out = old ^ ((old ^ result) & -(mask != 0))`
+     (`EmitTextMaskedStore`), any nonzero mask byte selecting.
+  3. **The drivers.** `NDStringComparison`: a `where=` mask into a BOOL output runs the blend (a trivial loop when the
+     four operands walk one linear order and the output overlaps neither inputs nor mask, else NDIter with the mask as an
+     ordinary operand and the output READWRITE, rows or 1-D); a cast output keeps the per-run ARRAYMASK route (its
+     write-masked copy-back leaves a masked-off element of a cast output untouched; a blend through the buffer would
+     round-trip it through bool). Unmasked iterations of several rows take the rows kernel. `NDStringTruth`: the truth
+     fill takes the rows kernel when the iterator allows. The old routes stay as the fallback without dynamic code; the
+     switches `NDStringComparison.RowsDisabled` / `MaskedBlendDisabled` / `NDStringTruth.RowsDisabled` select them for
+     A/B tests, counters `RowsRuns` / `MaskedBlendRuns` prove which route ran.
+  4. **Gates.** `StringRowsAndMaskTests` (9): the rows kernels against the managed reference row by row on raw memory
+     (both classes, widths across the hoist limit, both operand orders, five stride patterns per operand: dense, inner
+     broadcast, row broadcast, scalar, reversed rows; masked forms from random outputs with mask bytes 0 / 1 / 2 / 255);
+     the 1-D masked kernels (outputs forward / stepped / backward, masks dense / strided / single); the rows truth kernels
+     with the code-point flag set from a later row; the public routes against the old ones over narrow slices, column /
+     row broadcasts, 3-D and 4-D walks with leading axes, reversed rows, F slices, dense / row / column / 0-d masks,
+     stepped outputs, `out=` aliasing the mask, the cast-output exception (NumPy-probed values); `ForEachRows`' folding
+     and refusals; a `FencedMemory` run of every new route. A mutation pass of 14 planted bugs (row loop, rows frame,
+     masked store, fold, odometer, dispatch, trivial masked loop, blend route, truth flag, gate): all killed — the first
+     run left the odometer's wrap step alive (the test's leading axes coalesced, so the wrap ran only after the last
+     block), fixed with a view stepped on every axis and an exact block count. The string unit classes (320), the
+     string oracle (35 tests, 77,892 cases, deferral ceilings unchanged) on both TFMs, with AVX2 off, with hardware
+     intrinsics off and under guard pages; the full unit suite: net10.0 19,631 passed, net8.0 one failure,
+     `PythonIntToText_RefusedPast4300Digits_AsCPythonDoes`, a pre-existing timing assertion (`< 2000 ms` around
+     `BigInteger.Pow(2, 3_000_000)`, 2 s even alone on net8.0) that passes when run alone.
+  5. **Speed** (NPY/NS, two pinned P-cores, views built outside the timed call on both sides, the old route in the same
+     process; 1K / 100K / 1M): `m[:, :3] == "abc"` 7.3 / 9.6 / 4.4 (old 3.1 / 4.6 / 2.9); `less(slice, slice)` 8.0 /
+     11.6 / 5.8; a column-broadcast comparand 11.0 / 15.8 / 7.9; `equal(where=)` 1-D 6.6 / 12.2 / 7.6 (old 4.3 / 5.7 /
+     4.7) and over narrow rows 5.5 / 7.8 / 4.0 (old 1.9 / 1.8 / 1.75); `astype(bool)` of a narrow slice 117 / 108 / 49;
+     `count_nonzero` of a narrow slice 2.05 / 1.64 / 1.61 (old 0.78 / 0.75 / 0.84) — the lowest cell, ~6 ns per 3-element
+     row near the L3 bandwidth bound at 100K and DRAM-bound at 1M (NumPy reads the same lines). Measured with the slice
+     inside the timed call, NumSharp's string slice parse adds ~1–2 µs per call (a library-wide cost): `count_nonzero`
+     at 1K reads 1.14× that way.
 - **2026-10-15 — The roadmap** (owner's request: "Write a roadmap of the phases we have for p2 before we pick which we
   begin with and start"). §4 opens with the roadmap: the dependency graph, one row per stage (delivers, needs, unlocks,
   size, exit gate), the parallel tracks, the work on the same road outside phase 2 (P1.7f and D12, `numpy.char`, the

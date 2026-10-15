@@ -33,6 +33,20 @@ namespace NumSharp.Backends.Strings
         /// <summary>NumPy's text for a one-unit <c>U</c> element above U+10FFFF met by the string-to-bool cast (a SystemError).</summary>
         internal const string InvalidCodePointMessage = "invalid maximum character passed to PyUnicode_New";
 
+        /// <summary>
+        ///     Test and measurement hook: when true, a truth array of several non-coalescing rows calls the 1-D kernel once
+        ///     per row (<see cref="NDIterRef.ForEach"/>) instead of handing blocks of rows to the rows kernel. The results
+        ///     are the same bytes. Process-wide; set it only from single-threaded test code and restore it in a
+        ///     <c>finally</c>.
+        /// </summary>
+        internal static bool RowsDisabled;
+
+        /// <summary>
+        ///     Test hook: truth fills that ran through the rows kernel since the process started. A plain counter, not
+        ///     synchronized: tests read the difference around calls they make on one thread.
+        /// </summary>
+        internal static long RowsRuns;
+
         /// <summary>The route a caller's NumPy function reads the truth through (see the type summary).</summary>
         internal enum Flavor
         {
@@ -108,7 +122,16 @@ namespace NumSharp.Backends.Strings
                 using var iter = NDIterRef.AdvancedNew(2, new[] { text, result },
                     NDIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_SAFE_CASTING,
                     new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY }, opDescrs: new DType[2]);
-                iter.ForEach(kernel, &invalid);
+                // Several rows that do not coalesce (the truth of a column slice, a strided 3-D view): blocks of rows go to
+                // the rows kernel, whose prologue then runs once per block instead of once per row (strings plan D16).
+                NDInnerLoop2DFunc rows = !RowsDisabled && iter.CanRunRows ? ILKernelGenerator.GetTextTruthRowsKernel(unit, text.dtype.itemsize, check) : null;
+                if (rows is not null)
+                {
+                    iter.ForEachRows(rows, &invalid);
+                    RowsRuns++;
+                }
+                else
+                    iter.ForEach(kernel, &invalid);
             }
 
             if (invalid != 0)

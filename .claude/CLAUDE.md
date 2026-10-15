@@ -71,6 +71,15 @@ comparisons and truth values (P2.1) and concatenation / repetition (P2.3: `np.ad
 text kernels (`Backends/Kernels/ILKernelGenerator.Text{,.Emit,.Concat}.cs`: element widths are emit-time constants, every
 element is fixed-size chunk loads / stores, so no per-element branch follows its length — NumPy's own repeat loop runs a
 variable-size memcpy per copy and loses to that 2–4×) driven by `Backends/Strings/NDString{Comparison,Truth,Arithmetic}.cs`.
+Two driver forms came with P2.A (2026-10-15, plan D16 / D17): an iteration of several rows that does not coalesce (a
+column slice `m[:, :3]`, a column-broadcast comparand, a stepped N-D view) hands BLOCKS of rows to the rows form of a
+text kernel (`NDIterRef.ForEachRows` with an `NDInnerLoop2DFunc`, `Backends/Iterators/NDIter.Execution.Rows.cs`; kernels
+in `ILKernelGenerator.Text.Rows.cs`), so the kernel prologue runs once per block, not per row; and a `where=` mask into a
+bool output runs the masked comparison kernel, which computes every element and blends `out = mask ? result : out`
+branch-free instead of one kernel call per mask run (a cast `out=` keeps NDIter's per-run ARRAYMASK route: its
+write-masked copy-back is what leaves a masked-off element of a cast output untouched). Narrow rows run 2× the per-row
+route (`m[:, :3] == "abc"` 9.6× NumPy at 100K), masks 2.2–4.3× the per-run route; switches `RowsDisabled` /
+`MaskedBlendDisabled` on `NDStringComparison` (and `NDStringTruth.RowsDisabled`) take the old routes for A/B tests.
 **Text ↔ number conversion is phase 1 (P1.1, 2026-10-12, `docs/plans/strings-phase1-completion.md`)** — NumPy's legacy
 casts, byte for byte: a number becomes its scalar's `str()` (`Backends/Strings/NDTextFormat.cs`: the float positional /
 scientific windows per type, float16 / float32 shortest digits, complex forms; an unsized `'U'` / `'S'` takes

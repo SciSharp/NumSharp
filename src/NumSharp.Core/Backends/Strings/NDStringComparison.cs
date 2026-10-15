@@ -30,6 +30,15 @@ namespace NumSharp.Backends.Strings
     ///     calls the kernel ONCE over the whole result (NumPy's trivial loop; no iterator is built). Everything else is an
     ///     NDIter pass with <c>EXTERNAL_LOOP</c> and <c>COPY_IF_OVERLAP</c>: broadcasting, strides, F / transposed / reversed
     ///     views and masks are the iterator's, and the kernel's broadcast stages read a stride-0 comparand once per call.
+    ///     An iteration of several rows that does not coalesce (a column slice, a column-broadcast comparand, a strided
+    ///     3-D walk) hands BLOCKS of rows to the rows kernel (<see cref="NDIterRef.ForEachRows"/>, strings plan D16), so
+    ///     the kernel prologue and the iterator step run once per block instead of once per row.
+    ///     </para>
+    ///     <para>
+    ///     <b>Masks.</b> A <c>where=</c> mask into a bool output runs the masked kernel (D17): every element is computed and
+    ///     blended, <c>out = mask ? result : out</c>, the mask read as an ordinary operand — one pass instead of one kernel
+    ///     call per mask run. A mask into a cast output (a non-bool <c>out=</c>) keeps the per-run route over NDIter's
+    ///     ARRAYMASK operand, whose write-masked copy-back leaves the masked-off elements untouched through the buffer.
     ///     </para>
     /// </remarks>
     internal static class NDStringComparison
@@ -55,6 +64,47 @@ namespace NumSharp.Backends.Strings
             NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
             NDIterPerOpFlags.READONLY | NDIterPerOpFlags.ARRAYMASK,
         };
+
+        /// <summary>
+        ///     The per-operand flags of the blend route (a <c>where=</c> mask into a bool output): the mask is an ORDINARY
+        ///     read-only operand that the masked kernel reads itself, and the output is READWRITE because the kernel rewrites
+        ///     a masked-off element with the value it reads from it. The mask is read in the same element as the output is
+        ///     written, so an exact alias of the two (<c>out=m, where=m</c>) is elementwise and needs no copy; a partial
+        ///     overlap is left to COPY_IF_OVERLAP.
+        /// </summary>
+        private static readonly NDIterPerOpFlags[] s_blendFlags =
+        {
+            NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READWRITE | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+        };
+
+        /// <summary>
+        ///     Test and measurement hook: when true, an iteration of several rows calls the 1-D kernel once per row
+        ///     (<see cref="NDIterRef.ForEach"/>) instead of handing blocks of rows to the rows kernel
+        ///     (<see cref="NDIterRef.ForEachRows"/>). The results are the same bytes. Process-wide; set it only from
+        ///     single-threaded test code and restore it in a <c>finally</c>.
+        /// </summary>
+        internal static bool RowsDisabled;
+
+        /// <summary>
+        ///     Test and measurement hook: when true, a <c>where=</c> mask runs the per-run route (the ARRAYMASK operand of
+        ///     <see cref="NDIterRef.ForEach"/>, one kernel call per mask run) instead of the masked kernel's blend. The
+        ///     results are the same bytes. Process-wide; set it only from single-threaded test code and restore it in a
+        ///     <c>finally</c>.
+        /// </summary>
+        internal static bool MaskedBlendDisabled;
+
+        /// <summary>
+        ///     Test hook: comparison calls that ran through a rows kernel since the process started. A plain counter, not
+        ///     synchronized: tests read the difference around calls they make on one thread, and a lost increment under
+        ///     concurrent comparisons changes nothing else.
+        /// </summary>
+        internal static long RowsRuns;
+
+        /// <summary>Test hook: comparison calls whose <c>where=</c> mask ran through the blend. See <see cref="RowsRuns"/>.</summary>
+        internal static long MaskedBlendRuns;
 
         /// <summary>
         ///     Whether <paramref name="ufunc"/> is one of the six comparison ufuncs this class computes.
@@ -97,7 +147,8 @@ namespace NumSharp.Backends.Strings
             };
             int unit = x1.dtype.kind == 'U' ? 4 : 1;
             int w1 = x1.dtype.itemsize, w2 = x2.dtype.itemsize;
-            var kernel = GetKernel(op, unit, swap ? w2 : w1, swap ? w1 : w2, swap ? 1 : 0);
+            var shape = new TextCompareShape(op, unit, swap ? w2 : w1, swap ? w1 : w2, swap ? 1 : 0);
+            var kernel = GetKernel(op, unit, shape.WidthA, shape.WidthB, shape.AIndex);
 
             var dims = NDStringUfuncs.BroadcastDims(x1, x2, @out, where);
             NDArray result = @out ?? new NDArray(NPTypeCode.Boolean, ResultShape(dims, x1, x2, where), false);
@@ -105,8 +156,9 @@ namespace NumSharp.Backends.Strings
             {
                 if (result.size == 0)
                     return result;
-                if (!TryTrivial(kernel, x1, x2, result, where, @out is not null))
-                    RunIterator(kernel, x1, x2, result, where);
+                if (!TryTrivial(kernel, x1, x2, result, where, @out is not null)
+                    && (where is null || !TryBlend(shape, x1, x2, result, where, @out is not null)))
+                    RunIterator(kernel, shape, x1, x2, result, where);
                 return result;
             }
             catch
@@ -276,17 +328,146 @@ namespace NumSharp.Backends.Strings
             => (byte*)a.Address + a.Shape.offset * NDIterRef.ElementBytes(a);
 
         /// <summary>
+        ///     The identity of one comparison call's kernels after the operand swap: what every kernel form (1-D, rows,
+        ///     masked) is generated from.
+        /// </summary>
+        /// <param name="Op">The comparison of A against B (<c>greater</c> / <c>greater_equal</c> are already swapped to
+        ///     <c>less</c> / <c>less_equal</c>).</param>
+        /// <param name="Unit">1 for <c>S</c>, 4 for <c>U</c>.</param>
+        /// <param name="WidthA">A's element width in bytes.</param>
+        /// <param name="WidthB">B's element width in bytes.</param>
+        /// <param name="AIndex">The operand slot A is read from (1 for a swapped pair).</param>
+        private readonly record struct TextCompareShape(TextCompareOp Op, int Unit, int WidthA, int WidthB, int AIndex);
+
+        /// <summary>
+        ///     The blend route of a <c>where=</c> mask into a bool output: the masked kernel computes every element and writes
+        ///     <c>out = mask ? result : out</c>, with the mask an ordinary operand (one pass, whatever the mask's run
+        ///     structure), instead of one kernel call per mask run. Taken when the output is bool (a cast output keeps the
+        ///     per-run route, whose write-masked copy-back is what leaves its masked-off elements untouched) and the IL
+        ///     kernels exist.
+        /// </summary>
+        /// <param name="shape">The comparison identity.</param>
+        /// <param name="x1">The first input.</param>
+        /// <param name="x2">The second input.</param>
+        /// <param name="result">The bool output (fresh or <c>out=</c>).</param>
+        /// <param name="where">The bool mask (non-null).</param>
+        /// <param name="callerOut">True when <paramref name="result"/> is the caller's <c>out=</c>.</param>
+        /// <returns>True when the call was computed here; false sends it to <see cref="RunIterator"/>'s per-run route.</returns>
+        private static unsafe bool TryBlend(TextCompareShape shape, NDArray x1, NDArray x2, NDArray result, NDArray where,
+                                            bool callerOut)
+        {
+            if (MaskedBlendDisabled || result.typecode != NPTypeCode.Boolean)
+                return false;
+            var masked = ILKernelGenerator.GetTextCompareMaskedKernel(shape.Op, shape.Unit, shape.WidthA, shape.WidthB, shape.AIndex);
+            if (masked is null)
+                return false;
+
+            if (TryTrivialMasked(masked, x1, x2, result, where, callerOut))
+            {
+                MaskedBlendRuns++;
+                return true;
+            }
+
+            // A null descriptor keeps an operand's own (the string widths, the mask's bool); the loop's output is bool.
+            var descrs = new DType[4];
+            descrs[2] = DType.Boolean;
+            using var iter = NDIterRef.AdvancedNew(4, new[] { x1, x2, result, where },
+                NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP, NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_SAFE_CASTING, s_blendFlags, opDescrs: descrs);
+            if (!RowsDisabled && iter.CanRunRows)
+            {
+                var rows = ILKernelGenerator.GetTextCompareRowsKernel(shape.Op, shape.Unit, shape.WidthA, shape.WidthB,
+                                                                     shape.AIndex, masked: true);
+                if (rows is not null)
+                {
+                    iter.ForEachRows(rows);
+                    RowsRuns++;
+                    MaskedBlendRuns++;
+                    return true;
+                }
+            }
+            iter.ForEach(masked);
+            MaskedBlendRuns++;
+            return true;
+        }
+
+        /// <summary>
+        ///     The blend route's trivial loop: when the inputs, the output and the mask all walk one linear order (each a
+        ///     single element or of the result's dimensions in the result's contiguous order; for a 0-d or 1-D result any
+        ///     1-D operand at its own stride), one masked-kernel call covers the whole result with no iterator — the
+        ///     <see cref="TryTrivial"/> rules with the mask as a fourth operand.
+        /// </summary>
+        /// <param name="masked">The 1-D masked kernel.</param>
+        /// <param name="x1">The first input.</param>
+        /// <param name="x2">The second input.</param>
+        /// <param name="result">The bool output.</param>
+        /// <param name="where">The bool mask.</param>
+        /// <param name="callerOut">True when <paramref name="result"/> is the caller's <c>out=</c>.</param>
+        /// <returns>True when the call was computed here.</returns>
+        /// <remarks>
+        ///     An output that may share memory with an input, or with the mask, takes the iterator: its COPY_IF_OVERLAP
+        ///     copies a partially overlapping operand first, which this loop could not (an element written before a later
+        ///     element reads it as its mask). A fresh result shares memory with nothing.
+        /// </remarks>
+        private static unsafe bool TryTrivialMasked(NDInnerLoopFunc masked, NDArray x1, NDArray x2, NDArray result, NDArray where,
+                                                    bool callerOut)
+        {
+            var rs = result.Shape;
+            void** ptrs = stackalloc void*[4];
+            long* strides = stackalloc long[4];
+            if (rs.NDim <= 1)
+            {
+                if (!Linear1D(x1, rs) || !Linear1D(x2, rs) || !Linear1D(where, rs))
+                    return false;
+                strides[0] = Stride1D(x1);
+                strides[1] = Stride1D(x2);
+                strides[2] = rs.NDim == 0 || result.size == 1 ? 0 : rs.strides[0];
+                strides[3] = Stride1D(where);
+            }
+            else
+            {
+                bool c = rs.IsContiguous, f = rs.IsFContiguous;
+                if (!c && !f)
+                    return false;
+                if (!LinearOperand(x1, rs, ref c, ref f) || !LinearOperand(x2, rs, ref c, ref f)
+                    || !LinearOperand(where, rs, ref c, ref f) || !(c || f))
+                    return false;
+                strides[0] = x1.size == 1 ? 0 : x1.dtype.itemsize;
+                strides[1] = x2.size == 1 ? 0 : x2.dtype.itemsize;
+                strides[2] = 1;
+                strides[3] = where.size == 1 ? 0 : 1;
+            }
+            if (callerOut && (MayOverlap(result, x1) || MayOverlap(result, x2) || MayOverlap(result, where)))
+                return false;
+
+            ptrs[0] = ElementPointer(x1);
+            ptrs[1] = ElementPointer(x2);
+            ptrs[2] = ElementPointer(result);
+            ptrs[3] = ElementPointer(where);
+            masked(ptrs, strides, result.size, null);
+            GC.KeepAlive(x1);
+            GC.KeepAlive(x2);
+            GC.KeepAlive(result);
+            GC.KeepAlive(where);
+            return true;
+        }
+
+        /// <summary>
         ///     The NDIter pass: <c>EXTERNAL_LOOP</c> (the kernel gets whole inner rows), <c>COPY_IF_OVERLAP</c>, and for a
         ///     non-bool <c>out=</c> the buffered cast of the bool loop output into it. The string operands travel with their
-        ///     own descriptors (<c>opDescrs</c>), which size their elements.
+        ///     own descriptors (<c>opDescrs</c>), which size their elements. An unmasked iteration of several rows hands
+        ///     blocks of rows to the rows kernel (<see cref="NDIterRef.ForEachRows"/>), so a narrow-row walk pays the kernel
+        ///     prologue once per block instead of once per row.
         /// </summary>
-        /// <param name="kernel">The comparison kernel.</param>
+        /// <param name="kernel">The 1-D comparison kernel.</param>
+        /// <param name="shape">The comparison identity (for the rows kernel).</param>
         /// <param name="x1">The first input.</param>
         /// <param name="x2">The second input.</param>
         /// <param name="result">The output.</param>
-        /// <param name="where">The mask, or null.</param>
+        /// <param name="where">The mask, or null (a mask reaching here runs the per-run ARRAYMASK route).</param>
         /// <exception cref="StringComputationNotSupportedException">The buffered cast into a text <c>out=</c>.</exception>
-        private static unsafe void RunIterator(NDInnerLoopFunc kernel, NDArray x1, NDArray x2, NDArray result, NDArray where)
+        private static unsafe void RunIterator(NDInnerLoopFunc kernel, TextCompareShape shape, NDArray x1, NDArray x2,
+                                               NDArray result, NDArray where)
         {
             bool cast = result.typecode != NPTypeCode.Boolean;
             var flags = NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP;
@@ -299,6 +480,18 @@ namespace NumSharp.Backends.Strings
             using var iter = NDIterRef.AdvancedNew(ops.Length, ops, flags, NPY_ORDER.NPY_KEEPORDER,
                 cast ? NPY_CASTING.NPY_UNSAFE_CASTING : NPY_CASTING.NPY_SAFE_CASTING,
                 where is null ? s_flags : s_maskedFlags, opDescrs: descrs);
+            // CanRunRows is false for a buffered (cast) or masked iteration, which keep ForEach.
+            if (!RowsDisabled && iter.CanRunRows)
+            {
+                var rows = ILKernelGenerator.GetTextCompareRowsKernel(shape.Op, shape.Unit, shape.WidthA, shape.WidthB,
+                                                                     shape.AIndex, masked: false);
+                if (rows is not null)
+                {
+                    iter.ForEachRows(rows);
+                    RowsRuns++;
+                    return;
+                }
+            }
             iter.ForEach(kernel);
         }
 
