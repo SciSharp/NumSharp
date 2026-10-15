@@ -5,6 +5,12 @@ uses an explicit owner map; sharing a name with np or NDArray does not implement
 ufunc, MaskedArray, matrix, or random.Generator member. These rows never contribute
 to the five-surface headline. No random draw, file-system IO, or global RNG mutation
 is required to discover the instance-only fields in NumPy's public objects.
+
+Ufunc protocol methods (``add.reduce``, ``maximum.accumulate``, ``add.resolve_dtypes``, ...)
+are catalogued per export, from the pinned NumPy itself: the method list is read from the
+``numpy.ufunc`` type, and the scan covers every namespace the generator compares, so a
+ufunc exported from a submodule (``numpy.strings.str_len``) and a ufunc-like wrapper
+(numpy.ma's masked ``ma.add``) are inventoried like the top-level ufuncs.
 """
 
 from __future__ import annotations
@@ -15,7 +21,7 @@ import io
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 
 @dataclass(frozen=True)
@@ -84,6 +90,189 @@ MEMBER_ALIASES = {
     ("lib.npyio.NpzFile", "zip"): "Zip",
     ("lib.npyio.NpzFile", "close"): "Close",
 }
+
+
+# The ufunc methods whose call NumPy refuses for some ufunc SHAPES (arity, output count,
+# core signature). Any other method (resolve_dtypes, or one a future NumPy adds) gets no
+# shape rule: resolve_dtypes resolves loop dtypes for every shape, and an unknown method
+# must not inherit rules nobody reviewed for it.
+_SHAPE_RULED_UFUNC_METHODS = frozenset({"reduce", "accumulate", "reduceat", "outer", "at"})
+
+# Shared tail of every protocol row's note: why NumSharp can never match the member today.
+_NO_UFUNC_OBJECT = ("NumSharp exposes NumPy's ufuncs as functions, not first-class ufunc objects, "
+                    "so no object member can match; related np.sum/cumsum/outer operations do not "
+                    "implement it. Catalogued outside the headline scope.")
+
+
+def ufunc_protocol_methods(np: Any) -> tuple[str, ...]:
+    """Return the public methods of NumPy's ufunc type, read from the pinned NumPy.
+
+    Reading the type instead of listing names by hand keeps the per-export rows complete:
+    the hand-written list held five names and missed ``resolve_dtypes`` (NumPy 1.24+), so
+    ``numpy.add.resolve_dtypes`` had no row. A method a later NumPy adds appears on the next
+    generation the same way. Properties (``identity``, ``nin``, ``nout``, ``nargs``, ``ntypes``,
+    ``types``, ``signature``) are excluded: each is the same contract on every ufunc and is
+    catalogued once as a ``numpy.ufunc.<name>`` object member.
+
+    :param np: the imported, version-pinned ``numpy`` module.
+    :returns: the method names, sorted; at NumPy 2.4.2 ``("accumulate", "at", "outer",
+        "reduce", "reduceat", "resolve_dtypes")``.
+    """
+    # getattr_static reads the descriptor on the type: a method descriptor is callable,
+    # a getset descriptor (identity, nin, ...) is not, and nothing is evaluated.
+    return tuple(sorted(
+        name for name in dir(np.ufunc)
+        if not name.startswith("_") and callable(inspect.getattr_static(np.ufunc, name))
+    ))
+
+
+def ufunc_method_rejection(ufunc: Any, method: str) -> str | None:
+    """Return why NumPy rejects every call of ``method`` on ``ufunc``, or None when it may succeed.
+
+    The rules come from NumPy's ufunc method entry points (probed at 2.4.2): reductions,
+    accumulations and ``outer`` need a binary ufunc; reductions, accumulations and ``at`` need a
+    single output (``outer`` returns one array per output); ``at`` takes only unary or binary
+    ufuncs; and no method but ``resolve_dtypes`` runs on a generalized ufunc with a core
+    signature. A None result only means the shape is accepted: operands, dtypes and casting can
+    still make a given call fail.
+
+    :param ufunc: a ``numpy.ufunc`` instance.
+    :param method: a ufunc method name from ``ufunc_protocol_methods``.
+    :returns: the rejection text for the row's note, or None.
+    """
+    if method not in _SHAPE_RULED_UFUNC_METHODS:
+        return None
+    if ufunc.signature is not None:
+        return "NumPy rejects this method for generalized ufuncs with a core signature."
+    if method != "at" and ufunc.nin != 2:
+        return "NumPy requires a binary ufunc for this method."
+    if method != "outer" and ufunc.nout != 1:
+        return "NumPy requires a single-output ufunc for this method."
+    if method == "at" and ufunc.nin not in {1, 2}:
+        return "NumPy at supports only unary and binary ufuncs."
+    return None
+
+
+def _public_names(module: Any, top_level: bool) -> list[str]:
+    """List the public export names of one namespace, using the rule its catalog rows use.
+
+    :param module: the namespace module (numpy itself or a submodule).
+    :param top_level: True for numpy itself, whose historical per-ufunc rows walk ``vars(np)``.
+    :returns: sorted, de-duplicated names without a leading underscore.
+    """
+    if top_level:
+        names = vars(module)
+    else:
+        # Submodule rows (generate_coverage.public_exports / extended_surface_rows) come from
+        # __all__ when the module declares it, else from dir(): use the same list so every
+        # protocol row's owner export is itself a catalogued row.
+        names = getattr(module, "__all__", None) or dir(module)
+    return sorted({name for name in names if not name.startswith("_")})
+
+
+def ufunc_protocol_rows(
+    np: Any, seen_ids: set[str], namespaces: Sequence[tuple[str, str]], *,
+    signature: Callable[[Any, str], str],
+    documentation_url: Callable[[str, str, str], str] | None = None,
+) -> list[dict[str, Any]]:
+    """Return one row per ufunc method on every ufunc-like export of the given namespaces.
+
+    Two kinds of export carry NumPy's ufunc protocol:
+
+    * ``numpy.ufunc`` instances. Every public method of the type exists on each of them,
+      whether or not their shape allows a call, so each gets one row per method; the row's
+      ``applicability`` is ``not_applicable`` when NumPy rejects every call (``sqrt.reduce``)
+      and ``conditional`` otherwise.
+    * Wrapper objects that implement part of the protocol: numpy.ma's masked ufuncs. ``ma.add``
+      has reduce, accumulate and outer; the comparisons only accumulate and outer, because
+      NumPy sets their ``reduce`` to None; ``ma.maximum``/``ma.minimum`` have reduce and outer;
+      the domained and unary wrappers have none. Only methods that are callable get rows.
+
+    Every row is ``missing``: NumSharp exposes ufuncs as functions, so no NumSharp member can
+    implement an object member. Rows never enter the headline scope.
+
+    :param np: the imported, version-pinned ``numpy`` module.
+    :param seen_ids: ids emitted so far; updated in place, and an id already present is skipped
+        (the first emitter of an id keeps it, as everywhere in the catalog).
+    :param namespaces: ``(import path relative to numpy, display surface)`` pairs. The empty path
+        is numpy itself, whose rows keep the historical ``ufunc`` surface; a submodule's rows use
+        its display surface (``("lib.scimath", "emath")`` yields ``numpy.emath.<name>.<method>``).
+    :param signature: renders a NumPy callable's signature (generate_coverage.numpy_signature).
+    :param documentation_url: resolves a documented URL or its nearest documented parent; None
+        links the ufunc reference page.
+    :returns: the new rows, in namespace order, then export name, then method name.
+    :raises ValueError: when a namespace path does not resolve to a module, so a misspelt or
+        removed submodule fails the run instead of silently dropping its rows.
+    """
+    methods = ufunc_protocol_methods(np)
+    rows: list[dict[str, Any]] = []
+    for path, surface in namespaces:
+        try:
+            module = _resolve(np, path) if path else np
+        except (AttributeError, ImportError) as error:
+            # _resolve imports numpy.<path> when the attribute walk fails; a namespace the
+            # generator lists but NumPy lacks must fail the run with the namespace's name.
+            raise ValueError(f"Ufunc protocol namespace numpy.{path} does not resolve.") from error
+        if not inspect.ismodule(module):
+            raise ValueError(f"Ufunc protocol namespace numpy.{path} is not a module.")
+        for name in _public_names(module, top_level=not path):
+            obj = getattr(module, name, None)
+            if isinstance(obj, np.ufunc):
+                implemented = methods
+            elif obj is None or inspect.isclass(obj) or inspect.ismodule(obj):
+                # Classes (MaskedArray, chararray) are object surfaces of their own, and a
+                # module is a namespace; neither is a ufunc-like callable.
+                continue
+            else:
+                # getattr_static sees the INSTANCE override NumPy uses to remove a method
+                # (numpy.ma sets equal.reduce = None) and evaluates no property.
+                implemented = tuple(method for method in methods
+                                    if callable(inspect.getattr_static(obj, method, None)))
+                if not implemented:
+                    continue
+            owner = f"numpy.{surface}.{name}" if path else f"numpy.{name}"
+            for method in implemented:
+                row_id = f"{owner}.{method}"
+                if row_id in seen_ids:
+                    continue
+                seen_ids.add(row_id)
+                if isinstance(obj, np.ufunc):
+                    rejection = ufunc_method_rejection(obj, method)
+                    if rejection:
+                        note = rejection
+                    elif method in _SHAPE_RULED_UFUNC_METHODS:
+                        note = "NumPy permits this protocol shape; supported operands and dtype resolution still apply."
+                    elif method == "resolve_dtypes":
+                        note = ("NumPy resolves loop dtypes for every ufunc shape; it raises only for dtype "
+                                "combinations the ufunc has no loop for.")
+                    else:
+                        note = ("Discovered on numpy.ufunc without a reviewed shape rule, so it is recorded "
+                                "as conditional.")
+                    doc_url = (documentation_url("ufunc", method, "method") if documentation_url
+                               else "https://numpy.org/doc/stable/reference/ufuncs.html")
+                else:
+                    rejection = None
+                    note = (f"{owner} is a ufunc wrapper object that implements this method; NumPy's "
+                            "wrappers implement only some of the ufunc methods.")
+                    # No generated page exists for a wrapper's method: link the nearest
+                    # documented parent (never a fabricated URL).
+                    doc_url = (documentation_url(surface, f"{name}.{method}", "method") if documentation_url
+                               else "https://numpy.org/doc/stable/reference/ufuncs.html")
+                rows.append({
+                    "id": row_id, "origin": "numpy", "surface": surface if path else "ufunc",
+                    "name": f"{name}.{method}", "kind": "method",
+                    "numpy_signature": signature(getattr(obj, method), method),
+                    "documentation_url": doc_url,
+                    "in_default_scope": False, "extended": True, "object_surface": True,
+                    "object_type": owner, "disposition": "subsystem",
+                    "category": "Universal function objects", "availability": "missing",
+                    "support": "missing", "status": "missing", "numsharp_target": None,
+                    "numsharp_signatures": [], "numsharp_obsolete": False,
+                    "numsharp_source_paths": [], "numsharp_source_urls": [],
+                    "applicability": "not_applicable" if rejection else "conditional",
+                    "notes": note + " " + _NO_UFUNC_OBJECT,
+                })
+    return rows
 
 
 def _resolve(np: Any, path: str) -> Any:
@@ -205,12 +394,28 @@ def object_surface_rows(
     np: Any, inventory: dict[str, Any], seen_ids: set[str], *, root: Path,
     source_base_url: str, signature: Callable[[Any, str], str],
     documentation_url: Callable[[str, str, str], str] | None = None,
+    ufunc_namespaces: Sequence[tuple[str, str]] = (),
 ) -> list[dict[str, Any]]:
     """Return complete extended coverage rows, updating ``seen_ids`` in place.
 
     ``objectTypes`` must come from inventory schema 5. It is keyed by exact CLR
     full name and carries TypeInventory methods/properties/fields, including
     inherited public members and their ``declaringTypes`` for source evidence.
+
+    :param np: the imported, version-pinned ``numpy`` module.
+    :param inventory: the NumSharp reflection inventory (schema 5).
+    :param seen_ids: ids emitted so far; updated in place.
+    :param root: repository root, for source-file evidence.
+    :param source_base_url: URL prefix that turns a repository path into a source link.
+    :param signature: renders a NumPy callable's signature.
+    :param documentation_url: resolves a documented URL or its nearest parent; None uses
+        stable family pages.
+    :param ufunc_namespaces: submodules, besides numpy itself, whose ufunc-like exports get
+        per-method protocol rows: ``(import path relative to numpy, display surface)`` pairs,
+        normally every namespace the generator compares (``UFUNC_PROTOCOL_NAMESPACES``).
+    :returns: the object-member rows, then the ufunc protocol rows.
+    :raises ValueError: when the inventory lacks schema 5's ``objectTypes``, when a matched
+        member has no source evidence, or when a ufunc namespace does not resolve.
     """
     object_types = inventory.get("objectTypes")
     if not isinstance(object_types, dict):
@@ -304,46 +509,15 @@ def object_surface_rows(
                     member = None
                 emit(spec, name, kind, obj, member)
 
-        # NumPy exports 106 ufunc objects at the pin, aliases included. Their five
-        # protocol methods are independently searchable (add.reduce, add.at, ...).
-        # The attributes exist even when the ufunc's arity/core signature makes
-        # calling them invalid; record that distinction instead of hiding them.
-        for name in sorted(vars(np)):
-            obj = getattr(np, name)
-            if name.startswith("_") or not isinstance(obj, np.ufunc):
-                continue
-            for method in ("reduce", "accumulate", "reduceat", "outer", "at"):
-                row_id = f"numpy.{name}.{method}"
-                if row_id in seen_ids:
-                    continue
-                seen_ids.add(row_id)
-                rejection = None
-                if obj.signature is not None:
-                    rejection = "NumPy rejects this method for generalized ufuncs with a core signature."
-                elif method in {"reduce", "accumulate", "reduceat", "outer"} and obj.nin != 2:
-                    rejection = "NumPy requires a binary ufunc for this method."
-                elif method != "outer" and obj.nout != 1:
-                    rejection = "NumPy requires a single-output ufunc for this method."
-                elif method == "at" and obj.nin not in {1, 2}:
-                    rejection = "NumPy at supports only unary and binary ufuncs."
-                note = rejection or "NumPy permits this protocol shape; supported operands and dtype resolution still apply."
-                rows.append({
-                    "id": row_id, "origin": "numpy", "surface": "ufunc",
-                    "name": f"{name}.{method}", "kind": "method",
-                    "numpy_signature": signature(getattr(obj, method), method),
-                    "documentation_url": documentation_url("ufunc", method, "method") if documentation_url
-                        else "https://numpy.org/doc/stable/reference/ufuncs.html",
-                    "in_default_scope": False, "extended": True, "object_surface": True,
-                    "object_type": f"numpy.{name}", "disposition": "subsystem",
-                    "category": "Universal function objects", "availability": "missing",
-                    "support": "missing", "status": "missing", "numsharp_target": None,
-                    "numsharp_signatures": [], "numsharp_obsolete": False,
-                    "numsharp_source_paths": [], "numsharp_source_urls": [],
-                    "applicability": "not_applicable" if rejection else "conditional",
-                    "notes": note + " NumSharp's top-level function does not expose a first-class ufunc object; "
-                        "related np.sum/cumsum/outer operations do not implement this object member. "
-                        "Catalogued outside the headline scope.",
-                })
+        # Every ufunc method on every ufunc-like export (106 top-level ufunc objects at the
+        # pin, aliases included, plus submodule ufuncs and numpy.ma's masked wrappers) is
+        # independently searchable (add.reduce, maximum.accumulate, add.resolve_dtypes, ...).
+        # A method exists even when the ufunc's arity/core signature makes calling it
+        # invalid; the rows record that distinction instead of hiding the method.
+        rows.extend(ufunc_protocol_rows(
+            np, seen_ids, (("", ""), *ufunc_namespaces),
+            signature=signature, documentation_url=documentation_url,
+        ))
     finally:
         archive.close()
     return rows
