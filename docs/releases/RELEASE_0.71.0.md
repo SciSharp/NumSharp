@@ -3,7 +3,7 @@
 <!-- The owner's intro paragraph goes here (0.70.0 opened with one in the owner's own voice). -->
 
 ### 🧭 Overview
-- NumPy 2.x API coverage **87.1% -> 95.5%** (488 -> 535 of the 560 headline APIs), and **494 of the 560 are oracle-verified** against committed NumPy 2.4.2 contracts - every figure from the [Supported Features Dashboard](https://scisharp.github.io/NumSharp/docs/coverage-support-dashboard.html).
+- NumPy 2.x API coverage **87.1% -> 95.2%** (488 -> 533 of the 560 headline APIs, 4 more partial), and **537 of the 560 are oracle-verified** against committed NumPy 2.4.2 contracts - every figure from the [Supported Features Dashboard](https://scisharp.github.io/NumSharp/docs/coverage-support-dashboard.html).
   - `np.polynomial.*` - the `numpy.polynomial` package, **172 of its 193 functions** for all six bases, bit-exact.
   - `np.*` - **+48 functions**.
   - `np.random.*` - every NumPy bit generator, the whole `Generator` distribution surface, and a legacy `RandomState` that is NumPy's own sampler code line for line, all byte-identical streams.
@@ -31,9 +31,9 @@ One optional companion package ships for the first time, co-versioned with **Num
 
 ### 📊 Dashboards & Docs
 
-- **[Supported Features Dashboard](https://scisharp.github.io/NumSharp/docs/coverage-support-dashboard.html)** - now reports, for every API, whether its behavior is **oracle-verified** (committed NumPy 2.4.2 contracts resolve to it, directly or through a reviewed alias) next to whether it is available. Headline 95.5% available (535/560), 88.2% oracle-verified (494/560).
+- **[Supported Features Dashboard](https://scisharp.github.io/NumSharp/docs/coverage-support-dashboard.html)** - now reports, for every API, whether its behavior is **oracle-verified** (committed NumPy 2.4.2 contracts resolve to it, directly or through a reviewed alias) next to whether it is available. Headline 95.2% available (533/560, 4 more partial), 95.9% oracle-verified (537/560).
   - An oracle filter in the API explorer and an evidence pane per API: contract and error-contract counts, dtypes, layouts, corpus files and host pins.
-  - The catalog also covers what lies beyond the headline - NumPy's submodules (`numpy.ma`, `numpy.emath`, `numpy.polynomial`, `numpy.char`, `numpy.strings`, ...) and the members of its objects (`nditer`, `dtype`, `finfo`, the random classes): 1,137 of 2,519 APIs available in that expanded scope, the dashboard's default view.
+  - The catalog also covers what lies beyond the headline - NumPy's submodules (`numpy.ma`, `numpy.emath`, `numpy.polynomial`, `numpy.char`, `numpy.strings`, ...), the members of its objects (`nditer`, `dtype`, `finfo`, the random classes) and every method of every ufunc (`np.add.reduce`, `np.maximum.accumulate`, `np.add.at`, ...): 1,213 of 2,842 APIs available in that expanded scope, the dashboard's default view.
 - **[Tests & Oracle Dashboard](https://scisharp.github.io/NumSharp/docs/tests-oracle-dashboard.html)** - 407,913 committed NumPy 2.4.2 oracle test cases over 793 operations (0.70.0: 116K+), and 16,818 test declarations.
 - **[Benchmark Dashboard](https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.html)** - benchmark evidence for 452 of 518 benchmarkable APIs (the denominator grew with this release's new APIs).
 - **[Documentation site](https://scisharp.github.io/NumSharp/)** - new guides, whose code samples run as tests:
@@ -175,6 +175,7 @@ One optional companion package ships for the first time, co-versioned with **Num
 - Differential-fuzz oracle 116K+ -> 406,172 corpus cases: new tiers for every `numpy.polynomial` unit (139,882 cases), `np.ma` (68,860), `np.evaluate` (29,563), `np.emath`, `ndarray` instance members, and complex128 / Decimal coverage, with a dtype-spread gate (at least 4 dtypes per op) and an applicability gate - `57545200`, `67f8f96e`, `7a262afc`, `e84fd2f1`, `55a2a6a7`, `192f456c`, `1dd23bbe`.
 - The random-API oracle replays every public `np.random` overload against NumPy 2.4.2 by its exact C# signature (493 members, 5 engines x 10 seeds, the full post-call state), with coverage gates and a nightly soak under 10 fresh seeds - `20a5b60d`, `1c7ac693`, `8f70af7c`, `ecdab2fb`.
 - The coverage join credits each API from the oracle contracts that name it, strictly: a new op key or corpus file that resolves to nothing fails the docs build - `fd058f03`.
+- The coverage inventory lists every `numpy.ufunc` method (`reduce`, `accumulate`, `reduceat`, `outer`, `at`, `resolve_dtypes`, read from the type) for every ufunc, including those of `numpy.strings` and `numpy.char`, and the methods numpy.ma's masked ufunc wrappers implement: 323 more API contracts - `10464399`.
 - The `numpy.dtype` / dtype-class oracle replays 4,683 NumPy 2.4.2 records per C `long` model (Windows and Linux NumPy): the member names (the C slots included), every attribute of 1,014 descriptors, comparisons, promotions, the dtype classes and 1,941 casting resolutions - `6f11dc5a`.
 
 ### 💥 Breaking Changes
