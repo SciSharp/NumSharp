@@ -480,6 +480,102 @@ C-D1 decision and C3 for C-D3.
     0.94×).
   - **Open:** the other 43 functions (C3–C5), `chararray` (C2, the user's phase 2), C-D6's `None` (an
     `ArgumentNullException` here; NumPy's object array).
+- **2026-10-16 — phase 2: `chararray` as data** (C2's data half; the owner's scope: "`NDCharArray : NDArray`. The
+  constructor, `np.char.array` and `np.char.asarray` with NumPy's quirks (numbers and T become text). The finalize rule. The
+  subclass is kept on views and copies. Element access and iteration strip whitespace. `item()` and `tolist()` do not. The
+  `chararray(...)` repr and `view(type=)`. Oracle section `strchararray`").
+  - **Class** (`Char/NDCharArray{,.Strip,.Indexing,.Methods}.cs`): `NDCharArray : NDArray`, constructed over a storage.
+    **Deviation from C-D2:** no virtual finalize hook on `NDArray`. The class follows `NDMatrix`'s static rule: every member
+    NumPy answers with the subclass is re-declared with `new` (`astype`, `copy`, `view`, `byteswap`, `getfield`,
+    `to_device`, `T`, `mT`, `transpose`, `swapaxes`, `reshape` ×6, `ravel`, `flatten`, `squeeze`, `diagonal`, `take`,
+    `compress`, `repeat`, `real`, `imag`, `Clone`) and wraps the plain result (`From` / `TakeOver`: O(1), the storage
+    object taken over or aliased), so an `NDArray`-typed call site gets the plain `NDArray` member — NumPy's dynamic
+    dispatch through a static type is phase 3's question, with the operators and the `np.*` functions (§1.8). The finalize
+    rule (`dtype.char in 'VSUbc'`, else `ValueError("Can only create a chararray from string data.")`) runs BEFORE each
+    allocation, after NumPy's own earlier checks (astype: the casting rule; take: the index); `view(dtype)` reads the
+    dtype the array HAS, so `c.view(np.uint32)` is a uint32 chararray whose own views raise. NumPy answers `self` from
+    `real`, `squeeze()` without a length-1 axis, `astype` of the same dtype under `copy=False` (when the order is
+    satisfied) and `to_device`, and so does NumSharp.
+  - **Element access** (`NDCharArray.Indexing.cs`): one indexer per spelling (`Slice[]`, slice notation, `object[]`,
+    `NDArray<bool>`, `NDArray<int>[]`, `__getitem__`). A full integer index (one integer per axis, 0-d integer arrays
+    included: mapping.c's HAS_INTEGER) is the element STRIPPED as Python's `rstrip()` strips it (`NDCharArray.Strip.cs`:
+    29 code points for `U` — .NET's `char.IsWhiteSpace` plus U+001C–U+001F —, 6 bytes for `S`, trailing NULs first, a
+    NUL stops the strip), returned as a NEW read-only 0-d stand-in (`ScalarOf`: width = the kept length, at least 1; a
+    `U` unit above U+10FFFF is CPython's SystemError). Every other index returns a chararray: a view (basic), a view of the
+    gathered array (an index array, a mask, a scalar bool), an owning copy (HAS_SCALAR_ARRAY). `item()`, `tolist()`,
+    `take(i)` (a 0-d result is the UNSTRIPPED stand-in) and the flat iterator keep NumPy's unstripped values.
+  - **Iteration**: a 1-d chararray yields its stripped elements as .NET `string` / `byte[]` (exact, a kept NUL included),
+    an N-d one chararray row views; a 0-d one raises `TypeError: iteration over a 0-d array`.
+  - **Constructors** (`APIs/np.char.array.cs`): `chararray(shape, itemsize, unicode, buffer, offset, strides, order)` — a
+    `string` buffer FILLS (`self[...] = filler`), `ReadOnlyMemory<byte>` is Python's read-only `bytes`, `byte[]` a
+    writable `bytearray`, an `NDArray` is borrowed, everything else `np.ndarray`'s buffer rules; `array` / `asarray` —
+    str / bytes (`itemsize = len`, shape `len // itemsize`, Python's ZeroDivisionError as `DivideByZeroException`), lists
+    and tuples (`np.asarray` first), S / U arrays (a view, `itemsize // 4` for `U`, a cast when the width, the class or
+    `copy` asks; an `S` array under `unicode=True, copy=False` stays `S`), any other array through NumPy's `tolist()` route
+    (value-based widths: float32 `0.10000000149011612`; with an itemsize a cast at that width, 0 the unsized string),
+    Python scalars (`np.array(obj, dtype)`).
+  - **Printing**: `ReprClassName` gives `chararray(` and its continuation indent; `ArrayFormatter` wraps the element
+    formatter in `StrippedTextReprFormat` for an N-d chararray (NumPy's `_formatArray` indexes through `__getitem__`); a
+    0-d chararray prints unstripped. `NDArray.view(Type)` / `view(DType, Type)` are NumPy's `view(type=)` for
+    `NDArray` / `NDCharArray` / `NDMatrix` (`Type must be a sub-type of ndarray type` otherwise).
+  - **Divergences** (pinned `[Misaligned]`, `CharArrayTests`): `np.char.array(..., order=)` of string data returns a
+    chararray (NumPy's `np.asarray(obj, order=order)` drops the class: a plain ndarray; the oracle's one class excuse,
+    2,981 cases); `chararray(itemsize=0)` refused (NumPy's S0 / U0); a stripped value that ends in a NUL loses it in the
+    stand-in (a fixed-width element drops trailing NULs; the enumerator's value keeps it); `squeeze()` of a chararray over
+    numbers with a length-1 axis raises where NumPy hands back a plain array; `np.*` functions return plain arrays
+    (phase 3). Open with them (phase 3): `c.argmax()` / `argmin()` / `argpartition()` and `np.argmax(c)` return the
+    index (the text arg-reductions compute since `a9ec801a`), where NumPy's finalize raises `ValueError("Can only create
+    a chararray from string data.")` unless `out=` is given (probed: `c.argmax(out=plain)` computes, `c.argsort()` is a
+    plain array; NumPy 2.4.2 can crash on the second failed finalize in one process).
+  - **Base fixes the section's replay found** (each NumPy's answer for every array, with unit tests and the oracle cells
+    that return to the gates): a scalar `bool` index is a COPY (`a[True]` was an `expand_dims` view, `a[False]` the
+    dims-less sentinel, the string indexer counted the bool as an axis); an out-of-bounds integer in slice notation on a
+    strided view is NumPy's `IndexError` text (`UnmanagedStorage.GetView` checks every integer against its source axis
+    before the newaxis expansion), and index 0 of an empty axis raises; `getfield` of an empty array is a view (VF26's
+    part); `np.imag` of a real F array is F-ordered (`PyArray_ISFORTRAN`; VF31, MX03); `np.asanyarray(object[,])` is
+    NumPy's nested list of rows. The replay of the carved gaps also found MS15 matching (fixed by `cb3a4186`): 15 + 9 + 12
+    carved cases return to the matrix / view-flags / ma-surface tiers.
+  - **Gates.** Oracle section `strchararray` (11,505 cases, 1,448 NumPy errors, 0 deferred, 182 cases with the layout of
+    an advanced index of a non-C source excused (OpenBugs.FancyIndex's class), 2,981 with the order quirk's class): the
+    constructor's buffers, offsets, strides and errors; `array` / `asarray` over every branch × itemsize / copy / unicode /
+    order; element access over every whitespace code point and byte, every layout kind and index kind in three C#
+    spellings; iteration; 46 member calls over 14 layouts, the allocating finalize errors recorded in isolated NumPy processes
+    (NumPy 2.4.2 corrupts its heap there); `view(type)`; repr / str. Unit tests `Backends/Strings/CharArrayTests.cs` (17)
+    plus the base fixes' tests. Leak gates: `NDCharArray` is an object owner of the leak surface (`LeakCatalogue.Char.cs`,
+    property-read targets).
+  - **Performance** (NPY/NS, `start /affinity 14`, the benchmark's 55 cells: element access, iteration, the constructors,
+    `np.char.array` / `asarray` over every branch, the members that keep the class, the gathers, `view(type)` and repr at
+    1K / 100K / 1M): geomean 3.61× with tiered compilation off, 4.32× warmed with it on; every cell at least 1.63× (was
+    geomean 2.53×, 16 cells under 1.5×, the slowest 0.15×). What it took, cell by cell:
+    - element access 1.65–2.80× (was 0.44–0.77×): the element's address comes straight from the strides (no view of the
+      indexed array), the descriptors of the stand-in widths are cached, and the stand-in's text is cut from a per-thread
+      2 KB arena block (`Char/NDCharArray.StandIn.cs`): the pieces share the block's Disposer, so a stand-in pays no pool
+      round trip and no finalizable Disposer; it still owns an exclusive copy, and the block goes back to the pool with
+      its last stand-in. A lean element slice and storage (`StringArraySlice`'s trusted constructor,
+      `UnmanagedStorage.ReadOnlyStringScalar`) and an `int` / `long` indexer finish it;
+    - `c[mask]` 4.0–5.4×, `c[idx]` 2.7–3.2×, `take` 1.9–3.1× (were 0.76–1.03× at 1K): a fixed-width string array gathers
+      directly — the boolean mask through a new IL kernel (`DirectILKernelGenerator.MaskGather.cs`: a vector compare and
+      movemask per 32 mask bytes, the set bits walked with TrailingZeroCount), an index array through the fancy-index
+      kernel route — instead of through its unit view; the flat gather / scatter kernels now bake ANY slab width up to 256
+      bytes (`FixedCopyKindFor`: a constant-size `cpblk` the JIT unrolls; a `<U8` element was a memory-move call per
+      index), which numeric row gathers use too, and `np.take`'s result skips the `U` zero fill it overwrites;
+    - `c[1:]` 1.8–2.7× (was 0.32–0.42× in slice notation): `Slice.ParseSlices` keeps a bounded parse cache (~1.3 µs → 35 ns,
+      fresh slices per call), and `GetView` / `Shape.Slice` drop their per-call allocations (the index array of the
+      all-integer case, a LINQ closure, two growing lists): any basic slice view of any dtype went from ~570 to ~320 ns;
+    - `c.T` 2.2–3.3× (was 1.29× at 1K) and `c.copy()` 1.6–5.0× (was 1.34×): built as the subclass from the start (the
+      engine's `TransposedShape` over a storage alias; a fresh buffer filled by the dense block copy), and a copy of a
+      source already in fresh C layout reuses its shape (`NDIter.CopyAsShape`: `AsClean` instead of a rebuild). The 1K
+      copy is memcpy-bound on both sides: 32 KB moves in ~850 ns, L2 bandwidth;
+    - `np.char.array(float64)` 2.2–4.9× (was 1.15–1.20×): the float64 → text cast at the fixed width, the longest text and
+      a narrowing copy (`FloatsAsText`) — one repr per element where the `tolist()` route formatted twice. NumPy's
+      float64 cast text equals Python's `repr` (probed on 200,000 random doubles);
+    - `chararray(n)` 1.8–3.8× (was 0.17× at 100K): a zero-filled string buffer takes `np.zeros`' allocation (calloc, or the
+      OS's demand-zero pages from 128 KB), and such a VirtualAlloc'd block reports its memory through the pool's coarse
+      accounting (`AccountForeignAllocation`) instead of a `GC.AddMemoryPressure` per block, which ran a gen-2 collection
+      about every 150 allocations of a short-lived 3.2 MB array — also for numeric `np.zeros`.
+    Unit tests `Backends/Strings/CharArrayFastPathTests.cs` (15) hold each fast path to the general route it replaces; 21
+    planted bugs (arena, lean objects, offsets, the copy widths, the mask kernel's lanes and tail, the parse cache, the
+    copy shape, the transpose, the float text, the view trims, the zero fill) are killed by them.
 
 ---
 
@@ -507,7 +603,7 @@ The facade (C0) declares all 53; a row is complete when its computation lands.
 | String methods, rule 4 | `count`, `endswith`, `find`, `index`, `rfind`, `rindex`, `startswith`, `isalnum`, `isalpha`, `isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper` | ndarray of int64 / bool | P2.5 / P2.6 |
 | String methods, rule 5 | `split`, `rsplit`, `splitlines` | object array of lists (`NDListArray`) | C3 |
 | Views and copies (the finalize hook) | `T`, `mT`, `transpose`, `swapaxes`, `reshape`, `ravel`, `flatten`, `squeeze`, `copy`, `take`, `repeat`, `compress`, `diagonal`, `real`, `imag`, `view`, `astype`, `byteswap`, `flat` | chararray (`diagonal`, `imag` read-only); `astype` / `view` to a numeric dtype per §1.6 | C2 |
-| Finalize errors | `argmax`, `argmin`, `argpartition` | `ValueError("Can only create a chararray from string data.")` | C2 |
+| Finalize errors | `argmax`, `argmin`, `argpartition` | `ValueError("Can only create a chararray from string data.")`; with `out=`, the index | phase 3 (with the operators) |
 | Sorting | `argsort` (plain view), `sort` (in place), `searchsorted` | ndarray's answer | P2.2 |
 | Truth | `all`, `any`, `nonzero` | ndarray's answer | P2.1 (done) |
 | Numeric refusals | `max`, `min`, `sum`, `mean`, `prod`, `std`, `var`, `cumsum`, `cumprod`, `trace`, `clip`, `round`, `conj`, `conjugate`, `dot`, `choose` | ndarray's errors | phase 1 (done) |

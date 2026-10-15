@@ -42,7 +42,9 @@ namespace NumSharp
                     if (Storage.IsVString)
                         return Backends.Strings.NDVStringMove.Gather(this, cells => cells[mask]);
                     if (typecode == NPTypeCode.String)
-                        return StringAdvancedGet(u => MaskedUnitRows(u, mask, units => units[mask]), p => p[mask]);
+                        return TryStringMaskGather(mask, out var masked)
+                            ? masked
+                            : StringAdvancedGet(u => MaskedUnitRows(u, mask, units => units[mask]), p => p[mask]);
                     return this.TensorEngine.BooleanMask(this, mask);
                 }
 

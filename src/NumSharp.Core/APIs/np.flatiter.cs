@@ -347,12 +347,31 @@ namespace NumSharp
                 return pos;
             }
 
+            /// <summary>
+            ///     The elements at <paramref name="positions"/> as a new 1-D array (NumPy's <c>iter_subscript</c> result for a
+            ///     slice or an index array), of the base's class: a <see cref="NDCharArray"/> base gives a chararray, as NumPy
+            ///     allocates the result with <c>Py_TYPE(self-&gt;ao)</c>.
+            /// </summary>
+            /// <param name="positions">The validated flat C-order positions.</param>
+            /// <returns>A new array that owns its data.</returns>
+            /// <exception cref="ValueError">A chararray base holds data that is not string data (the subclass's finalize rule,
+            ///     checked before anything is allocated).</exception>
             private NDArray Gather(long[] positions)
             {
+                // The class of the iterator's ARRAY decides, at run time, as Py_TYPE does: a chararray's finalize rule runs
+                // where NumPy allocates the result, before any element is read.
+                var chars = _base as NDCharArray;
+                if (chars is not null)
+                    NDCharArray.Finalize(_base.dtype);
                 var result = new NDArray(_base.dtype, positions.Length);
                 for (int k = 0; k < positions.Length; k++)
                     result.SetAtIndex(GetScalar(positions[k]), k);   // both base-dtype: exact, no conversion
-                return result;
+                if (chars is null)
+                    return result;
+                // The chararray takes over the fresh storage; the plain wrapper's counted reference goes back.
+                var wrapped = NDCharArray.TakeOver(result, chars);
+                result.Dispose();
+                return wrapped;
             }
 
             /// <summary>
@@ -409,8 +428,11 @@ namespace NumSharp
                 }
             }
 
-            /// <summary>A fresh 1-D C-order COPY of the base (NumPy's <c>f.copy()</c>, which returns an ndarray).</summary>
-            public NDArray copy() => _base.flatten();
+            /// <summary>A fresh 1-D C-order COPY of the base (NumPy's <c>f.copy()</c>): an array of the base's class, so a
+            ///     chararray base gives a chararray (NumPy's <c>PyArray_Flatten</c> allocates with the base's type).</summary>
+            /// <returns>A new 1-D array that owns its data.</returns>
+            /// <exception cref="ValueError">A chararray base holds data that is not string data.</exception>
+            public NDArray copy() => _base is NDCharArray chars ? chars.flatten() : _base.flatten();
 
             /// <summary>
             ///     A typed, allocation-free, by-reference view of this same flat iteration — the

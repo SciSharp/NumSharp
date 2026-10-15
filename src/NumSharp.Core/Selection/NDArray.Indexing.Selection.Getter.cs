@@ -178,10 +178,20 @@ namespace NumSharp
                         // uint64 scalar like any other integer: a[np.uint64(1)] == a[1].
                         return new NDArray(Storage.GetData((int)ui));
                     case bool boolean:
-                        if (boolean == false)
-                            return new NDArray(dtype); //return empty
-
-                        return np.expand_dims(this, 0); //equivalent to [np.newaxis]
+                    {
+                        // NumPy's HAS_0D_BOOL: a scalar bool is an ADVANCED index (prepare_index makes it a zeros index
+                        // array of length 1 / 0 on a new leading axis), so the result is a fresh array — never a view —
+                        // of shape (1, ...) for True and (0, ...) for False. MapIter lays the subspace out in the source's
+                        // memory order, which a KEEPORDER copy of the new-axis view reproduces (a transposed source's
+                        // a[True] is (12, 1, 4)-strided, a broadcast one's keeps the stride-0 axis innermost).
+                        // (The view this returned for True shared memory, and False returned the dims-less sentinel.)
+                        var expanded = np.expand_dims(this, 0);
+                        if (boolean)
+                            return expanded.copy('K');
+                        var emptyDims = (long[])expanded.Shape.dimensions.Clone();
+                        emptyDims[0] = 0;
+                        return np.empty(Shape.Adopt(emptyDims), dtype);
+                    }
 
                     case int[] coords:
                         // A raw int[]/long[] as the SOLE index is FANCY indexing — NumPy
@@ -223,14 +233,16 @@ namespace NumSharp
             // (HAS_0D_BOOL): A[True, :] -> (1,3,4), A[:, True] -> (3,1,4), A[False, :] -> (0,3,4).
             if (TryBuild0dBoolWithBasic(indicesObjects, out var boolBasic, out var boolAxis, out var boolVal))
             {
+                // The 0-d bool makes this ADVANCED indexing (HAS_FANCY): NumPy answers with a fresh array, never a view
+                // of the source, so the basic view built here is copied (KEEPORDER: MapIter's subspace keeps the
+                // source's memory order) — or, for a False, replaced by a fresh empty array of the same dims.
                 var boolResult = this[boolBasic];               // size-1 axis (NewAxis) at boolAxis
                 if (boolVal)
-                    return boolResult;
-                // any-False -> that axis is empty; slice it to length 0 (keeps all other axes).
-                var emptySlices = new Slice[boolResult.ndim];
-                for (int i = 0; i < emptySlices.Length; i++) emptySlices[i] = Slice.All;
-                emptySlices[boolAxis] = new Slice(0, 0);
-                return boolResult[emptySlices];
+                    return boolResult.copy('K');
+                // any-False -> that axis is empty (keeps all other axes).
+                var emptyDims = (long[])boolResult.Shape.dimensions.Clone();
+                emptyDims[boolAxis] = 0;
+                return np.empty(Shape.Adopt(emptyDims), dtype);
             }
 
             // A LEADING boolean mask (any ndim) followed only by basic indices —

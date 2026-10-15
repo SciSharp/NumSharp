@@ -195,6 +195,27 @@ namespace NumSharp
         [NDScoped]
         public new NDMatrix view(DType dtype = null) => From(base.view(dtype), this);
 
+        /// <summary>NumPy's <c>m.view(type)</c>: a view of this matrix as the array class <paramref name="type"/>
+        ///     (<c>typeof(NDArray)</c> is the plain 2-D array), or — when <paramref name="type"/> is not an array class — read
+        ///     as the dtype that CLR type names.</summary>
+        /// <param name="type">The array class, or a CLR element type.</param>
+        /// <returns>A view of the class asked for; <see cref="NDArray"/> is its static type.</returns>
+        /// <exception cref="ValueError">The class's finalize rule refuses this matrix's dtype, or an itemsize error.</exception>
+        /// <exception cref="NotSupportedException">An array class with no NumPy counterpart.</exception>
+        /// <remarks>Declared here because the matrix's own <see cref="view(DType)"/> would otherwise take a
+        ///     <see cref="Type"/> argument through its implicit conversion to <see cref="DType"/>.</remarks>
+        public new NDArray view(Type type) => base.view(type);
+
+        /// <summary>NumPy's <c>m.view(dtype, type)</c>: a view of this matrix as the array class <paramref name="type"/>, its
+        ///     bytes read as <paramref name="dtype"/>.</summary>
+        /// <param name="dtype">The dtype to read the bytes as, or <c>null</c> to keep it.</param>
+        /// <param name="type">The array class, or <c>null</c> for this matrix's own class.</param>
+        /// <returns>A view of the class asked for.</returns>
+        /// <exception cref="ValueError"><paramref name="type"/> is not an array class, the class's finalize rule refuses the
+        ///     dtype, or an itemsize error.</exception>
+        /// <exception cref="NotSupportedException">An array class with no NumPy counterpart.</exception>
+        public new NDArray view(DType dtype, Type type) => type is null ? view(dtype) : base.view(dtype, type);
+
         /// <summary>The matrix with its bytes swapped, as a matrix.</summary>
         /// <param name="inplace"><c>true</c> swaps this matrix's own bytes and returns this matrix.</param>
         /// <returns>A new matrix, or this matrix when <paramref name="inplace"/> is <c>true</c>.</returns>

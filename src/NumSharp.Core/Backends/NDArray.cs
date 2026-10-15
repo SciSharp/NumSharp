@@ -942,9 +942,18 @@ namespace NumSharp
         ///     NumPy astype casting gate: default 'unsafe' allows any conversion; a stricter rule
         ///     raises <see cref="InvalidCastException"/> (NumPy's TypeError analogue) when the cast
         ///     is not permitted. Same exception type and message shape as <see cref="np.copyto"/>.
+        ///     Internal so a subclass member that must run NumPy's steps in order (the casting rule, then its
+        ///     <c>__array_finalize__</c>, then the cast — <see cref="NDCharArray.astype(DType, bool, char, string)"/>) can
+        ///     check the rule before it allocates anything.
         /// </summary>
+        /// <param name="toType">The numeric type code of the target.</param>
+        /// <param name="casting">The casting rule name; null, empty or <c>"unsafe"</c> allows every cast.</param>
+        /// <exception cref="InvalidCastException">The cast from this array's type is not allowed under the rule
+        ///     (<c>Cannot cast array data from dtype('…') to dtype('…') according to the rule '…'</c>).</exception>
+        /// <exception cref="ArgumentException">An unknown rule name (<see cref="np.can_cast(NPTypeCode, NPTypeCode, string)"/>'s
+        ///     refusal).</exception>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        private void ValidateAstypeCasting(NPTypeCode toType, string casting)
+        internal void ValidateAstypeCasting(NPTypeCode toType, string casting)
         {
             // 'unsafe' (astype's default) short-circuits — every conversion is allowed, no work.
             if (string.IsNullOrEmpty(casting) || casting == "unsafe")
@@ -1105,6 +1114,76 @@ namespace NumSharp
             }
             // AliasAs reinterprets bytes without conversion (like NumPy's view)
             return new NDArray(Storage.AliasAs(dtype.GetTypeCode())) { TensorEngine = TensorEngine };
+        }
+
+        /// <summary>
+        ///     NumPy's <c>a.view(type)</c> with one argument: an ARRAY CLASS (<c>typeof(NDArray)</c>,
+        ///     <c>typeof(NDCharArray)</c>, <c>typeof(NDMatrix)</c>) is the <c>type</c> argument, any other CLR type is the
+        ///     dtype it names (<c>a.view(typeof(float))</c>) — NumPy's rule that a type given as the dtype is the
+        ///     <c>type</c> when it is an ndarray subclass.
+        /// </summary>
+        /// <param name="type">An array class, a CLR element type, or <c>null</c> (a view of the same class and dtype).</param>
+        /// <returns>A view sharing this array's memory, of the class asked for; <see cref="NDArray"/> is its static type
+        ///     (cast it to reach the class's members, no copy is made).</returns>
+        /// <exception cref="ValueError">The class's finalize rule refuses this array's dtype
+        ///     (<c>np.arange(3).view(typeof(NDCharArray))</c>: <c>Can only create a chararray from string data.</c>; a matrix
+        ///     of more than two axes longer than 1), or one of NumPy's itemsize errors for a dtype.</exception>
+        /// <exception cref="NotSupportedException">An array class with no NumPy counterpart (<c>NDArray&lt;T&gt;</c>), or a
+        ///     CLR type that names no dtype.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.view.html</remarks>
+        public NDArray view(Type type)
+        {
+            if (type is null)
+                return view((DType)null);
+            return typeof(NDArray).IsAssignableFrom(type) ? view(null, type) : view((DType)type);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>a.view(dtype, type)</c>: a new view of this array as the array class <paramref name="type"/>, its
+        ///     bytes read as <paramref name="dtype"/>. NumPy builds the subclass object with the CURRENT dtype — its
+        ///     <c>__array_finalize__</c> sees that one — and changes the dtype afterwards, so
+        ///     <c>s.view(np.int32, chararray)</c> of an <c>S4</c> array is an int32 chararray while
+        ///     <c>np.arange(2).view("S8", chararray)</c> raises.
+        /// </summary>
+        /// <param name="dtype">The dtype to read the bytes as, or <c>null</c> to keep this array's.</param>
+        /// <param name="type">The array class: <c>typeof(NDArray)</c> (a plain view, also of a chararray or a matrix),
+        ///     <c>typeof(NDCharArray)</c> or <c>typeof(NDMatrix)</c>; <c>null</c> is the same as <see cref="view(DType)"/>.</param>
+        /// <returns>A view sharing this array's memory, of the class asked for (the static type is <see cref="NDArray"/>).</returns>
+        /// <exception cref="ValueError"><paramref name="type"/> is not an array class (NumPy's <c>Type must be a sub-type of
+        ///     ndarray type</c>), the class's finalize rule refuses this array's CURRENT dtype, or one of NumPy's itemsize
+        ///     errors for <paramref name="dtype"/>.</exception>
+        /// <exception cref="IncorrectShapeException">A matrix view of more than two axes where one has extent 0.</exception>
+        /// <exception cref="NotSupportedException">An array class with no NumPy counterpart (<c>NDArray&lt;T&gt;</c>).</exception>
+        /// <exception cref="TypeError">A view to or from a <c>StringDType</c> descriptor that is not equal to this array's.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.view.html</remarks>
+        public NDArray view(DType dtype, Type type)
+        {
+            if (type is null)
+                return view(dtype);
+            // array_view's type argument: PyType_IsSubtype(type, &PyArray_Type), else this ValueError.
+            if (!typeof(NDArray).IsAssignableFrom(type))
+                throw new ValueError("Type must be a sub-type of ndarray type");
+            if (type == typeof(NDArray))
+                return view(dtype);
+            if (type == typeof(NDCharArray))
+            {
+                // PyArray_View builds the subclass object over the CURRENT descriptor (chararray's __array_finalize__ reads
+                // that one) and assigns the new dtype afterwards. The plain view's wrapper is released once the chararray
+                // holds its own counted reference on the storage it takes over.
+                NDCharArray.Finalize(this.dtype);
+                using var plain = view(dtype);
+                return NDCharArray.TakeOver(plain, this);
+            }
+            if (type == typeof(NDMatrix))
+            {
+                // matrix's __array_finalize__ folds the shape onto two axes; the plain view's wrapper is released once the
+                // matrix aliases its storage.
+                using var plain = view(dtype);
+                return NDMatrix.ViewOf(plain);
+            }
+            throw new NotSupportedException(
+                $"view(type) supports the NumPy array classes NDArray (ndarray), NDCharArray (numpy.char.chararray) and NDMatrix " +
+                $"(numpy.matrix); {type} has no NumPy counterpart. Use view<T>() or AsGeneric<T>() for a typed array.");
         }
 
         /// <summary>

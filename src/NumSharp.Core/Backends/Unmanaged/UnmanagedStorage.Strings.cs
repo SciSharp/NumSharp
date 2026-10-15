@@ -81,6 +81,40 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     <see cref="Shape.Scalar"/> as a READ-ONLY owner: OWNDATA and ALIGNED set, WRITEABLE cleared — the shape of the
+        ///     scalar stand-ins (<see cref="ReadOnlyStringScalar"/>). Built once; shapes share their (empty) dimension arrays.
+        /// </summary>
+        private static readonly Shape ReadOnlyOwnedScalarShape =
+            Shape.Scalar.WithFlags(flagsToSet: ArrayFlags.OWNDATA | ArrayFlags.ALIGNED, flagsToClear: ArrayFlags.WRITEABLE);
+
+        /// <summary>
+        ///     A read-only 0-d string storage that owns <paramref name="element"/>: field for field what
+        ///     <c>new UnmanagedStorage(element, Shape.Scalar)</c> followed by clearing WRITEABLE produces (the fixed-width lane of
+        ///     <c>SetInternalArray</c>, OWNDATA from <c>OnReshaped</c>), without the generic constructor's shape checks, interface
+        ///     calls and lane switch. It is the hot path of a chararray's element access, which builds one storage per call.
+        /// </summary>
+        /// <param name="element">One element (<see cref="StringArraySlice.Count"/> 1). The storage takes no counted reference:
+        ///     the <see cref="NDArray"/> that wraps it does, as for every storage.</param>
+        /// <returns>The new storage, its descriptor the element's.</returns>
+        /// <remarks>Keep this in step with <c>_Allocate</c> + <c>SetInternalArray</c>: a field those set and this does not is
+        ///     a field the stand-ins miss. <c>Backends/Strings/CharArrayTests</c> compares the two storages field by field.</remarks>
+        internal static unsafe UnmanagedStorage ReadOnlyStringScalar(StringArraySlice element)
+        {
+            var storage = new UnmanagedStorage
+            {
+                _shape = ReadOnlyOwnedScalarShape,
+                _typecode = NPTypeCode.String,
+                _dtype = typeof(string),   // the lane's CLR type, as _typecode.AsType() gives it
+                _descr = element.Descr,
+                InternalArray = element,
+                Address = element.Address,
+                Count = 1,
+            };
+            storage._slices.Byte = element.Bytes;   // the byte lane keeps the block reachable through the union too
+            return storage;
+        }
+
+        /// <summary>
         ///     The string half of <see cref="CopyTo(void*)"/>: every element's raw bytes (NUL-padded ASCII for <c>S</c>,
         ///     UCS-4 code units for <c>U</c>) written to <paramref name="address"/> in C order — <c>tobytes()</c>'s layout.
         ///     A C-contiguous view is one block move from its first element; any other layout is first copied into a fresh

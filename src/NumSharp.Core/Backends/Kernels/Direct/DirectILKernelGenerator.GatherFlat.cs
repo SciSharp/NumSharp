@@ -38,9 +38,13 @@ using System.Runtime.Intrinsics.X86;
 //       (a caller that must not write partially validates the indices FIRST —
 //       FancyIndexScan — exactly as NumPy's mapiter_trivial_set does).
 //
-// Both are generated per (element width ∈ {1,2,4,8,16}, index width ∈ {4,8}
-// bytes, take: prefetch on/off). The index pointer is `void*` because an int32
-// index array is read in place — no widening copy — which is the common C# case
+// Both are generated per (element width, index width ∈ {4,8} bytes, take: prefetch on/off).
+// The element width is any constant from 1 to MaxFixedCopyBytes (FixedCopyKindFor): the five
+// primitive widths copy with typed MOVs, any other width (a fixed-width string element, a row of
+// the string unit view) with a constant-size cpblk the JIT unrolls, and the address scales by a
+// shift for a power of two and by a constant multiply otherwise.
+//
+// The index pointer is `void*` because an int32 index array is read in place — no widening copy — which is the common C# case
 // (`np.array(new int[] {…})` is int32) and the reason `np.take(a, idx32)` used to
 // cost 27 % more than `np.take(a, idx64)` at 100K.
 //
@@ -70,10 +74,10 @@ namespace NumSharp.Backends.Kernels
         private static readonly ConcurrentDictionary<int, PutFlatKernel> _putFlatKernels = new();
 
         /// <summary>
-        /// The flat gather kernel for one element width (<paramref name="copyKind"/> ∈ {1,2,4,8,16};
-        /// the <see cref="CopyKindFor"/> of the per-index slab) and index width. <c>null</c> when
-        /// runtime IL generation is unavailable or the slab is not a single primitive width
-        /// (copyKind 0 — the general <see cref="TakeKernel"/> serves those with <c>cpblk</c>).
+        /// The flat gather kernel for one element width (<paramref name="copyKind"/>: the
+        /// <see cref="FixedCopyKindFor"/> of the per-index slab, 1 to <see cref="MaxFixedCopyBytes"/> bytes) and
+        /// index width. <c>null</c> when runtime IL generation is unavailable or the slab is wider than a constant
+        /// copy (copyKind 0 — the general <see cref="TakeKernel"/> serves those with a runtime <c>cpblk</c>).
         /// </summary>
         public static TakeFlatKernel GetTakeFlatKernel(int copyKind, bool idx32, bool prefetch)
         {
@@ -121,16 +125,30 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
-        /// <summary>log2 of a typed copy width (1/2/4/8/16 → 0/1/2/3/4) — the address shift.</summary>
-        private static int ShiftForCopyKind(int copyKind) => copyKind switch
+        /// <summary>
+        ///     Emits <c>value * width</c> on the int64 on top of the stack, for a flat kernel's constant element width: one shift
+        ///     for a power of two (the five primitive widths, and 32 / 64 / 128 / 256-byte string elements), one multiply by a
+        ///     constant otherwise (a <c>&lt;U5</c> element is 20 bytes).
+        /// </summary>
+        /// <param name="il">The generator.</param>
+        /// <param name="width">The constant width in bytes, at least 1 (<see cref="FixedCopyKindFor"/>).</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> is not positive: kind 0 (a runtime width)
+        ///     has no flat kernel.</exception>
+        private static void EmitScaleByWidth(ILGenerator il, int width)
         {
-            1 => 0,
-            2 => 1,
-            4 => 2,
-            8 => 3,
-            16 => 4,
-            _ => throw new ArgumentOutOfRangeException(nameof(copyKind), copyKind, "flat kernels need a typed width"),
-        };
+            if (width <= 0)
+                throw new ArgumentOutOfRangeException(nameof(width), width, "flat kernels need a constant width");
+            if ((width & (width - 1)) == 0)
+            {
+                il.Emit(OpCodes.Ldc_I4, System.Numerics.BitOperations.Log2((uint)width));
+                il.Emit(OpCodes.Shl);
+            }
+            else
+            {
+                il.Emit(OpCodes.Ldc_I8, (long)width);
+                il.Emit(OpCodes.Mul);
+            }
+        }
 
         /// <summary>
         /// Emit <c>idx = *(int32|int64*)ptrLocal</c> (sign-extended to int64) into <paramref name="locIdx"/>.
@@ -182,15 +200,15 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emits the flat gather. Pseudocode (W = copyKind, IW = index width, S = log2 W):
+        /// Emits the flat gather. Pseudocode (W = copyKind, IW = index width; <c>* W</c> is a shift for a power of two):
         /// <code>
         /// long TakeFlat(byte* src, void* ind, long count, long maxItem, byte* dst) {
         ///     byte* ip = ind, dp = dst;
         ///     for (long j = 0; j &lt; count; j++, ip += IW, dp += W) {
-        ///         [prefetch: if (j + DIST &lt; count) prefetch(src + ((long)ip[DIST] &lt;&lt; S));]
+        ///         [prefetch: if (j + DIST &lt; count) prefetch(src + (long)ip[DIST] * W);]
         ///         long idx = *ip; if (idx &lt; 0) idx += maxItem;
         ///         if ((ulong)idx &gt;= (ulong)maxItem) return j;
-        ///         *(W*)dp = *(W*)(src + (idx &lt;&lt; S));
+        ///         copy W bytes: dp &lt;- src + idx * W;
         ///     }
         ///     return count;
         /// }
@@ -198,7 +216,8 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static TakeFlatKernel GenerateTakeFlatKernelIL(int copyKind, bool idx32, bool prefetch)
         {
-            int shift = ShiftForCopyKind(copyKind);
+            if (copyKind <= 0)
+                throw new ArgumentOutOfRangeException(nameof(copyKind), copyKind, "flat kernels need a constant width");
             int idxWidth = idx32 ? 4 : 8;
             bool usePrefetch = prefetch && Sse.IsSupported && _ssePrefetch0 != null;
 
@@ -259,10 +278,9 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Add);                                // ip + DIST*IW
                 if (idx32) { il.Emit(OpCodes.Ldind_I4); il.Emit(OpCodes.Conv_I8); }
                 else il.Emit(OpCodes.Ldind_I8);
-                il.Emit(OpCodes.Ldc_I4, shift);
-                il.Emit(OpCodes.Shl);
+                EmitScaleByWidth(il, copyKind);
                 il.Emit(OpCodes.Conv_I);
-                il.Emit(OpCodes.Add);                                // src + (idxFuture << S)
+                il.Emit(OpCodes.Add);                                // src + idxFuture * W
                 il.Emit(OpCodes.Call, _ssePrefetch0);
                 il.MarkLabel(lblSkipPf);
             }
@@ -270,11 +288,10 @@ namespace NumSharp.Backends.Kernels
             EmitFlatIndexLoad(il, locIp, locIdx, idx32);
             EmitFlatRaiseAdjust(il, locIdx, maxItemArg: 3, lblFail);
 
-            // sp = src + (idx << S)
+            // sp = src + idx * W
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldloc, locIdx);
-            il.Emit(OpCodes.Ldc_I4, shift);
-            il.Emit(OpCodes.Shl);
+            EmitScaleByWidth(il, copyKind);
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locSp);
@@ -301,14 +318,14 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emits the flat scatter. Pseudocode (W = copyKind, IW = index width, S = log2 W):
+        /// Emits the flat scatter. Pseudocode (W = copyKind, IW = index width; <c>* W</c> is a shift for a power of two):
         /// <code>
         /// long PutFlat(byte* dst, void* ind, long count, byte* values, long nv, long maxItem) {
-        ///     byte* ip = ind, vp = values, vend = values + (nv &lt;&lt; S);
+        ///     byte* ip = ind, vp = values, vend = values + nv * W;
         ///     for (long j = 0; j &lt; count; j++, ip += IW) {
         ///         long idx = *ip; if (idx &lt; 0) idx += maxItem;
         ///         if ((ulong)idx &gt;= (ulong)maxItem) return j;
-        ///         *(W*)(dst + (idx &lt;&lt; S)) = *(W*)vp;
+        ///         copy W bytes: dst + idx * W &lt;- vp;
         ///         vp += W; if (vp == vend) vp = values;      // wrapping values cursor
         ///     }
         ///     return count;
@@ -317,7 +334,8 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static PutFlatKernel GeneratePutFlatKernelIL(int copyKind, bool idx32)
         {
-            int shift = ShiftForCopyKind(copyKind);
+            if (copyKind <= 0)
+                throw new ArgumentOutOfRangeException(nameof(copyKind), copyKind, "flat kernels need a constant width");
             int idxWidth = idx32 ? 4 : 8;
 
             var dm = new DynamicMethod(
@@ -355,8 +373,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Stloc, locVp);
             il.Emit(OpCodes.Ldarg_3);
             il.Emit(OpCodes.Ldarg, 4);
-            il.Emit(OpCodes.Ldc_I4, shift);
-            il.Emit(OpCodes.Shl);
+            EmitScaleByWidth(il, copyKind);
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locVend);
@@ -371,11 +388,10 @@ namespace NumSharp.Backends.Kernels
             EmitFlatIndexLoad(il, locIp, locIdx, idx32);
             EmitFlatRaiseAdjust(il, locIdx, maxItemArg: 5, lblFail);
 
-            // dp = dst + (idx << S)
+            // dp = dst + idx * W
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldloc, locIdx);
-            il.Emit(OpCodes.Ldc_I4, shift);
-            il.Emit(OpCodes.Shl);
+            EmitScaleByWidth(il, copyKind);
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locDp);

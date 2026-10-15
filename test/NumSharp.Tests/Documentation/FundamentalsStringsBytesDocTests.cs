@@ -379,6 +379,29 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>
+        ///     The "The <c>chararray</c> class" snippets (the <c>numpy.char</c> plan's phase 2; every value probed against
+        ///     NumPy 2.4.2): the stripped element, the unstripped <c>item()</c>, iteration, the repr, a view that stays a
+        ///     chararray, the finalize ValueError, the float32 text of the <c>tolist()</c> route and <c>view(typeof(...))</c>.
+        /// </summary>
+        [TestMethod]
+        public void Computing_CharArrayClass()
+        {
+            var c = np.@char.array(new[] { "cat  ", "dog\t", "bird" });
+            c[0].item().Should().Be("cat");
+            c.item(0).Should().Be("cat  ");
+            var items = new System.Collections.Generic.List<object>();
+            foreach (var s in c)
+                items.Add(s);
+            items.Should().Equal("cat", "dog", "bird");
+            c.ToString(true).Should().Be("chararray(['cat', 'dog', 'bird'], dtype='<U5')");
+            (c.T is NDCharArray).Should().BeTrue();
+            Action numbers = () => c.astype(np.float64);
+            numbers.Should().Throw<ValueError>().Where(e => e.Message == "Can only create a chararray from string data.");
+            ((byte[])np.@char.array(np.array(new[] { 0.1f })).item(0)).Should().Equal("0.10000000149011612"u8.ToArray());
+            (np.array(new[] { "a", "b" }).view(typeof(NDCharArray)) is NDCharArray).Should().BeTrue();
+        }
+
+        /// <summary>
         ///     What the doc page still lists as a later stage: the unique values and the membership tests refuse with
         ///     <see cref="StringComputationNotSupportedException"/> (a <see cref="NotSupportedException"/>); a string
         ///     <c>dtype=</c> request of <c>np.add</c> over numbers computes (the numbers written as text, then concatenated).

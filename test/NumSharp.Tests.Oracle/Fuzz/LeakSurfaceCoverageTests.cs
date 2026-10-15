@@ -93,6 +93,9 @@ namespace NumSharp.Tests.Fuzz
             // NDMatrix (numpy.matrix): the members it declares — the matrix-only ones and every ndarray member it
             // re-declares to return a matrix. What it merely inherits is the ndarray module's.
             ("NDMatrix", typeof(NDMatrix), true),
+            // NDCharArray (numpy.char.chararray): the members it declares — the stripping indexers and enumerator and every
+            // ndarray member it re-declares to return a chararray. What it merely inherits is the ndarray module's.
+            ("NDCharArray", typeof(NDCharArray), true),
         };
 
         /// <summary>
@@ -108,6 +111,8 @@ namespace NumSharp.Tests.Fuzz
             ("NDArray<T>", typeof(NumSharp.Generic.NDArray<>)),
             ("NDMaskedArray", typeof(NDMaskedArray)),
             ("NDMatrix", typeof(NDMatrix)),
+            // NDCharArray's implicit conversions from a C# string / byte[] (the 0-d stand-ins its typed indexer setters take).
+            ("NDCharArray", typeof(NDCharArray)),
             // Object owners with operators: DType's conversions and safe-cast ordering, the flags object's
             // equality, and poly1d's arithmetic (which allocates a new polynomial per call).
             ("DType", typeof(DType)),

@@ -94,7 +94,39 @@ ASCII whitespace (NumPy's `rstrip=True` loop: one `Rstrip` flag of the text comp
 `multiply` (`np.strings.multiply`, a TypeError re-raised as `ValueError("Can only multiply by integers")`). Array arguments
 are `object` (C-D6: a `string` is `str`, a `byte[]` is `bytes`, a `byte[][]` a list of bytes); an `S` / `U` pair answers
 NumPy's `NotImplemented` as `null`; a `StringDType` operand is `comparison of non-string arrays`. Oracle section
-`strchar` (2,790 cases). `chararray` (`NDCharArray`) and the other 43 functions are open.
+`strchar` (2,790 cases).
+**`chararray` as data (phase 2, 2026-10-16): `NDCharArray : NDArray`** (`Char/NDCharArray{,.Strip,.Indexing,.Methods}.cs`,
+`APIs/np.char.array.cs`). `np.@char.chararray(shape, itemsize, unicode, buffer, offset, strides, order)` (a `string` buffer
+FILLS, `ReadOnlyMemory<byte>` is Python's read-only `bytes`, `byte[]` a writable `bytearray`, an `NDArray` is borrowed);
+`np.@char.array` / `asarray` follow NumPy's branches (str / bytes: `itemsize = len`, shape `len // itemsize`, Python's
+ZeroDivisionError as `DivideByZeroException`; an S / U array: a view, `itemsize // 4` for U so U is always cast; numbers,
+bools, None and StringDType through NumPy's `tolist()` route, value-based widths). The finalize rule (`dtype.char in
+'VSUbc'`, else `ValueError: Can only create a chararray from string data.`) runs before every allocation, and
+`view(dtype)` reads the OLD dtype (a `view(np.uint32)` chararray, whose own views raise). A full integer index (0-d integer
+arrays count) is a READ-ONLY 0-d stand-in of Python's `rstrip()` (29 code points for U: `char.IsWhiteSpace` + U+001C–U+001F;
+6 bytes for S); `item()`, `tolist()`, `take(i)` and the flat iterator do not strip; iteration yields stripped .NET values
+(1-D) or chararray rows. Every member re-declared with `new` keeps the class with NumPy's ownership and identities (`real`,
+`squeeze()`, `astype(copy=False)` and `to_device` return `this`); `repr` is `chararray(...)` with stripped elements;
+`NDArray.view(Type)` / `view(DType, Type)` are `view(type=)`. Divergences (pinned `[Misaligned]`): `np.char.array(...,
+order=)` of string data is a chararray (NumPy: a plain ndarray, its `np.asarray` drops the class — the oracle's one class
+excuse); an `itemsize=0` chararray (S0 / U0) is refused; a stripped value ending in NUL loses the NUL in the stand-in; np.*
+functions do not keep the class yet, and `c.argmax()` / `argmin()` / `argpartition()` return the index where NumPy's
+finalize raises (phase 3). Oracle section `strchararray` (11,505 cases). Its replay found and fixed seven
+base ndarray divergences: a scalar `bool` index is a COPY (`a[True]` was a view, `a[False]` the dims-less sentinel; the
+string indexer counted the bool as an axis), an out-of-bounds integer in slice notation on a strided view is NumPy's
+`IndexError` text (`UnmanagedStorage.GetView` checks every integer against its source axis), index 0 of an empty axis raises,
+`getfield` of an empty array is a view, `np.imag` of a real F array is F-ordered (`PyArray_ISFORTRAN`), and
+`np.asanyarray(object[,])` is NumPy's nested list of rows. The other 43 functions, the class's operators and np.* functions
+keeping the class are open (phases 3–4). Performance (55 cells, NPY/NS geomean 3.6×, min 1.63×; was 2.53× with 16 cells
+under 1.5×): the element stand-in's text is cut from a per-thread 2 KB arena whose Disposer the pieces share
+(`Char/NDCharArray.StandIn.cs`) and its address comes from the strides; string mask / index-array gathers run directly
+(`DirectILKernelGenerator.MaskGather.cs`; the flat gather kernels bake ANY constant slab width up to 256 bytes —
+`FixedCopyKindFor`, numeric row gathers too); `Slice.ParseSlices` has a bounded parse cache (1.3 µs → 35 ns) and
+`GetView` / `Shape.Slice` lost their per-call allocations (a basic slice view ~570 → ~320 ns, every dtype); `T` and
+`copy` build the subclass directly; `np.char.array(floats)` casts once then narrows; a zero-filled string buffer is
+`np.zeros`' calloc / demand-zero pages, and a VirtualAlloc'd zeroed block reports through the pool's coarse accounting
+(`AccountForeignAllocation`), not `GC.AddMemoryPressure` per block (a gen-2 collection every ~150 short-lived 3.2 MB
+arrays, numeric `np.zeros` included). Gate: `Backends/Strings/CharArrayFastPathTests.cs` (15; 21 planted bugs killed).
 **Text ↔ number conversion is phase 1 (P1.1, 2026-10-12, `docs/plans/strings-phase1-completion.md`)** — NumPy's legacy
 casts, byte for byte: a number becomes its scalar's `str()` (`Backends/Strings/NDTextFormat.cs`: the float positional /
 scientific windows per type, float16 / float32 shortest digits, complex forms; an unsized `'U'` / `'S'` takes

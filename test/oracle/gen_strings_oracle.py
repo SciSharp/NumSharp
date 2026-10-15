@@ -8125,11 +8125,741 @@ def gen_strsearch():
                 add("strsearch", "hist", params=params, operands=ops, layout=f"{fn}:sample={sk}:bins={bk}", call=call_hist)
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Section strchararray: numpy.char.chararray as data (the numpy.char plan's phase 2)
+# ----------------------------------------------------------------------------------------------------------------------
+
+CHA = "strchararray"
+
+# str.rstrip() with no argument removes the code points str.isspace() accepts: 29 in CPython 3.12 (Unicode 15.0).
+# chararray.__getitem__ strips a str element with them (Python's own method), never with np.char's ASCII set.
+PY_WS = [chr(c) for c in range(0x110000) if chr(c).isspace()]
+assert len(PY_WS) == 29, "CPython's whitespace set changed: NDCharArray's strip table must follow it"
+# bytes.rstrip() removes six ASCII bytes: \t \n \v \f \r and the space.
+BYTES_WS = [b for b in range(256) if bytes([b]).isspace()]
+assert len(BYTES_WS) == 6
+# Characters rstrip() keeps although they print like whitespace or are controls, the NUL (kept unless it is trailing), a
+# letter and a supplementary-plane character.
+PY_KEEP = ["\u200b", "\u180e", "\ufeff", "\u2060", "\x01", "\x08", "\x7f", "\x00", "a", "\U0001F600"]
+
+# The element pools of the chararray operands: every whitespace class in trailing position, kept look-alikes, NULs before
+# and after whitespace (rstrip keeps the 'a\x00' of 'a\x00 '), leading whitespace, empty values, non-ASCII and
+# supplementary-plane text. Values longer than an operand's width are truncated by np.array, as NumPy stores them.
+CHA_U = ["ab  ", "c\t", " d ", "e\x1c", "f\xa0", "g\u3000", "", "h", "x  ", "y \u3000 ", "\U0001F600 ", "a\x00 ",
+         "a \x00", "\u200b", "z\u180e", "q\ufeff", "  ", "\t\n", "\xe9\x85", "w\u2028", "m\u205f ", "n\u1680",
+         "k\x1f\x1e\x1d", "p\r\x0c\x0b", "   ", "s     ", "\u4e2d\u6587 "]
+CHA_S = [b"ab  ", b"c\t", b" d ", b"e\x1c", b"f\xa0", b"g\x85", b"", b"h", b"x\r\n", b"\x0b\x0c", b"a\x00 ", b"a \x00",
+         b"\xff ", b"q\x01", b"  ", b"\x1d\x1e\x1f", b"t\x0b"]
+
+
+class _ChaText(str):
+    """A printed result (``repr`` / ``str`` of a chararray), recorded as ``{"kind": "text"}``."""
+
+
+class _WithSelf:
+    """A result together with the object the call was made on, so the case records NumPy's ``result is receiver``
+    (``astype(copy=False)``, ``real``, ``squeeze()``, ``to_device``, ``np.char.asarray`` of a chararray)."""
+
+    def __init__(self, result, receiver):
+        """Keeps both.
+
+        Args:
+            result: the call's result.
+            receiver: the object whose identity the result is compared with (None: no identity recorded).
+        """
+        self.result, self.receiver = result, receiver
+
+
+def _cha_operand(spec, layout, seed=0):
+    """A (base, view) operand of ``spec`` in one of LAYOUTS, its base cycling through the chararray pool from ``seed``.
+
+    Args:
+        spec: the dtype, ``"<U4"`` / ``"|S4"``.
+        layout: a LAYOUTS key.
+        seed: the first pool index.
+
+    Returns:
+        The (base, view) pair.
+    """
+    n, build = LAYOUTS[layout]
+    pool = CHA_U if "U" in spec else CHA_S
+    base = np.array([pool[(seed + i) % len(pool)] for i in range(n)], dtype=spec) if n else np.zeros(0, dtype=spec)
+    return base, build(base)
+
+
+def _fview(arr):
+    """An F-contiguous operand equal to ``arr`` (2-D): a C-contiguous base holding ``arr`` in F order and its transposed
+    view (the replay rebuilds a view over its base buffer, so the layout survives).
+
+    Args:
+        arr: a 2-D array.
+
+    Returns:
+        The (base, view) pair.
+    """
+    base = np.ascontiguousarray(arr.T).reshape(-1).copy()
+    return base, base.reshape(arr.shape[::-1]).T
+
+
+def _cha_enc(v):
+    """``enc`` plus what np.char.array's Python arguments add: a complex, and a Python int past int64.
+
+    Args:
+        v: the Python value (lists element by element).
+
+    Returns:
+        The JSON-ready encoding.
+    """
+    if isinstance(v, complex):
+        return {"complex": [_jf(v.real), _jf(v.imag)]}
+    if isinstance(v, int) and not isinstance(v, bool) and not (-2 ** 63 <= v < 2 ** 63):
+        return {"bigint": str(v)}
+    if isinstance(v, (list, tuple)):
+        return [_cha_enc(x) for x in v]
+    return enc(v)
+
+
+def _cha_expect(r, views, receiver=None, value_kind=False):
+    """The expectation of a chararray call's result.
+
+    Args:
+        r: NumPy's result.
+        views: the case's operand views (for memory sharing).
+        receiver: the object the call was made on, or None.
+        value_kind: True for a Python value (``item()`` / ``tolist()``), compared by value with Python's integer and
+            float semantics (``pyvalue``).
+
+    Returns:
+        ``text`` for a printed string; ``pyvalue``; ``array`` with its CLASS (``chararray`` / ``ndarray`` / ``matrix``),
+        its OWNDATA read from the result itself (``array_expect`` reads a base-class view of a subclass) and, given a
+        receiver, ``self`` (NumPy's identity); ``items`` for a list (iteration); ``element`` for a scalar: its Python /
+        NumPy type name (``str`` is stripped by ``__getitem__``, ``str_`` is NumPy's unstripped scalar, ``uint32`` a
+        number) and its value.
+
+    Raises:
+        TypeError: a result kind the section does not record.
+    """
+    if isinstance(r, _ChaText):
+        return {"kind": "text", "u": str(r).encode("utf-32-le", "surrogatepass").hex()}
+    if value_kind:
+        return {"kind": "pyvalue", "value": enc(r)}
+    if isinstance(r, np.ndarray):
+        d = array_expect(r, views)
+        d["owndata"] = bool(r.flags.owndata)
+        d["class"] = type(r).__name__
+        if receiver is not None:
+            d["self"] = r is receiver
+        return d
+    if isinstance(r, list):
+        return {"kind": "items", "items": [_cha_expect(x, views) for x in r]}
+    if isinstance(r, (str, bytes, np.generic)):
+        return {"kind": "element", "py": type(r).__name__, "value": enc(r)}
+    raise TypeError(f"unexpected chararray result {type(r)}")
+
+
+def _cha_run(call, views, value_kind=False, uninit=False):
+    """Runs one call and returns its outcome.
+
+    Args:
+        call: the NumPy call, taking the operand views.
+        views: the operand views.
+        value_kind: see ``_cha_expect``.
+        uninit: the result's bytes are uninitialized (an ``S`` chararray without a buffer): its buffer is recorded as
+            None (not compared).
+
+    Returns:
+        ``{"expected": ...}`` or ``{"error": ...}``.
+    """
+    try:
+        r = call(*views)
+        receiver = None
+        if isinstance(r, _WithSelf):
+            r, receiver = r.result, r.receiver
+        exp = _cha_expect(r, views, receiver, value_kind)
+        if uninit and exp.get("kind") == "array":
+            exp["buffer"] = None
+        return {"expected": exp}
+    except Exception as e:  # noqa: BLE001 -- every NumPy exception is a recorded outcome
+        return {"error": err_info(e)}
+
+
+# The cases whose outcome a fresh process records (``add_cha(..., isolate=payload)``): NumPy 2.4.2 corrupts its heap when
+# a chararray's __array_finalize__ raises on a path that ALLOCATED the result first (astype / copy / flatten / byteswap /
+# imag / a flat slice of a chararray over numbers): the failure frees the buffer through a bad handler capsule
+# ("Exception ignored in: 'PyDataMem_UserFREE'") and a later call crashes the process.
+_CHA_PENDING = []
+
+
+def add_cha(op, *, params=None, operands=(), call=None, isolate=None, layout="", value_kind=False, uninit=False):
+    """Records one chararray case.
+
+    Args:
+        op: the corpus op key.
+        params: the case parameters.
+        operands: (base, view) pairs.
+        call: the NumPy call (``call(*views)``), when ``isolate`` is None.
+        isolate: a ``_cha_member_outcome`` payload: the outcome is recorded by a fresh process (``_cha_flush``).
+        layout: the case's layout label.
+        value_kind: see ``_cha_expect``.
+        uninit: see ``_cha_run``.
+    """
+    views = [v for _, v in operands]
+    prefix = f"{CHA}/{op}/"
+    n = _OP_COUNT.get(prefix, 0) + 1
+    _OP_COUNT[prefix] = n
+    cid = f"{CHA}/{op}/{n}"
+    assert cid not in _IDS
+    _IDS.add(cid)
+    case = {"id": cid, "op": op, "params": params or {}, "operands": [describe(b, v) for b, v in operands],
+            "phase": 1, "layout": layout}
+    if isolate is not None:
+        _CHA_PENDING.append((case, isolate))
+    else:
+        case.update(_cha_run(call, views, value_kind, uninit))
+    CASES.append(case)
+
+
+def _cha_arg_value(a):
+    """One JSON argument of a member call as the Python value NumPy receives.
+
+    Args:
+        a: ``{"dtype": s}`` (a dtype string, or ``ndarray`` / ``chararray`` / ``matrix`` for the classes),
+            ``{"type": "int" | "str"}`` (a Python type), ``{"list": [...]}`` (a list), or a JSON scalar (itself).
+
+    Returns:
+        The Python value.
+    """
+    if isinstance(a, dict):
+        if "dtype" in a:
+            return {"ndarray": np.ndarray, "chararray": np.char.chararray, "matrix": np.matrix}.get(a["dtype"], a["dtype"])
+        if "type" in a:
+            return {"int": int, "str": str}[a["type"]]
+        if "list" in a:
+            return a["list"]
+    return a
+
+
+def _cha_member_call(name, args):
+    """A member call of section E by name.
+
+    Args:
+        name: the member: a method name, a property (``T`` / ``mT`` / ``real`` / ``imag``) or a flat-iterator access
+            (``flat_index`` / ``flat_slice`` / ``flat_fancy`` / ``flat_copy``).
+        args: its positional arguments as JSON, an optional trailing ``{"kw": {...}}`` holding keywords.
+
+    Returns:
+        A function of the receiver chararray that makes the call.
+    """
+    kw = {}
+    if args and isinstance(args[-1], dict) and "kw" in args[-1]:
+        kw = {k: _cha_arg_value(v) for k, v in args[-1]["kw"].items()}
+        args = args[:-1]
+    real = [_cha_arg_value(a) for a in args]
+    if name in ("T", "mT", "real", "imag"):
+        return lambda c: getattr(c, name)
+    if name in ("flat_index", "flat_fancy"):
+        return lambda c: c.flat[real[0]]
+    if name == "flat_slice":
+        return lambda c: c.flat[slice(*real)]
+    if name == "flat_copy":
+        return lambda c: c.flat.copy()
+    return lambda c: getattr(c, name)(*real, **kw)
+
+
+def _cha_receiver(view, recv):
+    """The chararray a call is made on.
+
+    Args:
+        view: the operand view.
+        recv: None, or a dtype the chararray is viewed as first (``view(np.uint32)`` keeps the class: NumPy's finalize
+            reads the string dtype the array has, then the dtype changes).
+
+    Returns:
+        The chararray.
+    """
+    c = view.view(np.char.chararray)
+    return c.view(recv) if recv else c
+
+
+def _cha_member_outcome(payload):
+    """Rebuilds a member case's operand, makes the call and records its outcome (run by ``_cha_flush``'s worker
+    processes).
+
+    Args:
+        payload: ``{"spec", "layout", "seed", "name", "args", "recv"}``.
+
+    Returns:
+        ``{"expected": ...}`` or ``{"error": ...}``.
+    """
+    _, view = _cha_operand(payload["spec"], payload["layout"], payload["seed"])
+    member = _cha_member_call(payload["name"], payload["args"])
+
+    def call(v):
+        c = _cha_receiver(v, payload["recv"])
+        return _WithSelf(member(c), c)
+
+    return _cha_run(call, [view], payload["name"] in ("item", "tolist"))
+
+
+# The worker of an isolated case: imports this module, records the outcome, writes it as one JSON line and leaves without
+# the interpreter's teardown (where a heap NumPy corrupted would crash after the line is written).
+_CHA_WORKER = ("import json, os, sys\n"
+               "sys.path.insert(0, sys.argv[1])\n"
+               "import gen_strings_oracle as g\n"
+               "out = g._cha_member_outcome(json.loads(sys.stdin.read()))\n"
+               "sys.stdout.write(json.dumps(out, allow_nan=False) + '\\n')\n"
+               "sys.stdout.flush()\n"
+               "os._exit(0)\n")
+
+
+def _cha_isolated(payload):
+    """Records one isolated case in a fresh Python process.
+
+    Args:
+        payload: the ``_cha_member_outcome`` payload.
+
+    Returns:
+        The outcome.
+
+    Raises:
+        AssertionError: the worker wrote no outcome (it crashed during the call itself).
+    """
+    import subprocess
+    out = subprocess.run([sys.executable, "-I", "-c", _CHA_WORKER, str(HERE)], input=json.dumps(payload),
+                         capture_output=True, text=True, encoding="utf-8")
+    lines = out.stdout.strip().splitlines()
+    assert lines and lines[-1].startswith("{"), \
+        f"isolated chararray case {payload} wrote no outcome: rc={out.returncode} {out.stderr[-600:]}"
+    return json.loads(lines[-1])
+
+
+def _cha_flush():
+    """Records the outcome of every pending isolated case, eight worker processes at a time (each case alone in its
+    process); the cases keep their place and ids."""
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        outcomes = list(ex.map(lambda cp: _cha_isolated(cp[1]), _CHA_PENDING))
+    for (case, _), outcome in zip(_CHA_PENDING, outcomes):
+        case.update(outcome)
+    _CHA_PENDING.clear()
+
+
+def add_cha_member(spec, layout, seed, name, args, recv=None, isolate=False, values=None):
+    """Records one member call of section E on a chararray view of an operand.
+
+    Args:
+        spec: the operand's dtype.
+        layout: a LAYOUTS key (ignored with ``values``).
+        seed: the operand's first pool index.
+        name: see ``_cha_member_call``.
+        args: see ``_cha_member_call``.
+        recv: see ``_cha_receiver``.
+        isolate: True to record the outcome in a fresh process (a call that can raise the finalize error after
+            allocating); not with ``values``.
+        values: explicit base values (a 1-D operand), instead of the pool.
+    """
+    if values is not None:
+        operand_pair = plain(np.array(values, dtype=spec))
+        label = f"{spec}:values"
+    else:
+        operand_pair = _cha_operand(spec, layout, seed)
+        label = f"{spec}:{layout}" + (f":{recv}" if recv else "")
+    params = {"name": name, "args": args, "recv": recv}
+    if isolate:
+        assert values is None
+        payload = {"spec": spec, "layout": layout, "seed": seed, "name": name, "args": args, "recv": recv}
+        add_cha("cha_member", params=params, operands=[operand_pair], isolate=payload, layout=label)
+        return
+    member = _cha_member_call(name, args)
+
+    def call(v):
+        c = _cha_receiver(v, recv)
+        return _WithSelf(member(c), c)
+
+    add_cha("cha_member", params=params, operands=[operand_pair], call=call, layout=label,
+            value_kind=name in ("item", "tolist"))
+
+
+def _cha_index_py(spec, views):
+    """A JSON index as the Python index.
+
+    Args:
+        spec: entries ``{"i": n}`` (an int), ``{"s": [start, stop, step]}`` (a slice), ``{"e": 1}`` (Ellipsis), ``{"n": 1}``
+            (None, a new axis), ``{"b": bool}`` (a bool), ``{"a": [...]}`` (an int64 index array), ``{"z": n}`` (a 0-d
+            int64 array), ``{"m": k}`` (the k-th operand, a bool mask).
+        views: the case's operand views.
+
+    Returns:
+        The index tuple.
+    """
+    out = []
+    for e in spec:
+        if "i" in e:
+            out.append(e["i"])
+        elif "s" in e:
+            out.append(slice(*e["s"]))
+        elif "e" in e:
+            out.append(Ellipsis)
+        elif "n" in e:
+            out.append(None)
+        elif "b" in e:
+            out.append(e["b"])
+        elif "a" in e:
+            out.append(np.array(e["a"], dtype=np.int64))
+        elif "z" in e:
+            out.append(np.array(e["z"], dtype=np.int64))
+        elif "m" in e:
+            out.append(views[e["m"]])
+    return tuple(out)
+
+
+def _cha_basic(spec):
+    """Whether an index has at least one entry and holds only ints, slices, Ellipsis and new axes (the C#
+    slice-notation and Slice[] indexers take it).
+
+    Args:
+        spec: the JSON index.
+
+    Returns:
+        The answer.
+    """
+    return bool(spec) and all(("i" in e) or ("s" in e) or ("e" in e) or ("n" in e) for e in spec)
+
+
+def add_cha_item(base, view, index, layout, extra_ops=(), recv=None):
+    """Records ``c[index]`` for the operand viewed as a chararray, once per C# spelling of the index: the general
+    ``object[]`` indexer always, the slice-notation string and ``Slice[]`` indexers when the index is basic.
+
+    Args:
+        base: the operand's base.
+        view: the operand view.
+        index: the JSON index (``_cha_index_py``).
+        layout: the layout label.
+        extra_ops: more (base, view) operands an index entry names (a mask).
+        recv: see ``_cha_receiver``.
+    """
+    forms = ["objects"] + (["notation", "slices"] if _cha_basic(index) else [])
+    for form in forms:
+        def call(v, *rest, index=index):
+            return _cha_receiver(v, recv)[_cha_index_py(index, [v] + list(rest))]
+
+        add_cha("cha_item", params={"index": index, "form": form, "recv": recv},
+                operands=[(base, view)] + list(extra_ops), call=call, layout=layout)
+
+
+def _cha_array_cases():
+    """Section B: np.char.array / np.char.asarray over every argument kind NumPy's ``array`` branches on."""
+
+    def case(op, obj_spec, make_obj, operands, label, **kw):
+        """Records ``np.char.array / asarray(make_obj(*views), **kw)``, the None keywords left out (NumPy's defaults)."""
+        given = {k: v for k, v in kw.items() if v is not None}
+        params = {"obj": obj_spec, **given}
+        f = np.char.array if op == "cha_array" else np.char.asarray
+
+        def call(*vs):
+            obj = make_obj(*vs)
+            return _WithSelf(f(obj, **given), obj if isinstance(obj, np.ndarray) else None)
+
+        add_cha(op, params=params, operands=operands, call=call, layout=label)
+
+    for op in ["cha_array", "cha_asarray"]:
+        copies = [None, False] if op == "cha_array" else [None]
+        # A str / bytes: itemsize defaults to its length, the shape is len // itemsize (a ZeroDivisionError at 0), a str
+        # FILLS the chararray, bytes are its buffer (read-only).
+        for text in ["abcdef", "", "ab  ", "\xe9", "\U0001F600xy", "a\x00b", "  "]:
+            for itemsize in [None, 1, 2, 4, 7, 0, -1]:
+                for unicode in [None, False, True]:
+                    for order in [None, "F", "Q"]:
+                        case(op, {"v": enc(text)}, lambda text=text: text, [], "str", itemsize=itemsize, unicode=unicode,
+                             order=order)
+        for data in [b"abcd", b"", b"ab \x00", b"\xff\xfe", b"a\x00\x00\x00b\x00\x00\x00"]:
+            for itemsize in [None, 1, 2, 3, 0]:
+                for unicode in [None, False, True]:
+                    for order in [None, "F"]:
+                        case(op, {"v": enc(data)}, lambda data=data: data, [], "bytes", itemsize=itemsize,
+                             unicode=unicode, order=order)
+        # Lists (np.asarray first): strings take the string-array branch, anything else the tolist() route.
+        lists = [["hello", "world "], [b"ab", b"c"], ["a", 1], [["a", "bb"], ["c", "d"]], [], [["a"], "b"], [1, 22],
+                 [1.5, 2.25, 1e16, -0.0, float("nan"), float("-inf")], [True, False], [b"\xe9"], ["\xe9"],
+                 [[1, 2], [3, 4]], [1 + 2j, -0.5j, complex(float("nan"), float("inf"))], [2 ** 63 - 1, -2 ** 63],
+                 [b"ab", "c"]]
+        for lst in lists:
+            for itemsize in [None, 2, 0]:
+                for unicode in [None, False, True]:
+                    for order in [None, "F"]:
+                        for copy in copies:
+                            case(op, {"v": _cha_enc(lst)}, lambda lst=lst: lst, [], "list", itemsize=itemsize,
+                                 unicode=unicode, order=order, copy=copy)
+        # S / U ndarrays of every layout kind: a chararray view, the width in characters, a cast when the width or the
+        # class changes (U always: its itemsize counts bytes), np.asarray for an order (NumPy's result is then a plain
+        # ndarray: the order quirk, excused by the replay).
+        for spec in ["<U3", "|S3"]:
+            for layout in ["c1", "c2", "f2", "t3", "s1", "r1", "o1", "bc", "z0", "e1", "e2", "e3", "nx"]:
+                for itemsize in [None, 1, 5, 0]:
+                    for unicode in [None, False, True]:
+                        for order in [None, "C", "F", "K"]:
+                            for copy in copies:
+                                b, v = operand(spec, layout, seed=3, ascii_only=True)
+                                case(op, {"op": 0}, lambda v: v, [(b, v)], f"{spec}:{layout}", itemsize=itemsize,
+                                     unicode=unicode, order=order, copy=copy)
+        # Numbers and bools: the tolist() route without an itemsize (value-based widths: float32 prints its double
+        # value), a cast at the width with one (itemsize 0: the unsized string, int64 -> S21).
+        num_arrays = {
+            "i8": plain(np.array([1, 22, -333])), "i1": plain(np.array([-128, 5, 127], dtype=np.int8)),
+            "u1": plain(np.array([255, 0, 7], dtype=np.uint8)), "u8": plain(np.array([2 ** 64 - 1, 0], dtype=np.uint64)),
+            "f4": plain(np.array([0.1, 2, -1e-5], dtype=np.float32)),
+            "f2": plain(np.array([0.1, 2, 65504], dtype=np.float16)),
+            "f8": plain(np.array([0.1, 1e300, np.nan, -np.inf, -0.0, 1e16])),
+            "c16": plain(np.array([1 + 2j, -0.5j, complex(float("nan"), float("inf"))])),
+            "b": plain(np.array([True, False])), "i8:2d": plain(np.array([[1, 2], [3, 4]])),
+            "i8:F": _fview(np.array([[1, 2], [3, 4]])), "i8:e2": plain(np.zeros((0, 3), dtype=np.int64)),
+            "i8:20": plain(np.zeros((2, 0), dtype=np.int64)), "i8:0d": plain(np.array(7)), "f8:0d": plain(np.array(0.5)),
+        }
+        for label, (b, v) in num_arrays.items():
+            for itemsize in [None, 3, 0]:
+                for unicode in [None, True]:
+                    for order in [None, "F"]:
+                        case(op, {"op": 0}, lambda v: v, [(b, v)], label, itemsize=itemsize, unicode=unicode,
+                             order=order)
+        b, v = plain(np.array([[1, 2], [3, 4]]))
+        for itemsize in [None, 3]:
+            case(op, {"op": 0, "as": "T"}, lambda v: v.T, [(b, v)], "i8:T", itemsize=itemsize)
+        # StringDType: not character data, so the tolist() route (an NA object becomes its text).
+        for t_layout in ["c1", "f2", "e1"]:
+            for itemsize in [None, 2]:
+                for unicode in [None, True]:
+                    tb, tv = t_operand(TD, t_layout, seed=1, pool=["ab", "c", "", "def", "x y"], na_every=0)
+                    case(op, {"op": 0}, lambda v: v, [(tb, tv)], f"T:{t_layout}", itemsize=itemsize, unicode=unicode)
+        tb, tv = t_operand(TD, "c1", seed=0, pool=["\xe9", "a"], na_every=0)
+        case(op, {"op": 0}, lambda v: v, [(tb, tv)], "T:nonascii")
+        tb, tv = t_operand(TDN, "c1", seed=0, pool=["ab", "c"], na_every=2)
+        case(op, {"op": 0}, lambda v: v, [(tb, tv)], "T:na")
+        # Chararray inputs: an S chararray is answered ITSELF under copy=False; a U one is always cast.
+        for spec in ["|S3", "<U3"]:
+            for itemsize in [None, 3, 2]:
+                for copy in copies:
+                    b, v = operand(spec, "c1", seed=2, ascii_only=True)
+                    case(op, {"op": 0, "as": "chararray"}, lambda v: v.view(np.char.chararray), [(b, v)],
+                         f"chararray:{spec}", itemsize=itemsize, copy=copy)
+        # Python scalars: np.array(obj, dtype=bytes_ / str_), value-based.
+        for value in [5, -3, 2.5, -0.0, 1e20, float("nan"), True, False, None, 2 ** 70, 12345]:
+            for itemsize in [None, 2, 0]:
+                for unicode in [None, True]:
+                    case(op, {"v": _cha_enc(value)}, lambda value=value: value, [], "scalar", itemsize=itemsize,
+                         unicode=unicode)
+
+
+# The members of section E (name, args): the views and copies that keep the class, the identities, the finalize errors,
+# the Python values and the flat iterator.
+CHA_MEMBERS = [("T", []), ("mT", []), ("transpose", []), ("swapaxes", [0, -1]), ("reshape", [-1]),
+               ("reshape", [-1, {"kw": {"order": "F"}}]), ("ravel", []), ("ravel", ["F"]), ("flatten", []),
+               ("flatten", ["F"]), ("squeeze", []), ("copy", []), ("copy", ["F"]), ("copy", ["K"]),
+               ("take", [{"list": [0, -1]}]), ("take", [0]), ("take", [{"list": [[1]]}, {"kw": {"axis": -1}}]),
+               ("repeat", [2]), ("repeat", [2, {"kw": {"axis": 0}}]), ("compress", [{"list": [True, False]}]),
+               ("diagonal", []), ("real", []), ("imag", []), ("view", []), ("view", [{"dtype": "ndarray"}]),
+               ("astype", [{"dtype": "U5"}]), ("astype", [{"dtype": "S6"}]), ("astype", [{"dtype": "U"}]),
+               ("byteswap", []), ("item", [0]), ("tolist", []), ("to_device", ["cpu"]), ("flat_index", [0]),
+               ("flat_index", [-1]), ("flat_slice", [0, 2]), ("flat_fancy", [{"list": [0, -1]}]), ("flat_copy", [])]
+
+
+def gen_strchararray():
+    """Section strchararray: numpy.char.chararray as data — the constructor, np.char.array / asarray, element access and
+    iteration (stripped), the members that keep the class or raise the finalize error, view(type=), printing and the
+    flat iterator."""
+    # A. The constructor: shapes, widths, both classes, orders; a str buffer (a filler), bytes / bytearray / ndarray
+    #    buffers with offsets and strides; NumPy's errors.
+    for unicode in (False, True):
+        for shape in [3, (), (2, 0), (2, 3), [2, 2], -1, (2, -1)]:
+            for itemsize in [1, 3]:
+                for order in ["C", "F"]:
+                    add_cha("cha_new", params={"shape": shape, "itemsize": itemsize, "unicode": unicode, "order": order},
+                            call=lambda shape=shape, itemsize=itemsize, unicode=unicode, order=order:
+                            np.char.chararray(shape, itemsize=itemsize, unicode=unicode, order=order),
+                            layout="nobuffer", uninit=not unicode)
+        for itemsize in [-1, 2 ** 31, 2 ** 29, 2 ** 28, 5]:
+            add_cha("cha_new", params={"shape": 0, "itemsize": itemsize, "unicode": unicode},
+                    call=lambda itemsize=itemsize, unicode=unicode: np.char.chararray(0, itemsize=itemsize,
+                                                                                      unicode=unicode),
+                    layout="itemsize")
+        for order in ["A", "K", "f", "a", "Q", "c"]:
+            add_cha("cha_new", params={"shape": [2, 3], "itemsize": 2, "unicode": unicode, "order": order},
+                    call=lambda unicode=unicode, order=order: np.char.chararray((2, 3), itemsize=2, unicode=unicode,
+                                                                                order=order),
+                    layout="order", uninit=not unicode)
+        for filler in ["ab", "abcdef", "", "a  ", "\xe9", "\U0001F600x", "a\x00b", "  \t"]:
+            for shape, order in [(3, "C"), ((2, 2), "F"), ((), "C"), ((0,), "C")]:
+                add_cha("cha_new", params={"shape": shape, "itemsize": 3, "unicode": unicode, "order": order,
+                                           "buffer": {"str": enc(filler)}, "offset": 5},
+                        call=lambda filler=filler, shape=shape, order=order, unicode=unicode:
+                        np.char.chararray(shape, itemsize=3, unicode=unicode, buffer=filler, offset=5, order=order),
+                        layout="filler")
+    raw = bytes(range(97, 97 + 16))
+    utf32 = "abcd".encode("utf-32-le")
+    for kind in ["bytes", "bytearray"]:
+        for shape, itemsize, unicode, offset, strides, order in [
+                (2, 2, False, 0, None, "C"), (1, 2, False, 2, None, "C"), (1, 2, False, 3, None, "C"),
+                (2, 1, False, 0, [2], "C"), (2, 1, False, 3, [-2], "C"), ((2, 2), 1, False, 0, None, "F"),
+                ((2, 3), 2, False, 1, [6, 2], "C"), (3, 6, False, 0, None, "C"), (1, 2, True, 0, None, "C"),
+                (2, 1, True, 4, None, "C"), (2, 2, True, 0, None, "C"), ((), 4, False, 2, None, "C"),
+                (2, 1, True, 2, None, "C")]:
+            data = utf32 if unicode else raw
+
+            def call(shape=shape, itemsize=itemsize, unicode=unicode, offset=offset, strides=strides, order=order,
+                     data=data, kind=kind):
+                buf = bytes(data) if kind == "bytes" else bytearray(data)
+                return np.char.chararray(shape, itemsize=itemsize, unicode=unicode, buffer=buf, offset=offset,
+                                         strides=strides, order=order)
+
+            add_cha("cha_new", params={"shape": shape, "itemsize": itemsize, "unicode": unicode, "offset": offset,
+                                       "strides": strides, "order": order, "buffer": {kind: data.hex()}},
+                    call=call, layout=kind)
+    for spec, values, itemsize, unicode in [("|S2", [b"ab", b"cd"], 2, False), ("<U1", ["a", "b"], 1, True),
+                                            ("<i4", [0x64636261, 0x68676665], 4, False), ("<U2", ["ab", "cd"], 1, True)]:
+        b, v = plain(np.array(values, dtype=spec))
+        add_cha("cha_new", params={"shape": 2, "itemsize": itemsize, "unicode": unicode, "buffer": {"op": 0}},
+                operands=[(b, v)], call=lambda v, itemsize=itemsize, unicode=unicode:
+                np.char.chararray(2, itemsize=itemsize, unicode=unicode, buffer=v), layout="ndarray")
+    add_cha("cha_new", params={"shape": 2, "itemsize": 2, "buffer": {"list": enc([1, 2])}},
+            call=lambda: np.char.chararray(2, itemsize=2, buffer=[1, 2]), layout="list")
+
+    # B. np.char.array / np.char.asarray.
+    _cha_array_cases()
+
+    # C. Element access: every whitespace code point after a letter (U) and every byte (S), then every index kind over
+    #    every layout kind — a full integer index (0-d integer arrays count as integers) is the STRIPPED scalar, every
+    #    other index a chararray (a copy for a 0-d integer array beside a slice, NumPy's HAS_SCALAR_ARRAY).
+    b = np.array(["a" + c for c in PY_WS + PY_KEEP] + ["", " ", "\U0001F600 ", " a", "a\x00 ", "\x00 ", "a \x00 "],
+                 dtype="<U4")
+    for i in range(b.size):
+        add_cha_item(b, b, [{"i": i}], "U:ws")
+    b = np.array([b"a" + bytes([x]) for x in range(256)] + [b"", b" ", b" a", b"a\x00 ", b"\x00 "], dtype="|S3")
+    for i in range(b.size):
+        add_cha_item(b, b, [{"i": i}], "S:ws")
+    for spec in ["<U4", "|S4"]:
+        for layout in LAYOUTS:
+            base, view = _cha_operand(spec, layout, seed=1)
+            nd = view.ndim
+            if nd == 0:
+                indices = [[], [{"e": 1}], [{"n": 1}], [{"i": 0}], [{"e": 1}, {"n": 1}], [{"b": True}]]
+            else:
+                indices = [[{"i": int(x)} for x in np.unravel_index(k, view.shape)] for k in range(min(view.size, 6))]
+                indices += [[{"i": -1}] * nd, [{"i": view.shape[0]}] + [{"i": 0}] * (nd - 1),
+                            [{"i": 0}], [{"s": [1, None, None]}], [{"s": [None, None, -1]}], [{"e": 1}], [],
+                            [{"e": 1}, {"i": 0}], [{"i": 0}, {"e": 1}], [{"n": 1}], [{"b": True}], [{"b": False}],
+                            [{"a": [0, -1]}], [{"z": 0}], [{"z": 0}] * nd, [{"i": 0}] * (nd - 1) + [{"z": 0}],
+                            [{"i": 0}] * (nd + 1)]
+                if nd >= 2:
+                    indices += [[{"s": [None, None, None]}, {"i": 0}], [{"z": 0}, {"s": [None, None, None]}],
+                                [{"a": [0]}, {"a": [0]}] + [{"i": 0}] * (nd - 2)]
+            for index in indices:
+                add_cha_item(base, view, index, f"{spec}:{layout}")
+            if view.size and nd:
+                mask = np.zeros(view.shape, dtype=bool)
+                mask.flat[::2] = True
+                add_cha_item(base, view, [{"m": 1}], f"{spec}:{layout}:mask", extra_ops=[plain(mask)])
+    # A chararray over numbers (view(np.uint32) / view(np.int8)): an element is the NumPy number, a row view raises.
+    for spec, recv in [("<U2", "uint32"), ("|S4", "int8")]:
+        base, view = _cha_operand(spec, "c2", seed=0)
+        for index in [[{"i": 0}, {"i": 1}], [{"i": 0}], [{"s": [0, 1, None]}], [{"i": -1}, {"i": -1}]]:
+            add_cha_item(base, view, index, f"{spec}:c2:{recv}", recv=recv)
+
+    # D. Iteration: the stripped elements of a 1-d chararray, chararray rows of an N-d one, the 0-d TypeError.
+    for spec in ["<U4", "|S4"]:
+        for layout in LAYOUTS:
+            base, view = _cha_operand(spec, layout, seed=2)
+            add_cha("cha_iter", params={"recv": None}, operands=[(base, view)],
+                    call=lambda v: list(v.view(np.char.chararray)), layout=f"{spec}:{layout}")
+    for shape in [(2, 0), (0, 2), (0,)]:
+        b, v = plain(np.zeros(shape, dtype="<U1"))
+        add_cha("cha_iter", params={"recv": None}, operands=[(b, v)], call=lambda v: list(v.view(np.char.chararray)),
+                layout=f"empty{shape}")
+    for spec, recv in [("<U2", "uint32"), ("|S4", "int8")]:
+        base, view = _cha_operand(spec, "c1", seed=0)
+        add_cha("cha_iter", params={"recv": recv}, operands=[(base, view)],
+                call=lambda v, recv=recv: list(_cha_receiver(v, recv)), layout=f"{spec}:c1:{recv}")
+
+    # E. The members: views and copies keep the class (OWNDATA as NumPy), NumPy's identities, the finalize errors after
+    #    a non-string astype / getfield (isolated), item() / tolist() unstripped, the flat iterator.
+    for spec in ["<U4", "|S4"]:
+        cls = spec[1]
+        for layout in ["c1", "c2", "f2", "t3", "s2", "r2", "o1", "col", "bc", "z0", "one", "e2", "e3", "d5"]:
+            for name, args in CHA_MEMBERS:
+                add_cha_member(spec, layout, 3, name, args)
+            add_cha_member(spec, layout, 3, "astype", [{"dtype": spec}, {"kw": {"copy": False}}])
+            add_cha_member(spec, layout, 3, "view", [{"dtype": f"{cls}1"}])
+            add_cha_member(spec, layout, 3, "getfield", [{"dtype": f"{cls}1"}, 0])
+            add_cha_member(spec, layout, 3, "getfield", [{"dtype": f"{cls}2"}, 4 if cls == "U" else 2])
+            add_cha_member(spec, layout, 3, "view", [{"dtype": "uint32" if cls == "U" else "int8"}])
+            for target in ["int8", "float64", "T"]:
+                add_cha_member(spec, layout, 3, "astype", [{"dtype": target}], isolate=True)
+            add_cha_member(spec, layout, 3, "getfield", [{"dtype": "uint8"}, 0], isolate=True)
+    # Digit text cast to int8: the one numeric dtype the finalize rule accepts ('b'), so an int8 chararray.
+    for spec, values in [("<U2", ["1", "-5", "7"]), ("|S2", ["12", "3", "-1"])]:
+        add_cha_member(spec, None, 0, "astype", [{"dtype": "int8"}], values=values)
+    # A chararray over numbers: every view and copy raises the finalize error; element access and item() do not.
+    for spec, recv in [("<U2", "uint32"), ("|S4", "int8")]:
+        for layout in ["c1", "c2"]:
+            for name, args in CHA_MEMBERS + [("astype", [{"dtype": "U3"}]), ("view", [{"dtype": f"{spec[1]}1"}]),
+                                              ("astype", [{"dtype": recv}, {"kw": {"copy": False}}])]:
+                add_cha_member(spec, layout, 0, name, args, recv=recv, isolate=True)
+
+    # F. view(type=): the finalize rule reads the CURRENT dtype; a type that is not an ndarray class is a ValueError. A
+    #    None first argument stands for an omitted dtype (the keyword-only type=), as C#'s null does.
+    view_sources = {"U2": plain(np.array(["ab", "c"])), "S4": plain(np.array([b"abcd"])), "i8": plain(np.arange(3)),
+                    "i1": plain(np.array([65, 32], dtype=np.int8)), "u1": plain(np.array([65], dtype=np.uint8)),
+                    "b": plain(np.array([True])), "i4": plain(np.arange(2, dtype=np.int32)),
+                    "f8": plain(np.array([1.5])), "U2:2d": plain(np.array([["ab", "c"], ["d", "ef"]])),
+                    "U2:F": _fview(np.array([["ab", "c"], ["d", "ef"]]))}
+    view_args = [[{"dtype": "chararray"}], [{"dtype": "ndarray"}], [{"dtype": "matrix"}], [None, {"dtype": "chararray"}],
+                 [{"dtype": "int32"}, {"dtype": "chararray"}], [{"dtype": "S4"}, {"dtype": "chararray"}],
+                 [{"dtype": "U1"}, {"dtype": "chararray"}], [None, {"type": "int"}], [None, {"type": "str"}]]
+    for label, (b, v) in view_sources.items():
+        for args in view_args:
+            def call(v, args=args):
+                real = [None if a is None else _cha_arg_value(a) for a in args]
+                if len(real) == 1:
+                    return v.view(real[0])
+                if real[0] is None:
+                    return v.view(type=real[1])
+                return v.view(real[0], real[1])
+
+            add_cha("cha_viewtype", params={"args": args}, operands=[(b, v)], call=call, layout=label)
+    for spec in ["<U3", "|S3"]:
+        b, v = _cha_operand(spec, "c2", seed=4)
+        for target in ["ndarray", "chararray", "matrix"]:
+            add_cha("cha_viewtype", params={"args": [{"dtype": target}], "chararray": True}, operands=[(b, v)],
+                    call=lambda v, target=target: v.view(np.char.chararray).view(_cha_arg_value({"dtype": target})),
+                    layout=f"{spec}:chararray")
+
+    # G. Printing: repr (the class name, its continuation indent, stripped elements; a 0-d chararray unstripped) and str.
+    for spec in ["<U4", "|S4", "<U1", "<U12"]:
+        for layout in LAYOUTS:
+            base, view = _cha_operand(spec, layout, seed=5)
+            add_cha("cha_repr", params={"recv": None}, operands=[(base, view)],
+                    call=lambda v: _ChaText(repr(v.view(np.char.chararray))), layout=f"{spec}:{layout}")
+            add_cha("cha_str", params={"recv": None}, operands=[(base, view)],
+                    call=lambda v: _ChaText(str(v.view(np.char.chararray))), layout=f"{spec}:{layout}")
+    for n in [30, 1001, 2000]:
+        for spec in ["<U5", "|S5"]:
+            vals = [f"{i} " for i in range(n)] if spec[1] == "U" else [f"{i}\t".encode() for i in range(n)]
+            b, v = plain(np.array(vals, dtype=spec))
+            add_cha("cha_repr", params={"recv": None}, operands=[(b, v)],
+                    call=lambda v: _ChaText(repr(v.view(np.char.chararray))), layout=f"n{n}")
+            add_cha("cha_str", params={"recv": None}, operands=[(b, v)],
+                    call=lambda v: _ChaText(str(v.view(np.char.chararray))), layout=f"n{n}")
+    for spec, recv in [("<U2", "uint32"), ("|S4", "int8")]:
+        b, v = _cha_operand(spec, "c2", seed=0)
+        add_cha("cha_repr", params={"recv": recv}, operands=[(b, v)],
+                call=lambda v, recv=recv: _ChaText(repr(_cha_receiver(v, recv))), layout=f"{spec}:{recv}")
+
+    _cha_flush()
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
-              gen_strsort, gen_strchar, gen_strsearch]
+              gen_strsort, gen_strchar, gen_strsearch, gen_strchararray]
 
 
 def main():

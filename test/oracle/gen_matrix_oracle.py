@@ -1245,8 +1245,6 @@ GAPS = {
     "MX02": "np.cumsum / np.cumprod result layout for an operand that is not C-contiguous: NumPy's accumulate "
             "allocates in the operand's order (F for an F or transposed operand), NumSharp in C order; a "
             "broadcast bool operand goes the other way. Values equal.",
-    "MX03": "ndarray.imag of a real F-contiguous array: NumPy allocates the zeros in Fortran order "
-            "(PyArray_ISFORTRAN(self)), NumSharp in C order.",
     "MX04": "ndarray.round of a broadcast (stride-0) operand: the result layout differs (NumPy's KEEPORDER copy "
             "/ PyArray_Empty(ISFORTRAN) against NumSharp's). Values equal.",
     "MX05": "np.conjugate of a transposed strided or reversed complex128 view: NumPy's ufunc keeps the operand's "
@@ -1311,9 +1309,6 @@ def _gap_of(case):
             return "MX02"
         if op == "matrix.cumsum" and layout == "bcast" and dt == "bool":
             return "MX02"
-
-    if op == "matrix.imag" and layout in ("f", "t") and dt != "complex128" and not raises:
-        return "MX03"
 
     if op == "matrix.round" and layout == "bcast" and not raises:
         decimals = p.get("decimals", 0)

@@ -1828,13 +1828,12 @@ GAPS = {
     "VF22": "a[:, idx] on a C-contiguous view at a non-zero offset (an np.split child) THROWS "
             "IndexOutOfRangeException",
     "VF26": "results NumPy returns as a VIEW of an internal temporary (np.tile with unit reps of a 0-d input, "
-            "np.kron with a 0-d, ndarray.getfield of an empty array, np.nanmedian along an axis — "
-            "MaskedArray.filled's _data view) come back owning their data",
+            "np.kron with a 0-d, np.nanmedian along an axis — MaskedArray.filled's _data view) come back owning "
+            "their data",
     "VF27": "np.matvec / np.vecmat return a view of an internal buffer (OWNDATA false); NumPy's result owns its data",
     "VF29": "np.median / np.nanmedian of a 0-d with keepdims=True are read-only; NumPy returns a writeable 0-d array",
     "VF30": "np.nansum / np.nanprod with axis=None of a view at a non-zero offset (a 0-d np.unstack child, a 2-D "
             "np.split child) read the WRONG elements (the owner's, from its start)",
-    "VF31": "np.imag / ndarray.imag of a real F-ordered array (fresh zeros) are C-ordered; NumPy's are K (F)",
     "VF32": "np.nan_to_num(copy=True) of an F input is C-ordered; NumPy allocates in K order",
     "VF34": "np.round of a permuted or broadcast input: decimals=0 is C-ordered where NumPy keeps K, decimals=1 keeps "
             "the input order where NumPy's is C",
@@ -1940,15 +1939,12 @@ def _gap_of(tier, case):
             return "VF22" if lay.startswith("view_off_2d") else "VF21"
         if ((fn == "tile" and lay == "own_0d" and p["reps"] == [1])
                 or (fn == "kron" and lay == "own_0d+own_f_2d")
-                or (fn == "ndarray.getfield" and lay == "own_empty_2d")
                 or (fn == "nanmedian" and axis is not None and not p.get("keepdims"))):
             return "VF26"
         if fn in ("median", "nanmedian") and lay in ("own_0d", "view_0d") and p.get("keepdims"):
             return "VF29"
         if fn in ("nansum", "nanprod") and axis is None and lay in ("view_0d", "view_off_2d"):
             return "VF30"
-        if fn in ("imag", "ndarray.imag") and lay in ("own_f_2d", "view_t_2d") and case["operands"][0]["dtype"] != "complex128":
-            return "VF31"
         if fn == "nan_to_num" and p.get("copy") and lay == "own_f_2d":
             return "VF32"
         if fn == "round" and ((lay == "view_perm_3d") or (lay == "view_bcast_2d" and p["decimals"] == 1)):

@@ -1465,11 +1465,15 @@ namespace NumSharp
             // where offset = parent.offset + sum(parent.strides[d] * start[d])
             // and stride = parent.stride * step
 
-            var sliced_axes = new List<long>();
-            var sliced_strides_list = new List<long>();
+            // The kept axes are written into arrays of the parent's rank and cut to their count at the end (an integer
+            // slice drops its axis): two exact allocations where two growing lists made six.
+            int nd = NDim;
+            var sliced_axes = new long[nd];
+            var sliced_strides_list = new long[nd];
+            int kept = 0;
             long sliceOffset = this.offset;
 
-            for (int i = 0; i < NDim; i++)
+            for (int i = 0; i < nd; i++)
             {
                 var dim = dimensions[i];
                 var slice = input_slices.Length > i ? input_slices[i] : NumSharp.Slice.All;
@@ -1486,17 +1490,18 @@ namespace NumSharp
 
                 // Non-index slice: add to output dimensions and strides
                 long count = Math.Abs(slice_def.Count);
-                sliced_axes.Add(count);
+                sliced_axes[kept] = count;
 
                 // new_stride = parent.stride * step
                 // Negative step produces negative stride (for reversed iteration)
-                sliced_strides_list.Add(strides[i] * slice_def.Step);
+                sliced_strides_list[kept] = strides[i] * slice_def.Step;
+                kept++;
             }
 
             // Preserve bufferSize from parent (or compute from parent.size if not set)
             long parentBufferSize = bufferSize > 0 ? bufferSize : size;
 
-            if (sliced_axes.Count == 0) // Result is a scalar
+            if (kept == 0) // Result is a scalar
             {
                 // Create scalar via constructor with offset/bufferSize
                 var scalar = new Shape(Array.Empty<long>(), Array.Empty<long>(), sliceOffset, parentBufferSize);
@@ -1506,8 +1511,13 @@ namespace NumSharp
                 return scalar;
             }
 
-            var sliced_dims = sliced_axes.ToArray();
-            var sliced_strides = sliced_strides_list.ToArray();
+            var sliced_dims = sliced_axes;
+            var sliced_strides = sliced_strides_list;
+            if (kept < nd)
+            {
+                System.Array.Resize(ref sliced_dims, kept);
+                System.Array.Resize(ref sliced_strides, kept);
+            }
 
             // Create slice result via constructor
             var result = new Shape(sliced_dims, sliced_strides, sliceOffset, parentBufferSize);

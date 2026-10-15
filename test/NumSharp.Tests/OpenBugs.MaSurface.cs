@@ -23,7 +23,7 @@ namespace NumSharp.Tests
     //     view (MS36); is_mask of a masked bool array (MS17); the bool extremum fill values (MS14).
     //   * Crashes or refusals where NumPy computes: corrcoef of one variable (MS33), convolve of a 0-d operand (MS35),
     //     frombuffer of a buffer whose length is not a multiple of the item size (MS22), notmasked_edges of a 0-d array
-    //     with an axis (MS26), minimum_fill_value of a dtype (MS15).
+    //     with an axis (MS26).
     //   * Refusals NumPy makes and NumSharp does not, and error types / texts: MS6, MS8, MS21, MS23, MS24, MS27, MS28, MS30,
     //     MS32.
     //   * Reporting: the result FORM — an all-False mask dropped to nomask (MS1, MS2), masked_object's kept all-False mask
@@ -40,6 +40,8 @@ namespace NumSharp.Tests
     // MS25, MS28 and MS35 match NumPy, and MS2 for column_stack / dstack / diagflat. Their pins below stay where they are
     // as regression tests, untagged, each summary opening with "FIXED"; MS2's open part (hsplit) has a pin of its own,
     // and the generator's rules for the fixed ids are dropped (MS35's remaining 0-d convolve cases are MS1's class).
+    // MS15 (minimum_fill_value / maximum_fill_value of a dtype) was fixed by cb3a4186 (2026-10-13) and returned to the
+    // gate on 2026-10-15, when the numpy.char phase-2 replay of the carved gaps found its 12 cells matching.
     //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's rule from the generator's _gap_of so the
@@ -248,10 +250,13 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>ma.minimum_fill_value(np.dtype('float64'))</c>: NumPy reads the dtype and returns inf; NumSharp throws
-        ///     NotSupportedException (gap MS15).
+        ///     FIXED by cb3a4186 (strings phase 1, P1.7d: the fill-value members read a dtype argument as NumPy's
+        ///     <c>_get_dtype_of</c>); the pin and the ma_surface tier's 12 MS15 cells were left behind and return to the gates
+        ///     with the numpy.char phase-2 work (2026-10-15). NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>ma.minimum_fill_value(np.dtype('float64'))</c> threw NotSupportedException where NumPy reads
+        ///     the dtype and returns inf (gap MS15).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS15")]
+        [TestMethod]
         public void MaSurface_MinimumFillValue_OfADtype_IsInfinity()
         {
             var f = np.ma.minimum_fill_value(np.dtype("float64"));

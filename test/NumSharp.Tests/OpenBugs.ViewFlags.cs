@@ -35,6 +35,9 @@ namespace NumSharp.Tests
     // tiers' replay found VF03, VF11, VF18, VF25, VF28, VF33, VF35 fixed too, and parts of VF01, VF08, VF12, VF26 and
     // VF32. The pins of the fixed gaps stay below as regression tests, untagged, each summary opening with "FIXED".
     //
+    // FIXED 2026-10-15 (the numpy.char phase-2 work): np.imag / ndarray.imag of a real F array is F-ordered (VF31), and
+    // ndarray.getfield of an empty array is a view (VF26's getfield part); their carved cells are back in the gate.
+    //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's carve rule from the generator
     // (_gap_of) so the case returns to the gate.

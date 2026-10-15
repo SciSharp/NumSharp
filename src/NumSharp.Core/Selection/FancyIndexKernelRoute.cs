@@ -62,15 +62,15 @@ namespace NumSharp
         ///     the index array, from the C-contiguous <paramref name="src"/> (whose indexed axis has
         ///     <paramref name="maxItem"/> slabs) into the contiguous <paramref name="dst"/>, under RAISE
         ///     semantics (a negative index is normalised once, then bounds-checked). Picks the lean flat
-        ///     kernel for a primitive-width slab and the general take kernel (runtime-sized <c>cpblk</c>)
-        ///     otherwise. Returns -1 on success, else the position of the first out-of-range index (the
+        ///     kernel for a slab of a constant width (up to <c>MaxFixedCopyBytes</c>: every primitive element, a string
+        ///     element, a row of a string unit view) and the general take kernel (runtime-sized <c>cpblk</c>) otherwise. Returns -1 on success, else the position of the first out-of-range index (the
         ///     destination is then partially written — a fresh gather result is simply discarded).
         ///     Returns -2 when runtime IL generation is unavailable (nothing touched).
         /// </summary>
         internal static long Gather(byte* src, void* indices, bool idx32, long count, long maxItem, long slabBytes, byte* dst)
         {
             bool prefetch = maxItem * slabBytes > PrefetchThresholdBytes;
-            int copyKind = DirectILKernelGenerator.CopyKindFor(slabBytes);
+            int copyKind = DirectILKernelGenerator.FixedCopyKindFor(slabBytes);
             if (copyKind != 0)
             {
                 var flat = DirectILKernelGenerator.GetTakeFlatKernel(copyKind, idx32, prefetch);
@@ -98,7 +98,7 @@ namespace NumSharp
         /// </summary>
         internal static long Scatter(byte* dst, void* indices, bool idx32, long count, byte* values, long valuesCount, long maxItem, long slabBytes)
         {
-            int copyKind = DirectILKernelGenerator.CopyKindFor(slabBytes);
+            int copyKind = DirectILKernelGenerator.FixedCopyKindFor(slabBytes);
             if (copyKind != 0)
             {
                 var flat = DirectILKernelGenerator.GetPutFlatKernel(copyKind, idx32);

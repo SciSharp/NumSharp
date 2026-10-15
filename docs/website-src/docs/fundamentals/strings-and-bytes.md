@@ -4,7 +4,7 @@ NumSharp has NumPy's two fixed-width text dtypes: `str_` (`U`, Unicode) and `byt
 
 Conversion between text and numbers works as in NumPy: a number written into a text array is its scalar's `str()`, and a text cast to a number is parsed by Python's `int()`, `float()` or `complex()`, with NumPy's errors.
 
-Computing on text arrives in stages. Comparisons, truth values, concatenation, repetition, sorting and searching compute now, with NumPy's results, and so do the `numpy.char` module's comparisons, `add` and `multiply` (`np.@char`). The set routines and the other `np.strings` functions throw `StringComputationNotSupportedException` until their stage lands. Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
+Computing on text arrives in stages. Comparisons, truth values, concatenation, repetition, sorting and searching compute now, with NumPy's results, and so do the `numpy.char` module's comparisons, `add`, `multiply` and its `chararray` class (`np.@char`). The set routines and the other `np.strings` functions throw `StringComputationNotSupportedException` until their stage lands. Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
 
 NumPy 2's variable-width `StringDType` (`T`) stores, reads, writes, copies, casts, prints, goes to `.npy` files and through `np.loadtxt` / `np.savetxt` as in NumPy too; computing on it is the next phase (see [Variable-width text: `StringDType`](#variable-width-text-stringdtype)). NumPy's raw `void` (`V`) and `object` (`O`) dtypes stay unsupported.
 
@@ -348,6 +348,35 @@ The array arguments are NumPy's array_likes: an `NDArray`, a C# `string` (NumPy'
 
 Measured against NumPy 2.4.2 (pinned to two cores, 1,000 to 1,000,000 strings): the comparisons ran 2.6 to 10 times as fast, `np.@char.add` 4.9 to 6.9 times, `np.@char.multiply` 1.5 to 5 times. The slowest multiply case is a fresh 96 MB result, where both libraries pay the same page faults.
 
+### The `chararray` class
+
+`np.@char.chararray`, `np.@char.array` and `np.@char.asarray` make NumPy's `chararray`: an `NDCharArray`, which is an `NDArray` of `S` or `U` text. A chararray differs from a plain string array in three ways:
+
+- Element access removes the trailing whitespace of the element, as Python's `str.rstrip()` does for `U` text (29 whitespace characters: the ASCII ones, `'\x1c'` to `'\x1f'`, `'\x85'`, `'\xa0'`, U+3000 and the other Unicode spaces) and `bytes.rstrip()` does for `S` text (the 6 ASCII whitespace bytes). `item()`, `tolist()`, `take(i)` and the flat iterator keep the whitespace.
+- Views and copies of a chararray are chararrays: `T`, `reshape`, `ravel`, `copy`, `astype`, `take`, `repeat` and the other members it shares with `NDArray`.
+- A chararray holds text. A member that would make a chararray of numbers raises `ValueError: Can only create a chararray from string data.` NumPy's rule also allows `int8` data and NumSharp's `Char` dtype.
+
+```csharp
+var c = np.@char.array(new[] { "cat  ", "dog\t", "bird" });
+c[0].item();            // "cat": a read-only 0-d chararray stands for Python's str
+c.item(0);              // "cat  "
+foreach (var s in c)    // "cat", "dog", "bird"
+    Console.WriteLine(s);
+c.ToString(true);       // chararray(['cat', 'dog', 'bird'], dtype='<U5')
+c.T;                    // a chararray view
+c.astype(np.float64);   // ValueError: Can only create a chararray from string data.
+```
+
+`np.@char.array` takes NumPy's arguments:
+
+- A `string` fills a chararray of `len // itemsize` elements. A `byte[]` is a read-only buffer of `S` text.
+- A list, or an `S` / `U` array, becomes a chararray view, a cast to another width or class, or a copy.
+- A number array, a `StringDType` array and a C# number become text the way NumPy's `tolist()` route writes them: `np.@char.array(np.array(new[] { 0.1f }))` is `[b'0.10000000149011612']`.
+
+`np.@char.asarray` is `array` with `copy: false`, and returns an `S` chararray itself. `a.view(typeof(NDCharArray))` makes a chararray view of an `S` / `U` array, as NumPy's `a.view(np.char.chararray)` does.
+
+One difference from NumPy: with `order:` and text data, NumPy's `np.char.array` returns a plain array, because its `np.asarray` call drops the class. NumSharp returns a chararray with the same data and layout.
+
 ### What is not computed yet
 
 NumPy answers a call that involves text in one of two ways, and NumSharp follows it.
@@ -655,6 +684,8 @@ This is NumPy's `np.frombuffer` on a bytestring, and the general interop bridge.
 | `np.char.multiply(a, 3)` / `np.strings.multiply(a, 3)` | `np.@char.multiply(a, 3)` / `np.strings.multiply(a, 3)` |
 | `np.char.equal(a, b)` (strips trailing whitespace) | `np.@char.equal(a, b)` |
 | `np.char.compare_chararrays(a, b, '<', True)` | `np.@char.compare_chararrays(a, b, "<", true)` |
+| `c = np.char.array(["a ", "b"])`; `c[0]` (the stripped `str`) | `var c = np.@char.array(new[] { "a ", "b" })`; `c[0].item()` |
+| `a.view(np.char.chararray)` | `a.view(typeof(NDCharArray))` |
 | `np.char.upper(arr)` / `np.strings.upper(arr)` | a later stage: `NDArray.AsStringArray(arr).Select(s => s.ToUpper())` |
 | `np.array(["a", "bb"], dtype=StringDType())` | `np.array(new[] { "a", "bb" }, np.dtypes.StringDType())` |
 | `StringDType(na_object=None)` | `np.dtypes.StringDType(na_object: null)` |
@@ -708,6 +739,7 @@ A `U` to `S` cast encodes ASCII only, as NumPy does. Keep non-ASCII text in a `U
 | `np.sort` / `np.argsort` / `arr.sort()` / `np.partition` / `np.argpartition` | NumPy's results, NumPy's order of equal strings for every `kind`, NumPy's argument errors |
 | `np.@char.equal` … `np.@char.greater_equal`, `np.@char.compare_chararrays` | Comparisons after the trailing NULs and ASCII whitespace are removed; `null` (NumPy's `NotImplemented`) for `S` against `U` |
 | `np.@char.add` / `np.@char.multiply` | `np.add` / `np.strings.multiply`; a count that is not an integer is `ValueError("Can only multiply by integers")` |
+| `np.@char.chararray` / `np.@char.array` / `np.@char.asarray` | NumPy's `chararray` (`NDCharArray`): element access and iteration remove trailing whitespace, views and copies stay chararrays, text data only |
 | Other computing calls (`np.unique`, `np.searchsorted`, ...) | `StringComputationNotSupportedException` (a later stage) |
 | NumPy's refusals (`np.sum`, `np.sqrt`, ...) | NumPy's exception and message |
 | `np.dtypes.StringDType(...)` / `np.dtype("T")` | NumPy's variable-width `StringDType`: storage, element access, copies, gathers, scatters, casts and printing as NumPy's; computing on it throws `StringComputationNotSupportedException` (phase 2) |

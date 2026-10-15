@@ -257,6 +257,10 @@ namespace NumSharp.Tests.Strings
             // P2.2 milestone B) lives in its own partial; its np.searchsorted / np.digitize cases replay through strvalid's ops.
             if (TryInvokeSearch(c.Op, p, ops, out var searched))
                 return searched;
+            // Section strchararray (NDCharArray as data: the constructor, np.char.array / asarray, element access,
+            // iteration, the members that keep the class, view(type), printing) lives in its own partial.
+            if (TryInvokeChararray(c.Op, p, ops, out var chararray))
+                return chararray;
             throw new InvalidOperationException($"the string oracle has no op '{c.Op}'");
         }
 

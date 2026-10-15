@@ -845,6 +845,19 @@ dependencies land; C0 waits for the owner's decision C-D1, C3 for C-D3.
 
 ## 7. State log
 
+- **2026-10-16 — `numpy.char` phase 2: `chararray` as data** (`docs/plans/np-char.md` → state log). `NDCharArray :
+  NDArray` with the constructor, `np.char.array` / `asarray`, the finalize rule, the class kept on views and copies,
+  stripped element access and iteration, the `chararray(...)` repr and `view(type)`; no phase-2 kernel was needed (the
+  strip of one element is a scalar loop over its units; the casts, copies and gathers are phase 1's). Its oracle section
+  (`strchararray`, 11,505 cases) found seven divergences in the shared ndarray paths, fixed for every dtype: a scalar
+  `bool` index is a copy (and the string indexer no longer counts it as an axis), slice notation's out-of-bounds integer
+  on a strided view is NumPy's `IndexError`, index 0 of an empty axis raises, `getfield` of an empty array is a view,
+  `np.imag` of a real F array is F-ordered, and `np.asanyarray(object[,])` is a nested list of rows. Its performance work
+  sped up shared paths: a fixed-width string array's mask and index-array gathers run directly (a new mask-gather IL
+  kernel; the flat gather kernels take any constant slab width up to 256 bytes), `Slice.ParseSlices` caches its parses,
+  `GetView` / `Shape.Slice` drop their per-call allocations, `ndarray.copy` reuses a fresh C source's shape, a
+  zero-filled string buffer takes `np.zeros`' calloc / demand-zero pages, and a large zeroed block reports its memory
+  through the pool's coarse accounting (no gen-2 collection storm).
 - **2026-10-15 — P2.2 milestone B: searching `S` / `U` text** (`a9ec801a`; `np.argmax` / `np.argmin` /
   `np.nanargmax` / `np.nanargmin` and the methods, `np.searchsorted` / `ndarray.searchsorted`, `np.digitize`, the bin
   search of `np.histogram2d` / `np.histogramdd`; `Backends/Default/Sorting/TextArgReduce.cs`, `TextSearch.cs`,

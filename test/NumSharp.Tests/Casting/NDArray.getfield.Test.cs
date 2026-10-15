@@ -334,6 +334,32 @@ namespace NumSharp.Tests.Casting
             g[1].Should().Be((short)1800);
         }
 
+        /// <summary>
+        ///     A field of an EMPTY array is still a view (NumPy's <c>PyArray_GetField</c> builds a view whatever the size:
+        ///     <c>np.zeros((0, 3), np.int64).getfield(np.int32, 0)</c> has OWNDATA false, probed 2.4.2), read-only when the
+        ///     array is, for a numeric and a string field alike. It owned a fresh zero-length buffer until the view-flags tier's
+        ///     replay (VF26) found it matching after the 2026-10-15 fix.
+        /// </summary>
+        [TestMethod]
+        public void GetField_OfAnEmptyArray_IsAView()
+        {
+            var a = np.zeros(new Shape(0, 3), np.int64);
+            var field = a.getfield(np.int32, 0);
+            field.shape.Should().Equal(0L, 3L);
+            field.dtype.Should().Be(np.int32);
+            field.flags.owndata.Should().BeFalse();
+            field.flags.writeable.Should().BeTrue();
+
+            var text = np.zeros(new Shape(2, 0), np.dtype("<U4"));
+            var chars = text.getfield(np.dtype("<U1"), 4);
+            chars.shape.Should().Equal(2L, 0L);
+            chars.flags.owndata.Should().BeFalse();
+
+            var readOnly = np.zeros(new Shape(0), np.int64);
+            readOnly.setflags(write: false);
+            readOnly.getfield(np.int16, 2).flags.writeable.Should().BeFalse();
+        }
+
         // ---- all-dtype dispatch smoke ------------------------------------------------------------
 
         [TestMethod]

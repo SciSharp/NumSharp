@@ -191,7 +191,9 @@ namespace NumSharp
                 return @out;
             }
 
-            var result = new NDArray(a.dtype, Shape.Adopt(outDims), false); // the descriptor: a string's width
+            // The descriptor allocates (a string's width). The gather writes every element before the result is returned (an
+            // out-of-bounds index raises and the scope reclaims the partial result), so a U result skips its zero fill.
+            var result = NDArray.ForOverwrite(a.dtype, Shape.Adopt(outDims));
             long indicesCount = indices.size;
 
             // "Index error, since that is the usual error for raise mode" — only when something would be written.
@@ -332,7 +334,9 @@ namespace NumSharp
             long outerSize, long indicesCount, long maxItem, long innerSize, int mode, bool idx32 = false,
             int? axis = null)
         {
-            int copyKind = DirectILKernelGenerator.CopyKindFor(innerSize);
+            // A constant slab width up to MaxFixedCopyBytes (every primitive element, a string element) is baked into the
+            // kernel; a wider slab keeps the runtime-sized cpblk.
+            int copyKind = DirectILKernelGenerator.FixedCopyKindFor(innerSize);
             // Software prefetch pays off only when the randomly-gathered region misses cache; below that
             // threshold it is pure per-element overhead (measured ~1.6x slower at 100K). Gate on the
             // gathered footprint = maxItem slabs of innerSize bytes.

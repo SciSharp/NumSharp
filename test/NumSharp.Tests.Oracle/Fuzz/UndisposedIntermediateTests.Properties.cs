@@ -516,6 +516,7 @@ namespace NumSharp.Tests.Fuzz
                 "NpzFile" => new[] { new ReadTarget("load_npz(bytes)", f => Disposable(np.load_npz(f.NpzBytes))) },
                 "NDMaskedArray" => MaskedTargets,
                 "NDMatrix" => MatrixTargets,
+                "NDCharArray" => CharArrayTargets,
                 "NDArray<T>" => new[]
                 {
                     new ReadTarget("NDArray<double> (3,4)", _ =>
@@ -630,6 +631,29 @@ namespace NumSharp.Tests.Fuzz
                 var a = np.ones(new Shape(2, 3));
                 var m = np.asmatrix(a);
                 return (m, () => { m.Dispose(); a.Dispose(); });
+            }),
+        };
+
+        /// <summary>
+        ///     NDCharArray targets: a <c>U</c> chararray that owns its data (np.char.array of a list copies) and an <c>S</c>
+        ///     chararray VIEW (the transpose of an owner), so <c>T</c> / <c>mT</c> / <c>real</c> / <c>imag</c> are read on a
+        ///     contiguous owner and on a strided view.
+        /// </summary>
+        private static readonly IReadOnlyList<ReadTarget> CharArrayTargets = new[]
+        {
+            new ReadTarget("<U2 (2,2) owning", _ =>
+            {
+                var c = np.@char.array(new[,] { { "a ", "b" }, { "c", "d\t" } });
+                return (c, c.Dispose);
+            }),
+            new ReadTarget("|S2 transposed view", _ =>
+            {
+                // A U -> S cast: the S chararray owns its data, so the U source is released at once.
+                var u = np.array(new[,] { { "a ", "b" }, { "c", "d" } });
+                var c = np.@char.array(u, unicode: false);
+                u.Dispose();
+                var t = c.T;
+                return (t, () => { t.Dispose(); c.Dispose(); });
             }),
         };
 

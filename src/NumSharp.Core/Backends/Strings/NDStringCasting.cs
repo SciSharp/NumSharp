@@ -50,6 +50,31 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="OverflowException">Text → integer meets a value outside the target (NumPy's LP64 texts:
         ///     <c>Python integer 300 out of bounds for int8</c>, <c>Python int too large to convert to C long</c>).</exception>
         public static NDArray AsType(NDArray src, DType dtype, bool copy, char order, string casting)
+            => AsType(src, dtype, copy, order, casting, beforeAllocate: null);
+
+        /// <summary>
+        ///     <see cref="AsType(NDArray, DType, bool, char, string)"/> with a hook that runs where NumPy allocates the
+        ///     result: after the adapted dtype, the <c>copy=False</c> shortcut and the casting rule, before any element is
+        ///     converted. An ndarray subclass whose <c>__array_finalize__</c> refuses a dtype (<c>numpy.char.chararray</c>)
+        ///     raises there, so its error comes after the casting rule's and before a parse error of the conversion.
+        /// </summary>
+        /// <param name="src">The array (string or numeric).</param>
+        /// <param name="dtype">The requested dtype.</param>
+        /// <param name="copy">False to return <paramref name="src"/> itself when no conversion is needed (the hook does not
+        ///     run then: NumPy allocates nothing).</param>
+        /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
+        /// <param name="casting">The casting rule; null or empty is <c>'unsafe'</c>.</param>
+        /// <param name="beforeAllocate">Receives the ADAPTED result dtype (an unsized request resolved to its width) right
+        ///     before the result is allocated; it may throw. <c>null</c> runs nothing.</param>
+        /// <returns><paramref name="src"/> itself, or a new array of the adapted dtype.</returns>
+        /// <exception cref="ValueError">An unknown casting name, or whatever <paramref name="beforeAllocate"/> throws.</exception>
+        /// <exception cref="ArgumentException"><paramref name="order"/> is not one of C/F/A/K.</exception>
+        /// <exception cref="InvalidCastException">The cast is not allowed under <paramref name="casting"/>.</exception>
+        /// <exception cref="UnicodeEncodeError"><c>U → S</c> meets a code point at or above 128.</exception>
+        /// <exception cref="UnicodeDecodeError"><c>S → U</c> meets a byte at or above <c>0x80</c>.</exception>
+        /// <exception cref="SystemError">A unit above <c>U+10FFFF</c> where the cast decodes text.</exception>
+        /// <exception cref="OverflowException">Text → integer meets a value outside the target.</exception>
+        internal static NDArray AsType(NDArray src, DType dtype, bool copy, char order, string casting, Action<DType> beforeAllocate)
         {
             // npy_parse_arguments: the casting and order converters run before the dtype is adapted. astype's converter
             // also takes NumPy 2.4's 'same_value', which no string cast implements (every one fails the rule below).
@@ -88,6 +113,10 @@ namespace NumSharp.Backends.Strings
 
             if (!DTypeCasting.CanCastTypeTo(from, to, rule))
                 throw InvalidCast(from, to, rule, src.ndim == 0);
+
+            // PyArray_NewLikeArray allocates the result here, as the source's subclass: a subclass's finalize rule
+            // (chararray's 'Can only create a chararray from string data.') raises before any element converts.
+            beforeAllocate?.Invoke(to);
 
             // Text to bool is a string's truth value (NumPy's legacy string-to-bool cast: a non-empty string is True, a U
             // unit above U+10FFFF raises its SystemError), laid out by the requested order like any astype result.
@@ -152,7 +181,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="order">The (validated) order character.</param>
         /// <param name="shape">The array's shape.</param>
         /// <returns>True when the array's own layout satisfies the requested order.</returns>
-        private static bool OrderSatisfied(char order, Shape shape)
+        internal static bool OrderSatisfied(char order, Shape shape)
         {
             switch (order)
             {

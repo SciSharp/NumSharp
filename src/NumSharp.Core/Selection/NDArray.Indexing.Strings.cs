@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends;
+using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Strings;
 using NumSharp.Generic;
 
@@ -160,6 +161,10 @@ namespace NumSharp
                 switch (entry)
                 {
                     case Slice s when s.IsEllipsis || s.IsNewAxis:
+                        break;
+                    // A scalar bool is NumPy's HAS_0D_BOOL: a new axis of length 1 / 0 that consumes no axis of this array
+                    // (s[True] of a 0-d string array is (1,), not "too many indices").
+                    case bool:
                         break;
                     case NDArray nd when nd.typecode == NPTypeCode.Boolean:
                         consumed += nd.ndim;
@@ -331,12 +336,120 @@ namespace NumSharp
         {
             if (Storage.IsVString)
                 return VStringFetchIndices(normalized); // cells + duplication, never the unit route (NDArray.Indexing.VString.cs)
-            // A lone boolean mask over leading axes gathers whole rows (MaskedUnitRows); any other index runs on the unit
-            // view as given.
-            if (normalized.Length == 1 && normalized[0] is NDArray m && m.typecode == NPTypeCode.Boolean)
-                return StringAdvancedGet(u => MaskedUnitRows(u, m, units => units.FetchIndices(WithCharacterAxis(normalized))),
-                                         p => p.FetchIndices((object[])normalized.Clone()));
+            if (normalized.Length == 1 && normalized[0] is NDArray only)
+            {
+                // A lone boolean mask over leading axes: the direct mask gather, else whole unit-view rows
+                // (MaskedUnitRows); a lone integer index array: the direct row gather. Any other index runs on the unit
+                // view as given.
+                if (only.typecode == NPTypeCode.Boolean)
+                    return TryStringMaskGather(only, out var masked)
+                        ? masked
+                        : StringAdvancedGet(u => MaskedUnitRows(u, only, units => units.FetchIndices(WithCharacterAxis(normalized))),
+                                            p => p.FetchIndices((object[])normalized.Clone()));
+                if (TryStringGatherRows(only, out var gathered))
+                    return gathered;
+            }
             return StringAdvancedGet(u => u.FetchIndices(WithCharacterAxis(normalized)), p => p.FetchIndices((object[])normalized.Clone()));
+        }
+
+        /// <summary>
+        ///     The direct boolean-mask gather of a fixed-width string array: the selected elements (or rows of the trailing
+        ///     axes) are counted, allocated and copied by one kernel (<see cref="DirectILKernelGenerator.GetMaskGatherKernel"/>),
+        ///     with no unit view and no index array. NumPy's result for a mask over leading axes: <c>(count,) +
+        ///     shape[mask.ndim:]</c>, a fresh C-contiguous array that owns its data, in C order of the mask.
+        /// </summary>
+        /// <param name="mask">A boolean array; served when it is C-contiguous, has at least one axis, and its shape is a
+        ///     prefix of this array's shape.</param>
+        /// <param name="result">The selection, when served.</param>
+        /// <returns>True when served; false for a layout or mask this route does not cover (a non-contiguous source or
+        ///     mask, a 0-d mask, a shape mismatch, an empty trailing block, no runtime IL), which the caller's unit route
+        ///     takes with its own checks and errors.</returns>
+        /// <remarks>Every element of the result is written (one slab per non-zero mask byte, counted from the same bytes),
+        ///     so a <c>U</c> result skips its zero fill (<see cref="ForOverwrite"/>).</remarks>
+        [NDAnchored] // this array's and the mask's raw addresses go to the kernel: both stay rooted until it returns
+        private unsafe bool TryStringMaskGather(NDArray mask, out NDArray result)
+        {
+            result = null;
+            int lead = mask.ndim;
+            if (lead == 0 || lead > ndim || mask.typecode != NPTypeCode.Boolean || !Storage.IsFixedString
+                || !Shape.IsContiguous || !mask.Shape.IsContiguous || !DirectILKernelGenerator.Enabled)
+                return false;
+            var dims = Shape.dimensions;
+            for (int d = 0; d < lead; d++)
+                if (mask.Shape.dimensions[d] != dims[d])
+                    return false;
+            var slice = Storage.StringSlice;
+            long slabBytes = slice.ItemSize;
+            for (int d = lead; d < dims.Length; d++)
+                slabBytes *= dims[d];
+            if (slabBytes == 0)
+                return false;
+            var kernel = DirectILKernelGenerator.GetMaskGatherKernel(DirectILKernelGenerator.FixedCopyKindFor(slabBytes));
+            if (kernel is null)
+                return false;
+
+            byte* maskPtr = (byte*)mask.Storage.Address + mask.Shape.offset;
+            long count = DirectILKernelGenerator.CountTrueSimdHelper((bool*)maskPtr, mask.size);
+            var resultDims = new long[1 + dims.Length - lead];
+            resultDims[0] = count;
+            for (int d = lead; d < dims.Length; d++)
+                resultDims[1 + d - lead] = dims[d];
+            var picked = ForOverwrite(dtype, Shape.Adopt(resultDims));
+            picked.TensorEngine = TensorEngine;
+            kernel(slice.Address + Shape.offset * (long)slice.ItemSize, maskPtr, mask.size, slabBytes, (byte*)picked.Storage.Address);
+            result = picked;
+            return true;
+        }
+
+        /// <summary>
+        ///     The direct integer-array gather of a fixed-width string array, <c>a[idx]</c> over the first axis: the selected
+        ///     elements (or rows of the trailing axes) are copied by the fancy-index kernel route
+        ///     (<see cref="FancyIndexKernelRoute.Gather"/>) straight from the index buffer, with no unit view. NumPy's result:
+        ///     <c>idx.shape + shape[1:]</c>, a fresh C-contiguous array that owns its data.
+        /// </summary>
+        /// <param name="index">The index array; served when it is an int32 / int64 C-contiguous array with at least one
+        ///     axis.</param>
+        /// <param name="result">The selection, when served.</param>
+        /// <returns>True when served; false for an index or layout this route does not cover (another index dtype, a 0-d
+        ///     or non-contiguous index, a non-contiguous source, an empty trailing block, no runtime IL), which the caller's
+        ///     unit route takes with its own checks and errors.</returns>
+        /// <exception cref="IndexError">An index outside <c>[-size, size)</c> of the first axis: NumPy's
+        ///     <c>index 5 is out of bounds for axis 0 with size 3</c> (the partial result is released first).</exception>
+        [NDAnchored] // this array's and the index array's raw addresses go to the kernel: both stay rooted until it returns
+        private unsafe bool TryStringGatherRows(NDArray index, out NDArray result)
+        {
+            result = null;
+            if (ndim == 0 || index.ndim == 0 || !Storage.IsFixedString || !Shape.IsContiguous || !DirectILKernelGenerator.Enabled
+                || !FancyIndexKernelRoute.TryGetIndexPointer(index, out void* indexPtr, out bool index32))
+                return false;
+            var dims = Shape.dimensions;
+            var slice = Storage.StringSlice;
+            long slabBytes = slice.ItemSize;
+            for (int d = 1; d < dims.Length; d++)
+                slabBytes *= dims[d];
+            if (slabBytes == 0)
+                return false;
+
+            var indexDims = index.Shape.dimensions;
+            var resultDims = new long[indexDims.Length + dims.Length - 1];
+            System.Array.Copy(indexDims, resultDims, indexDims.Length);
+            System.Array.Copy(dims, 1, resultDims, indexDims.Length, dims.Length - 1);
+            // Every element is written unless an index is out of bounds, and then the result is released, never returned: a
+            // U result skips its zero fill.
+            var picked = ForOverwrite(dtype, Shape.Adopt(resultDims));
+            long fail = FancyIndexKernelRoute.Gather(slice.Address + Shape.offset * (long)slice.ItemSize, indexPtr, index32,
+                                                     index.size, dims[0], slabBytes, (byte*)picked.Storage.Address);
+            if (fail == -1)
+            {
+                picked.TensorEngine = TensorEngine;
+                result = picked;
+                return true;
+            }
+
+            picked.Dispose();
+            if (fail >= 0)
+                throw new IndexError($"index {FancyIndexKernelRoute.ReadIndex(indexPtr, index32, fail)} is out of bounds for axis 0 with size {dims[0]}");
+            return false;   // -2: the IL kernels are unavailable on this host
         }
 
         /// <summary>
@@ -368,6 +481,8 @@ namespace NumSharp
                     FetchIndices(proxy, selection, null, true)?.Dispose();
                 throw new IndexError($"too many indices for array: array is {ndim}-dimensional, but {selection.Length} were indexed");
             }
+            if (selection.Length == 1 && TryStringGatherRows(selection[0], out var gathered))
+                return gathered;
             return StringAdvancedGet(u => FetchIndices(u, selection, null, true), p => FetchIndices(p, selection, null, true));
         }
 

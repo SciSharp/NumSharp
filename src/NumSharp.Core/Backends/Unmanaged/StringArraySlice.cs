@@ -46,16 +46,7 @@ namespace NumSharp.Backends.Unmanaged
         /// whole number of its elements.</exception>
         public StringArraySlice(ArraySlice<byte> bytes, DType descr)
         {
-            if (descr is null)
-                throw new ArgumentNullException(nameof(descr));
-            if (descr.Meta is not StringDTypeMeta meta)
-                throw new ArgumentException($"{descr.ToString(true)} is not a fixed-width string dtype.", nameof(descr));
-            // An array element has at least one character: NumPy grows an unsized S0/U0 to S1/U1 at allocation, and
-            // NumSharp buffers are always native-endian (a '>U5' request is canonicalised before it gets here).
-            if (descr.itemsize <= 0)
-                throw new ArgumentException($"{descr.ToString(true)} is unsized; a string buffer needs a positive item size.", nameof(descr));
-            if (!descr.isnative)
-                throw new ArgumentException($"{descr.ToString(true)} is not native-endian; string buffers are stored in host order.", nameof(descr));
+            var meta = BufferClassOf(descr);
             if (bytes.Count % descr.itemsize != 0)
                 throw new ArgumentException($"A buffer of {bytes.Count} bytes is not a whole number of {descr.itemsize}-byte elements.", nameof(bytes));
 
@@ -68,6 +59,31 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         /// <summary>
+        ///     Wraps elements whose descriptor, widths and count the caller already holds, WITHOUT the public constructor's
+        ///     checks and divisions: the hot paths that build a slice per call — a chararray's element stand-in and the
+        ///     contiguous view of <see cref="Slice(long, long)"/> — where three integer divisions and the descriptor tests cost
+        ///     about as much as the rest of this object.
+        /// </summary>
+        /// <param name="bytes">The elements' bytes: <paramref name="count"/> × <paramref name="itemSize"/>.</param>
+        /// <param name="descr">The sized native <c>S</c> / <c>U</c> descriptor of the elements.</param>
+        /// <param name="itemSize">Bytes per element (<c>descr.itemsize</c>).</param>
+        /// <param name="chars">Characters per element (<paramref name="itemSize"/>, or a quarter of it for <c>U</c>).</param>
+        /// <param name="unicode">True when <paramref name="descr"/> is <c>U</c>.</param>
+        /// <param name="count">The number of elements.</param>
+        /// <remarks>Nothing is validated: a value that does not match <paramref name="descr"/> makes every reader of this
+        ///     slice read the wrong width. Callers copy them from an existing slice of the same descriptor, or derive them
+        ///     from one width as <c>NDCharArray.StandIn</c> does.</remarks>
+        internal StringArraySlice(ArraySlice<byte> bytes, DType descr, int itemSize, int chars, bool unicode, long count)
+        {
+            Bytes = bytes;
+            Descr = descr;
+            ItemSize = itemSize;
+            Chars = chars;
+            IsUnicode = unicode;
+            Count = count;
+        }
+
+        /// <summary>
         ///     Allocates a buffer for <paramref name="count"/> elements of <paramref name="descr"/> from the shared pool.
         /// </summary>
         /// <param name="descr">A sized, native string descriptor.</param>
@@ -75,14 +91,48 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="fillZeros">True to NUL-fill (every element reads <c>""</c> / <c>b""</c>); false leaves pool noise,
         /// for callers that write every byte.</param>
         /// <returns>The new slice.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="descr"/> is null.</exception>
         /// <exception cref="ArgumentException">See the constructor.</exception>
         /// <exception cref="OutOfMemoryException">The allocation failed.</exception>
+        /// <remarks>The NUL fill takes the numeric <c>np.zeros</c> route (<see cref="UnmanagedMemoryBlock{T}.AllocateZeroed"/>):
+        ///     <c>calloc</c>, or for a large block the operating system's demand-zero pages, which are zeroed when first
+        ///     written. A fill loop over a fresh block wrote every byte up front: 3.2 MB took ~115 µs where NumPy's
+        ///     <c>calloc</c> takes ~10 µs (its <c>U</c> allocation is zeroed the same way, <c>NPY_NEEDS_INIT</c>).</remarks>
         public static StringArraySlice Allocate(DType descr, long count, bool fillZeros)
+        {
+            var meta = BufferClassOf(descr);
+            int itemSize = descr.itemsize;
+            // The caller has already run AllocationGuard on (dims, itemsize), so the product cannot overflow.
+            long bytes = count * itemSize;
+            var buffer = fillZeros
+                ? new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.AllocateZeroed(bytes))
+                : ArraySlice<byte>.Allocate(bytes);
+            // The buffer holds exactly `count` elements by construction: the trusted constructor, no divisions.
+            return new StringArraySlice(buffer, descr, itemSize, meta.IsUnicode ? itemSize / 4 : itemSize, meta.IsUnicode, count);
+        }
+
+        /// <summary>
+        ///     The checks a string buffer's descriptor must pass, shared by the public constructor and
+        ///     <see cref="Allocate"/>: a fixed-width string class, sized (an element has at least one character: NumPy grows an
+        ///     unsized <c>S0</c>/<c>U0</c> to <c>S1</c>/<c>U1</c> at allocation) and native-endian (a <c>'&gt;U5'</c> request is
+        ///     canonicalised before it gets here).
+        /// </summary>
+        /// <param name="descr">The descriptor.</param>
+        /// <returns>Its string class.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="descr"/> is null.</exception>
+        /// <exception cref="ArgumentException">The descriptor is not a fixed-width string dtype, is unsized, or is not
+        ///     native-endian.</exception>
+        private static StringDTypeMeta BufferClassOf(DType descr)
         {
             if (descr is null)
                 throw new ArgumentNullException(nameof(descr));
-            // The caller has already run AllocationGuard on (dims, itemsize), so the product cannot overflow.
-            return new StringArraySlice(ArraySlice<byte>.Allocate(count * descr.itemsize, fillZeros), descr);
+            if (descr.Meta is not StringDTypeMeta meta)
+                throw new ArgumentException($"{descr.ToString(true)} is not a fixed-width string dtype.", nameof(descr));
+            if (descr.itemsize <= 0)
+                throw new ArgumentException($"{descr.ToString(true)} is unsized; a string buffer needs a positive item size.", nameof(descr));
+            if (!descr.isnative)
+                throw new ArgumentException($"{descr.ToString(true)} is not native-endian; string buffers are stored in host order.", nameof(descr));
+            return meta;
         }
 
         /// <summary>The raw buffer: <see cref="Count"/> × <see cref="ItemSize"/> bytes.</summary>
@@ -209,7 +259,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">The number of elements.</param>
         /// <returns>A string slice over the same bytes.</returns>
         public IArraySlice Slice(long start, long count)
-            => new StringArraySlice(Bytes.Slice(start * ItemSize, count * ItemSize), Descr);
+            => new StringArraySlice(Bytes.Slice(start * ItemSize, count * ItemSize), Descr, ItemSize, Chars, IsUnicode, count);
 
         /// <summary>A deep copy of the elements (fresh buffer, same descriptor).</summary>
         /// <returns>The copy.</returns>

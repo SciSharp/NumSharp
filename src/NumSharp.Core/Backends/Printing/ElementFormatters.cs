@@ -31,6 +31,28 @@ namespace NumSharp.Backends.Printing
     }
 
     /// <summary>
+    ///     The element formatter of a <c>numpy.char.chararray</c> with one or more axes: NumPy's <c>_formatArray</c> reads
+    ///     each element through <c>chararray.__getitem__</c>, so a <c>str</c> / <c>bytes</c> element is printed with its
+    ///     trailing whitespace stripped (<c>chararray(['a', ' b'], dtype='&lt;U2')</c> for <c>['a\t', ' b']</c>). The line
+    ///     wrapping then measures the stripped texts, as NumPy's does.
+    /// </summary>
+    internal sealed class StrippedTextReprFormat : IElementFormatter
+    {
+        /// <summary>The formatter of the unstripped data (<see cref="StringReprFormat"/>).</summary>
+        private readonly IElementFormatter _inner;
+
+        /// <summary>Wraps the formatter NumPy builds over the array's plain data.</summary>
+        /// <param name="inner">The formatter that prints one (stripped) element.</param>
+        internal StrippedTextReprFormat(IElementFormatter inner) => _inner = inner;
+
+        /// <summary>Formats one element as <c>chararray.__getitem__</c> returns it.</summary>
+        /// <param name="value">The element as the string storage reads it (<see cref="string"/> for <c>U</c>, <c>byte[]</c>
+        ///     for <c>S</c>, trailing NULs already stripped).</param>
+        /// <returns>The stripped value's repr.</returns>
+        public string Format(object value) => _inner.Format(NDCharArray.StripValue(value));
+    }
+
+    /// <summary>
     ///     NumPy's <c>numpystr</c> formatter for a NEP 55 <c>StringDType</c> array: <c>repr()</c> of each element OBJECT, never
     ///     padded - a text prints quoted with CPython's escapes (<c>'a'</c>, <c>"a'b"</c>, <c>'e\nf'</c>), an NA element prints
     ///     the repr of the descriptor's NA object (<c>None</c>, <c>nan</c>, <c>'NA'</c>).

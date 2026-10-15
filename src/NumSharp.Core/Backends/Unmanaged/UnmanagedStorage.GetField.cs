@@ -73,12 +73,12 @@ namespace NumSharp.Backends
             int ndim = dims.Length;
 
             // Empty array: no bytes to alias. Keep the dims, change only the dtype (validation already
-            // ran, since NumPy rejects an oversized field even on an empty array). A fresh C-order empty
-            // storage of the new dtype is the observable result (shape preserved, dtype changed).
+            // ran, since NumPy rejects an oversized field even on an empty array). A C-order empty storage of
+            // the new dtype that is still a VIEW of this one (EmptyFieldView) is the observable result.
             if (_shape.size == 0 || InternalArray == null)
             {
                 var emptyShape = ndim == 0 ? Shape.NewScalar() : Shape.Adopt((long[])dims.Clone(), 'C');
-                return new UnmanagedStorage(ArraySlice.Allocate(InfoOf<T>.NPTypeCode, emptyShape.size, false), emptyShape) { Engine = Engine };
+                return EmptyFieldView(ArraySlice.Allocate(InfoOf<T>.NPTypeCode, emptyShape.size, false), emptyShape);
             }
 
             // Element strides (old dtype) -> new-dtype element strides, keeping the BYTE stride constant.
@@ -201,15 +201,15 @@ namespace NumSharp.Backends
             var dims = _shape.dimensions;
             int ndim = dims.Length;
 
-            // Empty array: no bytes to alias - a fresh empty storage of the field dtype with the same dims (the numeric
-            // path's answer; NumPy's empty view addresses nothing either).
+            // Empty array: no bytes to alias - an empty storage of the field dtype with the same dims that is still a VIEW
+            // of this one (the numeric path's answer, EmptyFieldView; NumPy's empty view addresses nothing either).
             if (_shape.size == 0 || InternalArray == null)
             {
                 var emptyShape = ndim == 0 ? Shape.NewScalar() : Shape.Adopt((long[])dims.Clone(), 'C');
                 IArraySlice emptySlice = stringField
                     ? StringArraySlice.Allocate(descr, emptyShape.size, false)
                     : ArraySlice.Allocate(fieldCode, emptyShape.size, false);
-                return new UnmanagedStorage(emptySlice, emptyShape) { Engine = Engine };
+                return EmptyFieldView(emptySlice, emptyShape);
             }
 
             // Element strides (old dtype) -> field strides with the BYTE stride kept. An axis longer than 1 whose byte
@@ -255,6 +255,25 @@ namespace NumSharp.Backends
             r2.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL implies !OWNDATA)
             r2.Engine = Engine;
             return r2;
+        }
+
+        /// <summary>
+        ///     The result of a field view of an EMPTY array: a zero-length buffer of the field dtype that is still a VIEW of
+        ///     this storage. NumPy's <c>PyArray_GetField</c> builds a view whatever the size (<c>owndata</c> False, the base
+        ///     set, read-only when this array is), as <see cref="GetViewInternal"/>'s empty slice does; an owning result
+        ///     reported <c>flags.owndata</c> True and let <c>resize</c> treat the field as an independent array.
+        /// </summary>
+        /// <param name="slice">The zero-length buffer of the field dtype.</param>
+        /// <param name="shape">The field's (empty) shape.</param>
+        /// <returns>The empty view.</returns>
+        private UnmanagedStorage EmptyFieldView(IArraySlice slice, Shape shape)
+        {
+            if (!_shape.IsWriteable && shape.IsWriteable)
+                shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+            var empty = new UnmanagedStorage(slice, shape) { Engine = Engine };
+            empty._baseStorage = _baseStorage ?? this;
+            empty.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL implies !OWNDATA)
+            return empty;
         }
 
         #endregion

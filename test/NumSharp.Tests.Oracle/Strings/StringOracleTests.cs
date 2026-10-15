@@ -317,6 +317,19 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void TextSearching() => Run("strsearch");
 
         /// <summary>
+        ///     Section strchararray (the <c>numpy.char</c> plan's phase 2): <see cref="NDCharArray"/> as data. The constructor
+        ///     over shapes, widths, orders and every buffer kind (a str filler, bytes, a bytearray with offsets and strides, an
+        ///     ndarray, the refusals); <c>np.char.array</c> / <c>asarray</c> over every branch (str / bytes, lists, S / U arrays
+        ///     of every layout kind, numbers and bools through <c>tolist()</c>, StringDType, chararrays, Python scalars) with
+        ///     every <c>itemsize</c> / <c>copy</c> / <c>unicode</c> / <c>order</c>; element access through the three indexer
+        ///     spellings (the full integer index STRIPPED with Python's 29 whitespace code points / 6 bytes, every other index
+        ///     a chararray); iteration; the members that keep the class with NumPy's identities and finalize errors (the
+        ///     allocating ones recorded in isolated NumPy processes); <c>view(type)</c>; <c>repr</c> / <c>str</c>. Strict, but
+        ///     for the one documented class divergence (<see cref="ClassExcuse"/>).
+        /// </summary>
+        [TestMethod] public void CharArrayAsData() => Run("strchararray");
+
+        /// <summary>
         ///     Lifetime gate of the <c>StringDType</c> sections (strings phase 1, P1.9): once every case of tstore / tcreate /
         ///     tmove / tcast has been replayed and its arrays are garbage, no string allocator is left alive — every buffer the
         ///     replay made (operands, results, temporaries of the gathers, scatters and casts, failed operations) ran its clear
@@ -382,7 +395,7 @@ namespace NumSharp.Tests.Strings
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
                 "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
-                "storenone", "tma", "tio", "strsort", "strchar", "strsearch",
+                "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)
@@ -424,8 +437,9 @@ namespace NumSharp.Tests.Strings
                     failures.Add($"{c.Id} [{c.Layout}]: {message}");
             }
             int excused = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedLayouts.ContainsKey(c.Id));
+            int excusedClass = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedClasses.ContainsKey(c.Id));
             Console.WriteLine($"[strings/{section}] {total} cases, {deferred} deferred to the computational phase, " +
-                              $"{excused} with an excused layout, {failures.Count} failed");
+                              $"{excused} with an excused layout, {excusedClass} with an excused class, {failures.Count} failed");
             var listDeferred = Environment.GetEnvironmentVariable(ListDeferredVariable);
             if (!string.IsNullOrEmpty(listDeferred) && listDeferred != "0")
                 foreach (var d in deferredCases)
@@ -498,6 +512,17 @@ namespace NumSharp.Tests.Strings
                 return CompareError(c.Error, e, out message) ? Outcome.Passed : Outcome.Failed;
             }
 
+            // A call whose identity with its receiver is part of NumPy's answer (section strchararray: astype(copy=False),
+            // real, squeeze(), to_device, np.char.asarray of a chararray) comes back paired with that receiver.
+            object receiver = null;
+            bool hasReceiver = false;
+            if (result is StringOracleOps.SelfResult paired)
+            {
+                result = paired.Result;
+                receiver = paired.Receiver;
+                hasReceiver = true;
+            }
+
             if (c.Error is not null)
             {
                 message = $"NumPy raises {c.Error.Type}: {Shorten(c.Error.Text)} — NumSharp returned {Describe(result)}";
@@ -506,7 +531,22 @@ namespace NumSharp.Tests.Strings
             try
             {
                 var diffs = new List<string>();
-                Compare(c.Expected, result, layoutExcuse is null ? ops : null, diffs, compareLayout: layoutExcuse is null);
+                // The one class divergence of section strchararray (ClassExcuse): the result's class is compared with the
+                // class NumSharp's typed API returns there, everything else with NumPy's answer.
+                var classExcuse = ClassExcuse(c);
+                if (classExcuse != null)
+                    ExcusedClasses.TryAdd(c.Id, classExcuse);
+                Compare(c.Expected, result, layoutExcuse is null ? ops : null, diffs, compareLayout: layoutExcuse is null,
+                        wantClassOverride: classExcuse is null ? null : "chararray");
+                if (c.Expected.TryGetProperty("self", out var self))
+                {
+                    if (!hasReceiver)
+                        diffs.Add("NumPy's answer is compared with its receiver, but the replay returned no receiver");
+                    else if (ReferenceEquals(result, receiver) != self.GetBoolean())
+                        diffs.Add(self.GetBoolean()
+                            ? "NumPy returns the receiver ITSELF, NumSharp a new object"
+                            : "NumPy returns a new object, NumSharp the receiver itself");
+                }
                 if (diffs.Count == 0)
                     return Outcome.Passed;
                 message = string.Join("; ", diffs);
@@ -546,6 +586,9 @@ namespace NumSharp.Tests.Strings
             // numpy.ma's rank checks (compress_rowcols / mask_rowcols on a non-2-D array) raise NotImplementedError; the
             // .NET class with that meaning is NotImplementedException (the message is matched verbatim).
             ["NotImplementedError"] = new[] { "NotImplementedException" },
+            // np.char.array of an empty str / bytes, or with itemsize 0: NumPy's `len(obj) // itemsize` raises Python's
+            // ZeroDivisionError; .NET's class with that meaning is DivideByZeroException (the message is matched verbatim).
+            ["ZeroDivisionError"] = new[] { "DivideByZeroException" },
         };
 
         /// <summary>Compares NumSharp's exception with NumPy's: a corresponding class and the identical message.</summary>
@@ -610,6 +653,15 @@ namespace NumSharp.Tests.Strings
             if (c.Op == "ma1" && c.Layout is "MU2" or "MT2" && c.Params is not null && c.Params.TryGetValue("name", out var maName)
                 && maName.GetString() is "compress_nd" or "compress_rowcols" or "compress_cols")
                 return "compress_nd's column selection is a fancy index behind a slice: NumPy's transposed MapIter view (OpenBugs.FancyIndex)";
+            // Section strchararray's element access: an ADVANCED entry (an index array, a mask, a 0-d integer array, a scalar
+            // bool) over a source that is not C-contiguous. NumPy's MapIter (and HAS_SCALAR_ARRAY's KEEPORDER copy) lays
+            // the other axes out in the SOURCE's memory order; NumSharp's advanced indexing of a numeric array returns them
+            // C-ordered (OpenBugs.FancyIndex), and a string array's unit route re-tags a C-contiguous unit result.
+            if (c.Op == "cha_item" && c.Params is not null && c.Params.TryGetValue("index", out var chaIndex)
+                && chaIndex.EnumerateArray().Any(e => e.TryGetProperty("a", out _) || e.TryGetProperty("z", out _)
+                                                      || e.TryGetProperty("m", out _) || e.TryGetProperty("b", out _))
+                && !IsCContiguous(c.Operands[0]))
+                return "advanced index of a non-C source: NumPy keeps the source's memory order for the other axes (OpenBugs.FancyIndex)";
             if (c.Op != "getitem" || c.Params is null || !c.Params.TryGetValue("index", out var index))
                 return null;
             bool basicSeen = false;
@@ -623,20 +675,104 @@ namespace NumSharp.Tests.Strings
             return null;
         }
 
+        /// <summary>Whether an operand descriptor is a C-contiguous view (its strides are C's on every axis longer than 1; an
+        ///     empty view is).</summary>
+        /// <param name="o">The operand descriptor.</param>
+        /// <returns>True for a C-contiguous layout.</returns>
+        private static bool IsCContiguous(StringOracleCorpus.Operand o)
+        {
+            long expected = 1;
+            for (int d = o.Shape.Length - 1; d >= 0; d--)
+            {
+                if (o.Shape[d] == 0)
+                    return true;
+                if (o.Shape[d] != 1 && o.Strides[d] != expected)
+                    return false;
+                expected *= o.Shape[d];
+            }
+            return true;
+        }
+
+        /// <summary>
+        ///     The cases whose result CLASS is a known, documented divergence, keyed by case id with the reason; the result is
+        ///     still compared in full (values, layout, flags, identity), its class against the class NumSharp's API returns.
+        /// </summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> ExcusedClasses = new();
+
+        /// <summary>
+        ///     The one known class divergence: <c>np.char.array(obj, order=...)</c> / <c>np.char.asarray(obj, order=...)</c>
+        ///     of string data (an <c>S</c> / <c>U</c> ndarray or chararray, or a list NumPy turns into one). NumPy's
+        ///     <c>array</c> then runs <c>np.asarray(obj, order=order)</c>, which drops the subclass, so it returns a PLAIN
+        ///     ndarray — while every other branch of the same function returns a chararray. <c>np.@char.array</c> is typed
+        ///     <see cref="NDCharArray"/>, so NumSharp returns a chararray holding the same data with the same layout and
+        ///     flags (documented in <c>docs/plans/np-char.md</c> and on <see cref="CharModule"/>).
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>The reason, or null when the class must match NumPy's.</returns>
+        private static string ClassExcuse(StringOracleCorpus.Case c)
+        {
+            if (c.Op is not ("cha_array" or "cha_asarray") || c.Params is null || !c.Params.ContainsKey("order"))
+                return null;
+            if (c.Expected.ValueKind != JsonValueKind.Object || !c.Expected.TryGetProperty("class", out var cls)
+                || cls.GetString() != "ndarray")
+                return null;
+            return "np.char.array with order= over string data: NumPy's np.asarray drops the chararray class";
+        }
+
         /// <summary>Dispatches on the expectation kind.</summary>
         /// <param name="exp">The expectation.</param>
         /// <param name="result">NumSharp's result.</param>
         /// <param name="ops">The operands (for memory sharing and mutation checks), or null to skip memory sharing.</param>
         /// <param name="diffs">Receives the divergences.</param>
         /// <param name="compareLayout">False to compare values only (a <see cref="LayoutExcuse"/>d case).</param>
-        private static void Compare(JsonElement exp, object result, NDArray[] ops, List<string> diffs, bool compareLayout = true)
+        /// <param name="wantClassOverride">The array class to require instead of the expectation's <c>class</c> (a
+        ///     <see cref="ClassExcuse"/>d case), or null.</param>
+        private static void Compare(JsonElement exp, object result, NDArray[] ops, List<string> diffs, bool compareLayout = true,
+                                    string wantClassOverride = null)
         {
             string kind = exp.GetProperty("kind").GetString();
             switch (kind)
             {
                 case "array":
-                    CompareArray(exp, AsArray(result), ops, diffs, "", compareLayout);
+                    CompareArray(exp, AsArray(result), ops, diffs, "", compareLayout, wantClassOverride);
                     break;
+                case "element":
+                    CompareElement(exp, result, diffs);
+                    break;
+                case "items":
+                {
+                    // NumPy's list(chararray): each item by its own kind (a stripped element or a chararray row), the
+                    // item's index prefixed to its divergences.
+                    var want = exp.GetProperty("items").EnumerateArray().ToArray();
+                    if (result is not object[] items)
+                    {
+                        diffs.Add($"expected a list of {want.Length} items, got {Describe(result)}");
+                        return;
+                    }
+                    if (items.Length != want.Length)
+                    {
+                        diffs.Add($"{items.Length} items, NumPy {want.Length}");
+                        return;
+                    }
+                    for (int i = 0; i < items.Length; i++)
+                    {
+                        int before = diffs.Count;
+                        Compare(want[i], items[i], ops, diffs, compareLayout);
+                        for (int j = before; j < diffs.Count; j++)
+                            diffs[j] = $"[{i}] {diffs[j]}";
+                    }
+                    break;
+                }
+                case "pyvalue":
+                {
+                    // A Python value (item() / tolist()): a Python int equals an integer of any CLR width, a float a
+                    // double / float / Half, text ordinally, bytes by content, lists element by element.
+                    var want = StringOracleCorpus.Decode(exp.GetProperty("value"));
+                    var got = AsValue(result);
+                    if (!PyValueEquals(want, got))
+                        diffs.Add($"value {Show(got)} != NumPy {Show(want)}");
+                    break;
+                }
                 case "tuple":
                 {
                     var items = AsArrays(result);
@@ -912,13 +1048,23 @@ namespace NumSharp.Tests.Strings
         /// <param name="diffs">Receives the divergences.</param>
         /// <param name="prefix">A label for tuple items and mutation views.</param>
         /// <param name="compareLayout">False to compare the descriptor, shape and bytes only.</param>
+        /// <param name="wantClassOverride">The array class to require instead of the expectation's <c>class</c>, or null.</param>
         private static void CompareArray(JsonElement exp, NDArray r, NDArray[] ops, List<string> diffs, string prefix,
-                                         bool compareLayout = true)
+                                         bool compareLayout = true, string wantClassOverride = null)
         {
             if (r is null)
             {
                 diffs.Add(prefix + "expected an array, got null");
                 return;
+            }
+            // Section strchararray records the result's CLASS (chararray / ndarray / matrix): a chararray member that
+            // drops the subclass, or a plain call that invents it, fails here even when its data is NumPy's.
+            if (exp.TryGetProperty("class", out var wantClass))
+            {
+                string want = wantClassOverride ?? wantClass.GetString();
+                string got = r is NDCharArray ? "chararray" : r is NDMatrix ? "matrix" : "ndarray";
+                if (got != want)
+                    diffs.Add($"{prefix}class {got} != NumPy {want}");
             }
             string wantDtype = exp.GetProperty("dtype").GetString();
             if (r.dtype.str != wantDtype)
@@ -939,8 +1085,10 @@ namespace NumSharp.Tests.Strings
                 // object and coerce; its cells are allocator-specific).
                 CompareVStringValues(tvalues, r, diffs, prefix);
             }
-            else
+            else if (exp.GetProperty("buffer").ValueKind != JsonValueKind.Null)
             {
+                // A null buffer is data NumPy left uninitialized (an S chararray made without a buffer): only its
+                // descriptor, shape and layout are NumPy's.
                 var gotHex = Convert.ToHexString(StringOracleCorpus.CBytes(r)).ToLowerInvariant();
                 var wantHex = exp.GetProperty("buffer").GetString();
                 if (gotHex != wantHex)
@@ -1168,6 +1316,107 @@ namespace NumSharp.Tests.Strings
                 }
                 default: return Equals(want, got);
             }
+        }
+
+        /// <summary>
+        ///     Deep equality of decoded values with Python's number semantics (section strchararray's <c>item()</c> /
+        ///     <c>tolist()</c> of a chararray over numbers): a Python int equals an integer of any CLR width, a Python float a
+        ///     <see cref="double"/> / <see cref="float"/> / <see cref="Half"/> of the same value (NaN equal to NaN); text,
+        ///     bytes, None and lists as <see cref="ValueEquals"/>.
+        /// </summary>
+        /// <param name="want">NumPy's decoded value.</param>
+        /// <param name="got">NumSharp's value (<see cref="AsValue"/>).</param>
+        /// <returns>True when they are the same Python value.</returns>
+        private static bool PyValueEquals(object want, object got)
+        {
+            switch (want)
+            {
+                case long wl:
+                    // Convert.ToDecimal refuses a char: its code point is the number.
+                    return got is sbyte or byte or short or ushort or int or uint or long or ulong or char
+                           && Convert.ToDecimal(got is char ch ? (int)ch : got) == wl;
+                case double wd:
+                {
+                    double? g = got switch { double d => d, float f => f, Half h => (double)h, _ => null };
+                    return g is double gd && (gd.Equals(wd) || double.IsNaN(gd) && double.IsNaN(wd));
+                }
+                case List<object> wl2:
+                {
+                    if (got is not IList gl || got is byte[] || gl.Count != wl2.Count)
+                        return false;
+                    for (int i = 0; i < wl2.Count; i++)
+                        if (!PyValueEquals(wl2[i], gl[i]))
+                            return false;
+                    return true;
+                }
+                default:
+                    return ValueEquals(want, got);
+            }
+        }
+
+        /// <summary>
+        ///     Compares a scalar element (section strchararray's <c>element</c> kind) with NumPy's: <c>py</c> is the Python
+        ///     type of NumPy's answer — <c>str</c> / <c>bytes</c> (an element <c>__getitem__</c> STRIPPED), <c>str_</c> /
+        ///     <c>bytes_</c> (NumPy's unstripped scalar: <c>c.flat[i]</c>, <c>c.take(i)</c>), or a numeric dtype name
+        ///     (<c>uint32</c>: an element of a chararray over numbers). NumSharp answers with a read-only 0-d stand-in (the
+        ///     chararray indexer, <c>take</c>) or the element itself (the flat iterator); either way the value is compared, and
+        ///     a stand-in must be read-only (NumPy's scalar is immutable).
+        /// </summary>
+        /// <param name="exp">The element expectation (<c>py</c>, <c>value</c>).</param>
+        /// <param name="result">NumSharp's result.</param>
+        /// <param name="diffs">Receives the divergences.</param>
+        /// <remarks>
+        ///     A stripped text that ENDS in a NUL (<c>'a\0'</c>, the rstrip of <c>'a\0 '</c>) cannot be held by a fixed-width
+        ///     stand-in, whose storage drops trailing NULs as every <c>S</c> / <c>U</c> element does: NumPy's value is compared
+        ///     without its trailing NULs (pinned by the unit tests, <c>CharArrayTests</c>).
+        /// </remarks>
+        private static void CompareElement(JsonElement exp, object result, List<string> diffs)
+        {
+            string py = exp.GetProperty("py").GetString();
+            var want = StringOracleCorpus.Decode(exp.GetProperty("value"));
+            if (result is NDArray nd && nd.ndim != 0)
+            {
+                diffs.Add($"expected a {py} scalar, got {Describe(result)}");
+                return;
+            }
+            object got = result is NDArray zero ? zero.item() : result;
+            // Only a 0-d stand-in may lack the trailing NULs of NumPy's value (see the remarks); a .NET string / byte[]
+            // (the chararray enumerator's items, the flat iterator's element) must be the value exactly.
+            bool standIn = result is NDArray;
+            switch (py)
+            {
+                case "str":
+                case "str_":
+                {
+                    var ws = (string)want;
+                    if (got is not string gs || gs != ws && !(standIn && gs == ws.TrimEnd('\0')))
+                        diffs.Add($"element {Show(got)} != NumPy {py} {Show(want)}");
+                    break;
+                }
+                case "bytes":
+                case "bytes_":
+                {
+                    var wb = (byte[])want;
+                    int n = wb.Length;
+                    while (standIn && n > 0 && wb[n - 1] == 0)
+                        n--;
+                    if (got is not byte[] gb || !gb.AsSpan().SequenceEqual(wb.AsSpan(0, n)))
+                        diffs.Add($"element {Show(got)} != NumPy {py} {Show(want)}");
+                    break;
+                }
+                default:
+                {
+                    // A NumPy number: its dtype (the stand-in's, or the CLR type's) and its value.
+                    string gotDtype = result is NDArray s0 ? s0.dtype.name : got is null ? "null" : ((DType)got.GetType()).name;
+                    if (gotDtype != py)
+                        diffs.Add($"element dtype {gotDtype} != NumPy {py}");
+                    if (!PyValueEquals(want, got))
+                        diffs.Add($"element {Show(got)} != NumPy {py} {Show(want)}");
+                    break;
+                }
+            }
+            if (result is NDArray scalarArray && scalarArray.flags.writeable)
+                diffs.Add("the element's 0-d stand-in is writeable (NumPy's scalar is immutable)");
         }
 
         /// <summary>The decoded text of a string array (diagnostics), or its bytes otherwise.</summary>

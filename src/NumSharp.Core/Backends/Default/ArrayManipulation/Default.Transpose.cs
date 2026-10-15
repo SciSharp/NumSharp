@@ -272,14 +272,32 @@ namespace NumSharp.Backends
             //
             // No data copy is needed - transpose is always O(1).
             // The transposed shape shares memory with the original.
-            var shape = nd.Shape;
+            var newShape = TransposedShape(nd.Shape, permutation);
+
+            // Return an alias (view) with the permuted shape. Alias() inherits writeability from the
+            // source, so transposing a read-only array (broadcast / 'r' memmap) stays read-only.
+            return new NDArray(nd.Storage.Alias(newShape)) { TensorEngine = nd.TensorEngine };
+        }
+
+        /// <summary>
+        ///     The shape of a transposed VIEW (<c>PyArray_Transpose</c>'s new array): axis <c>i</c> of the result is axis
+        ///     <c>permutation[i]</c> of <paramref name="shape"/>, dimensions and strides alike; the offset and the buffer stay,
+        ///     so the view reads the same memory. Shared by <see cref="Transpose"/> and the subclasses that build their own
+        ///     view object over the same storage (<c>NDCharArray.T</c>).
+        /// </summary>
+        /// <param name="shape">The source shape.</param>
+        /// <param name="permutation">A validated permutation of the source axes (one entry per axis, each once).</param>
+        /// <returns>The permuted shape; its contiguity flags are computed from the permuted strides.</returns>
+        internal static Shape TransposedShape(in Shape shape, int[] permutation)
+        {
+            int n = permutation.Length;
             var srcDims = shape.dimensions;
             var srcStrides = shape.strides;
 
             // Permute dimensions and strides
             var permutedDims = new long[n];
             var permutedStrides = new long[n];
-            for (i = 0; i < n; i++)
+            for (int i = 0; i < n; i++)
             {
                 permutedDims[i] = srcDims[permutation[i]];
                 permutedStrides[i] = srcStrides[permutation[i]];
@@ -288,11 +306,21 @@ namespace NumSharp.Backends
             // Create the transposed shape via constructor (immutable)
             // IsContiguous is computed from strides and will be false for transposed arrays
             long bufSize = shape.bufferSize > 0 ? shape.bufferSize : shape.size;
-            var newShape = new Shape(permutedDims, permutedStrides, shape.offset, bufSize);
+            return new Shape(permutedDims, permutedStrides, shape.offset, bufSize);
+        }
 
-            // Return an alias (view) with the permuted shape. Alias() inherits writeability from the
-            // source, so transposing a read-only array (broadcast / 'r' memmap) stays read-only.
-            return new NDArray(nd.Storage.Alias(newShape)) { TensorEngine = nd.TensorEngine };
+        /// <summary>
+        ///     The shape of <c>a.T</c> (<see cref="Transpose"/> with no permutation): the axes reversed.
+        /// </summary>
+        /// <param name="shape">The source shape.</param>
+        /// <returns>The reversed-axes shape (see <see cref="TransposedShape(in Shape, int[])"/>).</returns>
+        internal static Shape ReversedAxesShape(in Shape shape)
+        {
+            int n = shape.NDim;
+            var permutation = new int[n];
+            for (int i = 0; i < n; i++)
+                permutation[i] = n - 1 - i;
+            return TransposedShape(shape, permutation);
         }
     }
 }

@@ -21,8 +21,11 @@ namespace NumSharp.Tests
     //   * Silent wrong values: np.dot of an N-D operand with an M-D one computes complex128 in float64 (MX10), the
     //     flat np.prod in a cast loop returns NaN / garbage or throws (MX08).
     //   * A crash: fancy assignment with two index entries into a C-contiguous view at an offset (MX07).
-    //   * Result LAYOUT (values equal): np.cumsum / np.cumprod (MX02), ndarray.imag of a real F array (MX03),
-    //     ndarray.round of a broadcast operand (MX04), np.conjugate of a transposed strided view (MX05).
+    //   * Result LAYOUT (values equal): np.cumsum / np.cumprod (MX02), ndarray.round of a broadcast operand (MX04),
+    //     np.conjugate of a transposed strided view (MX05).
+    //
+    // FIXED 2026-10-15 (the numpy.char phase-2 work): ndarray.imag of a real F array is F-ordered (MX03); its pin stays
+    // below as a regression test, untagged, its summary opening with "FIXED".
     //
     // Not repeated here, because an older file already pins the same root cause: the fancy getter's result layout
     // (MX01: OpenBugs.FancyIndex.cs, group 2), reshape(-1) of a broadcast view (MX06: OpenBugs.ViewFlags.cs, VF24),
@@ -114,10 +117,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>a.imag</c> of a real F-contiguous array: NumPy allocates the zeros in Fortran order
-        ///     (<c>PyArray_ISFORTRAN(self)</c>). NumSharp allocates C order (gap MX03).
+        ///     FIXED by the numpy.char phase-2 work (2026-10-15: <c>np.imag</c> of a non-complex array allocates in
+        ///     <c>PyArray_ISFORTRAN(self)</c>'s order): NumSharp gives NumPy's answer now, and this test pins it; the matrix
+        ///     tier's 15 MX03 cells are back in the gate. Before the fix: <c>a.imag</c> of a real F-contiguous array came back
+        ///     C-ordered, where NumPy allocates the zeros in Fortran order (gap MX03).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "matrix-MX03")]
+        [TestMethod]
         public void Matrix_ImagOfARealFArray_ShouldBeFOrdered()
         {
             using var c = np.arange(1, 7).reshape(2, 3);

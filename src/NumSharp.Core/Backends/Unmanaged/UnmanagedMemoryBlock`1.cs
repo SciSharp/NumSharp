@@ -1181,21 +1181,26 @@ namespace NumSharp.Backends.Unmanaged
             ///     <see cref="AllocationType.Native"/> these buffers are NOT
             ///     pooled — they are released straight back to the OS via
             ///     <see cref="OsVirtualMemory.Free"/> (instant for the pages
-            ///     never faulted in), so this disposer OWNS its GC pressure
-            ///     (registered here, released on free) the same way the
-            ///     External path does.
+            ///     never faulted in). The memory is reported the way the pool reports
+            ///     its own hand-outs, through
+            ///     <see cref="Pooling.SizeBucketedBufferPool.AccountForeignAllocation"/>
+            ///     (coarse pressure chunks while it is outstanding, and the pacing window),
+            ///     registered here and released on free.
             /// </summary>
             /// <param name="address">Base address from <see cref="OsVirtualMemory.Alloc"/>.</param>
-            /// <param name="bytesCount">Allocation size in bytes (GC pressure).</param>
+            /// <param name="bytesCount">Allocation size in bytes (accounted as outstanding memory).</param>
             /// <param name="virtualAlloc">Discriminates this ctor from the Native one; always true.</param>
+            /// <remarks>A <see cref="GC.AddMemoryPressure"/> per block (the former accounting) counted every short-lived
+            ///     block toward the GC's pressure trigger even after its <see cref="GC.RemoveMemoryPressure"/>: a loop of
+            ///     <c>np.zeros(400_000)</c> (3.2 MB each, disposed at once) ran a gen-2 collection about every 150
+            ///     allocations, which in a process with a large managed heap is the whole cost of the loop.</remarks>
             public Disposer(IntPtr address, long bytesCount, bool virtualAlloc)
             {
                 Address = address;
                 _bytesCount = bytesCount;
                 _type = AllocationType.Virtual;
 
-                if (bytesCount > 0)
-                    GC.AddMemoryPressure(bytesCount);
+                Pooling.SizeBucketedBufferPool.AccountForeignAllocation(bytesCount);
             }
 
             /// <summary>
@@ -1297,8 +1302,7 @@ namespace NumSharp.Backends.Unmanaged
                         // VirtualFree is instant for pages that were never
                         // faulted in — the common np.zeros-then-drop case.
                         Pooling.OsVirtualMemory.Free(Address);
-                        if (_bytesCount > 0)
-                            GC.RemoveMemoryPressure(_bytesCount);
+                        Pooling.SizeBucketedBufferPool.AccountForeignRelease(_bytesCount);
                         return;
                     case AllocationType.External:
                         _dispose();

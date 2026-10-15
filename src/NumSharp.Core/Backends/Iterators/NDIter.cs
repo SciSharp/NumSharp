@@ -4891,28 +4891,7 @@ namespace NumSharp.Backends.Iteration
             if (src is null) throw new ArgumentNullException(nameof(src));
 
             engine = engine ?? src.TensorEngine;
-            Shape srcShape = src.Shape;
-
-            // 0-D scalar has no axes to order; everything else allocates with the resolved layout
-            // (KEEPORDER lets an F-contiguous / transposed source cast as a single flat pass).
-            Shape outShape;
-            if (srcShape.NDim == 0)
-                outShape = Shape.NewScalar();
-            else if ((order == 'K' || order == 'k') && !srcShape.IsContiguous && !srcShape.IsFContiguous)
-            {
-                // True KEEPORDER (PyArray_NewLikeArray NPY_KEEPORDER): a neither-contiguous source
-                // allocates along its SORTED STRIDE PERM rather than collapsing to C — a 3-D
-                // transpose keeps its exact stride order (a neither-contiguous owned result) and a
-                // broadcast's stride-0 axes sort slowest (F-ish layout). Probed NumPy 2.4.2 via
-                // copy/astype/np.sort order='K'. Sources that ARE C- or F-contiguous fall through
-                // to the binary resolve below, which is exact for them.
-                outShape = srcShape.KeepOrder();
-            }
-            else
-            {
-                char physical = OrderResolver.Resolve(order, srcShape);
-                outShape = Shape.Adopt((long[])srcShape.dimensions.Clone(), physical);
-            }
+            Shape outShape = CopyAsShape(src.Shape, order);
 
             // Every byte of dst is written by the copy, so a U result skips NumPy's NEEDS_INIT zero fill (ForOverwrite);
             // a failing copy (an S <-> U conversion error) disposes it rather than hand out its undefined bytes.
@@ -4928,6 +4907,44 @@ namespace NumSharp.Backends.Iteration
                 throw;
             }
             return dst;
+        }
+
+        /// <summary>
+        ///     The layout <see cref="CopyAs"/> allocates for a copy of an array of <paramref name="srcShape"/> in
+        ///     <paramref name="order"/>: a fresh C / F layout resolved by <see cref="OrderResolver"/> (<c>'A'</c> keeps F only for
+        ///     a strictly F-contiguous source), NumPy's KEEPORDER stride permutation for <c>'K'</c> over a source that is neither
+        ///     C- nor F-contiguous, and a scalar shape for a 0-d source (no axes to order). Shared with the subclasses that
+        ///     allocate their own copy (<c>NDCharArray.copy</c>), so both produce the same layout.
+        /// </summary>
+        /// <param name="srcShape">The source layout.</param>
+        /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c> (either case).</param>
+        /// <returns>The result layout: owning, offset 0, writeable.</returns>
+        /// <exception cref="ArgumentException">An unknown order (<see cref="OrderResolver.Resolve"/>), for a source with at
+        ///     least one axis.</exception>
+        internal static Shape CopyAsShape(in Shape srcShape, char order)
+        {
+            // 0-D scalar has no axes to order; everything else allocates with the resolved layout
+            // (KEEPORDER lets an F-contiguous / transposed source cast as a single flat pass).
+            if (srcShape.NDim == 0)
+                return Shape.NewScalar();
+            if ((order == 'K' || order == 'k') && !srcShape.IsContiguous && !srcShape.IsFContiguous)
+            {
+                // True KEEPORDER (PyArray_NewLikeArray NPY_KEEPORDER): a neither-contiguous source
+                // allocates along its SORTED STRIDE PERM rather than collapsing to C — a 3-D
+                // transpose keeps its exact stride order (a neither-contiguous owned result) and a
+                // broadcast's stride-0 axes sort slowest (F-ish layout). Probed NumPy 2.4.2 via
+                // copy/astype/np.sort order='K'. Sources that ARE C- or F-contiguous fall through
+                // to the binary resolve below, which is exact for them.
+                return srcShape.KeepOrder();
+            }
+
+            char physical = OrderResolver.Resolve(order, srcShape);
+            // A C result over a source that already IS the C layout of a fresh buffer (offset 0, the exact C strides):
+            // AsClean returns the source's shape, sharing its dimension and stride arrays (shapes never write into them),
+            // where a rebuild cloned the dimensions and recomputed the strides on every copy. Its flags are the source's;
+            // the allocator re-sets what a fresh buffer reports (writeable, owner, aligned). Any other source gets
+            // Clean()'s new C layout — the same as Shape.Adopt(dims, 'C').
+            return physical == 'C' ? srcShape.AsClean() : Shape.Adopt((long[])srcShape.dimensions.Clone(), physical);
         }
 
         /// <inheritdoc cref="Copy(NDArray, NDArray)"/>

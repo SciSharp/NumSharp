@@ -824,6 +824,43 @@ namespace NumSharp.Tests.Creation
             result.Should().BeShaped(3);
         }
 
+        /// <summary>
+        ///     A rectangular <c>object[,]</c> is NumPy's nested list of its rows: <c>np.asarray([[1, 2.5], [3, 4]])</c> is the
+        ///     (2, 2) float64 array, C-contiguous and owning its data (probed 2.4.2). It threw "Cannot interpret 'System.Object'
+        ///     as a data type" until np.char.array's oracle section reached it (2026-10-15).
+        /// </summary>
+        [TestMethod]
+        public void ObjectGrid_IsANestedListOfRows()
+        {
+            var result = np.asanyarray(new object[,] { { 1L, 2.5 }, { 3L, 4L } });
+
+            result.dtype.Should().Be(np.float64);
+            result.shape.Should().Equal(2L, 2L);
+            result.ToArray<double>().Should().Equal(1.0, 2.5, 3.0, 4.0);
+            result.flags.c_contiguous.Should().BeTrue();
+            result.flags.owndata.Should().BeTrue();
+
+            var ints = np.asanyarray(new object[,,] { { { 1L }, { 2L } } });
+            ints.dtype.Should().Be(np.int64);
+            ints.shape.Should().Equal(1L, 2L, 1L);
+        }
+
+        /// <summary>
+        ///     An empty grid keeps its dimensions as NumPy's float64 empty array (<c>np.asarray([[], []])</c> is (2, 0)); a
+        ///     null leaf (Python's None: NumPy's object dtype) is refused rather than dropped, which would shift every later
+        ///     leaf into the wrong cell.
+        /// </summary>
+        [TestMethod]
+        public void ObjectGrid_EmptyKeepsTheDims_NullIsRefused()
+        {
+            var empty = np.asanyarray(new object[2, 0]);
+            empty.dtype.Should().Be(np.float64);
+            empty.shape.Should().Equal(2L, 0L);
+
+            Action none = () => np.asanyarray(new object[,] { { 1L, null } });
+            none.Should().Throw<NotSupportedException>();
+        }
+
         #endregion
     }
 }

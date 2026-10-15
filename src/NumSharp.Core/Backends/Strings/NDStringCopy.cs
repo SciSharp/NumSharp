@@ -329,7 +329,7 @@ namespace NumSharp.Backends.Strings
         ///     of the same layout: a multi-dimensional copy is copied first (<c>raw_array_assign_array</c> sees the overlap),
         ///     and a 1-D one walks away from the overlap — either way every element reads its value from before the copy.
         /// </remarks>
-        private static bool TryCopyDenseBlock(UnmanagedStorage dst, UnmanagedStorage src)
+        internal static bool TryCopyDenseBlock(UnmanagedStorage dst, UnmanagedStorage src)
         {
             var dShape = dst.Shape;
             var sShape = src.Shape;

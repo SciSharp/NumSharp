@@ -72,6 +72,12 @@ namespace NumSharp
                     if (ret is null)
                         throw new NotSupportedException($"Unable to resolve asanyarray for object[] (length {objArr.Length}): element type is not a supported NumSharp dtype.");
                     break;
+                case Array grid when grid.Rank > 1 && grid.GetType().GetElementType() == typeof(object):
+                    // A rectangular object array (object[,], object[,,]) is NumPy's nested list of its rows,
+                    // np.asarray([[1, 2], [3, 4]]): its leaves promoted as a flat list's, laid out with its dims
+                    // (new NDArray(grid) cannot read an object element type).
+                    ret = ConvertObjectGrid(grid);
+                    break;
                 case Array array:
                     ret = new NDArray(array);
                     break;
@@ -252,6 +258,42 @@ namespace NumSharp
         /// </summary>
         private static NDArray ConvertNonGenericEnumerable(IEnumerable enumerable)
             => ConvertEnumerator(enumerable.GetEnumerator());
+
+        /// <summary>
+        ///     Converts a rectangular multi-dimensional <c>object</c> array (<c>object[,]</c>, <c>object[,,]</c>) the way NumPy
+        ///     converts the nested list of its rows: the leaves, read in C order (a multi-dimensional array enumerates
+        ///     row-major), promoted with the flat list's rule (<see cref="FindCommonNumericType"/>), then laid out with the
+        ///     array's dimensions. An empty grid is NumPy's float64 array of those dimensions
+        ///     (<c>np.asarray([[], []])</c> is <c>(2, 0)</c> float64).
+        /// </summary>
+        /// <param name="grid">The rectangular object array (rank 2 or more).</param>
+        /// <returns>A new C-contiguous array of the grid's dimensions.</returns>
+        /// <exception cref="NotSupportedException">A <c>null</c> leaf (Python's <c>None</c>: NumPy's object dtype, which
+        ///     NumSharp has no storage for), or a leaf that is not a number / bool (a nested list or a text, which the
+        ///     caller's text route takes before this one).</exception>
+        private static NDArray ConvertObjectGrid(Array grid)
+        {
+            var dims = new long[grid.Rank];
+            for (int d = 0; d < dims.Length; d++)
+                dims[d] = grid.GetLength(d);
+            if (grid.Length == 0)
+                return np.zeros(new Shape(dims), DType.Double);
+
+            var items = new List<object>(grid.Length);
+            foreach (var leaf in grid)
+            {
+                // ConvertEnumerator drops a null item of a flat list; inside a grid that would shift every later leaf
+                // into the wrong cell, so a None is refused instead (NumPy builds an object array here).
+                if (leaf is null)
+                    throw new NotSupportedException(
+                        "Unable to resolve asanyarray for an object grid holding null (Python's None): NumPy's object dtype has no NumSharp storage.");
+                items.Add(leaf);
+            }
+            // The flat array is fresh and C-contiguous with exactly the grid's element count, so its storage is relabelled
+            // with the grid's C layout in place (no copy; it keeps owning its data, as NumPy's result does).
+            var flat = ConvertObjectListToNDArray(items, FindCommonNumericType(items));
+            return NDArray.AdoptLayout(flat, Shape.Adopt(dims));
+        }
 
         /// <summary>
         ///     Converts a non-generic IEnumerator to an NDArray.

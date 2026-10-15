@@ -1,8 +1,10 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace NumSharp
 {
@@ -145,9 +147,58 @@ namespace NumSharp
         /// <summary>
         /// Parses Python array slice notation and returns an array of Slice objects
         /// </summary>
+        /// <param name="multi_slice_notation">Comma-separated terms: <c>start:stop:step</c>, an integer, <c>...</c>,
+        ///     <c>newaxis</c>.</param>
+        /// <returns>New slice objects, one per term; the caller may modify them.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="multi_slice_notation"/> is null.</exception>
+        /// <exception cref="ArgumentException">A term is not slice notation.</exception>
+        /// <remarks>Recent notations are answered from a bounded parse cache (512 notations, emptied when full); the result
+        ///     is always a fresh copy, so modifying it never reaches the cache.</remarks>
         public static Slice[] ParseSlices(string multi_slice_notation)
         {
-            return DimensionSeparatorRegex().Split(multi_slice_notation).Where(s => !string.IsNullOrWhiteSpace(s)).Select(token => new Slice(token)).ToArray();
+            // A notation seen before is answered from the parse cache with FRESH Slice objects (they are mutable, public
+            // classes: a caller that edits what it got must not edit the cached parse).
+            if (multi_slice_notation is not null && ParsedNotations.TryGetValue(multi_slice_notation, out var cached))
+                return CopyOf(cached);
+
+            var parsed = DimensionSeparatorRegex().Split(multi_slice_notation).Where(s => !string.IsNullOrWhiteSpace(s)).Select(token => new Slice(token)).ToArray();
+            // Bounded: past the capacity the cache is emptied and refilled, so notations built per call ($"{i}:{i + 2}")
+            // cost one insertion each and never grow it. A notation that fails to parse threw above and is never cached.
+            if (Interlocked.Increment(ref _parsedNotationCount) > ParsedNotationsCapacity)
+            {
+                ParsedNotations.Clear();
+                Interlocked.Exchange(ref _parsedNotationCount, 0);
+            }
+            ParsedNotations.TryAdd(multi_slice_notation, CopyOf(parsed));
+            return parsed;
+        }
+
+        /// <summary>
+        ///     The parses of the slice notations used recently, by notation: <see cref="ParseSlices"/> runs three generated
+        ///     regexes, a split and a LINQ pipeline per call (~1.3 µs for <c>"1:"</c>), while a lookup and a copy of the parsed
+        ///     slices cost ~40 ns, and indexing code repeats the same few notations.
+        /// </summary>
+        private static readonly ConcurrentDictionary<string, Slice[]> ParsedNotations = new(StringComparer.Ordinal);
+
+        /// <summary>The approximate number of insertions since <see cref="ParsedNotations"/> was last emptied.</summary>
+        private static int _parsedNotationCount;
+
+        /// <summary>The number of notations <see cref="ParsedNotations"/> holds before it is emptied.</summary>
+        private const int ParsedNotationsCapacity = 512;
+
+        /// <summary>A new array of new slices equal to <paramref name="slices"/>, field for field.</summary>
+        /// <param name="slices">The slices to copy.</param>
+        /// <returns>The copy; no object of it is shared with <paramref name="slices"/>.</returns>
+        private static Slice[] CopyOf(Slice[] slices)
+        {
+            var copy = new Slice[slices.Length];
+            for (int i = 0; i < slices.Length; i++)
+            {
+                var s = slices[i];
+                copy[i] = new Slice(s.Start, s.Stop, s.Step) { IsIndex = s.IsIndex, IsEllipsis = s.IsEllipsis, IsNewAxis = s.IsNewAxis };
+            }
+
+            return copy;
         }
 
         // ---------------------------------------------------------------------------------------------------------

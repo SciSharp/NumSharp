@@ -90,6 +90,11 @@ namespace NumSharp.Backends.Printing
             IElementFormatter formatFn = a.Storage.IsVString
                 ? new VStringReprFormat()
                 : BuildFormatFunction(reduced, a.typecode, a.ndim, opts);
+            // numpy.char.chararray: NumPy's _formatArray reads every element through the array's own __getitem__, which
+            // strips a chararray's text (the format function itself is built over np.asarray's unstripped data, and a 0-d
+            // array is formatted from np.asarray: unstripped). The run-time class decides, as type(arr) does in NumPy.
+            if (a is NDCharArray && a.ndim > 0 && a.Storage.IsFixedString)
+                formatFn = new StrippedTextReprFormat(formatFn);
 
             string nextLinePrefix = " " + new string(' ', prefix.Length);
             string summaryInsert = summarize ? "..." : "";

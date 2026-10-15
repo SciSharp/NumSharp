@@ -36,7 +36,10 @@ namespace NumSharp
             // exactly as NumPy's _IsWriteable allows for an owner).
             // The descriptor, not the storage lane: a string array's imaginary part is its own dtype filled with
             // empty strings (all-zero bytes), which only the descriptor can allocate (probed: np.imag(U3) is <U3 '').
-            var zeros = np.zeros(Shape.Adopt(val.Shape.dimensions), val.dtype);
+            // The layout is array_imag_get's PyArray_ISFORTRAN(self): F order for an F-contiguous array that is not also
+            // C-contiguous (a transposed C block's imaginary part is F-contiguous), C otherwise.
+            bool fortran = val.Shape.IsFContiguous && !val.Shape.IsContiguous;
+            var zeros = np.zeros(Shape.Adopt(val.Shape.dimensions, fortran ? 'F' : 'C'), val.dtype);
             zeros.Storage.SetShapeUnsafe(zeros.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
             return zeros;
         }

@@ -109,5 +109,46 @@ namespace NumSharp.Tests.Selection
             Action two = () => { var _ = a[np.zeros(new Shape(0, 3), np.@bool), Slice.All]; };
             two.Should().Throw<IndexError>().WithMessage("too many indices for array: array is 2-dimensional, but 3 were indexed");
         }
+
+        /// <summary>
+        ///     An integer index out of bounds is NumPy's IndexError naming the axis of THIS array, through every spelling of
+        ///     a basic index (slice notation, <see cref="Slice"/>s, the general indexer) and on every layout: a strided or
+        ///     transposed view's notation index raised .NET's <c>ArgumentException</c> ("Index 6 is out of bounds for the axis
+        ///     with size 6") until the numpy.char phase-2 oracle reached it (2026-10-15). A new axis consumes no axis, so it
+        ///     does not shift the number (probed 2.4.2).
+        /// </summary>
+        [TestMethod]
+        public void IntegerIndex_OutOfBounds_NamesTheAxis_OnEveryLayout()
+        {
+            var strided = np.arange(12)["::2"];
+            Action notation = () => { var _ = strided["6"]; };
+            notation.Should().Throw<IndexError>().Where(e => e.Message == "index 6 is out of bounds for axis 0 with size 6");
+            Action slices = () => { var _ = strided[Slice.Index(-7)]; };
+            slices.Should().Throw<IndexError>().Where(e => e.Message == "index -7 is out of bounds for axis 0 with size 6");
+
+            var transposed = np.arange(12).reshape(4, 3).T;
+            Action second = () => { var _ = transposed["0, 4"]; };
+            second.Should().Throw<IndexError>().Where(e => e.Message == "index 4 is out of bounds for axis 1 with size 4");
+            Action newAxis = () => { var _ = transposed["np.newaxis, 3"]; };
+            newAxis.Should().Throw<IndexError>().Where(e => e.Message == "index 3 is out of bounds for axis 0 with size 3");
+        }
+
+        /// <summary>
+        ///     Index 0 of an EMPTY axis is out of bounds too, after an ellipsis or a slice: <c>np.zeros((2, 0))[..., 0]</c> is
+        ///     <c>index 0 is out of bounds for axis 1 with size 0</c> (probed 2.4.2). The view path let it through and
+        ///     returned a (2,) array.
+        /// </summary>
+        [TestMethod]
+        public void IndexZero_OfAnEmptyAxis_IsOutOfBounds()
+        {
+            const string text = "index 0 is out of bounds for axis 1 with size 0";
+            var empty = np.zeros(new Shape(2, 0));
+            Action ellipsis = () => { var _ = empty["..., 0"]; };
+            ellipsis.Should().Throw<IndexError>().Where(e => e.Message == text);
+            Action slice = () => { var _ = empty[new Slice(null, null), Slice.Index(0)]; };
+            slice.Should().Throw<IndexError>().Where(e => e.Message == text);
+            Action general = () => { var _ = empty[new object[] { Slice.Ellipsis, 0 }]; };
+            general.Should().Throw<IndexError>().Where(e => e.Message == text);
+        }
     }
 }

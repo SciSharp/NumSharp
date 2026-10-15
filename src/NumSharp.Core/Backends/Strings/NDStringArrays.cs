@@ -713,6 +713,21 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="TypeError">The discovered width exceeds the class's maximum.</exception>
         internal static NDArray FromValues(long[] dims, IReadOnlyList<object> values, DType dtype) => Build(dims, values, dtype, 'C');
 
+        /// <summary>
+        ///     <see cref="FromValues(long[], IReadOnlyList{object}, DType)"/> with NumPy's <c>order</c> for an array built from
+        ///     Python objects (<c>np.array(list, dtype, order=order)</c>): the values are written in C order and an <c>'F'</c>
+        ///     request lays a multi-dimensional result out in column-major order.
+        /// </summary>
+        /// <param name="dims">The result dimensions (the values fill them in C order).</param>
+        /// <param name="values">The elements, one per position, as Python objects (text, bytes, numbers, None).</param>
+        /// <param name="dtype">A string dtype (sized: values truncate; unsized: the width is discovered), or null.</param>
+        /// <param name="order"><c>'F'</c> / <c>'f'</c> for a column-major result; any other (already validated) order is C.</param>
+        /// <returns>The new array.</returns>
+        /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
+        /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into <c>U</c>.</exception>
+        /// <exception cref="NotSupportedException">A value that has no text form NumPy would give it (an object).</exception>
+        internal static NDArray FromValues(long[] dims, IReadOnlyList<object> values, DType dtype, char order) => Build(dims, values, dtype, order);
+
         private static NDArray Build(long[] dims, IReadOnlyList<object> values, DType dtype, char order)
         {
             // StringDType: every element is a Python object stored by stringdtype_setitem (BuildVString).

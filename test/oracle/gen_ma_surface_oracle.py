@@ -1004,7 +1004,6 @@ GAPS = {
     "MS4": "ma.resize to a 0-d shape keeps the mask; NumPy sets the mask only when the result has dimensions (0-d: nomask)",
     "MS5": "ma.apply_over_axes returns a masked array where NumPy returns a plain ndarray (an unmasked reduction's scalar "
            "re-expanded by expand_dims)",
-    "MS15": "minimum_fill_value / maximum_fill_value refuse a dtype argument (NotSupportedException); NumPy reads it",
     "MS17": "ma.is_mask(a masked bool array) is False; NumPy's is_mask reads the dtype (bool -> True)",
     "MS18": "np.ma.size has no axis parameter",
     "MS19": "np.ma.ndenumerate has no compressed parameter (NumPy's compressed=False yields masked entries too)",
@@ -1087,8 +1086,6 @@ def _gap_of(c):
         return "MS4"
     if op == "apply_over_axes" and e.get("form") == "scalar" and len(e.get("shape", [])) >= 1:
         return "MS5"
-    if op in ("minimum_fill_value", "maximum_fill_value") and "dtype" in p:
-        return "MS15"
     if op == "is_mask" and p.get("arg") == "masked" and ops[0]["dtype"] == "bool":
         return "MS17"
     if op == "size" and "axis" in p:
