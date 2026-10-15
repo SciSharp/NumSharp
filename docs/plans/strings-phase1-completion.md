@@ -697,6 +697,18 @@ After this plan, phase 2 loses P2.4 and gains the `T` forms of P2.1–P2.6 plus 
     1 MB on this machine, NumPy 219–284 / 316–790 / 619–6,617 µs.
   - Gates (Release, `OpenBugs` and `HighMemory` excluded): unit 19,665 / 19,664 passed on net10.0 / net8.0, oracle 347
     passed (1 skipped).
+  - **The validation made durable**: the committed text I/O oracle tier (`test/oracle/gen_textio_oracle.py`, run with
+    Linux NumPy → `test/NumSharp.Tests.Oracle/TextIO/corpus/textio_<section>.jsonl`, 54,741 cases, 19 MB, replayed by
+    `TextIO/TextIOOracleTests.cs`, category `TextIOOracle`, zero excuses), eight sections: `fromtext` (10,000),
+    `frombin` (3,000), `fromedges` (11,858, a fixed grid of every scanner token, separator placement and high byte),
+    `loadtxt` (8,000), `ltfields` (4,883), `lttokens` (8,000), `savetxt` (6,000), `tofile` (3,000). A file NAME written
+    by savetxt carries a `crlf` twin (the text-mode wrapper with `newline="\r\n"`, proven equal to the real file with
+    `"\n"` on the generating host), so the corpus replays on every host: passed on Windows and Linux (WSL), net10.0 and
+    net8.0. 14 planted bugs, all killed; two (fromfile's saturation by sign, the `0xFF` a signed `char` loses)
+    survived the random sections until the `fromedges` grid was added, because a random text fails on an early token.
+    The error-class table holds one alias (`OverflowError` → `OverflowException`), measured. Temp files go beside the
+    test assembly: in the user's `%TEMP%` a new file cost ~6 ms in the test host (the antivirus' first-open scan), two
+    minutes over the tier; on K: the tier takes ~10 s.
 
 ## 6. The next round: the rest of P1.7, so that phase 1 is complete
 

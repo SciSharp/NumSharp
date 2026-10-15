@@ -75,6 +75,12 @@
     <None Update="Strings\corpus\*.jsonl">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- The NumPy text I/O oracle (test/oracle/gen_textio_oracle.py, Linux NumPy), replayed by TextIO/TextIOOracleTests.cs:
+         its own directory, because its cases are calls of five functions over sources and targets, not the op schema the
+         generic sweeps of Fuzz/corpus replay. -->
+    <None Update="TextIO\corpus\*.jsonl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

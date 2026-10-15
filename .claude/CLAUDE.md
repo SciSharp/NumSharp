@@ -5435,7 +5435,7 @@ float64's own parser refuses) rounded once by `npy_double_to_half`; an ASCII fie
 parser. An unsized `U` / `S` with `max_rows=0` is `_read`'s empty chunk list: `ValueError("need at least one array to
 concatenate")`. **Deliberate divergence:** the empty-input `UserWarning` is not emitted (NumSharp has no warnings module;
 the array is still the correct empty result). Gate: `IO/LoadTxtTests.cs`, `IO/TextReaderPortTests.cs` (probed against
-NumPy 2.4.2). See `APIs/np.loadtxt.cs`.
+NumPy 2.4.2) and the text I/O oracle tier's loadtxt / ltfields / lttokens sections (20,883 cases). See `APIs/np.loadtxt.cs`.
 **The hot path (2026-10-15, validation pass):**
 - **Doubles** go through `Utilities/NDDoubleParse.cs`: Clinger's fast path, then fast_float's Eisel-Lemire
   `compute_float` (the 128-bit powers of five built from exact integers, q in [-342, 308]), and .NET's parser only for a
@@ -5635,10 +5635,12 @@ format="%s")`.
   1 MB on this machine, NumPy 219–284 / 316–790 / 619–6,617 µs; NumSharp adds no copy. (Opening with `OPEN_ALWAYS` and
   truncating after the write is 2× faster for a file that exists, but it is not `'wb'`: a hidden file opens instead of
   failing, and an interrupted write leaves the old tail.)
-- **Gates**: `IO/TextReaderPortTests.cs` (29), `IO/FromStringTests.cs`, `Casting/NDArray.fromfile.Test.cs`; the
-  validation pass replayed 50,000 random `fromstring` / `fromfile` cases, 181,500 `np.loadtxt` cases (incl. 70,000
-  tokenizer-edge ones: Unicode whitespace, `\r` / `\n` inside lines, comments, quotes, long and empty fields) and 35,000
-  `savetxt` / `tofile` cases against NumPy 2.4.2: 0 divergences.
+- **Gates**: the committed **text I/O oracle tier** (`TextIO/corpus/textio_*.jsonl`, 54,741 Linux-NumPy cases over the
+  five functions, category `TextIOOracle`, zero excuses; see "The text I/O oracle" under the differential-fuzz pipeline),
+  `IO/TextReaderPortTests.cs` (29), `IO/FromStringTests.cs`, `Casting/NDArray.fromfile.Test.cs`; the validation pass
+  also replayed 50,000 random `fromstring` / `fromfile` cases, 181,500 `np.loadtxt` cases (incl. 70,000 tokenizer-edge
+  ones: Unicode whitespace, `\r` / `\n` inside lines, comments, quotes, long and empty fields) and 35,000 `savetxt` /
+  `tofile` cases against NumPy 2.4.2: 0 divergences.
 See `APIs/np.fromstring.cs`. **Not implemented — `genfromtxt`/`fromregex`:** both require NumPy's structured/record
 dtypes (and `genfromtxt` its masked-array + missing-value machinery), which NumSharp has no analog for; their
 non-structured subset would only re-expose `loadtxt`.
@@ -6338,6 +6340,41 @@ claim is stronger: NumSharp's writer must be **byte-identical** to `np.save`, no
 - **Reverse interop** (manual; needs Python + the SDK): `python test/oracle/verify_npy_interop.py` has
   NumSharp write 28 files and real NumPy read them. This is the only way to prove `.npz` output,
   whose ZIP framing legitimately differs from Python's `zipfile` and so cannot be byte-compared.
+
+### The text I/O oracle (same philosophy, separate corpus; 2026-10-15)
+
+`test/oracle/gen_textio_oracle.py` → `test/NumSharp.Tests.Oracle/TextIO/corpus/textio_<section>.jsonl` (54,741 cases,
+19 MB), replayed by `TextIO/TextIOOracleTests.cs` (category `TextIOOracle`, one test per section, zero excuses):
+`np.fromstring`, `np.fromfile`, `np.loadtxt`, `np.savetxt` and `ndarray.tofile` over every dtype, StringDType included.
+- **Sections**: `fromtext` (10,000 random `fromstring` / text `fromfile` calls: separators, counts, offsets, the file
+  position afterwards, 13 texts past the C `FILE` model's 64 KB chunk), `frombin` (3,000 binary reads), `fromedges`
+  (11,858, a FIXED grid: every scanner token alone, after a clean element and before one; every separator in seven
+  placements; bytes at or past 0x80), `loadtxt` (8,000 over every option and source), `ltfields` (4,883: numeric
+  fields, 64 accepted ones a case, every refused one alone), `lttokens` (8,000 tokenizer edges), `savetxt` (6,000),
+  `tofile` (3,000).
+- **Regenerate with LINUX NumPy** (the host check refuses anything else: NumSharp pins a 64-bit C `long` and glibc's
+  `fscanf`): `wsl -e bash -lc 'cd ~ && ~/np242/bin/python /mnt/k/source/NumSharp/test/oracle/gen_textio_oracle.py'`
+  (from `~`: `refs/numpy`'s sources would shadow the package), `--sections a,b` for a subset, then `dotnet build`.
+  Deterministic (one seed per section); about 10 s.
+- **Newlines.** A file NAME written by `np.savetxt` goes through Python's text mode (`\n` → `os.linesep`), and so does
+  NumSharp. Each such case carries a `crlf` twin recorded through `io.TextIOWrapper(io.BytesIO(), newline="\r\n")`, which
+  the generator first proves equal to the real file with `newline="\n"`; the replay picks it on a Windows host. Gated on
+  Windows AND Linux (WSL: `~/.dotnet/dotnet test <copied output>/NumSharp.Tests.Oracle.dll --filter
+  TestCategory=TextIOOracle`), both TFMs.
+- **Left out on purpose** (documented divergences, unit-tested): results NumPy builds with zero-width string elements;
+  a non-native dtype's TEXT read (the case records NumPy's answer for the native dtype); `tofile` of a non-ASCII element
+  (crashes NumPy 2.4.2).
+- **Teeth.** 14 planted bugs in the scanners, the tokenizer's one-pass line path, the row sinks, the writers and the
+  binary reader: all killed. Two of them (fromfile's saturation by sign, the `0xFF` a signed `char` loses) survived the
+  random sections, because a random text fails on an early token before the overflowing value is read; the `fromedges`
+  grid exists for them. Error classes: only `OverflowError` → `OverflowException` is aliased (measured: every other
+  error the corpus records is raised under NumPy's own class name).
+- **Trap: a temp file costs 2.4 ms in the user's `%TEMP%` (~6 ms inside the test host)**: the antivirus scans a new
+  file on its first open, and 13,000 file cases put two minutes on the suite. In the build output on K: it is ~0.6 ms,
+  so the replay writes beside the test assembly (`TextIO/tmp_<pid>`): ~10 s from the main repo, ~2 min from a checkout
+  under `%TEMP%`, ~5 s on Linux.
+- **Trap: `cond ? long : double` is typed `double`** in C#: the replay's JSON decoder needs `(object)l`, or a Python int
+  in a parameter list (`comments=[1]`) reaches NumSharp as `1.0` ("not float" where NumPy says "not int").
 
 ## CI Pipeline
 
