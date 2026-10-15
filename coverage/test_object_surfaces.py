@@ -114,11 +114,31 @@ class ObjectSurfaceTests(unittest.TestCase):
         # NumSharp's np.add / np.ma.add are functions: a namesake never credits an object member.
         for row_id in ("numpy.ufunc.outer", "numpy.add.reduce", "numpy.add.outer",
                        "numpy.add.resolve_dtypes", "numpy.ma.add.reduce", "numpy.strings.add.reduce",
-                       "numpy.ma.MaskedArray.reshape",
+                       "numpy.ma.MaskedArray.ctypes",
                        "numpy.recarray.reshape", "numpy.random.PCG64.ctypes"):
             self.assertIsNone(self.by_id[row_id]["numsharp_target"], row_id)
         self.assertEqual("missing", self.by_id["numpy.lib.npyio.NpzFile.keys"]["status"])
         self.assertEqual("alias", self.by_id["numpy.lib.npyio.NpzFile.files"]["availability"])
+
+    def test_masked_array_and_vectorize_members_credit_their_numsharp_owners(self):
+        """numpy.ma.MaskedArray maps to NDMaskedArray and numpy.vectorize to Vectorized.
+
+        Without an owner type every member read missing (94 MaskedArray rows, NumSharp implements 77);
+        each credit comes from a member NDMaskedArray declares itself (it has no NDArray base), and the
+        members NumSharp lacks stay missing.
+        """
+        masked = [row for row in self.rows if row["object_type"] == "numpy.ma.MaskedArray" and row["kind"] != "class"]
+        credited = [row for row in masked if row["status"] == "available"]
+        self.assertEqual(94, len(masked))
+        self.assertEqual(77, len(credited))
+        for row in credited:
+            self.assertEqual("NumSharp.NDMaskedArray." + row["name"], row["numsharp_target"], row["id"])
+            self.assertTrue(row["numsharp_source_paths"], row["id"])
+        for gap in ("ctypes", "dump", "dumps", "flags", "setfield", "toflex", "torecords", "sharedmask"):
+            self.assertEqual("missing", self.by_id[f"numpy.ma.MaskedArray.{gap}"]["status"], gap)
+        self.assertEqual("NumSharp.NDMaskedArray.filled", self.by_id["numpy.ma.MaskedArray.filled"]["numsharp_target"])
+        self.assertEqual("NumSharp.Vectorized.signature", self.by_id["numpy.vectorize.signature"]["numsharp_target"])
+        self.assertEqual("missing", self.by_id["numpy.vectorize.pyfunc"]["status"])
 
     def test_ufunc_methods_are_read_from_the_ufunc_type(self):
         """The per-export method list is numpy.ufunc's public methods, not a hand-written list.
