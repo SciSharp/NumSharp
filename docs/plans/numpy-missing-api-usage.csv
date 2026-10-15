@@ -1,0 +1,1592 @@
+id,surface,kind,headline,measure,files,how
+numpy.integer,np,class,False,np.integer,203415,estimate 224768 x 181/200
+numpy.typing,np,module,False,numpy.typing,181274,estimate 186880 x 194/200
+numpy.floating,np,class,False,np.floating,161070,estimate 166912 x 193/200
+numpy.number,np,class,False,np.number,127949,estimate 130560 x 196/200
+numpy.errstate,np,class,False,np.errstate,119043,estimate 130816 x 182/200
+numpy.genfromtxt,np,function,True,np.genfromtxt,100614,estimate 101120 x 199/200
+numpy.__version__,np,constant,False,np.__version__,67579,estimate 68608 x 197/200
+numpy.datetime64,np,class,False,np.datetime64,58928,estimate 81280 x 145/200
+numpy.add.at,ufunc,method,False,np.add.at,53165,estimate 54528 x 195/200
+numpy.complex64,np,class,False,np.complex64,49398,estimate 68608 x 144/200
+numpy.generic,np,class,False,np.generic,45056,estimate 51200 x 176/200
+numpy.memmap,np,class,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.T,memmap,property,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.all,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.any,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.argmax,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.argmin,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.argpartition,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.argsort,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.astype,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.base,memmap,property,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.byteswap,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.choose,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.clip,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.compress,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.conj,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.conjugate,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.copy,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.ctypes,memmap,property,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.cumprod,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.cumsum,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.data,memmap,property,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.device,memmap,property,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.diagonal,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.dot,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.dtype,memmap,property,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.dump,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.dumps,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.fill,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.flags,memmap,property,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.flat,memmap,property,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.flatten,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.flush,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.getfield,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.imag,memmap,property,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.item,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.itemsize,memmap,property,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.mT,memmap,property,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.max,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.mean,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.min,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.nbytes,memmap,property,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.ndim,memmap,property,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.nonzero,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.partition,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.prod,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.put,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.ravel,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.real,memmap,property,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.repeat,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.reshape,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.resize,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.round,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.searchsorted,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.setfield,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.setflags,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.shape,memmap,property,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.size,memmap,property,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.sort,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.squeeze,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.std,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.strides,memmap,property,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.sum,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.swapaxes,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.take,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.to_device,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.tobytes,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.tofile,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.tolist,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.trace,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.transpose,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.var,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.memmap.view,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
+numpy.maximum.accumulate,ufunc,method,False,np.maximum.accumulate,41834,estimate 42688 x 196/200
+numpy.timedelta64,np,class,False,np.timedelta64,41291,estimate 55424 x 149/200
+numpy.fromiter,np,function,True,np.fromiter,31163,estimate 33152 x 188/200
+numpy.ndim,np,function,True,np.ndim,29737,estimate 49152 x 121/200
+numpy.seterr,np,function,True,np.seterr,26369,estimate 27904 x 189/200
+numpy.object_,np,class,False,np.object_,22711,estimate 36928 x 123/200
+numpy.str_,np,class,False,np.str_,22473,estimate 29376 x 153/200
+numpy.ndarray.ctypes,ndarray,property,True,ctypes.data_as,14333,estimate 15008 x 191/200
+numpy.get_include,np,function,True,np.get_include,13324,estimate 15584 x 171/200
+numpy.polynomial.legendre.leggauss,polynomial,function,False,leggauss,11615,estimate 11792 x 197/200
+numpy.bytes_,np,class,False,np.bytes_,11396,estimate 15296 x 149/200
+numpy.void,np,class,False,np.void,11294,estimate 17376 x 130/200
+numpy.maximum.reduce,ufunc,method,False,np.maximum.reduce,10048,"NOT reduceat re-count 10,048 (lower bound; the original 11,680 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
+numpy.longdouble,np,class,False,np.longdouble,9639,estimate 18016 x 107/200
+numpy.core,np,module,False,np.core,8941,estimate 13345 x 134/200
+numpy.complexfloating,np,class,False,np.complexfloating,8452,estimate 11904 x 142/200
+numpy.minimum.accumulate,ufunc,method,False,np.minimum.accumulate,7648,estimate 7648 x 100/100
+numpy.logical_and.reduce,ufunc,method,False,np.logical_and.reduce,7376,"NOT reduceat re-count 7,376 (lower bound; the original 7,376 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
+numpy.typecodes,np,constant,False,np.typecodes,7181,estimate 14656 x 98/200
+numpy.recarray,np,class,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.T,recarray,property,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.all,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.any,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.argmax,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.argmin,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.argpartition,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.argsort,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.astype,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.base,recarray,property,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.byteswap,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.choose,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.clip,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.compress,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.conj,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.conjugate,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.copy,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.ctypes,recarray,property,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.cumprod,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.cumsum,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.data,recarray,property,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.device,recarray,property,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.diagonal,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.dot,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.dtype,recarray,property,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.dump,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.dumps,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.field,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.fill,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.flags,recarray,property,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.flat,recarray,property,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.flatten,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.getfield,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.imag,recarray,property,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.item,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.itemsize,recarray,property,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.mT,recarray,property,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.max,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.mean,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.min,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.nbytes,recarray,property,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.ndim,recarray,property,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.nonzero,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.partition,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.prod,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.put,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.ravel,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.real,recarray,property,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.repeat,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.reshape,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.resize,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.round,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.searchsorted,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.setfield,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.setflags,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.shape,recarray,property,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.size,recarray,property,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.sort,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.squeeze,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.std,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.strides,recarray,property,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.sum,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.swapaxes,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.take,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.to_device,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.tobytes,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.tofile,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.tolist,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.trace,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.transpose,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.var,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.recarray.view,recarray,method,False,np.recarray,6156,estimate 8208 x 150/200
+numpy.fromfunction,np,function,True,np.fromfunction,5844,estimate 6184 x 189/200
+numpy.minimum.reduce,ufunc,method,False,np.minimum.reduce,5520,"NOT reduceat re-count 5,520 (lower bound; the original 6,528 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
+numpy.add.reduceat,ufunc,method,False,np.add.reduceat,5488,estimate 5488 x 100/100
+numpy.logical_or.reduce,ufunc,method,False,np.logical_or.reduce,5472,"NOT reduceat re-count 5,472 (lower bound; the original 5,776 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
+numpy.True_,np,constant,False,np.True_,4832,NOT re-count; estimate 4832 x 100/100
+numpy.maximum.at,ufunc,method,False,np.maximum.at,4688,estimate 4784 x 98/100
+numpy.subtract.outer,ufunc,method,False,np.subtract.outer,4400,estimate 4400 x 100/100
+numpy.signedinteger,np,class,False,np.signedinteger,4101,estimate 6408 x 128/200
+numpy.ufunc,np,class,False,np.ufunc,3872,estimate 7376 x 105/200
+numpy.rec,np,module,False,np.rec,3795,NOT re-count; estimate 3912 x 97/100
+numpy.add.reduce,ufunc,method,False,np.add.reduce,3624,"NOT reduceat re-count 3,624 (lower bound; the original 9,472 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
+numpy.minimum.at,ufunc,method,False,np.minimum.at,3049,estimate 3080 x 99/100
+numpy.datetime_as_string,np,function,True,np.datetime_as_string,2801,estimate 3112 x 180/200
+numpy.multiply.outer,ufunc,method,False,np.multiply.outer,2764,estimate 2792 x 99/100
+numpy.char.add,char,ufunc,False,np.char.add,2570,estimate 2720 x 189/200
+numpy.add.outer,ufunc,method,False,np.add.outer,2448,estimate 2448 x 100/100
+numpy.polynomial.polynomial.Polynomial,polynomial,class,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.basis,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.basis_name,polynomial,property,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.cast,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.coef,polynomial,property,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.convert,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.copy,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.cutdeg,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.degree,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.deriv,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.domain,polynomial,property,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.fit,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.fromroots,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.has_samecoef,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.has_samedomain,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.has_sametype,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.has_samewindow,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.identity,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.integ,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.linspace,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.mapparms,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.maxpower,polynomial,property,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.roots,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.symbol,polynomial,property,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.trim,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.truncate,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.polynomial.Polynomial.window,polynomial,property,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.False_,np,constant,False,np.False_,2343,estimate 2840 x 165/200
+numpy.finfo.nmant,finfo,property,False,nmant,2236,estimate 6577 x 68/200
+numpy.logaddexp.reduce,ufunc,method,False,np.logaddexp.reduce,2164,"NOT reduceat re-count 2,164 (lower bound; the original 2,156 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
+numpy.inexact,np,class,False,np.inexact,2137,estimate 4912 x 87/200
+numpy.rec.fromarrays,rec,function,False,np.rec.fromarrays,2098,estimate 2512 x 167/200
+numpy.isnat,np,ufunc,True,np.isnat,2032,estimate 2764 x 147/200
+numpy.polynomial.hermite.hermgauss,polynomial,function,False,hermgauss,1952,estimate 2088 x 187/200
+numpy.maximum.reduceat,ufunc,method,False,np.maximum.reduceat,1908,estimate 1908 x 100/100
+numpy.unsignedinteger,np,class,False,np.unsignedinteger,1855,estimate 2728 x 136/200
+numpy.add.accumulate,ufunc,method,False,np.add.accumulate,1696,estimate 1696 x 100/100
+numpy.info,np,function,True,np.info,1695,estimate 2648 x 128/200
+numpy.multiply.reduce,ufunc,method,False,np.multiply.reduce,1648,"NOT reduceat re-count 1,648 (lower bound; the original 1,732 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
+numpy.rec.array,rec,function,False,np.rec.array,1578,estimate 3712 x 85/200
+numpy.char.lower,char,function,False,np.char.lower,1412,estimate 1412 x 200/200
+numpy.busday_count,np,function,True,np.busday_count,1361,estimate 1768 x 154/200
+numpy.exceptions,np,module,False,np.exceptions,1361,estimate 1972 x 138/200
+numpy.minimum.reduceat,ufunc,method,False,np.minimum.reduceat,1307,estimate 1334 x 98/100
+numpy.char.decode,char,function,False,np.char.decode,1243,estimate 1480 x 168/200
+numpy.char.find,char,function,False,np.char.find,1216,estimate 1222 x 199/200
+numpy.polynomial.polynomial.polyfit,polynomial,function,False,polynomial.polyfit,1214,estimate 1220 x 199/200
+numpy.from_dlpack,np,function,True,np.from_dlpack,1197,estimate 1260 x 190/200
+numpy.char.startswith,char,function,False,np.char.startswith,1188,estimate 1188 x 200/200
+numpy.char.replace,char,function,False,np.char.replace,1123,estimate 1140 x 197/200
+numpy.char.strip,char,function,False,np.char.strip,1108,estimate 1108 x 200/200
+numpy.show_config,np,function,True,np.show_config,1085,estimate 1276 x 170/200
+numpy.gcd.reduce,ufunc,method,False,np.gcd.reduce,1084,"NOT reduceat re-count 1,084 (lower bound; the original 1,056 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
+numpy.char.mod,char,function,False,np.char.mod,1039,estimate 1044 x 199/200
+numpy.character,np,class,False,np.character,1039,estimate 1792 x 116/200
+numpy.bitwise_or.reduce,ufunc,method,False,np.bitwise_or.reduce,1028,"NOT reduceat re-count 1,028 (lower bound; the original 1,092 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
+numpy.lcm.reduce,ufunc,method,False,np.lcm.reduce,990,"NOT reduceat re-count 990 (lower bound; the original 990 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
+numpy.ufunc.reduce,ufunc,method,False,ufunc.reduce,973,"NOT reduceat re-count 1,158 (lower bound; the original 1,984 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); estimate 1158 x 84/100"
+numpy.rec.fromrecords,rec,function,False,np.rec.fromrecords,969,estimate 2364 x 82/200
+numpy.ScalarType,np,constant,False,np.ScalarType,950,estimate 1320 x 144/200
+numpy.bitwise_xor.reduce,ufunc,method,False,np.bitwise_xor.reduce,946,"NOT reduceat re-count 946 (lower bound; the original 962 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
+numpy.geterr,np,function,True,np.geterr,922,estimate 1308 x 141/200
+numpy.polynomial.chebyshev.chebfit,polynomial,function,False,chebfit,922,estimate 2120 x 87/200
+numpy.sctypeDict,np,constant,False,np.sctypeDict,727,estimate 1192 x 122/200
+numpy.char.array,char,function,False,np.char.array,716,estimate 868 x 165/200
+numpy.polynomial.chebyshev.Chebyshev,polynomial,class,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.basis,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.basis_name,polynomial,property,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.cast,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.coef,polynomial,property,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.convert,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.copy,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.cutdeg,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.degree,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.deriv,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.domain,polynomial,property,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.fit,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.fromroots,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.has_samecoef,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.has_samedomain,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.has_sametype,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.has_samewindow,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.identity,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.integ,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.interpolate,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.linspace,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.mapparms,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.maxpower,polynomial,property,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.roots,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.symbol,polynomial,property,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.trim,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.truncate,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.chebyshev.Chebyshev.window,polynomial,property,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.char.upper,char,function,False,np.char.upper,696,estimate 696 x 100/100
+numpy.equal.outer,ufunc,method,False,np.equal.outer,696,"ufunc study (vendored-filtered, literal not sampled)"
+numpy.ufunc.reduceat,ufunc,method,False,ufunc.reduceat,695,first pass (unsampled)
+numpy.char.equal,char,function,False,np.char.equal,674,first pass (unsampled)
+numpy.random.BitGenerator.cffi,random.BitGenerator,property,False,bit_generator.cffi,672,first pass (unsampled)
+numpy.random.MT19937.cffi,random.MT19937,property,False,bit_generator.cffi,672,first pass (unsampled)
+numpy.random.PCG64.cffi,random.PCG64,property,False,bit_generator.cffi,672,first pass (unsampled)
+numpy.random.PCG64DXSM.cffi,random.PCG64DXSM,property,False,bit_generator.cffi,672,first pass (unsampled)
+numpy.random.Philox.cffi,random.Philox,property,False,bit_generator.cffi,672,first pass (unsampled)
+numpy.random.SFC64.cffi,random.SFC64,property,False,bit_generator.cffi,672,first pass (unsampled)
+numpy.char.encode,char,function,False,np.char.encode,665,first pass (unsampled)
+numpy.char.split,char,function,False,np.char.split,658,estimate 818 x 161/200
+numpy.minimum.outer,ufunc,method,False,np.minimum.outer,614,"ufunc study (vendored-filtered, literal not sampled)"
+numpy.ufunc.nin,ufunc,property,False,ufunc.nin,610,first pass (unsampled)
+numpy.is_busday,np,function,True,np.is_busday,608,first pass (unsampled)
+numpy.record,np,class,False,np.record,607,estimate 2640 x 46/200
+numpy.record.T,record,property,False,np.record,607,estimate 2640 x 46/200
+numpy.record.all,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.any,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.argmax,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.argmin,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.argsort,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.astype,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.base,record,property,False,np.record,607,estimate 2640 x 46/200
+numpy.record.byteswap,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.choose,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.clip,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.compress,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.conj,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.conjugate,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.copy,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.cumprod,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.cumsum,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.data,record,property,False,np.record,607,estimate 2640 x 46/200
+numpy.record.device,record,property,False,np.record,607,estimate 2640 x 46/200
+numpy.record.diagonal,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.dtype,record,property,False,np.record,607,estimate 2640 x 46/200
+numpy.record.dump,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.dumps,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.fill,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.flags,record,property,False,np.record,607,estimate 2640 x 46/200
+numpy.record.flat,record,property,False,np.record,607,estimate 2640 x 46/200
+numpy.record.flatten,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.getfield,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.imag,record,property,False,np.record,607,estimate 2640 x 46/200
+numpy.record.item,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.itemsize,record,property,False,np.record,607,estimate 2640 x 46/200
+numpy.record.max,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.mean,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.min,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.nbytes,record,property,False,np.record,607,estimate 2640 x 46/200
+numpy.record.ndim,record,property,False,np.record,607,estimate 2640 x 46/200
+numpy.record.nonzero,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.pprint,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.prod,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.put,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.ravel,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.real,record,property,False,np.record,607,estimate 2640 x 46/200
+numpy.record.repeat,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.reshape,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.resize,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.round,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.searchsorted,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.setfield,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.setflags,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.shape,record,property,False,np.record,607,estimate 2640 x 46/200
+numpy.record.size,record,property,False,np.record,607,estimate 2640 x 46/200
+numpy.record.sort,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.squeeze,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.std,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.strides,record,property,False,np.record,607,estimate 2640 x 46/200
+numpy.record.sum,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.swapaxes,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.take,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.to_device,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.tobytes,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.tofile,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.tolist,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.trace,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.transpose,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.var,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.record.view,record,method,False,np.record,607,estimate 2640 x 46/200
+numpy.char.partition,char,function,False,np.char.partition,599,first pass (unsampled)
+numpy.char.translate,char,function,False,np.char.translate,577,first pass (unsampled)
+numpy.polynomial.hermite_e.hermegauss,polynomial,function,False,hermegauss,556,first pass (unsampled)
+numpy.strings.multiply,strings,function,False,np.strings.multiply,542,first pass (unsampled)
+numpy.busday_offset,np,function,True,np.busday_offset,514,estimate 784 x 131/200
+numpy.ufunc.nout,ufunc,property,False,ufunc.nout,510,estimate 2320 x 44/200
+numpy.ma.MaskedArray.get_fill_value,ma,method,False,get_fill_value,506,estimate 1808 x 56/200
+numpy.strings,np,module,False,np.strings,499,estimate 1040 x 96/200
+numpy.char.asarray,char,function,False,np.char.asarray,459,first pass (unsampled)
+numpy.rec.fromstring,rec,function,False,np.rec.fromstring,457,first pass (unsampled)
+numpy.char.not_equal,char,function,False,np.char.not_equal,454,first pass (unsampled)
+numpy.rec.fromfile,rec,function,False,np.rec.fromfile,446,first pass (unsampled)
+numpy.char.less,char,function,False,np.char.less,438,first pass (unsampled)
+numpy.char.greater,char,function,False,np.char.greater,436,first pass (unsampled)
+numpy.char.greater_equal,char,function,False,np.char.greater_equal,436,first pass (unsampled)
+numpy.char.less_equal,char,function,False,np.char.less_equal,436,first pass (unsampled)
+numpy.little_endian,np,constant,False,np.little_endian,417,first pass (unsampled)
+numpy.char.rpartition,char,function,False,np.char.rpartition,409,first pass (unsampled)
+numpy.ufunc.at,ufunc,method,False,ufunc.at,372,estimate 822 x 90/199
+numpy.char.rstrip,char,function,False,np.char.rstrip,348,first pass (unsampled)
+numpy.polynomial.legendre.legfit,polynomial,function,False,legfit,346,first pass (unsampled)
+numpy.seterrcall,np,function,True,np.seterrcall,334,estimate 1286 x 52/200
+numpy.polynomial.laguerre.laggauss,polynomial,function,False,laggauss,324,first pass (unsampled)
+numpy.finfo.machep,finfo,property,False,machep,318,estimate 3744 x 17/200
+numpy.char.str_len,char,ufunc,False,np.char.str_len,316,first pass (unsampled)
+numpy.subtract.at,ufunc,method,False,np.subtract.at,302,"ufunc study (vendored-filtered, literal not sampled)"
+numpy.flexible,np,class,False,np.flexible,299,estimate 788 x 76/200
+numpy.geterrcall,np,function,True,np.geterrcall,299,estimate 808 x 70/189
+numpy.bitwise_and.reduce,ufunc,method,False,np.bitwise_and.reduce,269,"NOT reduceat re-count 269 (lower bound; the original 264 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
+numpy.char.zfill,char,function,False,np.char.zfill,268,first pass (unsampled)
+numpy.logical_and.accumulate,ufunc,method,False,np.logical_and.accumulate,265,"ufunc study (vendored-filtered, literal not sampled)"
+numpy.logical_or.at,ufunc,method,False,np.logical_or.at,261,"ufunc study (vendored-filtered, literal not sampled)"
+numpy.polynomial.polynomial.polyvalfromroots,polynomial,function,False,polyvalfromroots,258,first pass (unsampled)
+numpy.bitwise_or.at,ufunc,method,False,np.bitwise_or.at,252,"ufunc study (vendored-filtered, literal not sampled)"
+numpy.ufunc.types,ufunc,property,False,ufunc.types,226,first pass (unsampled)
+numpy.multiply.accumulate,ufunc,method,False,np.multiply.accumulate,220,"ufunc study (vendored-filtered, literal not sampled)"
+numpy.logaddexp.accumulate,ufunc,method,False,np.logaddexp.accumulate,215,"ufunc study (vendored-filtered, literal not sampled)"
+numpy.char.count,char,function,False,np.char.count,197,first pass (unsampled)
+numpy.logical_xor.reduce,ufunc,method,False,np.logical_xor.reduce,195,upper bound: also counts files using reduceat (prefix match)
+numpy.fmax.reduce,ufunc,method,False,np.fmax.reduce,194,upper bound: also counts files using reduceat (prefix match)
+numpy.char.endswith,char,function,False,np.char.endswith,180,first pass (unsampled)
+numpy.ma.MaskedArray.torecords,ma,method,False,torecords,178,estimate 792 x 45/200
+numpy.busdaycalendar,np,class,False,np.busdaycalendar,173,first pass (unsampled)
+numpy.ufunc.accumulate,ufunc,method,False,ufunc.accumulate,172,first pass (unsampled)
+numpy.show_runtime,np,function,True,np.show_runtime,171,first pass (unsampled)
+numpy.maximum.outer,ufunc,method,False,np.maximum.outer,169,"ufunc study (vendored-filtered, literal not sampled)"
+numpy.ufunc.outer,ufunc,method,False,ufunc.outer,165,first pass (unsampled)
+numpy.fromregex,np,function,True,np.fromregex,159,first pass (unsampled)
+numpy.strings.find,strings,function,False,np.strings.find,159,first pass (unsampled)
+numpy.strings.replace,strings,function,False,np.strings.replace,155,first pass (unsampled)
+numpy.ufunc.signature,ufunc,property,False,ufunc.signature,155,first pass (unsampled)
+numpy.char.chararray,char,class,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.T,char.chararray,property,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.all,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.any,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.argmax,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.argmin,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.argpartition,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.argsort,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.astype,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.base,char.chararray,property,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.byteswap,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.capitalize,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.center,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.choose,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.clip,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.compress,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.conj,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.conjugate,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.copy,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.count,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.ctypes,char.chararray,property,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.cumprod,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.cumsum,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.data,char.chararray,property,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.decode,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.device,char.chararray,property,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.diagonal,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.dot,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.dtype,char.chararray,property,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.dump,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.dumps,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.encode,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.endswith,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.expandtabs,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.fill,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.find,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.flags,char.chararray,property,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.flat,char.chararray,property,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.flatten,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.getfield,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.imag,char.chararray,property,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.index,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.isalnum,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.isalpha,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.isdecimal,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.isdigit,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.islower,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.isnumeric,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.isspace,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.istitle,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.isupper,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.item,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.itemsize,char.chararray,property,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.join,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.ljust,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.lower,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.lstrip,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.mT,char.chararray,property,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.max,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.mean,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.min,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.nbytes,char.chararray,property,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.ndim,char.chararray,property,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.nonzero,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.partition,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.prod,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.put,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.ravel,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.real,char.chararray,property,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.repeat,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.replace,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.reshape,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.resize,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.rfind,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.rindex,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.rjust,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.round,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.rpartition,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.rsplit,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.rstrip,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.searchsorted,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.setfield,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.setflags,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.shape,char.chararray,property,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.size,char.chararray,property,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.sort,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.split,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.splitlines,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.squeeze,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.startswith,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.std,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.strides,char.chararray,property,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.strip,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.sum,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.swapaxes,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.swapcase,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.take,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.title,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.to_device,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.tobytes,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.tofile,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.tolist,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.trace,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.translate,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.transpose,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.upper,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.var,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.view,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.char.chararray.zfill,char.chararray,method,False,class:np.char.chararray,154,estimate 698 x 44/200
+numpy.strings.strip,strings,function,False,np.strings.strip,154,first pass (unsampled)
+numpy.power.outer,ufunc,method,False,np.power.outer,150,"ufunc study (vendored-filtered, literal not sampled)"
+numpy.fmax.accumulate,ufunc,method,False,np.fmax.accumulate,149,"ufunc study (vendored-filtered, literal not sampled)"
+numpy.polynomial.hermite.hermfit,polynomial,function,False,hermfit,149,first pass (unsampled)
+numpy.strings.count,strings,function,False,np.strings.count,148,first pass (unsampled)
+numpy.strings.endswith,strings,function,False,np.strings.endswith,148,first pass (unsampled)
+numpy.polynomial.laguerre.lagfit,polynomial,function,False,lagfit,146,first pass (unsampled)
+numpy.strings.index,strings,function,False,np.strings.index,144,first pass (unsampled)
+numpy.strings.rindex,strings,function,False,np.strings.rindex,144,first pass (unsampled)
+numpy.polynomial.chebyshev.chebgauss,polynomial,function,False,chebgauss,143,first pass (unsampled)
+numpy.hypot.reduce,ufunc,method,False,np.hypot.reduce,142,upper bound: also counts files using reduceat (prefix match)
+numpy.strings.lstrip,strings,function,False,np.strings.lstrip,142,first pass (unsampled)
+numpy.strings.rstrip,strings,function,False,np.strings.rstrip,142,first pass (unsampled)
+numpy.strings.expandtabs,strings,function,False,np.strings.expandtabs,141,first pass (unsampled)
+numpy.char.capitalize,char,function,False,np.char.capitalize,136,first pass (unsampled)
+numpy.fmin.reduce,ufunc,method,False,np.fmin.reduce,134,upper bound: also counts files using reduceat (prefix match)
+numpy.polynomial.chebyshev.chebpts1,polynomial,function,False,chebpts1,134,first pass (unsampled)
+numpy.ufunc.nargs,ufunc,property,False,ufunc.nargs,134,first pass (unsampled)
+numpy.char.isnumeric,char,ufunc,False,np.char.isnumeric,128,first pass (unsampled)
+numpy.subtract.reduce,ufunc,method,False,np.subtract.reduce,126,upper bound: also counts files using reduceat (prefix match)
+numpy.greater.outer,ufunc,method,False,np.greater.outer,125,"ufunc study (vendored-filtered, literal not sampled)"
+numpy.ufunc.identity,ufunc,property,False,ufunc.identity,119,first pass (unsampled)
+numpy.char.isdigit,char,ufunc,False,np.char.isdigit,115,first pass (unsampled)
+numpy.ma.MaskedArray.sharedmask,ma,property,False,sharedmask,115,estimate 2296 x 10/200
+numpy.polynomial.chebyshev.chebpts2,polynomial,function,False,chebpts2,114,first pass (unsampled)
+numpy.char.join,char,function,False,np.char.join,109,first pass (unsampled)
+numpy.char.center,char,function,False,np.char.center,108,first pass (unsampled)
+numpy.char.isalpha,char,ufunc,False,np.char.isalpha,108,first pass (unsampled)
+numpy.bitwise_xor.accumulate,ufunc,method,False,np.bitwise_xor.accumulate,107,"ufunc study (vendored-filtered, literal not sampled)"
+numpy.char.multiply,char,function,False,np.char.multiply,103,first pass (unsampled)
+numpy.char.title,char,function,False,np.char.title,102,first pass (unsampled)
+numpy.polynomial.legendre.Legendre,polynomial,class,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.basis,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.basis_name,polynomial,property,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.cast,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.coef,polynomial,property,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.convert,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.copy,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.cutdeg,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.degree,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.deriv,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.domain,polynomial,property,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.fit,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.fromroots,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.has_samecoef,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.has_samedomain,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.has_sametype,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.has_samewindow,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.identity,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.integ,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.linspace,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.mapparms,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.maxpower,polynomial,property,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.roots,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.symbol,polynomial,property,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.trim,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.truncate,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.legendre.Legendre.window,polynomial,property,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.char.compare_chararrays,char,function,False,np.char.compare_chararrays,98,first pass (unsampled)
+numpy.logical_or.accumulate,ufunc,method,False,np.logical_or.accumulate,97,"ufunc study, small (< 100)"
+numpy.logical_xor.outer,ufunc,method,False,np.logical_xor.outer,96,"ufunc study, small (< 100)"
+numpy.char.ljust,char,function,False,np.char.ljust,94,first pass (unsampled)
+numpy.strings.str_len,strings,ufunc,False,np.strings.str_len,90,first pass (unsampled)
+numpy.ufunc.ntypes,ufunc,property,False,ufunc.ntypes,90,first pass (unsampled)
+numpy.bitwise_or.reduceat,ufunc,method,False,np.bitwise_or.reduceat,89,"ufunc study, small (< 100)"
+numpy.strings.startswith,strings,function,False,np.strings.startswith,89,first pass (unsampled)
+numpy.strings.add,strings,ufunc,False,np.strings.add,88,first pass (unsampled)
+numpy.abs.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.absolute.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.acos.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.acosh.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.add.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.arccos.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.arccosh.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.arcsin.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.arcsinh.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.arctan.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.arctan2.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.arctanh.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.asin.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.asinh.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.atan.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.atan2.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.atanh.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.bitwise_and.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.bitwise_count.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.bitwise_invert.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.bitwise_left_shift.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.bitwise_not.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.bitwise_or.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.bitwise_right_shift.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.bitwise_xor.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.cbrt.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.ceil.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.char.add.resolve_dtypes,char,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.char.isalnum.resolve_dtypes,char,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.char.isalpha.resolve_dtypes,char,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.char.isdecimal.resolve_dtypes,char,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.char.isdigit.resolve_dtypes,char,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.char.islower.resolve_dtypes,char,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.char.isnumeric.resolve_dtypes,char,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.char.isspace.resolve_dtypes,char,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.char.istitle.resolve_dtypes,char,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.char.isupper.resolve_dtypes,char,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.char.str_len.resolve_dtypes,char,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.conj.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.conjugate.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.copysign.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.cos.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.cosh.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.deg2rad.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.degrees.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.divide.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.divmod.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.equal.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.exp.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.exp2.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.expm1.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.fabs.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.float_power.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.floor.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.floor_divide.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.fmax.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.fmin.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.fmod.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.frexp.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.gcd.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.greater.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.greater_equal.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.heaviside.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.hypot.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.invert.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.isfinite.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.isinf.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.isnan.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.isnat.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.lcm.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.ldexp.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.left_shift.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.less.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.less_equal.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.log.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.log10.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.log1p.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.log2.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.logaddexp.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.logaddexp2.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.logical_and.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.logical_not.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.logical_or.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.logical_xor.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.matmul.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.matvec.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.maximum.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.minimum.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.mod.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.modf.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.multiply.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.negative.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.nextafter.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.not_equal.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.polynomial.hermite_e.hermefit,polynomial,function,False,hermefit,85,first pass (unsampled)
+numpy.positive.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.pow.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.power.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.rad2deg.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.radians.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.reciprocal.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.remainder.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.right_shift.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.rint.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.sign.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.signbit.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.sin.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.sinh.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.spacing.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.sqrt.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.square.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.strings.add.resolve_dtypes,strings,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.strings.equal.resolve_dtypes,strings,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.strings.greater.resolve_dtypes,strings,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.strings.greater_equal.resolve_dtypes,strings,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.strings.isalnum.resolve_dtypes,strings,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.strings.isalpha.resolve_dtypes,strings,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.strings.isdecimal.resolve_dtypes,strings,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.strings.isdigit.resolve_dtypes,strings,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.strings.islower.resolve_dtypes,strings,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.strings.isnumeric.resolve_dtypes,strings,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.strings.isspace.resolve_dtypes,strings,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.strings.istitle.resolve_dtypes,strings,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.strings.isupper.resolve_dtypes,strings,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.strings.less.resolve_dtypes,strings,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.strings.less_equal.resolve_dtypes,strings,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.strings.not_equal.resolve_dtypes,strings,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.strings.partition,strings,function,False,np.strings.partition,85,first pass (unsampled)
+numpy.strings.str_len.resolve_dtypes,strings,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.subtract.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.tan.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.tanh.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.true_divide.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.trunc.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.vecdot.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.vecmat.resolve_dtypes,ufunc,method,False,resolve_dtypes,85,upper bound: resolve_dtypes of all ufuncs together
+numpy.char.rjust,char,function,False,np.char.rjust,84,first pass (unsampled)
+numpy.less.outer,ufunc,method,False,np.less.outer,83,"ufunc study, small (< 100)"
+numpy.polynomial.laguerre.lagweight,polynomial,function,False,lagweight,83,first pass (unsampled)
+numpy.strings.isalpha,strings,ufunc,False,np.strings.isalpha,82,first pass (unsampled)
+numpy.strings.lower,strings,function,False,np.strings.lower,82,first pass (unsampled)
+numpy.greater_equal.outer,ufunc,method,False,np.greater_equal.outer,81,"ufunc study, small (< 100)"
+numpy.logical_or.reduceat,ufunc,method,False,np.logical_or.reduceat,81,"ufunc study, small (< 100)"
+numpy.strings.decode,strings,function,False,np.strings.decode,81,first pass (unsampled)
+numpy.strings.encode,strings,function,False,np.strings.encode,81,first pass (unsampled)
+numpy.strings.isnumeric,strings,ufunc,False,np.strings.isnumeric,80,first pass (unsampled)
+numpy.strings.upper,strings,function,False,np.strings.upper,80,first pass (unsampled)
+numpy.strings.isdigit,strings,ufunc,False,np.strings.isdigit,79,first pass (unsampled)
+numpy.strings.rfind,strings,function,False,np.strings.rfind,79,first pass (unsampled)
+numpy.strings.isalnum,strings,ufunc,False,np.strings.isalnum,78,first pass (unsampled)
+numpy.strings.isdecimal,strings,ufunc,False,np.strings.isdecimal,78,first pass (unsampled)
+numpy.strings.islower,strings,ufunc,False,np.strings.islower,78,first pass (unsampled)
+numpy.strings.isspace,strings,ufunc,False,np.strings.isspace,78,first pass (unsampled)
+numpy.strings.istitle,strings,ufunc,False,np.strings.istitle,78,first pass (unsampled)
+numpy.strings.isupper,strings,ufunc,False,np.strings.isupper,78,first pass (unsampled)
+numpy.strings.rjust,strings,function,False,np.strings.rjust,78,first pass (unsampled)
+numpy.strings.ljust,strings,function,False,np.strings.ljust,77,first pass (unsampled)
+numpy.strings.capitalize,strings,function,False,np.strings.capitalize,76,first pass (unsampled)
+numpy.fmax.at,ufunc,method,False,np.fmax.at,75,"ufunc study, small (< 100)"
+numpy.strings.center,strings,function,False,np.strings.center,75,first pass (unsampled)
+numpy.strings.rpartition,strings,function,False,np.strings.rpartition,75,first pass (unsampled)
+numpy.strings.swapcase,strings,function,False,np.strings.swapcase,75,first pass (unsampled)
+numpy.strings.zfill,strings,function,False,np.strings.zfill,75,first pass (unsampled)
+numpy.strings.title,strings,function,False,np.strings.title,74,first pass (unsampled)
+numpy.polynomial.legendre.legweight,polynomial,function,False,legweight,65,first pass (unsampled)
+numpy.divmod.outer,ufunc,method,False,np.divmod.outer,64,first pass (unsampled)
+numpy.divide.outer,ufunc,method,False,np.divide.outer,62,"ufunc study, small (< 100)"
+numpy.finfo.negep,finfo,property,False,negep,62,estimate 2492 x 5/200
+numpy.char.lstrip,char,function,False,np.char.lstrip,60,first pass (unsampled)
+numpy.fmax.reduceat,ufunc,method,False,np.fmax.reduceat,59,"ufunc study, small (< 100)"
+numpy.multiply.at,ufunc,method,False,np.multiply.at,56,"ufunc study, small (< 100)"
+numpy.fmin.accumulate,ufunc,method,False,np.fmin.accumulate,54,"ufunc study, small (< 100)"
+numpy.logical_and.outer,ufunc,method,False,np.logical_and.outer,54,"ufunc study, small (< 100)"
+numpy.polynomial.chebyshev.chebinterpolate,polynomial,function,False,chebinterpolate,52,first pass (unsampled)
+numpy.polynomial.chebyshev.chebweight,polynomial,function,False,chebweight,52,first pass (unsampled)
+numpy.char.splitlines,char,function,False,np.char.splitlines,49,first pass (unsampled)
+numpy.bitwise_and.at,ufunc,method,False,np.bitwise_and.at,48,"ufunc study, small (< 100)"
+numpy.polynomial.laguerre.Laguerre,polynomial,class,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.basis,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.basis_name,polynomial,property,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.cast,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.coef,polynomial,property,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.convert,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.copy,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.cutdeg,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.degree,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.deriv,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.domain,polynomial,property,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.fit,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.fromroots,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.has_samecoef,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.has_samedomain,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.has_sametype,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.has_samewindow,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.identity,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.integ,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.linspace,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.mapparms,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.maxpower,polynomial,property,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.roots,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.symbol,polynomial,property,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.trim,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.truncate,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.laguerre.Laguerre.window,polynomial,property,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.multiply.reduceat,ufunc,method,False,np.multiply.reduceat,46,"ufunc study, small (< 100)"
+numpy.logical_and.at,ufunc,method,False,np.logical_and.at,45,"ufunc study, small (< 100)"
+numpy.bitwise_xor.at,ufunc,method,False,np.bitwise_xor.at,42,"ufunc study, small (< 100)"
+numpy.fmin.reduceat,ufunc,method,False,np.fmin.reduceat,42,"ufunc study, small (< 100)"
+numpy.char.rfind,char,function,False,np.char.rfind,40,first pass (unsampled)
+numpy.char.isupper,char,ufunc,False,np.char.isupper,39,first pass (unsampled)
+numpy.fmin.at,ufunc,method,False,np.fmin.at,38,"ufunc study, small (< 100)"
+numpy.polynomial.hermite.Hermite,polynomial,class,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.basis,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.basis_name,polynomial,property,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.cast,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.coef,polynomial,property,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.convert,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.copy,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.cutdeg,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.degree,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.deriv,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.domain,polynomial,property,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.fit,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.fromroots,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.has_samecoef,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.has_samedomain,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.has_sametype,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.has_samewindow,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.identity,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.integ,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.linspace,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.mapparms,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.maxpower,polynomial,property,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.roots,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.symbol,polynomial,property,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.trim,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.truncate,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.Hermite.window,polynomial,property,False,class:Hermite.fit,36,first pass (unsampled)
+numpy.polynomial.hermite.hermweight,polynomial,function,False,hermweight,36,first pass (unsampled)
+numpy.logical_and.reduceat,ufunc,method,False,np.logical_and.reduceat,31,"ufunc study, small (< 100)"
+numpy.char.islower,char,ufunc,False,np.char.islower,30,first pass (unsampled)
+numpy.bitwise_xor.outer,ufunc,method,False,np.bitwise_xor.outer,29,"ufunc study, small (< 100)"
+numpy.logical_xor.accumulate,ufunc,method,False,np.logical_xor.accumulate,29,"ufunc study, small (< 100)"
+numpy.not_equal.outer,ufunc,method,False,np.not_equal.outer,29,"ufunc study, small (< 100)"
+numpy.polynomial.hermite_e.HermiteE,polynomial,class,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.basis,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.basis_name,polynomial,property,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.cast,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.coef,polynomial,property,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.convert,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.copy,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.cutdeg,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.degree,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.deriv,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.domain,polynomial,property,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.fit,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.fromroots,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.has_samecoef,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.has_samedomain,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.has_sametype,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.has_samewindow,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.identity,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.integ,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.linspace,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.mapparms,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.maxpower,polynomial,property,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.roots,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.symbol,polynomial,property,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.trim,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.truncate,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.hermite_e.HermiteE.window,polynomial,property,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.negative.at,ufunc,method,False,np.negative.at,27,"ufunc study, small (< 100)"
+numpy.random.BitGenerator.capsule,random.BitGenerator,property,False,bit_generator.capsule,27,first pass (unsampled)
+numpy.random.MT19937.capsule,random.MT19937,property,False,bit_generator.capsule,27,first pass (unsampled)
+numpy.random.PCG64.capsule,random.PCG64,property,False,bit_generator.capsule,27,first pass (unsampled)
+numpy.random.PCG64DXSM.capsule,random.PCG64DXSM,property,False,bit_generator.capsule,27,first pass (unsampled)
+numpy.random.Philox.capsule,random.Philox,property,False,bit_generator.capsule,27,first pass (unsampled)
+numpy.random.SFC64.capsule,random.SFC64,property,False,bit_generator.capsule,27,first pass (unsampled)
+numpy.ufunc.resolve_dtypes,ufunc,method,False,ufunc.resolve_dtypes,27,first pass (unsampled)
+numpy.less_equal.outer,ufunc,method,False,np.less_equal.outer,26,"ufunc study, small (< 100)"
+numpy.polynomial.hermite_e.hermeweight,polynomial,function,False,hermeweight,25,first pass (unsampled)
+numpy.polynomial.set_default_printstyle,polynomial,function,False,set_default_printstyle,25,estimate 1006 x 5/200
+numpy.char.isspace,char,ufunc,False,np.char.isspace,23,first pass (unsampled)
+numpy.f2py,np,module,False,np.f2py,23,first pass (unsampled)
+numpy.char.isalnum,char,ufunc,False,np.char.isalnum,21,first pass (unsampled)
+numpy.subtract.accumulate,ufunc,method,False,np.subtract.accumulate,21,"ufunc study, small (< 100)"
+numpy.bitwise_and.outer,ufunc,method,False,np.bitwise_and.outer,20,"ufunc study, small (< 100)"
+numpy.char.index,char,function,False,np.char.index,20,first pass (unsampled)
+numpy.strings.slice,strings,function,False,np.strings.slice,20,first pass (unsampled)
+numpy.char.rsplit,char,function,False,np.char.rsplit,19,first pass (unsampled)
+numpy.random.BitGenerator.ctypes,random.BitGenerator,property,False,bit_generator.ctypes,19,first pass (unsampled)
+numpy.random.MT19937.ctypes,random.MT19937,property,False,bit_generator.ctypes,19,first pass (unsampled)
+numpy.random.PCG64.ctypes,random.PCG64,property,False,bit_generator.ctypes,19,first pass (unsampled)
+numpy.random.PCG64DXSM.ctypes,random.PCG64DXSM,property,False,bit_generator.ctypes,19,first pass (unsampled)
+numpy.random.Philox.ctypes,random.Philox,property,False,bit_generator.ctypes,19,first pass (unsampled)
+numpy.random.SFC64.ctypes,random.SFC64,property,False,bit_generator.ctypes,19,first pass (unsampled)
+numpy.char.istitle,char,ufunc,False,np.char.istitle,18,first pass (unsampled)
+numpy.char.rindex,char,function,False,np.char.rindex,18,first pass (unsampled)
+numpy.divide.reduce,ufunc,method,False,np.divide.reduce,18,"ufunc study, small (< 100)"
+numpy.logaddexp.at,ufunc,method,False,np.logaddexp.at,18,"ufunc study, small (< 100)"
+numpy.char.swapcase,char,function,False,np.char.swapcase,17,first pass (unsampled)
+numpy.test,np,function,True,np.test,17,NOT re-count; estimate 186 x 9/100
+numpy.char.expandtabs,char,function,False,np.char.expandtabs,16,first pass (unsampled)
+numpy.logaddexp2.reduce,ufunc,method,False,np.logaddexp2.reduce,16,"ufunc study, small (< 100)"
+numpy.logical_or.outer,ufunc,method,False,np.logical_or.outer,16,"ufunc study, small (< 100)"
+numpy.equal.reduce,ufunc,method,False,np.equal.reduce,15,"ufunc study, small (< 100)"
+numpy.logaddexp.reduceat,ufunc,method,False,np.logaddexp.reduceat,15,"ufunc study, small (< 100)"
+numpy.char.isdecimal,char,ufunc,False,np.char.isdecimal,14,first pass (unsampled)
+numpy.bitwise_or.accumulate,ufunc,method,False,np.bitwise_or.accumulate,13,"ufunc study, small (< 100)"
+numpy.divide.accumulate,ufunc,method,False,np.divide.accumulate,13,"ufunc study, small (< 100)"
+numpy.power.reduce,ufunc,method,False,np.power.reduce,13,"ufunc study, small (< 100)"
+numpy.rec.find_duplicate,rec,function,False,np.rec.find_duplicate,13,first pass (unsampled)
+numpy.bitwise_xor.reduceat,ufunc,method,False,np.bitwise_xor.reduceat,12,"ufunc study, small (< 100)"
+numpy.gcd.outer,ufunc,method,False,np.gcd.outer,12,"ufunc study, small (< 100)"
+numpy.divide.at,ufunc,method,False,np.divide.at,11,"ufunc study, small (< 100)"
+numpy.greater.accumulate,ufunc,method,False,np.greater.accumulate,10,"ufunc study, small (< 100)"
+numpy.greater.reduce,ufunc,method,False,np.greater.reduce,10,"ufunc study, small (< 100)"
+numpy.greater.reduceat,ufunc,method,False,np.greater.reduceat,10,"ufunc study, small (< 100)"
+numpy.ma.maximum.reduce,ma,method,False,ma.maximum.reduce,10,first pass (unsampled)
+numpy.strings.equal,strings,ufunc,False,np.strings.equal,10,first pass (unsampled)
+numpy.subtract.reduceat,ufunc,method,False,np.subtract.reduceat,10,"ufunc study, small (< 100)"
+numpy.hypot.outer,ufunc,method,False,np.hypot.outer,9,"ufunc study, small (< 100)"
+numpy.ma.minimum.reduce,ma,method,False,ma.minimum.reduce,9,first pass (unsampled)
+numpy.bitwise_and.accumulate,ufunc,method,False,np.bitwise_and.accumulate,8,"ufunc study, small (< 100)"
+numpy.mod.outer,ufunc,method,False,np.mod.outer,8,"ufunc study, small (< 100)"
+numpy.right_shift.outer,ufunc,method,False,np.right_shift.outer,8,"ufunc study, small (< 100)"
+numpy.bitwise_or.outer,ufunc,method,False,np.bitwise_or.outer,7,"ufunc study, small (< 100)"
+numpy.floor_divide.outer,ufunc,method,False,np.floor_divide.outer,7,"ufunc study, small (< 100)"
+numpy.floor_divide.reduce,ufunc,method,False,np.floor_divide.reduce,7,"ufunc study, small (< 100)"
+numpy.ma.MaskedArray.toflex,ma,method,False,toflex,7,estimate 698 x 2/200
+numpy.sin.at,ufunc,method,False,np.sin.at,7,first pass (unsampled)
+numpy.square.at,ufunc,method,False,np.square.at,7,"ufunc study, small (< 100)"
+numpy.true_divide.reduce,ufunc,method,False,np.true_divide.reduce,7,"ufunc study, small (< 100)"
+numpy.bitwise_and.reduceat,ufunc,method,False,np.bitwise_and.reduceat,6,"ufunc study, small (< 100)"
+numpy.floor_divide.accumulate,ufunc,method,False,np.floor_divide.accumulate,6,"ufunc study, small (< 100)"
+numpy.greater.at,ufunc,method,False,np.greater.at,6,"ufunc study, small (< 100)"
+numpy.isfinite.at,ufunc,method,False,np.isfinite.at,6,first pass (unsampled)
+numpy.ma.add.reduce,ma,method,False,ma.add.reduce,6,first pass (unsampled)
+numpy.strings.greater,strings,ufunc,False,np.strings.greater,6,first pass (unsampled)
+numpy.strings.greater_equal,strings,ufunc,False,np.strings.greater_equal,6,first pass (unsampled)
+numpy.strings.less,strings,ufunc,False,np.strings.less,6,first pass (unsampled)
+numpy.strings.less_equal,strings,ufunc,False,np.strings.less_equal,6,first pass (unsampled)
+numpy.strings.not_equal,strings,ufunc,False,np.strings.not_equal,6,first pass (unsampled)
+numpy.divide.reduceat,ufunc,method,False,np.divide.reduceat,5,"ufunc study, small (< 100)"
+numpy.equal.accumulate,ufunc,method,False,np.equal.accumulate,5,"ufunc study, small (< 100)"
+numpy.floor_divide.reduceat,ufunc,method,False,np.floor_divide.reduceat,5,"ufunc study, small (< 100)"
+numpy.fmod.accumulate,ufunc,method,False,np.fmod.accumulate,5,"ufunc study, small (< 100)"
+numpy.fmod.outer,ufunc,method,False,np.fmod.outer,5,"ufunc study, small (< 100)"
+numpy.fmod.reduce,ufunc,method,False,np.fmod.reduce,5,"ufunc study, small (< 100)"
+numpy.fmod.reduceat,ufunc,method,False,np.fmod.reduceat,5,"ufunc study, small (< 100)"
+numpy.remainder.accumulate,ufunc,method,False,np.remainder.accumulate,5,"ufunc study, small (< 100)"
+numpy.remainder.outer,ufunc,method,False,np.remainder.outer,5,"ufunc study, small (< 100)"
+numpy.remainder.reduce,ufunc,method,False,np.remainder.reduce,5,"ufunc study, small (< 100)"
+numpy.remainder.reduceat,ufunc,method,False,np.remainder.reduceat,5,"ufunc study, small (< 100)"
+numpy.strings.mod,strings,function,False,np.strings.mod,5,first pass (unsampled)
+numpy.true_divide.accumulate,ufunc,method,False,np.true_divide.accumulate,5,"ufunc study, small (< 100)"
+numpy.true_divide.outer,ufunc,method,False,np.true_divide.outer,5,"ufunc study, small (< 100)"
+numpy.true_divide.reduceat,ufunc,method,False,np.true_divide.reduceat,5,"ufunc study, small (< 100)"
+numpy.arctan2.outer,ufunc,method,False,np.arctan2.outer,4,"ufunc study, small (< 100)"
+numpy.equal.reduceat,ufunc,method,False,np.equal.reduceat,4,"ufunc study, small (< 100)"
+numpy.fmax.outer,ufunc,method,False,np.fmax.outer,4,"ufunc study, small (< 100)"
+numpy.fmin.outer,ufunc,method,False,np.fmin.outer,4,"ufunc study, small (< 100)"
+numpy.greater_equal.accumulate,ufunc,method,False,np.greater_equal.accumulate,4,"ufunc study, small (< 100)"
+numpy.greater_equal.reduce,ufunc,method,False,np.greater_equal.reduce,4,"ufunc study, small (< 100)"
+numpy.greater_equal.reduceat,ufunc,method,False,np.greater_equal.reduceat,4,"ufunc study, small (< 100)"
+numpy.heaviside.accumulate,ufunc,method,False,np.heaviside.accumulate,4,"ufunc study, small (< 100)"
+numpy.heaviside.outer,ufunc,method,False,np.heaviside.outer,4,"ufunc study, small (< 100)"
+numpy.heaviside.reduce,ufunc,method,False,np.heaviside.reduce,4,"ufunc study, small (< 100)"
+numpy.heaviside.reduceat,ufunc,method,False,np.heaviside.reduceat,4,"ufunc study, small (< 100)"
+numpy.left_shift.accumulate,ufunc,method,False,np.left_shift.accumulate,4,"ufunc study, small (< 100)"
+numpy.left_shift.outer,ufunc,method,False,np.left_shift.outer,4,"ufunc study, small (< 100)"
+numpy.left_shift.reduce,ufunc,method,False,np.left_shift.reduce,4,"ufunc study, small (< 100)"
+numpy.left_shift.reduceat,ufunc,method,False,np.left_shift.reduceat,4,"ufunc study, small (< 100)"
+numpy.less.accumulate,ufunc,method,False,np.less.accumulate,4,"ufunc study, small (< 100)"
+numpy.less.reduce,ufunc,method,False,np.less.reduce,4,"ufunc study, small (< 100)"
+numpy.less.reduceat,ufunc,method,False,np.less.reduceat,4,"ufunc study, small (< 100)"
+numpy.less_equal.accumulate,ufunc,method,False,np.less_equal.accumulate,4,"ufunc study, small (< 100)"
+numpy.less_equal.reduce,ufunc,method,False,np.less_equal.reduce,4,"ufunc study, small (< 100)"
+numpy.less_equal.reduceat,ufunc,method,False,np.less_equal.reduceat,4,"ufunc study, small (< 100)"
+numpy.not_equal.accumulate,ufunc,method,False,np.not_equal.accumulate,4,"ufunc study, small (< 100)"
+numpy.not_equal.reduce,ufunc,method,False,np.not_equal.reduce,4,"ufunc study, small (< 100)"
+numpy.not_equal.reduceat,ufunc,method,False,np.not_equal.reduceat,4,"ufunc study, small (< 100)"
+numpy.power.accumulate,ufunc,method,False,np.power.accumulate,4,"ufunc study, small (< 100)"
+numpy.right_shift.accumulate,ufunc,method,False,np.right_shift.accumulate,4,"ufunc study, small (< 100)"
+numpy.right_shift.reduce,ufunc,method,False,np.right_shift.reduce,4,"ufunc study, small (< 100)"
+numpy.right_shift.reduceat,ufunc,method,False,np.right_shift.reduceat,4,"ufunc study, small (< 100)"
+numpy.char.add.reduce,char,method,False,np.char.add.reduce,3,first pass (unsampled)
+numpy.log.at,ufunc,method,False,np.log.at,3,"ufunc study, small (< 100)"
+numpy.absolute.at,ufunc,method,False,np.absolute.at,2,"ufunc study, small (< 100)"
+numpy.logaddexp.outer,ufunc,method,False,np.logaddexp.outer,2,"ufunc study, small (< 100)"
+numpy.ma.multiply.outer,ma,method,False,ma.multiply.outer,2,first pass (unsampled)
+numpy.ma.multiply.reduce,ma,method,False,ma.multiply.reduce,2,first pass (unsampled)
+numpy.power.reduceat,ufunc,method,False,np.power.reduceat,2,"ufunc study, small (< 100)"
+numpy.strings.translate,strings,function,False,np.strings.translate,2,first pass (unsampled)
+numpy.equal.at,ufunc,method,False,np.equal.at,1,"ufunc study, small (< 100)"
+numpy.exp.at,ufunc,method,False,np.exp.at,1,"ufunc study, small (< 100)"
+numpy.float_power.reduce,ufunc,method,False,np.float_power.reduce,1,"ufunc study, small (< 100)"
+numpy.floor_divide.at,ufunc,method,False,np.floor_divide.at,1,"ufunc study, small (< 100)"
+numpy.gcd.accumulate,ufunc,method,False,np.gcd.accumulate,1,"ufunc study, small (< 100)"
+numpy.hypot.at,ufunc,method,False,np.hypot.at,1,"ufunc study, small (< 100)"
+numpy.ldexp.reduce,ufunc,method,False,np.ldexp.reduce,1,"ufunc study, small (< 100)"
+numpy.logical_xor.at,ufunc,method,False,np.logical_xor.at,1,"ufunc study, small (< 100)"
+numpy.ma.bitwise_or.reduce,ma,method,False,ma.bitwise_or.reduce,1,first pass (unsampled)
+numpy.ma.fromflex,ma,function,False,ma.fromflex,1,first pass (unsampled)
+numpy.mod.accumulate,ufunc,method,False,np.mod.accumulate,1,"ufunc study, small (< 100)"
+numpy.mod.reduce,ufunc,method,False,np.mod.reduce,1,"ufunc study, small (< 100)"
+numpy.nextafter.reduce,ufunc,method,False,np.nextafter.reduce,1,"ufunc study, small (< 100)"
+numpy.power.at,ufunc,method,False,np.power.at,1,"ufunc study, small (< 100)"
+numpy.reciprocal.at,ufunc,method,False,np.reciprocal.at,1,"ufunc study, small (< 100)"
+numpy.sqrt.at,ufunc,method,False,np.sqrt.at,1,"ufunc study, small (< 100)"
+numpy.true_divide.at,ufunc,method,False,np.true_divide.at,1,"ufunc study, small (< 100)"
+numpy.abs.at,ufunc,method,False,np.abs.at,0,"ufunc study, small (< 100)"
+numpy.acos.at,ufunc,method,False,np.acos.at,0,first pass (unsampled)
+numpy.acosh.at,ufunc,method,False,np.acosh.at,0,first pass (unsampled)
+numpy.arccos.at,ufunc,method,False,np.arccos.at,0,first pass (unsampled)
+numpy.arccosh.at,ufunc,method,False,np.arccosh.at,0,first pass (unsampled)
+numpy.arcsin.at,ufunc,method,False,np.arcsin.at,0,first pass (unsampled)
+numpy.arcsinh.at,ufunc,method,False,np.arcsinh.at,0,first pass (unsampled)
+numpy.arctan.at,ufunc,method,False,np.arctan.at,0,first pass (unsampled)
+numpy.arctan2.accumulate,ufunc,method,False,np.arctan2.accumulate,0,"ufunc study, small (< 100)"
+numpy.arctan2.at,ufunc,method,False,np.arctan2.at,0,"ufunc study, small (< 100)"
+numpy.arctan2.reduce,ufunc,method,False,np.arctan2.reduce,0,"ufunc study, small (< 100)"
+numpy.arctan2.reduceat,ufunc,method,False,np.arctan2.reduceat,0,"ufunc study, small (< 100)"
+numpy.arctanh.at,ufunc,method,False,np.arctanh.at,0,first pass (unsampled)
+numpy.asin.at,ufunc,method,False,np.asin.at,0,first pass (unsampled)
+numpy.asinh.at,ufunc,method,False,np.asinh.at,0,first pass (unsampled)
+numpy.atan.at,ufunc,method,False,np.atan.at,0,first pass (unsampled)
+numpy.atan2.accumulate,ufunc,method,False,np.atan2.accumulate,0,first pass (unsampled)
+numpy.atan2.at,ufunc,method,False,np.atan2.at,0,first pass (unsampled)
+numpy.atan2.outer,ufunc,method,False,np.atan2.outer,0,first pass (unsampled)
+numpy.atan2.reduce,ufunc,method,False,np.atan2.reduce,0,first pass (unsampled)
+numpy.atan2.reduceat,ufunc,method,False,np.atan2.reduceat,0,first pass (unsampled)
+numpy.atanh.at,ufunc,method,False,np.atanh.at,0,first pass (unsampled)
+numpy.bitwise_count.at,ufunc,method,False,np.bitwise_count.at,0,first pass (unsampled)
+numpy.bitwise_invert.at,ufunc,method,False,np.bitwise_invert.at,0,first pass (unsampled)
+numpy.bitwise_left_shift.accumulate,ufunc,method,False,np.bitwise_left_shift.accumulate,0,first pass (unsampled)
+numpy.bitwise_left_shift.at,ufunc,method,False,np.bitwise_left_shift.at,0,first pass (unsampled)
+numpy.bitwise_left_shift.outer,ufunc,method,False,np.bitwise_left_shift.outer,0,first pass (unsampled)
+numpy.bitwise_left_shift.reduce,ufunc,method,False,np.bitwise_left_shift.reduce,0,first pass (unsampled)
+numpy.bitwise_left_shift.reduceat,ufunc,method,False,np.bitwise_left_shift.reduceat,0,first pass (unsampled)
+numpy.bitwise_not.at,ufunc,method,False,np.bitwise_not.at,0,first pass (unsampled)
+numpy.bitwise_right_shift.accumulate,ufunc,method,False,np.bitwise_right_shift.accumulate,0,first pass (unsampled)
+numpy.bitwise_right_shift.at,ufunc,method,False,np.bitwise_right_shift.at,0,first pass (unsampled)
+numpy.bitwise_right_shift.outer,ufunc,method,False,np.bitwise_right_shift.outer,0,first pass (unsampled)
+numpy.bitwise_right_shift.reduce,ufunc,method,False,np.bitwise_right_shift.reduce,0,first pass (unsampled)
+numpy.bitwise_right_shift.reduceat,ufunc,method,False,np.bitwise_right_shift.reduceat,0,first pass (unsampled)
+numpy.cbrt.at,ufunc,method,False,np.cbrt.at,0,first pass (unsampled)
+numpy.ceil.at,ufunc,method,False,np.ceil.at,0,"ufunc study, small (< 100)"
+numpy.char.add.accumulate,char,method,False,np.char.add.accumulate,0,first pass (unsampled)
+numpy.char.add.at,char,method,False,np.char.add.at,0,first pass (unsampled)
+numpy.char.add.outer,char,method,False,np.char.add.outer,0,first pass (unsampled)
+numpy.char.add.reduceat,char,method,False,np.char.add.reduceat,0,first pass (unsampled)
+numpy.char.isalnum.at,char,method,False,np.char.isalnum.at,0,first pass (unsampled)
+numpy.char.isalpha.at,char,method,False,np.char.isalpha.at,0,first pass (unsampled)
+numpy.char.isdecimal.at,char,method,False,np.char.isdecimal.at,0,first pass (unsampled)
+numpy.char.isdigit.at,char,method,False,np.char.isdigit.at,0,first pass (unsampled)
+numpy.char.islower.at,char,method,False,np.char.islower.at,0,first pass (unsampled)
+numpy.char.isnumeric.at,char,method,False,np.char.isnumeric.at,0,first pass (unsampled)
+numpy.char.isspace.at,char,method,False,np.char.isspace.at,0,first pass (unsampled)
+numpy.char.istitle.at,char,method,False,np.char.istitle.at,0,first pass (unsampled)
+numpy.char.isupper.at,char,method,False,np.char.isupper.at,0,first pass (unsampled)
+numpy.char.str_len.at,char,method,False,np.char.str_len.at,0,first pass (unsampled)
+numpy.conj.at,ufunc,method,False,np.conj.at,0,first pass (unsampled)
+numpy.conjugate.at,ufunc,method,False,np.conjugate.at,0,first pass (unsampled)
+numpy.copysign.accumulate,ufunc,method,False,np.copysign.accumulate,0,"ufunc study, small (< 100)"
+numpy.copysign.at,ufunc,method,False,np.copysign.at,0,"ufunc study, small (< 100)"
+numpy.copysign.outer,ufunc,method,False,np.copysign.outer,0,"ufunc study, small (< 100)"
+numpy.copysign.reduce,ufunc,method,False,np.copysign.reduce,0,"ufunc study, small (< 100)"
+numpy.copysign.reduceat,ufunc,method,False,np.copysign.reduceat,0,"ufunc study, small (< 100)"
+numpy.cos.at,ufunc,method,False,np.cos.at,0,first pass (unsampled)
+numpy.cosh.at,ufunc,method,False,np.cosh.at,0,first pass (unsampled)
+numpy.deg2rad.at,ufunc,method,False,np.deg2rad.at,0,first pass (unsampled)
+numpy.degrees.at,ufunc,method,False,np.degrees.at,0,first pass (unsampled)
+numpy.exp2.at,ufunc,method,False,np.exp2.at,0,first pass (unsampled)
+numpy.expm1.at,ufunc,method,False,np.expm1.at,0,first pass (unsampled)
+numpy.fabs.at,ufunc,method,False,np.fabs.at,0,first pass (unsampled)
+numpy.float_power.accumulate,ufunc,method,False,np.float_power.accumulate,0,"ufunc study, small (< 100)"
+numpy.float_power.at,ufunc,method,False,np.float_power.at,0,"ufunc study, small (< 100)"
+numpy.float_power.outer,ufunc,method,False,np.float_power.outer,0,"ufunc study, small (< 100)"
+numpy.float_power.reduceat,ufunc,method,False,np.float_power.reduceat,0,"ufunc study, small (< 100)"
+numpy.floor.at,ufunc,method,False,np.floor.at,0,"ufunc study, small (< 100)"
+numpy.fmod.at,ufunc,method,False,np.fmod.at,0,"ufunc study, small (< 100)"
+numpy.gcd.at,ufunc,method,False,np.gcd.at,0,"ufunc study, small (< 100)"
+numpy.gcd.reduceat,ufunc,method,False,np.gcd.reduceat,0,"ufunc study, small (< 100)"
+numpy.greater_equal.at,ufunc,method,False,np.greater_equal.at,0,"ufunc study, small (< 100)"
+numpy.heaviside.at,ufunc,method,False,np.heaviside.at,0,"ufunc study, small (< 100)"
+numpy.hypot.accumulate,ufunc,method,False,np.hypot.accumulate,0,"ufunc study, small (< 100)"
+numpy.hypot.reduceat,ufunc,method,False,np.hypot.reduceat,0,"ufunc study, small (< 100)"
+numpy.invert.at,ufunc,method,False,np.invert.at,0,"ufunc study, small (< 100)"
+numpy.isinf.at,ufunc,method,False,np.isinf.at,0,first pass (unsampled)
+numpy.isnan.at,ufunc,method,False,np.isnan.at,0,first pass (unsampled)
+numpy.isnat.at,ufunc,method,False,np.isnat.at,0,first pass (unsampled)
+numpy.lcm.accumulate,ufunc,method,False,np.lcm.accumulate,0,"ufunc study, small (< 100)"
+numpy.lcm.at,ufunc,method,False,np.lcm.at,0,"ufunc study, small (< 100)"
+numpy.lcm.outer,ufunc,method,False,np.lcm.outer,0,"ufunc study, small (< 100)"
+numpy.lcm.reduceat,ufunc,method,False,np.lcm.reduceat,0,"ufunc study, small (< 100)"
+numpy.ldexp.accumulate,ufunc,method,False,np.ldexp.accumulate,0,"ufunc study, small (< 100)"
+numpy.ldexp.at,ufunc,method,False,np.ldexp.at,0,"ufunc study, small (< 100)"
+numpy.ldexp.outer,ufunc,method,False,np.ldexp.outer,0,"ufunc study, small (< 100)"
+numpy.ldexp.reduceat,ufunc,method,False,np.ldexp.reduceat,0,"ufunc study, small (< 100)"
+numpy.left_shift.at,ufunc,method,False,np.left_shift.at,0,"ufunc study, small (< 100)"
+numpy.less.at,ufunc,method,False,np.less.at,0,"ufunc study, small (< 100)"
+numpy.less_equal.at,ufunc,method,False,np.less_equal.at,0,"ufunc study, small (< 100)"
+numpy.log10.at,ufunc,method,False,np.log10.at,0,first pass (unsampled)
+numpy.log1p.at,ufunc,method,False,np.log1p.at,0,first pass (unsampled)
+numpy.log2.at,ufunc,method,False,np.log2.at,0,first pass (unsampled)
+numpy.logaddexp2.accumulate,ufunc,method,False,np.logaddexp2.accumulate,0,"ufunc study, small (< 100)"
+numpy.logaddexp2.at,ufunc,method,False,np.logaddexp2.at,0,"ufunc study, small (< 100)"
+numpy.logaddexp2.outer,ufunc,method,False,np.logaddexp2.outer,0,"ufunc study, small (< 100)"
+numpy.logaddexp2.reduceat,ufunc,method,False,np.logaddexp2.reduceat,0,"ufunc study, small (< 100)"
+numpy.logical_not.at,ufunc,method,False,np.logical_not.at,0,"ufunc study, small (< 100)"
+numpy.logical_xor.reduceat,ufunc,method,False,np.logical_xor.reduceat,0,"ufunc study, small (< 100)"
+numpy.ma.add.accumulate,ma,method,False,ma.add.accumulate,0,first pass (unsampled)
+numpy.ma.add.outer,ma,method,False,ma.add.outer,0,first pass (unsampled)
+numpy.ma.arctan2.accumulate,ma,method,False,ma.arctan2.accumulate,0,first pass (unsampled)
+numpy.ma.arctan2.outer,ma,method,False,ma.arctan2.outer,0,first pass (unsampled)
+numpy.ma.arctan2.reduce,ma,method,False,ma.arctan2.reduce,0,first pass (unsampled)
+numpy.ma.bitwise_and.accumulate,ma,method,False,ma.bitwise_and.accumulate,0,first pass (unsampled)
+numpy.ma.bitwise_and.outer,ma,method,False,ma.bitwise_and.outer,0,first pass (unsampled)
+numpy.ma.bitwise_and.reduce,ma,method,False,ma.bitwise_and.reduce,0,first pass (unsampled)
+numpy.ma.bitwise_or.accumulate,ma,method,False,ma.bitwise_or.accumulate,0,first pass (unsampled)
+numpy.ma.bitwise_or.outer,ma,method,False,ma.bitwise_or.outer,0,first pass (unsampled)
+numpy.ma.bitwise_xor.accumulate,ma,method,False,ma.bitwise_xor.accumulate,0,first pass (unsampled)
+numpy.ma.bitwise_xor.outer,ma,method,False,ma.bitwise_xor.outer,0,first pass (unsampled)
+numpy.ma.bitwise_xor.reduce,ma,method,False,ma.bitwise_xor.reduce,0,first pass (unsampled)
+numpy.ma.equal.accumulate,ma,method,False,ma.equal.accumulate,0,first pass (unsampled)
+numpy.ma.equal.outer,ma,method,False,ma.equal.outer,0,first pass (unsampled)
+numpy.ma.flatten_structured_array,ma,function,False,ma.flatten_structured_array,0,first pass (unsampled)
+numpy.ma.greater.accumulate,ma,method,False,ma.greater.accumulate,0,first pass (unsampled)
+numpy.ma.greater.outer,ma,method,False,ma.greater.outer,0,first pass (unsampled)
+numpy.ma.greater_equal.accumulate,ma,method,False,ma.greater_equal.accumulate,0,first pass (unsampled)
+numpy.ma.greater_equal.outer,ma,method,False,ma.greater_equal.outer,0,first pass (unsampled)
+numpy.ma.hypot.accumulate,ma,method,False,ma.hypot.accumulate,0,first pass (unsampled)
+numpy.ma.hypot.outer,ma,method,False,ma.hypot.outer,0,first pass (unsampled)
+numpy.ma.hypot.reduce,ma,method,False,ma.hypot.reduce,0,first pass (unsampled)
+numpy.ma.less.accumulate,ma,method,False,ma.less.accumulate,0,first pass (unsampled)
+numpy.ma.less.outer,ma,method,False,ma.less.outer,0,first pass (unsampled)
+numpy.ma.less_equal.accumulate,ma,method,False,ma.less_equal.accumulate,0,first pass (unsampled)
+numpy.ma.less_equal.outer,ma,method,False,ma.less_equal.outer,0,first pass (unsampled)
+numpy.ma.logical_and.accumulate,ma,method,False,ma.logical_and.accumulate,0,first pass (unsampled)
+numpy.ma.logical_and.outer,ma,method,False,ma.logical_and.outer,0,first pass (unsampled)
+numpy.ma.logical_and.reduce,ma,method,False,ma.logical_and.reduce,0,first pass (unsampled)
+numpy.ma.logical_or.accumulate,ma,method,False,ma.logical_or.accumulate,0,first pass (unsampled)
+numpy.ma.logical_or.outer,ma,method,False,ma.logical_or.outer,0,first pass (unsampled)
+numpy.ma.logical_or.reduce,ma,method,False,ma.logical_or.reduce,0,first pass (unsampled)
+numpy.ma.logical_xor.accumulate,ma,method,False,ma.logical_xor.accumulate,0,first pass (unsampled)
+numpy.ma.logical_xor.outer,ma,method,False,ma.logical_xor.outer,0,first pass (unsampled)
+numpy.ma.logical_xor.reduce,ma,method,False,ma.logical_xor.reduce,0,first pass (unsampled)
+numpy.ma.maximum.outer,ma,method,False,ma.maximum.outer,0,first pass (unsampled)
+numpy.ma.minimum.outer,ma,method,False,ma.minimum.outer,0,first pass (unsampled)
+numpy.ma.multiply.accumulate,ma,method,False,ma.multiply.accumulate,0,first pass (unsampled)
+numpy.ma.not_equal.accumulate,ma,method,False,ma.not_equal.accumulate,0,first pass (unsampled)
+numpy.ma.not_equal.outer,ma,method,False,ma.not_equal.outer,0,first pass (unsampled)
+numpy.ma.subtract.accumulate,ma,method,False,ma.subtract.accumulate,0,first pass (unsampled)
+numpy.ma.subtract.outer,ma,method,False,ma.subtract.outer,0,first pass (unsampled)
+numpy.ma.subtract.reduce,ma,method,False,ma.subtract.reduce,0,first pass (unsampled)
+numpy.mod.at,ufunc,method,False,np.mod.at,0,"ufunc study, small (< 100)"
+numpy.mod.reduceat,ufunc,method,False,np.mod.reduceat,0,"ufunc study, small (< 100)"
+numpy.nextafter.accumulate,ufunc,method,False,np.nextafter.accumulate,0,"ufunc study, small (< 100)"
+numpy.nextafter.at,ufunc,method,False,np.nextafter.at,0,"ufunc study, small (< 100)"
+numpy.nextafter.outer,ufunc,method,False,np.nextafter.outer,0,"ufunc study, small (< 100)"
+numpy.nextafter.reduceat,ufunc,method,False,np.nextafter.reduceat,0,"ufunc study, small (< 100)"
+numpy.not_equal.at,ufunc,method,False,np.not_equal.at,0,"ufunc study, small (< 100)"
+numpy.polynomial.polyutils.format_float,polynomial,function,False,polyutils.format_float,0,first pass (unsampled)
+numpy.positive.at,ufunc,method,False,np.positive.at,0,"ufunc study, small (< 100)"
+numpy.pow.accumulate,ufunc,method,False,np.pow.accumulate,0,first pass (unsampled)
+numpy.pow.at,ufunc,method,False,np.pow.at,0,first pass (unsampled)
+numpy.pow.outer,ufunc,method,False,np.pow.outer,0,first pass (unsampled)
+numpy.pow.reduce,ufunc,method,False,np.pow.reduce,0,first pass (unsampled)
+numpy.pow.reduceat,ufunc,method,False,np.pow.reduceat,0,first pass (unsampled)
+numpy.rad2deg.at,ufunc,method,False,np.rad2deg.at,0,first pass (unsampled)
+numpy.radians.at,ufunc,method,False,np.radians.at,0,first pass (unsampled)
+numpy.remainder.at,ufunc,method,False,np.remainder.at,0,"ufunc study, small (< 100)"
+numpy.right_shift.at,ufunc,method,False,np.right_shift.at,0,"ufunc study, small (< 100)"
+numpy.rint.at,ufunc,method,False,np.rint.at,0,first pass (unsampled)
+numpy.sign.at,ufunc,method,False,np.sign.at,0,"ufunc study, small (< 100)"
+numpy.signbit.at,ufunc,method,False,np.signbit.at,0,first pass (unsampled)
+numpy.sinh.at,ufunc,method,False,np.sinh.at,0,first pass (unsampled)
+numpy.spacing.at,ufunc,method,False,np.spacing.at,0,first pass (unsampled)
+numpy.strings.add.accumulate,strings,method,False,np.strings.add.accumulate,0,first pass (unsampled)
+numpy.strings.add.at,strings,method,False,np.strings.add.at,0,first pass (unsampled)
+numpy.strings.add.outer,strings,method,False,np.strings.add.outer,0,first pass (unsampled)
+numpy.strings.add.reduce,strings,method,False,np.strings.add.reduce,0,first pass (unsampled)
+numpy.strings.add.reduceat,strings,method,False,np.strings.add.reduceat,0,first pass (unsampled)
+numpy.strings.equal.accumulate,strings,method,False,np.strings.equal.accumulate,0,first pass (unsampled)
+numpy.strings.equal.at,strings,method,False,np.strings.equal.at,0,first pass (unsampled)
+numpy.strings.equal.outer,strings,method,False,np.strings.equal.outer,0,first pass (unsampled)
+numpy.strings.equal.reduce,strings,method,False,np.strings.equal.reduce,0,first pass (unsampled)
+numpy.strings.equal.reduceat,strings,method,False,np.strings.equal.reduceat,0,first pass (unsampled)
+numpy.strings.greater.accumulate,strings,method,False,np.strings.greater.accumulate,0,first pass (unsampled)
+numpy.strings.greater.at,strings,method,False,np.strings.greater.at,0,first pass (unsampled)
+numpy.strings.greater.outer,strings,method,False,np.strings.greater.outer,0,first pass (unsampled)
+numpy.strings.greater.reduce,strings,method,False,np.strings.greater.reduce,0,first pass (unsampled)
+numpy.strings.greater.reduceat,strings,method,False,np.strings.greater.reduceat,0,first pass (unsampled)
+numpy.strings.greater_equal.accumulate,strings,method,False,np.strings.greater_equal.accumulate,0,first pass (unsampled)
+numpy.strings.greater_equal.at,strings,method,False,np.strings.greater_equal.at,0,first pass (unsampled)
+numpy.strings.greater_equal.outer,strings,method,False,np.strings.greater_equal.outer,0,first pass (unsampled)
+numpy.strings.greater_equal.reduce,strings,method,False,np.strings.greater_equal.reduce,0,first pass (unsampled)
+numpy.strings.greater_equal.reduceat,strings,method,False,np.strings.greater_equal.reduceat,0,first pass (unsampled)
+numpy.strings.isalnum.at,strings,method,False,np.strings.isalnum.at,0,first pass (unsampled)
+numpy.strings.isalpha.at,strings,method,False,np.strings.isalpha.at,0,first pass (unsampled)
+numpy.strings.isdecimal.at,strings,method,False,np.strings.isdecimal.at,0,first pass (unsampled)
+numpy.strings.isdigit.at,strings,method,False,np.strings.isdigit.at,0,first pass (unsampled)
+numpy.strings.islower.at,strings,method,False,np.strings.islower.at,0,first pass (unsampled)
+numpy.strings.isnumeric.at,strings,method,False,np.strings.isnumeric.at,0,first pass (unsampled)
+numpy.strings.isspace.at,strings,method,False,np.strings.isspace.at,0,first pass (unsampled)
+numpy.strings.istitle.at,strings,method,False,np.strings.istitle.at,0,first pass (unsampled)
+numpy.strings.isupper.at,strings,method,False,np.strings.isupper.at,0,first pass (unsampled)
+numpy.strings.less.accumulate,strings,method,False,np.strings.less.accumulate,0,first pass (unsampled)
+numpy.strings.less.at,strings,method,False,np.strings.less.at,0,first pass (unsampled)
+numpy.strings.less.outer,strings,method,False,np.strings.less.outer,0,first pass (unsampled)
+numpy.strings.less.reduce,strings,method,False,np.strings.less.reduce,0,first pass (unsampled)
+numpy.strings.less.reduceat,strings,method,False,np.strings.less.reduceat,0,first pass (unsampled)
+numpy.strings.less_equal.accumulate,strings,method,False,np.strings.less_equal.accumulate,0,first pass (unsampled)
+numpy.strings.less_equal.at,strings,method,False,np.strings.less_equal.at,0,first pass (unsampled)
+numpy.strings.less_equal.outer,strings,method,False,np.strings.less_equal.outer,0,first pass (unsampled)
+numpy.strings.less_equal.reduce,strings,method,False,np.strings.less_equal.reduce,0,first pass (unsampled)
+numpy.strings.less_equal.reduceat,strings,method,False,np.strings.less_equal.reduceat,0,first pass (unsampled)
+numpy.strings.not_equal.accumulate,strings,method,False,np.strings.not_equal.accumulate,0,first pass (unsampled)
+numpy.strings.not_equal.at,strings,method,False,np.strings.not_equal.at,0,first pass (unsampled)
+numpy.strings.not_equal.outer,strings,method,False,np.strings.not_equal.outer,0,first pass (unsampled)
+numpy.strings.not_equal.reduce,strings,method,False,np.strings.not_equal.reduce,0,first pass (unsampled)
+numpy.strings.not_equal.reduceat,strings,method,False,np.strings.not_equal.reduceat,0,first pass (unsampled)
+numpy.strings.str_len.at,strings,method,False,np.strings.str_len.at,0,first pass (unsampled)
+numpy.tan.at,ufunc,method,False,np.tan.at,0,first pass (unsampled)
+numpy.tanh.at,ufunc,method,False,np.tanh.at,0,first pass (unsampled)
+numpy.trunc.at,ufunc,method,False,np.trunc.at,0,first pass (unsampled)
+numpy.abs.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.abs.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.abs.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.abs.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.absolute.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.absolute.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.absolute.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.absolute.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.acos.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.acos.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.acos.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.acos.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.acosh.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.acosh.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.acosh.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.acosh.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arccos.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arccos.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arccos.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arccos.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arccosh.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arccosh.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arccosh.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arccosh.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arcsin.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arcsin.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arcsin.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arcsin.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arcsinh.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arcsinh.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arcsinh.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arcsinh.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arctan.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arctan.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arctan.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arctan.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arctanh.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arctanh.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arctanh.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.arctanh.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.asin.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.asin.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.asin.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.asin.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.asinh.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.asinh.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.asinh.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.asinh.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.atan.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.atan.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.atan.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.atan.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.atanh.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.atanh.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.atanh.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.atanh.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.bitwise_count.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.bitwise_count.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.bitwise_count.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.bitwise_count.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.bitwise_invert.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.bitwise_invert.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.bitwise_invert.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.bitwise_invert.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.bitwise_not.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.bitwise_not.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.bitwise_not.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.bitwise_not.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.cbrt.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.cbrt.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.cbrt.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.cbrt.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.ceil.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.ceil.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.ceil.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.ceil.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isalnum.accumulate,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isalnum.outer,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isalnum.reduce,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isalnum.reduceat,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isalpha.accumulate,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isalpha.outer,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isalpha.reduce,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isalpha.reduceat,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isdecimal.accumulate,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isdecimal.outer,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isdecimal.reduce,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isdecimal.reduceat,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isdigit.accumulate,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isdigit.outer,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isdigit.reduce,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isdigit.reduceat,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.islower.accumulate,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.islower.outer,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.islower.reduce,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.islower.reduceat,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isnumeric.accumulate,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isnumeric.outer,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isnumeric.reduce,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isnumeric.reduceat,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isspace.accumulate,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isspace.outer,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isspace.reduce,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isspace.reduceat,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.istitle.accumulate,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.istitle.outer,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.istitle.reduce,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.istitle.reduceat,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isupper.accumulate,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isupper.outer,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isupper.reduce,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.isupper.reduceat,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.str_len.accumulate,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.str_len.outer,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.str_len.reduce,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.char.str_len.reduceat,char,method,False,,,NumPy rejects every call of this ufunc method
+numpy.conj.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.conj.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.conj.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.conj.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.conjugate.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.conjugate.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.conjugate.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.conjugate.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.cos.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.cos.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.cos.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.cos.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.cosh.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.cosh.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.cosh.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.cosh.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.deg2rad.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.deg2rad.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.deg2rad.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.deg2rad.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.degrees.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.degrees.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.degrees.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.degrees.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.divmod.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.divmod.at,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.divmod.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.divmod.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.exp.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.exp.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.exp.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.exp.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.exp2.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.exp2.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.exp2.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.exp2.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.expm1.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.expm1.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.expm1.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.expm1.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.fabs.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.fabs.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.fabs.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.fabs.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.finfo.iexp,finfo,property,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.finfo.nexp,finfo,property,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.floor.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.floor.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.floor.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.floor.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.frexp.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.frexp.at,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.frexp.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.frexp.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.frexp.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.iinfo.key,iinfo,property,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.invert.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.invert.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.invert.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.invert.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.isfinite.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.isfinite.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.isfinite.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.isfinite.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.isinf.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.isinf.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.isinf.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.isinf.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.isnan.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.isnan.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.isnan.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.isnan.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.isnat.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.isnat.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.isnat.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.isnat.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.log.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.log.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.log.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.log.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.log10.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.log10.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.log10.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.log10.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.log1p.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.log1p.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.log1p.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.log1p.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.log2.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.log2.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.log2.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.log2.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.logical_not.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.logical_not.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.logical_not.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.logical_not.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.ma.MaskedArray.base,ma,property,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.ma.MaskedArray.ctypes,ma,property,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.ma.MaskedArray.device,ma,property,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.ma.MaskedArray.dump,ma,method,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.ma.MaskedArray.dumps,ma,method,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.ma.MaskedArray.flags,ma,property,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.ma.MaskedArray.get_imag,ma,method,False,get_imag,,not attributable: other libraries define functions with the same name
+numpy.ma.MaskedArray.get_real,ma,method,False,get_real,,not attributable: other libraries define functions with the same name
+numpy.ma.MaskedArray.getfield,ma,method,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.ma.MaskedArray.set_fill_value,ma,method,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.ma.MaskedArray.setfield,ma,method,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.ma.MaskedArray.setflags,ma,method,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.ma.MaskedArray.to_device,ma,method,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.matmul.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.matmul.at,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.matmul.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.matmul.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.matmul.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.matrix.ctypes,matrix,property,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.matrix.dump,matrix,method,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.matrix.dumps,matrix,method,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.matvec.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.matvec.at,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.matvec.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.matvec.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.matvec.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.modf.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.modf.at,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.modf.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.modf.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.modf.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.ndarray.dump,ndarray,method,True,,,generic member name (pickle.dump / json.dumps share it)
+numpy.ndarray.dumps,ndarray,method,True,,,generic member name (pickle.dump / json.dumps share it)
+numpy.ndenumerate.__iter__,ndenumerate,method,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.ndenumerate.__next__,ndenumerate,method,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.ndenumerate.iter,ndenumerate,property,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.ndindex.__iter__,ndindex,method,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.ndindex.__next__,ndindex,method,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.negative.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.negative.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.negative.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.negative.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.positive.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.positive.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.positive.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.positive.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.rad2deg.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.rad2deg.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.rad2deg.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.rad2deg.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.radians.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.radians.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.radians.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.radians.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.reciprocal.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.reciprocal.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.reciprocal.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.reciprocal.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.rint.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.rint.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.rint.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.rint.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.sign.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.sign.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.sign.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.sign.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.signbit.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.signbit.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.signbit.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.signbit.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.sin.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.sin.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.sin.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.sin.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.sinh.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.sinh.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.sinh.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.sinh.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.spacing.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.spacing.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.spacing.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.spacing.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.sqrt.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.sqrt.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.sqrt.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.sqrt.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.square.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.square.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.square.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.square.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isalnum.accumulate,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isalnum.outer,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isalnum.reduce,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isalnum.reduceat,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isalpha.accumulate,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isalpha.outer,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isalpha.reduce,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isalpha.reduceat,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isdecimal.accumulate,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isdecimal.outer,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isdecimal.reduce,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isdecimal.reduceat,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isdigit.accumulate,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isdigit.outer,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isdigit.reduce,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isdigit.reduceat,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.islower.accumulate,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.islower.outer,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.islower.reduce,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.islower.reduceat,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isnumeric.accumulate,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isnumeric.outer,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isnumeric.reduce,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isnumeric.reduceat,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isspace.accumulate,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isspace.outer,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isspace.reduce,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isspace.reduceat,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.istitle.accumulate,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.istitle.outer,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.istitle.reduce,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.istitle.reduceat,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isupper.accumulate,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isupper.outer,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isupper.reduce,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.isupper.reduceat,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.str_len.accumulate,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.str_len.outer,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.str_len.reduce,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.strings.str_len.reduceat,strings,method,False,,,NumPy rejects every call of this ufunc method
+numpy.tan.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.tan.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.tan.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.tan.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.tanh.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.tanh.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.tanh.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.tanh.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.trunc.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.trunc.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.trunc.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.trunc.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.ufunc.__call__,ufunc,method,False,,,Python protocol (call / doc / name) of every ufunc
+numpy.ufunc.__doc__,ufunc,property,False,,,Python protocol (call / doc / name) of every ufunc
+numpy.ufunc.__name__,ufunc,property,False,,,Python protocol (call / doc / name) of every ufunc
+numpy.vecdot.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.vecdot.at,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.vecdot.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.vecdot.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.vecdot.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.vecmat.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.vecmat.at,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.vecmat.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.vecmat.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.vecmat.reduceat,ufunc,method,False,,,NumPy rejects every call of this ufunc method
+numpy.vectorize.__call__,vectorize,method,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.vectorize.cache,vectorize,property,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.vectorize.excluded,vectorize,property,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.vectorize.otypes,vectorize,property,False,,,generic member name or Python protocol: not measurable by phrase
+numpy.vectorize.pyfunc,vectorize,property,False,,,generic member name or Python protocol: not measurable by phrase
