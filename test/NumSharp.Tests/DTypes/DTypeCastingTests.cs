@@ -196,32 +196,32 @@ namespace NumSharp.Tests.DTypes
         [TestMethod]
         public void CastingImpls_CarryNumPysMinimalSafety()
         {
-            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Int32DType).Casting.Should().Be(NPY_CASTING.NPY_EQUIV_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Int64DType).Casting.Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.Int64DType, np.dtypes.Int32DType).Casting.Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.Float64DType, np.dtypes.Int32DType).Casting.Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Float64DType).Casting.Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.CharDType, np.dtypes.UInt16DType).Casting.Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.UInt16DType, np.dtypes.CharDType).Casting.Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.TimeDelta64DType).Casting.Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.UInt64DType, np.dtypes.TimeDelta64DType).Casting.Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.Float64DType, np.dtypes.TimeDelta64DType).Casting.Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.DateTime64DType).Casting.Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Int32DType).casting.Should().Be(NPY_CASTING.NPY_EQUIV_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Int64DType).casting.Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.Int64DType, np.dtypes.Int32DType).casting.Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.Float64DType, np.dtypes.Int32DType).casting.Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Float64DType).casting.Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.CharDType, np.dtypes.UInt16DType).casting.Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.UInt16DType, np.dtypes.CharDType).casting.Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.TimeDelta64DType).casting.Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.UInt64DType, np.dtypes.TimeDelta64DType).casting.Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.Float64DType, np.dtypes.TimeDelta64DType).casting.Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.DateTime64DType).casting.Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
             DTypeCasting.GetCastingImpl(np.dtypes.DateTime64DType, np.dtypes.DateTime64DType).Should().BeOfType<TimeToTimeCastingImpl>();
             DTypeCasting.GetCastingImpl(np.dtypes.TimeDelta64DType, np.dtypes.DateTime64DType).Should().BeOfType<DatetimeTimedeltaCastingImpl>();
             // NumPy registers a legacy cast from every numeric class to text; int32's longest text is 11 characters, so the
             // cast is 'safe' into a <U11 or wider and into the unsized class (probed 2.4.2), 'same_kind' into anything shorter.
-            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, DTypeRegistry.Str).Name.Should().Be("legacy_cast_to_string");
+            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, DTypeRegistry.Str).name.Should().Be("legacy_cast_to_string");
             np.can_cast(np.dtype("i4"), np.dtype("U")).Should().BeTrue();
             np.can_cast(np.dtype("i4"), np.dtype("U11")).Should().BeTrue();
             np.can_cast(np.dtype("i4"), np.dtype("U10")).Should().BeFalse("int32 needs 11 characters");
             np.can_cast(np.dtype("U3"), np.dtype("S3")).Should().BeFalse("str to bytes is never safe (the text may not be ASCII)");
             np.can_cast(np.dtype("S3"), np.dtype("U3")).Should().BeTrue();
             var impl = DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Int64DType);
-            impl.Name.Should().Be("numeric_cast");
-            impl.NIn.Should().Be(1);
-            impl.NOut.Should().Be(1);
-            impl.DTypes.Should().Equal(np.dtypes.Int32DType, np.dtypes.Int64DType);
+            impl.name.Should().Be("numeric_cast");
+            impl.nin.Should().Be(1);
+            impl.nout.Should().Be(1);
+            impl.dtypes.Should().Equal(np.dtypes.Int32DType, np.dtypes.Int64DType);
             impl.From.Should().BeSameAs(np.dtypes.Int32DType);
             impl.To.Should().BeSameAs(np.dtypes.Int64DType);
             impl.IsWithinDType.Should().BeFalse();
@@ -232,10 +232,10 @@ namespace NumSharp.Tests.DTypes
         {
             var impl = DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Int32DType);
             var loop = new DType[2];
-            impl.ResolveDescriptors(new[] { DType.Int32, (DType)null }, loop, out long view).Should().Be(NPY_CASTING.NPY_NO_CASTING);
+            impl.resolve_descriptors(new[] { DType.Int32, (DType)null }, loop, out long view).Should().Be(NPY_CASTING.NPY_NO_CASTING);
             view.Should().Be(0);
             loop[1].Should().BeSameAs(DType.Int32);
-            impl.ResolveDescriptors(new[] { np.dtype(">i4"), DType.Int32 }, loop, out view).Should().Be(NPY_CASTING.NPY_EQUIV_CASTING);
+            impl.resolve_descriptors(new[] { np.dtype(">i4"), DType.Int32 }, loop, out view).Should().Be(NPY_CASTING.NPY_EQUIV_CASTING);
             view.Should().Be(ArrayMethod.NoView);
 
             DTypeCasting.GetCastInfo(DType.Int32, DType.Int64, null, out view).Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
@@ -258,7 +258,7 @@ namespace NumSharp.Tests.DTypes
         {
             var impl = DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Int64DType);
             var ctx = new ArrayMethodContext(impl, new[] { DType.Int32, DType.Int64 });
-            Action act = () => impl.GetStridedLoop(ctx, aligned: true, new long[] { 4, 8 }, out _);
+            Action act = () => impl.get_strided_loop(ctx, aligned: true, new long[] { 4, 8 }, out _);
             act.Should().Throw<NotSupportedException>().WithMessage("*does not provide a strided loop yet*Stage C*");
         }
     }

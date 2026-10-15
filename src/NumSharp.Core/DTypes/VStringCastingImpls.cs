@@ -32,7 +32,7 @@ namespace NumSharp
         /// <param name="loopDescrs">Receives the loop descriptors.</param>
         /// <param name="viewOffset">0 when both loop descriptors are the same object (a view is legal), else <see cref="ArrayMethod.NoView"/>.</param>
         /// <returns><c>unsafe</c> from an NA-holding descriptor to one without, else <c>no</c> casting.</returns>
-        public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
+        public override NPY_CASTING resolve_descriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
             loopDescrs[1] = givenDescrs[1] ?? givenDescrs[0];
             loopDescrs[0] = givenDescrs[0];
@@ -60,8 +60,8 @@ namespace NumSharp
     ///     <c>safe</c> from numbers, bool and the datetime pair, <c>same_kind</c> from <c>U</c> and <c>S</c>.
     /// </summary>
     /// <remarks>
-    ///     Two levels per cast, as NumPy registers them: the method's MINIMAL safety (<see cref="ArrayMethod.Casting"/>,
-    ///     the spec's level, which <c>np.can_cast</c> checks first) and the safety <see cref="ResolveDescriptors"/> returns.
+    ///     Two levels per cast, as NumPy registers them: the method's MINIMAL safety (<see cref="ArrayMethod.casting"/>,
+    ///     the spec's level, which <c>np.can_cast</c> checks first) and the safety <see cref="resolve_descriptors"/> returns.
     ///     They differ for bool: the spec says <c>same_kind</c>, the resolver <c>safe</c>, so <c>can_cast(bool, T, 'safe')</c>
     ///     is True only after the resolver runs.
     /// </remarks>
@@ -89,7 +89,7 @@ namespace NumSharp
         /// <param name="loopDescrs">Receives the loop descriptors.</param>
         /// <param name="viewOffset">Always <see cref="ArrayMethod.NoView"/> (a conversion is never a view).</param>
         /// <returns>The cast's fixed safety.</returns>
-        public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
+        public override NPY_CASTING resolve_descriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
             loopDescrs[1] = givenDescrs[1] ?? To.default_descr();
             loopDescrs[0] = givenDescrs[0];
@@ -124,7 +124,7 @@ namespace NumSharp
         ///     <c>Casting from StringDType to a fixed-width dtype with an unspecified size is not currently supported, specify an explicit size for the output dtype instead.</c>
         ///     (<c>astype('U')</c> reports it as <c>cannot cast dtype StringDType() to &lt;class 'numpy.dtypes.StrDType'&gt;.</c>,
         ///     the wrapper of <see cref="DTypePromotion.CastDescrToDType"/>).</exception>
-        public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
+        public override NPY_CASTING resolve_descriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
             viewOffset = NoView;
             if (givenDescrs[1] == null)
@@ -173,7 +173,7 @@ namespace NumSharp
         /// <returns><c>unsafe</c>.</returns>
         /// <exception cref="TypeError">A datetime64 / timedelta64 destination without a descriptor (NumPy's
         ///     <c>Casting from StringDType to datetimes without a unit is not currently supported</c>).</exception>
-        public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
+        public override NPY_CASTING resolve_descriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
             viewOffset = NoView;
             if (givenDescrs[1] == null)

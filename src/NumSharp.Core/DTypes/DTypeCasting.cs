@@ -56,7 +56,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>_get_cast_safety_from_castingimpl</c>: run <see cref="ArrayMethod.ResolveDescriptors"/> and, when the
+        ///     NumPy's <c>_get_cast_safety_from_castingimpl</c>: run <see cref="ArrayMethod.resolve_descriptors"/> and, when the
         ///     loop descriptors it picked differ from the given ones (a byte swap folded in, a canonicalisation), fold the
         ///     safety of THOSE adaptations in too, so a multi-step cast reports its weakest step.
         /// </summary>
@@ -67,7 +67,7 @@ namespace NumSharp
             NPY_CASTING casting;
             try
             {
-                casting = impl.ResolveDescriptors(given, loop, out viewOffset);
+                casting = impl.resolve_descriptors(given, loop, out viewOffset);
             }
             catch (TypeError)
             {
@@ -116,7 +116,7 @@ namespace NumSharp
             if (impl == null)
                 return false;
 
-            if (MinCastSafety(impl.Casting, casting) == casting)
+            if (MinCastSafety(impl.casting, casting) == casting)
                 return true; /* No need to check using `castingimpl.resolve_descriptors()` */
 
             var safety = GetCastSafetyFromCastingImpl(impl, from, to, out _);

@@ -12,7 +12,7 @@ namespace NumSharp
     /// </summary>
     /// <remarks>
     ///     The class-level minimal safety is <c>unsafe</c> ("must resolve"), so <c>can_cast</c> for any stricter rule always
-    ///     asks <see cref="ResolveDescriptors"/>. The data movement itself is NumSharp's unit-view copy (truncate or
+    ///     asks <see cref="resolve_descriptors"/>. The data movement itself is NumSharp's unit-view copy (truncate or
     ///     zero-pad per element over the <c>uint8</c>/<c>uint32</c> lanes), not a loop handed out by this object.
     /// </remarks>
     public sealed class StringToStringCastingImpl : CastingImpl
@@ -35,7 +35,7 @@ namespace NumSharp
         /// <param name="viewOffset">0 when the destination can be a view of the source (it fits and the byte order
         /// matches), else <see cref="ArrayMethod.NoView"/>.</param>
         /// <returns><c>safe</c> (longer), <c>same_kind</c> (shorter), <c>no</c> (identical layout) or <c>equiv</c> (a byte swap).</returns>
-        public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
+        public override NPY_CASTING resolve_descriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
             loopDescrs[0] = givenDescrs[0];
             loopDescrs[1] = givenDescrs[1] ?? From.ensure_canonical(loopDescrs[0]);
@@ -143,7 +143,7 @@ namespace NumSharp
         /// <returns>The cast safety.</returns>
         /// <exception cref="TypeError">A <c>U</c> destination longer than a descriptor can describe
         /// (<c>string of length N is too large to store inside array.</c>).</exception>
-        public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
+        public override NPY_CASTING resolve_descriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
             viewOffset = NoView;
             var toMeta = (StringDTypeMeta)To;
@@ -162,8 +162,8 @@ namespace NumSharp
             /* Set the input one as well (late for easier error management) */
             loopDescrs[0] = From.ensure_canonical(givenDescrs[0]);
 
-            if (Casting == NPY_CASTING.NPY_UNSAFE_CASTING)
-                return Casting; // U -> S: unsafe whatever the lengths
+            if (casting == NPY_CASTING.NPY_UNSAFE_CASTING)
+                return casting; // U -> S: unsafe whatever the lengths
 
             return loopDescrs[1].itemsize >= size ? NPY_CASTING.NPY_SAFE_CASTING : NPY_CASTING.NPY_SAME_KIND_CASTING;
         }
@@ -234,7 +234,7 @@ namespace NumSharp
         /// <param name="loopDescrs">Receives the descriptors the cast runs on.</param>
         /// <param name="viewOffset">Always <see cref="ArrayMethod.NoView"/>.</param>
         /// <returns>Always <c>unsafe</c>.</returns>
-        public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
+        public override NPY_CASTING resolve_descriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
             viewOffset = NoView;
             var toMeta = (StringDTypeMeta)To;
@@ -251,7 +251,7 @@ namespace NumSharp
                 /* Find the correct string length, possibly based on the unit */
                 int size = ((DatetimeDTypeMeta)From).IsTimedelta
                     ? 21 /* This is arguably missing space for the unit */
-                    : DatetimeIsoStrLen(givenDescrs[0].DatetimeMetadata.Value.Base);
+                    : DatetimeIsoStrLen(givenDescrs[0].DatetimeMetadata.Value.@base);
                 if (toMeta.IsUnicode)
                     size *= 4;
                 loopDescrs[1] = new DType(toMeta, DType.NPY_NATIVE, null, size, toMeta.TypeChar);
@@ -287,7 +287,7 @@ namespace NumSharp
         /// <param name="loopDescrs">Receives the descriptors the cast runs on.</param>
         /// <param name="viewOffset">Always <see cref="ArrayMethod.NoView"/>.</param>
         /// <returns>Always <c>unsafe</c>.</returns>
-        public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
+        public override NPY_CASTING resolve_descriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
             viewOffset = NoView;
             loopDescrs[1] = givenDescrs[1] == null ? To.default_descr() : To.ensure_canonical(givenDescrs[1]);

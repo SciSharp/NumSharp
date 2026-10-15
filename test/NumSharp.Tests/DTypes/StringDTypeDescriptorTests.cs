@@ -618,17 +618,17 @@ namespace NumSharp.Tests.DTypes
 
             var given = new[] { np.dtype("U5"), null };
             var loop = new DType[2];
-            DTypeRegistry.Str.GetCastingImpl(DTypeRegistry.VString).ResolveDescriptors(given, loop, out _).Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
+            DTypeRegistry.Str.GetCastingImpl(DTypeRegistry.VString).resolve_descriptors(given, loop, out _).Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
             loop[1].Should().Be(np.dtypes.StringDType());
-            DTypeRegistry.Bool.GetCastingImpl(DTypeRegistry.VString).Casting.Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
-            DTypeRegistry.Bool.GetCastingImpl(DTypeRegistry.VString).ResolveDescriptors(new[] { np.dtype("?"), null }, loop, out _)
+            DTypeRegistry.Bool.GetCastingImpl(DTypeRegistry.VString).casting.Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
+            DTypeRegistry.Bool.GetCastingImpl(DTypeRegistry.VString).resolve_descriptors(new[] { np.dtype("?"), null }, loop, out _)
                 .Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
 
             var impl = DTypeRegistry.VString.GetCastingImpl(DTypeRegistry.Int16);
-            impl.ResolveDescriptors(new[] { np.dtype("T"), null }, loop, out view).Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
+            impl.resolve_descriptors(new[] { np.dtype("T"), null }, loop, out view).Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
             loop[1].Should().Be(np.int16);
             view.Should().Be(ArrayMethod.NoView);
-            DTypeRegistry.VString.GetCastingImpl(DTypeRegistry.Bool).ResolveDescriptors(new[] { np.dtype("T"), null }, loop, out _)
+            DTypeRegistry.VString.GetCastingImpl(DTypeRegistry.Bool).resolve_descriptors(new[] { np.dtype("T"), null }, loop, out _)
                 .Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
             loop[1].Should().Be(np.bool_);
 
@@ -658,10 +658,10 @@ namespace NumSharp.Tests.DTypes
             DTypePromotion.CastDescrToDType(t, DTypeRegistry.VString).Should().BeSameAs(t);
             var s5 = np.dtype("S5");
             var loop = new DType[2];
-            DTypeRegistry.VString.GetCastingImpl(DTypeRegistry.Bytes).ResolveDescriptors(new[] { t, s5 }, loop, out _)
+            DTypeRegistry.VString.GetCastingImpl(DTypeRegistry.Bytes).resolve_descriptors(new[] { t, s5 }, loop, out _)
                 .Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
             loop[1].Should().BeSameAs(s5);
-            Action m8 = () => DTypeRegistry.VString.GetCastingImpl(DTypeRegistry.TimeDelta64).ResolveDescriptors(new[] { t, null }, loop, out _);
+            Action m8 = () => DTypeRegistry.VString.GetCastingImpl(DTypeRegistry.TimeDelta64).resolve_descriptors(new[] { t, null }, loop, out _);
             m8.Should().Throw<TypeError>().WithMessage("Casting from StringDType to datetimes without a unit is not currently supported");
         }
 

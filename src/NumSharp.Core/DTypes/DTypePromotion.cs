@@ -315,7 +315,7 @@ namespace NumSharp
             var loop = new DType[2];
             try
             {
-                impl.ResolveDescriptors(given, loop, out _);
+                impl.resolve_descriptors(given, loop, out _);
             }
             catch (TypeError e)
             {
