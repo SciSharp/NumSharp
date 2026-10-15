@@ -39,8 +39,8 @@ lock-free cast table `07903e85`; NumPy's member names in the DTypes folder, `8de
 | P2.0 foundations | Done (`62f41584`): the IL text kernels (`Backends/Kernels/ILKernelGenerator.Text{,.Emit}.cs`): one DynamicMethod per (operation, unit, widths, operand order), emit-time chunk plans, broadcast-pattern stages. The Unicode tables moved to the stage that first reads them (§4, P2.A). |
 | P2.1 comparisons and truth | Done for `S` / `U` (`62f41584`, `68348bcf`; oracle section `strcomp`, 8,796 cases, zero excuses). Left: the `T` forms (§4, P2.T) and `np.char`'s stripping comparisons (`np-char.md` C1). |
 | P2.3 concatenation and repetition | Done for `S` / `U` (`f18ae600`; section `strarith`, 2,046 cases). Left: the `T` forms (P2.T), `np.char.add` / `np.char.multiply` (`np-char.md` C0 / C4). |
-| P2.A shared machinery | Part 1 done (2026-10-15, the rows contract D16 and the masked blend D17, retrofitted to the shipped comparison and truth kernels; state log). Left: the unary text driver and width-class helpers (with P2.5), the `T` kernel shell (with P2.T), the Unicode tables and the sticky escalation (with P2.6) — each lands with its first consumer, the roadmap's recommended order. |
-| P2.2 sorting, searching, set routines | Milestone A done (2026-10-15, state log): `np.sort` / `np.argsort` / `ndarray.sort` / `np.partition` / `np.argpartition` over `S` / `U` with NumPy's `kind` / `order` / `stable`, NumPy's order of equal strings included (its introsort replayed); oracle section `strsort` (4,998 cases, zero excuses). Left: milestone B (`argmax` / `argmin` / `nanargmax` / `nanargmin`, `searchsorted`, `digitize`), milestone C (`unique` and its Array-API forms, `isin`, the set routines, `lexsort`, `sort_complex`, the histograms, the discontinuous quantiles), and the `T` part (after P2.T). |
+| P2.A shared machinery | Part 1 done (2026-10-15, `b8003693`, the rows contract D16 and the masked blend D17, retrofitted to the shipped comparison and truth kernels; state log). Left: the unary text driver and width-class helpers (with P2.5), the `T` kernel shell (with P2.T), the Unicode tables and the sticky escalation (with P2.6) — each lands with its first consumer, the roadmap's recommended order. |
+| P2.2 sorting, searching, set routines | Milestone A done (2026-10-15, `9771aa9c`, state log): `np.sort` / `np.argsort` / `ndarray.sort` / `np.partition` / `np.argpartition` over `S` / `U` with NumPy's `kind` / `order` / `stable`, NumPy's order of equal strings included (its introsort replayed); oracle section `strsort` (4,998 cases, zero excuses). Left: milestone B (`argmax` / `argmin` / `nanargmax` / `nanargmin`, `searchsorted`, `digitize`), milestone C (`unique` and its Array-API forms, `isin`, the set routines, `lexsort`, `sort_complex`, the histograms, the discontinuous quantiles), and the `T` part (after P2.T). |
 | P2.4 casts between text and numbers | Moved to phase 1 by the owner (2026-10-10) and done there (P1.1 for `S` / `U`, P1.6 for `T`). The parse-fed numerics, the random bounds and seeds, numpy.ma's number fills and the bool → text cast all compute now. |
 | Deferral sites | 39 call sites left (counted after P2.2 milestone A, which removed `AxisSort`'s and `AxisPartition`'s three): 30 `NDStringUfuncs.NextPhase` (fixed width) and 9 `NDStringUfuncs.NextPhaseVString` (`T`). `NDStringCasting.TextConversion` and `NDStringCopy.MixedKinds` have no caller since P1.1. Appendix A maps every site to a stage. |
 | The gate | The string oracle (`test/oracle/gen_strings_oracle.py` → `NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl`, 34 sections, 82,890 cases since P2.2 milestone A's `strsort`). 783 of them still pass only as deferrals (the per-section ceilings of `StringOracleTests.DeferralCeilings`): 346 `S` / `U` cases of searching, the set routines, histograms and quantiles, and 437 `T` cases reached through numpy.ma. Appendix B lists them by stage. |
@@ -732,7 +732,7 @@ What §2.5 found missing in the drivers, built once for every family:
 
 ### P2.2 Sorting, searching, set routines (`S` / `U` / `T`; large)
 
-- **Milestone A done (2026-10-15, state log):** `np.sort` / `ndarray.sort` / `np.argsort` (every kind and the `stable`
+- **Milestone A done (2026-10-15, `9771aa9c`, state log):** `np.sort` / `ndarray.sort` / `np.argsort` (every kind and the `stable`
   keyword) / `np.partition` / `np.argpartition` over `S` / `U`, NumPy's order of equal strings included. Left for this stage:
   milestone B (the `argmax` family, `searchsorted`, `digitize`), milestone C (`unique` and the set routines, `lexsort`,
   `sort_complex`, the histograms, the discontinuous quantiles), and everything over `T`.
@@ -842,8 +842,8 @@ dependencies land; C0 waits for the owner's decision C-D1, C3 for C-D3.
 
 ## 7. State log
 
-- **2026-10-15 — P2.2 milestone A: sorting `S` / `U` text** (`np.sort`, `ndarray.sort`, `np.argsort`, `np.partition`,
-  `np.argpartition` with NumPy's `kind` / `order` / `stable`; `Backends/Default/Sorting/TextSort.cs`,
+- **2026-10-15 — P2.2 milestone A: sorting `S` / `U` text** (`9771aa9c`; `np.sort`, `ndarray.sort`, `np.argsort`,
+  `np.partition`, `np.argpartition` with NumPy's `kind` / `order` / `stable`; `Backends/Default/Sorting/TextSort.cs`,
   `Backends/Kernels/ILKernelGenerator.Text.Sort.cs`, `Backends/Default/Sorting/SortKind.cs`).
   1. **NumPy's answer.** `string_quicksort_` / `string_aquicksort_` (`npysort/quicksort.cpp`): a median-of-3 introsort
      that insertion-sorts ranges of at most 16 elements and falls back to `string_aheapsort_` past depth `2 · msb(n)`; not
@@ -894,9 +894,9 @@ dependencies land; C0 waits for the owner's decision C-D1, C3 for C-D3.
      tie-heavy text (one character of 4 values: 1.83× / 2.18× / 2.14× at 1K / 100K / 1M, 0.84–1.07× through two-ulong
      records).
 
-- **2026-10-15 — P2.A part 1: the rows contract (D16) and the masked blend (D17) for the shipped comparison and truth
-  kernels** (owner's direction: P2.A first, then P2.2; the other P2.A parts land with their first consumers, the
-  roadmap's recommended order).
+- **2026-10-15 — P2.A part 1 (`b8003693`): the rows contract (D16) and the masked blend (D17) for the shipped
+  comparison and truth kernels** (owner's direction: P2.A first, then P2.2; the other P2.A parts land with their first
+  consumers, the roadmap's recommended order).
   1. **The rows driver.** `NDIterRef.CanRunRows` / `ForEachRows(NDInnerLoop2DFunc, auxdata)`
      (`Backends/Iterators/NDIter.Execution.Rows.cs`): an unbuffered, unmasked `EXTERNAL_LOOP` iteration of two or more
      axes after coalescing, at its start and not ranged, runs as blocks of rows — the trailing axes every operand walks
