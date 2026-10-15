@@ -843,7 +843,7 @@ dependencies land; C0 waits for the owner's decision C-D1, C3 for C-D3.
 ## 7. State log
 
 - **2026-10-15 — P2.1's rstrip flavor and two P2.3 speedups, from the `numpy.char` plan's phase 1**
-  (`docs/plans/np-char.md` → state log). The comparison key gained `Rstrip` (NumPy's `rstrip=True` loop:
+  (`4c313632`; `docs/plans/np-char.md` → state log). The comparison key gained `Rstrip` (NumPy's `rstrip=True` loop:
   `ILKernelGenerator.Text.Strip.cs`), which every comparison form serves. P2.3: `np.strings.multiply` reaches NumPy's
   StringDType branch (`a * i`, deferred) and allocates its result with `NDArray.ForOverwrite` (no zero fill: the loop
   writes every byte); the narrow repetition kernel gained a DIRECT form when the last copy fits the element (zero it,

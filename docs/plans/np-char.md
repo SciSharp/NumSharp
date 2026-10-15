@@ -438,7 +438,7 @@ C-D1 decision and C3 for C-D3.
 
 ### State log
 
-- **2026-10-15 — phase 1: the module functions `numpy.strings` computes** (the owner's scope: "the `np.@char` facade,
+- **2026-10-15 — phase 1: the module functions `numpy.strings` computes** (`4c313632`; the owner's scope: "the `np.@char` facade,
   `compare_chararrays` and the six comparisons that strip trailing whitespace, over S/U (T refused), `np.char.add` and
   `np.char.multiply` (NumPy's ValueError rule), oracle section `strchar`"). Owner decisions taken: C-D1 (the module),
   C-D6's `null` for `NotImplemented`.
