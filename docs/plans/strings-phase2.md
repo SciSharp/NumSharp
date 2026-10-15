@@ -23,24 +23,25 @@
 
 ---
 
-## 0. Where phase 2 stands (2026-10-15, `strings` at `c3915f2a`)
+## 0. Where phase 2 stands (2026-10-15, `strings` at `ee6e121a`)
 
 Commit hashes in this plan: the branch was rebased onto journey4 on 2026-10-12, so the hashes of §0's first edition and
 of the 2026-10-09 state-log entries are the OLD ones; `git log -1 --format=%B a8d7f17c | grep -- '->'` translates them
-(`7c817644` → `62f41584`, `cc8b103f` → `68348bcf`, `31368171` → `f18ae600`, `3eb9cca5` → `b4983b7a`). The counts
-below were taken at `545818b0`; the commits after it up to `c3915f2a` are dtype work (the lock-free cast table
-`07903e85`; NumPy's member names in the DTypes folder, `8de98557` = journey4's `6f11dc5a`, `ea8174aa`, `c3915f2a`; the
-release notes `a911607a`) and change none of them.
+(`7c817644` → `62f41584`, `cc8b103f` → `68348bcf`, `31368171` → `f18ae600`, `3eb9cca5` → `b4983b7a`). The deferral
+counts below were taken at `545818b0` and re-counted at `ee6e121a`, unchanged: the commits between are dtype work (the
+lock-free cast table `07903e85`; NumPy's member names in the DTypes folder, `8de98557` = journey4's `6f11dc5a`,
+`ea8174aa`, `c3915f2a`; the release notes `a911607a`), this plan (`e4485fec`) and phase 1's P1.7c (`f5f3e634`, notes
+`ee6e121a`), which added the `tio` section and no deferred case.
 
 | Part | State |
 |---|---|
-| Phase 1 (text as data for `S`, `U`, `T`) | Done except P1.7c (text I/O for `T`) and P1.7f (the whole surface with `T`), which wait for the owner's decision D12 (`strings-phase1-completion.md` §6). P1.7f's `tsurface` oracle section is where the `np.*` calls that compute on `T` get their deferred cases (today only numpy.ma reaches them, section `tma`). |
+| Phase 1 (text as data for `S`, `U`, `T`) | Done except P1.7f (the whole surface with `T`), which waits for the owner's decision D12 (`strings-phase1-completion.md` §6.2). P1.7f's `tsurface` oracle section is where the `np.*` calls that compute on `T` get their deferred cases (today only numpy.ma reaches them, section `tma`). P1.7c (text I/O for `T`) landed in `f5f3e634` with two engines phase 2 reuses: CPython's codec layer (`IO/TextReading/PythonCodecs{,.Tables}.cs`, `TextIOCodec*.cs`: codec names and aliases, UTF-8 / -sig / -16 / -32, Latin-1, ASCII, 70 single-byte code pages, CPython's strict-error texts and positions) and CPython's `%` formatting (`Backends/Printing/PercentFormat.cs`, a port of `PyUnicode_Format`) — P2.6's `encode` / `decode` / `mod`. |
 | P2.0 foundations | Done (`62f41584`): the IL text kernels (`Backends/Kernels/ILKernelGenerator.Text{,.Emit}.cs`): one DynamicMethod per (operation, unit, widths, operand order), emit-time chunk plans, broadcast-pattern stages. The Unicode tables moved to the stage that first reads them (§4, P2.A). |
 | P2.1 comparisons and truth | Done for `S` / `U` (`62f41584`, `68348bcf`; oracle section `strcomp`, 8,796 cases, zero excuses). Left: the `T` forms (§4, P2.T) and `np.char`'s stripping comparisons (`np-char.md` C1). |
 | P2.3 concatenation and repetition | Done for `S` / `U` (`f18ae600`; section `strarith`, 2,046 cases). Left: the `T` forms (P2.T), `np.char.add` / `np.char.multiply` (`np-char.md` C0 / C4). |
 | P2.4 casts between text and numbers | Moved to phase 1 by the owner (2026-10-10) and done there (P1.1 for `S` / `U`, P1.6 for `T`). The parse-fed numerics, the random bounds and seeds, numpy.ma's number fills and the bool → text cast all compute now. |
 | Deferral sites | 42 call sites left (counted at `545818b0`): 33 `NDStringUfuncs.NextPhase` (fixed width) and 9 `NDStringUfuncs.NextPhaseVString` (`T`). `NDStringCasting.TextConversion` and `NDStringCopy.MixedKinds` have no caller since P1.1. Appendix A maps every site to a stage. |
-| The gate | The string oracle (`test/oracle/gen_strings_oracle.py` → `NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl`, 32 sections, 69,589 cases). 974 of them still pass only as deferrals (the per-section ceilings of `StringOracleTests.DeferralCeilings`): 537 `S` / `U` cases of sorting, searching, set routines, histograms and quantiles, and 437 `T` cases reached through numpy.ma. Appendix B lists them by stage. |
+| The gate | The string oracle (`test/oracle/gen_strings_oracle.py` → `NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl`, 33 sections, 77,892 cases since P1.7c's `tio`). 974 of them still pass only as deferrals (the per-section ceilings of `StringOracleTests.DeferralCeilings`): 537 `S` / `U` cases of sorting, searching, set routines, histograms and quantiles, and 437 `T` cases reached through numpy.ma. Appendix B lists them by stage. |
 | Iteration and machinery | `np.nditer` and `NDIter` carry string operands with NumPy's descriptors (`4d5b9f26`) and, since P1.7g (`97a168bf`), NumPy's own buffering: element sizes, string buffers, casts between every string dtype and the numbers, `T` buffers with their own allocators. This is the iteration base of every phase-2 kernel. |
 | Refusals and shape-decided answers | Where NumPy has no string loop, NumSharp raises NumPy's type and text, after NumPy's earlier checks in NumPy's order (`Backends/Strings/NDStringUfuncs{,.Precedence,.ShapeDecided,.VString}.cs`); empty inputs, lines of one element and pairs the `==` operator cannot compare are answered from the shape. These stay. |
 
@@ -390,7 +391,7 @@ Phase 2 adds text kernels and parsers; everything around them already exists and
 | `RadixSort.ArgSortU64`, `AxisSort.DriveAllButAxis` | the stable kinds, sorts along an axis (D3) |
 | The bool machinery: `nonzero` (count + bit scan), `count_nonzero`, the `any` / `all` reductions and their prologue, `np.where`, `compress` | truth values (D5) |
 | The numeric ufuncs (`maximum`, `where`, `multiply`, `max`) | the `np.strings` size passes (D7) |
-| `RandomSampling/PythonInt.cs` (CPython `int()`), the Dragon4 / `format_float_*` ports (`Backends/Printing`), `PyRepr`, `PrintfFormatter` (Python `%`) | text → int, the number → text layout rules, `np.str_('…')` in error texts, `np.strings.mod` |
+| `RandomSampling/PythonInt.cs` (CPython `int()`), the Dragon4 / `format_float_*` ports (`Backends/Printing`), `PyRepr`, `PrintfFormatter` (Python `%`; since `f5f3e634` driven by `PercentFormat`, a port of CPython's `PyUnicode_Format`), CPython's codec layer (`IO/TextReading/PythonCodecs`, `f5f3e634`) | text → int, the number → text layout rules, `np.str_('…')` in error texts, `np.strings.mod`, `np.strings.encode` / `decode` |
 | The text↔number `CastingImpl`s (`DTypes/StringCastingImpls.cs`, `DTypes/CastingImpls.cs`: descriptor resolution) and the `ArrayMethod.get_strided_loop` seam | the cast loops (D6) |
 | The set-routine and `unique` compositions (`np.setops.cs`, `NDArray.unique*.cs`) | P2.2, over the new text sort / compare primitives |
 
@@ -593,7 +594,7 @@ disassembly of its per-element body is checked for branches on the data (§2.5).
 | `T` elementwise (every family above over `T`) | the trivial loop or NDIter over the 16-byte cells; arena bases and the output allocator through auxdata | IL shell + C# two-cell helpers + the per-pair scalar path (D12) | two cells per vector: 1.4–2.8 ns against 7–9 scalar |
 | `T` reductions: `sum`, `cumsum`, `max`, `min`, `argmax`, `argmin` | the `DriveAllButAxis` lane walker | C# helpers (D18) | linear against NumPy's quadratic `sum` |
 | Sorting, searching, sets | `AxisSort` lanes (`sort` / `argsort` / `partition`); flat (`unique`, `searchsorted`, the set routines) | key records + NumPy's introsort port + `RadixSort.ArgSortU64` (D3, D19) | §2.2 and §2.5 |
-| Object-path functions: `mod`, `encode`, `decode`, `np.char`'s `join` / `split` family | NDIter, results in C order (NumPy's `_vec_string` layout) | C# helpers per element (.NET encoders with ASCII fast paths, `PrintfFormatter`) | NumPy 500–860 ns per element |
+| Object-path functions: `mod`, `encode`, `decode`, `np.char`'s `join` / `split` family | NDIter, results in C order (NumPy's `_vec_string` layout) | C# helpers per element (CPython's codecs, `PythonCodecs`, with ASCII fast paths; CPython's `%`, `PercentFormat`; both from `f5f3e634`) | NumPy 500–860 ns per element |
 | `np.evaluate` text leaves | — | not in phase 2 (D20) | at most ~18 % |
 | Whole-array (Direct) IL kernels | not used for text | — | the trivial loop already calls the NDIter kernel once over a contiguous array; the rows contract covers narrow rows |
 
@@ -610,6 +611,67 @@ specialization cap, the special units (embedded and trailing NULs, bytes ≥ 0x8
 surrogates) and, for `T`, every cell state (short, arena, heap, NA of each kind, the all-zero cell). Every stage also
 runs D21's portability and memory checks, a mutation pass, and reads the disassembly of its per-element bodies for
 branches on the data. Appendix D lists the route each NDArray case takes.
+
+### Roadmap (2026-10-15, `strings` at `ee6e121a`)
+
+Where the stages stand, what each needs and delivers, and the choice of where to start. The stage sections below hold
+the details; Appendix C the implementation of every function, Appendix D the route of every NDArray case.
+
+```mermaid
+flowchart LR
+  done["Done: P2.0, P2.1 and P2.3 for S / U;<br/>P2.4 in phase 1"]
+  A["P2.A shared machinery"]
+  T["P2.T StringDType computes"]
+  S["P2.2 sorting, searching, sets: S / U"]
+  ST["P2.2 over T"]
+  F["P2.5 np.strings: length, search,<br/>strip, pad, replace, partition, slice"]
+  U["P2.6 properties, case maps,<br/>translate, mod, encode, decode"]
+  Z["P2.7 switch-over: zero deferrals"]
+  done --> A
+  done --> S
+  A --> T
+  A --> F
+  A --> U
+  T --> ST
+  S --> ST
+  ST --> Z
+  F --> Z
+  U --> Z
+```
+
+| Stage | Delivers | Needs | Unlocks | Size | Exit gate |
+|---|---|---|---|---|---|
+| P2.A | No new function: the machinery of every later stage, in six parts — the unary text driver; the rows contract and the masked blend, first retrofitted to the shipped comparisons and truth readers (`m[:, :3] == "abc"` 19.3 → ~2.4 µs; `np.equal(…, where=m)` 426 → ~173 µs at 100K); the width-class helpers and their portable twins; the `T` kernel shell; the Unicode tables (CPython 3.12, Unicode 15.0.0) with the BMP flags word of the gather; the sticky escalation | nothing | P2.T, P2.5, P2.6 and the `T` part of P2.2; `np.char`'s C1 inherits the rows and masked variants | medium | unit tests of every primitive over widths 1 to past the cap and every `T` cell state; `FencedMemory`; AVX2 and intrinsics off; `strcomp` / `strarith` replay unchanged |
+| P2.T | `StringDType` computes: the six comparisons and their operators, the truth readers, `add` / `multiply` / `maximum` / `minimum`, `np.sum` / `np.cumsum` / `np.max` / `np.min` / `argmax` / `argmin`, numpy.ma over `T` | P2.A's `T` shell | 432 deferred `tma` cases, 8 deferral sites | medium | sections `tcomp`, `tarith`, `treduce`; `tma` strict |
+| P2.2 | `sort`, `argsort`, `lexsort`, `partition`, `argpartition`, `argmax` / `argmin` / `nanargmax` / `nanargmin`, `searchsorted`, `unique` and its Array-API forms, `isin`, the set routines, `digitize`, the histograms, the discontinuous quantiles, `sort_complex`: `S` / `U` first, then `T` | `S` / `U`: nothing new (the prefix keys of D3, `RadixSort`, `AxisSort` and P2.1's compare exist); `T`: P2.T | 537 + 5 deferred cases, 27 deferral sites | large | the deferred cases strict; a sorting section over every layout and NA kind |
+| P2.5 | 20 `np.strings` functions over `S` / `U` / `T` (`str_len`, `find`, `rfind`, `index`, `rindex`, `count`, `startswith`, `endswith`, `strip` / `lstrip` / `rstrip`, `replace`, `expandtabs`, `center` / `ljust` / `rjust`, `zfill`, `partition` / `rpartition`, `slice`) and the six comparison names (NumPy's `np.strings.equal` IS `np.equal`) | P2.A's driver, width classes and `T` shell | new public API: `np.strings` goes from 2 of NumPy's 46 names (`add`, `multiply`) to 28 | large | new zero-excuse sections |
+| P2.6 | 18 functions over `S` / `U` / `T`: the nine predicates, `upper` / `lower` / `swapcase` / `capitalize` / `title`, `translate`, `mod`, `encode`, `decode` | P2.A's tables and escalation; the `%` engine (`PercentFormat`) and CPython's codecs (`PythonCodecs`, strict errors) exist since `f5f3e634` | `np.strings` complete (46 of 46) | large (the two engines shrink it) | new zero-excuse sections |
+| P2.7 | numpy.ma's remaining statements (`median`, masked sort keys), `np.pad`'s `linear_ramp` over text, `np.evaluate`'s refusal message; the docs, `benchmark/strings`, the release notes | every stage above | the last 7 deferral sites; zero deferred cases | medium | the whole string oracle strict |
+
+**Parallel tracks.** Once P2.A exists, P2.T, P2.5 and P2.6 are independent of one another; P2.2's `S` / `U` part needs
+nothing from P2.A and can start at once. A parallel stage needs its own worktree (another session committed into the
+`strings` worktree while this plan was edited), and the stages share files (`NDStringUfuncs`, the text kernels,
+`gen_strings_oracle.py`), so parallel work is merged stage by stage.
+
+**On the same road, outside phase 2.**
+- Phase 1: only P1.7f (the whole surface with `T`) is left; P1.7c landed in `f5f3e634`. P1.7f's `tsurface` section is
+  where the `np.*` calls that compute on `T` get their deferred cases; without it, P2.T's sections reach those calls
+  themselves. The owner's decision D12 (`strings-phase1-completion.md` §6.2) orders P1.7f against phase 2: starting a
+  phase-2 stage now is its option B.
+- `numpy.char` (`docs/plans/np-char.md`): C0 waits for the owner's C-D1 and C3 for C-D3; C1 (the stripping
+  comparisons) can start now and is better after P2.A (it inherits the rows and masked variants); C4 follows P2.5;
+  C2's `%` uses `PercentFormat`.
+- Merging `strings` into journey4 (the owner's call): journey4's `985ae382` rewrote `DTypeRegistry.cs`, which `strings`
+  also changed.
+
+**Where to start.**
+
+| Start with | For | Against |
+|---|---|---|
+| P2.A (recommended) | every elementwise stage consumes it; its first part (the rows contract and the masked blend on the shipped comparison and truth kernels) is a measured speedup checked by sections that are already strict, so the drivers change under a full gate before new functions depend on them; then each part in the order of its first consumer (driver and width classes → P2.5, `T` shell → P2.T, tables and escalation → P2.6) | no new function until P2.T or P2.5 |
+| P2.2 `S` / `U` | the largest block of deferred cases (537 of 974); after comparisons, the most used text operations (`sort`, `unique`, `searchsorted`, `isin`); needs nothing new; the key-record introsort was prototyped twice | large; the exact tie order is the plan's riskiest port (§6 risk 1) |
+| P2.T | `T`, phase 1's new dtype, computes for the first time; 432 deferred cases; large measured speedups (`np.sum` linear where NumPy's is quadratic) | needs P2.A's `T` shell first |
+| P2.5 | the functions users look for in `np.strings` | needs P2.A's driver and width classes first |
 
 ### Done
 
@@ -676,7 +738,9 @@ What §2.5 found missing in the drivers, built once for every family:
   3.2–3.9× (`T`); through the distinct-strings shortcut and the stable kinds 7–13× (radix); `np.unique` and
   `searchsorted` ≥ 10× (NumPy: 254–1,640 ns per element); `argmax` ≥ 1.9× to 100K, the memory-bandwidth floor at 1M.
 - Unlocks the 537 deferred `S` / `U` cases (Appendix B).
-- Depends on P2.A; the `T` part on P2.T's comparison primitive. Size: large.
+- Depends, for `S` / `U`, on nothing new: the prefix keys (D3), `RadixSort.ArgSortU64`, `AxisSort.DriveAllButAxis` and
+  P2.1's full compare exist (P2.A's width-class helpers can serve the key extraction once they land). The `T` part
+  depends on P2.T (the `T` keys, the comparison and the NA rules). Size: large.
 
 ### P2.5 `np.strings`: length, search, strip, pad, replace, partition, slice (`S` / `U` / `T`; large)
 
@@ -696,10 +760,12 @@ What §2.5 found missing in the drivers, built once for every family:
 
 - `isalpha`, `isdigit`, `isspace`, `isalnum`, `islower`, `isupper`, `istitle`, `isdecimal`, `isnumeric` (`S`: ASCII
   rules; no `S` loop for the last two); `upper`, `lower`, `swapcase`, `capitalize`, `title` (CPython's full mappings, the
-  final sigma, the cut to the input width; NumPy's SystemError for `U` units above `0x10FFFF`); `translate`; `mod` (the
-  existing `PrintfFormatter`, values broadcast; tuple values need object arrays and stay out); `encode` / `decode` (the
-  codecs .NET has natively under Python's names, `strict` / `ignore` / `replace` at least, Python's UnicodeError texts,
-  `LookupError: unknown encoding` for the rest); every one over `T`.
+  final sigma, the cut to the input width; NumPy's SystemError for `U` units above `0x10FFFF`); `translate`; `mod`
+  (CPython's `%` formatting per element, `PercentFormat` from `f5f3e634`, values broadcast; tuple values need object
+  arrays and stay out); `encode` / `decode` (CPython's codec layer from `f5f3e634`, `PythonCodecs`: the codec names,
+  `LookupError: unknown encoding`, CPython's error texts and positions; P2.6 adds the `errors=` handlers past `strict`
+  — `ignore`, `replace`, `backslashreplace`, `xmlcharrefreplace`, `namereplace`, `surrogateescape`, `surrogatepass`);
+  every one over `T`.
 - Technique: D14 (ASCII first, the gather second, per call), D11, D12.
 - Targets (§2.5): predicates ≥ 9× on ASCII data, ≥ 4× on non-ASCII data; case maps ≥ 100× on ASCII, ≥ 28× on non-ASCII;
   `translate` / `mod` / `encode` / `decode` ≥ 20× (projected: NumPy's `_vec_string` costs 189–860 ns per element).
@@ -718,9 +784,10 @@ What §2.5 found missing in the drivers, built once for every family:
 ### Order
 
 `P2.A → P2.T → P2.2 → P2.5 → P2.6 → P2.7`. P2.5 and P2.6 are independent of each other once P2.A exists; P2.2's `S` / `U`
-part needs only P2.A and can run beside P2.T. Phase 1 comes first by the owner's direction (2026-10-10): P1.7c and P1.7f
-wait for the owner's decision D12 (`strings-phase1-completion.md` §6.2), and P1.7f's `tsurface` section is where the
-`np.*` calls that compute on `T` get their deferred cases — without it, P2.T's own sections must cover them.
+part needs nothing from P2.A and can run beside it. Phase 1 comes first by the owner's direction (2026-10-10): P1.7c is
+done (`f5f3e634`), P1.7f waits for the owner's decision D12 (`strings-phase1-completion.md` §6.2), and P1.7f's
+`tsurface` section is where the `np.*` calls that compute on `T` get their deferred cases — without it, P2.T's own
+sections must cover them. The roadmap at the top of this section weighs where to start.
 
 `numpy.char` (`docs/plans/np-char.md`) follows the stages: C1 (the stripping comparisons) after P2.A (they are a flavor
 of the comparison kernels with the same rows / masked variants), C3 and C4 after P2.5, C2 / C5 as their phase-2
@@ -749,7 +816,9 @@ dependencies land; C0 waits for the owner's decision C-D1, C3 for C-D3.
    width classes (D11) keep the complex families to one helper per class.
 4. **NumPy answers that depend on call history** (the ufunc dispatch cache, phase 1 trap): the corpus records a fresh
    process.
-5. **Codec coverage** for `encode` / `decode` (P2.6): which codecs and error handlers ship.
+5. **Codec coverage** for `encode` / `decode` (P2.6): the codecs are CPython's, ported by `f5f3e634` (the multi-byte
+   CJK codecs, `utf-7`, the escape codecs, IDNA and `mbcs` / `oem` are refused with `NotSupportedException`); P2.6
+   adds the error handlers past `strict`, each with CPython's replacement rules and texts.
 6. **Masked loads at a page boundary.** `vpmaskmovd` never faults on a masked-off lane, but a masked load whose
    masked-off lanes fall on an unmapped page can take a microcode assist (slow, still correct) on some CPUs. It can only
    happen at a buffer's last element; the FencedMemory tests prove correctness, the benchmarks measure the cost.
@@ -763,6 +832,14 @@ dependencies land; C0 waits for the owner's decision C-D1, C3 for C-D3.
 
 ## 7. State log
 
+- **2026-10-15 — The roadmap** (owner's request: "Write a roadmap of the phases we have for p2 before we pick which we
+  begin with and start"). §4 opens with the roadmap: the dependency graph, one row per stage (delivers, needs, unlocks,
+  size, exit gate), the parallel tracks, the work on the same road outside phase 2 (P1.7f and D12, `numpy.char`, the
+  merge into journey4) and the start options with a recommendation (P2.A, its retrofit part first). Corrected on the
+  way: P2.2's `S` / `U` part needs nothing from P2.A (D3 / D4 build on the prefix keys, `RadixSort`, `AxisSort` and
+  P2.1's compare); phase 1's P1.7c landed (`f5f3e634`), and its CPython codec layer (`PythonCodecs`, strict) and `%`
+  port (`PercentFormat`) become P2.6's `encode` / `decode` / `mod` engines; the corpus has 33 sections and 77,892 cases;
+  `np.strings` exposes 2 of NumPy's 46 names, P2.5 brings 26 and P2.6 the last 18.
 - **2026-10-15 — The discovery: the fastest exact implementation of every function left, and the stages re-planned**
   (owner's request: "do a discovery, looking at all the kinds of functions we will be implementing in phase 2, checking
   what will be the fastest best implementation for every function … We must have the best impl for all NDArray cases,
@@ -938,8 +1015,8 @@ NumPy's cost is ns per element at 100K for `U8` / `S8` / `T8` (§2.5); NPY/NS is
 | `replace` | Python sizing + C loop: 95–107 / 106 / 118–121 | the fused count + size pass; segment copies (a permute and a whole store per match); the `count` limit applied in the fill pass | P2.5 | m: 9.9 |
 | `expandtabs` | Python sizing + C loop: 118 / 71 / 197 | tab-free elements copied whole (one vector test); elements with tabs walked per unit (the column state) | P2.5 | p: ≥ 5 |
 | `partition`, `rpartition` | Python sizing + C loop: 101 / 96 / 85–88 | the `find` kernel, then three masked-load copies; `S` / `U`: three arrays where NumPy returns structured-field views (`[Misaligned]` layout) | P2.5 | p: ≥ 5 |
-| `mod` | `_vec_string`: 579–836 | `PrintfFormatter` per element into a scratch row; the longest result sizes the output (two passes) | P2.6 | p: ≥ 20 |
-| `encode`, `decode` | `_vec_string`: 634–703 / 516 / 500 | an ASCII fast path (ASCII text is its own UTF-8, Latin-1 and ASCII: narrow / widen); .NET's encoders otherwise; Python's error handlers and texts | P2.6 | p: ≥ 30 |
+| `mod` | `_vec_string`: 579–836 | `PercentFormat` (CPython's `%`, `f5f3e634`) per element: the format compiled once per distinct format element, run into a scratch row; the longest result sizes the output (two passes) | P2.6 | p: ≥ 20 |
+| `encode`, `decode` | `_vec_string`: 634–703 / 516 / 500 | an ASCII fast path (ASCII text is its own UTF-8, Latin-1 and ASCII: narrow / widen); CPython's codecs (`PythonCodecs`, `f5f3e634`) otherwise, with the `errors=` handlers past `strict` added by P2.6 | P2.6 | p: ≥ 30 |
 | `==` `!=` `<` `<=` `>` `>=` over `T` | C loop: 10.7–11.1 | two cells per vector, the per-pair scalar path, the NA rules (D12) | P2.T | m: 7.2 (`==`), 4.2 (`<`) |
 | `astype(bool)`, `nonzero`, `any` / `all`, `logical_*`, `isnan` over `T` | C loops: `astype(bool)` 1.6, `nonzero` 5.6, `isnan` 2.5 (`T8`) | the size / flag byte tests, two cells per vector | P2.T | p: ≥ 3 |
 | `add`, `multiply` over `T` | C loop: 34–42 / 49 | the sizes first; short outputs built in the cell (two cells → one by `vpshufb`); long outputs into the arena (exact reservation) | P2.T | p: ≥ 5 |
