@@ -82,8 +82,9 @@ route (`m[:, :3] == "abc"` 9.6× NumPy at 100K), masks 2.2–4.3× the per-run r
 `MaskedBlendDisabled` on `NDStringComparison` (and `NDStringTruth.RowsDisabled`) take the old routes for A/B tests.
 Sorting `S` / `U` text computes since P2.2 milestone A (2026-10-15): `np.sort` / `np.argsort` / `ndarray.sort` /
 `np.partition` / `np.argpartition` with NumPy's `kind` / `order` / `stable`, NumPy's order of equal strings included (see
-"Sorting & Searching" → "Text sorts"). Searching, the set routines, `lexsort`, the histograms and quantiles over text
-are the next milestones of P2.2.
+"Sorting & Searching" → "Text sorts"). Searching it computes since milestone B (2026-10-15): `np.argmax` / `np.argmin` /
+the nan forms / the methods, `np.searchsorted`, `np.digitize`, the bin search of `np.histogram2d` / `np.histogramdd`
+(see "Text searches"). The set routines, `lexsort`, `np.histogram` and the quantiles over text are the next milestones.
 **`numpy.char` (2026-10-15, `docs/plans/np-char.md`, phase 1).** `np.@char` is the MODULE object `CharModule`
 (`APIs/np.char.cs`, `[ModuleName("np.char")]`) with an implicit conversion to the `Char` dtype it used to be, so
 `astype(np.@char)` / `a.dtype == np.@char` / `(DType, DType)` tuple keys keep working (a descriptor member needs
@@ -3979,6 +3980,48 @@ excuses) + `Backends/Strings/StringSortTests.cs` (19); plan `docs/plans/strings-
   cells are argsorts of text outside Latin-1 (1.68–2.01×: an 8-byte key holds four such characters, not eight, so more
   keys tie) and of tie-heavy text: one character of 4 values argsorts 1.83× / 2.18× / 2.14× at 1K / 100K / 1M
   (0.84–1.07× through two-ulong records). 100K random `U8` 7.0×.
+
+**Text searches give NumPy's answers: the first extreme, and its binary search step for step** (strings phase 2, P2.2
+milestone B, 2026-10-15; `Backends/Default/Sorting/TextArgReduce.cs`, `TextSearch.cs`, the shared prefix keys
+`TextKeyer.cs`; gates the string oracle's `strsearch` section (7,142 cases, zero excuses) + `Backends/Strings/
+StringSearchTests.cs` (21); plan `docs/plans/strings-phase2.md`):
+- **What NumPy does.** `STRING_argmax` / `UNICODE_argmax` replace the running best only with a STRICTLY greater element
+  (smaller for argmin): the first extreme wins. `np.nanargmax` / `np.nanargmin` of text are argmax / argmin. `out=` must
+  cast 'safe' to intp (bool through uint32; uint64 and floats are TypeError), checked after the empty-line ValueError.
+  `np.searchsorted` converts both operands to their common descriptor (a number becomes text) and runs the GENERIC
+  `npy_binsearch` with its monotonic carry; a sorter value outside the haystack raises only when reached. Over a SORTED
+  haystack every correct search gives NumPy's answer; over an unsorted one only its exact comparison sequence does.
+  `np.digitize` of text searches the bins converted to text (text order: `digitize(['10','3','25'], [5, 20])` is
+  `[0 2 2]`).
+- **argmax / argmin.** Lines in blocks of 1,024, block winners merged strictly. Per block, the common prefix is skipped
+  (inline whole-vector compares), then the GATHER filter (`U` + AVX2: the unit after the prefix of 8 elements a gather;
+  a tie decided in one masked 256-bit compare for elements up to 32 bytes; each lane re-tested against the CURRENT best,
+  since an earlier lane of the group can raise it) or the KEYS filter (`S`, no AVX2, or a call whose best string recurs
+  one element in eight: the gather filter pays a full compare per copy). Short rows (≤ 16) are keyed end to end and
+  scanned branch-free. Non-C N-D flat reductions walk lines along the smallest stride, merged by value then C index.
+- **searchsorted.** DIRECT (few keys: `m·8·log2(n) ≤ n`): NumPy's loop on the strings, the head compared first (a `U`
+  string's first unit, an `S` string's first 8 bytes big-endian), the next step's two candidates prefetched above 1 MB.
+  KEYED: the prefix shared by every element and key is skipped (URLs: 21 units), one packing chosen from both arrays
+  keys them; when the haystack's keys never decrease in search order (through a sorter whose values are all in range;
+  equal keys' tails compared when the keys are not exact) the SORTED route answers with bounds — a galloping MERGE for
+  sorted keys, else four branch-free halving searches interleaved — otherwise NumPy's exact loop over the keys, as
+  BRANCHES (over an unsorted haystack branches beat masks 1.6×; masks lost 2–2.7× on sorted keys and categorical data,
+  whose paths the predictor learns).
+- **Rode along.** `np.histogram2d` / `np.histogramdd` of a text sample compute: the columns are cast to the stacked text
+  dtype FIRST, into a new array, as NumPy's stacking does (an `S` column beside a `U` one with a non-ASCII byte raises
+  `UnicodeDecodeError` before any bin error), and the numeric edges are searched as text. The generator's `describe()`
+  now asserts that a view addresses its base (a strided `out=` built from two separate arrays wrote outside the replayed
+  buffer, found by guard pages).
+- **Perf** (NPY/NS, two pinned P-cores, fresh inputs, 278 cells at 1K / 100K): geomean 3.83×; arg-reductions 3.43×,
+  searchsorted 4.56× (sorted haystacks of 100K 6–10×, sorted keys up to 45×), digitize 2.94×. The 26 cells under 1.5×
+  are memory-bound: arg-reductions over fresh 100K text read every cache line (1.04–1.46×; the gather loop with a fresh
+  input measured at ~1.2× a plain streaming read), and 100 keys into a 100K haystack wait on a dependent load per step
+  (0.66–1.36×, NumPy's loop has the same walk).
+- **Traps.** (1) A branch-free binary search is NOT always faster: it serializes the loads that a predictable branchy
+  search speculates past — measure sorted keys, categorical data and unsorted haystacks, not only random keys. (2) The
+  JIT does not turn selects inside loops into cmov (`x = c ? a : b` stayed a branch on .NET 10); build masks with
+  `-(long)Unsafe.As<bool, byte>(ref c)` and check the disassembly. (3) A gather lane mask taken against a group's
+  starting best can admit a lane that an earlier lane of the group has since beaten.
 
 **The index searches and index transforms return NumPy's objects** (2026-10-08, the open-bugs rundown's bug 8; plan
 `docs/plans/api-parameter-parity.md` X37; gates the layout-parity oracle's argwhere / flatnonzero / `unravel` / `ravelmi`

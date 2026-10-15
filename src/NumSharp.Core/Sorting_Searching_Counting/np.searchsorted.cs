@@ -17,13 +17,15 @@ namespace NumSharp
         /// <returns>Scalar index for insertion point.</returns>
         /// <exception cref="ArgumentException"><paramref name="side"/> is not <c>"left"</c> / <c>"right"</c> (NumPy's two
         ///     ValueError texts).</exception>
-        /// <exception cref="ValueError"><paramref name="a"/> is not 1-D, a sorter of uint64, or a sorter whose size differs
-        ///     from <paramref name="a"/>'s.</exception>
+        /// <exception cref="ValueError"><paramref name="a"/> is not 1-D, a sorter of uint64, a sorter whose size differs
+        ///     from <paramref name="a"/>'s, or a sorter index outside <paramref name="a"/> that the search reaches.</exception>
         /// <exception cref="TypeError">A sorter that is not 1-D (<c>could not parse sorter argument</c>) or not integer
         ///     (<c>sorter must only contain integers</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A text <paramref name="a"/> with elements: NumPy searches
-        ///     it as text (the computational phase).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html</remarks>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html
+        ///     <para>A text <paramref name="a"/> is searched as text: the key is formatted into the common string dtype, as
+        ///     NumPy converts it.</para>
+        /// </remarks>
         public static long searchsorted(NDArray a, int v, string side = "left", NDArray sorter = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(a, sorter);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
@@ -53,7 +55,6 @@ namespace NumSharp
         /// <exception cref="ArgumentException">See <see cref="searchsorted(NDArray, int, string, NDArray)"/>.</exception>
         /// <exception cref="ValueError">See <see cref="searchsorted(NDArray, int, string, NDArray)"/>.</exception>
         /// <exception cref="TypeError">See <see cref="searchsorted(NDArray, int, string, NDArray)"/>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">See <see cref="searchsorted(NDArray, int, string, NDArray)"/>.</exception>
         public static long searchsorted(NDArray a, double v, string side = "left", NDArray sorter = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(a, sorter);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
@@ -87,10 +88,14 @@ namespace NumSharp
         /// <exception cref="ValueError">See <see cref="searchsorted(NDArray, int, string, NDArray)"/>.</exception>
         /// <exception cref="TypeError">See <see cref="searchsorted(NDArray, int, string, NDArray)"/>.</exception>
         /// <exception cref="UnicodeDecodeError">A text search converts bytes that are not ASCII to the common <c>U</c> dtype.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text in <paramref name="a"/> or <paramref name="v"/> with
-        ///     something to compare: NumPy searches as text (the computational phase). No key, or an empty haystack, answers
-        ///     without a comparison.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html</remarks>
+        /// <exception cref="DTypePromotionError">Text with an operand that has no common dtype with it.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html
+        ///     <para>Text in <paramref name="a"/> or <paramref name="v"/> is searched as NumPy searches it: both converted to
+        ///     their common string dtype (a number formatted, bytes decoded), then NumPy's generic binary search step for step
+        ///     — its monotonic carry and its sorter checks included, so an unsorted haystack gives NumPy's answer too
+        ///     (<see cref="Backends.Sorting.TextSearch"/>).</para>
+        /// </remarks>
         [NDScoped]
         public static NDArray searchsorted(NDArray a, NDArray v, string side = "left", NDArray sorter = null)
         {
@@ -271,12 +276,13 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     <c>np.searchsorted</c> when the haystack or the keys are text — NumPy's <c>PyArray_SearchSorted</c> up to its
-        ///     binary search: the side, the common descriptor (<c>PyArray_DescrFromObject(v, a.dtype)</c>: a number with text
-        ///     gives text), the keys converted to it (bytes that are not ASCII fail to become <c>U</c>; formatting a number
-        ///     cannot fail), the haystack's rank and conversion, the sorter. Then, with no key the result is an empty intp
-        ///     array of the keys' shape, and with an empty haystack every key's insertion point is 0 — no comparison either
-        ///     way; otherwise the search compares text (the computational phase).
+        ///     <c>np.searchsorted</c> when the haystack or the keys are text — NumPy's <c>PyArray_SearchSorted</c>: the side,
+        ///     the common descriptor (<c>PyArray_DescrFromObject(v, a.dtype)</c>: a number with text gives text), the keys
+        ///     converted to it (bytes that are not ASCII fail to become <c>U</c>; formatting a number cannot fail), the
+        ///     haystack's rank and conversion, the sorter. Then, with no key the result is an empty intp array of the keys'
+        ///     shape, and with an empty haystack every key's insertion point is 0; otherwise NumPy's generic binary search
+        ///     runs over the text (<see cref="Backends.Sorting.TextSearch"/>: its exact comparisons, monotonic carry and
+        ///     sorter checks).
         /// </summary>
         /// <param name="a">The haystack.</param>
         /// <param name="v">The keys (a 0-d array for a scalar key).</param>
@@ -288,39 +294,43 @@ namespace NumSharp
         /// <exception cref="UnicodeDecodeError">Keys or haystack of bytes that are not ASCII converted to a <c>U</c> common dtype.</exception>
         /// <exception cref="ValueError">The haystack is not 1-D, or a sorter error (see <see cref="ValidateSearchSorter"/>).</exception>
         /// <exception cref="TypeError">A sorter error (see <see cref="ValidateSearchSorter"/>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">The search compares text.</exception>
+        /// <exception cref="ValueError">A sorter index outside the haystack that the search reaches (<c>Sorter index out of
+        ///     range.</c>).</exception>
+        [NDScoped]
         private static NDArray SearchSortedTextAnswer(NDArray a, NDArray v, string side, NDArray sorter)
         {
             ValidateSearchSide(side);
             var common = DTypePromotion.PromoteTypes(v.dtype, a.dtype);
 
-            // The keys, then the haystack, converted to the common descriptor: only S -> U can fail (a non-ASCII byte), so
-            // that conversion is run and discarded; widening and formatting numbers cannot fail.
-            ThrowIfSearchConversionFails(v, common);
+            // The keys, then the haystack, converted to the common descriptor in NumPy's order (PyArray_CheckFromAny on the
+            // keys, then on the haystack with its rank checked first): only S -> U can fail (a non-ASCII byte), and the
+            // conversions are kept for the search. An operand of the common kind is read as it is, whatever its width (the
+            // comparison pads the narrower string with zeros, the cast's padding).
+            NDArray keys = ConvertForTextSearch(v, common);
             if (a.ndim > 1)
                 throw new ValueError("object too deep for desired array");
             if (a.ndim < 1)
                 throw new ValueError("object of too small depth for desired array");
-            ThrowIfSearchConversionFails(a, common);
+            NDArray haystack = ConvertForTextSearch(a, common);
             ValidateSearchSorter(sorter, a.size);
 
             // Nothing compared: an empty result, or every key's insertion point 0 in an empty haystack.
             if (v.size == 0 || a.size == 0)
                 return new NDArray(NPTypeCode.Int64, v.ndim == 0 ? Shape.NewScalar() : Shape.Adopt((long[])v.Shape.dimensions.Clone()), true);
-            throw Backends.Strings.NDStringUfuncs.NextPhase("searchsorted", Backends.Strings.NDStringUfuncs.IsString(a) ? a : v);
+
+            NDArray sorterTyped = sorter is null ? null : EnsureContiguousInt64(sorter);
+            return Backends.Sorting.TextSearch.SearchSorted(haystack, keys, side == "left", sorterTyped);
         }
 
         /// <summary>
-        ///     Runs (and discards) the one conversion of a text search that can fail: bytes to the common <c>U</c> dtype, which
-        ///     NumPy's <c>PyArray_CheckFromAny</c> performs on every element (raising at the first byte that is not ASCII).
+        ///     One operand of a text search in the common descriptor's kind: the operand itself when it is already of that
+        ///     kind (any width), else its conversion (a number formatted, bytes decoded) — the array the search reads.
         /// </summary>
         /// <param name="x">The keys or the haystack.</param>
         /// <param name="common">The common descriptor.</param>
-        /// <exception cref="UnicodeDecodeError">A byte that is not ASCII.</exception>
-        private static void ThrowIfSearchConversionFails(NDArray x, DType common)
-        {
-            if (x.typecode == NPTypeCode.String && common.Meta == DTypeRegistry.Str && !x.Storage.StringSlice.IsUnicode && x.size > 0)
-                x.astype(common, true, 'K', "unsafe").Dispose();
-        }
+        /// <returns><paramref name="x"/> or a new array of <paramref name="common"/>.</returns>
+        /// <exception cref="UnicodeDecodeError">Bytes that are not ASCII converted to a <c>U</c> common descriptor.</exception>
+        private static NDArray ConvertForTextSearch(NDArray x, DType common)
+            => x.dtype.Meta == common.Meta ? x : x.astype(common, true, 'K', "unsafe");
     }
 }

@@ -253,6 +253,10 @@ namespace NumSharp.Tests.Strings
             // arguments as operands or Python values in its own partial.
             if (TryInvokeChar(c.Op, p, ops, out var chars))
                 return chars;
+            // Section strsearch (the arg-reductions with axis / out / keepdims and their methods, ndarray.searchsorted,
+            // P2.2 milestone B) lives in its own partial; its np.searchsorted / np.digitize cases replay through strvalid's ops.
+            if (TryInvokeSearch(c.Op, p, ops, out var searched))
+                return searched;
             throw new InvalidOperationException($"the string oracle has no op '{c.Op}'");
         }
 

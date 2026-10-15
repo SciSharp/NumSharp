@@ -17,6 +17,46 @@
             : a.TensorEngine.ArgMax(a, axis: axis, keepdims: keepdims);
 
         /// <summary>
+        ///     NumPy's <c>np.argmax(a, axis=None, out=None, *, keepdims=False)</c>: the int64 indices of the
+        ///     maximum values along <paramref name="axis"/> (the first occurrence), or of the C-order flattened array.
+        /// </summary>
+        /// <param name="a">Input array (any dtype, fixed-width text included: compared as NumPy's
+        ///     <c>STRING_argmax</c> / <c>UNICODE_argmax</c> compare it).</param>
+        /// <param name="axis">The axis along which to operate, or null (the default) for the flattened array.</param>
+        /// <param name="out">If provided, the indices are written into this array and the SAME instance is returned: its
+        ///     shape must equal the result's exactly, and its dtype must be bool or an integer that casts safely to int64
+        ///     (bool through uint32); the int64 indices are then cast into it unsafely, as NumPy writes them.</param>
+        /// <param name="keepdims">If true, the reduced axis is left in the result with length one (with
+        ///     <paramref name="axis"/> null, every axis: the shape <c>(1,) * a.ndim</c>).</param>
+        /// <returns>The int64 indices (a 0-d array for the flattened form without <paramref name="keepdims"/>), or
+        ///     <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the input's rank (rank 1 for a 0-d input, which
+        ///     NumPy ravels first).</exception>
+        /// <exception cref="ValueError">The reduced length is 0 (<c>attempt to get argmax of an empty sequence</c>), or
+        ///     <paramref name="out"/> does not have the result's shape (<c>output array does not match result of
+        ///     np.argmax.</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="out"/>'s dtype does not cast safely to int64 (uint64, floats,
+        ///     complex, text).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
+        ///     elements (the <c>StringDType</c> part of the next phase).</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.argmax.html
+        ///     <para>
+        ///     The order of NumPy's checks (<c>_PyArray_ArgMinMaxCommon</c>): the axis, the empty length, then the out —
+        ///     the engine raises the first two before it reads an element, and nothing it computes can raise, so checking the
+        ///     out afterwards reports the same error NumPy reports.
+        ///     </para>
+        /// </remarks>
+        [NDScoped]
+        public static NDArray argmax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
+        {
+            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Reduced((a, axis, @out, keepdims), static s => argmax(s.a, s.axis, s.@out, s.keepdims), axis, keepdims, null);
+            return NanArgWriteOut(a.TensorEngine.ReduceArgMax(a, axis, keepdims), @out, "argmax");
+        }
+
+        /// <summary>
         ///     Returns the index of the maximum value.
         /// </summary>
         /// <param name="a">Input array.</param>
@@ -38,6 +78,46 @@
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             ? NDMatrixBoundary.Reduced((a, axis, keepdims), static s => argmin(s.a, s.axis, s.keepdims), axis, keepdims, null)
             : a.TensorEngine.ArgMin(a, axis: axis, keepdims: keepdims);
+
+        /// <summary>
+        ///     NumPy's <c>np.argmin(a, axis=None, out=None, *, keepdims=False)</c>: the int64 indices of the
+        ///     minimum values along <paramref name="axis"/> (the first occurrence), or of the C-order flattened array.
+        /// </summary>
+        /// <param name="a">Input array (any dtype, fixed-width text included: compared as NumPy's
+        ///     <c>STRING_argmin</c> / <c>UNICODE_argmin</c> compare it).</param>
+        /// <param name="axis">The axis along which to operate, or null (the default) for the flattened array.</param>
+        /// <param name="out">If provided, the indices are written into this array and the SAME instance is returned: its
+        ///     shape must equal the result's exactly, and its dtype must be bool or an integer that casts safely to int64
+        ///     (bool through uint32); the int64 indices are then cast into it unsafely, as NumPy writes them.</param>
+        /// <param name="keepdims">If true, the reduced axis is left in the result with length one (with
+        ///     <paramref name="axis"/> null, every axis: the shape <c>(1,) * a.ndim</c>).</param>
+        /// <returns>The int64 indices (a 0-d array for the flattened form without <paramref name="keepdims"/>), or
+        ///     <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the input's rank (rank 1 for a 0-d input, which
+        ///     NumPy ravels first).</exception>
+        /// <exception cref="ValueError">The reduced length is 0 (<c>attempt to get argmin of an empty sequence</c>), or
+        ///     <paramref name="out"/> does not have the result's shape (<c>output array does not match result of
+        ///     np.argmin.</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="out"/>'s dtype does not cast safely to int64 (uint64, floats,
+        ///     complex, text).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
+        ///     elements (the <c>StringDType</c> part of the next phase).</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.argmin.html
+        ///     <para>
+        ///     The order of NumPy's checks (<c>_PyArray_ArgMinMaxCommon</c>): the axis, the empty length, then the out —
+        ///     the engine raises the first two before it reads an element, and nothing it computes can raise, so checking the
+        ///     out afterwards reports the same error NumPy reports.
+        ///     </para>
+        /// </remarks>
+        [NDScoped]
+        public static NDArray argmin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
+        {
+            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Reduced((a, axis, @out, keepdims), static s => argmin(s.a, s.axis, s.@out, s.keepdims), axis, keepdims, null);
+            return NanArgWriteOut(a.TensorEngine.ReduceArgMin(a, axis, keepdims), @out, "argmin");
+        }
 
         /// <summary>
         ///     Returns the index of the minimum value.

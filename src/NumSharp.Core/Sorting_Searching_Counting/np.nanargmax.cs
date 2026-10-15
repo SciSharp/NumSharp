@@ -38,9 +38,10 @@ namespace NumSharp
         /// <returns>Array of int64 indices (or a 0-d scalar for the flattened form); <paramref name="out"/> when given.</returns>
         /// <exception cref="ValueError">All-NaN slice encountered.</exception>
         /// <exception cref="AxisError">Axis out of bounds (reports the original axis, like NumPy).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A string array whose lines hold two or more elements: it is
-        ///     <c>np.argmax</c> / <c>np.argmin</c> of the text, which NumPy compares (the next phase of NumSharp's string
-        ///     support). An empty result or lines of one element give their zero indices (<paramref name="out"/> included).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
+        ///     elements: NumPy compares the text (the <c>StringDType</c> part of the next phase). An <c>S</c> / <c>U</c> array
+        ///     is <c>np.argmax</c> / <c>np.argmin</c> of the text and computes (its <c>_replace_nan</c> leaves an array that
+        ///     is not inexact alone).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanargmax.html</remarks>
         [NDScoped]
         public static NDArray nanargmax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
@@ -51,15 +52,13 @@ namespace NumSharp
             // Boundary scope: reclaims the NaN mask, the all-NaN-guard reductions and the replaced
             // copy; the result (or the caller's @out — untracked, a Returns no-op) is yielded.
             ValidateNanArgAxis(a, axis);
-            // Text: no NaN mask (not inexact), so NumPy's argmax runs its checks — the empty length, then out= — before it
-            // compares the text. Where it compares nothing (an empty result, lines of one element) the bool stand-in of the
-            // same shape computes the zeros, out= included.
+            // Text: no NaN mask (not inexact), so this is NumPy's argmax, which runs its checks — the empty length, then
+            // out= — before it compares the text; the engine then compares (or, where nothing is compared, computes the zero
+            // indices on a bool stand-in), and out= receives the indices as NumPy writes them.
             if (Backends.Strings.NDStringUfuncs.IsString(a))
             {
-                if (NanArgTextAnswer(a, axis, @out, keepdims, "argmax") is { } refusal)
-                    throw refusal;
-                using var standIn = Backends.Strings.NDStringUfuncs.BoolStandIn(a);
-                return nanargmax(standIn, axis, @out, keepdims);
+                NanArgTextChecks(a, axis, @out, keepdims, "argmax");
+                return NanArgWriteOut(a.TensorEngine.ReduceArgMax(a, axis, keepdims), @out, "argmax");
             }
             var prepared = NanArgReplace(a, double.NegativeInfinity, axis);
             var res = prepared.TensorEngine.ReduceArgMax(prepared, axis, keepdims);
@@ -97,9 +96,10 @@ namespace NumSharp
         /// <returns>Array of int64 indices (or a 0-d scalar for the flattened form); <paramref name="out"/> when given.</returns>
         /// <exception cref="ValueError">All-NaN slice encountered.</exception>
         /// <exception cref="AxisError">Axis out of bounds (reports the original axis, like NumPy).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A string array whose lines hold two or more elements: it is
-        ///     <c>np.argmax</c> / <c>np.argmin</c> of the text, which NumPy compares (the next phase of NumSharp's string
-        ///     support). An empty result or lines of one element give their zero indices (<paramref name="out"/> included).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
+        ///     elements: NumPy compares the text (the <c>StringDType</c> part of the next phase). An <c>S</c> / <c>U</c> array
+        ///     is <c>np.argmax</c> / <c>np.argmin</c> of the text and computes (its <c>_replace_nan</c> leaves an array that
+        ///     is not inexact alone).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanargmin.html</remarks>
         [NDScoped]
         public static NDArray nanargmin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
@@ -109,14 +109,12 @@ namespace NumSharp
                 return NDMatrixBoundary.Reduced((a, axis, @out, keepdims), static s => nanargmin(s.a, s.axis, s.@out, s.keepdims), axis, keepdims, null);
             // Boundary scope (see nanargmax(NDArray, int?, NDArray, bool)).
             ValidateNanArgAxis(a, axis);
-            // Text: NumPy's argmin checks the empty length and out= before it compares (see nanargmax); a shape that
-            // compares nothing runs on the bool stand-in.
+            // Text: NumPy's argmin checks the empty length and out= before it compares (see nanargmax); the engine
+            // compares, and out= receives the indices.
             if (Backends.Strings.NDStringUfuncs.IsString(a))
             {
-                if (NanArgTextAnswer(a, axis, @out, keepdims, "argmin") is { } refusal)
-                    throw refusal;
-                using var standIn = Backends.Strings.NDStringUfuncs.BoolStandIn(a);
-                return nanargmin(standIn, axis, @out, keepdims);
+                NanArgTextChecks(a, axis, @out, keepdims, "argmin");
+                return NanArgWriteOut(a.TensorEngine.ReduceArgMin(a, axis, keepdims), @out, "argmin");
             }
             var prepared = NanArgReplace(a, double.PositiveInfinity, axis);
             var res = prepared.TensorEngine.ReduceArgMin(prepared, axis, keepdims);
@@ -186,20 +184,19 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>np.argmax</c> / <c>np.argmin</c> of text (what <c>nanargmax</c> / <c>nanargmin</c> are for text: its
-        ///     <c>_replace_nan</c> leaves a non-inexact array alone), once the axis passed: an empty reduced length refuses,
-        ///     then <c>out=</c> is checked (<see cref="ValidateNanArgOut"/>), and only then the text is compared.
+        ///     NumPy's checks of <c>np.argmax</c> / <c>np.argmin</c> of text before it compares (what <c>nanargmax</c> /
+        ///     <c>nanargmin</c> are for text: its <c>_replace_nan</c> leaves a non-inexact array alone), once the axis passed:
+        ///     an empty reduced length refuses, then <c>out=</c> is checked (<see cref="ValidateNanArgOut"/>).
         /// </summary>
         /// <param name="a">The text array.</param>
         /// <param name="axis">The validated axis, or null for the flattened array.</param>
         /// <param name="out">The out array, or null.</param>
         /// <param name="keepdims">Whether the reduced axes stay with length one (decides the expected out shape).</param>
         /// <param name="name"><c>argmax</c> or <c>argmin</c>.</param>
-        /// <returns>The exception to throw, or null when NumPy compares nothing: an empty result (the reduced length is not
-        ///     0) or lines of at most one element, whose indices are all 0 (the caller computes them on a bool stand-in).</returns>
-        /// <exception cref="ValueError">An out of the wrong shape (thrown).</exception>
-        /// <exception cref="TypeError">An out that does not cast safely to int64 (thrown).</exception>
-        private static Exception NanArgTextAnswer(NDArray a, int? axis, NDArray @out, bool keepdims, string name)
+        /// <exception cref="ValueError">An empty reduced length (<c>attempt to get argmax of an empty sequence</c>), or an
+        ///     out of the wrong shape.</exception>
+        /// <exception cref="TypeError">An out that does not cast safely to int64.</exception>
+        private static void NanArgTextChecks(NDArray a, int? axis, NDArray @out, bool keepdims, string name)
         {
             int nd = a.ndim;
             long[] dims;
@@ -233,13 +230,9 @@ namespace NumSharp
                 }
             }
             if (reduced == 0)
-                return new ValueError($"attempt to get {name} of an empty sequence");
+                throw new ValueError($"attempt to get {name} of an empty sequence");
             if (@out is not null)
                 ValidateNanArgOut(@out, dims, name);
-            // The arg loop returns before its first comparison for an empty input or a line of one element.
-            if (a.size == 0 || reduced == 1)
-                return null;
-            return Backends.Strings.NDStringUfuncs.NextPhase(name, a);
         }
 
         /// <summary>

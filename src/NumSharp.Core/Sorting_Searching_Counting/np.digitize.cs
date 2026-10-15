@@ -30,9 +30,7 @@ namespace NumSharp
         ///     monotonically increasing or decreasing</c>).</exception>
         /// <exception cref="InvalidCastException"><paramref name="bins"/> does not cast 'safely' to float64 (text or complex;
         ///     NumPy's TypeError text).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A text <paramref name="x"/> with elements to search among
-        ///     non-empty bins: NumPy compares the keys as text against the bins converted to text (the computational
-        ///     phase).</exception>
+
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.digitize.html
         ///     <para>
@@ -40,6 +38,12 @@ namespace NumSharp
         ///     <c>PyArray_FROMANY(bins, NPY_DOUBLE, 1, 1)</c> checks the bins' rank before their 'safe' cast to float64; then the
         ///     monotonicity; then <c>searchsorted</c>. So a text x is only reached once the (numeric) bins passed — and when x has
         ///     no elements, or the bins are empty, NumPy's answer needs no comparison: an empty int64 array, or all zeros.
+        ///     </para>
+        ///     <para>
+        ///     <b>Text x.</b> <c>searchsorted(bins, x)</c> converts the numeric bins to x's string kind (their text, as NumPy
+        ///     formats them) and compares text: <c>digitize(['3', '10'], [2, 5])</c> is <c>[1, 0]</c>, because <c>'10'</c>
+        ///     sorts before <c>'2'</c>. The bins' text need not be in order (the monotonicity was checked on the numbers); the
+        ///     search's exact comparisons, ported from NumPy, give NumPy's indices anyway.
         ///     </para>
         /// </remarks>
         [NDScoped]
@@ -58,14 +62,19 @@ namespace NumSharp
             if (mono == 0)
                 throw new ValueError("bins must be monotonically increasing or decreasing");
 
-            // A text x is searched as text (searchsorted promotes the numeric bins to a string dtype). With no key, or no bin
-            // edge, nothing is compared: NumPy returns int64 indices of x's shape — all zero for empty bins (every key's
-            // insertion point), none for an empty x (a decreasing-bins `len(bins) - result` keeps both).
+            // A text x is searched as text: searchsorted converts the numeric bins to the common string dtype and runs NumPy's
+            // binary search over the text (the bins were checked monotonic as NUMBERS, so their text need not be sorted: the
+            // search's exact comparisons give NumPy's answer either way). With no key, or no bin edge, nothing is compared:
+            // NumPy returns int64 indices of x's shape — all zero for empty bins (every key's insertion point), none for an
+            // empty x (a decreasing-bins `len(bins) - result` keeps both).
             if (Backends.Strings.NDStringUfuncs.IsString(x))
             {
                 if (x.size == 0 || bins.size == 0)
                     return np.zeros(Shape.Adopt((long[])x.Shape.dimensions.Clone()), NPTypeCode.Int64);
-                throw Backends.Strings.NDStringUfuncs.NextPhase("digitize", x);
+                string textSide = right ? "left" : "right";
+                if (mono == -1)
+                    return NDArray.Scalar((long)bins.Shape.dimensions[0]) - np.searchsorted(bins["::-1"], x, textSide);
+                return np.searchsorted(bins, x, textSide);
             }
 
             // The side is reversed relative to `right` because searchsorted's operands are swapped

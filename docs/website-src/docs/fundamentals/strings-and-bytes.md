@@ -4,7 +4,7 @@ NumSharp has NumPy's two fixed-width text dtypes: `str_` (`U`, Unicode) and `byt
 
 Conversion between text and numbers works as in NumPy: a number written into a text array is its scalar's `str()`, and a text cast to a number is parsed by Python's `int()`, `float()` or `complex()`, with NumPy's errors.
 
-Computing on text arrives in stages. Comparisons, truth values, concatenation, repetition and sorting compute now, with NumPy's results, and so do the `numpy.char` module's comparisons, `add` and `multiply` (`np.@char`). Searching, the set routines and the other `np.strings` functions throw `StringComputationNotSupportedException` until their stage lands. Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
+Computing on text arrives in stages. Comparisons, truth values, concatenation, repetition, sorting and searching compute now, with NumPy's results, and so do the `numpy.char` module's comparisons, `add` and `multiply` (`np.@char`). The set routines and the other `np.strings` functions throw `StringComputationNotSupportedException` until their stage lands. Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
 
 NumPy 2's variable-width `StringDType` (`T`) stores, reads, writes, copies, casts, prints, goes to `.npy` files and through `np.loadtxt` / `np.savetxt` as in NumPy too; computing on it is the next phase (see [Variable-width text: `StringDType`](#variable-width-text-stringdtype)). NumPy's raw `void` (`V`) and `object` (`O`) dtypes stay unsupported.
 
@@ -16,7 +16,7 @@ NumPy 2's variable-width `StringDType` (`T`) stores, reads, writes, copies, cast
      Moving data → Moving_ViewsCopiesAndCasts, Moving_NonAsciiToBytes_Throws
      Converting between text and numbers → Converting_NumbersToText, Converting_TextToNumbers, Converting_StoresAndUfuncs, Converting_CSharpStringIsText
      Printing → Printing_StrAndRepr
-     Computing on text → Computing_Comparisons, Computing_TruthValues, Computing_ConcatenationAndRepetition, Computing_Sorting, Computing_CharModule, Computing_NumPyRefusals, Computing_NextPhase, Computing_NeverEqualToNumbers, Computing_ChecksInNumPysOrder
+     Computing on text → Computing_Comparisons, Computing_TruthValues, Computing_ConcatenationAndRepetition, Computing_Sorting, Computing_Searching, Computing_CharModule, Computing_NumPyRefusals, Computing_NextPhase, Computing_NeverEqualToNumbers, Computing_ChecksInNumPysOrder
      Variable-width text: StringDType → StringDType_Creating, StringDType_NAObjects, StringDType_WritingElements, StringDType_MovingAndCasting, StringDType_Nditer, StringDType_TextFiles, StringDType_Refusals, StringDType_ByteswapIsACopy
      .npy files → Npy_RoundTrip, Npy_CharWritesAsU1, Npy_StringDTypeIsNumPysPickle
      The Char dtype → Char_IsTwoByteUtf16CodeUnit
@@ -289,6 +289,40 @@ np.sort(words, kind: "stable", stable: true); // ValueError: `kind` and keyword 
 
 Measured against NumPy 2.4.2 on the same machine (pinned to two cores): over fresh inputs of 1,000 strings every `np.sort`, `np.argsort`, `np.partition` and `np.argpartition` measured ran at least 1.58 times as fast as NumPy (3 times in the geometric mean), and over 100,000 and 1,000,000 strings they ran 1.7 to 19 times as fast. The slowest cases are argsorts of text outside Latin-1 (1.7 to 2 times NumPy's speed), whose characters take more room in the sort key, and argsorts of text with many repeated values (about twice NumPy's speed): NumSharp reproduces NumPy's order of the equal strings by replaying its introsort.
 
+### Searching
+
+`np.argmax`, `np.argmin`, `np.nanargmax`, `np.nanargmin` (and the `ndarray` methods), `np.searchsorted` (and `ndarray.searchsorted`) and `np.digitize` search `S` and `U` text with NumPy's results. They compare as the sorts do: by code point (`U`) or byte value (`S`), unsigned.
+
+```csharp
+var words = np.array(new[] { "pear", "fig", "apple", "fig" });
+np.argmax(words);                                              // 0 ('pear')
+np.argmin(words);                                              // 2 ('apple')
+np.argmax(np.array(new[,] { { "b", "a" }, { "a", "c" } }), 1);  // [0 1]
+var sorted = np.sort(words);                                   // ['apple' 'fig' 'fig' 'pear']
+np.searchsorted(sorted, np.array(new[] { "fig", "kiwi" }));            // [1 3]
+np.searchsorted(sorted, np.array(new[] { "fig", "kiwi" }), "right");   // [3 3]
+```
+
+The arg-reductions follow NumPy's rules:
+
+- Of several equal extremes, the first wins.
+- `keepdims` keeps the reduced axis.
+- `out=` takes an integer array NumPy accepts: `bool` through `uint32` and the signed types. `uint64` and floats raise its `TypeError`.
+- `np.nanargmax` and `np.nanargmin` of text are `np.argmax` and `np.argmin`: text has no NaN.
+
+`np.searchsorted` first converts the keys and the haystack to their common string dtype, as NumPy does. A number is written as text, so `np.searchsorted(np.array(new[] { "1", "10", "2", "5" }), 3)` searches for `"3"` and returns 3. Bytes beside `str` are decoded.
+
+Over an unsorted haystack, NumPy's answer comes from its exact sequence of comparisons, and NumSharp follows that sequence. `np.digitize` of text searches the bins converted to text, so the bins follow text order, not number order:
+
+```csharp
+np.digitize(np.array(new[] { "10", "3", "25" }), np.array(new[] { 5, 20 }));   // [0 2 2]
+```
+
+Measured against NumPy 2.4.2 on the same machine (pinned to two cores, fresh inputs every call): the arg-reductions ran 3.4 times as fast as NumPy in the geometric mean, and `np.searchsorted` 4.6 times as fast (6 to 10 times over sorted haystacks of 100,000 strings, 1.4 to 4 times over unsorted ones, whose searches follow NumPy's exact sequence of comparisons). Two kinds of call stay close to NumPy's speed, because both libraries spend their time waiting on memory rather than comparing:
+
+- **An arg-reduction over 100,000 fresh strings** (1.1 to 1.5 times NumPy's speed). It reads every cache line of the array, at the memory's bandwidth.
+- **A few keys searched in a long haystack** (100 keys in 100,000 strings, 0.7 to 1.4 times NumPy's speed). Each step of a binary search reads an element whose address depends on the previous comparison, so the search waits on memory at every step.
+
 ### The `numpy.char` module
 
 `np.@char` is NumPy's `numpy.char` module. `char` is a C# keyword, so NumPy's `np.char.equal(a, b)` is `np.@char.equal(a, b)`. These functions compute now:
@@ -328,8 +362,8 @@ np.sqrt(names);   // TypeError: ufunc 'sqrt' not supported for the input types, 
 **NumPy computes on the text in a later stage.** NumSharp throws `StringComputationNotSupportedException`, a `NotSupportedException`:
 
 ```csharp
-np.unique(names);                                            // the unique values
-np.searchsorted(np.sort(names), np.array(new[] { "cow" }));  // a binary search
+np.unique(names);                                // the unique values
+np.isin(names, np.array(new[] { "cow" }));       // membership
 ```
 
 A comparison of text with numbers is "never equal" in NumPy, and in NumSharp: `names == np.array(new[] { 1, 2, 3 })` is `[False False False]`.
@@ -363,7 +397,7 @@ np.isin(names, np.array(new[] { 1.5, 2.0 }));   // [False False False]
 np.array_equal(names, np.zeros(new Shape(3L))); // False
 ```
 
-Over text that has to be read, the searches and the set routines stay in a later stage.
+Over text that has to be read, the set routines stay in a later stage.
 
 `np.place` and `np.putmask` follow NumPy's two value forms. A C# array is a Python list: NumSharp converts it straight into the target's dtype. An `NDArray` must cast to the target's dtype under the `'safe'` rule, as in NumPy:
 
@@ -631,7 +665,7 @@ This is NumPy's `np.frombuffer` on a bytestring, and the general interop bridge.
 ## Troubleshooting
 
 ### "`StringComputationNotSupportedException`: ... is the next phase"
-NumPy computes this call on text, and NumSharp does not compute it yet (comparisons, truth values, concatenation, repetition, sorting and the conversions between text and numbers already compute). Convert the values to .NET (`NDArray.AsStringArray`, `item`) and use LINQ, or keep the computation in NumPy.
+NumPy computes this call on text, and NumSharp does not compute it yet (comparisons, truth values, concatenation, repetition, sorting, searching and the conversions between text and numbers already compute). Convert the values to .NET (`NDArray.AsStringArray`, `item`) and use LINQ, or keep the computation in NumPy.
 
 ### "`ValueError: could not convert string to float`"
 A cast from text to a number parses every element, as NumPy does. Clean the text first, or keep it as text.

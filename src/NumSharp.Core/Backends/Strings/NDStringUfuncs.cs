@@ -16,8 +16,8 @@ namespace NumSharp.Backends.Strings
     ///     <b>Three kinds of answer.</b> Where NumPy itself refuses (no loop for the operand classes), the exception carries
     ///     NumPy's exact text: that is final behavior, not a gap. The comparisons and the <c>logical_*</c> truth tests
     ///     COMPUTE (strings phase 2, P2.1: <see cref="NDStringComparison"/>, <see cref="NDStringTruth"/>), after the same
-    ///     checks; concatenation, repetition (P2.3) and sorting (P2.2) compute too. Where NumPy computes in a way a later
-    ///     subphase implements (<c>argmax</c>, searching, the set routines, a text <c>out=</c>), the answer is
+    ///     checks; concatenation, repetition (P2.3), sorting and searching (P2.2) compute too. Where NumPy computes in a way a
+    ///     later subphase implements (the set routines, a text <c>out=</c>), the answer is
     ///     <see cref="NextPhase(string, NDArray)"/>: a
     ///     <see cref="NotSupportedException"/> that names the operation. The refusals are raised BEFORE broadcasting, as
     ///     NumPy resolves the loop before it broadcasts.
@@ -530,7 +530,8 @@ namespace NumSharp.Backends.Strings
                 case "nanquantile":
                     return a.size == 0 ? AddNotCompatible(d, "reduce") : NotSupportedForInputTypes("isnan");
                 default:
-                    // argmax/argmin, any/all, nonzero, count_nonzero and the sorting family compute on text.
+                    // argmax / argmin, any / all, nonzero, count_nonzero and the sorting family compute on text, and their
+                    // entry points answer before this guard; what reaches here is a computing reduction not routed yet.
                     return NextPhase(op, a);
             }
         }
@@ -881,9 +882,9 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     The refusal for a call NumPy answers by computing on text that NumSharp does not compute yet (sorting,
-        ///     searching, conversion between text and numbers, the <c>np.strings</c> functions beyond <c>add</c> /
-        ///     <c>multiply</c>): those are the next phase of NumSharp's string support.
+        ///     The refusal for a call NumPy answers by computing on text that NumSharp does not compute yet (the set routines,
+        ///     lexsort, np.histogram and the quantiles over text, the <c>np.strings</c> functions beyond <c>add</c> /
+        ///     <c>multiply</c>): those are the next stages of NumSharp's string support.
         /// </summary>
         /// <param name="op">The NumPy function or ufunc name.</param>
         /// <param name="a">A string operand of the call; its descriptor is named in the message.</param>
@@ -901,8 +902,8 @@ namespace NumSharp.Backends.Strings
             => new StringComputationNotSupportedException(
                 $"{op} is not supported for fixed-width string arrays yet ({descr.ToString(true)}): NumSharp's string support " +
                 "covers storage, element access, conversion to and from C#, copying, casts between string dtypes, conversion " +
-                "between text and numbers, indexing, printing, comparisons, truth tests, concatenation, repetition and sorting. " +
-                "The rest of string computation (searching, the set routines, the np.strings functions) is the next phase.");
+                "between text and numbers, indexing, printing, comparisons, truth tests, concatenation, repetition, sorting and " +
+                "searching. The rest of string computation (the set routines, the np.strings functions) is the next phase.");
 
         /// <summary>
         ///     The phase-2 deferral of a NEP 55 <c>StringDType</c> computation: a call NumPy answers by computing on

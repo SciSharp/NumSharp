@@ -982,7 +982,7 @@ namespace NumSharp.Backends.Sorting
         ///     for 2-D, whatever the layout (stepped, reversed, transposed, broadcast).
         /// </remarks>
         [NDScoped]
-        private static void DriveLines(NDArray[] ops, NDIterPerOpFlags[] flags, int axis, NDInnerLoopFunc kernel)
+        internal static void DriveLines(NDArray[] ops, NDIterPerOpFlags[] flags, int axis, NDInnerLoopFunc kernel)
         {
             if (ops[0].size == 0)
                 return;
@@ -1058,8 +1058,8 @@ namespace NumSharp.Backends.Sorting
             /// <summary>The gather kernel of the width, or null on a host without dynamic code (the managed twin runs).</summary>
             private readonly TextGatherFunc _gather;
 
-            /// <summary>The prefix-key kernels this job used, by (bits class, units, OR flag); filled on first use.</summary>
-            private readonly TextSortKeyFunc[] _keyKernels = new TextSortKeyFunc[4 * 9 * 2];
+            /// <summary>The prefix keys of this job's dtype (the kernels it resolves are cached in it for every line).</summary>
+            private readonly TextKeyer _keyer;
 
             /// <summary>2n ulongs: the keys and the radix's key buffer; after a line's stable order, the introsort records.</summary>
             private ulong* _keyBlock;
@@ -1120,6 +1120,7 @@ namespace NumSharp.Backends.Sorting
                 _unit = unit;
                 _width = width;
                 _units = width / unit;
+                _keyer = new TextKeyer(unit, _units);
                 _n = n;
                 _textStride = textStride;
                 _outStride = outStride;
@@ -1761,9 +1762,9 @@ namespace NumSharp.Backends.Sorting
             }
 
             /// <summary>
-            ///     Keys the selected elements from unit <paramref name="fromUnit"/> on: <c>S</c> takes the next 8 bytes; <c>U</c>
-            ///     first takes 8 units of 8 bits (collecting their OR), and when a unit does not fit 8 bits re-keys with the
-            ///     widest packing its units allow (16, 21 or 32 bits).
+            ///     Keys the selected elements from unit <paramref name="fromUnit"/> on (<see cref="TextKeyer.ComputeKeys"/>: <c>S</c>
+            ///     takes the next 8 bytes; <c>U</c> first takes 8 units of 8 bits, and when a unit does not fit 8 bits re-keys
+            ///     with the widest packing its units allow).
             /// </summary>
             /// <param name="text">The line's element 0.</param>
             /// <param name="stride">The byte distance between its elements.</param>
@@ -1773,66 +1774,7 @@ namespace NumSharp.Backends.Sorting
             /// <param name="keys">The key slots.</param>
             /// <returns>The units the keys cover (fewer than the packing holds when the element ends first).</returns>
             private int ComputeKeys(byte* text, long stride, long* index, long count, int fromUnit, ulong* keys)
-            {
-                int rem = _units - fromUnit;
-                byte* first = text + (long)fromUnit * _unit;
-                if (_unit == 1)
-                {
-                    int r = Math.Min(8, rem);
-                    KeyKernel(8, r, false)(first, stride, index, count, keys, null);
-                    return r;
-                }
-
-                uint* ors = stackalloc uint[4];
-                int r8 = Math.Min(8, rem);
-                KeyKernel(8, r8, true)(first, stride, index, count, keys, ors);
-                uint or3 = ors[0] | ors[1];   // units 0-2
-                uint or4 = or3 | ors[2];      // units 0-3
-                if ((or4 | ors[3]) < 0x100u)
-                    return r8;
-                int bits, units;
-                if (or4 < 0x10000u)
-                {
-                    bits = 16;
-                    units = Math.Min(4, rem);
-                }
-                else if (or3 < 0x200000u)
-                {
-                    bits = 21;
-                    units = Math.Min(3, rem);
-                }
-                else
-                {
-                    bits = 32;
-                    units = Math.Min(2, rem);
-                }
-                KeyKernel(bits, units, false)(first, stride, index, count, keys, null);
-                return units;
-            }
-
-            /// <summary>The prefix-key kernel of one packing: the emitted one, or the managed twin on a host without dynamic code.</summary>
-            /// <param name="bits">The bits per unit (8, 16, 21 or 32).</param>
-            /// <param name="units">The units per key.</param>
-            /// <param name="collectOr">Whether the kernel collects the unit OR.</param>
-            /// <returns>The kernel.</returns>
-            private TextSortKeyFunc KeyKernel(int bits, int units, bool collectOr)
-            {
-                int bitsClass = bits switch { 8 => 0, 16 => 1, 21 => 2, _ => 3 };
-                int slot = ((bitsClass * 9) + units) * 2 + (collectOr ? 1 : 0);
-                var kernel = _keyKernels[slot];
-                if (kernel is null)
-                {
-                    kernel = ILKernelGenerator.GetTextSortKeyKernel(_unit, units, bits, collectOr);
-                    if (kernel is null)
-                    {
-                        int unit = _unit;
-                        kernel = (text, stride, index, count, keys, unitOr) =>
-                            ILKernelGenerator.TextSortKeysManaged(unit, units, bits, collectOr, text, stride, index, count, keys, unitOr);
-                    }
-                    _keyKernels[slot] = kernel;
-                }
-                return kernel;
-            }
+                => _keyer.ComputeKeys(text, stride, index, count, fromUnit, keys);
 
             /// <summary>Runs the gather kernel, or its managed twin on a host without dynamic code.</summary>
             /// <param name="src">See <see cref="TextGatherFunc"/>.</param>

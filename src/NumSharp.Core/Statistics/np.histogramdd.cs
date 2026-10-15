@@ -196,13 +196,22 @@ namespace NumSharp
         ///     <c>min()</c> (<c>minimum</c> has no text loop, named with the STACKED dtype) when the dimension has a scalar bin
         ///     spec and no range; text edges: their widths' <c>subtract</c> refusal; text weights with points: bincount's
         ///     safe cast to float64.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text edges of two or more elements (NumPy compares them),
-        ///     or a text sample with points to bin (NumPy searches the edges, comparing text).</exception>
+        /// <exception cref="UnicodeDecodeError">An <c>S</c> column beside a <c>U</c> column holding a byte that is not ASCII:
+        ///     NumPy's stacking, its first statement, decodes the bytes before any bin is read, so this wins over every bin
+        ///     error.</exception>
         /// <remarks>
         ///     <para>
         ///     NumPy stacks the columns into ONE array (<c>np.atleast_2d(sample).T</c>), so a text column makes the whole
         ///     sample text: <c>U2</c> beside float64 is <c>&lt;U32</c>, beside int64 <c>&lt;U21</c>, beside bool
-        ///     <c>&lt;U5</c> (NumPy formats the numbers; the answers below never need the formatted text, only its dtype).
+        ///     <c>&lt;U5</c> (NumPy formats the numbers), <c>S2</c> beside <c>U1</c> <c>&lt;U2</c> (NumPy decodes the bytes
+        ///     as ASCII). Every column is cast to that stacked dtype first (<see cref="CastColumnsToStacked"/>), as NumPy's
+        ///     stacking does, and the formatted text decides the bins: <c>searchsorted</c> runs in the text descriptor common to
+        ///     the column and the edges (numeric edges become text), so <c>"10"</c> sorts before <c>"3"</c>, and the
+        ///     rightmost-edge test compares text with the last edge, which never equals a number.
+        ///     </para>
+        ///     <para>
+        ///     Text edges of two or more elements are compared by the string <c>greater</c> kernel (NumPy's monotonicity
+        ///     check); their widths then meet <c>subtract</c>'s refusal, a <see cref="TypeError"/>.
         ///     </para>
         ///     <para>
         ///     The per-dimension statements run in NumPy's order — the scalar bin's <c>bins[i] &lt; 1</c>, the outer edges,
@@ -219,11 +228,11 @@ namespace NumSharp
             // of DIFFERENTLY-typed columns — e.g. histogram2d(float32_x, float64_y) — must be promoted so its
             // per-dimension edges AND the binning comparison run in the one common dtype, matching NumPy
             // (whose stacked sample makes both edges float64). Done first, before any edge/bin computation
-            // reads cols[i].typecode. A text sample keeps its columns: only the stacked DTYPE is needed.
+            // reads cols[i].typecode. A text sample is cast to its stacked text dtype here too (CastColumnsToStacked):
+            // NumPy's stacking formats the number columns and decodes bytes beside str before it reads a bin.
             DType stacked = StackedSampleDescr(cols);
             bool textSample = stacked?.Meta is StringDTypeMeta;
-            if (!textSample)
-                cols = PromoteColumnsToCommon(cols);
+            cols = textSample ? CastColumnsToStacked(cols, stacked) : PromoteColumnsToCommon(cols);
 
             int D = cols.Length;
             long N = D == 0 ? 0 : cols[0].size;
@@ -288,12 +297,11 @@ namespace NumSharp
                 dedges[i] = np.diff(edges[i]);
             }
 
-            if (textSample)
+            if (textSample && N == 0)
             {
-                // NumPy now searches every edge array for the text points (string computation). With no points the searches,
-                // the rightmost-edge comparisons and the bincount see nothing, so the counts are the empty numeric sample's.
-                if (N > 0)
-                    throw Backends.Strings.NDStringUfuncs.NextPhase("searchsorted", stacked);
+                // With no points the searches, the rightmost-edge comparisons and the bincount see nothing, so the
+                // counts are the empty numeric sample's. (With points, every column already is the stacked text dtype:
+                // NumPy searches the numeric edges converted to text, so the bins follow string order, "10" before "3".)
                 cols = new NDArray[D];
                 for (int i = 0; i < D; i++)
                     cols[i] = np.zeros(Shape.Vector(0), NPTypeCode.Double);
@@ -307,6 +315,15 @@ namespace NumSharp
             var Ncount = new NDArray[D];
             for (int i = 0; i < D; i++)
             {
+                if (textSample && N > 0)
+                {
+                    // A text column: NumPy's searchsorted in the text descriptor common to the column and the edges, then the
+                    // rightmost-edge comparison (text against a number compares unequal everywhere, as NumPy's == answers).
+                    NDArray textIdx = np.searchsorted(edges[i], cols[i], "right");
+                    NDArray textOnEdge = cols[i] == edges[i]["-1"];
+                    Ncount[i] = textIdx - textOnEdge.astype(NPTypeCode.Int64);
+                    continue;
+                }
                 NPTypeCode cmp = promote_types(edges[i].typecode, cols[i].typecode);
                 var searchIdx = DirectILKernelGenerator.GetHistogramSearchIndexKernel(cmp);
                 if (searchIdx != null)
@@ -396,6 +413,33 @@ namespace NumSharp
         {
             if (sample is null) throw new ArgumentNullException(nameof(sample));
             return sample;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>atleast_2d(sample).T</c> for a TEXT sample: every column converted to the stacked text dtype, a
+        ///     number column formatted as NumPy formats it and an <c>S</c> column beside a <c>U</c> one decoded as ASCII.
+        ///     The stacking is histogramdd's first statement, so its decode error comes before any bin specification is read;
+        ///     and the columns it returns are what the bin search compares, since the formatted text decides the bins.
+        /// </summary>
+        /// <param name="cols">The sample's columns, as the caller passed them (the array may be the caller's own).</param>
+        /// <param name="stacked">The stacked text dtype (<see cref="StackedSampleDescr"/>).</param>
+        /// <returns><paramref name="cols"/> itself when every column already has the stacked dtype; otherwise a NEW array
+        ///     holding the converted columns (the caller's array is never written: <c>histogramdd(NDArray[] sample, …)</c>
+        ///     hands its own array in).</returns>
+        /// <exception cref="UnicodeDecodeError">An <c>S</c> column holding a byte that is not ASCII, converted to a <c>U</c>
+        ///     stacked dtype.</exception>
+        private static NDArray[] CastColumnsToStacked(NDArray[] cols, DType stacked)
+        {
+            NDArray[] cast = null;
+            for (int i = 0; i < cols.Length; i++)
+            {
+                if (cols[i].dtype == stacked)
+                    continue;
+                // Copy the array on the first column that changes, so a uniform sample allocates nothing.
+                cast ??= (NDArray[])cols.Clone();
+                cast[i] = cols[i].astype(stacked);
+            }
+            return cast ?? cols;
         }
 
         /// <summary>

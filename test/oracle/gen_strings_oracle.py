@@ -127,6 +127,9 @@ def describe(base, view):
     isz = base.itemsize
     off_bytes = view.__array_interface__["data"][0] - base.__array_interface__["data"][0] if view.size else 0
     assert off_bytes % isz == 0
+    # The view must address the base's own buffer: a pair built from two separate arrays gives an offset between two
+    # unrelated allocations, and the replay would write outside the rebuilt buffer (strsearch's first strided out= did).
+    assert view.size == 0 or np.may_share_memory(base, view), "a view must address its base's buffer"
     strides = []
     for s in view.strides:
         assert s % isz == 0, "a view stride must be a whole number of elements"
@@ -7622,11 +7625,511 @@ def gen_strchar():
     _char_call("char_multiply", [t1, 2], lambda x, i: np.char.multiply(x, i), layout="T:int", phase="compute")
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# strsearch. Searching text: np.argmax / np.argmin / np.nanargmax / np.nanargmin and the ndarray methods, np.searchsorted
+# and ndarray.searchsorted, np.digitize of text (strings phase 2, P2.2 milestone B)
+# ----------------------------------------------------------------------------------------------------------------------
+
+def _search_text(values, spec):
+    """A C-contiguous text operand of the given str values at ``spec`` (encoded as UTF-8 for an ``S`` spec).
+
+    :param values: the str values.
+    :param spec: the dtype, e.g. ``"U8"`` or ``"S8"``.
+    :returns: the (base, view) pair.
+    """
+    if spec.lstrip("<|")[0] == "S":
+        return plain(np.array([v.encode() for v in values], dtype=spec))
+    return plain(np.array(values, dtype=spec))
+
+
+def _rand_strings(rng, n, width, alphabet, minlen=0):
+    """``n`` strings of ``minlen`` to ``width`` characters drawn from ``alphabet``.
+
+    :param rng: the generator.
+    :param n: the count.
+    :param width: the most characters.
+    :param alphabet: the characters.
+    :param minlen: the fewest characters.
+    :returns: the list.
+    """
+    return ["".join(rng.choice(list(alphabet), int(rng.integers(minlen, width + 1)))) for _ in range(n)]
+
+
+def _pick(rng, n, pool):
+    """``n`` values drawn from ``pool`` (categorical data: the extreme value recurs).
+
+    :param rng: the generator.
+    :param n: the count.
+    :param pool: the values.
+    :returns: the list.
+    """
+    return [pool[int(i)] for i in rng.integers(0, len(pool), n)]
+
+
+def _argred(layout, op, axes, *, names=("argmax", "argmin"), keepdims=(False,), methods=False):
+    """Records the arg-reductions of one operand.
+
+    :param layout: the layout label.
+    :param op: the (base, view) operand.
+    :param axes: the axes (``None`` flattens).
+    :param names: the functions (``argmax`` / ``argmin`` / ``nanargmax`` / ``nanargmin``).
+    :param keepdims: the keepdims values.
+    :param methods: also record ``ndarray.argmax`` / ``ndarray.argmin``.
+    """
+    for ax in axes:
+        for kd in keepdims:
+            for name in names:
+                add("strsearch", "argred_kw", params={"name": name, "axis": ax, "keepdims": kd, "method": False,
+                                                      "out": False},
+                    operands=[op], layout=layout, call=lambda a, f=getattr(np, name), x=ax, k=kd: f(a, axis=x, keepdims=k))
+            if methods:
+                for name in ("argmax", "argmin"):
+                    add("strsearch", "argred_kw", params={"name": name, "axis": ax, "keepdims": kd, "method": True,
+                                                          "out": False},
+                        operands=[op], layout=layout, call=lambda a, n=name, x=ax, k=kd: getattr(a, n)(axis=x, keepdims=k))
+
+
+def _argred_out(layout, op, out, name, ax, kd, method=False):
+    """Records one arg-reduction into an ``out=`` array (its view and whole base compared afterwards).
+
+    :param layout: the layout label.
+    :param op: the (base, view) text operand.
+    :param out: the (base, view) out operand.
+    :param name: the function or method name.
+    :param ax: the axis (``None`` flattens).
+    :param kd: keepdims.
+    :param method: the ndarray method instead of the function.
+    """
+    if method:
+        call = lambda a, o, n=name, x=ax, k=kd: getattr(a, n)(axis=x, out=o, keepdims=k)
+    else:
+        call = lambda a, o, f=getattr(np, name), x=ax, k=kd: f(a, axis=x, out=o, keepdims=k)
+    add("strsearch", "argred_kw", params={"name": name, "axis": ax, "keepdims": kd, "method": method, "out": True},
+        operands=[op, out], layout=layout, mutate=1, call=call)
+
+
+def _search(layout, hay, keys, side="left", sorter=None, method=False):
+    """Records one search (``np.searchsorted``, or ``ndarray.searchsorted`` with ``method``).
+
+    :param layout: the layout label.
+    :param hay: the (base, view) haystack.
+    :param keys: the (base, view) keys.
+    :param side: the side name.
+    :param sorter: the (base, view) sorter, or ``None``.
+    :param method: the ndarray method instead of the function.
+    """
+    ops = [hay, keys] + ([sorter] if sorter is not None else [])
+    if method:
+        call = lambda h, k, *s, sd=side: h.searchsorted(k, side=sd, sorter=s[0] if s else None)
+    else:
+        call = lambda h, k, *s, sd=side: np.searchsorted(h, k, side=sd, sorter=s[0] if s else None)
+    add("strsearch", "ndsearchsorted" if method else "searchsorted_kw", params={"side": side, "sorter": sorter is not None},
+        operands=ops, layout=layout, call=call)
+
+
+def gen_strsearch():
+    """Section strsearch: searching text (P2.2 milestone B). Every case is phase 1: NumSharp searches ``S`` / ``U`` text,
+    so it must match NumPy now.
+
+    * arg-reductions: NumPy's first extreme element over random, categorical (the extreme recurs: the first copy wins),
+      long-prefix (the prefix skip), all-equal and NUL / high-byte data, every ``U`` key packing, block boundaries (1,023 /
+      1,024 / 1,025 / 2,049 elements, the extreme repeated in later blocks), every axis of 2-D / 3-D arrays with keepdims,
+      the catalog's layouts, broadcast views, ``out=`` of every kind (NumPy's checks: the empty-sequence error, the shape,
+      the 'safe' cast to intp), the ndarray methods, and the axis errors;
+    * searches: sorted and unsorted haystacks (NumPy's exact path, its monotonic carry), both sides, sorted / descending /
+      random keys, sorters (valid, out of range where the search reaches it and where it does not, every integer kind,
+      the refused kinds), few keys against a long haystack, mixed widths, shared prefixes that reach the narrower width,
+      ``S`` with ``U``, numbers with text, keys of every shape and layout, haystack views, every ``U`` packing, units above
+      U+10FFFF, keys that end before the strings with ties in the haystack, the method, and the argument errors;
+    * digitize: text ``x`` with increasing, decreasing, repeated, float and one-element bins, both ``right``, 0-d / 2-D /
+      empty ``x``, and the refusals of text bins.
+    """
+    rng = np.random.default_rng(20261016)
+    names4 = ("argmax", "argmin", "nanargmax", "nanargmin")
+
+    # ---- arg-reductions ------------------------------------------------------------------------------------------------
+    # The catalog's layouts: every axis (None flattens) and keepdims over the core layouts, the methods there too.
+    for spec in SPECS:
+        for lay in LAYOUTS:
+            op = operand(spec, lay, seed=5)
+            ndim = op[1].ndim
+            if ndim == 0:
+                axes = [None, 0, -1, 1]
+            elif lay in CORE_LAYOUTS:
+                axes = [None] + list(range(-ndim, ndim)) + [ndim]
+            else:
+                axes = [None, -1]
+            core = lay in CORE_LAYOUTS
+            _argred(lay, op, axes, names=names4 if core else ("argmax", "argmin"),
+                    keepdims=(False, True) if core else (False,), methods=core)
+
+    # Lines: random, categorical and long-prefix text at sizes around NumSharp's 16-element short lines and 1,024-element
+    # blocks.
+    big_flavors = {1023: ("cat",), 1025: ("rand", "cat", "prefix"), 2049: ("cat", "prefix")}
+    for n in (2, 3, 16, 17, 31, 100, 1023, 1025, 2049):
+        variants = (("U", 8), ("S", 8)) if n >= 1000 else \
+            (("U", 1), ("U", 3), ("U", 8), ("U", 12), ("S", 1), ("S", 3), ("S", 8), ("S", 12))
+        for kd, width in variants:
+            for flavor in big_flavors.get(n, ("rand", "cat", "prefix")):
+                if flavor == "rand":
+                    vals = _rand_strings(rng, n, width, "abcdefghijklmnop")
+                elif flavor == "cat":
+                    vals = _pick(rng, n, list(dict.fromkeys(_rand_strings(rng, 12, width, "abcd")))[:4])
+                else:
+                    pre = "x" * max(0, width - 2)
+                    vals = [pre + s for s in _rand_strings(rng, n, 2, "ab")]
+                op = _search_text(vals, f"{kd}{width}")
+                _argred(f"line-{flavor}{kd}{width}n{n}", op, [None])
+                if n == 100:
+                    for view, build in (("step3", lambda b: b[::3]), ("rev", lambda b: b[::-1])):
+                        _argred(f"line-{flavor}{kd}{width}n{n}-{view}", (op[0], build(op[1])), [None])
+
+    # Categorical words, the best word recurring one element in eight (NumSharp's U filter switches to keys once a block
+    # finds that many copies of its best): the first copy wins, whichever filter runs.
+    words = ["apple", "banana", "cherry", "date", "elder", "fig", "grape", "honeydew"]
+    for n in (40, 2100):
+        for kd in ("U", "S"):
+            op = _search_text(_pick(rng, n, words), f"{kd}8")
+            _argred(f"words{kd}n{n}", op, [None])
+            if n == 2100:
+                op2 = (op[0], op[1].reshape(210, 10))
+                _argred(f"words{kd}n{n}-2d", op2, [0, 1])
+
+    # Every U key packing (NumSharp keys 8 / 16 / 21 / 32 bits a unit), units above U+10FFFF, NULs and high bytes.
+    alphabets = {"ascii": "abcdefghij", "latin": "aàbéz\xff", "bmp": "aäā中文￿", "astral": "a\U0001F600\U00010000中"}
+    for name, alpha in alphabets.items():
+        for n in (5, 40, 1100):
+            for width in (2, 5, 9):
+                _argred(f"pack-{name}-w{width}n{n}", _search_text(_rand_strings(rng, n, width, alpha), f"U{width}"), [None])
+    hi = np.frombuffer(np.array([0x41, 0x110000, 0x7FFFFFFF, 0xFFFFFFFF, 0, 0x10FFFF] * 50, dtype="<u4").tobytes(),
+                       dtype="<U2").copy()
+    _argred("units-above-10ffff", plain(hi), [None])
+    _argred("S-nul-high", plain(np.array([b"a", b"a\x00b", b"a\x00", b"\xff", b"\xff\x00", b"", b"\x00\x01"] * 20,
+                                         dtype="S3")), [None])
+    _argred("U-nul", plain(np.array(["a", "a\x00b", "a\x00", "￿", "", "\x00\x01"] * 30, dtype="U3")), [None])
+    # All-equal lines (every element the same string), and lines equal but for one element at a block edge.
+    for n in (20, 1100):
+        for kd in ("U", "S"):
+            _argred(f"equal{kd}n{n}", _search_text(["same"] * n, f"{kd}4"), [None])
+            vals = ["same"] * n
+            vals[n - 1] = "samf"
+            vals[min(1024, n - 2)] = "samf"
+            _argred(f"equal-but{kd}n{n}", _search_text(vals, f"{kd}4"), [None])
+
+    # Block boundaries: the global extreme repeated in later blocks (the earliest copy wins), also after a shared prefix.
+    for n in (1025, 2049):
+        for kd in ("U", "S"):
+            vals = _rand_strings(rng, n, 6, "abcde")
+            for pos in (0, 1023, 1024, 2048, n - 1):
+                if pos < n:
+                    vals[pos] = "zzzzzz"
+            _argred(f"blocks{kd}n{n}", _search_text(vals, f"{kd}6"), [None])
+            long_pre = ["https://site.example/" + v for v in vals]
+            _argred(f"blocks-prefix{kd}n{n}", _search_text(long_pre, f"{kd}27"), [None])
+
+    # Every axis of 2-D / 3-D arrays (short rows and long ones), keepdims, and views over them.
+    for shape in ((6, 10), (10, 6), (4, 5, 6), (3, 40, 2), (400, 3), (3, 400)):
+        for kd in ("U", "S"):
+            size = int(np.prod(shape))
+            arr = np.array(_pick(rng, size, ["ab", "b", "abc", "ba", "c"]), dtype=f"{kd}4") if kd == "U" else \
+                np.array([v.encode() for v in _pick(rng, size, ["ab", "b", "abc", "ba", "c"])], dtype="S4")
+            m = arr.reshape(shape)
+            nd = len(shape)
+            label = "x".join(map(str, shape))
+            big = size > 1000
+            _argred(f"axes{kd}{label}", plain(m), [None] + list(range(-nd, nd)),
+                    names=("argmax", "argmin") if big else names4, keepdims=(False,) if big else (False, True))
+            if big:
+                continue
+            for view, build in (("T", lambda b: b.T), ("rev", lambda b: b[::-1]), ("step", lambda b: b[::2]),
+                                ("lastrev", lambda b: b[..., ::-1])):
+                base = plain(m)
+                _argred(f"axes{kd}{label}-{view}", (base[0], build(base[1])), [None, 0, -1])
+    bc = np.array(_pick(rng, 8, ["abc", "b", "ab"]), dtype="U3")
+    _argred("bcast", (bc, np.broadcast_to(bc, (5, 8))), [None, 0, 1])
+
+    # out=: the right shape and every accepted integer dtype (NumPy casts the indices 'unsafe' after a 'safe' check of the
+    # dtype: bool through uint32 pass, uint64 and floats do not), keepdims shapes, a wrong shape, and the empty-sequence
+    # error that comes first; the methods take the same out.
+    a2 = plain(np.array([["b", "a", "c"], ["a", "c", "c"]], dtype="U2"))
+    for name in names4:
+        for dt in ("int64", "int32", "int8", "uint8", "uint32", "bool", "uint64", "float64"):
+            _argred_out(f"out-flat-{dt}", a2, target(np.zeros((), dt)), name, None, False)
+            _argred_out(f"out-ax1-{dt}", a2, target(np.zeros(2, dt)), name, 1, False)
+        _argred_out("out-ax0-kd", a2, target(np.zeros((1, 3), np.int64)), name, 0, True)
+        _argred_out("out-flat-kd", a2, target(np.zeros((1, 1), np.int64)), name, None, True)
+        _argred_out("out-badshape", a2, target(np.zeros(3, np.int64)), name, 1, False)
+        _argred_out("out-badshape-kd", a2, target(np.zeros(2, np.int64)), name, 1, True)
+        _argred_out("out-empty", plain(np.zeros((0, 3), "U2")), target(np.zeros(5, np.int64)), name, 0, False)
+        _argred_out("out-empty-flat", plain(np.zeros(0, "U2")), target(np.zeros((), np.float64)), name, None, False)
+        zb = np.zeros(6, np.int64)
+        _argred_out("out-strided", a2, (zb, zb[::3]), name, 1, False)
+    for name in ("argmax", "argmin"):
+        _argred_out("out-method", a2, target(np.zeros(3, np.int64)), name, 0, False, method=True)
+        _argred_out("out-method-bad", a2, target(np.zeros(3, np.float64)), name, 0, False, method=True)
+
+    # Errors: an empty line, an empty axis, an axis out of range, 0-d arrays.
+    for name in names4:
+        for shape, ax in (((0,), None), ((0, 3), 0), ((0, 3), 1), ((3, 0), 1), ((3, 0), None), ((2, 3), 2), ((2, 3), -3)):
+            _argred(f"err{shape}ax{ax}", plain(np.zeros(shape, "U2")), [ax], names=(name,))
+    _argred("zero-d", plain(np.array("ab")), [None, 0, -1, 1], names=names4, keepdims=(False, True))
+
+    # ---- searches -----------------------------------------------------------------------------------------------------
+    # The search matrix: random, categorical and shared-prefix text; sorted and unsorted haystacks (NumPy's exact path);
+    # random, sorted and descending keys; a sorter; reversed and stepped haystack views. Sizes cross NumSharp's cost rule
+    # (few keys against a long haystack compare strings; many keys key the haystack).
+    for kd in ("U", "S"):
+        for flavor in ("rand", "cat", "prefix"):
+            for n, m in ((1, 1), (1, 5), (2, 5), (5, 5), (5, 100), (17, 1), (17, 100), (100, 1), (100, 5), (100, 120),
+                         (300, 200), (1000, 1), (1000, 5), (1000, 100)):
+                    if flavor == "rand":
+                        hv, kv, width = _rand_strings(rng, n, 6, "abcdefg"), _rand_strings(rng, m, 6, "abcdefgh"), 6
+                    elif flavor == "cat":
+                        pool_h = list(dict.fromkeys(_rand_strings(rng, 20, 4, "abcde")))[:5]
+                        pool_k = pool_h[:3] + list(dict.fromkeys(_rand_strings(rng, 20, 4, "abcdef")))[:4]
+                        hv, kv, width = _pick(rng, n, pool_h), _pick(rng, m, pool_k), 4
+                    else:
+                        hv = ["https://site.example/" + v for v in _rand_strings(rng, n, 3, "abc")]
+                        kv = ["https://site.example/" + v for v in _rand_strings(rng, m, 3, "abcd")]
+                        width = 24
+                    hay = _search_text(hv, f"{kd}{width}")
+                    keys = _search_text(kv, f"{kd}{width}")
+                    srt = plain(np.sort(hay[1]))
+                    label = f"{flavor}{kd}n{n}m{m}"
+                    for side in ("left", "right"):
+                        _search(f"{label}-sorted", srt, keys, side)
+                        _search(f"{label}-unsorted", hay, keys, side)
+                        if m <= 100:
+                            _search(f"{label}-sortedkeys", srt, plain(np.sort(keys[1])), side)
+                            _search(f"{label}-desckeys", hay, plain(np.sort(keys[1])[::-1].copy()), side)
+                        _search(f"{label}-sorter", hay, keys, side, num_operand(np.argsort(hay[1], kind="stable")))
+                    if n >= 5:
+                        _search(f"{label}-rev", (srt[0], srt[1][::-1]), keys, "left")
+                        _search(f"{label}-step2", (srt[0], srt[1][::2]), keys, "right")
+    # Few keys against a long haystack (the strings compared directly), sorted and not, both sides.
+    for kd, width, alpha in (("U", 8, "abcdefghij"), ("S", 8, "abcdefghij"), ("U", 1, "abcd"), ("U", 24, None)):
+        if alpha is None:
+            hv = ["https://site.example/" + v for v in _rand_strings(rng, 1200, 3, "abc")]
+            kv = ["https://site.example/" + v for v in _rand_strings(rng, 9, 3, "abcd")]
+        else:
+            hv, kv = _rand_strings(rng, 1200, width, alpha), _rand_strings(rng, 9, width, alpha)
+        hay, keys = _search_text(hv, f"{kd}{width}"), _search_text(kv, f"{kd}{width}")
+        for side in ("left", "right"):
+            _search(f"few{kd}{width}-sorted", plain(np.sort(hay[1])), keys, side)
+            _search(f"few{kd}{width}-unsorted", hay, keys, side)
+            _search(f"few{kd}{width}-sorter", hay, keys, side, num_operand(np.argsort(hay[1], kind="stable")))
+
+    # Keys that end before the strings do (U with a BMP alphabet keys 4 of 5 units; S16 / S32 key 8 bytes), with ties in
+    # the haystack past the key: the sorted haystack's checks and the searches compare the units after the keys.
+    for kd, width, alpha in (("U", 5, "aäā中文"), ("S", 16, "ab"), ("S", 32, "abc")):
+        hv = _rand_strings(rng, 700, width, alpha, minlen=width - 1)
+        hv += [hv[i][:8] + "a" * (width - 8) for i in range(0, 200, 7)]
+        kv = _rand_strings(rng, 300, width, alpha, minlen=width - 1) + hv[:50]
+        hay, keys = _search_text(hv, f"{kd}{width}"), _search_text(kv, f"{kd}{width}")
+        srt = plain(np.sort(hay[1]))
+        for side in ("left", "right"):
+            _search(f"ties{kd}{width}-sorted", srt, keys, side)
+            _search(f"ties{kd}{width}-sortedkeys", srt, plain(np.sort(keys[1])), side)
+            _search(f"ties{kd}{width}-sorter", hay, keys, side, num_operand(np.argsort(hay[1], kind="stable")))
+            _search(f"ties{kd}{width}-unsorted", hay, keys, side)
+
+    # Sorter values reached and not reached by the search, every integer kind, and the refused sorters.
+    hay = own(np.array(["d", "a", "c", "b", "e"], dtype="U1"))
+    for sname, srt in (("ok", [1, 3, 2, 0, 4]), ("oob-mid", [1, 3, 9, 0, 4]), ("oob-edge", [1, 3, 2, 0, 9]),
+                       ("neg", [1, -1, 2, 0, 4]), ("neg-first", [-1, 3, 2, 0, 4]), ("dup", [1, 1, 1, 1, 1])):
+        for dt in (np.int64, np.int32, np.int8, np.uint16):
+            if np.any(np.array(srt) < 0) and np.dtype(dt).kind == "u":
+                continue
+            for kv in (["c"], ["a"], ["z"], ["b", "e", "a"]):
+                for side in ("left", "right"):
+                    _search(f"sorter-{sname}-{np.dtype(dt).name}-{''.join(kv)}", hay, _search_text(kv, "U1"), side,
+                            num_operand(np.array(srt, dtype=dt)))
+    for sname, srt in (("uint64", np.array([1, 3, 2, 0, 4], np.uint64)), ("float", np.array([1.0, 3, 2, 0, 4])),
+                       ("bool", np.array([True, False, True, False, True])), ("2d", np.array([[1, 3, 2, 0, 4]])),
+                       ("size", np.array([1, 0])), ("0d", np.array(2))):
+        _search(f"sorter-bad-{sname}", hay, _search_text(["c"], "U1"), "left", num_operand(srt))
+
+    # Widths, kinds and numbers: mixed widths (the narrower zero-padded), shared prefixes reaching the narrower width,
+    # NULs, S with U (bytes decoded; a non-ASCII byte refused), numbers with text both ways.
+    _search("width-hay3-keys8", plain(np.sort(np.array(_rand_strings(rng, 200, 3, "abc"), dtype="U3"))),
+            _search_text(_rand_strings(rng, 50, 8, "abc"), "U8"))
+    _search("width-hay8-keys2", plain(np.sort(np.array(_rand_strings(rng, 200, 8, "abc"), dtype="U8"))),
+            _search_text(_rand_strings(rng, 50, 2, "abc"), "U2"))
+    _search("width-S-hay3-keys8", plain(np.sort(np.array([v.encode() for v in _rand_strings(rng, 200, 3, "abc")],
+                                                          dtype="S3"))),
+            _search_text(_rand_strings(rng, 50, 8, "abc"), "S8"), "right")
+    pre_h = ["https://site.example/" + v for v in _rand_strings(rng, 300, 3, "abc")]
+    for kname, kvals, kw in (("exact-prefix", ["https://site.example/"] * 7, 21),
+                             ("short", ["https"] * 3 + ["https://site"] * 4, 12),
+                             ("longer", ["https://site.example/" + v for v in _rand_strings(rng, 40, 6, "abcd")], 27)):
+        for kd in ("U", "S"):
+            hay = _search_text(pre_h, f"{kd}24")
+            keys = _search_text(kvals, f"{kd}{kw}")
+            for side in ("left", "right"):
+                _search(f"prefix-width-{kname}{kd}-sorted", plain(np.sort(hay[1])), keys, side)
+                _search(f"prefix-width-{kname}{kd}-unsorted", hay, keys, side)
+                _search(f"prefix-width-{kname}{kd}-swapped", plain(np.sort(keys[1])), hay, side)
+    _search("nul-U", plain(np.sort(np.array(["a", "a\x00b", "a\x00", "b", "", "a\x00\x00c"] * 5, dtype="U4"))),
+            plain(np.array(["a", "a\x00", "a\x00b", "a\x00a", "\x00", ""], dtype="U3")))
+    _search("nul-S", plain(np.sort(np.array([b"a", b"a\x00b", b"\xff", b"\x00", b""] * 5, dtype="S3"))),
+            plain(np.array([b"a\x00", b"\xfe", b"\xff\x00", b""], dtype="S2")))
+    _search("kinds-S-hay-U-keys", plain(np.sort(np.array([b"ab", b"b", b"cd"], dtype="S2"))),
+            plain(np.array(["b", "ba", "c", ""], dtype="U2")))
+    _search("kinds-U-hay-S-keys", plain(np.sort(np.array(["ab", "b", "cd"], dtype="U2"))),
+            plain(np.array([b"b", b"ba", b"c", b""], dtype="S2")), "right")
+    _search("kinds-U-hay-S-nonascii", plain(np.array(["ab", "b"], dtype="U2")), plain(np.array([b"\xff"], dtype="S1")))
+    _search("kinds-S-hay-nonascii-U-keys", plain(np.array([b"a", b"\xff"], dtype="S1")), plain(np.array(["a"], dtype="U1")))
+    _search("num-int-key", plain(np.array(["1", "10", "2", "5"], dtype="U2")), num_operand(np.array(3)))
+    _search("num-int-keys", plain(np.array(["1", "10", "2", "5"], dtype="U2")), num_operand(np.array([3, 10, 100, -1])))
+    _search("num-float-keys", plain(np.array(["1.5", "2", "2.25"], dtype="U4")), num_operand(np.array([1.75, 2.0, -0.5])))
+    _search("num-text-keys-int-hay", num_operand(np.array([1, 5, 9, 12])), plain(np.array(["3", "10", "9"], dtype="U2")))
+    _search("num-text-keys-float-hay", num_operand(np.array([0.5, 1.5, 2.5])),
+            plain(np.array(["1", "1.5", "2.0"], dtype="U3")), "right")
+    _search("num-S-hay-int-key", plain(np.array([b"1", b"10", b"2"], dtype="S2")), num_operand(np.array([3, 11])))
+    _search("num-bool-key", plain(np.array(["False", "True"], dtype="U5")), num_operand(np.array([True, False])))
+
+    # Keys of every shape and layout, and haystack views.
+    hay = plain(np.sort(np.array(_rand_strings(rng, 300, 4, "abcd"), dtype="U4")))
+    k2 = np.array(_rand_strings(rng, 60, 4, "abcde"), dtype="U4").reshape(6, 10)
+    _search("keys-2d", hay, plain(k2))
+    k2f = np.ascontiguousarray(k2.T).reshape(-1).copy()
+    _search("keys-2d-F", hay, (k2f, k2f.reshape(10, 6).T))
+    _search("keys-0d", hay, plain(np.array("bcd", dtype="U4")))
+    _search("keys-0d-right", hay, plain(np.array("bcd", dtype="U4")), "right")
+    kb = np.array(_rand_strings(rng, 30, 4, "abcde"), dtype="U4")
+    _search("keys-strided", hay, (kb, kb[::3]))
+    _search("keys-reversed", hay, (kb, kb[::-1]))
+    _search("keys-3d", hay, plain(np.array(_rand_strings(rng, 24, 4, "abcde"), dtype="U4").reshape(2, 3, 4)))
+    _search("keys-empty", hay, plain(np.zeros(0, "U4")))
+    _search("keys-empty-2d", hay, plain(np.zeros((2, 0), "U4")))
+    _search("hay-empty", plain(np.zeros(0, "U4")), plain(np.array(["a", "b"], dtype="U1")))
+    _search("hay-empty-0d", plain(np.zeros(0, "U4")), plain(np.array("a", dtype="U1")))
+    _search("hay-one", plain(np.array(["m"], dtype="U1")), plain(np.array(["a", "m", "z"], dtype="U1")), "right")
+    big = np.sort(np.array(_rand_strings(rng, 600, 5, "abcdef"), dtype="U5"))
+    for vname, build in (("rev", lambda b: b[::-1]), ("step3", lambda b: b[::3]), ("offset", lambda b: b[100:500])):
+        for side in ("left", "right"):
+            _search(f"hay-{vname}", (big, build(big)), plain(np.array(_rand_strings(rng, 80, 5, "abcdefg"), dtype="U5")),
+                    side)
+
+    # Every U packing and units above U+10FFFF.
+    for name, alpha in alphabets.items():
+        hv = np.sort(np.array(_rand_strings(rng, 400, 5, alpha), dtype="U5"))
+        for side in ("left", "right"):
+            _search(f"pack-{name}", plain(hv), plain(np.array(_rand_strings(rng, 300, 5, alpha), dtype="U5")), side)
+            _search(f"pack-{name}-unsorted", plain(np.array(_rand_strings(rng, 400, 5, alpha), dtype="U5")),
+                    plain(np.array(_rand_strings(rng, 300, 5, alpha), dtype="U5")), side)
+    _search("units-above-10ffff", plain(np.sort(hi)), plain(hi[:40].copy()))
+
+    # The method form, and the argument errors in NumPy's order: the side, the keys' conversion, the haystack's rank, the
+    # sorter.
+    hay = plain(np.array(["a", "b", "c"], dtype="U1"))
+    for side in ("left", "right"):
+        _search("method", hay, plain(np.array(["b", "bb", ""], dtype="U2")), side, method=True)
+    _search("method-sorter", own(np.array(["c", "a", "b"], dtype="U1")), plain(np.array(["b"], dtype="U1")), "left",
+            num_operand(np.array([1, 2, 0])), method=True)
+    for side in ("lft", "Left", "R", "", "LEFT", "x", "rightish"):
+        _search(f"side-{side or 'empty'}", hay, plain(np.array(["b"], dtype="U1")), side)
+    _search("side-before-sorter", hay, plain(np.array(["b"], dtype="U1")), "bad", num_operand(np.array([[1]])))
+    _search("hay-2d", plain(np.array([["a", "b"], ["c", "d"]], dtype="U1")), plain(np.array(["b"], dtype="U1")))
+    _search("hay-0d", plain(np.array("a", dtype="U1")), plain(np.array(["b"], dtype="U1")))
+    _search("hay-2d-keys-nonascii", plain(np.array([["a", "b"]], dtype="U1")), plain(np.array([b"\xff"], dtype="S1")))
+
+    # ---- edges a mutation pass found unguarded --------------------------------------------------------------------------
+    # Short rows whose keys tie before the row's end (the 9th unit decides); units that differ in a HIGH byte (U+0101 against
+    # U+0201) with the next units ordered the other way, as block winners and as search comparisons; a haystack sorted but
+    # for one descent at every position modulo 8; equal 8-unit keys whose tails descend; keys one unit short of the width.
+    for kd in ("U", "S"):
+        rows = np.array(["aaaaaaaab", "aaaaaaaac", "a", "zzzzzzzzb", "zzzzzzzza", "b", "m", "aaaaaaaaz", "aaaaaaaay"],
+                        dtype=f"{kd}9").reshape(3, 3)
+        _argred(f"rowties{kd}", plain(rows), [1, 0, None])
+    hb = ["a"] * 2000
+    hb[10] = "āz"
+    hb[1500] = "ȁa"
+    _argred("highbyte-blocks", plain(np.array(hb)), [None])
+    _search("highbyte", plain(np.array(["āz", "ȁa"])), plain(np.array(["ȁ\x01", "ā\x7f", "ǿz"])))
+    base = sorted(set(_rand_strings(rng, 80, 4, "abcdefgh", minlen=4)))
+    dkeys = _rand_strings(rng, 120, 4, "abcdefgh", minlen=4)
+    for pos in range(0, 18):
+        hay = list(base)
+        hay[pos], hay[pos + 1] = hay[pos + 1], hay[pos]
+        _search(f"one-descent-{pos}", plain(np.array(hay, dtype="U4")), plain(np.array(dkeys, dtype="U4")))
+    for kd in ("U", "S"):
+        hay = _search_text(["aaaaaaaa", "bbbbbbbbz", "bbbbbbbba", "cccccccc", "dddddddd"], f"{kd}12")
+        keys = _search_text(["bbbbbbbbm", "bbbbbbbbz", "c", "bbbbbbbba", "e"], f"{kd}12")
+        for side in ("left", "right"):
+            _search(f"desc-tails{kd}", hay, keys, side)
+        short_h = ["aaaaaaaa" + c for c in rng.choice(list("abc"), 300)]
+        short_k = ["aaaaaaaa" + c for c in rng.choice(list("abcd"), 100)]
+        for side in ("left", "right"):
+            _search(f"one-unit-short{kd}-sorted", _search_text(sorted(short_h), f"{kd}9"), _search_text(short_k, f"{kd}9"), side)
+            _search(f"one-unit-short{kd}-sortedkeys", _search_text(sorted(short_h), f"{kd}9"),
+                    _search_text(sorted(short_k), f"{kd}9"), side)
+            _search(f"one-unit-short{kd}-unsorted", _search_text(["b"] + short_h[1:], f"{kd}9"), _search_text(short_k, f"{kd}9"),
+                    side)
+
+    # ---- digitize ----------------------------------------------------------------------------------------------------
+    xs_u = plain(np.array([str(v) for v in rng.integers(-5, 120, 200)], dtype="U4"))
+    xs_s = plain(np.array([str(v).encode() for v in rng.integers(-5, 120, 200)], dtype="S4"))
+    for bname, bins in (("inc", np.arange(0, 100, 10)), ("dec", np.arange(100, 0, -10)), ("rep", np.array([1, 1, 5, 5, 20])),
+                        ("float", np.array([0.5, 2.25, 10.0, 99.5])), ("one", np.array([7])), ("neg", np.array([-3, 0, 3])),
+                        ("big", np.arange(0, 1000, 7)), ("rep-dec", np.array([20, 5, 5, 1, 1]))):
+        for right in (False, True):
+            for xname, x in (("U", xs_u), ("S", xs_s)):
+                add("strsearch", "digitize", params={"right": right}, operands=[x, num_operand(bins)],
+                    layout=f"dig-{xname}-{bname}", call=lambda xx, b, r=right: np.digitize(xx, b, right=r))
+    for xname, x in (("2d", plain(np.array([str(v) for v in rng.integers(0, 100, 20)], dtype="U3").reshape(4, 5))),
+                     ("0d", plain(np.array("42", dtype="U2"))), ("empty", plain(np.zeros(0, "U2"))),
+                     ("empty-2d", plain(np.zeros((0, 3), "U2"))), ("words", plain(np.array(["b", "a", "zz", ""], dtype="U2")))):
+        for right in (False, True):
+            add("strsearch", "digitize", params={"right": right}, operands=[x, num_operand(np.arange(0, 100, 10))],
+                layout=f"dig-{xname}", call=lambda xx, b, r=right: np.digitize(xx, b, right=r))
+    for xname, x, bins in (("text-bins", num_operand(np.array([1.5, 3.0])), plain(np.array(["1", "2"], dtype="U1"))),
+                           ("text-both", plain(np.array(["1"], dtype="U1")), plain(np.array(["1", "2"], dtype="U1"))),
+                           ("nonmono", plain(np.array(["1"], dtype="U1")), num_operand(np.array([3, 1, 2]))),
+                           ("bins-2d", plain(np.array(["1"], dtype="U1")), num_operand(np.array([[1, 2]])))):
+        add("strsearch", "digitize", params={"right": False}, operands=[x, bins], layout=f"dig-{xname}",
+            call=lambda xx, b: np.digitize(xx, b))
+
+    # ---- the bin search of histogram2d / histogramdd over a text sample whose columns differ in kind ------------------
+    # histogramdd's first statement stacks the sample (atleast_2d(sample).T): bytes beside str are decoded there, so a byte
+    # that is not ASCII raises UnicodeDecodeError before a bad bin count, decreasing edges or good edges are read; bytes
+    # beside bytes or numbers stay bytes. Otherwise the stacked text is searched in the numeric edges converted to text.
+    hist_samples = {
+        "Sx-U": (np.array([b"a\xff", b"b"], dtype="S2"), np.array(["c", "d"], dtype="U1")),
+        "Sascii-U": (np.array([b"10", b"3"], dtype="S2"), np.array(["1.5", "0.5"], dtype="U3")),
+        "U-Sx": (np.array(["1.5", "0.5"], dtype="U3"), np.array([b"a\xff", b"b"], dtype="S2")),
+        "Sx-S": (np.array([b"a\xff", b"10"], dtype="S2"), np.array([b"1.5", b"0.5"], dtype="S3")),
+        "Sx-F": (np.array([b"\xff", b"10"], dtype="S2"), np.array([1.5, 0.5])),
+    }
+    hist_bins_specs = {"2": (2, None), "2-range": (2, (0.0, 100.0)), "edges": (np.array([0.0, 1.0, 2.0, 30.0]), None),
+                       "dec": (np.array([30.0, 2.0, 1.0, 0.5]), None)}
+    for fn in ("histogram2d", "histogramdd"):
+        for sk, (sx, sy) in hist_samples.items():
+            for bk, (bins, rng_) in hist_bins_specs.items():
+                ops = [plain(sx), plain(sy) if sy.dtype.kind in "SU" else num_operand(sy)]
+                params = {"fn": fn, "range": _json_floats(rng_) if rng_ else None}
+                if isinstance(bins, np.ndarray):
+                    params["bins_op"] = len(ops)
+                    ops.append(num_operand(bins))
+                else:
+                    params["bins"] = bins
+
+                def call_hist(*views, p=params, r=rng_):
+                    x, yy = views[0], views[1]
+                    b = views[p["bins_op"]] if "bins_op" in p else p["bins"]
+                    if p["fn"] == "histogram2d":
+                        return np.histogram2d(x, yy, b, (r, r) if r else None)
+                    bb = [b, b] if isinstance(b, np.ndarray) and b.ndim == 1 else b
+                    H, edges = np.histogramdd([x, yy], bb, (r, r) if r else None)
+                    return (H,) + tuple(edges)
+                add("strsearch", "hist", params=params, operands=ops, layout=f"{fn}:sample={sk}:bins={bk}", call=call_hist)
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
-              gen_strsort, gen_strchar]
+              gen_strsort, gen_strchar, gen_strsearch]
 
 
 def main():

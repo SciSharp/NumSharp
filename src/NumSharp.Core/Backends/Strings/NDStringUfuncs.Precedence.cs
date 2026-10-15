@@ -904,7 +904,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="axis">The <c>axis</c> argument, or null for the flattened array.</param>
         /// <returns>The ValueError to throw, or null when <paramref name="op"/> is not an arg reduction or the reduced
         ///     length is not 0.</returns>
-        private static ValueError EmptyArgReductionError(string op, NDArray a, int? axis)
+        internal static ValueError EmptyArgReductionError(string op, NDArray a, int? axis)
         {
             string name = op switch
             {

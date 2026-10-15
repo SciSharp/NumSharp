@@ -23,7 +23,7 @@
 
 ---
 
-## 0. Where phase 2 stands (2026-10-15, after P2.2 milestone A)
+## 0. Where phase 2 stands (2026-10-15, after P2.2 milestone B)
 
 Commit hashes in this plan: the branch was rebased onto journey4 on 2026-10-12, so the hashes of §0's first edition and
 of the 2026-10-09 state-log entries are the OLD ones; `git log -1 --format=%B a8d7f17c | grep -- '->'` translates them
@@ -40,10 +40,10 @@ lock-free cast table `07903e85`; NumPy's member names in the DTypes folder, `8de
 | P2.1 comparisons and truth | Done for `S` / `U` (`62f41584`, `68348bcf`; oracle section `strcomp`, 8,796 cases, zero excuses). Left: the `T` forms (§4, P2.T) and `np.char`'s stripping comparisons (`np-char.md` C1). |
 | P2.3 concatenation and repetition | Done for `S` / `U` (`f18ae600`; section `strarith`, 2,046 cases). Left: the `T` forms (P2.T), `np.char.add` / `np.char.multiply` (`np-char.md` C0 / C4). |
 | P2.A shared machinery | Part 1 done (2026-10-15, `b8003693`, the rows contract D16 and the masked blend D17, retrofitted to the shipped comparison and truth kernels; state log). Left: the unary text driver and width-class helpers (with P2.5), the `T` kernel shell (with P2.T), the Unicode tables and the sticky escalation (with P2.6) — each lands with its first consumer, the roadmap's recommended order. |
-| P2.2 sorting, searching, set routines | Milestone A done (2026-10-15, `9771aa9c`, state log): `np.sort` / `np.argsort` / `ndarray.sort` / `np.partition` / `np.argpartition` over `S` / `U` with NumPy's `kind` / `order` / `stable`, NumPy's order of equal strings included (its introsort replayed); oracle section `strsort` (4,998 cases, zero excuses). Left: milestone B (`argmax` / `argmin` / `nanargmax` / `nanargmin`, `searchsorted`, `digitize`), milestone C (`unique` and its Array-API forms, `isin`, the set routines, `lexsort`, `sort_complex`, the histograms, the discontinuous quantiles), and the `T` part (after P2.T). |
+| P2.2 sorting, searching, set routines | Milestone A done (2026-10-15, `9771aa9c`, state log): `np.sort` / `np.argsort` / `ndarray.sort` / `np.partition` / `np.argpartition` over `S` / `U` with NumPy's `kind` / `order` / `stable`, NumPy's order of equal strings included (its introsort replayed); oracle section `strsort` (4,998 cases, zero excuses). Milestone B done (2026-10-15, `MILESTONE_B_HASH`, state log): `np.argmax` / `np.argmin` / `np.nanargmax` / `np.nanargmin` and the methods (axis, keepdims, `out=`), `np.searchsorted` / `ndarray.searchsorted` (NumPy's exact path over unsorted haystacks), `np.digitize`, and the bin search of `np.histogram2d` / `np.histogramdd`; oracle section `strsearch` (7,142 cases, zero excuses). Left: milestone C (`unique` and its Array-API forms, `isin`, the set routines, `lexsort`, `sort_complex`, `np.histogram`, the discontinuous quantiles), and the `T` part (after P2.T). |
 | P2.4 casts between text and numbers | Moved to phase 1 by the owner (2026-10-10) and done there (P1.1 for `S` / `U`, P1.6 for `T`). The parse-fed numerics, the random bounds and seeds, numpy.ma's number fills and the bool → text cast all compute now. |
-| Deferral sites | 39 call sites left (counted after P2.2 milestone A, which removed `AxisSort`'s and `AxisPartition`'s three): 30 `NDStringUfuncs.NextPhase` (fixed width) and 9 `NDStringUfuncs.NextPhaseVString` (`T`). `NDStringCasting.TextConversion` and `NDStringCopy.MixedKinds` have no caller since P1.1. Appendix A maps every site to a stage. |
-| The gate | The string oracle (`test/oracle/gen_strings_oracle.py` → `NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl`, 34 sections, 82,890 cases since P2.2 milestone A's `strsort`). 783 of them still pass only as deferrals (the per-section ceilings of `StringOracleTests.DeferralCeilings`): 346 `S` / `U` cases of searching, the set routines, histograms and quantiles, and 437 `T` cases reached through numpy.ma. Appendix B lists them by stage. |
+| Deferral sites | 35 call sites left (counted after P2.2 milestone B, which removed `np.searchsorted`'s, `np.digitize`'s, the `np.nanargmax` family's and `np.histogramdd`'s four; milestone A had removed `AxisSort`'s and `AxisPartition`'s three): 26 `NDStringUfuncs.NextPhase` (fixed width) and 9 `NDStringUfuncs.NextPhaseVString` (`T`). `NDStringCasting.TextConversion` and `NDStringCopy.MixedKinds` have no caller since P1.1. Appendix A maps every site to a stage. |
+| The gate | The string oracle (`test/oracle/gen_strings_oracle.py` → `NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl`, 36 sections, 92,822 cases since P2.2 milestone B's `strsearch` and the `numpy.char` plan's `strchar`). 648 of them still pass only as deferrals (the per-section ceilings of `StringOracleTests.DeferralCeilings`): 208 `S` / `U` cases of the set routines, `np.histogram` and the quantiles, 437 `T` cases reached through numpy.ma, and 3 `T` cases of `np.char.add` / `np.char.multiply` (StringDType arithmetic, P2.T). Appendix B lists them by stage. |
 | Iteration and machinery | `np.nditer` and `NDIter` carry string operands with NumPy's descriptors (`4d5b9f26`) and, since P1.7g (`97a168bf`), NumPy's own buffering: element sizes, string buffers, casts between every string dtype and the numbers, `T` buffers with their own allocators. This is the iteration base of every phase-2 kernel. |
 | Refusals and shape-decided answers | Where NumPy has no string loop, NumSharp raises NumPy's type and text, after NumPy's earlier checks in NumPy's order (`Backends/Strings/NDStringUfuncs{,.Precedence,.ShapeDecided,.VString}.cs`); empty inputs, lines of one element and pairs the `==` operator cannot compare are answered from the shape. These stay. |
 
@@ -736,6 +736,9 @@ What §2.5 found missing in the drivers, built once for every family:
   keyword) / `np.partition` / `np.argpartition` over `S` / `U`, NumPy's order of equal strings included. Left for this stage:
   milestone B (the `argmax` family, `searchsorted`, `digitize`), milestone C (`unique` and the set routines, `lexsort`,
   `sort_complex`, the histograms, the discontinuous quantiles), and everything over `T`.
+- **Milestone B done (2026-10-15, `MILESTONE_B_HASH`, state log):** `np.argmax` / `np.argmin` / `np.nanargmax` /
+  `np.nanargmin` and the ndarray methods (axis, keepdims, `out=`), `np.searchsorted` / `ndarray.searchsorted`,
+  `np.digitize`, and the bin search of `np.histogram2d` / `np.histogramdd`, over `S` / `U`.
 
 - `np.sort` / `ndarray.sort`, `np.argsort` (all kinds), `np.lexsort`, `np.partition` / `argpartition` (a full sort, as
   NumPy), `np.argmax` / `argmin` / `nanargmax` / `nanargmin` (axis, keepdims, `out=`), `np.searchsorted` (`side`,
@@ -842,6 +845,48 @@ dependencies land; C0 waits for the owner's decision C-D1, C3 for C-D3.
 
 ## 7. State log
 
+- **2026-10-15 — P2.2 milestone B: searching `S` / `U` text** (`MILESTONE_B_HASH`; `np.argmax` / `np.argmin` /
+  `np.nanargmax` / `np.nanargmin` and the methods, `np.searchsorted` / `ndarray.searchsorted`, `np.digitize`, the bin
+  search of `np.histogram2d` / `np.histogramdd`; `Backends/Default/Sorting/TextArgReduce.cs`, `TextSearch.cs`,
+  `TextKeyer.cs`, the key kernels of milestone A).
+  1. **NumPy's answers.** `STRING_argmax` / `UNICODE_argmax` replace the running best only with a strictly more extreme
+     element: the FIRST extreme wins. `np.nanargmax` of text is argmax (`_replace_nan` leaves a non-inexact array alone).
+     `_PyArray_ArgMinMaxCommon` checks the axis, the empty line (`attempt to get argmax of an empty sequence`), `out=`'s
+     shape (`output array does not match result of np.argmax.`) and its 'safe' cast to intp (bool through uint32 pass;
+     uint64 and floats are TypeError), in that order. `PyArray_SearchSorted` converts both operands to
+     `PyArray_DescrFromObject(v, a.dtype)` (a number becomes text, bytes beside `str` are decoded) and runs the generic
+     `npy_binsearch` / `npy_argbinsearch` with the monotonic carry; a sorter value outside the haystack raises
+     `Sorter index out of range.` only when the search reaches it. `np.digitize` casts the bins 'safe' to float64 for its
+     monotonicity test (text bins: TypeError), then searches the text with the numeric bins converted to text.
+  2. **argmax / argmin.** Blocks of 1,024 elements merged strictly; per block the common prefix skipped, then the GATHER
+     filter (`U` + AVX2; ties for elements up to 32 bytes in one masked 256-bit compare; every lane re-tested against the
+     current best) or the KEYS filter (prefix keys, the extreme key's first index by vector loads, refinement from the
+     units after the key); a call whose best string recurs one element in eight switches to the KEYS filter. Short rows
+     keyed end to end and scanned branch-free. Non-C N-D flat reductions walk lines along the smallest stride.
+  3. **searchsorted.** DIRECT for few keys (the strings compared, heads first, next candidates prefetched above 1 MB);
+     KEYED otherwise: the shared prefix skipped, one packing from both arrays, then the SORTED route when the haystack
+     never decreases in search order (bounds: a galloping merge for sorted keys, else four interleaved branch-free
+     halving searches; equal non-exact keys decided by their tails) or NumPy's exact loop over the keys as branches.
+  4. **Measured and rejected.** A two-pass gather (store every gathered unit, vector max, then collect the candidates):
+     5–10% faster on categorical text, 10% slower on random text, 5× slower on one-unit categorical text (every copy of
+     the extreme becomes a candidate). Branch-free masks in NumPy's exact loop: 1.6× slower over unsorted haystacks and
+     2–2.7× on sorted keys and categorical data, whose comparison outcomes the branch predictor follows; masks pay only
+     where the SORTED route can drop the carry and interleave independent searches. Prefetching the four candidates two
+     steps ahead in the DIRECT loop: no better than the next step's two, and worse on categorical haystacks.
+  5. **Found on the way.** The generator built a strided `out=` from two separate arrays (`(np.zeros(6), np.zeros(6)[::3])`),
+     so the replay rebuilt the view at the distance between two unrelated allocations and wrote outside its buffer;
+     guard pages caught it (`NUMSHARP_DEBUG_GUARD_PAGES=1`). `describe()` now asserts that a view addresses its base.
+     `np.histogramdd` cast a text sample's columns only after the bins were read, and into the caller's own `NDArray[]`:
+     NumPy stacks the sample first (`atleast_2d(sample).T`), so an `S` column beside a `U` one holding a byte that is not
+     ASCII raises `UnicodeDecodeError` over every bin error. The columns are now cast first, into a new array (40 oracle
+     cases; `Histogramdd_OfMixedKindText_StacksFirst_AndKeepsTheCallersColumns`).
+  6. **Gates.** Oracle section `strsearch` (7,142 cases, zero excuses, 1,252 NumPy errors); `StringSearchTests` (21: NumPy
+     literals, the routes against NumPy's algorithm, fenced pages); a mutation pass of 15 planted bugs: 14 fail a test
+     (5 needed new tests: ties before a short row's end, units differing in a high byte, one descent in a sorted
+     haystack, equal keys with descending tails, keys one unit short), 1 is an equivalent rewrite of the halving search.
+  7. **Perf** (NPY/NS, two pinned P-cores, fresh inputs, 278 cells at 1K / 100K): geomean 3.83×; arg-reductions 3.43×,
+     searchsorted 4.56×, digitize 2.94×. The 26 cells under 1.5× wait on memory on both sides: arg-reductions over fresh
+     100K text (1.04–1.46×, every cache line read) and 100 keys into a 100K haystack (0.66–1.36×, a dependent load a step).
 - **2026-10-15 — P2.1's rstrip flavor and two P2.3 speedups, from the `numpy.char` plan's phase 1**
   (`4c313632`; `docs/plans/np-char.md` → state log). The comparison key gained `Rstrip` (NumPy's `rstrip=True` loop:
   `ILKernelGenerator.Text.Strip.cs`), which every comparison form serves. P2.3: `np.strings.multiply` reaches NumPy's
@@ -1087,29 +1132,29 @@ dependencies land; C0 waits for the owner's decision C-D1, C3 for C-D3.
   module, P2.5), the numpy.ma members that fill text with `True` (`alltrue` …: the bool → text cast, P2.4), and a
   zero-excuse oracle section for comparisons and truth over the relayout kinds.
 
-## Appendix A — the 39 deferral sites by stage (2026-10-15, after P2.2 milestone A)
+## Appendix A — the 35 deferral sites by stage (2026-10-15, after P2.2 milestone B)
 
 The first edition counted 91 sites at the old `40f2d20f`; P2.0, P2.1 and P2.3 removed their sites and P1.1 the 43
 conversion sites. Left at `545818b0`: 33 `NDStringUfuncs.NextPhase` (fixed width) and 9 `NextPhaseVString` (`T`).
 
 | Stage | Sites |
 |---|---|
-| P2.2 (24) | `NDArray.unique` (fixed width; and `T` through `NextPhaseVString`), `np.isin` ×2, `np.intersect1d`, `np.setdiff1d` ×3, `np.setxor1d` ×3, `np.union1d`, `np.digitize`, `np.lexsort`, the `np.nanargmax` family, `np.searchsorted`, `np.sort_complex`, `np.histogram` ×3, `np.histogramdd` (its `searchsorted`), `NDStringUfuncs` (the reduction guard's answer for `argmax` / `argmin` and the sorting family), the discontinuous `quantile` methods ×2 (`NDStringUfuncs`, `NDStringUfuncs.Precedence`) |
+| P2.2 (20) | `NDArray.unique` (fixed width; and `T` through `NextPhaseVString`), `np.isin` ×2, `np.intersect1d`, `np.setdiff1d` ×3, `np.setxor1d` ×3, `np.union1d`, `np.lexsort`, `np.sort_complex`, `np.histogram` ×3, `NDStringUfuncs` (the reduction guard's default: argmax / argmin, the truth reductions and the sorting family answer before it, so it serves a computing reduction not routed yet), the discontinuous `quantile` methods ×2 (`NDStringUfuncs`, `NDStringUfuncs.Precedence`). Milestone B removed `np.searchsorted`'s, `np.digitize`'s, the `np.nanargmax` family's and `np.histogramdd`'s sites |
 | P2.T (8) | `NDStringUfuncs` (`T` `==` / `!=`), `NDStringUfuncs.ShapeDecided` (a `T` computing call), `NDStringUfuncs.VString` ×5 (the `T` loops: comparisons, `add`, `multiply`, `maximum` / `minimum`, the logical ufuncs, `isnan`, the reductions), `np.vander` over `T` |
 | P2.7 (7) | `np.evaluate` ×2 (`np.evaluate`, `NDExpr.Evaluate`), `np.pad` `linear_ramp`, `NDMaskedArray` `median`, `np.fft` (a guard behind NumPy's own `DTypePromotionError`: unreachable), and two computing answers of the fixed-width guards whose computation now exists (`NDStringUfuncs` `multiply` with a reduce `out=`, `NDStringUfuncs.Precedence.ComputeAnswer`): check that they are unreachable or answer them |
 
 `NDStringCasting.TextConversion` and `NDStringCopy.MixedKinds` construct the deferral but have no caller since P1.1.
 
-## Appendix B — the 783 deferred oracle cases by stage (2026-10-15, after P2.2 milestone A)
+## Appendix B — the 648 deferred oracle cases by stage (2026-10-15, after P2.2 milestone B and the `numpy.char` plan's phase 1)
 
 The first edition counted 3,342 phase-2 cases: P2.0 / P2.1 made 2,201 of them strict, P2.3 171 and P1.1 433 (970 → 537);
-P1.7d's `tma` section added 437 `T` cases. Listed with `NUMSHARP_STRING_ORACLE_DEFERRED=1` (each case's refusal names
+P1.7d's `tma` section added 437 `T` cases, the `numpy.char` plan's `strchar` section 3. Listed with `NUMSHARP_STRING_ORACLE_DEFERRED=1` (each case's refusal names
 the function).
 
 | Stage | Cases by function | Sections |
 |---|---|---|
-| P2.2, `S` / `U` (346) | `argmax` 60, `argmin` 59, the `histogram` family 54, `unique` 26, `percentile` 25, `quantile` 25, `setxor1d` 17, `searchsorted` 16, `isin` 15, `intersect1d` 14, `union1d` 9, `lexsort` 5, `setdiff1d` 5, the Array-API `unique_*` 12, `digitize` 3, `sort_complex` 1. Milestone A removed every sorting deferral (198: `argsort` 118, `partition` 28, `argpartition` 28, `sort` 24); 7 of those calls now defer one step later, at the `unique` / `searchsorted` that follows their sort | `reductions` 24, `straxis` 90, `strshape` 142, `strvalid` 5, `strsurface` 67, `strma` 18 |
-| P2.T (432) | `==` 72, `np.sum` 60, `<` 39, `logical_or` 35, `>=` 30, `>` 27, `all` 22, `any` 22, `flatnonzero` 21, `!=` 18, `<=` 18, `logical_and` 17, `logical_xor` 17, `np.cumsum` 13, `nonzero` 9, `add` 9, `multiply` 3 | `tma` |
+| P2.2, `S` / `U` (208) | `np.histogram` 54, `unique` 26, `percentile` 25, `quantile` 25, `setxor1d` 17, `isin` 15, `intersect1d` 14, `union1d` 9, `lexsort` 5, `setdiff1d` 5, the Array-API `unique_*` 12, `sort_complex` 1. Milestone A removed every sorting deferral (198: `argsort` 118, `partition` 28, `argpartition` 28, `sort` 24); milestone B every searching one (138: `argmax` 60, `argmin` 59, `searchsorted` 16 — 12 of them `np.histogram2d` / `np.histogramdd`'s bin search —, `digitize` 3) | `reductions` 14, `straxis` 50, `strshape` 84, `strsurface` 54, `strma` 6 |
+| P2.T (435) | `==` 72, `np.sum` 60, `<` 39, `logical_or` 35, `>=` 30, `>` 27, `all` 22, `any` 22, `flatnonzero` 21, `!=` 18, `<=` 18, `logical_and` 17, `logical_xor` 17, `np.cumsum` 13, `nonzero` 9, `add` 9, `multiply` 3; `np.char.add` 2, `np.char.multiply` 1 | `tma`, `strchar` 3 |
 | P2.2, `T` (5) | `median` 2, `sort` 2, `unique` 1 | `tma` |
 
 ## Appendix C — the implementation of every function

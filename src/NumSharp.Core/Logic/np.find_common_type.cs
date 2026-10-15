@@ -914,7 +914,7 @@ namespace NumSharp
                     "This operation is not supported for fixed-width string arrays: it promotes its operands with NumPy's " +
                     "numeric type rules, and text has no numeric type. NumSharp's string support covers storage, element " +
                     "access, conversion to and from C#, copying, casts between string dtypes, conversion between text and " +
-                    "numbers, indexing, printing, comparisons, truth tests, concatenation, repetition and sorting; the rest of " +
+                    "numbers, indexing, printing, comparisons, truth tests, concatenation, repetition, sorting and searching; the rest of " +
                     "string computation is the next phase.")
                 : new KeyNotFoundException($"The given key '({key.Item1}, {key.Item2})' was not present in the dictionary.");
 

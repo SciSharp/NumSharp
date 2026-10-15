@@ -116,8 +116,9 @@ namespace NumSharp.Tests.Backends.Strings
         {
             Action emptyLine = () => np.argmax(E2(), 0);
             emptyLine.Should().Throw<ValueError>().WithMessage("attempt to get argmax of an empty sequence");
-            Action text = () => np.argmax(U(), 0);
-            text.Should().Throw<StringComputationNotSupportedException>();
+            // Text is searched since P2.2 milestone B: np.argmax(['ab', 'c', 'de'], axis=0) -> 2, np.argmin -> 0.
+            np.argmax(U(), 0).GetInt64().Should().Be(2L);
+            np.argmin(U(), 0).GetInt64().Should().Be(0L);
         }
 
         [TestMethod]

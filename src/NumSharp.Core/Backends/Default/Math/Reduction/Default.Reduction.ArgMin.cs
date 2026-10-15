@@ -18,14 +18,30 @@ namespace NumSharp.Backends
         ///     ValueError, which a string array raises as <see cref="ValueError"/>).</exception>
         /// <exception cref="AxisError"><paramref name="axis_"/> is outside the input's rank (rank 1 for a 0-d input, which
         ///     NumPy ravels first) — checked before anything else, for every dtype.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A string array whose lines hold two or more elements:
-        ///     NumPy compares the text (the next phase of NumSharp's string support). An empty result or lines of one
-        ///     element give their zero indices.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
+        ///     elements: NumPy compares the text (the <c>StringDType</c> part of the next phase). An empty result or lines of
+        ///     one element give their zero indices.</exception>
+        /// <remarks>
+        ///     An <c>S</c> / <c>U</c> array is compared as NumPy's <c>STRING_argmin</c> / <c>UNICODE_argmin</c> compare it
+        ///     (unsigned code units over the item width; the first minimum of each line
+        ///     wins), by <see cref="Sorting.TextArgReduce"/>.
+        /// </remarks>
         public override NDArray ReduceArgMin(NDArray arr, int? axis_, bool keepdims = false)
         {
-            // Text: NumPy's argmin checks the axis (a 0-d input ravels first) and refuses an empty line, then compares the
-            // text (the next phase) — except where no comparison happens: an empty result, or lines of one element, whose
-            // indices are all 0. The bool stand-in of the same shape computes those through the numeric path.
+            // Fixed-width text: NumPy's argmin checks the axis (a 0-d input ravels first) and refuses an empty line; where
+            // it compares nothing (an empty result, lines of one element) the indices are all 0 and the bool stand-in of the
+            // same shape computes them through the numeric path; otherwise the text is compared (TextArgReduce).
+            if (Strings.NDStringUfuncs.IsString(arr))
+            {
+                Strings.NDStringUfuncs.ValidateReduceAxis("argmin", arr.ndim, axis_);
+                if (Strings.NDStringUfuncs.EmptyArgReductionError("argmin", arr, axis_) is { } empty)
+                    throw empty;
+                if (!Strings.NDStringUfuncs.ShapeDecides("argmin", arr, axis_))
+                    return Sorting.TextArgReduce.ArgReduce(arr, axis_, keepdims, max: false);
+                using var textStandIn = Strings.NDStringUfuncs.BoolStandIn(arr);
+                return ReduceArgMin(textStandIn, axis_, keepdims);
+            }
+            // StringDType: the same checks and shape-decided answers, the text comparison deferred (ReduceStandIn throws).
             if (Strings.NDStringUfuncs.ReduceStandIn("argmin", arr, axis_) is { } standIn)
             {
                 using (standIn)

@@ -322,6 +322,35 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>
+        ///     The doc page's Searching section: the arg-reductions return the first extreme (flat and along an axis, into an
+        ///     int32 <c>out=</c>), <c>np.searchsorted</c> over sorted text on both sides and with a number key (written as
+        ///     text), and <c>np.digitize</c> of text, whose bins follow text order.
+        /// </summary>
+        [TestMethod]
+        public void Computing_Searching()
+        {
+            var words = np.array(new[] { "pear", "fig", "apple", "fig" });
+            np.argmax(words).Should().Be(0L);
+            np.argmin(words).Should().Be(2L);
+            var m = np.array(new[,] { { "b", "a" }, { "a", "c" } });
+            np.argmax(m, 1).ToArray<long>().Should().Equal(0L, 1L);
+            var o = np.zeros(new Shape(2L), np.int32);
+            np.argmax(m, (int?)1, o);
+            o.ToArray<int>().Should().Equal(0, 1);
+            np.nanargmax(words).Should().Be(0L);
+
+            var sorted = np.sort(words);
+            NDArray.AsStringArray(sorted).Should().Equal("apple", "fig", "fig", "pear");
+            np.searchsorted(sorted, np.array(new[] { "fig", "kiwi" })).ToArray<long>().Should().Equal(1L, 3L);
+            np.searchsorted(sorted, np.array(new[] { "fig", "kiwi" }), "right").ToArray<long>().Should().Equal(3L, 3L);
+            np.searchsorted(np.array(new[] { "1", "10", "2", "5" }), 3).Should().Be(3L);
+
+            np.digitize(np.array(new[] { "10", "3", "25" }), np.array(new[] { 5, 20 })).ToArray<long>().Should().Equal(0L, 2L, 2L);
+            Action uint64Out = () => np.argmax(m, (int?)1, np.zeros(new Shape(2L), np.uint64));
+            uint64Out.Should().Throw<TypeError>();
+        }
+
+        /// <summary>
         ///     The "The <c>numpy.char</c> module" snippets (the <c>numpy.char</c> plan's phase 1; every value probed against
         ///     NumPy 2.4.2): a comparison that strips trailing whitespace against the plain ufunc, <c>compare_chararrays</c>,
         ///     <c>np.char.add</c>, <c>np.char.multiply</c> and its ValueError rule, the <c>S</c> / <c>U</c> pair's
@@ -350,7 +379,7 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>
-        ///     What the doc page still lists as a later stage: the unique values and the binary searches refuse with
+        ///     What the doc page still lists as a later stage: the unique values and the membership tests refuse with
         ///     <see cref="StringComputationNotSupportedException"/> (a <see cref="NotSupportedException"/>); a string
         ///     <c>dtype=</c> request of <c>np.add</c> over numbers computes (the numbers written as text, then concatenated).
         /// </summary>
@@ -360,8 +389,8 @@ namespace NumSharp.Tests.Documentation
             var names = Names();
             Action unique = () => np.unique(names);
             unique.Should().Throw<StringComputationNotSupportedException>();
-            Action search = () => np.searchsorted(np.sort(names), np.array(new[] { "cow" }));
-            search.Should().Throw<StringComputationNotSupportedException>();
+            Action isin = () => np.isin(names, np.array(new[] { "cow" }));
+            isin.Should().Throw<StringComputationNotSupportedException>();
             NDArray.AsStringArray(np.add(np.array(new[] { 1.5 }), np.array(new[] { 1.5 }), dtype: "U")).Should().Equal("1.51.5");
             // StringComputationNotSupportedException is a NotSupportedException.
             unique.Should().Throw<NotSupportedException>();

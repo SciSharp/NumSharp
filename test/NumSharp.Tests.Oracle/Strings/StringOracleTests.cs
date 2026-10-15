@@ -304,6 +304,19 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void CharModuleFunctions() => Run("strchar");
 
         /// <summary>
+        ///     Section strsearch (strings phase 2, P2.2 milestone B): searching <c>S</c> / <c>U</c> text —
+        ///     <c>np.argmax</c> / <c>np.argmin</c> / <c>np.nanargmax</c> / <c>np.nanargmin</c> and the ndarray methods (the
+        ///     first extreme element over random, categorical, long-prefix, all-equal and NUL / high-byte data, every
+        ///     <c>U</c> key packing, block boundaries, every axis with keepdims, the catalog's layouts, broadcast views,
+        ///     <c>out=</c> of every kind and NumPy's checks), <c>np.searchsorted</c> / <c>ndarray.searchsorted</c> (sorted and
+        ///     unsorted haystacks — NumPy's exact path with its monotonic carry —, both sides, sorted / descending / random
+        ///     keys, sorters reached and not reached, few keys against a long haystack, mixed widths and kinds, shared
+        ///     prefixes, numbers with text, keys of every layout, haystack views, keys that end before the strings, and the
+        ///     argument errors) and <c>np.digitize</c> of text. Every case is strict.
+        /// </summary>
+        [TestMethod] public void TextSearching() => Run("strsearch");
+
+        /// <summary>
         ///     Lifetime gate of the <c>StringDType</c> sections (strings phase 1, P1.9): once every case of tstore / tcreate /
         ///     tmove / tcast has been replayed and its arrays are garbage, no string allocator is left alive — every buffer the
         ///     replay made (operands, results, temporaries of the gathers, scatters and casts, failed operations) ran its clear
@@ -345,15 +358,16 @@ namespace NumSharp.Tests.Strings
 
         /// <summary>
         ///     The most cases each section may defer to the computational phase (see the class remarks): the deferrals
-        ///     left are searching (argmax / argmin, searchsorted, digitize), the set routines (unique, isin and the rest),
-        ///     lexsort, histograms and quantiles over text, and every computation over <c>StringDType</c>. Sorting <c>S</c> /
-        ///     <c>U</c> text computes since P2.2 (it lowered the ceilings: reductions 32 → 24, straxis 130 → 90, strshape
-        ///     190 → 142, strma 113 → 18). A section not listed may defer nothing.
+        ///     left are the set routines (unique and its variants, isin, the 1-D set operations), lexsort, sort_complex,
+        ///     np.histogram and the quantiles over text, and every computation over <c>StringDType</c>. Sorting <c>S</c> /
+        ///     <c>U</c> text computes since P2.2 milestone A (it lowered the ceilings: reductions 32 → 24, straxis 130 → 90,
+        ///     strshape 190 → 142, strma 113 → 18); searching it (argmax / argmin and the nan forms, searchsorted, digitize,
+        ///     histogram2d / histogramdd's bin search) since milestone B (reductions 24 → 14, straxis 90 → 50, strshape
+        ///     142 → 84, strvalid 5 → 0, strsurface 67 → 54, strma 18 → 6). A section not listed may defer nothing.
         /// </summary>
         private static readonly Dictionary<string, int> DeferralCeilings = new()
         {
-            ["reductions"] = 24, ["straxis"] = 90, ["strshape"] = 142, ["strvalid"] = 5, ["strsurface"] = 67,
-            ["strma"] = 18, ["tma"] = 437,
+            ["reductions"] = 14, ["straxis"] = 50, ["strshape"] = 84, ["strsurface"] = 54, ["strma"] = 6, ["tma"] = 437,
             // strchar: np.char.add of StringDType (2) and np.char.multiply of StringDType by an integer (1), which NumPy
             // computes and NumSharp's StringDType arithmetic (a later subphase) defers.
             ["strchar"] = 3,
@@ -368,7 +382,7 @@ namespace NumSharp.Tests.Strings
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
                 "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
-                "storenone", "tma", "tio", "strsort", "strchar",
+                "storenone", "tma", "tio", "strsort", "strchar", "strsearch",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)
