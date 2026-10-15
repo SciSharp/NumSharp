@@ -23,17 +23,23 @@ namespace NumSharp
         ///     raises AxisError on 0-d. NaN floats partition to the end (their indices keep encounter
         ///     order, the same policy as argsort's NaN tail).
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray argpartition(NDArray a, int kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.ArgPartition(a, new[] { kth }, axis, kind, order);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order))
+            : AxisPartition.ArgPartition(a, new[] { kth }, axis, kind, order);
 
         /// <summary>
         ///     Indirect partition around EVERY index in <paramref name="kth"/> at once (NumPy
         ///     <c>np.argpartition</c> with a kth sequence). Returns int64 indices; the input is only read.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argpartition.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray argpartition(NDArray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.ArgPartition(a, kth, axis, kind, order);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order))
+            : AxisPartition.ArgPartition(a, kth, axis, kind, order);
 
         /// <summary>
         ///     Indirect partition with the kth indices given as an ARRAY — NumPy's array-kth form
@@ -42,8 +48,11 @@ namespace NumSharp
         ///     values wrap modulo 2^64 exactly like NumPy's intp cast).
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argpartition.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray argpartition(NDArray a, NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.ArgPartition(a, kth, axis, kind, order);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order))
+            : AxisPartition.ArgPartition(a, kth, axis, kind, order);
     }
 
     public partial class NDArray

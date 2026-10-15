@@ -112,6 +112,27 @@ committed artifact**. Full checklist in **`references/verify-accuracy.md`**. The
 - **Dedup correctness:** a "fixed the thing I just added" line is a defect - collapse it into the
   feature's line describing the *final* behavior.
 
+## After the release publishes - put the notes on nuget.org (manual, owner-only)
+
+The GitHub release body (the install header + `docs/releases/RELEASE_<version>.md`, composed by
+build-and-release.yml's `create-release` job) is the release notes. nuget.org gets them **by hand**,
+because nothing in a published package can carry them later:
+
+- The packages embed **no README** (since after 0.70.0; the "No embedded package README" block in
+  `Directory.Build.props` fails `dotnet pack` if a project sets `PackageReadmeFile`). That keeps each
+  version's nuget.org README tab owner-editable - an embedded readme always wins and is immutable,
+  which is why 0.70.0 can never show its notes there.
+- The nuspec's `<releaseNotes>` is no alternative: immutable once published, rendered as plain text.
+
+**The step, per package of the release** (NumSharp, NumSharp.Bitmap, every NumSharp.Interop.*,
+NumSharp.Build): sign in to nuget.org as a SciSharp owner → `https://www.nuget.org/packages/<id>/Manage`
+→ **Readme** → select the new version → **Custom** tab → paste the GitHub release markdown exactly as
+published (`gh release view v<version> --repo SciSharp/NumSharp --json body --jq .body`) → **Submit**.
+It renders as markdown on the version's README tab; read it back from
+`https://www.nuget.org/packages/<id>/<version>/GetReadMeMd` (while signed in). Submitting an empty
+readme removes it again. The 0.40.0-prerelease ... 0.60.0 versions of NumSharp and NumSharp.Bitmap were
+back-filled this way on 2026-10-01.
+
 ## Critical gotchas (learned the hard way)
 
 - **The Read tool needs Windows paths; Git-Bash `/tmp` is invisible to it.** Dump commit bodies to

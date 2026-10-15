@@ -17,6 +17,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.cumprod.html</remarks>
         public NDArray cumprod(int? axis = null, DType dtype = null, NDArray @out = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.cumprod(this, axis, dtype, @out);
         }
     }

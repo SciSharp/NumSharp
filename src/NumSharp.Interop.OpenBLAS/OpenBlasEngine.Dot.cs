@@ -176,7 +176,7 @@ namespace NumSharp.Interop.OpenBLAS
                 }
             }
 
-            var outShape = nd == 0 ? Shape.Scalar : new Shape(SubArray(dimensions, nd));
+            var outShape = nd == 0 ? Shape.Scalar : Shape.Adopt(SubArray(dimensions, nd));
             // fillZeros:false + the conditional Zero below mirrors cblasfuncs.c's UNINITIALISED
             // new_array_for_sum (the default ctor zeroed a redundant second time).
             var outBuf = new NDArray(typeCode, outShape, fillZeros: false);

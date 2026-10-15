@@ -5,7 +5,7 @@ namespace NumSharp
 {
     /// <summary>
     ///     The cast between two storage-backed builtin classes (NumPy's <c>add_numeric_cast</c>, <c>convert_datatype.c</c>).
-    ///     Its <see cref="ArrayMethod.Casting"/> is computed the way NumPy computes <c>spec.casting</c>: the same class →
+    ///     Its <see cref="ArrayMethod.casting"/> is computed the way NumPy computes <c>spec.casting</c>: the same class →
     ///     <c>equiv</c> (a copy or byte swap); <c>safe</c> when the frozen promotion table says
     ///     <c>promote(from, to) == to</c> (NumPy's <c>_npy_can_cast_safely_table</c>); otherwise <c>same_kind</c> when the
     ///     source kind orders at or below the destination kind (<c>b &lt; u &lt; i &lt; f &lt; c</c>), else <c>unsafe</c>.
@@ -43,7 +43,7 @@ namespace NumSharp
         ///     it before it exists. The value is a constant, so the lazy evaluation is unobservable (a benign race at worst
         ///     computes it twice).
         /// </summary>
-        public override NPY_CASTING Casting => _casting ??= ComputeCasting(_from, _to);
+        public override NPY_CASTING casting => _casting ??= ComputeCasting(_from, _to);
 
         private static NPY_CASTING ComputeCasting(LegacyBuiltinDTypeMeta from, LegacyBuiltinDTypeMeta to)
         {
@@ -57,7 +57,7 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
+        public override NPY_CASTING resolve_descriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
             if (IsWithinDType)
                 return LegacySameDTypeResolveDescriptors(this, givenDescrs, loopDescrs, out viewOffset);
@@ -71,7 +71,7 @@ namespace NumSharp
         internal static NPY_CASTING LegacySameDTypeResolveDescriptors(CastingImpl impl, DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
             loopDescrs[0] = givenDescrs[0];
-            loopDescrs[1] = givenDescrs[1] ?? impl.From.EnsureCanonical(givenDescrs[0]);
+            loopDescrs[1] = givenDescrs[1] ?? impl.From.ensure_canonical(givenDescrs[0]);
 
             /*
              * Legacy dtypes (except datetime) only have byte-order and elsize as
@@ -92,12 +92,12 @@ namespace NumSharp
         /// </summary>
         internal static NPY_CASTING SimpleCastResolveDescriptors(CastingImpl impl, DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
-            loopDescrs[0] = impl.From.EnsureCanonical(givenDescrs[0]);
-            loopDescrs[1] = givenDescrs[1] != null ? impl.To.EnsureCanonical(givenDescrs[1]) : impl.To.DefaultDescr();
+            loopDescrs[0] = impl.From.ensure_canonical(givenDescrs[0]);
+            loopDescrs[1] = givenDescrs[1] != null ? impl.To.ensure_canonical(givenDescrs[1]) : impl.To.default_descr();
 
             viewOffset = NoView;
-            if (impl.Casting != NPY_CASTING.NPY_NO_CASTING)
-                return impl.Casting;
+            if (impl.casting != NPY_CASTING.NPY_NO_CASTING)
+                return impl.casting;
             if (loopDescrs[0].isnative == loopDescrs[1].isnative)
             {
                 viewOffset = 0;
@@ -122,11 +122,11 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
+        public override NPY_CASTING resolve_descriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
             /* This is a within-dtype cast, which currently must handle byteswapping */
             loopDescrs[0] = givenDescrs[0];
-            loopDescrs[1] = givenDescrs[1] ?? From.EnsureCanonical(givenDescrs[0]);
+            loopDescrs[1] = givenDescrs[1] ?? From.ensure_canonical(givenDescrs[0]);
             viewOffset = NoView;
 
             bool isTimedelta = ((DatetimeDTypeMeta)From).IsTimedelta;
@@ -142,17 +142,17 @@ namespace NumSharp
             var meta1 = loopDescrs[0].DatetimeMetadata.Value;
             var meta2 = loopDescrs[1].DatetimeMetadata.Value;
 
-            if ((meta1.Base == meta2.Base && meta1.Num == meta2.Num) ||
+            if ((meta1.@base == meta2.@base && meta1.num == meta2.num) ||
                 // handle some common metric prefix conversions
                 // 1000 fold conversions
-                (meta2.Base >= NPY_DATETIMEUNIT.NPY_FR_s && (int)meta1.Base - (int)meta2.Base == 1
-                                                          && meta2.Num != 0 && meta1.Num / meta2.Num == 1000) ||
+                (meta2.@base >= NPY_DATETIMEUNIT.NPY_FR_s && (int)meta1.@base - (int)meta2.@base == 1
+                                                          && meta2.num != 0 && meta1.num / meta2.num == 1000) ||
                 // 10^6 fold conversions
-                (meta2.Base >= NPY_DATETIMEUNIT.NPY_FR_s && (int)meta1.Base - (int)meta2.Base == 2
-                                                          && meta2.Num != 0 && meta1.Num / meta2.Num == 1000000) ||
+                (meta2.@base >= NPY_DATETIMEUNIT.NPY_FR_s && (int)meta1.@base - (int)meta2.@base == 2
+                                                          && meta2.num != 0 && meta1.num / meta2.num == 1000000) ||
                 // 10^9 fold conversions
-                (meta2.Base >= NPY_DATETIMEUNIT.NPY_FR_s && (int)meta1.Base - (int)meta2.Base == 3
-                                                          && meta2.Num != 0 && meta1.Num / meta2.Num == 1000000000))
+                (meta2.@base >= NPY_DATETIMEUNIT.NPY_FR_s && (int)meta1.@base - (int)meta2.@base == 3
+                                                          && meta2.num != 0 && meta1.num / meta2.num == 1000000000))
             {
                 if (byteorderMayAllowView)
                 {
@@ -161,25 +161,25 @@ namespace NumSharp
                 }
                 return NPY_CASTING.NPY_EQUIV_CASTING;
             }
-            if (meta1.Base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
+            if (meta1.@base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
             {
                 if (byteorderMayAllowView)
                     viewOffset = 0;
                 return NPY_CASTING.NPY_SAFE_CASTING;
             }
-            if (meta2.Base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
+            if (meta2.@base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
             {
                 /* TODO: This is actually an invalid cast (casting will error) */
                 return NPY_CASTING.NPY_UNSAFE_CASTING;
             }
             if (isTimedelta && (
                     /* jump between time units and date units is unsafe for timedelta */
-                    (meta1.Base <= NPY_DATETIMEUNIT.NPY_FR_M && meta2.Base > NPY_DATETIMEUNIT.NPY_FR_M) ||
-                    (meta1.Base > NPY_DATETIMEUNIT.NPY_FR_M && meta2.Base <= NPY_DATETIMEUNIT.NPY_FR_M)))
+                    (meta1.@base <= NPY_DATETIMEUNIT.NPY_FR_M && meta2.@base > NPY_DATETIMEUNIT.NPY_FR_M) ||
+                    (meta1.@base > NPY_DATETIMEUNIT.NPY_FR_M && meta2.@base <= NPY_DATETIMEUNIT.NPY_FR_M)))
             {
                 return NPY_CASTING.NPY_UNSAFE_CASTING;
             }
-            if (meta1.Base <= meta2.Base)
+            if (meta1.@base <= meta2.@base)
             {
                 /* Casting to a more precise unit is currently considered safe */
                 if (DatetimeMetaData.Divides(meta1, meta2, isTimedelta))
@@ -208,12 +208,12 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
+        public override NPY_CASTING resolve_descriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
-            loopDescrs[0] = From.EnsureCanonical(givenDescrs[0]);
+            loopDescrs[0] = From.ensure_canonical(givenDescrs[0]);
             loopDescrs[1] = givenDescrs[1] == null
                 ? ((DatetimeDTypeMeta)To).Descr(givenDescrs[0].DatetimeMetadata.Value)
-                : To.EnsureCanonical(givenDescrs[1]);
+                : To.ensure_canonical(givenDescrs[1]);
             viewOffset = NoView;
             /*
              * Mostly NPY_UNSAFE_CASTING is not true, the cast will fail.
@@ -238,7 +238,7 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
+        public override NPY_CASTING resolve_descriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
             if (IsWithinDType)
                 return BuiltinCastingImpl.LegacySameDTypeResolveDescriptors(this, givenDescrs, loopDescrs, out viewOffset);

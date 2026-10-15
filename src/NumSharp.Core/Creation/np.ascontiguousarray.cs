@@ -13,6 +13,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ascontiguousarray.html</remarks>
         public static NDArray ascontiguousarray(NDArray a, DType dtype = null)
         {
+            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Plain((a, dtype), static s => ascontiguousarray(s.a, s.dtype));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
             var result = asarray(a, dtype, 'C');

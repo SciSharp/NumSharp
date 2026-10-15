@@ -42,6 +42,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray nanargmax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
+            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Reduced((a, axis, @out, keepdims), static s => nanargmax(s.a, s.axis, s.@out, s.keepdims), axis, keepdims, null);
             // Boundary scope: reclaims the NaN mask, the all-NaN-guard reductions and the replaced
             // copy; the result (or the caller's @out — untracked, a Returns no-op) is yielded.
             ValidateNanArgAxis(a, axis);
@@ -85,6 +88,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray nanargmin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
+            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Reduced((a, axis, @out, keepdims), static s => nanargmin(s.a, s.axis, s.@out, s.keepdims), axis, keepdims, null);
             // Boundary scope (see nanargmax(NDArray, int?, NDArray, bool)).
             ValidateNanArgAxis(a, axis);
             var prepared = NanArgReplace(a, double.PositiveInfinity, axis);
@@ -127,7 +133,7 @@ namespace NumSharp
             if (@out.ndim != result.ndim)
                 throw new ValueError($"output array does not match result of np.{name}.");
             for (int d = 0; d < result.ndim; d++)
-                if (@out.shape[d] != result.shape[d])
+                if (@out.Shape.dimensions[d] != result.Shape.dimensions[d])
                     throw new ValueError($"output array does not match result of np.{name}.");
 
             np.copyto(@out, result, casting: "unsafe");

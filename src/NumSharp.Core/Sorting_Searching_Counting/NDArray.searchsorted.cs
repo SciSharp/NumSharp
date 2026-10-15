@@ -12,11 +12,17 @@ namespace NumSharp
         /// <returns>The insertion index.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.searchsorted.html</remarks>
         public long searchsorted(int v, string side = "left", NDArray sorter = null)
-            => np.searchsorted(this, v, side, sorter);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.searchsorted(this, v, side, sorter);
+        }
 
         /// <inheritdoc cref="searchsorted(int, string, NDArray)"/>
         public long searchsorted(double v, string side = "left", NDArray sorter = null)
-            => np.searchsorted(this, v, side, sorter);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.searchsorted(this, v, side, sorter);
+        }
 
         /// <summary>
         ///     Find the indices into this SORTED array where each value in <paramref name="v"/> would be inserted
@@ -29,6 +35,9 @@ namespace NumSharp
         /// <returns>An array of insertion indices with the same shape as <paramref name="v"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.searchsorted.html</remarks>
         public NDArray searchsorted(NDArray v, string side = "left", NDArray sorter = null)
-            => np.searchsorted(this, v, side, sorter);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.searchsorted(this, v, side, sorter);
+        }
     }
 }

@@ -105,25 +105,25 @@ namespace NumSharp.Tests.RandomSampling;
     [TestMethod]
     public void Power_ZeroParameter_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.power(0.0, 5L));
+        Assert.ThrowsException<ValueError>(() => np.random.power(0.0, 5L));
     }
 
     [TestMethod]
     public void Power_NegativeParameter_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.power(-1.0, 5L));
+        Assert.ThrowsException<ValueError>(() => np.random.power(-1.0, 5L));
     }
 
     [TestMethod]
     public void Power_ScalarZeroParameter_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.power(0.0));
+        Assert.ThrowsException<ValueError>(() => np.random.power(0.0));
     }
 
     [TestMethod]
     public void Power_ScalarNegativeParameter_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.power(-2.0));
+        Assert.ThrowsException<ValueError>(() => np.random.power(-2.0));
     }
 
     [TestMethod]

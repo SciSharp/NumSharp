@@ -19,9 +19,13 @@ namespace NumSharp
         /// Port of numpy/lib/_nanfunctions_impl.py::nancumprod: <c>_replace_nan(a, 1)</c> then <c>np.cumprod</c>.
         /// Only float-family dtypes can contain NaN, so integer/bool/decimal inputs are equivalent to <see cref="cumprod"/>.
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray nancumprod(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, axis, dtype, @out), static s => nancumprod(s.a, s.axis, s.dtype, s.@out), @out);
             // Boundary scope: the full-size NaN-replaced copy is reclaimed at exit; the scan
             // result (or the caller's @out — untracked, a Returns no-op) is yielded.
             // NumPy: a, mask = _replace_nan(a, 1); return np.cumprod(a, axis, dtype, out).

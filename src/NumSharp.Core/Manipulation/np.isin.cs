@@ -30,13 +30,14 @@ namespace NumSharp
         public static NDArray isin(NDArray element, NDArray test_elements,
             bool assume_unique = false, bool invert = false, string kind = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(element, test_elements);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (kind != null && kind != "sort" && kind != "table")
                 throw new ValueError($"Invalid kind: '{kind}'. Please use None, 'sort' or 'table'.");
 
             // Result is shaped like element in C-order. Build the shape from the DIMENSIONS (a fresh
             // C-contiguous shape) — reusing element.Shape would carry a view's strides and scramble the
             // contiguous membership buffer on reshape (transposed/strided/negative-stride element).
-            Shape outShape = new Shape(element.shape);
+            Shape outShape = Shape.Adopt(element.Shape.dimensions);
             NDArray ar1 = np.ravel(element);        // C-order flatten (NumPy: np.asarray(element).ravel())
             NDArray ar2 = np.ravel(test_elements);  // test values are always flattened
 

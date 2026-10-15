@@ -10,8 +10,11 @@
         /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one.</param>
         /// <returns>Array of indices into the array. It has the same shape as a.shape with the dimension along axis removed (unless keepdims is True).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmax.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static NDArray argmax(NDArray a, int axis, bool keepdims = false)
-            => a.TensorEngine.ArgMax(a, axis: axis, keepdims: keepdims);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, keepdims), static s => argmax(s.a, s.axis, s.keepdims), axis, keepdims, null)
+            : a.TensorEngine.ArgMax(a, axis: axis, keepdims: keepdims);
 
         /// <summary>
         ///     Returns the index of the maximum value.
@@ -30,8 +33,11 @@
         /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one.</param>
         /// <returns>Array of indices into the array. It has the same shape as a.shape with the dimension along axis removed (unless keepdims is True).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmin.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static NDArray argmin(NDArray a, int axis, bool keepdims = false)
-            => a.TensorEngine.ArgMin(a, axis: axis, keepdims: keepdims);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, keepdims), static s => argmin(s.a, s.axis, s.keepdims), axis, keepdims, null)
+            : a.TensorEngine.ArgMin(a, axis: axis, keepdims: keepdims);
 
         /// <summary>
         ///     Returns the index of the minimum value.

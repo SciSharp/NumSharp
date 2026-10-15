@@ -19,8 +19,11 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
         /// <param name="dtype">Validate-only (NumPy parity): comparisons have bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.equal.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray equal(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.Compare(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => equal(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : x1.TensorEngine.Compare(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Return (x1 == x2) element-wise with scalar.
@@ -54,8 +57,11 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
         /// <param name="dtype">Validate-only (NumPy parity): comparisons have bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.not_equal.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray not_equal(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.NotEqual(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => not_equal(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : x1.TensorEngine.NotEqual(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Return (x1 != x2) element-wise with scalar.
@@ -89,8 +95,11 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
         /// <param name="dtype">Validate-only (NumPy parity): comparisons have bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.less.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray less(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.Less(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => less(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : x1.TensorEngine.Less(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Return (x1 &lt; x2) element-wise with scalar.
@@ -124,8 +133,11 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
         /// <param name="dtype">Validate-only (NumPy parity): comparisons have bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.greater.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray greater(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.Greater(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => greater(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : x1.TensorEngine.Greater(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Return (x1 &gt; x2) element-wise with scalar.
@@ -159,8 +171,11 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
         /// <param name="dtype">Validate-only (NumPy parity): comparisons have bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.less_equal.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray less_equal(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.LessEqual(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => less_equal(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : x1.TensorEngine.LessEqual(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Return (x1 &lt;= x2) element-wise with scalar.
@@ -194,8 +209,11 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
         /// <param name="dtype">Validate-only (NumPy parity): comparisons have bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.greater_equal.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray greater_equal(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.GreaterEqual(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => greater_equal(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : x1.TensorEngine.GreaterEqual(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Return (x1 &gt;= x2) element-wise with scalar.

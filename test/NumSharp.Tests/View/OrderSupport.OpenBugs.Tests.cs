@@ -1693,8 +1693,14 @@ namespace NumSharp.Tests.View
         // Section 40: Fancy index write / slice write preserves F-contig
         // ============================================================================
 
+        /// <summary>
+        ///     A fancy-index write of a scalar into whole rows (<c>f[[0, 2]] = 99</c>) mutates an F-contiguous array in
+        ///     place, so it stays F-contiguous, as in NumPy.
+        /// </summary>
         [TestMethod]
-        [OpenBugs] // SetIndicesND asserts dstOffsets.size == values.size, breaks for scalar values on multi-row fancy writes regardless of layout. Not F-order specific — a pre-existing bug.
+        [TestCategory("Fixed")] // Was [OpenBugs]: SetIndicesND asserted dstOffsets.size == values.size, which broke scalar
+                   // values on multi-row fancy writes regardless of layout. Found passing (Debug and Release) by the
+                   // 2026-10-05 run of the whole OpenBugs category.
         public void FancyWrite_FContig_PreservesFContig()
         {
             // NumPy: f_arr[[0,2]] = 99 preserves F-contig (in-place)
@@ -2402,10 +2408,13 @@ namespace NumSharp.Tests.View
             r.Shape.IsFContiguous.Should().BeTrue();
         }
 
+        /// <summary>
+        ///     <c>np.squeeze</c> of an F-contiguous <c>(2, 1, 3)</c> array is an F-contiguous <c>(2, 3)</c> view: dropping a
+        ///     unit axis keeps the remaining strides, as NumPy's squeeze does.
+        /// </summary>
         [TestMethod]
-        [OpenBugs] // NumPy: squeeze(F(2,1,3)) -> (2,3) F-contig preserved.
-                   // NumSharp: produces (2,3) C-contig — squeeze doesn't carry the
-                   // F-strides pattern through the shape rebuild.
+        [TestCategory("Fixed")] // Was [OpenBugs]: squeeze rebuilt the shape as (2,3) C-contig instead of carrying the
+                   // F-strides through. Found passing by the 2026-10-05 run of the whole OpenBugs category.
         public void Squeeze_FContigWithUnitDim_PreservesFContig()
         {
             var f3 = np.empty(new Shape(2L, 1L, 3L), order: 'F', dtype: typeof(double));
@@ -2968,10 +2977,14 @@ namespace NumSharp.Tests.View
             ((int)v[5]).Should().Be(300);
         }
 
+        /// <summary>
+        ///     <c>c[[0, 2]] = 99</c> on a C-contiguous 2-D array broadcasts the scalar across both selected rows (2 × 4
+        ///     elements) and leaves row 1 alone, as NumPy does.
+        /// </summary>
         [TestMethod]
-        [OpenBugs] // Same SetIndicesND assert as Section 40. Confirmed on C-contig 2-D,
-                   // so the bug is NOT F-order specific — it's an indexing-shape bug.
-                   // dstOffsets.size=2 (two selected rows) vs values.size=8 (2*4 elements).
+        [TestCategory("Fixed")] // Was [OpenBugs]: the same SetIndicesND assert as Section 40, confirmed on C-contig 2-D
+                   // (dstOffsets.size=2 selected rows vs values.size=8 elements), so it was an indexing-shape bug,
+                   // not an F-order one. Found passing by the 2026-10-05 run of the whole OpenBugs category.
         public void FancyWrite_2D_CContig_ScalarRHS_Crashes()
         {
             // NumPy: arr[[0,2]] = 99 broadcasts scalar across 2 rows * 4 cols.
@@ -2983,11 +2996,14 @@ namespace NumSharp.Tests.View
             ((int)c[1, 0]).Should().Be(4);  // row 1 unchanged
         }
 
+        /// <summary>
+        ///     <c>c[[0, 2]] = values</c> with a <c>(2, 4)</c> value array assigns one value row per selected row, as NumPy
+        ///     does, and leaves row 1 alone.
+        /// </summary>
         [TestMethod]
-        [OpenBugs] // Same SetIndicesND assert, now with a matching-shape value array
-                   // instead of a scalar. Still dstOffsets.size=2 (per index) vs
-                   // values.size=8 (per element) — assertion cares about size match,
-                   // not broadcast compatibility.
+        [TestCategory("Fixed")] // Was [OpenBugs]: the same SetIndicesND assert with a matching-shape value array
+                   // (dstOffsets.size=2 per index vs values.size=8 per element — the assert compared sizes, not
+                   // broadcast compatibility). Found passing by the 2026-10-05 run of the whole OpenBugs category.
         public void FancyWrite_2D_CContig_MatchingArrayRHS_Crashes()
         {
             // NumPy: arr[[0,2]] = 2-D (2,4) array assigns per row.
@@ -3001,9 +3017,14 @@ namespace NumSharp.Tests.View
             ((int)c[1, 0]).Should().Be(4);  // row 1 unchanged
         }
 
+        /// <summary>
+        ///     The F-contiguous form of <see cref="FancyWrite_2D_CContig_ScalarRHS_Crashes"/>: <c>f[[0, 2]] = 99</c> fills
+        ///     both selected rows and the array stays F-contiguous.
+        /// </summary>
         [TestMethod]
-        [OpenBugs] // F-contig variant of FancyWrite_2D_CContig_ScalarRHS_Crashes —
-                   // confirms layout is orthogonal to the bug.
+        [TestCategory("Fixed")] // Was [OpenBugs]: the F-contig variant of FancyWrite_2D_CContig_ScalarRHS_Crashes, which
+                   // showed the layout was orthogonal to the bug. Found passing by the 2026-10-05 run of the whole
+                   // OpenBugs category.
         public void FancyWrite_2D_FContig_ScalarRHS_Crashes()
         {
             var f = np.empty(new Shape(4L, 3L), order: 'F', dtype: typeof(int));

@@ -1,0 +1,19 @@
+# The Python side of NumSharpPythonnetLocalExample: six data science libraries, each pinned to the
+# version the example was validated with. All six have binary wheels for Python 3.11, 3.12 and 3.13
+# on Windows x64, Linux x64 and macOS arm64.
+#
+#   python -m venv .venv
+#   .venv\Scripts\python -m pip install -r requirements.txt      (Windows)
+#   .venv/bin/python -m pip install -r requirements.txt          (Linux, macOS)
+#
+# The next line adds PyTorch's own index, which has CPU-only builds. Without it, pip on Linux installs
+# the CUDA build of torch together with 19 more packages (nvidia-*, cuda-*, triton) that this example
+# never loads. Remove the line when you want the GPU build.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+numpy==2.4.2          # the NumPy release that NumSharp is tested against
+pandas==3.0.5
+scipy==1.16.3
+scikit-learn==1.9.1
+matplotlib==3.11.2
+torch==2.13.0         # installs as 2.13.0+cpu on Windows and Linux

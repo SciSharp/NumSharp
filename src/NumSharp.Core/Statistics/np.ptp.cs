@@ -13,9 +13,13 @@ namespace NumSharp
         ///     (e.g. <c>ptp(uint8[0,255]) == 255</c>, <c>ptp(int8[-128,127]) == -1</c>).
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ptp.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray ptp(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, axis, @out, keepdims), static s => ptp(s.a, s.axis, s.@out, s.keepdims), @out);
             if (a is null) throw new ArgumentNullException(nameof(a));
 
             var maxRes = np.amax(a, axis, keepdims);
@@ -29,6 +33,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray ptp(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, axis, @out, keepdims), static s => ptp(s.a, s.axis, s.@out, s.keepdims), @out);
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (axis is null) return ptp(a, (int?)null, @out, keepdims);
             if (axis.Length == 1) return ptp(a, (int?)axis[0], @out, keepdims);
@@ -70,9 +77,9 @@ namespace NumSharp
                     bool reduced = false;
                     for (int j = 0; j < normalized.Length; j++)
                         if (normalized[j] == i) { reduced = true; break; }
-                    if (!reduced) kept.Add(a.shape[i]);
+                    if (!reduced) kept.Add(a.Shape.dimensions[i]);
                 }
-                diff = diff.reshape(kept.ToArray());
+                diff = diff.reshape(Shape.Adopt(kept.ToArray()));
             }
 
             return WriteOrReturn(diff, @out);
@@ -81,9 +88,9 @@ namespace NumSharp
         private static NDArray WriteOrReturn(NDArray diff, NDArray @out)
         {
             if (@out is null) return diff;
-            if (!diff.shape.SequenceEqual(@out.shape))
+            if (!diff.Shape.dimensions.SequenceEqual(@out.Shape.dimensions))
                 throw new ArgumentException(
-                    $"out has wrong shape; expected=[{string.Join(",", diff.shape)}] got=[{string.Join(",", @out.shape)}]");
+                    $"out has wrong shape; expected=[{string.Join(",", diff.Shape.dimensions)}] got=[{string.Join(",", @out.Shape.dimensions)}]");
             np.copyto(@out, diff);
             return @out;
         }

@@ -11,11 +11,17 @@ namespace NumSharp
         /// <returns>Output array which has the same shape as this array, except along the given axis.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.repeat.html</remarks>
         public NDArray repeat(int repeats, int? axis = null)
-            => np.repeat(this, repeats, axis);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.repeat(this, repeats, axis);
+        }
 
         /// <inheritdoc cref="repeat(int, int?)"/>
         public NDArray repeat(long repeats, int? axis = null)
-            => np.repeat(this, repeats, axis);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.repeat(this, repeats, axis);
+        }
 
         /// <summary>
         ///     Repeat each element of the array by the per-element counts in <paramref name="repeats"/>. Refer to
@@ -26,6 +32,9 @@ namespace NumSharp
         /// <returns>Output array which has the same shape as this array, except along the given axis.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.repeat.html</remarks>
         public NDArray repeat(NDArray repeats, int? axis = null)
-            => np.repeat(this, repeats, axis);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.repeat(this, repeats, axis);
+        }
     }
 }

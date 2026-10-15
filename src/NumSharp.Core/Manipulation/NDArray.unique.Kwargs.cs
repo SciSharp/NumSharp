@@ -735,7 +735,7 @@ namespace NumSharp
                     if (mask[i]) rank++;
                     invDst[perm[i]] = rank;
                 }
-                var invShape = ndim <= 1 ? Shape.Vector(n) : new Shape(Storage.Shape.Dimensions);
+                var invShape = ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(Storage.Shape.dimensions);
                 results[outPos++] = new NDArray(invSlice, invShape);
             }
 
@@ -788,11 +788,12 @@ namespace NumSharp
             // kind in "cfmM") is skipped and the mask is a plain structured `!=`, under which every
             // NaN slab is DISTINCT (nan != nan) regardless of equal_nan. Accepted for API symmetry.
             _ = equal_nan;
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             var moved = axis == 0 ? this : np.moveaxis(this, axis, 0);
-            long n = moved.Shape.Dimensions[0];
+            long n = moved.Shape.dimensions[0];
 
             long slabSize = 1;
-            for (int d = 1; d < moved.ndim; d++) slabSize *= moved.Shape.Dimensions[d];
+            for (int d = 1; d < moved.ndim; d++) slabSize *= moved.Shape.dimensions[d];
 
             var orig = new int[n];
             for (int i = 0; i < n; i++) orig[i] = i;
@@ -835,9 +836,9 @@ namespace NumSharp
             var resultShapeDims = new long[moved.ndim];
             resultShapeDims[0] = outN;
             for (int d = 1; d < moved.ndim; d++)
-                resultShapeDims[d] = moved.Shape.Dimensions[d];
+                resultShapeDims[d] = moved.Shape.dimensions[d];
 
-            var values = GatherSlabs(movedCopy, sortedKeepIdx.ToArray(), slabSize, new Shape(resultShapeDims));
+            var values = GatherSlabs(movedCopy, sortedKeepIdx.ToArray(), slabSize, Shape.Adopt(resultShapeDims));
 
             if (axis != 0)
                 values = np.moveaxis(values, 0, axis);
@@ -1316,7 +1317,7 @@ namespace NumSharp
                     if (mask[i] != 0) rank++;
                     invDst[kp[i].Perm] = rank;
                 }
-                var invShape = ndim <= 1 ? Shape.Vector(n) : new Shape(Storage.Shape.Dimensions);
+                var invShape = ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(Storage.Shape.dimensions);
                 results[outPos++] = new NDArray(invSlice, invShape);
             }
 
@@ -1492,7 +1493,7 @@ namespace NumSharp
                     if (mask[i] != 0) rank++;
                     invDst[kp[i].Perm] = rank;
                 }
-                var invShape = ndim <= 1 ? Shape.Vector(n) : new Shape(Storage.Shape.Dimensions);
+                var invShape = ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(Storage.Shape.dimensions);
                 results[outPos++] = new NDArray(invSlice, invShape);
             }
 

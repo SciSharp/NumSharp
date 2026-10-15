@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "scope": "Pinned original numerical definitions for all six Karpathy Gists; no top-level datasets, model/application imports or unbounded loops.",
+  "cases": [
+    {
+      "case_id": "KARPATHY-ORIGINAL-SOURCE-INTEGRITY",
+      "kind": "source_integrity",
+      "tier": "KarpathySourceIntegrity",
+      "tests": [
+        "KarpathyOriginalSourceTests.OriginalSource_IsHashVerifiedAndOnlyReviewedDefinitionsAreLoaded"
+      ],
+      "assertions": [
+        "All six embedded source files match fixedSHA256 pins before evaluation",
+        "Only explicit original definitions are installed; dataset/environment/top-level application globals are absent",
+        "Unknown source names rejected"
+      ],
+      "limits": [
+        "Legacy RNN/Pong/LSTM syntax uses lib2to3 on testedCPython3.12; converter absence fails rather than skipping",
+        "LSTM hidden-size /4 becomes //4; Pong np.float becomes np.float64; walk's uninitialized NumPy dispatch flag is repaired explicitly"
+      ]
+    },
+    {
+      "case_id": "KARPATHY-NES-SHORT-ORIGINAL-BYTES",
+      "kind": "original_short_run_and_byte_ledger",
+      "tiers": [
+        "KarpathyShortRun",
+        "KarpathyByteParity"
+      ],
+      "tests": [
+        "KarpathyExistingShortRunsTests.NesOriginalObjective_TwelveCompleteUpdates_AllStatesByteExact"
+      ],
+      "assertions": [
+        "Pinned original f objective, original population50/sigma.1/alpha.001, seed0",
+        "Twelve complete updates and thirteen weight/reward states,52float64values byte-equal"
+      ],
+      "limits": [
+        "Explicitly shortened300-update loop; the prior full301-state regression remains separate"
+      ]
+    },
+    {
+      "case_id": "KARPATHY-WALK-SHORT-ORIGINAL-BYTES",
+      "kind": "adapted_original_short_run_and_byte_ledger",
+      "tiers": [
+        "KarpathyShortRun",
+        "KarpathyByteParity"
+      ],
+      "tests": [
+        "KarpathyExistingShortRunsTests.WalkOriginalSlerp_FiveFullLatentFrames_ByteExact"
+      ],
+      "assertions": [
+        "Five original full1x4x64x64 latent frames in each spherical/near-parallel branch compared byte-for-byte",
+        "Pinned original numerical slerp definitions evaluated through pythonnet on exported inputs"
+      ],
+      "limits": [
+        "Only initial inputs_are_torch=False inserted to repair the original broken NumPy dispatch branch; mathematical expressions unchanged",
+        "Synthetic latents, no Torch RNG/device/model/video claim"
+      ]
+    }
+  ],
+  "exclusions": [
+    {
+      "case_id": "KARPATHY-ORIGINAL-TOPLEVEL-APPLICATIONS",
+      "status": "outside_approved_scope",
+      "reason": "Loader deliberately excludes all original imports/assignments/main loops and IO. Tests execute original named numerical definitions with bounded explicit drivers, not complete external ML applications."
+    }
+  ]
+}

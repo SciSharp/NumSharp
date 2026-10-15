@@ -72,7 +72,7 @@ namespace NumSharp.Backends
             // storage of the new dtype is the observable result (shape preserved, dtype changed).
             if (_shape.size == 0 || InternalArray == null)
             {
-                var emptyShape = ndim == 0 ? Shape.NewScalar() : new Shape((long[])dims.Clone(), 'C');
+                var emptyShape = ndim == 0 ? Shape.NewScalar() : Shape.Adopt((long[])dims.Clone(), 'C');
                 return new UnmanagedStorage(ArraySlice.Allocate(InfoOf<T>.NPTypeCode, emptyShape.size, false), emptyShape) { Engine = Engine };
             }
 
@@ -100,7 +100,9 @@ namespace NumSharp.Backends
             if (!_shape.IsWriteable && newShape.IsWriteable)
                 newShape = newShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
 
-            var newSlice = ArraySlice.Wrap<T>((void*)wrapBase, newBufferCount);
+            // The field alias counts its references on THIS storage's block (WrapShared): disposing the owner while the
+            // field view lives does not free the buffer under it.
+            var newSlice = ArraySlice.WrapShared<T>(wrapBase, newBufferCount, InternalArray);
             var r2 = new UnmanagedStorage();
             r2._shape = newShape;
             r2._typecode = InfoOf<T>.NPTypeCode;

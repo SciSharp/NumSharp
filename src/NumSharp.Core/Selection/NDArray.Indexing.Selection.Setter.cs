@@ -21,7 +21,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/user/basics.indexing.html</remarks>
         /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
         /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
-        /// <exception cref="NumSharpException">If this array is not writeable (e.g., broadcast array).</exception>
+        /// <exception cref="ValueError">If this array is not writeable (e.g., broadcast array) — NumPy's "assignment destination is read-only".</exception>
         public void SetIndices(NDArray values, NDArray[] indices)
         {
             NumSharpException.ThrowIfNotWriteable(Shape);
@@ -161,17 +161,19 @@ namespace NumSharp
                 long len = axisIndex[a].size;
                 var sh = new long[gridDims];
                 for (int k = 0; k < gridDims; k++) sh[k] = (k == pos) ? len : 1L;
-                axisIndex[a] = axisIndex[a].reshape(sh);
+                axisIndex[a] = axisIndex[a].reshape(Shape.Adopt(sh));
                 pos++;
             }
 
             var mesh = np.broadcast_arrays(axisIndex);
 
-            // The value broadcasts to the advanced-index result (grid) shape, per NumPy.
-            NDArray v = values;
+            // The value broadcasts to the advanced-index result (grid) shape, per NumPy: leading axes it has
+            // beyond the result's rank are dropped first, and a value that still does not fit raises NumPy's
+            // "shape mismatch: value array ..." before anything is written (PrepareAssignedValue).
             var gridShape = mesh[0].Shape;
+            NDArray v = PrepareAssignedValue(values, gridShape.dimensions);
             if (!System.Linq.Enumerable.SequenceEqual(v.Shape.dimensions, gridShape.dimensions))
-                v = np.broadcast_to(values, gridShape);
+                v = np.broadcast_to(v, gridShape);
 
             SetIndices(this, mesh, v);
             return true;
@@ -287,11 +289,11 @@ namespace NumSharp
                 if (values.size != 1)
                 {
                     var selShape = boolBasic.Length == 0
-                        ? (long[])this.shape.Select(x => (long)x).ToArray()
-                        : this[boolBasic].shape.Select(x => (long)x).ToArray();
+                        ? (long[])this.Shape.dimensions.Select(x => (long)x).ToArray()
+                        : this[boolBasic].Shape.dimensions.Select(x => (long)x).ToArray();
                     selShape[boolAxis] = 0;                      // False -> empty axis
                     string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
-                    try { np.broadcast_to(values, (Shape)selShape); }
+                    try { np.broadcast_to(values, Shape.Adopt(selShape)); }
                     catch (IncorrectShapeException ex)
                     {
                         throw new ValueError($"shape mismatch: value array of shape {Tup(values.Shape.dimensions)} " +
@@ -322,10 +324,11 @@ namespace NumSharp
             // scatters the value (broadcast to the grid shape) in one pass.
             if (TryBuildMultiAdvancedGrid(indicesObjects, out var multiGrid))
             {
-                NDArray v = values;
+                // NumPy's MapIter value rule (leading axes dropped, its ValueError text): PrepareAssignedValue.
                 var gridShape = multiGrid[0].Shape;
+                NDArray v = PrepareAssignedValue(values, gridShape.dimensions);
                 if (!System.Linq.Enumerable.SequenceEqual(v.Shape.dimensions, gridShape.dimensions))
-                    v = np.broadcast_to(values, gridShape);
+                    v = np.broadcast_to(v, gridShape);
                 SetIndices(this, multiGrid, v);
                 return;
             }
@@ -489,7 +492,7 @@ namespace NumSharp
             {
                 var ndim = indicesObjects.Length;
                 var prematureSlices = new Slice[ndim];
-                var dims = @this.shape;
+                var dims = @this.Shape.dimensions;
                 for (int i = 0; i < ndim; i++)
                 {
                     if (indicesObjects[i] is Slice slice)
@@ -506,7 +509,7 @@ namespace NumSharp
                 @this = @this[prematureSlices];
 
                 //updated premature axes
-                dims = @this.shape;
+                dims = @this.Shape.dimensions;
                 for (int i = 0; i < ndim; i++)
                 {
                     if (prematureSlices[i] != Slice.All)
@@ -654,7 +657,7 @@ namespace NumSharp
                 //handle non-flat index
                 if (idxs.ndim != 1)
                 {
-                    indicesImpliedShape = idxs.shape;
+                    indicesImpliedShape = idxs.Shape.dimensions;
                     idxs = idxs.flat;
                 }
 
@@ -698,7 +701,7 @@ namespace NumSharp
                     var nd = indices[i];
                     if (nd.ndim != 1)
                     {
-                        indicesImpliedShape = nd.shape;
+                        indicesImpliedShape = nd.Shape.dimensions;
                         indices[i] = nd = nd.flat;
                     }
                 }
@@ -707,7 +710,7 @@ namespace NumSharp
             //resolve retShape
             if (!isSubshaped)
             {
-                retShape = indicesImpliedShape ?? (long[])idxs.shape.Clone();
+                retShape = indicesImpliedShape ?? (long[])idxs.Shape.dimensions.Clone();
             }
             else
             {
@@ -715,7 +718,7 @@ namespace NumSharp
                 {
                     retShape = new long[idxs.ndim + srcShape.NDim - ndsCount];
                     for (int i = 0; i < idxs.ndim; i++)
-                        retShape[i] = idxs.shape[i];
+                        retShape[i] = idxs.Shape.dimensions[i];
 
 
                     subShape = new long[srcShape.NDim - ndsCount];
@@ -739,6 +742,13 @@ namespace NumSharp
                         retShape = Arrays.Concat(indicesImpliedShape, subShape);
                 }
             }
+
+            // NumPy prepares the value against the indexing-result shape BEFORE its first store (MapIter's
+            // extra_op block): a value with more axes than the result loses its leading axes (they must hold
+            // one element in total: a (1, N) matrix row fits an (N,) selection), and one that still cannot
+            // broadcast raises "shape mismatch: value array of shape ... could not be broadcast to indexing
+            // result of shape ...". Every route below receives the prepared value.
+            values = PrepareAssignedValue(values, retShape);
 
             // Kernel route — ONE index array into a C-contiguous destination (a[idx] = v, m[ridx] = v,
             // m[ridx] = row): validate every index first (NumPy's mapiter_trivial_set does exactly that
@@ -837,7 +847,7 @@ namespace NumSharp
                     string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
                     try
                     {
-                        valuesTyped = np.broadcast_to(valuesTyped, (Shape)retShape).copy().MakeGeneric<T>();
+                        valuesTyped = np.broadcast_to(valuesTyped, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
                     }
                     catch (IncorrectShapeException ex)
                     {
@@ -865,7 +875,7 @@ namespace NumSharp
                 {
                     try
                     {
-                        typedValues = np.broadcast_to(typedValues, (Shape)retShape).copy().MakeGeneric<T>();
+                        typedValues = np.broadcast_to(typedValues, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
                     }
                     catch (IncorrectShapeException ex)
                     {
@@ -933,7 +943,7 @@ namespace NumSharp
                 // exactly retShape (the same ValueError texts as the general route, per branch).
                 try
                 {
-                    typed = np.broadcast_to(typed, (Shape)retShape).copy().MakeGeneric<T>();
+                    typed = np.broadcast_to(typed, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
                 }
                 catch (IncorrectShapeException ex)
                 {

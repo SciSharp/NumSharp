@@ -21,9 +21,13 @@ namespace NumSharp
         /// np.isreal(a)  // [True, True, True]
         /// </code>
         /// </example>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // reclaims the np.imag view and the Scalar(0) temp the complex branch hands to np.equal
         public static NDArray isreal(NDArray a)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped(a, static s => isreal(s));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
 
@@ -33,7 +37,7 @@ namespace NumSharp
             // only (never `a.Shape`, whose strides/offset for a sliced/broadcast/strided view make
             // np.ones read past the logical window and return garbage bytes).
             if (a.GetTypeCode != NPTypeCode.Complex)
-                return np.ones(new Shape(a.shape), NPTypeCode.Boolean);
+                return np.ones(Shape.Adopt(a.Shape.dimensions), NPTypeCode.Boolean);
 
             // Complex: the imaginary lane (a strided float64 view via np.imag) compared to zero.
             // IEEE `==` gives NumPy's semantics exactly: -0.0 == 0 (real), NaN/Inf != 0 (not real).
@@ -57,9 +61,16 @@ namespace NumSharp
         /// np.iscomplex(a)  // [False, False, False]
         /// </code>
         /// </example>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // reclaims the np.imag view and the Scalar(0) temp the complex branch hands to np.not_equal
         public static NDArray iscomplex(NDArray a)
         {
+            // A numpy.matrix operand: a complex one is `ax.imag != 0`, a ufunc (a matrix comes back); any other
+            // dtype is a new zeros array, which is plain.
+            if (NDMatrixBoundary.Sees(a))
+                return a.GetTypeCode == NPTypeCode.Complex
+                    ? NDMatrixBoundary.Wrapped(a, static s => iscomplex(s))
+                    : NDMatrixBoundary.Plain(a, static s => iscomplex(s));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
 
@@ -68,7 +79,7 @@ namespace NumSharp
             // Non-complex short-circuits to all-False from the DIMENSIONS only (not `a.Shape`, whose
             // view strides/offset would make np.zeros emit garbage bytes on a strided/broadcast input).
             if (a.GetTypeCode != NPTypeCode.Complex)
-                return np.zeros(new Shape(a.shape), NPTypeCode.Boolean);
+                return np.zeros(Shape.Adopt(a.Shape.dimensions), NPTypeCode.Boolean);
 
             // Complex: the imaginary lane (a strided float64 view via np.imag) compared to zero.
             // IEEE `!=` gives NumPy's semantics exactly: -0.0 != 0 is False, NaN/Inf != 0 is True.

@@ -21,6 +21,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray vander(NDArray x, int? N = null, bool increasing = false)
         {
+            using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             x = np.asarray(x);
             if (x.ndim != 1)
                 throw new ValueError("x must be a one-dimensional array or sequence.");

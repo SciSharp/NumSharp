@@ -107,6 +107,29 @@ namespace NumSharp.Backends.Unmanaged.Pooling
     ///     • Return is best-effort: when the bucket is full or the size
     ///       falls outside the pool's window the pointer is freed
     ///       immediately via <see cref="NativeMemory.Free"/>.
+    ///     • Return must be given the size the buffer was taken with: the
+    ///       size selects the bucket AND tells whether the buffer has an
+    ///       alignment header (see ALIGNMENT).
+    ///
+    ///     ALIGNMENT (2026-10-10)
+    ///     ----------------------
+    ///     A buffer of <see cref="AlignedMinBytes"/> (one page) or more
+    ///     starts on a <see cref="BufferAlignment"/>-byte boundary, whether it
+    ///     is fresh, zeroed, reused from a bucket or outside the pooled
+    ///     window. The C allocator aligns to 16 bytes, so half of all
+    ///     buffers used to start in the middle of a 32-byte vector, where
+    ///     every second vector load or store of a SIMD kernel crosses a
+    ///     cache line. A kernel can align ONE of its streams with a scalar
+    ///     prefix; only the allocator can align all of them. Measured on
+    ///     the comparison benchmark (two arrays of 100,000 elements, the
+    ///     result fresh): float64 20.0 -> 15.1 us, float32 10.6 -> 8.5,
+    ///     int32 11.4 -> 9.4, int16 6.4 -> 5.7; 82 of 614 cells at that size
+    ///     ran 10 percent or more faster, and the cells at 1,000 and at
+    ///     10,000,000 elements did not move. The cost is
+    ///     <see cref="AlignedOverheadBytes"/> (80) bytes a buffer.
+    ///     The boundary is a cache line, NOT a page: buffers that all start
+    ///     at one page offset put every stream of a many-operand kernel in
+    ///     the same cache set at each step.
     /// </summary>
     public static unsafe class SizeBucketedBufferPool
     {
@@ -179,6 +202,112 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         /// </summary>
         public static readonly bool GuardPagesEnabled =
             OsVirtualMemory.IsSupported && EnvVars.DebugGuardPages;
+
+        /// <summary>
+        ///     Byte size from which a buffer is handed out on a <see cref="BufferAlignment"/>-byte boundary: one
+        ///     page. A smaller buffer stays in the L1 cache while a kernel works on it, where a vector load that
+        ///     crosses a cache line costs nothing that can be measured, and the header of an aligned buffer
+        ///     (<see cref="AlignedOverheadBytes"/>) would be a large part of it.
+        /// </summary>
+        /// <remarks>
+        ///     WHY ALIGN AT ALL. The C allocator returns 16-byte aligned blocks, so half of all buffers start in the
+        ///     middle of a 32-byte vector and every second vector load or store of a kernel then crosses a cache
+        ///     line. Measured on the comparison kernels with the operands in the L2 cache, ns an element, buffer on
+        ///     a 64-byte boundary against 16 bytes past one: float64 two arrays 0.141 and 0.250, float32 0.074 and
+        ///     0.126, uint8 against a value 0.026 and 0.036. Each array won or lost 20 to 78 percent by its address.
+        ///     NumPy's buffers are 16-byte aligned too (measured: <c>ctypes.data % 64</c> is uniform over
+        ///     0 / 16 / 32 / 48 up to 800 KB), so this is a place where NumSharp is the faster library by
+        ///     construction, not by chance.
+        /// </remarks>
+        public const long AlignedMinBytes = 4096;
+
+        /// <summary>
+        ///     Alignment, in bytes, of every buffer of <see cref="AlignedMinBytes"/> or more: one cache line, which
+        ///     is also a whole number of 128-, 256- and 512-bit vectors.
+        /// </summary>
+        public const int BufferAlignment = 64;
+
+        /// <summary>
+        ///     Bytes in front of an aligned buffer that hold what <see cref="FreeFresh"/> needs: the pointer the C
+        ///     allocator returned and the size the buffer was requested with.
+        /// </summary>
+        private const int AlignedHeaderBytes = 16;
+
+        /// <summary>
+        ///     Extra bytes one aligned buffer costs: the header and the distance to the next boundary (at most
+        ///     <see cref="BufferAlignment"/>). 80 bytes on a buffer of at least 4096: under 2 percent.
+        /// </summary>
+        public const int AlignedOverheadBytes = BufferAlignment + AlignedHeaderBytes;
+
+        /// <summary>
+        ///     A fresh, uninitialised buffer from the C allocator, on a <see cref="BufferAlignment"/>-byte boundary
+        ///     from <see cref="AlignedMinBytes"/> bytes up. Free it with <see cref="FreeFresh"/> and the SAME size.
+        /// </summary>
+        /// <param name="bytes">Byte size requested.</param>
+        /// <returns>The buffer.</returns>
+        /// <exception cref="OutOfMemoryException">The allocator has no memory for it.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static IntPtr AllocFresh(long bytes)
+            => bytes < AlignedMinBytes ? (IntPtr)NativeMemory.Alloc((nuint)bytes) : AllocAligned(bytes, zeroed: false);
+
+        /// <summary>
+        ///     A fresh zero-filled buffer from the C allocator (<c>calloc</c>), aligned like <see cref="AllocFresh"/>.
+        /// </summary>
+        /// <param name="bytes">Byte size requested.</param>
+        /// <returns>The buffer, every byte of it zero.</returns>
+        /// <exception cref="OutOfMemoryException">The allocator has no memory for it.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static IntPtr AllocFreshZeroed(long bytes)
+            => bytes < AlignedMinBytes ? (IntPtr)NativeMemory.AllocZeroed((nuint)bytes) : AllocAligned(bytes, zeroed: true);
+
+        /// <summary>
+        ///     Allocates <paramref name="bytes"/> on a <see cref="BufferAlignment"/>-byte boundary: a block that is
+        ///     <see cref="AlignedOverheadBytes"/> larger, the first boundary at least a header past its start, and
+        ///     the block's own pointer and <paramref name="bytes"/> stored in that header.
+        /// </summary>
+        /// <param name="bytes">Byte size requested (at least <see cref="AlignedMinBytes"/>).</param>
+        /// <param name="zeroed">Take the block from <c>calloc</c>.</param>
+        /// <returns>The aligned buffer.</returns>
+        /// <exception cref="OutOfMemoryException">The allocator has no memory for it.</exception>
+        /// <remarks>
+        ///     Why a header and not <see cref="NativeMemory.AlignedAlloc"/>: the zeroed path must stay
+        ///     <c>calloc</c>. For a large block the C runtime hands out pages the operating system zeroes when they
+        ///     are first written, which is what makes <c>np.zeros</c> of a huge array cost microseconds; there is no
+        ///     aligned <c>calloc</c>, and an aligned allocation followed by a clear would touch every page. With the
+        ///     header both paths end in the same <see cref="NativeMemory.Free"/>, on every operating system. Writing
+        ///     the header touches the block's first page only.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static IntPtr AllocAligned(long bytes, bool zeroed)
+        {
+            // checked: a size close to the address-space limit must fail as an allocation failure, not wrap.
+            nuint total = checked((nuint)bytes + (nuint)AlignedOverheadBytes);
+            byte* raw = (byte*)(zeroed ? NativeMemory.AllocZeroed(total) : NativeMemory.Alloc(total));
+            byte* aligned = (byte*)(((nuint)raw + (nuint)AlignedHeaderBytes + (nuint)(BufferAlignment - 1)) & ~(nuint)(BufferAlignment - 1));
+            ((void**)aligned)[-1] = raw;
+            ((long*)aligned)[-2] = bytes;
+            return (IntPtr)aligned;
+        }
+
+        /// <summary>
+        ///     Frees a buffer of <see cref="AllocFresh"/> / <see cref="AllocFreshZeroed"/>.
+        /// </summary>
+        /// <param name="ptr">The buffer.</param>
+        /// <param name="bytes">The size it was requested with. It decides whether the buffer has a header, so a
+        ///     size on the other side of <see cref="AlignedMinBytes"/> than the one allocated with frees a wrong
+        ///     pointer. Every caller of <see cref="Take"/> returns its buffer with the size it took.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void FreeFresh(IntPtr ptr, long bytes)
+        {
+            if (bytes < AlignedMinBytes)
+            {
+                NativeMemory.Free((void*)ptr);
+                return;
+            }
+            byte* aligned = (byte*)ptr;
+            Debug.Assert(((long*)aligned)[-2] == bytes, "A pooled buffer was returned with another size than it was taken with.");
+            NativeMemory.Free(((void**)aligned)[-1]);
+        }
 
         // Guard-mode bookkeeping: usable pointer -> reserved region base (for FreeGuarded).
         private static readonly ConcurrentDictionary<IntPtr, IntPtr> _guardRegions = new();
@@ -279,7 +408,9 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         /// <summary>
         ///     Take a buffer of the given byte size. Returns either a reused
         ///     warm buffer or a fresh allocation; either way the caller owns
-        ///     it and must eventually Return or Free it. The memory is NOT
+        ///     it and must eventually <see cref="Return"/> it with the same byte
+        ///     size (never free it directly: from <see cref="AlignedMinBytes"/> up
+        ///     the pointer is not the C allocator's own). The memory is NOT
         ///     zeroed.
         /// </summary>
         /// <param name="bytes">Byte size of the buffer. Must be &gt; 0.</param>
@@ -296,7 +427,7 @@ namespace NumSharp.Backends.Unmanaged.Pooling
             {
                 Interlocked.Increment(ref _misses);
                 PaceIfStarved();
-                return (IntPtr)NativeMemory.Alloc((nuint)bytes);
+                return AllocFresh(bytes);
             }
 
             if (_buckets.TryGetValue(bytes, out var bucket) && bucket.Stack.TryPop(out var ptr))
@@ -314,7 +445,7 @@ namespace NumSharp.Backends.Unmanaged.Pooling
 
             Interlocked.Increment(ref _misses);
             PaceIfStarved();
-            return (IntPtr)NativeMemory.Alloc((nuint)bytes);
+            return AllocFresh(bytes);
         }
 
         /// <summary>
@@ -346,10 +477,11 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         ///     OWNERSHIP &amp; PRESSURE
         ///     ---------------------
         ///     The caller owns the returned pointer and must eventually
-        ///     <see cref="Return"/> or free it; a calloc'd pointer is a normal
-        ///     <see cref="NativeMemory"/> allocation, so Return may pool it for
-        ///     later (non-zero) reuse by <see cref="Take"/> or free it via
-        ///     <see cref="NativeMemory.Free"/>. Outstanding-byte accounting is
+        ///     <see cref="Return"/> it with the same byte size. A calloc'd buffer
+        ///     is laid out like one of <see cref="Take"/> (aligned, with the same
+        ///     header, from <see cref="AlignedMinBytes"/> up), so Return may pool it
+        ///     for later (non-zero) reuse by <see cref="Take"/> or free it.
+        ///     Outstanding-byte accounting is
         ///     registered here exactly as <see cref="Take"/> does, so the
         ///     paired <see cref="Return"/> balances it, and the pacing trigger
         ///     keeps dropped np.zeros graphs collected promptly.
@@ -378,15 +510,15 @@ namespace NumSharp.Backends.Unmanaged.Pooling
 
             Interlocked.Increment(ref _zeroedAllocs);
             PaceIfStarved();
-            return (IntPtr)NativeMemory.AllocZeroed((nuint)bytes);
+            return AllocFreshZeroed(bytes);
         }
 
         /// <summary>Guard-mode allocation: a page-protected buffer, tracked for <see cref="Return"/>.</summary>
         private static IntPtr TakeGuarded(long bytes)
         {
             var p = OsVirtualMemory.AllocGuarded(bytes, out var region);
-            if (p == IntPtr.Zero)   // VirtualAlloc exhausted: fall back so the run continues
-                return (IntPtr)NativeMemory.Alloc((nuint)bytes);
+            if (p == IntPtr.Zero)   // VirtualAlloc exhausted: fall back so the run continues (Return frees it by size)
+                return AllocFresh(bytes);
             _guardRegions[p] = region;
             Interlocked.Increment(ref _misses);
             return p;
@@ -400,8 +532,11 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         ///     already at capacity, the buffer is freed via
         ///     <see cref="NativeMemory.Free"/> instead of being kept.
         /// </summary>
-        /// <param name="ptr">Pointer obtained from <see cref="Take"/> or a paired NativeMemory.Alloc.</param>
-        /// <param name="bytes">Size in bytes originally requested.</param>
+        /// <param name="ptr">Pointer obtained from <see cref="Take"/> or <see cref="TakeZeroed"/>. A pointer from
+        ///     another allocator must not be returned here: from <see cref="AlignedMinBytes"/> up the pool reads its
+        ///     own header in front of the buffer.</param>
+        /// <param name="bytes">Size in bytes originally requested. It must be the size passed to the Take call:
+        ///     it selects the bucket and tells whether the buffer has an alignment header.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static void Return(IntPtr ptr, long bytes)
         {
@@ -421,7 +556,7 @@ namespace NumSharp.Backends.Unmanaged.Pooling
 
             if (bytes < MinPoolableBytes || bytes >= MaxPoolableBytes)
             {
-                NativeMemory.Free((void*)ptr);
+                FreeFresh(ptr, bytes);
                 Interlocked.Increment(ref _returnsFreed);
                 return;
             }
@@ -434,7 +569,7 @@ namespace NumSharp.Backends.Unmanaged.Pooling
             if (newDepth > bucket.Cap)
             {
                 Interlocked.Decrement(ref bucket.Depth);
-                NativeMemory.Free((void*)ptr);
+                FreeFresh(ptr, bytes);
                 Interlocked.Increment(ref _returnsFreed);
                 return;
             }
@@ -454,7 +589,7 @@ namespace NumSharp.Backends.Unmanaged.Pooling
             {
                 while (kv.Value.Stack.TryPop(out var ptr))
                 {
-                    NativeMemory.Free((void*)ptr);
+                    FreeFresh(ptr, kv.Key);   // a bucket's key is the size every buffer in it was taken with
                     Interlocked.Decrement(ref kv.Value.Depth);
                 }
             }

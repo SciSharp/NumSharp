@@ -75,7 +75,7 @@ namespace NumSharp
             // Build the output shape = input shape with axis -> nout.
             var outDims = (long[])src.Shape.dimensions.Clone();
             outDims[ax] = nout;
-            var outShape = new Shape(outDims);
+            var outShape = Shape.Adopt(outDims);
 
             NDArray result;
             NDArray castTarget = null;   // set when out's dtype is a same_kind cast OF the loop dtype
@@ -84,7 +84,7 @@ namespace NumSharp
                 if (@out.ndim != ndim)
                     throw new ArgumentException("output array has wrong shape.");
                 for (int d = 0; d < ndim; d++)
-                    if (@out.shape[d] != outDims[d])
+                    if (@out.Shape.dimensions[d] != outDims[d])
                         throw new ArgumentException("output array has wrong shape.");
 
                 NPTypeCode outTc = @out.GetTypeCode;
@@ -117,7 +117,7 @@ namespace NumSharp
                 result = new NDArray(outDtype, outShape, false);
             }
 
-            long nin = src.shape[ax];
+            long nin = src.Shape.dimensions[ax];
             long inAxisStride = src.Shape.strides[ax];
             long outAxisStride = result.Shape.strides[ax];
             long[] inStrides = src.Shape.strides;
@@ -127,7 +127,7 @@ namespace NumSharp
 
             // Number of independent 1-D transforms (product of all-but-axis dims).
             long lanes = 1;
-            for (int d = 0; d < ndim; d++) if (d != ax) lanes *= src.shape[d];
+            for (int d = 0; d < ndim; d++) if (d != ax) lanes *= src.Shape.dimensions[d];
             if (lanes == 0) return castTarget ?? result; // an empty non-axis dimension: nothing to do
 
             // Compute mode for a float32/float16-precision transform (numpy parity — see the docs on
@@ -195,10 +195,10 @@ namespace NumSharp
                 idx[d]++;
                 inBase += inStrides[d];
                 outBase += outStrides[d];
-                if (idx[d] < src.shape[d]) return;
+                if (idx[d] < src.Shape.dimensions[d]) return;
                 idx[d] = 0;
-                inBase -= src.shape[d] * inStrides[d];
-                outBase -= src.shape[d] * outStrides[d];
+                inBase -= src.Shape.dimensions[d] * inStrides[d];
+                outBase -= src.Shape.dimensions[d] * outStrides[d];
             }
         }
 

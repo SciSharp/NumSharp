@@ -18,6 +18,9 @@ namespace NumSharp.Backends.Kernels
         // Future
         Power,
         FloorDivide,
+        /// <summary>C-style floating remainder (np.fmod): result takes the sign of the DIVIDEND,
+        /// unlike <see cref="Mod"/> (floored, sign of divisor). Scalar-only, all int+float dtypes.</summary>
+        Fmod,
         LeftShift,
         RightShift,
         // Transcendental binary
@@ -41,7 +44,27 @@ namespace NumSharp.Backends.Kernels
         /// <summary>Next representable value after x1 toward x2 (np.nextafter).</summary>
         NextAfter,
         /// <summary>Magnitude of x1 with the sign of x2 (np.copysign).</summary>
-        CopySign
+        CopySign,
+        /// <summary>sqrt(x1**2 + x2**2) without spurious overflow/underflow (np.hypot). Correctly-rounded
+        /// (Borges FMA); routed to NDHypotMath, scalar-only like the rest of this family.</summary>
+        Hypot,
+        /// <summary>The Heaviside step function (np.heaviside): 0 if x1&lt;0, x2 if x1==0, 1 if x1&gt;0, and
+        /// the positive canonical NaN if x1 is NaN. NOT commutative — x1 selects the branch, x2 is only the
+        /// x1==0 fill (its exact bits, NaN sign included, pass through). Float-tier promotion like the rest
+        /// of this family (ATan2), but unlike them it has a branchless SIMD fast path (compare + select,
+        /// no libm) because every output is an exact value; routed to NDHeavisideMath.</summary>
+        Heaviside,
+        // Number-theoretic binary — INTEGER-ONLY (no bool/float/complex/decimal loop; those raise the
+        // no-loop error at the np.* boundary). Data-dependent scalar Euclidean loop per element, so — like
+        // NumPy itself ("It may be nice to vectorize these, OTOH…") — there is NO SIMD path: absent from
+        // CanUseSimdForOp, they route through the scalar per-element kernel (NDGcdLcm helpers). Uniform
+        // NEP50 promotion (both operands + output share one integer dtype); uint64+signed → float64 → no loop.
+        /// <summary>Greatest common divisor of |x1| and |x2| (np.gcd). Result is non-negative except where
+        /// the magnitude wraps the signed range (gcd(int8 -128,-128) == -128). gcd(0,0) == 0.</summary>
+        Gcd,
+        /// <summary>Lowest common multiple of |x1| and |x2| (np.lcm): 0 if either is 0, else |x1|/gcd*|x2|
+        /// (divide-before-multiply; the product WRAPS the dtype on overflow, matching NumPy).</summary>
+        Lcm
     }
 
     /// <summary>
@@ -52,6 +75,14 @@ namespace NumSharp.Backends.Kernels
         // Core operations (Phase 1)
         Negate,
         Abs,
+        /// <summary>
+        /// np.fabs — the float-only absolute value. The KERNEL is identical to <see cref="Abs"/> on
+        /// the float loops (clear the IEEE sign bit), so every emit site aliases Fabs to Abs; it is a
+        /// DISTINCT op only so it reports the ufunc name "fabs" (not "absolute") in errors and carries
+        /// its own float-tier dtype resolution (see <c>DefaultEngine.Fabs</c>). Never has complex/int
+        /// input at the kernel — <c>Fabs</c> rejects complex and promotes int→float before dispatch.
+        /// </summary>
+        Fabs,
         Sqrt,
         Exp,
         Log,
@@ -104,6 +135,14 @@ namespace NumSharp.Backends.Kernels
         IsPosInf,
         /// <summary>Test element-wise for negative infinity (np.isneginf). x == -inf.</summary>
         IsNegInf,
+        /// <summary>
+        /// Test element-wise whether the IEEE sign bit is set (np.signbit). Returns bool.
+        /// This is NOT <c>x &lt; 0</c>: it is defined on the raw bit pattern, so <c>-0.0</c> and a
+        /// negative NaN are True while <c>+0.0</c>, <c>+inf</c> and a positive NaN are False. For
+        /// signed integers it coincides with <c>x &lt; 0</c> (the two's-complement MSB); for unsigned
+        /// integers / bool it is always False; complex has no loop (rejected at the np.* layer).
+        /// </summary>
+        SignBit,
 
         /// <summary>
         /// Complex conjugate (np.conjugate / np.conj). Identity at every real dtype
@@ -111,7 +150,76 @@ namespace NumSharp.Backends.Kernels
         /// flips the sign of the imaginary part for Complex (via <c>System.Numerics.Complex.Conjugate</c>).
         /// Dtype is preserved (never promoted), matching NumPy's per-dtype conjugate loops.
         /// </summary>
-        Conjugate
+        Conjugate,
+
+        /// <summary>
+        /// Distance to the adjacent representable value away from zero — one ULP (np.spacing).
+        /// Float-only ufunc (ee/ff/dd loops + NumSharp's decimal extension; complex has NO loop).
+        /// float32/float64 are SIGNED (carry the sign of x, +minsubnormal at ±0) via the raw
+        /// bit-increment <c>reinterpret(bits(x)+1) - x</c>; float16 is NumPy's separate always-positive
+        /// <c>npy_half_spacing</c>. See <see cref="NumSharp.Utilities.NDSpacingMath"/>.
+        /// </summary>
+        Spacing,
+
+        /// <summary>
+        /// Population count of the absolute value — the number of set bits in <c>|x|</c> (np.bitwise_count),
+        /// NumPy's <c>npy_popcount(a &lt; 0 ? -a : a)</c>. INTEGER/BOOL ONLY: every supported dtype
+        /// (bool/byte/sbyte/int16/uint16/int32/uint32/int64/uint64/char) maps to a <b>uint8</b> result,
+        /// float/complex/decimal/half raise the no-loop TypeError at the np.* boundary. Two consequences
+        /// that make it behave like the float classification predicates (<see cref="IsNan"/> etc.) rather
+        /// than an ordinary math op: it CONSUMES the input dtype and the emitter itself yields the (byte)
+        /// result — the scalar/strided loops must NOT convert input→output first (which would truncate a
+        /// wide value to 8 bits before counting) — and the output dtype is fixed regardless of input width.
+        /// Signed negatives count the magnitude (<c>bitwise_count(-1)==1</c>, not 8; the min value's
+        /// two's-complement negation wraps to itself, so <c>bitwise_count(int8 -128)==1</c>), computed via
+        /// a branchless abs (<c>(x^(x&gt;&gt;w-1))-(x&gt;&gt;w-1)</c>) before <c>BitOperations.PopCount</c>.
+        /// </summary>
+        BitwiseCount,
+
+        /// <summary>
+        /// Round to the nearest integer, half-to-even (np.rint) — the TRUE ufunc form of round-half-to-even.
+        /// The VALUE computation is IDENTICAL to <see cref="Round"/> (both are <c>Math.Round</c>'s default
+        /// banker's rounding), so every emit site ALIASES Rint to Round (the <see cref="Fabs"/>/<see cref="Abs"/>
+        /// pattern); it is a DISTINCT op only because its DTYPE rule differs — unlike <see cref="Round"/>
+        /// (which preserves the input dtype: an integer array stays that integer type), <c>rint</c> PROMOTES
+        /// to a float tier (bool/int8/uint8→float16, int16/uint16→float32, int32+→float64; float/complex/decimal
+        /// preserved), so it never has an integer <c>type</c> at the kernel. NumSharp's engine <c>np.rint</c>
+        /// reaches Round's kernel through <see cref="Round"/> with a float return type; this separate op exists
+        /// for the fused expression engine (<see cref="NumSharp.Backends.Iteration.NDExpr"/>), whose one-op-per-node
+        /// model needs a distinct node to carry rint's float-tier typing while sharing Round's kernel.
+        /// </summary>
+        Rint,
+
+        /// <summary>
+        /// Real part (np.real). complex128 → float64 (extract the real lane); every REAL dtype is the
+        /// IDENTITY with its dtype PRESERVED (the real part of a real number is itself). NOT a ufunc, so
+        /// there is NO engine kernel for this op — it exists ONLY for the fused expression engine
+        /// (<see cref="NumSharp.Backends.Iteration.NDExpr"/>), which handles it entirely in
+        /// <c>UnaryNode.EmitScalar</c> (a complex child calls <see cref="NumSharp.Utilities.NDComplexMath.RealPart"/>;
+        /// a real child is emitted unchanged) and never reaches <c>DirectILKernelGenerator.EmitUnaryScalarOperation</c>.
+        /// </summary>
+        Real,
+
+        /// <summary>
+        /// Imaginary part (np.imag). complex128 → float64 (extract the imaginary lane); every REAL dtype
+        /// yields ZERO with its dtype PRESERVED (the imaginary part of a real number is zero). Like
+        /// <see cref="Real"/> it is NOT a ufunc and has NO engine kernel — the fused expression engine
+        /// handles it in <c>UnaryNode.EmitScalar</c> (a complex child calls
+        /// <see cref="NumSharp.Utilities.NDComplexMath.ImagPart"/>; a real child pushes a zero of the
+        /// preserved dtype, the input VALUE unread — matching np.imag's <c>zeros_like</c>).
+        /// </summary>
+        Imag,
+
+        /// <summary>
+        /// Phase angle in radians (np.angle, radians only — no <c>deg=</c> in the fused primitive).
+        /// complex128 → float64 as <c>atan2(imag, real)</c>; a REAL input is <c>atan2(0, x)</c> (0 for
+        /// x ≥ 0, pi for x &lt; 0, NaN → NaN) at NumPy's per-dtype float tier (<see cref="np.AngleRealTier"/>:
+        /// bool/int32+/f64 → f64, int8/uint8/f16 → f16, int16/uint16/char/f32 → f32). NOT a ufunc / no
+        /// engine kernel — the fused expression engine handles it in <c>UnaryNode.EmitScalar</c>
+        /// (<see cref="NumSharp.Utilities.NDComplexMath.Angle"/> for a complex child, <c>Math.Atan2(0, x)</c>
+        /// for a real one). Host-libm (<c>atan2</c>), so bit-exact only within the host-pinned evaluate tier.
+        /// </summary>
+        Angle
     }
 
     /// <summary>

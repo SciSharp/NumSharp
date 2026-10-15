@@ -43,74 +43,72 @@ namespace NumSharp
         ///     1-D array of consecutive differences (input dtype), optionally
         ///     bracketed by <paramref name="to_begin"/> and <paramref name="to_end"/>.
         /// </returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ediff1d.html</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="ary"/> is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="to_begin"/> or <paramref name="to_end"/> cannot be
+        ///     cast to <paramref name="ary"/>'s dtype under <c>same_kind</c>.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="ary"/> is boolean (NumPy forbids boolean
+        ///     subtraction).</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.ediff1d.html
+        ///     <para>Scoped by <c>[NDScoped]</c>: the ravel, the prepared <paramref name="to_begin"/> /
+        ///     <paramref name="to_end"/> copies, the slice views of the fallback path and the middle differences
+        ///     that a concatenation supersedes are released on return, exceptions included, and the result is
+        ///     yielded. The body no longer repeats that bookkeeping with a hand-written try/finally.</para>
+        /// </remarks>
         [NDScoped]
         public static NDArray ediff1d(NDArray ary, object to_end = null, object to_begin = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(ary);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (ary is null) throw new ArgumentNullException(nameof(ary));
 
-            // ravel() always returns a fresh, disposable wrapper (it may share the
-            // caller's storage, but disposing the wrapper never frees the caller's).
+            // ravel() always returns a fresh wrapper (it may share the caller's storage);
+            // it is released by this method's scope, which never frees the caller's buffer.
             var flat = np.ravel(ary);
             NPTypeCode dt = flat.GetTypeCode;
 
             NDArray begin = null, end = null, middle = null;
-            try
+
+            // NumPy validates/casts to_begin and to_end before differencing.
+            begin = EdiffPrepareEnd(to_begin, dt, "to_begin");
+            end = EdiffPrepareEnd(to_end, dt, "to_end");
+
+            // ediff1d differences with subtract for ALL dtypes; NumPy forbids
+            // boolean subtraction (np.diff special-cases bool, ediff1d does not).
+            if (dt == NPTypeCode.Boolean)
+                throw new NotSupportedException(
+                    "numpy boolean subtract, the `-` operator, is not supported, " +
+                    "use the bitwise_xor, the `^` operator, or the logical_xor function instead.");
+
+            long L = flat.size;
+            // Fast path: the flattened input is always C-contiguous 1-D, so the middle
+            // differences are the same adjacent-difference stencil np.diff uses — one
+            // fused kernel over the source, no slice views, no NDIter. dt is non-boolean
+            // here (boolean threw above). Falls back to the slice-subtract for L<2 or an
+            // unavailable dtype kernel.
+            if (L >= 2)
+                middle = DiffAdjacentContiguous(flat, 0);
+            if (middle is null)
             {
-                // NumPy validates/casts to_begin and to_end before differencing.
-                begin = EdiffPrepareEnd(to_begin, dt, "to_begin");
-                end = EdiffPrepareEnd(to_end, dt, "to_end");
-
-                // ediff1d differences with subtract for ALL dtypes; NumPy forbids
-                // boolean subtraction (np.diff special-cases bool, ediff1d does not).
-                if (dt == NPTypeCode.Boolean)
-                    throw new NotSupportedException(
-                        "numpy boolean subtract, the `-` operator, is not supported, " +
-                        "use the bitwise_xor, the `^` operator, or the logical_xor function instead.");
-
-                long L = flat.size;
-                // Fast path: the flattened input is always C-contiguous 1-D, so the middle
-                // differences are the same adjacent-difference stencil np.diff uses — one
-                // fused kernel over the source, no slice views, no NDIter. dt is non-boolean
-                // here (boolean threw above). Falls back to the slice-subtract for L<2 or an
-                // unavailable dtype kernel.
-                if (L >= 2)
-                    middle = DiffAdjacentContiguous(flat, 0);
-                if (middle is null)
-                {
-                    long m = L > 0 ? L - 1 : 0;
-                    var hi = SliceAlongAxis(flat, 0, L - m, L); // flat[1:]
-                    var lo = SliceAlongAxis(flat, 0, 0, m);     // flat[:-1]
-                    // Same lean NDIter subtract as np.diff (uninitialised output,
-                    // no promotion/broadcast re-derivation); `-` operator as fallback.
-                    middle = DiffSubtractViaNDIter(hi, lo) ?? (hi - lo);
-                    hi.Dispose();
-                    lo.Dispose();
-                }
-
-                // Fast path: nothing to bracket — return the middle directly.
-                if (begin is null && end is null)
-                {
-                    var fast = middle;
-                    middle = null;     // hand ownership to the caller
-                    return fast;
-                }
-
-                // Assemble [to_begin?, middle, to_end?]. All three are already 1-D
-                // and of dtype dt, so concatenate keeps the dtype unchanged.
-                var parts = new List<NDArray>(3);
-                if (begin is not null) parts.Add(begin);
-                parts.Add(middle);
-                if (end is not null) parts.Add(end);
-                return np.concatenate(parts.ToArray(), 0);
+                long m = L > 0 ? L - 1 : 0;
+                var hi = SliceAlongAxis(flat, 0, L - m, L); // flat[1:]
+                var lo = SliceAlongAxis(flat, 0, 0, m);     // flat[:-1]
+                // Same lean NDIter subtract as np.diff (uninitialised output,
+                // no promotion/broadcast re-derivation); `-` operator as fallback.
+                middle = DiffSubtractViaNDIter(hi, lo) ?? (hi - lo);
             }
-            finally
-            {
-                flat.Dispose();
-                middle?.Dispose();
-                begin?.Dispose();
-                end?.Dispose();
-            }
+
+            // Fast path: nothing to bracket — return the middle directly (the scope yields it).
+            if (begin is null && end is null)
+                return middle;
+
+            // Assemble [to_begin?, middle, to_end?]. All three are already 1-D
+            // and of dtype dt, so concatenate keeps the dtype unchanged. The parts are
+            // released by this method's scope once the concatenation copied them.
+            var parts = new List<NDArray>(3);
+            if (begin is not null) parts.Add(begin);
+            parts.Add(middle);
+            if (end is not null) parts.Add(end);
+            return np.concatenate(parts.ToArray(), 0);
         }
 
         /// <summary>
@@ -120,28 +118,30 @@ namespace NumSharp
         ///     cast to <paramref name="dt"/> as a fresh owned 1-D array. Returns
         ///     <c>null</c> when <paramref name="value"/> is <c>null</c>.
         /// </summary>
+        /// <param name="value">The <c>to_begin</c>/<c>to_end</c> operand: null, a scalar, a collection or an NDArray.</param>
+        /// <param name="dt">The dtype of the flattened input.</param>
+        /// <param name="name">The parameter name quoted in the casting error.</param>
+        /// <returns>A fresh 1-D array of dtype <paramref name="dt"/>, or <c>null</c>.</returns>
+        /// <exception cref="ArgumentException"><paramref name="value"/>'s dtype cannot be cast to
+        ///     <paramref name="dt"/> under <c>same_kind</c>.</exception>
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only caller is the <c>[NDScoped]</c>
+        ///     <see cref="ediff1d"/>, so the conversion of a non-array <paramref name="value"/> and its ravel are
+        ///     released by that scope, exceptions included. An <see cref="NDArray"/> <paramref name="value"/> is the
+        ///     caller's and is never disposed.</remarks>
+        [NDScopedCovered]
         private static NDArray EdiffPrepareEnd(object value, NPTypeCode dt, string name)
         {
             if (value is null) return null;
 
             NDArray src = value is NDArray nd ? nd : np.asanyarray(value);
-            bool srcOwned = value is not NDArray;
-            NDArray flat = null;
-            try
-            {
-                if (!np.can_cast(src.GetTypeCode, dt, "same_kind"))
-                    throw new ArgumentException(
-                        $"dtype of `{name}` must be compatible with input `ary` " +
-                        "under the `same_kind` rule.", name);
 
-                flat = np.ravel(src);
-                return flat.astype(dt, copy: true);
-            }
-            finally
-            {
-                flat?.Dispose();
-                if (srcOwned) src.Dispose();
-            }
+            if (!np.can_cast(src.GetTypeCode, dt, "same_kind"))
+                throw new ArgumentException(
+                    $"dtype of `{name}` must be compatible with input `ary` " +
+                    "under the `same_kind` rule.", name);
+
+            var flat = np.ravel(src);
+            return flat.astype(dt, copy: true);
         }
     }
 }

@@ -8,36 +8,35 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Build a 2-D array from a nested sequence of blocks: <c>[[A, B], [C, D]]</c> assembles one
-        ///     matrix by joining the blocks in each inner list left-to-right and stacking the resulting
-        ///     rows top-to-bottom.
+        ///     Build a matrix from a nested sequence of blocks: <c>[[A, B], [C, D]]</c> assembles one
+        ///     <see cref="NDMatrix"/> by joining the blocks in each inner list left-to-right and stacking the
+        ///     resulting rows top-to-bottom.
         /// </summary>
         /// <param name="obj">
         ///     Rows of blocks. Each inner array holds the blocks of one row; they are concatenated along
         ///     the last axis (horizontally). The rows are then concatenated along axis 0 (vertically).
         /// </param>
-        /// <returns>The assembled 2-D array.</returns>
+        /// <returns>The assembled matrix; it owns its data in C order.</returns>
         /// <remarks>
         ///     Port of NumPy 2.x <c>numpy.bmat</c> ≙ <c>matrix(concatenate([concatenate(row, axis=-1) for
         ///     row in obj], axis=0))</c>. It is <b>pure block assembly (concatenation) — it performs NO
         ///     matrix multiplication</b>, so no BLAS/OpenBLAS path is involved; the numerics come entirely
         ///     from <see cref="concatenate(NDArray[], int?, NDArray, NPTypeCode?, string)"/> and the 2-D
-        ///     coercion from <see cref="asmatrix(NDArray, Type)"/>. NumSharp has no dedicated <c>matrix</c>
-        ///     subclass (NumPy's is pending-deprecated), so the result is a plain 2-D <see cref="NDArray"/>
-        ///     — the special matrix operators (<c>*</c> as matmul, <c>**</c> as matrix power, <c>.H</c>,
-        ///     <c>.I</c>) are NOT provided. The result dtype follows NumPy's two-stage
+        ///     coercion from <see cref="Shape.AsMatrix"/>. The result is an <see cref="NDMatrix"/>, as in
+        ///     NumPy: <c>*</c> is the matrix product on it and it has <c>.T</c>, <c>.H</c>, <c>.I</c>; seen
+        ///     through an <see cref="NDArray"/> reference it is a plain 2-D array. The result dtype follows NumPy's two-stage
         ///     <see cref="result_type(NDArray[])"/> promotion (per row, then across rows). Errors reproduce
         ///     NumPy's <see cref="ValueError"/> verbatim (see <see cref="bmat(ITuple)"/> remarks). See
         ///     <see cref="block(object)"/> for the N-D generalization.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.bmat.html
         /// </remarks>
-        // Scope: bmat builds intermediate row concatenations / a parsed-block copy and then wraps the
-        // final concatenation in an asmatrix VIEW — so every intermediate (and, for bmat(NDArray),
-        // the obj.copy() the view aliases) is orphaned once the view owns the buffer (measured: one
+        // Scope: bmat builds intermediate row concatenations / a parsed-block copy and then hands the
+        // final concatenation's storage to the matrix (BmatMatrix) — so every intermediate, and the plain
+        // wrapper of the final concatenation, is orphaned once the matrix holds the buffer (measured: one
         // bucketed buffer escaped per call). [NDScoped] reclaims the intermediates while yielding the
-        // asmatrix view; ARC keeps the view's shared buffer alive through it (rule R1 / invariant I3).
+        // matrix; ARC keeps the matrix's buffer alive through it (rule R1 / invariant I3).
         [NDScoped]
-        public static NDArray bmat(NDArray[][] obj)
+        public static NDMatrix bmat(NDArray[][] obj)
         {
             if (obj is null)
                 throw new ArgumentNullException(nameof(obj));
@@ -53,15 +52,15 @@ namespace NumSharp
                 rows[i] = BmatConcat(obj[i], -1);
             }
 
-            return asmatrix(BmatConcat(rows, 0));
+            return BmatMatrix(BmatConcat(rows, 0));
         }
 
         /// <summary>
-        ///     Build a 2-D array from a flat sequence of blocks placed side by side: <c>[A, B]</c> joins the
+        ///     Build a matrix from a flat sequence of blocks placed side by side: <c>[A, B]</c> joins the
         ///     blocks along the last axis, then coerces the result to 2-D.
         /// </summary>
         /// <param name="obj">The blocks, concatenated left-to-right (along the last axis).</param>
-        /// <returns>The assembled 2-D array.</returns>
+        /// <returns>The assembled matrix; it owns its data in C order.</returns>
         /// <remarks>
         ///     Port of NumPy 2.x <c>numpy.bmat([A, B, …])</c> ≙ <c>matrix(concatenate(obj, axis=-1))</c> —
         ///     the flat-list branch, equivalent to a single-row <c>[[A, B, …]]</c>. A flat list of 1-D
@@ -70,38 +69,39 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/generated/numpy.bmat.html
         /// </remarks>
         [NDScoped]
-        public static NDArray bmat(NDArray[] obj)
+        public static NDMatrix bmat(NDArray[] obj)
         {
             if (obj is null)
                 throw new ArgumentNullException(nameof(obj));
 
-            return asmatrix(BmatConcat(obj, -1));
+            return BmatMatrix(BmatConcat(obj, -1));
         }
 
         /// <summary>
-        ///     Interpret a single array as a matrix — a 2-D copy. A 0-D input becomes <c>(1, 1)</c>, a 1-D
-        ///     input of length N becomes <c>(1, N)</c>, and a 2-D input is copied unchanged.
+        ///     Interpret a single array as a matrix — an <see cref="NDMatrix"/> copy. A 0-D input becomes
+        ///     <c>(1, 1)</c>, a 1-D input of length N becomes <c>(1, N)</c>, and a 2-D input is copied unchanged.
         /// </summary>
         /// <param name="obj">Input array.</param>
-        /// <returns>A fresh 2-D array holding <paramref name="obj"/>'s values.</returns>
+        /// <returns>A new matrix holding <paramref name="obj"/>'s values.</returns>
         /// <remarks>
         ///     Port of NumPy 2.x <c>numpy.bmat(ndarray)</c> ≙ <c>matrix(obj)</c>, which <b>copies</b>
-        ///     (<c>matrix</c>'s default <c>copy=True</c>) — unlike <see cref="asmatrix(NDArray, Type)"/>,
-        ///     which returns a view. The copy is taken first, then coerced to 2-D, so the result never
-        ///     aliases <paramref name="obj"/>. https://numpy.org/doc/stable/reference/generated/numpy.bmat.html
+        ///     (<c>matrix</c>'s default <c>copy=True</c>) — unlike <see cref="asmatrix(NDArray, DType)"/>,
+        ///     which returns a view. The array is viewed as a matrix first (which is where an input that cannot
+        ///     be a matrix raises), then copied, so the result never aliases <paramref name="obj"/>.
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.bmat.html
         /// </remarks>
         [NDScoped]
-        public static NDArray bmat(NDArray obj)
+        public static NDMatrix bmat(NDArray obj)
         {
             if (obj is null)
                 throw new ArgumentNullException(nameof(obj));
 
             // NumPy's bmat(ndarray) is matrix(obj) with copy=True, so the result must not alias obj.
-            return asmatrix(obj.copy());
+            return NDMatrix.Create(obj, null, copy: true);
         }
 
         /// <summary>
-        ///     Build a 2-D array from C# tuples of blocks — <c>(A, B)</c> is a single side-by-side row and
+        ///     Build a matrix from C# tuples of blocks — <c>(A, B)</c> is a single side-by-side row and
         ///     <c>((A, B), (C, D))</c> is a nested block matrix — the tuple spelling of NumPy's
         ///     <c>np.bmat((A, B))</c> / <c>np.bmat(((A, B), (C, D)))</c>.
         /// </summary>
@@ -111,7 +111,7 @@ namespace NumSharp
         ///     otherwise each entry is a row (itself a tuple / <c>NDArray[]</c> / sequence of blocks),
         ///     concatenated per row and stacked along axis 0.
         /// </param>
-        /// <returns>The assembled 2-D array.</returns>
+        /// <returns>The assembled matrix; it owns its data in C order.</returns>
         /// <remarks>
         ///     Port of NumPy 2.x <c>numpy.bmat</c>'s <c>isinstance(obj, (tuple, list))</c> branch. Mixed
         ///     forms work too — <c>([A, B], [C, D])</c> (a tuple of lists) — since a row may be a tuple, an
@@ -132,7 +132,7 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         [NDScoped]
-        public static NDArray bmat(ITuple obj)
+        public static NDMatrix bmat(ITuple obj)
         {
             if (obj is null)
                 throw new ArgumentNullException(nameof(obj));
@@ -147,15 +147,15 @@ namespace NumSharp
             {
                 object row = obj[i];
                 if (row is NDArray)
-                    return asmatrix(BmatConcat(BmatTupleToBlocks(obj), -1));
+                    return BmatMatrix(BmatConcat(BmatTupleToBlocks(obj), -1));
                 arrRows.Add(BmatConcat(BmatRowToBlocks(row), -1));
             }
 
-            return asmatrix(BmatConcat(arrRows.ToArray(), 0));
+            return BmatMatrix(BmatConcat(arrRows.ToArray(), 0));
         }
 
         /// <summary>
-        ///     Build a 2-D array from a matrix string whose tokens name the blocks: rows are separated by
+        ///     Build a matrix from a matrix string whose tokens name the blocks: rows are separated by
         ///     <c>';'</c> and the blocks within a row by commas and/or whitespace, e.g.
         ///     <c>"A, B; C, D"</c>. Each token is resolved to an <see cref="NDArray"/> through the supplied
         ///     dictionaries (trying <paramref name="ldict"/> first, then <paramref name="gdict"/>); the
@@ -169,7 +169,7 @@ namespace NumSharp
         ///     Global name → array map, consulted when a name is absent from <paramref name="ldict"/>
         ///     (NumPy's <c>gdict</c>). Optional.
         /// </param>
-        /// <returns>The assembled 2-D array.</returns>
+        /// <returns>The assembled matrix; it owns its data in C order.</returns>
         /// <exception cref="NameError">A token is not present in either dictionary.</exception>
         /// <remarks>
         ///     Port of NumPy 2.x <c>numpy.bmat(str, ldict, gdict)</c> → <c>matrix(_from_string(...))</c>.
@@ -183,13 +183,13 @@ namespace NumSharp
         ///     <paramref name="gdict"/>; a token absent from both — including a numeric literal such as
         ///     <c>"1"</c>, which NumPy also treats as a name — raises <see cref="NameError"/>
         ///     ("name '{token}' is not defined"), matching NumPy verbatim. Unlike
-        ///     <see cref="asmatrix(string, Type)"/>'s literal parser, brackets are NOT stripped (they
+        ///     <see cref="asmatrix(string, DType)"/>'s literal parser, brackets are NOT stripped (they
         ///     become part of a token and fail to resolve), exactly as NumPy's <c>_from_string</c> leaves
         ///     them. https://numpy.org/doc/stable/reference/generated/numpy.bmat.html
         ///     </para>
         /// </remarks>
         [NDScoped]
-        public static NDArray bmat(string obj, IDictionary<string, NDArray> ldict,
+        public static NDMatrix bmat(string obj, IDictionary<string, NDArray> ldict,
             IDictionary<string, NDArray> gdict = null)
         {
             if (obj is null)
@@ -200,7 +200,30 @@ namespace NumSharp
                     "against the caller's Python frame, which has no C# equivalent. Pass ldict (and/or gdict).",
                     nameof(ldict));
 
-            return asmatrix(BmatFromString(obj, ldict, gdict));
+            return BmatMatrix(BmatFromString(obj, ldict, gdict));
+        }
+
+        /// <summary>
+        ///     NumPy's <c>matrix(concatenated)</c> at the end of <c>bmat</c>: the assembled array as a matrix that
+        ///     owns its data in C order. <c>matrix()</c> copies by default; the concatenation is a fresh array
+        ///     nobody else holds, so its buffer IS that copy and is handed to the matrix without a second copy
+        ///     (an F-ordered concatenation, which an all-F block set produces, is re-laid out in C order first,
+        ///     as NumPy's <c>new.copy()</c> does).
+        /// </summary>
+        /// <param name="assembled">The fresh concatenation. Its wrapper is reclaimed by the caller's scope.</param>
+        /// <returns>The matrix: 1-d folded to a row, more than two axes only when all but two have length 1.</returns>
+        /// <exception cref="ValueError">The concatenation has more than two axes longer than 1
+        ///     (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="IncorrectShapeException">More than two axes and one of extent 0.</exception>
+        [NDScopedCovered]
+        private static NDMatrix BmatMatrix(NDArray assembled)
+        {
+            // matrix(data) views the array first, so a shape that cannot be a matrix raises BEFORE NumPy's
+            // copy; NDMatrix.From applies the same rule to whichever array is handed over below.
+            if (assembled.Shape.IsContiguous)
+                return NDMatrix.From(assembled);
+            assembled.Shape.AsMatrix();
+            return NDMatrix.From(assembled.copy('C'));
         }
 
         /// <summary>
@@ -215,6 +238,7 @@ namespace NumSharp
         /// </summary>
         private static NDArray BmatConcat(NDArray[] blocks, int axis)
         {
+            using var plain = NDMatrixBoundary.Inside();   // np.bmat builds its matrix itself from the plain join
             if (blocks.Length == 0)
                 throw new ValueError("need at least one array to concatenate");
 

@@ -193,6 +193,7 @@ namespace NumSharp
             bool equal_nan = true,
             bool sorted = true)
         {
+            using var plain = NDMatrixBoundary.PlainFor(ar);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // Boundary scope: the instance unique's sort/argsort/mask internals are reclaimed at
             // exit; the present outputs are yielded (the UniqueResult carries only those arrays).
             using var scope = NDScope.Open();

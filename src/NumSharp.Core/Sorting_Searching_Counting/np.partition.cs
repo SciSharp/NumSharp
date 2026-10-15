@@ -25,8 +25,11 @@ namespace NumSharp
         ///     lexicographic real-then-imag ordering. The result is a fresh C-contiguous copy (house
         ///     np.sort convention — NumPy's copy(order='K') keeps F-order for F-inputs; values identical).
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray partition(NDArray a, int kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.Partition(a, new[] { kth }, axis, kind, order);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => partition(s.a, s.kth, s.axis, s.kind, s.order))
+            : AxisPartition.Partition(a, new[] { kth }, axis, kind, order);
 
         /// <summary>
         ///     Return a partitioned copy of an array, partitioning around EVERY index in
@@ -41,9 +44,12 @@ namespace NumSharp
         /// <param name="kind">Selection algorithm — only 'introselect' exists.</param>
         /// <param name="order">Must stay null (no structured dtypes).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.partition.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray partition(NDArray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.Partition(a, kth, axis, kind, order);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => partition(s.a, s.kth, s.axis, s.kind, s.order))
+            : AxisPartition.Partition(a, kth, axis, kind, order);
 
         /// <summary>
         ///     Return a partitioned copy with the kth indices given as an ARRAY — NumPy's array-kth
@@ -54,8 +60,11 @@ namespace NumSharp
         ///     (uint64 past 2^63 goes negative; 2^64-1 is a legal -1). 0-d and any layout accepted.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.partition.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray partition(NDArray a, NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.Partition(a, kth, axis, kind, order);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => partition(s.a, s.kth, s.axis, s.kind, s.order))
+            : AxisPartition.Partition(a, kth, axis, kind, order);
     }
 
     public partial class NDArray

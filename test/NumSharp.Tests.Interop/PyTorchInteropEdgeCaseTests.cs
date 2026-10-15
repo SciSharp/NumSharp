@@ -18,6 +18,7 @@ namespace NumSharp.Tests.Interop
     ///     (validated on 2.13.0 and 2.12.1; the gate is the <see cref="PyTorchTestGate"/> floor).
     /// </summary>
     [TestClass]
+    [PythonEcosystem]
     public class PyTorchInteropEdgeCaseTests : InteropTestBase
     {
         [TestMethod]
@@ -131,7 +132,7 @@ namespace NumSharp.Tests.Interop
                     "let two logical coordinates blindly overwrite one element");
                 using NDArray zeros = np.zeros(new Shape(2, 3));
                 new Action(() => np.copyto(expanded, zeros))
-                    .Should().Throw<NumSharpException>().WithMessage("*read-only*");
+                    .Should().Throw<ValueError>().WithMessage("*read-only*");
                 PyStr("edge_expanded_base.tolist()").Should().Be("[0.0, 1.0, 2.0]");
             }
         }
@@ -318,7 +319,7 @@ namespace NumSharp.Tests.Interop
 
                 using NDArray ones = np.ones(new Shape(4, 3));
                 new Action(() => np.copyto(view, ones))
-                    .Should().Throw<NumSharpException>().WithMessage("*read-only*");
+                    .Should().Throw<ValueError>().WithMessage("*read-only*");
                 new Action(() => { using var _ = view.ToTorch(requireGIL: false); })
                     .Should().Throw<InvalidOperationException>().WithMessage("*non-writeable*copy:true*");
 
@@ -716,14 +717,24 @@ namespace NumSharp.Tests.Interop
                     return;
                 }
 
-                using PyObject tensor = Scope.Eval($"torch.arange(6, dtype=torch.float64, device='{device}')");
+                // Apple's MPS backend has no float64 at all — torch refuses to even create one there
+                // ("MPS framework doesn't support float64"), which is exactly what the macOS CI runner,
+                // which HAS an MPS device, hit the first time this test ran on it. float32 is the widest
+                // float both accelerators share, so the MPS leg uses it; CUDA keeps float64.
+                bool mps = device == "mps";
+                using PyObject tensor = Scope.Eval(
+                    $"torch.arange(6, dtype=torch.{(mps ? "float32" : "float64")}, device='{device}')");
                 new Action(() => { using var _ = tensor.AsTorchNDArray(requireGIL: false); })
                     .Should().Throw<PythonException>().WithMessage("*CPU*");
 
                 using NDArray copy = tensor.ToTorchNDArray(force: true, requireGIL: false);
-                copy.typecode.Should().Be(NPTypeCode.Double);
+                copy.typecode.Should().Be(mps ? NPTypeCode.Single : NPTypeCode.Double);
                 copy.shape.Should().Equal(6);
-                for (int i = 0; i < 6; i++) ReadAt<double>(copy, i).Should().Be(i);
+                for (int i = 0; i < 6; i++)
+                {
+                    if (mps) ReadAt<float>(copy, i).Should().Be(i);
+                    else ReadAt<double>(copy, i).Should().Be(i);
+                }
             }
         }
 
@@ -803,8 +814,19 @@ namespace NumSharp.Tests.Interop
             return Version.Parse(numeric.Substring(0, cut).TrimEnd('.'));
         }
 
+        /// <summary>
+        ///     Gate for the live PyTorch claims: the running test must be tagged
+        ///     <see cref="PythonEcosystemAttribute"/>, and torch must be installed at
+        ///     <see cref="MinimumTorchVersion"/> or newer — otherwise the test is Inconclusive, or FAILS
+        ///     under <c>NUMSHARP_PYTHONNET_REQUIRE_PACKAGES</c> (the ecosystem environment installs it).
+        /// </summary>
+        /// <param name="scope">The test's Python namespace; <c>torch</c> is imported into it on success.</param>
+        /// <exception cref="AssertFailedException">Untagged test, or torch absent/too old under the require knob.</exception>
+        /// <exception cref="AssertInconclusiveException">torch absent or too old, and that is allowed.</exception>
         internal static void Require(PyModule scope)
         {
+            InteropTestBase.RequireEcosystemTag("torch");
+
             using (Py.GIL())
             {
                 try
@@ -813,13 +835,13 @@ namespace NumSharp.Tests.Interop
                 }
                 catch (PythonException)
                 {
-                    Assert.Inconclusive("python package 'torch' is not installed");
+                    InteropTestBase.ReportMissingPackage("python package 'torch' is not installed");
                 }
 
                 scope.Exec("import torch");
                 string version = Python.torch.version();
                 if (Parse(version) < MinimumTorchVersion)
-                    Assert.Inconclusive(
+                    InteropTestBase.ReportMissingPackage(
                         $"PyTorch {version} is installed; the live compatibility gate needs {MinimumTorchVersion} or newer " +
                         "(the release whose torch.from_numpy accepts unsigned 16/32/64-bit dtypes).");
             }

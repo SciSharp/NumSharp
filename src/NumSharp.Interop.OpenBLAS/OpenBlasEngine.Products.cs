@@ -139,7 +139,7 @@ namespace NumSharp.Interop.OpenBLAS
             long isA = a.Shape.strides[a.ndim - 1];
             long isB = b.Shape.strides[b.ndim - 1];
 
-            var outShape = bshape.Length == 0 ? Shape.Scalar : new Shape(bshape);
+            var outShape = bshape.Length == 0 ? Shape.Scalar : Shape.Adopt(bshape);
             var outBuf = new NDArray(common, outShape, fillZeros: false);
 
             T* pa = (T*)a.Address + a.Shape.offset;
@@ -429,7 +429,7 @@ namespace NumSharp.Interop.OpenBLAS
             var dims = new long[bshape.Length + 1];
             Array.Copy(bshape, dims, bshape.Length);
             dims[bshape.Length] = m;
-            return new Shape(dims);
+            return Shape.Adopt(dims);
         }
 
         private static long ProductOf(long[] dims)

@@ -40,15 +40,22 @@ namespace NumSharp
         ///     before the position <paramref name="obj"/>. Scalar-obj path.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.insert.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray insert(NDArray arr, int obj, NDArray values, int? axis = null)
-            => insert(arr, (long)obj, values, axis);
+            => NDMatrixBoundary.Sees(arr)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis))
+            : insert(arr, (long)obj, values, axis);
 
         /// <summary>
         ///     Long-index overload of <see cref="insert(NDArray, int, NDArray, int?)"/>.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // reclaims PrepareAxisContext's ravel work array and the pre-order intermediate WithSourceOrder supersedes (np.delete's exact pattern)
         public static NDArray insert(NDArray arr, long obj, NDArray values, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (values is null) throw new ArgumentNullException(nameof(values));
 
@@ -60,34 +67,61 @@ namespace NumSharp
         ///     Scalar-obj overload accepting a scalar value (NumPy: <c>np.insert(a, 1, 99)</c>).
         ///     Broadcasts the value to the required shape using <c>arr.dtype</c>.
         /// </summary>
+        /// <param name="arr">Input array.</param>
+        /// <param name="obj">The index before which the value is inserted; negative values count from the end.</param>
+        /// <param name="value">The value(s) to insert: a scalar, a C# array or collection, or an
+        ///     <see cref="NDArray"/> whose static type is <see cref="object"/>. Cast to <paramref name="arr"/>'s
+        ///     dtype.</param>
+        /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
+        /// <returns>A fresh array with the value(s) inserted (F-ordered when <paramref name="arr"/> is).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/>, <paramref name="obj"/> or <paramref name="value"/> is null.</exception>
+        /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
+        /// <remarks>
+        ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="value"/> is built in THIS frame,
+        ///     before the array overload's scope opens, so this overload releases it with a scope of its own. An
+        ///     <see cref="NDArray"/> passed as <paramref name="value"/> comes back unchanged and was built before
+        ///     the scope opened, so it is never disposed. (The hand-written version disposed the conversion
+        ///     unconditionally, which released the caller's own array.)
+        /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        [NDScoped]
         public static NDArray insert(NDArray arr, long obj, object value, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, value, axis), static s => insert(s.arr, s.obj, s.value, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             var asArr = ScalarValueAsArray(value, arr.dtype);
-            try { return insert(arr, obj, asArr, axis); }
-            finally { asArr.Dispose(); }
+            return insert(arr, obj, asArr, axis);
         }
 
         /// <summary>
         ///     int-overload accepting a scalar value.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray insert(NDArray arr, int obj, object value, int? axis = null)
-            => insert(arr, (long)obj, value, axis);
+            => NDMatrixBoundary.Sees(arr)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((arr, obj, value, axis), static s => insert(s.arr, s.obj, s.value, s.axis))
+            : insert(arr, (long)obj, value, axis);
 
         /// <summary>
         ///     Slice-obj overload. <paramref name="obj"/> is expanded via
         ///     Python <c>slice.indices(N)</c> into an indices array, then the
         ///     multi-index branch runs.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // same transient set as the long-obj overload
         public static NDArray insert(NDArray arr, Slice obj, NDArray values, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             if (values is null) throw new ArgumentNullException(nameof(values));
 
             var ctx = PrepareAxisContext(arr, axis);
-            long N = ctx.work.shape[ctx.axis];
+            long N = ctx.work.Shape.dimensions[ctx.axis];
             var indices = InsertExpandSliceObj(obj, N);
             // Slice obj is never treated as scalar for the broadcast quirk
             // (matches NumPy: ``isinstance(obj, slice)`` short-circuits the
@@ -98,12 +132,32 @@ namespace NumSharp
         /// <summary>
         ///     Slice-obj overload accepting a scalar value.
         /// </summary>
+        /// <param name="arr">Input array.</param>
+        /// <param name="obj">The insertion positions, expanded with Python's <c>slice.indices(N)</c>.</param>
+        /// <param name="value">The value(s) to insert: a scalar, a C# array or collection, or an
+        ///     <see cref="NDArray"/> whose static type is <see cref="object"/>. Cast to <paramref name="arr"/>'s
+        ///     dtype.</param>
+        /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
+        /// <returns>A fresh array with the value(s) inserted (F-ordered when <paramref name="arr"/> is).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/>, <paramref name="obj"/> or <paramref name="value"/> is null.</exception>
+        /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
+        /// <remarks>
+        ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="value"/> is built in THIS frame,
+        ///     before the array overload's scope opens, so this overload releases it with a scope of its own. An
+        ///     <see cref="NDArray"/> passed as <paramref name="value"/> comes back unchanged and was built before
+        ///     the scope opened, so it is never disposed. (The hand-written version disposed the conversion
+        ///     unconditionally, which released the caller's own array.)
+        /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        [NDScoped]
         public static NDArray insert(NDArray arr, Slice obj, object value, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, value, axis), static s => insert(s.arr, s.obj, s.value, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             var asArr = ScalarValueAsArray(value, arr.dtype);
-            try { return insert(arr, obj, asArr, axis); }
-            finally { asArr.Dispose(); }
+            return insert(arr, obj, asArr, axis);
         }
 
         /// <summary>
@@ -111,9 +165,13 @@ namespace NumSharp
         ///     (NumPy parity: <c>np.insert(arr, [1], v) != np.insert(arr, 1, v)</c>
         ///     when v has multiple axes, even though both have one insertion point).
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // same transient set as the long-obj overload
         public static NDArray insert(NDArray arr, int[] obj, NDArray values, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             if (values is null) throw new ArgumentNullException(nameof(values));
@@ -128,20 +186,44 @@ namespace NumSharp
         /// <summary>
         ///     int[]-obj overload accepting a scalar value.
         /// </summary>
+        /// <param name="arr">Input array.</param>
+        /// <param name="obj">The insertion positions (each before the original element at that index).</param>
+        /// <param name="value">The value(s) to insert: a scalar, a C# array or collection, or an
+        ///     <see cref="NDArray"/> whose static type is <see cref="object"/>. Cast to <paramref name="arr"/>'s
+        ///     dtype.</param>
+        /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
+        /// <returns>A fresh array with the value(s) inserted (F-ordered when <paramref name="arr"/> is).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/>, <paramref name="obj"/> or <paramref name="value"/> is null.</exception>
+        /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
+        /// <remarks>
+        ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="value"/> is built in THIS frame,
+        ///     before the array overload's scope opens, so this overload releases it with a scope of its own. An
+        ///     <see cref="NDArray"/> passed as <paramref name="value"/> comes back unchanged and was built before
+        ///     the scope opened, so it is never disposed. (The hand-written version disposed the conversion
+        ///     unconditionally, which released the caller's own array.)
+        /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        [NDScoped]
         public static NDArray insert(NDArray arr, int[] obj, object value, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, value, axis), static s => insert(s.arr, s.obj, s.value, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             var asArr = ScalarValueAsArray(value, arr.dtype);
-            try { return insert(arr, obj, asArr, axis); }
-            finally { asArr.Dispose(); }
+            return insert(arr, obj, asArr, axis);
         }
 
         /// <summary>
         ///     long[]-obj overload.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // same transient set as the long-obj overload
         public static NDArray insert(NDArray arr, long[] obj, NDArray values, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             if (values is null) throw new ArgumentNullException(nameof(values));
@@ -153,23 +235,65 @@ namespace NumSharp
         /// <summary>
         ///     long[]-obj overload accepting a scalar value.
         /// </summary>
+        /// <param name="arr">Input array.</param>
+        /// <param name="obj">The insertion positions (each before the original element at that index).</param>
+        /// <param name="value">The value(s) to insert: a scalar, a C# array or collection, or an
+        ///     <see cref="NDArray"/> whose static type is <see cref="object"/>. Cast to <paramref name="arr"/>'s
+        ///     dtype.</param>
+        /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
+        /// <returns>A fresh array with the value(s) inserted (F-ordered when <paramref name="arr"/> is).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/>, <paramref name="obj"/> or <paramref name="value"/> is null.</exception>
+        /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
+        /// <remarks>
+        ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="value"/> is built in THIS frame,
+        ///     before the array overload's scope opens, so this overload releases it with a scope of its own. An
+        ///     <see cref="NDArray"/> passed as <paramref name="value"/> comes back unchanged and was built before
+        ///     the scope opened, so it is never disposed. (The hand-written version disposed the conversion
+        ///     unconditionally, which released the caller's own array.)
+        /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        [NDScoped]
         public static NDArray insert(NDArray arr, long[] obj, object value, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, value, axis), static s => insert(s.arr, s.obj, s.value, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             var asArr = ScalarValueAsArray(value, arr.dtype);
-            try { return insert(arr, obj, asArr, axis); }
-            finally { asArr.Dispose(); }
+            return insert(arr, obj, asArr, axis);
         }
 
         /// <summary>
         ///     NDArray-obj overload accepting a scalar value.
         /// </summary>
+        /// <param name="arr">Input array.</param>
+        /// <param name="obj">A 0-d or 1-D integer index array, or a 1-D boolean mask of insertion positions.</param>
+        /// <param name="value">The value(s) to insert: a scalar, a C# array or collection, or an
+        ///     <see cref="NDArray"/> whose static type is <see cref="object"/>. Cast to <paramref name="arr"/>'s
+        ///     dtype.</param>
+        /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
+        /// <returns>A fresh array with the value(s) inserted (F-ordered when <paramref name="arr"/> is).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/>, <paramref name="obj"/> or <paramref name="value"/> is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="obj"/> is a boolean mask that is not 1-D, or an index
+        ///     array of more than one dimension.</exception>
+        /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
+        /// <remarks>
+        ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="value"/> is built in THIS frame,
+        ///     before the array overload's scope opens, so this overload releases it with a scope of its own. An
+        ///     <see cref="NDArray"/> passed as <paramref name="value"/> comes back unchanged and was built before
+        ///     the scope opened, so it is never disposed. (The hand-written version disposed the conversion
+        ///     unconditionally, which released the caller's own array.)
+        /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        [NDScoped]
         public static NDArray insert(NDArray arr, NDArray obj, object value, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, value, axis), static s => insert(s.arr, s.obj, s.value, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             var asArr = ScalarValueAsArray(value, arr.dtype);
-            try { return insert(arr, obj, asArr, axis); }
-            finally { asArr.Dispose(); }
+            return insert(arr, obj, asArr, axis);
         }
 
         /// <summary>
@@ -182,9 +306,25 @@ namespace NumSharp
         ///             "index array argument obj to insert must be one dimensional or scalar".</item>
         ///     </list>
         /// </summary>
+        /// <param name="arr">Input array.</param>
+        /// <param name="obj">A 0-d or 1-D integer index array, or a 1-D boolean mask of insertion positions.</param>
+        /// <param name="values">The values to insert, cast to <paramref name="arr"/>'s dtype and broadcast to the
+        ///     insertion slot.</param>
+        /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
+        /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
+        /// <exception cref="ArgumentNullException">An argument is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="obj"/> is a boolean mask that is not 1-D, or an index
+        ///     array of more than one dimension.</exception>
+        /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
+        /// <remarks>Scoped by <c>[NDScoped]</c>: the same transient set as the long-obj overload, plus the
+        ///     bool-mask flatnonzero temp, is released on return.</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // same transient set as the long-obj overload, plus the bool-mask flatnonzero temp
         public static NDArray insert(NDArray arr, NDArray obj, NDArray values, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             if (values is null) throw new ArgumentNullException(nameof(values));
@@ -197,7 +337,8 @@ namespace NumSharp
                     throw new ArgumentException(
                         "boolean array argument obj to insert must be one dimensional",
                         nameof(obj));
-                using var nzIdx = np.flatnonzero(obj);
+                // nzIdx is released by this method's scope (exceptions included).
+                var nzIdx = np.flatnonzero(obj);
                 long[] indices = ToInt64Vector(nzIdx, "insert");
                 return WithSourceOrder(arr, InsertMultiIndex(ctx.work, indices, values, ctx.axis));
             }
@@ -231,10 +372,21 @@ namespace NumSharp
         ///     (ndmin=arr.ndim, optional moveaxis for scalar-obj quirk),
         ///     concatenate pre + values + post along axis.
         /// </summary>
+        /// <param name="arr">The working array (the input, or its ravel for <c>axis=None</c>).</param>
+        /// <param name="index">The insertion index; negative values count from the end, <c>N</c> appends.</param>
+        /// <param name="values">The values to insert.</param>
+        /// <param name="axis">The normalized axis.</param>
+        /// <param name="scalarObj">True when NumPy's scalar-obj quirk applies (moveaxis of the values' first axis).</param>
+        /// <returns>A fresh array with the values inserted.</returns>
+        /// <exception cref="IndexOutOfRangeException"><paramref name="index"/> is outside <c>[-N, N]</c>.</exception>
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its callers are the <c>[NDScoped]</c> <c>insert</c> overloads,
+        ///     so the coerced values and the pre/post views are released by the caller's scope, exceptions
+        ///     included.</remarks>
+        [NDScopedCovered]
         private static NDArray InsertSingleIndex(
             NDArray arr, long index, NDArray values, int axis, bool scalarObj)
         {
-            long N = arr.shape[axis];
+            long N = arr.Shape.dimensions[axis];
             if (index < -N || index > N) // Insert allows index == N (append-at-end).
                 throw new IndexOutOfRangeException(
                     $"index {index} is out of bounds for axis {axis} with size {N}");
@@ -243,29 +395,25 @@ namespace NumSharp
             // Cast values to arr.dtype (NumPy: values = array(values, dtype=arr.dtype))
             // and ensure ndmin = arr.ndim. We need to potentially moveaxis the first
             // axis to the insertion axis (scalarObj quirk).
-            using var coerced = CoerceValuesForSingleIndex(arr, values, axis, scalarObj);
+            var coerced = CoerceValuesForSingleIndex(arr, values, axis, scalarObj);
 
-            long numNew = coerced.shape[axis];
+            long numNew = coerced.Shape.dimensions[axis];
             if (numNew == 0)
                 return DuplicateArray(arr);
 
             var pre = SliceAlongAxis(arr, axis, 0, index);
             var post = SliceAlongAxis(arr, axis, index, N);
-            try
+            // Build the chunk list, dropping any empty-along-axis ones so
+            // concatenate doesn't have to filter them itself.
+            if (pre.Shape.dimensions[axis] == 0)
             {
-                // Build the chunk list, dropping any empty-along-axis ones so
-                // concatenate doesn't have to filter them itself.
-                if (pre.shape[axis] == 0)
-                {
-                    if (post.shape[axis] == 0)
-                        return np.concatenate(new[] { coerced }, axis);
-                    return np.concatenate(new[] { coerced, post }, axis);
-                }
-                if (post.shape[axis] == 0)
-                    return np.concatenate(new[] { pre, coerced }, axis);
-                return np.concatenate(new[] { pre, coerced, post }, axis);
+                if (post.Shape.dimensions[axis] == 0)
+                    return np.concatenate(new[] { coerced }, axis);
+                return np.concatenate(new[] { coerced, post }, axis);
             }
-            finally { pre.Dispose(); post.Dispose(); }
+            if (post.Shape.dimensions[axis] == 0)
+                return np.concatenate(new[] { pre, coerced }, axis);
+            return np.concatenate(new[] { pre, coerced, post }, axis);
         }
 
         /// <summary>
@@ -273,10 +421,21 @@ namespace NumSharp
         ///     bounds-check), stable-sort and reorder values, then build the
         ///     interleaved chunk list for a single concatenate call.
         /// </summary>
+        /// <param name="arr">The working array (the input, or its ravel for <c>axis=None</c>).</param>
+        /// <param name="indices">The insertion indices; normalized in place (the caller passes an array it owns).</param>
+        /// <param name="values">The values to insert, one slot per index after broadcasting.</param>
+        /// <param name="axis">The normalized axis.</param>
+        /// <returns>A fresh array with the values interleaved at the sorted insertion positions.</returns>
+        /// <exception cref="IndexOutOfRangeException">An index is outside <c>[-N, N]</c>.</exception>
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its callers are the <c>[NDScoped]</c> <c>insert</c>
+        ///     overloads, so the coerced values, the reordering <c>take</c>, its order array and every chunk view are
+        ///     released by the caller's scope, exceptions included. The chunk views share their bases' buffers, so
+        ///     holding them until that scope closes keeps no extra memory alive.</remarks>
+        [NDScopedCovered]
         private static NDArray InsertMultiIndex(
             NDArray arr, long[] indices, NDArray values, int axis)
         {
-            long N = arr.shape[axis];
+            long N = arr.Shape.dimensions[axis];
 
             // Empty indices ⇒ NumPy returns arr.copy() (NumPy: indices.size == 0 and
             // not isinstance(obj, np.ndarray); we always normalise empty regardless,
@@ -299,7 +458,7 @@ namespace NumSharp
 
             // Coerce values to arr.dtype with axis-dim broadcast to numNew. The
             // multi-index path never applies the moveaxis quirk.
-            using var coerced = CoerceValuesForMultiIndex(arr, values, axis, numNew);
+            var coerced = CoerceValuesForMultiIndex(arr, values, axis, numNew);
 
             // Stable sort of indices, recording the permutation. Used to reorder
             // both the indices list (for chunk splitting) and the values along
@@ -312,7 +471,6 @@ namespace NumSharp
             // values[..., order, ...] — done via np.take if the order is non-trivial.
             // Skip the take if the order is already identity (early exit).
             NDArray reorderedValues = null;
-            bool ownReordered = false;
             bool needReorder = false;
             for (int i = 0; i < numNew; i++)
             {
@@ -323,62 +481,41 @@ namespace NumSharp
             {
                 var orderArr = np.array(LongArrayFromInt(order));
                 reorderedValues = np.take(coerced, orderArr, axis: axis);
-                ownReordered = true;
-                orderArr.Dispose();
             }
             else
             {
                 reorderedValues = coerced;
             }
 
-            try
+            // Build interleaved chunk list: [arr[:s0], val0, arr[s0:s1], val1, ..., arr[s_{N-1}:end]]
+            // For each sorted index s_k, take values[..., k:k+1, ...] as the value chunk.
+            int totalChunks = numNew * 2 + 1;
+            var chunks = new NDArray[totalChunks];
+            int slot = 0;
+            long prevSplit = 0;
+
+            for (int k = 0; k < numNew; k++)
             {
-                // Build interleaved chunk list: [arr[:s0], val0, arr[s0:s1], val1, ..., arr[s_{N-1}:end]]
-                // For each sorted index s_k, take values[..., k:k+1, ...] as the value chunk.
-                int totalChunks = numNew * 2 + 1;
-                var chunks = new NDArray[totalChunks];
-                var disposable = new NDArray[totalChunks];
-                int slot = 0;
-                long prevSplit = 0;
+                long s = sortedIndices[k];
+                // arr chunk [prevSplit, s)
+                var arrChunk = SliceAlongAxis(arr, axis, prevSplit, s);
+                chunks[slot] = arrChunk;
+                slot++;
 
-                try
-                {
-                    for (int k = 0; k < numNew; k++)
-                    {
-                        long s = sortedIndices[k];
-                        // arr chunk [prevSplit, s)
-                        var arrChunk = SliceAlongAxis(arr, axis, prevSplit, s);
-                        chunks[slot] = arrChunk;
-                        disposable[slot] = arrChunk;
-                        slot++;
+                // values chunk along axis: [k, k+1)
+                var valChunk = SliceAlongAxis(reorderedValues, axis, k, k + 1);
+                chunks[slot] = valChunk;
+                slot++;
 
-                        // values chunk along axis: [k, k+1)
-                        var valChunk = SliceAlongAxis(reorderedValues, axis, k, k + 1);
-                        chunks[slot] = valChunk;
-                        disposable[slot] = valChunk;
-                        slot++;
-
-                        prevSplit = s;
-                    }
-
-                    // Tail: arr[prevSplit:N]
-                    var arrTail = SliceAlongAxis(arr, axis, prevSplit, N);
-                    chunks[slot] = arrTail;
-                    disposable[slot] = arrTail;
-                    slot++;
-
-                    return np.concatenate(chunks, axis);
-                }
-                finally
-                {
-                    for (int i = 0; i < disposable.Length; i++)
-                        disposable[i]?.Dispose();
-                }
+                prevSplit = s;
             }
-            finally
-            {
-                if (ownReordered) reorderedValues.Dispose();
-            }
+
+            // Tail: arr[prevSplit:N]
+            var arrTail = SliceAlongAxis(arr, axis, prevSplit, N);
+            chunks[slot] = arrTail;
+            slot++;
+
+            return np.concatenate(chunks, axis);
         }
 
         // ---------------------------- helpers ----------------------------
@@ -389,14 +526,23 @@ namespace NumSharp
         ///     accept an unboxed scalar so callers don't have to construct
         ///     a 0-D ndarray themselves.
         /// </summary>
+        /// <param name="value">The scalar, C# array or collection, or an <see cref="NDArray"/> passed as object.</param>
+        /// <param name="dtype">The target array's dtype.</param>
+        /// <returns><paramref name="value"/> itself when it is an <see cref="NDArray"/>; otherwise its conversion,
+        ///     cast to <paramref name="dtype"/> when the inferred dtype differs.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its callers are the <c>[NDScoped]</c> object-value
+        ///     <c>insert</c> overloads, so the conversion that a cast supersedes, and the returned conversion itself,
+        ///     are released by the caller's scope. An <see cref="NDArray"/> returned as-is is the caller's and is never
+        ///     disposed.</remarks>
+        [NDScopedCovered]
         private static NDArray ScalarValueAsArray(object value, DType dtype)
         {
-            if (value is NDArray nd) return nd; // (caller should disposes the wrapper, but the as-is path is safe)
+            if (value is NDArray nd) return nd; // the caller's array, built before the scope opened: never disposed
             var asArr = np.asanyarray(value);
             if (!Equals(asArr.dtype, dtype))
             {
                 var casted = asArr.astype(dtype, copy: true);
-                asArr.Dispose();
                 return casted;
             }
             return asArr;
@@ -411,16 +557,27 @@ namespace NumSharp
         ///     replaced by <c>numnew</c>, so the concatenate path can splice it
         ///     in without further shape gymnastics.
         /// </summary>
+        /// <param name="arr">The working array whose dtype and shape the values adopt.</param>
+        /// <param name="values">The values to insert.</param>
+        /// <param name="axis">The normalized insertion axis.</param>
+        /// <param name="scalarObj">True when NumPy's scalar-obj quirk applies (moveaxis of the values' first axis).</param>
+        /// <returns>The values, cast and broadcast to the insertion slot; <paramref name="values"/> itself when it
+        ///     already has the dtype and the slot's shape.</returns>
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only caller is the covered <see cref="InsertSingleIndex"/>,
+        ///     under the <c>[NDScoped]</c> <c>insert</c> overloads. The cast, the ndmin reshape, the moveaxis view and the
+        ///     broadcast copy are released by that scope, and <paramref name="values"/> is never disposed. (The
+        ///     hand-written version tracked ownership with a flag and wrapped a passed-through
+        ///     <paramref name="values"/> in a second NDArray so the caller's <c>using</c> would not dispose the
+        ///     caller's array; under the scope neither is needed.)</remarks>
+        [NDScopedCovered]
         private static NDArray CoerceValuesForSingleIndex(
             NDArray arr, NDArray values, int axis, bool scalarObj)
         {
             // Cast dtype if needed.
             NDArray v = values;
-            bool owned = false;
             if (v.GetTypeCode != arr.GetTypeCode)
             {
                 v = values.astype(arr.GetTypeCode, copy: true);
-                owned = true;
             }
 
             // ndmin = arr.ndim: prepend 1s.
@@ -430,11 +587,9 @@ namespace NumSharp
                 var newDims = new long[targetNDim];
                 int prefix = targetNDim - v.ndim;
                 for (int i = 0; i < prefix; i++) newDims[i] = 1;
-                for (int i = 0; i < v.ndim; i++) newDims[prefix + i] = v.shape[i];
-                var reshaped = v.reshape(new Shape(newDims));
-                if (owned) v.Dispose();
+                for (int i = 0; i < v.ndim; i++) newDims[prefix + i] = v.Shape.dimensions[i];
+                var reshaped = v.reshape(Shape.Adopt(newDims));
                 v = reshaped;
-                owned = true;
             }
 
             // Scalar-obj quirk: moveaxis(values, 0, axis) — moves the first axis
@@ -444,17 +599,12 @@ namespace NumSharp
             if (scalarObj && v.ndim > 1 && axis != 0)
             {
                 var moved = np.moveaxis(v, 0, axis);
-                if (owned) v.Dispose();
                 v = moved;
-                owned = true;
             }
 
             // Broadcast to arr.shape with axis dim = v.shape[axis].
-            long numNew = arr.ndim == 0 ? v.size : v.shape[axis];
+            long numNew = arr.ndim == 0 ? v.size : v.Shape.dimensions[axis];
             var broadcasted = BroadcastValuesToInsertSlot(arr, v, axis, numNew);
-            if (owned && !ReferenceEquals(broadcasted, v)) v.Dispose();
-            else if (!owned && ReferenceEquals(broadcasted, v))
-                broadcasted = new NDArray(v.Storage) { TensorEngine = v.TensorEngine };
             return broadcasted;
         }
 
@@ -464,6 +614,17 @@ namespace NumSharp
         ///     result is always C-contiguous so the chunk-splitting + concatenate
         ///     pipeline can slice it without strided-view surprises.
         /// </summary>
+        /// <param name="arr">The working array whose shape (except along <paramref name="axis"/>) is the target.</param>
+        /// <param name="values">The dtype-matched values.</param>
+        /// <param name="axis">The normalized insertion axis.</param>
+        /// <param name="numNew">The extent of the insertion slot along <paramref name="axis"/>.</param>
+        /// <returns><paramref name="values"/> itself when it already has the target shape; otherwise a C-contiguous
+        ///     copy of its broadcast.</returns>
+        /// <exception cref="IncorrectShapeException"><paramref name="values"/> cannot broadcast to the slot.</exception>
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only caller is the covered
+        ///     <see cref="CoerceValuesForSingleIndex"/>, so the stride-0 broadcast view is released by the
+        ///     <c>insert</c> overload's scope.</remarks>
+        [NDScopedCovered]
         private static NDArray BroadcastValuesToInsertSlot(
             NDArray arr, NDArray values, int axis, long numNew)
         {
@@ -473,22 +634,21 @@ namespace NumSharp
                 bool same = true;
                 for (int i = 0; i < arr.ndim; i++)
                 {
-                    long expected = i == axis ? numNew : arr.shape[i];
-                    if (values.shape[i] != expected) { same = false; break; }
+                    long expected = i == axis ? numNew : arr.Shape.dimensions[i];
+                    if (values.Shape.dimensions[i] != expected) { same = false; break; }
                 }
                 if (same) return values;
             }
 
             // Build target shape and broadcast.
             var targetDims = new long[arr.ndim];
-            for (int i = 0; i < arr.ndim; i++) targetDims[i] = arr.shape[i];
+            for (int i = 0; i < arr.ndim; i++) targetDims[i] = arr.Shape.dimensions[i];
             targetDims[axis] = numNew;
 
-            var bcast = np.broadcast_to(values, new Shape(targetDims));
+            var bcast = np.broadcast_to(values, Shape.Adopt(targetDims));
             // Materialise to a contig owning copy — broadcast_to returns a
             // stride-0 read-only view that confuses np.take and SliceAlongAxis.
             var contig = np.ascontiguousarray(bcast);
-            if (!ReferenceEquals(contig, bcast)) bcast.Dispose();
             return contig;
         }
 
@@ -498,36 +658,46 @@ namespace NumSharp
         ///     <c>arr.shape[..axis] + (numNew,) + arr.shape[axis+1..]</c>.
         ///     Used by the multi-index path before sort/reorder.
         /// </summary>
+        /// <param name="arr">The working array whose dtype and shape the values adopt.</param>
+        /// <param name="values">The values to insert.</param>
+        /// <param name="axis">The normalized insertion axis.</param>
+        /// <param name="numNew">The number of insertion positions (the slot's extent along <paramref name="axis"/>).</param>
+        /// <returns>The values, cast and broadcast to the slot; <paramref name="values"/> itself when it already has
+        ///     the dtype and the slot's shape.</returns>
+        /// <exception cref="IncorrectShapeException"><paramref name="values"/> cannot broadcast to the slot.</exception>
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only caller is the covered <see cref="InsertMultiIndex"/>,
+        ///     under the <c>[NDScoped]</c> <c>insert</c> overloads. The cast, the ndmin reshape, the broadcast view and
+        ///     its contiguous copy are released by that scope, and <paramref name="values"/> is never disposed. (The
+        ///     hand-written version tracked ownership with a flag and wrapped a passed-through
+        ///     <paramref name="values"/> in a second NDArray so the caller's <c>using</c> would not dispose the
+        ///     caller's array; under the scope neither is needed.)</remarks>
+        [NDScopedCovered]
         private static NDArray CoerceValuesForMultiIndex(
             NDArray arr, NDArray values, int axis, int numNew)
         {
             // Cast dtype.
             NDArray v = values;
-            bool owned = false;
             if (v.GetTypeCode != arr.GetTypeCode)
             {
                 v = values.astype(arr.GetTypeCode, copy: true);
-                owned = true;
             }
 
             // Build target shape: arr.shape with axis dim = numNew.
             var targetDims = new long[arr.ndim];
-            for (int i = 0; i < arr.ndim; i++) targetDims[i] = arr.shape[i];
+            for (int i = 0; i < arr.ndim; i++) targetDims[i] = arr.Shape.dimensions[i];
             targetDims[axis] = numNew;
-            var targetShape = new Shape(targetDims);
+            var targetShape = Shape.Adopt(targetDims);
 
-            // Shape already matches? Just hand it back (still wrapped).
+            // Shape already matches? Just hand it back (the caller's values or the cast copy).
             if (v.ndim == arr.ndim)
             {
                 bool same = true;
                 for (int i = 0; i < arr.ndim; i++)
                 {
-                    if (v.shape[i] != targetDims[i]) { same = false; break; }
+                    if (v.Shape.dimensions[i] != targetDims[i]) { same = false; break; }
                 }
                 if (same)
                 {
-                    if (!owned)
-                        v = new NDArray(v.Storage) { TensorEngine = v.TensorEngine };
                     return v;
                 }
             }
@@ -544,11 +714,9 @@ namespace NumSharp
                 var newDims = new long[targetNDim];
                 int prefix = targetNDim - v.ndim;
                 for (int i = 0; i < prefix; i++) newDims[i] = 1;
-                for (int i = 0; i < v.ndim; i++) newDims[prefix + i] = v.shape[i];
-                var reshaped = v.reshape(new Shape(newDims));
-                if (owned) v.Dispose();
+                for (int i = 0; i < v.ndim; i++) newDims[prefix + i] = v.Shape.dimensions[i];
+                var reshaped = v.reshape(Shape.Adopt(newDims));
                 v = reshaped;
-                owned = true;
             }
 
             // Broadcast to target. broadcast_to handles size-1 stretching.
@@ -558,11 +726,6 @@ namespace NumSharp
             // the fast paths and we don't run into the "broadcast view + slice
             // by stepped-axis" quirks.
             var contig = np.ascontiguousarray(bcast);
-            if (!ReferenceEquals(contig, bcast))
-                bcast.Dispose();
-            else
-                contig = bcast;
-            if (owned) v.Dispose();
             return contig;
         }
 

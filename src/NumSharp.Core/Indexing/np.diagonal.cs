@@ -41,6 +41,7 @@ namespace NumSharp
         /// </remarks>
         public static NDArray diagonal(NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (a is null) throw new ArgumentNullException(nameof(a));
 
             int ndim = a.ndim;

@@ -106,8 +106,20 @@ public class ModfBenchmarks : TypedBenchmarkBase
     [GlobalCleanup]
     public void Cleanup() { _a = null!; GC.Collect(); }
 
+    /// <summary>
+    /// <c>np.modf(a)</c> for every dtype it accepts; Complex stays rejection evidence.
+    /// </summary>
+    /// <returns>The <c>(fractional, integral)</c> pair, or the unsupported-dtype sentinel for Complex.</returns>
+    /// <remarks>
+    /// Since 59f99320 np.modf has a loop for every REAL dtype: bool/int inputs promote to the
+    /// narrowest float per width (bool/int8/uint8 → float16, int16/uint16/char → float32, int32+ →
+    /// float64), exactly NumPy 2.4.2's resolution, and float16 has its own kernel. Only complex has no
+    /// modf loop, on either side (a TypeError). The old Single/Double/Decimal-only gate expected every
+    /// other dtype to be rejected, so it failed the docs job's benchmark-body smoke once modf started
+    /// accepting them ("expected to be rejected, but the operation succeeded").
+    /// </remarks>
     [Benchmark(Description = "np.modf(a)")]
-    public object Modf() => DType is NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal
-        ? np.modf(_a)
-        : VerifyUnsupportedDtype(() => np.modf(_a));
+    public object Modf() => DType is NPTypeCode.Complex
+        ? VerifyUnsupportedDtype(() => np.modf(_a))
+        : np.modf(_a);
 }

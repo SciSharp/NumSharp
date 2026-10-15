@@ -20,9 +20,13 @@ namespace NumSharp
         /// Port of numpy/lib/_nanfunctions_impl.py::nancumsum: <c>_replace_nan(a, 0)</c> then <c>np.cumsum</c>.
         /// Only float-family dtypes can contain NaN, so integer/bool/decimal inputs are equivalent to <see cref="cumsum"/>.
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray nancumsum(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, axis, dtype, @out), static s => nancumsum(s.a, s.axis, s.dtype, s.@out), @out);
             // Boundary scope: the full-size NaN-replaced copy is reclaimed at exit; the scan
             // result (or the caller's @out — untracked, a Returns no-op) is yielded.
             // NumPy: a, mask = _replace_nan(a, 0); return np.cumsum(a, axis, dtype, out). The mask is

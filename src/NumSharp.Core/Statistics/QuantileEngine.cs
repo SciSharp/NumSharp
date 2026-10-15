@@ -75,11 +75,22 @@ namespace NumSharp.Statistics
             }
         }
 
+        /// <param name="medianMean">
+        ///     When true, the even-size slice is reduced with NumPy's <c>np.median</c> rule —
+        ///     the <b>mean</b> of the two central order statistics, <c>(a+b)/2</c> — instead of
+        ///     the quantile <c>_lerp</c> at q=0.5. The two disagree by up to 1 ULP on ~10 % of
+        ///     inputs (NumPy computes <c>np.median</c> via <c>mean(part[middle])</c>, a different
+        ///     code path from <c>np.quantile(a, 0.5)</c>), so <c>np.median</c>/<c>np.nanmedian</c>
+        ///     MUST set this to stay bit-exact. Only meaningful with <paramref name="method"/> =
+        ///     <see cref="QuantileMethod.Linear"/> and q = 0.5 (the sole caller shape); ignored by
+        ///     the complex path, whose <c>(1-γ)·a + γ·b</c> form already equals the mean at γ=0.5.
+        /// </param>
         [NDScoped]
         public static NDArray Compute(
             NDArray a, double[] q, int[] axisArr, NDArray @out,
             bool overwrite_input, QuantileMethod method, bool keepdims, bool qIsScalar,
-            bool emptyReturnsNaN = false, bool ignoreNaN = false, bool allowBooleanContinuous = false)
+            bool emptyReturnsNaN = false, bool ignoreNaN = false, bool allowBooleanContinuous = false,
+            bool medianMean = false)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (q is null) throw new ArgumentNullException(nameof(q));
@@ -140,9 +151,9 @@ namespace NumSharp.Statistics
                         staged = a.Shape.IsContiguous ? a : a.copy();
                     else
                         staged = np.moveaxis(a, axis, nd - 1).copy();
-                    n = (int)staged.shape[staged.ndim - 1];
+                    n = (int)staged.Shape.dimensions[staged.ndim - 1];
                     outerSize = 1;
-                    for (int i = 0; i < staged.ndim - 1; i++) outerSize *= staged.shape[i];
+                    for (int i = 0; i < staged.ndim - 1; i++) outerSize *= staged.Shape.dimensions[i];
                 }
                 else
                 {
@@ -153,14 +164,14 @@ namespace NumSharp.Statistics
                     int[] dest = Enumerable.Range(0, keep.Length).ToArray();
                     NDArray moved = np.moveaxis(a, keep, dest);
                     long reduced = 1;
-                    for (int i = 0; i < normalized.Length; i++) reduced *= a.shape[normalized[i]];
+                    for (int i = 0; i < normalized.Length; i++) reduced *= a.Shape.dimensions[normalized[i]];
                     long[] newShape = new long[keep.Length + 1];
-                    for (int i = 0; i < keep.Length; i++) newShape[i] = a.shape[keep[i]];
+                    for (int i = 0; i < keep.Length; i++) newShape[i] = a.Shape.dimensions[keep[i]];
                     newShape[keep.Length] = reduced;
-                    staged = moved.reshape(newShape).copy();
-                    n = (int)staged.shape[staged.ndim - 1];
+                    staged = moved.reshape(Shape.Adopt(newShape)).copy();
+                    n = (int)staged.Shape.dimensions[staged.ndim - 1];
                     outerSize = 1;
-                    for (int i = 0; i < staged.ndim - 1; i++) outerSize *= staged.shape[i];
+                    for (int i = 0; i < staged.ndim - 1; i++) outerSize *= staged.Shape.dimensions[i];
                 }
             }
 
@@ -175,7 +186,7 @@ namespace NumSharp.Statistics
             else
             {
                 long[] keepShape = new long[outerDims];
-                for (int i = 0; i < outerDims; i++) keepShape[i] = staged.shape[i];
+                for (int i = 0; i < outerDims; i++) keepShape[i] = staged.Shape.dimensions[i];
                 if (qIsScalar)
                 {
                     outShape = keepShape;
@@ -188,7 +199,7 @@ namespace NumSharp.Statistics
                 }
             }
 
-            NDArray resultRaw = new NDArray(outTypeCode, qIsScalar && outerDims == 0 ? new Shape() : new Shape(outShape));
+            NDArray resultRaw = new NDArray(outTypeCode, qIsScalar && outerDims == 0 ? new Shape() : Shape.Adopt(outShape));
 
             // ── Empty reduction axis ──
             // The IL/Complex row kernels assume at least one element per row and index
@@ -233,6 +244,12 @@ namespace NumSharp.Statistics
                     fixed (int* rowKPtr = rowKManaged)
                     {
                         long dstOuterStride = qIsScalar ? 0L : outerSize;
+                        // Logical element 0 of the staged operand. Most staging paths copy/flatten
+                        // (offset 0), but the 1-D-contiguous and last-axis-contiguous fast paths
+                        // keep `staged = a` with its original Shape.offset — so the base MUST fold in
+                        // `offset * itemsize`, exactly as np.average/np.cov do. Omitting it read from
+                        // the buffer start and ignored the slice (e.g. a `simple_slice_offset` view).
+                        byte* stagedBase = (byte*)staged.Address + staged.Shape.offset * srcSize;
                         // Complex has no IL quantile kernel — values have no natural
                         // total order and the IL pipeline is float/int-only.  Route
                         // through a managed lexicographic-sort + interpolate path that
@@ -242,7 +259,7 @@ namespace NumSharp.Statistics
                         if (a.typecode == NPTypeCode.Complex)
                         {
                             ComputeComplexQuantile(
-                                srcBase: (System.Numerics.Complex*)staged.Address,
+                                srcBase: (System.Numerics.Complex*)stagedBase,
                                 outer: outerSize, n: n,
                                 method: method,
                                 q: qPtr, nQs: qCopy.Length,
@@ -255,7 +272,7 @@ namespace NumSharp.Statistics
                                 srcType: a.typecode,
                                 outType: outTypeCode,
                                 method: method,
-                                srcBase: staged.Address,
+                                srcBase: stagedBase,
                                 scratchBase: scratchPtr,
                                 outer: outerSize,
                                 n: n,
@@ -266,7 +283,8 @@ namespace NumSharp.Statistics
                                 dstBase: resultRaw.Address,
                                 dstOuterStride: dstOuterStride,
                                 ignoreNaN: nanAware,
-                                rowKScratch: rowKPtr);
+                                rowKScratch: rowKPtr,
+                                medianMean: medianMean);
                         }
                     }
                 }
@@ -288,10 +306,10 @@ namespace NumSharp.Statistics
 
             if (@out is not null)
             {
-                if (!result.shape.SequenceEqual(@out.shape))
+                if (!result.Shape.dimensions.SequenceEqual(@out.Shape.dimensions))
                     throw new ArgumentException(
-                        $"Wrong shape of argument 'out', shape={string.Join(",", result.shape)} is required; " +
-                        $"got shape={string.Join(",", @out.shape)}.");
+                        $"Wrong shape of argument 'out', shape={string.Join(",", result.Shape.dimensions)} is required; " +
+                        $"got shape={string.Join(",", @out.Shape.dimensions)}.");
                 np.copyto(@out, result);
                 return @out;
             }
@@ -343,28 +361,28 @@ namespace NumSharp.Statistics
             {
                 shapeArr = new long[nd];
                 for (int i = 0; i < nd; i++)
-                    shapeArr[i] = (reduceAll || axes.Contains(i)) ? 1L : a.shape[i];
+                    shapeArr[i] = (reduceAll || axes.Contains(i)) ? 1L : a.Shape.dimensions[i];
             }
             else
             {
                 var dims = new List<long>();
                 if (!reduceAll)
                     for (int i = 0; i < nd; i++)
-                        if (!axes.Contains(i)) dims.Add(a.shape[i]);
+                        if (!axes.Contains(i)) dims.Add(a.Shape.dimensions[i]);
                 shapeArr = dims.ToArray();   // length 0 → 0-D scalar
             }
 
             NDArray result = shapeArr.Length == 0
                 ? new NDArray(tc, new Shape())
-                : new NDArray(tc, new Shape(shapeArr));
+                : new NDArray(tc, Shape.Adopt(shapeArr));
             FillWithNaN(result, tc);
 
             if (@out is not null)
             {
-                if (!result.shape.SequenceEqual(@out.shape))
+                if (!result.Shape.dimensions.SequenceEqual(@out.Shape.dimensions))
                     throw new ArgumentException(
-                        $"Wrong shape of argument 'out', shape={string.Join(",", result.shape)} is required; " +
-                        $"got shape={string.Join(",", @out.shape)}.");
+                        $"Wrong shape of argument 'out', shape={string.Join(",", result.Shape.dimensions)} is required; " +
+                        $"got shape={string.Join(",", @out.Shape.dimensions)}.");
                 np.copyto(@out, result);
                 return @out;
             }
@@ -574,7 +592,7 @@ namespace NumSharp.Statistics
             if (axisArr == null || axisArr.Length == 0)
             {
                 outShape = new long[qDim + srcNd];
-                if (!qIsScalar) outShape[0] = result.shape[0];
+                if (!qIsScalar) outShape[0] = result.Shape.dimensions[0];
                 for (int i = 0; i < srcNd; i++) outShape[qDim + i] = 1;
             }
             else
@@ -582,16 +600,16 @@ namespace NumSharp.Statistics
                 int[] norm = NormalizeAxes(axisArr, srcNd);
                 var axisSet = new HashSet<int>(norm);
                 outShape = new long[qDim + srcNd];
-                if (!qIsScalar) outShape[0] = result.shape[0];
+                if (!qIsScalar) outShape[0] = result.Shape.dimensions[0];
 
                 int srcIdx = qDim;
                 for (int i = 0; i < srcNd; i++)
                 {
                     if (axisSet.Contains(i)) outShape[qDim + i] = 1;
-                    else outShape[qDim + i] = result.shape[srcIdx++];
+                    else outShape[qDim + i] = result.Shape.dimensions[srcIdx++];
                 }
             }
-            return result.reshape(outShape);
+            return result.reshape(Shape.Adopt(outShape));
         }
 
         /// <summary>

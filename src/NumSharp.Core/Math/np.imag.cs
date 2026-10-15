@@ -19,8 +19,12 @@ namespace NumSharp
         ///     and dtype (the imaginary part of a real number is zero), matching NumPy exactly.
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.imag.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray imag(NDArray val)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(val))
+                return NDMatrixBoundary.Wrapped(val, static s => imag(s));
             // Complex: a strided float64 view onto the imaginary lane (writes through, shares memory).
             if (val.typecode == NPTypeCode.Complex)
                 return new NDArray(val.Storage.AliasComplexLane(imaginary: true));
@@ -30,7 +34,7 @@ namespace NumSharp
             // owndata=True, base=None, so clear WRITEABLE on the owned array itself rather than aliasing
             // a view, which would misreport owndata=False. setflags(write=True) on it then succeeds,
             // exactly as NumPy's _IsWriteable allows for an owner).
-            var zeros = np.zeros(new Shape(val.shape), val.typecode);
+            var zeros = np.zeros(Shape.Adopt(val.Shape.dimensions), val.typecode);
             zeros.Storage.SetShapeUnsafe(zeros.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
             return zeros;
         }

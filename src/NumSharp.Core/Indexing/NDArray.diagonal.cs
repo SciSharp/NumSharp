@@ -11,6 +11,9 @@ namespace NumSharp
         /// <returns>A view onto the requested diagonal(s).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.diagonal.html</remarks>
         public NDArray diagonal(int offset = 0, int axis1 = 0, int axis2 = 1)
-            => np.diagonal(this, offset, axis1, axis2);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.diagonal(this, offset, axis1, axis2);
+        }
     }
 }

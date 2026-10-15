@@ -80,7 +80,10 @@
 
        A project overrides in its own body (imported AFTER this file, so it wins), and the
        `== ''` guards also let a command-line `-p:` / global property win — e.g.
-       benchmark/NumSharp.Benchmark.Sandbox deliberately sets both false to measure cold tier-1.
+       benchmark/NumSharp.Benchmark.Sandbox deliberately sets both false to measure cold tier-1, and
+       the three CI test hosts (NumSharp.Tests, NumSharp.Tests.Oracle, NumSharp.Tests.Build.Analyzer)
+       set TieredPGO=false: a short, JIT-bound test run never pays back PGO's instrumented tier
+       (measured 7-15 % faster; rationale and numbers in test/NumSharp.Tests/NumSharp.Tests.csproj).
        ==================================================================================== -->
   <PropertyGroup>
     <TieredCompilation Condition="'$(TieredCompilation)' == ''">true</TieredCompilation>
@@ -150,5 +153,38 @@
     <None Include="$(MSBuildThisFileDirectory)docs\website-src\images\numsharp.icon128.png"
           Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
+
+  <!-- ====================================================================================
+       No embedded package README — deliberately, for EVERY package (since after 0.70.0).
+
+       WHY. nuget.org shows one readme per package version on its README tab. When the .nupkg
+       embeds one (`PackageReadmeFile` → the nuspec's `<readme>`), the gallery ALWAYS renders
+       that file and ignores the owner-editable readme on the package's Manage page — and the
+       embedded copy can never change afterwards, because the package is signed and immutable.
+       Leaving the readme OUT keeps every version's README tab editable after publishing, which
+       is where the owner pastes that release's GitHub release markdown by hand:
+       nuget.org → package → Manage → Readme → select the version → Custom → Submit.
+       The nuspec's `<releaseNotes>` is no substitute: it is just as immutable after publish and
+       nuget.org renders it as plain text. 0.70.0 shipped embedded readmes, which is exactly why
+       its README tab can never carry its release notes (0.40.0–0.60.0 did not, so theirs could).
+
+       The project folders' README.md files stay in the repo as GitHub/docs documentation; they
+       are simply not packed. A package without a readme still shows its `Description` on the
+       README tab until the owner submits one.
+
+       ENFORCED. The target below fails `dotnet pack` for any project that sets
+       `PackageReadmeFile`, so the policy cannot regress silently through a copied csproj or a
+       well-meaning "add a readme" fix — a slip that would only surface after an irreversible
+       publish. It hooks `GenerateNuspec`, which `dotnet pack` runs with or without `no-build`.
+       It is declared here, ahead of the project body, yet still sees a project's own
+       `PackageReadmeFile`: a target's Condition is evaluated when the target runs, after the
+       whole project has been evaluated. To return to embedded readmes on purpose, delete this
+       block together with the guard.
+       ==================================================================================== -->
+  <Target Name="NumSharpRejectEmbeddedPackageReadme"
+          BeforeTargets="GenerateNuspec"
+          Condition="'$(PackageReadmeFile)' != ''">
+    <Error Text="$(MSBuildProjectFile) sets PackageReadmeFile='$(PackageReadmeFile)', but NumSharp packages must not embed a README: nuget.org always shows an embedded readme and then ignores the owner-editable one, so this version's README tab could never be given its release notes after publishing. Remove PackageReadmeFile (and the packed README.md item) - see 'No embedded package README' in Directory.Build.props." />
+  </Target>
 
 </Project>

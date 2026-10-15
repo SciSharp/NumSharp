@@ -316,8 +316,8 @@ namespace NumSharp.Tests.DTypes
             Action act = () => DTypePromotion.CommonDType(np.dtypes.DateTime64DType, np.dtypes.Float64DType);
             act.Should().Throw<DTypePromotionError>();
             // NotImplemented in both directions is null at the slot level
-            np.dtypes.Int32DType.CommonDType(np.dtypes.DateTime64DType).Should().BeNull("the class with the larger type number answers");
-            np.dtypes.DateTime64DType.CommonDType(np.dtypes.Int32DType).Should().BeNull();
+            np.dtypes.Int32DType.common_dtype(np.dtypes.DateTime64DType).Should().BeNull("the class with the larger type number answers");
+            np.dtypes.DateTime64DType.common_dtype(np.dtypes.Int32DType).Should().BeNull();
         }
 
         [TestMethod]

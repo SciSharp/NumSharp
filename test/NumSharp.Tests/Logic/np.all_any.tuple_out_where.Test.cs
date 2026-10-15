@@ -245,14 +245,114 @@ namespace NumSharp.Tests.Logic
             Assert.AreEqual(true, r.GetValue<bool>(2));
         }
 
+        /// <summary>
+        ///     A non-bool <c>where=</c> ARRAY raises: NumPy's converter casts the mask with the <c>safe</c> rule, and
+        ///     only bool reaches bool (<c>np.all(np.array([1,1,0], np.int32), where=np.array([1,1,0], np.int32))</c> is a
+        ///     <c>TypeError</c> in NumPy 2.4.2). Only a Python LIST of ints is read by truth value there, and a C# array
+        ///     is an ndarray in NumSharp's mapping, so it raises like NumPy's array. The house type for this check is
+        ///     <see cref="ArgumentException"/>, as on the elementwise ufuncs; the text is NumPy's.
+        /// </summary>
         [TestMethod]
-        public void all_non_bool_where_treated_as_truthy()
+        public void all_non_bool_where_array_raises_numpys_cast_error()
         {
-            // numpy: where=int → non-zero treated as True (truthy)
             var a = np.array(new[] { 1, 1, 0 });
-            var w = np.array(new[] { 1, 1, 0 });  // last is "false" → ignored
-            var r = np.all(a, @where: w);
-            Assert.AreEqual(true, r.GetValue<bool>(0));
+            var w = np.array(new[] { 1, 1, 0 });
+            var e = Assert.ThrowsException<ArgumentException>(() => np.all(a, @where: w));
+            Assert.AreEqual("Cannot cast array data from dtype('int32') to dtype('bool') according to the rule 'safe'", e.Message);
+        }
+
+        /// <summary>
+        ///     Every non-bool mask dtype, the method forms, the tuple-axis overload and a 0-d mask (NumPy words a 0-d
+        ///     source as a "scalar"). NumPy 2.4.2 texts. Was the [OpenBugs] pin
+        ///     <c>AllAny_Where_NonBoolMask_RaisesNumPysCastError</c> until the reduce prologue (ReductionArguments) landed.
+        /// </summary>
+        [TestMethod]
+        public void where_non_bool_mask_raises_for_every_form()
+        {
+            var b = np.array(new[] { true, false, true, true, true, true }).reshape(2, 3);
+            var int64Mask = np.array(new long[] { 1, 0, 1, 0, 1, 1 }).reshape(2, 3);
+            var float64Mask = np.array(new[] { 1.0, 0.0, 1.0, 0.0, 1.0, 1.0 }).reshape(2, 3);
+            var uint8Mask = np.array(new byte[] { 1, 0, 1, 0, 1, 1 }).reshape(2, 3);
+            const string tail = " to dtype('bool') according to the rule 'safe'";
+            (string Label, Func<object> Call, string Text)[] cases =
+            {
+                ("np.all int64", () => np.all(b, @where: int64Mask), "Cannot cast array data from dtype('int64')" + tail),
+                ("np.any int64", () => np.any(b, @where: int64Mask), "Cannot cast array data from dtype('int64')" + tail),
+                ("np.all float64", () => np.all(b, @where: float64Mask), "Cannot cast array data from dtype('float64')" + tail),
+                ("np.any uint8", () => np.any(b, @where: uint8Mask), "Cannot cast array data from dtype('uint8')" + tail),
+                ("b.all int64", () => b.all(@where: int64Mask), "Cannot cast array data from dtype('int64')" + tail),
+                ("b.any float64", () => b.any(@where: float64Mask), "Cannot cast array data from dtype('float64')" + tail),
+                ("np.all tuple axis int64", () => np.all(b, new[] { 0, 1 }, null, false, int64Mask), "Cannot cast array data from dtype('int64')" + tail),
+                ("np.all 0-d int64", () => np.all(b, @where: np.array(1L)), "Cannot cast scalar from dtype('int64')" + tail),
+            };
+            foreach (var (label, call, text) in cases)
+            {
+                var e = Assert.ThrowsException<ArgumentException>(call, label);
+                Assert.AreEqual(text, e.Message, label);
+            }
+
+            var boolMask = np.array(new[] { true, false, true, false, true, true }).reshape(2, 3);
+            Assert.AreEqual(true, (bool)np.all(b, @where: boolMask));
+        }
+
+        /// <summary>
+        ///     NumPy's reduce prologue reports in its argument-parsing order (probed 2.4.2): a read-only out before the
+        ///     mask, the mask before the axis, the axis before any shape. Each case pairs two faults; the first one
+        ///     must win.
+        /// </summary>
+        [TestMethod]
+        public void reduce_prologue_reports_in_numpys_order()
+        {
+            var b = np.ones(new Shape(2, 3), NPTypeCode.Boolean);
+            var readOnlyOut = np.zeros(new Shape(3), NPTypeCode.Boolean);
+            readOnlyOut.flags.writeable = false;
+            var intMask = np.ones(new Shape(2, 3), NPTypeCode.Int64);
+
+            var e1 = Assert.ThrowsException<ValueError>(() => np.all(b, 0, readOnlyOut, false, intMask));
+            Assert.AreEqual("output array is read-only", e1.Message);
+
+            var e2 = Assert.ThrowsException<ArgumentException>(() => np.all(b, 7, null, false, intMask));
+            Assert.AreEqual("Cannot cast array data from dtype('int64') to dtype('bool') according to the rule 'safe'", e2.Message);
+
+            var e3 = Assert.ThrowsException<ArgumentException>(() => np.any(b, null, null, false, np.ones(new Shape(2), NPTypeCode.Int64)));
+            StringAssert.StartsWith(e3.Message, "Cannot cast array data from dtype('int64')");
+
+            Assert.ThrowsException<AxisError>(() => np.all(b, 7, np.zeros(new Shape(9, 9), NPTypeCode.Boolean), false, null));
+        }
+
+        /// <summary>
+        ///     The shape checks of NumPy's reduction iterator, verbatim (probed 2.4.2): the mask broadcasts TO the
+        ///     input (never the reverse, and never with more axes), out has the result's rank and extents.
+        /// </summary>
+        [TestMethod]
+        public void reduce_shape_errors_use_numpys_iterator_texts()
+        {
+            var b = np.ones(new Shape(2, 3), NPTypeCode.Boolean);
+            var row = np.ones(new Shape(1, 3), NPTypeCode.Boolean);
+
+            var e1 = Assert.ThrowsException<IncorrectShapeException>(() => np.all(b, null, null, false, np.ones(new Shape(2), NPTypeCode.Boolean)));
+            Assert.AreEqual("operands could not be broadcast together with remapped shapes [original->remapped]: (2,3) (2,) ", e1.Message);
+
+            var e2 = Assert.ThrowsException<ValueError>(() => np.all(b, null, null, false, np.ones(new Shape(1, 2, 3), NPTypeCode.Boolean)));
+            Assert.AreEqual("input operand has more dimensions than allowed by the axis remapping", e2.Message);
+
+            var e3 = Assert.ThrowsException<ValueError>(() => np.all(row, 0, null, false, np.ones(new Shape(2, 3), NPTypeCode.Boolean)));
+            Assert.AreEqual("non-broadcastable operand with shape (1,3) doesn't match the broadcast shape (2,3)", e3.Message);
+
+            var e4 = Assert.ThrowsException<ValueError>(() => np.any(b, 1, np.zeros(new Shape(2, 1), NPTypeCode.Boolean)));
+            Assert.AreEqual("output parameter for reduction operation logical_or has the wrong number of dimensions: Found 2 but expected 1", e4.Message);
+
+            var e5 = Assert.ThrowsException<ValueError>(() => np.all(b, null, np.zeros(new Shape(1), NPTypeCode.Boolean), true));
+            Assert.AreEqual("output parameter for reduction operation logical_and has the wrong number of dimensions: Found 1 but expected 2 (must match the operand's when keepdims=True)", e5.Message);
+
+            var e6 = Assert.ThrowsException<ValueError>(() => np.all(b, 1, np.zeros(new Shape(1), NPTypeCode.Boolean)));
+            Assert.AreEqual("output operand requires a reduction along dimension 0, but the reduction is not enabled. The dimension size of 1 does not match the expected output shape.", e6.Message);
+
+            var e7 = Assert.ThrowsException<ValueError>(() => np.all(b, 1, np.zeros(new Shape(2, 3), NPTypeCode.Boolean), true));
+            Assert.AreEqual("operand was set up as a reduction along axis 1, but the length of the axis is 3 (it has to be 1)", e7.Message);
+
+            var e8 = Assert.ThrowsException<IncorrectShapeException>(() => np.all(b, 1, np.zeros(new Shape(3), NPTypeCode.Boolean), false, np.ones(new Shape(2), NPTypeCode.Boolean)));
+            Assert.AreEqual("operands could not be broadcast together with remapped shapes [original->remapped]: (3,)->(3,newaxis) (2,3) (2,) ", e8.Message);
         }
 
         // === out= keyword ===
@@ -305,12 +405,18 @@ namespace NumSharp.Tests.Logic
             Assert.AreEqual(true, outArr.GetValue<bool>(2));
         }
 
+        /// <summary>
+        ///     An out of the right rank but the wrong extent fails NumPy's reduction-iterator broadcast, with its
+        ///     remapped-shapes text (<c>np.all(np.ones((2,3)), axis=0, out=np.empty(4, bool))</c>, NumPy 2.4.2). The
+        ///     dropped reduced axis is a leading newaxis, which NumPy's shape printer omits: <c>(4,)-&gt;(4)</c>.
+        /// </summary>
         [TestMethod]
         public void all_out_shape_mismatch_throws()
         {
             var a = np.ones(new Shape(2, 3));
             var badOut = np.empty(new Shape(4), NPTypeCode.Boolean);
-            Assert.ThrowsException<ArgumentException>(() => np.all(a, axis: 0, @out: badOut));
+            var e = Assert.ThrowsException<IncorrectShapeException>(() => np.all(a, axis: 0, @out: badOut));
+            Assert.AreEqual("operands could not be broadcast together with remapped shapes [original->remapped]: (4,)->(4) (2,3) ", e.Message);
         }
 
         [TestMethod]

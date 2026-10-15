@@ -31,8 +31,12 @@ namespace NumSharp
         /// </returns>
         /// <exception cref="AxisError">When <paramref name="axis"/> is out of bounds for the array's dimensions.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.flip.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray flip(NDArray m, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(m))
+                return NDMatrixBoundary.Wrapped((m, axis), static s => flip(s.m, s.axis));
             if (m is null)
                 throw new ArgumentNullException(nameof(m));
 
@@ -66,8 +70,12 @@ namespace NumSharp
         /// <exception cref="AxisError">When any axis is out of bounds for the array's dimensions.</exception>
         /// <exception cref="ValueError">When an axis is repeated ("repeated axis").</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.flip.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray flip(NDArray m, int[] axis)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(m))
+                return NDMatrixBoundary.Wrapped((m, axis), static s => flip(s.m, s.axis));
             if (m is null)
                 throw new ArgumentNullException(nameof(m));
 
@@ -108,8 +116,12 @@ namespace NumSharp
         /// </returns>
         /// <exception cref="ValueError">When <paramref name="m"/> is less than 2-d ("Input must be &gt;= 2-d.").</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fliplr.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray fliplr(NDArray m)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(m))
+                return NDMatrixBoundary.Wrapped(m, static s => fliplr(s));
             if (m is null)
                 throw new ArgumentNullException(nameof(m));
 
@@ -131,8 +143,12 @@ namespace NumSharp
         /// </returns>
         /// <exception cref="ValueError">When <paramref name="m"/> is less than 1-d ("Input must be &gt;= 1-d.").</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.flipud.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray flipud(NDArray m)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(m))
+                return NDMatrixBoundary.Wrapped(m, static s => flipud(s));
             if (m is null)
                 throw new ArgumentNullException(nameof(m));
 

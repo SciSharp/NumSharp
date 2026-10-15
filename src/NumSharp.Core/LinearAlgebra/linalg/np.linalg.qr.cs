@@ -21,10 +21,15 @@ namespace NumSharp
             /// </returns>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.qr.html</remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             [NDScoped] // reclaims the ToCommon cast temp; the (Q, R) tuple is yielded component-wise
             public static (NDArray Q, NDArray R) qr(NDArray a, string mode = "reduced")
             {
                 string resolved = ResolveQrMode(mode);
+                // A numpy.matrix operand: NumPy returns wrap(q), wrap(r) (wrap(r) alone for mode 'r'); for mode 'raw'
+                // it is wrap(h) and the plain tau.
+                if (NDMatrixBoundary.Sees(a))
+                    return NDMatrixBoundary.WrappedPair((a, mode), static s => qr(s.a, s.mode), wrapFirst: true, wrapSecond: resolved != "raw");
                 AssertStacked2d(a);
                 var common = CommonType(a);
                 return a.TensorEngine.Qr(ToCommon(a, common), resolved);

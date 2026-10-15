@@ -14,6 +14,9 @@ namespace NumSharp
         /// <param name="where">Elements to include in the reduction (null means include all).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.all.html</remarks>
         public NDArray all(int? axis = null, NDArray @out = null, bool keepdims = false, NDArray @where = null)
-            => np.all(this, axis, @out, keepdims, @where);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.all(this, axis, @out, keepdims, @where);
+        }
     }
 }

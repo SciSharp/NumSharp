@@ -13,6 +13,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.count_nonzero.html</remarks>
         public static long count_nonzero(NDArray a)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (a.size == 0)
                 return 0;
 
@@ -29,6 +30,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.count_nonzero.html</remarks>
         public static NDArray count_nonzero(NDArray a, int axis, bool keepdims = false)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (a.size == 0)
             {
                 // Handle empty arrays - return zeros with reduced shape
@@ -39,13 +41,13 @@ namespace NumSharp
                     throw new ArgumentOutOfRangeException(nameof(axis));
 
                 var resultShape = Shape.GetAxis(shape, axis);
-                var result = np.zeros(new Shape(resultShape), NPTypeCode.Int64);
+                var result = np.zeros(Shape.Adopt(resultShape), NPTypeCode.Int64);
                 if (keepdims)
                 {
                     var ks = new long[a.ndim];
                     for (int d = 0, sd = 0; d < a.ndim; d++)
                         ks[d] = (d == axis) ? 1 : resultShape[sd++];
-                    result.Storage.Reshape(new Shape(ks));
+                    result.Storage.Reshape(Shape.Adopt(ks));
                 }
                 return result;
             }

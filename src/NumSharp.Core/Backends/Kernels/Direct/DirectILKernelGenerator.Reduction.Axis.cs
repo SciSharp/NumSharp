@@ -143,7 +143,7 @@ namespace NumSharp.Backends.Kernels
                 (NPTypeCode.Decimal, NPTypeCode.Decimal) => CreateAxisReductionKernelScalar<decimal, decimal>(key),
                 (NPTypeCode.Boolean, NPTypeCode.Boolean) => CreateAxisReductionKernelScalar<bool, bool>(key),
                 (NPTypeCode.Char, NPTypeCode.Char) => CreateAxisReductionKernelScalar<char, char>(key),
-                // Half min/max get a boxing-free direct-Half loop (no double bridge);
+                // Half min/max run NumPy's bit-level float16 walk (first NaN verbatim, no double bridge);
                 // sum/mean/prod keep the double-intermediate scalar path for accumulation precision.
                 (NPTypeCode.Half, NPTypeCode.Half) => key.Op == ReductionOp.Min || key.Op == ReductionOp.Max
                     ? CreateAxisReductionKernelHalfMinMax(key)
@@ -444,24 +444,17 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Boxing-free Half min/max axis reducer.
-        ///
-        /// The generic scalar path (CombineScalarsPromoted's Half branch) bridges every
-        /// element through <see cref="double"/>: (double)(Half)accum → Math.Min →
-        /// (Half)result. That round-trip dominated f16 amin/amax along an axis. Half has
-        /// no Vector&lt;Half&gt; arithmetic in the BCL, but it exposes a hardware-backed
-        /// total order via its comparison operators, so a direct Half loop with no double
-        /// round-trip is ~7× faster than the bridge (9.99 ms → ~1.45 ms on a 1000×1000
-        /// reduce) and beats NumPy's f16 loop (1.7–2.1 ms, which widens to float per
-        /// element).
-        ///
-        /// NaN propagates to match Math.Min/Max and NumPy's reduce: the accumulator is
-        /// seeded from element 0, and a NaN input is taken on sight (x &lt; acc is false
-        /// when acc is NaN, so once NaN enters it sticks). Only Min/Max route here —
-        /// Sum/Mean/Prod keep the double-intermediate path for accumulation precision.
-        /// Offset / strided / negative-stride / transposed views are handled by the same
-        /// coordinate walk as <see cref="AxisReductionScalarHelper{TInput,TAccum}"/>.
+        /// Half min/max axis reducer — an adapter onto NumPy's float16 walk
+        /// (<see cref="NumPyHalfMinMaxReduce.Axis"/>, bit-level SIMD, no float conversion).
         /// </summary>
+        /// <remarks>
+        /// The engine's float16 np.max / np.min run that walk directly (DefaultEngine.HalfMinMaxReduce), before any
+        /// axis kernel is fetched; this keeps the (Half, Half) Min / Max kernel key exact for any other caller. The
+        /// loop it replaced (`x &gt; acc || IsNaN(x)` per element, a div/mod coordinate walk per output) let a LATER NaN
+        /// replace an earlier one, where NumPy's HALF_maximum keeps the FIRST NaN of every output verbatim.
+        /// </remarks>
+        /// <param name="key">The (Half, Half) Min or Max key.</param>
+        /// <returns>The kernel.</returns>
         private static unsafe AxisReductionKernel CreateAxisReductionKernelHalfMinMax(AxisReductionKernelKey key)
         {
             bool isMin = key.Op == ReductionOp.Min;
@@ -476,77 +469,31 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Static body for <see cref="CreateAxisReductionKernelHalfMinMax"/>, mirroring the
-        /// thin-lambda → static-helper shape of <see cref="AxisReductionSimdHelper{T}"/> /
-        /// <see cref="AxisReductionScalarHelper{TInput,TAccum}"/> and marked AggressiveOptimization.
-        /// ~1.45 ms (1000×1000) is the realistic floor for this delegate path: the data pointers
-        /// arrive as method parameters rather than fixed-block locals, so the JIT emits a slightly
-        /// more conservative inner loop than an equivalent standalone scan (~0.85 ms) — still well
-        /// ahead of the double-bridge it replaces, and ahead of NumPy.
+        /// Static body for <see cref="CreateAxisReductionKernelHalfMinMax"/>: re-indexes the kernel contract's output
+        /// strides (one per OUTPUT axis) by INPUT axis and runs <see cref="NumPyHalfMinMaxReduce.Axis"/>, which picks the
+        /// row or slab walk itself (<paramref name="axisSize"/> and <paramref name="outputSize"/> follow from the shape).
         /// </summary>
+        /// <param name="input">The input's logical element 0.</param>
+        /// <param name="output">The output's logical element 0.</param>
+        /// <param name="inputStrides">Input element strides (<paramref name="ndim"/> entries).</param>
+        /// <param name="inputShape">Input extents (<paramref name="ndim"/> entries).</param>
+        /// <param name="outputStrides">Output element strides (<paramref name="ndim"/> − 1 entries, by output axis).</param>
+        /// <param name="axis">The reduced axis.</param>
+        /// <param name="axisSize">The reduced extent (implied by <paramref name="inputShape"/>; unused).</param>
+        /// <param name="ndim">The input rank.</param>
+        /// <param name="outputSize">The output element count (implied by the shape; unused).</param>
+        /// <param name="isMin">minimum when true, maximum when false.</param>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void AxisReductionHalfMinMaxHelper(
             Half* input, Half* output,
             long* inputStrides, long* inputShape, long* outputStrides,
             int axis, long axisSize, int ndim, long outputSize, bool isMin)
         {
-            long axisStride = inputStrides[axis];
-
-            int outputNdim = ndim - 1;
-            Span<long> outputDimStrides = stackalloc long[outputNdim > 0 ? outputNdim : 1];
-            if (outputNdim > 0)
-            {
-                outputDimStrides[outputNdim - 1] = 1;
-                for (int d = outputNdim - 2; d >= 0; d--)
-                {
-                    int nextInputDim = (d + 1) >= axis ? d + 2 : d + 1;
-                    outputDimStrides[d] = outputDimStrides[d + 1] * inputShape[nextInputDim];
-                }
-            }
-
-            for (long outIdx = 0; outIdx < outputSize; outIdx++)
-            {
-                // Linear output index → coordinates → input/output offsets.
-                long remaining = outIdx;
-                long inputBaseOffset = 0;
-                long outputOffset = 0;
-                for (int d = 0; d < outputNdim; d++)
-                {
-                    int inputDim = d >= axis ? d + 1 : d;
-                    long coord = remaining / outputDimStrides[d];
-                    remaining = remaining % outputDimStrides[d];
-                    inputBaseOffset += coord * inputStrides[inputDim];
-                    outputOffset += coord * outputStrides[d];
-                }
-
-                // Seed from element 0 (axisSize >= 1: empty min/max throws upstream).
-                Half* axisStart = input + inputBaseOffset;
-                Half acc = *axisStart;
-                if (axisStride == 1)
-                {
-                    // INNER-CONTIG fast path. With a runtime axisStride the JIT cannot prove
-                    // unit stride, so axisStart[i*axisStride] (or p += axisStride) emits a
-                    // variable-stride load and a per-element 64-bit multiply — that alone
-                    // doubled this loop (1.5 ms → 0.85 ms on a 1000×1000 innermost reduce).
-                    // Branching on axisStride==1 lets the JIT treat axisStart[i] as the
-                    // sequential stream it is. Covers axis==ndim-1 on C-contig input.
-                    if (isMin)
-                        for (long i = 1; i < axisSize; i++) { Half x = axisStart[i]; if (x < acc || Half.IsNaN(x)) acc = x; }
-                    else
-                        for (long i = 1; i < axisSize; i++) { Half x = axisStart[i]; if (x > acc || Half.IsNaN(x)) acc = x; }
-                }
-                else
-                {
-                    // STRIDED path — advance the read pointer by axisStride each step (no
-                    // i*stride multiply). Also covers negative-stride views (axisStride < 0).
-                    Half* p = axisStart;
-                    if (isMin)
-                        for (long i = 1; i < axisSize; i++) { p += axisStride; Half x = *p; if (x < acc || Half.IsNaN(x)) acc = x; }
-                    else
-                        for (long i = 1; i < axisSize; i++) { p += axisStride; Half x = *p; if (x > acc || Half.IsNaN(x)) acc = x; }
-                }
-                output[outputOffset] = acc;
-            }
+            Span<long> os = ndim <= 64 ? stackalloc long[64] : new long[ndim];
+            for (int d = 0, od = 0; d < ndim; d++)
+                os[d] = d == axis ? 0 : outputStrides[od++];
+            NumPyHalfMinMaxReduce.Axis((ushort*)input, new ReadOnlySpan<long>(inputShape, ndim),
+                new ReadOnlySpan<long>(inputStrides, ndim), (ushort*)output, os.Slice(0, ndim), axis, !isMin, nanIgnore: false);
         }
 
         /// <summary>

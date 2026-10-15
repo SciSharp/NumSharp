@@ -39,16 +39,26 @@ namespace NumSharp
             return flat ? ArrayFormatter.ArrayRepr(this, opts) : ArrayFormatter.ArrayStr(this, opts);
         }
 
+        /// <summary>
+        ///     The class name NumPy's <c>repr()</c> prints before the opening parenthesis: <c>array</c> for an
+        ///     <c>ndarray</c>, the subclass name for a subclass (<c>type(arr).__name__</c> in
+        ///     <c>_array_repr_implementation</c>). Override it in a subclass that NumPy prints under another name;
+        ///     the continuation lines and a wrapped <c>dtype=</c> suffix are aligned to this name's length, so it
+        ///     changes the layout of the whole repr, not the first word alone.
+        /// </summary>
+        /// <returns>The name without the parenthesis. Never <c>null</c> or empty.</returns>
+        internal virtual string ReprClassName => "array";
+
         #region legacy char/string rendering
 
         private string LegacyCharToString(bool flat)
         {
             var s = new StringBuilder();
-            if (shape.Length == 0)
+            if (this.Shape.dimensions.Length == 0)
             {
                 s.Append($"{Storage.GetAtIndex(0)}");
             }
-            else if (shape.Length == 1)
+            else if (this.Shape.dimensions.Length == 1)
             {
                 s.Append(string.Join("", GetData<char>()));
             }
@@ -78,7 +88,7 @@ namespace NumSharp
                 return;
             }
 
-            if (shape.Length == 1)
+            if (this.Shape.dimensions.Length == 1)
             {
                 s.Append("[");
                 s.Append("\"");
@@ -89,7 +99,7 @@ namespace NumSharp
                 return;
             }
 
-            var size = shape[0];
+            var size = this.Shape.dimensions[0];
             s.Append("[");
 
             for (long i = 0; i < size; i++)

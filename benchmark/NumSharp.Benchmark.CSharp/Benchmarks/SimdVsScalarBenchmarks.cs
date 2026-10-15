@@ -208,7 +208,8 @@ public class SimdReductionTypeBenchmarks : BenchmarkBase
 
         _array = Type switch
         {
-            DType.Int32 => np.random.randint(-1000, 1000, new Shape(N)),
+            // An explicit int32: randint's default is the legacy C long, int64 in NumSharp's LP64 model.
+            DType.Int32 => np.random.randint(-1000, 1000, new Shape(N), np.int32),
             DType.Float32 => (np.random.rand(N) * 100 - 50).astype(np.float32),
             DType.Float64 => np.random.rand(N) * 100 - 50,
             _ => throw new ArgumentException($"Unknown type: {Type}")

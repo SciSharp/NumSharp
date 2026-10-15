@@ -21,6 +21,7 @@
         [NDScoped]
         public static NDArray outer(NDArray a, NDArray b, NDArray @out = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a, b, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             //multiply(a.ravel()[:, newaxis], b.ravel()[newaxis, :], out)
             return multiply(np.expand_dims(a.ravel(), -1), np.expand_dims(b.ravel(), 0), @out);
         }

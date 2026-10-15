@@ -92,7 +92,7 @@ namespace NumSharp
         ///     </list>
         ///     The sized codes (<c>"i4"</c>, <c>"f8"</c>) are NOT looked up here: NumPy parses <c>kind + size</c>
         ///     arithmetically (<c>PyArray_TypestrConvert</c>) before consulting the name table, and so does
-        ///     <see cref="dtype(string)"/>.
+        ///     <see cref="dtype(string, bool, bool, System.Collections.Generic.IReadOnlyDictionary{string, object})"/>.
         /// </summary>
         private static readonly FrozenDictionary<string, Type> _dtype_string_map = BuildDtypeStringMap();
 
@@ -232,10 +232,27 @@ namespace NumSharp
         ///     <c>"timedelta64[s/2]"</c>), optionally prefixed with a byte order (<c>"&lt;i4"</c>, <c>"&gt;f8"</c>, <c>"=u2"</c>,
         ///     <c>"|b1"</c>), or one of NumSharp's PascalCase aliases (<c>"Int32"</c>, <c>"Single"</c>).
         /// </param>
+        /// <param name="align">
+        ///     NumPy's <c>align=</c>: pad a STRUCTURED dtype like a C struct. Every NumSharp dtype is non-structured, where
+        ///     NumPy ignores it too (<c>np.dtype('f8', align=True) is np.dtype('f8')</c>), so it is accepted and has no effect.
+        /// </param>
+        /// <param name="copy">
+        ///     NumPy's <c>copy=</c>: return a fresh copy instead of the shared builtin singleton. Only a singleton is copied
+        ///     (NumPy tests <c>fields is None</c>, which only the static builtin descriptors satisfy): a descriptor that is
+        ///     already a fresh object (a non-native byte order, a datetime unit) comes back as itself.
+        /// </param>
+        /// <param name="metadata">
+        ///     NumPy's <c>metadata=</c>: a dictionary to attach (see <see cref="DType.metadata"/>). The result is always a
+        ///     fresh descriptor; when the parsed descriptor already carries metadata the two are merged without
+        ///     overwriting the keys it already has (NumPy's <c>PyDict_Merge(..., override=0)</c>). Null means "not given".
+        /// </param>
         /// <returns>
         ///     The matching descriptor: the class's canonical instance for a native builtin (so <c>np.dtype("i8")</c>
         ///     is the same object every call), a fresh instance for a non-native byte order (<c>"&gt;i4"</c> keeps
-        ///     <c>byteorder == '&gt;'</c>, <c>isnative == false</c>) and for every datetime64/timedelta64 descriptor.
+        ///     <c>byteorder == '&gt;'</c>, <c>isnative == false</c>) and for every datetime64/timedelta64 descriptor — or a
+        ///     fresh copy when <paramref name="copy"/> or <paramref name="metadata"/> asks for one. An explicit host byte
+        ///     order is read as native (<c>"&lt;f8"</c> is the <c>float64</c> singleton on a little-endian host), as NumPy's
+        ///     parser reads it.
         /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
         /// <exception cref="NotSupportedException">
@@ -247,15 +264,27 @@ namespace NumSharp
         /// <exception cref="ValueError">A datetime divisor that is not a multiple of a lower unit (verbatim).</exception>
         /// <remarks>
         ///     Grammar, in NumPy's order: a comma-string / parenthesised sub-array is a structured dtype (unsupported);
-        ///     the byte-order character is consumed (<c>'|'</c> reads as native, and a lone byte-order character is
-        ///     invalid); a datetime typestr (<c>M8</c>/<c>m8</c>/<c>datetime64</c>/<c>timedelta64</c> + metadata) is
-        ///     parsed by <see cref="DatetimeMetaData.Parse"/>; a one-character code is a type code; a code whose tail is
-        ///     an integer is <c>kind + size</c> (<c>PyArray_TypestrConvert</c> — so <c>"b1"</c> is bool while <c>"b"</c> is
-        ///     int8, <c>"i3"</c>, <c>"f16"</c> and <c>"?1"</c> are invalid); anything else is a NAME looked up in the
-        ///     type dictionary. Case matters everywhere (<c>"I4"</c> is not <c>"i4"</c>), whitespace is never stripped.
+        ///     the byte-order character is consumed (<c>'|'</c> reads as native, an explicit host order folds into
+        ///     <c>'='</c>, and a lone byte-order character is invalid); a datetime typestr
+        ///     (<c>M8</c>/<c>m8</c>/<c>datetime64</c>/<c>timedelta64</c> + metadata) is parsed by
+        ///     <see cref="DatetimeMetaData.Parse"/>; a one-character code is a type code; a code whose tail is an integer
+        ///     is <c>kind + size</c> (<c>PyArray_TypestrConvert</c> — so <c>"b1"</c> is bool while <c>"b"</c> is int8,
+        ///     <c>"i3"</c>, <c>"f16"</c> and <c>"?1"</c> are invalid); anything else is a NAME looked up in the type
+        ///     dictionary. Case matters everywhere (<c>"I4"</c> is not <c>"i4"</c>), whitespace is never stripped. The
+        ///     keywords then apply in <c>arraydescr_new</c>'s order: <paramref name="copy"/>, then <paramref name="metadata"/>.
         ///     <para>https://numpy.org/doc/stable/reference/arrays.dtypes.html</para>
         /// </remarks>
-        public static DType dtype(string dtype)
+        public static DType dtype(string dtype, bool align = false, bool copy = false, IReadOnlyDictionary<string, object> metadata = null)
+            => ApplyDescrKeywords(ConvertFromStr(dtype), copy, metadata);
+
+        /// <summary>The parse half of <see cref="dtype(string, bool, bool, IReadOnlyDictionary{string, object})"/> — NumPy's <c>_convert_from_str</c>.</summary>
+        /// <param name="dtype">The dtype string.</param>
+        /// <returns>The parsed descriptor (the shared singleton for a native builtin).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        /// <exception cref="NotSupportedException">An unsupported or invalid dtype string (NumPy's texts).</exception>
+        /// <exception cref="TypeError">A malformed datetime unit.</exception>
+        /// <exception cref="ValueError">A datetime divisor that is not a multiple of a lower unit.</exception>
+        private static DType ConvertFromStr(string dtype)
         {
             if (dtype == null)
                 throw new ArgumentNullException(nameof(dtype));
@@ -273,7 +302,7 @@ namespace NumSharp
                 throw new NotSupportedException("NumSharp does not support custom nested array dtypes");
 
             /* Process the endian character. '|' is replaced by '='*/
-            char endian = DType.NativeByteOrder;
+            char endian = DType.NPY_NATIVE;
             switch (type[0])
             {
                 case '>':
@@ -284,7 +313,7 @@ namespace NumSharp
                     break;
 
                 case '|':
-                    endian = DType.NativeByteOrder;
+                    endian = DType.NPY_NATIVE;
                     type = type.Substring(1);
                     break;
             }
@@ -292,6 +321,14 @@ namespace NumSharp
             /* Just an endian character is invalid */
             if (type.Length == 0)
                 throw NotUnderstood(dtype);
+
+            // NumPy stores a parsed host order as '=' (`if (endian != '=' && PyArray_ISNBO(endian)) endian = '=';` at
+            // `finish`, and the datetime branch only stores a non-native order). Folding it here, before any branch builds
+            // a descriptor, keeps "<f8" the float64 singleton and "<M8[ns]" a '=' descriptor; only the opposite order is
+            // stored explicitly. (newbyteorder, by contrast, keeps an explicit host order — DType.NormalizeByteOrder does
+            // not fold it.)
+            if (endian != DType.NPY_NATIVE && endian != DType.NPY_OPPBYTE)
+                endian = DType.NPY_NATIVE;
 
             /* Check for datetime format */
             if (IsDatetimeTypestr(type))
@@ -302,11 +339,14 @@ namespace NumSharp
             if (type.Length == 1)
             {
                 // NumPy's PyArray_DescrFromType maps the datetime LETTERS to the generic-unit descriptors
-                // (np.dtype('M') is dtype('<M8'), np.dtype('m') is dtype('<m8')).
-                if (type[0] == 'M')
-                    return DTypeRegistry.DateTime64.DefaultDescr().WithByteOrder(endian);
-                if (type[0] == 'm')
-                    return DTypeRegistry.TimeDelta64.DefaultDescr().WithByteOrder(endian);
+                // (np.dtype('M') is dtype('<M8'), np.dtype('m') is dtype('<m8')) — the static BUILTIN descriptor itself,
+                // so np.dtype('M').isbuiltin is 1 while the typestr np.dtype('M8') builds a fresh one (isbuiltin 0); only
+                // the opposite byte order copies it (the `finish` block's DESCR_REPLACE).
+                if (type[0] == 'M' || type[0] == 'm')
+                {
+                    var letter = (type[0] == 'M' ? DTypeRegistry.DateTime64 : DTypeRegistry.TimeDelta64).singleton;
+                    return endian == DType.NPY_NATIVE ? letter : letter.WithByteOrder(endian);
+                }
                 if (!_dtype_string_map.TryGetValue(type, out resolved))
                     resolved = null;
             }
@@ -346,19 +386,79 @@ namespace NumSharp
             }
 
             var descr = DType.From(resolved);
-            if (endian != DType.NativeByteOrder && endian != DType.HostByteOrder && descr.byteorder != DType.NotApplicableByteOrder)
+            if (endian != DType.NPY_NATIVE && endian != DType.NPY_NATBYTE && descr.byteorder != DType.NPY_IGNORE)
                 return descr.WithByteOrder(endian);
             return descr;
         }
 
         /// <summary>The descriptor of a C# <see cref="System.Type"/> — <c>np.dtype(typeof(int))</c> (NumPy's <c>np.dtype(np.int32)</c>).</summary>
-        public static DType dtype(Type type) => DType.From(type ?? throw new ArgumentNullException(nameof(type)));
+        /// <param name="type">The C# element type.</param>
+        /// <param name="align">NumPy's <c>align=</c>; no effect on a non-structured dtype (see <see cref="dtype(string, bool, bool, IReadOnlyDictionary{string, object})"/>).</param>
+        /// <param name="copy">NumPy's <c>copy=</c>: a fresh copy of the class singleton instead of the singleton.</param>
+        /// <param name="metadata">NumPy's <c>metadata=</c>: a dictionary to attach (always gives a fresh descriptor); null means "not given".</param>
+        /// <returns>The class's canonical instance, or a fresh copy when <paramref name="copy"/> or <paramref name="metadata"/> asks for one.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="type"/> is null.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="type"/> is not one of NumSharp's element types.</exception>
+        public static DType dtype(Type type, bool align = false, bool copy = false, IReadOnlyDictionary<string, object> metadata = null)
+            => ApplyDescrKeywords(DType.From(type ?? throw new ArgumentNullException(nameof(type))), copy, metadata);
 
         /// <summary>The descriptor of an <see cref="NPTypeCode"/> — NumSharp's storage enum spelling.</summary>
-        public static DType dtype(NPTypeCode typecode) => DType.From(typecode);
+        /// <param name="typecode">The storage code.</param>
+        /// <param name="align">NumPy's <c>align=</c>; no effect on a non-structured dtype.</param>
+        /// <param name="copy">NumPy's <c>copy=</c>: a fresh copy of the class singleton instead of the singleton.</param>
+        /// <param name="metadata">NumPy's <c>metadata=</c>: a dictionary to attach (always gives a fresh descriptor); null means "not given".</param>
+        /// <returns>The class's canonical instance, or a fresh copy when <paramref name="copy"/> or <paramref name="metadata"/> asks for one.</returns>
+        /// <exception cref="ArgumentException"><paramref name="typecode"/> is <see cref="NPTypeCode.Empty"/>.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="typecode"/> has no registered class.</exception>
+        public static DType dtype(NPTypeCode typecode, bool align = false, bool copy = false, IReadOnlyDictionary<string, object> metadata = null)
+            => ApplyDescrKeywords(DType.From(typecode), copy, metadata);
 
-        /// <summary>A descriptor converts to itself — <c>np.dtype(np.dtype('f8'))</c>.</summary>
-        public static DType dtype(DType dtype) => dtype ?? throw new ArgumentNullException(nameof(dtype));
+        /// <summary>A descriptor converts to itself — <c>np.dtype(np.dtype('f8'))</c> is the same object, unless a keyword asks for a copy.</summary>
+        /// <param name="dtype">The descriptor.</param>
+        /// <param name="align">NumPy's <c>align=</c>; no effect on a non-structured dtype.</param>
+        /// <param name="copy">NumPy's <c>copy=</c>: a fresh copy when <paramref name="dtype"/> is a class singleton (any other descriptor comes back as itself, as in NumPy).</param>
+        /// <param name="metadata">NumPy's <c>metadata=</c>: merged into the descriptor's own metadata without overwriting its keys, in a fresh descriptor; null means "not given".</param>
+        /// <returns><paramref name="dtype"/> itself, or a fresh copy when a keyword asks for one.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        public static DType dtype(DType dtype, bool align = false, bool copy = false, IReadOnlyDictionary<string, object> metadata = null)
+            => ApplyDescrKeywords(dtype ?? throw new ArgumentNullException(nameof(dtype)), copy, metadata);
+
+        /// <summary>
+        ///     The keyword half of NumPy's <c>arraydescr_new</c> (<c>np.dtype(obj, align, copy, metadata)</c>), applied to the
+        ///     descriptor the positional argument converted to, in NumPy's statement order: <c>copy</c> copies only a class
+        ///     singleton (NumPy's <c>fields == None</c> test); <c>metadata</c> then always yields a fresh descriptor whose
+        ///     metadata is the descriptor's own dict merged with the given one, existing keys winning.
+        /// </summary>
+        /// <param name="conv">The converted descriptor.</param>
+        /// <param name="copy">The <c>copy=</c> keyword.</param>
+        /// <param name="metadata">The <c>metadata=</c> keyword, or null when not given.</param>
+        /// <returns><paramref name="conv"/>, or the copy the keywords ask for.</returns>
+        /// <exception cref="TypeError"><paramref name="metadata"/> is given for a non-legacy class (NumPy's "cannot attach metadata to new style DType").</exception>
+        private static DType ApplyDescrKeywords(DType conv, bool copy, IReadOnlyDictionary<string, object> metadata)
+        {
+            // NumPy: `if (copy && PyDataType_FIELDS(conv) == Py_None)` — only the static builtin descriptor has fields None,
+            // so a descriptor that is already a fresh object is returned as is even with copy=True.
+            if (copy && ReferenceEquals(conv, conv.Meta.singleton))
+                conv = conv.Copy();
+
+            if (metadata == null)
+                return conv;
+            if (!conv.Meta._legacy)
+                throw new TypeError("cannot attach metadata to new style DType");
+
+            // NumPy copies the descriptor (unless the copy step already did) and gives it its own dict: a copy of the existing
+            // metadata merged with the keyword's WITHOUT overriding keys already present (PyDict_Merge override=0), else a
+            // copy of the keyword's dict. Dictionary keeps insertion order when nothing is removed, which is Python's order.
+            // WithMetadata always builds a fresh descriptor, which stands for both of NumPy's copies (the result is a new
+            // object either way; nothing else holds the intermediate copy).
+            var merged = new Dictionary<string, object>(StringComparer.Ordinal);
+            if (conv.metadata != null)
+                foreach (var kv in conv.metadata)
+                    merged[kv.Key] = kv.Value;
+            foreach (var kv in metadata)
+                merged.TryAdd(kv.Key, kv.Value);
+            return conv.WithMetadata(new System.Collections.ObjectModel.ReadOnlyDictionary<string, object>(merged));
+        }
 
         private static NotSupportedException NotUnderstood(string dtype)
             => new NotSupportedException($"data type '{dtype}' not understood");
@@ -546,6 +646,110 @@ namespace NumSharp
         NPY_COMPLEX_SCALAR,
         NPY_OBJECT_SCALAR
     };
+
+    /// <summary>
+    ///     NumPy's <c>NPY_TYPES</c> type-number enum (<c>numpy/_core/include/numpy/ndarraytypes.h</c>) — the C-API
+    ///     identity behind every descriptor's <see cref="DType.num"/> / <see cref="DType.type_num"/>. Byte-identical to
+    ///     NumPy's header: the members and their integer values are exactly NumPy's, so <c>(int)NPY_TYPES.NPY_CDOUBLE</c>
+    ///     is 15 on every platform, and <c>a.dtype.type_num</c> equals <c>np.dtype(...).num</c> on the host it runs on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    ///     <b>Identity, not the computational switch.</b> <see cref="NPTypeCode"/> remains NumSharp's storage/kernel
+    ///     discriminator (the value every backend <c>switch</c> and IL generator dispatches on); this enum is the
+    ///     NumPy-facing <i>identity</i> that rides ALONGSIDE it, the exact split NumPy draws between its C
+    ///     <c>type_num</c> and the descriptor it keys. It is a pure mirror — see <see cref="DType.type_num"/> for the
+    ///     accessor and <see cref="DType.From(NPY_TYPES)"/> for the <c>PyArray_DescrFromType</c> reverse.
+    /// </para>
+    /// <para>
+    ///     <b>C long is platform-dependent, and so is the descriptor a fixed-width spelling resolves to</b> (verified
+    ///     against numpy 2.4.2): on <b>LP64</b> (Linux/macOS) <c>np.dtype('int32')</c> is <see cref="NPY_INT"/> (5) and
+    ///     <c>np.dtype('int64')</c> is <see cref="NPY_LONG"/> (7); on <b>LLP64</b> (Windows / any 32-bit process, where C
+    ///     <c>long</c> is 32-bit) <c>np.dtype('int32')</c> is <see cref="NPY_LONG"/> (7) and <c>np.dtype('int64')</c> is
+    ///     <see cref="NPY_LONGLONG"/> (9). This enum carries ALL of those members regardless of platform (it is the whole
+    ///     C enum); it is <see cref="DTypeRegistry"/> that maps NumSharp's single Int32/Int64 onto the platform-correct
+    ///     member — the same <c>CLongIs32Bit</c> switch the <c>LongDType</c>/<c>LongLongDType</c> aliases already use.
+    /// </para>
+    /// <para>
+    ///     <b>Members NumSharp has no storage for are still present</b> (for byte-identity and for
+    ///     <see cref="DType.From(NPY_TYPES)"/> to reject them precisely): <see cref="NPY_LONGLONG"/>/<see cref="NPY_ULONGLONG"/>
+    ///     on LP64, <see cref="NPY_LONGDOUBLE"/>/<see cref="NPY_CLONGDOUBLE"/> (NumSharp collapses to float64/complex128),
+    ///     <see cref="NPY_CFLOAT"/> (complex64 — unsupported), <see cref="NPY_OBJECT"/>, <see cref="NPY_STRING"/> (bytes),
+    ///     <see cref="NPY_VOID"/>. <see cref="NPY_CHAR"/> (24) is NumPy's <i>deprecated</i> byte-char and is NOT NumSharp's
+    ///     <c>char</c> dtype (which is a NumSharp extension at <see cref="NUMSHARP_CHAR"/> in the user range).
+    /// </para>
+    /// </remarks>
+    /// <remarks>https://numpy.org/doc/stable/reference/c-api/dtype.html#enumerated-types</remarks>
+    public enum NPY_TYPES
+    {
+        /// <summary>Boolean (<see cref="System.Boolean"/> / NumSharp <see cref="NPTypeCode.Boolean"/>).</summary>
+        NPY_BOOL = 0,
+        /// <summary>Signed 8-bit (C <c>signed char</c>; NumSharp <see cref="NPTypeCode.SByte"/> / int8).</summary>
+        NPY_BYTE = 1,
+        /// <summary>Unsigned 8-bit (C <c>unsigned char</c>; NumSharp <see cref="NPTypeCode.Byte"/> / uint8).</summary>
+        NPY_UBYTE = 2,
+        /// <summary>Signed 16-bit (C <c>short</c>; NumSharp <see cref="NPTypeCode.Int16"/>).</summary>
+        NPY_SHORT = 3,
+        /// <summary>Unsigned 16-bit (C <c>unsigned short</c>; NumSharp <see cref="NPTypeCode.UInt16"/>).</summary>
+        NPY_USHORT = 4,
+        /// <summary>C <c>int</c> — always 32-bit; NumPy's <c>intc</c>. NumSharp's Int32 maps here ONLY on LP64 (on LLP64 it is <see cref="NPY_LONG"/>).</summary>
+        NPY_INT = 5,
+        /// <summary>C <c>unsigned int</c> — NumPy's <c>uintc</c>. NumSharp's UInt32 maps here only on LP64.</summary>
+        NPY_UINT = 6,
+        /// <summary>C <c>long</c> — 64-bit on LP64, 32-bit on LLP64. NumSharp's Int64 maps here on LP64; its Int32 maps here on LLP64.</summary>
+        NPY_LONG = 7,
+        /// <summary>C <c>unsigned long</c>. NumSharp's UInt64 maps here on LP64; its UInt32 on LLP64.</summary>
+        NPY_ULONG = 8,
+        /// <summary>C <c>long long</c> — always 64-bit. NumSharp's Int64 maps here on LLP64 (unused on LP64, where Int64 is <see cref="NPY_LONG"/>).</summary>
+        NPY_LONGLONG = 9,
+        /// <summary>C <c>unsigned long long</c>. NumSharp's UInt64 maps here on LLP64 (unused on LP64).</summary>
+        NPY_ULONGLONG = 10,
+        /// <summary>float32 (NumSharp <see cref="NPTypeCode.Single"/>) — platform-independent.</summary>
+        NPY_FLOAT = 11,
+        /// <summary>float64 (NumSharp <see cref="NPTypeCode.Double"/>) — platform-independent.</summary>
+        NPY_DOUBLE = 12,
+        /// <summary>C <c>long double</c> (extended precision). NumSharp has none — its <c>LongDoubleDType</c> collapses onto float64, so no descriptor reports this num.</summary>
+        NPY_LONGDOUBLE = 13,
+        /// <summary>complex64 — <b>unsupported in NumSharp</b> (single complex width is complex128); no descriptor reports this num.</summary>
+        NPY_CFLOAT = 14,
+        /// <summary>complex128 (NumSharp <see cref="NPTypeCode.Complex"/>) — platform-independent.</summary>
+        NPY_CDOUBLE = 15,
+        /// <summary>C <c>long double</c> complex — collapses onto complex128 in NumSharp; no descriptor reports this num.</summary>
+        NPY_CLONGDOUBLE = 16,
+        /// <summary>Python object array — <b>unsupported in NumSharp</b>.</summary>
+        NPY_OBJECT = 17,
+        /// <summary>Fixed-width byte string (<c>|S</c>) — <b>unsupported in NumSharp</b> (Stage D).</summary>
+        NPY_STRING = 18,
+        /// <summary>Fixed-width Unicode (<c>&lt;U</c>) — the vestigial <see cref="NPTypeCode.String"/> slot; no storage (Stage D).</summary>
+        NPY_UNICODE = 19,
+        /// <summary>Structured / void (<c>V</c>) — <b>unsupported in NumSharp</b>.</summary>
+        NPY_VOID = 20,
+        /// <summary>datetime64 (<c>M8</c>) — descriptor-level only until Stage C (no storage lane yet).</summary>
+        NPY_DATETIME = 21,
+        /// <summary>timedelta64 (<c>m8</c>) — descriptor-level only until Stage C.</summary>
+        NPY_TIMEDELTA = 22,
+        /// <summary>float16 (NumSharp <see cref="NPTypeCode.Half"/>) — appended out of precision order (23), platform-independent.</summary>
+        NPY_HALF = 23,
+        /// <summary>NumPy's <b>deprecated</b> byte-char (raises if used). NOT NumSharp's <c>char</c> dtype — that is <see cref="NUMSHARP_CHAR"/>.</summary>
+        NPY_CHAR = 24,
+        /// <summary>Sentinel: the count of legacy dtypes (shares value 24 with <see cref="NPY_CHAR"/>).</summary>
+        NPY_NTYPES_LEGACY = 24,
+        /// <summary>Sentinel: "no type" (a deliberately high, stable value so appending dtypes does not move it).</summary>
+        NPY_NOTYPE = 25,
+        /// <summary>Sentinel: the count of types excluding the 1.6 additions (shares value 21 with <see cref="NPY_DATETIME"/>).</summary>
+        NPY_NTYPES_ABI_COMPATIBLE = 21,
+        /// <summary>The first user-defined type number — everything at or above is a registered user dtype (NumSharp's Decimal/Char live here).</summary>
+        NPY_USERDEF = 256,
+        /// <summary>NEP 55 variable-width <c>StringDType</c> — the first non-legacy-layout dtype (reserved; Stage D).</summary>
+        NPY_VSTRING = 2056,
+
+        // ---- NumSharp extensions (no NumPy analog) — the user-defined range, exactly as NumPy numbers a user dtype ----
+
+        /// <summary>NumSharp-only <see cref="System.Decimal"/> dtype (NumSharp <see cref="NPTypeCode.Decimal"/>) — the first user slot (aliases <see cref="NPY_USERDEF"/> = 256).</summary>
+        NUMSHARP_DECIMAL = NPY_USERDEF,
+        /// <summary>NumSharp-only <see cref="System.Char"/> dtype (NumSharp <see cref="NPTypeCode.Char"/>; promotes as uint16) — user slot 257.</summary>
+        NUMSHARP_CHAR = NPY_USERDEF + 1,
+    }
 
     /// <summary>
     ///     https://numpy.org/doc/stable/reference/c-api/dtype.html#enumerated-types

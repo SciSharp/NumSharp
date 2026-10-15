@@ -23,6 +23,7 @@ namespace NumSharp
             [NDScoped]
             public static NDArray det(NDArray a)
             {
+                using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 AssertStackedSquare(a);
                 var common = CommonType(a);
                 return a.TensorEngine.Det(ToCommon(a, common));
@@ -44,6 +45,7 @@ namespace NumSharp
             [NDScoped]
             public static (NDArray sign, NDArray logabsdet) slogdet(NDArray a)
             {
+                using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 AssertStackedSquare(a);
                 var common = CommonType(a);
                 return a.TensorEngine.Slogdet(ToCommon(a, common));

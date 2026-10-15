@@ -8,44 +8,47 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <summary>
-        /// Return the sum of array elements over a given axis treating NaNs as zero.
+        ///     <c>np.nansum</c>: the sum of <paramref name="a"/>'s elements over <paramref name="axis"/> treating NaN as zero —
+        ///     NumPy's <c>np.sum(where(isnan(a), 0, a), axis, keepdims)</c> (<c>_replace_nan</c> then <c>np.sum</c>), so it
+        ///     follows np.sum's rules: the result starts from the identity +0.0 (a sum of -0.0 is +0.0), a complex element
+        ///     with a NaN in EITHER part counts as zero, and an integer / bool input is plain <c>np.sum</c>.
         /// </summary>
+        /// <param name="a">The array to reduce; any dtype, any layout.</param>
+        /// <param name="axis">The axis to reduce, or null for every axis (a 0-d input also takes 0 / -1, np.sum's rule).</param>
+        /// <param name="keepdims">When true the reduced axes stay in the result with length 1.</param>
+        /// <returns>The NaN-skipping sum (a read-only 0-d scalar for a full reduction).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         public override NDArray NanSum(NDArray a, int? axis = null, bool keepdims = false)
         {
             var arr = a;
             var shape = arr.Shape;
-
-            // B15: Complex nansum — treat any entry with NaN in real OR imag as zero.
-            if (arr.GetTypeCode == NPTypeCode.Complex)
-                return NanSumComplex(arr, axis, keepdims);
+            var tc = arr.GetTypeCode;
 
             // Non-float types: fall back to regular sum (no NaN possible)
-            if (arr.GetTypeCode != NPTypeCode.Single && arr.GetTypeCode != NPTypeCode.Double && arr.GetTypeCode != NPTypeCode.Half)
+            if (tc != NPTypeCode.Single && tc != NPTypeCode.Double && tc != NPTypeCode.Half && tc != NPTypeCode.Complex)
                 return Sum(arr, axis: axis, keepdims: keepdims);
 
             if (shape.IsEmpty)
                 return arr;
 
-            if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
+            // A one-element input is NumPy's identity + replaced element, 0-d (keepdims: (1,)*ndim). The old shortcut
+            // returned the input's (1,) clone with its -0.0 sign, and a complex 0-d input with axis=0 looped forever in
+            // NanSumComplex's coordinate incrementor. The flat reduction takes the fused NaN-skipping kernels, which start
+            // from +0.0 and skip a NaN element — exactly identity + replaced element, with no isnan / where temporaries
+            // (0.24 → 2.6 µs through the composition, which NumPy's own 3.2 µs barely beat); an axis keeps the
+            // composition, whose np.sum route owns the axis rules (a 0-d input's axis 0 / -1, the shapes).
+            if (shape.size == 1)
             {
-                var val = arr.GetAtIndex(0);
-                switch (arr.GetTypeCode)
-                {
-                    case NPTypeCode.Single:
-                        if (float.IsNaN((float)val))
-                            return NDArray.Scalar(0f);
-                        break;
-                    case NPTypeCode.Double:
-                        if (double.IsNaN((double)val))
-                            return NDArray.Scalar(0.0);
-                        break;
-                    case NPTypeCode.Half:
-                        if (Half.IsNaN((Half)val))
-                            return NDArray.Scalar(Half.Zero);
-                        break;
-                }
-                return a.Clone();
+                if (axis == null)
+                    return tc == NPTypeCode.Complex
+                        ? NanSumComplex(arr, null, keepdims)
+                        : NanReductionElementWise(arr, ReductionOp.NanSum, keepdims);
+                return NanReplacedReduction(arr, axis, keepdims, ReductionOp.NanSum);
             }
+
+            // B15: Complex nansum — treat any entry with NaN in real OR imag as zero.
+            if (tc == NPTypeCode.Complex)
+                return NanSumComplex(arr, axis, keepdims);
 
             if (axis == null)
             {
@@ -58,8 +61,20 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Return the product of array elements over a given axis treating NaNs as ones.
+        ///     <c>np.nanprod</c>: the product of <paramref name="a"/>'s elements over <paramref name="axis"/> treating NaN
+        ///     as one — NumPy's <c>np.prod(where(isnan(a), 1, a), axis, keepdims)</c>, so it follows np.prod's rules (the
+        ///     identity start <c>1</c>, the result shape). An integer / bool input is plain <c>np.prod</c>.
         /// </summary>
+        /// <param name="a">The array to reduce; any dtype, any layout.</param>
+        /// <param name="axis">The axis to reduce, or null for every axis (a 0-d input also takes 0 / -1, np.prod's rule).</param>
+        /// <param name="keepdims">When true the reduced axes stay in the result with length 1.</param>
+        /// <returns>The NaN-skipping product (a read-only 0-d scalar for a full reduction).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <remarks>
+        ///     A complex input goes to <c>np.prod</c> without the NaN replacement (pre-existing; NumPy replaces a complex
+        ///     element with a NaN in either part by <c>1</c>), and a lone complex element skips NumPy's <c>(1+0j) * x</c>
+        ///     — pinned by <c>OpenBugsReductionTests.Prod_OneComplexElement_IsTheIdentityTimesTheElement</c>.
+        /// </remarks>
         public override NDArray NanProd(NDArray a, int? axis = null, bool keepdims = false)
         {
             var arr = a;
@@ -72,25 +87,15 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
                 return arr;
 
-            if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
+            // A one-element input: NumPy's np.prod(where(isnan(a), 1, a)) — 1 * replaced element, 0-d (keepdims:
+            // (1,)*ndim). The old shortcut returned the input's (1,) clone. The flat reduction takes the fused
+            // NaN-skipping kernel (it starts from 1 and skips a NaN element: exactly NumPy's value, and a real 1 * x
+            // keeps x's sign); an axis keeps the composition, whose np.prod route owns the axis rules.
+            if (shape.size == 1)
             {
-                var val = arr.GetAtIndex(0);
-                switch (arr.GetTypeCode)
-                {
-                    case NPTypeCode.Single:
-                        if (float.IsNaN((float)val))
-                            return NDArray.Scalar(1f);
-                        break;
-                    case NPTypeCode.Double:
-                        if (double.IsNaN((double)val))
-                            return NDArray.Scalar(1.0);
-                        break;
-                    case NPTypeCode.Half:
-                        if (Half.IsNaN((Half)val))
-                            return NDArray.Scalar((Half)1.0);
-                        break;
-                }
-                return a.Clone();
+                if (axis == null)
+                    return NanReductionElementWise(arr, ReductionOp.NanProd, keepdims);
+                return NanReplacedReduction(arr, axis, keepdims, ReductionOp.NanProd);
             }
 
             if (axis == null)
@@ -104,63 +109,157 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Return minimum of an array or minimum along an axis, ignoring NaNs.
+        /// Return minimum of an array or minimum along an axis, ignoring NaNs — NumPy's <c>np.nanmin</c>, which on an
+        /// ndarray IS <c>np.fmin.reduce</c> (see <see cref="NanMinMax"/>).
         /// </summary>
+        /// <param name="a">The array to reduce.</param>
+        /// <param name="axis">The axis to reduce (null = all axes).</param>
+        /// <param name="keepdims">Keep the reduced axes as size 1.</param>
+        /// <returns>The reduced array (a 0-d scalar for a flat reduction without keepdims).</returns>
+        /// <exception cref="ArgumentException">The reduction is empty — "zero-size array to reduction operation fmin which
+        /// has no identity", NumPy's ValueError.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         public override NDArray NanMin(NDArray a, int? axis = null, bool keepdims = false)
-        {
-            var arr = a;
-            var shape = arr.Shape;
-
-            // Non-float types: fall back to regular amin (no NaN possible)
-            if (arr.GetTypeCode != NPTypeCode.Single && arr.GetTypeCode != NPTypeCode.Double && arr.GetTypeCode != NPTypeCode.Half)
-                return ReduceAMin(arr, axis, keepdims: keepdims);
-
-            if (shape.IsEmpty)
-                return arr;
-
-            if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
-            {
-                return a.Clone();
-            }
-
-            if (axis == null)
-            {
-                return NanReductionElementWise(arr, ReductionOp.NanMin, keepdims);
-            }
-            else
-            {
-                return ExecuteNanAxisReduction(arr, axis.Value, keepdims, ReductionOp.NanMin);
-            }
-        }
+            => NanMinMax(a, axis, keepdims, MinMaxOp.FMin);
 
         /// <summary>
-        /// Return maximum of an array or maximum along an axis, ignoring NaNs.
+        /// Return maximum of an array or maximum along an axis, ignoring NaNs — NumPy's <c>np.nanmax</c>, which on an
+        /// ndarray IS <c>np.fmax.reduce</c> (see <see cref="NanMinMax"/>).
         /// </summary>
+        /// <param name="a">The array to reduce.</param>
+        /// <param name="axis">The axis to reduce (null = all axes).</param>
+        /// <param name="keepdims">Keep the reduced axes as size 1.</param>
+        /// <returns>The reduced array (a 0-d scalar for a flat reduction without keepdims).</returns>
+        /// <exception cref="ArgumentException">The reduction is empty — "zero-size array to reduction operation fmax which
+        /// has no identity", NumPy's ValueError.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         public override NDArray NanMax(NDArray a, int? axis = null, bool keepdims = false)
+            => NanMinMax(a, axis, keepdims, MinMaxOp.FMax);
+
+        /// <summary>
+        /// The shared body of <see cref="NanMax"/> / <see cref="NanMin"/>. NumPy's <c>nanmax(a)</c> for a plain ndarray is
+        /// <c>np.fmax.reduce(a, axis)</c> plus an "All-NaN slice" RuntimeWarning (NumSharp has no warnings), so float32 /
+        /// float64 run NumPy's own fmax / fmin reduction schedules through the exact core
+        /// (<see cref="TryExactFlatMinMaxScalar"/>, <see cref="TryExactAxisMinMax"/> with <see cref="MinMaxOp.FMax"/> /
+        /// <see cref="MinMaxOp.FMin"/>).
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Consequence for floats: the result's BITS are NumPy's — which zero survives a ±0 tie (the CRT scalar op keeps
+        /// <c>+0</c> for max / <c>-0</c> for min where the vector op keeps the later operand, so it depends on where
+        /// NumPy's calls put each element) and which payload an all-NaN reduction returns (never the canonical NaN: an
+        /// all-NaN accumulator hands back its lane 0 as is). The kernels it replaces matched only the value.
+        /// </para>
+        /// <para>
+        /// Edges, probed against NumPy 2.4.2: an empty reduction raises with the <c>fmax</c> / <c>fmin</c> name even for an
+        /// integer array (a reduced axis of extent 0, or a flat reduction of an empty array; a non-empty reduced axis of an
+        /// empty array yields the empty result); a 0-d or one-element 1-D input returns its element as a 0-d scalar (a
+        /// NaN keeps its payload — NumPy copies the first element and never calls the loop). Integer and bool arrays are
+        /// the plain <c>np.amax</c> / <c>np.amin</c> (fmax of integers IS max).
+        /// </para>
+        /// <para>
+        /// float16 and complex128 have no SIMD loop in NumPy — <c>HALF_fmax</c> / <c>CDOUBLE_fmax</c> are sequential — and
+        /// fold in NumPy's visiting order on every layout: float16 through the bit-level SIMD walks it shares with np.max /
+        /// np.min (<see cref="HalfMinMaxReduce"/>), complex128 through <see cref="NanMinMaxSequential"/>. NaN elements
+        /// skipped (complex: a NaN in either part), a tie keeping the EARLIER element in NumPy's visiting order, an all-NaN
+        /// reduction returning its first NaN verbatim. Complex used
+        /// to go to <c>np.amax</c> / <c>np.amin</c>, which PROPAGATE a NaN — a value bug. A broadcast float32 / float64
+        /// input — which the exact core declines (a zero stride changes NpyIter's axis sort) — runs the reduction iterator
+        /// of the keyword path (<see cref="MaxMinNumPy"/>), which ports that sort: bit-exact too since 2026-10-05.
+        /// </para>
+        /// </remarks>
+        /// <param name="a">The array to reduce.</param>
+        /// <param name="axis">The axis to reduce (null = all axes).</param>
+        /// <param name="keepdims">Keep the reduced axes as size 1.</param>
+        /// <param name="op"><see cref="MinMaxOp.FMax"/> or <see cref="MinMaxOp.FMin"/>.</param>
+        /// <returns>The reduced array.</returns>
+        /// <exception cref="ArgumentException">The reduction is empty (NumPy's ValueError text).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        private NDArray NanMinMax(NDArray a, int? axis, bool keepdims, MinMaxOp op)
         {
             var arr = a;
             var shape = arr.Shape;
-
-            // Non-float types: fall back to regular amax (no NaN possible)
-            if (arr.GetTypeCode != NPTypeCode.Single && arr.GetTypeCode != NPTypeCode.Double && arr.GetTypeCode != NPTypeCode.Half)
-                return ReduceAMax(arr, axis, keepdims: keepdims);
+            var tc = arr.GetTypeCode;
+            bool isMax = op == MinMaxOp.FMax;
+            var nanOp = isMax ? ReductionOp.NanMax : ReductionOp.NanMin;
 
             if (shape.IsEmpty)
                 return arr;
 
-            if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
-            {
-                return a.Clone();
-            }
+            // fmax / fmin have no identity: an empty reduction raises with THEIR name (not "maximum"), for every dtype —
+            // so this precedes the integer delegation below.
+            if (shape.size == 0)
+                return HandleEmptyArrayMinMaxReduction(arr, axis, keepdims, null, NumPyMinMaxReduce.UfuncName(op));
 
+            // Types that cannot hold a NaN: fmax / fmin of them ARE max / min — the exact amax / amin. Complex is NOT one of
+            // them (a NaN in either part makes the element NaN, which fmax SKIPS where amax would propagate it), so it is
+            // kept for the sequential fold below.
+            if (tc != NPTypeCode.Single && tc != NPTypeCode.Double && tc != NPTypeCode.Half && tc != NPTypeCode.Complex)
+                return isMax ? ReduceAMax(arr, axis, keepdims: keepdims) : ReduceAMin(arr, axis, keepdims: keepdims);
+
+            // A single element: NumPy copies it into the result and never calls the loop (bits, NaN payload included, kept).
+            if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
+                return HandleScalarReduction(arr, keepdims, null, null);
+
+            // float16 / complex128: NumPy's HALF_fmax / CDOUBLE_fmax are plain sequential loops, folded in NumPy's visiting
+            // order on every layout (broadcast included). float16 runs the bit-level SIMD walks of
+            // Default.Reduction.MinMax.Half.cs (the same walks as np.max / np.min, with the NaN-skipping rule); complex128
+            // the scalar fold of Default.Reduction.Nan.Sequential.cs.
+            if (tc == NPTypeCode.Half)
+                return HalfMinMaxReduce(arr, axis, keepdims, isMax, nanIgnore: true);
+            if (tc == NPTypeCode.Complex)
+                return NanMinMaxSequential(arr, axis, keepdims, isMax);
+
+            bool exactDtype = tc == NPTypeCode.Single || tc == NPTypeCode.Double;
+
+            // A broadcast float32 / float64 input: the exact core declines it (a zero stride changes NpyIter's axis sort), so it
+            // runs the reduction iterator, which ports that sort and NumPy's fmax / fmin call cuts — bit-exact like every
+            // other layout (the kernels below matched only the value).
+            if (exactDtype && shape.IsBroadcasted)
+                return MaxMinNumPy(arr, axis, null, keepdims, null, null, op);
             if (axis == null)
             {
-                return NanReductionElementWise(arr, ReductionOp.NanMax, keepdims);
+                if (exactDtype)
+                {
+                    // NumPy's flat fmax / fmin schedule (null = declined: a broadcast input → the kernels below).
+                    var r = TryExactFlatMinMaxScalar(arr, op);
+                    if (r is not null)
+                    {
+                        if (keepdims)
+                        {
+                            var ks = new long[arr.ndim];
+                            for (int i = 0; i < arr.ndim; i++)
+                                ks[i] = 1;
+                            r.Storage.Reshape(Shape.Adopt(ks));
+                        }
+
+                        return r.MarkReductionScalar();
+                    }
+                }
+
+                return NanReductionElementWise(arr, nanOp, keepdims);
             }
-            else
+
+            if (exactDtype)
             {
-                return ExecuteNanAxisReduction(arr, axis.Value, keepdims, ReductionOp.NanMax);
+                int ax = NormalizeAxis(axis.Value, arr.ndim);
+
+                // An extent-1 reduced axis: NumPy copies each lone element (payload kept) — no loop call.
+                if (shape[ax] == 1)
+                    return HandleTrivialAxisReduction(arr, ax, keepdims, tc, null);
+
+                // NumPy's per-element fmax / fmin schedule (null = declined: a broadcast input → the kernel below).
+                var exact = TryExactAxisMinMax(arr, ax, op);
+                if (exact is not null)
+                {
+                    if (keepdims)
+                        exact.Storage.ExpandDimension(ax);
+                    // Same PyArray_Return rule as ReduceAMax: a fresh 0-d result is a read-only scalar.
+                    return exact.MarkReductionScalar();
+                }
             }
+
+            return ExecuteNanAxisReduction(arr, axis.Value, keepdims, nanOp);
         }
 
         /// <summary>
@@ -216,7 +315,7 @@ namespace NumSharp.Backends
                     var keepdimsShape = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++)
                         keepdimsShape[i] = 1;
-                    r.Storage.Reshape(new Shape(keepdimsShape));
+                    r.Storage.Reshape(Shape.Adopt(keepdimsShape));
                 }
                 return r.MarkReductionScalar();
             }
@@ -254,7 +353,7 @@ namespace NumSharp.Backends
                 var keepdimsShape = new long[arr.ndim];
                 for (int i = 0; i < arr.ndim; i++)
                     keepdimsShape[i] = 1;
-                r.Storage.Reshape(new Shape(keepdimsShape));
+                r.Storage.Reshape(Shape.Adopt(keepdimsShape));
             }
             return r.MarkReductionScalar();
         }
@@ -384,7 +483,7 @@ namespace NumSharp.Backends
 
             // KEEPORDER: allocate the result in the input's memory order (F for an F-contig input),
             // so the strided-output kernel fills it in place with no post-hoc copy (issue #610).
-            var result = AllocateReductionResult(inputType, outputDims, shape);
+            var result = AllocateReductionResult(inputType, outputDims, shape, axis);
 
             long axisSize = shape.dimensions[axis];
             long outputSize = result.size > 0 ? result.size : 1;
@@ -419,7 +518,7 @@ namespace NumSharp.Backends
             // writes each element through the result's strides, so the F-order buffer fills correctly
             // (issue #610). outputDimStrides below are a C-order decomposition of the LOGICAL output
             // index used only to locate the INPUT slice — independent of the output's physical layout.
-            var result = AllocateReductionResult(inputType, outputDims, shape);
+            var result = AllocateReductionResult(inputType, outputDims, shape, axis);
 
             long axisSize = shape.dimensions[axis];
             long outputSize = result.size > 0 ? result.size : 1;
@@ -474,6 +573,20 @@ namespace NumSharp.Backends
             return result;
         }
 
+        /// <summary>
+        ///     Reads the element at MEMORY offset <paramref name="offset"/> (in elements, relative to the view's own
+        ///     <c>Shape.offset</c>) — the coordinate the scalar NaN-axis walk computes from the strides. It must not go
+        ///     through <c>GetAtIndex</c>, which takes a LOGICAL C-order index and maps it through the strides a second
+        ///     time: on a strided, reversed or transposed view that read other elements (or past the view), so
+        ///     <c>np.nansum</c> of a strided float16 slab of negative zeros returned values like 0.0289.
+        /// </summary>
+        /// <typeparam name="T">The element type (the array's dtype).</typeparam>
+        /// <param name="arr">The array whose buffer is read.</param>
+        /// <param name="offset">The memory offset in elements, relative to <c>arr.Shape.offset</c>.</param>
+        /// <returns>The element stored there.</returns>
+        private static unsafe T ReadAtMemoryOffset<T>(NDArray arr, long offset) where T : unmanaged
+            => ((T*)arr.Address)[arr.Shape.offset + offset];
+
         private static float ReduceNanAxisScalarFloat(NDArray arr, long baseOffset, long axisSize, long axisStride, ReductionOp op)
         {
             switch (op)
@@ -483,7 +596,7 @@ namespace NumSharp.Backends
                     float sum = 0f;
                     for (long i = 0; i < axisSize; i++)
                     {
-                        float val = (float)arr.GetAtIndex(baseOffset + i * axisStride);
+                        float val = ReadAtMemoryOffset<float>(arr, baseOffset + i * axisStride);
                         if (!float.IsNaN(val)) sum += val;
                     }
                     return sum;
@@ -493,7 +606,7 @@ namespace NumSharp.Backends
                     float prod = 1f;
                     for (long i = 0; i < axisSize; i++)
                     {
-                        float val = (float)arr.GetAtIndex(baseOffset + i * axisStride);
+                        float val = ReadAtMemoryOffset<float>(arr, baseOffset + i * axisStride);
                         if (!float.IsNaN(val)) prod *= val;
                     }
                     return prod;
@@ -504,7 +617,7 @@ namespace NumSharp.Backends
                     bool foundNonNaN = false;
                     for (long i = 0; i < axisSize; i++)
                     {
-                        float val = (float)arr.GetAtIndex(baseOffset + i * axisStride);
+                        float val = ReadAtMemoryOffset<float>(arr, baseOffset + i * axisStride);
                         if (!float.IsNaN(val)) { if (val < minVal) minVal = val; foundNonNaN = true; }
                     }
                     return foundNonNaN ? minVal : float.NaN;
@@ -515,7 +628,7 @@ namespace NumSharp.Backends
                     bool foundNonNaN = false;
                     for (long i = 0; i < axisSize; i++)
                     {
-                        float val = (float)arr.GetAtIndex(baseOffset + i * axisStride);
+                        float val = ReadAtMemoryOffset<float>(arr, baseOffset + i * axisStride);
                         if (!float.IsNaN(val)) { if (val > maxVal) maxVal = val; foundNonNaN = true; }
                     }
                     return foundNonNaN ? maxVal : float.NaN;
@@ -534,7 +647,7 @@ namespace NumSharp.Backends
                     double sum = 0.0;
                     for (long i = 0; i < axisSize; i++)
                     {
-                        double val = (double)arr.GetAtIndex(baseOffset + i * axisStride);
+                        double val = ReadAtMemoryOffset<double>(arr, baseOffset + i * axisStride);
                         if (!double.IsNaN(val)) sum += val;
                     }
                     return sum;
@@ -544,7 +657,7 @@ namespace NumSharp.Backends
                     double prod = 1.0;
                     for (long i = 0; i < axisSize; i++)
                     {
-                        double val = (double)arr.GetAtIndex(baseOffset + i * axisStride);
+                        double val = ReadAtMemoryOffset<double>(arr, baseOffset + i * axisStride);
                         if (!double.IsNaN(val)) prod *= val;
                     }
                     return prod;
@@ -555,7 +668,7 @@ namespace NumSharp.Backends
                     bool foundNonNaN = false;
                     for (long i = 0; i < axisSize; i++)
                     {
-                        double val = (double)arr.GetAtIndex(baseOffset + i * axisStride);
+                        double val = ReadAtMemoryOffset<double>(arr, baseOffset + i * axisStride);
                         if (!double.IsNaN(val)) { if (val < minVal) minVal = val; foundNonNaN = true; }
                     }
                     return foundNonNaN ? minVal : double.NaN;
@@ -566,7 +679,7 @@ namespace NumSharp.Backends
                     bool foundNonNaN = false;
                     for (long i = 0; i < axisSize; i++)
                     {
-                        double val = (double)arr.GetAtIndex(baseOffset + i * axisStride);
+                        double val = ReadAtMemoryOffset<double>(arr, baseOffset + i * axisStride);
                         if (!double.IsNaN(val)) { if (val > maxVal) maxVal = val; foundNonNaN = true; }
                     }
                     return foundNonNaN ? maxVal : double.NaN;
@@ -589,7 +702,7 @@ namespace NumSharp.Backends
                     double sum = 0.0;
                     for (long i = 0; i < axisSize; i++)
                     {
-                        double val = (double)(Half)arr.GetAtIndex(baseOffset + i * axisStride);
+                        double val = (double)ReadAtMemoryOffset<Half>(arr, baseOffset + i * axisStride);
                         if (!double.IsNaN(val)) sum += val;
                     }
                     return (Half)sum;
@@ -599,7 +712,7 @@ namespace NumSharp.Backends
                     double prod = 1.0;
                     for (long i = 0; i < axisSize; i++)
                     {
-                        double val = (double)(Half)arr.GetAtIndex(baseOffset + i * axisStride);
+                        double val = (double)ReadAtMemoryOffset<Half>(arr, baseOffset + i * axisStride);
                         if (!double.IsNaN(val)) prod *= val;
                     }
                     return (Half)prod;
@@ -610,7 +723,7 @@ namespace NumSharp.Backends
                     bool foundNonNaN = false;
                     for (long i = 0; i < axisSize; i++)
                     {
-                        double val = (double)(Half)arr.GetAtIndex(baseOffset + i * axisStride);
+                        double val = (double)ReadAtMemoryOffset<Half>(arr, baseOffset + i * axisStride);
                         if (!double.IsNaN(val)) { if (val < minVal) minVal = val; foundNonNaN = true; }
                     }
                     return foundNonNaN ? (Half)minVal : Half.NaN;
@@ -621,7 +734,7 @@ namespace NumSharp.Backends
                     bool foundNonNaN = false;
                     for (long i = 0; i < axisSize; i++)
                     {
-                        double val = (double)(Half)arr.GetAtIndex(baseOffset + i * axisStride);
+                        double val = (double)ReadAtMemoryOffset<Half>(arr, baseOffset + i * axisStride);
                         if (!double.IsNaN(val)) { if (val > maxVal) maxVal = val; foundNonNaN = true; }
                     }
                     return foundNonNaN ? (Half)maxVal : Half.NaN;
@@ -651,37 +764,46 @@ namespace NumSharp.Backends
                 {
                     var ks = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++) ks[i] = 1;
-                    r.Storage.Reshape(new Shape(ks));
+                    r.Storage.Reshape(Shape.Adopt(ks));
                 }
                 return r.MarkReductionScalar();
             }
 
-            // Axis reduction via iterator: iterate per slice and sum with NaN-skip.
-            var ax = axis.Value;
-            while (ax < 0) ax = arr.ndim + ax;
-            Shape axisedShape = Shape.GetAxis(shape, ax);
-            var ret = new NDArray(NPTypeCode.Complex, axisedShape, false);
-            var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, ax);
-            var iterRet = new ValueCoordinatesIncrementor(ref axisedShape);
-            var iterIndex = iterRet.Index;
-            var slices = iterAxis.Slices;
+            // Axis reduction: NumPy's own structure, np.sum(where(isnan(a), 0, a), axis, keepdims). The per-slice
+            // NDCoordinatesAxisIncrementor walk it replaces threw on a 1-D input ("vector shape") and could not reduce
+            // an empty slab; the composition inherits np.sum's routes (the +0.0 identity, the complex axis kernels,
+            // KEEPORDER output, every layout).
+            return NanReplacedReduction(arr, axis, keepdims, ReductionOp.NanSum);
+        }
 
-            do
-            {
-                var slice = arr[slices];
-                System.Numerics.Complex sum;
-                using (var it = NDIterRef.New(slice, NDIterGlobalFlags.EXTERNAL_LOOP))
-                    sum = it.ExecuteReducing<NanSumComplexKernel, System.Numerics.Complex>(default, System.Numerics.Complex.Zero);
-                // iterIndex is the FULL output coordinate (length == ret.ndim). Writing to
-                // iterIndex[0] alone only addressed the first axis, so for a >=3-D input the
-                // multi-D output left every position past the first row uninitialized
-                // (B28: reads of `new NDArray(...,false)` junk). Resolve the whole coordinate
-                // to its C-order flat offset.
-                ret.SetAtIndex(sum, ret.Shape.GetOffset(iterIndex));
-            } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-            if (keepdims) ret.Storage.ExpandDimension(ax);
-            return ret;
+        /// <summary>
+        ///     NumPy's structure for <c>np.nansum</c> / <c>np.nanprod</c>: <c>_replace_nan(a, identity)</c> — every NaN
+        ///     element replaced by the reduction's identity (0 for a sum, 1 for a product; a complex element with a NaN in
+        ///     EITHER part, which is what <c>np.isnan</c> tests) — then <c>np.sum</c> / <c>np.prod</c> over the result. The
+        ///     reduction therefore follows np.sum's / np.prod's rules exactly: the identity start, the result shape (0-d,
+        ///     keepdims, the 0-d input's axis 0 / -1), the axis validation and every layout.
+        /// </summary>
+        /// <param name="arr">The float16 / float32 / float64 / complex128 input.</param>
+        /// <param name="axis">The axis to reduce, or null for every axis.</param>
+        /// <param name="keepdims">When true the reduced axes stay in the result with length 1.</param>
+        /// <param name="op"><see cref="ReductionOp.NanSum"/> or <see cref="ReductionOp.NanProd"/>.</param>
+        /// <returns>The reduction of the NaN-replaced array.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <remarks>
+        ///     Three IL passes (isnan, where, the reduction) where the fused NaN kernels make one; it serves the routes
+        ///     those kernels do not cover (a one-element input, the complex axis sum). NumPy itself makes four (a copy,
+        ///     isnan, copyto, the reduction). The mask, the fill scalar and the replaced copy are this method's own
+        ///     intermediates and are released here; the reduction's result is always a fresh array.
+        /// </remarks>
+        private NDArray NanReplacedReduction(NDArray arr, int? axis, bool keepdims, ReductionOp op)
+        {
+            var tc = arr.GetTypeCode;
+            using var isNaN = np.isnan(arr);
+            using var fill = NDArray.Scalar(op == ReductionOp.NanProd ? tc.GetOneValue() : tc.GetDefaultValue(), tc);
+            using var replaced = np.where(isNaN, fill, arr);
+            return op == ReductionOp.NanProd
+                ? ReduceProduct(replaced, axis, keepdims: keepdims)
+                : ReduceAdd(replaced, axis, keepdims);
         }
     }
 }

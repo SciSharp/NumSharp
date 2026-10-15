@@ -584,6 +584,11 @@ namespace NumSharp.Tests.Documentation
             int[,] md = (int[,])arr.ToMuliDimArray<int>();
             md[1, 1].Should().Be(4);
 
+            // The documented any-layout + conversion line: the transpose's logical elements, as float64.
+            double[,] mdT = (double[,])arr.T.ToMuliDimArray<double>();
+            mdT[0, 1].Should().Be(3.0);
+            mdT[1, 0].Should().Be(2.0);
+
             int[][] jag = (int[][])arr.ToJaggedArray<int>();
             jag[1][0].Should().Be(3);
 
@@ -637,10 +642,10 @@ namespace NumSharp.Tests.Documentation
             c["..."] = c + 1;
             c.ToArray<int>().Should().Equal(2, 3, 4);
 
-            // "NumSharpException: assignment destination is read-only" → copy the broadcast view first
+            // "ValueError: assignment destination is read-only" → copy the broadcast view first
             var bc = np.broadcast_to(np.arange(3), new Shape(2, 3));
             Action write = () => bc[0, 0] = 9;
-            write.Should().Throw<NumSharpException>().WithMessage("*read-only*");
+            write.Should().Throw<ValueError>().WithMessage("*read-only*");
         }
 
         // ── Second pass: the view / copy / read-only semantics the tables claim ─────────────────────
@@ -767,7 +772,7 @@ namespace NumSharp.Tests.Documentation
             var b = np.broadcast_to(np.arange(3), new Shape(2, 3));
             b.Shape.IsWriteable.Should().BeFalse("broadcast views are read-only");
             Action act = () => b[0, 0] = 99;
-            act.Should().Throw<NumSharpException>().WithMessage("*read-only*");
+            act.Should().Throw<ValueError>().WithMessage("*read-only*");
         }
 
         [TestMethod]

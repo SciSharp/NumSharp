@@ -206,22 +206,24 @@ public class AuditV2_Iterators
     }
 
     // =====================================================================
-    // T1.23 — NDIter.GetIterView(0) throws OverflowException on 0-d arrays.
-    // File: src/NumSharp.Core/Backends/Iterators/NDIter.cs:2650-2704
+    // T1.23 — NDIter.GetIterView(0) threw OverflowException on 0-d arrays (RESOLVED).
+    // File: src/NumSharp.Core/Backends/Iterators/NDIter.cs (GetIterView)
     //
-    // Line 2668 returns original.flat[0] for ndim=0, but flat[0] triggers slice
-    // indexing which fails on scalars with OverflowException.
+    // GetIterView returns original.flat[0] for ndim=0. At audit time flat[0]
+    // went through slice indexing, which failed on scalars with OverflowException.
+    // GetIterView itself is unchanged; the indexing path under flat[0] no longer
+    // throws. The test was [OpenBugs] until the 2026-10-05 run of the whole
+    // OpenBugs category found it passing.
     // =====================================================================
     /// <summary>
     /// T1.23 — GetIterView on a 0-d (scalar) array must return a 0-d view
     /// that shares storage with the scalar. NumPy: it.itviews[0] returns a
-    /// 0-d view. NumSharp: throws OverflowException ("Arithmetic operation
-    /// resulted in an overflow").
+    /// 0-d view. At audit time NumSharp threw OverflowException ("Arithmetic
+    /// operation resulted in an overflow") at NDArray.get_Item(Slice[]).
     ///
     /// NumPy 2.4.2: np.nditer(np.array(42)).itviews[0].ndim == 0
-    /// NumSharp: OverflowException at NDArray.get_Item(Slice[]).
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.23")]
+    [TestMethod] // RESOLVED: a 0-d operand gives a 0-d view (was [OpenBugs] audit-v2-T1.23).
     public void T1_23_GetIterView_On_0D_Array_Must_Not_Throw()
     {
         var scalar = np.array(42L);
@@ -365,9 +367,10 @@ public class AuditV2_Iterators
 
     /// <summary>
     /// T1.34 — NDExpr.Call with a Half-typed parameter must be allowed.
-    /// IsSupported() rejects Half/SByte/Complex as method parameter/return types.
+    /// FIXED (NDExpr Phase 0): CallNode.IsSupported covers all 15 dtypes (SByte/Half/Complex
+    /// included); the edge conversions already handled them.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.34")]
+    [TestMethod]
     public void T1_34_NDExpr_Call_Half_Param_Must_Compile()
     {
         Func<Half, Half> f = h => h;

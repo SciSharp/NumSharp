@@ -20,13 +20,25 @@ namespace NumSharp
         /// </param>
         /// <returns>
         ///     A <see cref="PolyfitResult"/> that converts implicitly to the coefficient array; deconstruct it
-        ///     for the <c>full</c> five-tuple or the <c>cov</c> two-tuple.
+        ///     for the <c>full</c> five-tuple or the <c>cov</c> two-tuple. It carries exactly the arrays NumPy's
+        ///     return holds: the SVD diagnostics (<c>residuals</c>/<c>rank</c>/<c>singular_values</c>) only when
+        ///     <paramref name="full"/> is true, the covariance only when <paramref name="cov"/> is truthy — every
+        ///     other slot is <c>null</c>.
         /// </returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polyfit.html</remarks>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.polyfit.html
+        ///     <para>
+        ///     The lstsq diagnostics a non-<c>full</c> call does not return are released with the method's other
+        ///     temporaries. They used to ride along in the result regardless of <paramref name="full"/>, so the
+        ///     ordinary spelling <c>NDArray c = np.polyfit(x, y, deg)</c> — which keeps only the coefficients —
+        ///     stranded the residual and singular-value buffers (2 pooled arrays per call) until a GC.
+        ///     </para>
+        /// </remarks>
         [NDScoped] // PolyfitResult is an INDArrayCarrier: the outputs it carries are yielded, every float-cast/vander/scale/cov temp is reclaimed
         public static PolyfitResult polyfit(NDArray x, NDArray y, int deg, double? rcond = null,
             bool full = false, NDArray w = null, object cov = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(x, y, w);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             int order = deg + 1;
             x = np.asarray(x) + 0.0;   // to floating (float32 stays float32; int/bool -> float64)
             y = np.asarray(y) + 0.0;
@@ -39,7 +51,7 @@ namespace NumSharp
                 throw new TypeError("expected non-empty vector for x");
             if (y.ndim < 1 || y.ndim > 2)
                 throw new TypeError("expected 1D or 2D array for y");
-            if (x.shape[0] != y.shape[0])
+            if (x.Shape.dimensions[0] != y.Shape.dimensions[0])
                 throw new TypeError("expected x and y to have same length");
 
             double rc = rcond ?? (x.size * np.finfo(x.dtype).eps);
@@ -53,7 +65,7 @@ namespace NumSharp
                 w = np.asarray(w) + 0.0;
                 if (w.ndim != 1)
                     throw new TypeError("expected a 1-d array for weights");
-                if (w.shape[0] != y.shape[0])
+                if (w.Shape.dimensions[0] != y.Shape.dimensions[0])
                     throw new TypeError("expected w and y to have the same length");
                 NDArray wcol = np.expand_dims(w, -1);
                 lhs = lhs * wcol;
@@ -71,6 +83,9 @@ namespace NumSharp
             if (full)
                 return new PolyfitResult(c, resids, rank, s, rc, null);
 
+            // Not `full`: NumPy returns only the coefficients (plus the covariance below), so the diagnostics are
+            // left OUT of the result — the scope then reclaims them with every other temporary of this call.
+
             if (CovTruthy(cov))
             {
                 NDArray vbase = np.linalg.inv(np.dot(lhs.T, lhs));
@@ -83,10 +98,10 @@ namespace NumSharp
 
                 NDArray fac = unscaled ? NDArray.Scalar(1.0) : resids / (double)(x.size - order);
                 NDArray v = y.ndim == 1 ? vbase * fac : np.expand_dims(vbase, -1) * fac;
-                return new PolyfitResult(c, resids, rank, s, rc, v);
+                return new PolyfitResult(c, null, null, null, rc, v);
             }
 
-            return new PolyfitResult(c, resids, rank, s, rc, null);
+            return new PolyfitResult(c, null, null, null, rc, null);
         }
 
         /// <summary>NumPy's <c>elif cov:</c> truthiness — true, or a non-empty string other than nothing.</summary>
@@ -113,13 +128,14 @@ namespace NumSharp
         /// <summary>Polynomial coefficients, highest power first — <c>(deg+1,)</c> or <c>(deg+1, K)</c>.</summary>
         public readonly NDArray coeffs;
 
-        /// <summary>Sum of squared residuals of the least-squares fit (empty unless full-rank overdetermined).</summary>
+        /// <summary>Sum of squared residuals of the least-squares fit (empty unless full-rank overdetermined);
+        /// <c>null</c> unless <c>full</c> was requested (NumPy returns it only then).</summary>
         public readonly NDArray residuals;
 
-        /// <summary>Effective rank of the scaled Vandermonde matrix.</summary>
+        /// <summary>Effective rank of the scaled Vandermonde matrix; <c>null</c> unless <c>full</c> was requested.</summary>
         public readonly NDArray rank;
 
-        /// <summary>Singular values of the scaled Vandermonde matrix.</summary>
+        /// <summary>Singular values of the scaled Vandermonde matrix; <c>null</c> unless <c>full</c> was requested.</summary>
         public readonly NDArray singular_values;
 
         /// <summary>The <c>rcond</c> value used.</summary>

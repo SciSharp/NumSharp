@@ -14,7 +14,10 @@ namespace NumSharp
         /// <returns>Lower triangle of <paramref name="m"/>, of the same dtype. Always a fresh, writeable, C-contiguous array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tril.html</remarks>
         public static NDArray tril(NDArray m, int k = 0)
-            => Triangle(m, k, lower: true);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(m);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return Triangle(m, k, lower: true);
+        }
 
         /// <summary>
         ///     Upper triangle of an array — a copy of <paramref name="m"/> with all elements
@@ -25,7 +28,10 @@ namespace NumSharp
         /// <returns>Upper triangle of <paramref name="m"/>, of the same dtype. Always a fresh, writeable, C-contiguous array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.triu.html</remarks>
         public static NDArray triu(NDArray m, int k = 0)
-            => Triangle(m, k, lower: false);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(m);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return Triangle(m, k, lower: false);
+        }
 
         /// <summary>
         ///     Shared implementation of <see cref="tril"/> / <see cref="triu"/>.
@@ -71,8 +77,8 @@ namespace NumSharp
                 throw new ArgumentException("tri() missing 1 required positional argument: 'N'");
 
             // NumPy: tri(*m.shape[-2:], ...) — for 1-D that is tri(n) which squares up to (n, n).
-            long rows = ndim == 1 ? m.shape[0] : m.shape[ndim - 2];
-            long cols = ndim == 1 ? m.shape[0] : m.shape[ndim - 1];
+            long rows = ndim == 1 ? m.Shape.dimensions[0] : m.Shape.dimensions[ndim - 2];
+            long cols = ndim == 1 ? m.Shape.dimensions[0] : m.Shape.dimensions[ndim - 1];
 
             var fast = TryTriangleBlit(m, k, lower, cols);
             if (!(fast is null))
@@ -109,7 +115,7 @@ namespace NumSharp
 
             long size = m.size;
             if (size == 0 || cols == 0)
-                return np.zeros(new Shape((long[])m.shape.Clone()), m.typecode);
+                return np.zeros(Shape.Adopt((long[])m.Shape.dimensions.Clone()), m.typecode);
 
             int elemSize = m.typecode.SizeOf();
             bool writeOnce = PrefersWriteOnce(size * elemSize);
@@ -118,8 +124,8 @@ namespace NumSharp
             // write every byte of every row exactly once (zeros, retained run, zeros). Above it
             // np.zeros rides free OS zero-pages and only the retained run is worth touching.
             var res = writeOnce
-                ? new NDArray(m.typecode, new Shape((long[])m.shape.Clone()), false)
-                : np.zeros(new Shape((long[])m.shape.Clone()), m.typecode);
+                ? new NDArray(m.typecode, Shape.Adopt((long[])m.Shape.dimensions.Clone()), false)
+                : np.zeros(Shape.Adopt((long[])m.Shape.dimensions.Clone()), m.typecode);
             byte* src = m.Storage.Address;
             byte* dst = res.Storage.Address + res.Shape.Offset * elemSize;
 

@@ -13,6 +13,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray union1d(NDArray ar1, NDArray ar2)
         {
+            using var plain = NDMatrixBoundary.PlainFor(ar1, ar2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // Boundary scope: the ravel views, the concatenate buffer and unique's internals are
             // reclaimed at exit; only the final (possibly NaN-canonicalised) array is yielded.
             // NumPy: unique(concatenate((ar1, ar2), axis=None)) — axis=None flattens both operands.

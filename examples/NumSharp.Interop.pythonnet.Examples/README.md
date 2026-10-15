@@ -6,6 +6,13 @@ bridge between NumSharp `NDArray` and the Python ecosystem (numpy, PEP 3118 buff
 Pandas, custom adapters) through Python.NET. Together they touch **every public member** of the
 package.
 
+For a complete project instead of single files, see the two examples beside this folder:
+[`NumSharpPythonnetLocalExample`](../NumSharpPythonnetLocalExample/README.md) (a console app that
+finds the Python on your machine, starts the engine inside a virtual environment and runs NumPy,
+pandas, SciPy, scikit-learn, Matplotlib and PyTorch over NumSharp arrays) and
+[`NumSharpPythonnetGhActionsCicd`](../NumSharpPythonnetGhActionsCicd/README.md) (the same six
+libraries as tests, with the GitHub Actions workflow that runs them on Windows, Linux and macOS).
+
 They are written to be **read**, top to bottom: each line does one thing and the comment beside it
 states what that line leaves behind (`// nd is now [11. 1. 2. 3.]`, `// (48, 8)`,
 `// InvalidOperationException: ...`). They print nothing and assert nothing. The proof lives next

@@ -26,11 +26,12 @@ namespace NumSharp
         /// <param name="align">
         ///     Describes whether or not the data is aligned properly for its type. False CLEARS the
         ///     ALIGNED flag (observable in <see cref="flags"/>: <c>aligned</c>/<c>num</c>/<c>behaved</c>/
-        ///     <c>carray</c>/<c>farray</c> and the repr all follow); True re-sets it. NumPy's
-        ///     "cannot set aligned flag of mis-aligned array to True" is unreachable here: NumSharp
-        ///     addresses memory in whole elements (element strides and offsets), so data can never sit
-        ///     mis-aligned for its own dtype — True always succeeds. Fresh views and copies of an
-        ///     align-cleared array come back ALIGNED, as in NumPy (each new array recomputes the flag).
+        ///     <c>carray</c>/<c>farray</c> and the repr all follow); True re-sets it when the memory is
+        ///     aligned and raises NumPy's <c>ValueError("cannot set aligned flag of mis-aligned array to
+        ///     True")</c> when it is not — an array over a caller's buffer at a misaligning byte offset
+        ///     (<c>np.ndarray(shape, buffer=b, offset=3)</c>) or a view of one. Fresh views and copies of an
+        ///     align-cleared array come back ALIGNED when their memory is, as in NumPy (each new array
+        ///     recomputes the flag).
         /// </param>
         /// <param name="uic">
         ///     (Write-back-if-copy.) True raises NumPy's
@@ -43,7 +44,8 @@ namespace NumSharp
         ///     writeback state to resolve. A documented memory-safety divergence.
         /// </param>
         /// <exception cref="ValueError">
-        ///     <c>uic: true</c>, or <c>write: true</c> on an array NumPy's rule refuses (see above).
+        ///     <c>align: true</c> on misaligned memory, <c>uic: true</c>, or <c>write: true</c> on an array
+        ///     NumPy's rule refuses (see above).
         /// </exception>
         /// <remarks>
         ///     <para>
@@ -69,6 +71,11 @@ namespace NumSharp
 
             if (align.HasValue)
             {
+                // array_setflags tests IsAligned(self) before it sets the flag, and returns at once when the memory
+                // is misaligned: nothing has changed yet, so there is nothing to roll back.
+                if (align.Value && !Storage.IsDataAligned)
+                    throw new ValueError("cannot set aligned flag of mis-aligned array to True");
+
                 Storage.SetShapeUnsafe(align.Value
                     ? Shape.WithFlags(flagsToSet: ArrayFlags.ALIGNED)
                     : Shape.WithFlags(flagsToClear: ArrayFlags.ALIGNED));

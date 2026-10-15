@@ -16,8 +16,11 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the computation runs at this precision; integer/bool requests raise NumPy's "No loop matching" error.</param>
         /// <returns>The tangent of each element of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tan.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray tan(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.Tan(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => tan(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.Tan(x, dtype, @out, where);
 
         /// <summary>
         ///     Compute hyperbolic tangent element-wise. <br></br>
@@ -27,8 +30,11 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tanh.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray tanh(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.Tanh(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => tanh(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.Tanh(x, dtype, @out, where);
 
         /// <summary>
         ///     Compute trigonometric inverse tangent, element-wise. <br></br>
@@ -38,8 +44,11 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>Return has the same shape as x. Its real part is in [-pi/2, pi/2] (arctan(+/-inf) returns +/-pi/2). This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arctan.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray arctan(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.ATan(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => arctan(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.ATan(x, dtype, @out, where);
 
         /// <summary>
         ///     Compute Element-wise arc tangent of x1/x2 choosing the quadrant correctly. <br></br>
@@ -50,7 +59,10 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The Array of angles in radians, in the range [-pi, pi]. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arctan2.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray arctan2(NDArray y, NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.ATan2(y, x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(y, x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((y, x, @out, where, dtype), static s => arctan2(s.y, s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.ATan2(y, x, dtype, @out, where);
     }
 }

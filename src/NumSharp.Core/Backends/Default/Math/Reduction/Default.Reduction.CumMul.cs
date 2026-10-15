@@ -41,7 +41,7 @@ namespace NumSharp.Backends
                 }
 
                 return new NDArray(emptyRetType,
-                    axis_ == null ? Shape.Vector(shape.size) : new Shape(shape.dimensions), false);
+                    axis_ == null ? Shape.Vector(shape.size) : Shape.Adopt(shape.dimensions), false);
             }
 
             // 0-d scalar or single-element 1-D: cumprod is the value itself, promoted to the
@@ -83,7 +83,7 @@ namespace NumSharp.Backends
             NDArray inputArr = arr;
 
             // Create output with CONTIGUOUS strides even if input is broadcast.
-            var outputShape = new Shape(shape.dimensions);  // Fresh contiguous shape
+            var outputShape = Shape.Adopt(shape.dimensions);  // Fresh contiguous shape
             var retTypeCode = typeCode ?? (inputArr.GetTypeCode.GetAccumulatingType());
             var ret = new NDArray(retTypeCode, outputShape, false);
 
@@ -92,13 +92,13 @@ namespace NumSharp.Backends
             // handle negative strides or offset-based views correctly.
             if (DirectILKernelGenerator.Enabled && !shape.IsBroadcasted && shape.IsContiguous && shape.offset == 0)
             {
-                bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.Shape.Strides[axis] == 1);
+                bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.Shape.strides[axis] == 1);
                 var key = new CumulativeAxisKernelKey(inputArr.GetTypeCode, retTypeCode, ReductionOp.CumProd, innerAxisContiguous);
                 var kernel = DirectILKernelGenerator.TryGetCumulativeAxisKernel(key);
                 if (kernel != null)
                 {
-                    fixed (long* inputStrides = arr.Shape.Strides)
-                    fixed (long* shapePtr = arr.shape)
+                    fixed (long* inputStrides = arr.Shape.strides)
+                    fixed (long* shapePtr = arr.Shape.dimensions)
                     {
                         kernel((void*)arr.Address, (void*)ret.Address, inputStrides, shapePtr, axis, arr.ndim, arr.size);
                     }

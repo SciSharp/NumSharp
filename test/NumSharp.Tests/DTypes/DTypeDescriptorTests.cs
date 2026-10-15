@@ -35,7 +35,23 @@ namespace NumSharp.Tests.DTypes
             string name, string str, string repr, string tostr, string cls)
         {
             var d = np.dtype(spelling);
+            // The 32/64-bit integer type_num AND char are platform-dependent: np.dtype('int32')/np.dtype('int64')
+            // resolve to NPY_LONG(7,'l')/NPY_LONGLONG(9,'q') on LLP64 (Windows / 32-bit) but NPY_INT(5,'i')/
+            // NPY_LONG(7,'l') on LP64 (Linux/macOS). The DataRow carries the LP64 values; remap to the local
+            // platform so the assertion tracks the host NumPy byte-for-byte (see DTypeRegistry's CLongIs32Bit).
+            bool cLongIs32 = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) || IntPtr.Size != 8;
+            if (cLongIs32)
+            {
+                switch (spelling)
+                {
+                    case "i4": num = 7; ch = 'l'; break;
+                    case "u4": num = 8; ch = 'L'; break;
+                    case "i8": num = 9; ch = 'q'; break;
+                    case "u8": num = 10; ch = 'Q'; break;
+                }
+            }
             d.num.Should().Be(num);
+            d.type_num.Should().Be((NPY_TYPES)num, "type_num is the typed view of num");
             d.kind.Should().Be(kind);
             d.@char.Should().Be(ch);
             d.byteorder.Should().Be(byteorder);
@@ -87,6 +103,40 @@ namespace NumSharp.Tests.DTypes
             ch.Meta.Should().BeSameAs(np.dtypes.CharDType);
         }
 
+        [TestMethod]
+        public void NpyTypes_ImplicitCast_And_From_WidthCanonicalized()
+        {
+            // NPY_TYPES is the fifth dtype spelling — implicitly converts to DType like Type/NPTypeCode/string.
+            ((DType)NPY_TYPES.NPY_DOUBLE).Should().Be(np.float64);
+            np.zeros(3, NPY_TYPES.NPY_DOUBLE).dtype.Should().Be(np.float64);
+            np.sqrt(np.arange(4), dtype: NPY_TYPES.NPY_FLOAT).dtype.Should().Be(np.float32);
+
+            // From (and thus the implicit cast) maps EVERY C-integer number to the NumSharp type of that width, on
+            // any platform — NumPy's PyArray_DescrFromType accepts intc/long/longlong everywhere; NumSharp folds each
+            // width to one type. So NPY_INT and NPY_LONGLONG resolve regardless of which is the platform-canonical num.
+            DType.From(NPY_TYPES.NPY_INT).Should().Be(np.int32);
+            DType.From(NPY_TYPES.NPY_UINT).Should().Be(np.uint32);
+            DType.From(NPY_TYPES.NPY_LONGLONG).Should().Be(np.int64);
+            DType.From(NPY_TYPES.NPY_ULONGLONG).Should().Be(np.uint64);
+            bool cLongIs32 = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) || IntPtr.Size != 8;
+            DType.From(NPY_TYPES.NPY_LONG).Should().Be(cLongIs32 ? np.int32 : np.int64);   // C long: 32-bit on Windows
+            DType.From(NPY_TYPES.NPY_HALF).Should().Be(np.float16);
+            DType.From(NPY_TYPES.NPY_CDOUBLE).Should().Be(np.complex128);
+
+            // type_num round-trips through From for the platform-canonical spelling.
+            DType.From(np.dtype("int64").type_num).Should().Be(np.int64);
+            DType.From(np.dtype("int32").type_num).Should().Be(np.int32);
+
+            // NumSharp's user-range extras carry the user members.
+            np.dtype("decimal").type_num.Should().Be(NPY_TYPES.NUMSHARP_DECIMAL);
+            np.dtype("char").type_num.Should().Be(NPY_TYPES.NUMSHARP_CHAR);
+
+            // Numbers with no NumSharp type at all are rejected (never silently substituted).
+            ((Action)(() => DType.From(NPY_TYPES.NPY_CFLOAT))).Should().Throw<NotSupportedException>("no complex64");
+            ((Action)(() => DType.From(NPY_TYPES.NPY_OBJECT))).Should().Throw<NotSupportedException>();
+            ((Action)(() => DType.From(NPY_TYPES.NPY_VOID))).Should().Throw<NotSupportedException>();
+        }
+
         // ---- datetime64 / timedelta64: parametric descriptors -----------------------------------------------------
 
         [DataTestMethod]
@@ -112,13 +162,23 @@ namespace NumSharp.Tests.DTypes
             d.str.Should().Be(str);
             d.ToString(true).Should().Be(repr);
             d.ToString().Should().Be(tostr);
-            d.isbuiltin.Should().Be(0, "NumPy's datetime default_descr hands out a COPY of the singleton, never the singleton");
+            if (spelling.Length == 1)
+            {
+                // The bare letters are PyArray_DescrFromType(NPY_DATETIME / NPY_TIMEDELTA): the static builtin descriptor
+                // itself, the same object every call (NumPy 2.4.2: np.dtype('M').isbuiltin == 1, np.dtype('M') is np.dtype('M')).
+                d.isbuiltin.Should().Be(1, "np.dtype('M') / np.dtype('m') is the builtin singleton");
+                d.Should().BeSameAs(np.dtype(spelling));
+            }
+            else
+            {
+                d.isbuiltin.Should().Be(0, "a datetime typestr builds a fresh descriptor (and default_descr hands out a COPY of the singleton)");
+            }
             d.isnative.Should().BeTrue();
             d.type.Should().BeNull("no C# scalar type until the storage lane lands (Stage C)");
             d.typecode.Should().Be(NPTypeCode.Empty);
-            d.Meta.IsParametric.Should().BeTrue();
-            d.Meta.IsLegacy.Should().BeTrue();
-            d.Meta.IsNumeric.Should().BeFalse();
+            d.Meta._parametric.Should().BeTrue();
+            d.Meta._legacy.Should().BeTrue();
+            d.Meta._is_numeric.Should().BeFalse();
             np.datetime_data(d).Should().Be((unit, count));
             d.DatetimeMetadata.Should().NotBeNull();
         }
@@ -320,14 +380,24 @@ namespace NumSharp.Tests.DTypes
             empty.Should().Throw<ValueError>().WithMessage("byteorder not recognized (got '')");
         }
 
+        /// <summary>
+        ///     NumPy's legacy <c>ensure_canonical</c> slot (<c>ensure_native_byteorder</c>) returns a native descriptor as is
+        ///     and a non-native one as a FRESH '=' copy (<c>PyArray_DescrNewByteorder(descr, NPY_NATIVE)</c>), never the class
+        ///     singleton — observable through <c>np.result_type(np.dtype('&gt;i4'))</c>, which NumPy 2.4.2 answers with an
+        ///     int32 that <c>is not np.dtype('i4')</c> and reports <c>isbuiltin == 0</c>.
+        /// </summary>
         [TestMethod]
         public void EnsureCanonical_ReturnsNativeForm()
         {
             var big = np.dtype(">i4");
-            big.Meta.EnsureCanonical(big).Should().BeSameAs(DType.Int32);
-            DType.Int32.Meta.EnsureCanonical(DType.Int32).Should().BeSameAs(DType.Int32);
+            var native = big.Meta.ensure_canonical(big);
+            native.Should().Be(DType.Int32);
+            native.Should().NotBeSameAs(DType.Int32, "NumPy copies the descriptor rather than returning the singleton");
+            native.isbuiltin.Should().Be(0);
+            native.byteorder.Should().Be('=');
+            DType.Int32.Meta.ensure_canonical(DType.Int32).Should().BeSameAs(DType.Int32);
             var bigDt = np.dtype(">M8[ns]");
-            var canon = bigDt.Meta.EnsureCanonical(bigDt);
+            var canon = bigDt.Meta.ensure_canonical(bigDt);
             canon.isnative.Should().BeTrue();
             canon.Should().Be(np.dtype("M8[ns]"));
         }

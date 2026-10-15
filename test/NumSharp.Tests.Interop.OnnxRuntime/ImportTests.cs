@@ -148,7 +148,7 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             using IDisposableReadOnlyCollection<OrtValue> outputs = session.Run(options, new[] { "X" }, new[] { input.Value }, new[] { "seq" });
 
             outputs[0].OnnxType.Should().Be(OnnxValueType.ONNX_TYPE_SEQUENCE);
-            new Action(() => outputs[0].ToNDArray()).Should().Throw<NotSupportedException>().WithMessage("*SEQUENCE*GetValueCount*");
+            new Action(() => outputs[0].ToNDArray()).Should().Throw<NotSupportedException>().WithMessage("*SEQUENCE*ToNDArrays*");
             new Action(() => outputs[0].AsNDArray()).Should().Throw<NotSupportedException>().WithMessage("*SEQUENCE*");
             NDArrayOnnxInterop.LiveImports.Should().Be(0);
         }

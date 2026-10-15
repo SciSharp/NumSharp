@@ -316,7 +316,9 @@ namespace NumSharp.Tests.Selection
             // np: a(3,4)[a%2==0] (6 trues) = [1,2,3] -> ValueError
             var a = Iota2(3, 4);
             Action act = () => a[(a % 2) == 0] = np.array(new long[] { 1, 2, 3 });
-            act.Should().Throw<IncorrectShapeException>();
+            // A mask of the array's own shape is NumPy's array_assign_boolean_subscript, with its own text.
+            act.Should().Throw<ValueError>().WithMessage(
+                "NumPy boolean array indexing assignment cannot assign 3 input values to the 6 output values where the mask is true");
         }
 
         [TestMethod]
@@ -324,7 +326,8 @@ namespace NumSharp.Tests.Selection
         {
             var a = Iota2(3, 4);
             Action act = () => a[(a % 3) == 0] = np.array(new long[] { 1, 2, 3, 4, 5 }); // 4 trues, 5 vals
-            act.Should().Throw<IncorrectShapeException>();
+            act.Should().Throw<ValueError>().WithMessage(
+                "NumPy boolean array indexing assignment cannot assign 5 input values to the 4 output values where the mask is true");
         }
 
         // =================================================================
@@ -363,7 +366,9 @@ namespace NumSharp.Tests.Selection
             // np: a(3,4)[rowmask picks 2] = [10,20]  -> ValueError ((2,) !-> (2,4))
             var a = Iota2(3, 4);
             Action act = () => a[M(true, false, true)] = np.array(new long[] { 10, 20 });
-            act.Should().Throw<IncorrectShapeException>();
+            // A prefix mask is a fancy index: NumPy's MapIter text.
+            act.Should().Throw<ValueError>().WithMessage(
+                "shape mismatch: value array of shape (2,) could not be broadcast to indexing result of shape (2,4)");
         }
 
         [TestMethod]
@@ -428,7 +433,7 @@ namespace NumSharp.Tests.Selection
             // assigning into a broadcast (read-only) view -> NumPy ValueError
             var a = np.broadcast_to(Iota(4), new Shape(3, 4));
             Action act = () => a[(a % 2) == 0] = (NDArray)(-1L);
-            act.Should().Throw<NumSharpException>();
+            act.Should().Throw<ValueError>();
         }
 
         [TestMethod]

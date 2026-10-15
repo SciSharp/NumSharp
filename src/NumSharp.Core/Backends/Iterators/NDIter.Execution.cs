@@ -759,7 +759,17 @@ namespace NumSharp.Backends.Iteration
         /// schedule is used via <see cref="BufferedReduce{TResult}"/>. Otherwise
         /// we let the IL kernel iterate the array directly.
         /// </summary>
-        public TResult ExecuteReduction<TResult>(ReductionOp op) where TResult : unmanaged
+        /// <typeparam name="TResult">The CLR type of the result — the accumulator's own type.</typeparam>
+        /// <param name="op">The reduction.</param>
+        /// <param name="accumType">The accumulator (loop) dtype the caller resolved, which must be
+        /// <typeparamref name="TResult"/>'s dtype; null derives the op's default (the NEP 50 accumulator for
+        /// sum / prod). The caller's dtype matters: <c>np.sum(int8, dtype=int8)</c> over an F-contiguous view
+        /// asked for an int8 result, and the derived int64 accumulator generated an int8-typed kernel under the
+        /// (int8, int64) cache key — a wrong sum, and every later default int8 sum found that kernel and failed
+        /// its delegate cast ("IL kernel not available for Sum(SByte) -> Int64").</param>
+        /// <returns>The reduced value.</returns>
+        /// <exception cref="InvalidOperationException">The iterator does not hold exactly one operand.</exception>
+        public TResult ExecuteReduction<TResult>(ReductionOp op, NPTypeCode? accumType = null) where TResult : unmanaged
         {
             if (_state->NOp != 1)
                 throw new InvalidOperationException(
@@ -769,9 +779,9 @@ namespace NumSharp.Backends.Iteration
             bool isContig = (f & (uint)NDIterFlags.CONTIGUOUS) != 0;
 
             var srcType = _state->GetOpSrcDType(0);
-            var accumType = DetermineAccumulatorType(srcType, op, typeof(TResult));
+            var resolvedAccumType = accumType ?? DetermineAccumulatorType(srcType, op, typeof(TResult));
 
-            var key = new ElementReductionKernelKey(srcType, accumType, op, isContig);
+            var key = new ElementReductionKernelKey(srcType, resolvedAccumType, op, isContig);
             var kernel = DirectILKernelGenerator.GetTypedElementReductionKernel<TResult>(key);
 
             int ndim = _state->NDim;

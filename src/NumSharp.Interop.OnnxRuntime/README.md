@@ -25,7 +25,9 @@ NumSharp reads. So there is no `TensorEngine` seam, no `[ModuleInitializer]`, an
 changes nothing until a verb is called.
 
 > Verified against ONNX Runtime **1.16.0** (the package floor) and **1.29.0** (current) on net8.0 / net10.0,
-> by `test/NumSharp.Tests.Interop.OnnxRuntime` (128 tests over 20 committed `.onnx` models ORT actually executes).
+> by `test/NumSharp.Tests.Interop.OnnxRuntime` (200 tests over 23 committed `.onnx` models ORT actually executes, among
+> them an every-dtype × every-layout matrix, property-based, metamorphic, bit-pattern-fuzz, concurrency, boundary,
+> reference-accounting and API-approval suites).
 
 ## Install
 
@@ -52,6 +54,7 @@ Same convention as the pythonnet bridge: **`As…` shares memory** (zero-copy vi
 | ORT → NumSharp | `ortValue.ToNDArray()` → `NDArray` | a fresh **owning**, C-contiguous **copy** — the safe default; dispose the `OrtValue` whenever you like. |
 | ORT → NumSharp | `ortValue.AsNDArray(ownsValue = false)` → `NDArray` | a **zero-copy view** over ORT's own buffer (CPU tensors only), mutations visible both ways. `ownsValue: true` makes the last view dispose the `OrtValue`. |
 | ORT → NumSharp | `denseTensor.ToNDArray()` / `denseTensor.AsNDArray()` / `namedOnnxValue.ToNDArray()` | the legacy-surface twins (column-major tensors transpose back on copy, stay Fortran-ordered as a view; `NamedOnnxValue` dispatches on the element type at runtime). |
+| ORT → NumSharp | `ortValue.ToNDArrays()` / `ToMap()` / `ToMaps()` / `ReadStringTensor()` | **non-tensor** outputs: a sequence of tensors → `NDArray[]`; a map / a scikit-learn ZipMap `sequence(map(int64,float))` → `(keys, values)` NDArray copies; a string tensor → `string[]` (NumSharp has no string dtype). All copy — no lease. |
 
 Plus the dtype maps `ToTensorElementType` / `FromTensorElementType` (+ `Try…` forms, `ToTensorElementClrType`)
 and two counters, `NDArrayOnnxInterop.LiveExports` / `LiveImports`, that make every live crossing observable.
@@ -91,7 +94,8 @@ session.Run(inputs, outputs: new Dictionary<string, NDArray> { { "Y", preallocat
 | Char | UInt16 | zero-copy as UTF-16 code units; directional — an ORT UInt16 comes back as UInt16, not Char |
 | Decimal | — | no ONNX type: the array-producing verbs convert to Double (a float64 temporary the handle owns; lossy beyond ~16 digits); the low-level maps refuse it |
 | Complex | Complex64/128 exist in the enum but **no ORT API or kernel accepts them** | refused — split into `np.real` / `np.imag` |
-| — | BFloat16, String | no NumSharp dtype — refused with the ORT-side alternative named |
+| — | BFloat16 | no NumSharp dtype — refused with the ORT-side alternative named |
+| String | String | no NumSharp string/object dtype: a string **output** reads as `string[]` via `ortValue.ReadStringTensor()`; a string model **input** is refused |
 
 ## Post-processing
 
@@ -131,16 +135,38 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
 - **Exports** (`AsOrtValue` / `AsDenseTensor<T>`) take their own atomic reference on the NumSharp buffer
   (NumSharp's ARC), so the memory survives even if the source `NDArray` is disposed or collected while ORT
   holds the tensor. Release is deterministic and owned by the returned handle (`OrtTensor.Dispose` /
-  `OrtTensor<T>.Dispose`); a forgotten handle is released by a finalizer safety net. **Keep the handle alive
-  across `Run`** — pass `handle.Value`, dispose after the run (`using`). While exported,
-  `ndarray.resize(refcheck: true)` on the source refuses (`cannot resize an array that references or is
-  referenced by another array`), exactly NumPy's rule.
+  `OrtTensor<T>.Dispose`). **Keep the handle (or its `Value`) reachable across `Run`** — pass `handle.Value`,
+  dispose after the run (`using`): ORT's own `Run` holds no reference to the managed inputs while native code
+  reads them, and neither do `OrtIoBinding`, `SessionOptions.AddInitializer` or `OrtValue.CreateSequence`.
+  While exported, `ndarray.resize(refcheck: true)` on the source refuses (`cannot resize an array that
+  references or is referenced by another array`), exactly NumPy's rule.
+- **Reachable means valid.** Holding only `handle.Value`, or only `Tensor` / `Memory`, keeps the handle — and
+  its reference on the buffer — alive, so a collection never disposes an `OrtValue` or disables a tensor you
+  still hold. A forgotten handle is released by a finalizer safety net once nothing reaches any of them; it only
+  gives the reference back (never frees eagerly), so an alias of the buffer you still hold stays valid, and it
+  never disposes the `OrtValue` or a `Source` conversion you can still reach.
+- **Pins of an `AsDenseTensor<T>` handle's `Memory<T>` outlive the handle.** Whoever pins that memory —
+  ORT's `CreateTensorValueFromMemory`, any `Memory<T>.Pin()` — takes a reference of its own on the NumSharp
+  buffer, given back exactly once: when the pin is disposed (two copies of one `MemoryHandle` count once) or
+  when it is collected undisposed (ORT's `OrtValue` finalizer never disposes the pin it holds). A
+  `tensor.AsNDArray()` view is an ordinary NumSharp view of the buffer, counted on it like any view. A disposed
+  handle only refuses NEW access: its tensor's `Memory<T>` throws `ObjectDisposedException` for a new span or
+  pin, and so do `ToNDArray` / `AsNDArray` of that tensor (before allocating anything).
+- **A released source is refused** with `ObjectDisposedException` by every verb that reads it (the exports,
+  the copies, `Run`'s cast and C-order copy): each takes its reference on the buffer before its first read,
+  so it never reads memory the pool may have handed to another array. Dtype and size refusals come first, so
+  nothing is converted, copied or allocated for an array that cannot cross.
 - **Imports** (`AsNDArray`) lease ORT's buffer through NumSharp's memory-block reference counting: the lease
   fires when the last NumSharp view over the memory — derived slices included — is disposed or collected.
   Non-owning views root the `OrtValue` (it cannot be finalized under them) but the caller must not `Dispose`
   it while a view is in use — the rule ORT documents for `GetTensorDataAsSpan`. `ownsValue: true` transfers
   ownership: the last view disposes the `OrtValue`, and the caller must not. Views do not own their data
   (`flags.owndata == False`): a size-changing `resize` refuses instead of detaching from ORT's memory.
+- **A `DenseTensor<T>` view keeps its tensor reachable.** `denseTensor.AsNDArray()` over a legacy `session.Run`
+  output (`DisposableNamedOnnxValue.AsTensor<T>()`) roots the tensor — and through it the `OrtValue` — so
+  results that are merely dropped are not finalized under the view (they used to be, and the next run's output
+  showed through it). Disposing the results explicitly while a view lives still frees the memory under it:
+  keep them alive, or copy with `ToNDArray`.
 - **Only CPU-addressable tensors** can be read or viewed. A CUDA / DirectML / TensorRT-resident output is
   refused (`the tensor lives in 'Cuda' memory ... which the CPU cannot address`) — bind a CPU output or copy
   to CPU first. Host-accessible device memory (`CudaPinned`) is fine.
@@ -151,9 +177,21 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
 
 ## Limits (stated up front)
 
-- **Complex** (ORT has no complex tensors), **BFloat16** / **String** / float8 / 4-bit (no NumSharp dtype).
+- **Complex** (ORT has no complex tensors), **BFloat16** / float8 / 4-bit (no NumSharp dtype). **String** has
+  no NumSharp dtype either, but string tensor OUTPUTS read as `string[]` via `ReadStringTensor()`; only a string
+  model INPUT is refused. Sequence / map outputs read via `ToNDArrays` / `ToMap` / `ToMaps`.
 - **GPU-resident tensors** cannot be viewed as `NDArray`s.
-- ORT's managed data API (`GetTensorMutableRawData`, spans) is `int`-indexed: copying a tensor over 2 GB
-  through `ToOrtValue` / `ToNDArray` throws — share it zero-copy instead.
+- ORT's managed data API (`GetTensorMutableRawData` and every span over it) is `int`-indexed — it hands out a
+  tensor's memory only as a `Span` of bytes, whose length it casts to `int` unchecked. **Export:** an array over
+  2 GB is refused by `ToOrtValue` before anything is copied or allocated — share it zero-copy with `AsOrtValue`,
+  which hands ORT a native pointer (no limit). **Import:** a tensor of 2 GB or more can be neither copied
+  (`ToNDArray`) nor viewed (`AsNDArray`) out of an `OrtValue`; both refuse up front, before anything is
+  allocated (`ToNDArray` used to allocate the whole result first and then fail; `AsNDArray` failed or worked
+  depending on bit 31 of the byte count). Let ORT write such an output into NumSharp's memory instead:
+  pre-allocate it and run `session.Run(inputs, outputs)`. A `DenseTensor<T>` has no byte limit (up to
+  `int.MaxValue` elements): `ToNDArray` / `AsNDArray` take it whole.
+- `ToDenseTensor<T>` copies into a managed `T[]`, which holds at most `Array.MaxLength` (2,147,483,591)
+  elements; a larger array is refused up front (`AsDenseTensor<T>` shares up to `int.MaxValue` elements,
+  `AsOrtValue` has no element limit).
 - `Run(...)` shape validation can only see what `NodeMetadata` reports: a declaration without dimensions is
   either a scalar or an unknown-rank tensor (indistinguishable there) and is left to ORT's own check.

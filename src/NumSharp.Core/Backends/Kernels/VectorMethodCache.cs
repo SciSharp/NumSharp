@@ -460,6 +460,21 @@ namespace NumSharp.Backends.Kernels
                     ?? throw new MissingMethodException(vT.FullName, "get_" + propName);
             });
 
+        /// <summary>
+        /// <c>Vector{N}&lt;T&gt;.AllBitsSet</c> property getter — the all-true lane mask of the
+        /// fused-expression vector path (a Boolean-typed node's constant True).
+        /// </summary>
+        public static MethodInfo AllBitsSet(int simdBits, Type elem)
+            => _propGetters.GetOrAdd((simdBits, elem, "AllBitsSet"), static key =>
+            {
+                var (bits, e, propName) = key;
+                var vT = V(bits, e);
+                var prop = vT.GetProperty(propName, BindingFlags.Public | BindingFlags.Static)
+                    ?? throw new MissingMemberException(vT.FullName, propName);
+                return prop.GetGetMethod()
+                    ?? throw new MissingMethodException(vT.FullName, "get_" + propName);
+            });
+
         // =================================================================
         // Generic escape hatch — for less-common ops not pre-wired above
         // =================================================================

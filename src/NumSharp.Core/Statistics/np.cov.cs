@@ -41,6 +41,7 @@ namespace NumSharp
         public static NDArray cov(NDArray m, NDArray y = null, bool rowvar = true, bool bias = false,
             int? ddof = null, NDArray fweights = null, NDArray aweights = null, DType dtype = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(m, y, fweights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (m is null) throw new ArgumentNullException(nameof(m));
 
             // --- Check inputs. NumPy's "ddof must be integer" ValueError is enforced by the int? type. ---
@@ -67,20 +68,20 @@ namespace NumSharp
                 X = X.T;
 
             // Empty variables => (0, 0) float64, regardless of input dtype (NumPy: np.array([]).reshape(0, 0)).
-            if (X.shape[0] == 0)
+            if (X.Shape.dimensions[0] == 0)
                 return np.zeros(new Shape(0, 0), NPTypeCode.Double);
 
             if (y is not null)
             {
                 NDArray Y = np.atleast_2d(y).astype(resultType);
-                if (!rowvar && Y.shape[0] != 1)
+                if (!rowvar && Y.Shape.dimensions[0] != 1)
                     Y = Y.T;
                 X = np.concatenate((X, Y), 0);
             }
 
             int ddofValue = ddof ?? (bias ? 0 : 1);
 
-            long nobs = X.shape[1];
+            long nobs = X.Shape.dimensions[1];
 
             // --- Combined weights w = fweights * aweights (either may be absent). ---
             NDArray w = null;
@@ -92,7 +93,7 @@ namespace NumSharp
                     throw new TypeError("fweights must be integer");
                 if (fw.ndim > 1)
                     throw new RuntimeError("cannot handle multidimensional fweights");
-                if (fw.shape[0] != nobs)
+                if (fw.Shape.dimensions[0] != nobs)
                     throw new RuntimeError("incompatible numbers of samples and fweights");
                 if (np.any(fw < 0.0))
                     throw new ValueError("fweights cannot be negative");
@@ -103,7 +104,7 @@ namespace NumSharp
                 aweightsCast = aweights.astype(NPTypeCode.Double);
                 if (aweightsCast.ndim > 1)
                     throw new RuntimeError("cannot handle multidimensional aweights");
-                if (aweightsCast.shape[0] != nobs)
+                if (aweightsCast.Shape.dimensions[0] != nobs)
                     throw new RuntimeError("incompatible numbers of samples and aweights");
                 if (np.any(aweightsCast < 0.0))
                     throw new ValueError("aweights cannot be negative");

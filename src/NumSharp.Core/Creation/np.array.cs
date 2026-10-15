@@ -21,12 +21,20 @@ namespace NumSharp
         /// </summary>
         /// <param name="nd">Source array.</param>
         /// <param name="copy">When <c>true</c> (default) the source storage is cloned; when <c>false</c> the storage is shared (alias). For "copy only if needed" semantics use <see cref="asarray(NDArray, Type, char, bool?, NDArray, string)"/>.</param>
+        /// <returns>A new array object. A 0-d source that was built as an explicit 0-d ARRAY
+        ///     (<see cref="NDArray.IsExplicitZeroDimArray"/>) gives an explicit 0-d array again, as NumPy's
+        ///     <c>np.array(np.array(2))</c> is a 0-d array.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="nd"/> is <c>null</c>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         [MethodImpl(OptimizeAndInline)]
-        public static NDArray array(NDArray nd, bool copy = true) =>
-            copy
+        public static NDArray array(NDArray nd, bool copy = true)
+        {
+            var result = copy
                 ? new NDArray(nd.Storage.Clone()) { TensorEngine = nd.TensorEngine }
                 : new NDArray(nd.Storage) { TensorEngine = nd.TensorEngine };
+            // The mark is per object, so a new object must receive it explicitly.
+            return nd.IsExplicitZeroDimArray ? result.MarkExplicitZeroDimArray() : result;
+        }
 
         /// <summary>
         ///     Create an array from a <see cref="MemoryView"/> (obtained from <see cref="NDArray.data"/>) —
@@ -53,11 +61,20 @@ namespace NumSharp
         /// <param name="scalar">The scalar value.</param>
         /// <returns>A 0-dimensional <see cref="NDArray"/> containing the scalar value.</returns>
         /// <remarks>
+        ///     <para>
         ///     NumPy: np.array(42) creates a 0-dimensional array with shape ().
         ///     https://numpy.org/doc/stable/reference/generated/numpy.array.html
+        ///     </para>
+        ///     <para>
+        ///     The result is marked as an explicit 0-d ARRAY (<see cref="NDArray.IsExplicitZeroDimArray"/>), which
+        ///     one operator reads: <c>matrix * np.array(2)</c> is the product with a 1 x 1 matrix, as in NumPy, and
+        ///     raises unless the matrix has one column. Use <see cref="NDArray.Scalar{T}(T)"/> or a C# number for a
+        ///     value that must SCALE a matrix; library code that builds a computed scalar must use
+        ///     <see cref="NDArray.Scalar{T}(T)"/> too.
+        ///     </para>
         /// </remarks>
         [MethodImpl(OptimizeAndInline)]
-        public static NDArray array<T>(T scalar) where T : unmanaged => NDArray.Scalar(scalar);
+        public static NDArray array<T>(T scalar) where T : unmanaged => NDArray.Scalar(scalar).MarkExplicitZeroDimArray();
 
         /// <summary>
         ///     Creates an <see cref="NDArray"/> from an array with an unknown size or dtype.
@@ -248,7 +265,7 @@ namespace NumSharp
 
                 NDArray @out = new NDArray(InfoOf<T>.NPTypeCode, new Shape(len1, len2));
 
-                var strides = @out.Shape.Strides;
+                var strides = @out.Shape.strides;
                 long stride1 = strides[0];
                 Debug.Assert(strides[1] == 1);
 
@@ -287,7 +304,7 @@ namespace NumSharp
 
                 NDArray @out = new NDArray(InfoOf<T>.NPTypeCode, new Shape(len1, len2, len3));
 
-                var strides = @out.Shape.Strides;
+                var strides = @out.Shape.strides;
                 long stride1 = strides[0];
                 long stride2 = strides[1];
                 Debug.Assert(strides[2] == 1);
@@ -333,7 +350,7 @@ namespace NumSharp
 
                 NDArray @out = new NDArray(InfoOf<T>.NPTypeCode, new Shape(len1, len2, len3, len4));
 
-                var strides = @out.Shape.Strides;
+                var strides = @out.Shape.strides;
                 long stride1 = strides[0];
                 long stride2 = strides[1];
                 long stride3 = strides[2];
@@ -386,7 +403,7 @@ namespace NumSharp
 
                 NDArray @out = new NDArray(InfoOf<T>.NPTypeCode, new Shape(len1, len2, len3, len4, len5));
 
-                var strides = @out.Shape.Strides;
+                var strides = @out.Shape.strides;
                 long stride1 = strides[0];
                 long stride2 = strides[1];
                 long stride3 = strides[2];

@@ -40,6 +40,50 @@ namespace NumSharp.Tests.Fuzz
         };
 
         /// <summary>
+        ///     The float16 reductions whose result is a SELECTED input element — NumPy's HALF_maximum / HALF_minimum /
+        ///     HALF_fmax / HALF_fmin (numpy/_core/src/umath/loops.c.src) are sequential loops that copy one operand, never
+        ///     compute a new value. So the result's bits — which NaN (payload, sign, a signalling NaN unquieted), which ±0 —
+        ///     follow from the reduction's visiting order alone, with no libm, compiler or CPU in the path: portable, and
+        ///     contractual. For a float16 operand these ops are compared by RAW BYTES and any difference is a HARD failure
+        ///     (no registry excuse: a selection has no rounding to excuse, and the generic ULP excuses read NaN-vs-NaN as
+        ///     0 ULP). Gated across every tier that holds them (reduce, nanreduce, specials, instance, half_minmax).
+        /// </summary>
+        private static readonly HashSet<string> HalfSelectionContractOps = new() { "max", "min", "nanmax", "nanmin" };
+
+        /// <summary>
+        ///     True when the case reduces exactly one float16 operand to a float16 result — the shape of every case the
+        ///     float16 min/max contracts (<see cref="HalfSelectionContractOps"/>, <see cref="IsHalfPtpContractCase"/>) cover.
+        /// </summary>
+        /// <param name="c">The corpus case.</param>
+        /// <param name="tc">The type code of the result being compared.</param>
+        /// <returns>
+        ///     <see langword="true"/> for a float16 result of a single float16 operand; <see langword="false"/> for a
+        ///     <c>dtype=</c> cast or a multi-operand case, whose bits the contracts do not describe.
+        /// </returns>
+        private static bool IsSingleHalfOperand(FuzzCorpus.Case c, NPTypeCode tc)
+            => tc == NPTypeCode.Half && c.Operands.Length == 1 && c.Operands[0].Dtype == "float16";
+
+        /// <summary>
+        ///     True when the case is a float16 <c>ptp</c> whose bits are a contract on this host.
+        /// </summary>
+        /// <param name="c">The corpus case.</param>
+        /// <param name="tc">The type code of the result being compared.</param>
+        /// <returns>
+        ///     <see langword="true"/> on an x86 host (<see cref="NanSignIsX86Reference"/>) for a <c>ptp</c> of one float16
+        ///     operand; its bytes then compare raw and any difference is a hard failure.
+        /// </returns>
+        /// <remarks>
+        ///     NumPy's <c>_ptp</c> (numpy/_core/_methods.py) is <c>subtract(maximum.reduce(a), minimum.reduce(a))</c>: two of
+        ///     the selections above, which return the SAME first NaN, and one HALF_subtract, which computes in float32 and
+        ///     narrows once — so a signalling NaN comes back quieted, identically on every host. One step is hardware
+        ///     dependent: <c>inf - inf</c> makes the CPU's default NaN, negative on x86 (the recorded win-amd64 0xfe00) and
+        ///     positive on arm64. So the raw-byte comparison holds on x86 hosts only; elsewhere NaN stays tokenized, as for
+        ///     every other op.
+        /// </remarks>
+        private static bool IsHalfPtpContractCase(FuzzCorpus.Case c, NPTypeCode tc)
+            => NanSignIsX86Reference && c.Op == "ptp" && IsSingleHalfOperand(c, tc);
+
+        /// <summary>
         ///     The complex NaN-SIGN contract above is authored against numpy 2.4.2 win-amd64 (MSVC UCRT),
         ///     and NumSharp reproduces it in managed code + x64 SSE — so it holds bit-for-bit on the whole
         ///     x86 family (Windows AND Linux, shared deterministic SSE), but NOT on AArch64: a fresh NaN
@@ -54,6 +98,51 @@ namespace NumSharp.Tests.Fuzz
             System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture
                 is System.Runtime.InteropServices.Architecture.X86
                 or System.Runtime.InteropServices.Architecture.X64;
+
+        /// <summary>
+        ///     True on a host where the NaN-operand-order tier (<c>nan_order.jsonl</c>) is a byte contract:
+        ///     an x86 process with NumPy's X86_V3 feature set (AVX2, FMA3, BMI1, BMI2, LZCNT).
+        /// </summary>
+        /// <remarks>
+        ///     The tier is authored against numpy 2.4.2 win-amd64, whose AVX2 scalar-broadcast loop
+        ///     splits its NaN choice at blocks of two 32-byte vectors. NumSharp derives that block from
+        ///     the host's features exactly as NumPy's dispatcher would (16-byte vectors without X86_V3),
+        ///     so on a host without X86_V3 BOTH libraries would split at a different point than the
+        ///     recorded bytes and the comparison would fail on a platform artifact. Such hosts, and
+        ///     arm64 (whose NumPy is compiled by another compiler with another operand order), compare
+        ///     NaN as one token instead — the same host rule as <see cref="NanSignIsX86Reference"/>.
+        ///     NumSharp's own NaN choice does not depend on the operating system, so Linux x64 is gated
+        ///     like Windows.
+        /// </remarks>
+        private static readonly bool NaNOperandOrderHost =
+            NanSignIsX86Reference
+            && System.Runtime.Intrinsics.X86.Avx2.IsSupported
+            && System.Runtime.Intrinsics.X86.Fma.IsSupported
+            && System.Runtime.Intrinsics.X86.Bmi1.IsSupported
+            && System.Runtime.Intrinsics.X86.Bmi2.IsSupported
+            && System.Runtime.Intrinsics.X86.Lzcnt.IsSupported;
+
+        /// <summary>
+        ///     True for a case of the NaN-operand-order tier on a host where that tier is a byte contract.
+        /// </summary>
+        /// <param name="c">The corpus case to test.</param>
+        /// <returns>
+        ///     <see langword="true"/> when the case carries <c>params.nan_bits = true</c> (written only by
+        ///     <c>gen_oracle.gen_nan_order</c>) and <see cref="NaNOperandOrderHost"/> holds; then its NaN
+        ///     payloads compare raw and any payload or sign difference fails outright.
+        /// </returns>
+        /// <remarks>
+        ///     When both operands of a float add or multiply are NaN, the result is the NaN of the
+        ///     operand the compiled loop put first. Every other tier tokenizes NaN, so this marker is the
+        ///     one place that choice is gated; it rides on the case rather than the op name because the
+        ///     same ops (<c>add</c>, <c>multiply</c>, <c>out_binary</c>, <c>evaluate</c>) appear in
+        ///     tiers whose layouts include NumSharp's documented residuals.
+        /// </remarks>
+        private static bool IsNaNOperandOrderCase(FuzzCorpus.Case c)
+            => NaNOperandOrderHost
+               && c.Params != null
+               && c.Params.TryGetValue("nan_bits", out var marker)
+               && marker.ValueKind == System.Text.Json.JsonValueKind.True;
 
         // ---- new tiers ---------------------------------------------------------------------
 
@@ -125,11 +214,22 @@ namespace NumSharp.Tests.Fuzz
         /// <summary>
         ///     The original (dtype, shape, bytes) comparison, factored out so tuple slots reuse it
         ///     verbatim. <paramref name="slot"/> labels which tuple slot is being compared (null
-        ///     for a plain result) so a failure names it.
+        ///     for a plain result) so a failure names it. When the expectation carries a memory facet
+        ///     (<see cref="FuzzCorpus.Expected.Mem"/>, the view-flags tiers) it is compared too, against
+        ///     <paramref name="operands"/>, once dtype and shape agree.
         /// </summary>
+        /// <param name="c">The corpus case.</param>
+        /// <param name="result">NumSharp's result (one array, or one tuple slot).</param>
+        /// <param name="exp">NumPy's expectation for it.</param>
+        /// <param name="slot">The tuple-slot label, or null for a plain result.</param>
+        /// <param name="failures">Receives one line per unexcused divergence.</param>
+        /// <param name="documented">Counts the registry-excused divergences by reason.</param>
+        /// <param name="operands">The case's reconstructed operands, for the facet's shares / same relations; null
+        ///     when the caller has none (the facet is then skipped — only the view-flags tiers record one, and their
+        ///     replay always passes the operands).</param>
         private static void CompareArray(
             FuzzCorpus.Case c, NDArray result, FuzzCorpus.Expected exp, string slot,
-            List<string> failures, Dictionary<string, int> documented)
+            List<string> failures, Dictionary<string, int> documented, NDArray[] operands = null)
         {
             var empty = Array.Empty<BitDiff.Diff>();
             string at = slot == null ? "" : $" {slot}";
@@ -141,6 +241,23 @@ namespace NumSharp.Tests.Fuzz
             // unmappable dtype (verified), so this only fires for the fft float32/float16 cells.
             NPTypeCode tc;
             try { tc = FuzzCorpus.DtypeToTC(exp.Dtype); }
+            catch (NotSupportedException) when (OpRegistry.IsPolynomialOp(c.Op) && exp.Dtype == "complex64")
+            {
+                // numpy.polynomial makes complex64 values under NEP 50 (a float16/float32 value meeting a Python
+                // complex, or a complex64 NumPy scalar meeting a narrow value): complex64 SCALARS in its scalar code and
+                // complex64 ARRAY loops in mapdomain's `off + scl*x`. NumSharp emulates both in float32 exactly (the
+                // scalar engine; the mapdomain complex64 kernels) and carries the value in its one complex dtype,
+                // complex128 (#569). The generator records exactly those results, so the VALUES must match NumPy's:
+                // up-cast NumPy's complex64 (exact) and compare, NaN tokenized as for every binary op. The polynomial
+                // tiers take no registry excuse, so this is the one documented divergence they report — dtype-only,
+                // never a value.
+                if (result.typecode == NPTypeCode.Complex && Complex64ValuesMatch(exp, result))
+                    Bump(documented, "complex64 result carried as complex128 (#569: no complex64 dtype; values exact)");
+                else
+                    failures.Add($"{c.Id} [{c.Layout}]{at}: NumPy complex64 result, NumSharp {result.typecode}{result.Shape}: " +
+                                 "VALUES diverge after up-cast (not dtype-only)");
+                return;
+            }
             catch (NotSupportedException)
             {
                 var dr = MisalignedRegistry.Classify(c, DivergenceKind.Dtype, null, null, default, empty);
@@ -177,6 +294,22 @@ namespace NumSharp.Tests.Fuzz
                 return;
             }
 
+            // The class of the returned object (matrix tier): a numpy.matrix must come back as an NDMatrix and a
+            // plain array as a plain NDArray. A NumPy scalar is a 0-d array of either class in NumSharp.
+            if (exp.Cls is "matrix" or "ndarray" && (result is NDMatrix) != (exp.Cls == "matrix"))
+                failures.Add($"{c.Id} [{c.Layout}]{at}: returned a {(result is NDMatrix ? "matrix" : "plain array")}, " +
+                             $"NumPy returns a {(exp.Cls == "matrix" ? "matrix" : "plain array")}");
+
+            // The memory facet (view-flags tiers): checked once dtype and shape agree, reported on its own line so a
+            // value divergence of the same case stays visible beside it. No registry branch excuses a facet: the
+            // tiers that record one are held to zero excuses.
+            if (exp.Mem != null && operands != null)
+            {
+                string mem = CompareMem(result, exp.Mem, operands);
+                if (mem != null)
+                    failures.Add($"{c.Id} [{c.Layout}]{at}: memory facet: {mem}");
+            }
+
             var actual = FuzzCorpus.ResultBytes(result);
             var expected = FuzzCorpus.FromHex(exp.Buffer);
 
@@ -186,9 +319,18 @@ namespace NumSharp.Tests.Fuzz
             // CONTRACTUAL and is compared by raw bytes. The trigger keys on a complex OPERAND, not the
             // result dtype, so `abs`/`absolute` (complex128 -> float64) is gated too. Everywhere else NaN
             // stays tokenized (a differing payload/sign is non-contractual — order/algorithm-dependent).
-            bool nanExact = ComplexNanContractOps.Contains(c.Op)
-                            && (tc == NPTypeCode.Complex || c.Operands.Any(o => o.Dtype == "complex128"))
-                            && NanSignIsX86Reference;   // win-amd64 NaN-sign contract; tokenize off x86 (arm64)
+            // The nan_order tier's cases (params.nan_bits) gate the float add / multiply NaN-operand
+            // order the same way: their NaN payloads are contractual, so they compare raw as well.
+            // float16 max / min / nanmax / nanmin copy an input element (HalfSelectionContractOps): raw bytes, portable.
+            // float16 ptp subtracts two of those selections: raw bytes on x86 hosts (IsHalfPtpContractCase).
+            bool halfSelection = HalfSelectionContractOps.Contains(c.Op) && IsSingleHalfOperand(c, tc);
+            bool halfPtp = IsHalfPtpContractCase(c, tc);
+            bool nanExact = halfSelection
+                            || halfPtp
+                            || (ComplexNanContractOps.Contains(c.Op)
+                                && (tc == NPTypeCode.Complex || c.Operands.Any(o => o.Dtype == "complex128"))
+                                && NanSignIsX86Reference)   // win-amd64 NaN-sign contract; tokenize off x86 (arm64)
+                            || IsNaNOperandOrderCase(c);
 
             // Bit-exact to NumPy ("precise") passes HERE, before truth is ever read — matching
             // NumPy's bytes is the contract, and truth can never turn a precise result red.
@@ -202,8 +344,10 @@ namespace NumSharp.Tests.Fuzz
             // it must bypass the ULP / pathological-edge excuses, which report NaN-vs-NaN as 0 ULP and
             // would otherwise swallow the regression this gate exists to catch. A finite rounding
             // residual (nanExact but no sign flip) still flows through the registry (the ≤3-ULP excuse).
+            // A float16 selection has no rounding residual at all, and float16 ptp rounds exactly as NumPy's HALF_subtract
+            // does (float32 arithmetic, one narrowing): every difference is hard.
             bool signFlip = nanExact && diffs.Any(d => BitDiff.DiffHasSignFlip(expected, actual, d.Index, tc));
-            var vreason = signFlip ? null
+            var vreason = signFlip || halfSelection || halfPtp ? null
                 : MisalignedRegistry.Classify(c, DivergenceKind.Value, expected, actual, tc, diffs, truth);
             if (vreason != null)
             {
@@ -214,7 +358,10 @@ namespace NumSharp.Tests.Fuzz
             // Shrinking rebuilds the case as a 1-element repro, which only makes sense for the
             // elementwise single-array shape — skip it for tuple slots.
             var shrunk = slot == null ? Shrinker.ShrinkElementwise(c, diffs[0].Index) : null;
-            failures.Add($"{c.Id} [{c.Layout}]{at}: " + (signFlip ? "NaN-sign/signed-zero contract violation " : "") +
+            failures.Add($"{c.Id} [{c.Layout}]{at}: " +
+                (halfSelection ? "float16 selection contract violation "
+                    : halfPtp ? "float16 ptp contract violation "
+                    : signFlip ? "NaN-sign/signed-zero contract violation " : "") +
                 string.Join(", ", diffs.Take(3).Select(d => $"@{d.Index} exp {d.Expected} act {d.Actual}" +
                     TruthNote(expected, actual, truth, d.Index, tc))) +
                 (diffs.Count > 3 ? $" (+{diffs.Count - 3} more)" : "") +
@@ -264,6 +411,28 @@ namespace NumSharp.Tests.Fuzz
         }
 
         /// <summary>
+        ///     Whether NumSharp's complex128 <paramref name="result"/> holds exactly NumPy's complex64 values: the
+        ///     expected bytes (two float32 per element) are widened exactly to two float64 and compared with the
+        ///     result through <see cref="BitDiff.Compare(byte[],byte[],NPTypeCode)"/> — same shape, every finite
+        ///     component and signed zero bit-exact, NaN tokenized (which NaN payload survives a float32 operation is
+        ///     non-contractual, as for every binary op).
+        /// </summary>
+        /// <param name="exp">NumPy's expected result (dtype complex64).</param>
+        /// <param name="result">NumSharp's result (complex128).</param>
+        /// <returns>True when the values match: the divergence is the dtype alone.</returns>
+        private static bool Complex64ValuesMatch(FuzzCorpus.Expected exp, NDArray result)
+        {
+            if (!ShapeEquals(result.Shape.dimensions, exp.Shape))
+                return false;
+            byte[] want = FuzzCorpus.FromHex(exp.Buffer);
+            byte[] up = new byte[want.Length * 2];
+            for (int i = 0; i + 4 <= want.Length; i += 4)
+                BitConverter.GetBytes((double)BitConverter.ToSingle(want, i)).CopyTo(up, i * 2);
+            byte[] got = FuzzCorpus.ResultBytes(result);
+            return up.Length == got.Length && BitDiff.Compare(up, got, NPTypeCode.Complex).Count == 0;
+        }
+
+        /// <summary>
         ///     For a truth-bearing failure, say WHO lost precision right in the failure line:
         ///     NumSharp's and NumPy's ULP distances to the correctly-rounded reference. An
         ///     untruthful divergence then reads e.g. "(truth-ulp NS=512 NPY=2)" — the precision
@@ -300,7 +469,116 @@ namespace NumSharp.Tests.Fuzz
             }
 
             for (int i = 0; i < want.Length; i++)
-                CompareArray(c, got[i], want[i], $"slot[{i}]", failures, documented);
+                CompareArray(c, got[i], want[i], $"slot[{i}]", failures, documented, operands);
+
+            // The view-flags tiers also record which slots share memory and which are one object (np.nonzero's columns
+            // of one buffer, np.diag_indices' repeated slot, np.meshgrid's views): NumSharp's slots must pair the same way.
+            if (c.Expected.Xshare != null || c.Expected.Xsame != null)
+            {
+                string cross = CompareCrossSlots(got, c.Expected.Xshare, c.Expected.Xsame);
+                if (cross != null)
+                    failures.Add($"{c.Id} [{c.Layout}]: tuple slots: {cross}");
+            }
+        }
+
+        // ---- the memory facet (view-flags tiers) -------------------------------------------------
+
+        /// <summary>The flag names in <see cref="FuzzCorpus.MemFacet.Flags"/> order, for failure lines.</summary>
+        private static readonly string[] MemFlagNames = { "C_CONTIGUOUS", "F_CONTIGUOUS", "OWNDATA", "WRITEABLE", "ALIGNED" };
+
+        /// <summary>
+        ///     Compares NumSharp's result against NumPy's memory facet: the five flags, the normalized byte strides, and
+        ///     per operand whether the result shares its memory and whether it IS the operand.
+        /// </summary>
+        /// <param name="result">NumSharp's result array.</param>
+        /// <param name="want">NumPy's facet.</param>
+        /// <param name="operands">The case's operands, in descriptor order (the facet's per-operand lists follow it).</param>
+        /// <returns>Null when every part agrees; otherwise one line naming each part that differs.</returns>
+        /// <remarks>
+        ///     Strides are normalized on NumSharp's side exactly as the generator normalized NumPy's: an axis of extent
+        ///     0 or 1, and every axis of an empty array, reads 0. <c>np.shares_memory</c> is NumSharp's own exact solver
+        ///     (<c>max_work = -1</c>), NumPy's answer being exact too; an empty array shares memory with nothing on either
+        ///     side. Identity is <see cref="object.ReferenceEquals"/>, NumPy's <c>is</c>.
+        /// </remarks>
+        private static string CompareMem(NDArray result, FuzzCorpus.MemFacet want, NDArray[] operands)
+        {
+            var parts = new List<string>();
+            var f = result.flags;
+            bool[] got = { f.c_contiguous, f.f_contiguous, f.owndata, f.writeable, f.aligned };
+            if (want.Flags != null)
+                for (int i = 0; i < Math.Min(got.Length, want.Flags.Length); i++)
+                    if (got[i] != want.Flags[i])
+                        parts.Add($"{MemFlagNames[i]} {got[i]} (NumPy {want.Flags[i]})");
+
+            if (want.Strides != null)
+            {
+                long[] dims = result.Shape.dimensions;
+                long[] bytes = result.strides;
+                bool empty = result.size == 0;
+                var norm = new long[dims.Length];
+                for (int i = 0; i < dims.Length; i++)
+                    norm[i] = empty || dims[i] <= 1 ? 0 : bytes[i];
+                if (!norm.SequenceEqual(want.Strides))
+                    parts.Add($"strides ({string.Join(",", norm)}) (NumPy ({string.Join(",", want.Strides)}))");
+            }
+
+            int n = Math.Min(operands.Length, Math.Max(want.Shares?.Length ?? 0, want.Same?.Length ?? 0));
+            for (int i = 0; i < n; i++)
+            {
+                var op = operands[i];
+                if (want.Same != null && i < want.Same.Length)
+                {
+                    bool same = ReferenceEquals(result, op);
+                    if (same != want.Same[i])
+                        parts.Add(want.Same[i]
+                            ? $"returned a new object, NumPy returns operand {i} itself"
+                            : $"returned operand {i} itself, NumPy returns a new object");
+                }
+                if (want.Shares != null && i < want.Shares.Length && op is not null)
+                {
+                    bool shares = np.shares_memory(result, op);
+                    if (shares != want.Shares[i])
+                        parts.Add(want.Shares[i]
+                            ? $"a COPY of operand {i}, NumPy returns a VIEW of it"
+                            : $"a VIEW of operand {i}, NumPy returns memory of its own");
+                }
+            }
+            return parts.Count == 0 ? null : string.Join("; ", parts);
+        }
+
+        /// <summary>
+        ///     Compares which slots of a tuple result share memory and which are one object, against NumPy's pairs.
+        /// </summary>
+        /// <param name="slots">NumSharp's tuple slots.</param>
+        /// <param name="wantShare">NumPy's sharing pairs (null when not recorded).</param>
+        /// <param name="wantSame">NumPy's identity pairs (null when not recorded).</param>
+        /// <returns>Null when both pair sets agree; otherwise a line naming the differing pairs.</returns>
+        private static string CompareCrossSlots(NDArray[] slots, int[][] wantShare, int[][] wantSame)
+        {
+            var gotShare = new HashSet<(int, int)>();
+            var gotSame = new HashSet<(int, int)>();
+            for (int i = 0; i < slots.Length; i++)
+                for (int j = i + 1; j < slots.Length; j++)
+                {
+                    if (ReferenceEquals(slots[i], slots[j]))
+                        gotSame.Add((i, j));
+                    if (slots[i] is not null && slots[j] is not null && np.shares_memory(slots[i], slots[j]))
+                        gotShare.Add((i, j));
+                }
+
+            var parts = new List<string>();
+            void Diff(string what, HashSet<(int, int)> got, int[][] want)
+            {
+                if (want == null)
+                    return;
+                var w = new HashSet<(int, int)>(want.Select(p => (p[0], p[1])));
+                if (!got.SetEquals(w))
+                    parts.Add($"{what} pairs {{{string.Join(" ", got.OrderBy(x => x).Select(x => $"{x.Item1}-{x.Item2}"))}}} " +
+                              $"(NumPy {{{string.Join(" ", w.OrderBy(x => x).Select(x => $"{x.Item1}-{x.Item2}"))}}})");
+            }
+            Diff("shared-memory", gotShare, wantShare);
+            Diff("same-object", gotSame, wantSame);
+            return parts.Count == 0 ? null : string.Join("; ", parts);
         }
 
         /// <summary>
@@ -353,12 +631,19 @@ namespace NumSharp.Tests.Fuzz
             {
                 "ArgumentException", "ArgumentNullException", "ArgumentOutOfRangeException",
                 "IncorrectShapeException", "AxisOutOfRangeException", "InvalidOperationException",
-                "FormatException", "OverflowException", "NotSupportedException"
+                "FormatException", "OverflowException", "NotSupportedException",
+                // ndarray.item's size guard (NumPy: ValueError "can only convert an array of
+                // size 1 to a Python scalar") is the house IncorrectSizeException.
+                "IncorrectSizeException"
             },
             ["TypeError"] = new[]
             {
                 "NotSupportedException", "InvalidCastException", "ArgumentException",
-                "ArgumentNullException", "InvalidOperationException", "UFuncTypeException"
+                "ArgumentNullException", "InvalidOperationException", "UFuncTypeException",
+                // IncorrectTypeException now derives from TypeError (the ufunc "No loop matching…" /
+                // "not supported for the input types" / digitize / i0 messages are all NumPy TypeErrors),
+                // but its .GetType().Name stays "IncorrectTypeException", so name it here explicitly.
+                "IncorrectTypeException"
             },
             ["IndexError"] = new[]
             {
@@ -413,7 +698,10 @@ namespace NumSharp.Tests.Fuzz
 
             string gotType = caught.GetType().Name;
             string gotText = NormalizeMessage(caught.Message);
-            string wantText = c.Error.Text ?? "";
+            // Trimmed like NumSharp's side (NormalizeMessage): NumPy's iterator texts END in a space
+            // ("operands could not be broadcast together with shapes (3,) (4,) "), which a one-sided trim
+            // could never match.
+            string wantText = (c.Error.Text ?? "").Trim();
 
             // NumSharp names several exceptions exactly after NumPy's (Exceptions/{ValueError,
             // TypeError,IndexError,AxisError}.cs), so an identical name is the strongest possible

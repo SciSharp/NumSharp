@@ -23,9 +23,13 @@ namespace NumSharp
         ///     -&gt; float16, int16/uint16/float32 -&gt; float32.
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.angle.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray angle(NDArray z, bool deg = false)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(z))
+                return NDMatrixBoundary.Wrapped((z, deg), static s => angle(s.z, s.deg));
             NDArray a;
             if (z.typecode == NPTypeCode.Complex)
             {
@@ -67,8 +71,10 @@ namespace NumSharp
         ///     <c>arctan2(0, z)</c> where <c>0</c> is a weak Python int (probed against NumPy 2.4.2).
         ///     Note <c>bool</c> resolves to float64 (unlike the ordinary unary-math tier's float16).
         ///     Char (uint16-like) follows uint16 -&gt; float32; Decimal (no NumPy analog) -&gt; float64.
+        ///     Exposed as <c>internal</c> so the fused expression engine's <c>UnaryNode</c> (np.angle's
+        ///     NDExpr node) resolves its real-input result dtype through the SAME table, not a copy.
         /// </summary>
-        private static NPTypeCode AngleRealTier(NPTypeCode tc)
+        internal static NPTypeCode AngleRealTier(NPTypeCode tc)
         {
             switch (tc)
             {

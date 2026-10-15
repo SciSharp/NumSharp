@@ -24,6 +24,7 @@ namespace NumSharp
         public static NDArray interp(NDArray x, NDArray xp, NDArray fp,
             double? left = null, double? right = null, double? period = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(x, xp, fp);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             bool isComplex = fp.typecode == NPTypeCode.Complex;
             Complex? cleft = left.HasValue ? new Complex(left.Value, 0) : (Complex?)null;
             Complex? cright = right.HasValue ? new Complex(right.Value, 0) : (Complex?)null;
@@ -40,7 +41,10 @@ namespace NumSharp
         [NDScoped]
         public static NDArray interp(NDArray x, NDArray xp, NDArray fp,
             Complex? left, Complex? right = null, double? period = null)
-            => InterpComplex(x, xp, fp, left, right, period);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(x, xp, fp);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return InterpComplex(x, xp, fp, left, right, period);
+        }
 
         // =====================================================================
         // Real (float64) path
@@ -63,7 +67,7 @@ namespace NumSharp
             if (afp.size != lenxp)
                 throw new ArgumentException("fp and xp are not of the same length.");
 
-            var result = new NDArray(NPTypeCode.Double, new Shape(x.shape), fillZeros: false);
+            var result = new NDArray(NPTypeCode.Double, Shape.Adopt(x.Shape.dimensions), fillZeros: false);
             long lenx = xc.size;
 
             double* dx = (double*)axp.Address;
@@ -148,7 +152,7 @@ namespace NumSharp
             if (afp.size != lenxp)
                 throw new ArgumentException("fp and xp are not of the same length.");
 
-            var result = new NDArray(NPTypeCode.Complex, new Shape(x.shape), fillZeros: false);
+            var result = new NDArray(NPTypeCode.Complex, Shape.Adopt(x.Shape.dimensions), fillZeros: false);
             long lenx = xc.size;
 
             double* dx = (double*)axp.Address;
@@ -337,7 +341,7 @@ namespace NumSharp
 
             if (xpd.ndim != 1 || fpd.ndim != 1)
                 throw new ArgumentException("Data points must be 1-D sequences");
-            if (xpd.shape[0] != fpd.shape[0])
+            if (xpd.Shape.dimensions[0] != fpd.Shape.dimensions[0])
                 throw new ArgumentException("fp and xp are not of the same length");
 
             // normalize periodic boundaries: x %= period; xp %= period

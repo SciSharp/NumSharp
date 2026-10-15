@@ -15,8 +15,11 @@ namespace NumSharp
         /// <param name="axis">Axis along which to repeat values. <c>null</c> (NumPy <c>None</c>) flattens the input and returns a flat array.</param>
         /// <returns>Output array which has the same shape as <paramref name="a"/>, except along <paramref name="axis"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray repeat(NDArray a, int repeats, int? axis = null)
-            => repeat(a, (long)repeats, axis);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis))
+            : repeat(a, (long)repeats, axis);
 
         /// <summary>
         ///     Repeat each element of an array after themselves.
@@ -26,9 +29,13 @@ namespace NumSharp
         /// <param name="axis">Axis along which to repeat values. <c>null</c> (NumPy <c>None</c>) flattens the input.</param>
         /// <returns>Output array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // calculating overload: reclaims the ravel/ascontiguousarray/reshape temps
         public static NDArray repeat(NDArray a, long repeats, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
             if (repeats < 0)
@@ -50,9 +57,13 @@ namespace NumSharp
         /// <param name="axis">Axis along which to repeat. <c>null</c> flattens the input.</param>
         /// <returns>A new array with elements repeated according to <paramref name="repeats"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // calculating overload: reclaims the ravel temps
         public static NDArray repeat(NDArray a, NDArray repeats, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
             if (repeats is null)
@@ -195,13 +206,13 @@ namespace NumSharp
             // chunked memcpy reads a logically-rectangular slab of inner dims.
             NDArray src = a.Shape.IsContiguous ? a : np.ascontiguousarray(a);
 
-            long[] inDims = src.shape;
+            long[] inDims = src.Shape.dimensions;
             long n = inDims[normalizedAxis];
             long total = n * repeats;
 
             long[] outDims = (long[])inDims.Clone();
             outDims[normalizedAxis] = total;
-            var ret = new NDArray(a.GetTypeCode, new Shape(outDims));
+            var ret = new NDArray(a.GetTypeCode, Shape.Adopt(outDims));
 
             if (src.size == 0 || total == 0)
                 return ret;
@@ -236,7 +247,7 @@ namespace NumSharp
             NDArray src = a.Shape.IsContiguous ? a : np.ascontiguousarray(a);
             NDArray repFlat = repeats.ravel();
 
-            long[] inDims = src.shape;
+            long[] inDims = src.Shape.dimensions;
             long n = inDims[normalizedAxis];
 
             // NumPy parity: scalar (0-d) or size-1 repeats broadcasts along the axis; otherwise the
@@ -252,7 +263,7 @@ namespace NumSharp
 
             long[] outDims = (long[])inDims.Clone();
             outDims[normalizedAxis] = total;
-            var ret = new NDArray(a.GetTypeCode, new Shape(outDims));
+            var ret = new NDArray(a.GetTypeCode, Shape.Adopt(outDims));
 
             if (src.size == 0 || total == 0)
                 return ret;

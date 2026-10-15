@@ -64,7 +64,7 @@ namespace NumSharp.Interop.OpenBLAS
             long m = shape.dimensions[nd - 1]; // square: rows == cols == m (validated by AssertStackedSquare)
 
             // fillZeros:false: DelinearizeTriangle writes every cell (factor + default), so pre-zeroing is wasted.
-            var result = new NDArray(InfoOf<T>.NPTypeCode, new Shape((long[])shape.dimensions.Clone()), fillZeros: false);
+            var result = new NDArray(InfoOf<T>.NPTypeCode, Shape.Adopt((long[])shape.dimensions.Clone()), fillZeros: false);
             if (result.size == 0)
                 return result; // (…,0,0) → empty factor, matching NumPy
 

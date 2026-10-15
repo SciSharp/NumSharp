@@ -3,7 +3,7 @@ using System;
 namespace NumSharp.Tests.DTypes
 {
     /// <summary>
-    ///     The dtype-string grammar of <see cref="np.dtype(string)"/> — the port of <c>descriptor.c::_convert_from_str</c>
+    ///     The dtype-string grammar of <see cref="np.dtype(string, bool, bool, System.Collections.Generic.IReadOnlyDictionary{string, object})"/> — the port of <c>descriptor.c::_convert_from_str</c>
     ///     plus the datetime metadata grammar of <c>datetime.c</c>. Every expectation (values AND error texts) was probed
     ///     against <c>numpy==2.4.2</c>; <c>DTypeStringParityTests</c> keeps the pre-existing name/code table, this file
     ///     covers what the new grammar adds: datetime typestrs, divisors, byte-order retention, NumPy's error wording,
@@ -180,8 +180,8 @@ namespace NumSharp.Tests.DTypes
         public void DatetimeMetaData_Struct_Api()
         {
             var m = DatetimeMetaData.Parse("[10ns]");
-            m.Base.Should().Be(NPY_DATETIMEUNIT.NPY_FR_ns);
-            m.Num.Should().Be(10);
+            m.@base.Should().Be(NPY_DATETIMEUNIT.NPY_FR_ns);
+            m.num.Should().Be(10);
             m.UnitString.Should().Be("ns");
             m.ToString().Should().Be("[10ns]");
             m.ToString(skipBrackets: true).Should().Be("10ns");

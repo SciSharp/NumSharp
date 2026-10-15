@@ -11,6 +11,9 @@ namespace NumSharp
         /// <returns>An array of the same type as this array, containing the rounded values.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.round.html</remarks>
         public NDArray round(int decimals = 0, NDArray @out = null)
-            => np.around(this, decimals, @out);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.around(this, decimals, @out);
+        }
     }
 }

@@ -22,10 +22,20 @@ namespace NumSharp
         ///     promotion (NEP50). If <paramref name="b"/> is 0-d the result is the element-wise
         ///     <c>a * b</c> (which is itself the degenerate Kronecker product).
         /// </returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.kron.html</remarks>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> or <paramref name="b"/> is null.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.kron.html
+        ///     <para>Scoped by <c>[NDScoped]</c>: the interleaved reshapes, the broadcast views, the tile path's two
+        ///     materialized operands and the product that the final reshape views are released on return, and that
+        ///     reshape is yielded. The tile path no longer adds hand-written <c>using</c> declarations on top.</para>
+        /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray kron(NDArray a, NDArray b)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a, b))
+                return NDMatrixBoundary.Wrapped((a, b), static s => kron(s.a, s.b));
             int nda = a.ndim, ndb = b.ndim;
 
             // NumPy promotes a to ndmin=b.ndim, so post-promotion nda >= ndb and the scalar shortcut
@@ -43,8 +53,8 @@ namespace NumSharp
             var as_ = new long[nd];
             var bs = new long[nd];
             for (int i = 0; i < nd; i++) { as_[i] = 1; bs[i] = 1; }
-            for (int i = 0; i < nda; i++) as_[nd - nda + i] = a.shape[i];
-            for (int i = 0; i < ndb; i++) bs[nd - ndb + i] = b.shape[i];
+            for (int i = 0; i < nda; i++) as_[nd - nda + i] = a.Shape.dimensions[i];
+            for (int i = 0; i < ndb; i++) bs[nd - ndb + i] = b.Shape.dimensions[i];
 
             // Interleave: a-dims get a trailing size-1 axis (odd positions), b-dims a leading size-1 axis
             // (even positions). Broadcasting the two interleaved views to (r0,s0,r1,s1,...) and multiplying
@@ -89,19 +99,21 @@ namespace NumSharp
             {
                 var bcast = new long[2 * nd];
                 for (int i = 0; i < nd; i++) { bcast[2 * i] = as_[i]; bcast[2 * i + 1] = bs[i]; }
-                var bcShape = new Shape(bcast);
+                var bcShape = Shape.Adopt(bcast);
 
                 // repeat-a and tile-b, both materialised C-contiguous at the interleaved shape, then one
                 // SimdFull multiply. The final reshape to (rt*st) is a view over the contiguous product.
-                using var aRep = broadcast_to(a.reshape(aInter), bcShape).copy();
-                using var bTiled = broadcast_to(b.reshape(bInter), bcShape).copy();
-                return multiply(aRep, bTiled).reshape(outShape);
+                // Both operands (and the reshape/broadcast views they came from) are released by this
+                // method's scope as soon as it returns — the same moment a `using` would release them.
+                var aRep = broadcast_to(a.reshape(Shape.Adopt(aInter)), bcShape).copy();
+                var bTiled = broadcast_to(b.reshape(Shape.Adopt(bInter)), bcShape).copy();
+                return multiply(aRep, bTiled).reshape(Shape.Adopt(outShape));
             }
 
             // Direct broadcast-multiply. For contiguous inputs the two reshapes are pure views, so this is
             // a single kernel pass; a non-contiguous operand is materialised C-order by reshape (as NumPy
             // does), keeping values correct for every layout.
-            return multiply(a.reshape(aInter), b.reshape(bInter)).reshape(outShape);
+            return multiply(a.reshape(Shape.Adopt(aInter)), b.reshape(Shape.Adopt(bInter))).reshape(Shape.Adopt(outShape));
         }
 
         /// <summary>

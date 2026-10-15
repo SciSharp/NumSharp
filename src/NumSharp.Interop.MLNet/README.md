@@ -71,6 +71,36 @@ dispose it — a `using`, or wire it into your `MLContext` lifetime — to relea
 takes its own ARC reference, so it is even safe to dispose the source array while the view (or its
 cursors) still read it. Not disposing leaks the pin until finalization.
 
+**Reachable means valid.** Whatever can reach the view — you, a transform's output, a cursor, a getter delegate —
+keeps the pins and the buffer alive, and a getter keeps its cursor reachable until its read is done, so a collection
+landing mid-copy cannot release the row under it. The finalizers of the view and its cursors only give their reference
+back (never free eagerly), so an alias of the buffer you still hold stays valid after they run, in any order.
+
+A source whose buffer has already been released is refused (`ObjectDisposedException`) by every export
+verb: each takes its reference before its first read (the Half / Decimal conversion, `ToDataView`'s
+snapshot, `ToVBuffer`'s copy), so it never reads memory the pool may have handed to another array.
+
+**Cursors keep ML.NET's own contract** (checked against ML.NET's `Cache`, `FilterRowsByColumn`, `TakeRows` and
+`LoadFromEnumerable` cursors): `Position` is `-1` before the first row, after the last and after `Dispose`; a
+getter called off a row throws ML.NET's own `InvalidOperationException` ("Values cannot be fetched at this
+time…") and reads nothing; `MoveNext` stays `false` once it returned `false` or the cursor was disposed; and
+`Schema` still answers after the view is disposed. Off-row getters used to read the element before the first row
+or past the last one — after `Dispose`, from a buffer the cursor no longer kept alive.
+
+**Each cursor holds its own pin** and releases it on `Dispose` — or, for a cursor nobody disposes, from a
+finalizer. ML.NET abandons cursors itself (`ShuffleRows`, used by training pipelines, never disposes the cursor
+it opens on its input), and before that net a single shuffle kept the NumSharp buffer referenced for the life of
+the process.
+
+**Imports have no managed-array cap.** `view.ToNDArray(column)` stages rows straight into NumSharp memory: one
+exact allocation when the view reports its row count, growing chunks (copied together once) when it does not, so
+a column of more than `Array.MaxLength` elements in total imports (it used to stage through a managed `T[]` and
+fail there). A sparse `VBuffer` densifies at any size (the clear counted bytes in an `int` and threw at 2 GB).
+
+ML.NET's buffers hold at most 2,146,435,071 elements (its internal `ArrayUtils.ArrayMaxSize`, a little
+below `Array.MaxLength`): a vector column wider than that, or a `ToVBuffer` longer than that, is refused at
+export, before anything is allocated — ML.NET could not read such a row or copy such a buffer.
+
 `NDArrayMLNetInterop.LiveExports` counts live views, for leak detection in tests.
 
 ## Dependency

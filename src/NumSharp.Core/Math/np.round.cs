@@ -14,8 +14,14 @@ namespace NumSharp
         /// <param name="dtype">The <see cref="DType"/> the returned ndarray should be of (a C# <see cref="System.Type"/>, an <see cref="NPTypeCode"/> or a NumPy dtype string all convert implicitly). <see langword="null"/> preserves NumPy's round dtype rules (integer inputs are an identity copy).</param>
         /// <returns>An array of the same type as a, containing the rounded values. Unless out was specified, a new array is created. A reference to the result is returned. The real and imaginary parts of complex numbers are rounded separately. The result of rounding a float is a float.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray round_(NDArray x, int decimals = 0, NDArray @out = null, DType dtype = null)
-            => x.TensorEngine.Round(x, decimals, dtype, @out);
+            => !NDMatrixBoundary.Sees(x) ? x.TensorEngine.Round(x, decimals, dtype, @out)
+            // a numpy.matrix operand: decimals=0 is the rint ufunc (a matrix comes back); any other decimals is
+            // ndarray.round's multiply / rint / divide route, which NumPy returns as a plain array
+            : decimals == 0
+                ? NDMatrixBoundary.Wrapped((x, decimals, @out, dtype), static s => round_(s.x, s.decimals, s.@out, s.dtype), @out)
+                : NDMatrixBoundary.Plain((x, decimals, @out, dtype), static s => round_(s.x, s.decimals, s.@out, s.dtype));
 
         /// <summary>
         ///     Evenly round to the given number of decimals (alias of <see cref="round_"/>; NumPy: <c>np.around is np.round</c>).
@@ -26,7 +32,13 @@ namespace NumSharp
         /// <param name="dtype">The <see cref="DType"/> the returned ndarray should be of (implicit from <see cref="System.Type"/> / <see cref="NPTypeCode"/> / NumPy dtype string).</param>
         /// <returns>An array of the same type as a, containing the rounded values. Unless out was specified, a new array is created. A reference to the result is returned. The real and imaginary parts of complex numbers are rounded separately. The result of rounding a float is a float.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray around(NDArray x, int decimals = 0, NDArray @out = null, DType dtype = null)
-            => x.TensorEngine.Round(x, decimals, dtype, @out);
+            => !NDMatrixBoundary.Sees(x) ? x.TensorEngine.Round(x, decimals, dtype, @out)
+            // a numpy.matrix operand: decimals=0 is the rint ufunc (a matrix comes back); any other decimals is
+            // ndarray.round's multiply / rint / divide route, which NumPy returns as a plain array
+            : decimals == 0
+                ? NDMatrixBoundary.Wrapped((x, decimals, @out, dtype), static s => around(s.x, s.decimals, s.@out, s.dtype), @out)
+                : NDMatrixBoundary.Plain((x, decimals, @out, dtype), static s => around(s.x, s.decimals, s.@out, s.dtype));
     }
 }

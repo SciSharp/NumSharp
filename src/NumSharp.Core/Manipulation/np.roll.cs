@@ -18,11 +18,15 @@ namespace NumSharp
         /// Matches NumPy's algorithm: empty_like + slice-copy pairs.
         /// https://numpy.org/doc/stable/reference/generated/numpy.roll.html
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray roll(NDArray a, long shift, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, shift, axis), static s => roll(s.a, s.shift, s.axis));
             if (axis == null)
-                return roll(a.ravel(), shift, 0).reshape(a.shape);
+                return roll(a.ravel(), shift, 0).reshape(Shape.Adopt(a.Shape.dimensions));
 
             int ax = axis.Value;
             if (ax < 0) ax += a.ndim;
@@ -30,7 +34,7 @@ namespace NumSharp
                 throw new ArgumentException(
                     $"axis {axis.Value} is out of bounds for array of dimension {a.ndim}");
 
-            long n = a.shape[ax];
+            long n = a.Shape.dimensions[ax];
 
             // Python-style modulo: always non-negative when n > 0.
             // If n == 0 (empty axis), offset stays 0 — nothing to roll.
@@ -74,7 +78,10 @@ namespace NumSharp
         }
 
         /// <inheritdoc cref="roll(NDArray, long, int?)"/>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray roll(NDArray a, int shift, int? axis = null)
-            => roll(a, (long)shift, axis);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, shift, axis), static s => roll(s.a, s.shift, s.axis))
+            : roll(a, (long)shift, axis);
     }
 }

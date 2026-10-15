@@ -80,6 +80,7 @@ namespace NumSharp.Backends
             NDArray source = nd;
             if (!nd.Shape.IsContiguous)
             {
+                using var plain = NDMatrixBoundary.PlainFor(nd);   // an engine method computes plain: np.ascontiguousarray below must not apply its matrix rule
                 materialized = np.ascontiguousarray(nd);
                 source = materialized;
             }
@@ -232,7 +233,7 @@ namespace NumSharp.Backends
             for (int d = 0, od = 0; d < nd.ndim; d++)
                 if (d != axis) outputDims[od++] = shape.dimensions[d];
 
-            var outputShape = outputDims.Length > 0 ? new Shape(outputDims) : Shape.Scalar;
+            var outputShape = outputDims.Length > 0 ? Shape.Adopt(outputDims) : Shape.Scalar;
             var result = new NDArray(NPTypeCode.Int64, outputShape, false);
 
             if (nd.size == 0)
@@ -243,7 +244,7 @@ namespace NumSharp.Backends
                     var ks = new long[nd.ndim];
                     for (int d = 0, sd = 0; d < nd.ndim; d++)
                         ks[d] = (d == axis) ? 1 : outputDims[sd++];
-                    result.Storage.Reshape(new Shape(ks));
+                    result.Storage.Reshape(Shape.Adopt(ks));
                 }
                 return result;
             }
@@ -255,7 +256,7 @@ namespace NumSharp.Backends
                 var ks = new long[nd.ndim];
                 for (int d = 0, sd = 0; d < nd.ndim; d++)
                     ks[d] = (d == axis) ? 1 : (sd < outputDims.Length ? outputDims[sd++] : 1);
-                result.Storage.Reshape(new Shape(ks));
+                result.Storage.Reshape(Shape.Adopt(ks));
             }
 
             return result;

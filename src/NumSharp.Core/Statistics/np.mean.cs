@@ -14,8 +14,11 @@ namespace NumSharp
         /// <param name="a">Array containing numbers whose mean is desired. If a is not an array, a conversion is attempted.</param>
         /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mean.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static NDArray mean(NDArray a)
-            => a.TensorEngine.Mean(a);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced(a, static s => mean(s), null, false, "mean")
+            : a.TensorEngine.Mean(a);
 
         /// <summary>
         ///     Compute the arithmetic mean along the specified axis.
@@ -27,8 +30,11 @@ namespace NumSharp
         /// <param name="axis">Axis or axes along which the means are computed. The default is to compute the mean of the flattened array.</param>
         /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mean.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static NDArray mean(NDArray a, int axis)
-            => a.TensorEngine.Mean(a, axis);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis), static s => mean(s.a, s.axis), axis, false, "mean")
+            : a.TensorEngine.Mean(a, axis);
 
         /// <summary>
         ///     Compute the arithmetic mean along the specified axis.
@@ -43,9 +49,12 @@ namespace NumSharp
         /// </param>
         /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mean.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         [NDScoped]
         public static NDArray mean(NDArray a, bool keepdims)
-            => a.TensorEngine.Mean(a, null, null, keepdims);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, keepdims), static s => mean(s.a, s.keepdims), null, keepdims, "mean")
+            : a.TensorEngine.Mean(a, null, null, keepdims);
 
         /// <summary>
         ///     Compute the arithmetic mean along the specified axis.
@@ -62,8 +71,11 @@ namespace NumSharp
         /// </param>
         /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mean.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static NDArray mean(NDArray a, int axis, DType dtype, bool keepdims = false)
-            => a.TensorEngine.Mean(a, axis, dtype, keepdims);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, dtype, keepdims), static s => mean(s.a, s.axis, s.dtype, s.keepdims), axis, keepdims, "mean")
+            : a.TensorEngine.Mean(a, axis, dtype, keepdims);
 
         /// <summary>
         ///     Compute the arithmetic mean along the specified axis.
@@ -79,9 +91,12 @@ namespace NumSharp
         ///     If the default value is passed, then keepdims will not be passed through to the mean method of sub-classes of ndarray, however any non-default value will be.If the sub-class’ method does not implement keepdims any exceptions will be raised.
         /// </param>
         /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         [NDScoped]
         public static NDArray mean(NDArray a, int axis, bool keepdims)
-            => a.TensorEngine.Mean(a, axis, null, keepdims);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, keepdims), static s => mean(s.a, s.axis, s.keepdims), axis, keepdims, "mean")
+            : a.TensorEngine.Mean(a, axis, null, keepdims);
 
     }
 }

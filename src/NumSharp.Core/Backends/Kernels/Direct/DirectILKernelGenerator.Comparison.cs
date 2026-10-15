@@ -148,6 +148,26 @@ namespace NumSharp.Backends.Kernels
                     return halfCmp;
             }
 
+            // complex128 pairs compare two elements per 256-bit vector with NumPy's CLT / CLE / CGT / CGE / CEQ / CNE
+            // rule (Comparison.Complex.cs); the emitted loop below takes one element at a time through
+            // System.Numerics.Complex. The strided forms keep the emitted loop.
+            if (key.LhsType == NPTypeCode.Complex && key.RhsType == NPTypeCode.Complex)
+            {
+                var complexCmp = TryGetComplexComparisonKernel(key.Op, key.Path);
+                if (complexCmp != null)
+                    return complexCmp;
+            }
+
+            // int64 against uint64, either order: NumPy's exact qQ / Qq loops as machine compares
+            // (Comparison.MixedSign.cs). The emitted loop below is exact too, but it compares in System.Decimal.
+            if ((key.LhsType == NPTypeCode.Int64 && key.RhsType == NPTypeCode.UInt64)
+                || (key.LhsType == NPTypeCode.UInt64 && key.RhsType == NPTypeCode.Int64))
+            {
+                var mixedSignCmp = TryGetMixedSignComparisonKernel(key.LhsType == NPTypeCode.Int64, key.Op, key.Path);
+                if (mixedSignCmp != null)
+                    return mixedSignCmp;
+            }
+
             return key.Path switch
             {
                 ExecutionPath.SimdFull => GenerateComparisonSimdFullKernel(key),
@@ -317,15 +337,18 @@ namespace NumSharp.Backends.Kernels
             var locMask3 = il.DeclareLocal(vectorType);
             var maskLocals = new[] { locMask0, locMask1, locMask2, locMask3 };
 
-            // unrollEnd = totalSize - unrollStep + 1 (last valid 4x start position)
+            // unrollEnd = totalSize - unrollStep: the LAST start of four whole vectors (the loop runs while i <= it, so
+            // i + unrollStep <= totalSize). It was totalSize - unrollStep + 1, which ran one body too many whenever
+            // totalSize % unrollStep == unrollStep - 1 (n = 31 of float32): one element read past both inputs and one
+            // bool written past the result — over the next slot of an out= view's parent buffer.
             il.Emit(OpCodes.Ldarg_S, (byte)7); // totalSize
-            il.Emit(OpCodes.Ldc_I8, unrollStep - 1);
+            il.Emit(OpCodes.Ldc_I8, unrollStep);
             il.Emit(OpCodes.Sub);
             il.Emit(OpCodes.Stloc, locUnrollEnd);
 
-            // vectorEnd = totalSize - vectorCount + 1 (last valid SIMD start position)
+            // vectorEnd = totalSize - vectorCount: the last start of one whole vector (same off-by-one fixed).
             il.Emit(OpCodes.Ldarg_S, (byte)7); // totalSize
-            il.Emit(OpCodes.Ldc_I8, vectorCount - 1);
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
             il.Emit(OpCodes.Sub);
             il.Emit(OpCodes.Stloc, locVectorEnd);
 
@@ -384,23 +407,8 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Stloc, maskLocals[n]);
             }
 
-            // Extract all 4 masks to booleans
-            for (int n = 0; n < unrollFactor; n++)
-            {
-                long offset = n * vectorCount;
-
-                // Create a temporary local to hold (i + offset) for extraction
-                var locIOffset = il.DeclareLocal(typeof(long));
-                il.Emit(OpCodes.Ldloc, locI);
-                if (offset > 0)
-                {
-                    il.Emit(OpCodes.Ldc_I8, offset);
-                    il.Emit(OpCodes.Add);
-                }
-                il.Emit(OpCodes.Stloc, locIOffset);
-
-                EmitMaskToBoolExtraction(il, comparisonType, (int)vectorCount, locIOffset, maskLocals[n]);
-            }
+            // Store all 4 masks as bools: packed together on AVX2 hosts (NumPy's npyv_pack_b8_*), else one by one.
+            EmitMasksToBools(il, comparisonType, (int)vectorCount, locI, maskLocals);
 
             // i += unrollStep
             il.Emit(OpCodes.Ldloc, locI);
@@ -618,28 +626,29 @@ namespace NumSharp.Backends.Kernels
                 : null;
 
         /// <summary>
-        /// Emit extraction of comparison mask vector to individual booleans.
-        ///
-        /// FAST PATH (BMI2 X64, V256/V128 with ≤8 lanes):
-        ///   ExtractMostSignificantBits → uint (N MSB bits)
-        ///   PDEP(bits, 0x0101…01)      → ulong (N bytes, each 0x00 or 0x01)
-        ///   *(ulong*)(result + i) = packed   // single 8-byte store
-        ///
-        /// One PDEP + one ulong store replaces N individual byte stores —
-        /// for 8-lane Vector256<float> that's 8× fewer memory writes per
-        /// mask, which lifts the compare-to-bool kernel from 2× slower
-        /// than NumPy toward parity. For ≤4 lanes (Vector128 path) the
-        /// PDEP still writes 8 bytes but only the first N are meaningful
-        /// — the per-mask emit knows the lane count so it stores via
-        /// stind.i{N×8} sized exactly.
-        ///
-        /// FALLBACK (no BMI2 X64, or lane count &gt; 8):
-        ///   Per-lane shift-mask-store, identical to the prior
-        ///   implementation. Vector512<bool> with 16 lanes would need
-        ///   two PDEPs or a 16-byte VPSHUFB-based expansion — not worth
-        ///   the IL complexity until we measure a V512 binding actually
-        ///   hitting this kernel.
+        ///     Emits the store of ONE comparison mask vector (every lane all-ones or all-zeros) as <paramref name="vectorCount"/>
+        ///     result bytes, 1 or 0, at <c>result + i</c>.
         /// </summary>
+        /// <param name="il">The kernel's IL generator; argument 2 is the <c>bool*</c> result.</param>
+        /// <param name="type">The comparison dtype the mask's lanes came from (its width decides the method).</param>
+        /// <param name="vectorCount">The lanes in one vector of <paramref name="type"/>: 2 to 64.</param>
+        /// <param name="locI">The local holding the first result index this mask covers.</param>
+        /// <param name="locMask">The local holding the mask vector.</param>
+        /// <remarks>
+        ///     <list type="bullet">
+        ///     <item><b>Bool lanes</b>: <see cref="EmitBoolVectorComparison"/> already produced the 0/1 bytes; one store.</item>
+        ///     <item><b>1-byte lanes</b>: a mask lane is <c>0xFF</c> or <c>0x00</c>, so <c>mask &amp; 1</c> IS the result
+        ///     bytes: one AND and one whole-vector store, at every vector width. The per-lane path this replaced cost about
+        ///     four instructions an element, so int8 / uint8 comparisons ran ten times slower than their compare.</item>
+        ///     <item><b>Wider lanes with BMI2</b>: the lane sign bits (<c>ExtractMostSignificantBits</c>) become bytes
+        ///     through one PDEP per 8 lanes, each stored as one 8-byte write (2 or 4 lanes store exactly 2 or 4 bytes, so
+        ///     nothing past the vector's lanes is written). The bits are read as a <c>ulong</c>, because a Vector512's
+        ///     extract returns 64 bits: a 32-bit local would drop lanes 32-63.</item>
+        ///     <item><b>No BMI2</b> (ARM, old x86): one shift-and-store per lane.</item>
+        ///     </list>
+        ///     The 4×-unrolled loops store four masks together through <see cref="EmitMasksToBools"/>, which packs them on
+        ///     AVX2 hosts; this single-mask form serves their one-vector remainder loops and the other widths.
+        /// </remarks>
         private static void EmitMaskToBoolExtraction(ILGenerator il, NPTypeCode type,
             int vectorCount, LocalBuilder locI, LocalBuilder locMask)
         {
@@ -657,84 +666,370 @@ namespace NumSharp.Backends.Kernels
 
             var clrType = GetClrType(type);
 
-            // ExtractMostSignificantBits gives us a uint where each bit is the MSB of each lane.
-            // For comparison masks (all 1s = true, all 0s = false), MSB=1 means true.
+            // One-byte lanes: 0xFF & 1 = 1, 0x00 & 1 = 0, so the AND of the mask IS the result vector.
+            if (GetTypeSize(type) == 1)
+            {
+                var and = VectorMethodCache.BinaryX86(VectorBits, "BitwiseAnd", clrType)
+                          ?? VectorMethodCache.Generic(VectorBits, "BitwiseAnd", clrType, paramCount: 2);
+                il.Emit(OpCodes.Ldloc, locMask);
+                il.Emit(OpCodes.Ldc_I4_1);
+                EmitVectorCreate(il, type);
+                il.EmitCall(OpCodes.Call, and, null);   // [bytes]
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Add);                   // [bytes, ptr]
+                EmitVectorStore(il, type);
+                return;
+            }
+
+            // The lane sign bits, widened to 64 bits whatever the extract returns (uint for V128/V256, ulong for V512).
             il.Emit(OpCodes.Ldloc, locMask);
             il.EmitCall(OpCodes.Call, VectorMethodCache.ExtractMostSignificantBits(VectorBits, clrType), null);
-            var locBits = il.DeclareLocal(typeof(uint));
+            il.Emit(OpCodes.Conv_U8);
+            var locBits = il.DeclareLocal(typeof(ulong));
             il.Emit(OpCodes.Stloc, locBits);
 
-            // ── FAST PATH: BMI2 PDEP for ≤8 lanes ────────────────────────
-            // Single PDEP turns the N-bit mask into a ulong with N bytes
-            // of 0x00/0x01, then one aligned store covers the lot.
-            if (s_bmi2X64Pdep != null && vectorCount <= 8)
+            if (s_bmi2X64Pdep != null)
             {
-                // packed = PDEP((ulong)bits, 0x0101010101010101)
-                il.Emit(OpCodes.Ldloc, locBits);
-                il.Emit(OpCodes.Conv_U8);
-                il.Emit(OpCodes.Ldc_I8, unchecked((long)0x0101010101010101UL));
-                il.EmitCall(OpCodes.Call, s_bmi2X64Pdep, null);
-                var locPacked = il.DeclareLocal(typeof(ulong));
-                il.Emit(OpCodes.Stloc, locPacked);
-
-                // *(result + i) = packed  — store as ulong/uint/ushort
-                // sized to the exact lane count so we never write past
-                // the meaningful bytes.
-                il.Emit(OpCodes.Ldarg_2);    // result (bool*)
-                il.Emit(OpCodes.Ldloc, locI);
-                il.Emit(OpCodes.Add);
-                il.Emit(OpCodes.Ldloc, locPacked);
-                if (vectorCount == 8)
+                // PDEP takes the LOW 8 source bits for the 8 set bits of 0x0101…01, so chunk c only needs the shift.
+                for (int chunk = 0; chunk * 8 < vectorCount; chunk++)
                 {
-                    il.Emit(OpCodes.Stind_I8);  // 8 bytes
-                }
-                else if (vectorCount == 4)
-                {
-                    il.Emit(OpCodes.Conv_U4);
-                    il.Emit(OpCodes.Stind_I4);  // 4 bytes
-                }
-                else if (vectorCount == 2)
-                {
-                    il.Emit(OpCodes.Conv_U2);
-                    il.Emit(OpCodes.Stind_I2);  // 2 bytes
-                }
-                else
-                {
-                    // Odd count (e.g. lane-count 3 from some V128 dtype).
-                    // Fall through to per-lane below; emit nothing here.
-                    il.Emit(OpCodes.Pop);   // discard the packed ulong
-                    il.Emit(OpCodes.Pop);   // discard the addr we pushed
-                    goto PerLane;
+                    int lanes = Math.Min(8, vectorCount - chunk * 8);
+                    il.Emit(OpCodes.Ldarg_2);
+                    il.Emit(OpCodes.Ldloc, locI);
+                    if (chunk > 0)
+                    {
+                        il.Emit(OpCodes.Ldc_I8, (long)(chunk * 8));
+                        il.Emit(OpCodes.Add);
+                    }
+                    il.Emit(OpCodes.Add);                                   // [ptr]
+                    il.Emit(OpCodes.Ldloc, locBits);
+                    if (chunk > 0)
+                    {
+                        il.Emit(OpCodes.Ldc_I4, chunk * 8);
+                        il.Emit(OpCodes.Shr_Un);
+                    }
+                    il.Emit(OpCodes.Ldc_I8, unchecked((long)0x0101010101010101UL));
+                    il.EmitCall(OpCodes.Call, s_bmi2X64Pdep, null);        // [ptr, packed]
+                    // Store exactly the lanes' bytes: a 2- or 4-lane vector must not write past its lanes.
+                    switch (lanes)
+                    {
+                        case 8:
+                            il.Emit(OpCodes.Stind_I8);
+                            break;
+                        case 4:
+                            il.Emit(OpCodes.Conv_U4);
+                            il.Emit(OpCodes.Stind_I4);
+                            break;
+                        case 2:
+                            il.Emit(OpCodes.Conv_U2);
+                            il.Emit(OpCodes.Stind_I2);
+                            break;
+                        default:
+                            il.Emit(OpCodes.Conv_U1);
+                            il.Emit(OpCodes.Stind_I1);
+                            break;
+                    }
                 }
                 return;
             }
 
-            PerLane:
-            // ── FALLBACK: per-lane shift-mask-store ──────────────────────
+            // No BMI2: (bits >> j) & 1 per lane.
             for (int j = 0; j < vectorCount; j++)
             {
-                // result + i + j
-                il.Emit(OpCodes.Ldarg_2); // result (bool*)
-                il.Emit(OpCodes.Ldloc, locI);  // Stack: [ptr, int64]
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Ldloc, locI);
                 if (j > 0)
                 {
-                    il.Emit(OpCodes.Ldc_I8, (long)j);  // Stack: [ptr, int64, int64]
-                    il.Emit(OpCodes.Add);              // int64 + int64 = OK
+                    il.Emit(OpCodes.Ldc_I8, (long)j);
+                    il.Emit(OpCodes.Add);
                 }
-                il.Emit(OpCodes.Add);  // ptr + int64 = OK
-
-                // (bits >> j) & 1
-                il.Emit(OpCodes.Ldloc, locBits);  // Stack: [uint32]
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldloc, locBits);
                 if (j > 0)
                 {
-                    il.Emit(OpCodes.Ldc_I4, j);   // Shift amount - always int32
+                    il.Emit(OpCodes.Ldc_I4, j);
                     il.Emit(OpCodes.Shr_Un);
                 }
-                il.Emit(OpCodes.Ldc_I4_1);        // Mask - int32
+                il.Emit(OpCodes.Conv_U4);
+                il.Emit(OpCodes.Ldc_I4_1);
                 il.Emit(OpCodes.And);
-
-                // Store as bool (1 byte)
                 il.Emit(OpCodes.Stind_I1);
+            }
+        }
+
+        /// <summary>
+        ///     Emits the stores of the 4×-unrolled body's four comparison masks as consecutive result bytes, starting at
+        ///     <c>result + i</c> (<c>4 * vectorCount</c> bytes).
+        /// </summary>
+        /// <param name="il">The kernel's IL generator; argument 2 is the <c>bool*</c> result.</param>
+        /// <param name="type">The comparison dtype the masks' lanes came from.</param>
+        /// <param name="vectorCount">The lanes in one vector of <paramref name="type"/>.</param>
+        /// <param name="locI">The local holding the first result index of the four masks.</param>
+        /// <param name="masks">The four mask locals, in element order.</param>
+        /// <remarks>
+        ///     On an AVX2 host with 256-bit vectors the masks of 2-, 4- and 8-byte lanes are PACKED into result bytes the way
+        ///     NumPy's comparison loops do it (<c>npyv_pack_b8_b16 / _b32 / _b64</c> in <c>loops_comparison.dispatch.c.src</c>):
+        ///     saturating packs narrow the all-ones / all-zeros lanes to bytes, a permute undoes AVX2's per-128-bit-half
+        ///     packing order, an AND with 1 makes the bytes 0/1, and one vector store writes them. Measured over 100K
+        ///     elements against the per-vector PDEP store: float32 7.05 → 5.15 µs, float64 14.7 → 9.95 µs, int16 6.8 →
+        ///     3.8 µs. Every other case stores each mask through <see cref="EmitMaskToBoolExtraction"/>.
+        /// </remarks>
+        private static void EmitMasksToBools(ILGenerator il, NPTypeCode type, int vectorCount, LocalBuilder locI,
+            LocalBuilder[] masks)
+        {
+            int laneBytes = type == NPTypeCode.Boolean ? 1 : GetTypeSize(type);
+            if (ComparisonPackIntrinsics.Available && masks.Length == 4 && laneBytes >= 2)
+            {
+                EmitPackedMasksToBools(il, type, laneBytes, vectorCount, locI, masks);
+                return;
+            }
+
+            for (int n = 0; n < masks.Length; n++)
+            {
+                var locIOffset = il.DeclareLocal(typeof(long));
+                il.Emit(OpCodes.Ldloc, locI);
+                if (n > 0)
+                {
+                    il.Emit(OpCodes.Ldc_I8, (long)n * vectorCount);
+                    il.Emit(OpCodes.Add);
+                }
+                il.Emit(OpCodes.Stloc, locIOffset);
+                EmitMaskToBoolExtraction(il, type, vectorCount, locIOffset, masks[n]);
+            }
+        }
+
+        /// <summary>
+        ///     The AVX2 packed store of four 256-bit masks (see <see cref="EmitMasksToBools"/>).
+        /// </summary>
+        /// <param name="il">The kernel's IL generator; argument 2 is the <c>bool*</c> result.</param>
+        /// <param name="type">The comparison dtype (2-, 4- or 8-byte lanes).</param>
+        /// <param name="laneBytes">The lane width in bytes: 2, 4 or 8.</param>
+        /// <param name="vectorCount">The lanes per vector: 16, 8 or 4.</param>
+        /// <param name="locI">The local holding the first result index.</param>
+        /// <param name="masks">The four mask locals, in element order.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="laneBytes"/> is not 2, 4 or 8 — a caller bug.</exception>
+        /// <remarks>
+        ///     AVX2's packs work inside each 128-bit half, so each width ends with its own reorder:
+        ///     <list type="bullet">
+        ///     <item><b>2-byte lanes</b> (two pairs, 64 bools): <c>packsswb(m0, m1)</c> holds <c>[m0 lo, m1 lo | m0 hi,
+        ///     m1 hi]</c> as quadwords; <c>vpermq 0xD8</c> reorders them to <c>[m0 lo, m0 hi, m1 lo, m1 hi]</c>.</item>
+        ///     <item><b>4-byte lanes</b> (32 bools): two <c>packssdw</c> and one <c>packsswb</c> leave the dwords as
+        ///     <c>[m0 lo, m1 lo, m2 lo, m3 lo | m0 hi, m1 hi, m2 hi, m3 hi]</c>; <c>vpermd (0,4,1,5,2,6,3,7)</c> restores
+        ///     element order (NumPy's <c>npyv_pack_b8_b32</c>).</item>
+        ///     <item><b>8-byte lanes</b> (16 bools): each 64-bit lane is two equal dwords, so the same three packs make
+        ///     every lane appear twice; <c>vpshufb</c> keeps the even bytes of each half (<c>[m0q0, m0q1, m1q0, m1q1, …]</c>
+        ///     low, <c>[m0q2, m0q3, m1q2, m1q3, …]</c> high) and <c>punpcklwd</c> of the halves interleaves their 2-byte
+        ///     pairs back into element order; one 16-byte store.</item>
+        ///     </list>
+        ///     A saturating pack keeps a lane's -1 / 0 (the mask is all-ones or all-zeros whatever its dtype: a float mask
+        ///     reinterpreted as int32 is -1).
+        /// </remarks>
+        private static void EmitPackedMasksToBools(ILGenerator il, NPTypeCode type, int laneBytes, int vectorCount,
+            LocalBuilder locI, LocalBuilder[] masks)
+        {
+            var lane = GetClrType(type);
+            var P = ComparisonPackIntrinsics.Instance;
+
+            void LoadAs(LocalBuilder mask, Type to)
+            {
+                il.Emit(OpCodes.Ldloc, mask);
+                if (lane != to)
+                    il.EmitCall(OpCodes.Call, P.As256(lane, to), null);
+            }
+
+            // result + i + offset as a byte pointer.
+            void PushResultPtr(long offset)
+            {
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Ldloc, locI);
+                if (offset > 0)
+                {
+                    il.Emit(OpCodes.Ldc_I8, offset);
+                    il.Emit(OpCodes.Add);
+                }
+                il.Emit(OpCodes.Add);
+            }
+
+            switch (laneBytes)
+            {
+                case 2:
+                {
+                    for (int pair = 0; pair < 2; pair++)
+                    {
+                        var locBytes = il.DeclareLocal(typeof(Vector256<sbyte>));
+                        LoadAs(masks[2 * pair], typeof(short));
+                        LoadAs(masks[2 * pair + 1], typeof(short));
+                        il.EmitCall(OpCodes.Call, P.PackInt16, null);                          // V256<sbyte>
+                        il.EmitCall(OpCodes.Call, P.As256(typeof(sbyte), typeof(long)), null);
+                        il.Emit(OpCodes.Ldc_I4, 0xD8);
+                        il.EmitCall(OpCodes.Call, P.Permute4x64, null);
+                        il.EmitCall(OpCodes.Call, P.As256(typeof(long), typeof(sbyte)), null);
+                        P.EmitOnes256(il);
+                        il.EmitCall(OpCodes.Call, P.And256, null);
+                        il.Emit(OpCodes.Stloc, locBytes);
+                        PushResultPtr(pair * 2L * vectorCount);
+                        il.Emit(OpCodes.Ldloc, locBytes);
+                        il.EmitCall(OpCodes.Call, P.Store256, null);
+                    }
+                    return;
+                }
+                case 4:
+                {
+                    var locBytes = il.DeclareLocal(typeof(Vector256<sbyte>));
+                    LoadAs(masks[0], typeof(int));
+                    LoadAs(masks[1], typeof(int));
+                    il.EmitCall(OpCodes.Call, P.PackInt32, null);                              // p01: V256<short>
+                    LoadAs(masks[2], typeof(int));
+                    LoadAs(masks[3], typeof(int));
+                    il.EmitCall(OpCodes.Call, P.PackInt32, null);                              // p23
+                    il.EmitCall(OpCodes.Call, P.PackInt16, null);                              // V256<sbyte>
+                    il.EmitCall(OpCodes.Call, P.As256(typeof(sbyte), typeof(int)), null);
+                    P.EmitDwordOrder(il);
+                    il.EmitCall(OpCodes.Call, P.PermuteVar8x32, null);
+                    il.EmitCall(OpCodes.Call, P.As256(typeof(int), typeof(sbyte)), null);
+                    P.EmitOnes256(il);
+                    il.EmitCall(OpCodes.Call, P.And256, null);
+                    il.Emit(OpCodes.Stloc, locBytes);
+                    PushResultPtr(0);
+                    il.Emit(OpCodes.Ldloc, locBytes);
+                    il.EmitCall(OpCodes.Call, P.Store256, null);
+                    return;
+                }
+                case 8:
+                {
+                    var locPicked = il.DeclareLocal(typeof(Vector256<sbyte>));
+                    var locBytes = il.DeclareLocal(typeof(Vector128<sbyte>));
+                    LoadAs(masks[0], typeof(int));
+                    LoadAs(masks[1], typeof(int));
+                    il.EmitCall(OpCodes.Call, P.PackInt32, null);
+                    LoadAs(masks[2], typeof(int));
+                    LoadAs(masks[3], typeof(int));
+                    il.EmitCall(OpCodes.Call, P.PackInt32, null);
+                    il.EmitCall(OpCodes.Call, P.PackInt16, null);                              // every lane twice
+                    P.EmitEvenBytesControl(il);
+                    il.EmitCall(OpCodes.Call, P.ShuffleBytes, null);
+                    il.Emit(OpCodes.Stloc, locPicked);
+                    il.Emit(OpCodes.Ldloc, locPicked);
+                    il.EmitCall(OpCodes.Call, P.GetLower, null);
+                    il.EmitCall(OpCodes.Call, P.As128(typeof(sbyte), typeof(short)), null);
+                    il.Emit(OpCodes.Ldloc, locPicked);
+                    il.EmitCall(OpCodes.Call, P.GetUpper, null);
+                    il.EmitCall(OpCodes.Call, P.As128(typeof(sbyte), typeof(short)), null);
+                    il.EmitCall(OpCodes.Call, P.UnpackLowInt16, null);
+                    il.EmitCall(OpCodes.Call, P.As128(typeof(short), typeof(sbyte)), null);
+                    P.EmitOnes128(il);
+                    il.EmitCall(OpCodes.Call, P.And128, null);
+                    il.Emit(OpCodes.Stloc, locBytes);
+                    PushResultPtr(0);
+                    il.Emit(OpCodes.Ldloc, locBytes);
+                    il.EmitCall(OpCodes.Call, P.Store128, null);
+                    return;
+                }
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(laneBytes), laneBytes, "EmitPackedMasksToBools: 2-, 4- or 8-byte lanes only — caller bug.");
+            }
+        }
+
+        /// <summary>
+        ///     The AVX2 intrinsics <see cref="EmitPackedMasksToBools"/> calls, resolved once. <see cref="Available"/> is
+        ///     false on any host whose kernels are not 256-bit AVX2 (128-bit, AVX-512 and ARM hosts store each mask
+        ///     through <see cref="EmitMaskToBoolExtraction"/>), and the instance is then never built.
+        /// </summary>
+        private sealed class ComparisonPackIntrinsics
+        {
+            /// <summary>True when the kernels emit 256-bit vectors on a host with AVX2.</summary>
+            internal static readonly bool Available = VectorBits == 256 && System.Runtime.Intrinsics.X86.Avx2.IsSupported;
+
+            /// <summary>The resolved handles (null when <see cref="Available"/> is false: nothing may read them then).</summary>
+            internal static readonly ComparisonPackIntrinsics Instance = Available ? new ComparisonPackIntrinsics() : null;
+
+            internal readonly MethodInfo PackInt32, PackInt16, PermuteVar8x32, Permute4x64, ShuffleBytes, And256, Store256,
+                GetLower, GetUpper, UnpackLowInt16, And128, Store128, Create256Int32x8, Create256SByteX32, Create256SByte,
+                Create128SByte;
+            private readonly MethodInfo _as256, _as128;
+
+            private ComparisonPackIntrinsics()
+            {
+                var avx2 = typeof(System.Runtime.Intrinsics.X86.Avx2);
+                var avx = typeof(System.Runtime.Intrinsics.X86.Avx);
+                var sse2 = typeof(System.Runtime.Intrinsics.X86.Sse2);
+                PackInt32 = Get(avx2, "PackSignedSaturate", typeof(Vector256<int>), typeof(Vector256<int>));
+                PackInt16 = Get(avx2, "PackSignedSaturate", typeof(Vector256<short>), typeof(Vector256<short>));
+                PermuteVar8x32 = Get(avx2, "PermuteVar8x32", typeof(Vector256<int>), typeof(Vector256<int>));
+                Permute4x64 = Get(avx2, "Permute4x64", typeof(Vector256<long>), typeof(byte));
+                ShuffleBytes = Get(avx2, "Shuffle", typeof(Vector256<sbyte>), typeof(Vector256<sbyte>));
+                And256 = Get(avx2, "And", typeof(Vector256<sbyte>), typeof(Vector256<sbyte>));
+                Store256 = Get(avx, "Store", typeof(sbyte*), typeof(Vector256<sbyte>));
+                UnpackLowInt16 = Get(sse2, "UnpackLow", typeof(Vector128<short>), typeof(Vector128<short>));
+                And128 = Get(sse2, "And", typeof(Vector128<sbyte>), typeof(Vector128<sbyte>));
+                Store128 = Get(sse2, "Store", typeof(sbyte*), typeof(Vector128<sbyte>));
+                GetLower = GenericOne(typeof(Vector256), "GetLower", typeof(sbyte));
+                GetUpper = GenericOne(typeof(Vector256), "GetUpper", typeof(sbyte));
+                Create256Int32x8 = Get(typeof(Vector256), "Create", Enumerable.Repeat(typeof(int), 8).ToArray());
+                Create256SByteX32 = Get(typeof(Vector256), "Create", Enumerable.Repeat(typeof(sbyte), 32).ToArray());
+                Create256SByte = Get(typeof(Vector256), "Create", typeof(sbyte));
+                Create128SByte = Get(typeof(Vector128), "Create", typeof(sbyte));
+                _as256 = typeof(Vector256).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                    .Single(m => m.Name == "As" && m.GetGenericArguments().Length == 2);
+                _as128 = typeof(Vector128).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                    .Single(m => m.Name == "As" && m.GetGenericArguments().Length == 2);
+            }
+
+            /// <summary>A public static method by exact parameter types; a missing one fails fast at first use.</summary>
+            /// <exception cref="MissingMethodException">The runtime has no such overload.</exception>
+            private static MethodInfo Get(Type owner, string name, params Type[] parameters)
+                => owner.GetMethod(name, BindingFlags.Public | BindingFlags.Static, null, parameters, null)
+                   ?? throw new MissingMethodException(owner.FullName, name);
+
+            /// <summary>A one-type-parameter generic static method closed over <paramref name="t"/>.</summary>
+            /// <exception cref="InvalidOperationException">The owner has no such single generic method.</exception>
+            private static MethodInfo GenericOne(Type owner, string name, Type t)
+                => owner.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                    .Single(m => m.Name == name && m.IsGenericMethodDefinition && m.GetGenericArguments().Length == 1
+                                 && m.GetParameters().Length == 1)
+                    .MakeGenericMethod(t);
+
+            /// <summary><c>Vector256.As&lt;from, to&gt;</c>: a free reinterpretation of the 256 bits.</summary>
+            internal MethodInfo As256(Type from, Type to) => _as256.MakeGenericMethod(from, to);
+
+            /// <summary><c>Vector128.As&lt;from, to&gt;</c>.</summary>
+            internal MethodInfo As128(Type from, Type to) => _as128.MakeGenericMethod(from, to);
+
+            /// <summary>Pushes <c>Vector256.Create((sbyte)1)</c>, the AND that turns -1 / 0 bytes into 1 / 0.</summary>
+            internal void EmitOnes256(ILGenerator il)
+            {
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.EmitCall(OpCodes.Call, Create256SByte, null);
+            }
+
+            /// <summary>Pushes <c>Vector128.Create((sbyte)1)</c>.</summary>
+            internal void EmitOnes128(ILGenerator il)
+            {
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.EmitCall(OpCodes.Call, Create128SByte, null);
+            }
+
+            /// <summary>Pushes the dword order (0, 4, 1, 5, 2, 6, 3, 7) that undoes the per-half packing.</summary>
+            internal void EmitDwordOrder(ILGenerator il)
+            {
+                foreach (int k in new[] { 0, 4, 1, 5, 2, 6, 3, 7 })
+                    il.Emit(OpCodes.Ldc_I4, k);
+                il.EmitCall(OpCodes.Call, Create256Int32x8, null);
+            }
+
+            /// <summary>Pushes the <c>vpshufb</c> control that moves each half's even bytes to its low 8 bytes (the high
+            ///     8 bytes, control -1, become zero and are never stored).</summary>
+            internal void EmitEvenBytesControl(ILGenerator il)
+            {
+                for (int half = 0; half < 2; half++)
+                {
+                    for (int k = 0; k < 8; k++)
+                        il.Emit(OpCodes.Ldc_I4, 2 * k);
+                    for (int k = 0; k < 8; k++)
+                        il.Emit(OpCodes.Ldc_I4_M1);
+                }
+                il.EmitCall(OpCodes.Call, Create256SByteX32, null);
             }
         }
 
@@ -808,8 +1103,159 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        ///     Tells whether a scalar-broadcast comparison kernel can compare its array operand a whole vector at a time.
+        /// </summary>
+        /// <param name="arrayType">The dtype of the array operand (the one that is not one element).</param>
+        /// <param name="comparisonType">The dtype both operands are compared in (<see cref="ComparisonKernelKey.ComparisonType"/>).</param>
+        /// <returns>
+        ///     <see langword="true"/> when SIMD hardware is present, the array is already in the comparison dtype and that
+        ///     dtype has vector compares (every integer width, float32, float64, and bool through its byte lanes).
+        /// </returns>
+        /// <remarks>
+        ///     The array must already be in the comparison dtype because the vector body loads its elements as they are;
+        ///     a widening comparison (an int8 array against an int32 scalar) would need a vector conversion per element and
+        ///     stays on the scalar loop. The dispatcher re-packs a Python-int scalar that fits an integer array's dtype into
+        ///     that dtype (<c>DefaultEngine.AdoptWeakComparisonScalar</c>), so the common <c>uint8 &gt; 128</c> form reaches
+        ///     this path. The scalar's own dtype does not matter: it is converted once, exactly as the scalar loop converts it.
+        /// </remarks>
+        private static bool CanUseComparisonBroadcastSimd(NPTypeCode arrayType, NPTypeCode comparisonType)
+        {
+            if (VectorBits == 0)
+                return false;
+            if (arrayType != comparisonType)
+                return false;
+            return CanUseSimd(comparisonType) || comparisonType == NPTypeCode.Boolean;
+        }
+
+        /// <summary>
+        ///     Emits the vector part of a scalar-broadcast comparison: a 4×-unrolled loop and a one-vector loop over the
+        ///     array operand, each lane compared with the scalar broadcast into a vector once.
+        /// </summary>
+        /// <param name="il">The kernel's IL generator. The kernel's arguments follow <see cref="ComparisonKernel"/>.</param>
+        /// <param name="key">The kernel key; only its comparison operator is read.</param>
+        /// <param name="comparisonType">The dtype both operands are compared in, which is also the array operand's dtype.</param>
+        /// <param name="scalarOnRight">
+        ///     <see langword="true"/> for <c>array op scalar</c>, <see langword="false"/> for <c>scalar op array</c>. The
+        ///     operand order is kept: <c>&lt;</c> is not symmetric, and NaN lanes must see the same compare as the scalar loop.
+        /// </param>
+        /// <param name="arrayArg">The kernel argument index that holds the array's base pointer: 0 (lhs) or 1 (rhs).</param>
+        /// <param name="arraySize">The array element size in bytes.</param>
+        /// <param name="locScalar">The local that already holds the scalar, converted to <paramref name="comparisonType"/>.</param>
+        /// <param name="locI">
+        ///     The element counter, 0 on entry. On exit it holds the first element the vector loops did not process; the
+        ///     caller's scalar loop continues from there.
+        /// </param>
+        /// <remarks>
+        ///     The vector compare is the one the same-dtype <c>SimdFull</c> kernel uses (<see cref="EmitVectorComparison"/>):
+        ///     ordered float compares, so a NaN lane is False except under <c>!=</c>, and bool lanes compared by truth value.
+        ///     The four masks of the unrolled body become result bytes through <see cref="EmitMasksToBools"/> (packed on
+        ///     AVX2 hosts), the remainder's single mask through <see cref="EmitMaskToBoolExtraction"/>. Each vector is a
+        ///     full load from a contiguous run, so the loops stop while a whole vector still fits and never read past the
+        ///     array.
+        /// </remarks>
+        private static void EmitComparisonBroadcastSimdLoop(ILGenerator il, ComparisonKernelKey key, NPTypeCode comparisonType,
+            bool scalarOnRight, int arrayArg, int arraySize, LocalBuilder locScalar, LocalBuilder locI)
+        {
+            long vectorCount = GetVectorCount(comparisonType);
+            const int unrollFactor = 4;
+            long unrollStep = vectorCount * unrollFactor;
+            // Bool rides the byte lanes (GetSimdLaneType), as the SimdFull kernel's masks do.
+            var vectorType = GetVectorType(GetSimdLaneType(comparisonType));
+            var arrayLoad = arrayArg == 0 ? OpCodes.Ldarg_0 : OpCodes.Ldarg_1;
+
+            // The scalar is broadcast ONCE, before the loops: the body then reads a register, not memory.
+            var locBroadcast = il.DeclareLocal(vectorType);
+            il.Emit(OpCodes.Ldloc, locScalar);
+            EmitVectorCreate(il, comparisonType);
+            il.Emit(OpCodes.Stloc, locBroadcast);
+
+            var locUnrollEnd = il.DeclareLocal(typeof(long));
+            var locVectorEnd = il.DeclareLocal(typeof(long));
+            // unrollEnd = totalSize - unrollStep (the last start of four whole vectors: the loop runs while i <= it, so
+            // i + unrollStep <= totalSize); vectorEnd likewise for one vector. Never past the last element.
+            il.Emit(OpCodes.Ldarg_S, (byte)7);
+            il.Emit(OpCodes.Ldc_I8, unrollStep);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locUnrollEnd);
+            il.Emit(OpCodes.Ldarg_S, (byte)7);
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locVectorEnd);
+
+            var maskLocals = new LocalBuilder[unrollFactor];
+            for (int n = 0; n < unrollFactor; n++)
+                maskLocals[n] = il.DeclareLocal(vectorType);
+
+            // Pushes array[i + offset] as a vector, then compares it with the broadcast in the kernel's operand order.
+            void EmitCompareAt(long offset)
+            {
+                if (!scalarOnRight)
+                    il.Emit(OpCodes.Ldloc, locBroadcast);
+                il.Emit(arrayLoad);
+                il.Emit(OpCodes.Ldloc, locI);
+                if (offset > 0)
+                {
+                    il.Emit(OpCodes.Ldc_I8, offset);
+                    il.Emit(OpCodes.Add);
+                }
+                il.Emit(OpCodes.Ldc_I8, (long)arraySize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+                EmitVectorLoad(il, comparisonType);
+                if (scalarOnRight)
+                    il.Emit(OpCodes.Ldloc, locBroadcast);
+                EmitVectorComparison(il, key.Op, comparisonType);
+            }
+
+            var lblUnrollLoop = il.DefineLabel();
+            var lblUnrollEnd = il.DefineLabel();
+            var lblRemainderLoop = il.DefineLabel();
+            var lblRemainderEnd = il.DefineLabel();
+
+            // === 4x UNROLLED: four independent compares, then four mask stores ===
+            il.MarkLabel(lblUnrollLoop);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locUnrollEnd);
+            il.Emit(OpCodes.Bgt, lblUnrollEnd);
+            for (int n = 0; n < unrollFactor; n++)
+            {
+                EmitCompareAt(n * vectorCount);
+                il.Emit(OpCodes.Stloc, maskLocals[n]);
+            }
+            EmitMasksToBools(il, comparisonType, (int)vectorCount, locI, maskLocals);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, unrollStep);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+            il.Emit(OpCodes.Br, lblUnrollLoop);
+
+            // === ONE VECTOR AT A TIME for the last 0-3 whole vectors ===
+            il.MarkLabel(lblUnrollEnd);
+            il.MarkLabel(lblRemainderLoop);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locVectorEnd);
+            il.Emit(OpCodes.Bgt, lblRemainderEnd);
+            EmitCompareAt(0);
+            il.Emit(OpCodes.Stloc, maskLocals[0]);
+            EmitMaskToBoolExtraction(il, comparisonType, (int)vectorCount, locI, maskLocals[0]);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+            il.Emit(OpCodes.Br, lblRemainderLoop);
+
+            il.MarkLabel(lblRemainderEnd);
+        }
+
+        /// <summary>
         /// Emit loop for scalar right operand comparison.
         /// </summary>
+        /// <remarks>
+        ///     An array already in the comparison dtype runs the vector loops first
+        ///     (<see cref="EmitComparisonBroadcastSimdLoop"/>); the scalar loop below then finishes the last partial vector,
+        ///     or the whole array when the array must be converted per element.
+        /// </remarks>
         private static void EmitComparisonScalarRightLoop(ILGenerator il, ComparisonKernelKey key,
             int lhsSize, int rhsSize, NPTypeCode comparisonType)
         {
@@ -828,6 +1274,10 @@ namespace NumSharp.Backends.Kernels
             // i = 0
             il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locI);
+
+            if (CanUseComparisonBroadcastSimd(key.LhsType, comparisonType))
+                EmitComparisonBroadcastSimdLoop(il, key, comparisonType, scalarOnRight: true, arrayArg: 0,
+                    arraySize: lhsSize, locScalar: locRhsVal, locI: locI);
 
             il.MarkLabel(lblLoop);
 
@@ -871,6 +1321,10 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Emit loop for scalar left operand comparison.
         /// </summary>
+        /// <remarks>
+        ///     The mirror of <see cref="EmitComparisonScalarRightLoop"/>: the vector loops run first when the array (the
+        ///     right operand) is already in the comparison dtype, keeping <c>scalar op array</c> operand order.
+        /// </remarks>
         private static void EmitComparisonScalarLeftLoop(ILGenerator il, ComparisonKernelKey key,
             int lhsSize, int rhsSize, NPTypeCode comparisonType)
         {
@@ -889,6 +1343,10 @@ namespace NumSharp.Backends.Kernels
             // i = 0
             il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locI);
+
+            if (CanUseComparisonBroadcastSimd(key.RhsType, comparisonType))
+                EmitComparisonBroadcastSimdLoop(il, key, comparisonType, scalarOnRight: false, arrayArg: 1,
+                    arraySize: rhsSize, locScalar: locLhsVal, locI: locI);
 
             il.MarkLabel(lblLoop);
 

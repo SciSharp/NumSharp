@@ -602,63 +602,97 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void UnaryBatch_Family_OutSmoke()
         {
+            // One value-pinned call per shipped out=-capable unary ufunc — now checking EVERY element
+            // (not just [3]), the out= reference identity, and the out dtype. Full arrays and the
+            // pi-based interior values probed against NumPy 2.4.2.
+            const double Pi = System.Math.PI;
             var o = np.empty(new Shape(4), np.float64);
 
-            np.log2(np.array(new[] { 1.0, 2, 4, 8 }), o);
-            Assert.AreEqual(3.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.log2(np.array(new[] { 1.0, 2, 4, 8 }), o), o));
+            AssertRow(o, 0.0, 1.0, 2.0, 3.0);
 
-            np.log10(np.array(new[] { 1.0, 10, 100, 1000 }), o);
-            Assert.AreEqual(3.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.log10(np.array(new[] { 1.0, 10, 100, 1000 }), o), o));
+            AssertRow(o, 0.0, 1.0, 2.0, 3.0);
 
-            np.log1p(np.zeros(new Shape(4), np.float64), o);
-            Assert.AreEqual(0.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.log1p(np.zeros(new Shape(4), np.float64), o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, 0.0);
 
-            np.exp2(np.array(new[] { 0.0, 1, 2, 3 }), o);
-            Assert.AreEqual(8.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.exp2(np.array(new[] { 0.0, 1, 2, 3 }), o), o));
+            AssertRow(o, 1.0, 2.0, 4.0, 8.0);
 
-            np.expm1(np.zeros(new Shape(4), np.float64), o);
-            Assert.AreEqual(0.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.expm1(np.zeros(new Shape(4), np.float64), o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, 0.0);
 
-            np.cbrt(np.array(new[] { 0.0, 1, 8, 27 }), o);
-            Assert.AreEqual(3.0, o.GetDouble(3), 1e-12);
+            Assert.IsTrue(ReferenceEquals(np.cbrt(np.array(new[] { 0.0, 1, 8, 27 }), o), o));
+            AssertRow(o, 0.0, 1.0, 2.0, 3.0);
 
-            np.cosh(np.zeros(new Shape(4), np.float64), o);
-            Assert.AreEqual(1.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.cosh(np.zeros(new Shape(4), np.float64), o), o));
+            AssertRow(o, 1.0, 1.0, 1.0, 1.0);
 
-            np.tanh(np.zeros(new Shape(4), np.float64), o);
-            Assert.AreEqual(0.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.tanh(np.zeros(new Shape(4), np.float64), o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, 0.0);
 
-            np.arcsin(np.array(new[] { 0.0, 0, 0, 1 }), o);
-            Assert.AreEqual(System.Math.PI / 2, o.GetDouble(3), 1e-12);
+            Assert.IsTrue(ReferenceEquals(np.arcsin(np.array(new[] { 0.0, 0, 0, 1 }), o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, Pi / 2);
 
-            np.arccos(np.array(new[] { 1.0, 1, 1, 0 }), o);
-            Assert.AreEqual(System.Math.PI / 2, o.GetDouble(3), 1e-12);
+            Assert.IsTrue(ReferenceEquals(np.arccos(np.array(new[] { 1.0, 1, 1, 0 }), o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, Pi / 2);
 
-            np.arctan(np.array(new[] { 0.0, 0, 0, 1 }), o);
-            Assert.AreEqual(System.Math.PI / 4, o.GetDouble(3), 1e-12);
+            Assert.IsTrue(ReferenceEquals(np.arctan(np.array(new[] { 0.0, 0, 0, 1 }), o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, Pi / 4);
 
-            np.deg2rad(np.array(new[] { 0.0, 90, 180, 360 }), o);
-            Assert.AreEqual(2 * System.Math.PI, o.GetDouble(3), 1e-12);
+            Assert.IsTrue(ReferenceEquals(np.deg2rad(np.array(new[] { 0.0, 90, 180, 360 }), o), o));
+            AssertRow(o, 0.0, Pi / 2, Pi, 2 * Pi);
 
-            np.rad2deg(np.array(new[] { 0.0, System.Math.PI / 2, System.Math.PI, 2 * System.Math.PI }), o);
-            Assert.AreEqual(360.0, o.GetDouble(3), 1e-12);
+            Assert.IsTrue(ReferenceEquals(np.rad2deg(np.array(new[] { 0.0, Pi / 2, Pi, 2 * Pi }), o), o));
+            AssertRow(o, 0.0, 90.0, 180.0, 360.0);
 
-            np.ceil(np.array(new[] { 0.5, 1.5, 2.5, 3.5 }), o);
-            Assert.AreEqual(4.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.ceil(np.array(new[] { 0.5, 1.5, 2.5, 3.5 }), o), o));
+            AssertRow(o, 1.0, 2.0, 3.0, 4.0);
 
-            np.trunc(np.array(new[] { 0.5, 1.5, 2.5, -3.5 }), o);
-            Assert.AreEqual(-3.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.trunc(np.array(new[] { 0.5, 1.5, 2.5, -3.5 }), o), o));
+            AssertRow(o, 0.0, 1.0, 2.0, -3.0);
 
-            // aliases ride the same merged surface.
-            np.radians(np.array(new[] { 0.0, 90, 180, 360 }), o);
-            Assert.AreEqual(2 * System.Math.PI, o.GetDouble(3), 1e-12);
+            // aliases ride the same merged surface — identical values to deg2rad/rad2deg.
+            Assert.IsTrue(ReferenceEquals(np.radians(np.array(new[] { 0.0, 90, 180, 360 }), o), o));
+            AssertRow(o, 0.0, Pi / 2, Pi, 2 * Pi);
 
-            np.degrees(np.array(new[] { 0.0, System.Math.PI / 2, System.Math.PI, 2 * System.Math.PI }), o);
-            Assert.AreEqual(360.0, o.GetDouble(3), 1e-12);
+            Assert.IsTrue(ReferenceEquals(np.degrees(np.array(new[] { 0.0, Pi / 2, Pi, 2 * Pi }), o), o));
+            AssertRow(o, 0.0, 90.0, 180.0, 360.0);
 
+            // bitwise_not (int loop) — every element + the int32 out dtype.
             var oi = np.empty(new Shape(4), np.int32);
-            np.bitwise_not(np.array(new[] { 12, 10, 15, 1 }).astype(np.int32), oi);
-            Assert.AreEqual(-13, oi.GetInt32(0));
+            Assert.IsTrue(ReferenceEquals(np.bitwise_not(np.array(new[] { 12, 10, 15, 1 }).astype(np.int32), oi), oi));
+            AssertRowInt(oi, -13, -11, -16, -2);
+        }
+
+        /// <summary>
+        /// Assert a float64 <paramref name="o"/> has exactly <paramref name="expected"/>.Length elements,
+        /// is float64 dtype, and matches every element within a tight tolerance — turns the family smoke
+        /// test from a single-element pin into a full-row assertion.
+        /// </summary>
+        /// <param name="o">The out array to check.</param>
+        /// <param name="expected">The full expected row (probed against NumPy 2.4.2).</param>
+        private static void AssertRow(NDArray o, params double[] expected)
+        {
+            Assert.AreEqual(expected.Length, (int)o.size, "size");
+            Assert.AreEqual(NPTypeCode.Double, o.typecode, "dtype");
+            for (int i = 0; i < expected.Length; i++)
+                Assert.AreEqual(expected[i], o.GetDouble(i), 1e-12, $"element {i}");
+        }
+
+        /// <summary>
+        /// Int32 twin of <see cref="AssertRow"/> for the integer-loop smoke ops (bitwise_not): exact
+        /// per-element equality plus the int32 out dtype.
+        /// </summary>
+        /// <param name="o">The out array to check.</param>
+        /// <param name="expected">The full expected row (probed against NumPy 2.4.2).</param>
+        private static void AssertRowInt(NDArray o, params int[] expected)
+        {
+            Assert.AreEqual(expected.Length, (int)o.size, "size");
+            Assert.AreEqual(NPTypeCode.Int32, o.typecode, "dtype");
+            for (int i = 0; i < expected.Length; i++)
+                Assert.AreEqual(expected[i], o.GetInt32(i), $"element {i}");
         }
 
         // =====================================================================

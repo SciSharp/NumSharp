@@ -24,9 +24,13 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             [NDScoped] // reclaims the ToCommon cast temp
             public static NDArray cholesky(NDArray a, bool upper = false)
             {
+                // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+                if (NDMatrixBoundary.Sees(a))
+                    return NDMatrixBoundary.Wrapped((a, upper), static s => cholesky(s.a, s.upper));
                 AssertStackedSquare(a);
                 var common = CommonType(a);
                 return a.TensorEngine.Cholesky(ToCommon(a, common), upper);

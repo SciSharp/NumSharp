@@ -36,6 +36,7 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Abs:
+                case UnaryOp.Fabs:   // np.fabs(decimal) — same as Abs (Math.Abs(decimal))
                     il.EmitCall(OpCodes.Call, CachedMethods.MathAbsDecimal, null);
                     break;
 
@@ -43,6 +44,13 @@ namespace NumSharp.Backends.Kernels
                     // Math.Sign(decimal) returns int, convert back to decimal
                     il.EmitCall(OpCodes.Call, CachedMethods.MathSignDecimal, null);
                     il.EmitCall(OpCodes.Call, CachedMethods.DecimalImplicitFromInt, null);
+                    break;
+
+                case UnaryOp.Spacing:
+                    // np.spacing on decimal (no NumPy analog): the double-bridge is packaged inside
+                    // NDSpacingMath.Spacing(decimal), so a single Call suffices (unlike the transcendental
+                    // block below which inlines the decimal->double->Math.*->decimal round-trip).
+                    il.EmitCall(OpCodes.Call, CachedMethods.SpacingDec, null);
                     break;
 
                 case UnaryOp.Ceil:
@@ -56,6 +64,7 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Round:
+                case UnaryOp.Rint:   // np.rint — same Math.Round(decimal), differs only in dtype tier
                     // Math.Round has decimal overload
                     il.EmitCall(OpCodes.Call, CachedMethods.MathRoundDecimal, null);
                     break;
@@ -208,6 +217,17 @@ namespace NumSharp.Backends.Kernels
                     // Decimal cannot be NaN or Inf - pop value, push false
                     il.Emit(OpCodes.Pop);
                     il.Emit(OpCodes.Ldc_I4_0);
+                    break;
+
+                case UnaryOp.SignBit:
+                    // np.signbit on decimal (no NumPy analog): strictly-negative test via
+                    // Math.Sign(x) < 0. Math.Sign(decimal) returns 0 for BOTH +0m and a
+                    // negative-zero -0.0m, so a negative-zero decimal reports False (the raw
+                    // sign flag is not consulted). Documented divergence from the float rule
+                    // (where -0.0 → True); decimal -0.0m is exotic and has no NumPy counterpart.
+                    il.EmitCall(OpCodes.Call, CachedMethods.MathSignDecimal, null);
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Clt);
                     break;
 
                 default:
@@ -391,6 +411,7 @@ namespace NumSharp.Backends.Kernels
                 // TypeError for complex inputs, so falling through to the default throw keeps parity.
 
                 case UnaryOp.Round:
+                case UnaryOp.Rint:   // np.rint(complex) — same real/imag half-to-even, complex128 preserved
                     // NumPy rint(complex) / around(complex) rounds the real and imaginary parts
                     // SEPARATELY, half-to-even (Math.Round default). floor/ceil/trunc have no complex
                     // loop in NumPy (TypeError), so Round is the only rounding op handled here.
@@ -557,6 +578,7 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Abs:
+                case UnaryOp.Fabs:   // np.fabs(f16) scalar/strided — same as Abs (Half sign-bit clear)
                     il.EmitCall(OpCodes.Call, CachedMethods.HalfAbs, null);
                     break;
 
@@ -581,6 +603,7 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Round:
+                case UnaryOp.Rint:   // np.rint(f16) — same Half→double→Round→Half roundtrip as Round
                 case UnaryOp.Deg2Rad:
                 case UnaryOp.Rad2Deg:
                     // The three ops NOT covered by the float32 fast path above (Round is bit-preserving,
@@ -651,6 +674,14 @@ namespace NumSharp.Backends.Kernels
                     il.EmitCall(OpCodes.Call, GetHelper(nameof(HalfSignHelper)), null);
                     break;
 
+                case UnaryOp.Spacing:
+                    // np.spacing at float16 is NumPy's SEPARATE npy_half_spacing routine (a raw 16-bit
+                    // bit-fiddle, ALWAYS non-negative, boundary-aware) — NOT the float32-bridge the
+                    // transcendentals above use, and NOT the signed float32/float64 formula. Ported
+                    // bit-for-bit in NDSpacingMath.Spacing(Half) (verified over all 65 536 patterns).
+                    il.EmitCall(OpCodes.Call, CachedMethods.SpacingH, null);
+                    break;
+
                 case UnaryOp.IsNan:
                     il.EmitCall(OpCodes.Call, CachedMethods.HalfIsNaN, null);
                     break;
@@ -673,6 +704,13 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.IsFinite:
                     il.EmitCall(OpCodes.Call,
                         ScalarMethodCache.Predicate(typeof(Half), "IsFinite"), null);
+                    break;
+
+                case UnaryOp.SignBit:
+                    // np.signbit at float16: the raw f16 sign bit via Half.IsNegative (computes in
+                    // the 16-bit domain, no float round-trip) — -0.0/-NaN True, +0.0/+NaN False.
+                    il.EmitCall(OpCodes.Call,
+                        ScalarMethodCache.Predicate(typeof(Half), "IsNegative"), null);
                     break;
 
                 default:

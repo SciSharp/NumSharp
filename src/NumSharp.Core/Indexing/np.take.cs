@@ -36,9 +36,13 @@ namespace NumSharp
         ///     when <paramref name="out"/> is supplied).
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.take.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // reclaims the 0-d reshape alias and the natural-result temp on the out= path
         public static NDArray take(NDArray a, NDArray indices, int? axis = null, NDArray @out = null, string mode = "raise")
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, indices, axis, @out, mode), static s => take(s.a, s.indices, s.axis, s.@out, s.mode), @out);
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
 
@@ -103,31 +107,50 @@ namespace NumSharp
         /// <summary>
         ///     Scalar convenience overload — take a single element by flat index.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // the 0-d index wrapper is built in THIS frame, before the array overload's scope opens
         public static NDArray take(NDArray a, long index, int? axis = null, NDArray @out = null, string mode = "raise")
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, index, axis, @out, mode), static s => take(s.a, s.index, s.axis, s.@out, s.mode), @out);
             // Wrap the scalar in a 0-d NDArray so the array overload's shape-preserving
             // logic emits a 0-d result (NumPy semantic for scalar input).
             var idxArr = NDArray.Scalar(index);
             return take(a, idxArr, axis, @out, mode);
         }
 
+        /// <summary>
+        ///     Flat <c>np.take</c> (no axis): gathers <c>a.flat[indices]</c> through the IL take kernel into a fresh
+        ///     C-contiguous array shaped like <paramref name="indices"/>.
+        /// </summary>
+        /// <param name="a">The source array, any layout (a non-contiguous source is first copied to C order).</param>
+        /// <param name="indices">The integer index array; a C-contiguous int32/int64 one is read in place.</param>
+        /// <param name="mode">The parsed out-of-bounds policy (raise / wrap / clip).</param>
+        /// <returns>The gathered values: dtype of <paramref name="a"/>, shape of <paramref name="indices"/>.</returns>
+        /// <exception cref="ArgumentException"><paramref name="a"/> is empty and <paramref name="indices"/> is not.</exception>
+        /// <exception cref="TypeError">The index dtype cannot be cast to int64 under <c>same_kind</c> (float/complex).</exception>
+        /// <exception cref="ArgumentOutOfRangeException">An index is out of bounds under mode <c>raise</c>.</exception>
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>: the only caller is the <c>[NDScoped]</c>
+        /// <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>, so the C-order copy of a non-contiguous source
+        /// and the int64 copy of the indices are released by that caller's scope, exceptions included. A scope of this
+        /// helper's own would be nested under the caller's and cost one scope allocation per call; the caller returns
+        /// right after this helper, so it would release nothing sooner. The caller's <paramref name="a"/> and
+        /// <paramref name="indices"/> were built before any scope opened, so a source or index array used as-is is
+        /// never disposed.</remarks>
+        [NDScopedCovered]
         private static unsafe NDArray TakeFlat(NDArray a, NDArray indices, int mode)
         {
             // Materialise non-contig source to C-contig so the kernel can walk linearly.
-            NDArray sourceOwned = null;
             NDArray source = a;
             if (!a.Shape.IsContiguous)
-            {
-                sourceOwned = np.ascontiguousarray(a);
-                source = sourceOwned;
-            }
+                source = np.ascontiguousarray(a);
 
             // Cast indices to contig int64 (a contig int32 array is read in place).
-            var idx64 = CastIndicesToInt64(indices, "same_kind", out bool ownIdx, out bool idx32);
+            var idx64 = CastIndicesToInt64(indices, "same_kind", out _, out bool idx32);
 
             // Output shape = indices.shape, dtype = a.dtype, C-contig allocated.
-            var outShape = new Shape((long[])indices.Shape.dimensions.Clone());
+            var outShape = Shape.Adopt((long[])indices.Shape.dimensions.Clone());
             var result = new NDArray(a.typecode, outShape, false);
 
             long indicesCount = indices.size;
@@ -135,41 +158,46 @@ namespace NumSharp
             long elemBytes = a.dtypesize;
 
             if (indicesCount == 0)
-            {
-                if (ownIdx) idx64.Dispose();
-                sourceOwned?.Dispose();
                 return result;
-            }
 
             if (maxItem == 0)
                 throw new ArgumentException("cannot do a non-empty take from an empty array.", nameof(a));
 
-            try
-            {
-                ExecuteTakeKernel(source, idx64, result,
-                    outerSize: 1, indicesCount: indicesCount,
-                    maxItem: maxItem, innerSize: elemBytes, mode: mode, idx32: idx32);
-            }
-            finally
-            {
-                if (ownIdx) idx64.Dispose();
-                sourceOwned?.Dispose();
-            }
+            ExecuteTakeKernel(source, idx64, result,
+                outerSize: 1, indicesCount: indicesCount,
+                maxItem: maxItem, innerSize: elemBytes, mode: mode, idx32: idx32);
 
             return result;
         }
 
+        /// <summary>
+        ///     <c>np.take</c> along <paramref name="axis"/>: gathers whole slabs <c>a[..., indices, ...]</c> through
+        ///     the IL take kernel into a fresh C-contiguous array of shape
+        ///     <c>a.shape[:axis] + indices.shape + a.shape[axis+1:]</c>.
+        /// </summary>
+        /// <param name="a">The source array, any layout (a non-contiguous source is first copied to C order).</param>
+        /// <param name="indices">The integer index array; a C-contiguous int32/int64 one is read in place.</param>
+        /// <param name="axis">The normalized (non-negative, in-range) axis to take along.</param>
+        /// <param name="mode">The parsed out-of-bounds policy (raise / wrap / clip).</param>
+        /// <returns>The gathered slabs, dtype of <paramref name="a"/>.</returns>
+        /// <exception cref="ArgumentException">The axis is empty and <paramref name="indices"/> is not.</exception>
+        /// <exception cref="TypeError">The index dtype cannot be cast to int64 under <c>same_kind</c> (float/complex).</exception>
+        /// <exception cref="ArgumentOutOfRangeException">An index is out of bounds under mode <c>raise</c>.</exception>
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>: the only caller is the <c>[NDScoped]</c>
+        /// <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>, so the C-order copy of a non-contiguous source
+        /// and the int64 copy of the indices are released by that caller's scope, exceptions included. A scope of this
+        /// helper's own would be nested under the caller's and cost one scope allocation per call; the caller returns
+        /// right after this helper, so it would release nothing sooner. The caller's <paramref name="a"/> and
+        /// <paramref name="indices"/> were built before any scope opened, so a source or index array used as-is is
+        /// never disposed.</remarks>
+        [NDScopedCovered]
         private static unsafe NDArray TakeAxis(NDArray a, NDArray indices, int axis, int mode)
         {
-            NDArray sourceOwned = null;
             NDArray source = a;
             if (!a.Shape.IsContiguous)
-            {
-                sourceOwned = np.ascontiguousarray(a);
-                source = sourceOwned;
-            }
+                source = np.ascontiguousarray(a);
 
-            var idx64 = CastIndicesToInt64(indices, "same_kind", out bool ownIdx, out bool idx32);
+            var idx64 = CastIndicesToInt64(indices, "same_kind", out _, out bool idx32);
 
             // Compute outer × inner factorisation around `axis`.
             long outerSize = 1;
@@ -188,30 +216,19 @@ namespace NumSharp
             for (int d = 0; d < indices.ndim; d++) outDims[outIdx++] = indices.Shape.dimensions[d];
             for (int d = axis + 1; d < a.ndim; d++) outDims[outIdx++] = a.Shape.dimensions[d];
 
-            var result = new NDArray(a.typecode, new Shape(outDims), false);
+            var result = new NDArray(a.typecode, Shape.Adopt(outDims), false);
 
             long indicesCount = indices.size;
             if (indicesCount == 0 || outerSize == 0)
-            {
-                if (ownIdx) idx64.Dispose();
-                sourceOwned?.Dispose();
                 return result;
-            }
 
             if (maxItem == 0)
                 throw new ArgumentException("cannot do a non-empty take from an empty axis.", nameof(a));
 
-            try
-            {
-                ExecuteTakeKernel(source, idx64, result,
-                    outerSize: outerSize, indicesCount: indicesCount,
-                    maxItem: maxItem, innerSize: innerBytes, mode: mode, idx32: idx32);
-            }
-            finally
-            {
-                if (ownIdx) idx64.Dispose();
-                sourceOwned?.Dispose();
-            }
+            ExecuteTakeKernel(source, idx64, result,
+                outerSize: outerSize, indicesCount: indicesCount,
+                maxItem: maxItem, innerSize: innerBytes, mode: mode, idx32: idx32,
+                axis: axis);   // axis form: the raise-mode IndexError names this axis (NumPy wording)
 
             return result;
         }
@@ -223,9 +240,37 @@ namespace NumSharp
         /// </summary>
         private const long IndexPrefetchThresholdBytes = 2L * 1024 * 1024;
 
+        /// <summary>
+        ///     Run the compiled take gather over <paramref name="source"/> into
+        ///     <paramref name="result"/>, choosing between the lean flat kernel and the general
+        ///     outer×inner kernel, and — under mode 'raise' — converting a kernel-reported
+        ///     out-of-bounds index into NumPy's exact IndexError wording.
+        /// </summary>
+        /// <param name="source">The gathered array (read through raw pointer + offset).</param>
+        /// <param name="idx64">The contiguous index array (int64 storage; reinterpreted as int32
+        ///     values when <paramref name="idx32"/> is true).</param>
+        /// <param name="result">Preallocated C-contiguous destination the kernel fills.</param>
+        /// <param name="outerSize">Product of the dims before the take axis (1 for a flat take).</param>
+        /// <param name="indicesCount">Number of indices gathered per outer position.</param>
+        /// <param name="maxItem">The take axis's extent — the bound a raise-mode index must satisfy
+        ///     after one negative wrap.</param>
+        /// <param name="innerSize">Bytes per gathered slab (element bytes × trailing dims).</param>
+        /// <param name="mode">0 = raise, 1 = wrap, 2 = clip (NumPy's mode order).</param>
+        /// <param name="idx32">True when the index buffer holds int32 values read in place.</param>
+        /// <param name="axis">The take axis as the CALLER spelled it, or null for a flat
+        ///     (axis=None) take — load-bearing for the error text only: NumPy's raise-mode message
+        ///     names the axis ("for axis 0 with size 8") on an axis take but drops the clause
+        ///     entirely ("for size 8") on a flat one.</param>
+        /// <exception cref="NotSupportedException">No IL kernel exists for this element width
+        ///     (dynamic codegen unavailable).</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Mode 'raise' met an index still out of
+        ///     [0, <paramref name="maxItem"/>) after the single negative wrap — message per
+        ///     <paramref name="axis"/> above, and nothing has been partially written that the
+        ///     caller exposes (the result buffer is discarded on throw).</exception>
         private static unsafe void ExecuteTakeKernel(
             NDArray source, NDArray idx64, NDArray result,
-            long outerSize, long indicesCount, long maxItem, long innerSize, int mode, bool idx32 = false)
+            long outerSize, long indicesCount, long maxItem, long innerSize, int mode, bool idx32 = false,
+            int? axis = null)
         {
             int copyKind = DirectILKernelGenerator.CopyKindFor(innerSize);
             // Software prefetch pays off only when the randomly-gathered region misses cache; below that
@@ -266,9 +311,15 @@ namespace NumSharp
                 long failPair = status;
                 long badJ = failPair % indicesCount;
                 long badVal = idx32 ? ((int*)idxPtr)[badJ] : idxPtr[badJ];
+                // NumPy's two IndexError spellings, verbatim (probed 2.4.2, gated by errors_full):
+                // an axis take says "for axis {n} with size", the flat (axis=None) form drops the
+                // axis clause entirely ("for size {n}") — the old single wording ("for axis with
+                // size") matched neither.
                 throw new ArgumentOutOfRangeException(
                     nameof(idx64),
-                    $"index {badVal} is out of bounds for axis with size {maxItem}");
+                    axis.HasValue
+                        ? $"index {badVal} is out of bounds for axis {axis.Value} with size {maxItem}"
+                        : $"index {badVal} is out of bounds for size {maxItem}");
             }
         }
 

@@ -27,9 +27,13 @@
         ///         - If a is an N-D array and b is an M-D array(where M>=2), it is a sum product over the last axis of a and the second-to-last axis of b:<br></br>
         ///           dot(a, b)[i,j,k,m] = sum(a[i,j,:] * b[k,:,m])
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray dot(NDArray a, NDArray b, NDArray @out = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a, b))
+                return NDMatrixBoundary.Wrapped((a, b, @out), static s => dot(s.a, s.b, s.@out), @out);
             var result = a.TensorEngine.Dot(a, b);
             if (@out is null)
                 return result;
@@ -46,7 +50,7 @@
                     "number of dimensions, and be a C-Array)");
 
             for (int d = 0; d < result.ndim; d++)
-                if (result.shape[d] != @out.shape[d])
+                if (result.Shape.dimensions[d] != @out.Shape.dimensions[d])
                     throw new ValueError("output array has wrong dimensions");
 
             // dtype already validated equal, so this is a straight copy of the freshly-computed

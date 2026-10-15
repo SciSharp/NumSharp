@@ -20,9 +20,13 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             [NDScoped] // reclaims the ToCommon cast temp and the pre-collapse complex w/v CollapseEig supersedes
             public static (NDArray eigenvalues, NDArray eigenvectors) eig(NDArray a)
             {
+                // a numpy.matrix operand: NumPy returns the plain eigenvalues and wrap(vt), the eigenvectors as a matrix
+                if (NDMatrixBoundary.Sees(a))
+                    return NDMatrixBoundary.WrappedPair(a, static s => eig(s), wrapFirst: false, wrapSecond: true);
                 AssertStackedSquare(a);
                 AssertFinite(a);
                 var common = CommonType(a);
@@ -38,6 +42,7 @@ namespace NumSharp
             [NDScoped] // reclaims the ToCommon cast temp and the pre-collapse complex eigenvalues
             public static NDArray eigvals(NDArray a)
             {
+                using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 AssertStackedSquare(a);
                 AssertFinite(a);
                 var common = CommonType(a);
@@ -74,6 +79,17 @@ namespace NumSharp
                 {
                     // csingle and cdouble both collapse onto NumSharp's single complex width.
                     resultType = NPTypeCode.Complex;
+                    // A float32 operand's complex result is NumPy's csingle: geev ran in double and `astype(complex64)`
+                    // rounded each component to float32. NumSharp keeps the complex128 dtype (#569) but carries exactly
+                    // those values — so a float32 matrix's eigenvalues, eigenvectors and everything sorted from them
+                    // (numpy.polynomial's {p}roots) are NumPy's complex64 values, widened exactly. The imaginary-part
+                    // test above already ran on the unrounded result, as NumPy's does.
+                    if (common == NPTypeCode.Single)
+                    {
+                        RoundComponentsToSingle(w);
+                        if (v is not null)
+                            RoundComponentsToSingle(v);
+                    }
                 }
 
                 // NumPy's `w.astype(result_t, copy=False)`: for a real operand np.real already produced
@@ -84,6 +100,32 @@ namespace NumSharp
                 w = w.astype(resultType, copy: false);
                 v = v is null ? null : v.astype(resultType, copy: false);
                 return (w, v);
+            }
+
+            /// <summary>
+            ///     NumPy's <c>astype(complex64)</c> of a complex128 result, in place and keeping the complex128 dtype: each
+            ///     component narrowed to float32 (round to nearest even, the house cast) and widened back, which is exact.
+            /// </summary>
+            /// <param name="z">A complex128 array the caller owns (the geev seam's fresh result), overwritten.</param>
+            /// <remarks>
+            ///     A C-contiguous result (the eigenvalues always) is rounded through ONE float64 view of its interleaved
+            ///     components — a cast and a copy back, half the array operations of the per-lane form, which matters at
+            ///     the small sizes numpy.polynomial's <c>{p}roots</c> runs (0.7 of 1.4 µs on a degree-10 float32 series).
+            ///     Any other layout (an F-ordered eigenvector matrix: <c>view</c> needs a contiguous last axis) rounds the
+            ///     real and the imaginary lane separately, strided float64 views of the same buffer.
+            /// </remarks>
+            private static void RoundComponentsToSingle(NDArray z)
+            {
+                if (z.Shape.IsContiguous)
+                {
+                    var parts = z.view(np.float64);
+                    np.copyto(parts, parts.astype(NPTypeCode.Single));
+                    return;
+                }
+                var re = np.real(z);
+                np.copyto(re, re.astype(NPTypeCode.Single));
+                var im = np.imag(z);
+                np.copyto(im, im.astype(NPTypeCode.Single));
             }
 
             /// <summary>
@@ -101,9 +143,13 @@ namespace NumSharp
             /// </returns>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigh.html</remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             [NDScoped] // reclaims the ToCommon cast temp; the tuple is yielded component-wise
             public static (NDArray eigenvalues, NDArray eigenvectors) eigh(NDArray a, char UPLO = 'L')
             {
+                // a numpy.matrix operand: NumPy returns the plain eigenvalues and wrap(vt), the eigenvectors as a matrix
+                if (NDMatrixBoundary.Sees(a))
+                    return NDMatrixBoundary.WrappedPair((a, UPLO), static s => eigh(s.a, s.UPLO), wrapFirst: false, wrapSecond: true);
                 char uplo = RequireUplo(UPLO);
                 AssertStackedSquare(a);
                 var common = CommonType(a);
@@ -117,6 +163,7 @@ namespace NumSharp
             [NDScoped] // reclaims the ToCommon cast temp (the discarded eigenvector slot is null here)
             public static NDArray eigvalsh(NDArray a, char UPLO = 'L')
             {
+                using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 char uplo = RequireUplo(UPLO);
                 AssertStackedSquare(a);
                 var common = CommonType(a);

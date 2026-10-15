@@ -9,6 +9,7 @@
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmax.html</remarks>
         public long argmax()
         {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.argmax(this);
         }
 
@@ -21,6 +22,7 @@
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmax.html</remarks>
         public NDArray argmax(int axis, bool keepdims = false)
         {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.argmax(this, axis, keepdims);
         }
     }

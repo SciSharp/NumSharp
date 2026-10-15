@@ -59,6 +59,7 @@ namespace NumSharp
         [NDScoped] // engine boundary (also called directly, not only via np.vdot): the ravel/reshape/conjugate temps are reclaimed
         public virtual NDArray Vdot(NDArray a, NDArray b)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a, b);   // an engine method computes plain: np.ravel / np.reshape below must not apply its matrix rule
             var blas = Blas;
             if (blas != null && blas.TryVdot(a, b, out var accelerated))
                 return accelerated;

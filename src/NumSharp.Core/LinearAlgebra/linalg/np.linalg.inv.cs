@@ -19,6 +19,7 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             // Scope: ToCommon mints a dtype-cast temp when `a` is not already the common type
             // (a.typecode == common ? a : Cast(...)) — a leftover otherwise dropped to the finalizer.
             // [NDScoped] reclaims it while leaving a passthrough input untouched (rule R2); the
@@ -26,6 +27,9 @@ namespace NumSharp
             [NDScoped]
             public static NDArray inv(NDArray a)
             {
+                // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+                if (NDMatrixBoundary.Sees(a))
+                    return NDMatrixBoundary.Wrapped(a, static s => inv(s));
                 AssertStackedSquare(a);
                 var common = CommonType(a);
                 return a.TensorEngine.Inv(ToCommon(a, common));
@@ -47,9 +51,13 @@ namespace NumSharp
             /// </param>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.pinv.html</remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             [NDScoped]
             public static NDArray pinv(NDArray a, double? rcond = null, bool hermitian = false, double? rtol = null)
             {
+                // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+                if (NDMatrixBoundary.Sees(a))
+                    return NDMatrixBoundary.Wrapped((a, rcond, hermitian, rtol), static s => pinv(s.a, s.rcond, s.hermitian, s.rtol));
                 if (rcond is not null && rtol is not null)
                     throw new ValueError("`rtol` and `rcond` can't be both set.");
 
@@ -71,7 +79,7 @@ namespace NumSharp
                     var emptyDims = (long[]) a.Shape.dimensions.Clone();
                     emptyDims[nd - 2] = n;
                     emptyDims[nd - 1] = m;
-                    return np.zeros(new Shape(emptyDims), a.typecode);
+                    return np.zeros(Shape.Adopt(emptyDims), a.typecode);
                 }
 
                 var common = CommonType(a);
@@ -99,6 +107,7 @@ namespace NumSharp
             [NDScoped]
             public static NDArray tensorinv(NDArray a, int ind = 2)
             {
+                using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 if (ind <= 0)
                     throw new ValueError("Invalid ind argument.");
 

@@ -256,7 +256,7 @@ def describe(base, view):
             raise ValueError(
                 f"layout produced a non-view operand: offset={offset_elem} addressed=[{lo},{hi}] "
                 f"base.size={base.size}; shape={view.shape} strides={strides_elem}")
-    return {
+    d = {
         "dtype": view.dtype.name,
         "shape": [int(d) for d in view.shape],
         "strides": strides_elem,
@@ -264,6 +264,15 @@ def describe(base, view):
         "bufferSize": int(base.size),
         "buffer": base.tobytes().hex(),
     }
+    # A read-only view whose read-onlyness is NOT derivable from its strides — a SAME-SHAPE
+    # np.broadcast_to keeps the source's ordinary strides, so the (shape, strides) tuple looks
+    # writeable — must carry the flag explicitly (the out_where broadcast-out refusal cells rely
+    # on it; without this, 293 1-D broadcast-out error cells silently reconstructed writeable and
+    # the C# side computed a result where NumPy refuses). Emitted ONLY when False so every
+    # writeable row's serialization stays byte-identical to the pre-flag corpus.
+    if not view.flags.writeable:
+        d["writeable"] = False
+    return d
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +342,56 @@ def _(da, db):
 def _(da, db):
     a = _cbase((8,), da); b = _cbase((8,), db)
     return a, a[::-1], b, b[::-1]
+
+
+# ---------------------------------------------------------------------------
+# F-ordered pairs where one operand BROADCASTS (plan docs/plans/api-parameter-parity.md, item X3).
+# A strictly F-contiguous operand can still broadcast: a (2,1,4) F array against a (2,3,4) F array.
+# NumSharp's direct binary kernels allocated such a result in F order but write it in C order over
+# the coalesced dims, and the broadcast operand's stride-0 axis kept the dims from coalescing, so
+# the values came out scrambled (every SIMD dtype under the small-broadcast cutoff, float16
+# add/subtract/multiply/divide at any size). Each view is the transpose of a C base (describe()
+# serializes the base in C order). Kept OUT of PAIR_LAYOUTS, which every pairwise tier iterates;
+# the elementwise binary tiers (gen_binary's callers) add them through BINARY_LAYOUT_NAMES.
+# ---------------------------------------------------------------------------
+FBCAST_PAIR_LAYOUTS = {}
+
+
+def _fpair(name):
+    def deco(fn):
+        FBCAST_PAIR_LAYOUTS[name] = fn
+        return fn
+    return deco
+
+
+@_fpair("pp_fbcast_mid")          # (2,3,4) F op (2,1,4) F: broadcast along the middle axis
+def _(da, db):
+    a = _cbase((4, 3, 2), da); b = _cbase((4, 1, 2), db)
+    return a, a.T, b, b.T
+
+
+@_fpair("pp_fbcast_first")        # (2,3,4) F op (1,3,4) F: along the F-innermost (first) axis
+def _(da, db):
+    a = _cbase((4, 3, 2), da); b = _cbase((4, 3, 1), db)
+    return a, a.T, b, b.T
+
+
+@_fpair("pp_fbcast_last")         # (2,3,4) F op (2,3,1) F: along the F-outermost (last) axis
+def _(da, db):
+    a = _cbase((4, 3, 2), da); b = _cbase((1, 3, 2), db)
+    return a, a.T, b, b.T
+
+
+@_fpair("pp_fbcast_mid_left")     # (2,1,4) F op (2,3,4) F: the broadcast operand on the left
+def _(da, db):
+    a = _cbase((4, 1, 2), da); b = _cbase((4, 3, 2), db)
+    return a, a.T, b, b.T
+
+
+# Every pair layout the elementwise binary tiers replay: the shared PAIR_LAYOUTS, then the F-broadcast
+# pairs (appended, so the existing cases keep their ids and bytes).
+BINARY_PAIR_LAYOUTS = {**PAIR_LAYOUTS, **FBCAST_PAIR_LAYOUTS}
+BINARY_LAYOUT_NAMES = list(BINARY_PAIR_LAYOUTS.keys())
 
 
 # ---------------------------------------------------------------------------

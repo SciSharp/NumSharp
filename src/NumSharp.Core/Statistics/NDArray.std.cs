@@ -18,6 +18,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.std.html</remarks>
         public NDArray std(bool keepdims = false, int? ddof = null, DType dtype = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.std(this, keepdims, ddof, dtype);
         }
 
@@ -34,6 +35,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.std.html</remarks>
         public NDArray std(int axis, bool keepdims = false, int? ddof = null, DType dtype = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.std(this, axis, keepdims, ddof, dtype);
         }
     }

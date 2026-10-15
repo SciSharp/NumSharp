@@ -85,7 +85,7 @@ namespace NumSharp.Backends.Sorting
             }
             int ax = NormalizeAxis(axis.Value, a.ndim);
             var src = a.Shape.IsContiguous ? a : a.copy('C');
-            var ret = new NDArray(NPTypeCode.Int64, new Shape((long[])a.Shape.dimensions.Clone()), false);
+            var ret = new NDArray(NPTypeCode.Int64, Shape.Adopt((long[])a.Shape.dimensions.Clone()), false);
             ArgSortInto(src, ret, ax);
             return ret;
         }
@@ -118,7 +118,7 @@ namespace NumSharp.Backends.Sorting
 
         private static void SortInPlace(NDArray target, int axis)
         {
-            long N = target.shape[axis];
+            long N = target.Shape.dimensions[axis];
             if (N <= 1 || target.size == 0) return;
 
             var tc = target.GetTypeCode;
@@ -166,9 +166,23 @@ namespace NumSharp.Backends.Sorting
             }
         }
 
+        /// <summary>
+        /// Write the indices that sort every line of <paramref name="src"/> along
+        /// <paramref name="axis"/> into <paramref name="dst"/> (stable radix for the integer/float
+        /// dtypes with NaN last; a managed comparison sort for Half/Complex/Decimal).
+        /// </summary>
+        /// <param name="src">The C-contiguous array to argsort (read only).</param>
+        /// <param name="dst">An int64 array with <paramref name="src"/>'s dims; every line along <paramref name="axis"/> is overwritten.</param>
+        /// <param name="axis">The already-normalised sort axis.</param>
+        /// <exception cref="NotSupportedException">A Half/Complex/Decimal line is longer than <see cref="int.MaxValue"/> (the comparison sort uses managed buffers).</exception>
+        /// <remarks>
+        /// Radix scratch is unmanaged and sized for ONE line; the line kernels reuse it for every line,
+        /// sorting <c>LineCtx.n</c> elements regardless of the iterator's per-call count. That is why
+        /// an input with no lines (<c>size == 0</c>) must return before the drive: see the guard below.
+        /// </remarks>
         private static void ArgSortInto(NDArray src, NDArray dst, int axis)
         {
-            long N = src.shape[axis];
+            long N = src.Shape.dimensions[axis];
             var tc = src.GetTypeCode;
             int elsize = tc.SizeOf();
             var ctx = new LineCtx
@@ -177,7 +191,14 @@ namespace NumSharp.Backends.Sorting
                 inStride = (long)src.Shape.strides[axis] * elsize,
                 outStride = (long)dst.Shape.strides[axis] * sizeof(long),
             };
-            if (N == 0) return;
+            // An empty axis OR zero lines (another dimension is 0, e.g. (0,3) along the last axis):
+            // dst has src's dims, so it is empty too and there is nothing to write. The size guard is
+            // load-bearing, not an optimisation: the line kernels ignore the iterator's per-call count
+            // and always write a full line of N indices, so letting a zero-line drive through wrote N
+            // int64s into dst's ZERO-byte buffer — native heap corruption (Windows killed the process
+            // with 0xC0000374 STATUS_HEAP_CORRUPTION; glibc stayed silent). SortInPlace and
+            // AxisPartition already carried this guard; argsort was the one sibling without it.
+            if (N == 0 || src.size == 0) return;
 
             // Radix scratch is UNMANAGED so a line may exceed int.MaxValue (the index column idx/it
             // and the key column are both element-sized and would otherwise cap at ~2^31). The scalar
@@ -226,12 +247,30 @@ namespace NumSharp.Backends.Sorting
         /// op_axes so it can't coalesce); the kernel receives each operand's line start per call.
         /// Internal: <see cref="AxisPartition"/> drives its partition/argpartition line kernels through
         /// the same loop (NumPy routes _new_sortlike AND _new_partitionlike through one drive too).</summary>
+        /// <param name="ops">The operands whose lines are visited together (all share <c>ops[0]</c>'s dims).</param>
+        /// <param name="flags">Per-operand NDIter access flags (READONLY / WRITEONLY / READWRITE).</param>
+        /// <param name="axis">The normalised line axis — the one axis the iterator does NOT walk.</param>
+        /// <param name="kern">The line kernel, called once per line with each operand's line start.</param>
+        /// <param name="aux">The kernel's context (a <c>LineCtx*</c> or the partition equivalent).</param>
+        /// <remarks>
+        /// A zero-size <c>ops[0]</c> returns without calling <paramref name="kern"/>: there are no lines,
+        /// and the line kernels would otherwise sort/write a full line into an empty buffer.
+        /// </remarks>
         [NDScoped]
         internal static void DriveAllButAxis(NDArray[] ops, NDIterPerOpFlags[] flags, int axis, NDInnerLoopFunc kern, void* aux)
         {
             // Scope: the 1-D (1, N) promotion views below are pure iteration aids over the caller's
             // operands — without eager reclamation a dropped view held the result buffer's last
             // extra ref until the finalizer, pinning every 1-D sort/argsort/partition result.
+
+            // Defence in depth for every caller: a zero-size operand means there are no lines to
+            // visit, but the iterator still makes a kernel call for it, and the line kernels ignore
+            // that call's count and sort/write a WHOLE line (LineCtx.n elements). Returning here keeps
+            // an unguarded caller from overrunning a zero-byte buffer. The callers also check size
+            // themselves; this only catches one that forgets (argsort did — see ArgSortInto).
+            if (ops[0].size == 0)
+                return;
+
             int ndim = ops[0].ndim;
 
             // 1-D input drops its only axis -> a 0-dimensional all-but-axis iterator. Our NDIter
@@ -308,21 +347,58 @@ namespace NumSharp.Backends.Sorting
         }
 
         // ----- float radix with NaN-last partition -----
+
+        /// <summary>
+        ///     The NaN NumPy's float32 sort writes: the positive quiet NaN <c>0x7FC00000</c>. NumPy's default sort
+        ///     (x86-simd-sort for 'quicksort' / 'heapsort') replaces every NaN of a line longer than one element —
+        ///     negative, signalling or payload-bearing — with <c>std::numeric_limits&lt;float&gt;::quiet_NaN()</c> after
+        ///     sorting. .NET's <see cref="float.NaN"/> is the NEGATIVE <c>0xFFC00000</c>, so writing it gave every sorted
+        ///     NaN the opposite sign of NumPy's (np.sort, ndarray.sort, and everything that sorts first — polyfromroots'
+        ///     <c>roots.sort()</c> then carried the wrong sign through <c>-r</c> into every coefficient).
+        /// </summary>
+        private static readonly float NumPySortNaN32 = BitConverter.UInt32BitsToSingle(0x7FC00000U);
+
+        /// <summary>
+        ///     The NaN NumPy's float64 sort writes: the positive quiet NaN <c>0x7FF8000000000000</c> (see
+        ///     <see cref="NumPySortNaN32"/>; .NET's <see cref="double.NaN"/> is the negative <c>0xFFF8…</c>).
+        /// </summary>
+        private static readonly double NumPySortNaN64 = BitConverter.UInt64BitsToDouble(0x7FF8000000000000UL);
+
+        /// <summary>
+        ///     Sorts one float32 line in place: the non-NaN values by radix, then the NaN tail.
+        /// </summary>
+        /// <param name="line">The line's first element (byte address).</param>
+        /// <param name="c">The line context: length, stride and the radix scratch buffers.</param>
+        /// <remarks>
+        ///     The tail is NumPy's canonical NaN (<see cref="NumPySortNaN32"/>), not the input NaNs: NumPy's default
+        ///     kind rewrites them all. A one-element line never reaches here (the driver leaves it untouched, as NumPy
+        ///     does), so its NaN keeps its bits. NumPy's 'stable' / 'mergesort' kinds keep each NaN's bits instead;
+        ///     NumSharp ignores <c>kind</c>, so those calls get the default kind's NaN.
+        /// </remarks>
         private static void SortLineF32(byte* line, LineCtx* c)
         {
             long n = c->n; long s = c->inStride; long m = 0;
             for (long i = 0; i < n; i++) { float v = *(float*)(line + i * s); if (!float.IsNaN(v)) c->k32[m++] = FKey32(v); }
             uint* r = RadixSort.SortU32(c->k32, c->t32, m, 4, c->count);
             for (long i = 0; i < m; i++) *(float*)(line + i * s) = FVal32(r[i]);
-            for (long i = m; i < n; i++) *(float*)(line + i * s) = float.NaN;
+            float nan = NumPySortNaN32;
+            for (long i = m; i < n; i++) *(float*)(line + i * s) = nan;
         }
+
+        /// <summary>
+        ///     Sorts one float64 line in place: the non-NaN values by radix, then the NaN tail.
+        /// </summary>
+        /// <param name="line">The line's first element (byte address).</param>
+        /// <param name="c">The line context: length, stride and the radix scratch buffers.</param>
+        /// <remarks>The tail is NumPy's canonical NaN (<see cref="NumPySortNaN64"/>); see <see cref="SortLineF32"/>.</remarks>
         private static void SortLineF64(byte* line, LineCtx* c)
         {
             long n = c->n; long s = c->inStride; long m = 0;
             for (long i = 0; i < n; i++) { double v = *(double*)(line + i * s); if (!double.IsNaN(v)) c->k64[m++] = FKey64(v); }
             ulong* r = RadixSort.SortU64(c->k64, c->t64, m, c->count);
             for (long i = 0; i < m; i++) *(double*)(line + i * s) = FVal64(r[i]);
-            for (long i = m; i < n; i++) *(double*)(line + i * s) = double.NaN;
+            double nan = NumPySortNaN64;
+            for (long i = m; i < n; i++) *(double*)(line + i * s) = nan;
         }
         private static void ArgLineF32(byte* inLine, byte* outLine, LineCtx* c)
         {

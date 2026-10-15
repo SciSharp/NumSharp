@@ -53,6 +53,13 @@ using System.Runtime.Intrinsics.X86;
 // the per-chunk kernel emits per chunk, here hoisted per row). The first-generation
 // kernel required C for every operand, so those shapes fell back to the per-row
 // route at ~7x the cost of the row-broadcast case the kernel already handled.
+// Three or more inputs (np.clip's (x, lo, hi): a row bound and a scalar, a column
+// bound) dispatch the same way over all 2^N patterns: the all-C block stays inline
+// and every other pattern is a STAGE — a DynamicMethod of its own, compiled on its
+// first call, so the kernel's inline budget is not split N ways
+// (DirectILKernelGenerator.InnerLoop.BroadcastPatterns.cs). Before them a ternary
+// kernel with any S input ran the scalar 2-D block (np.clip(m, row, hi): 0.2-0.7x
+// NumPy, now 4.7-27x at 100K).
 //
 // SUB-VECTOR ROWS — the masked tail
 // ---------------------------------
@@ -389,9 +396,18 @@ namespace NumSharp.Backends.Kernels
                     Emit2DSimdBlock(il, operandTypes, ptrLocals, outerStrideLocals, new[] { false, true }, vectorBody!, scalarBody);
                     il.Emit(OpCodes.Br, lblEnd);
                 }
+                else if (nIn <= MaxBroadcastPatternInputs)
+                {
+                    // Ternary and wider: every input row contiguous (C) or broadcast along the row
+                    // (S) — pattern 0 is the inline all-C block, each other C/S pattern a stage of
+                    // its own (InnerLoop.BroadcastPatterns.cs: one method per pattern keeps the JIT's
+                    // inline budget per method); any other inner stride → the scalar block.
+                    Emit2DBroadcastPatternDispatch(il, operandTypes, ptrLocals, innerStrideLocals, outerStrideLocals,
+                        vectorBody!, scalarBody, cacheKey, lblScalar, lblEnd);
+                }
                 else
                 {
-                    // Ternary and wider: every input contiguous, else scalar.
+                    // Inputs past MaxBroadcastPatternInputs: every input contiguous, else scalar.
                     for (int op = 0; op < nIn; op++)
                     {
                         il.Emit(OpCodes.Ldloc, innerStrideLocals[op]);

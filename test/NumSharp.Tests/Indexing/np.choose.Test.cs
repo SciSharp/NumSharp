@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Numerics;
 
 namespace NumSharp.Tests.Indexing;
@@ -375,4 +376,103 @@ public class ChooseTests
         Action act = () => np.choose(np.array(0), np.array(5));
         act.Should().Throw<TypeError>().WithMessage("iteration over a 0-d array");
     }
+
+    // ---- lifetime: the [NDScoped] overloads release every intermediate ----------
+
+    /// <summary>
+    ///     A choice that needs a dtype cast and an <c>out=</c> destination each make a pooled temporary: the cast
+    ///     copy of the int32 choice, and the computed result that is then copied into <c>out</c>. Before the
+    ///     <c>choose</c> overloads carried <c>[NDScoped]</c>, only the int64 index copy was released by hand and
+    ///     both of these went to the finalizer. Now every buffer the call takes comes back before it returns.
+    ///     Measured in an exact pool window (re-run when a collection lands in it). NumPy 2.4.2:
+    ///     <c>np.choose([0, 1, 1, 0], [[1., 2., 3., 4.], np.array([10, 20, 30, 40], int32)], out=o)</c>
+    ///     returns <c>o</c> holding <c>[1., 20., 30., 4.]</c>.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize] // reads the process-wide pool counters
+    public void Choose_CastChoiceAndOut_ReleaseEveryIntermediate()
+    {
+        const int n = 4096; // large enough that the cast and the result come from the bucketed pool
+        var idx = np.array(Enumerable.Range(0, n).Select(i => (long)((i >> 1) & 1)).ToArray());
+        var c0 = np.arange(n).astype(np.float64);
+        var c1 = np.arange(n).astype(np.int32) * 10;
+        var o = np.zeros(new Shape(n), np.float64);
+        np.choose(idx, new[] { c0, c1 }, @out: o); // warm-up: kernels and pool buckets exist before the window
+
+        long acquired = 0, released = 0;
+        bool exact = false;
+        for (int attempt = 0; attempt < 5 && !exact; attempt++)
+        {
+            GcQuiescence.CollectYoung();
+            var window = GcQuiescence.OpenWindow();
+            long a0 = Acquisitions, r0 = Releases;
+            var r = np.choose(idx, new[] { c0, c1 }, @out: o);
+            acquired = Acquisitions - a0;
+            released = Releases - r0;
+            exact = GcQuiescence.Undisturbed(window);
+            ReferenceEquals(r, o).Should().BeTrue("out= returns the destination itself");
+        }
+
+        Assert.IsTrue(acquired >= 2, "the cast choice and the computed result must come from the pool, or the window measures nothing");
+        if (exact)
+            Assert.AreEqual(acquired, released, "every buffer choose takes is released before it returns");
+        else
+            Assert.IsTrue(released >= acquired, "every buffer choose takes is released before it returns");
+        o.GetDouble(0).Should().Be(0.0);
+        o.GetDouble(2).Should().Be(20.0);
+        o.GetDouble(5).Should().Be(5.0);
+        o.GetDouble(6).Should().Be(60.0);
+        LeakGuards.StillUsable(c1);
+        LeakGuards.StillUsable(idx);
+    }
+
+    /// <summary>
+    ///     The plain return path of the same call keeps exactly one buffer — the result — and releases the cast.
+    ///     NumPy 2.4.2: <c>np.choose([0, 1, 1, 0], [[1., 2., 3., 4.], np.array([10, 20, 30, 40], int32)])</c> →
+    ///     <c>[1., 20., 30., 4.]</c>, float64.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize] // reads the process-wide pool counters
+    public void Choose_CastChoice_KeepsOnlyTheResult()
+    {
+        const int n = 4096;
+        var idx = np.array(Enumerable.Range(0, n).Select(i => (long)((i >> 1) & 1)).ToArray());
+        var c0 = np.arange(n).astype(np.float64);
+        var c1 = np.arange(n).astype(np.int32) * 10;
+        np.choose(idx, new[] { c0, c1 }).Dispose(); // warm-up
+
+        long acquired = 0, released = 0;
+        bool exact = false;
+        NDArray r = null;
+        for (int attempt = 0; attempt < 5 && !exact; attempt++)
+        {
+            r?.Dispose();
+            GcQuiescence.CollectYoung();
+            var window = GcQuiescence.OpenWindow();
+            long a0 = Acquisitions, r0 = Releases;
+            r = np.choose(idx, new[] { c0, c1 });
+            acquired = Acquisitions - a0;
+            released = Releases - r0;
+            exact = GcQuiescence.Undisturbed(window);
+        }
+
+        Assert.IsTrue(acquired >= 2, "the cast choice and the result must come from the pool");
+        if (exact)
+            Assert.AreEqual(acquired - 1, released, "only the returned result keeps its buffer");
+        else
+            Assert.IsTrue(released >= acquired - 1, "only the returned result keeps its buffer");
+        r.GetTypeCode.Should().Be(NPTypeCode.Double);
+        r.GetDouble(2).Should().Be(20.0);
+        r.GetDouble(5).Should().Be(5.0);
+        LeakGuards.StillUsable(r);
+    }
+
+    /// <summary>Pooled buffers handed out so far (process-wide).</summary>
+    private static long Acquisitions => NumSharp.Backends.Unmanaged.Pooling.SizeBucketedBufferPool.Hits
+                                        + NumSharp.Backends.Unmanaged.Pooling.SizeBucketedBufferPool.Misses
+                                        + NumSharp.Backends.Unmanaged.Pooling.SizeBucketedBufferPool.ZeroedAllocs;
+
+    /// <summary>Pooled buffers given back so far (process-wide).</summary>
+    private static long Releases => NumSharp.Backends.Unmanaged.Pooling.SizeBucketedBufferPool.Returns
+                                    + NumSharp.Backends.Unmanaged.Pooling.SizeBucketedBufferPool.ReturnsFreed;
 }

@@ -45,6 +45,15 @@ using NumSharp.Backends.Iteration;
 // This is cheap (NOp integer compares) and matches what NumPy's inner-loop
 // dispatch does.
 //
+// BROADCAST INPUTS (stride 0)
+// ---------------------------
+// A binary kernel has dedicated scalar-left / scalar-right loops. Three or more
+// inputs dispatch on their C/S pattern (C = contiguous, S = stride 0): the all-C
+// loop inline, every other pattern a stage of its own whose S inputs are read once
+// and Vector.Create'd; the gather route does the same for strided inputs next to
+// broadcast ones (two or more inputs). See
+// DirectILKernelGenerator.InnerLoop.BroadcastPatterns.cs.
+//
 // CACHE
 // -----
 // Keyed by user-provided string. Caller is responsible for uniqueness. The
@@ -98,7 +107,11 @@ namespace NumSharp.Backends.Kernels
             if (_innerLoopKeyCache.TryGetValue(key, out var cached))
                 return cached;
 
-            var kernel = CompileInnerLoop(operandTypes, scalarBody, vectorBody, key.ToCacheKey());
+            // A binary-ufunc key names its op, which is what tells the shell that a float add/multiply needs NumPy's
+            // broadcast-NaN region rule (HasNaNOperandOrder). The "npy_binop_*" string keys are minted ONLY here, so the
+            // string cache can never hold a kernel of the same name compiled without the rule.
+            BinaryOp? nanOrderedOp = key.Family == InnerLoopKernelKey.KernelFamily.Binary ? (BinaryOp)key.Op : null;
+            var kernel = CompileInnerLoop(operandTypes, scalarBody, vectorBody, key.ToCacheKey(), nanOrderedOp);
             _innerLoopKeyCache.TryAdd(key, kernel);
             return kernel;
         }
@@ -165,6 +178,31 @@ namespace NumSharp.Backends.Kernels
             Action<ILGenerator> scalarBody,
             Action<ILGenerator>? vectorBody,
             string cacheKey)
+            => CompileInnerLoop(operandTypes, scalarBody, vectorBody, cacheKey, nanOrderedOp: null);
+
+        /// <summary>
+        ///     <see cref="CompileInnerLoop(NPTypeCode[], Action{ILGenerator}, Action{ILGenerator}?, string)"/> that also knows
+        ///     the binary op the bodies implement, so a float add/multiply gets NumPy's broadcast-NaN region rule.
+        /// </summary>
+        /// <param name="operandTypes">Input dtypes followed by the output dtype.</param>
+        /// <param name="scalarBody">Per-element body (see the 4-argument overload).</param>
+        /// <param name="vectorBody">Optional per-vector body (see the 4-argument overload).</param>
+        /// <param name="cacheKey">The kernel's cache key; a kernel compiled under it is reused as-is.</param>
+        /// <param name="nanOrderedOp">
+        ///     The binary op of a 2-input ufunc kernel, or <see langword="null"/>. When it is a float add/multiply
+        ///     (<see cref="HasNaNOperandOrder"/>), every call whose stride-0 input holds a NaN runs
+        ///     <see cref="EmitBroadcastNaNRegion"/> with the <see cref="BroadcastNaNRule"/> passed as <c>auxdata</c>, and the
+        ///     broadcast SIMD loops keep the plain instruction (the value they broadcast is then never NaN).
+        /// </param>
+        /// <returns>The cached or newly compiled kernel.</returns>
+        /// <exception cref="ArgumentNullException">A required argument is null.</exception>
+        /// <exception cref="ArgumentException">Fewer than two operand types.</exception>
+        internal static NDInnerLoopFunc CompileInnerLoop(
+            NPTypeCode[] operandTypes,
+            Action<ILGenerator> scalarBody,
+            Action<ILGenerator>? vectorBody,
+            string cacheKey,
+            BinaryOp? nanOrderedOp)
         {
             if (operandTypes is null) throw new ArgumentNullException(nameof(operandTypes));
             if (operandTypes.Length < 2)
@@ -173,18 +211,23 @@ namespace NumSharp.Backends.Kernels
             if (cacheKey is null) throw new ArgumentNullException(nameof(cacheKey));
 
             return _innerLoopCache.GetOrAdd(cacheKey, _ =>
-                GenerateTemplatedInnerLoop(operandTypes, scalarBody, vectorBody, cacheKey));
+                GenerateTemplatedInnerLoop(operandTypes, scalarBody, vectorBody, cacheKey, nanOrderedOp));
         }
 
         private static NDInnerLoopFunc GenerateTemplatedInnerLoop(
             NPTypeCode[] operandTypes,
             Action<ILGenerator> scalarBody,
             Action<ILGenerator>? vectorBody,
-            string cacheKey)
+            string cacheKey,
+            BinaryOp? nanOrderedOp)
         {
             int nOp = operandTypes.Length;
             int nIn = nOp - 1;
             NPTypeCode outType = operandTypes[nIn];
+
+            // A 2-input float add/multiply whose stride-0 input can be NaN: that case runs NumPy's region rule
+            // (EmitBroadcastNaNRegion), everything else the supplied bodies.
+            bool nanOrdered = nanOrderedOp.HasValue && nIn == 2 && HasNaNOperandOrder(nanOrderedOp.Value, outType);
 
             var dm = new DynamicMethod(
                 name: $"NDInnerLoop_{Sanitize(cacheKey)}",
@@ -298,19 +341,28 @@ namespace NumSharp.Backends.Kernels
                     il.MarkLabel(lblSimdSL);
                     EmitSimdBroadcastBinaryLoop(
                         il, operandTypes[0], ptrLocals, scalarSide: 0,
-                        vectorBody!, scalarBody);
+                        vectorBody!, scalarBody, nanOrdered ? nanOrderedOp : null, lblEnd);
                     il.Emit(OpCodes.Br, lblEnd);
 
                     // ── SIMD scalar-rhs (lhs contig, rhs broadcast) ─────────
                     il.MarkLabel(lblSimdSR);
                     EmitSimdBroadcastBinaryLoop(
                         il, operandTypes[0], ptrLocals, scalarSide: 1,
-                        vectorBody!, scalarBody);
+                        vectorBody!, scalarBody, nanOrdered ? nanOrderedOp : null, lblEnd);
                     il.Emit(OpCodes.Br, lblEnd);
+                }
+                else if (nIn >= 3 && nIn <= MaxBroadcastPatternInputs)
+                {
+                    // Ternary and wider: every input contiguous (C) or broadcast along the loop
+                    // (S, stride 0) — pattern 0 is the inline all-contig loop, each other C/S
+                    // pattern a stage of its own (InnerLoop.BroadcastPatterns.cs); a genuinely
+                    // strided input or output → gather (when available) → scalar fallback.
+                    EmitBroadcastPatternDispatch1D(il, operandTypes, ptrLocals, strideLocals,
+                        vectorBody!, scalarBody, cacheKey, lblSimdBail, lblEnd);
                 }
                 else
                 {
-                    // Non-binary (unary, ternary, ...): the all-contig SIMD
+                    // Unary (and inputs past MaxBroadcastPatternInputs): the all-contig SIMD
                     // path. Any stride != elemSize → gather (when available)
                     // → scalar fallback.
                     for (int op = 0; op < nOp; op++)
@@ -343,6 +395,12 @@ namespace NumSharp.Backends.Kernels
                         il.Emit(OpCodes.Ldc_I8, -GatherStrideLimit);
                         il.Emit(OpCodes.Blt, lblScalarStrided);
                     }
+
+                    // A broadcast (stride-0) input next to the strided ones is read once and broadcast instead of
+                    // gathered: its pattern's stage takes the call; with none broadcast control falls through.
+                    if (nIn >= 2 && nIn <= MaxBroadcastPatternInputs)
+                        EmitGatherBroadcastPatternDispatch(il, operandTypes, strideLocals, vectorBody!, scalarBody,
+                            gatherSupport, cacheKey, lblEnd);
 
                     var lblGatherScatter = il.DefineLabel();
                     il.Emit(OpCodes.Ldloc, strideLocals[nIn]);
@@ -392,6 +450,12 @@ namespace NumSharp.Backends.Kernels
                 EmitScalarContigLoop(il, operandTypes, ptrLocals, scalarBody);
                 il.Emit(OpCodes.Br, lblEnd);
                 il.MarkLabel(lblScalarStrided);
+
+                // A mixed-dtype float add/multiply with a stride-0 input (a STRONG 0-d of another dtype): NumPy buffers
+                // the cast operand, so its calls split per BroadcastNaNRule.BufferChunk — a NaN broadcast value takes
+                // the region rule, everything else the strided loop below.
+                if (nanOrdered)
+                    EmitStridedBroadcastNaNDispatch(il, operandTypes, ptrLocals, strideLocals, lblEnd);
             }
 
             // Scalar strided fallback (always present).
@@ -473,12 +537,31 @@ namespace NumSharp.Backends.Kernels
         /// <c>EmitSimdFullLoop</c> in MixedType.cs but targets the
         /// NDInnerLoopFunc signature.
         /// </summary>
+        /// <param name="il">The kernel's generator.</param>
+        /// <param name="operandTypes">Inputs then the output; one shared SIMD dtype.</param>
+        /// <param name="ptrLocals">Per-operand data pointers (inputs then the output).</param>
+        /// <param name="vectorBody">The op's vector body: N input vectors → one output vector.</param>
+        /// <param name="scalarBody">The op's scalar body (the tail): N input values → one output value.</param>
+        /// <param name="isScalar">
+        /// Null (every input contiguous — the shape this loop always had), or per input whether it is
+        /// BROADCAST along the loop (inner byte stride 0). A broadcast input is loaded ONCE before the
+        /// loop, kept as a scalar for the tail and <c>Vector.Create</c>d for every vector group — the
+        /// N-ary form of <see cref="EmitSimdBroadcastBinaryLoop"/>'s hoist, used by the broadcast-pattern
+        /// stages (DirectILKernelGenerator.InnerLoop.BroadcastPatterns.cs). The output is always contiguous.
+        /// </param>
+        /// <remarks>
+        /// A broadcast input's vector is <c>Vector.Create</c> of the very element every lane would have
+        /// read through a stride-0 pointer, so the result is byte-identical to the scalar strided route.
+        /// The hoisted load runs even for a zero-length call; the iterator never hands a kernel a
+        /// dangling operand pointer (a broadcast operand points at its one element), so it is safe.
+        /// </remarks>
         private static void EmitSimdContigLoop(
             ILGenerator il,
             NPTypeCode[] operandTypes,
             LocalBuilder[] ptrLocals,
             Action<ILGenerator> vectorBody,
-            Action<ILGenerator> scalarBody)
+            Action<ILGenerator> scalarBody,
+            bool[]? isScalar = null)
         {
             int nOp = operandTypes.Length;
             int nIn = nOp - 1;
@@ -486,6 +569,32 @@ namespace NumSharp.Backends.Kernels
             int elemSize = GetTypeSize(outType);
             long vectorCount = GetVectorCount(outType);
             long unrollStep = vectorCount * 4;
+
+            // Broadcast inputs: their one value, read once, as a scalar (the tail) and as a vector
+            // (every group). Null entries are the contiguous inputs, loaded per group as before.
+            LocalBuilder?[]? locVScalar = null;
+            LocalBuilder?[]? locScalarVal = null;
+            if (isScalar != null)
+            {
+                // CanSimdAllOperands guarantees one shared dtype, so the output's lane vector type is
+                // every input's (Boolean rides byte lanes — GetSimdLaneType).
+                var vecType = VectorMethodCache.V(VectorBits, GetSimdLaneType(outType));
+                locVScalar = new LocalBuilder?[nIn];
+                locScalarVal = new LocalBuilder?[nIn];
+                for (int op = 0; op < nIn; op++)
+                {
+                    if (!isScalar[op]) continue;
+                    locVScalar[op] = il.DeclareLocal(vecType);
+                    locScalarVal[op] = il.DeclareLocal(GetClrType(operandTypes[op]));
+                    // scalarVal = *ptr; vScalar = Vector.Create(scalarVal)
+                    il.Emit(OpCodes.Ldloc, ptrLocals[op]);
+                    EmitLoadIndirect(il, operandTypes[op]);
+                    il.Emit(OpCodes.Dup);
+                    il.Emit(OpCodes.Stloc, locScalarVal[op]!);
+                    EmitVectorCreate(il, operandTypes[op]);
+                    il.Emit(OpCodes.Stloc, locVScalar[op]!);
+                }
+            }
 
             var locI = il.DeclareLocal(typeof(long));
             var locUnrollEnd = il.DeclareLocal(typeof(long));
@@ -524,9 +633,15 @@ namespace NumSharp.Backends.Kernels
             {
                 long offset = u * vectorCount;
 
-                // Load N input vectors at (i + offset) * elemSize.
+                // Load N input vectors at (i + offset) * elemSize (a broadcast input pushes its
+                // hoisted vector instead).
                 for (int op = 0; op < nIn; op++)
                 {
+                    if (locVScalar?[op] is { } hoisted)
+                    {
+                        il.Emit(OpCodes.Ldloc, hoisted);
+                        continue;
+                    }
                     EmitAddrIPlusOffset(il, ptrLocals[op], locI, offset, elemSize);
                     EmitVectorLoad(il, operandTypes[op]);
                 }
@@ -556,6 +671,11 @@ namespace NumSharp.Backends.Kernels
 
             for (int op = 0; op < nIn; op++)
             {
+                if (locVScalar?[op] is { } hoisted)
+                {
+                    il.Emit(OpCodes.Ldloc, hoisted);
+                    continue;
+                }
                 EmitAddrIPlusOffset(il, ptrLocals[op], locI, 0, elemSize);
                 EmitVectorLoad(il, operandTypes[op]);
             }
@@ -578,7 +698,10 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldarg_2);
             il.Emit(OpCodes.Bge, lblTailEnd);
 
-            EmitScalarElement(il, operandTypes, ptrLocals, /*stridesInElems*/ null, locI, contig: true, scalarBody);
+            if (locScalarVal == null)
+                EmitScalarElement(il, operandTypes, ptrLocals, /*stridesInElems*/ null, locI, contig: true, scalarBody);
+            else
+                EmitScalarElementWithBroadcast(il, operandTypes, ptrLocals, locScalarVal, locI, scalarBody);
 
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Ldc_I8, 1L);
@@ -609,14 +732,30 @@ namespace NumSharp.Backends.Kernels
         ///     (NDIter has already advanced them to the outer-iter start)
         ///   - scalarSide ∈ {0, 1}: 0 = lhs broadcast, 1 = rhs broadcast
         ///   - 4× unroll mirrors EmitSimdContigLoop for consistent pipelining
+        ///
+        /// For a float add/multiply (<paramref name="nanOrderedOp"/> set) a NaN broadcast value branches to
+        /// <see cref="EmitBroadcastNaNRegion"/> (NumPy's call model from the <see cref="BroadcastNaNRule"/> in
+        /// <c>auxdata</c>), and the loops run the PLAIN instruction instead of the supplied bodies: with a non-NaN
+        /// broadcast value only the array element can be NaN, so the operand order cannot change any result and the
+        /// order-pinning compare would be wasted work.
         /// </summary>
+        /// <param name="il">The kernel's IL stream (the <see cref="NDInnerLoopFunc"/> signature).</param>
+        /// <param name="dtype">The shared dtype of both inputs and the output.</param>
+        /// <param name="ptrLocals">Per-operand data-pointer locals (input 0, input 1, output).</param>
+        /// <param name="scalarSide">0 when input 0 is the broadcast operand, 1 when input 1 is.</param>
+        /// <param name="vectorBody">The caller's vector body (used when <paramref name="nanOrderedOp"/> is null).</param>
+        /// <param name="scalarBody">The caller's scalar body (used when <paramref name="nanOrderedOp"/> is null).</param>
+        /// <param name="nanOrderedOp">The float add/multiply this kernel implements, or <see langword="null"/>.</param>
+        /// <param name="lblEnd">The kernel's exit label (the NaN path branches there).</param>
         private static void EmitSimdBroadcastBinaryLoop(
             ILGenerator il,
             NPTypeCode dtype,
             LocalBuilder[] ptrLocals,
             int scalarSide,
             Action<ILGenerator> vectorBody,
-            Action<ILGenerator> scalarBody)
+            Action<ILGenerator> scalarBody,
+            BinaryOp? nanOrderedOp,
+            Label lblEnd)
         {
             int elemSize = GetTypeSize(dtype);
             long vectorCount = GetVectorCount(dtype);
@@ -633,14 +772,24 @@ namespace NumSharp.Backends.Kernels
 
             var locVScalar = il.DeclareLocal(vecType);
             var locScalarVal = il.DeclareLocal(clrType);
+            var lblNaNScalar = il.DefineLabel();
+
+            if (nanOrderedOp is BinaryOp op)
+            {
+                // Non-NaN broadcast value ⇒ order-independent results ⇒ the plain instruction suffices.
+                vectorBody = g => EmitVectorOperation(g, op, dtype);
+                scalarBody = g => EmitScalarOperation(g, op, dtype);
+            }
 
             // ── Pre-load + pre-broadcast the scalar once. ───────────────────
             // scalarVal = *scalarPtr;
             il.Emit(OpCodes.Ldloc, scalarPtr);
             EmitLoadIndirect(il, dtype);
-            il.Emit(OpCodes.Dup);
-            il.Emit(OpCodes.Stloc, locScalarVal);  // save for scalar tail
+            il.Emit(OpCodes.Stloc, locScalarVal);  // save for scalar tail (and the NaN test)
+            if (nanOrderedOp.HasValue)
+                EmitBranchIfNaN(il, locScalarVal, lblNaNScalar);
             // vScalar = Vector.Create(scalarVal);
+            il.Emit(OpCodes.Ldloc, locScalarVal);
             EmitVectorCreate(il, dtype);
             il.Emit(OpCodes.Stloc, locVScalar);
 
@@ -752,6 +901,120 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Stloc, locI);
             il.Emit(OpCodes.Br, lblTail);
             il.MarkLabel(lblTailEnd);
+
+            if (nanOrderedOp.HasValue)
+            {
+                il.Emit(OpCodes.Br, lblEnd);
+                il.MarkLabel(lblNaNScalar);
+                // Both the array input and the output are element-contiguous here (the shell's stride dispatch).
+                EmitBroadcastNaNRegion(il, dtype, locScalarVal,
+                    contigPtr, dtype, arrayStride: null, outPtr, outStride: null,
+                    pushCount: g => g.Emit(OpCodes.Ldarg_2),
+                    scalarIsSecond: scalarSide == 1,
+                    pushSplitPerCall: EmitLoadRuleSplitPerCall,
+                    pushBufferChunk: EmitLoadRuleBufferChunk,
+                    contiguous: true, lblEnd);
+            }
+        }
+
+        /// <summary>
+        ///     The cold dispatch of a MIXED-dtype float add/multiply inner loop (no SIMD) at its strided entry: when exactly
+        ///     one input has stride 0 and its value, converted to the loop dtype, is NaN, runs
+        ///     <see cref="EmitBroadcastNaNRegion"/> over the strided operands and branches to <paramref name="lblEnd"/>;
+        ///     otherwise falls through to the strided loop the caller emits next.
+        /// </summary>
+        /// <remarks>
+        ///     NumPy buffers the cast operand of such a call, so its own inner loop sees contiguous buffers and splits the
+        ///     call into <see cref="BroadcastNaNRule.BufferChunk"/>-sized pieces; the dispatcher only sets
+        ///     <see cref="BroadcastNaNRule.SplitPerCall"/> when that model holds, and a null rule keeps the second-operand rule.
+        /// </remarks>
+        /// <param name="il">The kernel's IL stream.</param>
+        /// <param name="operandTypes">Input 0, input 1 and output dtypes.</param>
+        /// <param name="ptrLocals">Per-operand data-pointer locals.</param>
+        /// <param name="strideLocals">Per-operand byte-stride locals.</param>
+        /// <param name="lblEnd">The kernel's exit label.</param>
+        private static void EmitStridedBroadcastNaNDispatch(
+            ILGenerator il, NPTypeCode[] operandTypes, LocalBuilder[] ptrLocals, LocalBuilder[] strideLocals, Label lblEnd)
+        {
+            NPTypeCode outType = operandTypes[2];
+            var lblCheckRight = il.DefineLabel();
+            var lblFallThrough = il.DefineLabel();
+
+            for (int side = 0; side < 2; side++)
+            {
+                if (side == 1)
+                    il.MarkLabel(lblCheckRight);
+
+                // This side broadcast (stride 0) and the other not (two stride-0 inputs = one repeated element; NumPy
+                // takes its scalar loop there, which the strided loop already reproduces).
+                il.Emit(OpCodes.Ldloc, strideLocals[side]);
+                il.Emit(OpCodes.Ldc_I8, 0L);
+                il.Emit(OpCodes.Bne_Un, side == 0 ? lblCheckRight : lblFallThrough);
+                il.Emit(OpCodes.Ldloc, strideLocals[1 - side]);
+                il.Emit(OpCodes.Ldc_I8, 0L);
+                il.Emit(OpCodes.Beq, lblFallThrough);
+
+                var locS = il.DeclareLocal(GetClrType(outType));
+                il.Emit(OpCodes.Ldloc, ptrLocals[side]);
+                EmitLoadIndirect(il, operandTypes[side]);
+                EmitConvertTo(il, operandTypes[side], outType);
+                il.Emit(OpCodes.Stloc, locS);
+                il.Emit(OpCodes.Ldloc, locS);
+                il.Emit(OpCodes.Ldloc, locS);
+                il.Emit(OpCodes.Beq, lblFallThrough);   // ordered → not NaN (and the other input is not stride-0)
+
+                EmitBroadcastNaNRegion(il, outType, locS,
+                    ptrLocals[1 - side], operandTypes[1 - side], strideLocals[1 - side],
+                    ptrLocals[2], strideLocals[2],
+                    pushCount: g => g.Emit(OpCodes.Ldarg_2),
+                    scalarIsSecond: side == 1,
+                    pushSplitPerCall: EmitLoadRuleSplitPerCall,
+                    pushBufferChunk: EmitLoadRuleBufferChunk,
+                    contiguous: false, lblEnd);
+            }
+
+            il.MarkLabel(lblFallThrough);
+        }
+
+        /// <summary>
+        ///     Pushes <see cref="BroadcastNaNRule.SplitPerCall"/> from the kernel's <c>auxdata</c> argument (int32), or 0 when
+        ///     <c>auxdata</c> is null.
+        /// </summary>
+        /// <param name="il">The IL stream of an <see cref="NDInnerLoopFunc"/> kernel.</param>
+        private static void EmitLoadRuleSplitPerCall(ILGenerator il)
+        {
+            var lblNull = il.DefineLabel();
+            var lblDone = il.DefineLabel();
+            il.Emit(OpCodes.Ldarg_3);
+            il.Emit(OpCodes.Brfalse, lblNull);
+            il.Emit(OpCodes.Ldarg_3);
+            il.Emit(OpCodes.Ldind_I4);                       // BroadcastNaNRule.SplitPerCall at byte offset 0
+            il.Emit(OpCodes.Br, lblDone);
+            il.MarkLabel(lblNull);
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.MarkLabel(lblDone);
+        }
+
+        /// <summary>
+        ///     Pushes <see cref="BroadcastNaNRule.BufferChunk"/> from the kernel's <c>auxdata</c> argument (int64), or 0 when
+        ///     <c>auxdata</c> is null.
+        /// </summary>
+        /// <param name="il">The IL stream of an <see cref="NDInnerLoopFunc"/> kernel.</param>
+        private static void EmitLoadRuleBufferChunk(ILGenerator il)
+        {
+            var lblNull = il.DefineLabel();
+            var lblDone = il.DefineLabel();
+            il.Emit(OpCodes.Ldarg_3);
+            il.Emit(OpCodes.Brfalse, lblNull);
+            il.Emit(OpCodes.Ldarg_3);
+            il.Emit(OpCodes.Ldc_I4_8);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);                       // BroadcastNaNRule.BufferChunk at byte offset 8
+            il.Emit(OpCodes.Br, lblDone);
+            il.MarkLabel(lblNull);
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.MarkLabel(lblDone);
         }
 
         /// <summary>
@@ -890,6 +1153,50 @@ namespace NumSharp.Backends.Kernels
             else
                 EmitAddrIStrided(il, ptrLocals[nIn], locI, strideLocals![nIn]);
 
+            il.Emit(OpCodes.Ldloc, locOutVal);
+            EmitStoreIndirect(il, outType);
+        }
+
+        /// <summary>
+        /// The scalar-tail element of a broadcast-pattern loop: a contiguous input loads
+        /// <c>ptr + i*elemSize</c>, a broadcast input pushes the value hoisted before the loop; then
+        /// the scalar body, then the contiguous store — <see cref="EmitScalarElement"/>'s contig form
+        /// with the broadcast inputs read once instead of through a stride-0 address.
+        /// </summary>
+        /// <param name="il">The kernel's generator.</param>
+        /// <param name="operandTypes">Inputs then the output.</param>
+        /// <param name="ptrLocals">Per-operand data pointers.</param>
+        /// <param name="locScalarVal">Per input: the hoisted value of a broadcast input, or null for a contiguous one.</param>
+        /// <param name="locI">The element index.</param>
+        /// <param name="scalarBody">The op's scalar body.</param>
+        private static void EmitScalarElementWithBroadcast(
+            ILGenerator il,
+            NPTypeCode[] operandTypes,
+            LocalBuilder[] ptrLocals,
+            LocalBuilder?[] locScalarVal,
+            LocalBuilder locI,
+            Action<ILGenerator> scalarBody)
+        {
+            int nIn = operandTypes.Length - 1;
+            NPTypeCode outType = operandTypes[nIn];
+
+            for (int op = 0; op < nIn; op++)
+            {
+                if (locScalarVal[op] is { } hoisted)
+                {
+                    il.Emit(OpCodes.Ldloc, hoisted);
+                    continue;
+                }
+                EmitAddrIPlusOffset(il, ptrLocals[op], locI, 0, GetTypeSize(operandTypes[op]));
+                EmitLoadIndirect(il, operandTypes[op]);
+            }
+
+            scalarBody(il);
+
+            // [valOut] → [outAddr, valOut] for the indirect store.
+            var locOutVal = il.DeclareLocal(GetClrType(outType));
+            il.Emit(OpCodes.Stloc, locOutVal);
+            EmitAddrIPlusOffset(il, ptrLocals[nIn], locI, 0, GetTypeSize(outType));
             il.Emit(OpCodes.Ldloc, locOutVal);
             EmitStoreIndirect(il, outType);
         }
@@ -1045,8 +1352,26 @@ namespace NumSharp.Backends.Kernels
         ///
         /// Stride-0 (broadcast) inputs are valid here — the index vector is
         /// all-zero and the gather replicates the element; the dedicated
-        /// SL/SR broadcast paths catch the common binary cases first.
+        /// SL/SR broadcast paths catch the common binary cases first, and the
+        /// broadcast-pattern gather stages (<paramref name="isScalar"/>) the
+        /// rest, so this generic form only meets them in a kernel without stages.
         /// </summary>
+        /// <param name="il">The kernel's generator.</param>
+        /// <param name="operandTypes">Inputs then the output; one shared SIMD dtype.</param>
+        /// <param name="ptrLocals">Per-operand data pointers.</param>
+        /// <param name="strideLocals">Per-operand inner byte strides (each input within the gather budget).</param>
+        /// <param name="vectorBody">The op's vector body.</param>
+        /// <param name="scalarBody">The op's scalar body (the strided tail).</param>
+        /// <param name="g">The gather instruction handles for the dtype.</param>
+        /// <param name="scatterOut">True: the output is strided and stored lane by lane; false: one contiguous vector store.</param>
+        /// <param name="isScalar">
+        /// Null (gather every input), or per input whether it is BROADCAST along the loop (inner byte stride 0):
+        /// such an input is read once before the loop and <c>Vector.Create</c>d for every group instead of being
+        /// gathered with an all-zero index vector — one hoisted broadcast replacing a gather per vector, the
+        /// <c>np.clip(x[::2], lo, hi)</c> shape where the bounds are 0-d.
+        /// </param>
+        /// <remarks>The strided scalar tail serves a broadcast input unchanged: its byte stride is 0, so
+        /// <c>ptr + i*stride</c> is its one element.</remarks>
         private static void EmitSimdGatherLoop(
             ILGenerator il,
             NPTypeCode[] operandTypes,
@@ -1055,7 +1380,8 @@ namespace NumSharp.Backends.Kernels
             Action<ILGenerator> vectorBody,
             Action<ILGenerator> scalarBody,
             GatherSupport g,
-            bool scatterOut)
+            bool scatterOut,
+            bool[]? isScalar = null)
         {
             int nOp = operandTypes.Length;
             int nIn = nOp - 1;
@@ -1064,11 +1390,30 @@ namespace NumSharp.Backends.Kernels
             long lanes = g.Lanes;
             long unrollStep = lanes * 4;
 
+            // ── Broadcast inputs: their one value as a hoisted vector (no index vector, no gather). ──
+            LocalBuilder?[]? locVScalar = null;
+            if (isScalar != null)
+            {
+                locVScalar = new LocalBuilder?[nIn];
+                var vecType = VectorMethodCache.V(VectorBits, GetSimdLaneType(dtype));
+                for (int op = 0; op < nIn; op++)
+                {
+                    if (!isScalar[op]) continue;
+                    locVScalar[op] = il.DeclareLocal(vecType);
+                    il.Emit(OpCodes.Ldloc, ptrLocals[op]);
+                    EmitLoadIndirect(il, operandTypes[op]);
+                    EmitVectorCreate(il, operandTypes[op]);
+                    il.Emit(OpCodes.Stloc, locVScalar[op]!);
+                }
+            }
+
             // ── Hoist per-input index vectors: Create(0, s, 2s, …, (lanes-1)s). ──
             var idxLocals = new LocalBuilder[nIn];
             var locSInt = il.DeclareLocal(typeof(int));
             for (int op = 0; op < nIn; op++)
             {
+                if (locVScalar?[op] != null)
+                    continue;   // broadcast: pushed from its hoisted vector, never gathered
                 idxLocals[op] = il.DeclareLocal(g.IndexVectorType);
                 il.Emit(OpCodes.Ldloc, strideLocals[op]);
                 il.Emit(OpCodes.Conv_I4); // guarded: |stride| ≤ GatherStrideLimit
@@ -1128,7 +1473,7 @@ namespace NumSharp.Backends.Kernels
             {
                 long offset = u * lanes;
                 EmitGatherVectorGroup(il, operandTypes, ptrLocals, strideLocals, idxLocals,
-                    locI, offset, elemSize, g, vectorBody, scatterOut, locOutVec);
+                    locI, offset, elemSize, g, vectorBody, scatterOut, locOutVec, locVScalar);
             }
 
             il.Emit(OpCodes.Ldloc, locI);
@@ -1145,7 +1490,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Bgt, lblRemEnd);
 
             EmitGatherVectorGroup(il, operandTypes, ptrLocals, strideLocals, idxLocals,
-                locI, 0, elemSize, g, vectorBody, scatterOut, locOutVec);
+                locI, 0, elemSize, g, vectorBody, scatterOut, locOutVec, locVScalar);
 
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Ldc_I8, lanes);
@@ -1176,6 +1521,19 @@ namespace NumSharp.Backends.Kernels
         /// contiguous vector store, or per-lane extract+store when the output
         /// is strided.
         /// </summary>
+        /// <param name="il">The kernel's generator.</param>
+        /// <param name="operandTypes">Inputs then the output.</param>
+        /// <param name="ptrLocals">Per-operand data pointers.</param>
+        /// <param name="strideLocals">Per-operand inner byte strides.</param>
+        /// <param name="idxLocals">Per gathered input its hoisted byte-offset index vector (null for a broadcast input).</param>
+        /// <param name="locI">The element index.</param>
+        /// <param name="offset">The group's element offset from <paramref name="locI"/>.</param>
+        /// <param name="elemSize">The element size in bytes.</param>
+        /// <param name="g">The gather handles.</param>
+        /// <param name="vectorBody">The op's vector body.</param>
+        /// <param name="scatterOut">True: per-lane strided store; false: contiguous vector store.</param>
+        /// <param name="locOutVec">Scratch for the result vector (scatter only).</param>
+        /// <param name="locVScalar">Null, or per input the hoisted vector of a broadcast input, pushed instead of a gather.</param>
         private static void EmitGatherVectorGroup(
             ILGenerator il,
             NPTypeCode[] operandTypes,
@@ -1185,13 +1543,19 @@ namespace NumSharp.Backends.Kernels
             LocalBuilder locI, long offset, int elemSize,
             GatherSupport g,
             Action<ILGenerator> vectorBody,
-            bool scatterOut, LocalBuilder? locOutVec)
+            bool scatterOut, LocalBuilder? locOutVec,
+            LocalBuilder?[]? locVScalar = null)
         {
             int nIn = operandTypes.Length - 1;
             NPTypeCode outType = operandTypes[nIn];
 
             for (int op = 0; op < nIn; op++)
             {
+                if (locVScalar?[op] is { } hoisted)
+                {
+                    il.Emit(OpCodes.Ldloc, hoisted);
+                    continue;
+                }
                 // base = ptr + (i + offset) * stride  (byte*)
                 EmitAddrIStridedOffset(il, ptrLocals[op], locI, offset, strideLocals[op]);
                 il.Emit(OpCodes.Ldloc, idxLocals[op]);

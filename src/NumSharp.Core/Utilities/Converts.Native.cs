@@ -2066,10 +2066,16 @@ namespace NumSharp.Utilities
         }
 
 
+        /// <summary>
+        ///     uint64 → float32, rounded ONCE to nearest-even as NumPy's C cast does — not .NET 8's conversion, which
+        ///     goes through float64 and rounds twice (2⁶⁰ + 2³⁶ + 1 → 0x5D800000 instead of NumPy's 0x5D800001).
+        /// </summary>
+        /// <param name="value">The value to convert.</param>
+        /// <returns>The float32 nearest <paramref name="value"/>, ties to even.</returns>
         [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(ulong value)
         {
-            return value;
+            return UInt64ToSingleRoundOnce(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -2090,9 +2096,19 @@ namespace NumSharp.Utilities
             return (float)value;
         }
 
+        /// <summary>
+        ///     float16 → float32, exact, with NumPy's NaN rule (<c>npy_halfbits_to_floatbits</c>): a NaN keeps its sign
+        ///     and payload and a SIGNALLING NaN stays signalling — the BCL cast sets the quiet bit.
+        /// </summary>
+        /// <param name="value">The value to convert.</param>
+        /// <returns>The same value as float32 (every float16 is exactly representable).</returns>
         [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(Half value)
         {
+            ushort bits = BitConverter.HalfToUInt16Bits(value);
+            // Only the NaN arm differs from the BCL; finite values and infinities widen identically.
+            if (IsHalfNaNBits(bits))
+                return HalfNaNBitsToSingle(bits);
             return (float)value;
         }
 
@@ -2225,10 +2241,16 @@ namespace NumSharp.Utilities
         }
 
 
+        /// <summary>
+        ///     uint64 → float64, rounded ONCE to nearest-even as NumPy's C cast does — not .NET 8's conversion, which
+        ///     from 2⁶³ on converts as signed and adds 2⁶⁴, rounding twice (2⁶³ + 1025 → 2⁶³ instead of 2⁶³ + 2048).
+        /// </summary>
+        /// <param name="value">The value to convert.</param>
+        /// <returns>The float64 nearest <paramref name="value"/>, ties to even.</returns>
         [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(ulong value)
         {
-            return value;
+            return UInt64ToDoubleRoundOnce(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -2249,9 +2271,20 @@ namespace NumSharp.Utilities
             return (double)value;
         }
 
+        /// <summary>
+        ///     float16 → float64, exact, with NumPy's NaN rule (<c>npy_halfbits_to_doublebits</c> — NumPy converts
+        ///     directly, not through float32): a NaN keeps its sign and payload and a SIGNALLING NaN stays signalling —
+        ///     the BCL cast sets the quiet bit.
+        /// </summary>
+        /// <param name="value">The value to convert.</param>
+        /// <returns>The same value as float64 (every float16 is exactly representable).</returns>
         [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(Half value)
         {
+            ushort bits = BitConverter.HalfToUInt16Bits(value);
+            // Only the NaN arm differs from the BCL; finite values and infinities widen identically.
+            if (IsHalfNaNBits(bits))
+                return HalfNaNBitsToDouble(bits);
             return (double)value;
         }
 
@@ -2572,15 +2605,38 @@ namespace NumSharp.Utilities
             return (Half)value;
         }
 
+        /// <summary>
+        ///     float32 → float16, rounded to nearest-even, with NumPy's NaN rule (<c>npy_floatbits_to_halfbits</c>): a
+        ///     NaN keeps its sign and the top 10 payload bits, a SIGNALLING NaN stays signalling, and one whose kept
+        ///     bits are all zero becomes 0x7C01 — the BCL cast sets the quiet bit (0x7E00 for the latter).
+        /// </summary>
+        /// <param name="value">The value to convert.</param>
+        /// <returns>The float16 nearest <paramref name="value"/> (±inf beyond the float16 range).</returns>
         [MethodImpl(OptimizeAndInline)]
         public static Half ToHalf(float value)
         {
+            uint bits = BitConverter.SingleToUInt32Bits(value);
+            // Only the NaN arm differs from the BCL; finite values round identically (both round to nearest-even).
+            if ((bits & 0x7FFF_FFFFu) > 0x7F80_0000u)
+                return SingleNaNBitsToHalf(bits);
             return (Half)value;
         }
 
+        /// <summary>
+        ///     float64 → float16, rounded ONCE to nearest-even, with NumPy's NaN rule (<c>npy_doublebits_to_halfbits</c>):
+        ///     a NaN keeps its sign and the top 10 payload bits, a SIGNALLING NaN stays signalling, and one whose kept
+        ///     bits are all zero becomes 0x7C01 — the BCL cast sets the quiet bit (0x7E00 for the latter).
+        /// </summary>
+        /// <param name="value">The value to convert.</param>
+        /// <returns>The float16 nearest <paramref name="value"/> (±inf beyond the float16 range).</returns>
         [MethodImpl(OptimizeAndInline)]
         public static Half ToHalf(double value)
         {
+            ulong bits = BitConverter.DoubleToUInt64Bits(value);
+            // Only the NaN arm differs from the BCL; finite values round identically (both convert directly from the
+            // double, no intermediate float32 rounding).
+            if ((bits & 0x7FFF_FFFF_FFFF_FFFFUL) > 0x7FF0_0000_0000_0000UL)
+                return DoubleNaNBitsToHalf(bits);
             return (Half)value;
         }
 
@@ -2590,11 +2646,17 @@ namespace NumSharp.Utilities
             return (Half)value;
         }
 
+        /// <summary>
+        ///     complex128 → float16: NumPy takes the real part and converts it as float64 → float16
+        ///     (<see cref="ToHalf(double)"/>, so a signalling NaN stays signalling).
+        /// </summary>
+        /// <param name="value">The value to convert.</param>
+        /// <returns>The float16 nearest the real part.</returns>
         [MethodImpl(OptimizeAndInline)]
         public static Half ToHalf(System.Numerics.Complex value)
         {
             // NumPy: complex -> float16 uses the real part
-            return (Half)value.Real;
+            return ToHalf(value.Real);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -2674,10 +2736,16 @@ namespace NumSharp.Utilities
             return value;
         }
 
+        /// <summary>
+        ///     float16 → complex128: the real part is the float16 converted exactly to float64 with NumPy's NaN rule
+        ///     (<see cref="ToDouble(Half)"/> — a signalling NaN stays signalling); the imaginary part is +0.
+        /// </summary>
+        /// <param name="value">The value to convert.</param>
+        /// <returns>The complex value <paramref name="value"/> + 0j.</returns>
         [MethodImpl(OptimizeAndInline)]
         public static System.Numerics.Complex ToComplex(Half value)
         {
-            return new System.Numerics.Complex((double)value, 0);
+            return new System.Numerics.Complex(ToDouble(value), 0);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -2728,10 +2796,16 @@ namespace NumSharp.Utilities
             return new System.Numerics.Complex(value, 0);
         }
 
+        /// <summary>
+        ///     uint64 → complex128: the real part is rounded ONCE to nearest-even (<see cref="ToDouble(ulong)"/> — not
+        ///     .NET 8's double-rounding conversion); the imaginary part is +0.
+        /// </summary>
+        /// <param name="value">The value to convert.</param>
+        /// <returns>The complex value nearest <paramref name="value"/> + 0j.</returns>
         [MethodImpl(OptimizeAndInline)]
         public static System.Numerics.Complex ToComplex(ulong value)
         {
-            return new System.Numerics.Complex(value, 0);
+            return new System.Numerics.Complex(UInt64ToDoubleRoundOnce(value), 0);
         }
 
         [MethodImpl(OptimizeAndInline)]

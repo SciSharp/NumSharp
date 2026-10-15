@@ -49,12 +49,19 @@ namespace NumSharp
         ///     empty — for instance <c>[[a, b], []]</c>.
         /// </exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.block.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray block(object arrays)
         {
+            // A numpy.matrix block: NumPy's result class follows its ROUTE. Repeated concatenation returns a matrix
+            // (np.concatenate keeps the class of its operands); the single-allocation route fills a new ndarray
+            // (probed 2.4.2: np.block([m, m]) is a matrix, and an ndarray once it holds more than 2*512*512 elements).
+            if (NDMatrixBoundary.SeesNested(arrays))
+                return NDMatrixBoundary.WrappedIf(arrays, static s => block(s), static _ => !t_blockTookSlicingRoute);
             if (arrays is null)
                 throw new ArgumentNullException(nameof(arrays));
 
             var (normalized, listNdim, resultNdim, finalSize) = _block_setup(arrays);
+            t_blockTookSlicingRoute = (long)listNdim * finalSize > 2 * 512 * 512;
 
             // NumPy wisdom (numpy/_core/shape_base.py): repeated concatenation
             // copies the data once per nesting level, single-allocation slicing
@@ -67,6 +74,13 @@ namespace NumSharp
             else
                 return _block_concatenate(normalized, listNdim, resultNdim);
         }
+
+        /// <summary>
+        ///     Which route the last <see cref="block(object)"/> call on this thread took: true for the
+        ///     single-allocation slicing route, false for repeated concatenation. Read only by the matrix rule of
+        ///     <see cref="block(object)"/>, right after the call it made returns.
+        /// </summary>
+        [ThreadStatic] private static bool t_blockTookSlicingRoute;
 
         // ------------------------------------------------------------------
         //  Port of numpy/_core/shape_base.py — same helper names, same flow.
@@ -192,8 +206,8 @@ namespace NumSharp
                 for (int i = 0; i < pad; i++)
                     dims[i] = 1;
                 for (int i = 0; i < a.ndim; i++)
-                    dims[pad + i] = a.shape[i];
-                return a.reshape(dims);
+                    dims[pad + i] = a.Shape.dimensions[i];
+                return a.reshape(Shape.Adopt(dims));
             }
 
             // ONE alias, not one per axis. `ndim` can be user-supplied (np.r_'s ndmin comes
@@ -250,8 +264,12 @@ namespace NumSharp
                 return joined;
             }
 
-            // We've 'bottomed out' - arrays is a leaf NDArray
-            return AtLeastNdView((NDArray)arrays, resultNdim);
+            // We've 'bottomed out' - arrays is a leaf NDArray. NumPy's _atleast_nd is array(a, ndmin=ndim,
+            // subok=True), which cannot give a numpy.matrix another axis: a matrix leaf stays two-dimensional, so a
+            // list nested deeper than two levels fails in the join above as it does in NumPy (np.block([[[m]]]):
+            // "axis -3 is out of bounds for array of dimension 2").
+            var leaf = (NDArray)arrays;
+            return NDMatrixBoundary.IsMatrix(leaf) ? leaf : AtLeastNdView(leaf, resultNdim);
         }
 
         private static NDArray _block_concatenate(object normalized, int listNdim, int resultNdim)
@@ -358,7 +376,7 @@ namespace NumSharp
                 // slice and the array inside a list to be consistent with the
                 // recursive case.
                 var arr = AtLeastNdView((NDArray)arrays, resultNdim);
-                return ((long[])arr.shape.Clone(),
+                return ((long[])arr.Shape.dimensions.Clone(),
                         new List<(long, long)[]> { Array.Empty<(long, long)>() },
                         new List<NDArray> { arr });
             }
@@ -384,7 +402,7 @@ namespace NumSharp
                 if (!fOrder && !cOrder) break;
             }
 
-            var retShape = fOrder && !cOrder ? new Shape(shape, 'F') : new Shape(shape);
+            var retShape = fOrder && !cOrder ? Shape.Adopt(shape, 'F') : Shape.Adopt(shape);
             // fillZeros: false — the slice windows tile the output exactly
             // (validated level-by-level in _concatenate_shapes), so every byte
             // is written below (NumPy uses np.empty for the same reason).

@@ -16,10 +16,11 @@ namespace NumSharp
         ///     quiet, negative-signed, or payload-bearing — to the single positive quiet NaN, but ONLY for
         ///     float32/float64. float16 and complex128 NaNs are left exactly as they are (probed against
         ///     NumPy 2.4.2: f16 <c>0x7E00/0xFE00/0x7C01/…</c> and a complex negative-NaN real part
-        ///     <c>0xFFF8…</c> all pass through unchanged). NumSharp's sort/unique do not canonicalise —
-        ///     <c>np.sort</c> yields .NET's negative NaN (<c>0xFFF8…</c>) and <c>np.unique</c> preserves the
-        ///     input payload — so a NaN that survives a set operation would diverge. This restores parity by
-        ///     rewriting only the NaN lanes of a float32/float64 result to NumPy's canonical value.
+        ///     <c>0xFFF8…</c> all pass through unchanged). <c>np.sort</c> writes NumPy's canonical NaN too (since
+        ///     2026-10-05; it wrote .NET's negative <c>0xFFF8…</c> before), but <c>np.unique</c>, which these
+        ///     set operations go through, preserves the input payload — so a NaN that survives a set operation
+        ///     would diverge. This restores parity by rewriting only the NaN lanes of a float32/float64 result to
+        ///     NumPy's canonical value.
         ///
         ///     <para><c>isin</c> returns bool (no NaN) and <c>intersect1d</c> never emits a NaN (NaN != NaN,
         ///     so a shared-value adjacency check never selects one), so neither needs this pass.</para>

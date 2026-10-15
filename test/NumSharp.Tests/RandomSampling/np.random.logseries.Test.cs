@@ -144,25 +144,25 @@ namespace NumSharp.Tests.RandomSampling
         [TestMethod]
         public void Logseries_NegativeP_Throws()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.logseries(-0.1, 10));
+            Assert.ThrowsException<ValueError>(() => np.random.logseries(-0.1, 10));
         }
 
         [TestMethod]
         public void Logseries_PEqualsOne_Throws()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.logseries(1.0, 10));
+            Assert.ThrowsException<ValueError>(() => np.random.logseries(1.0, 10));
         }
 
         [TestMethod]
         public void Logseries_PGreaterThanOne_Throws()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.logseries(1.5, 10));
+            Assert.ThrowsException<ValueError>(() => np.random.logseries(1.5, 10));
         }
 
         [TestMethod]
         public void Logseries_PIsNaN_Throws()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.logseries(double.NaN, 10));
+            Assert.ThrowsException<ValueError>(() => np.random.logseries(double.NaN, 10));
         }
 
         #endregion

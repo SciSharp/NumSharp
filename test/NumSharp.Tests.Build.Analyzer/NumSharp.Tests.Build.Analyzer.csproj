@@ -23,6 +23,10 @@
     <Configurations>Debug;Release;Publish</Configurations>
     <!-- This project does NOT apply the analyzer to its own compile (it only references it for the
          DiagnosticAnalyzer TYPES and drives it manually), so its own code is never analyzed. -->
+    <!-- TieredPGO OFF for this short-lived, JIT-bound test host (tiering stays on) — overrides the repo-wide
+         default in ../../Directory.Build.props; the measured rationale is in ../NumSharp.Tests/NumSharp.Tests.csproj
+         (this suite: 23.9 s -> 20.7 s summed on net10.0, 2026-09-24 — Roslyn compiles in-process are JIT-heavy). -->
+    <TieredPGO>false</TieredPGO>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
@@ -47,6 +51,19 @@
          woven code executed and its reclamation asserted). It is an Exe project — referencing one
          yields its DLL plus Mono.Cecil; nothing here runs it as a process. -->
     <ProjectReference Include="..\..\tools\NumSharp.Build\NumSharp.Build.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Opts the test host out of Windows' efficiency-mode scheduling (a windowless child of `dotnet test` is
+         treated as background work and parked on a hybrid CPU's E-cores). Shared with NumSharp.Tests, which
+         owns the file; a module initializer, a no-op off Windows. See the file's remarks. -->
+    <Compile Include="..\NumSharp.Tests\Utilities\TestHostQualityOfService.cs" Link="TestHostQualityOfService.cs" />
+    <!-- The exact-and-cheap GC protocol (young collection when it decides the same fates a full one would, full
+         only as the fallback). Linked (not copied) from NumSharp.Tests, like the Oracle does, so the weaver's
+         "values survive forced collections" gate collects the way every other lifetime test does: this host's
+         heap holds whole Roslyn compilations, so the full pair it used to force per iteration was the test's
+         dominant cost. See the file's remarks. -->
+    <Compile Include="..\NumSharp.Tests\Utilities\GcQuiescence.cs" Link="GcQuiescence.cs" />
   </ItemGroup>
 
   <ItemGroup>

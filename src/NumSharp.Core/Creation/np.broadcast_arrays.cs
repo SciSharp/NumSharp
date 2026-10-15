@@ -12,6 +12,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_arrays.html</remarks>
         public static NDArray[] broadcast_arrays(params NDArray[] ndArrays)
         {
+            using var plain = NDMatrixBoundary.PlainFor(ndArrays);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             int len = ndArrays.Length;
             int i;
             var inputShapes = new Shape[len];
@@ -39,6 +40,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_arrays.html</remarks>
         public static (NDArray Lhs, NDArray Rhs) broadcast_arrays(NDArray lhs, NDArray rhs)
         {
+            using var plain = NDMatrixBoundary.PlainFor(lhs, rhs);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             var (leftShape, rightShape) = Shape.Broadcast(lhs.Shape, rhs.Shape);
             // NumPy 2.4.2 parity: broadcast_arrays results are WRITEABLE (see the params overload above).
             return (new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(lhs.Storage, leftShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE))),

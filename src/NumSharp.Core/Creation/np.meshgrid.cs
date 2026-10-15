@@ -74,7 +74,10 @@ namespace NumSharp
         /// </summary>
         public static MeshgridResult meshgrid(NDArray x1, NDArray x2,
             string indexing = "xy", bool sparse = false, bool copy = true)
-            => meshgrid(new[] { x1, x2 }, indexing, sparse, copy);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(x1, x2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return meshgrid(new[] { x1, x2 }, indexing, sparse, copy);
+        }
 
         /// <summary>
         ///     Return coordinate matrices from three coordinate vectors — see
@@ -82,7 +85,10 @@ namespace NumSharp
         /// </summary>
         public static MeshgridResult meshgrid(NDArray x1, NDArray x2, NDArray x3,
             string indexing = "xy", bool sparse = false, bool copy = true)
-            => meshgrid(new[] { x1, x2, x3 }, indexing, sparse, copy);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(x1, x2, x3);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return meshgrid(new[] { x1, x2, x3 }, indexing, sparse, copy);
+        }
 
         /// <summary>
         ///     Return a tuple of coordinate matrices from N coordinate vectors — make N-D coordinate arrays
@@ -130,6 +136,7 @@ namespace NumSharp
         public static MeshgridResult meshgrid(NDArray[] xi,
             string indexing = "xy", bool sparse = false, bool copy = true)
         {
+            using var plain = NDMatrixBoundary.PlainFor(xi);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (xi is null)
                 throw new ArgumentNullException(nameof(xi));
             if (indexing != "xy" && indexing != "ij")
@@ -150,7 +157,7 @@ namespace NumSharp
                 NDArray a = xi[i] ?? throw new ArgumentNullException($"xi[{i}]",
                     "meshgrid coordinate vectors must not be null.");
                 int axis = swapXY ? (i == 0 ? 1 : i == 1 ? 0 : i) : i;
-                output[i] = a.reshape(OpenMeshShape(ndim, axis, a.size));
+                output[i] = a.reshape(Shape.Adopt(OpenMeshShape(ndim, axis, a.size)));
             }
 
             // Dense grids: broadcast each open-mesh axis across the full shape.

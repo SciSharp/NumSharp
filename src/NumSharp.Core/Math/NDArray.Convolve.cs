@@ -60,7 +60,10 @@ namespace NumSharp
             NDArray data = MaterializeForSliding(a, retType);
             NDArray kernel = MaterializeForSliding(v["::-1"], retType);
 
-            return SlidingCorrelate(data, kernel, retType, m);
+            // NumPy hands a one-element operand to its dotfunc with the operand's own stride (np.convolve's kernel
+            // reversed), which can keep a complex product off cblas and on CDOUBLE_dot's plain loop.
+            bool complexDotViaBlas = DotOperandBlasable(a, retType, reversed: false) && DotOperandBlasable(v, retType, reversed: true);
+            return SlidingCorrelate(data, kernel, retType, m, complexDotViaBlas);
         }
     }
 }

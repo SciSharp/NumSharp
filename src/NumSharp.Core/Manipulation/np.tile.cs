@@ -18,8 +18,12 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tile.html</remarks>
         /// <exception cref="ArgumentNullException">If <paramref name="A"/> or <paramref name="reps"/> is null.</exception>
         /// <exception cref="ArgumentException">If any element of <paramref name="reps"/> is negative.</exception>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray tile(NDArray A, params int[] reps)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(A))
+                return NDMatrixBoundary.Wrapped((A, reps), static s => tile(s.A, s.reps));
             if (A is null) throw new ArgumentNullException(nameof(A));
             if (reps is null) throw new ArgumentNullException(nameof(reps));
 
@@ -30,8 +34,25 @@ namespace NumSharp
         ///     Construct an array by repeating <paramref name="A"/> the number of times given by <paramref name="reps"/>.
         ///     <para>Long overload — see <see cref="tile(NDArray, int[])"/>.</para>
         /// </summary>
+        /// <param name="A">The input array.</param>
+        /// <param name="reps">The number of repetitions of A along each axis. Each rep must be non-negative.</param>
+        /// <returns>The tiled output array (see <see cref="tile(NDArray, int[])"/>).</returns>
+        /// <exception cref="ArgumentNullException">If <paramref name="A"/> or <paramref name="reps"/> is null.</exception>
+        /// <exception cref="ArgumentException">If any element of <paramref name="reps"/> is negative.</exception>
+        /// <remarks>
+        ///     Scoped by <c>[NDScoped]</c>: the interleaved reshape of <paramref name="A"/>, its broadcast view and the
+        ///     materialized copy are released on return, and the final reshape (a view that holds its own reference on
+        ///     the copy's buffer) is yielded. On the all-ones path the reshape of a lower-rank <paramref name="A"/> is
+        ///     released too; it was left to the finalizer before. The <c>int[]</c> overload delegates here, so it
+        ///     needs no scope of its own.
+        /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        [NDScoped]
         public static NDArray tile(NDArray A, long[] reps)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(A))
+                return NDMatrixBoundary.Wrapped((A, reps), static s => tile(s.A, s.reps));
             if (A is null) throw new ArgumentNullException(nameof(A));
             if (reps is null) throw new ArgumentNullException(nameof(reps));
 
@@ -45,7 +66,7 @@ namespace NumSharp
             var aShape = new long[outDim];
             var tup = new long[outDim];
             for (int i = 0; i < outDim - aDim; i++) aShape[i] = 1;
-            for (int i = 0; i < aDim; i++) aShape[outDim - aDim + i] = A.shape[i];
+            for (int i = 0; i < aDim; i++) aShape[outDim - aDim + i] = A.Shape.dimensions[i];
             for (int i = 0; i < outDim - d; i++) tup[i] = 1;
             for (int i = 0; i < d; i++) tup[outDim - d + i] = reps[i];
 
@@ -65,7 +86,7 @@ namespace NumSharp
             // Empty result: any rep==0 or any aShape[i]==0 → return zero-element array of the
             // correct shape and dtype. NumPy: tile([], 3) → array([], shape=(0,), dtype=float64).
             if (outSize == 0)
-                return zeros(new Shape(outShape), A.dtype);
+                return zeros(Shape.Adopt(outShape), A.dtype);
 
             // Trivial case: all reps are 1 → return a keep-order copy preserving the
             // (possibly promoted) shape. Matches NumPy's array(A, copy=True, ndmin=d)
@@ -74,7 +95,7 @@ namespace NumSharp
             for (int i = 0; i < outDim; i++) if (tup[i] != 1) { allOnes = false; break; }
             if (allOnes)
             {
-                var c = aDim == outDim ? A.copy('K') : A.reshape(new Shape(aShape)).copy('K');
+                var c = aDim == outDim ? A.copy('K') : A.reshape(Shape.Adopt(aShape)).copy('K');
                 return c;
             }
 
@@ -100,13 +121,14 @@ namespace NumSharp
 
             // promoted is a new wrapper (view or copy depending on A's contiguity);
             // broadcasted is a stride-0 broadcast view of promoted; contiguous is a
-            // fresh materialized copy. All three are owning intermediates that the
-            // final reshape doesn't keep — the returned NDArray shares contiguous's
-            // storage but holds its own ARC ref via InitializeArc.
-            using var promoted = A.reshape(new Shape(interleaved));
-            using var broadcasted = broadcast_to(promoted, new Shape(broadcastTarget));
-            using var contiguous = broadcasted.copy();
-            return contiguous.reshape(new Shape(outShape));
+            // fresh materialized copy. All three are intermediates that the final
+            // reshape doesn't keep, released by this method's scope — the returned
+            // NDArray shares contiguous's storage but holds its own ARC ref via
+            // InitializeArc, so releasing contiguous does not free that buffer.
+            var promoted = A.reshape(Shape.Adopt(interleaved));
+            var broadcasted = broadcast_to(promoted, Shape.Adopt(broadcastTarget));
+            var contiguous = broadcasted.copy();
+            return contiguous.reshape(Shape.Adopt(outShape));
         }
 
         private static long[] ToLongArray(int[] arr)

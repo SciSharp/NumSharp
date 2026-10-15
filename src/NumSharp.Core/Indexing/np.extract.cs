@@ -50,6 +50,7 @@ namespace NumSharp
         [NDScoped] // reclaims the ravel view/copy handed to take (and the flatnonzero indices on the throw path)
         public static NDArray extract(NDArray condition, NDArray arr)
         {
+            using var plain = NDMatrixBoundary.PlainFor(condition, arr);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (condition is null) throw new ArgumentNullException(nameof(condition));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
 

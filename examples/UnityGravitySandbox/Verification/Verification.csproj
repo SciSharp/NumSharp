@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Standalone, Unity-independent harness that compiles the EXACT physics engine source Unity runs
+       (Assets/Scripts/Physics/*.cs) against NumSharp.Core and asserts the science holds. Because it
+       shares one copy of the physics code with the Unity project, a green run here is evidence the
+       simulation Unity plays is numerically correct — the part a running Unity editor can't self-check. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <!-- NumSharp.Core is strong-named; a non-signed console harness may reference it (only the reverse is
+         disallowed), so opt this project out of the repo-wide signing to keep it self-contained. -->
+    <SignAssembly>false</SignAssembly>
+    <!-- Pull the engine in as external compile items instead of duplicating it. -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="..\UnityProject\Assets\Scripts\Physics\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
+  </ItemGroup>
+
+</Project>

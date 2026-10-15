@@ -51,7 +51,9 @@ namespace NumSharp
         /// </remarks>
         /// <exception cref="NotSupportedException">Always, once the subscripts validate.</exception>
         public static NDArray einsum(string subscripts, params NDArray[] operands)
-            => einsum(subscripts, operands, null);
+            => NDMatrixBoundary.Sees(operands)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            ? NDMatrixBoundary.Plain((subscripts, operands), static s => einsum(s.subscripts, s.operands))
+            : einsum(subscripts, operands, null);
 
         /// <summary>
         ///     Evaluates the Einstein summation convention, with NumPy's full keyword surface.
@@ -79,6 +81,9 @@ namespace NumSharp
         public static NDArray einsum(string subscripts, NDArray[] operands, NDArray @out = null,
             DType dtype = null, char order = 'K', string casting = "safe", object optimize = null)
         {
+            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            if (NDMatrixBoundary.Sees(operands))
+                return NDMatrixBoundary.Plain((subscripts, operands, @out, dtype, order, casting, optimize), static s => einsum(s.subscripts, s.operands, s.@out, s.dtype, s.order, s.casting, s.optimize));
             if (subscripts is null)
                 throw new ArgumentNullException(nameof(subscripts));
 

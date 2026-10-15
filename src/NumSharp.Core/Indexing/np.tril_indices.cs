@@ -40,7 +40,7 @@ namespace NumSharp
         public static NDArray<long>[] tril_indices_from(NDArray arr, int k = 0)
         {
             RequireTwoDimensional(arr);
-            return tril_indices(checked((int)arr.shape[arr.ndim - 2]), k, checked((int)arr.shape[arr.ndim - 1]));
+            return tril_indices(checked((int)arr.Shape.dimensions[arr.ndim - 2]), k, checked((int)arr.Shape.dimensions[arr.ndim - 1]));
         }
 
         /// <summary>
@@ -53,7 +53,7 @@ namespace NumSharp
         public static NDArray<long>[] triu_indices_from(NDArray arr, int k = 0)
         {
             RequireTwoDimensional(arr);
-            return triu_indices(checked((int)arr.shape[arr.ndim - 2]), k, checked((int)arr.shape[arr.ndim - 1]));
+            return triu_indices(checked((int)arr.Shape.dimensions[arr.ndim - 2]), k, checked((int)arr.Shape.dimensions[arr.ndim - 1]));
         }
 
         private static void RequireTwoDimensional(NDArray arr)
