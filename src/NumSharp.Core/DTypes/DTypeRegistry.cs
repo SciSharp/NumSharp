@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Threading;
 using NumSharp.Backends.Iteration;
 
 namespace NumSharp
@@ -21,15 +23,59 @@ namespace NumSharp
     ///     <c>PyArray_InitializeDatetimeCasts</c>. It touches no <c>np</c> static state, so it cannot cycle with the
     ///     <c>np</c> static constructor; the promotion TABLE (<see cref="np._nptypemap_arr_arr"/>) is consulted lazily at
     ///     call time.
+    ///     <para>
+    ///     <b>Threading.</b> No lookup takes a lock. The three keyed tables are
+    ///     <see cref="ConcurrentDictionary{TKey,TValue}"/>s, the code table is read with <see cref="Volatile.Read{T}"/>,
+    ///     and <see cref="All"/> copies an array that each registration replaces instead of changing. Only
+    ///     <see cref="Register"/> takes <see cref="_lock"/>: it checks the type number, the name, every alias and the
+    ///     storage code before it writes any table, and two registrations must not interleave between their checks and
+    ///     their writes. A lookup that runs during a registration sees each table either before or after its write, so a
+    ///     new class can be found by its type number a moment before it can be found by its name.
+    ///     </para>
     /// </remarks>
     public static class DTypeRegistry
     {
+        /// <summary>
+        ///     Serializes registrations and nothing else: <see cref="Register"/> holds it across <see cref="Add"/>'s checks
+        ///     and writes, so two registrations cannot both pass the checks and then collide in the tables. No lookup takes
+        ///     it.
+        /// </summary>
         private static readonly object _lock = new object();
+
+        /// <summary>
+        ///     The class of each storage code, indexed by <see cref="NPTypeCode"/> (the largest code, <c>Complex</c>, is 128).
+        ///     A slot is written at most once, from null to its class, with <see cref="Volatile.Write{T}"/>, and read with
+        ///     <see cref="Volatile.Read{T}"/>, so a lookup sees null or a fully constructed class.
+        /// </summary>
         private static readonly DTypeMeta[] _byCode = new DTypeMeta[129];
-        private static readonly Dictionary<int, DTypeMeta> _byTypeNum = new Dictionary<int, DTypeMeta>();
-        private static readonly Dictionary<string, DTypeMeta> _byName = new Dictionary<string, DTypeMeta>(StringComparer.Ordinal);
-        private static readonly Dictionary<Type, DTypeMeta> _byScalarType = new Dictionary<Type, DTypeMeta>();
-        private static readonly List<DTypeMeta> _all = new List<DTypeMeta>();
+
+        /// <summary>
+        ///     The class of each NumPy type number, read without a lock by <see cref="FromTypeNum"/> while
+        ///     <see cref="Register"/> may be adding to it. <c>concurrencyLevel: 1</c> because <see cref="_lock"/> already
+        ///     serializes every write, so the dictionary's own write lock is never contended; <c>capacity: 31</c> (37 buckets
+        ///     after the round-up to a prime) holds the 18 builtin type numbers without a resize.
+        /// </summary>
+        private static readonly ConcurrentDictionary<int, DTypeMeta> _byTypeNum = new(concurrencyLevel: 1, capacity: 31);
+
+        /// <summary>
+        ///     The class of each class name and alias (ordinal), read without a lock by <see cref="FromName"/>.
+        ///     <c>capacity: 61</c> (71 buckets) holds the 33 builtin names and aliases without a resize.
+        /// </summary>
+        private static readonly ConcurrentDictionary<string, DTypeMeta> _byName = new(concurrencyLevel: 1, capacity: 61, comparer: StringComparer.Ordinal);
+
+        /// <summary>
+        ///     The class of each C# scalar type, read without a lock by <see cref="FromScalarType"/>, which every
+        ///     <c>Type → DType</c> conversion runs (<see cref="DType.From(Type)"/>, <c>np.zeros(3, typeof(int))</c>). The
+        ///     first class registered for a type keeps it. <c>capacity: 31</c> holds the builtin scalar types without a resize.
+        /// </summary>
+        private static readonly ConcurrentDictionary<Type, DTypeMeta> _byScalarType = new(concurrencyLevel: 1, capacity: 31);
+
+        /// <summary>
+        ///     Every registered class, in registration order. Nothing writes into an array once it is published:
+        ///     <see cref="AppendToAll"/> publishes a longer copy with <see cref="Volatile.Write{T}"/>, and <see cref="All"/>
+        ///     copies whichever array it reads, so it needs no lock and its caller can never change the registry's array.
+        /// </summary>
+        private static DTypeMeta[] _all = Array.Empty<DTypeMeta>();
 
         /// <summary>True when the platform C <c>long</c> is 32 bits (MSVC on Windows, any 32-bit process) — decides which class <c>LongDType</c> aliases.</summary>
         internal static readonly bool CLongIs32Bit = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || IntPtr.Size != 8;
@@ -123,9 +169,9 @@ namespace NumSharp
             _byName[PyLong.Name] = PyLong;
             _byName[PyFloat.Name] = PyFloat;
             _byName[PyComplex.Name] = PyComplex;
-            _all.Add(PyLong);
-            _all.Add(PyFloat);
-            _all.Add(PyComplex);
+            AppendToAll(PyLong);
+            AppendToAll(PyFloat);
+            AppendToAll(PyComplex);
 
             InitializeNumericCasts();
             InitializeDatetimeCasts();
@@ -140,32 +186,68 @@ namespace NumSharp
             return meta;
         }
 
+        /// <summary>
+        ///     Adds <paramref name="meta"/> to every table it belongs in: its type number, its name and aliases, its storage
+        ///     code when it has storage, its C# scalar type unless another class claimed that type first, and the list behind
+        ///     <see cref="All"/>.
+        /// </summary>
+        /// <param name="meta">The class to add.</param>
+        /// <exception cref="InvalidOperationException">
+        ///     The type number, the name or an alias is already registered; or the class has storage and its
+        ///     <see cref="NPTypeCode"/> is outside the code table or already registered. Nothing is written then.
+        /// </exception>
+        /// <remarks>
+        ///     Callers serialize: the static constructor runs on one thread, and <see cref="Register"/> holds
+        ///     <see cref="_lock"/>. Lookups run alongside the writes without waiting and see each table before or after
+        ///     its write.
+        /// </remarks>
         private static void Add(DTypeMeta meta)
         {
-            if (_byTypeNum.ContainsKey(meta.type_num))
-                throw new InvalidOperationException($"A DType with type number {meta.type_num} is already registered ({_byTypeNum[meta.type_num]}).");
+            if (_byTypeNum.TryGetValue(meta.type_num, out var holder))
+                throw new InvalidOperationException($"A DType with type number {meta.type_num} is already registered ({holder}).");
             if (_byName.ContainsKey(meta.Name))
                 throw new InvalidOperationException($"A DType named '{meta.Name}' is already registered.");
             foreach (var alias in meta.Aliases)
                 if (_byName.ContainsKey(alias))
                     throw new InvalidOperationException($"A DType named '{alias}' is already registered.");
 
+            // The storage code is checked with the rest, before the first write: a refused class must not stay findable
+            // by FromTypeNum or FromName, and a corrected retry of it must not fail on "type number already registered".
+            int code = -1;
+            if (meta.HasStorage)
+            {
+                code = (int)meta.TypeCode;
+                if (code < 0 || code >= _byCode.Length)
+                    throw new InvalidOperationException($"NPTypeCode {meta.TypeCode} is outside the registry's code range.");
+                if (Volatile.Read(ref _byCode[code]) is { } taken)
+                    throw new InvalidOperationException($"NPTypeCode {meta.TypeCode} is already registered ({taken}).");
+            }
+
             _byTypeNum[meta.type_num] = meta;
             _byName[meta.Name] = meta;
             foreach (var alias in meta.Aliases)
                 _byName[alias] = meta;
-            if (meta.HasStorage)
-            {
-                int code = (int)meta.TypeCode;
-                if (code < 0 || code >= _byCode.Length)
-                    throw new InvalidOperationException($"NPTypeCode {meta.TypeCode} is outside the registry's code range.");
-                if (_byCode[code] != null)
-                    throw new InvalidOperationException($"NPTypeCode {meta.TypeCode} is already registered ({_byCode[code]}).");
-                _byCode[code] = meta;
-            }
-            if (meta.type != null && !_byScalarType.ContainsKey(meta.type))
-                _byScalarType[meta.type] = meta;
-            _all.Add(meta);
+            if (code >= 0)
+                Volatile.Write(ref _byCode[code], meta);
+            // The first class registered for a C# scalar type keeps it (the vestigial Str owns typeof(string), say).
+            if (meta.type != null)
+                _byScalarType.TryAdd(meta.type, meta);
+            AppendToAll(meta);
+        }
+
+        /// <summary>
+        ///     Publishes a copy of the class list with <paramref name="meta"/> appended. A plain copy is enough because
+        ///     writers are serialized (the static constructor, or <see cref="Register"/> under <see cref="_lock"/>); a reader
+        ///     keeps whichever array it read.
+        /// </summary>
+        /// <param name="meta">The class to append.</param>
+        private static void AppendToAll(DTypeMeta meta)
+        {
+            var current = _all;
+            var next = new DTypeMeta[current.Length + 1];
+            Array.Copy(current, next, current.Length);
+            next[current.Length] = meta;
+            Volatile.Write(ref _all, next);
         }
 
         /// <summary>NumPy's <c>PyArray_InitializeNumericCasts</c>: one <see cref="BuiltinCastingImpl"/> per ordered pair of storage classes.</summary>
@@ -222,13 +304,18 @@ namespace NumSharp
 
         // ---- lookups ----
 
-        /// <summary>The class whose storage discriminator is <paramref name="typeCode"/>; null for <see cref="NPTypeCode.Empty"/> / an unregistered code.</summary>
+        /// <summary>
+        ///     The class whose storage discriminator is <paramref name="typeCode"/> — behind every
+        ///     <see cref="DType.From(NPTypeCode)"/>. Takes no lock.
+        /// </summary>
+        /// <param name="typeCode">The storage code.</param>
+        /// <returns>The class, or null for <see cref="NPTypeCode.Empty"/>, a code outside the table, or an unregistered code.</returns>
         public static DTypeMeta FromTypeCode(NPTypeCode typeCode)
         {
             int code = (int)typeCode;
             if (code <= 0 || code >= _byCode.Length)
                 return null;
-            return _byCode[code];
+            return Volatile.Read(ref _byCode[code]);
         }
 
         /// <summary>
@@ -252,21 +339,28 @@ namespace NumSharp
         /// <summary>The class named <paramref name="name"/> (<c>"Int32DType"</c>) or one of its aliases (<c>"IntDType"</c>), or null.</summary>
         public static DTypeMeta FromName(string name) => name != null && _byName.TryGetValue(name, out var meta) ? meta : null;
 
-        /// <summary>Every registered class (builtins, datetime pair, the abstract scalar classes, user classes).</summary>
-        public static IReadOnlyList<DTypeMeta> All
-        {
-            get
-            {
-                lock (_lock)
-                    return _all.ToArray();
-            }
-        }
+        /// <summary>Every registered class (builtins, datetime pair, the abstract scalar classes, user classes), in registration order.</summary>
+        /// <value>
+        ///     A new array on every read, taken without a lock: the caller may keep or change it, and a registration that
+        ///     runs meanwhile is either wholly in it or not in it.
+        /// </value>
+        public static IReadOnlyList<DTypeMeta> All => (DTypeMeta[])Volatile.Read(ref _all).Clone();
 
         /// <summary>
         ///     Registers a new DType class (a user dtype). Its type number, name and aliases must be unused; a class with
         ///     storage must carry an unused <see cref="NPTypeCode"/>. Casting implementations are added separately with
         ///     <see cref="AddCastingImpl"/>.
         /// </summary>
+        /// <param name="meta">The class to register.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="meta"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">
+        ///     The type number, the name or an alias is already registered, or the storage code is outside the code table or
+        ///     already registered. Nothing is registered then, so the class can be registered once its conflict is fixed.
+        /// </exception>
+        /// <remarks>
+        ///     The only member that takes a lock: <see cref="_lock"/> keeps two registrations from interleaving between their
+        ///     checks and their writes. Lookups never wait for it.
+        /// </remarks>
         public static void Register(DTypeMeta meta)
         {
             if (meta == null)

@@ -2303,7 +2303,9 @@ Char 257 are the user-defined range, so their
 descriptors report `isbuiltin == 2`, repr `dtype(decimal)`), `DatetimeDTypeMeta` × 2 (`DateTime64DType` 21 `'M'`,
 `TimeDelta64DType` 22 `'m'`, PARAMETRIC), `PyScalarDTypeMeta` × 3 (`_PyLongDType`/`_PyFloatDType`/`_PyComplexDType`,
 ABSTRACT — the NEP 50 weak literals). `DTypeRegistry` owns them (`FromTypeCode`/`FromScalarType`/`FromTypeNum`/
-`FromName`, `Register` for future classes, casting-impl registration); `np.dtypes` is the NumPy-named facade with NumPy's
+`FromName`, `Register` for future classes, casting-impl registration; lookups take no lock — `ConcurrentDictionary`
+tables, a `Volatile` code table, `All` copies an array each registration replaces — and only `Register` locks, checking
+every key before its first write so a refused class leaves no trace); `np.dtypes` is the NumPy-named facade with NumPy's
 aliases (`ByteDType`, `IntDType`, platform `LongDType`, `LongLongDType`, `LongDoubleDType`→Float64, …).
 
 **Engines.** `DTypePromotion` is `common_dtype.c`/`convert_datatype.c` verbatim: `CommonDType` (two-sided protocol, then
@@ -4594,7 +4596,10 @@ suffix all work; `max_header_size` (default 10000) bounds hostile input and `all
 `np.load` returns `object` — `NDArray` for `.npy`, `NpzFile` for `.npz` — mirroring NumPy's
 content-dependent return; **`np.load_npy` / `np.load_npz` are the typed forms** and need no cast.
 `NpzFile` is lazy + cached, takes `"w"` or `"w.npy"` as keys, exposes `.Files` stripped, supports
-`npz.f.weights` dot access (NumPy's `BagObj`) and **must be disposed**.
+`npz.f.weights` dot access (NumPy's `BagObj`) and **must be disposed**. Unlike NumPy's, it is safe to share between
+threads: a cached member is returned without a lock, every read of the archive (a first load, `GetRawBytes`,
+`IsArray`'s magic check, `Dispose`) runs under one gate because a `ZipArchive` reads one stream, and two threads loading
+the same member first get one instance.
 
 | Dtype | Maps to | Notes |
 |-------|---------|-------|

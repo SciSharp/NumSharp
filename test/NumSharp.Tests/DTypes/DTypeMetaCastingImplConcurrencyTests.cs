@@ -258,8 +258,8 @@ namespace NumSharp.Tests.DTypes
                 t.Start();
             foreach (var t in threads)
                 t.Join(TimeSpan.FromMinutes(1)).Should().BeTrue("a racer must finish its rounds instead of hanging the run");
-            // Disposed only after every racer left: disposing a Barrier with a waiter inside throws, which would mask
-            // the join failure above.
+            // Disposed only after every racer left: a racer still waiting in SignalAndWait would get an
+            // ObjectDisposedException on its own thread, where nothing catches it, and that would end the test host.
             start.Dispose();
 
             var problems = new List<string>();
