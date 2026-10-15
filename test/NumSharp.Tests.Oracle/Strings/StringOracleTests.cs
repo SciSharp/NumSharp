@@ -266,6 +266,20 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void MaskedStringDType() => Run("tma");
 
         /// <summary>
+        ///     Section tio (strings phase 1, P1.7c): text I/O over NEP 55 <c>StringDType</c> — <c>np.loadtxt</c> from every
+        ///     source (a list of lines, a text stream, a byte stream, a file name) with every option, every descriptor (the NA
+        ///     objects, <c>coerce=False</c>) and converters of every value kind, its result's layout and its cells (the order
+        ///     NumPy packs the strings in); the same reader for numeric and fixed-width dtypes; <c>np.savetxt</c> of
+        ///     <c>StringDType</c> arrays (the NA element as every kind of Python object under every %-conversion, the Latin-1
+        ///     default of a byte stream, what reached the target before an error); <c>ndarray.tofile</c>; the refusals of
+        ///     <c>np.fromfile</c> / <c>np.fromstring</c> / <c>np.frombuffer</c>; <c>loadtxt</c>'s comments as Python objects;
+        ///     and Python's codecs under both functions (names as <c>codecs.lookup</c> resolves them, the UTF-16 / UTF-32 /
+        ///     <c>utf-8-sig</c> BOM rules, the charmap codecs, TextIOWrapper's chunking of a file, which decides a decode
+        ///     error's position, and its encoder for a file target). Every case is strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeTextIO() => Run("tio");
+
+        /// <summary>
         ///     Lifetime gate of the <c>StringDType</c> sections (strings phase 1, P1.9): once every case of tstore / tcreate /
         ///     tmove / tcast has been replayed and its arrays are garbage, no string allocator is left alive — every buffer the
         ///     replay made (operands, results, temporaries of the gathers, scatters and casts, failed operations) ran its clear
@@ -325,7 +339,7 @@ namespace NumSharp.Tests.Strings
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
                 "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
-                "storenone", "tma",
+                "storenone", "tma", "tio",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)

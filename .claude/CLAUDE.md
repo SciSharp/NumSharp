@@ -5348,10 +5348,10 @@ a 2-D array writes a row per line; 0-D / ≥3-D raise `ValueError("Expected 1D o
 instead")`. Each row is `format % tuple(row)` where `format` is the single spec joined `ncol` times by
 `delimiter`, a caller-supplied multi-`%` string (delimiter then ignored), or the list/tuple of specs joined —
 resolved with NumPy's verbatim errors (`ValueError "fmt has wrong number of % formats:  …"`, the new house
-`AttributeError "fmt has wrong shape.  …"`). The `%`-engine is the **existing `PrintfFormatter`** shared with
-`ndarray.tofile` (Python `%`-operator: flags `-+ 0#`, width, `.precision`, `d i u x X o e E f F g G s c %%`,
-2-digit-min exponent, `nan`/`inf`, `-0.0`); the multi-column `format % tuple(row)` path added
-`PrintfFormatter.FormatRow`/`FormatRowInto` (sequential-arg, appends straight into the batch buffer). Numeric
+`AttributeError "fmt has wrong shape.  …"`). The `%`-engine is a port of CPython 3.12's `PyUnicode_Format`, shared
+with `ndarray.tofile` (the next paragraph but one, "Text I/O for `StringDType`" → **the `%` operator**): the row format
+is compiled once (`PercentFormat`) and run per row into the batch buffer; the elements are NUMPY SCALARS (`%r` is
+`np.float32(0.1)`, a `TypeError` names `numpy.bool`). Numeric
 specs **widen to double** (matching NumPy's `float()`/`int()` coercion, so `int64` past 2^53 and `float32`
 render at the double value) while `%s` uses each dtype's shortest scalar repr. On an INTEGER conversion
 (`d i u x X o`) a `.precision` is Python's **minimum-digit** count, left-zero-filled (`%.5d`→`00042`,
@@ -5361,10 +5361,12 @@ code point in `[0, 0x10FFFF]` and **raises** `OverflowError("%c arg not in range
 on a **bool** and `%x`/`%X`/`%o` on a bool are the `TypeError`→dtype/format mismatch (a bool is not an int for
 those conversions — probed), while `%d`/`%i`/`%u` accept a bool (→1/0). **Complex** wraps a single spec
 as `' (%s+%sj)'` per column and applies the `+-`→`-` fix-up, exactly as NumPy. Overloads target a **filename**
-(`.gz` → gzip; Python text-mode `\n`→`os.linesep` translation, so a file matches NumPy on the same platform —
-CRLF on Windows), an open **`Stream`**, or a **`TextWriter`** (both verbatim `\n`, NumPy's file-handle path).
+(created first; gzip for exactly `.gz`; Python text-mode `\n`→`os.linesep` translation, so a file matches NumPy on the
+same platform — CRLF on Windows), an open **`Stream`**, or a **`TextWriter`** (both verbatim `\n`, NumPy's file-handle
+path); the encodings are Python's codecs (the text I/O paragraph below).
 Reads any layout (C/F/strided/transposed/negative-stride/broadcast/sliced) in logical C-order via
-`GetAtIndex`; all 15 dtypes (Char/Decimal have no NumPy analog but render via the same coercion). **Perf
+`GetAtIndex`; all 15 dtypes (Char is a `uint16` scalar whose `%c` is its character, Decimal a `float64` of its value, as
+`ArrayFormatter.ScalarStr` prints them). **Perf
 (NPY/NS):** file-to-file **~2.1×**, `%d`/`%g` **3–25×** (NumPy's `savetxt` is a pure-Python per-row loop).
 **Two deliberate divergences** (`[Misaligned]`): `%d`/`%i`/`%u` on **inf** raises `System.OverflowException`
 where NumPy raises `OverflowError` (message identical; NumSharp has no `OverflowError` type — nan still raises
@@ -5392,18 +5394,133 @@ NaN→`+qNaN 0x7FF8…`), **complex** is `to_complex_int` with the imaginary uni
 (Char/Decimal via the same coercion). `converters`
 (a `Func<string,object>` for all columns, or an `IDictionary<int,Func<string,object>>` per column), `usecols`
 (int[], negatives from the end), `unpack` (transpose), `skiprows`/`max_rows` (blank/comment lines don't count toward
-`max_rows`) and `encoding` are supported. Inputs: **filename** (`.gz` transparently decompressed; universal
-newlines), open **`Stream`**, **`TextReader`**, or **`IEnumerable<string>`** (lines, embedded newlines split). Errors
+`max_rows`) and `encoding` are supported. Inputs: **filename** (NumPy's `DataSource`: the compressed fall-backs, gzip
+for exactly `.gz`; universal newlines), open **`Stream`**, **`TextReader`**, or **`IEnumerable<string>`** (lines,
+embedded newlines split). Errors
 are NumPy-verbatim: `ValueError("the number of columns changed from {a} to {b} at row {n}; …")`, `ValueError("could
 not convert string '{tok}' to {dtype} at row {r}, column {c}.")` (**row 0-based, column 1-based**), `ValueError(
 "invalid column index {k} at row {n} with {c} columns")`, `ValueError("Illegal value of ndmin keyword: …")`,
 `TypeError` for a multi-char/newline delimiter. Fields are parsed straight from the line's **char span** (no per-field
-string allocation on the common path). **Perf (NPY/NS):** integer/bool/discrete dtypes **1.5–1.9×**; **float-heavy
-input ~1.0–1.1× (parity)** — bounded by the correctly-rounded `double.Parse`, the analog of NumPy's `strtod` (the
-same floor on both sides, as with savetxt's `%.18e`). **Deliberate divergence:** the empty-input `UserWarning` is not
+string allocation on the common path). **Perf (NPY/NS, 2026-10-15, two pinned P-cores, 1K–1M rows):** int64 lines
+**2.6–2.7×**; float64 lines **1.3–1.4×**, a float64 file **1.5–1.6×** — bounded by the correctly-rounded
+`double.Parse`, the analog of NumPy's `strtod` (the same floor on both sides, as with savetxt's `%.18e`). **Deliberate divergence:** the empty-input `UserWarning` is not
 emitted (NumSharp has no warnings module; the array is still the correct empty result). Gate: `IO/LoadTxtTests.cs`
 (probed against NumPy 2.4.2). Reuses the private `BytesToArray` helper from `np.fromfile.cs` (whose own parsers
 truncate rather than range-check, so loadtxt carries its own strict ones). See `APIs/np.loadtxt.cs`.
+
+**Text I/O for `StringDType`, and Python's codecs (strings phase 1, P1.7c, 2026-10-15).** `np.loadtxt` / `np.savetxt` /
+`ndarray.tofile` / `np.fromfile` / `np.fromstring` handle NEP 55 `StringDType` as NumPy does, and every text encoding
+goes through a port of CPython's own codec layer. Plan `docs/plans/strings-phase1-completion.md` (P1.7c and the closing
+pass); code in `IO/TextReading/` and `APIs/np.{loadtxt,loadtxt.Sinks,loadtxt.Parsers,savetxt,tofile,fromfile}.cs`.
+- **loadtxt's pipeline** (NumPy's `_read` + `textreading/`):
+  - the Python-level checks run in NumPy's order. `comments` are Python objects as in NumPy: a non-iterable is
+    `'int' object is not iterable` before the ndmin check; a `null` element is `str.split(None, 1)[0]` (IndexError on a
+    blank line); another object raises `must be str or None, not int` at the first line; `delimiter in comments` is
+    Python's `in`;
+  - then the source, then the C reader's control-character checks;
+  - `LoadTxtTokenizer` is a port of `tokenize.cpp`. One vectorized `IndexOfAny` over the state's stop set replaces its
+    per-character loop, and the stop character is then classified in the loop's order;
+  - one sink per dtype class (numeric / fixed `U`-`S` / `StringDType`) creates the converters at the first data row.
+    A `StringDType` field is stored whole; a string NA object marks an equal field missing; a converter's value is
+    stored by `stringdtype_setitem`'s rules (the NA check first, then `coerce`).
+- **Sources.**
+  - A file name follows NumPy's `DataSource` (`PyDataSource`): the name, else the name with `.bz2`, `.gz`, `.xz` or
+    `.lzma` appended. The extension is Python's `os.path.splitext`, case-sensitive: `.GZ` is plain text. `.bz2`, `.xz`
+    and `.lzma` are refused (`NotSupportedException`): .NET has no decompressor.
+  - The file is read through `LoadTxtTextFile`, a port of the read side of TextIOWrapper. `read(16384)` takes the
+    decoded characters left over, then chunks of `max(8192, b2cratio * remaining)` bytes, one raw read each. `b2cratio`
+    is measured AFTER newline translation, which `IncrementalNewlineDecoder` does inside the reader. Line iteration
+    (multiple or multi-character comments) reads 8192-byte chunks. Those chunks are what a CPython decode error's
+    position counts within: an invalid byte at 10,000 reports position 10,000, at 20,000 position 3,616.
+  - A byte `Stream` is split at `0x0A` and each line decoded on its own (`bytes.decode`). A `TextReader` is split at
+    `\n`.
+- **The codecs** (`TextIOCodec` + `PythonCodecs`, tables generated from CPython 3.12 by `tools/gen_python_codecs.py`
+  into `PythonCodecs.Tables.cs`).
+  - **Names**: `_Py_normalize_encoding`, CPython's 326-entry alias table, then the module name. A `.` is never part of a
+    module name, so `utf.8` is unknown while `iso.8859.1` is an alias.
+  - **The C fast paths** of `PyUnicode_Decode` / `PyUnicode_AsEncodedString` are honoured for one-shot calls: an
+    `iso8859_1` spelling encodes with the `'latin-1'` text where the registry would pick the charmap module.
+  - **Exact codecs**: UTF-8 and `utf-8-sig`; UTF-16 / UTF-32 in both byte orders, with and without a BOM (ports of
+    `PyUnicode_DecodeUTF16Stateful` / `DecodeUTF32Stateful`: their four errors, their spans and the `consumed` rule);
+    Latin-1, ASCII and `undefined`; and the 70 single-byte charmaps. A charmap's encode map is the inverse of its
+    decode table with the LAST byte winning, which the generator verifies over the whole BMP for every codec.
+  - **Refused by name** (`NotSupportedException`): the multi-byte CJK codecs, `utf-7`, the escape codecs, IDNA and
+    `mbcs` / `oem`. A bytes-to-bytes codec is CPython's `LookupError ... is not a text encoding; use codecs.decode() /
+    codecs.encode() / codecs.open() ...`, the advice depending on the context.
+  - **Defaults**: a file name UTF-8 (pinned; Windows NumPy uses the ANSI code page), a stream Latin-1 for loadtxt and
+    for savetxt (whose `encoding or 'latin1'` also maps `""` to Latin-1).
+  - **BOMs**: a byte stream's line decode reads a BOM per line; a file's BOM codec requires one (`UnicodeError: UTF-16
+    stream does not start with BOM`); `utf-8-sig` drops a partial BOM at the end silently, as CPython does.
+- **savetxt's writer** (`SaveTxtWriter`):
+  - a byte stream is NumPy's `WriteWrap`: each write is checked and encoded on its own, so a BOM codec writes a BOM
+    before every write;
+  - a file is TextIOWrapper's encoder (`TextIOFileEncoder`). Its `encodefuncs` are chosen by codec name, so
+    `iso8859-1` names encode as Latin-1. The BOM is written once, even for an empty first write. The error names
+    `'utf-16'` in the first write and `'utf-16-le'` after it. Positions count the newline-TRANSLATED write: CPython
+    translates before it encodes. The writer checks the untranslated write and re-checks only a failing one
+    translated, which is sound because every codec encodes `\r`;
+  - a `StringDType` element is the Python object `getitem` returns (a `str`, or the NA object), formatted by
+    `PrintfFormatter.PyObject` with Python's `%` rules for that object's type.
+- **The `%` operator** (`Backends/Printing/PercentFormat.cs` + `PrintfFormatter{,.PyObject}.cs`, 2026-10-15), shared by
+  savetxt (`format % tuple(row)`, NumPy scalars; a `StringDType` row: Python objects) and tofile (`format % (item,)`,
+  the Python object `getitem` returns for EVERY dtype: a `float` for float16 / float32, an `int`, a `bool`, a `complex`,
+  a `str` / `bytes`):
+  - the parse is `unicode_format_arg_parse`, compiled once per call. CPython parses as it formats, so each parse error
+    is recorded where the parser meets it and raised when a run reaches it, after the arguments CPython takes first.
+    Rules: ONE `h` / `l` / `L` is skipped (`%lld` is the unsupported `'l'`); the argument is taken BEFORE the conversion
+    character is checked (`'%y' % ()` is "not enough arguments"); `%(key)` is `format requires a mapping` (a tuple);
+    `unsupported format character 'y' (0x79) at index 1` shows the character only when printable ASCII and counts the
+    index in CODE POINTS; `width too big` / `precision too big` digit by digit; `incomplete format`; a leftover argument
+    is `not all arguments converted during string formatting`;
+  - a `*` width / precision takes a Python `int` only (a `bool` is one; `np.int64` is NOT an `int` subclass: `* wants
+    int`), a negative width left-justifies (the most negative one pads nothing: CPython's negation overflows), a negative
+    precision is 0, past `ssize_t` / `int` is CPython's OverflowError;
+  - CPython's limits: `%.2147483647e` is `%.0e` (its `precision + 1` wraps), `%g` without `#` strips zeros past any
+    precision, an integer precision past `INT_MAX - 3` is `precision too large`, a decimal conversion of an int past
+    4300 digits is CPython's ValueError, a width no string can meet is `OutOfMemoryException` (`MemoryError`);
+  - NumPy scalars vs Python objects: an `np.bool` is not an integer (`%x` / `%c` refuse it), a Python `bool` is
+    (`'%x' % True` is `1`); a NumPy scalar's `repr` names its type, a `TypeError` quotes `numpy.float64` / `float`;
+  - tofile checks `sep` and `format` with CPython's `"s"` converter BEFORE opening the file (a NUL: `embedded null
+    character`; a lone surrogate: the UTF-8 error), writes each element's text as ASCII (`UnicodeEncodeError` where
+    NumPy crashes) and the separator as its UTF-8 bytes;
+  - nothing is rendered "best effort" any more: the old formatter printed `%a` / `%y` / `%%` verbatim, fed one value to
+    every spec, accepted any number of length modifiers and formatted a float under `%x` / `%c` (95 of 160 probed
+    tofile cases differed from NumPy; now one does, NumPy's crash).
+- **NumPy bugs not reproduced**:
+  - `np.loadtxt` keeps the caller's `StringDType` instance, so a second call with the same instance corrupts the first
+    result;
+  - `tofile`'s text mode crashes on non-ASCII text: it does not check `PyUnicode_AsASCIIString`'s NULL. NumSharp raises
+    the `UnicodeEncodeError`.
+- **Divergences** (`[Misaligned]` / documented):
+  - a non-BMP control character is refused;
+  - `max_rows` buffers grow instead of being preallocated;
+  - an unsized `U`/`S` result's error rows count from the start (NumPy counts within 50,000-row chunks);
+  - float16 fields use NumPy's grammar differences (pre-existing);
+  - under `encoding='bytes'` a C# converter receives a str;
+  - a `.gz` file's decode-error positions may differ, since CPython's gzip reader hands TextIOWrapper whatever one
+    decompression step produced;
+  - URLs and the `destpath` fall-back of `DataSource` are not ported.
+- **Perf** (NPY/NS, two pinned P-cores, 1K–1M rows of two `StringDType` columns, re-measured after the `%` port):
+  loadtxt from lines **3.4–3.7×**, from a file **2.9–3.8×**; savetxt to a writer **5.3–8.1×**, to a stream **5.9–7.5×**;
+  `np.save` **2.8–7.7×**, `np.load` **2.5–3.5×**; numeric savetxt `%.18e` **2.4–2.9×**, `%d` **7.6–11×**.
+- **Gates**:
+  - the string oracle's section **tio** (`strings_tio.jsonl`, 8,303 cases, 4,100 NumPy errors, zero excuses): every
+    option, NA object, converter kind and source; the NA element as every kind of Python object under every
+    %-conversion; comments as Python objects; every codec family through files, streams and file targets; decode
+    errors in later TextIOWrapper chunks and chunks that end inside a UTF-8 sequence (large sources recorded as a
+    `repeat` recipe); the `%` format matrix (74 formats × 22 arrays of every NumPy dtype through savetxt and tofile, star
+    widths from NA ints, tofile's `sep` / `format` checks);
+  - `IO/StringDTypeTextIOTests.cs` (18), `IO/TextIOCodecTests.cs` (18: exact exception types, the newline-translated
+    position, the gzip round trip, the refusals) and `IO/PercentFormatTests.cs` (15: the parse driven directly, the
+    raw and the wrapped TypeError, Char / Decimal, NumPy's crash case, no file on an argument error, both writers over
+    `FencedMemory`);
+  - the closing pass (2026-10-15): 99.14 % of the 3,256 changed executable lines covered (the rest defensive or
+    unreachable); 40 planted bugs, all killed; the I/O tests and the string oracle under
+    `NUMSHARP_DEBUG_GUARD_PAGES=1`.
+- **Trap: CPython's incremental UTF-8 decoder carries a truncated SURROGATE** (`0xED 0xA0..0xBF` exactly at a chunk's
+  end) to the next chunk, as it carries a valid start (`unicode_decode_utf8`'s case 2 when `consumed` is set): the
+  error then reports position 0 of the NEXT decode. .NET's `Utf8.ToUtf16` calls those two bytes invalid at once, so
+  `TextIOCodec.Incremental`'s tail logic defers them itself. A one-shot `bytes.decode` raises at once.
 
 **`np.fromstring(string, dtype=float, count=-1, sep)`** (`APIs/np.fromstring.cs`) parses a 1-D array from the
 numbers in a text string — the SAME item reader `np.fromfile` uses for a text file, so it shares fromfile's

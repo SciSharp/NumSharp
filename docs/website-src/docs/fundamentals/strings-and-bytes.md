@@ -6,7 +6,7 @@ Conversion between text and numbers works as in NumPy: a number written into a t
 
 Computing on text arrives in stages. Comparisons, truth values, concatenation and repetition compute now, with NumPy's results. Sorting, searching and the other `np.strings` functions throw `StringComputationNotSupportedException` until their stage lands. Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
 
-NumPy 2's variable-width `StringDType` (`T`) stores, reads, writes, copies, casts, prints and goes to `.npy` files as in NumPy too; computing on it is the next phase (see [Variable-width text: `StringDType`](#variable-width-text-stringdtype)). NumPy's raw `void` (`V`) and `object` (`O`) dtypes stay unsupported.
+NumPy 2's variable-width `StringDType` (`T`) stores, reads, writes, copies, casts, prints, goes to `.npy` files and through `np.loadtxt` / `np.savetxt` as in NumPy too; computing on it is the next phase (see [Variable-width text: `StringDType`](#variable-width-text-stringdtype)). NumPy's raw `void` (`V`) and `object` (`O`) dtypes stay unsupported.
 
 <!-- Tests: NumSharp.Tests.Documentation.FundamentalsStringsBytesDocTests - every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/FundamentalsStringsBytesDocTests.cs. Section → method(s):
      The two string dtypes → TwoStringDtypes_WidthAndItemSize, TwoStringDtypes_RawBytes
@@ -17,7 +17,7 @@ NumPy 2's variable-width `StringDType` (`T`) stores, reads, writes, copies, cast
      Converting between text and numbers → Converting_NumbersToText, Converting_TextToNumbers, Converting_StoresAndUfuncs, Converting_CSharpStringIsText
      Printing → Printing_StrAndRepr
      Computing on text → Computing_Comparisons, Computing_TruthValues, Computing_ConcatenationAndRepetition, Computing_NumPyRefusals, Computing_NextPhase, Computing_NeverEqualToNumbers, Computing_ChecksInNumPysOrder
-     Variable-width text: StringDType → StringDType_Creating, StringDType_NAObjects, StringDType_WritingElements, StringDType_MovingAndCasting, StringDType_Nditer, StringDType_Refusals, StringDType_ByteswapIsACopy
+     Variable-width text: StringDType → StringDType_Creating, StringDType_NAObjects, StringDType_WritingElements, StringDType_MovingAndCasting, StringDType_Nditer, StringDType_TextFiles, StringDType_Refusals, StringDType_ByteswapIsACopy
      .npy files → Npy_RoundTrip, Npy_CharWritesAsU1, Npy_StringDTypeIsNumPysPickle
      The Char dtype → Char_IsTwoByteUtf16CodeUnit
      Byte streams via np.frombuffer → Bytes_ViaFrombuffer -->
@@ -407,13 +407,48 @@ using (var it = np.nditer(t, new[] { "refs_ok", "buffered" }, new[] { "readwrite
         x[0][Slice.Ellipsis] = (string)x[0].item() + "!";      // t is ['a!', 'a long string over fifteen!']
 ```
 
+### Text files: `loadtxt`, `savetxt` and `tofile`
+
+`np.loadtxt` reads every field of a `StringDType` column whole, whatever its length. A field equal to a string NA object is a missing element, and a converter's result is stored as `a[...] = value` stores it. So with `na_object: null`, a converter that returns `null` makes the element missing:
+
+```csharp
+var na = np.dtypes.StringDType(na_object: null);
+var t = np.loadtxt(new[] { "a b", "- c" }, na, converters: (Func<string, object>)(s => s == "-" ? null : s));
+t.item(1, 0);                                      // null: the NA object
+np.loadtxt(new[] { "a  b" }, np.dtypes.StringDType(), delimiter: ",").item();   // "a  b": the whole line, spaces kept
+```
+
+`np.savetxt` formats each element as the Python object NumPy's `getitem` returns: a `str`, or the descriptor's NA object for a missing element. `%s` of a missing element is therefore `str(na_object)`, and a numeric conversion takes the NA object's own type:
+
+```csharp
+var w = new StringWriter();
+np.savetxt(w, np.array(new object[] { "x", null }, na), "%s");
+w.ToString();                                      // "x\nNone\n"
+var nanNA = np.dtypes.StringDType(na_object: double.NaN);
+np.savetxt(new StringWriter(), np.array(new object[] { double.NaN }, nanNA), "%d");
+                                                   // ValueError: cannot convert float NaN to integer
+np.savetxt(new StringWriter(), np.array(new[] { "x" }, na), "%d");
+                                                   // TypeError: Mismatch between array dtype ('StringDType(na_object=None)') and format specifier ('%d')
+```
+
+`ndarray.tofile(path, sep: ",")` writes each element's `str()`, or `format % element`. Its binary mode (`sep: ""`), `np.fromfile` and `np.fromstring` refuse a `StringDType`, as NumPy does:
+
+```csharp
+t.tofile(path, sep: ",");                          // a,b,None,c
+np.fromfile(path, np.dtypes.StringDType(), sep: ",");   // ValueError: Cannot read into object array
+```
+
+All three follow NumPy's text encodings (see [Reading and writing text files](io.md#text-io)): a file name is read and written as UTF-8 by default, a byte `Stream` as Latin-1, and `encoding:` accepts every name Python's `codecs.lookup` accepts for UTF-8, UTF-16, UTF-32, Latin-1, ASCII and the single-byte code pages.
+
+Measured against NumPy 2.4.2 on the same machine (pinned to two cores, 1,000 to 1,000,000 rows of two `StringDType` columns): `np.loadtxt` from a list of lines or a file runs 2.9 to 3.8 times as fast as NumPy, `np.savetxt` to a writer or a byte stream 5.3 to 8.1 times, and `np.save` / `np.load` of the result 2.5 to 7.7 times.
+
 ### What `StringDType` refuses
 
 | Call | NumSharp |
 |------|----------|
 | `view(another dtype)`, `memoryview` (`.data`), `np.frombuffer(..., "T")` | NumPy's errors: a cell is not raw text |
 | `np.ndarray(shape, "T", buffer: ...)` | `ArgumentException`. NumPy reads the bytes as cells; a cell holds an arena offset or a heap pointer, so NumSharp refuses |
-| `loadtxt` / `savetxt` with `StringDType` | not yet (a later package) |
+| `np.fromfile`, `np.fromstring` and `tofile`'s binary mode with `StringDType` | NumPy's errors (`Cannot read into object array`, `OSError` for the binary write) |
 | Computation: `==`, `np.sum`, `np.sort`, `np.strings.*` | `StringComputationNotSupportedException` or `NotSupportedException` (phase 2) |
 
 NumPy 2.4.2 has bugs on `StringDType` that NumSharp does not reproduce; NumSharp gives the correct answer:
@@ -425,6 +460,8 @@ NumPy 2.4.2 has bugs on `StringDType` that NumSharp does not reproduce; NumSharp
 - The `StringDType` to `complex` cast writes the real part into the imaginary part too.
 - A short string copied onto itself (`a[...] = a[:1]`) becomes `''`.
 - A buffered `np.nditer` with a `StringDType` input and an allocated `StringDType` output raises `MemoryError: Failed to load string in StringDType getitem` when the loop reads its own output, and `String deallocation failed in clear loop` when the iterator closes.
+- `np.loadtxt` keeps the `StringDType` instance it is given as its result's descriptor, so a second call with the same instance corrupts the first result (`MemoryError: Failed to load string in StringDType getitem` when it is read). NumSharp gives every result its own allocator.
+- `tofile`'s text mode writes each element through `PyUnicode_AsASCIIString` without checking the result, so a non-ASCII text crashes the process. NumSharp raises the `UnicodeEncodeError` that call reports.
 
 ---
 

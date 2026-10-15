@@ -2,298 +2,176 @@ using System;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
+using NumSharp.Backends.Strings;
 
 namespace NumSharp.Backends.Printing
 {
     /// <summary>
-    ///     A focused port of CPython's <c>str.__mod__</c> (the <c>%</c> operator) as used by
-    ///     <c>numpy.ndarray.tofile(sep, format)</c>: each array element is written as
-    ///     <c>format % item</c> where <c>item</c> is the boxed scalar. NumPy's text writer applies the
-    ///     format string to exactly one value per element, so this engine handles a format with the
-    ///     surrounding literal text plus its conversion specifier(s), each fed the same value.
-    ///
-    ///     Supported conversions (matching Python semantics probed against 3.x / NumPy 2.4.2):
-    ///     <c>d i u</c> (decimal; floats truncate toward zero), <c>x X o</c> (signed base-16/8),
-    ///     <c>f F</c> (fixed, default precision 6), <c>e E</c> (scientific, 2-digit-min exponent),
-    ///     <c>g G</c> (general), <c>s</c> (<see cref="ArrayFormatter.ScalarStr"/>), <c>c</c> (char),
-    ///     <c>%%</c> (literal). Flags <c>- + space 0 #</c>, field width and <c>.precision</c> are honored.
-    ///
-    ///     Lenient by design where CPython/NumPy would RAISE: a conversion that does not match the value
-    ///     type (e.g. <c>%x</c>/<c>%o</c> on a bool/float, <c>%c</c> on a float, <c>%d</c> on inf/nan) yields
-    ///     a best-effort rendering (base of the truncated integer, the char, or "inf"/"nan") instead of a
-    ///     TypeError/OverflowError, and a format whose conversion count != 1 is applied leniently rather than
-    ///     rejected — a file writer must not abort mid-stream on a per-element formatting quirk. <c>%r</c>
-    ///     maps to the scalar string rather than NumPy 2.x's typed scalar repr ("np.float64(1.5)").
+    ///     A port of CPython 3.12's <c>str.__mod__</c> (the <c>%</c> operator, <c>PyUnicode_Format</c> in
+    ///     <c>Objects/unicodeobject.c</c>) as NumPy uses it: <c>np.savetxt</c> writes each row as
+    ///     <c>format % tuple(row)</c> and <c>ndarray.tofile(sep, format)</c> each element as <c>format % (item,)</c>.
     /// </summary>
-    internal static class PrintfFormatter
+    /// <remarks>
+    ///     <para>
+    ///     <see cref="PercentFormat"/> is the parse (a format is compiled once per call and run per row or element); this
+    ///     class holds the conversions. Both follow CPython exactly, errors included: a conversion the value's type does
+    ///     not take raises CPython's <c>TypeError</c> (<see cref="PrintfArgumentException"/>), a NaN under an integer
+    ///     conversion its <c>ValueError</c>, an infinity or a <c>%c</c> code point out of range its <c>OverflowError</c>
+    ///     (<see cref="OverflowException"/>), and a malformed format <c>incomplete format</c> or <c>unsupported format
+    ///     character ...</c>. Nothing is rendered "best effort": the writer raises where NumPy raises.
+    ///     </para>
+    ///     <para>
+    ///     Conversions: <c>s</c> / <c>r</c> / <c>a</c> (<c>str()</c> / <c>repr()</c> / <c>ascii()</c>, cut to the
+    ///     precision and padded to the width in code points); <c>d i u</c> (decimal; a float truncates toward zero);
+    ///     <c>x X o</c> (an integer only; the <c>#</c> form prefixes <c>0x</c> / <c>0X</c> / <c>0o</c>, even for 0);
+    ///     <c>f F</c>, <c>e E</c>, <c>g G</c> (default precision 6, a two-digit-minimum exponent, <c>nan</c> /
+    ///     <c>inf</c>); <c>c</c> (a code point, or a one-character <c>str</c>). Flags <c>- + space 0 #</c>, a width and a
+    ///     <c>.precision</c> (each may be <c>*</c>, a Python <c>int</c> argument) as CPython applies them.
+    ///     </para>
+    ///     <para>
+    ///     The value of each conversion is either a Python object (<see cref="ApplyPyObject"/>) or a NumPy scalar of a
+    ///     dtype (<see cref="ApplyNumPyScalar"/>); see <see cref="PercentFormat"/> for which writer passes which.
+    ///     NumSharp's two dtypes without a NumPy scalar follow their established NumPy analogs: a <c>Char</c> element is
+    ///     a <c>uint16</c> (<c>%s</c> is its number, <c>%c</c> its character) and a <c>Decimal</c> element a
+    ///     <c>float64</c> of its value, as <see cref="ArrayFormatter.ScalarStr"/> prints them.
+    ///     </para>
+    /// </remarks>
+    internal static partial class PrintfFormatter
     {
         private static readonly CultureInfo CI = CultureInfo.InvariantCulture;
 
-        /// <summary>Apply a Python <c>%</c>-format string to a single boxed value.</summary>
-        public static string Format(string format, object value, NPTypeCode tc)
+        /// <summary>
+        ///     The largest precision .NET's <c>F</c> / <c>E</c> formats accept (999,999,999 on .NET 7 and later). A longer
+        ///     result could not be held anyway: it passes the longest string .NET allows.
+        /// </summary>
+        private const int MaxNetPrecision = 999_999_999;
+
+        /// <summary>
+        ///     A precision a <c>%g</c> conversion without the <c>#</c> flag never needs more of: a double has at most 767
+        ///     significant digits, and without <c>#</c> the trailing zeros past them are stripped, so any larger precision
+        ///     prints the same text (CPython prints <c>'%.2147483647g' % 1.0</c> as <c>'1'</c>, in no time).
+        /// </summary>
+        private const int MaxUsefulGeneralPrecision = 1100;
+
+        /// <summary>Compiles a Python <c>%</c> format once, for a writer that applies it many times.</summary>
+        /// <param name="format">The format string.</param>
+        /// <returns>The compiled format (<see cref="PercentFormat.Compile"/>).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="format"/> is null.</exception>
+        public static PercentFormat Compile(string format) => PercentFormat.Compile(format);
+
+        /// <summary>
+        ///     <c>format % (value,)</c> — a one-item tuple, the way <c>ndarray.tofile</c> applies its format to each
+        ///     element — compiled and run once.
+        /// </summary>
+        /// <param name="format">The Python <c>%</c> format string.</param>
+        /// <param name="value">The item.</param>
+        /// <param name="kind">The item's kind: <see cref="PercentFormat.PyObject"/> for a Python object, else the dtype of
+        ///     the NumPy scalar it stands for.</param>
+        /// <returns>The formatted text.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="format"/> is null.</exception>
+        /// <exception cref="PrintfArgumentException">CPython's <c>TypeError</c>s (see
+        ///     <see cref="PercentFormat.FormatInto"/>).</exception>
+        /// <exception cref="ValueError">CPython's <c>ValueError</c>s (see <see cref="PercentFormat.FormatInto"/>).</exception>
+        /// <exception cref="OverflowException">CPython's <c>OverflowError</c>s (see
+        ///     <see cref="PercentFormat.FormatInto"/>).</exception>
+        /// <exception cref="OutOfMemoryException">A result longer than .NET's longest string.</exception>
+        public static string Format(string format, object value, NPTypeCode kind)
         {
-            var sb = new StringBuilder(format.Length + 16);
-            int i = 0, n = format.Length;
-            while (i < n)
-            {
-                char ch = format[i];
-                if (ch != '%')
-                {
-                    sb.Append(ch);
-                    i++;
-                    continue;
-                }
-
-                // '%' begins a conversion spec.
-                i++;
-                if (i < n && format[i] == '%') // "%%" -> literal '%'
-                {
-                    sb.Append('%');
-                    i++;
-                    continue;
-                }
-
-                // flags
-                bool left = false, plus = false, space = false, zero = false, alt = false;
-                while (i < n)
-                {
-                    char f = format[i];
-                    if (f == '-') left = true;
-                    else if (f == '+') plus = true;
-                    else if (f == ' ') space = true;
-                    else if (f == '0') zero = true;
-                    else if (f == '#') alt = true;
-                    else break;
-                    i++;
-                }
-
-                // width
-                int width = 0;
-                while (i < n && format[i] >= '0' && format[i] <= '9')
-                {
-                    width = width * 10 + (format[i] - '0');
-                    i++;
-                }
-
-                // .precision
-                int precision = -1;
-                if (i < n && format[i] == '.')
-                {
-                    i++;
-                    precision = 0;
-                    while (i < n && format[i] >= '0' && format[i] <= '9')
-                    {
-                        precision = precision * 10 + (format[i] - '0');
-                        i++;
-                    }
-                }
-
-                // length modifiers are meaningless here (numpy passes a scalar) — skip them.
-                while (i < n && (format[i] == 'l' || format[i] == 'h' || format[i] == 'L'))
-                    i++;
-
-                if (i >= n) // dangling '%...' with no conversion char — emit verbatim.
-                {
-                    sb.Append('%');
-                    break;
-                }
-
-                char conv = format[i];
-                i++;
-                // A fixed-width string element is the Python object getitem returns (str / bytes): ndarray.tofile's
-                // `format % item`. Its conversions are str.__mod__'s for text, not the numeric ones.
-                sb.Append(tc == NPTypeCode.String
-                    ? ApplyText(conv, left, width, precision, value, numpyScalar: false)
-                    : Apply(conv, left, plus, space, zero, alt, width, precision, value, tc));
-            }
-
+            var sb = new StringBuilder(format?.Length + 16 ?? 16);
+            object[] args = { value };
+            NPTypeCode[] kinds = { kind };
+            Compile(format).FormatInto(sb, args, kinds);
             return sb.ToString();
         }
 
         /// <summary>
-        ///     Sequential-argument variant of <see cref="Format"/> — the port of CPython's
-        ///     <c>str.__mod__</c> applied to a TUPLE, as used by <c>numpy.savetxt</c>'s per-row
-        ///     <c>format % tuple(row)</c>. Every conversion spec consumes the NEXT value from
-        ///     <paramref name="args"/> (whereas <see cref="Format"/> feeds its single value to every
-        ///     spec); <c>%%</c> is a literal and consumes nothing.
+        ///     One CPython <c>%</c> conversion of a NUMPY SCALAR: an element of <c>np.savetxt</c>'s <c>tuple(row)</c> (and
+        ///     of its complex branch's <c>(z.real, z.imag)</c> pairs, which are <c>np.float64</c>).
         /// </summary>
-        /// <exception cref="PrintfArgumentException">
-        ///     The number of conversion specs does not match <paramref name="args"/>.Count, or a
-        ///     <c>%c</c> conversion targets a non-integral value — the two conditions under which
-        ///     CPython's <c>%</c> operator raises a <see cref="TypeError"/> mid-row. NumPy's real
-        ///     branch catches this and reports the dtype/format mismatch; its complex branch lets it
-        ///     surface (a <see cref="PrintfArgumentException"/> IS a <see cref="TypeError"/>).
-        /// </exception>
-        public static string FormatRow(string format, System.Collections.Generic.IReadOnlyList<object> args,
-            System.Collections.Generic.IReadOnlyList<NPTypeCode> tcs)
+        /// <param name="conv">The conversion character, one <see cref="PercentFormat"/> has checked is supported.</param>
+        /// <param name="left">The <c>-</c> flag (or a negative <c>*</c> width).</param>
+        /// <param name="plus">The <c>+</c> flag.</param>
+        /// <param name="space">The <c> </c> flag.</param>
+        /// <param name="zero">The <c>0</c> flag.</param>
+        /// <param name="alt">The <c>#</c> flag.</param>
+        /// <param name="width">The minimum width (0 for none).</param>
+        /// <param name="precision">The precision (-1 for none).</param>
+        /// <param name="value">The boxed scalar.</param>
+        /// <param name="tc">Its dtype (<see cref="NPTypeCode.String"/>: an <c>np.str_</c> / <c>np.bytes_</c>, a C#
+        ///     <see cref="string"/> / <c>byte[]</c>).</param>
+        /// <returns>The converted text, padded to the width.</returns>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy 2.4.2's scalars under CPython's rules, probed for every dtype: <c>%s</c> is the scalar's
+        ///     <c>str()</c> (<c>0.1</c> for an <c>np.float32</c>, not the widened double); <c>%r</c> / <c>%a</c> its
+        ///     <c>repr()</c> (<c>np.float64(1.5)</c>, <c>np.True_</c>, <c>np.uint8(200)</c>); <c>%d</c> / <c>%i</c> /
+        ///     <c>%u</c> its <c>int()</c> (<c>np.True_</c> is 1, a float truncates, NaN and infinity raise); <c>%x</c> /
+        ///     <c>%X</c> / <c>%o</c> and <c>%c</c> only an integer (an <c>np.bool</c> is NOT one: its <c>__index__</c>
+        ///     raises); <c>%e</c> / <c>%f</c> / <c>%g</c> its <c>float()</c> (an <c>np.uint64</c> rounded once, a bool
+        ///     1.0 / 0.0). An <c>np.complex128</c> converts its real part, as its <c>__int__</c> / <c>__float__</c> do
+        ///     (NumPy warns <c>ComplexWarning</c>; <c>savetxt</c> never hands one over, it splits complex rows).
+        ///     </para>
+        ///     <para>
+        ///     The <c>TypeError</c> names the scalar's type as CPython quotes it (<c>Py_TYPE(v)-&gt;tp_name</c>):
+        ///     <c>numpy.bool</c>, <c>numpy.float64</c>, <c>numpy.float32</c>, <c>numpy.float16</c>,
+        ///     <c>numpy.complex128</c>, <c>numpy.str_</c>, <c>numpy.bytes_</c>.
+        ///     </para>
+        /// </remarks>
+        /// <exception cref="PrintfArgumentException">A conversion the scalar's type does not take: <c>%x format: an
+        ///     integer is required, not numpy.float64</c>, <c>%c requires int or char</c>, <c>%d format: a real number is
+        ///     required, not numpy.str_</c>, <c>must be real number, not numpy.bytes_</c>.</exception>
+        /// <exception cref="ValueError"><c>cannot convert float NaN to integer</c>.</exception>
+        /// <exception cref="OverflowException"><c>cannot convert float infinity to integer</c>; <c>%c arg not in
+        ///     range(0x110000)</c>; <c>precision too large</c> (an integer conversion past <c>INT_MAX - 3</c>).</exception>
+        /// <exception cref="OutOfMemoryException">A result longer than .NET's longest string.</exception>
+        internal static string ApplyNumPyScalar(char conv, bool left, bool plus, bool space, bool zero, bool alt,
+            int width, int precision, object value, NPTypeCode tc)
         {
-            var sb = new StringBuilder(format.Length + 16);
-            FormatRowInto(sb, format, args, tcs);
-            return sb.ToString();
-        }
+            // np.str_ / np.bytes_ subclass str / bytes: the text rules, with the NumPy names in repr and errors.
+            if (tc == NPTypeCode.String)
+                return ApplyText(conv, left, width, precision, value, numpyScalar: true);
 
-        /// <summary>
-        ///     <see cref="FormatRow"/> appending directly into <paramref name="sb"/> — the allocation-free
-        ///     form used on <c>np.savetxt</c>'s hot per-row path (no intermediate row string, the caller's
-        ///     batch buffer absorbs every row).
-        /// </summary>
-        public static void FormatRowInto(StringBuilder sb, string format,
-            System.Collections.Generic.IReadOnlyList<object> args,
-            System.Collections.Generic.IReadOnlyList<NPTypeCode> tcs)
-        {
-            int i = 0, n = format.Length, argIdx = 0, argCount = args.Count;
-            while (i < n)
+            switch (conv)
             {
-                char ch = format[i];
-                if (ch != '%')
-                {
-                    sb.Append(ch);
-                    i++;
-                    continue;
-                }
-
-                i++;
-                if (i < n && format[i] == '%') // "%%" -> literal '%', consumes no argument
-                {
-                    sb.Append('%');
-                    i++;
-                    continue;
-                }
-
-                // flags
-                bool left = false, plus = false, space = false, zero = false, alt = false;
-                while (i < n)
-                {
-                    char f = format[i];
-                    if (f == '-') left = true;
-                    else if (f == '+') plus = true;
-                    else if (f == ' ') space = true;
-                    else if (f == '0') zero = true;
-                    else if (f == '#') alt = true;
-                    else break;
-                    i++;
-                }
-
-                // width
-                int width = 0;
-                while (i < n && format[i] >= '0' && format[i] <= '9')
-                {
-                    width = width * 10 + (format[i] - '0');
-                    i++;
-                }
-
-                // .precision
-                int precision = -1;
-                if (i < n && format[i] == '.')
-                {
-                    i++;
-                    precision = 0;
-                    while (i < n && format[i] >= '0' && format[i] <= '9')
-                    {
-                        precision = precision * 10 + (format[i] - '0');
-                        i++;
-                    }
-                }
-
-                // length modifiers are meaningless here (a scalar per spec) — skip them.
-                while (i < n && (format[i] == 'l' || format[i] == 'h' || format[i] == 'L'))
-                    i++;
-
-                if (i >= n) // dangling '%...' with no conversion char — emit verbatim.
-                {
-                    sb.Append('%');
-                    break;
-                }
-
-                char conv = format[i];
-                i++;
-
-                if (argIdx >= argCount)
-                    throw new PrintfArgumentException("not enough arguments for format string");
-
-                object value = args[argIdx];
-                NPTypeCode tc = tcs[argIdx];
-                argIdx++;
-
-                // A fixed-width string element: savetxt formats tuple(row), whose items are NumPy scalars (np.str_ /
-                // np.bytes_), so %r prints their NumPy repr and a numeric conversion's TypeError names numpy.str_.
-                if (tc == NPTypeCode.String)
-                {
-                    sb.Append(ApplyText(conv, left, width, precision, value, numpyScalar: true));
-                    continue;
-                }
-
-                // Integer/char conversions validate their operand exactly as CPython's `%` operator does on
-                // a NumPy scalar — this is where savetxt on the wrong dtype raises. A TypeError is caught by
-                // savetxt's real branch and reported as the dtype/format mismatch (PrintfArgumentException IS
-                // a TypeError); a ValueError/OverflowError propagates uncaught.
-                switch (conv)
-                {
-                    case 'c':
-                        // %c takes a true integer (int/uint/char) whose value is a valid code point; bool and
-                        // every non-integral scalar raise TypeError ("Mismatch..."), and an out-of-range int
-                        // raises OverflowError. Probed: "%c"%np.bool_(True) and "%c"%np.float64(1) both raise
-                        // TypeError; "%c"%np.int8(-1) raises OverflowError.
-                        if (IsTrueIntegerTc(tc))
-                        {
-                            TryToBigInteger(value, tc, out BigInteger cp);
-                            if (cp < 0 || cp > 0x10FFFF)
-                                throw new OverflowException("%c arg not in range(0x110000)");
-                            break;
-                        }
+                case 's':
+                    return PadText(ArrayFormatter.ScalarStr(value, tc), width, precision, left);
+                case 'r':
+                    return PadText(NumPyScalarRepr(value, tc), width, precision, left);
+                case 'a':
+                    return PadText(PyRepr.Ascii(NumPyScalarRepr(value, tc)), width, precision, left);
+                case 'd':
+                case 'i':
+                case 'u':
+                    // mainformatlong: PyNumber_Long — the integer itself, a float truncated (NaN / infinity refused).
+                    return FormatInteger(NumPyScalarToInteger(value, tc), 10, false, left, plus, space, zero, false, width,
+                        precision);
+                case 'x':
+                case 'X':
+                case 'o':
+                    // _PyNumber_Index: only an integer scalar. np.bool_.__index__ raises in NumPy 2, and every float /
+                    // complex scalar has none, so each is "not an integer" even when its value is integral.
+                    if (!IsTrueIntegerTc(tc))
+                        throw new PrintfArgumentException($"%{conv} format: an integer is required, not {NumPyTypeName(tc)}");
+                    return FormatInteger(NumPyScalarToInteger(value, tc), conv == 'o' ? 8 : 16, conv == 'X',
+                        left, plus, space, zero, alt, width, precision);
+                case 'c':
+                    // formatchar: PyLong_AsLongAndOverflow, which goes through __index__ (refused as above).
+                    if (!IsTrueIntegerTc(tc))
                         throw new PrintfArgumentException("%c requires int or char");
-                    case 'x':
-                    case 'X':
-                    case 'o':
-                        // Hex/octal accept only true integers; bool AND non-integral floats raise TypeError.
-                        if (IsTrueIntegerTc(tc))
-                            break;
-                        throw new PrintfArgumentException(
-                            $"%{conv} format: an integer is required, not {(tc == NPTypeCode.Boolean ? "numpy.bool" : "float")}");
-                    case 'd':
-                    case 'i':
-                    case 'u':
-                        // Integers and bool pass; a FINITE float truncates, but nan/inf raise (uncaught).
-                        if (!IsIntegralTc(tc))
-                        {
-                            double dv = ToReal(value);
-                            if (double.IsNaN(dv))
-                                throw new ValueError("cannot convert float NaN to integer");
-                            if (double.IsInfinity(dv))
-                                throw new OverflowException("cannot convert float infinity to integer");
-                        }
-                        break;
-                }
-
-                sb.Append(Apply(conv, left, plus, space, zero, alt, width, precision, value, tc));
-            }
-
-            if (argIdx != argCount)
-                throw new PrintfArgumentException("not all arguments converted during string formatting");
-        }
-
-        private static bool IsIntegralTc(NPTypeCode tc)
-        {
-            switch (tc)
-            {
-                case NPTypeCode.Boolean:
-                case NPTypeCode.SByte:
-                case NPTypeCode.Byte:
-                case NPTypeCode.Int16:
-                case NPTypeCode.UInt16:
-                case NPTypeCode.Int32:
-                case NPTypeCode.UInt32:
-                case NPTypeCode.Int64:
-                case NPTypeCode.UInt64:
-                case NPTypeCode.Char:
-                    return true;
+                    return PadCodePoints(CodePointText(NumPyScalarToInteger(value, tc)), width, left);
                 default:
-                    return false;
+                    // e E f F g G: formatfloat's PyFloat_AsDouble, which every numeric scalar answers.
+                    return FormatReal(conv, NumPyScalarToDouble(value, tc), left, plus, space, zero, alt, width, precision);
             }
         }
 
-        // A "true" integer for the %x/%X/%o/%c operand rules — every integral dtype EXCEPT Boolean, which
-        // CPython's `%` operator rejects for those conversions on a NumPy scalar (a bool is not an int there).
+        /// <summary>
+        ///     The integral dtypes whose scalars have an <c>__index__</c> (<c>%x</c> / <c>%X</c> / <c>%o</c> /
+        ///     <c>%c</c> take them): every integer dtype and NumSharp's <c>Char</c> (a <c>uint16</c>), but NOT
+        ///     <c>Boolean</c> — <c>np.bool_.__index__</c> raises in NumPy 2.
+        /// </summary>
+        /// <param name="tc">The dtype.</param>
+        /// <returns>True for an integer dtype.</returns>
         private static bool IsTrueIntegerTc(NPTypeCode tc)
         {
             switch (tc)
@@ -313,48 +191,158 @@ namespace NumSharp.Backends.Printing
             }
         }
 
-        private static string Apply(char conv, bool left, bool plus, bool space, bool zero, bool alt,
-            int width, int precision, object value, NPTypeCode tc)
+        /// <summary>The type name CPython's <c>TypeError</c> quotes for a NumPy scalar: <c>numpy.</c> and the dtype's
+        ///     NumPy name (<c>numpy.bool</c>, <c>numpy.float32</c>; a <c>Decimal</c> is the <c>float64</c> it prints
+        ///     as).</summary>
+        /// <param name="tc">The dtype.</param>
+        /// <returns>The name.</returns>
+        private static string NumPyTypeName(NPTypeCode tc) => "numpy." + tc.AsNumpyDtypeName();
+
+        /// <summary>
+        ///     NumPy 2's <c>repr()</c> of a scalar: <c>np.True_</c> / <c>np.False_</c>, else <c>np.&lt;dtype&gt;(str)</c>
+        ///     (<c>np.int64(-7)</c>, <c>np.float32(0.1)</c>, <c>np.float64(nan)</c>; an <c>np.complex128</c> without its
+        ///     str's parentheses, <c>np.complex128(1+2j)</c>).
+        /// </summary>
+        /// <param name="value">The boxed scalar.</param>
+        /// <param name="tc">Its dtype (not <see cref="NPTypeCode.String"/>, which <see cref="TextRepr"/> handles).</param>
+        /// <returns>The repr.</returns>
+        private static string NumPyScalarRepr(object value, NPTypeCode tc)
         {
+            if (tc == NPTypeCode.Boolean)
+                return (bool)value ? "np.True_" : "np.False_";
+            string str = ArrayFormatter.ScalarStr(value, tc);
+            if (tc == NPTypeCode.Complex && str.Length >= 2 && str[0] == '(' && str[^1] == ')')
+                str = str.Substring(1, str.Length - 2);
+            return "np." + tc.AsNumpyDtypeName() + "(" + str + ")";
+        }
+
+        /// <summary>
+        ///     A NumPy scalar's <c>int()</c> (<c>PyNumber_Long</c>): an integer or a bool exactly, a float (a decimal
+        ///     through its double, a complex through its real part) truncated toward zero.
+        /// </summary>
+        /// <param name="value">The boxed scalar.</param>
+        /// <param name="tc">Its dtype.</param>
+        /// <returns>The integer.</returns>
+        /// <exception cref="ValueError"><c>cannot convert float NaN to integer</c>.</exception>
+        /// <exception cref="OverflowException"><c>cannot convert float infinity to integer</c>.</exception>
+        private static BigInteger NumPyScalarToInteger(object value, NPTypeCode tc)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Boolean: return (bool)value ? BigInteger.One : BigInteger.Zero;
+                case NPTypeCode.SByte: return (sbyte)value;
+                case NPTypeCode.Byte: return (byte)value;
+                case NPTypeCode.Int16: return (short)value;
+                case NPTypeCode.UInt16: return (ushort)value;
+                case NPTypeCode.Int32: return (int)value;
+                case NPTypeCode.UInt32: return (uint)value;
+                case NPTypeCode.Int64: return (long)value;
+                case NPTypeCode.UInt64: return (ulong)value;
+                case NPTypeCode.Char: return (char)value;
+                default:
+                    return TruncateReal(NumPyScalarToDouble(value, tc));
+            }
+        }
+
+        /// <summary>
+        ///     A NumPy scalar's <c>float()</c>: a bool 1.0 / 0.0, an integer rounded once to the nearest double (an
+        ///     <c>np.uint64</c> too: .NET's own conversion double-rounds at and above 2^63), a float widened exactly, a
+        ///     decimal as <see cref="ArrayFormatter.ScalarStr"/> converts it, a complex's real part.
+        /// </summary>
+        /// <param name="value">The boxed scalar.</param>
+        /// <param name="tc">Its dtype.</param>
+        /// <returns>The double.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="tc"/> is not a numeric dtype.</exception>
+        private static double NumPyScalarToDouble(object value, NPTypeCode tc)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Boolean: return (bool)value ? 1.0 : 0.0;
+                case NPTypeCode.SByte: return (sbyte)value;
+                case NPTypeCode.Byte: return (byte)value;
+                case NPTypeCode.Int16: return (short)value;
+                case NPTypeCode.UInt16: return (ushort)value;
+                case NPTypeCode.Int32: return (int)value;
+                case NPTypeCode.UInt32: return (uint)value;
+                case NPTypeCode.Int64: return (long)value;
+                case NPTypeCode.UInt64:
+                {
+                    ulong u = (ulong)value;
+                    return u <= long.MaxValue ? (long)u : PythonInt.ToDouble(new BigInteger(u));
+                }
+                case NPTypeCode.Char: return (char)value;
+                case NPTypeCode.Half: return (double)(Half)value;
+                case NPTypeCode.Single: return (float)value;
+                case NPTypeCode.Double: return (double)value;
+                case NPTypeCode.Decimal: return (double)(decimal)value;
+                case NPTypeCode.Complex: return ((Complex)value).Real;
+                default: throw new ArgumentOutOfRangeException(nameof(tc), tc, "not a numeric dtype");
+            }
+        }
+
+        /// <summary>A float's <c>int()</c>: truncated toward zero, exactly (as a Python int of any size).</summary>
+        /// <param name="d">The value.</param>
+        /// <returns>The integer.</returns>
+        /// <exception cref="ValueError"><c>cannot convert float NaN to integer</c>.</exception>
+        /// <exception cref="OverflowException"><c>cannot convert float infinity to integer</c>.</exception>
+        private static BigInteger TruncateReal(double d)
+        {
+            if (double.IsNaN(d))
+                throw new ValueError("cannot convert float NaN to integer");
+            if (double.IsInfinity(d))
+                throw new OverflowException("cannot convert float infinity to integer");
+            return new BigInteger(Math.Truncate(d));
+        }
+
+        /// <summary>
+        ///     <c>%c</c> of an integer: the one-character string of the code point (a lone surrogate code point is a valid
+        ///     one-unit Python <c>str</c>, which <see cref="char.ConvertFromUtf32"/> would refuse).
+        /// </summary>
+        /// <param name="cp">The code point.</param>
+        /// <returns>Its character.</returns>
+        /// <exception cref="OverflowException"><c>%c arg not in range(0x110000)</c> for a negative value or one past
+        ///     U+10FFFF (CPython's test also catches an overflow of the C <c>long</c>).</exception>
+        private static string CodePointText(BigInteger cp)
+        {
+            if (cp.Sign < 0 || cp > 0x10FFFF)
+                throw new OverflowException("%c arg not in range(0x110000)");
+            int code = (int)cp;
+            return code >= 0xD800 && code <= 0xDFFF ? ((char)code).ToString() : char.ConvertFromUtf32(code);
+        }
+
+        /// <summary>
+        ///     A float conversion (<c>formatfloat</c> over <c>PyOS_double_to_string</c>): <c>e</c> / <c>E</c>, <c>f</c> /
+        ///     <c>F</c>, <c>g</c> / <c>G</c> of a double, with CPython's default precision 6.
+        /// </summary>
+        /// <param name="conv">The conversion character.</param>
+        /// <param name="d">The value.</param>
+        /// <param name="left">The <c>-</c> flag.</param>
+        /// <param name="plus">The <c>+</c> flag.</param>
+        /// <param name="space">The <c> </c> flag.</param>
+        /// <param name="zero">The <c>0</c> flag.</param>
+        /// <param name="alt">The <c>#</c> flag.</param>
+        /// <param name="width">The minimum width.</param>
+        /// <param name="precision">The precision (-1 for the default 6).</param>
+        /// <returns>The text.</returns>
+        /// <exception cref="OutOfMemoryException">A result longer than .NET's longest string.</exception>
+        private static string FormatReal(char conv, double d, bool left, bool plus, bool space, bool zero, bool alt,
+            int width, int precision)
+        {
+            bool upper = conv == 'E' || conv == 'F' || conv == 'G';
             switch (conv)
             {
-                case 's':
-                case 'r':
-                {
-                    // %s -> str(item); zero flag does not apply to strings.
-                    string body = ArrayFormatter.ScalarStr(value, tc);
-                    return Pad(body, "", width, left, false);
-                }
-                case 'd':
-                case 'i':
-                case 'u':
-                    return FormatInteger(value, tc, 10, false, false, left, plus, space, zero, false, width, precision);
-                case 'x':
-                    return FormatInteger(value, tc, 16, false, false, left, plus, space, zero, alt, width, precision);
-                case 'X':
-                    return FormatInteger(value, tc, 16, true, false, left, plus, space, zero, alt, width, precision);
-                case 'o':
-                    return FormatInteger(value, tc, 8, false, false, left, plus, space, zero, alt, width, precision);
-                case 'f':
-                case 'F':
-                    return FormatFixed(ToReal(value), conv == 'F', precision < 0 ? 6 : precision,
-                        alt, left, plus, space, zero, width);
                 case 'e':
                 case 'E':
-                    return FormatScientific(ToReal(value), conv == 'E', precision < 0 ? 6 : precision,
-                        alt, left, plus, space, zero, width);
-                case 'g':
-                case 'G':
-                    return FormatGeneral(ToReal(value), conv == 'G', precision, alt,
-                        left, plus, space, zero, width);
-                case 'c':
-                {
-                    string body = FormatChar(value, tc);
-                    return Pad(body, "", width, left, false);
-                }
+                    // PyOS_double_to_string asks dtoa for precision + 1 digits. At INT_MAX the sum wraps negative, and
+                    // dtoa's mode 2 then makes ONE digit: exactly what precision 0 prints ('%.2147483647e' % 1.5 is
+                    // '2e+00' in CPython 3.12, at once).
+                    int pe = precision < 0 ? 6 : precision == int.MaxValue ? 0 : precision;
+                    return FormatScientific(d, upper, pe, alt, left, plus, space, zero, width);
+                case 'f':
+                case 'F':
+                    return FormatFixed(d, upper, precision < 0 ? 6 : precision, alt, left, plus, space, zero, width);
                 default:
-                    // Unknown conversion: emit the '%' + conv verbatim (lenient).
-                    return "%" + conv;
+                    return FormatGeneral(d, upper, precision, alt, left, plus, space, zero, width);
             }
         }
 
@@ -368,7 +356,7 @@ namespace NumSharp.Backends.Printing
         ///     flags do nothing); <c>%c</c> takes a one-character <c>str</c>; every numeric conversion raises CPython's
         ///     <c>TypeError</c>.
         /// </summary>
-        /// <param name="conv">The conversion character.</param>
+        /// <param name="conv">The conversion character, one <see cref="PercentFormat"/> has checked is supported.</param>
         /// <param name="left">The <c>-</c> flag.</param>
         /// <param name="width">The minimum width in code points (0 for none).</param>
         /// <param name="precision">The precision (-1 for none): the maximum number of code points kept.</param>
@@ -382,6 +370,8 @@ namespace NumSharp.Backends.Printing
         ///     (<c>%d format: a real number is required, not str</c>, <c>%x format: an integer is required, not
         ///     bytes</c>, <c>must be real number, not numpy.str_</c>) or <c>%c</c> of anything but one character
         ///     (<c>%c requires int or char</c>).</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="conv"/> is not a conversion character (the
+        ///     caller checks it first).</exception>
         private static string ApplyText(char conv, bool left, int width, int precision, object value, bool numpyScalar)
         {
             bool isBytes = value is byte[];
@@ -420,8 +410,7 @@ namespace NumSharp.Backends.Printing
                 case 'G':
                     throw new PrintfArgumentException($"must be real number, not {typeName}");
                 default:
-                    // Unknown conversion: emit the '%' + conv verbatim (lenient, as the numeric path).
-                    return "%" + conv;
+                    throw new ArgumentOutOfRangeException(nameof(conv), conv, "not a % conversion character");
             }
 
             if (precision >= 0)
@@ -463,6 +452,7 @@ namespace NumSharp.Backends.Printing
         /// <param name="width">The minimum width.</param>
         /// <param name="left">Left-align (pad on the right).</param>
         /// <returns>The padded text.</returns>
+        /// <exception cref="OutOfMemoryException">A width .NET cannot allocate.</exception>
         private static string PadCodePoints(string body, int width, bool left)
         {
             int deficit = width - PyRepr.CodePointLength(body);
@@ -473,54 +463,31 @@ namespace NumSharp.Backends.Printing
 
         // ---- numeric helpers ---------------------------------------------------------
 
-        private static double ToReal(object v) => v switch
-        {
-            double d => d,
-            float f => f,
-            Half h => (double)h,
-            decimal m => (double)m,
-            Complex c => c.Real, // numpy discards the imaginary part for real conversions
-            bool b => b ? 1.0 : 0.0,
-            char ch => ch,
-            _ => Convert.ToDouble(v, CI)
-        };
-
-        // Exact integer value as BigInteger (integers) or truncated-toward-zero (floats).
-        private static bool TryToBigInteger(object v, NPTypeCode tc, out BigInteger big)
-        {
-            switch (tc)
-            {
-                case NPTypeCode.Boolean: big = (bool)v ? 1 : 0; return true;
-                case NPTypeCode.SByte: big = (sbyte)v; return true;
-                case NPTypeCode.Byte: big = (byte)v; return true;
-                case NPTypeCode.Int16: big = (short)v; return true;
-                case NPTypeCode.UInt16: big = (ushort)v; return true;
-                case NPTypeCode.Int32: big = (int)v; return true;
-                case NPTypeCode.UInt32: big = (uint)v; return true;
-                case NPTypeCode.Int64: big = (long)v; return true;
-                case NPTypeCode.UInt64: big = (ulong)v; return true;
-                case NPTypeCode.Char: big = (char)v; return true;
-                default:
-                {
-                    double d = ToReal(v);
-                    if (!double.IsFinite(d)) { big = BigInteger.Zero; return false; }
-                    big = new BigInteger(Math.Truncate(d));
-                    return true;
-                }
-            }
-        }
-
-        private static string FormatInteger(object value, NPTypeCode tc, int radix, bool upper, bool _,
+        /// <summary>
+        ///     An integer conversion's text (<c>_PyUnicode_FormatLong</c> + <c>unicode_format_arg_output</c>): the digits
+        ///     in base 10, 16 or 8, a precision as the MINIMUM number of digits, the <c>#</c> prefix, the sign, the width.
+        /// </summary>
+        /// <param name="big">The integer.</param>
+        /// <param name="radix">10, 16 or 8.</param>
+        /// <param name="upper">Upper-case hex digits and prefix (<c>%X</c>).</param>
+        /// <param name="left">The <c>-</c> flag.</param>
+        /// <param name="plus">The <c>+</c> flag.</param>
+        /// <param name="space">The <c> </c> flag.</param>
+        /// <param name="zero">The <c>0</c> flag.</param>
+        /// <param name="alt">The <c>#</c> flag (a prefix for base 16 and 8 only).</param>
+        /// <param name="width">The minimum width.</param>
+        /// <param name="precision">The minimum number of digits (-1 for none).</param>
+        /// <returns>The text.</returns>
+        /// <exception cref="OverflowException"><c>precision too large</c>: CPython refuses a precision past
+        ///     <c>INT_MAX - 3</c> before it computes a digit.</exception>
+        /// <exception cref="ValueError">A decimal conversion of a Python int with more than 4300 digits (CPython's
+        ///     <c>sys.get_int_max_str_digits()</c>; base 16 and 8 have no limit).</exception>
+        /// <exception cref="OutOfMemoryException">A width or precision .NET cannot allocate.</exception>
+        private static string FormatInteger(BigInteger big, int radix, bool upper,
             bool left, bool plus, bool space, bool zero, bool alt, int width, int precision)
         {
-            // Non-finite floats have no integer form; Python raises, but a file writer should not abort —
-            // fall back to the nan/inf text (still readable, never crashes mid-file).
-            if (!TryToBigInteger(value, tc, out BigInteger big))
-            {
-                double d = ToReal(value);
-                string t = double.IsNaN(d) ? "nan" : (d < 0 ? "-inf" : "inf");
-                return Pad(t.TrimStart('-'), d < 0 ? "-" : Sign(false, plus, space), width, left, zero);
-            }
+            if (precision > int.MaxValue - 3)
+                throw new OverflowException("precision too large");
 
             bool neg = big.Sign < 0;
             BigInteger mag = BigInteger.Abs(big);
@@ -529,7 +496,7 @@ namespace NumSharp.Backends.Printing
             {
                 16 => ToBaseString(mag, 16, upper),
                 8 => ToBaseString(mag, 8, upper),
-                _ => mag.ToString(CI)
+                _ => NDTextFormat.FormatPythonInt(mag)
             };
 
             // Python's `.precision` on an integer conversion (d/i/u/x/X/o) is the MINIMUM number of digits:
@@ -584,6 +551,35 @@ namespace NumSharp.Backends.Printing
             return sb.ToString();
         }
 
+        /// <summary>
+        ///     .NET's <c>F</c> / <c>E</c> format of a non-negative double: the exact decimal digits, rounded half to even
+        ///     (the rounding of CPython's dtoa, verified on both target frameworks).
+        /// </summary>
+        /// <param name="abs">The value (non-negative, finite).</param>
+        /// <param name="format">'F' or 'E'.</param>
+        /// <param name="precision">The number of digits after the point.</param>
+        /// <returns>The text.</returns>
+        /// <exception cref="OutOfMemoryException">A precision past <see cref="MaxNetPrecision"/>: the result would be
+        ///     longer than any .NET string (CPython builds such strings when memory allows).</exception>
+        private static string FormatDigits(double abs, char format, int precision)
+        {
+            if (precision > MaxNetPrecision)
+                throw new OutOfMemoryException();
+            return abs.ToString(format == 'F' ? "F" + precision.ToString(CI) : "E" + precision.ToString(CI), CI);
+        }
+
+        /// <summary><c>%f</c> / <c>%F</c>: fixed notation with <paramref name="precision"/> digits after the point.</summary>
+        /// <param name="d">The value.</param>
+        /// <param name="upper"><c>%F</c> (upper-case <c>INF</c> / <c>NAN</c>).</param>
+        /// <param name="precision">The number of fraction digits.</param>
+        /// <param name="alt">The <c>#</c> flag: a point even with no fraction digits.</param>
+        /// <param name="left">The <c>-</c> flag.</param>
+        /// <param name="plus">The <c>+</c> flag.</param>
+        /// <param name="space">The <c> </c> flag.</param>
+        /// <param name="zero">The <c>0</c> flag.</param>
+        /// <param name="width">The minimum width.</param>
+        /// <returns>The text.</returns>
+        /// <exception cref="OutOfMemoryException">A result longer than .NET's longest string.</exception>
         private static string FormatFixed(double d, bool upper, int precision, bool alt,
             bool left, bool plus, bool space, bool zero, int width)
         {
@@ -591,12 +587,25 @@ namespace NumSharp.Backends.Printing
                 return NonFinite(d, upper, plus, space, width, left, zero);
 
             string sign = (d < 0 || IsNegZero(d)) ? "-" : Sign(false, plus, space);
-            string digits = Math.Abs(d).ToString("F" + precision, CI);
+            string digits = FormatDigits(Math.Abs(d), 'F', precision);
             // '#' forces a trailing decimal point even when no fractional digits are emitted ("%#.0f"%3=="3.").
             if (alt && digits.IndexOf('.') < 0) digits += ".";
             return Pad(digits, sign, width, left, zero);
         }
 
+        /// <summary><c>%e</c> / <c>%E</c>: one digit, the point, <paramref name="precision"/> digits, a two-digit-minimum
+        ///     exponent.</summary>
+        /// <param name="d">The value.</param>
+        /// <param name="upper"><c>%E</c>.</param>
+        /// <param name="precision">The number of fraction digits.</param>
+        /// <param name="alt">The <c>#</c> flag: a point even at precision 0.</param>
+        /// <param name="left">The <c>-</c> flag.</param>
+        /// <param name="plus">The <c>+</c> flag.</param>
+        /// <param name="space">The <c> </c> flag.</param>
+        /// <param name="zero">The <c>0</c> flag.</param>
+        /// <param name="width">The minimum width.</param>
+        /// <returns>The text.</returns>
+        /// <exception cref="OutOfMemoryException">A result longer than .NET's longest string.</exception>
         private static string FormatScientific(double d, bool upper, int precision, bool alt,
             bool left, bool plus, bool space, bool zero, int width)
         {
@@ -604,7 +613,7 @@ namespace NumSharp.Backends.Printing
                 return NonFinite(d, upper, plus, space, width, left, zero);
 
             string sign = (d < 0 || IsNegZero(d)) ? "-" : Sign(false, plus, space);
-            string body = Math.Abs(d).ToString("E" + precision, CI); // e.g. "1.500000E+000"
+            string body = FormatDigits(Math.Abs(d), 'E', precision); // e.g. "1.500000E+000"
             int ei = body.IndexOf('E');
             string mant = body.Substring(0, ei);
             // '#' keeps the mantissa's decimal point even at precision 0 ("%#.0e"%3=="3.e+00").
@@ -613,6 +622,19 @@ namespace NumSharp.Backends.Printing
             return Pad(digits, sign, width, left, zero);
         }
 
+        /// <summary><c>%g</c> / <c>%G</c>: <paramref name="precision"/> significant digits (6 by default, 0 means 1),
+        ///     fixed notation when the exponent is in <c>[-4, precision)</c>, trailing zeros stripped unless <c>#</c>.</summary>
+        /// <param name="d">The value.</param>
+        /// <param name="upper"><c>%G</c>.</param>
+        /// <param name="precision">The number of significant digits (-1 for the default).</param>
+        /// <param name="alt">The <c>#</c> flag: keep the trailing zeros and the point.</param>
+        /// <param name="left">The <c>-</c> flag.</param>
+        /// <param name="plus">The <c>+</c> flag.</param>
+        /// <param name="space">The <c> </c> flag.</param>
+        /// <param name="zero">The <c>0</c> flag.</param>
+        /// <param name="width">The minimum width.</param>
+        /// <returns>The text.</returns>
+        /// <exception cref="OutOfMemoryException">A result longer than .NET's longest string.</exception>
         private static string FormatGeneral(double d, bool upper, int precision, bool alt,
             bool left, bool plus, bool space, bool zero, int width)
         {
@@ -620,17 +642,21 @@ namespace NumSharp.Backends.Printing
                 return NonFinite(d, upper, plus, space, width, left, zero);
 
             int P = precision < 0 ? 6 : (precision == 0 ? 1 : precision);
+            // Without '#' the digits past a double's 767 significant ones are zeros that get stripped, and the exponent
+            // test below is the same for any P past 309: a smaller P prints the same text, within .NET's format limit.
+            if (!alt && P > MaxUsefulGeneralPrecision)
+                P = MaxUsefulGeneralPrecision;
             string sign = (d < 0 || IsNegZero(d)) ? "-" : Sign(false, plus, space);
             double abs = Math.Abs(d);
 
             // decimal exponent X of the value written in %e style with P-1 fraction digits.
-            string es = abs.ToString("E" + (P - 1), CI);
+            string es = FormatDigits(abs, 'E', P - 1);
             int X = int.Parse(es.Substring(es.IndexOf('E') + 1), CI);
 
             string digits;
             if (X >= -4 && X < P)
             {
-                digits = abs.ToString("F" + Math.Max(0, P - 1 - X), CI);
+                digits = FormatDigits(abs, 'F', Math.Max(0, P - 1 - X));
                 // '#' keeps trailing zeros AND forces a decimal point ("%#g"%100000=="100000.");
                 // the default form strips both.
                 if (!alt) digits = StripTrailingZeros(digits);
@@ -638,7 +664,7 @@ namespace NumSharp.Backends.Printing
             }
             else
             {
-                string body = abs.ToString("E" + (P - 1), CI);
+                string body = es;
                 int ei = body.IndexOf('E');
                 string mant = body.Substring(0, ei);
                 if (!alt) mant = StripTrailingZeros(mant);
@@ -647,18 +673,6 @@ namespace NumSharp.Backends.Printing
             }
 
             return Pad(digits, sign, width, left, zero);
-        }
-
-        private static string FormatChar(object value, NPTypeCode tc)
-        {
-            if (tc == NPTypeCode.Char) return ((char)value).ToString();
-            if (TryToBigInteger(value, tc, out BigInteger big) &&
-                big >= 0 && big <= 0x10FFFF)
-            {
-                int cp = (int)big;
-                return char.ConvertFromUtf32(cp);
-            }
-            return ArrayFormatter.ScalarStr(value, tc);
         }
 
         // ---- shared formatting primitives -------------------------------------------

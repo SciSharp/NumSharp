@@ -488,6 +488,43 @@ namespace NumSharp.Tests.Documentation
             t.ToString(true).Should().Be("array(['a!', 'a long string over fifteen!'], dtype=StringDType())");
         }
 
+        /// <summary>
+        ///     The "Text files" examples: loadtxt with a converter whose null is the NA object and a whole-line field;
+        ///     savetxt formatting the NA object itself (its <c>str()</c>, its own type's <c>%d</c>) and the Mismatch error;
+        ///     tofile's text mode and fromfile's refusal.
+        /// </summary>
+        [TestMethod]
+        public void StringDType_TextFiles()
+        {
+            var na = np.dtypes.StringDType(na_object: null);
+            var t = np.loadtxt(new[] { "a b", "- c" }, na, converters: (Func<string, object>)(s => s == "-" ? null : s));
+            t.item(1, 0).Should().BeNull();
+            np.loadtxt(new[] { "a  b" }, np.dtypes.StringDType(), delimiter: ",").item().Should().Be("a  b");
+
+            var w = new System.IO.StringWriter();
+            np.savetxt(w, np.array(new object[] { "x", null }, na), "%s");
+            w.ToString().Should().Be("x\nNone\n");
+            var nanNA = np.dtypes.StringDType(na_object: double.NaN);
+            ((Action)(() => np.savetxt(new System.IO.StringWriter(), np.array(new object[] { double.NaN }, nanNA), "%d")))
+                .Should().Throw<ValueError>().WithMessage("cannot convert float NaN to integer");
+            ((Action)(() => np.savetxt(new System.IO.StringWriter(), np.array(new[] { "x" }, na), "%d")))
+                .Should().Throw<TypeError>()
+                .WithMessage("Mismatch between array dtype ('StringDType(na_object=None)') and format specifier ('%d')");
+
+            string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ns_doc_tofile_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                t.tofile(path, sep: ",");
+                System.IO.File.ReadAllText(path).Should().Be("a,b,None,c");
+                ((Action)(() => np.fromfile(path, np.dtypes.StringDType(), sep: ",")))
+                    .Should().Throw<ValueError>().WithMessage("Cannot read into object array");
+            }
+            finally
+            {
+                System.IO.File.Delete(path);
+            }
+        }
+
         /// <summary>The "What StringDType refuses" table: the raw-buffer routes and computation.</summary>
         [TestMethod]
         public void StringDType_Refusals()

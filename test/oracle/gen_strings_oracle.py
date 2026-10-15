@@ -33,6 +33,7 @@ Each case records what NumPy 2.4.2 returns for one call:
 
 Deterministic: no randomness; regenerate with ``python test/oracle/gen_strings_oracle.py`` (needs numpy==2.4.2).
 """
+import codecs
 import json
 import sys
 import warnings
@@ -105,9 +106,9 @@ def enc(v):
 
 # LinAlgError (a ValueError subclass in NumPy and NumSharp alike) is recorded under its own name, so the replay checks
 # that NumSharp raises the linear-algebra class itself, not just any ValueError.
-KNOWN_ERRORS = ["UnicodeEncodeError", "UnicodeDecodeError", "DTypePromotionError", "AxisError", "LinAlgError",
+KNOWN_ERRORS = ["UnicodeEncodeError", "UnicodeDecodeError", "UnicodeError", "DTypePromotionError", "AxisError", "LinAlgError",
                 "ValueError", "TypeError", "IndexError", "OverflowError", "SystemError", "KeyError", "ZeroDivisionError",
-                "NotImplementedError", "RuntimeError", "MemoryError"]
+                "NotImplementedError", "RuntimeError", "MemoryError", "OSError", "LookupError"]
 
 
 def err_info(e):
@@ -6228,10 +6229,699 @@ def _gen_none_routes():
            values=enc(values), dtype=spec)
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Section tio: text I/O over StringDType (strings phase 1, P1.7c)
+# ----------------------------------------------------------------------------------------------------------------------
+#
+# np.loadtxt reads every field of a StringDType through npy_to_generic: PyArray_Pack of the field's str, so a field equal
+# to a string na_object is an NA element and a converter's value meets stringdtype_setitem (the NA object first, then
+# as_pystring's coerce rule; a 0-d array is CAST into the descriptor, so coerce does not apply to it). np.savetxt formats
+# a StringDType row as Python objects (getitem's str, or the na_object itself), ndarray.tofile refuses the binary mode and
+# formats each element as a Python object in text mode, and np.fromfile / np.fromstring / np.frombuffer refuse the dtype.
+# The section also replays the reader's options for numeric and fixed-width dtypes: np.loadtxt's tokenizer, sources and
+# converters are one port for every dtype.
+#
+# Sources (``params.source``): "lines" (a Python list of str), "reader" (io.StringIO, iterated line by line), "stream"
+# (io.BytesIO: bytes lines decoded one by one, Latin-1 by default) and "file" (a temporary file read by NAME: universal
+# newlines, decoded with the given encoding; always an explicit encoding here, because NumPy's default is the locale's,
+# which NumSharp pins to UTF-8). np.savetxt writes to "writer" (io.StringIO) or "stream" (io.BytesIO, Latin-1 by
+# default), never to a file name, whose newline translation is the host's. ndarray.tofile writes ASCII-only arrays:
+# NumPy 2.4.2 crashes (an access violation) on the error path of a non-ASCII StringDType element in text mode.
+
+# Texts for ndarray.tofile: ASCII only (see above), across the cell kinds (short, medium, long) and the reprs that differ
+# from the text (quotes, NUL, tab).
+T_ASCII_POOL = ["a", "m" * 16, "", "bc", "def", "q" * 20, "x y", "n" * 15, "p" * 255, "a\x00b", "r" * 256, "it's",
+                "s" * 300, "\t", "~", "zz"]
+
+# The converter menu: both sides map a name to the same computation (the C# twin is TioConverter in
+# StringOracleOps.TextIO.cs). Each name covers one kind of value a converter may return.
+_TIO_CONVERTERS = {
+    "upper": lambda s: s.upper(),
+    "len": lambda s: len(s),
+    "none": lambda s: None,
+    "nan": lambda s: float("nan"),
+    "na": lambda s: "NA",
+    "int": lambda s: int(s),
+    "float3": lambda s: float(s) / 3,
+    "bool": lambda s: s == "a",
+    "complex": lambda s: complex(1, 2),
+    "utf8": lambda s: s.encode("utf-8"),
+    "badbytes": lambda s: b"\x80",
+    "list": lambda s: [s, s],
+    "tuple": lambda s: (s,),
+    "dict": lambda s: {s: 1},
+    "arr0": lambda s: np.array(5),
+    "arr0f": lambda s: np.array(1.5),
+    "arr1": lambda s: np.array([5, 6]),
+    "raise": lambda s: 1 // 0,
+    "surrogate": lambda s: "\ud800",
+    "same": lambda s: s,
+    "half": lambda s: np.float16(0.5),
+}
+
+
+def _encodes(text, name):
+    """Whether ``text`` encodes strictly under the codec ``name``.
+
+    :param text: the text.
+    :param name: a codec name.
+    :returns: False for an unencodable text, an unknown name or a codec that raises on every call.
+    """
+    try:
+        text.encode(name)
+        return True
+    except (UnicodeError, LookupError):
+        return False
+
+
+def _tio_conv(conv):
+    """The NumPy ``converters`` argument of an encoded request.
+
+    :param conv: None, a converter name, ``{"<col>": name}`` (a dict; a name of ``None`` is a non-callable value), or
+        ``"notcallable"`` (``converters=5``: neither a dict nor a callable).
+    :returns: what ``np.loadtxt``'s ``converters`` receives.
+    """
+    if conv is None:
+        return None
+    if conv == "notcallable":
+        return 5
+    if isinstance(conv, str):
+        return _TIO_CONVERTERS[conv]
+    return {int(k): (None if v is None else _TIO_CONVERTERS[v]) for k, v in conv.items()}
+
+
+def _tio_source(source, data, tmpdir):
+    """The NumPy input of one loadtxt case.
+
+    :param source: "lines", "reader", "stream" or "file".
+    :param data: a list of str (lines), a str (reader) or bytes (stream / file).
+    :param tmpdir: the directory of the file sources.
+    :returns: the object ``np.loadtxt`` reads.
+    """
+    import io
+    import os
+    if source == "lines":
+        return list(data)
+    if source == "reader":
+        return io.StringIO(data)
+    if source == "stream":
+        return io.BytesIO(data)
+    path = os.path.join(tmpdir, f"tio_{len(CASES)}.txt")
+    with open(path, "wb") as f:
+        f.write(data)
+    return path
+
+
+class _TioRepeat:
+    """A stream / file source of ``head + unit * count + tail`` bytes, recorded as that recipe instead of the bytes (the
+    large files that put a decode error into a later TextIOWrapper chunk would otherwise be tens of kilobytes each).
+    """
+
+    def __init__(self, unit, count, tail, head=b""):
+        """Records the recipe.
+
+        :param unit: the repeated bytes.
+        :param count: how many times.
+        :param tail: the bytes after them.
+        :param head: the bytes before them.
+        """
+        self.unit, self.count, self.tail, self.head = unit, count, tail, head
+
+    def bytes(self):
+        """The source's bytes.
+
+        :returns: ``head + unit * count + tail``.
+        """
+        return self.head + self.unit * self.count + self.tail
+
+    def enc(self):
+        """The recipe as JSON.
+
+        :returns: ``{"repeat": [unit hex, count, tail hex]}``, with the head's hex as a fourth item when there is one.
+        """
+        recipe = [self.unit.hex(), self.count, self.tail.hex()]
+        if self.head:
+            recipe.append(self.head.hex())
+        return {"repeat": recipe}
+
+
+def _tio_load(source, data, dtype, tmpdir, *, result="array", **kw):
+    """Records one ``np.loadtxt`` case (op ``t_loadtxt``).
+
+    :param source: the source kind (``_tio_source``).
+    :param data: the source's data.
+    :param dtype: a dtype string or a ``TSpec``.
+    :param tmpdir: the directory of the file sources.
+    :param result: "array", or "cells" for a StringDType result's raw cells (their arena offsets show the order NumPy
+        packed the strings in).
+    :param kw: loadtxt's other arguments: comments / delimiter / quotechar (a str, a list of str or None), skiprows,
+        usecols (an int or a list), unpack, ndmin, max_rows, encoding, and conv (a ``_tio_conv`` request).
+    """
+    if isinstance(data, _TioRepeat):
+        encoded, data = data.enc(), data.bytes()
+    else:
+        encoded = enc(list(data)) if source == "lines" else enc(data)
+    params = {"source": source, "data": encoded, "dtype": senc(dtype), "result": result}
+    call_kw = {}
+    for name in ("comments", "delimiter", "quotechar"):
+        if name in kw:
+            params[name] = enc(kw[name])
+            call_kw[name] = kw[name]
+    for name in ("skiprows", "usecols", "unpack", "ndmin", "max_rows", "encoding"):
+        if name in kw:
+            params[name] = kw[name]
+            call_kw[name] = kw[name]
+    if "conv" in kw:
+        params["conv"] = kw["conv"]
+        call_kw["converters"] = _tio_conv(kw["conv"])
+
+    def call():
+        with warnings.catch_warnings():
+            # loadtxt's "input contained no data" / empty-line warnings: NumSharp has no warnings channel.
+            warnings.simplefilter("ignore")
+            arr = np.loadtxt(_tio_source(source, data, tmpdir), dtype=sbuild(dtype), **call_kw)
+        return _TCells(arr.tobytes()) if result == "cells" else arr
+
+    add("tio", "t_loadtxt", params=params, call=call)
+
+
+def _tio_write(arr_pair, *, target, written=False, tmpdir=None, **kw):
+    """Records one ``np.savetxt`` case: the text (writer) or the bytes (stream, file) written, or NumPy's error.
+
+    :param arr_pair: the (base, view) operand.
+    :param target: "writer" (io.StringIO), "stream" (io.BytesIO) or "file" (a fresh file name: NumPy's TextIOWrapper,
+        whose newline translation makes a case platform-dependent unless nothing written holds a '\\n').
+    :param written: True for op ``t_savetxt_written``: the output is recorded even when NumPy raised (what reached the
+        target before the error); False for ``t_savetxt``: the output, or the error.
+    :param tmpdir: the directory of a file target.
+    :param kw: savetxt's other arguments (fmt as a str or a list of str, delimiter, newline, header, footer, comments,
+        encoding).
+    """
+    import io
+    import os
+    params = {"target": target}
+    for name in ("fmt", "delimiter", "newline", "header", "footer", "comments"):
+        if name in kw:
+            params[name] = enc(kw[name])
+    if "encoding" in kw:
+        params["encoding"] = kw["encoding"]
+
+    def call(a):
+        if target == "file":
+            path = os.path.join(tmpdir, f"tio_save_{len(CASES)}.txt")
+            try:
+                np.savetxt(path, a, **kw)
+            except Exception:  # noqa: BLE001 -- the _written form records the file NumPy left behind
+                if not written:
+                    raise
+            with open(path, "rb") as f:
+                return f.read()
+        fh = io.StringIO() if target == "writer" else io.BytesIO()
+        try:
+            np.savetxt(fh, a, **kw)
+        except Exception:  # noqa: BLE001 -- the _written form records what was written before the error
+            if not written:
+                raise
+        return fh.getvalue()
+
+    add("tio", "t_savetxt_written" if written else "t_savetxt", params=params, operands=[arr_pair], call=call)
+
+
+def _tio_tofile(arr_pair, tmpdir, *, sep, fmt, written=False):
+    """Records one ``ndarray.tofile`` case: the file's bytes, or NumPy's error.
+
+    :param arr_pair: the (base, view) operand.
+    :param tmpdir: the output directory (a fresh file per case).
+    :param sep: the separator ("" for the binary mode).
+    :param fmt: the format.
+    :param written: True for op ``t_tofile_written``: the file's bytes are recorded even when NumPy raised (NumPy
+        creates or truncates the file before it writes).
+    """
+    import os
+
+    def call(a):
+        path = os.path.join(tmpdir, f"tio_out_{len(CASES)}.bin")
+        try:
+            a.tofile(path, sep=sep, format=fmt)
+        except Exception:  # noqa: BLE001 -- the _written form records the file NumPy left behind
+            if not written:
+                raise
+        with open(path, "rb") as f:
+            return f.read()
+
+    add("tio", "t_tofile_written" if written else "t_tofile", params={"sep": enc(sep), "format": enc(fmt)},
+        operands=[arr_pair], call=call)
+
+
+def _tio_fromfile(data, spec, tmpdir, *, sep, count, offset):
+    """Records one ``np.fromfile`` case over a temporary file holding ``data`` (op ``t_fromfile``).
+
+    :param data: the file's bytes.
+    :param spec: the descriptor request.
+    :param tmpdir: the directory.
+    :param sep: the separator ("" for binary).
+    :param count: the item count.
+    :param offset: the byte offset.
+    """
+    import os
+
+    def call():
+        path = os.path.join(tmpdir, f"tio_in_{len(CASES)}.bin")
+        with open(path, "wb") as f:
+            f.write(data)
+        return np.fromfile(path, dtype=sbuild(spec), count=count, sep=sep, offset=offset)
+
+    add("tio", "t_fromfile", params={"data": enc(data), "dtype": senc(spec), "sep": enc(sep), "count": count,
+                                     "offset": offset}, call=call)
+
+
+def gen_tio():
+    """Section tio (strings phase 1, P1.7c): text I/O over NEP 55 StringDType.
+
+    * ``np.loadtxt`` with every option — the four sources, delimiters, comments (one, several, multi-character),
+      quoting (fields across lines included), skiprows, usecols, unpack, ndmin, max_rows, encodings (the stream default,
+      'bytes', undecodable bytes, an unknown codec) and converters of every value kind (the NA objects, coerce=False,
+      bytes, 0-d and N-d arrays, lists, tuples, a raising converter) under every descriptor — its result's layout and
+      its cells (NumPy's packing order), and its errors in NumPy's order and texts;
+    * the same reader for numeric and fixed-width dtypes;
+    * ``np.savetxt`` of StringDType arrays: the NA element, Python objects' %-conversions, the Mismatch error, the
+      Latin-1 default of a byte stream, an unknown codec and what reached the target before an error;
+    * ``ndarray.tofile``: the binary refusal and the text mode's Python objects;
+    * the refusals of ``np.fromfile`` / ``np.fromstring`` / ``np.frombuffer``;
+    * loadtxt's comments as Python objects (non-iterables, None and non-str elements, ``delimiter in comments``);
+    * the NA element as every kind of Python object (ints, a big int, floats, a complex, np.float16, None, a str) under
+      every %-conversion, through savetxt and tofile;
+    * the % formats of savetxt (NumPy scalars) and tofile (getitem's Python objects) over every NumPy dtype: CPython's
+      parse and its errors, '*' arguments, NumPy scalar reprs, and tofile's checks of sep and format;
+    * Python's codecs: names resolved as ``codecs.lookup`` resolves them, every codec family over a file and a byte
+      stream, decode errors in later TextIOWrapper chunks, and savetxt to a byte stream and to a file name (a file
+      target writes no '\\n', so the corpus does not depend on the platform's line separator).
+
+    Every case is strict.
+    """
+    import tempfile
+    tmpdir = tempfile.mkdtemp(prefix="numsharp_tio_")
+    specs = [TD, TDN, TDNAN, TDS, TDC, TDNC]
+    long_a, long_b = "a" * 20, "b" * 300
+    datasets = {
+        "basic": ["ab cd", "ef gh"],
+        "na": ["ab NA", "NA cd", "None nan"],
+        "long": [f"{long_a} x", f"y {long_b}", "z w"],
+        "uni": ["é ü", "中 文", "😀 x"],
+        "single": ["a", "bb", "ccc"],
+        "one": ["only"],
+        "blank": ["a b", "", "   ", "c d"],
+        "comment": ["a b # c", "# full line", "c d"],
+        "ws": [" a  b ", "\tc d\t"],
+        "crlf": ["a b\r\n", "c d\r\n"],
+        "empty": [],
+        "allcomment": ["# x", "# y"],
+    }
+    # ---- every descriptor over the datasets, from each source ----------------------------------------------------
+    for spec in specs:
+        for lines in datasets.values():
+            _tio_load("lines", lines, spec, tmpdir)
+            _tio_load("reader", "\n".join(lines), spec, tmpdir)
+            if all(s.isascii() for s in lines):
+                _tio_load("stream", "\n".join(lines).encode("ascii"), spec, tmpdir)
+            _tio_load("file", "\n".join(lines).encode("utf-8"), spec, tmpdir, encoding="utf-8")
+            if spec in (TD, TDS):
+                _tio_load("lines", lines, spec, tmpdir, result="cells")
+    # ---- the result's cells: short / medium / long strings, NA cells, row-major packing under usecols --------------
+    cell_sets = [["ab " + "m" * 16, "x" * 15 + " y", "z" * 256 + " q"], ["NA a", "b NA"], ["", "a"],
+                 ["é" * 8 + " ü", "中" * 6 + " 文"], ['"" a', 'b ""']]
+    for spec in (TD, TDN, TDS):
+        for lines in cell_sets:
+            for usecols in (None, [1, 0], [-1]):
+                kw = {} if usecols is None else {"usecols": usecols}
+                _tio_load("lines", lines, spec, tmpdir, result="cells", quotechar='"', **kw)
+    # ---- options ---------------------------------------------------------------------------------------------------
+    for spec in (TD, TDS):
+        csv = ["a,b,c", "d,,f", ",h,"]
+        for delimiter in (",", ";", " ", None):
+            _tio_load("lines", csv, spec, tmpdir, delimiter=delimiter)
+        for usecols in ([0], [2, 0], [-1], [0, 0], [5], 1, [], [-4]):
+            _tio_load("lines", csv, spec, tmpdir, delimiter=",", usecols=usecols)
+        for skiprows in (0, 1, 2, 5):
+            for max_rows in (None, 0, 1, 2):
+                _tio_load("lines", csv, spec, tmpdir, delimiter=",", skiprows=skiprows, max_rows=max_rows)
+        _tio_load("lines", ["a,b", "", "c,d", "e,f"], spec, tmpdir, delimiter=",", max_rows=2)
+        for unpack in (False, True):
+            for ndmin in (0, 1, 2):
+                for lines in (csv, ["a,b"], ["a"], ["a", "b"], []):
+                    _tio_load("lines", lines, spec, tmpdir, delimiter=",", unpack=unpack, ndmin=ndmin)
+        for comments in ("#", "%", None, ["#", "%"], "//", [], ["//", "#"], ["#"]):
+            lines = ["a b # c", "d e % f", "// g h", "i j"]
+            _tio_load("lines", lines, spec, tmpdir, comments=comments)
+            _tio_load("reader", "\n".join(lines), spec, tmpdir, comments=comments)
+            _tio_load("file", "\n".join(lines).encode("utf-8"), spec, tmpdir, comments=comments, encoding="utf-8")
+        quoted = ['"a b" c', '"x""y" z', '"" q', "'s t' u"]
+        for quotechar in ('"', "'", None):
+            _tio_load("lines", quoted, spec, tmpdir, quotechar=quotechar)
+            _tio_load("lines", ['"a,b",c', 'd,"e"'], spec, tmpdir, quotechar=quotechar, delimiter=",")
+        # A quoted field spans lines (list elements, a text stream's lines, a file's universal newlines).
+        _tio_load("lines", ['"a', 'b" c'], spec, tmpdir, quotechar='"')
+        _tio_load("reader", '"a\nb" c\nd e', spec, tmpdir, quotechar='"')
+        _tio_load("file", b'"a\r\nb" c\r\nd e\r\n', spec, tmpdir, quotechar='"', encoding="utf-8")
+        _tio_load("file", b"a b\rc d\re f", spec, tmpdir, encoding="utf-8")
+        _tio_load("stream", b'"a\nb" c\nd e\n', spec, tmpdir, quotechar='"')
+        # Whitespace before a quote: data under a delimiter, skipped in whitespace mode.
+        _tio_load("lines", [' "a b",c'], spec, tmpdir, quotechar='"', delimiter=",")
+        _tio_load("lines", ['  "a b" c '], spec, tmpdir, quotechar='"')
+        _tio_load("lines", ['"a" b '], spec, tmpdir, quotechar='"')
+        _tio_load("lines", ['"a"b c'], spec, tmpdir, quotechar='"')
+        _tio_load("lines", ['a"b" c'], spec, tmpdir, quotechar='"')
+    # ---- encodings ---------------------------------------------------------------------------------------------------
+    for spec in (TD, TDN):
+        data = "é x\nü 中\n".encode("utf-8")
+        for encoding in (None, "utf-8", "latin-1", "ascii", "bytes"):
+            _tio_load("stream", data, spec, tmpdir, **({} if encoding is None else {"encoding": encoding}))
+            # A file NAME with 'bytes' is read with the locale's encoding (host-dependent): not recorded.
+            if encoding not in (None, "bytes"):
+                _tio_load("file", data, spec, tmpdir, encoding=encoding)
+        _tio_load("stream", "é x".encode("latin-1"), spec, tmpdir, encoding="latin-1")
+        _tio_load("stream", b"\xef\xbb\xbfa b", spec, tmpdir, encoding="utf-8")
+        _tio_load("file", b"\xef\xbb\xbfa b", spec, tmpdir, encoding="utf-8")
+        _tio_load("stream", b"a b\r\nc d\r\n", spec, tmpdir)
+        _tio_load("stream", b"a\xff b\n", spec, tmpdir, encoding="utf-8")
+        _tio_load("file", b"ok\na\xff b\n", spec, tmpdir, encoding="utf-8")
+        _tio_load("stream", "a b\nc 中\n".encode("utf-8"), spec, tmpdir, encoding="ascii")
+        # An unknown codec: a byte stream meets it at its first line (none: no error), a file name at the open.
+        _tio_load("stream", b"a b\n", spec, tmpdir, encoding="nosuchcodec")
+        _tio_load("stream", b"", spec, tmpdir, encoding="nosuchcodec")
+        _tio_load("file", b"a b\n", spec, tmpdir, encoding="nosuchcodec")
+        _tio_load("lines", ["a b"], spec, tmpdir, encoding="nosuchcodec")
+        _tio_load("reader", "a b\n", spec, tmpdir, encoding="nosuchcodec")
+    # ---- converters of every value kind under every descriptor -----------------------------------------------------
+    for spec in specs:
+        for name in _TIO_CONVERTERS:
+            data = ["1 2", "3 4"] if name in ("int", "float3") else ["a 1", "b NA"]
+            _tio_load("lines", data, spec, tmpdir, conv=name)
+        for conv in ({"0": "upper"}, {"-1": "len"}, {"1": "none", "0": "na"}, {"5": "upper"}, {"-3": "upper"},
+                     {"0": None}, "notcallable", {"0": "upper", "-2": "len"}):
+            _tio_load("lines", ["a b", "c d"], spec, tmpdir, conv=conv)
+            _tio_load("lines", ["a b", "c d"], spec, tmpdir, conv=conv, usecols=[1])
+            _tio_load("lines", ["a b", "c d"], spec, tmpdir, conv=conv, usecols=[-1, 0])
+        # Converters are created at the first data row: an empty input never meets a bad one.
+        _tio_load("lines", [], spec, tmpdir, conv={"5": "upper"})
+        _tio_load("lines", [], spec, tmpdir, conv="notcallable")
+        # encoding='bytes': a converter receives the field's Latin-1 bytes in NumPy (a C# converter the same characters),
+        # so only converters that do not return their input are recorded; a field past U+00FF fails the encode.
+        for name in ("len", "none", "na"):
+            _tio_load("lines", ["a b"], spec, tmpdir, conv=name, encoding="bytes")
+        _tio_load("lines", ["中 b"], spec, tmpdir, conv="len", encoding="bytes")
+        _tio_load("lines", ["中 b"], spec, tmpdir, encoding="bytes")
+    # ---- errors ----------------------------------------------------------------------------------------------------
+    for spec in (TD, TDC):
+        _tio_load("lines", ["a b", "c"], spec, tmpdir)
+        _tio_load("lines", ["a b", "c d e"], spec, tmpdir)
+        _tio_load("lines", ["a b", "c"], spec, tmpdir, usecols=[1])
+        _tio_load("lines", ["a\nb c"], spec, tmpdir)
+        _tio_load("lines", ["a\rb"], spec, tmpdir)
+        _tio_load("reader", "a b\rc d\n", spec, tmpdir)
+        _tio_load("lines", ["\ud800 x"], spec, tmpdir)
+        _tio_load("lines", ["a b"], spec, tmpdir, ndmin=3)
+        _tio_load("lines", ["a b"], spec, tmpdir, skiprows=-1)
+        _tio_load("lines", ["a b"], spec, tmpdir, max_rows=-1)
+        _tio_load("lines", ["a b"], spec, tmpdir, comments="")
+        _tio_load("lines", ["a b"], spec, tmpdir, comments=["#", ""])
+        _tio_load("lines", ["a b"], spec, tmpdir, comments=["#", ","], delimiter=",")
+        _tio_load("lines", ["a b"], spec, tmpdir, comments="//", quotechar='"')
+        for delimiter, quotechar, comments in ((", ", None, "#"), ("\n", None, "#"), (",", ",", "#"), (",", None, ","),
+                                               (None, " ", "#"), (None, None, " "), (",", "\r", "#"), ("ab", None, "#"),
+                                               (",", '"', '"'), (None, "\t", "#"), ("", None, "#"), (None, "", "#")):
+            _tio_load("lines", ["a b"], spec, tmpdir, delimiter=delimiter, quotechar=quotechar, comments=comments)
+    # ---- the same reader for the numeric and fixed-width dtypes -----------------------------------------------------
+    for dt in ("float64", "int32", "<U3", "|S2", "<U", "|S", "bool", "complex128"):
+        for lines in (["1 2", "3 4"], ["1,2,", ",3,4"], ["1 2 # x", "", "3 4"], ['"1" 2'], ["é 1"], ["中 1"],
+                      ["abc defg", "h i"], []):
+            for kw in ({}, {"delimiter": ","}, {"quotechar": '"'}, {"usecols": [1]}, {"ndmin": 2}, {"unpack": True}):
+                _tio_load("lines", lines, dt, tmpdir, **kw)
+        _tio_load("stream", "1 2\né 3\n".encode("latin-1"), dt, tmpdir)
+        _tio_load("file", b"1 2\r\n3 4\r\n", dt, tmpdir, encoding="utf-8")
+        for name in ("len", "none", "raise", "same"):
+            _tio_load("lines", ["1 2"], dt, tmpdir, conv=name)
+    # ---- np.savetxt of StringDType arrays ------------------------------------------------------------------------------
+    for spec in (TD, TDN, TDNAN, TDS, TDC):
+        for lay in ("c1", "c2", "f2", "r1", "e1", "z0"):
+            op = t_operand(spec, lay)
+            for fmt in ("%s", "%r", "%a", "%5s", "%-5s|", "%.1s", "%c", "%d", "%.18e", "%x"):
+                _tio_write(op, target="writer", fmt=fmt)
+            _tio_write(op, target="writer")
+            _tio_write(op, target="writer", fmt="%s", delimiter=";", newline="|", header="h\nh2", footer="f",
+                       comments="## ")
+            _tio_write(op, target="writer", fmt="%s", encoding="nosuchcodec")
+            _tio_write(op, target="stream", fmt="%s")
+            _tio_write(op, target="stream", fmt="%s", encoding="utf-8")
+            ncol = op[1].shape[1] if op[1].ndim == 2 else 1
+            _tio_write(op, target="writer", fmt=["%s", "%r", "%3s", "%-2s"][:ncol])
+            _tio_write(op, target="writer", fmt=["%s", "%r", "%3s", "%-2s", "%s"][:ncol + 1])
+            _tio_write(op, target="writer", fmt="|".join(["%s", "%r", "%3s", "%-2s"][:ncol]))
+            _tio_write(op, target="writer", fmt="|".join(["%s", "%r", "%3s", "%-2s", "%s"][:ncol + 1]))
+    for spec in (TD, TDN):
+        base = np.array(["ab", "é", "中", "x"], dtype=spec.build())
+        pair = (base, base)
+        for encoding in (None, "utf-8", "latin-1", "ascii", "bytes", "nosuchcodec"):
+            kw = {} if encoding is None else {"encoding": encoding}
+            _tio_write(pair, target="stream", fmt="%s", header="H", **kw)
+            _tio_write(pair, target="stream", written=True, fmt="%s", header="H", **kw)
+        _tio_write(pair, target="stream", fmt="%s", header="h€")
+        _tio_write(pair, target="stream", written=True, fmt="%s", header="h€")
+        _tio_write(pair, target="stream", written=True, fmt="%s€")
+        _tio_write(pair, target="writer", written=True, fmt="%d", header="H", footer="F")
+        # An empty array writes no row: an unknown codec is never met without a header.
+        e = np.array([], dtype=spec.build())
+        _tio_write((e, e), target="stream", fmt="%s", encoding="nosuchcodec")
+        _tio_write(t_plain(np.zeros((2, 0), dtype=spec.build())), target="writer")
+    na_arr = np.array(["ab", None, "c", None], dtype=TDN.build())
+    _tio_write((na_arr, na_arr), target="writer", written=True, fmt="%d", header="H")
+    _tio_write((na_arr, na_arr), target="writer", fmt="%s")
+    nan_arr = np.array(["1.5", float("nan"), "2"], dtype=TDNAN.build())
+    _tio_write((nan_arr, nan_arr), target="writer", written=True, fmt="%d")
+    # ---- ndarray.tofile --------------------------------------------------------------------------------------------
+    for spec in (TD, TDN, TDNAN, TDS):
+        for lay in ("c1", "c2", "f2", "r1", "e1", "z0"):
+            op = t_operand(spec, lay, pool=T_ASCII_POOL)
+            for sep, fmt in (("", "%s"), (",", "%s"), (" ", "%r"), ("\n", "%5s"), (",", ""), (";", "%-3s|"),
+                             (",", "%d"), (",", "%c")):
+                _tio_tofile(op, tmpdir, sep=sep, fmt=fmt)
+                _tio_tofile(op, tmpdir, sep=sep, fmt=fmt, written=True)
+    # ---- the refusals of the readers ------------------------------------------------------------------------------------
+    for spec in (TD, TDN, TDC):
+        for sep, count, offset in (("", -1, 0), (" ", -1, 0), (" ", 0, 0), (" ", -1, 1), ("", -1, 1), (",", 2, 0)):
+            _tio_fromfile(b"a b c", spec, tmpdir, sep=sep, count=count, offset=offset)
+        for text, sep in (("a b", " "), ("a b", None), ("", " "), ("", None), ("a,b", ",")):
+            add("tio", "t_fromstring", params={"text": enc(text), "dtype": senc(spec), "sep": enc(sep)},
+                call=lambda t=text, s=sep, d=spec: np.fromstring(t, dtype=d.build(), sep=s) if s is not None
+                else np.fromstring(t, dtype=d.build()))
+        # tcreate's t_frombuffer op (its params: the buffer as hex, the descriptor request), over more buffers and
+        # descriptors.
+        for data in (b"", b"a" * 16, b"a" * 32):
+            add("tio", "t_frombuffer", params={"buffer": data.hex(), "dtype": senc(spec)},
+                call=lambda b=data, d=spec: np.frombuffer(b, dtype=d.build()))
+    # ---- loadtxt's comments as Python objects -------------------------------------------------------------------------
+    # loadtxt's comprehension over the argument (a non-iterable raises "'int' object is not iterable" before _read's
+    # checks), _read's checks over the tuple ("" in comment, the one-character fast path, `delimiter in comments` with
+    # Python's `in`: None is in it when an element is None), and _preprocess_comments' `line.split(c, 1)[0]` per line: a
+    # None element keeps the first whitespace-separated word (IndexError on an empty or blank line, skipped lines
+    # included), any other non-str raises str.split's TypeError at the first line read (never for an input without lines).
+    for comments in (5, 2.5, True, [5], [5, "#"], ["#", 5], [2.5], [True], ["#", None], [None], [None, "%"],
+                     [None, None], [b"#"], [b"#", "%"], b"#", b"%%", ("#",), ("#", "%"), [], ["#", "\n"], ["##"],
+                     ["\n"], "\n"):
+        for lines in (["a b # c", "d e"], ["  x y", ""], ["a,b # c"], ["1 2 % x", "3 4"], []):
+            for spec in (TD, "float64"):
+                _tio_load("lines", lines, spec, tmpdir, comments=comments)
+    for kw in ({"delimiter": ","}, {"quotechar": '"'}, {"delimiter": "ab"}, {"max_rows": 1}, {"skiprows": 1},
+               {"ndmin": 3}, {"usecols": [0]}, {"delimiter": ",", "skiprows": 1}):
+        for comments in ([None], [None, 5], [5, ","], [5], 5, [None, ","]):
+            _tio_load("lines", ["a b,c d", " x y,z", "u v w\x1cq,r"], TD, tmpdir, comments=comments, **kw)
+            _tio_load("lines", ["", "a b,c d"], TD, tmpdir, comments=comments, **kw)
+    for source, data in (("reader", "a b\n\n c d\n"), ("reader", "a b\nc d"), ("stream", b"a b\n\n c d\n"),
+                         ("stream", b"a b\nc d"), ("file", b"a b\r\n\r\n c d\r\n"), ("file", b"a b\nc d"),
+                         ("file", b"a b\r c d\r")):
+        for comments in ([None], [None, "%"], ["%", "#"], [5], ["b", None]):
+            _tio_load(source, data, TD, tmpdir, comments=comments)
+            _tio_load(source, data, TD, tmpdir, comments=comments, delimiter=",")
+    for comments in (["#", "%"], "#", [None], ["#"]):
+        _tio_load("lines", ["a", None], TD, tmpdir, comments=comments)
+    # ---- the NA element as a Python object under every conversion ----------------------------------------------------
+    # savetxt's `fmt % tuple(row)` and tofile's `format % obj` meet getitem's na_object itself: an int (a bool, a big
+    # int, a code point for %c), a float (signed zero, NaN, infinity, past float32), a complex, an np.float16, None or a
+    # str, each through every conversion with flags, width and precision. savetxt wraps a TypeError into its "Mismatch"
+    # text and lets ValueError / OverflowError through; tofile raises them all as they are. NumPy's tofile writes its
+    # text with PyUnicode_AsASCIIString and segfaults on a NULL result, so no tofile case formats a non-ASCII %c.
+    na_objects = (7, -3, True, False, 2 ** 70, 2 ** 1030, 65, 0x10FFFF, 0x110000, -1, 0xD800, 2.5, -0.0, 1e300,
+                  float("inf"), float("-inf"), float("nan"), complex(1, 2), np.float16(1.5), None, "NA")
+    na_fmts = ("%d", "%i", "%u", "%x", "%X", "%#o", "%c", "%e", "%E", "%f", "%F", "%g", "%G", "%s", "%r", "%a",
+               "%+08.2f", "%-6d|", "%.3x", "%5c", "% g", "%#x", "%.0e", "%10.4G")
+    for na in na_objects:
+        arr = np.array([na, na], dtype=TSpec(na=na).build())
+        for fmt in na_fmts:
+            _tio_write((arr, arr), target="writer", fmt=fmt)
+        _tio_write((arr, arr), target="stream", fmt="%s")
+        _tio_write((arr, arr), target="writer", fmt=["%s"])
+        non_ascii_char = isinstance(na, int) and not isinstance(na, bool) and 128 <= na < 0x110000
+        for fmt in ("%d", "%x", "%c", "%e", "%g", "%s", "%r", "%a", "%5.1f", ""):
+            if non_ascii_char and fmt == "%c":
+                continue
+            _tio_tofile((arr, arr), tmpdir, sep=",", fmt=fmt)
+    # ---- the % formats of savetxt and tofile over every dtype ----------------------------------------------------------
+    # CPython 3.12's PyUnicode_Format, as NumPy calls it: np.savetxt formats tuple(row) of NUMPY SCALARS (a StringDType
+    # row: Python objects; a complex row: np.float64 pairs), ndarray.tofile formats (item,) of the PYTHON OBJECT getitem
+    # returns (a float for every float dtype, an int, a bool, a complex, a str / bytes). The matrix covers the parse —
+    # flags, '*' widths and precisions (a Python int only: a NumPy scalar is "* wants int"), one length modifier, '%%',
+    # '%(key)' without a mapping, an incomplete or unsupported spec and its code-point index, the argument taken before
+    # the conversion is checked, a leftover argument — and every conversion against every element type: a NumPy scalar's
+    # repr names its type, a TypeError quotes it, a NumPy bool is not an int where a Python bool is. tofile's sep and
+    # format pass CPython's "s" converter (no NUL, no lone surrogate) before the file is opened. NumPy 2.4.2's tofile
+    # crashes on non-ASCII text (it does not check PyUnicode_AsASCIIString's NULL), so no tofile case reaches one.
+    pct_fmts = ["%y", "%5y", "%", "a%", "%5", "%.", "%-", "%(x)s", "%*d", "%.*f", "%ld", "%lld", "%hd", "%Ld", "%5%",
+                "%-5%", "%é", "%5.2l", "%#", "%l", "%x", "%c", "%d", "%s", "%r", "%a", "%e", "%5.1f", "%%", "%o", "%X",
+                "%#x", "%+d", "%-6.2s|", "%.*s", "%*s", "%10.3e", "%#o", "% d", "%+.2g", "%G", "%i", "%u", "%.0f",
+                "%#.3x", "%05.1f", "%-8r|", "%.3r", "%c%c", "%d %d", "%%%d", "%\U0001F600", "\U0001F600%y", "%\x00",
+                "% ", "%(", "%**d", "%.5.3f", "%-*d", "%0*d", "%*-d", "%9223372036854775808d", "%.2147483648d",
+                "%.2147483647d", "%.2147483647e", "%.2147483647g", "%.2147483647s", "%.300f", "%.40g", "%#.20g",
+                "%\x1f", "%\x1e", "%~", "%\x7f"]
+    pct_arrays = [
+        np.array([7, -2, 0]), np.array([65, 200], dtype=np.uint8), np.array([2 ** 64 - 1, 2 ** 63 + 1025], dtype=np.uint64),
+        np.array([-128], dtype=np.int8), np.array([1.5, np.nan, -np.inf, -0.0]), np.array([0.1], dtype=np.float32),
+        np.array([1.5, 65504], dtype=np.float16), np.array([True, False]), np.array([1 + 2j, complex(np.nan, 0)]),
+        np.array(["ab", "é"]), np.array([b"ab", b"\x80"]), np.array(["ab", "é"], dtype=TD.build()),
+        np.array([None, "ab"], dtype=TDN.build()), np.array([7, "ab"], dtype=TSpec(na=7).build()),
+        np.array([[3, 7]]), np.array([[1.5, 2.5]]), np.array([[1, 2, 3]]), np.array([[3, 7]], dtype=np.uint16),
+        np.array([[4, "ab"]], dtype=TSpec(na=4).build()), np.array([["5", "ab"]]),
+        np.array([[-2 ** 63, -2 ** 63]], dtype=TSpec(na=-2 ** 63).build()), np.array([[-5, -5]], dtype=TSpec(na=-5).build()),
+    ]
+
+    def tofile_crashes(a, fmt):
+        """Whether NumPy's tofile meets a non-ASCII element text (it crashes there) before it raises or finishes.
+
+        :param a: the array.
+        :param fmt: the format.
+        :returns: True when an element's ``fmt % (item,)`` succeeds with non-ASCII text before any element raises.
+        """
+        for i in range(a.size):
+            item = a.reshape(-1)[i].item() if a.dtype.kind != "T" else a.reshape(-1)[i]
+            try:
+                text = fmt % (item,) if fmt else str(item)
+            except Exception:  # noqa: BLE001 -- NumPy raises at this element: no crash
+                return False
+            if not text.isascii():
+                return True
+        return False
+
+    for a in pct_arrays:
+        pair = t_plain(a) if a.dtype.kind == "T" else plain(a)
+        for fmt in pct_fmts:
+            _tio_write(pair, target="writer", fmt=fmt)
+            if a.ndim == 1 and not tofile_crashes(a, fmt):
+                _tio_tofile(pair, tmpdir, sep=",", fmt=fmt)
+    for a in pct_arrays:
+        if a.ndim == 2:
+            pair = t_plain(a) if a.dtype.kind == "T" else plain(a)
+            for fmt in (["%*s", ""], ["%*d", ""], ["%-*d|", ""], ["%s", "%*d"], ["%d", "%s"], ["%x", "%.*s"], ["%.*d", ""],
+                        ["%*.*f", ""],
+                        ["%d%%", ""], ["%r", "%a"], ["%c", "%s"]):
+                if len(fmt) == a.shape[1]:
+                    _tio_write(pair, target="writer", fmt=fmt)
+            _tio_write(pair, target="writer", fmt="%d%%")
+    # The "s" converter of tofile's sep and format: checked before the file is opened (sep first).
+    small = plain(np.array([1, 2]))
+    for sep, fmt in ((",", "%s\x00"), ("\x00", "%s"), (",", "\udc80%s"), ("\ud800", "%s"), ("\x00", "\ud800"),
+                     ("", "%s\x00"), ("é", "%d"), ("\U0001F600", "%s"), (",", "%s\ud800\x00")):
+        _tio_tofile(small, tmpdir, sep=sep, fmt=fmt)
+    # ---- Python's codecs ----------------------------------------------------------------------------------------------
+    # NumPy decodes a byte stream's lines with bytes.decode (a BOM codec reads a BOM per line, native little-endian without
+    # one) and a file name through TextIOWrapper (the BOM codecs require a BOM; positions in a decode error count within
+    # the chunk TextIOWrapper decodes, whose size read(16384) derives from the bytes-per-character ratio and a line
+    # iteration fixes at 8192); it encodes a byte stream's writes one by one with str.encode (a BOM per write) and a file's
+    # through TextIOWrapper's encoder (one BOM; 'utf-16' names itself so in the first write's error, 'utf-16-le' after).
+    # Names resolve as codecs.lookup resolves them, after the C fast paths for one-shot calls (an iso8859_1 spelling
+    # encodes with the 'latin-1' text). The codecs NumSharp refuses (the multi-byte CJK ones, utf-7, …) are not cases.
+    codec_names = ["utf-8", "UTF8", "utf_8_sig", "utf-16", "utf-16-le", "UTF-16BE", "u16", "utf-32", "utf_32_le",
+                   "utf-32-be", "latin-1", "L1", "iso8859_1", "iso-8859-1", "ascii", "646", "cp1252", "Windows-1252",
+                   "iso8859_15", "koi8_r", "cp037", "mac_roman", "cp437", "undefined", "base64", "rot13", "nosuch", "",
+                   "utf.8", "iso.8859.1", "locale", "cp65001"]
+    texts = ["a b\né 中\n", "x\r\ny z\r", "€ 1\n", "\U0001F600 b\n", "", "p q"]
+    for name in codec_names:
+        try:
+            codecs_info = codecs.lookup(name)
+            text_codec = getattr(codecs_info, "_is_text_encoding", True) and name != "undefined"
+        except LookupError:
+            text_codec = False
+        # 'locale' names the locale's encoding only for open(): a file then reads with it (the ANSI code page on the
+        # Windows host that generates the corpus, UTF-8 in NumSharp), so only its byte-stream cases (an unknown name
+        # there) are portable.
+        sources = ("stream",) if name == "locale" else ("file", "stream")
+        for text in texts:
+            data = text.encode(name) if text_codec and _encodes(text, name) else text.encode("utf-8")
+            for source in sources:
+                _tio_load(source, data, TD, tmpdir, encoding=name)
+            if "file" in sources:
+                _tio_load("file", data, TD, tmpdir, encoding=name, comments=["#", "%"])
+        for data in (b"\xff\xfe\x00\xdcx\x00", b"a\x00b", b"a\x81b\n", b"\x80 1\n", b"\xef\xbb", b"\xef\xbb\xbf\xff",
+                     b"\xff", b"\x00\x00\x11\x00", b"\x00\xd8\x00\x00", b"\xfe\xff\x00a\x00\n", b"a\x00\x00\xd8", b"x y\n"):
+            for source in sources:
+                _tio_load(source, data, TD, tmpdir, encoding=name)
+    # Decode errors in later chunks of a file: TextIOWrapper's chunk sizes decide the position.
+    for name, unit, bad in (("utf-8", b"a", b"\xff"), ("utf-8", "é".encode(), b"\xff"), ("utf-8", "a\r\n".encode(), b"\xff"),
+                            ("utf-16-le", b"a\x00", b"\x00\xdc"), ("utf-16-le", "中".encode("utf-16-le"), b"\x00\xdc"),
+                            ("cp1252", b"a", b"\x81"), ("ascii", b"a", b"\x80"), ("utf-32-le", b"a\x00\x00\x00", b"\x00\x00\x11\x00"),
+                            ("utf-8", b"\xe4\xb8\xad", b"\xe4\xb8")):
+        for n in (8190, 8192, 10000, 16383, 16384, 20000, 40000):
+            data = _TioRepeat(unit, n // len(unit), bad + b"\n")
+            _tio_load("file", data, TD, tmpdir, encoding=name)
+            _tio_load("file", data, TD, tmpdir, encoding=name, comments=["#", "%"])
+    # A chunk that ends INSIDE a UTF-8 sequence (the first read(16384) chunk, or a line iteration's 8192): CPython's
+    # incremental decoder carries a valid start to the next chunk and raises at once for an invalid one — an overlong or
+    # surrogate second byte, a code point past U+10FFFF, a lead it never accepts — counting the position in that chunk;
+    # an invalid byte earlier in the chunk is reported first. Every source ends in an error (a short corpus case).
+    for head, cut, after in ((b"", b"\xe0\x80", b""), (b"", b"\xed\xa0", b""), (b"", b"\xf4\x90", b""),
+                             (b"", b"\xf0\x80", b""), (b"", b"\xc0", b""), (b"", b"\xe4\xb8", b"\xad\xff"),
+                             (b"", b"\xf0\x9f\x98", b"\x80\xff"), (b"", b"\xe4", b"\xb8\xad\xff"),
+                             (b"\xff", b"\xe4\xb8", b"\xad"), (b"\xff", b"\xf0\x9f", b"\x98\x80")):
+        for size in (8192, 16384):
+            data = _TioRepeat(b"a", size - len(head) - len(cut), cut + after + b"\n", head=head)
+            _tio_load("file", data, TD, tmpdir, encoding="utf-8")
+            _tio_load("file", data, TD, tmpdir, encoding="utf-8", comments=["#", "%"])
+    # A whole (non-final) first chunk of continuation bytes only, shorter than a UTF-8 sequence: no lead to carry.
+    for data in (b"\x80\x80", b"\x80", b"\xbf\x80\x80", b"\x80\x80\x80\x80\n"):
+        _tio_load("file", data, TD, tmpdir, encoding="utf-8")
+    # Complex fields: exponents, the inf / nan words in either part, a missing parenthesis.
+    for field in ("1e3+2e-1j", "1E+2-3E-2j", "inf+nanj", "-infj", "nanj", "-nan-infj", "(1+2j", "1e+j", "1e", "infinityj",
+                  "(nan)", "INF-INFj", "1.5e-3j", "(-0-0j)"):
+        _tio_load("lines", [field], "complex128", tmpdir)
+    # savetxt to a byte stream (WriteWrap: str.encode per write) and to a file name (TextIOWrapper); nothing written holds
+    # a '\n' in the file cases, so the corpus does not depend on the platform's line separator.
+    t_ok = np.array(["ab", "é", "中", "\U0001F600"], dtype=TD.build())
+    t_ascii = np.array(["ab", "cd"], dtype=TD.build())
+    # A lone surrogate (only UCS-4 U can hold one: StringDType stores UTF-8) is what UTF-8 / 16 / 32 refuse to encode.
+    t_bad = np.array(["ab", "x\ud800y"], dtype="<U3")
+    # A run of unencodable characters holding a surrogate pair: one code point of the run, as CPython counts it.
+    t_run = np.array(["a中\U0001F600b", "\U0001F600\U0001F600x"], dtype=TD.build())
+    for name in ("cp1252", "cp437", "koi8_r", "latin-1", "ascii", "mac_roman"):
+        _tio_write((t_run, t_run), target="stream", fmt="%s", encoding=name)
+        _tio_write((t_run, t_run), target="file", tmpdir=tmpdir, fmt="%s", newline="|", encoding=name)
+    for name in codec_names + ["utf-16", "bytes"]:
+        for arr in (t_ok, t_ascii, t_bad):
+            for written in (False, True):
+                _tio_write((arr, arr), target="stream", written=written, fmt="%s", header="H", encoding=name)
+                if name != "locale":
+                    _tio_write((arr, arr), target="file", written=written, tmpdir=tmpdir, fmt="%s", newline="|",
+                               header="H", footer="F", comments="#", encoding=name)
+        if name == "locale":
+            continue
+        empty = np.array([], dtype=TD.build())
+        _tio_write((empty, empty), target="file", tmpdir=tmpdir, fmt="%s", newline="|", encoding=name)
+        # Two rows of no columns with newline="": two empty writes, the first of which a BOM codec encodes to its BOM.
+        _tio_write(t_plain(np.zeros((2, 0), dtype=TD.build())), target="file", tmpdir=tmpdir, fmt="%s", newline="",
+                   encoding=name)
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
-              gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma]
+              gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio]
 
 
 def main():

@@ -241,6 +241,10 @@ namespace NumSharp.Tests.Strings
             // arrays) live in their own partial.
             if (TryInvokeConversions(c.Op, p, ops, out var converted))
                 return converted;
+            // Section tio (np.loadtxt / np.savetxt / ndarray.tofile / the readers' refusals over StringDType) rebuilds its
+            // sources and targets in its own partial.
+            if (TryInvokeTextIO(c.Op, p, ops, out var textio))
+                return textio;
             throw new InvalidOperationException($"the string oracle has no op '{c.Op}'");
         }
 

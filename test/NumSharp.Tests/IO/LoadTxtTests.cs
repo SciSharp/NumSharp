@@ -23,7 +23,7 @@ namespace NumSharp.Tests.IO
         private static NDArray L(string text, NPTypeCode dt = NPTypeCode.Double, string comments = "#",
             string delimiter = null, int skiprows = 0, int[] usecols = null, bool unpack = false, int ndmin = 0,
             int? max_rows = null, string quotechar = null)
-            => np.loadtxt(new StringReader(text), dt, comments, delimiter, null, skiprows, usecols, unpack, ndmin, max_rows, quotechar);
+            => np.loadtxt(new StringReader(text), dt, comments, delimiter, null, skiprows, usecols, unpack, ndmin, null, max_rows, quotechar);
 
         private static double[] Vals(NDArray a)
         {
@@ -201,9 +201,9 @@ namespace NumSharp.Tests.IO
         [TestMethod]
         public void QuoteChar()
         {
-            var a = np.loadtxt(new StringReader("\"1\" \"2\""), NPTypeCode.Double, "#", null, null, 0, null, false, 0, null, "\"");
+            var a = np.loadtxt(new StringReader("\"1\" \"2\""), NPTypeCode.Double, "#", null, null, 0, null, false, 0, null, null, "\"");
             AssertArr(a, new[] { 2 }, NPTypeCode.Double, new double[] { 1, 2 });
-            var b = np.loadtxt(new StringReader("1,\"2\",3"), NPTypeCode.Double, "#", ",", null, 0, null, false, 0, null, "\"");
+            var b = np.loadtxt(new StringReader("1,\"2\",3"), NPTypeCode.Double, "#", ",", null, 0, null, false, 0, null, null, "\"");
             AssertArr(b, new[] { 3 }, NPTypeCode.Double, new double[] { 1, 2, 3 });
         }
 
@@ -215,7 +215,9 @@ namespace NumSharp.Tests.IO
             using (var ms = new MemoryStream(Encoding.ASCII.GetBytes("1 2\n3 4")))
                 AssertArr(np.loadtxt(ms), new[] { 2, 2 }, NPTypeCode.Double, new double[] { 1, 2, 3, 4 });
             AssertArr(np.loadtxt(new[] { "1 2", "3 4" }), new[] { 2, 2 }, NPTypeCode.Double, new double[] { 1, 2, 3, 4 });
-            AssertArr(np.loadtxt(new[] { "1 2\n3 4" }), new[] { 2, 2 }, NPTypeCode.Double, new double[] { 1, 2, 3, 4 }); // embedded newline
+            // A sequence element is ONE line: NumPy refuses a newline inside it (outside quotes) instead of splitting it.
+            AssertMsg<ValueError>(() => np.loadtxt(new[] { "1 2\n3 4" }),
+                "Found an unquoted embedded newline within a single line of input.  This is currently not supported.");
         }
 
         [TestMethod]
@@ -279,6 +281,91 @@ namespace NumSharp.Tests.IO
             Assert.ThrowsException<ArgumentNullException>(() => np.loadtxt((string)null));
             Assert.ThrowsException<ArgumentNullException>(() => np.loadtxt((Stream)null));
             Assert.ThrowsException<ArgumentNullException>(() => np.loadtxt((TextReader)null));
+        }
+
+        /// <summary>A C# <c>char</c> comment is NumPy's one-character <c>str</c> (NumPy has no character type).</summary>
+        [TestMethod]
+        public void Comments_Char_IsAOneCharacterString()
+        {
+            var a = np.loadtxt(new[] { "1 2 % 3", "% x", "4 5" }, np.float64, '%');
+            AssertArr(a, new[] { 2, 2 }, NPTypeCode.Double, new double[] { 1, 2, 4, 5 });
+        }
+
+        /// <summary>
+        ///     NumSharp's <c>Decimal</c> dtype (no NumPy analog) parses each field with decimal's own grammar, so a decimal
+        ///     fraction is exact; a field it cannot read is the loader's conversion error, which names the dtype by its NumPy
+        ///     analog (<c>float64</c>, as <see cref="NPTypeCode.Decimal"/>'s NumPy name is everywhere).
+        /// </summary>
+        [TestMethod]
+        public void Decimal_ParsesEachFieldExactly()
+        {
+            var a = np.loadtxt(new[] { "0.1 2", " 3.25 -1e2" }, np.@decimal);
+            Assert.AreEqual(NPTypeCode.Decimal, a.typecode);
+            CollectionAssert.AreEqual(new[] { 0.1m, 2m, 3.25m, -100m }, Enumerable.Range(0, 4).Select(i => (decimal)a.ravel().GetAtIndex(i)).ToArray());
+            var e = Assert.ThrowsException<ValueError>(() => np.loadtxt(new[] { "1 x" }, np.@decimal));
+            Assert.AreEqual("could not convert string 'x' to float64 at row 0, column 2.", e.Message);
+        }
+
+        /// <summary>
+        ///     Lines longer than a reader's block and a row of more fields than the tokenizer's first buffer: the blocks and
+        ///     the field buffer grow, the fields come back whole.
+        /// </summary>
+        [TestMethod]
+        public void LongLinesAndManyFields_GrowTheBuffers()
+        {
+            string longField = new string('x', 100_000);
+            var t = np.loadtxt(new StringReader(longField + " y\n"), np.dtypes.StringDType());
+            Assert.AreEqual(longField, (string)t.item(0));
+            Assert.AreEqual("y", (string)t.item(1));
+            using var bytes = new MemoryStream(Encoding.UTF8.GetBytes(longField + " y\n"));
+            var tb = np.loadtxt(bytes, np.dtypes.StringDType());
+            Assert.AreEqual(longField, (string)tb.item(0));
+            // 50,001 empty fields: each advances the tokenizer's field buffer by its terminator alone.
+            var e = np.loadtxt(new[] { new string(',', 50_000) }, np.dtypes.StringDType(), delimiter: ",");
+            Assert.AreEqual(50_001L, e.size);
+            Assert.AreEqual("", (string)e.item(50_000));
+        }
+
+        /// <summary>
+        ///     A file read in chunks whose characters take three bytes: TextIOWrapper sizes the second chunk from the first's
+        ///     bytes-per-character ratio (3), so the decoded buffer grows past its first size.
+        /// </summary>
+        [TestMethod]
+        public void FileOfWideCharacters_GrowsTheDecodedBuffer()
+        {
+            string path = Path.Combine(Path.GetTempPath(), "ns_wide_" + Guid.NewGuid().ToString("N") + ".txt");
+            try
+            {
+                string field = new string('中', 20_000);
+                File.WriteAllBytes(path, Encoding.UTF8.GetBytes(field + " b\n"));
+                var t = np.loadtxt(path, np.dtypes.StringDType(), encoding: "utf-8");
+                Assert.AreEqual(field, (string)t.item(0));
+                Assert.AreEqual("b", (string)t.item(1));
+                // 'locale' names the default for a file name: UTF-8 here (pinned; Windows NumPy uses the ANSI code page).
+                Assert.AreEqual(field, (string)np.loadtxt(path, np.dtypes.StringDType(), encoding: "locale").item(0));
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        /// <summary>
+        ///     NumPy's <c>DataSource</c>: a name that exists nowhere, with no compressed variant either, is
+        ///     <c>FileNotFoundError: &lt;name&gt; not found.</c>; a name without an extension and a dot-file have none to
+        ///     split off.
+        /// </summary>
+        [TestMethod]
+        public void FileName_NotFound_AfterTheCompressedNames()
+        {
+            string path = Path.Combine(Path.GetTempPath(), "ns_nosuch_" + Guid.NewGuid().ToString("N"));
+            var e = Assert.ThrowsException<FileNotFoundException>(() => np.loadtxt(path));
+            Assert.AreEqual($"{path} not found.", e.Message);
+            string dotFile = Path.Combine(Path.GetTempPath(), "." + Guid.NewGuid().ToString("N"));
+            Assert.AreEqual($"{dotFile} not found.", Assert.ThrowsException<FileNotFoundException>(() => np.loadtxt(dotFile)).Message);
+            // A compressed name has no further fall-back.
+            string gz = path + ".gz";
+            Assert.AreEqual($"{gz} not found.", Assert.ThrowsException<FileNotFoundException>(() => np.loadtxt(gz)).Message);
         }
     }
 }

@@ -32,6 +32,12 @@ namespace NumSharp
         ///     "unmatched data" error all match it.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.fromstring.html
         /// </remarks>
+        /// <returns>The 1-D array of the parsed items.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="string"/> is null.</exception>
+        /// <exception cref="ValueError">NumPy's refusals, in NumPy's order: an empty separator (<c>The binary mode of
+        ///     fromstring is removed, use frombuffer instead</c>); a <c>StringDType</c> dtype (<c>Cannot create an object
+        ///     array from a string</c>); an unsized string dtype (<c>zero-valued itemsize</c>); a sized string dtype (<c>don't
+        ///     know how to read character strings with that array type</c>); text the reader cannot read to its end.</exception>
         public static NDArray fromstring(string @string, DType dtype = null, int count = -1, string sep = null)
         {
             if (@string is null) throw new ArgumentNullException(nameof(@string));
@@ -40,6 +46,11 @@ namespace NumSharp
             // the string's bytes, so a caller reaching for it is redirected to frombuffer.
             if (string.IsNullOrEmpty(sep))
                 throw new ValueError("The binary mode of fromstring is removed, use frombuffer instead");
+
+            // PyArray_FromString's first check: a dtype whose items hold references (StringDType: a cell points into its
+            // buffer's allocator) cannot be filled from text, whatever the text or the count (an empty string too).
+            if (dtype?.Meta is VStringDTypeMeta)
+                throw new ValueError("Cannot create an object array from a string");
 
             // A fixed-width string dtype: PyArray_FromString refuses an unsized class first, then any dtype without a
             // text element reader (the string classes have none).

@@ -139,6 +139,35 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
+        ///     The Python type name CPython's messages quote for an object (<c>Py_TYPE(obj)-&gt;tp_name</c>) under the boundary
+        ///     map: <c>NoneType</c>, <c>bool</c>, <c>int</c>, <c>float</c> (a <see cref="decimal"/> too, which converts to
+        ///     one), <c>complex</c>, <c>str</c> (a <see cref="char"/> too), <c>bytes</c>, <c>numpy.float16</c>,
+        ///     <c>numpy.ndarray</c>, <c>tuple</c>, <c>dict</c>, <c>list</c>; an opaque object reports its .NET type name.
+        /// </summary>
+        /// <param name="obj">The C# value standing in for a Python object (null is <c>None</c>).</param>
+        /// <returns>The name, as in <c>'int' object is not iterable</c> or <c>must be str or None, not float</c>.</returns>
+        /// <remarks>
+        ///     <see cref="bool"/> is tested before the integers: a Python <c>bool</c> is an <c>int</c> subclass whose own name
+        ///     is <c>bool</c>, and CPython's messages quote the object's own type.
+        /// </remarks>
+        public static string TypeName(object obj) => obj switch
+        {
+            null => "NoneType",
+            bool => "bool",
+            sbyte or byte or short or ushort or int or uint or long or ulong or BigInteger => "int",
+            float or double or decimal => "float",
+            Complex => "complex",
+            string or char => "str",
+            byte[] => "bytes",
+            Half => "numpy.float16",
+            NDArray => "numpy.ndarray",
+            ITuple => "tuple",
+            IDictionary => "dict",
+            IList => "list",
+            _ => obj.GetType().Name,
+        };
+
+        /// <summary>
         ///     NumPy's <c>na_eq_cmp</c> — the equality a <c>StringDType</c> uses for two missing-data objects: the same object
         ///     (NumPy's identity shortcut, which is how <c>None</c> equals <c>None</c>); two Python floats that are both NaN
         ///     (<c>float('nan')</c> and <c>np.nan</c> are different objects but the same missing value); otherwise Python's

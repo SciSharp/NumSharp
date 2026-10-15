@@ -90,6 +90,27 @@ namespace NumSharp.Tests.Documentation
             back.ToArray<double>().Should().Equal(1.0, 2.0, 3.0, 4.0);
         }
 
+        /// <summary>The "Text encodings" example: a UTF-16 file (one BOM), a cp1252 byte stream, CPython's charmap error.</summary>
+        [TestMethod]
+        public void TextEncodings_Utf16AndCodePages()
+        {
+            var arr = np.array(new[] { "ab", "é" }, np.dtypes.StringDType());
+            np.savetxt(At("out.txt"), arr, fmt: "%s", encoding: "utf-16");
+            byte[] file = File.ReadAllBytes(At("out.txt"));
+            file[0].Should().Be(0xFF);
+            file[1].Should().Be(0xFE);
+            var back = np.loadtxt(At("out.txt"), np.dtypes.StringDType(), encoding: "UTF-16");
+            back.item(0).Should().Be("ab");
+            back.item(1).Should().Be("é");
+            using var ms = new MemoryStream();
+            np.savetxt(ms, arr, fmt: "%s", encoding: "Windows-1252");
+            ms.ToArray().Should().Equal(new byte[] { 0x61, 0x62, 0x0A, 0xE9, 0x0A });
+            ((Action)(() => np.savetxt(new MemoryStream(), np.array(new[] { "中" }, np.dtypes.StringDType()), fmt: "%s",
+                    encoding: "cp1252")))
+                .Should().Throw<UnicodeEncodeError>()
+                .WithMessage("'charmap' codec can't encode character '\\u4e2d' in position 0: character maps to <undefined>");
+        }
+
         [TestMethod]
         public void FromString_ParsesNumbers()
         {

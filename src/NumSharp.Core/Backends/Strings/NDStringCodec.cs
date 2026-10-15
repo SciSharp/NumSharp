@@ -262,6 +262,47 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
+        ///     A one-byte codec's strict encode check (CPython's <c>unicode_encode_ucs1</c>, the ASCII and Latin-1 codecs):
+        ///     returns when every character is at most <paramref name="limit"/>, else raises CPython's
+        ///     <see cref="UnicodeEncodeError"/> for the RUN of unencodable code points starting at the first one.
+        /// </summary>
+        /// <param name="value">The text being encoded.</param>
+        /// <param name="limit">The largest encodable code point (<c>0x7F</c> for ASCII, <c>0xFF</c> for Latin-1).</param>
+        /// <param name="codec">CPython's codec name in the message (<c>ascii</c>, <c>latin-1</c>).</param>
+        /// <param name="reason">CPython's reason (<c>ordinal not in range(128)</c>, <c>ordinal not in range(256)</c>).</param>
+        /// <exception cref="UnicodeEncodeError">A character past <paramref name="limit"/>: <c>'latin-1' codec can't encode
+        ///     character '中' in position 2: ordinal not in range(256)</c>, or a range for a longer run.</exception>
+        /// <remarks>Every character before the first unencodable one is at most <c>U+00FF</c>, so its UTF-16 index IS its
+        ///     code-point position; inside the run a surrogate pair counts as one code point, as Python counts it.</remarks>
+        internal static void ThrowIfNotEncodable(ReadOnlySpan<char> value, char limit, string codec, string reason)
+        {
+            int first = value.IndexOfAnyExceptInRange('\0', limit);
+            if (first < 0)
+                return;
+            int i = first;
+            long endPosition = first;
+            uint firstCodePoint = 0;
+            while (i < value.Length && value[i] > limit)
+            {
+                uint cp;
+                if (char.IsHighSurrogate(value[i]) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
+                {
+                    cp = (uint)char.ConvertToUtf32(value[i], value[i + 1]);
+                    i += 2;
+                }
+                else
+                {
+                    cp = value[i];
+                    i++;
+                }
+                if (endPosition == first)
+                    firstCodePoint = cp;
+                endPosition++;
+            }
+            throw EncodeErrorFor(firstCodePoint, first, endPosition, codec, reason);
+        }
+
+        /// <summary>
         ///     The same check over a <c>U</c> element's units (the trailing NUL units already excluded by
         ///     <paramref name="chars"/> or not — NUL is ASCII either way): the unit above <c>U+10FFFF</c> check comes first,
         ///     as NumPy reads the element into a Python string (<c>UNICODE_getitem</c>) before encoding it.
@@ -361,15 +402,28 @@ namespace NumSharp.Backends.Strings
         /// <param name="end">Code-point position one past the run end.</param>
         /// <returns>The exception (not thrown).</returns>
         internal static UnicodeEncodeError EncodeErrorFor(uint firstCodePoint, long start, long end)
+            => EncodeErrorFor(firstCodePoint, start, end, "ascii", "ordinal not in range(128)");
+
+        /// <summary>
+        ///     CPython's <c>UnicodeEncodeError.__str__</c> for any codec: one bad character prints as <c>\xNN</c> /
+        ///     <c>\uNNNN</c> / <c>\UNNNNNNNN</c> (lowercase hex); a longer run prints its position range.
+        /// </summary>
+        /// <param name="firstCodePoint">The first unencodable code point.</param>
+        /// <param name="start">Code-point position of the run start.</param>
+        /// <param name="end">Code-point position one past the run end.</param>
+        /// <param name="codec">CPython's codec name (<c>ascii</c>, <c>latin-1</c>).</param>
+        /// <param name="reason">CPython's reason text.</param>
+        /// <returns>The exception (not thrown).</returns>
+        internal static UnicodeEncodeError EncodeErrorFor(uint firstCodePoint, long start, long end, string codec, string reason)
         {
             if (end == start + 1)
             {
                 string escaped = firstCodePoint <= 0xFF ? $"\\x{firstCodePoint:x2}"
                     : firstCodePoint <= 0xFFFF ? $"\\u{firstCodePoint:x4}"
                     : $"\\U{firstCodePoint:x8}";
-                return new UnicodeEncodeError($"'ascii' codec can't encode character '{escaped}' in position {start}: ordinal not in range(128)");
+                return new UnicodeEncodeError($"'{codec}' codec can't encode character '{escaped}' in position {start}: {reason}");
             }
-            return new UnicodeEncodeError($"'ascii' codec can't encode characters in position {start}-{end - 1}: ordinal not in range(128)");
+            return new UnicodeEncodeError($"'{codec}' codec can't encode characters in position {start}-{end - 1}: {reason}");
         }
 
         // ---------------------------------------------------------------------------------------------

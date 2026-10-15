@@ -700,6 +700,19 @@ namespace NumSharp.Backends.Strings
         /// <param name="dtype">The requested dtype or null.</param>
         /// <param name="order">The requested memory layout.</param>
         /// <returns>The new array.</returns>
+        /// <summary>
+        ///     <c>np.array(values, dtype)</c> for values already collected in C order with known dimensions — the store
+        ///     <c>np.loadtxt</c> makes for a fixed-width string dtype after it read every field: a sized class keeps its width
+        ///     (each value truncated to it), an unsized one takes the widest value's.
+        /// </summary>
+        /// <param name="dims">The result's dimensions (their product is <c>values.Count</c>).</param>
+        /// <param name="values">The element values in C order: a <see cref="string"/>, a <c>byte[]</c> (one <c>S</c> value), a
+        ///     number (stored as its text), or null (<c>None</c>).</param>
+        /// <param name="dtype">The string dtype.</param>
+        /// <returns>The new C-ordered array, which owns its data.</returns>
+        /// <exception cref="TypeError">The discovered width exceeds the class's maximum.</exception>
+        internal static NDArray FromValues(long[] dims, IReadOnlyList<object> values, DType dtype) => Build(dims, values, dtype, 'C');
+
         private static NDArray Build(long[] dims, IReadOnlyList<object> values, DType dtype, char order)
         {
             // StringDType: every element is a Python object stored by stringdtype_setitem (BuildVString).

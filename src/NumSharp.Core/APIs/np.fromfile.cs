@@ -27,8 +27,17 @@ namespace NumSharp
         /// </param>
         /// <param name="offset">Bytes to skip from the file's current position. Binary files only.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fromfile.html</remarks>
+        /// <returns>The 1-D array of the items read.</returns>
+        /// <exception cref="TypeError">An <paramref name="offset"/> with a text separator (<c>'offset' argument only permitted
+        ///     for binary files</c>): checked before the file is opened, as NumPy's <c>array_fromfile</c> checks it.</exception>
+        /// <exception cref="FileNotFoundException">The file does not exist.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> dtype (<c>Cannot read into object array</c>), or NumPy's
+        ///     refusals for a string dtype and for text it cannot read.</exception>
         public static NDArray fromfile(string file, DType dtype = null, int count = -1, string sep = "", long offset = 0)
         {
+            // array_fromfile tests offset-with-a-separator before it opens the file, so a missing file reports this first.
+            if (offset != 0 && !string.IsNullOrEmpty(sep))
+                throw new TypeError("'offset' argument only permitted for binary files");
             using var fs = new FileStream(file, FileMode.Open, FileAccess.Read);
             return fromfile(fs, dtype, count, sep, offset);
         }
@@ -41,6 +50,14 @@ namespace NumSharp
         public static NDArray fromfile(Stream stream, DType dtype = null, int count = -1, string sep = "", long offset = 0)
         {
             if (stream is null) throw new ArgumentNullException(nameof(stream));
+            // PyArray_FromFile refuses a dtype whose items hold references (a StringDType cell points into its buffer's
+            // allocator: no bytes of a file can be one) before it reads anything — after the wrapper's offset check.
+            if (dtype?.Meta is VStringDTypeMeta)
+            {
+                if (offset != 0 && !string.IsNullOrEmpty(sep))
+                    throw new TypeError("'offset' argument only permitted for binary files");
+                throw new ValueError("Cannot read into object array");
+            }
             // A fixed-width string dtype: its width is the descriptor's (the lane carries none), and NumPy reads text
             // files only for the dtypes with a scanner, which the string classes lack.
             if (Backends.Strings.NDStringStorage.IsString(dtype))
