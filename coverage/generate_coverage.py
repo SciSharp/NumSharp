@@ -12,19 +12,22 @@ import json
 import re
 import subprocess
 import sys
+import types
+import typing
+import warnings
 from collections import Counter
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
 import oracle_evidence
-from numpy_documentation import documentation_url
+from numpy_documentation import documentation_index, documentation_url
 from object_surfaces import OBJECT_SURFACE_PATHS, enrich_object_classes, object_surface_rows
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_NUMPY_VERSION = "2.4.2"
-GENERATOR_VERSION = "1.12.0"
+GENERATOR_VERSION = "1.13.0"
 OUTPUT_FILES = ("coverage.json", "coverage.csv", "summary.md", "manifest.json")
 NUMSHARP_SOURCE_BASE_URL = "https://github.com/SciSharp/NumSharp/blob/master/"
 
@@ -151,7 +154,49 @@ EXTENDED_SUBMODULES = [
     ("ctypeslib",             "ctypeslib",             "ctypes interop",            "tooling"),
     ("lib.format",            "lib.format",            "npy/npz format internals",  "tooling"),
     ("lib.introspect",        "lib.introspect",        "Runtime & diagnostics",     "tooling"),
+    # NumPy's own public-module list (numpy/tests/test_public_api.py: PUBLIC_MODULES and
+    # PUBLIC_ALIASED_MODULES) names every module below as well; until generator 1.13.0 the catalog
+    # never scanned them, so numpy.dtypes, numpy.exceptions and numpy.typing had no rows at all.
+    # test_catalog compares this list with the installed NumPy's list and fails on a module that is
+    # neither scanned here nor excluded, with a reason, in EXCLUDED_PUBLIC_SUBMODULES.
+    ("dtypes",                "dtypes",                "Dtype classes",             "candidate"),
+    ("exceptions",            "exceptions",            "Exceptions & warnings",     "candidate"),
+    ("ma.mrecords",           "ma.mrecords",           "Masked record arrays",      "subsystem"),
+    ("typing",                "typing",                "Static typing",             "tooling"),
+    ("version",               "version",               "Runtime & diagnostics",     "tooling"),
+    ("f2py",                  "f2py",                  "Fortran bindings",          "tooling"),
+    ("lib",                   "lib",                   "Library support",           "tooling"),
+    ("lib.mixins",            "lib.mixins",            "Operator mixins",           "tooling"),
+    ("testing.overrides",     "testing.overrides",     "Test support",              "tooling"),
+    # Documented in NumPy's reference although test_public_api.py does not list them: numpy.matlib
+    # (deprecated with a PendingDeprecationWarning since NumPy 1.19, still shipped) and the
+    # numpy.testing.extbuild helpers (an attribute of numpy.testing, not an importable path;
+    # resolve_submodule's attribute walk finds it). The third, numpy.lib.user_array, documents one
+    # name, its container class, which object_surfaces catalogues with its members.
+    ("matlib",                "matlib",                "Matrix library",            "candidate"),
+    ("testing.extbuild",      "testing.extbuild",      "Test support",              "tooling"),
 ]
+
+# Submodules whose public listing re-exports NumPy's main namespace, so only the members they
+# DEFINE are their API: numpy.matlib does `from numpy import *`, so its __all__ is all ~500 NumPy names
+# plus its own eight functions. Scanning that listing would catalogue numpy.matlib.sum,
+# numpy.matlib.add.reduce and hundreds of other duplicates of numpy.* rows. A name is kept when the
+# object's __module__ is the submodule itself; constants carry no __module__, and matlib defines none.
+OWN_MEMBERS_ONLY_SUBMODULES = frozenset({"matlib"})
+
+# Public NumPy modules (by NumPy's own list, see above) the catalog deliberately does not scan, each
+# with the reason. A module counts as covered when it, or a parent listed here, appears below, so
+# numpy.distutils' submodules need no entry of their own.
+EXCLUDED_PUBLIC_SUBMODULES = {
+    "ma.extras": ("Implementation module: numpy.ma's __all__ re-exports the whole of its __all__, so "
+                  "every member is catalogued as numpy.ma.<name>."),
+    "lib.npyio": ("Its only public names, DataSource and NpzFile, are object surfaces of their own "
+                  "(numpy.lib.npyio.DataSource / numpy.lib.npyio.NpzFile, every member catalogued)."),
+    "typing.mypy_plugin": ("The mypy plugin entry point: named in a mypy configuration file, never "
+                           "imported by user code; its __all__ is empty."),
+    "distutils": ("Build tooling NumPy lists as public only on Python < 3.12 (removed for 3.12+, "
+                  "deprecated since NumPy 1.23); the catalog targets the pinned NumPy on Python 3.12."),
+}
 
 # The submodules whose callables are part of the five-surface headline (numpy.<name>). One list
 # for public_exports and the ufunc protocol scan, so a surface added here is scanned by both.
@@ -161,9 +206,13 @@ HEADLINE_SUBMODULES = ("random", "linalg", "fft")
 # object inventory catalogs each ufunc method on every ufunc-like export found here (numpy itself
 # is always included): numpy.strings.str_len and numpy.ma's masked add are ufunc protocol owners
 # just like numpy.add, so scanning only the top level left their methods out of the catalog.
+# The own-members-only submodules are left out: the members they define contain no ufunc, and their
+# listing (numpy.matlib's __all__ is NumPy's whole namespace) would re-catalogue every top-level
+# ufunc's methods under them.
 UFUNC_PROTOCOL_NAMESPACES = (
     tuple((surface, surface) for surface in HEADLINE_SUBMODULES)
-    + tuple((path, surface) for path, surface, _category, _disposition in EXTENDED_SUBMODULES)
+    + tuple((path, surface) for path, surface, _category, _disposition in EXTENDED_SUBMODULES
+            if path not in OWN_MEMBERS_ONLY_SUBMODULES)
 )
 
 # ndarray interop-protocol dunders. public_exports() drops every '_'-prefixed ndarray member, so
@@ -327,12 +376,31 @@ def numpy_signature(obj: Any, fallback_name: str) -> str:
     return "Signature unavailable from runtime introspection"
 
 
+# Runtime types of numpy.typing's aliases: NDArray is a types.GenericAlias, ArrayLike and DTypeLike are
+# typing.TypeAliasType instances (Python 3.12+; absent on older Pythons, hence the filter).
+_TYPE_ALIAS_TYPES = tuple(alias for alias in (types.GenericAlias, getattr(typing, "TypeAliasType", None))
+                          if alias is not None)
+
+
 def numpy_kind(np: Any, obj: Any) -> str:
+    """Classify a NumPy export as module, ufunc, class, function or constant.
+
+    The kind decides scope: callables (function/ufunc) are API rows that count in the coverage
+    percentages, while classes, constants and modules are supporting rows (see is_api_row).
+
+    :param np: the imported numpy module (its ``ufunc`` type identifies ufunc exports).
+    :param obj: the exported object.
+    :returns: one of "module", "ufunc", "class", "function", "constant".
+    """
     if inspect.ismodule(obj):
         return "module"
     if isinstance(obj, np.ufunc):
         return "ufunc"
     if inspect.isclass(obj):
+        return "class"
+    # A typing alias is a type for annotations, not a function: a GenericAlias is callable (calling it
+    # instantiates its origin), so without this check numpy.typing.NDArray would count as an API function.
+    if isinstance(obj, _TYPE_ALIAS_TYPES):
         return "class"
     if callable(obj):
         return "function"
@@ -538,12 +606,18 @@ def resolve_submodule(np: Any, path: str) -> Any:
     as an ATTRIBUTE aliasing numpy.lib.scimath and is not importable by that name on every build, so
     the attribute fallback keeps the catalog complete without hard-coding aliases.
 
+    Importing numpy.matlib emits NumPy's own PendingDeprecationWarning; it is suppressed here because
+    cataloguing a deprecated module is not using it, and a test run with warnings enabled must not
+    report the catalog's scan as a NumPy deprecation.
+
     :param np: the imported numpy module.
     :param path: dotted submodule path relative to numpy (e.g. "polynomial.chebyshev").
     :returns: the resolved module object, or None when it is absent (never raises).
     """
     try:
-        return importlib.import_module("numpy." + path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", (DeprecationWarning, PendingDeprecationWarning))
+            return importlib.import_module("numpy." + path)
     except Exception:
         obj: Any = np
         for part in path.split("."):
@@ -553,78 +627,191 @@ def resolve_submodule(np: Any, path: str) -> Any:
         return obj if inspect.ismodule(obj) else None
 
 
+def numsharp_types_by_simple_name(inventory: dict[str, Any]) -> dict[str, str]:
+    """Index NumSharp's exported types by simple name, for crediting a NumPy CLASS to a ported type.
+
+    A NumPy class export is credited to the NumSharp type of the same simple name (numpy.random.Generator
+    -> NumSharp.Generator, numpy.exceptions.AxisError -> NumSharp.AxisError). The match is by type, never
+    by a member namesake, so it cannot credit a function. A simple name exported twice prefers the root
+    NumSharp.<Name>; nested types ("Outer+Inner") index by their innermost name.
+
+    :param inventory: the reflected NumSharp inventory; its ``exportedTypes`` list is read (absent -> empty).
+    :returns: simple type name -> full CLR type name.
+    """
+    numsharp_types_by_simple: dict[str, str] = {}
+    for full in inventory.get("exportedTypes", []):
+        simple = full.rsplit(".", 1)[-1].split("+")[-1]
+        if simple not in numsharp_types_by_simple or full == f"NumSharp.{simple}":
+            numsharp_types_by_simple[simple] = full
+    return numsharp_types_by_simple
+
+
+def submodule_public_names(module: Any, path: str, surface: str) -> list[str]:
+    """List the public names of one extended submodule: its own contract plus what NumPy documents.
+
+    The module's ``__all__`` is its contract; a module without one (or with an empty one, as
+    numpy.lib.format) falls back to every non-underscore ``dir()`` name. NumPy's ``__all__`` lists are
+    not complete, so every name its official documentation index lists directly under the module
+    (``numpy.<path>.<name>`` or ``numpy.<surface>.<name>``) and that exists on the pinned build is added:
+    numpy.exceptions.RankWarning is documented but absent from that module's ``__all__``. Names the docs
+    list only for a newer NumPy (the index tracks latest stable) are skipped by the existence check.
+    For OWN_MEMBERS_ONLY_SUBMODULES only names the module itself defines survive, documented or not.
+
+    The result must not depend on what the process imported before: a submodule is an attribute of
+    its package only once something has imported it, so ``hasattr`` alone made numpy.typing.mypy_plugin
+    appear or not by test order. A documented submodule is therefore imported here when it exists,
+    and one listed in EXCLUDED_PUBLIC_SUBMODULES (mypy_plugin) is never added, imported or not.
+
+    :param module: the resolved submodule.
+    :param path: its import path relative to numpy (``lib.scimath``).
+    :param surface: its display surface, under which the docs may also index it (``emath``).
+    :returns: sorted, de-duplicated names without a leading underscore.
+    """
+    declared = getattr(module, "__all__", None)
+    names = set(declared) if declared else {name for name in dir(module) if not name.startswith("_")}
+    for prefix in {f"numpy.{path}.", f"numpy.{surface}."}:
+        for api_id in documentation_index():
+            name = api_id[len(prefix):] if api_id.startswith(prefix) else ""
+            # One segment past the prefix is a module member; more is a member of a member
+            # (numpy.ma.MaskedArray.sum), which belongs to an object surface, not to this scan.
+            if not name or "." in name or name.startswith("_"):
+                continue
+            if any(within_namespace(f"{path}.{name}", excluded) for excluded in EXCLUDED_PUBLIC_SUBMODULES):
+                continue
+            if not hasattr(module, name) and hasattr(module, "__path__"):
+                # A documented submodule of a package (only packages have __path__) is reachable once
+                # imported; import it now so the outcome is the same on every run.
+                try:
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", (DeprecationWarning, PendingDeprecationWarning))
+                        importlib.import_module(f"{module.__name__}.{name}")
+                except ImportError:
+                    pass  # documented only for a newer NumPy: no such submodule on the pin
+            if hasattr(module, name):
+                names.add(name)
+    if path in OWN_MEMBERS_ONLY_SUBMODULES:
+        names = {name for name in names
+                 if getattr(getattr(module, name, None), "__module__", None) == module.__name__}
+    return sorted(names)
+
+
 def extended_surface_rows(
     np: Any, inventory: dict[str, Any], seen_ids: set[str],
     members_by_surface: dict[str, list[dict[str, Any]]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Catalog public callables of the NumPy submodules the headline scope excludes.
+    """Catalog every public member of the NumPy submodules the headline scope excludes.
 
     These rows carry in_default_scope=False, so they never move the headline percentage; their only
     job is to make a scan SEE families (numpy.emath, numpy.polynomial.*, numpy.lib.stride_tricks,
-    numpy.ma, numpy.char/strings, numpy.testing, ...) that the five-surface enumerator is structurally
-    blind to. A member is credited "available" ONLY when NumSharp exposes a member of the SAME name on
-    a [ModuleName]-annotated facade for that exact submodule (e.g. an eventual np.emath) — never via a
-    top-level np namesake, whose semantics differ (numpy.emath.sqrt(-1) == 1j while np.sqrt(-1) == nan).
-    Today no such facade exists, so every extended member reads "missing"; adding the facade later
-    credits them automatically with no change here.
+    numpy.ma, numpy.char/strings, numpy.testing, numpy.dtypes, numpy.exceptions, numpy.typing, ...)
+    that the five-surface enumerator is structurally blind to. The member list is
+    submodule_public_names (``__all__`` plus the names NumPy documents under the module).
+
+    Callables become API rows. Classes, constants and modules (numpy.ma.masked, numpy.ma.nomask, the
+    numpy.polynomial.<basis> domain constants, numpy.dtypes.Float64DType, numpy.exceptions.AxisError)
+    become supporting rows, which is_api_row keeps out of every percentage; until generator 1.13.0
+    they had no rows at all, so NumSharp's own np.ma.masked or np.dtypes.Float64DType read as
+    NumSharp-only extensions instead of crediting NumPy's names. A class an object surface owns
+    (numpy.ma.MaskedArray, numpy.char.chararray, ...) is left to that surface.
+
+    A member is credited "available" ONLY when NumSharp exposes a member of the SAME name on a
+    [ModuleName]-annotated facade for that exact submodule (np.ma, np.dtypes, np.polynomial.chebyshev,
+    ...) — never via a top-level np namesake, whose semantics differ (numpy.emath.sqrt(-1) == 1j while
+    np.sqrt(-1) == nan). A real class without such a member is credited when NumSharp exports a type
+    of the same simple name (numpy.exceptions.AxisError -> NumSharp.AxisError), the same type rule
+    resolve_rows applies to headline class exports; availability then reads "type".
 
     :param np: the imported numpy module (the oracle surface).
-    :param inventory: the reflected NumSharp inventory (its ``modules`` map supplies facade members).
+    :param inventory: the reflected NumSharp inventory (its ``modules`` map supplies facade members,
+        its ``exportedTypes`` list the ported types).
     :param seen_ids: the running set of emitted row ids; mutated to keep ids globally unique.
+    :param members_by_surface: facade members by surface from member_maps; computed when None.
     :returns: the list of extended catalog rows (may be empty if a NumPy build ships none of them).
+    :raises SystemExit: when a listed submodule is absent from the pinned NumPy, so a renamed or
+        removed module fails the run instead of silently dropping its family.
     """
     # Top-level NumSharp np members — used ONLY to annotate a namesake (informational), never to credit.
     np_module = inventory["modules"].get("np", {"methods": [], "properties": [], "fields": []})
     np_toplevel = {m["name"] for grp in ("methods", "properties", "fields") for m in np_module[grp]}
     if members_by_surface is None:
         _, members_by_surface, _ = member_maps(inventory)
+    numsharp_types_by_simple = numsharp_types_by_simple_name(inventory)
 
     rows: list[dict[str, Any]] = []
 
     def emit(surface: str, name: str, kind: str, category: str, disposition: str,
-             host_module: str, obj: Any) -> None:
-        # Row id mirrors the NumPy dotted path so it is stable and collision-free across submodules.
-        row_id = f"numpy.{surface}.{name}"
+             host_module: str, obj: Any, row_id: str | None = None) -> None:
+        # Row id mirrors the NumPy dotted path so it is stable and collision-free across submodules; a
+        # family's own module row passes its id (numpy.matlib), which is not <surface>.<name>.
+        row_id = row_id or f"numpy.{surface}.{name}"
         if row_id in seen_ids:  # a name can appear under both a module and its re-export; keep the first.
             return
         seen_ids.add(row_id)
-        # Credit only a same-surface facade member (none exist yet -> missing). The top-level namesake
-        # is recorded as prose so the emath.sqrt / char.upper false-positive class is visible, not hidden.
+        # Credit only a same-surface facade member. The top-level namesake is recorded as prose so the
+        # emath.sqrt / char.upper false-positive class is visible, not hidden.
         matched = next((member for member in members_by_surface.get(surface_for_module(host_module), [])
                         if member["name"] == name), None)
-        note = ("Matched against the same NumPy submodule facade; behavioral parity requires tests."
-                if matched else DISPOSITION_NOTE[disposition])
-        if not matched and name in np_toplevel:
+        # A real class (not a typing alias: numpy.typing.NDArray must not match NumSharp.NDArray by name)
+        # without a facade member may be ported as a NumSharp type of the same simple name.
+        type_target = (numsharp_types_by_simple.get(name)
+                       if matched is None and kind == "class" and inspect.isclass(obj) else None)
+        if matched:
+            note = "Matched against the same NumPy submodule facade; behavioral parity requires tests."
+            target = matched["target"]
+            signatures = matched["signatures"]
+            obsolete = matched.get("obsolete", False)
+            source_paths = matched.get("sourcePaths", [])
+            source_urls = matched.get("sourceUrls", [])
+        elif type_target:
+            note = f"NumSharp exports the {name} type ({type_target})."
+            target = type_target
+            signatures = [f"public class {name}"]
+            obsolete = False
+            source_paths = locate_type_source(name)
+            source_urls = SourceLocator.github_urls(source_paths)
+        else:
+            note = DISPOSITION_NOTE[disposition]
+            target, signatures, obsolete, source_paths, source_urls = None, [], False, [], []
+        if not matched and not type_target and name in np_toplevel:
             note += f" NumSharp has a top-level np.{name} (distinct surface/semantics; not credited here)."
+        credited = bool(matched or type_target)
         rows.append({
             "id": row_id, "origin": "numpy", "surface": surface, "name": name, "kind": kind,
             "numpy_signature": numpy_signature(obj, name),
             "documentation_url": documentation_url(surface, name, kind), "in_default_scope": False,
             "extended": True, "disposition": disposition,
-            "category": category, "availability": "exact" if matched else "missing",
-            "support": "declared" if matched else "missing",
-            "status": "available" if matched else "missing",
-            "numsharp_target": matched["target"] if matched else None,
-            "numsharp_signatures": matched["signatures"] if matched else [],
-            "numsharp_obsolete": matched.get("obsolete", False) if matched else False,
-            "numsharp_source_paths": matched.get("sourcePaths", []) if matched else [],
-            "numsharp_source_urls": matched.get("sourceUrls", []) if matched else [], "notes": note,
+            "category": category, "availability": "exact" if matched else "type" if type_target else "missing",
+            "support": "declared" if credited else "missing",
+            "status": "available" if credited else "missing",
+            "numsharp_target": target,
+            "numsharp_signatures": signatures,
+            "numsharp_obsolete": obsolete,
+            "numsharp_source_paths": source_paths,
+            "numsharp_source_urls": source_urls, "notes": note,
         })
 
     for path, surface, category, disposition in EXTENDED_SUBMODULES:
         module = resolve_submodule(np, path)
         if module is None:
             raise SystemExit(f"Required NumPy catalog submodule is absent: numpy.{path}")
-        # Prefer __all__ (the module's own public contract) and fall back to non-underscore dir().
-        names = getattr(module, "__all__", None) or [n for n in dir(module) if not n.startswith("_")]
         host_module = "np." + surface  # the [ModuleName] a NumSharp facade for this family would carry.
-        for name in sorted(set(names)):
+        # The family module's own row, unless another scan already emitted it: public_exports lists only
+        # the modules in numpy.__all__, and a parent family lists only the submodules in its __all__, so
+        # numpy.matlib, numpy.version, numpy.ma.mrecords and numpy.testing.extbuild had no row of their
+        # own. It is credited like any member, by a member of that name on the parent's facade.
+        parent, _, leaf = surface.rpartition(".")
+        emit(surface, leaf, "module", category, disposition, "np." + parent if parent else "np", module,
+             row_id=f"numpy.{surface}")
+        for name in submodule_public_names(module, path, surface):
             obj = getattr(module, name)
-            # Functions/ufuncs only — classes (Polynomial, MaskedArray, chararray) are noted in the
-            # summary prose rather than catalogued as member rows, matching the "functions" question.
-            is_call = (isinstance(obj, np.ufunc) or inspect.isfunction(obj) or inspect.isbuiltin(obj)
-                       or (callable(obj) and not inspect.isclass(obj) and not inspect.ismodule(obj)))
-            if not is_call:
+            # A module another package owns (``import warnings`` surfacing through a dir() fallback)
+            # is not NumPy API; a NumPy submodule a module exports (numpy.ma.core) is a module row.
+            if inspect.ismodule(obj) and not obj.__name__.startswith("numpy"):
+                continue
+            # A class an object surface owns gets its class row and every member row there, credited
+            # through the explicit CLR owner map; emitting it here first would take the id with this
+            # scan's category and crediting instead.
+            if f"numpy.{surface}.{name}" in OBJECT_SURFACE_PATHS:
                 continue
             emit(surface, name, numpy_kind(np, obj), category, disposition, host_module, obj)
 
@@ -670,11 +857,8 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
     targets, surfaces, prefixes = member_maps(inventory)
     # Exported-type index (simple name -> full name) for crediting a NumPy CLASS export against a
     # NumSharp type of the same name. A repeated simple name prefers the root NumSharp.<Name>.
-    numsharp_types_by_simple: dict[str, str] = {}
-    for full in inventory.get("exportedTypes", []):
-        simple = full.rsplit(".", 1)[-1].split("+")[-1]
-        if simple not in numsharp_types_by_simple or full == f"NumSharp.{simple}":
-            numsharp_types_by_simple[simple] = full
+    # extended_surface_rows applies the same index to submodule classes.
+    numsharp_types_by_simple = numsharp_types_by_simple_name(inventory)
     # Case-sensitive matching IS the parity contract: NumPy's public API is case-sensitive, so every
     # match below (direct_target / auto_alternative / aliases / the stray gate) is an exact dict
     # lookup on the C# spelling. We ALSO fold case here to DETECT near-misses — an in-scope NumPy

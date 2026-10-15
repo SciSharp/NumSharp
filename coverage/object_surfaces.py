@@ -79,6 +79,14 @@ OBJECT_SURFACES = (
     ObjectSurface("vectorize", "Function wrappers", "NumSharp.Vectorized",
                   protocols=("__call__",)),
     ObjectSurface("lib.NumpyVersion", "Runtime & diagnostics", disposition="tooling"),
+    # Public classes whose members NumPy documents (or whose module NumPy lists as public) but which
+    # had no object surface before generator 1.13.0, found by auditing the catalog against NumPy's
+    # documentation index and public-module list. NumSharp implements none of them yet.
+    ObjectSurface("busdaycalendar", "Date & time", disposition="subsystem"),
+    ObjectSurface("ma.mrecords.MaskedRecords", "Masked record arrays", disposition="subsystem"),
+    ObjectSurface("lib.Arrayterator", "Array iterators", disposition="tooling"),
+    ObjectSurface("lib.user_array.container", "Array subclass helpers", disposition="tooling"),
+    ObjectSurface("testing.clear_and_catch_warnings", "Test support", disposition="tooling"),
 )
 
 OBJECT_SURFACE_PATHS = tuple("numpy." + surface.path for surface in OBJECT_SURFACES)
