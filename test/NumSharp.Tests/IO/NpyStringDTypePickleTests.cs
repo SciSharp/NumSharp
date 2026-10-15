@@ -164,18 +164,36 @@ namespace NumSharp.Tests.IO
         }
 
         /// <summary>Every loaded array's allocator is freed with the array: the live allocator count returns to its baseline.</summary>
+        /// <remarks>
+        ///     The count is process-wide, so another test's undisposed <c>StringDType</c> arrays lower it whenever a
+        ///     collection finalizes them; a window that a collection disturbed is measured again, never compared
+        ///     (<see cref="GcQuiescence"/>). Measured unguarded, the test failed whenever the string tests ran before it in
+        ///     one process (3 live allocators at the baseline, 1 after the loop).
+        /// </remarks>
         [TestMethod]
         public void LoadedArrays_ReleaseTheirAllocators()
         {
             using var a = np.array(new[] { "a", "bcdefghijklmnopqrs", "c" }, np.dtypes.StringDType());
             byte[] raw = np.save(a);
-            long baseline = VStringAllocator.LiveAllocators;
-            for (int i = 0; i < 50; i++)
+            for (int attempt = 0; ; attempt++)
             {
-                using var loaded = (NDArray)np.load(raw, allow_pickle: true);
-                loaded.size.Should().Be(3);
+                GcQuiescence.CollectYoung();
+                var window = GcQuiescence.OpenWindow();
+                long baseline = VStringAllocator.LiveAllocators;
+                for (int i = 0; i < 50; i++)
+                {
+                    using var loaded = (NDArray)np.load(raw, allow_pickle: true);
+                    loaded.size.Should().Be(3);
+                }
+                long after = VStringAllocator.LiveAllocators;
+                if (GcQuiescence.Undisturbed(window))
+                {
+                    after.Should().Be(baseline, "every loaded array's allocator is freed with the array");
+                    return;
+                }
+                if (attempt == 4)
+                    Assert.Inconclusive("Every measurement window was disturbed by a collection.");
             }
-            VStringAllocator.LiveAllocators.Should().Be(baseline);
         }
 
         /// <summary>
