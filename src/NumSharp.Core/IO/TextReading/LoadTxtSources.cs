@@ -35,6 +35,13 @@ namespace NumSharp.IO
         /// <returns>What the buffer is.</returns>
         internal abstract LoadTxtBufferState NextBuffer(out ReadOnlyMemory<char> buffer);
 
+        /// <summary>
+        ///     An upper bound on the buffers still to come when the source knows it (a line source over an array or a list:
+        ///     the lines not yet read), else -1. Every line buffer ends its row, so no more rows than this remain after the
+        ///     current one; the reader sizes its result from it.
+        /// </summary>
+        internal virtual long RemainingLinesHint => -1;
+
         /// <summary>Releases what the source owns (the file it opened); a caller's reader or stream is left open.</summary>
         public virtual void Dispose() { }
     }
@@ -50,6 +57,9 @@ namespace NumSharp.IO
         /// <returns>False at the end of the input.</returns>
         internal abstract bool TryReadLine(out ReadOnlyMemory<char> line);
 
+        /// <summary>The lines not yet read when the reader knows them (an array or a list), else -1.</summary>
+        internal virtual long RemainingLines => -1;
+
         /// <summary>Releases what the reader owns.</summary>
         public virtual void Dispose() { }
     }
@@ -62,9 +72,25 @@ namespace NumSharp.IO
     {
         private readonly IEnumerator<string> _lines;
 
+        // An array or a List<string> is read by index, which is how Python's list iterator walks a list: the length is
+        // tested before every element, so an element a converter changes is read as changed, and a list a converter grows
+        // or shrinks is walked to its new length (a List<T> enumerator would raise on the change instead). It also skips the
+        // enumerator's two interface calls per line, a measurable share of a short line.
+        private readonly string[] _array;
+        private readonly List<string> _list;
+        private int _index;
+
         /// <summary>Wraps the sequence.</summary>
         /// <param name="lines">The lines.</param>
-        internal LoadTxtSequenceLineReader(IEnumerable<string> lines) => _lines = lines.GetEnumerator();
+        internal LoadTxtSequenceLineReader(IEnumerable<string> lines)
+        {
+            if (lines is string[] array)
+                _array = array;
+            else if (lines is List<string> list)
+                _list = list;
+            else
+                _lines = lines.GetEnumerator();
+        }
 
         /// <summary>
         ///     True when the lines pass through NumPy's <c>_preprocess_comments</c> first (multiple or multi-character
@@ -79,12 +105,34 @@ namespace NumSharp.IO
         /// <exception cref="AttributeError">A null element when <see cref="NullLineIsAttributeError"/> is set.</exception>
         internal override bool TryReadLine(out ReadOnlyMemory<char> line)
         {
-            if (!_lines.MoveNext())
+            string s;
+            if (_array != null)
             {
-                line = default;
-                return false;
+                if (_index >= _array.Length)
+                {
+                    line = default;
+                    return false;
+                }
+                s = _array[_index++];
             }
-            string s = _lines.Current;
+            else if (_list != null)
+            {
+                if (_index >= _list.Count)
+                {
+                    line = default;
+                    return false;
+                }
+                s = _list[_index++];
+            }
+            else
+            {
+                if (!_lines.MoveNext())
+                {
+                    line = default;
+                    return false;
+                }
+                s = _lines.Current;
+            }
             if (s == null)
             {
                 if (NullLineIsAttributeError)
@@ -96,7 +144,13 @@ namespace NumSharp.IO
         }
 
         /// <inheritdoc/>
-        public override void Dispose() => _lines.Dispose();
+        /// <remarks>A list a converter changes can end with more or fewer lines; the count is the bound at the time asked
+        ///     (the reader then grows its result if more rows arrive).</remarks>
+        internal override long RemainingLines => _array != null ? _array.Length - _index : _list != null ? Math.Max(0, _list.Count - _index) : -1;
+
+        /// <inheritdoc/>
+        /// <remarks>An array or list is read by index and has no enumerator to release.</remarks>
+        public override void Dispose() => _lines?.Dispose();
     }
 
     /// <summary>
@@ -527,49 +581,66 @@ namespace NumSharp.IO
         ///     raised at the first line read, skipped lines included, as NumPy's generator raises it.</exception>
         internal override LoadTxtBufferState NextBuffer(out ReadOnlyMemory<char> buffer)
         {
-            if (!_lines.TryReadLine(out var line))
+            if (!_lines.TryReadLine(out buffer))
             {
                 buffer = default;
                 return LoadTxtBufferState.IsFileEnd;
             }
+            // The comment stripping lives in its own method: its locals and loop would otherwise give this per-line call a
+            // large frame to set up and zero on every line.
             if (_comments != null)
-            {
-                var span = line.Span;
-                foreach (object c in _comments)
-                {
-                    if (c is string s)
-                    {
-                        int at = span.IndexOf(s.AsSpan(), StringComparison.Ordinal);
-                        if (at >= 0)
-                            span = span.Slice(0, at);
-                    }
-                    else if (c is null)
-                    {
-                        // str.split(None, 1)[0]: leading whitespace dropped, then everything from the first whitespace
-                        // character on (Python's whitespace — the tokenizer's set, U+001C..U+001F included).
-                        int start = 0;
-                        while (start < span.Length && LoadTxtTokenizer.IsSpace(span[start]))
-                            start++;
-                        if (start == span.Length)
-                            throw new IndexError("list index out of range");
-                        int end = start;
-                        while (end < span.Length && !LoadTxtTokenizer.IsSpace(span[end]))
-                            end++;
-                        span = span.Slice(start, end - start);
-                        // A slice that does not start at the line's first character: the buffer is the slice's own memory.
-                        line = line.Slice(start);
-                    }
-                    else
-                    {
-                        throw new TypeError($"must be str or None, not {Backends.Strings.NDPyObject.TypeName(c)}");
-                    }
-                }
-                if (span.Length != line.Length)
-                    line = line.Slice(0, span.Length);
-            }
-            buffer = line;
+                buffer = StripComments(buffer);
             return LoadTxtBufferState.IsLineEnd;
         }
+
+        /// <summary>
+        ///     NumPy's <c>_preprocess_comments</c> over one line: each comment in order cuts the line at its first occurrence
+        ///     (<c>line.split(c, 1)[0]</c>); a <c>None</c> comment keeps the first whitespace-separated word.
+        /// </summary>
+        /// <param name="line">The line.</param>
+        /// <returns>The line's remaining text.</returns>
+        /// <exception cref="IndexError">A <c>None</c> comment over a line that is empty or only whitespace.</exception>
+        /// <exception cref="TypeError">A comment that is neither a str nor <c>None</c>.</exception>
+        private ReadOnlyMemory<char> StripComments(ReadOnlyMemory<char> line)
+        {
+            var span = line.Span;
+            foreach (object c in _comments)
+            {
+                if (c is string s)
+                {
+                    int at = span.IndexOf(s.AsSpan(), StringComparison.Ordinal);
+                    if (at >= 0)
+                        span = span.Slice(0, at);
+                }
+                else if (c is null)
+                {
+                    // str.split(None, 1)[0]: leading whitespace dropped, then everything from the first whitespace
+                    // character on (Python's whitespace — the tokenizer's set, U+001C..U+001F included).
+                    int start = 0;
+                    while (start < span.Length && LoadTxtTokenizer.IsSpace(span[start]))
+                        start++;
+                    if (start == span.Length)
+                        throw new IndexError("list index out of range");
+                    int end = start;
+                    while (end < span.Length && !LoadTxtTokenizer.IsSpace(span[end]))
+                        end++;
+                    span = span.Slice(start, end - start);
+                    // A slice that does not start at the line's first character: the buffer is the slice's own memory.
+                    line = line.Slice(start);
+                }
+                else
+                {
+                    throw new TypeError($"must be str or None, not {Backends.Strings.NDPyObject.TypeName(c)}");
+                }
+            }
+            if (span.Length != line.Length)
+                line = line.Slice(0, span.Length);
+            return line;
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>Every line is one buffer, a comment-stripped one included, so the reader's line count is the bound.</remarks>
+        internal override long RemainingLinesHint => _lines.RemainingLines;
 
         /// <inheritdoc/>
         public override void Dispose() => _lines.Dispose();

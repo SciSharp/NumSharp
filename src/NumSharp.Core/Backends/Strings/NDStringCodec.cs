@@ -89,6 +89,26 @@ namespace NumSharp.Backends.Strings
         public static void WriteUcs4(ReadOnlySpan<char> value, uint* dst, int chars)
         {
             int written = 0;
+            int kept = Math.Min(value.Length, chars);
+            if (kept <= 16 && chars - kept <= 16)
+            {
+                // A short element (a typical text field): widen the kept chars and test them for surrogates in the same pass,
+                // and zero-fill with stores — the vectorized range search and Clear each cost more to start than these few
+                // units take. Without a surrogate among the kept chars both branches below write exactly these units (the
+                // pairing loop meets no pair before it has written `chars` units), so only a surrogate falls through.
+                int i = 0;
+                while (i < kept && (uint)(value[i] - '\uD800') > '\uDFFF' - '\uD800')
+                {
+                    dst[i] = value[i];
+                    i++;
+                }
+                if (i == kept)
+                {
+                    for (; i < chars; i++)
+                        dst[i] = 0;
+                    return;
+                }
+            }
             if (value.IndexOfAnyInRange('\uD800', '\uDFFF') < 0)
             {
                 // No surrogates: one unit per char, a plain widening copy.

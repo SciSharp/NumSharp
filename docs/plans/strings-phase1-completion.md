@@ -662,6 +662,41 @@ After this plan, phase 2 loses P2.4 and gains the `T` forms of P2.1–P2.6 plus 
     - Gates (Release, `OpenBugs` and `HighMemory` excluded as in CI): unit 19,622 / 19,621 passed on net10.0 / net8.0
       (11 skipped each), oracle 347 passed on both (1 skipped).
   - P1.7f waits for the owner.
+- 2026-10-15 — **The text readers and writers validated in full** (owner's `/np-function` request: "Validate the
+  functions fully"): `np.loadtxt`, `np.savetxt`, `ndarray.tofile`, `np.fromfile` and `np.fromstring` over every dtype,
+  each against NumPy 2.4.2 in random differential sweeps, then brought to at least 1.5× NumPy wherever the file system
+  allows.
+  - **`np.fromstring` / `np.fromfile` rewritten as NumPy's `array_from_text`** (`IO/TextReading/NumPyTextScan*.cs`). The
+    old reader split the text into tokens and parsed them with .NET's parsers; 630 of the first 2,000 random cases
+    differed from NumPy. The port: `fromstr_next_element` / `fromfile_next_element` and the two skip-separator routines
+    over `swab_separator`; `fromstring`'s scanners are CPython's `PyOS_strtol` / `PyOS_strtoul` (64-bit `long`) and
+    NumPy's `NumPyOS_ascii_strtod`, `fromfile`'s are glibc's `fscanf` through a C `FILE` model (`ungetc`, the Python file
+    sought to `ftell` after the read, also after an error); `count ≥ 0` keeps the count (the failed scan's slot holds its
+    value); the argument conversions run in NumPy's order with NumPy's texts. Pinned to LP64 (Linux NumPy): Windows
+    NumPy's 32-bit `long` differs in 247 of 20,000 cases, all integer parsing.
+  - **Real `np.loadtxt` bugs fixed**: float16 fields are Python's `float()` of the text (underscores, Unicode digits and
+    Unicode whitespace accepted — NumPy's `npy_to_generic`), not float32's grammar; `max_rows=0` with an unsized `U` /
+    `S` is `need at least one array to concatenate`; a NumPy scalar's width in an unsized `U` / `S` is its dtype's
+    `REQUIRED_STR_LEN` (`np.float16` → `U32`), not its `str()` length.
+  - **`NDDoubleParse`** (`Utilities/`): Clinger + fast_float's Eisel-Lemire + .NET's parser for the undecided long
+    mantissas, correctly rounded (3,010,805 texts against `double.Parse`, 0 differ), shared by every text reader.
+  - **Speed**: the loadtxt tokenizer's step inline in its row loop, an ASCII class table before the vectorized search, a
+    one-pass reader for quote-free line buffers with its fields as slices of the line, per-row sink stores, index-based
+    reading of `string[]` / `List<string>` lines (Python's list iterator), a presized result for those sources, staged
+    text for an unsized `U` / `S`; binary `fromfile` reads straight into the result (and past 2 GB), binary `tofile`
+    writes straight from the buffer (views at an offset too), text `tofile` writes through a pooled byte buffer (it
+    allocated a 64 K-character writer and builder per call). Three JIT traps documented in CLAUDE.md: `stackalloc`
+    blocks inlining, an inlined P/Invoke sets up a call frame in every caller's prolog, a long single-call loop runs as
+    on-stack-replaced code.
+  - Validation: 50,000 random `fromstring` / `fromfile` cases, 181,500 `np.loadtxt` cases (70,000 of them
+    tokenizer-edge cases written for the new fast path) and 35,000 `savetxt` / `tofile` cases replayed against NumPy
+    2.4.2: 0 divergences. New unit tests: `IO/TextReaderPortTests.cs` (29), `Utilities/NDDoubleParseTests.cs` (4).
+  - Speed sheet (NPY/NS, two pinned P-cores, 1K / 100K / 1M elements, 219 cells, each result's SHA-256 against NumPy's):
+    geomean 3.81×. Under 1.5×: the contiguous binary `tofile` cells (0.93–1.34×), at the file system's floor —
+    `CREATE_ALWAYS` (`open('wb')`) plus one `WriteFile` alone take 189 µs / 237–287 µs / 509–592 µs for 8 KB / 100 KB /
+    1 MB on this machine, NumPy 219–284 / 316–790 / 619–6,617 µs.
+  - Gates (Release, `OpenBugs` and `HighMemory` excluded): unit 19,665 / 19,664 passed on net10.0 / net8.0, oracle 347
+    passed (1 skipped).
 
 ## 6. The next round: the rest of P1.7, so that phase 1 is complete
 

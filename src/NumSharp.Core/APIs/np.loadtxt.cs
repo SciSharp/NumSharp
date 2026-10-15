@@ -511,6 +511,11 @@ namespace NumSharp
         [NDScoped]
         private static NDArray LoadTxtCore(LoadTxtStream stream, LoadTxtConfig cfg, bool unpack)
         {
+            // An unsized string dtype ('U', 'S') is _read's chunked object read: `while max_rows != 0` reads chunks with the C
+            // reader and casts each. With max_rows == 0 the loop never runs, so the C reader checks nothing and _read
+            // concatenates an empty chunk list.
+            if (cfg.MaxRows == 0 && cfg.Descr.Meta is StringDTypeMeta && cfg.Descr.itemsize == 0)
+                throw new ValueError("need at least one array to concatenate");
             CheckLoadTxtControlCharacters(cfg);
             var tokenizer = new LoadTxtTokenizer(cfg.Delimiter, cfg.Quote, cfg.Comment);
             using LoadTxtSink sink = LoadTxtSink.Create(cfg.Descr, cfg.ByteConverters);
@@ -544,12 +549,34 @@ namespace NumSharp
                     if (cfg.Converters != null)
                         convFuncs = CreateLoadTxtConverters(cfg.Converters, actualNumFields, usecols);
                     started = true;
+                    // A source that bounds its remaining lines (an array or a list) bounds the rows: a sink of fixed-size
+                    // elements then allocates the result once and fills it in place, where NumPy grows its array in blocks
+                    // and shrinks it at the end (the values are the same either way).
+                    long moreLines = stream.RemainingLinesHint;
+                    if (moreLines >= 0 && actualNumFields > 0)
+                    {
+                        long bound = 1 + moreLines;
+                        if (cfg.MaxRows >= 0 && cfg.MaxRows < bound)
+                            bound = cfg.MaxRows;
+                        sink.Reserve(bound, actualNumFields);
+                    }
                 }
 
                 if (usecols == null && actualNumFields != currentNumFields)
                     throw new ValueError(
                         $"the number of columns changed from {actualNumFields} to {currentNumFields} at row {rowCount + 1}; " +
                         "use `usecols` to select a subset and avoid this error");
+
+                if (usecols == null && convFuncs == null)
+                {
+                    // Every field of the row, in order, with no converter: the sink runs the row's loop itself (one call per
+                    // row, the dtype's conversion inline), and reports the first field it could not store.
+                    int stored = sink.StoreRow(tokenizer, actualNumFields, out Exception cause);
+                    if (stored < actualNumFields)
+                        throw LoadTxtConvertError(tokenizer.Field(stored), sink.DescrText, rowCount, stored, cause);
+                    rowCount++;
+                    continue;
+                }
 
                 for (int i = 0; i < actualNumFields; i++)
                 {

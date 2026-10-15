@@ -788,10 +788,12 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="TypeError">The width exceeds the class's maximum (<c>string too large to store inside
         ///     array.</c>).</exception>
         /// <remarks>
-        ///     The width of a value: a string's code points, a byte[]'s length, 4 for <c>str(None)</c>; a number's is the
+        ///     The width of a value: a string's code points, a byte[]'s length, 4 for <c>str(None)</c>; a Python number's is the
         ///     length of its <c>str()</c> under a requested unsized class (<c>PyArray_DTypeFromObjectStringDiscovery</c>), and
         ///     its descriptor's text width without one (NumPy discovers the number's own dtype, then
-        ///     <c>PyArray_PromoteTypes</c> widens the string class to that dtype's <c>REQUIRED_STR_LEN</c>).
+        ///     <c>PyArray_PromoteTypes</c> widens the string class to that dtype's <c>REQUIRED_STR_LEN</c>). A NumPy scalar
+        ///     (<see cref="Half"/>, NumSharp's <see cref="decimal"/>) always takes its dtype's <c>REQUIRED_STR_LEN</c>: only the
+        ///     exact Python builtins are known scalars of the string classes.
         /// </remarks>
         private static DType Discover(IReadOnlyList<object> values, DType dtype)
         {
@@ -837,11 +839,29 @@ namespace NumSharp.Backends.Strings
                     char _ => 1,
                     byte[] b => b.Length,
                     null => 4, // str(None) == 'None'
-                    _ => dtype != null ? NDStringStorage.StrLength(v) : NumberTextWidth(v),
+                    // Under a requested class only the exact Python builtins (python_builtins_are_known_scalar_types) take
+                    // their str() length; a NumPy scalar (a Half, NumSharp's decimal) is discovered as its own dtype and cast
+                    // to the class, which is that dtype's REQUIRED_STR_LEN (np.array([np.float16(0.5)], 'U') is <U32).
+                    _ => dtype != null && v is not (Half or decimal) ? NDStringStorage.StrLength(v) : NumberTextWidth(v),
                 };
                 if (len > width)
                     width = len;
             }
+            return UnsizedTextDescr(cls, width);
+        }
+
+        /// <summary>
+        ///     The descriptor an unsized string class takes for its widest element: <paramref name="cls"/>'s class of
+        ///     <paramref name="width"/> characters, or the class singleton for a width of zero (the discovery's last step,
+        ///     shared with <c>np.loadtxt</c>'s staged unsized read, which measures the same widths without the objects).
+        /// </summary>
+        /// <param name="cls">The string class (U or S).</param>
+        /// <param name="width">The widest element's length: code points for U, bytes for S.</param>
+        /// <returns>The descriptor.</returns>
+        /// <exception cref="TypeError">A width past the class's maximum (<c>string too large to store inside
+        ///     array.</c>).</exception>
+        internal static DType UnsizedTextDescr(StringDTypeMeta cls, long width)
+        {
             if (width > cls.MaxChars)
                 throw new TypeError("string too large to store inside array.");
             return width == 0 ? cls.singleton : cls.Descr(width);

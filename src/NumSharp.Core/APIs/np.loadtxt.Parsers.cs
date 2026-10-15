@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using NumSharp.Backends;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -16,9 +17,12 @@ namespace NumSharp
 
         /// <summary>
         ///     Parses one field into the element slot of a numeric dtype — the dispatch NumPy makes through each field's
-        ///     <c>set_from_ucs4</c> function pointer: floats through <see cref="TryDoubleLT"/> (then narrowed: a float32 /
-        ///     float16 field is parsed as a double and rounded once), integers range-checked, unsigned integers refusing a
-        ///     sign, bool through int64 (any nonzero integer is True; <c>"True"</c> is not an integer and fails).
+        ///     <c>set_from_ucs4</c> function pointer: float32 / float64 through <see cref="TryDoubleLT"/> (a float32 field is
+        ///     parsed as a double and rounded once), integers range-checked, unsigned integers refusing a sign, bool through
+        ///     int64 (any nonzero integer is True; <c>"True"</c> is not an integer and fails). float16 has no
+        ///     <c>set_from_ucs4</c> of its own: NumPy's <c>npy_to_generic</c> packs the field's <c>str</c> with
+        ///     <c>PyArray_Pack</c>, i.e. Python's <c>float()</c> (underscores between digits, any Unicode decimal digit and
+        ///     space) rounded to float16 — <see cref="LoadtxtWriteGenericHalf"/>.
         /// </summary>
         /// <param name="tc">The result's storage lane.</param>
         /// <param name="tok">The field's characters (unstripped: each parser strips NumPy's whitespace itself).</param>
@@ -26,6 +30,8 @@ namespace NumSharp
         /// <returns>True when the field parsed and was written; false for any parse or range failure, which the caller
         ///     reports as NumPy's <c>could not convert string … to … at row r, column c.</c> without a cause (NumPy's
         ///     numeric parsers set no exception).</returns>
+        /// <exception cref="ValueError">A float16 field <c>float()</c> refuses: the error NumPy's generic conversion raises,
+        ///     which the caller chains as the cause of its <c>could not convert string</c> message.</exception>
         /// <remarks>A lane without a parser here (the string lanes) returns false: those dtypes have their own sinks.</remarks>
         private static bool LoadtxtWriteField(NPTypeCode tc, ReadOnlySpan<char> tok, Span<byte> dst)
         {
@@ -33,7 +39,7 @@ namespace NumSharp
             {
                 case NPTypeCode.Double: { if (!TryDoubleLT(tok, out double v)) return false; MemoryMarshal.Write(dst, in v); return true; }
                 case NPTypeCode.Single: { if (!TryDoubleLT(tok, out double v)) return false; float f = (float)v; MemoryMarshal.Write(dst, in f); return true; }
-                case NPTypeCode.Half: { if (!TryDoubleLT(tok, out double v)) return false; Half h = (Half)v; MemoryMarshal.Write(dst, in h); return true; }
+                case NPTypeCode.Half: return LoadtxtWriteGenericHalf(tok, dst);
                 case NPTypeCode.Decimal: { if (!TryDecimalLT(tok, out decimal v)) return false; MemoryMarshal.Write(dst, in v); return true; }
                 case NPTypeCode.Complex: { if (!TryComplexLT(tok, out Complex v)) return false; MemoryMarshal.Write(dst, in v); return true; }
                 case NPTypeCode.Int64: { if (!TryLongLT(tok, long.MinValue, long.MaxValue, out long v)) return false; MemoryMarshal.Write(dst, in v); return true; }
@@ -51,6 +57,115 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     A float16 field, as NumPy's <c>npy_to_generic</c> stores it: <c>PyArray_Pack(float16, str(field))</c>, which
+        ///     reaches <c>HALF_setitem</c> and Python's <c>float()</c> of the text (<see cref="ReductionInitial.PackStore"/>
+        ///     carries that grammar), then <c>npy_double_to_half</c>.
+        /// </summary>
+        /// <param name="tok">The field's characters, unstripped (<c>float()</c> strips its own whitespace).</param>
+        /// <param name="dst">The element slot (at least 2 bytes).</param>
+        /// <returns>True (a failure raises).</returns>
+        /// <exception cref="ValueError"><c>could not convert string to float: '…'</c>, which the reader chains as the cause of
+        ///     its own message.</exception>
+        private static bool LoadtxtWriteGenericHalf(ReadOnlySpan<char> tok, Span<byte> dst)
+        {
+            // Fast path, exact for the text it accepts: an ASCII field (below 127) without '_' is a str that float() reads
+            // as PyOS_string_to_double of the field stripped of Py_ISSPACE (the six ASCII whitespace characters), or as
+            // one of the inf / infinity / nan words. Anything else — underscores, Unicode digits or spaces, junk — takes
+            // the full float() path, which also raises float()'s own error.
+            if (TryPythonFloatAscii(tok, out double fast))
+            {
+                Half h = (Half)fast;
+                MemoryMarshal.Write(dst, in h);
+                return true;
+            }
+            Span<byte> slot = stackalloc byte[ReductionInitial.SlotBytes];
+            ReductionInitial.PackStore(tok.ToString(), NPTypeCode.Half, slot);
+            slot.Slice(0, 2).CopyTo(dst);
+            return true;
+        }
+
+        /// <summary>
+        ///     Python's <c>float(s)</c> for an ASCII <c>str</c> without underscores: the text stripped of <c>Py_ISSPACE</c>
+        ///     (space, <c>\t</c>, <c>\n</c>, <c>\v</c>, <c>\f</c>, <c>\r</c> — not the C0 separators, which only a Unicode
+        ///     <c>str</c> transform would map), then one decimal number or <c>inf</c> / <c>infinity</c> / <c>nan</c> with an
+        ///     optional sign, case-insensitive. NaN keeps the sign (<c>float('-nan')</c> is <c>-fabs(Py_NAN)</c>).
+        /// </summary>
+        /// <param name="tok">The text.</param>
+        /// <param name="value">The value, when accepted.</param>
+        /// <returns>False when the text is not ASCII, holds an underscore, or is not one number: the caller then runs the
+        ///     full <c>float()</c> (which accepts what this refuses or raises the error).</returns>
+        private static bool TryPythonFloatAscii(ReadOnlySpan<char> tok, out double value)
+        {
+            value = 0;
+            int start = 0, end = tok.Length;
+            for (int i = 0; i < end; i++)
+                if (tok[i] >= 127 || tok[i] == '_')
+                    return false;
+            while (start < end && IsPySpace(tok[start])) start++;
+            while (end > start && IsPySpace(tok[end - 1])) end--;
+            var s = tok.Slice(start, end - start);
+            if (NDDoubleParse.TryParseWhole(s, out value))
+                return true;
+            return TryInfNanWord(s, out value);
+        }
+
+        /// <summary>CPython's <c>Py_ISSPACE</c> (and the C locale's <c>isspace</c>): the six ASCII whitespace characters.</summary>
+        /// <param name="c">The character.</param>
+        /// <returns>True for space, <c>\t</c>, <c>\n</c>, <c>\v</c>, <c>\f</c>, <c>\r</c>.</returns>
+        private static bool IsPySpace(char c) => c == ' ' || (uint)(c - '\t') <= '\r' - '\t';
+
+        /// <summary>
+        ///     CPython's <c>_Py_parse_inf_or_nan</c> over the WHOLE text: an optional sign, then <c>inf</c>,
+        ///     <c>infinity</c> or <c>nan</c> in any case. NaN takes the sign (<c>-fabs(Py_NAN)</c>); the unsigned NaN is the
+        ///     positive quiet NaN.
+        /// </summary>
+        /// <param name="s">The stripped text.</param>
+        /// <param name="value">The value, when it matched.</param>
+        /// <returns>True when the text is exactly one of the words.</returns>
+        private static bool TryInfNanWord(ReadOnlySpan<char> s, out double value)
+        {
+            value = 0;
+            if (s.Length == 0)
+                return false;
+            ReadOnlySpan<char> body = s;
+            bool negative = false;
+            if (body[0] == '+') body = body.Slice(1);
+            else if (body[0] == '-') { negative = true; body = body.Slice(1); }
+            if (EqualsAsciiIgnoreCase(body, "inf") || EqualsAsciiIgnoreCase(body, "infinity"))
+            {
+                value = negative ? double.NegativeInfinity : double.PositiveInfinity;
+                return true;
+            }
+            if (EqualsAsciiIgnoreCase(body, "nan"))
+            {
+                value = negative ? double.NaN : LoadtxtPositiveNaN;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        ///     CPython's <c>case_insensitive_match</c>: the text is exactly <paramref name="lowerWord"/>, each letter in either
+        ///     ASCII case. Unlike <see cref="StringComparison.OrdinalIgnoreCase"/>, a non-ASCII letter whose upper case is ASCII
+        ///     (the dotless <c>ı</c> of <c>"ınf"</c>) does not match: NumPy hands the parser ASCII only.
+        /// </summary>
+        /// <param name="s">The text.</param>
+        /// <param name="lowerWord">The lower-case ASCII word.</param>
+        /// <returns>True on a match.</returns>
+        private static bool EqualsAsciiIgnoreCase(ReadOnlySpan<char> s, string lowerWord)
+        {
+            if (s.Length != lowerWord.Length)
+                return false;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (c >= 128 || (c | 0x20) != lowerWord[i])
+                    return false;
+            }
+            return true;
+        }
+
+        /// <summary>
         ///     The NaN NumPy's C parser produces for <c>"nan"</c>: the POSITIVE quiet NaN <c>0x7FF8…</c> (.NET's
         ///     <see cref="double.NaN"/> is the negative one, <c>0xFFF8…</c>, so a field must not parse to it). See np.fromfile.cs.
         /// </summary>
@@ -63,7 +178,11 @@ namespace NumSharp
         /// </summary>
         /// <param name="c">The character.</param>
         /// <returns>True for NumPy's whitespace.</returns>
-        private static bool IsLoadtxtWhitespace(char c) => char.IsWhiteSpace(c) || (c >= '\u001c' && c <= '\u001f');
+        private static bool IsLoadtxtWhitespace(char c)
+            // ASCII first: a printable ASCII character (most field text) is past ' ' and below U+0085 (NEL), the first
+            // non-ASCII whitespace, so the Unicode table is consulted only for the rare text beyond it.
+            => c <= ' ' ? c == ' ' || (uint)(c - '\t') <= '\r' - '\t' || (uint)(c - 0x1c) <= 3
+                        : c >= 0x85 && char.IsWhiteSpace(c);
 
         /// <summary>
         ///     Strips NumPy's whitespace (<see cref="IsLoadtxtWhitespace"/>) from both ends of a field — the strip
@@ -92,53 +211,111 @@ namespace NumSharp
         private static bool TryDoubleLT(ReadOnlySpan<char> tok, out double value)
         {
             ReadOnlySpan<char> s = TrimLoadtxtWs(tok);
-            if (s.Length > 0)
-            {
-                // inf / infinity / nan (case-insensitive, optional sign) — double.TryParse rejects these.
-                ReadOnlySpan<char> body = s;
-                int sign = 1;
-                if (body[0] == '+') body = body.Slice(1);
-                else if (body[0] == '-') { sign = -1; body = body.Slice(1); }
-                if (body.Equals("inf", StringComparison.OrdinalIgnoreCase) || body.Equals("infinity", StringComparison.OrdinalIgnoreCase))
-                { value = sign < 0 ? double.NegativeInfinity : double.PositiveInfinity; return true; }
-                if (body.Equals("nan", StringComparison.OrdinalIgnoreCase))
-                { value = sign < 0 ? double.NaN : LoadtxtPositiveNaN; return true; }
-            }
-            // Requires the whole token to be a valid float (NumPy's p_end == end): rejects hex / "_" / junk.
-            return double.TryParse(s, NumberStyles.Float, CI, out value);
+            // The whole stripped field must be one number (NumPy's p_end == end): hex, '_' and trailing text are refused.
+            // The decimal grammar is _Py_dg_strtod's; the inf / nan words are _Py_parse_inf_or_nan's (no "nan(...)").
+            if (NDDoubleParse.TryParseWhole(s, out value))
+                return true;
+            return TryInfNanWord(s, out value);
         }
 
         /// <summary>
-        ///     Parses a signed integer field as NumPy's <c>str_to_int64</c> does, range-checked against the target dtype
-        ///     (<c>int8 "200"</c> fails, it does not wrap).
+        ///     NumPy's <c>str_to_int64</c> (textreading/str_to_int.h), range-checked against the target dtype while the digits
+        ///     accumulate (<c>int8 "200"</c> fails, it does not wrap): <c>Py_UNICODE_ISSPACE</c> whitespace, one optional sign,
+        ///     at least one ASCII digit, then only whitespace.
         /// </summary>
         /// <param name="tok">The field.</param>
         /// <param name="min">The dtype's smallest value.</param>
         /// <param name="max">The dtype's largest value.</param>
         /// <param name="value">The value (0 on failure).</param>
-        /// <returns>True when the stripped field is an integer within [<paramref name="min"/>, <paramref name="max"/>].</returns>
+        /// <returns>True when the field is an integer within [<paramref name="min"/>, <paramref name="max"/>].</returns>
         private static bool TryLongLT(ReadOnlySpan<char> tok, long min, long max, out long value)
         {
-            if (long.TryParse(TrimLoadtxtWs(tok), NumberStyles.Integer, CI, out value) && value >= min && value <= max)
-                return true;
             value = 0;
-            return false;
+            int p = 0, end = tok.Length;
+            while (p < end && IsLoadtxtWhitespace(tok[p])) p++;
+            bool negative = false;
+            if (p < end && tok[p] == '-') { negative = true; p++; }
+            else if (p < end && tok[p] == '+') p++;
+            if (p >= end || (uint)(tok[p] - '0') > 9)
+                return false;
+            long number = 0;
+            if (negative)
+            {
+                // accumulate downwards so int_min itself is reachable
+                long preMin = min / 10;
+                int digPreMin = (int)-(min % 10);
+                while (p < end && (uint)(tok[p] - '0') <= 9)
+                {
+                    int d = tok[p] - '0';
+                    if (number > preMin || (number == preMin && d <= digPreMin))
+                    {
+                        number = number * 10 - d;
+                        p++;
+                    }
+                    else
+                        return false;
+                }
+            }
+            else
+            {
+                long preMax = max / 10;
+                int digPreMax = (int)(max % 10);
+                while (p < end && (uint)(tok[p] - '0') <= 9)
+                {
+                    int d = tok[p] - '0';
+                    if (number < preMax || (number == preMax && d <= digPreMax))
+                    {
+                        number = number * 10 + d;
+                        p++;
+                    }
+                    else
+                        return false;
+                }
+            }
+            while (p < end && IsLoadtxtWhitespace(tok[p])) p++;
+            if (p != end)
+                return false;
+            value = number;
+            return true;
         }
 
         /// <summary>
-        ///     Parses an unsigned integer field as NumPy's <c>str_to_uint64</c> does: a negative sign is refused outright
-        ///     (<c>uint8 "-1"</c> fails), and the value is range-checked against the target dtype.
+        ///     NumPy's <c>str_to_uint64</c>: as <see cref="TryLongLT"/>, but a minus sign is refused outright (<c>uint8 "-1"</c>
+        ///     fails) and a plus sign is allowed.
         /// </summary>
         /// <param name="tok">The field.</param>
         /// <param name="max">The dtype's largest value.</param>
         /// <param name="value">The value (0 on failure).</param>
-        /// <returns>True when the stripped field is an unsigned integer not above <paramref name="max"/>.</returns>
+        /// <returns>True when the field is an unsigned integer not above <paramref name="max"/>.</returns>
         private static bool TryULongLT(ReadOnlySpan<char> tok, ulong max, out ulong value)
         {
-            ReadOnlySpan<char> s = TrimLoadtxtWs(tok);
             value = 0;
-            if (s.Length > 0 && s[0] == '-') return false; // unsigned rejects a negative sign outright
-            return ulong.TryParse(s, NumberStyles.Integer, CI, out value) && value <= max;
+            int p = 0, end = tok.Length;
+            while (p < end && IsLoadtxtWhitespace(tok[p])) p++;
+            if (p < end && tok[p] == '-')
+                return false;
+            if (p < end && tok[p] == '+') p++;
+            if (p >= end || (uint)(tok[p] - '0') > 9)
+                return false;
+            ulong number = 0;
+            ulong preMax = max / 10;
+            int digPreMax = (int)(max % 10);
+            while (p < end && (uint)(tok[p] - '0') <= 9)
+            {
+                int d = tok[p] - '0';
+                if (number < preMax || (number == preMax && d <= digPreMax))
+                {
+                    number = number * 10 + (uint)d;
+                    p++;
+                }
+                else
+                    return false;
+            }
+            while (p < end && IsLoadtxtWhitespace(tok[p])) p++;
+            if (p != end)
+                return false;
+            value = number;
+            return true;
         }
 
         /// <summary>
@@ -237,7 +414,7 @@ namespace NumSharp
             }
 
             consumed = i;
-            value = double.Parse(s.Slice(begin, i - begin), NumberStyles.Float, CI);
+            value = NDDoubleParse.Parse(s.Slice(begin, i - begin));
             return true;
         }
 
@@ -251,7 +428,8 @@ namespace NumSharp
         {
             if (i + word.Length > end) return false;
             for (int k = 0; k < word.Length; k++)
-                if (char.ToLowerInvariant(s[i + k]) != word[k]) return false;
+                // ASCII letters only: NumPy hands its parser ASCII text, so a dotless 'ı' (upper case 'I') is no 'i'
+                if (s[i + k] >= 128 || (s[i + k] | 0x20) != word[k]) return false;
             return true;
         }
 

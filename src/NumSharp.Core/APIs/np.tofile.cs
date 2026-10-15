@@ -103,9 +103,9 @@ namespace NumSharp
                 WriteText(stream, sep, format);
         }
 
-        // Binary: raw item bytes in C-order. Contiguous offset-0 views stream straight from their
-        // buffer (no managed copy); every other layout is materialized C-contiguous first — mirroring
-        // NumPy's PyArray_ToFile (whole-buffer fwrite when ISCONTIGUOUS, else a C-order element walk).
+        // Binary: raw item bytes in C-order. C-contiguous arrays (views included) are written straight
+        // from their buffer (no managed copy); every other layout is materialized C-contiguous first —
+        // mirroring NumPy's PyArray_ToFile (whole-buffer fwrite when ISCONTIGUOUS, else a C-order element walk).
         /// <exception cref="OSError">A <c>StringDType</c> array (also an empty one): NumPy's <c>PyArray_ToFile</c> refuses
         ///     every dtype with <c>NPY_LIST_PICKLE</c> before it looks at the size, because a cell holds an arena offset or a
         ///     heap pointer that means nothing outside its own buffer.</exception>
@@ -118,18 +118,30 @@ namespace NumSharp
             if (size == 0 || dtypesize == 0)
                 return;
 
-            bool directable = Shape.IsContiguous && Shape.offset == 0;
+            // A C-contiguous array is written from its own buffer, starting at its first element (a contiguous slice
+            // re-seats the address and keeps offset 0, a contiguous view of a strided parent keeps the base address and a
+            // non-zero offset: address + offset * itemsize covers both); any other layout is materialized in C order first.
+            bool directable = Shape.IsContiguous;
             NDArray src = directable ? this : this.copy('C');
             try
             {
                 unsafe
                 {
-                    long len = checked((long)src.size * src.dtypesize);
-                    using (var ums = new UnmanagedMemoryStream((byte*)src.Storage.Address, len))
-                        ums.CopyTo(stream);
+                    int itemSize = src.dtypesize;
+                    byte* p = (byte*)src.Storage.Address + src.Shape.offset * (long)itemSize;
+                    long len = checked((long)src.size * itemSize);
+                    // NumPy's single fwrite of the buffer: spans written straight from it (a stream passes a span larger
+                    // than its own buffer to the OS directly), at most a gigabyte each because a span's length is an int.
+                    while (len > 0)
+                    {
+                        int n = (int)Math.Min(len, 1 << 30);
+                        stream.Write(new ReadOnlySpan<byte>(p, n));
+                        p += n;
+                        len -= n;
+                    }
                 }
 
-                // Keep the (possibly freshly-copied) source alive until the unmanaged read completes.
+                // Keep the (possibly freshly-copied) source alive until the unmanaged writes complete.
                 System.GC.KeepAlive(src);
             }
             finally
@@ -199,9 +211,23 @@ namespace NumSharp
             }
         }
 
-        // Text: each element in C-order is rendered via `format % (item,)` (default "%s" == str(item)) and joined by
-        // `sep` — no trailing separator. GetAtIndex walks logical C-order through the shape's strides, so any layout is
-        // honored without a prior materialization.
+        /// <summary>
+        ///     <c>PyArray_ToFile</c>'s text mode: for each element in C order, its text (<c>str(item)</c> or
+        ///     <c>format % (item,)</c> of the Python object <c>getitem</c> returns) as ASCII, then the separator's UTF-8 bytes
+        ///     except after the last element.
+        /// </summary>
+        /// <param name="stream">The destination (left open, flushed at the end).</param>
+        /// <param name="sep">The separator (non-empty; checked by the caller).</param>
+        /// <param name="format">The <c>%</c> format, or <c>""</c> / <c>"%s"</c> for <c>str(item)</c>.</param>
+        /// <exception cref="UnicodeEncodeError">An element's text is not ASCII.</exception>
+        /// <exception cref="TypeError">CPython's <c>TypeError</c> of <c>format % (item,)</c>.</exception>
+        /// <remarks>
+        ///     The bytes go straight into a pooled 32 KiB buffer that is written whenever it fills: the element texts are
+        ///     ASCII (each is checked), so each character is its own byte, and the separator is encoded once. A
+        ///     <see cref="StreamWriter"/> with a 64 K-character buffer and a builder of the same size cost more per call than
+        ///     a thousand elements take to format. An element that fails leaves the elements before it, each with its
+        ///     separator, in the stream — NumPy fwrites element by element — because the buffer is written on failure too.
+        /// </remarks>
         private void WriteText(Stream stream, string sep, string format)
         {
             if (size == 0)
@@ -214,13 +240,6 @@ namespace NumSharp
             PercentFormat program = useScalarStr ? null : PrintfFormatter.Compile(format);
             long n = size;
 
-            // ASCII-compatible, no BOM; leave the caller's stream open.
-            using var sw = new StreamWriter(stream, new UTF8Encoding(false), 1 << 16, leaveOpen: true);
-
-            // Batch elements into a StringBuilder and flush in ~32 KB chunks — one encoded Write per
-            // chunk instead of two per element keeps the writer overhead off the hot path while bounding
-            // memory (matters for very large arrays; a per-element StreamWriter.Write is otherwise a
-            // measurable tax on top of the per-element scalar formatting).
             // NumPy's tofile pulls each element through getitem, which returns a Python float (double)
             // for float16/float32 — so the emitted text is that widened double's, not the value rendered
             // at the array's narrower native precision (e.g. float32 0.1 -> "0.10000000149011612", not
@@ -238,7 +257,9 @@ namespace NumSharp
             // a float NaN, a string, an int ...), whose str() / `format % obj` are CPython's rules for that object's type.
             bool pyObjects = Storage.IsVString;
 
-            var sb = new StringBuilder(1 << 16);
+            // The separator is written as its UTF-8 bytes (NumPy fwrites the C string).
+            byte[] sepBytes = Encoding.UTF8.GetBytes(sep);
+            var output = new AsciiOutput(stream);
             // NumPy's `format % (item,)`: a one-item tuple of the Python object getitem returned. The tuple and the
             // element's text buffer are reused for every element.
             var args = new object[1];
@@ -261,7 +282,7 @@ namespace NumSharp
                                 ? (v is byte[] bytes ? Backends.Printing.PyRepr.Bytes(bytes) : (string)v)
                                 : Backends.Printing.ArrayFormatter.ScalarStr(v, renderTc);
                         Backends.Strings.NDStringCodec.ThrowIfNotAscii(str.AsSpan());
-                        sb.Append(str);
+                        output.Ascii(str.AsSpan());
                     }
                     else
                     {
@@ -269,17 +290,12 @@ namespace NumSharp
                         args[0] = pyObjects ? v : GetItemObject(v, tc);
                         program.FormatInto(item, args, kinds);
                         ThrowIfNotAscii(item);
-                        sb.Append(item);
+                        foreach (ReadOnlyMemory<char> chunk in item.GetChunks())
+                            output.Ascii(chunk.Span);
                     }
 
                     if (i != n - 1)
-                        sb.Append(sep);
-
-                    if (sb.Length >= (1 << 15))
-                    {
-                        sw.Write(sb);
-                        sb.Clear();
-                    }
+                        output.Bytes(sepBytes);
                 }
             }
             catch (PrintfArgumentException e)
@@ -291,11 +307,83 @@ namespace NumSharp
             }
             finally
             {
-                // NumPy fwrites element by element (each element, then its separator), so an element that fails leaves every
-                // element before it — and the separator after each — in the file. The batch flushes here on success and on
-                // failure alike; the failing element's own text never reached the batch.
-                if (sb.Length > 0)
-                    sw.Write(sb);
+                // On success and on failure alike: every element written before a failing one stays (the failing
+                // element's own text never reached the buffer), then the stream is flushed as NumPy's file is.
+                output.Close();
+            }
+        }
+
+        /// <summary>
+        ///     The byte buffer <see cref="WriteText"/> writes through: ASCII text one byte per character and raw bytes,
+        ///     collected in a pooled 32 KiB array that is written to the stream whenever it fills.
+        /// </summary>
+        /// <remarks>A class rather than locals because the element loop and the error paths share it; <see cref="Close"/>
+        ///     returns the array to the pool (idempotent).</remarks>
+        private sealed class AsciiOutput
+        {
+            private readonly Stream _stream;
+            private byte[] _buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(1 << 15);
+            private int _used;
+
+            /// <summary>Creates the buffer over a stream.</summary>
+            /// <param name="stream">The destination.</param>
+            internal AsciiOutput(Stream stream) => _stream = stream;
+
+            /// <summary>Appends text whose characters are all ASCII (checked by the caller): one byte each.</summary>
+            /// <param name="text">The text.</param>
+            internal void Ascii(ReadOnlySpan<char> text)
+            {
+                while (text.Length > 0)
+                {
+                    if (_used == _buffer.Length)
+                        Drain();
+                    int n = Math.Min(text.Length, _buffer.Length - _used);
+                    Span<byte> dst = _buffer.AsSpan(_used, n);
+                    for (int i = 0; i < n; i++)
+                        dst[i] = (byte)text[i];
+                    _used += n;
+                    text = text.Slice(n);
+                }
+            }
+
+            /// <summary>Appends raw bytes (the separator's UTF-8).</summary>
+            /// <param name="bytes">The bytes.</param>
+            internal void Bytes(ReadOnlySpan<byte> bytes)
+            {
+                while (bytes.Length > 0)
+                {
+                    if (_used == _buffer.Length)
+                        Drain();
+                    int n = Math.Min(bytes.Length, _buffer.Length - _used);
+                    bytes.Slice(0, n).CopyTo(_buffer.AsSpan(_used, n));
+                    _used += n;
+                    bytes = bytes.Slice(n);
+                }
+            }
+
+            /// <summary>Writes the buffered bytes to the stream.</summary>
+            private void Drain()
+            {
+                _stream.Write(_buffer, 0, _used);
+                _used = 0;
+            }
+
+            /// <summary>Writes what is buffered, flushes the stream and returns the array to the pool.</summary>
+            internal void Close()
+            {
+                if (_buffer == null)
+                    return;
+                try
+                {
+                    if (_used > 0)
+                        Drain();
+                    _stream.Flush();
+                }
+                finally
+                {
+                    System.Buffers.ArrayPool<byte>.Shared.Return(_buffer);
+                    _buffer = null;
+                }
             }
         }
     }

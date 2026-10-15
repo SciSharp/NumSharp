@@ -5,6 +5,7 @@ using NumSharp.Backends;
 using NumSharp.Backends.Strings;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Backends.Unmanaged.Pooling;
+using NumSharp.IO;
 
 namespace NumSharp
 {
@@ -43,6 +44,45 @@ namespace NumSharp
             ///     cause of that same message (NumPy's <c>npy_PyErr_ChainExceptionsCause</c>).</exception>
             internal abstract bool Store(ReadOnlySpan<char> field, Func<string, object> converter);
 
+            /// <summary>
+            ///     Converts and appends the first <paramref name="count"/> fields of a row that has no converter and no
+            ///     <c>usecols</c> selection: <see cref="Store"/> for each field in order, with the row's loop inside the sink so
+            ///     a sink can run its own conversion per field without a virtual call each.
+            /// </summary>
+            /// <param name="row">The tokenizer holding the row.</param>
+            /// <param name="count">The number of fields to store (the row's field count).</param>
+            /// <param name="cause">The error that stopped the row, or null (also when a parser refused a field without
+            ///     one).</param>
+            /// <returns><paramref name="count"/> when every field was stored, else the index of the field that was not, which
+            ///     the caller reports as NumPy's <c>could not convert string … at row r, column c.</c> with
+            ///     <paramref name="cause"/> chained.</returns>
+            internal virtual int StoreRow(LoadTxtTokenizer row, int count, out Exception cause)
+            {
+                // The row's characters once; each field is a slice of them.
+                ReadOnlySpan<char> chars = row.RowChars;
+                int[] starts = row.FieldStarts, ends = row.FieldEnds;
+                int i = 0;
+                try
+                {
+                    for (; i < count; i++)
+                    {
+                        if (!Store(chars.Slice(starts[i], ends[i] - starts[i]), null))
+                        {
+                            cause = null;
+                            return i;
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    // The caller chains it as the cause, as it chains an error of Store.
+                    cause = e;
+                    return i;
+                }
+                cause = null;
+                return count;
+            }
+
             /// <summary>Builds the result: a fresh C-ordered <c>(rows, cols)</c> array that owns its data (NumPy's
             ///     <c>read_rows</c> result, whatever <c>ndmin</c> does to it afterwards).</summary>
             /// <param name="rows">The number of data rows read.</param>
@@ -50,6 +90,100 @@ namespace NumSharp
             /// <returns>The array.</returns>
             /// <exception cref="OutOfMemoryException">The result cannot be allocated, or a string cannot be packed.</exception>
             internal abstract NDArray Finish(long rows, int cols);
+
+            /// <summary>
+            ///     Sizes the staging for a source that bounds its rows (<see cref="LoadTxtStream.RemainingLinesHint"/>): a sink
+            ///     of fixed-size elements allocates its result at once and writes the elements straight into it, so the
+            ///     doubling buffer's copies and the final copy into the result are skipped. Called once, at the first data
+            ///     row, before any element is stored.
+            /// </summary>
+            /// <param name="rows">The most rows the read can produce (at least 1).</param>
+            /// <param name="cols">The number of result columns.</param>
+            internal virtual void Reserve(long rows, int cols) { }
+
+            /// <summary>The largest result <see cref="Reserve"/> allocates up front: past it the rows a source bounds may be
+            ///     mostly comment lines, and the doubling buffer's extra copy is a small share of such a read anyway.</summary>
+            protected const long PresizeMaxBytes = 1L << 26;
+
+            /// <summary>
+            ///     Allocates a presized result (see <see cref="Reserve"/>): its buffer becomes the staging buffer.
+            /// </summary>
+            /// <param name="descr">The result's descriptor.</param>
+            /// <param name="rows">The rows to allocate.</param>
+            /// <param name="cols">The columns.</param>
+            /// <param name="itemSize">The element size in bytes.</param>
+            /// <param name="buffer">The result's buffer.</param>
+            /// <param name="capacity">Its size in bytes.</param>
+            /// <returns>The result, or null when it would exceed <see cref="PresizeMaxBytes"/>.</returns>
+            /// <exception cref="OutOfMemoryException">The result cannot be allocated.</exception>
+            protected static unsafe NDArray AllocatePresized(DType descr, long rows, int cols, int itemSize, out byte* buffer, out long capacity)
+            {
+                buffer = null;
+                capacity = 0;
+                if (rows <= 0 || cols <= 0 || itemSize <= 0 || rows > PresizeMaxBytes / cols / itemSize)
+                    return null;
+                var result = new NDArray(descr, new Shape(rows, cols), false);
+                buffer = (byte*)result.Storage.Address;
+                capacity = rows * cols * itemSize;
+                return result;
+            }
+
+            /// <summary>
+            ///     Leaves a presized result when the source produced more rows than it bounded (a converter grew the list):
+            ///     the staged elements move to a pooled buffer that grows as usual, and the presized result is released.
+            /// </summary>
+            /// <param name="presized">The presized result (cleared).</param>
+            /// <param name="buffer">The staging buffer (replaced by the pooled one).</param>
+            /// <param name="capacity">Its size (replaced).</param>
+            /// <param name="used">The bytes staged.</param>
+            /// <param name="needed">The free bytes the caller is about to write.</param>
+            /// <exception cref="OutOfMemoryException">The pool cannot provide the buffer.</exception>
+            protected static unsafe void LeavePresized(ref NDArray presized, ref byte* buffer, ref long capacity, long used, long needed)
+            {
+                byte* staged = buffer;
+                buffer = null;
+                capacity = 0;
+                Grow(ref buffer, ref capacity, 0, used + needed);
+                if (used > 0)
+                    Buffer.MemoryCopy(staged, buffer, capacity, used);
+                presized.Dispose();
+                presized = null;
+            }
+
+            /// <summary>
+            ///     The result of a presized read: the presized array itself when every row it was sized for arrived, else an
+            ///     exact array of the rows read (the bound counted lines that held no row: blanks, comments, a quoted field's
+            ///     continuation), the presized one released.
+            /// </summary>
+            /// <param name="descr">The result's descriptor.</param>
+            /// <param name="presized">The presized result (cleared).</param>
+            /// <param name="buffer">Its buffer, the staging buffer (cleared).</param>
+            /// <param name="capacity">Its size (cleared).</param>
+            /// <param name="presizedRows">The rows it was allocated with.</param>
+            /// <param name="rows">The rows read.</param>
+            /// <param name="cols">The columns.</param>
+            /// <param name="itemSize">The element size in bytes.</param>
+            /// <returns>The result.</returns>
+            /// <exception cref="OutOfMemoryException">The exact array cannot be allocated.</exception>
+            protected static unsafe NDArray TakePresized(DType descr, ref NDArray presized, ref byte* buffer, ref long capacity,
+                long presizedRows, long rows, int cols, int itemSize)
+            {
+                NDArray result = presized;
+                byte* staged = buffer;
+                presized = null;
+                buffer = null;
+                capacity = 0;
+                if (rows == presizedRows)
+                    return result;
+                using (result)
+                {
+                    var exact = new NDArray(descr, new Shape(rows, cols), false);
+                    long bytes = rows * cols * itemSize;
+                    if (bytes > 0)
+                        Buffer.MemoryCopy(staged, (byte*)exact.Storage.Address, bytes, bytes);
+                    return exact;
+                }
+            }
 
             /// <summary>Returns the staging memory to the pool (idempotent).</summary>
             public virtual void Dispose() { }
@@ -95,10 +229,25 @@ namespace NumSharp
             /// <param name="used">The bytes in use (kept by the copy).</param>
             /// <param name="needed">The free bytes the caller is about to write.</param>
             /// <exception cref="OutOfMemoryException">The pool cannot provide the larger buffer.</exception>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             protected static unsafe void EnsureFree(ref byte* buffer, ref long capacity, long used, long needed)
             {
-                if (capacity - used >= needed)
-                    return;
+                if (capacity - used < needed)
+                    Grow(ref buffer, ref capacity, used, needed);
+            }
+
+            /// <summary>The growth step of <see cref="EnsureFree"/>, kept out of line.</summary>
+            /// <param name="buffer">The current buffer (null before the first growth).</param>
+            /// <param name="capacity">Its size in bytes.</param>
+            /// <param name="used">The bytes in use (kept by the copy).</param>
+            /// <param name="needed">The free bytes the caller is about to write.</param>
+            /// <exception cref="OutOfMemoryException">The pool cannot provide the larger buffer.</exception>
+            /// <remarks>Never inlined: the pool's allocation is a P/Invoke, and a P/Invoke inlined into a caller makes that
+            ///     caller set up an inlined call frame in its prolog on every call, taken or not — measured as a fifth of a
+            ///     short row's cost in the row stores.</remarks>
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            protected static unsafe void Grow(ref byte* buffer, ref long capacity, long used, long needed)
+            {
                 long grown = Math.Max(capacity * 2, 1L << 13);
                 while (grown - used < needed)
                     grown *= 2;
@@ -140,6 +289,9 @@ namespace NumSharp
             private readonly bool _byteConverters;
             private byte* _buffer;
             private long _capacity, _used;
+            // A presized result (Reserve): _buffer is its buffer, not the pool's.
+            private NDArray _presized;
+            private long _presizedRows;
 
             /// <summary>Creates the sink.</summary>
             /// <param name="descr">The numeric descriptor.</param>
@@ -150,6 +302,35 @@ namespace NumSharp
                 _tc = descr.GetTypeCode();
                 _itemSize = _tc.SizeOf();
                 _byteConverters = byteConverters;
+            }
+
+            /// <inheritdoc/>
+            internal override void Reserve(long rows, int cols)
+            {
+                if (_buffer != null)
+                    return;
+                _presized = AllocatePresized(_descr, rows, cols, _itemSize, out _buffer, out _capacity);
+                _presizedRows = rows;
+            }
+
+            /// <summary>Room for <paramref name="needed"/> more bytes (a presized result left only when it is full).</summary>
+            /// <param name="needed">The bytes about to be written.</param>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private void EnsureRoom(long needed)
+            {
+                if (_capacity - _used < needed)
+                    GrowRoom(needed);
+            }
+
+            /// <summary>The growth step of <see cref="EnsureRoom"/>, out of line (see <see cref="LoadTxtSink.Grow"/>).</summary>
+            /// <param name="needed">The bytes about to be written.</param>
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private void GrowRoom(long needed)
+            {
+                if (_presized is not null)
+                    LeavePresized(ref _presized, ref _buffer, ref _capacity, _used, needed);
+                else
+                    Grow(ref _buffer, ref _capacity, _used, needed);
             }
 
             /// <inheritdoc/>
@@ -174,7 +355,7 @@ namespace NumSharp
             [SkipLocalsInit]
             internal override bool Store(ReadOnlySpan<char> field, Func<string, object> converter)
             {
-                EnsureFree(ref _buffer, ref _capacity, _used, _itemSize);
+                EnsureRoom(_itemSize);
                 var element = new Span<byte>(_buffer + _used, _itemSize);
                 if (converter == null)
                 {
@@ -194,8 +375,48 @@ namespace NumSharp
             }
 
             /// <inheritdoc/>
+            /// <remarks>The row's elements are reserved at once and each field goes straight to the dtype's strict parser, the
+            ///     same parse <see cref="Store"/> runs without a converter.</remarks>
+            internal override int StoreRow(LoadTxtTokenizer row, int count, out Exception cause)
+            {
+                EnsureRoom((long)_itemSize * count);
+                // The row's characters once, and the element position in a local: the writes go through raw pointers, after
+                // which the JIT must assume this object's fields changed.
+                ReadOnlySpan<char> chars = row.RowChars;
+                int[] starts = row.FieldStarts, ends = row.FieldEnds;
+                NPTypeCode tc = _tc;
+                int itemSize = _itemSize;
+                byte* element = _buffer + _used;
+                int i = 0;
+                try
+                {
+                    for (; i < count; i++, element += itemSize)
+                    {
+                        if (!LoadtxtWriteField(tc, chars.Slice(starts[i], ends[i] - starts[i]), new Span<byte>(element, itemSize)))
+                        {
+                            _used = element - _buffer;
+                            cause = null;
+                            return i;
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    // A float16 field is Python's float() of the text, whose ValueError NumPy chains as the cause.
+                    _used = element - _buffer;
+                    cause = e;
+                    return i;
+                }
+                _used = element - _buffer;
+                cause = null;
+                return count;
+            }
+
+            /// <inheritdoc/>
             internal override NDArray Finish(long rows, int cols)
             {
+                if (_presized is not null)
+                    return TakePresized(_descr, ref _presized, ref _buffer, ref _capacity, _presizedRows, rows, cols, _itemSize);
                 var result = new NDArray(_descr, new Shape(rows, cols), false);
                 long bytes = rows * cols * _itemSize;
                 if (bytes > 0)
@@ -204,7 +425,18 @@ namespace NumSharp
             }
 
             /// <inheritdoc/>
-            public override void Dispose() => ReturnBuffer(ref _buffer, ref _capacity);
+            public override void Dispose()
+            {
+                // A presized result's buffer is the result's own, never the pool's.
+                if (_presized is not null)
+                {
+                    _presized.Dispose();
+                    _presized = null;
+                    _buffer = null;
+                    _capacity = 0;
+                }
+                ReturnBuffer(ref _buffer, ref _capacity);
+            }
         }
 
         /// <summary>
@@ -222,10 +454,18 @@ namespace NumSharp
             private readonly int _itemSize;
             private readonly bool _byteConverters;
             // A sized class: the elements' bytes, written as the result will hold them. An unsized class: the values the
-            // object array would hold (NumPy's _read reads S0 / U0 into an object array, then casts it).
+            // object array would hold (NumPy's _read reads S0 / U0 into an object array, then casts it) — as objects when a
+            // field goes through Store (a converter, usecols), or, for rows StoreRow takes, as their text staged in _buffer
+            // (U: UTF-16 units, S: Latin-1 bytes) with each element's end offset in _ends and the widest element's width
+            // (code points for U, bytes for S): the cast's result without a string object per field.
             private byte* _buffer;
             private long _capacity, _used;
             private readonly List<object> _values;
+            private byte* _ends;
+            private long _endsCapacity, _staged, _stagedWidth;
+            // A sized class's presized result (Reserve): _buffer is its buffer, not the pool's.
+            private NDArray _presized;
+            private long _presizedRows;
 
             /// <summary>Creates the sink.</summary>
             /// <param name="descr">A <c>U</c> or <c>S</c> descriptor (sized or not).</param>
@@ -243,6 +483,37 @@ namespace NumSharp
 
             /// <inheritdoc/>
             internal override string DescrText => _itemSize == 0 ? "object" : _descr.ToString();
+
+            /// <inheritdoc/>
+            /// <remarks>A sized class only: an unsized class's width is known after the last row.</remarks>
+            internal override void Reserve(long rows, int cols)
+            {
+                if (_itemSize == 0 || _buffer != null)
+                    return;
+                _presized = AllocatePresized(_descr, rows, cols, _itemSize, out _buffer, out _capacity);
+                _presizedRows = rows;
+            }
+
+            /// <summary>Room for <paramref name="needed"/> more bytes of a sized class's elements (a presized result left
+            ///     only when it is full).</summary>
+            /// <param name="needed">The bytes about to be written.</param>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private void EnsureRoom(long needed)
+            {
+                if (_capacity - _used < needed)
+                    GrowRoom(needed);
+            }
+
+            /// <summary>The growth step of <see cref="EnsureRoom"/>, out of line (see <see cref="LoadTxtSink.Grow"/>).</summary>
+            /// <param name="needed">The bytes about to be written.</param>
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private void GrowRoom(long needed)
+            {
+                if (_presized is not null)
+                    LeavePresized(ref _presized, ref _buffer, ref _capacity, _used, needed);
+                else
+                    Grow(ref _buffer, ref _capacity, _used, needed);
+            }
 
             /// <inheritdoc/>
             /// <remarks>
@@ -264,6 +535,10 @@ namespace NumSharp
             {
                 if (_itemSize == 0)
                 {
+                    // Elements staged by StoreRow come first in element order (a call uses one path for all its rows, so
+                    // this only guards the order).
+                    if (_staged > 0)
+                        MoveStagedToValues();
                     if (converter != null)
                         _values.Add(converter(ConverterInput(field, _byteConverters)));
                     else if (_unicode)
@@ -276,7 +551,7 @@ namespace NumSharp
                     return true;
                 }
 
-                EnsureFree(ref _buffer, ref _capacity, _used, _itemSize);
+                EnsureRoom(_itemSize);
                 byte* element = _buffer + _used;
                 if (converter != null)
                 {
@@ -285,18 +560,111 @@ namespace NumSharp
                 }
                 else if (_unicode)
                     NDStringCodec.WriteUcs4(field, (uint*)element, _chars);
+                else if (!WriteLatin1Element(field, element, _chars))
+                    return false;
+                _used += _itemSize;
+                return true;
+            }
+
+            /// <inheritdoc/>
+            /// <remarks>A sized class reserves the row's elements at once and writes each field as <see cref="Store"/> does
+            ///     without a converter (neither writer raises). An unsized class stages each field's text (see
+            ///     <see cref="StageText"/>), which <see cref="Finish"/> casts as NumPy casts its object array.</remarks>
+            internal override int StoreRow(LoadTxtTokenizer row, int count, out Exception cause)
+            {
+                if (_itemSize == 0)
+                {
+                    // Objects stored by Store come first in element order (never the case within one call).
+                    if (_values.Count > 0)
+                        return base.StoreRow(row, count, out cause);
+                    EnsureFree(ref _ends, ref _endsCapacity, _staged * sizeof(long), (long)count * sizeof(long));
+                    ReadOnlySpan<char> rowText = row.RowChars;
+                    int[] rowStarts = row.FieldStarts, rowEnds = row.FieldEnds;
+                    int i = 0;
+                    try
+                    {
+                        for (; i < count; i++)
+                            StageText(rowText.Slice(rowStarts[i], rowEnds[i] - rowStarts[i]));
+                    }
+                    catch (Exception e)
+                    {
+                        // An unsized S field past Latin-1: the UnicodeEncodeError NumPy chains as the cause.
+                        cause = e;
+                        return i;
+                    }
+                    cause = null;
+                    return count;
+                }
+                cause = null;
+                EnsureRoom((long)_itemSize * count);
+                // The element writes go through raw pointers, after which the JIT must assume this object's fields changed:
+                // the loop works on locals and stores the position once.
+                byte* element = _buffer + _used;
+                int itemSize = _itemSize, chars = _chars;
+                ReadOnlySpan<char> text = row.RowChars;
+                int[] starts = row.FieldStarts, ends = row.FieldEnds;
+                if (_unicode)
+                {
+                    for (int i = 0; i < count; i++, element += itemSize)
+                        NDStringCodec.WriteUcs4(text.Slice(starts[i], ends[i] - starts[i]), (uint*)element, chars);
+                }
                 else
                 {
-                    // npy_to_string: the stored characters must be Latin-1 (the rest of the field is never looked at).
-                    var stored = field.Slice(0, Math.Min(field.Length, _chars));
+                    for (int i = 0; i < count; i++, element += itemSize)
+                    {
+                        if (!WriteLatin1Element(text.Slice(starts[i], ends[i] - starts[i]), element, chars))
+                        {
+                            _used = element - _buffer;
+                            return i;
+                        }
+                    }
+                }
+                _used = element - _buffer;
+                return count;
+            }
+
+            /// <summary>
+            ///     <c>npy_to_string</c>: the field's first <paramref name="chars"/> characters as their Latin-1 bytes, the rest
+            ///     of the element zero-filled. Only the stored characters must be at most <c>U+00FF</c>; the rest of the field
+            ///     is never looked at.
+            /// </summary>
+            /// <param name="field">The field.</param>
+            /// <param name="element">The element's first byte.</param>
+            /// <param name="chars">The element's width (<c>itemsize</c>).</param>
+            /// <returns>False when a stored character is past <c>U+00FF</c> (the element may then hold some of the bytes; the
+            ///     caller does not keep it).</returns>
+            private static bool WriteLatin1Element(ReadOnlySpan<char> field, byte* element, int chars)
+            {
+                int n = Math.Min(field.Length, chars);
+                if (n <= 16)
+                {
+                    // A short field: the test and the narrowing in one pass (a vectorized range search costs more to start
+                    // than these few characters take).
+                    for (int i = 0; i < n; i++)
+                    {
+                        char c = field[i];
+                        if (c > '\u00FF')
+                            return false;
+                        element[i] = (byte)c;
+                    }
+                }
+                else
+                {
+                    var stored = field.Slice(0, n);
                     if (stored.IndexOfAnyExceptInRange('\0', '\u00FF') >= 0)
                         return false;
-                    for (int i = 0; i < stored.Length; i++)
+                    for (int i = 0; i < n; i++)
                         element[i] = (byte)stored[i];
-                    if (stored.Length < _chars)
-                        new Span<byte>(element + stored.Length, _chars - stored.Length).Clear();
                 }
-                _used += _itemSize;
+                if (chars - n <= 16)
+                {
+                    for (int i = n; i < chars; i++)
+                        element[i] = 0;
+                }
+                else
+                {
+                    new Span<byte>(element + n, chars - n).Clear();
+                }
                 return true;
             }
 
@@ -311,6 +679,74 @@ namespace NumSharp
                 return bytes;
             }
 
+            /// <summary>
+            ///     Appends one field of an unsized class to the staged text: what <see cref="Store"/> keeps as an object (the
+            ///     field's str for U, its Latin-1 bytes for S, the whole field encoded first), kept as the text itself.
+            /// </summary>
+            /// <param name="field">The field.</param>
+            /// <exception cref="UnicodeEncodeError">An S field with a character past <c>U+00FF</c>
+            ///     (<c>c_byte_converters</c> encodes the whole field as Latin-1).</exception>
+            /// <remarks>The element count's room in <see cref="_ends"/> is reserved by the caller for the row.</remarks>
+            private void StageText(ReadOnlySpan<char> field)
+            {
+                int n = field.Length;
+                long width = n;
+                if (_unicode)
+                {
+                    EnsureFree(ref _buffer, ref _capacity, _used, 2L * n);
+                    char* dst = (char*)(_buffer + _used);
+                    bool surrogate = false;
+                    for (int j = 0; j < n; j++)
+                    {
+                        char c = field[j];
+                        surrogate |= (uint)(c - '\uD800') <= '\uDFFF' - '\uD800';
+                        dst[j] = c;
+                    }
+                    // The cast's width counts code points: a surrogate pair is one (len() of the str).
+                    if (surrogate)
+                        width = NDStringCodec.CodePointCount(field);
+                    _used += 2L * n;
+                }
+                else
+                {
+                    EnsureFree(ref _buffer, ref _capacity, _used, n);
+                    byte* dst = _buffer + _used;
+                    for (int j = 0; j < n; j++)
+                    {
+                        char c = field[j];
+                        if (c > '\u00FF')
+                        {
+                            // Raises CPython's UnicodeEncodeError for the first character past Latin-1.
+                            NDStringCodec.ThrowIfNotEncodable(field, '\u00FF', "latin-1", "ordinal not in range(256)");
+                        }
+                        dst[j] = (byte)c;
+                    }
+                    _used += n;
+                }
+                ((long*)_ends)[_staged++] = _used;
+                if (width > _stagedWidth)
+                    _stagedWidth = width;
+            }
+
+            /// <summary>Moves the staged elements into <see cref="_values"/> as the objects <see cref="Store"/> keeps
+            ///     (strings for U, Latin-1 byte arrays for S), so the two can follow each other in element order.</summary>
+            private void MoveStagedToValues()
+            {
+                long start = 0;
+                for (long k = 0; k < _staged; k++)
+                {
+                    long stop = ((long*)_ends)[k];
+                    if (_unicode)
+                        _values.Add(new string((char*)(_buffer + start), 0, (int)((stop - start) / 2)));
+                    else
+                        _values.Add(new ReadOnlySpan<byte>(_buffer + start, (int)(stop - start)).ToArray());
+                    start = stop;
+                }
+                _staged = 0;
+                _stagedWidth = 0;
+                _used = 0;
+            }
+
             /// <inheritdoc/>
             /// <exception cref="TypeError">An unsized class whose widest value exceeds the class's maximum width.</exception>
             /// <exception cref="ValueError">An unsized class holding a converter's sequence (NumPy's cast of its object
@@ -323,9 +759,13 @@ namespace NumSharp
                     // is one character wide.
                     if (rows == 0)
                         return new NDArray(NDStringStorage.AllocationDescr(_descr), new Shape(0, cols), false);
+                    if (_staged > 0)
+                        return FinishStaged(rows, cols);
                     return NDStringArrays.FromValues(new[] { rows, (long)cols }, _values, _descr);
                 }
 
+                if (_presized is not null)
+                    return TakePresized(_descr, ref _presized, ref _buffer, ref _capacity, _presizedRows, rows, cols, _itemSize);
                 var result = new NDArray(_descr, new Shape(rows, cols), false);
                 long bytes = rows * cols * _itemSize;
                 if (bytes > 0)
@@ -333,8 +773,60 @@ namespace NumSharp
                 return result;
             }
 
+            /// <summary>
+            ///     The unsized class's result from the staged text: NumPy's <c>astype</c> of its object array of the fields
+            ///     (<see cref="NDStringArrays.FromValues"/> over the same strings / byte arrays) — the widest element decides
+            ///     the width, each element is written by the class's setitem.
+            /// </summary>
+            /// <param name="rows">The number of rows (at least one).</param>
+            /// <param name="cols">The number of columns.</param>
+            /// <returns>The array.</returns>
+            /// <exception cref="TypeError">The widest element exceeds the class's maximum width (<c>string too large to store
+            ///     inside array.</c>).</exception>
+            private NDArray FinishStaged(long rows, int cols)
+            {
+                DType descr = NDStringArrays.UnsizedTextDescr((StringDTypeMeta)_descr.Meta, _stagedWidth);
+                var storage = UnmanagedStorage.AllocateString(new Shape(rows, cols), descr, fillZeros: false);
+                var slice = storage.StringSlice;
+                byte* p = slice.Address;
+                int itemSize = slice.ItemSize;
+                int chars = slice.Chars;
+                long start = 0;
+                for (long k = 0; k < _staged; k++, p += itemSize)
+                {
+                    long stop = ((long*)_ends)[k];
+                    if (_unicode)
+                    {
+                        // UNICODE_setitem of the str: its code points, NUL-padded (the width holds the widest one).
+                        NDStringCodec.WriteUcs4(new ReadOnlySpan<char>(_buffer + start, (int)((stop - start) / 2)), (uint*)p, chars);
+                    }
+                    else
+                    {
+                        // STRING_setitem of the bytes: copied, NUL-padded.
+                        int n = (int)(stop - start);
+                        Buffer.MemoryCopy(_buffer + start, p, itemSize, n);
+                        if (n < itemSize)
+                            new Span<byte>(p + n, itemSize - n).Clear();
+                    }
+                    start = stop;
+                }
+                return new NDArray(storage);
+            }
+
             /// <inheritdoc/>
-            public override void Dispose() => ReturnBuffer(ref _buffer, ref _capacity);
+            public override void Dispose()
+            {
+                // A presized result's buffer is the result's own, never the pool's.
+                if (_presized is not null)
+                {
+                    _presized.Dispose();
+                    _presized = null;
+                    _buffer = null;
+                    _capacity = 0;
+                }
+                ReturnBuffer(ref _buffer, ref _capacity);
+                ReturnBuffer(ref _ends, ref _endsCapacity);
+            }
         }
 
         /// <summary>

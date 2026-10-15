@@ -5429,13 +5429,39 @@ embedded newlines split). Errors
 are NumPy-verbatim: `ValueError("the number of columns changed from {a} to {b} at row {n}; …")`, `ValueError("could
 not convert string '{tok}' to {dtype} at row {r}, column {c}.")` (**row 0-based, column 1-based**), `ValueError(
 "invalid column index {k} at row {n} with {c} columns")`, `ValueError("Illegal value of ndmin keyword: …")`,
-`TypeError` for a multi-char/newline delimiter. Fields are parsed straight from the line's **char span** (no per-field
-string allocation on the common path). **Perf (NPY/NS, 2026-10-15, two pinned P-cores, 1K–1M rows):** int64 lines
-**2.6–2.7×**; float64 lines **1.3–1.4×**, a float64 file **1.5–1.6×** — bounded by the correctly-rounded
-`double.Parse`, the analog of NumPy's `strtod` (the same floor on both sides, as with savetxt's `%.18e`). **Deliberate divergence:** the empty-input `UserWarning` is not
-emitted (NumSharp has no warnings module; the array is still the correct empty result). Gate: `IO/LoadTxtTests.cs`
-(probed against NumPy 2.4.2). Reuses the private `BytesToArray` helper from `np.fromfile.cs` (whose own parsers
-truncate rather than range-check, so loadtxt carries its own strict ones). See `APIs/np.loadtxt.cs`.
+`TypeError` for a multi-char/newline delimiter. A float16 field is NumPy's `npy_to_generic`: `PyArray_Pack` of the field's
+str, i.e. Python's `float()` (underscores between digits, Unicode digits and Unicode whitespace accepted, which float32 /
+float64's own parser refuses) rounded once by `npy_double_to_half`; an ASCII field without `_` takes the shared double
+parser. An unsized `U` / `S` with `max_rows=0` is `_read`'s empty chunk list: `ValueError("need at least one array to
+concatenate")`. **Deliberate divergence:** the empty-input `UserWarning` is not emitted (NumSharp has no warnings module;
+the array is still the correct empty result). Gate: `IO/LoadTxtTests.cs`, `IO/TextReaderPortTests.cs` (probed against
+NumPy 2.4.2). See `APIs/np.loadtxt.cs`.
+**The hot path (2026-10-15, validation pass):**
+- **Doubles** go through `Utilities/NDDoubleParse.cs`: Clinger's fast path, then fast_float's Eisel-Lemire
+  `compute_float` (the 128-bit powers of five built from exact integers, q in [-342, 308]), and .NET's parser only for a
+  mantissa past 19 digits whose truncation does not decide the rounding (w and w+1 differ). Correctly rounded, the bits
+  `_Py_dg_strtod` gives (3,010,805 texts against `double.Parse`, 0 differ; gate `Utilities/NDDoubleParseTests.cs`);
+  ~24 ns for a short decimal and ~50 for 17–19 digits, where `double.Parse` takes ~52 and 130–140. Shared with
+  `np.fromstring` / `np.fromfile`'s scanners.
+- **The tokenizer** runs `tokenizer_core`'s step inline in `Tokenize`'s row loop (state, buffer span and position in
+  locals; NumPy's step per call reloaded all three through `this`), finds a run's stop with a 128-entry ASCII class table
+  for the first 16 characters and the vectorized `SearchValues` search past them, and reads a WHOLE line buffer without
+  the quote character in one pass (`TokenizeUnquotedLine`: the same steps without the state variable, the row's end
+  rules included), its fields left as slices of the line (`RowChars` / `FieldStarts` / `FieldEnds`) instead of copies
+  in the field buffer. A line with a quote, a chunk of a file, and a skipped line keep the state machine.
+- **The sinks** take a row at a time (`StoreRow`: one call per row, the dtype's conversion inline, its first failing
+  field reported with NumPy's row / column message) whenever there is no converter and no `usecols`; a fixed-size dtype
+  whose source bounds its lines (`string[]` / `List<string>`: `LoadTxtStream.RemainingLinesHint`) allocates the result
+  at the first row and writes it in place (an exact copy only when blank / comment lines leave fewer rows; up to 64 MiB).
+  An unsized `U` / `S` stages the fields' text, not a string object per field, and sizes the result from the widest.
+- **Line sources**: an array or a `List<string>` is read by index, as Python's list iterator walks a list (an element a
+  converter changes is read changed, lines a converter appends are read too).
+- **JIT traps found**: a `stackalloc` in a method stops the JIT from inlining it even under `AggressiveInlining` (the
+  step function kept `state` address-exposed); a P/Invoke inlined into a caller (the pool's allocation, through an
+  inlined growth path) makes that caller set up an inlined call frame in its prolog on EVERY call (`Grow` is
+  `NoInlining`); a long single-call loop runs as on-stack-replaced code with its locals in the frame (the row loop of
+  `LoadTxtCore` moved into the sinks).
+- **Perf**: the speed sheet under `np.fromstring` / `np.fromfile` below.
 
 **Text I/O for `StringDType`, and Python's codecs (strings phase 1, P1.7c, 2026-10-15).** `np.loadtxt` / `np.savetxt` /
 `ndarray.tofile` / `np.fromfile` / `np.fromstring` handle NEP 55 `StringDType` as NumPy does, and every text encoding
@@ -5447,8 +5473,9 @@ pass); code in `IO/TextReading/` and `APIs/np.{loadtxt,loadtxt.Sinks,loadtxt.Par
     blank line); another object raises `must be str or None, not int` at the first line; `delimiter in comments` is
     Python's `in`;
   - then the source, then the C reader's control-character checks;
-  - `LoadTxtTokenizer` is a port of `tokenize.cpp`. One vectorized `IndexOfAny` over the state's stop set replaces its
-    per-character loop, and the stop character is then classified in the loop's order;
+  - `LoadTxtTokenizer` is a port of `tokenize.cpp`: a run's stop character is found by an ASCII class table (then the
+    vectorized stop set past 16 characters) and classified in the loop's order; a quote-free line buffer is read in
+    one pass with its fields as slices of the line (see the hot path above);
   - one sink per dtype class (numeric / fixed `U`-`S` / `StringDType`) creates the converters at the first data row.
     A `StringDType` field is stored whole; a string NA object marks an equal field missing; a converter's value is
     stored by `stringdtype_setitem`'s rules (the NA check first, then `coerce`).
@@ -5524,7 +5551,6 @@ pass); code in `IO/TextReading/` and `APIs/np.{loadtxt,loadtxt.Sinks,loadtxt.Par
   - a non-BMP control character is refused;
   - `max_rows` buffers grow instead of being preallocated;
   - an unsized `U`/`S` result's error rows count from the start (NumPy counts within 50,000-row chunks);
-  - float16 fields use NumPy's grammar differences (pre-existing);
   - under `encoding='bytes'` a C# converter receives a str;
   - a `.gz` file's decode-error positions may differ, since CPython's gzip reader hands TextIOWrapper whatever one
     decompression step produced;
@@ -5551,20 +5577,68 @@ pass); code in `IO/TextReading/` and `APIs/np.{loadtxt,loadtxt.Sinks,loadtxt.Par
   error then reports position 0 of the NEXT decode. .NET's `Utf8.ToUtf16` calls those two bytes invalid at once, so
   `TextIOCodec.Incremental`'s tail logic defers them itself. A one-shot `bytes.decode` raises at once.
 
-**`np.fromstring(string, dtype=float, count=-1, sep)`** (`APIs/np.fromstring.cs`) parses a 1-D array from the
-numbers in a text string — the SAME item reader `np.fromfile` uses for a text file, so it shares fromfile's
-`SplitTokens`/`SelectTokens`/`TokensToArray` (NumPy shares its `fromstr` the same way): a whitespace-only `sep`
-splits on any whitespace run, a non-whitespace `sep`'s spaces are a wildcard, one trailing separator is tolerated,
-and a bad/missing item raises the verbatim `ValueError("string or file could not be read to its end due to
-unmatched data")`. `count` caps the items (all 15 dtypes; default float64). The **binary mode was REMOVED in
-NumPy 1.22**, so an empty/`null` `sep` raises `ValueError("The binary mode of fromstring is removed, use frombuffer
-instead")` rather than reinterpreting the string's bytes (probed 2.4.2). Because it shares `fromfile`'s parser, it
-inherits that parser's **deliberate lenient-superset traits** (differentially mapped vs NumPy 2.4.2): the imaginary
-unit is lowercase `j` ONLY (`"1+2J"` rejected — fixed to match NumPy, was accepted), the parenthesised `"(1+2j)"`
-form is accepted (a superset that round-trips `tofile`; NumPy rejects it), and integer over/underflow **wraps
-deterministically** where NumPy's C parser is platform-specific — NumPy RAISES on a narrow-unsigned negative
-(`uint8 "-1"`, though `uint64 "-1"` wraps) and CLAMPS overflow via `strtol` (Windows 32-bit `long`), both portably
-avoided here (`loadtxt` carries strict range-checking parsers for full parity instead). Gate: `IO/FromStringTests.cs`.
+**`np.fromstring` / `np.fromfile` / `ndarray.tofile` are NumPy's C readers and writers, statement for statement**
+(`IO/TextReading/NumPyTextScan{,.File,.Reader}.cs`, `APIs/np.{fromstring,fromfile,tofile}.cs`; the strings phase-1
+validation pass, 2026-10-15). Signatures `fromstring(string | byte[] string, dtype=float, count=-1, sep, like)`,
+`fromfile(string file | Stream, dtype=float, count=-1, sep="", offset=0, like)`, `tofile(string | Stream, sep="",
+format="%s")`.
+- **`array_from_text`** (both text readers): elements and separators alternate (`fromstr_next_element` /
+  `fromfile_next_element`, `fromstr_skip_separator` / `fromfile_skip_separator`, over NumPy's `swab_separator`: a
+  whitespace run in `sep` is ONE wildcard space, a space is prepended when `sep` does not start with whitespace, a second
+  one appended when it ends with one, so `","` is `" ,"`). The end of the text is tested BEFORE a separator's match (a
+  trailing separator ends the read), the separator after the last requested element is optional, and a failed read is
+  `ValueError("string or file could not be read to its end due to unmatched data")`. `fromstring` with `count ≥ 0` never
+  shrinks: the result is `(count,)`, the slot of a failed scan holds what the scanner wrote (0, -1.0, -1+0j: `""` with
+  `count=2` is `[-1., ?]`), the rest is NumPy's uninitialized memory (NumSharp zeroes it). The scanners report the
+  position AFTER leading whitespace even when no number follows, so whitespace alone is an element: `"1, "` is
+  `[1., -1.]` (float) and `[1, 0]` (int). `fromfile` resizes to the elements read.
+- **`fromstring`'s scanners**: CPython's `PyOS_strtol` / `PyOS_strtoul` with a 64-bit `long` (whitespace skipped before
+  AND after the sign, so `"- 1"` is -1; strtoul takes no sign; overflow saturates — strtol to `LONG_MAX` for EITHER sign
+  except exactly -2^63); NumPy's `NumPyOS_ascii_strtod` (every NaN form positive, `nan(...)`, `"-nan"`; `inf` /
+  `infinity` in any case; CPython's decimal grammar, no hex, no `_`; no number is -1.0); `CDOUBLE_fromstr`'s quirks
+  (`"1+2"` is 1+0j with the `"+2"` consumed, a bare `"j"` is -1j). A narrower integer dtype takes the C long's low bits
+  (`int8 "300"` is 44), float32 / float16 the double rounded once.
+- **`fromfile`'s scanners**: glibc's `fscanf` through a C `FILE` model (`CFileReader`: 64 KB chunks, `ungetc` — a 0xFF
+  pushed back through `char` is lost —, the Python file sought to `ftell` after the read, ALSO after an error, the
+  offset seek first): `%ld` / `%lu` take whitespace, a sign, then at least one digit (a sign without a digit is consumed
+  and fails); strtoul negates modulo 2^64 (`uint64 "-1"` is `ULONG_MAX`), strtol clamps BY SIGN (unlike CPython's);
+  `NumPyOS_ascii_ftolf`'s number-like scan (a dangling `e` or `.` is consumed); `CDOUBLE_scan`'s `ungetc` of a missing
+  `j`; a separator byte at or past 0x80 never matches (`fgetc`'s int against a signed `char`).
+- **Platform pin**: LP64 (Linux / macOS NumPy: a C `long` is 64 bits, glibc's `fscanf`). Windows NumPy (32-bit `long`,
+  MSVC's `fscanf`) differs in 247 of 20,000 random cases, all integer parsing — the pin of the random module
+  (`NumPyRandom.LegacyLong`).
+- **Argument order** (`array_fromstring` / `array_fromfile` / `PyArray_FromString` / `PyArray_FromFile`): `string`'s
+  `s#` (UTF-8; CPython's UnicodeEncodeError for a lone surrogate), `sep`'s `s` (UnicodeEncodeError, then `embedded null
+  character`; a null `sep` is `fromfile() argument 4 must be str, not None`), fromstring's removed binary mode (an empty
+  or null `sep`: `The binary mode of fromstring is removed, use frombuffer instead`), REFCHK (`Cannot create an object
+  array from a string` / `Cannot read into object array` for StringDType), item size 0 (`zero-valued itemsize`), no
+  `fromstr` / `scan` (`don't know how to read character strings with that array type` / `Unable to read character files
+  of that array type`). `fromfile`'s `offset` with a separator is `TypeError` before the file is opened; a missing file
+  is `FileNotFoundException("[Errno 2] No such file or directory: 'x'")`.
+- **Binary**: `fread` straight into the result's buffer (count -1: every whole item, `(size - pos) / itemsize` in C's
+  truncating division, so a position past the end is `negative dimensions are not allowed` and a partial trailing item
+  stays unread; a count past the end consumes the partial item); spans of 1 GB, so files past 2 GB read; a non-native
+  byte order is swapped to native; a non-seekable stream is read to its end (NumPy cannot read one). `tofile` writes a
+  C-contiguous array, views at an offset included, straight from its buffer, any other layout through one C-order copy.
+- **Text `tofile`** writes each element's ASCII text and the separator's UTF-8 bytes through a pooled 32 KB byte buffer
+  (it allocated a 64 K-character `StreamWriter` and builder per call: 240 µs of a 1K call).
+- **NumPy bugs not reproduced**: the uninitialized tail of a counted `fromstring`; a non-native dtype's text read (NumPy
+  byte-swaps the value its scanner wrote in native order): NumSharp returns the native dtype with the right values.
+- **Divergences**: the result of a non-native request has the native dtype (no non-native storage); an unsized `S` /
+  `U` read with `count ≥ 0` is `NotSupportedException` (NumPy builds zero-width elements); `complex64` has no dtype.
+- **Perf** (NPY/NS, two pinned P-cores, 1K / 100K / 1M elements, 219 cells, every result's SHA-256 against NumPy's,
+  time-based warm-up — a cell timed right after the JIT's first compile read 0.66×): geomean **3.81×**. `fromstring`
+  1.71–11.7×, text `fromfile` 2.07–19.9×, binary `fromfile` 1.42–3.74×, text `tofile` 1.85–10.6×, strided binary `tofile`
+  1.26–30.8×, loadtxt from lines 2.19–5.50× (text dtypes 1.55–9.98×, from a file 1.73–2.69×), savetxt 1.70–23.6×. **Under
+  1.5×: the 9 contiguous binary `tofile` cells (0.93–1.34×) and 4 more within noise of it — the file system's floor**:
+  `CREATE_ALWAYS` (Python's `open('wb')`) plus one `WriteFile` take 189 / 237–287 / 509–592 µs alone for 8 KB / 100 KB /
+  1 MB on this machine, NumPy 219–284 / 316–790 / 619–6,617 µs; NumSharp adds no copy. (Opening with `OPEN_ALWAYS` and
+  truncating after the write is 2× faster for a file that exists, but it is not `'wb'`: a hidden file opens instead of
+  failing, and an interrupted write leaves the old tail.)
+- **Gates**: `IO/TextReaderPortTests.cs` (29), `IO/FromStringTests.cs`, `Casting/NDArray.fromfile.Test.cs`; the
+  validation pass replayed 50,000 random `fromstring` / `fromfile` cases, 181,500 `np.loadtxt` cases (incl. 70,000
+  tokenizer-edge ones: Unicode whitespace, `\r` / `\n` inside lines, comments, quotes, long and empty fields) and 35,000
+  `savetxt` / `tofile` cases against NumPy 2.4.2: 0 divergences.
 See `APIs/np.fromstring.cs`. **Not implemented — `genfromtxt`/`fromregex`:** both require NumPy's structured/record
 dtypes (and `genfromtxt` its masked-array + missing-value machinery), which NumSharp has no analog for; their
 non-structured subset would only re-expose `loadtxt`.
