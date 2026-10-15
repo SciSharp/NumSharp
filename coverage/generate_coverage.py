@@ -24,7 +24,7 @@ from object_surfaces import OBJECT_SURFACE_PATHS, enrich_object_classes, object_
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_NUMPY_VERSION = "2.4.2"
-GENERATOR_VERSION = "1.10.0"
+GENERATOR_VERSION = "1.11.0"
 OUTPUT_FILES = ("coverage.json", "coverage.csv", "summary.md", "manifest.json")
 NUMSHARP_SOURCE_BASE_URL = "https://github.com/SciSharp/NumSharp/blob/master/"
 
@@ -152,6 +152,19 @@ EXTENDED_SUBMODULES = [
     ("lib.format",            "lib.format",            "npy/npz format internals",  "tooling"),
     ("lib.introspect",        "lib.introspect",        "Runtime & diagnostics",     "tooling"),
 ]
+
+# The submodules whose callables are part of the five-surface headline (numpy.<name>). One list
+# for public_exports and the ufunc protocol scan, so a surface added here is scanned by both.
+HEADLINE_SUBMODULES = ("random", "linalg", "fft")
+
+# Every namespace the catalog compares, as (import path relative to numpy, display surface). The
+# object inventory catalogs each ufunc method on every ufunc-like export found here (numpy itself
+# is always included): numpy.strings.str_len and numpy.ma's masked add are ufunc protocol owners
+# just like numpy.add, so scanning only the top level left their methods out of the catalog.
+UFUNC_PROTOCOL_NAMESPACES = (
+    tuple((surface, surface) for surface in HEADLINE_SUBMODULES)
+    + tuple((path, surface) for path, surface, _category, _disposition in EXTENDED_SUBMODULES)
+)
 
 # ndarray interop-protocol dunders. public_exports() drops every '_'-prefixed ndarray member, so
 # these zero-copy / array-protocol hooks were invisible too. Catalogued out-of-headline against the
@@ -503,7 +516,8 @@ def public_exports(np: Any) -> list[dict[str, Any]]:
             "documentation_url": documentation_url("ndarray", name, kind), "in_default_scope": True,
         })
 
-    for surface, module in (("random", np.random), ("linalg", np.linalg), ("fft", np.fft)):
+    for surface in HEADLINE_SUBMODULES:
+        module = getattr(np, surface)
         for name in sorted(set(module.__all__)):
             if not hasattr(module, name):
                 continue
@@ -855,6 +869,7 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
     rows.extend(object_surface_rows(
         np, inventory, seen_ids, root=ROOT, source_base_url=NUMSHARP_SOURCE_BASE_URL,
         signature=numpy_signature, documentation_url=documentation_url,
+        ufunc_namespaces=UFUNC_PROTOCOL_NAMESPACES,
     ))
     enrich_object_classes(rows, inventory, ROOT, NUMSHARP_SOURCE_BASE_URL)
 
@@ -1143,7 +1158,9 @@ def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_ver
         f"{len(all_apis['by_surface'])} surfaces and {len(all_apis['by_category'])} categories). "
         f"**{all_apis['missing']} missing**, **{all_apis['partial']} partial**.",
         "",
-        f"The catalog includes **{summary['ufunc_protocols']['total']} per-ufunc protocol methods**; "
+        f"The catalog includes **{summary['ufunc_protocols']['total']} per-ufunc protocol methods** "
+        "(each public `numpy.ufunc` method on every ufunc export of the compared namespaces, plus the "
+        "methods numpy.ma's masked ufunc wrappers implement); "
         f"**{summary['ufunc_protocols']['not_applicable']}** describe methods whose calls NumPy rejects "
         "for that ufunc. These count as exposed API contracts, not computable operations.",
         "",
