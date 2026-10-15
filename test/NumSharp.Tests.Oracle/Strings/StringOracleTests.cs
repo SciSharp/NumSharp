@@ -280,6 +280,18 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void StringDTypeTextIO() => Run("tio");
 
         /// <summary>
+        ///     Section strsort (strings phase 2, P2.2): sorting <c>S</c> / <c>U</c> text — <c>np.argsort</c>'s tie order for
+        ///     every kind spelling and the <c>stable</c> keyword (NumPy's introsort, its insertion-only lines of up to 16
+        ///     elements, its heapsort fallback driven by McIlroy's adversary, the stable order), over categorical, distinct,
+        ///     long-prefix, NUL and high-byte data, every <c>U</c> key packing (Latin-1, the BMP, astral code points, units
+        ///     above U+10FFFF), the catalog's layouts and wider lines along every axis; <c>np.sort</c>, <c>ndarray.sort</c> in
+        ///     place (the whole base buffer compared), <c>np.partition</c> / <c>np.argpartition</c>; and NumPy's argument
+        ///     errors in its order (the kind, the kind with <c>stable</c>, the order, the axis, a read-only target), and
+        ///     <c>StringDType</c>'s refusal of the heapsort kind. Every case is strict.
+        /// </summary>
+        [TestMethod] public void TextSorting() => Run("strsort");
+
+        /// <summary>
         ///     Lifetime gate of the <c>StringDType</c> sections (strings phase 1, P1.9): once every case of tstore / tcreate /
         ///     tmove / tcast has been replayed and its arrays are garbage, no string allocator is left alive — every buffer the
         ///     replay made (operands, results, temporaries of the gathers, scatters and casts, failed operations) ran its clear
@@ -321,13 +333,15 @@ namespace NumSharp.Tests.Strings
 
         /// <summary>
         ///     The most cases each section may defer to the computational phase (see the class remarks): the deferrals
-        ///     left are sorting, searching, set routines, histograms and quantiles over text. A section not listed may
-        ///     defer nothing.
+        ///     left are searching (argmax / argmin, searchsorted, digitize), the set routines (unique, isin and the rest),
+        ///     lexsort, histograms and quantiles over text, and every computation over <c>StringDType</c>. Sorting <c>S</c> /
+        ///     <c>U</c> text computes since P2.2 (it lowered the ceilings: reductions 32 → 24, straxis 130 → 90, strshape
+        ///     190 → 142, strma 113 → 18). A section not listed may defer nothing.
         /// </summary>
         private static readonly Dictionary<string, int> DeferralCeilings = new()
         {
-            ["reductions"] = 32, ["straxis"] = 130, ["strshape"] = 190, ["strvalid"] = 5, ["strsurface"] = 67,
-            ["strma"] = 113, ["tma"] = 437,
+            ["reductions"] = 24, ["straxis"] = 90, ["strshape"] = 142, ["strvalid"] = 5, ["strsurface"] = 67,
+            ["strma"] = 18, ["tma"] = 437,
         };
 
         /// <summary>The corpus is complete: every section has cases and every case belongs to a section above.</summary>
@@ -339,7 +353,7 @@ namespace NumSharp.Tests.Strings
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
                 "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
-                "storenone", "tma", "tio",
+                "storenone", "tma", "tio", "strsort",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)

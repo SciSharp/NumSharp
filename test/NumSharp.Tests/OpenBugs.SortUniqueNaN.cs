@@ -16,7 +16,7 @@ namespace NumSharp.Tests
     ///     <c>'heapsort'</c>) rewrites every NaN of a line longer than one element — negative, signalling or
     ///     payload-bearing — to <c>std::numeric_limits&lt;T&gt;::quiet_NaN()</c>, the POSITIVE <c>0x7ff8000000000000</c>
     ///     / <c>0x7fc00000</c>. NumSharp's sort does the same since commit 7026b3e5 (<c>AxisSort.SortLineF32/F64</c>,
-    ///     the F5 fix). Two NaN-policy gaps remain, both library-wide:
+    ///     the F5 fix). Of the two NaN-policy gaps below (both library-wide) the first remains:
     ///     </para>
     ///     <list type="number">
     ///         <item>
@@ -28,10 +28,10 @@ namespace NumSharp.Tests
     ///         to <c>np.unique</c> comes back unchanged here where NumPy returns <c>0x7ff8…</c>.
     ///         </item>
     ///         <item>
-    ///         <b><c>np.sort</c> ignores <c>kind</c>.</b> NumPy's <c>kind='stable'</c> and <c>'mergesort'</c> do NOT
-    ///         canonicalize — they keep every NaN's exact bits (sign and payload). NumSharp ignores the <c>kind</c>
-    ///         argument entirely and always runs the one sort core, which canonicalizes, so a stable / mergesort call
-    ///         loses the NaN bits NumPy preserves.
+    ///         FIXED (strings phase 2, P2.2): <b><c>np.sort</c> ignored <c>kind</c>.</b> NumPy's <c>kind='stable'</c> and
+    ///         <c>'mergesort'</c> do NOT canonicalize — they keep every NaN's exact bits (sign and payload), in input order.
+    ///         The kind now reaches the float line sort, which keeps them for the stable kind; the test stays as a
+    ///         regression guard (no longer <c>[OpenBugs]</c>).
     ///         </item>
     ///     </list>
     ///     <para>
@@ -105,29 +105,51 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.sort</c> with <c>kind='stable'</c> or <c>'mergesort'</c> must PRESERVE every NaN's exact bits
-        ///     (NumPy's stable kinds do not canonicalize), where NumSharp ignores <c>kind</c> and always canonicalizes.
-        ///     The same array sorted with the default (quicksort) kind already matches NumPy on both sides and so is
-        ///     not pinned here.
+        ///     FIXED (strings phase 2, P2.2): <c>np.sort</c> with <c>kind='stable'</c> / <c>'mergesort'</c> /
+        ///     <c>stable=True</c>, and <c>ndarray.sort</c> with the stable kind, PRESERVE every NaN's exact bits in input order
+        ///     (NumPy's stable kinds do not canonicalize), while the default kind writes NumPy's canonical quiet NaN. NumSharp
+        ///     ignored <c>kind</c> and always canonicalized; <c>kind</c> now reaches the float line sort
+        ///     (<c>AxisSort.SortLineF32/F64</c>, <c>LineCtx.keepNaNBits</c>). Guards both kinds, float64 and float32.
         /// </summary>
-        /// <exception cref="Exception">The assertion framework's failure exception, while NumSharp ignores
-        /// <c>kind</c> — the expected state until a stable / mergesort sort keeps NaN bits like NumPy's.</exception>
-        [TestMethod, OpenBugs]
-        public void Sort_IgnoresKind_CanonicalizesWhereStableKindsPreserveNaNBits()
+        /// <exception cref="Exception">The assertion framework's failure exception, when a stable sort rewrites a NaN or the
+        ///     default sort keeps one (a regression).</exception>
+        [TestMethod]
+        public void Sort_StableKinds_KeepEveryNaNsBits()
         {
             var fails = new List<string>();
 
-            // NumPy's stable / mergesort leave the negative NaN (0xfff8…) and the payload NaN (0x7ff8…abc) untouched
-            // after the finite values; NumSharp rewrites both to the canonical 0x7ff8000000000000.
+            // NumPy's stable / mergesort leave the negative NaN (0xfff8…) and the payload NaN (0x7ff8…abc) untouched,
+            // in input order, after the finite values; its default kind rewrites both to 0x7ff8000000000000.
             foreach (var kind in new[] { "stable", "mergesort" })
                 Check(fails, $"sort f64 kind={kind}",
                     () => np.sort(F64(One64, NegNaN64, Two64, PayloadNaN64), kind: kind),
                     "float64 (4,) 3ff0000000000000 4000000000000000 fff8000000000000 7ff8000000000abc");
+            Check(fails, "sort f64 stable=True",
+                () => np.sort(F64(One64, NegNaN64, Two64, PayloadNaN64), stable: true),
+                "float64 (4,) 3ff0000000000000 4000000000000000 fff8000000000000 7ff8000000000abc");
+            Check(fails, "sort f64 default",
+                () => np.sort(F64(One64, NegNaN64, Two64, PayloadNaN64)),
+                "float64 (4,) 3ff0000000000000 4000000000000000 7ff8000000000000*2");
+            // float32: np.sort([1, -nan, 2, nan(0x123)], kind='stable') keeps 0xffc00000 then 0x7fc00123; ndarray.sort too.
+            Check(fails, "sort f32 kind=stable",
+                () => np.sort(F32(One32, NegNaN32, Two32, 0x7fc00123), kind: "stable"),
+                "float32 (4,) 3f800000 40000000 ffc00000 7fc00123");
+            Check(fails, "ndarray.sort f32 kind=stable",
+                () =>
+                {
+                    var a = F32(One32, NegNaN32, Two32, 0x7fc00123);
+                    a.sort(kind: "stable");
+                    return a;
+                },
+                "float32 (4,) 3f800000 40000000 ffc00000 7fc00123");
+            Check(fails, "sort f32 default",
+                () => np.sort(F32(One32, NegNaN32, Two32, 0x7fc00123)),
+                "float32 (4,) 3f800000 40000000 7fc00000*2");
 
             AssertNoMismatch(fails,
-                "np.sort(kind='stable'|'mergesort') must keep every NaN's exact bits (NumPy's stable kinds do not " +
-                "canonicalize); NumSharp ignores kind and canonicalizes — see Sorting_Searching_Counting/np.sort.cs " +
-                "and plan docs/plans/numpy-polynomial.md section 12");
+                "np.sort(kind='stable'|'mergesort') must keep every NaN's exact bits in input order (NumPy's stable kinds do " +
+                "not canonicalize) and the default kind must write the canonical quiet NaN — see " +
+                "Backends/Default/Sorting/AxisSort.cs SortLineF32 / SortLineF64");
         }
 
         /// <summary>Builds a fresh float64 array from raw bit patterns, preserving each NaN's sign and payload.</summary>

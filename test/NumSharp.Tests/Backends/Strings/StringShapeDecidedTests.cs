@@ -137,12 +137,12 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         [TestMethod]
-        public void Sorts_RefuseA0dAxis_AndDeferText()
+        public void Sorts_RefuseA0dAxis_AndSortText()
         {
             Action zeroD = () => np.sort(np.array("ab"));
             zeroD.Should().Throw<AxisError>().WithMessage("axis -1 is out of bounds for array of dimension 0*");
-            Action text = () => np.sort(U());
-            text.Should().Throw<StringComputationNotSupportedException>();
+            // np.sort(['ab', 'c', 'de']) -> ['ab', 'c', 'de'] (code point order).
+            NDArray.AsStringArray(np.sort(U())).Should().Equal("ab", "c", "de");
         }
 
         [TestMethod]

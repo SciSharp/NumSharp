@@ -385,9 +385,9 @@ namespace NumSharp.Tests.Backends.Strings
             Action partition = () => np.partition(U(), 5);
             partition.Should().Throw<ValueError>().WithMessage("kth(=5) out of bounds (3)");
 
-            // Past the checks, NumPy compares the text: the next phase.
-            Action compare = () => np.partition(U(), 1);
-            compare.Should().Throw<StringComputationNotSupportedException>();
+            // Past the checks NumPy sorts the text (a string has no partition function):
+            // np.partition(['ab', 'c', 'de'], 1) -> ['ab', 'c', 'de'].
+            NDArray.AsStringArray(np.partition(U(), 1)).Should().Equal("ab", "c", "de");
         }
 
         [TestMethod]

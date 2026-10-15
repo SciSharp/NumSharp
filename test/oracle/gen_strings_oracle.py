@@ -6918,10 +6918,476 @@ def gen_tio():
                    encoding=name)
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# strsort. Sorting text: np.sort / np.argsort / ndarray.sort / np.partition / np.argpartition (strings phase 2, P2.2)
+# ----------------------------------------------------------------------------------------------------------------------
+
+# Every spelling of the sort keywords NumPy accepts: the default, the four kind names, single letters of either case (NumPy
+# parses the first letter only) and the stable keyword both ways.
+_SORT_KWS = [{}, {"kind": "quicksort"}, {"kind": "heapsort"}, {"kind": "stable"}, {"kind": "mergesort"}, {"kind": "Q"},
+             {"kind": "h"}, {"stable": True}, {"stable": False}]
+
+# The keywords whose argsort answers differ over text: the default introsort, the heapsort kind (the same answer in
+# NumPy 2.4.2) and the stable sort.
+_SORT_KWS_CORE = [{}, {"kind": "heapsort"}, {"kind": "stable"}]
+
+# NumPy's SMALL_QUICKSORT (npysort/npysort_common.h): a range of at most 16 elements is insertion-sorted.
+_SMALL_QUICKSORT = 15
+
+
+def _sort_params(kw, **extra):
+    """The params of a sort case: the three sort keywords as given (None for an omitted one) plus ``extra``.
+
+    :param kw: the sort keywords (``kind`` / ``stable`` / ``order``).
+    :param extra: other params (``axis``, ``kth``).
+    :returns: the params dict.
+    """
+    p = {"kind": kw.get("kind"), "stable": kw.get("stable"), "order": kw.get("order")}
+    p.update(extra)
+    return p
+
+
+def _msb(n):
+    """NumPy's ``npy_get_msb``: the position of the highest set bit of ``n`` (0 for 0 and 1).
+
+    :param n: a non-negative count.
+    :returns: the bit position.
+    """
+    d = 0
+    while n > 1:
+        n >>= 1
+        d += 1
+    return d
+
+
+def _heapsort_idx(a, less):
+    """NumPy's ``string_aheapsort_`` over a list of indices, in place (``_introsort_idx``'s fallback).
+
+    :param a: the indices.
+    :param less: the strict comparator ``less(i, j)``.
+    """
+    n = len(a)
+    a.insert(0, None)  # NumPy's heapsort indexes from 1 (``a = tosort - 1``)
+    for l in range(n >> 1, 0, -1):
+        tmp = a[l]
+        i, j = l, l << 1
+        while j <= n:
+            if j < n and less(a[j], a[j + 1]):
+                j += 1
+            if less(tmp, a[j]):
+                a[i] = a[j]
+                i = j
+                j += j
+            else:
+                break
+        a[i] = tmp
+    while n > 1:
+        tmp = a[n]
+        a[n] = a[1]
+        n -= 1
+        i, j = 1, 2
+        while j <= n:
+            if j < n and less(a[j], a[j + 1]):
+                j += 1
+            if less(tmp, a[j]):
+                a[i] = a[j]
+                i = j
+                j += j
+            else:
+                break
+        a[i] = tmp
+    a.pop(0)
+
+
+def _introsort_idx(tosort, less):
+    """NumPy's ``string_aquicksort_`` (npysort/quicksort.cpp) over a list of indices with a comparator, in place.
+
+    A transcription used only to BUILD inputs (McIlroy's adversary) and to count how often an input reaches the heapsort
+    fallback; the recorded answers are NumPy's own.
+
+    :param tosort: the indices (sorted in place).
+    :param less: the strict comparator ``less(i, j)``.
+    :returns: how many ranges went to the heapsort fallback.
+    """
+    fallbacks = 0
+    pl, pr = 0, len(tosort) - 1
+    stack = []
+    cdepth = _msb(len(tosort)) * 2
+    while True:
+        if cdepth < 0:
+            fallbacks += 1
+            seg = tosort[pl:pr + 1]
+            _heapsort_idx(seg, less)
+            tosort[pl:pr + 1] = seg
+        else:
+            while pr - pl > _SMALL_QUICKSORT:
+                pm = pl + ((pr - pl) >> 1)
+                if less(tosort[pm], tosort[pl]):
+                    tosort[pm], tosort[pl] = tosort[pl], tosort[pm]
+                if less(tosort[pr], tosort[pm]):
+                    tosort[pr], tosort[pm] = tosort[pm], tosort[pr]
+                if less(tosort[pm], tosort[pl]):
+                    tosort[pm], tosort[pl] = tosort[pl], tosort[pm]
+                vp = tosort[pm]  # NumPy keeps a pointer to the pivot's DATA, which survives the swap below
+                pi, pj = pl, pr - 1
+                tosort[pm], tosort[pj] = tosort[pj], tosort[pm]
+                while True:
+                    pi += 1
+                    while less(tosort[pi], vp):
+                        pi += 1
+                    pj -= 1
+                    while less(vp, tosort[pj]):
+                        pj -= 1
+                    if pi >= pj:
+                        break
+                    tosort[pi], tosort[pj] = tosort[pj], tosort[pi]
+                pk = pr - 1
+                tosort[pi], tosort[pk] = tosort[pk], tosort[pi]
+                # NumPy pushes the larger partition with the decremented depth and continues with the smaller one.
+                cdepth -= 1
+                if pi - pl < pr - pi:
+                    stack.append((pi + 1, pr, cdepth))
+                    pr = pi - 1
+                else:
+                    stack.append((pl, pi - 1, cdepth))
+                    pl = pi + 1
+            for i in range(pl + 1, pr + 1):
+                vi = tosort[i]
+                j = i
+                while j > pl and less(vi, tosort[j - 1]):
+                    tosort[j] = tosort[j - 1]
+                    j -= 1
+                tosort[j] = vi
+        if not stack:
+            break
+        pl, pr, cdepth = stack.pop()
+    return fallbacks
+
+
+def _adversary(n):
+    """McIlroy's "A killer adversary for quicksort" against ``_introsort_idx``: values frozen lazily so that every pivot
+    the introsort picks is small, which drives it into its heapsort fallback.
+
+    :param n: the length.
+    :returns: the values, a permutation of ``range(n)``.
+    """
+    gas = n
+    val = [gas] * n
+    state = {"nsolid": 0, "candidate": 0}
+
+    def freeze(x):
+        val[x] = state["nsolid"]
+        state["nsolid"] += 1
+
+    def less(x, y):
+        if val[x] == gas and val[y] == gas:
+            freeze(x if x == state["candidate"] else y)
+        if val[x] == gas:
+            state["candidate"] = x
+        elif val[y] == gas:
+            state["candidate"] = y
+        return val[x] < val[y]
+
+    _introsort_idx(list(range(n)), less)
+    for i in range(n):
+        if val[i] == gas:
+            freeze(i)
+    return val
+
+
+def _units_array(rows, width):
+    """A ``U`` array from raw code units (any 32-bit value, above U+10FFFF included), each row zero-padded to ``width``.
+
+    :param rows: the code units of each element.
+    :param width: the dtype's width in units.
+    :returns: the array.
+    """
+    raw = np.zeros((len(rows), width), dtype=np.uint32)
+    for i, r in enumerate(rows):
+        raw[i, :len(r)] = r
+    return np.frombuffer(raw.tobytes(), dtype=f"<U{width}").copy()
+
+
+def _categorical(rng, n, k, width, kind, alphabet="abcdefghij"):
+    """``n`` strings drawn from ``k`` distinct values of at most ``width`` characters (the tie-heavy data whose argsort
+    exposes the sort's tie order); ``k`` is capped by how many distinct values the width allows.
+
+    :param rng: the generator.
+    :param n: the count.
+    :param k: the number of distinct values.
+    :param width: the most characters a value has (and the dtype's width).
+    :param kind: ``"U"`` or ``"S"``.
+    :param alphabet: the characters.
+    :returns: the array.
+    """
+    k = min(k, sum(len(alphabet) ** length for length in range(width + 1)))
+    pool = []
+    while len(pool) < k:
+        s = "".join(rng.choice(list(alphabet), int(rng.integers(0, width + 1))))
+        if s not in pool:
+            pool.append(s)
+    values = [pool[int(i)] for i in rng.integers(0, k, n)]
+    if kind == "S":
+        return np.array([v.encode() for v in values], dtype=f"S{width}")
+    return np.array(values, dtype=f"U{width}")
+
+
+def _sort_all(make, layout, axes, kws, *, sort_kws=({},), partition=True, inplace_kws=()):
+    """Records the sort family over one operand.
+
+    :param make: returns a fresh (base, view) pair (called once for the calls that only read it, and once more for each
+        in-place case, whose base the call rewrites).
+    :param layout: the layout label.
+    :param axes: the axes to record (``None`` flattens).
+    :param kws: the keyword sets of ``np.argsort``.
+    :param sort_kws: the keyword sets of ``np.sort`` (a value sort gives one answer for every kind over text).
+    :param partition: also record ``np.partition`` / ``np.argpartition`` with ``kth`` -1 and 0.
+    :param inplace_kws: the keyword sets of ``ndarray.sort`` (an int axis only; the view must be writeable).
+    """
+    op = make()
+    view = op[1]
+    for ax in axes:
+        for kw in kws:
+            add("strsort", "argsort_kw", params=_sort_params(kw, axis=ax), operands=[op], layout=layout,
+                call=lambda a, x=ax, k=kw: np.argsort(a, axis=x, **k))
+        for kw in sort_kws:
+            add("strsort", "sort_kw", params=_sort_params(kw, axis=ax), operands=[op], layout=layout,
+                call=lambda a, x=ax, k=kw: np.sort(a, axis=x, **k))
+        if partition and view.ndim > 0:
+            n_axis = view.size if ax is None else view.shape[ax]
+            for kth in ([-1, 0] if n_axis > 1 else [0]):
+                add("strsort", "partition_kw", params={"axis": ax, "kth": kth}, operands=[op], layout=layout,
+                    call=lambda a, x=ax, k=kth: np.partition(a, k, axis=x))
+                add("strsort", "argpartition_kw", params={"axis": ax, "kth": kth}, operands=[op], layout=layout,
+                    call=lambda a, x=ax, k=kth: np.argpartition(a, k, axis=x))
+        if ax is not None and view.ndim > 0 and view.flags.writeable:
+            for kw in inplace_kws:
+                add("strsort", "ndsort_kw", params=_sort_params(kw, axis=ax), operands=[make()], layout=layout, mutate=0,
+                    call=lambda a, x=ax, k=kw: a.sort(axis=x, **k))
+
+
+def _fixed(arr):
+    """A ``make`` callable for ``_sort_all`` over a C-contiguous operand of ``arr``'s shape (a fresh copy per call).
+
+    :param arr: the array.
+    :returns: the callable.
+    """
+    return lambda: plain(arr)
+
+
+def gen_strsort():
+    """Section strsort: sorting text (P2.2). Every case is phase 1: NumSharp sorts ``S`` / ``U`` text, so it must match
+    NumPy now.
+
+    * NumPy's introsort tie order: categorical data at sizes around its insertion-only boundary (16 / 17 elements) and
+      beyond, ``S`` and ``U`` of several widths, every kind spelling and the stable keyword;
+    * distinct strings, long common prefixes (keys of the first units tie), every ``U`` key packing (Latin-1, the BMP,
+      astral code points, units above U+10FFFF), a non-ASCII unit after eight ASCII ones, NULs and high bytes;
+    * every layout of the shared catalog and wider lines over every axis, ``ndarray.sort`` in place (the whole base
+      buffer compared);
+    * McIlroy's adversary, which drives the introsort into its heapsort fallback (ties included);
+    * NumPy's argument errors in its order, and ``StringDType``'s refusal of the heapsort kind.
+    """
+    rng = np.random.default_rng(20261015)
+
+    # Tie order: categorical data (NumPy insertion-sorts a line of at most 16 elements, so 16 / 17 is its boundary).
+    for n in (2, 15, 16, 17, 18, 33, 100, 257, 1000):
+        variants = (("U", 3), ("U", 9), ("S", 8)) if n == 1000 else \
+            (("U", 1), ("U", 3), ("U", 8), ("U", 9), ("S", 3), ("S", 8), ("S", 9))
+        for kd, width in variants:
+            for k in (2, 5):
+                arr = _categorical(rng, n, k, width, kd)
+                every = n in (17, 100)
+                _sort_all(_fixed(arr), f"cat{kd}{width}k{k}n{n}", (-1,), _SORT_KWS if every else _SORT_KWS_CORE,
+                          sort_kws=_SORT_KWS if n == 17 else ({},), partition=n in (16, 17, 100))
+    for kd, width in (("U", 5), ("S", 5)):
+        arr = _categorical(rng, 3000, 6, width, kd)
+        _sort_all(_fixed(arr), f"cat{kd}{width}k6n3000", (-1,), _SORT_KWS_CORE, partition=False)
+
+    # Distinct strings (any correct sort is NumPy's answer) and long common prefixes (the first units of every key tie).
+    for n in (17, 300, 2000):
+        draws = ("".join(rng.choice(list("abcdefghijklmnop"), int(rng.integers(1, 9)))) for _ in range(n * 3))
+        values = list(dict.fromkeys(draws))[:n]
+        for kd in ("U", "S"):
+            arr = np.array([v.encode() for v in values], dtype="S8") if kd == "S" else np.array(values, dtype="U8")
+            _sort_all(_fixed(arr), f"distinct{kd}n{n}", (-1,), _SORT_KWS_CORE, partition=False)
+    for n in (40, 400):
+        for kd, width in (("U", 24), ("S", 24), ("U", 40)):
+            pool = list(dict.fromkeys("https://example.org/" + "".join(rng.choice(list("ab"), int(rng.integers(0, 5))))
+                                      for _ in range(12)))
+            values = [pool[int(i)] for i in rng.integers(0, len(pool), n)]
+            arr = np.array([v.encode() for v in values], dtype=f"S{width}") if kd == "S" else \
+                np.array(values, dtype=f"U{width}")
+            _sort_all(_fixed(arr), f"prefix{kd}{width}n{n}", (-1,), _SORT_KWS_CORE, partition=False)
+
+    # Every U key packing (NumSharp keys 8 / 16 / 21 / 32 bits a unit by the widest unit present), the late non-ASCII
+    # unit, NULs (embedded and trailing) and high bytes.
+    pools = {"latin1": [0, 0x41, 0x7F, 0x80, 0xE9, 0xFF], "bmp": [0x41, 0x100, 0x4E2D, 0xFFFF],
+             "astral": [0x41, 0x10000, 0x1F600, 0x10FFFF], "over": [0x41, 0x110000, 0xFFFFFFFE, 0xFFFFFFFF]}
+    for name, pool in pools.items():
+        for width in (1, 2, 3, 5, 9):
+            for n in (30, 200):
+                rows = [[int(rng.choice(pool)) for _ in range(int(rng.integers(0, width + 1)))] for _ in range(n)]
+                _sort_all(_fixed(_units_array(rows, width)), f"units-{name}-w{width}n{n}", (-1,), _SORT_KWS_CORE,
+                          partition=False)
+        rows = [[0x61] * 8 + [int(rng.choice(pool))] for _ in range(60)]
+        _sort_all(_fixed(_units_array(rows, 9)), f"units-{name}-late", (-1,), _SORT_KWS_CORE, partition=False)
+    for n in (20, 200):
+        rows = [[int(rng.choice([0, 0x61, 0x62])) for _ in range(4)] for _ in range(n)]
+        _sort_all(_fixed(_units_array(rows, 4)), f"nulU4n{n}", (-1,), _SORT_KWS_CORE, partition=False)
+        raw = rng.choice(np.array([0, 0x61, 0x62, 0x7F, 0x80, 0xFF], dtype=np.uint8), (n, 5))
+        _sort_all(_fixed(np.frombuffer(raw.tobytes(), dtype="S5").copy()), f"nulS5n{n}", (-1,), _SORT_KWS_CORE,
+                  partition=False)
+
+    # The catalog's layouts over the shared pools (U with non-ASCII text, S with high bytes). Its core layouts get every
+    # axis (None flattens) and an in-place sort along each; the others the flattened and the last axis.
+    for spec in SPECS:
+        for lay in LAYOUTS:
+            def make(s=spec, l=lay):
+                return operand(s, l, seed=3)
+            ndim = make()[1].ndim
+            if ndim == 0:
+                axes = [None]
+            elif lay in CORE_LAYOUTS:
+                axes = [None] + list(range(-1, ndim))
+            else:
+                axes = [None, -1]
+            _sort_all(make, lay, axes, _SORT_KWS_CORE, inplace_kws=({},))
+    # Wider lines (longer than 16 elements, so the introsort partitions) over C / F / reversed / stepped / permuted views.
+    for spec in ("<U4", "|S4"):
+        cat = _categorical(rng, 120, 3, 4, spec[1])
+        builders = {"c": lambda b: b.reshape(4, 30), "f": lambda b: b.reshape(30, 4).T,
+                    "r": lambda b: b.reshape(4, 30)[::-1, ::-1], "s": lambda b: b.reshape(2, 60)[:, ::2],
+                    "t3": lambda b: b.reshape(2, 3, 20).transpose(1, 2, 0)}
+        for key, build in builders.items():
+            def make(c=cat, bld=build):
+                base = c.copy()
+                return base, bld(base)
+            ndim = make()[1].ndim
+            _sort_all(make, f"wide-{key}{spec[1]}", [None] + list(range(-1, ndim)), _SORT_KWS_CORE,
+                      inplace_kws=({}, {"kind": "stable"}, {"stable": True}))
+
+    # The heapsort fallback: McIlroy's adversary, its values halved (q = 2) so that the fallback orders ties too (a
+    # coarser division no longer reaches it).
+    for n in (64, 200, 500):
+        values = _adversary(n)
+        for q in (1, 2):
+            qv = [v // q for v in values]
+            fallbacks = _introsort_idx(list(range(n)), lambda x, y: qv[x] < qv[y])
+            assert fallbacks > 0, f"the adversary of {n} / {q} does not reach the heapsort fallback"
+            for kd in ("U", "S"):
+                strs = [f"{v:04d}" for v in qv]
+                arr = np.array([s.encode() for s in strs], dtype="S4") if kd == "S" else np.array(strs, dtype="U4")
+                _sort_all(_fixed(arr), f"adversary{kd}n{n}q{q}fb{fallbacks}", (-1,), _SORT_KWS_CORE)
+
+    # Prefix keys (8 units / bytes) that do not cover the strings and rarely repeat: NumSharp then runs NumPy's introsort
+    # with its string compare straight over (key, index) records. Each line has a few duplicated strings (NumPy's tie
+    # order decides them) and a few pairs equal in their first 8 characters only (the compare goes past the key).
+    def tail_line(n, width, seed, dups, prefix_pairs, kd):
+        r = np.random.default_rng(seed)
+        values = []
+        while len(values) < n - dups - 2 * prefix_pairs:
+            values.append("".join(r.choice(list("abcdefghijklmnopqrstuvwxyz"), width)))
+        for _ in range(prefix_pairs):
+            head = "".join(r.choice(list("abcdefghij"), 8))
+            values.append(head + "a" * (width - 8))
+            values.append(head + "b" + "a" * (width - 9))
+        for _ in range(dups):
+            values.append(values[int(r.integers(0, len(values)))])
+        order = r.permutation(len(values))
+        values = [values[int(i)] for i in order]
+        if kd == "S":
+            return np.array([v.encode() for v in values], dtype=f"S{width}")
+        return np.array(values, dtype=f"U{width}")
+
+    for n, dups in ((40, 2), (300, 20), (1000, 150)):
+        for kd, width in (("U", 9), ("U", 12), ("S", 10)):
+            arr = tail_line(n, width, 7 * n + width, dups, 2, kd)
+            _sort_all(_fixed(arr), f"tail{kd}{width}n{n}", (-1,), _SORT_KWS_CORE, partition=n == 40)
+            if n == 300:
+                # Two-dimensional: lines of 30 along the last axis, and the same lines along axis 0 (stepped columns).
+                m = arr.reshape(10, 30)
+                _sort_all(_fixed(m), f"tail{kd}{width}rows", (-1,), _SORT_KWS_CORE, partition=False)
+                _sort_all(_fixed(m.T.copy()), f"tail{kd}{width}cols", (0,), _SORT_KWS_CORE, partition=False)
+    # Short rows (at most 16 elements: NumSharp counts their ranks) whose 8-unit keys tie inside every row: the order
+    # comes from the unit after the key. Rows laid end to end, F-ordered rows (strided) and the columns (axis 0).
+    for kd in ("U", "S"):
+        for w in (2, 3, 4, 7, 16):
+            rr = np.random.default_rng(100 + w)
+            rows = []
+            for _ in range(12):
+                head = "".join(rr.choice(list("ab"), 8))
+                rows.append([head + str(rr.choice(list("zyxa"))) for _ in range(w)])
+            arr = np.array(rows, dtype="U9")
+            if kd == "S":
+                arr = arr.astype("S9")
+            _sort_all(_fixed(arr), f"rowties{kd}w{w}", (-1, 0), _SORT_KWS_CORE, partition=False)
+
+            def make_f(a=arr):
+                base = np.ascontiguousarray(a.T).reshape(-1).copy()
+                return base, base.reshape(a.shape[1], a.shape[0]).T
+            _sort_all(make_f, f"rowtiesF{kd}w{w}", (-1,), _SORT_KWS_CORE, partition=False)
+
+    # The adversary through the same route: distinct 8-character keys (the heapsort fallback orders them) and a 9th unit.
+    for n in (64, 200, 500):
+        values = _adversary(n)
+        fallbacks = _introsort_idx(list(range(n)), lambda x, y: values[x] < values[y])
+        assert fallbacks > 0, f"the adversary of {n} does not reach the heapsort fallback"
+        for kd in ("U", "S"):
+            strs = [f"{v:08d}z" for v in values]
+            arr = np.array([s.encode() for s in strs], dtype="S9") if kd == "S" else np.array(strs, dtype="U9")
+            _sort_all(_fixed(arr), f"adversary-tail{kd}n{n}fb{fallbacks}", (-1,), _SORT_KWS_CORE, partition=False)
+
+    # NumPy's argument errors, in its order: the kind (parsed first: its first letter, quoted by repr), the kind with
+    # stable, the order, then the axis. Numbers refuse the same arguments.
+    row = plain(np.array(["b", "a", "c"]))
+    bad = [{"kind": "timsort"}, {"kind": ""}, {"kind": "x"}, {"kind": "it's"}, {"kind": 'a"b'}, {"kind": "radix"},
+           {"kind": "stable", "stable": True}, {"kind": "q", "stable": False}, {"order": "x"}, {"order": ["x"]},
+           {"kind": "x", "order": "x"}, {"kind": "stable", "stable": True, "order": "x"},
+           {"kind": "x", "stable": True}]
+    for kw in bad:
+        for ax in (-1, 9, None):
+            add("strsort", "argsort_kw", params=_sort_params(kw, axis=ax), operands=[row], layout="row",
+                call=lambda a, x=ax, k=kw: np.argsort(a, axis=x, **k))
+            add("strsort", "sort_kw", params=_sort_params(kw, axis=ax), operands=[row], layout="row",
+                call=lambda a, x=ax, k=kw: np.sort(a, axis=x, **k))
+        add("strsort", "ndsort_kw", params=_sort_params(kw, axis=-1), operands=[target(np.array(["b", "a", "c"]))],
+            layout="row", mutate=0, call=lambda a, k=kw: a.sort(axis=-1, **k))
+    for kw in ({"kind": "x"}, {"kind": "stable", "stable": True}, {"order": "f"}):
+        num = num_operand(np.array([3, 1, 2]))
+        add("strsort", "argsort_kw", params=_sort_params(kw, axis=-1), operands=[num], layout="int",
+            call=lambda a, k=kw: np.argsort(a, **k))
+        add("strsort", "sort_kw", params=_sort_params(kw, axis=-1), operands=[num], layout="int",
+            call=lambda a, k=kw: np.sort(a, **k))
+    zero_d = plain(np.array("ab"))
+    for ax in (-1, 0, 1, None):
+        add("strsort", "sort_kw", params=_sort_params({}, axis=ax), operands=[zero_d], layout="0d",
+            call=lambda a, x=ax: np.sort(a, axis=x))
+        add("strsort", "argsort_kw", params=_sort_params({}, axis=ax), operands=[zero_d], layout="0d",
+            call=lambda a, x=ax: np.argsort(a, axis=x))
+    for ax in (-1, 1, -3):
+        add("strsort", "ndsort_kw", params=_sort_params({}, axis=ax), operands=[plain(np.array([["b", "a"], ["d", "c"]]))],
+            layout="2d", mutate=0, call=lambda a, x=ax: a.sort(axis=x))
+    for kw in ({}, {"kind": "x"}):
+        add("strsort", "ndsort_kw", params=_sort_params(kw, axis=-1), operands=[operand("<U3", "bc")], layout="bc",
+            mutate=0, call=lambda a, k=kw: a.sort(axis=-1, **k))
+
+    # StringDType refuses the heapsort kind: a sort after its axis (and writeability) checks, an argsort before them; one
+    # element and an empty array included.
+    for values in (["b", "a"], ["q"], []):
+        for ax in (-1, 5):
+            t = t_plain(np.array(values, dtype=TD.build()))
+            add("strsort", "sort_kw", params=_sort_params({"kind": "heapsort"}, axis=ax), operands=[t],
+                layout=f"T{len(values)}", call=lambda a, x=ax: np.sort(a, axis=x, kind="heapsort"))
+            add("strsort", "argsort_kw", params=_sort_params({"kind": "heapsort"}, axis=ax), operands=[t],
+                layout=f"T{len(values)}", call=lambda a, x=ax: np.argsort(a, axis=x, kind="heapsort"))
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
-              gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio]
+              gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
+              gen_strsort]
 
 
 def main():

@@ -15,7 +15,7 @@ namespace NumSharp.Tests.Documentation
     ///     strings and bytes" fundamentals article). Each test mirrors one documented snippet and
     ///     asserts the behaviour the page claims: NumPy's fixed-width <c>U</c> / <c>S</c> dtypes store, convert (to and from
     ///     numbers included), move and print like NumPy 2.4.2, and computing on text gives NumPy's results (comparisons,
-    ///     truth values, concatenation, repetition), NumPy's refusal (NumPy's text), or the next-phase exception.
+    ///     truth values, concatenation, repetition, sorting), NumPy's refusal (NumPy's text), or the next-phase exception.
     /// </summary>
     [TestClass]
     public class FundamentalsStringsBytesDocTests
@@ -290,7 +290,39 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>
-        ///     What the doc page still lists as a later phase: sorting and the unique values (a sort) refuse with
+        ///     The "Sorting" snippets (strings phase 2, P2.2; every value probed against NumPy 2.4.2): code-point order, the
+        ///     in-place sort, NumPy's introsort order of equal strings for the default kind and the input order for the
+        ///     stable kind (20 single letters, past the 16 elements NumPy insertion-sorts), the partitions as full sorts,
+        ///     and NumPy's two keyword errors with its texts.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_Sorting()
+        {
+            var words = np.array(new[] { "pear", "fig", "apple", "fig" });
+            NDArray.AsStringArray(np.sort(words)).Should().Equal("apple", "fig", "fig", "pear");
+            np.argsort(words).ToArray<long>().Should().Equal(2L, 1L, 3L, 0L);
+            NDArray.AsStringArray(np.sort(np.array(new[] { "b", "A", "a", "é", "Z" }))).Should().Equal("A", "Z", "a", "b", "é");
+            NDArray.AsStringArray(np.partition(words, 1)).Should().Equal("apple", "fig", "fig", "pear");
+            np.argpartition(words, 1).ToArray<long>().Should().Equal(2L, 1L, 3L, 0L);
+            words.sort();
+            NDArray.AsStringArray(words).Should().Equal("apple", "fig", "fig", "pear");
+
+            var grades = np.array("babacabcabacbacbabac".Select(c => c.ToString()).ToArray());
+            np.argsort(grades).ToArray<long>().Should().Equal(1L, 3L, 16L, 5L, 13L, 8L, 18L, 10L, 0L, 17L, 15L, 12L, 9L, 6L, 2L, 7L, 14L, 4L, 11L, 19L);
+            np.argsort(grades, kind: "stable").ToArray<long>()
+              .Should().Equal(1L, 3L, 5L, 8L, 10L, 13L, 16L, 18L, 0L, 2L, 6L, 9L, 12L, 15L, 17L, 4L, 7L, 11L, 14L, 19L);
+            np.argsort(grades, stable: true).ToArray<long>().Should().Equal(np.argsort(grades, kind: "stable").ToArray<long>());
+
+            Action badKind = () => np.sort(words, kind: "timsort");
+            badKind.Should().Throw<ValueError>().WithMessage("sort kind must be one of 'quick', 'heap', or 'stable' (got 'timsort')");
+            Action both = () => np.sort(words, kind: "stable", stable: true);
+            both.Should().Throw<ValueError>()
+                .WithMessage("`kind` and keyword parameters can't be provided at the same time. Use only one of them.");
+        }
+
+        /// <summary>
+        ///     What the doc page still lists as a later stage: the unique values and the binary searches refuse with
         ///     <see cref="StringComputationNotSupportedException"/> (a <see cref="NotSupportedException"/>); a string
         ///     <c>dtype=</c> request of <c>np.add</c> over numbers computes (the numbers written as text, then concatenated).
         /// </summary>
@@ -298,13 +330,13 @@ namespace NumSharp.Tests.Documentation
         public void Computing_NextPhase()
         {
             var names = Names();
-            Action sort = () => np.sort(names);
-            sort.Should().Throw<StringComputationNotSupportedException>();
             Action unique = () => np.unique(names);
             unique.Should().Throw<StringComputationNotSupportedException>();
+            Action search = () => np.searchsorted(np.sort(names), np.array(new[] { "cow" }));
+            search.Should().Throw<StringComputationNotSupportedException>();
             NDArray.AsStringArray(np.add(np.array(new[] { 1.5 }), np.array(new[] { 1.5 }), dtype: "U")).Should().Equal("1.51.5");
             // StringComputationNotSupportedException is a NotSupportedException.
-            sort.Should().Throw<NotSupportedException>();
+            unique.Should().Throw<NotSupportedException>();
 
             // The .NET route until then.
             NDArray.AsStringArray(names).Select(s => s.ToUpper()).Should().Equal("CAT", "DOG", "BIRD");

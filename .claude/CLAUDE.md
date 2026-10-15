@@ -80,6 +80,10 @@ branch-free instead of one kernel call per mask run (a cast `out=` keeps NDIter'
 write-masked copy-back is what leaves a masked-off element of a cast output untouched). Narrow rows run 2× the per-row
 route (`m[:, :3] == "abc"` 9.6× NumPy at 100K), masks 2.2–4.3× the per-run route; switches `RowsDisabled` /
 `MaskedBlendDisabled` on `NDStringComparison` (and `NDStringTruth.RowsDisabled`) take the old routes for A/B tests.
+Sorting `S` / `U` text computes since P2.2 milestone A (2026-10-15): `np.sort` / `np.argsort` / `ndarray.sort` /
+`np.partition` / `np.argpartition` with NumPy's `kind` / `order` / `stable`, NumPy's order of equal strings included (see
+"Sorting & Searching" → "Text sorts"). Searching, the set routines, `lexsort`, the histograms and quantiles over text
+are the next milestones of P2.2.
 **Text ↔ number conversion is phase 1 (P1.1, 2026-10-12, `docs/plans/strings-phase1-completion.md`)** — NumPy's legacy
 casts, byte for byte: a number becomes its scalar's `str()` (`Backends/Strings/NDTextFormat.cs`: the float positional /
 scientific windows per type, float16 / float32 shortest digits, complex forms; an unsized `'U'` / `'S'` takes
@@ -310,16 +314,17 @@ on the lines it ADDED (a cobertura run of the unit + oracle suites joined with `
 99.4 % (3,600 / 3,623; the rest cannot run: host limits and guards behind excluded conditions). Mutation pass: 27 planted
 bugs, 26 killed, 1 equivalent. A crashed test host counts as a kill (a corrupt cell can end it without a "Failed" line).
 Where NumPy REFUSES (no string loop) NumSharp raises NumPy's type + text; where NumPy COMPUTES something not ported yet
-(sort/search, the other `np.strings` functions) it throws
+(searching, the set routines, the other `np.strings` functions) it throws
 `StringComputationNotSupportedException` — both AFTER NumPy's earlier checks in NumPy's order (`dtype=` class check,
 read-only `out=`, non-bool `where=`, the axis under one of three rules, the quantile q/axis/method/empty-axis order,
 a computing loop's output cast and broadcast; `Backends/Strings/NDStringUfuncs{,.Precedence}.cs`). Every engine ufunc
 member resolves its `dtype=` through `UfuncLoopCode(dtype, "<numpy name>", x1, x2, out, where)` so an unsized string
 request (`'U'`, `'S'`) gets NumPy's per-ufunc answer. Gate: the string oracle (`test/oracle/gen_strings_oracle.py` →
-`NumSharp.Tests.Oracle/Strings`, 43,825 cases in 23 sections, `strconv` = 4,487 conversion cases, `tdtype` = 1,188 descriptor cases; a phase-2 case passes as
+`NumSharp.Tests.Oracle/Strings`, 82,890 cases in 34 sections, `strconv` = 4,487 conversion cases, `tdtype` = 1,188 descriptor cases, `strsort` = 4,998 sorting cases; a phase-2 case passes as
 "deferred" only while NumSharp throws `StringComputationNotSupportedException`, so phase 2 is gated by the same corpus,
-and a section may defer no more than its ceiling (`StringOracleTests.DeferralCeilings`, 537 in all: sorting, searching,
-set routines, histograms, quantiles), so a computation answered today cannot slide back; `NUMSHARP_STRING_ORACLE_DEFERRED=1`
+and a section may defer no more than its ceiling (`StringOracleTests.DeferralCeilings`, 783 in all: 346 `S` / `U` cases
+of searching, the set routines, histograms and quantiles, and 437 `StringDType` cases through numpy.ma), so a computation
+answered today cannot slide back; `NUMSHARP_STRING_ORACLE_DEFERRED=1`
 lists every deferred case with its refusal) + `Backends/Strings/StringCallOrderTests.cs` + `StringShapeDecidedTests.cs`
 + `StringComparisonTruthTests.cs` + `StringArithmeticTests.cs` + `TextNumberConversionTests.cs`. **Validation pass (2026-10-07)** — the deferral rule is now exact: defer ONLY where NumPy
 reads the text (compares, concatenates, parses, formats into a result); where dtypes, sizes or shapes decide NumPy's
@@ -3921,6 +3926,49 @@ Semantics (all probed against NumPy 2.4.2, pinned in `NDEvaluateTests.cs`):
 
 ### Sorting & Searching
 `argmax`, `argmin`, `argpartition`, `argsort`, `argwhere`, `flatnonzero`, `lexsort`, `nanargmax`, `nanargmin`, `nonzero`, `partition`, `searchsorted`, `sort`, `sort_complex`
+
+**Text sorts replay NumPy's introsort, its order of equal strings included** (strings phase 2, P2.2 milestone A,
+2026-10-15; `Backends/Default/Sorting/TextSort.cs`, key kernels `Backends/Kernels/ILKernelGenerator.Text.Sort.cs`, the
+keywords `Backends/Default/Sorting/SortKind.cs`; gates the string oracle's `strsort` section (4,998 cases, zero
+excuses) + `Backends/Strings/StringSortTests.cs` (19); plan `docs/plans/strings-phase2.md`):
+- **What NumPy does.** `np.sort` / `np.argsort` / `ndarray.sort` over `S` / `U` run `string_quicksort_` /
+  `string_aquicksort_` (`npysort/quicksort.cpp`): a median-of-3 introsort that insertion-sorts every range of at most 16
+  elements and falls back to `string_aheapsort_` once its depth budget (`2 · msb(n)`) is spent. It is NOT stable, so an
+  argsort's order of equal strings depends on the whole run. In 2.4.2 the heapsort kind gives the default's answer, the
+  stable kinds the unique stable order, and `np.partition` / `np.argpartition` have no text partition: NumPy sorts
+  (`npy_quicksort` / `npy_aquicksort`, the same answers). A `StringDType` array refuses the heapsort kind
+  (`RuntimeError: unsupported sort kind`); its other sorts are the `T` part of P2.2.
+- **Keys.** Each element's first units as one big-endian `ulong` (`S`: 8 bytes; `U`: 8 units of 8 bits, else 16 / 21 /
+  32 bits by the widest unit present), from IL key kernels with managed twins; EXACT when the key covers the element.
+- **Argsort routes** (one permutation whichever runs; test hooks switch each off: `ShortcutDisabled`,
+  `DirectPortDisabled`, `PackedWindowDisabled`, `TailPortDisabled`; counters prove which ran):
+  - a line of at most 16 elements: a branch-free vector count-rank (NumPy's insertion sort is the stable order); rows
+    that lie end to end are keyed 4,096 elements per kernel call, strided rows one row at a time;
+  - exact keys, unstable kind: the introsort REPLAYED over key records when the line has at most 128 elements, its
+    duplicates are certain (more elements than the window of varying key bits holds values) or a 128-key sample repeats —
+    over window-packed records (`window << 32 | index`, one ulong, 2× the two-ulong records on tie-heavy lines) when the
+    varying bits span at most 32, else over (key, index) pairs;
+  - keys that do not cover the strings, unstable kind, at most 16,384 elements, 1 to 8 sample repeats: the introsort
+    replayed over (prefix key, index) records whose compare goes past the key on a tie (NumPy's own string compare);
+  - otherwise the stable order (a stable LSD radix over the key bytes that vary, then a tie pass that keys the next units
+    of each run of equal keys), and then for the unstable kinds either the distinct-strings shortcut (no equal strings:
+    the stable order IS NumPy's answer) or dense ranks replayed over packed records.
+- **Value sorts and the stable kind** take the stable order (any order of equal strings gives the same values) and
+  gather. The kinds reach numbers too: the stable kind keeps every float NaN's bits in input order, the default writes
+  NumPy's canonical quiet NaN (the former `[OpenBugs]` pin, now the regression test `Sort_StableKinds_KeepEveryNaNsBits`).
+- **Benchmark trap.** A sorting benchmark that repeats ONE input lets the branch predictor memorize a branchy sort of up
+  to ~1,000 elements, NumPy's included: NumPy argsorts the same 1,000 random `U8` strings in 31 µs and fresh ones in
+  81 µs at best, 88 µs in the median call (NumSharp's radix: 19 / 21 µs either way). It also made the introsort replay
+  look 1.4–1.8× faster than the radix at 512–1,000 random 64-bit keys, where it is 2.6–3.1× slower on fresh keys. Time
+  sorting cells over a pool of fresh inputs on BOTH sides (16 different inputs cycled per cell, the median call), and
+  set routing thresholds from fresh-input medians.
+- **Perf** (NPY/NS, two pinned P-cores): fresh inputs (76 cells at 1K: 6 datasets × 8 forms, partition and
+  argpartition, and 8 more layouts of two datasets): every cell ≥ 1.58×, geomean 3.05×; one repeated input (216 cells,
+  8 datasets × 1K / 100K / 1M): geomean 3.89× (2.68× / 4.86× / 4.51× by size; every 100K and 1M cell 1.68–18.8×). The 11
+  cells below 1.5× are 1K cells the repeated input flatters NumPy on (their fresh twins 1.62–4.26×). The slowest 100K / 1M
+  cells are argsorts of text outside Latin-1 (1.68–2.01×: an 8-byte key holds four such characters, not eight, so more
+  keys tie) and of tie-heavy text: one character of 4 values argsorts 1.83× / 2.18× / 2.14× at 1K / 100K / 1M
+  (0.84–1.07× through two-ulong records). 100K random `U8` 7.0×.
 
 **The index searches and index transforms return NumPy's objects** (2026-10-08, the open-bugs rundown's bug 8; plan
 `docs/plans/api-parameter-parity.md` X37; gates the layout-parity oracle's argwhere / flatnonzero / `unravel` / `ravelmi`

@@ -214,8 +214,13 @@ namespace NumSharp.Tests.Backends.Strings
             r.dtype.Should().Be(np.@bool);
             r.shape.Should().Equal(new long[] { 0 });
             ReferenceEquals(np.ma.getmask(r), np.ma.nomask).Should().BeTrue();
-            Action text = () => np.ma.isin(MU(), "ab");
-            text.Should().Throw<StringComputationNotSupportedException>();
+            // Over text the sort compares the strings: ma.isin(ma.array(['ab', 'c', 'de'], mask=[1, 0, 0]), 'ab') ->
+            // masked_array(data=[--, False, False], mask=[True, False, False], fill_value=True), the data under the mask False
+            // (probed against NumPy 2.4.2).
+            var text = np.ma.isin(MU(), "ab");
+            np.ma.getmaskarray(text).ToArray<bool>().Should().Equal(true, false, false);
+            np.ma.getdata(text).ToArray<bool>().Should().Equal(false, false, false);
+            ((bool)text.fill_value).Should().BeTrue();
         }
 
         /// <summary>
@@ -326,9 +331,13 @@ namespace NumSharp.Tests.Backends.Strings
             NDArray.AsStringArray(np.ma.getdata(r)).Should().Equal("c");
             np.ma.getmaskarray(r).ToArray<bool>().Should().Equal(true);
             Text(r.fill_value).Should().Be("N");
-            // Masked and unmasked text: where the masked slot sorts is a string comparison with the fill.
-            Action mixed = () => np.ma.unique(MU());
-            mixed.Should().Throw<StringComputationNotSupportedException>();
+            // Masked and unmasked text: the masked slot sorts with the fill 'N/A' cut to the width:
+            // ma.unique(ma.array(['ab', 'c', 'de'], mask=[1, 0, 0])) -> data [--, 'c', 'de'], mask [True, False, False],
+            // fill_value 'N/' (probed against NumPy 2.4.2).
+            var mixed = np.ma.unique(MU());
+            NDArray.AsStringArray(np.ma.getdata(mixed))[1..].Should().Equal("c", "de");
+            np.ma.getmaskarray(mixed).ToArray<bool>().Should().Equal(true, false, false);
+            Text(mixed.fill_value).Should().Be("N/");
         }
     }
 }

@@ -39,16 +39,16 @@ namespace NumSharp.Backends.Sorting
         /// <exception cref="ValueError">An unknown <paramref name="kind"/>, an <paramref name="order"/>, or a kth out of
         ///     bounds (and NumPy's kth dtype errors for an array kth).</exception>
         /// <exception cref="AxisError">A string array with an out-of-bounds axis.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A string array whose lines hold two or more elements:
-        ///     NumPy sorts the text (a string has no partition function; the next phase of NumSharp's string support). Lines of
-        ///     at most one element are answered from the shape.</exception>
         public static NDArray Partition(NDArray a, int[] kth, int? axis, string kind, string order)
         {
             ValidateKindOrder(kind, order);
-            // Text: NumPy checks the axis and the kth bounds, then partitions by comparison (the next phase). A line of at
-            // most one element (or none) compares nothing: the copy below moves the strings and the line kernel returns.
-            if (Strings.NDStringUfuncs.IsString(a) && TextAnswer("partition", a, axis, () => WidenKth(kth)) is { } refusal)
-                throw refusal;
+            // Text: NumPy checks the axis and the kth bounds, then (a string having no partition function) sorts every
+            // line with npy_quicksort, so the partition IS the sorted copy.
+            if (Strings.NDStringUfuncs.IsString(a))
+            {
+                TextChecks("partition", a, axis, () => WidenKth(kth));
+                return AxisSort.SortText(a, axis);
+            }
             if (axis == null)
             {
                 var flat = a.ravel().copy('C');
@@ -76,17 +76,16 @@ namespace NumSharp.Backends.Sorting
         /// <exception cref="ValueError">An unknown <paramref name="kind"/>, an <paramref name="order"/>, or a kth out of
         ///     bounds (and NumPy's kth dtype errors for an array kth).</exception>
         /// <exception cref="AxisError">A string array with an out-of-bounds axis.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A string array whose lines hold two or more elements:
-        ///     NumPy sorts the text (a string has no partition function; the next phase of NumSharp's string support). Lines of
-        ///     at most one element are answered from the shape.</exception>
         public static NDArray Partition(NDArray a, NDArray kth, int? axis, string kind, string order)
         {
             ValidateKindOrder(kind, order);
             KthTooDeepCheck(kth);
-            // Text: the axis, then the kth dtype and bounds, then the comparison partition (the next phase); a line of at
-            // most one element continues below, where the copy moves the strings and the line kernel returns.
-            if (Strings.NDStringUfuncs.IsString(a) && TextAnswer("partition", a, axis, () => ExtractKthValues(kth)) is { } refusal)
-                throw refusal;
+            // Text: the axis, then the kth dtype and bounds, then the sort NumPy partitions a string with.
+            if (Strings.NDStringUfuncs.IsString(a))
+            {
+                TextChecks("partition", a, axis, () => ExtractKthValues(kth));
+                return AxisSort.SortText(a, axis);
+            }
             if (axis == null)
             {
                 var flat = a.ravel().copy('C');
@@ -110,18 +109,13 @@ namespace NumSharp.Backends.Sorting
         /// <exception cref="ValueError">An unknown <paramref name="kind"/>, an <paramref name="order"/>, or a kth out of
         ///     bounds (and NumPy's kth dtype errors for an array kth).</exception>
         /// <exception cref="AxisError">A string array with an out-of-bounds axis.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A string array whose lines hold two or more elements:
-        ///     NumPy sorts the text (a string has no partition function; the next phase of NumSharp's string support). Lines of
-        ///     at most one element are answered from the shape.</exception>
         public static void PartitionInPlace(NDArray a, int[] kth, int? axis, string kind, string order)
         {
             ValidateKindOrder(kind, order);
-            // Text: the axis, writeability and the kth bounds, then NumPy sorts the text (the next phase); lines of at most
-            // one element stay as they are.
+            // Text: the axis, writeability and the kth bounds, then NumPy sorts every line in place.
             if (Strings.NDStringUfuncs.IsString(a))
             {
-                if (TextAnswerInPlace(a, axis, () => WidenKth(kth)) is { } refusal)
-                    throw refusal;
+                TextPartitionInPlace(a, axis, () => WidenKth(kth));
                 return;
             }
             if (axis == null)
@@ -147,19 +141,14 @@ namespace NumSharp.Backends.Sorting
         /// <exception cref="ValueError">An unknown <paramref name="kind"/>, an <paramref name="order"/>, or a kth out of
         ///     bounds (and NumPy's kth dtype errors for an array kth).</exception>
         /// <exception cref="AxisError">A string array with an out-of-bounds axis.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A string array whose lines hold two or more elements:
-        ///     NumPy sorts the text (a string has no partition function; the next phase of NumSharp's string support). Lines of
-        ///     at most one element are answered from the shape.</exception>
         public static void PartitionInPlace(NDArray a, NDArray kth, int? axis, string kind, string order)
         {
             ValidateKindOrder(kind, order);
             KthTooDeepCheck(kth);
-            // Text: the axis, writeability, then the kth dtype and bounds, then the comparison sort (the next phase); lines
-            // of at most one element stay as they are.
+            // Text: the axis, writeability, then the kth dtype and bounds, then the in-place sort of every line.
             if (Strings.NDStringUfuncs.IsString(a))
             {
-                if (TextAnswerInPlace(a, axis, () => ExtractKthValues(kth)) is { } refusal)
-                    throw refusal;
+                TextPartitionInPlace(a, axis, () => ExtractKthValues(kth));
                 return;
             }
             if (axis == null)
@@ -187,22 +176,17 @@ namespace NumSharp.Backends.Sorting
         /// <exception cref="ValueError">An unknown <paramref name="kind"/>, an <paramref name="order"/>, or a kth out of
         ///     bounds (and NumPy's kth dtype errors for an array kth).</exception>
         /// <exception cref="AxisError">A string array with an out-of-bounds axis.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A string array whose lines hold two or more elements:
-        ///     NumPy sorts the text (a string has no partition function; the next phase of NumSharp's string support). Lines of
-        ///     at most one element are answered from the shape.</exception>
         public static NDArray ArgPartition(NDArray a, int[] kth, int? axis, string kind, string order)
         {
             ValidateKindOrder(kind, order);
             if (a.ndim == 0)
                 a = a.reshape(1);
-            // Text: the axis (a 0-d input ravelled above), then the kth bounds, then the comparison (the next phase). A
-            // line of at most one element compares nothing: the bool stand-in of the same shape gives the zero indices.
+            // Text: the axis (a 0-d input ravelled above), then the kth bounds, then NumPy's generic introsort fallback
+            // (npy_aquicksort), which compares as the string introsort does: argpartition is the default argsort.
             if (Strings.NDStringUfuncs.IsString(a))
             {
-                if (TextAnswer("argpartition", a, axis, () => WidenKth(kth)) is { } refusal)
-                    throw refusal;
-                using var standIn = Strings.NDStringUfuncs.BoolStandIn(a);
-                return ArgPartition(standIn, kth, axis, kind, order);
+                TextChecks("argpartition", a, axis, () => WidenKth(kth));
+                return AxisSort.ArgSortText(a, axis, stable: false);
             }
             if (axis == null)
             {
@@ -228,23 +212,17 @@ namespace NumSharp.Backends.Sorting
         /// <exception cref="ValueError">An unknown <paramref name="kind"/>, an <paramref name="order"/>, or a kth out of
         ///     bounds (and NumPy's kth dtype errors for an array kth).</exception>
         /// <exception cref="AxisError">A string array with an out-of-bounds axis.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A string array whose lines hold two or more elements:
-        ///     NumPy sorts the text (a string has no partition function; the next phase of NumSharp's string support). Lines of
-        ///     at most one element are answered from the shape.</exception>
         public static NDArray ArgPartition(NDArray a, NDArray kth, int? axis, string kind, string order)
         {
             ValidateKindOrder(kind, order);
             KthTooDeepCheck(kth);
             if (a.ndim == 0)
                 a = a.reshape(1);
-            // Text: the axis, then the kth dtype and bounds, then the comparison partition (the next phase); a line of at
-            // most one element runs on the bool stand-in of the same shape (zero indices).
+            // Text: the axis, then the kth dtype and bounds, then the default argsort (NumPy's generic introsort fallback).
             if (Strings.NDStringUfuncs.IsString(a))
             {
-                if (TextAnswer("argpartition", a, axis, () => ExtractKthValues(kth)) is { } refusal)
-                    throw refusal;
-                using var standIn = Strings.NDStringUfuncs.BoolStandIn(a);
-                return ArgPartition(standIn, kth, axis, kind, order);
+                TextChecks("argpartition", a, axis, () => ExtractKthValues(kth));
+                return AxisSort.ArgSortText(a, axis, stable: false);
             }
             if (axis == null)
             {
@@ -273,48 +251,39 @@ namespace NumSharp.Backends.Sorting
         }
 
         /// <summary>
-        ///     The answer of <c>np.partition</c> / <c>np.argpartition</c> over text, after the checks NumPy makes before it
-        ///     compares anything: the axis (<c>axis=None</c> flattens), the kth values (an array kth's dtype checks run
-        ///     here, after the axis) and their bounds against the partitioned length. NumPy then partitions the text by
-        ///     comparison, the next phase of NumSharp's string support.
+        ///     The checks NumPy makes before <c>np.partition</c> / <c>np.argpartition</c> touch text: the axis (<c>axis=None</c>
+        ///     flattens), the kth values (an array kth's dtype checks run here, after the axis) and their bounds against the
+        ///     partitioned length (<c>partition_prep_kth_array</c> runs "even if using sorting"). The caller then sorts: a
+        ///     string has no partition function, so NumPy sorts every line (<c>npy_quicksort</c> / <c>npy_aquicksort</c>).
         /// </summary>
         /// <param name="op">The NumPy function name.</param>
         /// <param name="a">The string array (a 0-d argpartition input already ravelled).</param>
         /// <param name="axis">The axis, or null for the flattened array.</param>
         /// <param name="kth">Produces the kth values (raising NumPy's kth dtype errors).</param>
-        /// <returns>The next-phase refusal (every NumPy refusal is thrown first), or null when NumPy compares nothing: an
-        ///     empty input or lines of at most one element, which <c>_new_sortlike</c> / <c>_new_argsortlike</c> return before
-        ///     reading (the caller computes the result through its numeric path).</returns>
         /// <exception cref="AxisError">The axis is out of bounds.</exception>
         /// <exception cref="ValueError">A kth is out of bounds, or a bool kth array.</exception>
         /// <exception cref="TypeError">A non-integer kth array.</exception>
-        private static Exception TextAnswer(string op, NDArray a, int? axis, Func<long[]> kth)
+        private static void TextChecks(string op, NDArray a, int? axis, Func<long[]> kth)
         {
             // NumPy's AxisError (the numeric path's NormalizeAxis keeps its house ArgumentException).
             Strings.NDStringUfuncs.ValidateReduceAxis(op, a.ndim, axis);
             long n = axis is not { } ax ? a.size : a.Shape.dimensions[ax < 0 ? ax + a.ndim : ax];
             PrepKth(kth(), n, a.size);
-            // A string has no partition function, so NumPy sorts each line — except an empty one or one of one element.
-            if (a.size == 0 || n <= 1)
-                return null;
-            return Strings.NDStringUfuncs.NextPhase(op, a);
         }
 
         /// <summary>
-        ///     The answer of the in-place <c>ndarray.partition</c> over text, in NumPy's <c>PyArray_Partition</c> order: the
-        ///     axis (<c>check_and_adjust_axis</c>), the array's writeability (<c>partition array is read-only</c>), the kth
-        ///     values and their bounds (<c>partition_prep_kth_array</c> runs "even if using sorting"); a string has no
-        ///     partition function, so NumPy then sorts the text by comparison, the next phase of NumSharp's string support.
+        ///     The in-place <c>ndarray.partition</c> over text, in NumPy's <c>PyArray_Partition</c> order: the axis
+        ///     (<c>check_and_adjust_axis</c>), the array's writeability (<c>partition array is read-only</c>), the kth values
+        ///     and their bounds; then (a string having no partition function) the in-place sort of every line, which leaves
+        ///     a line of at most one element, or an empty array, as it is.
         /// </summary>
         /// <param name="a">The string array partitioned in place.</param>
         /// <param name="axis">The axis, or null (NumSharp's flatten-in-place extension: no axis check).</param>
         /// <param name="kth">Produces the kth values (raising NumPy's kth dtype errors).</param>
-        /// <returns>The next-phase refusal (every NumPy refusal is thrown first), or null when the lines hold at most one
-        ///     element (or the array is empty): NumPy's sort leaves such lines as they are, so the in-place call is done.</returns>
         /// <exception cref="AxisError">The axis is out of bounds.</exception>
         /// <exception cref="ValueError">The array is read-only, a kth is out of bounds, or a bool kth array.</exception>
         /// <exception cref="TypeError">A non-integer kth array.</exception>
-        private static Exception TextAnswerInPlace(NDArray a, int? axis, Func<long[]> kth)
+        private static void TextPartitionInPlace(NDArray a, int? axis, Func<long[]> kth)
         {
             Strings.NDStringUfuncs.ValidateReduceAxis("partition", a.ndim, axis);
             if (!a.Shape.IsWriteable)
@@ -322,8 +291,14 @@ namespace NumSharp.Backends.Sorting
             long n = axis is not { } ax ? a.size : a.Shape.dimensions[ax < 0 ? ax + a.ndim : ax];
             PrepKth(kth(), n, a.size);
             if (a.size == 0 || n <= 1)
-                return null;
-            return Strings.NDStringUfuncs.NextPhase("partition", a);
+                return;
+            if (axis == null)
+            {
+                // NumSharp's flatten-in-place extension: one line over the whole (contiguous) buffer.
+                TextSort.SortLines(a.reshape(a.size), 0);
+                return;
+            }
+            TextSort.SortLines(a, AxisSort.NormalizeAxis(axis.Value, a.ndim));
         }
 
         /// <summary>Widen an int[] kth to the long[] the cores take (NumPy's kth is intp).

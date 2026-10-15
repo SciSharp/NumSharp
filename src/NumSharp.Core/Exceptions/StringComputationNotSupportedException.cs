@@ -7,12 +7,12 @@ namespace NumSharp
     ///     support does not do yet. The string dtypes cover storage, element access, conversion to and from C#, copying,
     ///     casts between string dtypes, conversion between text and numbers (NumPy's legacy casts: a number's scalar
     ///     <c>str()</c>, a text's <c>int()</c> / <c>float()</c> / <c>complex()</c>), indexing, printing, comparisons, truth
-    ///     tests, concatenation and repetition; the rest of text computation — sorting and searching, and the
-    ///     <c>np.strings</c> functions beyond <c>add</c> / <c>multiply</c> — is the next phase.
+    ///     tests, concatenation, repetition and sorting; the rest of text computation — searching, the set routines, and
+    ///     the <c>np.strings</c> functions beyond <c>add</c> / <c>multiply</c> — is the next phase.
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///     <b>When it is thrown.</b> Only where NumPy itself returns a result: <c>np.sort(u)</c>, <c>np.unique(u)</c>,
+    ///     <b>When it is thrown.</b> Only where NumPy itself returns a result: <c>np.unique(u)</c>, <c>np.argmax(u)</c>,
     ///     <c>np.searchsorted(u, v)</c>, <c>np.histogram(u)</c> and similar. Where NumPy raises an error for a string operand
     ///     (<c>np.subtract(u, u)</c>, <c>np.sum(u)</c>, <c>np.dot(u, u)</c>), NumSharp raises NumPy's own exception and text
     ///     instead, because that answer is final.

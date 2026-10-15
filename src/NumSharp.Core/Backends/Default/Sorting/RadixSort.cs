@@ -279,6 +279,141 @@ namespace NumSharp.Backends.Sorting
         }
 
         /// <summary>
+        ///     The keyed 8-byte argsort when the caller knows which key bits differ between the keys
+        ///     (<paramref name="varyingBits"/> = OR of the keys XOR AND of the keys): only the bytes that hold a varying bit
+        ///     get a histogram and a scatter pass. A byte in which every key agrees cannot reorder anything, and its
+        ///     histogram would still cost one increment per key — for text keys, whose short strings leave whole bytes zero
+        ///     (a one-character <c>U1</c> key varies in one byte of eight), that is most of the counting work.
+        /// </summary>
+        /// <param name="keys">The keys (the first buffer of the ping-pong pair).</param>
+        /// <param name="keyTmp">The second key buffer, <paramref name="n"/> slots.</param>
+        /// <param name="idx">The index column, ordered with the keys (element i at slot i on entry).</param>
+        /// <param name="idxTmp">The second index buffer.</param>
+        /// <param name="n">The number of keys.</param>
+        /// <param name="hist">Histogram scratch of at least 8 · 256 longs.</param>
+        /// <param name="varyingBits">The bits in which some two keys differ; a bit outside it is the same in every key.</param>
+        /// <param name="sortedKeys">Receives the buffer that holds the sorted keys.</param>
+        /// <returns>The buffer that holds the index column in sorted order (stable: equal keys keep their order).</returns>
+        /// <remarks>Gives the same order as <see cref="ArgSortU64(ulong*, ulong*, long*, long*, long, long*, out ulong*)"/>:
+        ///     that overload skips a byte whose histogram puts every key in one bucket, which is exactly a byte with no
+        ///     varying bit, so both run the same scatter passes in the same order.</remarks>
+        internal static long* ArgSortU64(ulong* keys, ulong* keyTmp, long* idx, long* idxTmp,
+                                         long n, long* hist, ulong varyingBits, out ulong* sortedKeys)
+        {
+            if (n <= 1 || varyingBits == 0) { sortedKeys = keys; return idx; }
+            if (n <= InsertionThresholdForBytes(varyingBits))
+            {
+                ArgInsertionU64(keys, idx, (int)n);
+                sortedKeys = keys;
+                return idx;
+            }
+            return ArgSortU64Radix(keys, keyTmp, idx, idxTmp, n, hist, varyingBits, out sortedKeys);
+        }
+
+        /// <summary>
+        ///     The longest line the varying-bits argsort orders by insertion: the radix costs a fixed histogram setup plus a
+        ///     pass per VARYING byte, so with few of them it overtakes insertion on much shorter lines than the 120 elements
+        ///     of eight varying bytes. Measured over fresh random lines (median µs, insertion / radix): one varying byte
+        ///     0.8 / 0.5 at 48 elements and 4.0 / 1.0 at 100; two, 2.3 / 1.4 at 64; eight, 6.7 / 6.5 at 120.
+        /// </summary>
+        /// <param name="varyingBits">The bits in which some two keys differ.</param>
+        /// <returns>The longest line insertion keeps.</returns>
+        private static int InsertionThresholdForBytes(ulong varyingBits)
+        {
+            int bytes = 0;
+            for (int b = 0; b < 8; b++)
+                if (((varyingBits >> (8 * b)) & 0xFF) != 0)
+                    bytes++;
+            return bytes switch
+            {
+                1 => 40,
+                2 => 56,
+                3 => 90,
+                _ => InsertionThreshold64,
+            };
+        }
+
+        /// <summary>
+        ///     The radix passes of <see cref="ArgSortU64(ulong*, ulong*, long*, long*, long, long*, ulong, out ulong*)"/>
+        ///     whatever the line's length (no insertion fallback): a counting pass and a stable scatter per varying byte.
+        /// </summary>
+        /// <param name="keys">The keys (the first buffer of the ping-pong pair).</param>
+        /// <param name="keyTmp">The second key buffer, <paramref name="n"/> slots.</param>
+        /// <param name="idx">The index column, ordered with the keys.</param>
+        /// <param name="idxTmp">The second index buffer.</param>
+        /// <param name="n">The number of keys (at least 2).</param>
+        /// <param name="hist">Histogram scratch of at least 8 · 256 longs.</param>
+        /// <param name="varyingBits">The bits in which some two keys differ (not 0).</param>
+        /// <param name="sortedKeys">Receives the buffer that holds the sorted keys.</param>
+        /// <returns>The buffer that holds the index column in sorted order (stable).</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        internal static long* ArgSortU64Radix(ulong* keys, ulong* keyTmp, long* idx, long* idxTmp,
+                                              long n, long* hist, ulong varyingBits, out ulong* sortedKeys)
+        {
+            // The varying bytes, lowest first (the LSD order).
+            int* shifts = stackalloc int[8];
+            int passes = 0;
+            for (int b = 0; b < 8; b++)
+                if (((varyingBits >> (8 * b)) & 0xFF) != 0)
+                    shifts[passes++] = 8 * b;
+
+            // Their histograms in one read pass. One or two varying bytes count only those (a U1 key: one increment per key
+            // instead of eight); three or more take the unrolled all-bytes pass, whose eight fixed increments run faster
+            // than a loop over a variable number of bytes (measured: 1,000 keys of eight varying bytes, 21.9 against
+            // 18.6 µs through a variable inner loop). histBase[p] is pass p's histogram either way.
+            long** histBase = stackalloc long*[8];
+            if (passes <= 2)
+            {
+                for (int b = 0; b < passes * 256; b++)
+                    hist[b] = 0;
+                for (int p = 0; p < passes; p++)
+                    histBase[p] = hist + p * 256;
+                int s0 = shifts[0];
+                if (passes == 1)
+                {
+                    for (long i = 0; i < n; i++)
+                        hist[(int)((keys[i] >> s0) & 0xFF)]++;
+                }
+                else
+                {
+                    int s1 = shifts[1];
+                    for (long i = 0; i < n; i++)
+                    {
+                        ulong v = keys[i];
+                        hist[(int)((v >> s0) & 0xFF)]++;
+                        hist[256 + (int)((v >> s1) & 0xFF)]++;
+                    }
+                }
+            }
+            else
+            {
+                BuildHist64(keys, n, hist);
+                for (int p = 0; p < passes; p++)
+                    histBase[p] = hist + (shifts[p] >> 3) * 256;
+            }
+
+            ulong* ks = keys, kd = keyTmp;
+            long* xs = idx, xd = idxTmp;
+            for (int pass = 0; pass < passes; pass++)
+            {
+                int shift = shifts[pass];
+                long* h = histBase[pass];
+                Prefix(h);
+                for (long i = 0; i < n; i++)
+                {
+                    int d = (int)((ks[i] >> shift) & 0xFF);
+                    long p = h[d]++;
+                    kd[p] = ks[i];
+                    xd[p] = xs[i];
+                }
+                ulong* tk = ks; ks = kd; kd = tk;
+                long* tx = xs; xs = xd; xd = tx;
+            }
+            sortedKeys = ks;
+            return xs;
+        }
+
+        /// <summary>
         /// Builds ALL <paramref name="nbytes"/> byte-histograms of <paramref name="src"/> in ONE
         /// read pass into <paramref name="hist"/> (<c>nbytes·256</c> longs, the b-th 256-block = byte
         /// b's counts). Standard LSD radix re-reads the key array once per byte-pass purely to count;

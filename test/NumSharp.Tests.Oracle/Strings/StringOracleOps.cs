@@ -245,6 +245,10 @@ namespace NumSharp.Tests.Strings
             // sources and targets in its own partial.
             if (TryInvokeTextIO(c.Op, p, ops, out var textio))
                 return textio;
+            // Section strsort (np.sort / np.argsort / ndarray.sort / the partitions with NumPy's kind / order / stable
+            // keywords, P2.2) lives in its own partial.
+            if (TryInvokeSort(c.Op, p, ops, out var sorted))
+                return sorted;
             throw new InvalidOperationException($"the string oracle has no op '{c.Op}'");
         }
 
