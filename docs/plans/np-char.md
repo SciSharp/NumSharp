@@ -480,7 +480,7 @@ C-D1 decision and C3 for C-D3.
     0.94×).
   - **Open:** the other 43 functions (C3–C5), `chararray` (C2, the user's phase 2), C-D6's `None` (an
     `ArgumentNullException` here; NumPy's object array).
-- **2026-10-16 — phase 2: `chararray` as data** (C2's data half; the owner's scope: "`NDCharArray : NDArray`. The
+- **2026-10-16 — phase 2: `chararray` as data** (`012ac869`; C2's data half; the owner's scope: "`NDCharArray : NDArray`. The
   constructor, `np.char.array` and `np.char.asarray` with NumPy's quirks (numbers and T become text). The finalize rule. The
   subclass is kept on views and copies. Element access and iteration strip whitespace. `item()` and `tolist()` do not. The
   `chararray(...)` repr and `view(type=)`. Oracle section `strchararray`").

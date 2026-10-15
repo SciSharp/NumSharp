@@ -845,7 +845,7 @@ dependencies land; C0 waits for the owner's decision C-D1, C3 for C-D3.
 
 ## 7. State log
 
-- **2026-10-16 — `numpy.char` phase 2: `chararray` as data** (`docs/plans/np-char.md` → state log). `NDCharArray :
+- **2026-10-16 — `numpy.char` phase 2: `chararray` as data** (`012ac869`; `docs/plans/np-char.md` → state log). `NDCharArray :
   NDArray` with the constructor, `np.char.array` / `asarray`, the finalize rule, the class kept on views and copies,
   stripped element access and iteration, the `chararray(...)` repr and `view(type)`; no phase-2 kernel was needed (the
   strip of one element is a scalar loop over its units; the casts, copies and gathers are phase 1's). Its oracle section
