@@ -123,6 +123,7 @@ One optional companion package ships for the first time, co-versioned with **Num
 
 ### ⚡ Performance
 *Ratios are NumPy ÷ NumSharp - higher is better (`x2` = twice NumPy's speed); `xLOW->xHIGH` spans the worst→best measured cell across sizes and dtypes.*
+- `x1.6->x117` - text comparisons and truth readers over narrow rows and `where=` masks: a non-coalescing iteration runs blocks of rows through one kernel call, and a mask into a bool `out=` is blended instead of split into runs (`m[:, :3] == "abc"` x9.6 at 100K, was x4.6; `np.equal(..., where=m)` over narrow rows x7.8, was x1.8; `count_nonzero` of a column slice x1.6-x2.1, was x0.75-x0.84) - `b8003693`.
 - `x0.70->x3.1` - `np.max` / `np.min` / `np.ptp` on NumPy's exact reduction schedules, slab reductions folding eight reduced indices per pass (axis cells on non-C layouts were x0.28-x1.0; L3-bound 4M cells of 1- and 4-byte lanes still trail) - `1d79ce61`, `f8f91b3d`.
 - `x0.41->x4.7` - `np.nanmax` / `np.nanmin` (float32/float64 axis cells were x0.15-x0.50, flat C now x2.89 / float32 x3.33; float16/complex128 non-C axes run NumPy's scalar loop at x0.41-x0.69) - `de6333dd`, `268d91fd`.
 - `x0.77->x106` - `np.argmax` / `np.argmin` along an axis walk the strides instead of a per-output div/mod walk (axis 0: float64 x4.4-x8.8, integers x10-x16, bool x95-x106; memory-bound contiguous rows at 4M x0.77-x1.04), and the 64-bit flat argmax runs NumPy's single-pass tournament - `ceac36f2`.
