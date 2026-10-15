@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Dynamic;
 using System.IO;
@@ -26,6 +27,14 @@ namespace NumSharp.IO
     ///     NDArray w = npz["weights"];
     ///     NDArray b = npz.f.biases;   // dot access, NumPy's BagObj
     ///     </code>
+    ///
+    ///     Any number of threads may read members of one archive at the same time (NumPy's <c>NpzFile</c> is not
+    ///     thread-safe; this one is). A member already loaded is returned without a lock. Everything that reads the
+    ///     archive itself (loading a member, <see cref="GetRawBytes"/>, the magic check of <see cref="IsArray"/>) runs
+    ///     under one gate, because the archive reads a single underlying stream, so new members load one at a time.
+    ///     Two threads asking for the same member first get the same instance. <see cref="Dispose"/> waits for a load in
+    ///     progress, and every access after it raises <see cref="ObjectDisposedException"/>. <see cref="Zip"/> hands out
+    ///     the archive itself and bypasses the gate.
     /// </remarks>
     public sealed class NpzFile : IReadOnlyDictionary<string, NDArray>, IDisposable
     {
@@ -47,18 +56,35 @@ namespace NumSharp.IO
         /// </remarks>
         private readonly Dictionary<string, ZipArchiveEntry> _keyToEntry;
 
-        /// <summary>Cache keyed by entry identity, so duplicate names cannot alias each other.</summary>
+        /// <summary>
+        ///     Cache keyed by entry identity, so duplicate names cannot alias each other. A
+        ///     <see cref="ConcurrentDictionary{TKey,TValue}"/> so a cached member is read without the gate while another
+        ///     thread loads a different member; every write happens under <see cref="_archiveGate"/>.
+        /// </summary>
         // Borrowed: an array is handed to whoever first reads it (the indexer / Values / enumeration
         // return the SAME instance on every access) and that reader owns it — an archive that disposed
         // its cache on Close would pull the buffer out from under `using var z = np.load_npz(p);
         // var a = z["a"];`. Dispose only forgets the memo.
-        [NDBorrowed] private readonly Dictionary<ZipArchiveEntry, NDArray> _cache;
+        [NDBorrowed] private readonly ConcurrentDictionary<ZipArchiveEntry, NDArray> _cache;
+
+        /// <summary>
+        ///     Serializes every read of <see cref="_archive"/> and <see cref="Dispose"/>. A <see cref="ZipArchive"/> is not
+        ///     thread-safe: each entry stream seeks and reads the one underlying stream, so two members read at once would
+        ///     interleave their seeks and decode each other's bytes.
+        /// </summary>
+        private readonly object _archiveGate = new object();
 
         private readonly List<string> _files;
 
         private Stream _stream;
         private ZipArchive _archive;
-        private bool _disposed;
+
+        /// <summary>
+        ///     Set once, under <see cref="_archiveGate"/>, by <see cref="Dispose"/>. <c>volatile</c> because the lock-free
+        ///     checks at the top of each member read it outside the gate; the members that touch the archive read it again
+        ///     inside the gate, where the answer is final.
+        /// </summary>
+        private volatile bool _disposed;
 
         /// <summary>
         ///     Open an archive over a stream.
@@ -87,7 +113,9 @@ namespace NumSharp.IO
             }
 
             _keyToEntry = new Dictionary<string, ZipArchiveEntry>(StringComparer.Ordinal);
-            _cache = new Dictionary<ZipArchiveEntry, NDArray>();
+            // One write lock is enough (every write is under _archiveGate already), and the member count bounds the
+            // cache, so it never resizes.
+            _cache = new ConcurrentDictionary<ZipArchiveEntry, NDArray>(concurrencyLevel: 1, capacity: _archive.Entries.Count);
             _files = new List<string>(_archive.Entries.Count);
 
             // Mirrors NumPy's NpzFile.__init__ exactly:
@@ -142,7 +170,12 @@ namespace NumSharp.IO
         /// <summary>Lower-case alias of <see cref="F"/>, spelled as NumPy spells it.</summary>
         public dynamic f => F;
 
-        /// <summary>The underlying archive, for callers that need entry metadata.</summary>
+        /// <summary>
+        ///     The underlying archive, for callers that need entry metadata. Reading entries through it bypasses the gate
+        ///     that serializes this class's own reads, so do not read it while other threads load members.
+        /// </summary>
+        /// <value>The open archive.</value>
+        /// <exception cref="ObjectDisposedException">The archive was disposed.</exception>
         public ZipArchive Zip
         {
             get { ThrowIfDisposed(); return _archive; }
@@ -166,10 +199,19 @@ namespace NumSharp.IO
 
         /// <summary>
         ///     The array stored under <paramref name="key"/>, with or without the <c>.npy</c> suffix.
-        ///     Loaded on first access and cached.
+        ///     Loaded on first access and cached; every later access, from any thread, returns the same instance.
         /// </summary>
+        /// <param name="key">The member name, with or without the <c>.npy</c> suffix.</param>
+        /// <returns>The member's array, owned by the caller that first read it (the archive never disposes it).</returns>
+        /// <exception cref="ObjectDisposedException">The archive was disposed.</exception>
         /// <exception cref="KeyNotFoundException">No such member.</exception>
-        /// <exception cref="FormatException">The member is not a .npy file — use <see cref="GetRawBytes"/>.</exception>
+        /// <exception cref="FormatException">The member is not a .npy file — use <see cref="GetRawBytes"/> — or its header is malformed.</exception>
+        /// <exception cref="NotSupportedException">The member holds a dtype NumSharp cannot load (an object array, say).</exception>
+        /// <exception cref="InvalidDataException">A compressed member's data is corrupt.</exception>
+        /// <remarks>
+        ///     A cached member is returned without a lock. A member that is not cached yet is loaded under the archive's
+        ///     gate, so a thread loading one member waits for a thread loading another.
+        /// </remarks>
         public NDArray this[string key]
         {
             get
@@ -182,21 +224,33 @@ namespace NumSharp.IO
                 if (_cache.TryGetValue(entry, out NDArray cached))
                     return cached;
 
-                // NumPy checks the magic and hands back raw bytes for anything that is not a .npy.
-                // NumSharp's indexer is typed, so route those to GetRawBytes instead of widening every
-                // access to object.
-                if (!StartsWithNpyMagic(entry))
-                    throw new FormatException(
-                        $"'{entry.FullName}' is not a .npy member (its magic string is missing), so it has no " +
-                        $"array to return. Use GetRawBytes(\"{key}\") to read it as bytes.");
-
-                // Stream the member straight into the reader. Buffering it first would cap members at
-                // 2 GB (MemoryStream's limit) and double the peak cost of every load — see OpenMember.
-                using (Stream member = entry.Open())
+                lock (_archiveGate)
                 {
-                    NDArray array = NpyFormat.ReadArray(member, AllowPickle, MaxHeaderSize);
-                    _cache[entry] = array;
-                    return array;
+                    // Dispose takes the gate too, so here the archive is either open or closed for good, and a closed one
+                    // must raise ObjectDisposedException instead of failing inside the zip reader.
+                    ThrowIfDisposed();
+
+                    // Another thread may have loaded this member while this one waited. Returning its array keeps the
+                    // promise that every access to a member gets the same instance.
+                    if (_cache.TryGetValue(entry, out cached))
+                        return cached;
+
+                    // NumPy checks the magic and hands back raw bytes for anything that is not a .npy.
+                    // NumSharp's indexer is typed, so route those to GetRawBytes instead of widening every
+                    // access to object.
+                    if (!StartsWithNpyMagic(entry))
+                        throw new FormatException(
+                            $"'{entry.FullName}' is not a .npy member (its magic string is missing), so it has no " +
+                            $"array to return. Use GetRawBytes(\"{key}\") to read it as bytes.");
+
+                    // Stream the member straight into the reader. Buffering it first would cap members at
+                    // 2 GB (MemoryStream's limit) and double the peak cost of every load — see OpenMember.
+                    using (Stream member = entry.Open())
+                    {
+                        NDArray array = NpyFormat.ReadArray(member, AllowPickle, MaxHeaderSize);
+                        _cache[entry] = array;
+                        return array;
+                    }
                 }
             }
         }
@@ -207,9 +261,14 @@ namespace NumSharp.IO
         /// </summary>
         /// <remarks>
         ///     Capped at ~2 GB by <see cref="Array"/> itself. A member larger than that can still be read
-        ///     as an array through the indexer, which streams instead of buffering.
+        ///     as an array through the indexer, which streams instead of buffering. Reads the archive under its gate,
+        ///     like a load.
         /// </remarks>
+        /// <param name="key">The member name, with or without the <c>.npy</c> suffix.</param>
+        /// <returns>A new array holding the member's bytes.</returns>
+        /// <exception cref="ObjectDisposedException">The archive was disposed.</exception>
         /// <exception cref="KeyNotFoundException">No such member.</exception>
+        /// <exception cref="InvalidDataException">A compressed member's data is corrupt.</exception>
         public byte[] GetRawBytes(string key)
         {
             ThrowIfDisposed();
@@ -217,13 +276,23 @@ namespace NumSharp.IO
             if (!_keyToEntry.TryGetValue(key, out ZipArchiveEntry entry))
                 throw new KeyNotFoundException($"{key} is not a file in the archive");
 
-            var buffer = new MemoryStream(entry.Length > 0 && entry.Length <= int.MaxValue ? (int)entry.Length : 0);
-            using (Stream member = entry.Open())
-                member.CopyTo(buffer);
-            return buffer.ToArray();
+            lock (_archiveGate)
+            {
+                // Dispose may have closed the archive while this thread waited for the gate.
+                ThrowIfDisposed();
+
+                var buffer = new MemoryStream(entry.Length > 0 && entry.Length <= int.MaxValue ? (int)entry.Length : 0);
+                using (Stream member = entry.Open())
+                    member.CopyTo(buffer);
+                return buffer.ToArray();
+            }
         }
 
         /// <summary>Whether <paramref name="key"/> names a member that holds a .npy array.</summary>
+        /// <param name="key">The member name, with or without the <c>.npy</c> suffix.</param>
+        /// <returns>True when the member is cached or starts with the .npy magic string; false when there is no such member or it is not a .npy file.</returns>
+        /// <exception cref="ObjectDisposedException">The archive was disposed.</exception>
+        /// <remarks>A cached member answers without a lock; otherwise the magic check reads the archive under its gate.</remarks>
         public bool IsArray(string key)
         {
             ThrowIfDisposed();
@@ -233,7 +302,12 @@ namespace NumSharp.IO
             if (_cache.ContainsKey(entry))
                 return true;
 
-            return StartsWithNpyMagic(entry);
+            lock (_archiveGate)
+            {
+                // Dispose may have closed the archive while this thread waited for the gate.
+                ThrowIfDisposed();
+                return StartsWithNpyMagic(entry);
+            }
         }
 
         /// <summary>NumPy's <c>name.removesuffix(".npy")</c>.</summary>
@@ -311,22 +385,30 @@ namespace NumSharp.IO
         public void Close() => Dispose();
 
         /// <inheritdoc cref="Close"/>
+        /// <remarks>
+        ///     Takes the archive's gate, so a member another thread is loading finishes first (a large member can make
+        ///     this wait), and that thread's next access raises <see cref="ObjectDisposedException"/>. The arrays already
+        ///     handed out stay valid: they belong to the callers that read them. Calling it again does nothing.
+        /// </remarks>
         public void Dispose()
         {
-            if (_disposed)
-                return;
+            lock (_archiveGate)
+            {
+                if (_disposed)
+                    return;
 
-            _disposed = true;
-            F = null;
+                _disposed = true;
+                F = null;
 
-            _archive?.Dispose();
-            _archive = null;
+                _archive?.Dispose();
+                _archive = null;
 
-            if (_ownStream)
-                _stream?.Dispose();
-            _stream = null;
+                if (_ownStream)
+                    _stream?.Dispose();
+                _stream = null;
 
-            _cache.Clear();
+                _cache.Clear();
+            }
         }
 
         private void ThrowIfDisposed()
