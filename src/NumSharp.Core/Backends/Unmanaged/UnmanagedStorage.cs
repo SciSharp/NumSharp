@@ -1489,7 +1489,7 @@ namespace NumSharp.Backends
                 // np.empty(3, 'U3') is three empty strings: a U element's NUL padding is part of its value, and a reused
                 // buffer could hold units no code point maps to. S carries no such flag; its leftover bytes are still text.
                 // A caller that overwrites every byte (overwriteAll) skips the fill: nothing can read the noise.
-                bool zero = fillZeros || (!overwriteAll && (stringDescr.Meta.ItemFlags & DTypeMeta.NeedsInitFlag) != 0);
+                bool zero = fillZeros || (!overwriteAll && (stringDescr.Meta.ItemFlags & DTypeMeta.NPY_NEEDS_INIT) != 0);
                 _Allocate(fresh, StringArraySlice.Allocate(stringDescr, fresh.size, zero));
                 return;
             }

@@ -320,7 +320,7 @@ namespace NumSharp
         /// <param name="parameters">The descriptor's <c>na_object</c> / <c>coerce</c> parameters.</param>
         /// <exception cref="ArgumentNullException"><paramref name="meta"/> or <paramref name="parameters"/> is null.</exception>
         internal DType(VStringDTypeMeta meta, VStringParameters parameters)
-            : this(meta, NPY_IGNORE, null, VStringDTypeMeta.CellSize, 'T',
+            : this(meta, NPY_IGNORE, null, VStringDTypeMeta.SIZEOF_NPY_PACKED_STATIC_STRING, 'T',
                 parameters ?? throw new ArgumentNullException(nameof(parameters)))
         {
         }
@@ -623,7 +623,7 @@ namespace NumSharp
             {
                 if (_vstring is null || !_vstring.HasNAObject)
                     throw new AttributeError($"'{Meta.FullName}' object has no attribute 'na_object'");
-                return _vstring.NAObject;
+                return _vstring.na_object;
             }
         }
 
@@ -639,7 +639,7 @@ namespace NumSharp
             {
                 if (_vstring is null)
                     throw new AttributeError($"'{Meta.FullName}' object has no attribute 'coerce'");
-                return _vstring.Coerce;
+                return _vstring.coerce;
             }
         }
 

@@ -41,11 +41,17 @@ namespace NumSharp
     /// </remarks>
     public sealed class VStringDTypeMeta : DTypeMeta
     {
-        /// <summary>NumPy's <c>SIZEOF_NPY_PACKED_STATIC_STRING</c>: the bytes of one element cell.</summary>
-        public const int CellSize = 16;
+        /// <summary>
+        ///     NumPy's <c>SIZEOF_NPY_PACKED_STATIC_STRING</c> (<c>2 * sizeof(size_t)</c>, <c>stringdtype/dtype.h</c>): the bytes
+        ///     of one element cell, the <c>itemsize</c> of every <c>StringDType</c> descriptor.
+        /// </summary>
+        public const int SIZEOF_NPY_PACKED_STATIC_STRING = 16;
 
-        /// <summary>NumPy's <c>ALIGNOF_NPY_PACKED_STATIC_STRING</c>: the cell holds a pointer-sized field.</summary>
-        public const int CellAlignment = 8;
+        /// <summary>
+        ///     NumPy's <c>ALIGNOF_NPY_PACKED_STATIC_STRING</c> (<c>_Alignof(size_t)</c>): the cell holds a pointer-sized field,
+        ///     so a descriptor's <c>alignment</c> is 8.
+        /// </summary>
+        public const int ALIGNOF_NPY_PACKED_STATIC_STRING = 8;
 
         /// <summary>
         ///     NumPy's descriptor flags for <c>StringDType</c>: <c>NPY_ITEM_REFCOUNT | NPY_LIST_PICKLE | NPY_NEEDS_INIT |
@@ -56,7 +62,8 @@ namespace NumSharp
         /// <summary>Builds the class. Called once by <see cref="DTypeRegistry"/>.</summary>
         internal VStringDTypeMeta()
             : base("StringDType", "numpy.dtypes", 2056, typeof(string), "str", NPTypeCode.String,
-                kind: 'T', typeChar: 'T', itemSize: CellSize, alignment: CellAlignment, DTypeFlags.NPY_DT_PARAMETRIC)
+                kind: 'T', typeChar: 'T', itemSize: SIZEOF_NPY_PACKED_STATIC_STRING,
+                alignment: ALIGNOF_NPY_PACKED_STATIC_STRING, DTypeFlags.NPY_DT_PARAMETRIC)
         {
         }
 
@@ -144,7 +151,7 @@ namespace NumSharp
             var p2 = descr2.VString ?? throw new ArgumentException($"{descr2.ToString(true)} is not a StringDType descriptor.", nameof(descr2));
             if (!VStringParameters.CompatibleNA(p1, p2, out bool hasNA, out object na))
                 throw new TypeError($"Cannot find common instance for incompatible dtypes '{descr1}' and '{descr2}'");
-            return Descr(hasNA, na, p1.Coerce && p1.Coerce);
+            return Descr(hasNA, na, p1.coerce && p1.coerce);
         }
 
         /// <summary>

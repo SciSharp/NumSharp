@@ -156,7 +156,7 @@ namespace NumSharp.Backends.Unmanaged
                 if (isNull < 0)
                     throw new OutOfMemoryException("Failed to load string in StringDType getitem");
                 if (isNull == 1)
-                    return HasNAObject ? Descr.VString.NAObject : string.Empty;
+                    return HasNAObject ? Descr.VString.na_object : string.Empty;
                 return Decode(buf, size);
             }
             finally
@@ -184,7 +184,7 @@ namespace NumSharp.Backends.Unmanaged
             // form could be longer gets a heap array): no allocation per stored text.
             bool isNA = IsNAValue(value);
             Span<byte> scratch = stackalloc byte[StackEncodeBytes];
-            ReadOnlySpan<byte> utf8 = isNA ? default : EncodeForStore(AsPyString(value, Descr.VString.Coerce), scratch);
+            ReadOnlySpan<byte> utf8 = isNA ? default : EncodeForStore(AsPyString(value, Descr.VString.coerce), scratch);
             Allocator.Acquire();
             try
             {
@@ -212,7 +212,7 @@ namespace NumSharp.Backends.Unmanaged
         internal void SetRange(System.Collections.Generic.IReadOnlyList<object> values)
         {
             Span<byte> scratch = stackalloc byte[StackEncodeBytes];
-            bool coerce = Descr.VString.Coerce;
+            bool coerce = Descr.VString.coerce;
             bool hasNA = Descr.VString.HasNAObject; // no NA object: no value can be NA, skip the comparison per element
             Allocator.Acquire();
             try
@@ -308,7 +308,7 @@ namespace NumSharp.Backends.Unmanaged
         public void Fill(object value)
         {
             bool isNA = IsNAValue(value);
-            byte[] utf8 = isNA ? null : NDUtf8.Encode(AsPyString(value, Descr.VString.Coerce));
+            byte[] utf8 = isNA ? null : NDUtf8.Encode(AsPyString(value, Descr.VString.coerce));
             if (Count == 0)
                 return;
             Allocator.Acquire();
@@ -330,7 +330,7 @@ namespace NumSharp.Backends.Unmanaged
         internal bool IsNAValue(object value)
         {
             var p = Descr.VString;
-            return p.HasNAObject && NDPyObject.Equal(value, p.NAObject);
+            return p.HasNAObject && NDPyObject.Equal(value, p.na_object);
         }
 
         /// <summary>

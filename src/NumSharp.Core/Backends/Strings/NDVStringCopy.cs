@@ -296,7 +296,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="dst">The destination slice.</param>
         /// <returns>The UTF-8 bytes, or null when NA cells are copied as NA.</returns>
         internal static byte[] NAReplacement(VStringArraySlice src, VStringArraySlice dst)
-            => src.HasNAObject && !dst.HasNAObject ? NDUtf8.Encode(src.Descr.VString.NAName) : null;
+            => src.HasNAObject && !dst.HasNAObject ? NDUtf8.Encode(src.Descr.VString.na_name) : null;
 
         /// <summary>Whether a copy of an overlapping source must go through a temporary (NumPy's <c>PyArray_AssignArray</c>):
         ///     a multi-dimensional destination, or a 1-D one whose stride runs against the source's last stride.</summary>

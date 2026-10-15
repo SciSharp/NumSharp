@@ -518,6 +518,14 @@ oracle sections closed the gaps between "NumPy refuses" and "NumPy computes":
   (`DatetimeMetaData.Parse`/`Divides`/`GreatestCommonDivisor`/`CanCast*`, `DTypeCasting.ParseCasting`/`CastingToString`).
   The oracle's `members` record carries each struct's fields as NumPy's headers have them, and the replay's
   `StructPorts` holds the C# class to them, listing every unported field with its reason (self-retiring).
+  On branch `strings` (same day): `VStringParameters` takes the field names of `PyArray_StringDTypeObject` (`na_object`,
+  `coerce`, `has_nan_na`, `has_string_na`, `na_name`, `default_string`; were `NAObject`, `Coerce`, `HasNanNA`,
+  `HasStringNA`, `NAName`, `DefaultString`), `VStringDTypeMeta.CellSize` / `CellAlignment` are NumPy's macros
+  `SIZEOF_NPY_PACKED_STATIC_STRING` / `ALIGNOF_NPY_PACKED_STATIC_STRING`, and `DTypeMeta.NeedsInitFlag` is `NPY_NEEDS_INIT`.
+  The oracle records that struct (unported: `base`, `array_owned`, `allocator`) and the three macros' values, which the
+  replay's `MacroHolders` checks. The class records of `StrDType`, `BytesDType` and `StringDType` are compared there and
+  match NumPy. Not renamed, being outside the folder: `VStringAllocator` (NumPy's `NPY_STRING_*` flags and
+  `NpyString_*` functions under PascalCase names) and `NDArrayMethodFlags` (NumPy's `NPY_METH_*`).
 * **Ported:** `dtype.isalignedstruct`, `len(dtype)` (`__len__`, 0 fields), `dtype[key]` (`__getitem__`, NumPy's KeyError),
   `dtype.metadata` and `np.dtype(dtype, align, copy, metadata)` (`arraydescr_new`'s statements: `copy` copies only a
   singleton, `metadata` always copies and merges without overwriting existing keys).

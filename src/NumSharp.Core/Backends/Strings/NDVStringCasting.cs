@@ -109,7 +109,7 @@ namespace NumSharp.Backends.Strings
                 NPTypeCode from = src.TypeCode;
                 // Only a float64 NaN compares equal to a float NaN NA object (NumPy builds a np.float64 scalar, a Python float
                 // subclass; float32 / float16 / complex scalars are not, and NaN != NaN for them).
-                bool nanToNA = slice.Descr.VString.HasNanNA && from == NPTypeCode.Double;
+                bool nanToNA = slice.Descr.VString.has_nan_na && from == NPTypeCode.Double;
                 run = (s, ss, d, ds, n) => NumberRun(s, ss, from, d, ds, n, allocator, nanToNA);
             }
 
@@ -300,7 +300,7 @@ namespace NumSharp.Backends.Strings
             var p = slice.Descr.VString;
             // load_nullable_string: an NA element reads as the NA object's str() when the descriptor has a non-string NA
             // object, else as the default string (the string NA itself; '' without an NA object).
-            byte[] naText = NDUtf8.Encode(p.HasNAObject && !p.HasStringNA ? p.NAName : p.DefaultString);
+            byte[] naText = NDUtf8.Encode(p.HasNAObject && !p.has_string_na ? p.na_name : p.default_string);
             RunAction run;
             if (dst.IsFixedString)
             {
@@ -313,9 +313,9 @@ namespace NumSharp.Backends.Strings
             else if (dst.TypeCode == NPTypeCode.Boolean)
             {
                 // string_to_bool's NA rule, decided once for the descriptor.
-                byte naTruth = p.HasNAObject && !p.HasStringNA
-                    ? (p.HasNanNA ? (byte)1 : (byte)0)
-                    : (byte)(p.DefaultString.Length == 0 ? 1 : 0);
+                byte naTruth = p.HasNAObject && !p.has_string_na
+                    ? (p.has_nan_na ? (byte)1 : (byte)0)
+                    : (byte)(p.default_string.Length == 0 ? 1 : 0);
                 run = (s, ss, d, ds, n) => ToBoolRun(s, ss, d, ds, n, allocator, naTruth);
             }
             else
@@ -550,7 +550,7 @@ namespace NumSharp.Backends.Strings
             {
                 // string_to_string: NumPy's in_has_null && !out_has_null turns an NA cell into the NA object's str().
                 var fp = from.VString;
-                byte[] naName = fp.HasNAObject && !to.VString.HasNAObject ? NDUtf8.Encode(fp.NAName) : null;
+                byte[] naName = fp.HasNAObject && !to.VString.HasNAObject ? NDUtf8.Encode(fp.na_name) : null;
                 return (s, ss, d, ds, n) => NDVStringCopy.CopyRun(s, ss, d, ds, n, fromAllocator, toAllocator, naName);
             }
 
@@ -574,13 +574,13 @@ namespace NumSharp.Backends.Strings
                 if (src == NPTypeCode.Boolean)
                     return (s, ss, d, ds, n) => BoolRun(s, ss, d, ds, n, toAllocator);
                 // Only a float64 NaN compares equal to a float NaN NA object (see IntoVString).
-                bool nanToNA = to.VString.HasNanNA && src == NPTypeCode.Double;
+                bool nanToNA = to.VString.has_nan_na && src == NPTypeCode.Double;
                 return (s, ss, d, ds, n) => NumberRun(s, ss, src, d, ds, n, toAllocator, nanToNA);
             }
 
             // From StringDType: the setup of FromVString, keyed on the destination DESCRIPTOR.
             var p = from.VString;
-            byte[] naText = NDUtf8.Encode(p.HasNAObject && !p.HasStringNA ? p.NAName : p.DefaultString);
+            byte[] naText = NDUtf8.Encode(p.HasNAObject && !p.has_string_na ? p.na_name : p.default_string);
             if (to.Meta is StringDTypeMeta)
             {
                 int chars = to.kind == 'U' ? to.itemsize / 4 : to.itemsize;
@@ -591,9 +591,9 @@ namespace NumSharp.Backends.Strings
             NPTypeCode dst = to.GetTypeCode();
             if (dst == NPTypeCode.Boolean)
             {
-                byte naTruth = p.HasNAObject && !p.HasStringNA
-                    ? (p.HasNanNA ? (byte)1 : (byte)0)
-                    : (byte)(p.DefaultString.Length == 0 ? 1 : 0);
+                byte naTruth = p.HasNAObject && !p.has_string_na
+                    ? (p.has_nan_na ? (byte)1 : (byte)0)
+                    : (byte)(p.default_string.Length == 0 ? 1 : 0);
                 return (s, ss, d, ds, n) => ToBoolRun(s, ss, d, ds, n, fromAllocator, naTruth);
             }
             return (s, ss, d, ds, n) => ToNumberRun(s, ss, d, ds, n, dst, fromAllocator);

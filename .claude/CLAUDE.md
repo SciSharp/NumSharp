@@ -2878,7 +2878,13 @@ The other ports in `DTypes/` follow the same rule (2026-10-15): `ArrayMethod` ha
 and `PyBoundArrayMethodObject` (`name`, `nin`, `nout`, `casting`, `flags`, `dtypes`, `resolve_descriptors()`,
 `get_strided_loop()`), `ArrayMethodContext` those of `PyArrayMethod_Context` (`method`, `descriptors`), `DatetimeMetaData`
 those of `PyArray_DatetimeMetaData` (`@base`, `num`); `CastingImpl.From`/`To`/`IsWithinDType` and the static helpers that
-port NumPy-internal C functions (`DatetimeMetaData.Divides`, `DTypeCasting.ParseCasting`, …) keep their names.
+port NumPy-internal C functions (`DatetimeMetaData.Divides`, `DTypeCasting.ParseCasting`, …) keep their names. On branch
+`strings`: `VStringParameters` has the fields of `PyArray_StringDTypeObject` (`na_object`, `coerce`, `has_nan_na`,
+`has_string_na`, `na_name`, `default_string`; `HasNAObject` has no field, NumPy reads a null `na_object`), the StringDType
+cell's constants are `VStringDTypeMeta.SIZEOF_NPY_PACKED_STATIC_STRING` / `ALIGNOF_NPY_PACKED_STATIC_STRING`, and the item
+flag is `DTypeMeta.NPY_NEEDS_INIT`; the oracle's `members` record carries that struct and the three macros' values
+(`MacroHolders`). `VStringAllocator` (`Backends/Strings/`, outside the folder) still uses PascalCase names for NumPy's
+`NPY_STRING_*` flags and `NpyString_*` functions.
 Ported with the pass: `isalignedstruct` (False), `__len__()` (0 fields), `__getitem__(key)` (NumPy's KeyError, quoted like
 Python's `str(KeyError)`), `metadata` + `np.dtype(dtype, align, copy, metadata)` (`copy` copies only a singleton;
 `metadata` always copies and merges without overwriting existing keys; equality/hash/printing ignore it). Fixed with it:

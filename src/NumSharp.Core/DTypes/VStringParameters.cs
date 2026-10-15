@@ -12,6 +12,14 @@ namespace NumSharp
     /// </summary>
     /// <remarks>
     ///     <para>
+    ///     <b>NumPy's names.</b> Each member that ports a field of <c>PyArray_StringDTypeObject</c>
+    ///     (<c>numpy/_core/include/numpy/ndarraytypes.h</c>) carries the field's name. Not ported: <c>base</c> (the
+    ///     <c>PyArray_Descr</c> header, which is the <see cref="DType"/> that holds these parameters), <c>array_owned</c>
+    ///     and <c>allocator</c> (NumPy gives every array its own descriptor copy holding the string allocator; NumSharp keeps
+    ///     the allocator on the array's buffer, <c>VStringAllocator</c>, so a descriptor is never owned by an array).
+    ///     <see cref="HasNAObject"/> has no field of its own: NumPy reads "absent" as a null <c>na_object</c> pointer.
+    ///     </para>
+    ///     <para>
     ///     <b>Immutable, shared.</b> A descriptor never changes its parameters, so the derived fields are computed exactly
     ///     once and every later reader (the cast loops, the element stores of P1.5 / P1.6) reads plain fields instead of
     ///     re-running Python protocols per element — NumPy caches them on the descriptor for the same reason.
@@ -19,7 +27,7 @@ namespace NumSharp
     ///     <para>
     ///     <b>"Not given" is not <c>None</c>.</b> NumPy distinguishes a descriptor without a missing-data object (the
     ///     attribute does not exist) from one whose missing-data object is <c>None</c>. <see cref="HasNAObject"/> carries
-    ///     that bit; <see cref="NAObject"/> is <see langword="null"/> both for "absent" and for <c>None</c>.
+    ///     that bit; <see cref="na_object"/> is <see langword="null"/> both for "absent" and for <c>None</c>.
     ///     </para>
     ///     <para>
     ///     <b>A <see cref="char"/> is stored as a one-character string.</b> Every NumSharp string store reads a C#
@@ -50,59 +58,63 @@ namespace NumSharp
         internal VStringParameters(bool hasNAObject, object naObject, bool coerce)
         {
             HasNAObject = hasNAObject;
-            NAObject = hasNAObject ? (naObject is char c ? c.ToString() : naObject) : null;
-            Coerce = coerce;
+            na_object = hasNAObject ? (naObject is char c ? c.ToString() : naObject) : null;
+            // The parameter carries the field's name (NumPy's spelling), so the field is written through `this.`.
+            this.coerce = coerce;
             if (!hasNAObject)
             {
-                NAName = string.Empty;
-                DefaultString = string.Empty;
+                na_name = string.Empty;
+                default_string = string.Empty;
                 return;
             }
             // first check for a string
-            if (NAObject is string s)
+            if (na_object is string s)
             {
-                HasStringNA = true;
+                has_string_na = true;
                 // NumPy keeps default_string as UTF-8 (PyUnicode_AsUTF8AndSize), so a lone surrogate fails the
                 // descriptor's construction with CPython's encode error; the count is all the check needs.
                 NDUtf8.GetByteCount(s);
-                DefaultString = s;
+                default_string = s;
             }
             else
             {
                 // treat as nan-like if != comparison returns a object whose truth value raises an error (pd.NA) or a
                 // truthy value (e.g. a NaN-like object)
-                HasNanNA = NDPyObject.IsNaNLike(NAObject);
-                DefaultString = string.Empty;
+                has_nan_na = NDPyObject.IsNaNLike(na_object);
+                default_string = string.Empty;
             }
-            NAName = NDPyObject.Str(NAObject);
+            na_name = NDPyObject.Str(na_object);
             // na_name is UTF-8 in NumPy too: an object whose str() holds a lone surrogate fails here (a string was
             // already checked above; its str() is itself).
-            if (!HasStringNA)
-                NDUtf8.GetByteCount(NAName);
+            if (!has_string_na)
+                NDUtf8.GetByteCount(na_name);
         }
 
         /// <summary>True when the descriptor has a missing-data object (NumPy: the <c>na_object</c> attribute exists).</summary>
         internal bool HasNAObject { get; }
 
-        /// <summary>The missing-data object (<see langword="null"/> for <c>None</c> and when there is none).</summary>
-        internal object NAObject { get; }
+        /// <summary>
+        ///     NumPy's <c>na_object</c>: the missing-data object (<see langword="null"/> for <c>None</c> and when there is
+        ///     none — <see cref="HasNAObject"/> tells the two apart).
+        /// </summary>
+        internal object na_object { get; }
 
         /// <summary>NumPy's <c>coerce</c>: a non-<c>str</c> value is stored as its <c>str()</c> (true) or refused (false).</summary>
-        internal bool Coerce { get; }
+        internal bool coerce { get; }
 
         /// <summary>NumPy's <c>has_nan_na</c>: the missing-data object is NaN-like (<c>na != na</c> is truthy or raises).</summary>
-        internal bool HasNanNA { get; }
+        internal bool has_nan_na { get; }
 
         /// <summary>NumPy's <c>has_string_na</c>: the missing-data object is a <c>str</c>.</summary>
-        internal bool HasStringNA { get; }
+        internal bool has_string_na { get; }
 
         /// <summary>NumPy's <c>na_name</c>: the missing-data object's <c>str()</c> (<c>'None'</c>, <c>'nan'</c>, <c>'NA'</c>);
         ///     empty when there is none.</summary>
-        internal string NAName { get; }
+        internal string na_name { get; }
 
         /// <summary>NumPy's <c>default_string</c>: for a string missing-data object, that string (what a missing value
         ///     reads as in a string operation); otherwise empty.</summary>
-        internal string DefaultString { get; }
+        internal string default_string { get; }
 
         /// <summary>
         ///     NumPy's <c>_eq_comparison</c>: equal when both coerce alike and their missing-data objects are equal by
@@ -117,11 +129,11 @@ namespace NumSharp
                 return true;
             if (a is null || b is null)
                 return false;
-            if (a.Coerce != b.Coerce)
+            if (a.coerce != b.coerce)
                 return false;
             if (a.HasNAObject != b.HasNAObject)
                 return false; // na_eq_cmp(NULL, x) is 0 for any present x
-            return !a.HasNAObject || NDPyObject.Equal(a.NAObject, b.NAObject);
+            return !a.HasNAObject || NDPyObject.Equal(a.na_object, b.na_object);
         }
 
         /// <summary>
@@ -135,20 +147,20 @@ namespace NumSharp
         /// <returns>False when both are present and unequal (NumPy raises).</returns>
         internal static bool CompatibleNA(VStringParameters a, VStringParameters b, out bool outHas, out object outNA)
         {
-            if (a.HasNAObject && b.HasNAObject && !NDPyObject.Equal(a.NAObject, b.NAObject))
+            if (a.HasNAObject && b.HasNAObject && !NDPyObject.Equal(a.na_object, b.na_object))
             {
                 outHas = false;
                 outNA = null;
                 return false;
             }
             outHas = a.HasNAObject || b.HasNAObject;
-            outNA = a.HasNAObject ? a.NAObject : b.NAObject;
+            outNA = a.HasNAObject ? a.na_object : b.na_object;
             return true;
         }
 
         /// <summary>A hash consistent with <see cref="AreEqual"/> (NumPy hashes the tuple <c>(coerce, na_object)</c>).</summary>
         /// <returns>The hash.</returns>
-        internal int Hash() => HasNAObject ? HashCode.Combine(Coerce, NDPyObject.Hash(NAObject)) : HashCode.Combine(Coerce);
+        internal int Hash() => HasNAObject ? HashCode.Combine(coerce, NDPyObject.Hash(na_object)) : HashCode.Combine(coerce);
 
         /// <summary>
         ///     NumPy's <c>stringdtype_repr</c> — both the descriptor's <c>repr()</c> and its <c>str()</c>:
@@ -158,11 +170,11 @@ namespace NumSharp
         /// <returns>The representation.</returns>
         internal string Repr()
         {
-            if (HasNAObject && !Coerce)
-                return "StringDType(na_object=" + NDPyObject.Repr(NAObject) + ", coerce=False)";
+            if (HasNAObject && !coerce)
+                return "StringDType(na_object=" + NDPyObject.Repr(na_object) + ", coerce=False)";
             if (HasNAObject)
-                return "StringDType(na_object=" + NDPyObject.Repr(NAObject) + ")";
-            return Coerce ? "StringDType()" : "StringDType(coerce=False)";
+                return "StringDType(na_object=" + NDPyObject.Repr(na_object) + ")";
+            return coerce ? "StringDType()" : "StringDType(coerce=False)";
         }
     }
 }

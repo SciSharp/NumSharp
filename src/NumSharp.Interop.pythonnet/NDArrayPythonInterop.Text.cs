@@ -370,11 +370,11 @@ namespace NumSharp.Interop.PythonNet
         {
             var parameters = descr.VString;
             if (!parameters.HasNAObject)
-                return NewNumpyStringDType(hasNA: false, na: null, parameters.Coerce);
-            PyObject na = MissingValueToPython(parameters.NAObject);
+                return NewNumpyStringDType(hasNA: false, na: null, parameters.coerce);
+            PyObject na = MissingValueToPython(parameters.na_object);
             try
             {
-                return NewNumpyStringDType(hasNA: true, na, parameters.Coerce);
+                return NewNumpyStringDType(hasNA: true, na, parameters.coerce);
             }
             finally
             {

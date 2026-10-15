@@ -336,7 +336,7 @@ namespace NumSharp.Tests.IO
                 for (int i = 0; i < values.Length; i++)
                 {
                     object got = c.Storage.GetAtIndex(i);
-                    object want = values[i] is NpyTNA ? descr.VString.NAObject : values[i];
+                    object want = values[i] is NpyTNA ? descr.VString.na_object : values[i];
                     bool same = want is double w && got is double g ? (double.IsNaN(w) && double.IsNaN(g)) || w == g : Equals(want, got);
                     if (!same)
                     {

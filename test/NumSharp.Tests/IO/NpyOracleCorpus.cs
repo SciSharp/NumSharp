@@ -336,7 +336,7 @@ namespace NumSharp.Tests.IO
         /// <param name="descr">The descriptor.</param>
         /// <returns>The objects setitem stores.</returns>
         public static object[] StoreValues(object[] values, DType descr)
-            => values.Select(v => v is NpyTNA ? descr.VString.NAObject : v).ToArray();
+            => values.Select(v => v is NpyTNA ? descr.VString.na_object : v).ToArray();
     }
 
     /// <summary>One array inside an npz archive or an appended stream.</summary>

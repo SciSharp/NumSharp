@@ -17,7 +17,7 @@ namespace NumSharp.Tests.DTypes
     ///     (<c>DTypes/corpus/dtype_oracle.&lt;model&gt;.jsonl</c>, written by <c>test/oracle/gen_dtype_oracle.py</c>)
     ///     against <see cref="DType"/>, <see cref="DTypeMeta"/>, <see cref="DTypeFlags"/>, <c>np.dtypes</c> and the other
     ///     NumPy structs the DTypes folder ports (<see cref="ArrayMethod"/>, <see cref="ArrayMethodContext"/>,
-    ///     <see cref="DatetimeMetaData"/>): every member
+    ///     <see cref="DatetimeMetaData"/>, <see cref="VStringParameters"/>): every member
     ///     NumPy names must exist here under NumPy's exact spelling, and every probed value, error, comparison, promotion,
     ///     class attribute and casting resolution must equal NumPy's. No Python runs at test time.
     /// </summary>
@@ -183,6 +183,24 @@ namespace NumSharp.Tests.DTypes
                 ["parameters"] = "NumPy 2.4's run-time loop parameters (used by sorting); no NumSharp loop reads them",
             }),
             ["PyArray_DatetimeMetaData"] = (typeof(DatetimeMetaData), new Dictionary<string, string>(StringComparer.Ordinal)),
+            ["PyArray_StringDTypeObject"] = (typeof(VStringParameters), new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["base"] = "the PyArray_Descr header: the DType that holds the parameters",
+                ["array_owned"] = "NumPy gives each array its own descriptor copy; NumSharp's descriptors are shared and immutable",
+                ["allocator"] = "NumSharp keeps the string allocator on the array's buffer (VStringAllocator), not on the descriptor",
+            }),
+        };
+
+        /// <summary>
+        ///     The C macros a class of the DTypes folder carries as a constant, with that class. The generator records each
+        ///     macro's value (the <c>macros</c> of the <c>members</c> record); the class must declare a constant of the
+        ///     macro's exact name with that value.
+        /// </summary>
+        private static readonly Dictionary<string, Type> MacroHolders = new(StringComparer.Ordinal)
+        {
+            ["NPY_NEEDS_INIT"] = typeof(DTypeMeta),
+            ["SIZEOF_NPY_PACKED_STATIC_STRING"] = typeof(VStringDTypeMeta),
+            ["ALIGNOF_NPY_PACKED_STATIC_STRING"] = typeof(VStringDTypeMeta),
         };
 
         /// <summary>
@@ -219,8 +237,9 @@ namespace NumSharp.Tests.DTypes
         ///     Every name NumPy gives <c>numpy.dtype</c>, <c>numpy._DTypeMeta</c>, the DType class's C fields and NEP 42
         ///     slots, the <c>NPY_DT_*</c> flags, the byte-order macros, <c>numpy.dtypes</c> and the fields of the other
         ///     structs the DTypes folder ports (<see cref="StructPorts"/>: <see cref="ArrayMethod"/>,
-        ///     <see cref="ArrayMethodContext"/>, <see cref="DatetimeMetaData"/>) exists in C# under NumPy's spelling
-        ///     (case-sensitive), or is an explicit exemption that is still absent.
+        ///     <see cref="ArrayMethodContext"/>, <see cref="DatetimeMetaData"/>, <see cref="VStringParameters"/>) and the C
+        ///     macros its classes carry as constants (<see cref="MacroHolders"/>, with NumPy's values) exists in C# under
+        ///     NumPy's spelling (case-sensitive), or is an explicit exemption that is still absent.
         /// </summary>
         [TestMethod]
         public void Members_ExistUnderNumPysNames()
@@ -286,7 +305,10 @@ namespace NumSharp.Tests.DTypes
                 }
                 foreach (var field in st.Value.EnumerateArray().Select(e => e.GetString()))
                 {
-                    bool present = HasMember(port.Port, field);
+                    // An internal port (VStringParameters) declares internal members: look those up too.
+                    bool present = port.Port.IsPublic
+                        ? HasMember(port.Port, field)
+                        : port.Port.GetMember(field, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static).Length > 0;
                     if (port.NotPorted.ContainsKey(field))
                     {
                         if (present)
@@ -300,6 +322,25 @@ namespace NumSharp.Tests.DTypes
             }
             foreach (var mapped in StructPorts.Keys.Where(k => !structsSeen.Contains(k)))
                 problems.Add($"StructPorts maps {mapped}, which the oracle no longer records");
+
+            // The C macros a class carries as a constant: present under the macro's name, with NumPy's value.
+            var macrosSeen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var macro in m.GetProperty("macros").EnumerateObject())
+            {
+                macrosSeen.Add(macro.Name);
+                if (!MacroHolders.TryGetValue(macro.Name, out var holder))
+                {
+                    problems.Add($"macro {macro.Name}: a NumPy macro this test does not map (add it to MacroHolders)");
+                    continue;
+                }
+                var constant = holder.GetField(macro.Name, BindingFlags.Public | BindingFlags.Static);
+                if (constant == null || !constant.IsLiteral)
+                    problems.Add($"{macro.Name}: no {holder.Name} constant of that name");
+                else if (Convert.ToInt64(constant.GetValue(null), CultureInfo.InvariantCulture) != macro.Value.GetInt64())
+                    problems.Add($"{macro.Name}: {holder.Name} has {constant.GetValue(null)}, NumPy {macro.Value.GetInt64()}");
+            }
+            foreach (var mapped in MacroHolders.Keys.Where(k => !macrosSeen.Contains(k)))
+                problems.Add($"MacroHolders maps {mapped}, which the oracle no longer records");
 
             foreach (var flag in m.GetProperty("dt_flags").EnumerateObject())
             {

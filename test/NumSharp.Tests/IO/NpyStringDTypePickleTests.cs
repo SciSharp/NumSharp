@@ -157,7 +157,7 @@ namespace NumSharp.Tests.IO
             double payload = BitConverter.Int64BitsToDouble(0x7FF8000000000ABCL);
             using var a = np.array(new object[] { "x", payload }, np.dtypes.StringDType(payload));
             using var loaded = (NDArray)np.load(np.save(a), allow_pickle: true);
-            BitConverter.DoubleToInt64Bits((double)loaded.dtype.VString.NAObject).Should().Be(0x7FF8000000000ABCL);
+            BitConverter.DoubleToInt64Bits((double)loaded.dtype.VString.na_object).Should().Be(0x7FF8000000000ABCL);
             loaded.size.Should().Be(2);
             loaded.Storage.GetAtIndex(0).Should().Be("x");
             loaded.Storage.GetAtIndex(1).Should().BeOfType<double>();

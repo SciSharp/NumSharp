@@ -16,8 +16,10 @@ Record kinds (field "kind"):
   members  the names NumPy defines for the two objects: numpy.dtype's public attributes and dunders, numpy._DTypeMeta's
            own attributes, numpy.dtypes' public names, the C fields and slots of the DType class, the NPY_DT_* flag
            values and the byte-order macros; and the C fields of the other structs the DTypes folder ports: the
-           ArrayMethod (PyArrayMethodObject, PyBoundArrayMethodObject), its call context (PyArrayMethod_Context) and
-           the datetime unit (PyArray_DatetimeMetaData). The replay asserts each exists in C# under NumPy's spelling.
+           ArrayMethod (PyArrayMethodObject, PyBoundArrayMethodObject), its call context (PyArrayMethod_Context), the
+           datetime unit (PyArray_DatetimeMetaData) and the StringDType parameters (PyArray_StringDTypeObject); and the
+           values of the C macros a class of the folder carries as a constant (NPY_NEEDS_INIT, the StringDType cell's
+           SIZEOF_ / ALIGNOF_NPY_PACKED_STATIC_STRING). The replay asserts each exists in C# under NumPy's spelling.
   descr    one descriptor built by a recipe and every numpy.dtype attribute of it, plus str / repr / len, the class
            name and the KeyError text of d[0].
   error    a recipe NumPy refuses: the exception type and str(e).
@@ -215,6 +217,19 @@ def members():
         "PyBoundArrayMethodObject": struct_fields(method_h, "PyBoundArrayMethodObject"),
         "PyArrayMethod_Context": struct_fields(api, "PyArrayMethod_Context"),
         "PyArray_DatetimeMetaData": struct_fields(types_h, "PyArray_DatetimeMetaData"),
+        "PyArray_StringDTypeObject": struct_fields(types_h, "PyArray_StringDTypeObject"),
+    }
+    # The C macros a class of the DTypes folder carries as a constant. NPY_NEEDS_INIT is a plain number in
+    # ndarraytypes.h; the StringDType cell's two macros are C expressions (2 * sizeof(size_t), _Alignof(size_t)), so
+    # their values are read from what NumPy reports for a StringDType descriptor, which is what those macros set.
+    needs_init = re.search(r"#define NPY_NEEDS_INIT\s+(0x[0-9A-Fa-f]+|\d+)", types_h)
+    if not needs_init:
+        raise SystemExit("NPY_NEEDS_INIT not found in ndarraytypes.h")
+    string_dt = np.dtypes.StringDType()
+    macros = {
+        "NPY_NEEDS_INIT": int(needs_init.group(1), 0),
+        "SIZEOF_NPY_PACKED_STATIC_STRING": string_dt.itemsize,
+        "ALIGNOF_NPY_PACKED_STATIC_STRING": string_dt.alignment,
     }
 
     d = np.dtype("f8")
@@ -230,7 +245,7 @@ def members():
     emit("members", "all",
          dtype_public=public, dtype_dunders=dunders, dtypemeta_own=meta_own, dtypes_module=module,
          dt_slots=slots, dtypemeta_fields=meta_fields, dtype_slot_fields=slot_fields, dt_flags=flags,
-         struct_fields=struct_records,
+         struct_fields=struct_records, macros=macros,
          byteorder_macros={"NPY_LITTLE": "<", "NPY_BIG": ">", "NPY_NATIVE": "=", "NPY_SWAP": "s", "NPY_IGNORE": "|",
                            "NPY_NATBYTE": native, "NPY_OPPBYTE": swapped})
 

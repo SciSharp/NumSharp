@@ -139,35 +139,35 @@ namespace NumSharp.Tests.DTypes
         public void Parameters_DerivedFields_FollowNewStringDTypeInstance()
         {
             var s = np.dtypes.StringDType("NA").VString;
-            s.HasStringNA.Should().BeTrue();
-            s.HasNanNA.Should().BeFalse();
-            s.DefaultString.Should().Be("NA");
-            s.NAName.Should().Be("NA");
+            s.has_string_na.Should().BeTrue();
+            s.has_nan_na.Should().BeFalse();
+            s.default_string.Should().Be("NA");
+            s.na_name.Should().Be("NA");
 
             var nan = np.dtypes.StringDType(double.NaN).VString;
-            nan.HasNanNA.Should().BeTrue();
-            nan.HasStringNA.Should().BeFalse();
-            nan.DefaultString.Should().BeEmpty();
-            nan.NAName.Should().Be("nan");
+            nan.has_nan_na.Should().BeTrue();
+            nan.has_string_na.Should().BeFalse();
+            nan.default_string.Should().BeEmpty();
+            nan.na_name.Should().Be("nan");
 
             var none = np.dtypes.StringDType(null).VString;
-            none.HasNanNA.Should().BeFalse();
-            none.HasStringNA.Should().BeFalse();
-            none.NAName.Should().Be("None");
+            none.has_nan_na.Should().BeFalse();
+            none.has_string_na.Should().BeFalse();
+            none.na_name.Should().Be("None");
 
-            np.dtypes.StringDType(Half.NaN).VString.HasNanNA.Should().BeTrue();
-            np.dtypes.StringDType(new Complex(1, double.NaN)).VString.HasNanNA.Should().BeTrue();
-            np.dtypes.StringDType(5).VString.HasNanNA.Should().BeFalse();
-            np.dtypes.StringDType(5).VString.NAName.Should().Be("5");
-            np.dtypes.StringDType((Half)1.5).VString.NAName.Should().Be("1.5");
-            np.dtypes.StringDType(new byte[] { (byte)'x' }).VString.NAName.Should().Be("b'x'");
-            np.dtypes.StringDType(na_object: true).VString.NAName.Should().Be("True");
-            np.dtypes.StringDType('?').VString.HasStringNA.Should().BeTrue();
+            np.dtypes.StringDType(Half.NaN).VString.has_nan_na.Should().BeTrue();
+            np.dtypes.StringDType(new Complex(1, double.NaN)).VString.has_nan_na.Should().BeTrue();
+            np.dtypes.StringDType(5).VString.has_nan_na.Should().BeFalse();
+            np.dtypes.StringDType(5).VString.na_name.Should().Be("5");
+            np.dtypes.StringDType((Half)1.5).VString.na_name.Should().Be("1.5");
+            np.dtypes.StringDType(new byte[] { (byte)'x' }).VString.na_name.Should().Be("b'x'");
+            np.dtypes.StringDType(na_object: true).VString.na_name.Should().Be("True");
+            np.dtypes.StringDType('?').VString.has_string_na.Should().BeTrue();
 
             var t = np.dtypes.StringDType().VString;
             t.HasNAObject.Should().BeFalse();
-            t.NAName.Should().BeEmpty();
-            t.DefaultString.Should().BeEmpty();
+            t.na_name.Should().BeEmpty();
+            t.default_string.Should().BeEmpty();
             np.dtype("f8").VString.Should().BeNull();
         }
 
@@ -189,7 +189,7 @@ namespace NumSharp.Tests.DTypes
             d.Should().Throw<UnicodeEncodeError>().WithMessage("'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed");
             np.dtypes.StringDType(new object[] { "\ud800" }).ToString().Should().Be("StringDType(na_object=['\\ud800'])");
             np.dtypes.StringDType("😀").ToString().Should().Be("StringDType(na_object='😀')");
-            np.dtypes.StringDType("😀").VString.DefaultString.Should().Be("😀");
+            np.dtypes.StringDType("😀").VString.default_string.Should().Be("😀");
         }
 
         /// <summary>An "other" sentinel whose <c>str()</c> holds a lone surrogate (Python: <c>__str__</c> returning <c>'x\ud800'</c>).</summary>

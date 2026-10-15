@@ -98,7 +98,7 @@ namespace NumSharp.IO
             DType descr = array.dtype;
             VStringParameters p = descr.VString;
             if (p.HasNAObject)
-                CheckPicklableNA(p.NAObject);
+                CheckPicklableNA(p.na_object);
 
             // is_fortran is PyArray_ISFORTRAN of the array itself (not of the C copy the walk reads).
             bool isFortran = !array.Shape.IsContiguous && array.Shape.IsFContiguous;
@@ -283,10 +283,10 @@ namespace NumSharp.IO
                 Boundary();
                 SaveGlobal(InternalModule, "_convert_to_stringdtype_kwargs");
                 Boundary();
-                SaveLong(p.Coerce ? 1 : 0);
+                SaveLong(p.coerce ? 1 : 0);
                 if (p.HasNAObject)
                 {
-                    SaveNA(p.NAObject);
+                    SaveNA(p.na_object);
                     WriteByte(TUPLE2);
                 }
                 else
@@ -359,7 +359,7 @@ namespace NumSharp.IO
                     {
                         // A descriptor without an NA object reads an NA cell as '' (stringdtype_getitem).
                         if (p.HasNAObject)
-                            SaveNAWithoutBoundary(p.NAObject);
+                            SaveNAWithoutBoundary(p.na_object);
                         else
                             SaveTextWithoutBoundary(null, 0, EmptyKey);
                         return;
@@ -979,7 +979,7 @@ namespace NumSharp.IO
         private static void StoreElements(VStringArraySlice slice, PyList items, PickleReader reader, long[] shape, bool fortran)
         {
             VStringParameters p = slice.Descr.VString;
-            byte[] naUtf8 = p.HasNAObject && p.NAObject is string naText ? NDUtf8.Encode(naText) : null;
+            byte[] naUtf8 = p.HasNAObject && p.na_object is string naText ? NDUtf8.Encode(naText) : null;
             PyValue[] values = items.Items;
             int n = items.Count;
             long arenaBytes = 0;

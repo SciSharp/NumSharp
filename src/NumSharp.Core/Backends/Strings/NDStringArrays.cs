@@ -183,7 +183,7 @@ namespace NumSharp.Backends.Strings
             // that object).
             var vparams = a.Storage.IsVString ? a.dtype.VString : null;
             var elementType = vparams != null
-                ? (!vparams.HasNAObject || vparams.NAObject is null || vparams.NAObject is string ? typeof(string) : typeof(object))
+                ? (!vparams.HasNAObject || vparams.na_object is null || vparams.na_object is string ? typeof(string) : typeof(object))
                 : a.Storage.StringSlice.IsUnicode ? typeof(string) : typeof(byte[]);
             var dims = a.Shape.dimensions;
             if (dims.Length == 0)

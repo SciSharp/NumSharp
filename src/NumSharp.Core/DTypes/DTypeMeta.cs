@@ -334,15 +334,16 @@ namespace NumSharp
         ///     <c>NPY_NEEDS_INIT</c> (8), because a fixed-width Unicode item is NUL-padded and must start zeroed.
         /// </summary>
         /// <value>The flag bits every descriptor of this class reports. The one storage decision they drive is
-        ///     <see cref="NeedsInitFlag"/>: a fresh buffer of such a class is zero-filled even when uninitialized memory
+        ///     <see cref="NPY_NEEDS_INIT"/>: a fresh buffer of such a class is zero-filled even when uninitialized memory
         ///     was asked for (NumPy's <c>PyArray_NewFromDescr_int</c>).</value>
         public virtual int ItemFlags => HasReferences ? 63 : 0;
 
         /// <summary>
-        ///     NumPy's <c>NPY_NEEDS_INIT</c> item flag (0x08): every allocation of a descriptor reporting it starts zeroed,
-        ///     so <c>np.empty</c> of a <c>U</c> dtype holds empty strings rather than whatever the allocator returned.
+        ///     NumPy's <c>NPY_NEEDS_INIT</c> item flag (0x08, <c>ndarraytypes.h</c>): every allocation of a descriptor reporting
+        ///     it starts zeroed, so <c>np.empty</c> of a <c>U</c> dtype holds empty strings rather than whatever the allocator
+        ///     returned.
         /// </summary>
-        public const int NeedsInitFlag = 0x08;
+        public const int NPY_NEEDS_INIT = 0x08;
 
         // ---------------------------------------------------------------------------------------------
         // Registry and descriptor-layout policy

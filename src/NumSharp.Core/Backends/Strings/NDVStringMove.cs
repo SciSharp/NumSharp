@@ -476,7 +476,7 @@ namespace NumSharp.Backends.Strings
         {
             var slice = dst.Storage.VStringSlice;
             bool isNA = slice.IsNAValue(value);
-            byte[] utf8 = isNA ? null : NDUtf8.Encode(VStringArraySlice.AsPyString(value, slice.Descr.VString.Coerce));
+            byte[] utf8 = isNA ? null : NDUtf8.Encode(VStringArraySlice.AsPyString(value, slice.Descr.VString.coerce));
             if (dst.size == 0)
                 return;
             var allocator = slice.Allocator;
