@@ -1,6 +1,7 @@
 id,surface,kind,headline,measure,files,how
 numpy.integer,np,class,False,np.integer,203415,estimate 224768 x 181/200
 numpy.typing,np,module,False,numpy.typing,181274,estimate 186880 x 194/200
+numpy.typing.NDArray,typing,class,False,numpy.typing.NDArray,162286,max of co:numpy.typing+NDArray 162286 (estimate 173568 x 187/200); npt.NDArray 61376 (estimate 70144 x 175/200)
 numpy.floating,np,class,False,np.floating,161070,estimate 166912 x 193/200
 numpy.number,np,class,False,np.number,127949,estimate 130560 x 196/200
 numpy.errstate,np,class,False,np.errstate,119043,estimate 130816 x 182/200
@@ -84,11 +85,13 @@ numpy.memmap.var,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
 numpy.memmap.view,memmap,method,False,np.memmap,44997,estimate 47616 x 189/200
 numpy.maximum.accumulate,ufunc,method,False,np.maximum.accumulate,41834,estimate 42688 x 196/200
 numpy.timedelta64,np,class,False,np.timedelta64,41291,estimate 55424 x 149/200
+numpy.typing.ArrayLike,typing,class,False,numpy.typing.ArrayLike,34090,estimate 37054 x 184/200
 numpy.fromiter,np,function,True,np.fromiter,31163,estimate 33152 x 188/200
 numpy.ndim,np,function,True,np.ndim,29737,estimate 49152 x 121/200
 numpy.seterr,np,function,True,np.seterr,26369,estimate 27904 x 189/200
 numpy.object_,np,class,False,np.object_,22711,estimate 36928 x 123/200
 numpy.str_,np,class,False,np.str_,22473,estimate 29376 x 153/200
+numpy.ma.core,ma,module,False,ma.core,15990,estimate 29888 x 107/200
 numpy.ndarray.ctypes,ndarray,property,True,ctypes.data_as,14333,estimate 15008 x 191/200
 numpy.get_include,np,function,True,np.get_include,13324,estimate 15584 x 171/200
 numpy.polynomial.legendre.leggauss,polynomial,function,False,leggauss,11615,estimate 11792 x 197/200
@@ -96,6 +99,7 @@ numpy.bytes_,np,class,False,np.bytes_,11396,estimate 15296 x 149/200
 numpy.void,np,class,False,np.void,11294,estimate 17376 x 130/200
 numpy.maximum.reduce,ufunc,method,False,np.maximum.reduce,10048,"NOT reduceat re-count 10,048 (lower bound; the original 11,680 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
 numpy.longdouble,np,class,False,np.longdouble,9639,estimate 18016 x 107/200
+numpy.matlib,matlib,module,False,numpy.matlib,9314,estimate 10768 x 173/200
 numpy.core,np,module,False,np.core,8941,estimate 13345 x 134/200
 numpy.complexfloating,np,class,False,np.complexfloating,8452,estimate 11904 x 142/200
 numpy.minimum.accumulate,ufunc,method,False,np.minimum.accumulate,7648,estimate 7648 x 100/100
@@ -177,18 +181,24 @@ numpy.fromfunction,np,function,True,np.fromfunction,5844,estimate 6184 x 189/200
 numpy.minimum.reduce,ufunc,method,False,np.minimum.reduce,5520,"NOT reduceat re-count 5,520 (lower bound; the original 6,528 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
 numpy.add.reduceat,ufunc,method,False,np.add.reduceat,5488,estimate 5488 x 100/100
 numpy.logical_or.reduce,ufunc,method,False,np.logical_or.reduce,5472,"NOT reduceat re-count 5,472 (lower bound; the original 5,776 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
+numpy.typing.DTypeLike,typing,class,False,numpy.typing.DTypeLike,5244,estimate 7184 x 146/200
 numpy.True_,np,constant,False,np.True_,4832,NOT re-count; estimate 4832 x 100/100
 numpy.maximum.at,ufunc,method,False,np.maximum.at,4688,estimate 4784 x 98/100
 numpy.subtract.outer,ufunc,method,False,np.subtract.outer,4400,estimate 4400 x 100/100
+numpy.version,version,module,False,numpy.version (module),4267,sum of np.version 2715 (estimate 4052 x 134/200); numpy.version 1552 (estimate 4032 x 77/200)
 numpy.signedinteger,np,class,False,np.signedinteger,4101,estimate 6408 x 128/200
 numpy.ufunc,np,class,False,np.ufunc,3872,estimate 7376 x 105/200
+numpy.exceptions.VisibleDeprecationWarning,exceptions,class,False,exceptions.VisibleDeprecationWarning,3831,sum of exceptions.VisibleDeprecationWarning 480 (estimate 495 x 97/100); np.VisibleDeprecationWarning(1.x) 3351 (estimate 4296 x 156/200)
 numpy.rec,np,module,False,np.rec,3795,NOT re-count; estimate 3912 x 97/100
+numpy.matlib.repmat,matlib,function,False,matlib.repmat,3653,estimate 4624 x 158/200
 numpy.add.reduce,ufunc,method,False,np.add.reduce,3624,"NOT reduceat re-count 3,624 (lower bound; the original 9,472 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
 numpy.minimum.at,ufunc,method,False,np.minimum.at,3049,estimate 3080 x 99/100
 numpy.datetime_as_string,np,function,True,np.datetime_as_string,2801,estimate 3112 x 180/200
 numpy.multiply.outer,ufunc,method,False,np.multiply.outer,2764,estimate 2792 x 99/100
 numpy.char.add,char,ufunc,False,np.char.add,2570,estimate 2720 x 189/200
+numpy.version.version,version,constant,False,np.version.version,2538,sum of np.version.version 1613 (estimate 1812 x 178/200); numpy.version.version 925 (estimate 934 x 99/100)
 numpy.add.outer,ufunc,method,False,np.add.outer,2448,estimate 2448 x 100/100
+numpy.exceptions.ComplexWarning,exceptions,class,False,exceptions.ComplexWarning,2404,sum of exceptions.ComplexWarning 1380 (estimate 2604 x 106/200); np.ComplexWarning(1.x) 1024 (estimate 1896 x 108/200)
 numpy.polynomial.polynomial.Polynomial,polynomial,class,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
 numpy.polynomial.polynomial.Polynomial.basis,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
 numpy.polynomial.polynomial.Polynomial.basis_name,polynomial,property,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
@@ -216,12 +226,14 @@ numpy.polynomial.polynomial.Polynomial.symbol,polynomial,property,False,class:Po
 numpy.polynomial.polynomial.Polynomial.trim,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
 numpy.polynomial.polynomial.Polynomial.truncate,polynomial,method,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
 numpy.polynomial.polynomial.Polynomial.window,polynomial,property,False,class:Polynomial.fit,2346,estimate 2496 x 188/200
+numpy.polynomial.Polynomial,polynomial,class,False,class:Polynomial.fit,2346,"estimate 2496 x 188/200 (class-level, shared)"
 numpy.False_,np,constant,False,np.False_,2343,estimate 2840 x 165/200
 numpy.finfo.nmant,finfo,property,False,nmant,2236,estimate 6577 x 68/200
 numpy.logaddexp.reduce,ufunc,method,False,np.logaddexp.reduce,2164,"NOT reduceat re-count 2,164 (lower bound; the original 2,156 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
 numpy.inexact,np,class,False,np.inexact,2137,estimate 4912 x 87/200
 numpy.rec.fromarrays,rec,function,False,np.rec.fromarrays,2098,estimate 2512 x 167/200
 numpy.isnat,np,ufunc,True,np.isnat,2032,estimate 2764 x 147/200
+numpy.exceptions.RankWarning,exceptions,class,False,exceptions.RankWarning,1969,sum of exceptions.RankWarning 640 (estimate 970 x 66/100); np.RankWarning(1.x) 1329 (estimate 1682 x 158/200)
 numpy.polynomial.hermite.hermgauss,polynomial,function,False,hermgauss,1952,estimate 2088 x 187/200
 numpy.maximum.reduceat,ufunc,method,False,np.maximum.reduceat,1908,estimate 1908 x 100/100
 numpy.unsignedinteger,np,class,False,np.unsignedinteger,1855,estimate 2728 x 136/200
@@ -229,6 +241,7 @@ numpy.add.accumulate,ufunc,method,False,np.add.accumulate,1696,estimate 1696 x 1
 numpy.info,np,function,True,np.info,1695,estimate 2648 x 128/200
 numpy.multiply.reduce,ufunc,method,False,np.multiply.reduce,1648,"NOT reduceat re-count 1,648 (lower bound; the original 1,732 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
 numpy.rec.array,rec,function,False,np.rec.array,1578,estimate 3712 x 85/200
+numpy.ma.extras,ma,module,False,ma.extras,1421,estimate 2608 x 109/200
 numpy.char.lower,char,function,False,np.char.lower,1412,estimate 1412 x 200/200
 numpy.busday_count,np,function,True,np.busday_count,1361,estimate 1768 x 154/200
 numpy.exceptions,np,module,False,np.exceptions,1361,estimate 1972 x 138/200
@@ -252,6 +265,7 @@ numpy.ScalarType,np,constant,False,np.ScalarType,950,estimate 1320 x 144/200
 numpy.bitwise_xor.reduce,ufunc,method,False,np.bitwise_xor.reduce,946,"NOT reduceat re-count 946 (lower bound; the original 962 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
 numpy.geterr,np,function,True,np.geterr,922,estimate 1308 x 141/200
 numpy.polynomial.chebyshev.chebfit,polynomial,function,False,chebfit,922,estimate 2120 x 87/200
+numpy.dtypes.StringDType,dtypes,class,False,dtypes.StringDType,892,max of dtypes.StringDType 892 (estimate 1716 x 104/200); co:numpy.dtypes+StringDType 347 (estimate 780 x 44/99)
 numpy.sctypeDict,np,constant,False,np.sctypeDict,727,estimate 1192 x 122/200
 numpy.char.array,char,function,False,np.char.array,716,estimate 868 x 165/200
 numpy.polynomial.chebyshev.Chebyshev,polynomial,class,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
@@ -282,6 +296,7 @@ numpy.polynomial.chebyshev.Chebyshev.symbol,polynomial,property,False,class:Cheb
 numpy.polynomial.chebyshev.Chebyshev.trim,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
 numpy.polynomial.chebyshev.Chebyshev.truncate,polynomial,method,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
 numpy.polynomial.chebyshev.Chebyshev.window,polynomial,property,False,class:Chebyshev.fit,702,estimate 1232 x 114/200
+numpy.polynomial.Chebyshev,polynomial,class,False,class:Chebyshev.fit,702,"estimate 1232 x 114/200 (class-level, shared)"
 numpy.char.upper,char,function,False,np.char.upper,696,estimate 696 x 100/100
 numpy.equal.outer,ufunc,method,False,np.equal.outer,696,"ufunc study (vendored-filtered, literal not sampled)"
 numpy.ufunc.reduceat,ufunc,method,False,ufunc.reduceat,695,first pass (unsampled)
@@ -366,6 +381,8 @@ numpy.record.var,record,method,False,np.record,607,estimate 2640 x 46/200
 numpy.record.view,record,method,False,np.record,607,estimate 2640 x 46/200
 numpy.char.partition,char,function,False,np.char.partition,599,first pass (unsampled)
 numpy.char.translate,char,function,False,np.char.translate,577,first pass (unsampled)
+numpy.matlib.identity,matlib,function,False,matlib.identity,572,estimate 2288 x 50/200
+numpy.matlib.zeros,matlib,function,False,matlib.zeros,567,estimate 2412 x 47/200
 numpy.polynomial.hermite_e.hermegauss,polynomial,function,False,hermegauss,556,first pass (unsampled)
 numpy.strings.multiply,strings,function,False,np.strings.multiply,542,first pass (unsampled)
 numpy.busday_offset,np,function,True,np.busday_offset,514,estimate 784 x 131/200
@@ -380,24 +397,128 @@ numpy.char.less,char,function,False,np.char.less,438,first pass (unsampled)
 numpy.char.greater,char,function,False,np.char.greater,436,first pass (unsampled)
 numpy.char.greater_equal,char,function,False,np.char.greater_equal,436,first pass (unsampled)
 numpy.char.less_equal,char,function,False,np.char.less_equal,436,first pass (unsampled)
+numpy.rec.recarray,rec,class,False,rec.recarray,424,estimate 1664 x 51/200
 numpy.little_endian,np,constant,False,np.little_endian,417,first pass (unsampled)
 numpy.char.rpartition,char,function,False,np.char.rpartition,409,first pass (unsampled)
 numpy.ufunc.at,ufunc,method,False,ufunc.at,372,estimate 822 x 90/199
 numpy.char.rstrip,char,function,False,np.char.rstrip,348,first pass (unsampled)
 numpy.polynomial.legendre.legfit,polynomial,function,False,legfit,346,first pass (unsampled)
 numpy.seterrcall,np,function,True,np.seterrcall,334,estimate 1286 x 52/200
+numpy.dtypes.ObjectDType,dtypes,class,False,dtypes.ObjectDType,330,estimate 674 x 49/100
+numpy.matlib.eye,matlib,function,False,matlib.eye,328,estimate 2344 x 28/200
 numpy.polynomial.laguerre.laggauss,polynomial,function,False,laggauss,324,first pass (unsampled)
 numpy.finfo.machep,finfo,property,False,machep,318,estimate 3744 x 17/200
 numpy.char.str_len,char,ufunc,False,np.char.str_len,316,first pass (unsampled)
+numpy.version.full_version,version,constant,False,np.version.full_version,308,sum of np.version.full_version 265 (estimate 270 x 98/100); numpy.version.full_version 43 (unsampled first-pass count)
 numpy.subtract.at,ufunc,method,False,np.subtract.at,302,"ufunc study (vendored-filtered, literal not sampled)"
 numpy.flexible,np,class,False,np.flexible,299,estimate 788 x 76/200
 numpy.geterrcall,np,function,True,np.geterrcall,299,estimate 808 x 70/189
+numpy.matlib.ones,matlib,function,False,matlib.ones,296,estimate 2364 x 25/200
+numpy.ma.mrecords.MaskedRecords,ma,class,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords,ma,module,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.all,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.anom,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.any,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.argmax,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.argmin,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.argpartition,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.argsort,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.astype,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.base,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.baseclass,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.byteswap,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.choose,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.clip,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.compress,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.compressed,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.conj,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.conjugate,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.copy,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.count,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.ctypes,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.cumprod,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.cumsum,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.data,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.device,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.diagonal,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.dot,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.dtype,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.dump,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.dumps,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.fill,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.fill_value,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.filled,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.flags,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.flat,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.flatten,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.get_fill_value,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.get_imag,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.get_real,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.getfield,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.harden_mask,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.hardmask,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.ids,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.imag,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.iscontiguous,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.item,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.itemsize,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.mask,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.max,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.mean,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.min,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.mT,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.nbytes,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.ndim,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.nonzero,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.partition,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.prod,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.product,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.ptp,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.put,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.ravel,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.real,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.recordmask,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.repeat,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.reshape,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.resize,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.round,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.searchsorted,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.set_fill_value,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.setfield,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.setflags,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.shape,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.sharedmask,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.shrink_mask,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.size,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.soften_mask,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.sort,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.squeeze,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.std,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.strides,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.sum,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.swapaxes,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.T,ma,property,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.take,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.to_device,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.tobytes,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.tofile,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.toflex,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.tolist,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.torecords,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.trace,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.transpose,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.unshare_mask,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.var,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
+numpy.ma.mrecords.MaskedRecords.view,ma,method,False,ma.mrecords,280,estimate 2944 x 19/200
 numpy.bitwise_and.reduce,ufunc,method,False,np.bitwise_and.reduce,269,"NOT reduceat re-count 269 (lower bound; the original 264 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled)"
 numpy.char.zfill,char,function,False,np.char.zfill,268,first pass (unsampled)
+numpy.matlib.empty,matlib,function,False,matlib.empty,266,estimate 2216 x 24/200
 numpy.logical_and.accumulate,ufunc,method,False,np.logical_and.accumulate,265,"ufunc study (vendored-filtered, literal not sampled)"
 numpy.logical_or.at,ufunc,method,False,np.logical_or.at,261,"ufunc study (vendored-filtered, literal not sampled)"
 numpy.polynomial.polynomial.polyvalfromroots,polynomial,function,False,polyvalfromroots,258,first pass (unsampled)
 numpy.bitwise_or.at,ufunc,method,False,np.bitwise_or.at,252,"ufunc study (vendored-filtered, literal not sampled)"
+numpy.version.short_version,version,constant,False,np.version.short_version,236,sum of np.version.short_version 178 (estimate 742 x 24/100); numpy.version.short_version 58 (estimate 135 x 43/100)
+numpy.matlib.rand,matlib,function,False,matlib.rand,232,estimate 357 x 65/100
 numpy.ufunc.types,ufunc,property,False,ufunc.types,226,first pass (unsampled)
 numpy.multiply.accumulate,ufunc,method,False,np.multiply.accumulate,220,"ufunc study (vendored-filtered, literal not sampled)"
 numpy.logaddexp.accumulate,ufunc,method,False,np.logaddexp.accumulate,215,"ufunc study (vendored-filtered, literal not sampled)"
@@ -407,6 +528,8 @@ numpy.fmax.reduce,ufunc,method,False,np.fmax.reduce,194,upper bound: also counts
 numpy.char.endswith,char,function,False,np.char.endswith,180,first pass (unsampled)
 numpy.ma.MaskedArray.torecords,ma,method,False,torecords,178,estimate 792 x 45/200
 numpy.busdaycalendar,np,class,False,np.busdaycalendar,173,first pass (unsampled)
+numpy.busdaycalendar.holidays,busdaycalendar,property,False,np.busdaycalendar,173,"first pass (unsampled) (class-level, shared)"
+numpy.busdaycalendar.weekmask,busdaycalendar,property,False,np.busdaycalendar,173,"first pass (unsampled) (class-level, shared)"
 numpy.ufunc.accumulate,ufunc,method,False,ufunc.accumulate,172,first pass (unsampled)
 numpy.show_runtime,np,function,True,np.show_runtime,171,first pass (unsampled)
 numpy.maximum.outer,ufunc,method,False,np.maximum.outer,169,"ufunc study (vendored-filtered, literal not sampled)"
@@ -539,6 +662,7 @@ numpy.strings.lstrip,strings,function,False,np.strings.lstrip,142,first pass (un
 numpy.strings.rstrip,strings,function,False,np.strings.rstrip,142,first pass (unsampled)
 numpy.strings.expandtabs,strings,function,False,np.strings.expandtabs,141,first pass (unsampled)
 numpy.char.capitalize,char,function,False,np.char.capitalize,136,first pass (unsampled)
+numpy.matlib.randn,matlib,function,False,matlib.randn,136,estimate 2272 x 12/200
 numpy.fmin.reduce,ufunc,method,False,np.fmin.reduce,134,upper bound: also counts files using reduceat (prefix match)
 numpy.polynomial.chebyshev.chebpts1,polynomial,function,False,chebpts1,134,first pass (unsampled)
 numpy.ufunc.nargs,ufunc,property,False,ufunc.nargs,134,first pass (unsampled)
@@ -546,9 +670,11 @@ numpy.char.isnumeric,char,ufunc,False,np.char.isnumeric,128,first pass (unsample
 numpy.subtract.reduce,ufunc,method,False,np.subtract.reduce,126,upper bound: also counts files using reduceat (prefix match)
 numpy.greater.outer,ufunc,method,False,np.greater.outer,125,"ufunc study (vendored-filtered, literal not sampled)"
 numpy.ufunc.identity,ufunc,property,False,ufunc.identity,119,first pass (unsampled)
+numpy.typing.NBitBase,typing,class,False,numpy.typing.NBitBase,116,estimate 3320 x 7/200
 numpy.char.isdigit,char,ufunc,False,np.char.isdigit,115,first pass (unsampled)
 numpy.ma.MaskedArray.sharedmask,ma,property,False,sharedmask,115,estimate 2296 x 10/200
 numpy.polynomial.chebyshev.chebpts2,polynomial,function,False,chebpts2,114,first pass (unsampled)
+numpy.ma.mrecords.fromtextfile,ma,function,False,mrecords.fromtextfile,113,estimate 940 x 12/100
 numpy.char.join,char,function,False,np.char.join,109,first pass (unsampled)
 numpy.char.center,char,function,False,np.char.center,108,first pass (unsampled)
 numpy.char.isalpha,char,ufunc,False,np.char.isalpha,108,first pass (unsampled)
@@ -582,10 +708,12 @@ numpy.polynomial.legendre.Legendre.symbol,polynomial,property,False,class:Legend
 numpy.polynomial.legendre.Legendre.trim,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
 numpy.polynomial.legendre.Legendre.truncate,polynomial,method,False,class:Legendre.fit,100,first pass (unsampled)
 numpy.polynomial.legendre.Legendre.window,polynomial,property,False,class:Legendre.fit,100,first pass (unsampled)
+numpy.polynomial.Legendre,polynomial,class,False,class:Legendre.fit,100,"first pass (unsampled) (class-level, shared)"
 numpy.char.compare_chararrays,char,function,False,np.char.compare_chararrays,98,first pass (unsampled)
 numpy.logical_or.accumulate,ufunc,method,False,np.logical_or.accumulate,97,"ufunc study, small (< 100)"
 numpy.logical_xor.outer,ufunc,method,False,np.logical_xor.outer,96,"ufunc study, small (< 100)"
 numpy.char.ljust,char,function,False,np.char.ljust,94,first pass (unsampled)
+numpy.dtypes.StrDType,dtypes,class,False,dtypes.StrDType,92,unsampled first-pass count
 numpy.strings.str_len,strings,ufunc,False,np.strings.str_len,90,first pass (unsampled)
 numpy.ufunc.ntypes,ufunc,property,False,ufunc.ntypes,90,first pass (unsampled)
 numpy.bitwise_or.reduceat,ufunc,method,False,np.bitwise_or.reduceat,89,"ufunc study, small (< 100)"
@@ -747,6 +875,7 @@ numpy.strings.isspace,strings,ufunc,False,np.strings.isspace,78,first pass (unsa
 numpy.strings.istitle,strings,ufunc,False,np.strings.istitle,78,first pass (unsampled)
 numpy.strings.isupper,strings,ufunc,False,np.strings.isupper,78,first pass (unsampled)
 numpy.strings.rjust,strings,function,False,np.strings.rjust,78,first pass (unsampled)
+numpy.version.release,version,constant,False,np.version.release,78,sum of np.version.release 78 (estimate 970 x 8/100); numpy.version.release 0 (unsampled first-pass count)
 numpy.strings.ljust,strings,function,False,np.strings.ljust,77,first pass (unsampled)
 numpy.strings.capitalize,strings,function,False,np.strings.capitalize,76,first pass (unsampled)
 numpy.fmax.at,ufunc,method,False,np.fmax.at,75,"ufunc study, small (< 100)"
@@ -754,7 +883,9 @@ numpy.strings.center,strings,function,False,np.strings.center,75,first pass (uns
 numpy.strings.rpartition,strings,function,False,np.strings.rpartition,75,first pass (unsampled)
 numpy.strings.swapcase,strings,function,False,np.strings.swapcase,75,first pass (unsampled)
 numpy.strings.zfill,strings,function,False,np.strings.zfill,75,first pass (unsampled)
+numpy.f2py.get_include,f2py,function,False,f2py.get_include,75,estimate 680 x 11/100
 numpy.strings.title,strings,function,False,np.strings.title,74,first pass (unsampled)
+numpy.rec.format_parser,rec,class,False,rec.format_parser,73,estimate 1216 x 12/200
 numpy.polynomial.legendre.legweight,polynomial,function,False,legweight,65,first pass (unsampled)
 numpy.divmod.outer,ufunc,method,False,np.divmod.outer,64,first pass (unsampled)
 numpy.divide.outer,ufunc,method,False,np.divide.outer,62,"ufunc study, small (< 100)"
@@ -767,6 +898,7 @@ numpy.logical_and.outer,ufunc,method,False,np.logical_and.outer,54,"ufunc study,
 numpy.polynomial.chebyshev.chebinterpolate,polynomial,function,False,chebinterpolate,52,first pass (unsampled)
 numpy.polynomial.chebyshev.chebweight,polynomial,function,False,chebweight,52,first pass (unsampled)
 numpy.char.splitlines,char,function,False,np.char.splitlines,49,first pass (unsampled)
+numpy.f2py.run_main,f2py,function,False,f2py.run_main,49,estimate 545 x 9/100
 numpy.bitwise_and.at,ufunc,method,False,np.bitwise_and.at,48,"ufunc study, small (< 100)"
 numpy.polynomial.laguerre.Laguerre,polynomial,class,False,class:Laguerre.fit,48,first pass (unsampled)
 numpy.polynomial.laguerre.Laguerre.basis,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
@@ -795,6 +927,7 @@ numpy.polynomial.laguerre.Laguerre.symbol,polynomial,property,False,class:Laguer
 numpy.polynomial.laguerre.Laguerre.trim,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
 numpy.polynomial.laguerre.Laguerre.truncate,polynomial,method,False,class:Laguerre.fit,48,first pass (unsampled)
 numpy.polynomial.laguerre.Laguerre.window,polynomial,property,False,class:Laguerre.fit,48,first pass (unsampled)
+numpy.polynomial.Laguerre,polynomial,class,False,class:Laguerre.fit,48,"first pass (unsampled) (class-level, shared)"
 numpy.multiply.reduceat,ufunc,method,False,np.multiply.reduceat,46,"ufunc study, small (< 100)"
 numpy.logical_and.at,ufunc,method,False,np.logical_and.at,45,"ufunc study, small (< 100)"
 numpy.bitwise_xor.at,ufunc,method,False,np.bitwise_xor.at,42,"ufunc study, small (< 100)"
@@ -830,6 +963,8 @@ numpy.polynomial.hermite.Hermite.trim,polynomial,method,False,class:Hermite.fit,
 numpy.polynomial.hermite.Hermite.truncate,polynomial,method,False,class:Hermite.fit,36,first pass (unsampled)
 numpy.polynomial.hermite.Hermite.window,polynomial,property,False,class:Hermite.fit,36,first pass (unsampled)
 numpy.polynomial.hermite.hermweight,polynomial,function,False,hermweight,36,first pass (unsampled)
+numpy.dtypes.BytesDType,dtypes,class,False,dtypes.BytesDType,36,unsampled first-pass count
+numpy.polynomial.Hermite,polynomial,class,False,class:Hermite.fit,36,"first pass (unsampled) (class-level, shared)"
 numpy.logical_and.reduceat,ufunc,method,False,np.logical_and.reduceat,31,"ufunc study, small (< 100)"
 numpy.char.islower,char,ufunc,False,np.char.islower,30,first pass (unsampled)
 numpy.bitwise_xor.outer,ufunc,method,False,np.bitwise_xor.outer,29,"ufunc study, small (< 100)"
@@ -862,6 +997,7 @@ numpy.polynomial.hermite_e.HermiteE.symbol,polynomial,property,False,class:Hermi
 numpy.polynomial.hermite_e.HermiteE.trim,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
 numpy.polynomial.hermite_e.HermiteE.truncate,polynomial,method,False,class:HermiteE.fit,29,first pass (unsampled)
 numpy.polynomial.hermite_e.HermiteE.window,polynomial,property,False,class:HermiteE.fit,29,first pass (unsampled)
+numpy.polynomial.HermiteE,polynomial,class,False,class:HermiteE.fit,29,"first pass (unsampled) (class-level, shared)"
 numpy.negative.at,ufunc,method,False,np.negative.at,27,"ufunc study, small (< 100)"
 numpy.random.BitGenerator.capsule,random.BitGenerator,property,False,bit_generator.capsule,27,first pass (unsampled)
 numpy.random.MT19937.capsule,random.MT19937,property,False,bit_generator.capsule,27,first pass (unsampled)
@@ -870,9 +1006,11 @@ numpy.random.PCG64DXSM.capsule,random.PCG64DXSM,property,False,bit_generator.cap
 numpy.random.Philox.capsule,random.Philox,property,False,bit_generator.capsule,27,first pass (unsampled)
 numpy.random.SFC64.capsule,random.SFC64,property,False,bit_generator.capsule,27,first pass (unsampled)
 numpy.ufunc.resolve_dtypes,ufunc,method,False,ufunc.resolve_dtypes,27,first pass (unsampled)
+numpy.dtypes.VoidDType,dtypes,class,False,dtypes.VoidDType,27,unsampled first-pass count
 numpy.less_equal.outer,ufunc,method,False,np.less_equal.outer,26,"ufunc study, small (< 100)"
 numpy.polynomial.hermite_e.hermeweight,polynomial,function,False,hermeweight,25,first pass (unsampled)
 numpy.polynomial.set_default_printstyle,polynomial,function,False,set_default_printstyle,25,estimate 1006 x 5/200
+numpy.ma.mvoid,ma,class,False,ma.mvoid,25,estimate 496 x 5/100
 numpy.char.isspace,char,ufunc,False,np.char.isspace,23,first pass (unsampled)
 numpy.f2py,np,module,False,np.f2py,23,first pass (unsampled)
 numpy.char.isalnum,char,ufunc,False,np.char.isalnum,21,first pass (unsampled)
@@ -899,6 +1037,7 @@ numpy.logical_or.outer,ufunc,method,False,np.logical_or.outer,16,"ufunc study, s
 numpy.equal.reduce,ufunc,method,False,np.equal.reduce,15,"ufunc study, small (< 100)"
 numpy.logaddexp.reduceat,ufunc,method,False,np.logaddexp.reduceat,15,"ufunc study, small (< 100)"
 numpy.char.isdecimal,char,ufunc,False,np.char.isdecimal,14,first pass (unsampled)
+numpy.dtypes.Complex64DType,dtypes,class,False,dtypes.Complex64DType,14,unsampled first-pass count
 numpy.bitwise_or.accumulate,ufunc,method,False,np.bitwise_or.accumulate,13,"ufunc study, small (< 100)"
 numpy.divide.accumulate,ufunc,method,False,np.divide.accumulate,13,"ufunc study, small (< 100)"
 numpy.power.reduce,ufunc,method,False,np.power.reduce,13,"ufunc study, small (< 100)"
@@ -924,6 +1063,7 @@ numpy.ma.MaskedArray.toflex,ma,method,False,toflex,7,estimate 698 x 2/200
 numpy.sin.at,ufunc,method,False,np.sin.at,7,first pass (unsampled)
 numpy.square.at,ufunc,method,False,np.square.at,7,"ufunc study, small (< 100)"
 numpy.true_divide.reduce,ufunc,method,False,np.true_divide.reduce,7,"ufunc study, small (< 100)"
+numpy.version.git_revision,version,constant,False,np.version.git_revision,7,sum of np.version.git_revision 6 (unsampled first-pass count); numpy.version.git_revision 1 (unsampled first-pass count)
 numpy.bitwise_and.reduceat,ufunc,method,False,np.bitwise_and.reduceat,6,"ufunc study, small (< 100)"
 numpy.floor_divide.accumulate,ufunc,method,False,np.floor_divide.accumulate,6,"ufunc study, small (< 100)"
 numpy.greater.at,ufunc,method,False,np.greater.at,6,"ufunc study, small (< 100)"
@@ -949,6 +1089,7 @@ numpy.strings.mod,strings,function,False,np.strings.mod,5,first pass (unsampled)
 numpy.true_divide.accumulate,ufunc,method,False,np.true_divide.accumulate,5,"ufunc study, small (< 100)"
 numpy.true_divide.outer,ufunc,method,False,np.true_divide.outer,5,"ufunc study, small (< 100)"
 numpy.true_divide.reduceat,ufunc,method,False,np.true_divide.reduceat,5,"ufunc study, small (< 100)"
+numpy.ma.mrecords.mrecarray,ma,class,False,mrecords.mrecarray,5,unsampled first-pass count
 numpy.arctan2.outer,ufunc,method,False,np.arctan2.outer,4,"ufunc study, small (< 100)"
 numpy.equal.reduceat,ufunc,method,False,np.equal.reduceat,4,"ufunc study, small (< 100)"
 numpy.fmax.outer,ufunc,method,False,np.fmax.outer,4,"ufunc study, small (< 100)"
@@ -979,12 +1120,15 @@ numpy.right_shift.reduce,ufunc,method,False,np.right_shift.reduce,4,"ufunc study
 numpy.right_shift.reduceat,ufunc,method,False,np.right_shift.reduceat,4,"ufunc study, small (< 100)"
 numpy.char.add.reduce,char,method,False,np.char.add.reduce,3,first pass (unsampled)
 numpy.log.at,ufunc,method,False,np.log.at,3,"ufunc study, small (< 100)"
+numpy.exceptions.ModuleDeprecationWarning,exceptions,class,False,exceptions.ModuleDeprecationWarning,3,unsampled first-pass count
 numpy.absolute.at,ufunc,method,False,np.absolute.at,2,"ufunc study, small (< 100)"
 numpy.logaddexp.outer,ufunc,method,False,np.logaddexp.outer,2,"ufunc study, small (< 100)"
 numpy.ma.multiply.outer,ma,method,False,ma.multiply.outer,2,first pass (unsampled)
 numpy.ma.multiply.reduce,ma,method,False,ma.multiply.reduce,2,first pass (unsampled)
 numpy.power.reduceat,ufunc,method,False,np.power.reduceat,2,"ufunc study, small (< 100)"
 numpy.strings.translate,strings,function,False,np.strings.translate,2,first pass (unsampled)
+numpy.ma.mrecords.fromarrays,ma,function,False,mrecords.fromarrays,2,unsampled first-pass count
+numpy.rec.record,rec,class,False,np.rec.record,2,unsampled first-pass count
 numpy.equal.at,ufunc,method,False,np.equal.at,1,"ufunc study, small (< 100)"
 numpy.exp.at,ufunc,method,False,np.exp.at,1,"ufunc study, small (< 100)"
 numpy.float_power.reduce,ufunc,method,False,np.float_power.reduce,1,"ufunc study, small (< 100)"
@@ -1218,6 +1362,8 @@ numpy.strings.str_len.at,strings,method,False,np.strings.str_len.at,0,first pass
 numpy.tan.at,ufunc,method,False,np.tan.at,0,first pass (unsampled)
 numpy.tanh.at,ufunc,method,False,np.tanh.at,0,first pass (unsampled)
 numpy.trunc.at,ufunc,method,False,np.trunc.at,0,first pass (unsampled)
+numpy.ma.mrecords.addfield,ma,function,False,mrecords.addfield,0,unsampled first-pass count
+numpy.ma.mrecords.fromrecords,ma,function,False,mrecords.fromrecords,0,unsampled first-pass count
 numpy.abs.accumulate,ufunc,method,False,,,NumPy rejects every call of this ufunc method
 numpy.abs.outer,ufunc,method,False,,,NumPy rejects every call of this ufunc method
 numpy.abs.reduce,ufunc,method,False,,,NumPy rejects every call of this ufunc method
