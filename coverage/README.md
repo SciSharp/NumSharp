@@ -19,13 +19,36 @@ Members are reflected with both `Static` and `Instance` flags (per-member `stati
 
 The existing DocFX dashboard defaults to **All NumPy APIs**: the five historical headline surfaces plus public extended submodules and object members. The scope selector also offers the historical headline, extended APIs, full NumPy catalog (including types/constants/modules), and NumSharp extensions. Every summary, surface card, capability category, and explorer result uses that selected scope. Types/constants/modules remain searchable but never enter an API availability denominator.
 
-Extended namespaces cover complex-domain math, polynomials, masked arrays, legacy and modern strings, records, and object contracts. Each carries `extended=true`, `in_default_scope=false`, and a disposition. `summary.api_scope` reports the expanded counts and categories; `summary.default_scope` preserves the historical comparison.
+Extended namespaces cover complex-domain math, polynomials, masked arrays (with masked record arrays), legacy and modern strings, records, dtype classes, exceptions and warnings, static typing, version strings, the deprecated matrix library, Fortran bindings, and object contracts. Each carries `extended=true`, `in_default_scope=false`, and a disposition. `summary.api_scope` reports the expanded counts and categories; `summary.default_scope` preserves the historical comparison.
 
 The final `dashboard_rows` projection in `generate_coverage.py` applies the dashboard's reviewed scope **after** resolving support against original owners. It removes the ignored interop, library, testing, ctypes, and namespace-introspection surfaces (including root exports) from emitted JSON/CSV and all summary counts. The underlying NumPy extraction remains comprehensive so inventory regression checks can detect missing discovery. Nothing about ignored surfaces is displayed in the dashboard. MaskedArray members share the `ma` surface and **Masked arrays** category; legacy polynomial functions, `poly1d`, and the entire polynomial package share the `polynomial` surface and **Polynomials** category. Canonical IDs, signatures, implementation targets, and documentation links remain intact.
 
 `object_surfaces.py` discovers methods, properties, selected protocols, and instance-only attributes from actual pinned NumPy classes/objects. It includes ufuncs, modern and legacy RNGs, seed sequences and bit generators, polynomial classes, masked/record/string/matrix arrays, iterators, dtype/limits/flags, archives, memory maps, and other public object contracts. Every public method of NumPy's ufunc type is also catalogued per ufunc export. The list is read from `numpy.ufunc` at the pin (`reduce`, `accumulate`, `reduceat`, `outer`, `at`, `resolve_dtypes`), never written by hand. The scan covers numpy itself and every namespace the generator compares (`UFUNC_PROTOCOL_NAMESPACES`), so ufuncs exported by `numpy.strings` and `numpy.char` get rows too. numpy.ma's masked ufunc wrappers get a row for each of those methods they implement: `ma.add` has `reduce`/`accumulate`/`outer`, the comparisons only `accumulate`/`outer` (NumPy sets their `reduce` to None), `ma.maximum`/`ma.minimum` only `reduce`/`outer`. These rows describe exposed protocols: unary reductions and most generalized-ufunc methods reject every call in NumPy (`applicability: not_applicable`, explained in the notes), while `resolve_dtypes` resolves for every ufunc shape. Aliases are separate exported names, and inherited members are separate contracts on each owner type.
 
 The reflection inventory's schema v5 `objectTypes` map contains public members **including inherited members**, with declaring-type evidence. Object members match only their explicitly mapped CLR owner, using exact spelling or a reviewed adapter in `object_surfaces.py`. A top-level `np.sqrt`, `np.sum`, or an ordinary NDArray member cannot confer support on `emath.sqrt`, `add.reduce`, or `MaskedArray.sum`. A class being available does not mark its methods available. Missing methods, signatures, source links, and reviewed spelling differences are visible individually.
+
+## Catalog completeness
+
+What counts as NumPy's public API is decided outside the generator, by two NumPy sources. `test_catalog.py` enforces both on every run:
+
+- **NumPy's public-module list.** `numpy/tests/test_public_api.py` defines `PUBLIC_MODULES` and `PUBLIC_ALIASED_MODULES`; the test evaluates them for the running Python. Every listed module must be scanned (numpy itself, a `HEADLINE_SUBMODULES` entry or an `EXTENDED_SUBMODULES` family) or excluded with a reason in `EXCLUDED_PUBLIC_SUBMODULES`. The exclusions are `ma.extras` (numpy.ma re-exports its whole `__all__`), `lib.npyio` (its two names are object surfaces), the mypy plugin, and `distutils` (public only before Python 3.12). A NumPy release that adds a public module fails `test_every_public_numpy_module_is_scanned_or_excluded`.
+- **NumPy's documentation index.** `numpy_documentation_inventory.json` holds every `numpy.*` object of the official Sphinx index. `test_every_documented_numpy_api_on_the_pin_has_a_row` requires a row for every documented name that resolves on the pin. The row can match exactly, through a documented alias, or as the same object catalogued under another spelling (`numpy.lib.scimath.sqrt` is `numpy.emath.sqrt`). Two classes are exempt, as open decisions:
+  - Python protocol dunders: operators, container and pickling hooks (`ndarray.__add__`, `ndarray.__getitem__`). They are catalogued only where an object surface declares them, and the reflection tool does not emit C# operators.
+  - Members of NumPy's scalar types (`numpy.generic` and its subclasses). NumSharp has no scalar objects; a C# primitive is the scalar.
+
+Within a scanned family the member list is the module's `__all__` (else its non-underscore `dir()`), plus every name the documentation index lists directly under the module. `numpy.exceptions.RankWarning`, for example, is documented but absent from `__all__`. A documented submodule is imported explicitly, so the list never depends on what the process imported before. `numpy.matlib` re-exports all of NumPy, so only the eight functions it defines are its API (`OWN_MEMBERS_ONLY_SUBMODULES`).
+
+Every public member becomes a row:
+- **Callables** are API rows.
+- **Classes, constants and modules** are supporting rows that stay outside the percentages (`numpy.ma.masked`, the `numpy.polynomial.<basis>` domain/zero/one/x constants, `numpy.dtypes.Float64DType`, `numpy.exceptions.AxisError`).
+- **Each family's own module** gets a row when nothing else catalogued it (`numpy.matlib`, `numpy.version`).
+- **A class an object surface owns** (`numpy.ma.MaskedArray`) is left to that surface.
+
+Crediting follows two rules:
+- A submodule member is credited by a member of the same name on that submodule's NumSharp facade.
+- A real class with no such member is credited to a NumSharp type of the same simple name (`numpy.exceptions.AxisError` → `NumSharp.AxisError`), the rule headline classes use. A typing alias (`numpy.typing.NDArray`) is not a class, so a NumSharp type named `NDArray` never credits it.
+
+Generator 1.13.0 introduced these guards. The audit behind it found 462 documented names that resolve on NumPy 2.4.2 with no row: whole modules were never scanned (`dtypes`, `exceptions`, `typing`, `version`, `ma.mrecords`, `matlib`, `f2py`), the extended scan kept only callables, and four public classes had no object surface (`busdaycalendar`, `ma.mrecords.MaskedRecords`, `lib.Arrayterator`, `lib.user_array.container`). Cataloguing them also credited 66 NumSharp members that had read as NumSharp-only extensions: 27 `np.dtypes` classes, 8 `np.ma` objects, 24 polynomial constants and 7 polynomial submodules.
 
 ## NumPy-oracle parity evidence
 
@@ -54,7 +77,7 @@ Availability says NumSharp *exposes* an API; the committed NumPy oracles say it 
 
 - `verified-direct` / `verified-alias` — credited (available/partial) row with contracts. Both count as **oracle-verified**.
 - `unverified` — available/partial NumPy API with no contracts: parity is declared, not proven. Some such APIs carry dedicated unit suites instead (see OracleSurfaceCoverageTests' sibling-owned and known-gap lists).
-- `uncredited` — contracts exercise the API but the catalog calls it missing/unsupported: a crediting gap. None remain at generator 1.12.0; the last ones were `numpy.ma.MaskedArray.*`, credited once its object surface was mapped to its owner type `NDMaskedArray`.
+- `uncredited` — contracts exercise the API but the catalog calls it missing/unsupported: a crediting gap. None remain at generator 1.13.0; the last ones were `numpy.ma.MaskedArray.*`, credited once its object surface was mapped to its owner type `NDMaskedArray`.
 - `none` — everything else.
 
 **Outputs.**
@@ -101,7 +124,7 @@ Documentation URLs resolve from `numpy_documentation_inventory.json`, a checked-
 
 The historical headline denominator includes NumPy top-level callables, `ndarray` methods and properties, and callables from `numpy.random`, `numpy.linalg`, and `numpy.fft`. The dashboard's expanded denominator adds extended function and object-member contracts. NumPy types, constants, modules, and NumSharp-only APIs are catalogued separately and affect neither percentage.
 
-A NumPy **class** export (for example `numpy.random.Generator`, `PCG64`, `SeedSequence`, `BitGenerator`, `MT19937`) is credited when NumSharp exports a public type of the same name — a `"type"` availability match against the inventory's `exportedTypes` index. This carries the type existence the member-name index cannot (a class such as `BitGenerator` has no public members of its own), and, being out of default scope, it fixes the Types catalog without moving the headline.
+A NumPy **class** export (for example `numpy.random.Generator`, `PCG64`, `SeedSequence`, `BitGenerator`, `MT19937`) is credited when NumSharp exports a public type of the same name — a `"type"` availability match against the inventory's `exportedTypes` index. This carries the type existence the member-name index cannot (a class such as `BitGenerator` has no public members of its own), and, being out of default scope, it fixes the Types catalog without moving the headline. Since generator 1.13.0 the same rule credits submodule classes (`numpy.exceptions.AxisError` → `NumSharp.AxisError`, `numpy.ma.MaskError` → `NumSharp.MaskError`) when the submodule's NumSharp facade has no member of that name; typing aliases are never matched (see "Catalog completeness").
 
 Platform-conditional extended-precision aliases (`float96`, `float128`, `complex192`, and `complex256`) are excluded so the artifact is byte-identical across Windows and Linux. NumPy's portable `longdouble` and `clongdouble` names remain catalogued.
 
