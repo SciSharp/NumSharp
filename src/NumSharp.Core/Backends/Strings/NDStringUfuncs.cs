@@ -464,7 +464,10 @@ namespace NumSharp.Backends.Strings
         /// <param name="op">The NumPy function name (<c>"sum"</c>, <c>"cumprod"</c>, <c>"nanmax"</c>, ...).</param>
         /// <param name="a">The reduced array.</param>
         /// <exception cref="TypeError">NumPy refuses the reduction for string operands (its verbatim text).</exception>
-        /// <exception cref="StringComputationNotSupportedException">NumPy computes it on text (<see cref="NextPhase(string, NDArray)"/>).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> operand whose reduction NumPy computes
+        ///     (<see cref="NextPhaseVString"/>: computing on <c>StringDType</c> is phase 2's next stage).</exception>
+        /// <exception cref="InvalidOperationException">A fixed-width text operand of a function <see cref="ReduceError"/>
+        ///     does not name: a wiring error inside NumSharp (every computing reduction answers before this guard).</exception>
         internal static void ThrowIfReduce(string op, NDArray a)
         {
             if (IsVString(a))
@@ -482,7 +485,9 @@ namespace NumSharp.Backends.Strings
         /// </summary>
         /// <param name="op">The NumPy function name.</param>
         /// <param name="a">The string array.</param>
-        /// <returns>The exception to throw (never null).</returns>
+        /// <returns>The exception to throw (never null): NumPy's refusal, or an <see cref="InvalidOperationException"/> for a
+        ///     function this table does not name (a computing reduction answers before the guard, so reaching here is a
+        ///     wiring error).</returns>
         internal static Exception ReduceError(string op, NDArray a)
         {
             var d = a.dtype;
@@ -530,9 +535,10 @@ namespace NumSharp.Backends.Strings
                 case "nanquantile":
                     return a.size == 0 ? AddNotCompatible(d, "reduce") : NotSupportedForInputTypes("isnan");
                 default:
-                    // argmax / argmin, any / all, nonzero, count_nonzero and the sorting family compute on text, and their
-                    // entry points answer before this guard; what reaches here is a computing reduction not routed yet.
-                    return NextPhase(op, a);
+                    // argmax / argmin, any / all, nonzero, count_nonzero, the sorting family, unique and the quantiles
+                    // compute on text and answer before this guard; every function that reaches it is named above. An
+                    // unnamed one is a wiring error inside NumSharp, not a NumPy answer.
+                    return new InvalidOperationException($"the text reduction guard has no answer for '{op}' over {d}");
             }
         }
 
@@ -722,40 +728,30 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy's answer for <c>np.percentile</c> / <c>np.quantile</c> of a string array. The interpolating methods
-        ///     (<c>linear</c>, the default, and the other continuous ones) subtract two neighbouring elements as NumPy
-        ///     scalars, which Python refuses; the selection methods only sort and pick an element, which NumPy computes on
-        ///     text (the next phase).
+        ///     NumPy's refusal of <c>np.percentile</c> / <c>np.quantile</c> over a string array with an interpolating method
+        ///     (<c>linear</c> with a float q, and the other continuous ones): <c>_lerp</c> subtracts two neighbouring elements.
+        ///     The selection methods never reach here — NumPy computes them on text (<see cref="QuantileAnswer"/> returns null
+        ///     for them, and <see cref="NumSharp.Statistics.QuantileText"/> computes).
         /// </summary>
         /// <param name="op">The NumPy function name (<c>"percentile"</c> or <c>"quantile"</c>).</param>
         /// <param name="a">The string array.</param>
-        /// <param name="method">The <c>method=</c> argument.</param>
+        /// <param name="method">The <c>method=</c> argument (an interpolating one).</param>
         /// <param name="scalarResult">True when the interpolated result is a scalar (a scalar <c>q</c> and no axis left):
         ///     NumPy's <c>_lerp</c> then subtracts two NumPy scalars, which Python refuses with its own text; with any
         ///     array result it subtracts arrays, and <c>subtract</c>'s promoter names the descriptors.</param>
         /// <returns>The exception (not thrown).</returns>
         /// <remarks>
         ///     The full answer, with the axis, method and empty-axis checks NumPy makes first, is
-        ///     <see cref="QuantileAnswer"/>; this is its last step.
+        ///     <see cref="QuantileAnswer"/>; this is its last step. <paramref name="op"/> and <paramref name="method"/> are kept
+        ///     in the signature for the callers' symmetry with the other refusals; the text depends only on the result's rank.
         /// </remarks>
         internal static Exception QuantileError(string op, NDArray a, string method, bool scalarResult = true)
         {
-            switch (method)
-            {
-                // The discontinuous methods select an element without arithmetic (NumPy's _get_indexes + take).
-                case "lower":
-                case "higher":
-                case "nearest":
-                case "inverted_cdf":
-                case "closest_observation":
-                    return NextPhase(op, a);
-                default:
-                    if (!scalarResult)
-                        return NoLoop("subtract", a.dtype, a.dtype);
-                    // Python's binary-operator refusal names the NumPy scalar type of each operand (np.str_ / np.bytes_).
-                    var scalar = "numpy." + a.dtype.Meta.ScalarName;
-                    return new TypeError($"unsupported operand type(s) for -: '{scalar}' and '{scalar}'");
-            }
+            if (!scalarResult)
+                return NoLoop("subtract", a.dtype, a.dtype);
+            // Python's binary-operator refusal names the NumPy scalar type of each operand (np.str_ / np.bytes_).
+            var scalar = "numpy." + a.dtype.Meta.ScalarName;
+            return new TypeError($"unsupported operand type(s) for -: '{scalar}' and '{scalar}'");
         }
 
         /// <summary>

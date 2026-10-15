@@ -145,8 +145,8 @@ namespace NumSharp
         /// <returns>The 1-D masked array of unique values; it inherits a masked operand's hard-mask flag and fill value
         ///     (converted to the dtype).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="ar1"/> is null.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A text operand whose answer sorts or compares the
-        ///     strings (NumPy reads them): the next phase of NumSharp's string support.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> operand whose answer sorts or
+        ///     compares the strings (computing on <c>StringDType</c> is phase 2's next stage); fixed-width text computes.</exception>
         /// <remarks>
         ///     NumPy's <c>np.unique(ar1).view(MaskedArray)</c>, whose <c>_unique1d</c> runs with the subclass:
         ///     <c>ar = ar.flatten()</c>; without a masked element the integer / complex dtypes take the hash path (sorted
@@ -175,8 +175,8 @@ namespace NumSharp
         /// <returns>The <see cref="UniqueResult"/>: the values (see <see cref="unique(object)"/>) and the requested int64
         ///     index arrays.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="ar1"/> is null.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A text operand whose answer sorts or compares the
-        ///     strings: the next phase of NumSharp's string support.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> operand whose answer sorts or
+        ///     compares the strings (computing on <c>StringDType</c> is phase 2's next stage); fixed-width text computes.</exception>
         /// <remarks>
         ///     With a flag NumPy argsorts instead of sorting in place (<c>perm = ar.argsort(kind='mergesort' if
         ///     return_index else 'quicksort')</c>, <c>aux = ar[perm]</c>), then <c>perm[mask]</c> and <c>inv_idx[perm] =

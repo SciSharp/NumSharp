@@ -26,9 +26,12 @@ namespace NumSharp
         ///     (a 0-filled int64 array of the keys' shape). NaN keys sort last (stable argsort policy);
         ///     ties across ALL keys keep ascending index order.
         /// </remarks>
-        /// <exception cref="StringComputationNotSupportedException">A string key along lines of two or more elements: NumPy
-        ///     sorts by the text (the next phase of NumSharp's string support). Lines of at most one element give the zero
-        ///     indices.</exception>
+        /// <exception cref="TypeError">No key (<c>need sequence of keys with len &gt; 0 in lexsort</c>).</exception>
+        /// <exception cref="ValueError">Keys of different shapes (<c>all keys need to be the same shape</c>).</exception>
+        /// <exception cref="AxisError">The axis is out of bounds for the keys' rank.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> key along lines of two or more
+        ///     elements (the <c>StringDType</c> part of NumSharp's next phase). Fixed-width text keys (<c>S</c> / <c>U</c>) sort
+        ///     by their text with the stable string argsort, as NumPy's do.</exception>
         [NDScoped]
         public static NDArray lexsort(NDArray[] keys, int axis = -1)
         {
@@ -66,24 +69,17 @@ namespace NumSharp
                 return NDArray.Scalar(0L);
             if (first.size <= 1)
                 return np.zeros(Shape.Adopt(first.Shape.dimensions), NPTypeCode.Int64); // [0] for one element, [] for none
-            // Text keys: NumPy's argsort compares them (the next phase of NumSharp's string support), except along lines of
-            // one element, whose stable order is the identity — the zero indices, whatever the keys hold.
-            for (int i = 0; i < keys.Length; i++)
-            {
-                if (!Backends.Strings.NDStringUfuncs.IsString(keys[i]))
-                    continue;
-                if (first.Shape.dimensions[ax] > 1)
-                    throw Backends.Strings.NDStringUfuncs.NextPhase("lexsort", keys[i]);
-                return np.zeros(Shape.Adopt((long[])first.Shape.dimensions.Clone()), NPTypeCode.Int64);
-            }
 
             // First pass over an identity permutation IS the first key's stable argsort;
             // every later key re-sorts the permutation it receives (stably), so the LAST
             // key decides first and earlier keys only break its ties — NumPy's ordering.
-            var perm = np.argsort(keys[0], ax);
+            // Every pass asks for the STABLE kind: NumPy's PyArray_LexSort runs each key's NPY_STABLESORT argsort, and a
+            // text key's default kind would be NumPy's introsort, whose order of equal strings is not the stable one (a
+            // numeric key's argsort is one stable order for every kind).
+            var perm = np.argsort(keys[0], ax, kind: "stable");
             for (int j = 1; j < keys.Length; j++)
             {
-                var g = np.argsort(np.take_along_axis(keys[j], perm, ax), ax);
+                var g = np.argsort(np.take_along_axis(keys[j], perm, ax), ax, kind: "stable");
                 perm = np.take_along_axis(perm, g, ax);
             }
             return perm;
@@ -98,16 +94,17 @@ namespace NumSharp
         /// <param name="keys">Array whose first-axis sub-arrays are the sort keys.</param>
         /// <param name="axis">Axis to sort along (default -1).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.lexsort.html</remarks>
-        /// <exception cref="StringComputationNotSupportedException">A string key along lines of two or more elements: NumPy
-        ///     sorts by the text (the next phase of NumSharp's string support). Lines of at most one element give the zero
-        ///     indices.</exception>
+        /// <exception cref="TypeError">A 0-d array or an empty first axis (<c>need sequence of keys with len &gt; 0 in
+        ///     lexsort</c>).</exception>
+        /// <exception cref="AxisError">The axis is out of bounds for a key's rank.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array of keys along lines of two or
+        ///     more elements (the <c>StringDType</c> part of NumSharp's next phase); fixed-width text keys sort by their text.</exception>
         public static NDArray lexsort(NDArray keys, int axis = -1)
         {
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(keys))
                 return NDMatrixBoundary.Plain((keys, axis), static s => lexsort(s.keys, s.axis));
-            // A string array is a sequence of text keys: the key list below refuses or answers it after NumPy's
-            // sequence checks.
+            // A string array is a sequence of text keys, each sorted by its text (the key list below).
             if (keys is null)
                 throw new ArgumentNullException(nameof(keys));
             // a 0-d array is not a sequence; an empty first axis is a zero-length key sequence

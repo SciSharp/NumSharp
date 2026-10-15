@@ -268,7 +268,8 @@ namespace NumSharp
         /// <returns>The counts (or summed weights, or density) and the edges.</returns>
         /// <exception cref="ValueError">See <see cref="GetBinEdges"/>; a weights shape that differs from <paramref name="a"/>'s.</exception>
         /// <exception cref="TypeError">See <see cref="GetBinEdges"/> and <see cref="HistogramTextAnswer"/>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">NumPy sorts or searches text to count (<see cref="HistogramTextAnswer"/>).</exception>
+        /// <exception cref="UnicodeDecodeError">A text search converts <c>S</c> text holding a byte that is not ASCII to a
+        ///     <c>U</c> common descriptor (<see cref="HistogramTextAnswer"/>).</exception>
         private static HistogramResult HistogramImpl(NDArray a, object bins, (double, double)? range, bool density, NDArray weights)
         {
             (NDArray raveled, NDArray w) = RavelAndCheckWeights(a, weights);
@@ -312,53 +313,41 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's cumulative histogram path when the data, the edges or the weights are text — the only path text
-        ///     reaches. Every answer it can give without comparing text is given; the rest needs NumSharp's string
-        ///     computation.
+        ///     reaches (text data never gets equal-width edges, text weights are never "simple", text edges are an explicit
+        ///     array): the block loop of <see cref="HistogramCumulativeText"/>, then the optional density.
         /// </summary>
         /// <param name="raveled">The raveled data.</param>
         /// <param name="w">The raveled weights, or null.</param>
-        /// <param name="binEdges">The edges <see cref="GetBinEdges"/> returned (text ones have at most one element: two or more
-        ///     were compared there).</param>
+        /// <param name="binEdges">The edges <see cref="GetBinEdges"/> returned (text edges were compared there, NumPy's
+        ///     monotonic check).</param>
         /// <param name="density">Whether to normalize to a density.</param>
-        /// <returns>The counts (empty when there are at most one edge; zeros when there is no data) and the edges.</returns>
+        /// <returns>The counts (or summed weights, or density) and the edges.</returns>
         /// <exception cref="TypeError">Text weights: <c>ufunc 'subtract' did not contain a loop …</c> when there is no data
         ///     (NumPy's <c>np.diff</c> of its text-typed running total), else NumPy's add.accumulate refusal (the weights'
-        ///     <c>cumsum</c>); text edges with <paramref name="density"/>: the bin widths' <c>subtract</c> refusal.</exception>
-        /// <exception cref="StringComputationNotSupportedException">There is data and at least two edges, with text data:
-        ///     NumPy sorts the data and searches it for every edge, comparing text.</exception>
+        ///     <c>cumsum</c>, the first statement of a block that can fail); text edges with <paramref name="density"/>: the bin
+        ///     widths' <c>subtract</c> refusal.</exception>
+        /// <exception cref="UnicodeDecodeError">A search that converts <c>S</c> text beside <c>U</c> text to their common
+        ///     <c>U</c> descriptor, and a byte is not ASCII.</exception>
         /// <remarks>
         ///     NumPy's loop runs once per 65536-element block of the data: with no data it never runs, so the running total
-        ///     stays <c>np.zeros(edges.shape, ntype)</c>. With at most one edge the counts are <c>np.diff</c> of at most one
-        ///     element, empty whatever the comparisons found — so those answers need no text computation. The sort and
-        ///     searches cannot raise; the first statement that can is the weights' <c>cumsum</c>, then the density's
-        ///     <c>np.diff(bin_edges)</c>.
+        ///     stays <c>np.zeros(edges.shape, ntype)</c> (<c>ntype</c>: intp without weights, the weights' dtype with them).
+        ///     The counts can come out NEGATIVE where the edges increase as numbers but not as text (NumPy validates numeric
+        ///     edges as numbers and searches them as text: edges <c>[1, 2, 10]</c> become <c>'1'</c>, <c>'2'</c>, <c>'10'</c>);
+        ///     this is NumPy's answer and the loop below gives it, where binning each sample would not.
         /// </remarks>
         private static HistogramResult HistogramTextAnswer(NDArray raveled, NDArray w, NDArray binEdges, bool density)
         {
-            long nb = System.Math.Max(binEdges.size - 1, 0);
-            NDArray n;
-            if (w is null)
+            if (w is not null && Backends.Strings.NDStringUfuncs.IsString(w))
             {
-                if (raveled.size > 0 && binEdges.size > 1)
-                    throw Backends.Strings.NDStringUfuncs.NextPhase("histogram", raveled);
-                n = np.zeros(Shape.Vector(nb), NPTypeCode.Int64);
-            }
-            else if (raveled.size == 0)
-            {
-                // cum_n = np.zeros(bin_edges.shape, weights.dtype); n = np.diff(cum_n): subtract has no text loop.
-                if (Backends.Strings.NDStringUfuncs.IsString(w))
+                // cum_n = np.zeros(bin_edges.shape, weights.dtype) holds text. With data, a block's `sw.cumsum()`
+                // (add.accumulate) refuses it first (the argsort and the gathers before it cannot fail); without data the
+                // loop never runs and n = np.diff(cum_n) refuses the text subtraction.
+                if (raveled.size == 0)
                     throw Backends.Strings.NDStringUfuncs.NoLoop("subtract", w.dtype, w.dtype);
-                n = np.zeros(Shape.Vector(nb), w.dtype);
+                throw Backends.Strings.NDStringUfuncs.AddNotCompatible(w.dtype, "accumulate");
             }
-            else
-            {
-                // np.argsort / np.sort of the block cannot fail; `sw.cumsum()` is the first statement that can.
-                if (Backends.Strings.NDStringUfuncs.IsString(w))
-                    throw Backends.Strings.NDStringUfuncs.AddNotCompatible(w.dtype, "accumulate");
-                if (binEdges.size > 1)
-                    throw Backends.Strings.NDStringUfuncs.NextPhase("histogram", raveled);
-                n = np.zeros(Shape.Vector(nb), w.dtype);
-            }
+
+            NDArray n = HistogramCumulativeText(raveled, w, binEdges, w is null ? NPTypeCode.Int64 : w.typecode);
 
             if (density)
             {
@@ -369,6 +358,67 @@ namespace NumSharp
                 return new HistogramResult(n / db / np.sum(n), binEdges);
             }
             return new HistogramResult(n, binEdges);
+        }
+
+        /// <summary>
+        ///     NumPy's cumulative histogram loop, statement for statement, for data, edges or weights of which one is text:
+        ///     per block of 65536 samples, the block sorted (with weights: its argsort, NumPy's default kind) and searched for
+        ///     every edge (<see cref="SearchSortedInclusive"/>), the running total updated in place, and the counts taken as
+        ///     <c>np.diff</c> of the total.
+        /// </summary>
+        /// <param name="a">The raveled data (text or numbers).</param>
+        /// <param name="w">The raveled numeric weights, or null.</param>
+        /// <param name="binEdges">The edges (text or numbers, at least as NumPy's monotonic check left them).</param>
+        /// <param name="ntype">NumPy's <c>ntype</c>: int64 (intp) without weights, the weights' dtype with them.</param>
+        /// <returns>The counts (or summed weights), one per bin: <c>np.diff(cum_n)</c>.</returns>
+        /// <exception cref="UnicodeDecodeError">A search converts <c>S</c> text holding a byte that is not ASCII to a <c>U</c>
+        ///     common descriptor.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     Every search runs in the text descriptor common to the block and the edges (np.searchsorted's rule): numeric
+        ///     edges are searched as their text, and a numeric block — sorted as numbers — is searched as its text with
+        ///     NumPy's exact binary search, whatever order the text has.
+        ///     </para>
+        ///     <para>
+        ///     The weighted form argsorts each block with the DEFAULT kind on purpose: NumPy's introsort decides the order of
+        ///     equal strings, hence the order in which their weights enter the cumulative sum, and so the last bits of a float
+        ///     total (TextSort reproduces that order).
+        ///     </para>
+        ///     <para>Scoped: every block's sorted copy, order, gathers and searches are reclaimed; only the counts
+        ///     survive.</para>
+        /// </remarks>
+        [NDScoped]
+        private static NDArray HistogramCumulativeText(NDArray a, NDArray w, NDArray binEdges, NPTypeCode ntype)
+        {
+            long len = a.size;
+            // cum_n = np.zeros(bin_edges.shape, ntype)
+            NDArray cumN = np.zeros(Shape.Vector(binEdges.size), ntype);
+            NDArray zero = w is null ? null : np.zeros(Shape.Vector(1), ntype);
+            for (long start = 0; start < len; start += HistogramBlock)
+            {
+                long blockLen = System.Math.Min(HistogramBlock, len - start);
+                string slice = $"{start}:{start + blockLen}";
+                NDArray tmpA = a[slice];
+                if (w is null)
+                {
+                    // sa = np.sort(a[i:i + BLOCK]); cum_n += _search_sorted_inclusive(sa, bin_edges)
+                    NDArray sa = np.sort(tmpA);
+                    np.add(cumN, SearchSortedInclusive(sa, binEdges), @out: cumN);
+                }
+                else
+                {
+                    // sorting_index = np.argsort(tmp_a); sa = tmp_a[sorting_index]; sw = tmp_w[sorting_index]
+                    NDArray sortIdx = np.argsort(tmpA);
+                    NDArray sa = tmpA[sortIdx];
+                    NDArray sw = w[slice][sortIdx];
+                    // cw = np.concatenate((zero, sw.cumsum())); cum_n += cw[bin_index]
+                    NDArray cw = np.concatenate((zero, np.cumsum(sw)), 0);
+                    NDArray binIndex = SearchSortedInclusive(sa, binEdges);
+                    np.add(cumN, np.take(cw, binIndex), @out: cumN);
+                }
+            }
+            // n = np.diff(cum_n)
+            return np.diff(cumN);
         }
 
         // ---------------------------------------------------------------------
@@ -540,8 +590,8 @@ namespace NumSharp
         ///     estimator, the in-range mask's <c>greater_equal</c> against the Python float edge; otherwise the edges' dtype,
         ///     <c>np.result_type(first_edge, last_edge, a)</c>, which has no common DType for text and Python numbers
         ///     (<see cref="DTypePromotionError"/>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text edges of two or more elements: NumPy's monotonicity
-        ///     check compares them.</exception>
+        /// <exception cref="ValueError">Text edges that decrease (<c>`bins` must increase monotonically, when an array</c>): the
+        ///     string <c>greater</c> comparison of each edge with the next, NumPy's monotonicity check.</exception>
         /// <remarks>
         ///     Explicit edges never read the data, so text data with explicit edges gets its edges back here; the histogram's
         ///     counting step decides the rest (<see cref="HistogramTextAnswer"/>).
@@ -946,7 +996,8 @@ namespace NumSharp
         /// <param name="fromRange">True when the edges came from a range (Python floats), false for the empty-data defaults.</param>
         /// <exception cref="DTypePromotionError">Always: <c>The DType &lt;class 'numpy.dtypes.StrDType'&gt; could not be promoted
         ///     by &lt;class 'numpy.dtypes._PyLongDType'&gt;. …</c> (or <c>_PyFloatDType</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">Defensive: a promotion that succeeded (none does today).</exception>
+        /// <exception cref="InvalidOperationException">Defensive: a promotion that succeeded (none can: NumPy 2.4.2 has no
+        ///     common DType of text and a Python number).</exception>
         private static void ThrowTextEdgeType(NDArray a, bool fromRange)
         {
             // Boxed C# integer / double literals are the weak Python ints / floats of DTypePromotion.ResultType.
@@ -954,7 +1005,7 @@ namespace NumSharp
                 DTypePromotion.ResultType(0.0, 1.0, a.dtype);
             else
                 DTypePromotion.ResultType(0L, 1L, a.dtype);
-            throw Backends.Strings.NDStringUfuncs.NextPhase("histogram", a);
+            throw new InvalidOperationException($"np.histogram: the edges' dtype of {a.dtype} data promoted unexpectedly");
         }
 
         /// <summary>True when every element of the boolean mask is true (NumPy's <c>logical_and.reduce</c>).</summary>

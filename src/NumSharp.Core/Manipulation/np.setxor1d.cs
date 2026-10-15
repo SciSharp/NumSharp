@@ -13,24 +13,16 @@ namespace NumSharp
         /// <returns>Sorted 1-D array of unique values that are in only one of the input arrays.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.setxor1d.html</remarks>
         /// <exception cref="UnicodeDecodeError">A <c>U</c> result over <c>S</c> text holding a non-ASCII byte.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A string operand of two or more elements (without
-        ///     <paramref name="assume_unique"/>), or a string result of two or more elements: NumPy sorts the text (the next
-        ///     phase of NumSharp's string support). Numbers to format as text defer as a text conversion.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> operand whose answer depends on its
+        ///     text (the <c>StringDType</c> part of NumSharp's next phase). Fixed-width text runs NumPy's statements: each
+        ///     input's <c>np.unique</c>, the concatenation (numbers formatted into text, bytes decoded beside str), the sort
+        ///     and the flags of values that occur once.</exception>
         [NDScoped]
         public static NDArray setxor1d(NDArray ar1, NDArray ar2, bool assume_unique = false)
         {
             using var plain = NDMatrixBoundary.PlainFor(ar1, ar2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // Text: NumPy unique()s each input (sorting its text: the next phase of NumSharp's string support, and the
-            // result keeps it), concatenates them and sorts the values. Inputs of at most one text element each order
-            // nothing until the concatenation; the statements below then run NumPy's own steps.
-            bool text = Backends.Strings.NDStringUfuncs.IsString(ar1) || Backends.Strings.NDStringUfuncs.IsString(ar2);
-            if (text && !assume_unique)
-            {
-                if (Backends.Strings.NDStringUfuncs.IsString(ar1) && ar1.size > 1)
-                    throw Backends.Strings.NDStringUfuncs.NextPhase("setxor1d", ar1);
-                if (Backends.Strings.NDStringUfuncs.IsString(ar2) && ar2.size > 1)
-                    throw Backends.Strings.NDStringUfuncs.NextPhase("setxor1d", ar2);
-            }
+            // Text runs the statements below unchanged: np.unique and np.sort order the text, the concatenation formats
+            // numbers and decodes bytes as NumPy's does, and the text != builds the flags.
             // Boundary scope: the unique/ravel/concatenate/sort temps and the flag masks are
             // reclaimed at exit; only the surviving-values array is yielded.
 
@@ -44,9 +36,6 @@ namespace NumSharp
             NDArray aux = np.concatenate((np.ravel(ar1), np.ravel(ar2)), 0);
             if (aux.size == 0)
                 return aux;
-            // Text: the sort below compares two or more strings (the next phase); one element is its own answer.
-            if (text && aux.size > 1)
-                throw Backends.Strings.NDStringUfuncs.NextPhase("setxor1d", aux);
 
             aux = np.sort(aux);
 

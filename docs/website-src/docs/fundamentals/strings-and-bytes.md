@@ -323,6 +323,36 @@ Measured against NumPy 2.4.2 on the same machine (pinned to two cores, fresh inp
 - **An arg-reduction over 100,000 fresh strings** (1.1 to 1.5 times NumPy's speed). It reads every cache line of the array, at the memory's bandwidth.
 - **A few keys searched in a long haystack** (100 keys in 100,000 strings, 0.7 to 1.4 times NumPy's speed). Each step of a binary search reads an element whose address depends on the previous comparison, so the search waits on memory at every step.
 
+### Unique values, set routines and statistics
+
+`np.unique` (every `return_*` flag, `axis`, `equal_nan` and `sorted`), `np.unique_values`, `np.unique_counts`, `np.unique_inverse`, `np.unique_all`, `np.isin`, `np.intersect1d`, `np.union1d`, `np.setdiff1d`, `np.setxor1d`, `np.lexsort`, `np.sort_complex`, `np.histogram`, `np.histogram_bin_edges` and the selection methods of `np.quantile` and `np.percentile` work on `S` and `U` text with NumPy's results. They order text as the sorts do.
+
+```csharp
+var fruit = np.array(new[] { "pear", "fig", "apple", "fig", "pear" });
+var (values, counts) = np.unique(fruit, return_counts: true);   // ['apple' 'fig' 'pear'], [1 2 2]
+np.isin(fruit, np.array(new[] { "fig", "kiwi" }));               // [False  True False  True False]
+np.intersect1d(fruit, np.array(new[] { "pear", "plum" }));       // ['pear']
+np.setdiff1d(fruit, np.array(new[] { "pear" }));                 // ['apple' 'fig']
+np.quantile(fruit, 0.5, method: "lower");                        // 'fig'
+np.quantile(fruit, 0.5);   // TypeError: unsupported operand type(s) for -: 'numpy.str_' and 'numpy.str_'
+```
+
+Some results follow from how NumPy computes them:
+
+- **Numbers and bytes beside text.** `np.isin` and the set routines join their two operands into one array, as NumPy does. Numbers are written as text, and bytes are decoded as ASCII (a byte past ASCII raises NumPy's `UnicodeDecodeError`). With few test values, `np.isin` compares the elements instead, and text never equals a number there. NumPy switches between the two at `10 * len(ar1) ** 0.145` test values:
+
+  ```csharp
+  np.isin(np.array(new[] { "1", "2" }), np.arange(20));            // [ True  True]: 20 values are joined
+  np.isin(np.array(new[] { "1", "2" }), np.array(new long[] { 1 })); // [False False]: 1 value is compared
+  ```
+
+- **The order of `np.unique_values`.** NumPy returns the distinct strings in the order of its hash table, which depends on the C++ library NumPy was built with. NumSharp returns them sorted; the values are the same. `np.unique(..., sorted: false)` without a `return_*` flag differs the same way.
+- **`np.sort_complex`** sorts the text first and parses it afterwards, so the result follows the text's order: `np.sort_complex(np.array(new[] { "10", "9", "2+1j" }))` is `[10.+0.j  2.+1.j  9.+0.j]`.
+- **`np.histogram`** of text needs explicit edges, as text or as numbers. Number edges are compared as text, so a count can come out negative, as in NumPy: `np.histogram(np.array(new[] { "1", "5", "10", "30", "2" }), np.array(new long[] { 0, 5, 10 }))` counts `[ 4 -2]` (`"10"` sorts before `"5"` as text).
+- **`np.quantile` and `np.percentile`** compute the methods that pick an element: `lower`, `higher`, `nearest`, `inverted_cdf`, `closest_observation`, and `linear` with an integer `q` (`np.quantile(fruit, 1)` is `'pear'`). The other methods interpolate, which subtracts text, so NumPy raises a `TypeError` and NumSharp raises the same one. `np.percentile` divides `q` by 100 first, so its `linear` method always interpolates.
+
+Measured against NumPy 2.4.2 on the same machine (pinned to two cores, fresh inputs every call, 1,000 and 100,000 strings): every call measured ran at least 1.5 times as fast as NumPy, 4.2 times in the geometric mean. `np.unique` of text with few distinct values hashes the strings and sorts only the distinct ones, as NumPy does; past 1 in 16 distinct strings it sorts every string, which is faster for mostly distinct text (11 times NumPy's speed on 100,000 random strings). The slowest cases, 1.5 to 2 times NumPy's speed, are weighted histograms (each block's weights are summed in NumPy's tie order) and `np.unique` along an axis of small arrays.
+
 ### The `numpy.char` module
 
 `np.@char` is NumPy's `numpy.char` module. `char` is a C# keyword, so NumPy's `np.char.equal(a, b)` is `np.@char.equal(a, b)`. These functions compute now:
@@ -388,11 +418,12 @@ np.sum(names);    // TypeError: the resolved dtypes are not compatible with add.
 np.sqrt(names);   // TypeError: ufunc 'sqrt' not supported for the input types, ...
 ```
 
-**NumPy computes on the text in a later stage.** NumSharp throws `StringComputationNotSupportedException`, a `NotSupportedException`:
+**NumPy computes on the text.** NumSharp computes it too for `S` and `U` text: comparisons, truth values, concatenation and repetition, sorting, searching, unique values, set routines, histograms, quantiles and the conversions between text and numbers. Computing on `StringDType` text is the next stage, and there NumSharp throws `StringComputationNotSupportedException`, a `NotSupportedException`:
 
 ```csharp
-np.unique(names);                                // the unique values
-np.isin(names, np.array(new[] { "cow" }));       // membership
+var t = names.astype(np.dtypes.StringDType());
+np.unique(t);    // the unique values
+t == t;          // the comparison
 ```
 
 A comparison of text with numbers is "never equal" in NumPy, and in NumSharp: `names == np.array(new[] { 1, 2, 3 })` is `[False False False]`.
@@ -426,7 +457,6 @@ np.isin(names, np.array(new[] { 1.5, 2.0 }));   // [False False False]
 np.array_equal(names, np.zeros(new Shape(3L))); // False
 ```
 
-Over text that has to be read, the set routines stay in a later stage.
 
 `np.place` and `np.putmask` follow NumPy's two value forms. A C# array is a Python list: NumSharp converts it straight into the target's dtype. An `NDArray` must cast to the target's dtype under the `'safe'` rule, as in NumPy:
 
@@ -696,7 +726,7 @@ This is NumPy's `np.frombuffer` on a bytestring, and the general interop bridge.
 ## Troubleshooting
 
 ### "`StringComputationNotSupportedException`: ... is the next phase"
-NumPy computes this call on text, and NumSharp does not compute it yet (comparisons, truth values, concatenation, repetition, sorting, searching and the conversions between text and numbers already compute). Convert the values to .NET (`NDArray.AsStringArray`, `item`) and use LINQ, or keep the computation in NumPy.
+NumPy computes this call on `StringDType` text, and NumSharp does not compute on `StringDType` yet (every computation over `S` and `U` text does). Cast to a fixed width (`arr.astype("U10")`), convert the values to .NET (`NDArray.AsStringArray`, `item`) and use LINQ, or keep the computation in NumPy.
 
 ### "`ValueError: could not convert string to float`"
 A cast from text to a number parses every element, as NumPy does. Clean the text first, or keep it as text.
@@ -740,7 +770,11 @@ A `U` to `S` cast encodes ASCII only, as NumPy does. Keep non-ASCII text in a `U
 | `np.@char.equal` … `np.@char.greater_equal`, `np.@char.compare_chararrays` | Comparisons after the trailing NULs and ASCII whitespace are removed; `null` (NumPy's `NotImplemented`) for `S` against `U` |
 | `np.@char.add` / `np.@char.multiply` | `np.add` / `np.strings.multiply`; a count that is not an integer is `ValueError("Can only multiply by integers")` |
 | `np.@char.chararray` / `np.@char.array` / `np.@char.asarray` | NumPy's `chararray` (`NDCharArray`): element access and iteration remove trailing whitespace, views and copies stay chararrays, text data only |
-| Other computing calls (`np.unique`, `np.searchsorted`, ...) | `StringComputationNotSupportedException` (a later stage) |
+| `np.argmax` / `np.argmin` / `np.searchsorted` / `np.digitize` | NumPy's results: the first extreme element, NumPy's exact search over unsorted haystacks |
+| `np.unique` / `np.unique_values` / `np.unique_counts` / `np.unique_inverse` / `np.unique_all` | NumPy's results for every flag and axis; `unique_values` (and `sorted: false`) sorted where NumPy keeps its hash order |
+| `np.isin` / `np.intersect1d` / `np.union1d` / `np.setdiff1d` / `np.setxor1d` / `np.lexsort` / `np.sort_complex` | NumPy's results: numbers beside text written as text, bytes decoded as ASCII where NumPy joins the operands |
+| `np.histogram` / `np.histogram_bin_edges` | NumPy's results with text or number edges (compared as text), weights and density |
+| `np.quantile` / `np.percentile` | NumPy's results for the methods that pick an element; the interpolating methods raise NumPy's `TypeError` |
 | NumPy's refusals (`np.sum`, `np.sqrt`, ...) | NumPy's exception and message |
 | `np.dtypes.StringDType(...)` / `np.dtype("T")` | NumPy's variable-width `StringDType`: storage, element access, copies, gathers, scatters, casts and printing as NumPy's; computing on it throws `StringComputationNotSupportedException` (phase 2) |
 | `np.dtype("V7")` / `"O"` | `NotSupportedException` |

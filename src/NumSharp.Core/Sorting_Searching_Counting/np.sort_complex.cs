@@ -21,25 +21,21 @@ namespace NumSharp
         ///     any-NaN-part-last ordering. A 0-d input leaks <c>ndarray.sort()</c>'s own
         ///     "axis -1 is out of bounds for array of dimension 0" — exactly as NumPy leaks it.
         /// </remarks>
-        /// <exception cref="AxisError">A 0-d string array (<c>axis -1 is out of bounds for array of dimension 0</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty string array: NumPy sorts the text and parses it
-        ///     into complex numbers (the next phase of NumSharp's string support). An empty one gives an empty complex128
-        ///     array.</exception>
+        /// <exception cref="AxisError">A 0-d array (<c>axis -1 is out of bounds for array of dimension 0</c>, which NumPy's
+        ///     <c>b.sort()</c> raises).</exception>
+        /// <exception cref="ValueError">Text that is not a complex number (<c>complex() arg is a malformed string</c>): NumPy
+        ///     sorts the text, then <c>astype('D')</c> parses it, the first malformed string in the sorted array's C order
+        ///     raising.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
+        ///     elements (the <c>StringDType</c> part of NumSharp's next phase).</exception>
         [NDScoped]
         public static NDArray sort_complex(NDArray a)
         {
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Plain(a, static s => sort_complex(s));
-            // Text: NumPy's b.sort() checks its axis (a 0-d input refuses -1) and sorts the text (the next phase of the
-            // string support); lines of at most one element are left as they are, and astype('D') then parses the text,
-            // which the cast below defers for a non-empty array (text conversion) and does for an empty one.
-            if (Backends.Strings.NDStringUfuncs.IsString(a))
-            {
-                Backends.Strings.NDStringUfuncs.ValidateReduceAxis("sort", a.ndim, -1);
-                if (!Backends.Strings.NDStringUfuncs.ShapeDecides("sort", a, -1))
-                    throw Backends.Strings.NDStringUfuncs.NextPhase("sort_complex", a);
-            }
+            // Text runs NumPy's two statements as they are: b.sort() orders the text along the last axis (a 0-d input
+            // refuses the axis), and astype('D') parses each string into a complex number with Python's complex() rules.
             // np.sort == array(a, copy=True) + in-place sort along the default last axis; the sort
             // runs in the ORIGINAL dtype (an int64 past 2^53 must order by its exact value, not by
             // its double image), and only the sorted result is widened.

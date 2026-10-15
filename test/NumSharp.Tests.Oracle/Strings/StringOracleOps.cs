@@ -261,6 +261,11 @@ namespace NumSharp.Tests.Strings
             // iteration, the members that keep the class, view(type), printing) lives in its own partial.
             if (TryInvokeChararray(c.Op, p, ops, out var chararray))
                 return chararray;
+            // Section strsets (np.quantile / np.percentile with every q / axis / out form, P2.2 milestone C) lives in its own
+            // partial; its unique, isin, set-routine, lexsort, sort_complex and histogram cases replay through the ops of
+            // sections strshape and strsurface.
+            if (TryInvokeSets(c.Op, p, ops, out var sets))
+                return sets;
             throw new InvalidOperationException($"the string oracle has no op '{c.Op}'");
         }
 

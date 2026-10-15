@@ -229,7 +229,7 @@ namespace NumSharp.Tests.Documentation
             np.array2string(np.array(new[] { "a'b", "c\"d" })).Should().Be("[\"a'b\" 'c\"d']");
         }
 
-        // ── Computing on text (the next phase) ────────────────────────────────────────────────────
+        // ── Computing on text ─────────────────────────────────────────────────────────────────────
 
         [TestMethod]
         public void Computing_NumPyRefusals()
@@ -351,6 +351,36 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>
+        ///     The doc page's "Unique values, set routines and statistics" section (every value probed against NumPy 2.4.2):
+        ///     np.unique with counts, np.isin, intersect1d / setdiff1d, the take path of np.quantile and the interpolation's
+        ///     TypeError; np.isin's two paths for numbers beside text; np.sort_complex's text order; a negative histogram count;
+        ///     np.quantile with an integer q.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_UniqueSetRoutinesAndStatistics()
+        {
+            var fruit = np.array(new[] { "pear", "fig", "apple", "fig", "pear" });
+            var (values, counts) = np.unique(fruit, return_counts: true);
+            NDArray.AsStringArray(values).Should().Equal("apple", "fig", "pear");
+            counts.ToArray<long>().Should().Equal(1L, 2L, 2L);
+            np.isin(fruit, np.array(new[] { "fig", "kiwi" })).ToArray<bool>().Should().Equal(false, true, false, true, false);
+            NDArray.AsStringArray(np.intersect1d(fruit, np.array(new[] { "pear", "plum" }))).Should().Equal("pear");
+            NDArray.AsStringArray(np.setdiff1d(fruit, np.array(new[] { "pear" }))).Should().Equal("apple", "fig");
+            ((string)np.quantile(fruit, 0.5, method: "lower").item()).Should().Be("fig");
+            Action lerp = () => np.quantile(fruit, 0.5);
+            lerp.Should().Throw<TypeError>().WithMessage("unsupported operand type(s) for -: 'numpy.str_' and 'numpy.str_'");
+
+            np.isin(np.array(new[] { "1", "2" }), np.arange(20)).ToArray<bool>().Should().Equal(true, true);
+            np.isin(np.array(new[] { "1", "2" }), np.array(new long[] { 1 })).ToArray<bool>().Should().Equal(false, false);
+            np.sort_complex(np.array(new[] { "10", "9", "2+1j" })).ToArray<System.Numerics.Complex>().Should().Equal(
+                new System.Numerics.Complex(10, 0), new System.Numerics.Complex(2, 1), new System.Numerics.Complex(9, 0));
+            np.histogram(np.array(new[] { "1", "5", "10", "30", "2" }), np.array(new long[] { 0, 5, 10 })).hist
+                .ToArray<long>().Should().Equal(4L, -2L);
+            ((string)np.quantile(fruit, 1).item()).Should().Be("pear");
+        }
+
+        /// <summary>
         ///     The "The <c>numpy.char</c> module" snippets (the <c>numpy.char</c> plan's phase 1; every value probed against
         ///     NumPy 2.4.2): a comparison that strips trailing whitespace against the plain ufunc, <c>compare_chararrays</c>,
         ///     <c>np.char.add</c>, <c>np.char.multiply</c> and its ValueError rule, the <c>S</c> / <c>U</c> pair's
@@ -402,18 +432,22 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>
-        ///     What the doc page still lists as a later stage: the unique values and the membership tests refuse with
-        ///     <see cref="StringComputationNotSupportedException"/> (a <see cref="NotSupportedException"/>); a string
-        ///     <c>dtype=</c> request of <c>np.add</c> over numbers computes (the numbers written as text, then concatenated).
+        ///     What the doc page still lists as a later stage: computing on <c>StringDType</c> text — its unique values and its
+        ///     comparison refuse with <see cref="StringComputationNotSupportedException"/> (a
+        ///     <see cref="NotSupportedException"/>) — while the same calls over <c>U</c> text compute; a string <c>dtype=</c>
+        ///     request of <c>np.add</c> over numbers computes (the numbers written as text, then concatenated).
         /// </summary>
         [TestMethod]
         public void Computing_NextPhase()
         {
             var names = Names();
-            Action unique = () => np.unique(names);
+            var t = names.astype(np.dtypes.StringDType());
+            Action unique = () => np.unique(t);
             unique.Should().Throw<StringComputationNotSupportedException>();
-            Action isin = () => np.isin(names, np.array(new[] { "cow" }));
-            isin.Should().Throw<StringComputationNotSupportedException>();
+            Action compare = () => _ = t == t;
+            compare.Should().Throw<StringComputationNotSupportedException>();
+            NDArray.AsStringArray((NDArray)np.unique(names)).Should().Equal("bird", "cat", "dog");
+            np.isin(names, np.array(new[] { "cow" })).ToArray<bool>().Should().Equal(false, false, false);
             NDArray.AsStringArray(np.add(np.array(new[] { 1.5 }), np.array(new[] { 1.5 }), dtype: "U")).Should().Equal("1.51.5");
             // StringComputationNotSupportedException is a NotSupportedException.
             unique.Should().Throw<NotSupportedException>();

@@ -8855,11 +8855,474 @@ def gen_strchararray():
     _cha_flush()
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# strsets. Set routines and statistics over text: np.unique with every flag and the Array-API unique family, np.isin,
+# intersect1d / union1d / setdiff1d / setxor1d, np.lexsort, np.sort_complex, np.histogram / histogram_bin_edges, and
+# np.quantile / np.percentile with the methods NumPy computes on text (strings phase 2, P2.2 milestone C)
+# ----------------------------------------------------------------------------------------------------------------------
+
+SETS = "strsets"
+
+
+def _set_values(rng, n, flavor, kind):
+    """``n`` str values of one data flavor (encoded later for an ``S`` operand).
+
+    :param rng: the generator.
+    :param n: the count.
+    :param flavor: ``cat`` (a few values repeated), ``rand`` (mostly distinct), ``nul`` (embedded and trailing NULs, the
+        empty string), ``prefix`` (a long shared prefix), ``wide`` (non-ASCII: Latin-1 for ``S`` stand-ins, astral
+        and BMP units for ``U``).
+    :param kind: ``U`` or ``S`` (an ``S`` flavor keeps to code points below 256, encoded as Latin-1).
+    :returns: the list.
+    """
+    if flavor == "cat":
+        return _pick(rng, n, ["pear", "fig", "apple", "fig2", "kiwi", ""])
+    if flavor == "rand":
+        return _rand_strings(rng, n, 6, "abcdefgh")
+    if flavor == "nul":
+        return _pick(rng, n, ["a", "a\x00b", "a\x00", "", "\x00", "ab", "b\x00\x00c"])
+    if flavor == "prefix":
+        return ["xxxxxxx" + s for s in _rand_strings(rng, n, 2, "ab")]
+    pool = ["\xe9", "a\xff", "\xe0b", "z", "\x80"] if kind == "S" else ["\xe9", "\U0001F600", "中", "a￿", "z"]
+    return _pick(rng, n, pool)
+
+
+def _set_operand(rng, n, flavor, spec):
+    """A 1-D C-contiguous text operand of ``n`` values of one flavor.
+
+    :param rng: the generator.
+    :param n: the count.
+    :param flavor: see ``_set_values``.
+    :param spec: the dtype (``U6``, ``S6`` ...).
+    :returns: the (base, view) pair.
+    """
+    kind = spec.lstrip("<|")[0]
+    vals = _set_values(rng, n, flavor, kind)
+    if kind == "S":
+        return own(np.array([v.encode("latin-1") for v in vals], dtype=spec))
+    return own(np.array(vals, dtype=spec))
+
+
+def _quant_call(name, a, q, axis, method, keepdims, out):
+    """``np.quantile`` / ``np.percentile`` with the given keywords (``out`` omitted when None)."""
+    kw = {"axis": axis, "method": method, "keepdims": keepdims}
+    if out is not None:
+        kw["out"] = out
+    return getattr(np, name)(a, q, **kw)
+
+
+def _quant(layout, op, *, name="quantile", q=0.5, qkind="f", axis=None, method="lower", keepdims=False, out=None,
+           extra=()):
+    """Records one quantile-family call (op ``quant_kw``).
+
+    :param layout: the layout label.
+    :param op: the (base, view) text operand.
+    :param name: ``quantile`` or ``percentile``.
+    :param q: the q value: a float, a list of floats, a Python int, or a (base, view) operand for ``qkind='arr'``.
+    :param qkind: ``f`` (a Python float), ``fl`` (a list of floats), ``i`` (a Python int), ``arr`` (an ndarray q).
+    :param axis: None, an int or a tuple of ints.
+    :param method: the method name.
+    :param keepdims: keepdims.
+    :param out: an out (base, view) operand, or None.
+    :param extra: nothing (reserved).
+    """
+    ops = [op]
+    params = {"name": name, "qkind": qkind, "method": method, "keepdims": keepdims,
+              "axis": list(axis) if isinstance(axis, tuple) else axis}
+    if qkind == "arr":
+        params["q_op"] = len(ops)
+        ops.append(q)
+    else:
+        params["q"] = q
+    if out is not None:
+        params["out_op"] = len(ops)
+        ops.append(out)
+
+    def call(*views, p=params):
+        a = views[0]
+        qq = views[p["q_op"]] if p["qkind"] == "arr" else p["q"]
+        o = views[p["out_op"]] if "out_op" in p else None
+        ax = tuple(p["axis"]) if isinstance(p["axis"], list) else p["axis"]
+        return _quant_call(p["name"], a, qq, ax, p["method"], p["keepdims"], o)
+
+    add(SETS, "quant_kw", params=params, operands=ops, layout=layout,
+        mutate=params.get("out_op"), call=call)
+
+
+def gen_strsets():
+    """Section strsets: set routines and statistics over text (P2.2 milestone C). Every case is phase 1: NumSharp computes
+    ``S`` / ``U`` text, so it must match NumPy now.
+
+    * ``np.unique``: every flag combination over categorical, distinct, NUL-holding (``'a\\x00b'`` beside ``'a'``,
+      trailing NULs that read away), long-prefix and non-ASCII data at sizes around NumSharp's block boundaries; the
+      catalog's layouts; every axis of 2-D / 3-D arrays (NumPy's structured row path: rows compared field by field); the
+      ``equal_nan`` / ``sorted`` keywords (``sorted=False`` without flags is NumPy's hash order: an excused order); the
+      Array-API family (``unique_values`` is NumPy's hash order: an excused order);
+    * ``np.isin``: both of ``_isin``'s paths (the loop below ``10 * len(ar1) ** 0.145`` test elements, the sort path at and
+      above it), ``S`` with ``U`` (no loop: the mask stays; the sort path decodes the bytes, raising NumPy's
+      UnicodeDecodeError for a non-ASCII byte), text with numbers (written as text on the sort path), ``invert``,
+      ``assume_unique`` with duplicates (NumPy's undefined-but-exact answer), the ``table`` refusal, empty and 0-d / 2-D
+      operands;
+    * the set routines: ``intersect1d`` (``assume_unique``, ``return_indices``: the stable argsort's first occurrences),
+      ``union1d``, ``setdiff1d`` / ``setxor1d`` (``assume_unique``), over widths, classes and numbers;
+    * ``np.lexsort``: text keys, mixed text / number keys, 2-D keys along every axis, ties broken by the earlier keys;
+    * ``np.sort_complex``: text sorted as text and then parsed as complex (the order is the text's), the parse errors;
+    * ``np.histogram`` / ``histogram_bin_edges``: text data with text edges and with number edges (searched as text:
+      counts can be negative), number data with text edges, weights of every kind, density, data past NumPy's
+      65,536-element block, decreasing edges;
+    * ``np.quantile`` / ``np.percentile``: every method (the take path's selections, 'linear' with an integer q, the
+      interpolating methods' refusals and empty-axis lookups), q as a Python float / list / int and as arrays of every
+      dtype and rank up to 3, ``axis`` as None / int / tuple, ``keepdims``, ``out=`` of every width and class (NumPy's
+      take checks), over the catalog's layouts and empty axes.
+    """
+    rng = np.random.default_rng(20261016 + 3)
+    flags_all = [(False, False, False), (True, False, False), (False, True, False), (False, False, True),
+                 (True, True, True), (True, False, True)]
+
+    # ---- np.unique and the Array-API family ----------------------------------------------------------------------------
+    for spec in SPECS:
+        for lay in LAYOUTS:
+            op = operand(spec, lay, seed=7)
+            v = op[1]
+            axes = [None] + (list(range(-v.ndim, v.ndim)) if v.ndim and lay in CORE_LAYOUTS else [])
+            for ax in axes:
+                for ri, rv, rc in (flags_all if lay in CORE_LAYOUTS else flags_all[:2] + flags_all[4:5]):
+                    add(SETS, "unique", params={"ri": ri, "rv": rv, "rc": rc, "axis": ax}, operands=[op], layout=lay,
+                        call=lambda a, x=ax, i=ri, n=rv, c=rc: np.unique(a, return_index=i, return_inverse=n,
+                                                                         return_counts=c, axis=x))
+            for name in ("unique_values", "unique_counts", "unique_inverse", "unique_all"):
+                add(SETS, "unique_api", params={"name": name}, operands=[op], layout=lay,
+                    call=lambda a, f=getattr(np, name): f(a))
+
+    for n in (2, 7, 16, 17, 100, 1025):
+        for spec in ("<U6", "|S6", "<U9", "|S9"):
+            for flavor in ("cat", "rand", "nul", "prefix", "wide"):
+                if n >= 1000 and (flavor not in ("cat", "rand") or spec in ("<U9", "|S9")):
+                    continue
+                op = _set_operand(rng, n, flavor, spec)
+                lay = f"{flavor}{spec.lstrip('<|')}n{n}"
+                for ri, rv, rc in (flags_all if n < 1000 else [(False, False, False), (True, True, True)]):
+                    add(SETS, "unique", params={"ri": ri, "rv": rv, "rc": rc, "axis": None}, operands=[op], layout=lay,
+                        call=lambda a, i=ri, nn=rv, c=rc: np.unique(a, return_index=i, return_inverse=nn, return_counts=c))
+                if n in (17, 1025):
+                    for name in ("unique_values", "unique_counts", "unique_inverse", "unique_all"):
+                        add(SETS, "unique_api", params={"name": name}, operands=[op], layout=lay,
+                            call=lambda a, f=getattr(np, name): f(a))
+                    # sorted=False: NumPy hashes the text when no index output is asked (an excused order), sorts it
+                    # otherwise; equal_nan has no effect on text.
+                    for ri, rv, rc in ((False, False, False), (True, True, True)):
+                        for en, so in ((False, True), (True, False)):
+                            add(SETS, "unique", params={"ri": ri, "rv": rv, "rc": rc, "axis": None, "equal_nan": en,
+                                                        "sorted": so},
+                                operands=[op], layout=lay,
+                                call=lambda a, i=ri, nn=rv, c=rc, e=en, s=so: np.unique(
+                                    a, return_index=i, return_inverse=nn, return_counts=c, equal_nan=e, sorted=s))
+
+    # Rows: 2-D and 3-D arrays along every axis (NumPy's structured row path), duplicate rows and NUL padding.
+    for spec in ("<U3", "|S3"):
+        kind = spec.lstrip("<|")[0]
+        rows = [["ab", "c", "d"], ["ab", "c", "d"], ["a", "c\x00", "d"], ["ab", "", "d"], ["b", "a", "z"],
+                ["ab", "c", "d"], ["a", "c", "d"], ["", "", ""]]
+        enc_rows = [[x.encode() for x in r] for r in rows] if kind == "S" else rows
+        base2 = np.array(enc_rows, dtype=spec)
+        cases = {"r2": base2, "r2T": base2.T, "r3": base2.reshape(2, 4, 3), "r2s": base2[::2], "r2rev": base2[::-1]}
+        for key, arr in cases.items():
+            op = plain(arr)
+            for ax in range(-arr.ndim, arr.ndim):
+                for ri, rv, rc in flags_all:
+                    add(SETS, "unique", params={"ri": ri, "rv": rv, "rc": rc, "axis": ax}, operands=[op],
+                        layout=f"{key}{spec.lstrip('<|')}",
+                        call=lambda a, x=ax, i=ri, n=rv, c=rc: np.unique(a, return_index=i, return_inverse=n,
+                                                                         return_counts=c, axis=x))
+    for key, arr in {"cols1000": np.array(_pick(rng, 3000, ["x", "y", "xy", ""]), dtype="<U2").reshape(1000, 3),
+                     "colsS1000": np.array([s.encode() for s in _pick(rng, 3000, ["x", "y", "xy", ""])],
+                                           dtype="|S2").reshape(1000, 3)}.items():
+        op = plain(arr)
+        for ax in (0, 1):
+            for ri, rv, rc in ((False, False, False), (True, True, True)):
+                add(SETS, "unique", params={"ri": ri, "rv": rv, "rc": rc, "axis": ax}, operands=[op], layout=key,
+                    call=lambda a, x=ax, i=ri, n=rv, c=rc: np.unique(a, return_index=i, return_inverse=n,
+                                                                     return_counts=c, axis=x))
+
+    # ---- np.isin ---------------------------------------------------------------------------------------------------------
+    def isin_case(layout, x, y, *, assume_unique=False, invert=False, kind=None):
+        params = {"assume_unique": assume_unique, "invert": invert, "kind": kind}
+        add(SETS, "isin", params=params, operands=[x, y], layout=layout,
+            call=lambda a, b, au=assume_unique, iv=invert, k=kind: np.isin(a, b, assume_unique=au, invert=iv, kind=k))
+
+    u_pool = ["pear", "fig", "apple", "kiwi", "", "fi", "fig\x00x"]
+    for n1, n2s in ((1, (1, 9, 10, 11)), (100, (5, 19, 20, 40)), (2000, (30, 31)), (7, (1, 13, 14))):
+        x_u = own(np.array(_pick(rng, n1, u_pool), dtype="<U6"))
+        x_s = own(np.array([s.encode() for s in _pick(rng, n1, u_pool)], dtype="|S6"))
+        for n2 in n2s:
+            y_u = own(np.array(_pick(rng, n2, u_pool + ["zz", "plum"]), dtype="<U5"))
+            y_s = own(np.array([s.encode() for s in _pick(rng, n2, u_pool + ["zz", "plum"])], dtype="|S5"))
+            y_i = own(np.arange(n2) - 2)
+            y_sx = own(np.array([b"\xff" if i % 3 == 0 else b"fig" for i in range(n2)], dtype="|S3"))
+            lay = f"{n1}x{n2}"
+            for iv in ((False, True) if n1 < 1000 else (False,)):
+                isin_case(f"UU{lay}", x_u, y_u, invert=iv)
+                isin_case(f"SS{lay}", x_s, y_s, invert=iv)
+                isin_case(f"US{lay}", x_u, y_s, invert=iv)
+                isin_case(f"SU{lay}", x_s, y_u, invert=iv)
+                isin_case(f"Ui{lay}", x_u, y_i, invert=iv)
+                isin_case(f"iU{lay}", own(np.arange(n1) - 1), y_u, invert=iv)
+                isin_case(f"USx{lay}", x_u, y_sx, invert=iv)
+            isin_case(f"UUau{lay}", x_u, y_u, assume_unique=True)
+            isin_case(f"UUsort{lay}", x_u, y_u, kind="sort")
+    nums = own(np.array(["1", "2", "10", "3.5", "-1", "nan", "1e3"]))
+    for y, key in ((own(np.arange(-3, 20)), "ints"), (own(np.array([3.5, 1000.0, np.nan, -1.0] * 6)), "floats"),
+                   (own(np.array([True, False] * 12)), "bools"), (own(np.array([1 + 0j, 3.5 + 0j] * 12)), "complex")):
+        isin_case(f"nums-{key}", nums, y)
+        isin_case(f"nums-{key}-inv", nums, y, invert=True)
+    two_d = plain(np.array(_pick(rng, 12, u_pool), dtype="<U6").reshape(3, 4))
+    zero_d = plain(np.array("fig"))
+    for key, x in (("2d", two_d), ("0d", zero_d), ("e", own(np.zeros(0, "<U3"))),
+                   ("t3", operand("<U3", "t3", seed=2)), ("bc", operand("<U3", "bc", seed=4))):
+        for y, ykey in ((own(np.array(["fig", "pear", "a"], dtype="<U4")), "small"),
+                        (own(np.array(_pick(rng, 60, u_pool), dtype="<U6")), "big"),
+                        (operand("<U3", "s1", seed=1), "s1")):
+            isin_case(f"{key}-{ykey}", x, y)
+    isin_case("table", own(np.array(["a", "b"])), own(np.array(["a"])), kind="table")
+    isin_case("badkind", own(np.array(["a", "b"])), own(np.array(["a"])), kind="quick")
+    isin_case("au-dups", own(np.array(["b", "a", "b", "c", "a"] * 8)), own(np.array(["a", "b"] * 30)), assume_unique=True)
+    isin_case("au-dups-inv", own(np.array(["b", "a", "b", "c", "a"] * 8)), own(np.array(["a", "b"] * 30)),
+              assume_unique=True, invert=True)
+    isin_case("empty-S-nonascii", own(np.zeros(0, "<U2")), own(np.array([b"\xff", b"a"], dtype="|S1")))
+
+    # ---- the set routines ------------------------------------------------------------------------------------------------
+    def setop(layout, name, x, y, assume_unique=False, return_indices=False):
+        params = {"name": name, "assume_unique": assume_unique, "return_indices": return_indices}
+        if name == "intersect1d":
+            call = lambda a, b, au=assume_unique, ri=return_indices: np.intersect1d(a, b, assume_unique=au,
+                                                                                     return_indices=ri)
+        elif name == "union1d":
+            call = lambda a, b: np.union1d(a, b)
+        else:
+            call = lambda a, b, f=getattr(np, name), au=assume_unique: f(a, b, assume_unique=au)
+        add(SETS, "setop", params=params, operands=[x, y], layout=layout, call=call)
+
+    set_pairs = []
+    for n1, n2 in ((5, 4), (40, 33), (600, 400)):
+        a_u = own(np.array(_pick(rng, n1, u_pool), dtype="<U6"))
+        b_u = own(np.array(_pick(rng, n2, u_pool + ["plum", "zz", "fig\x00"]), dtype="<U4"))
+        a_s = own(np.array([s.encode() for s in _pick(rng, n1, u_pool)], dtype="|S6"))
+        b_s = own(np.array([s.encode() for s in _pick(rng, n2, u_pool + ["plum"])], dtype="|S7"))
+        set_pairs += [(f"UU{n1}", a_u, b_u), (f"SS{n1}", a_s, b_s), (f"US{n1}", a_u, b_s), (f"SU{n1}", a_s, b_u),
+                      (f"Ui{n1}", a_u, own(np.arange(n2) % 7)), (f"iU{n1}", own(np.arange(n1) % 5), b_u)]
+    set_pairs += [("Ue", own(np.array(["b", "a", "b"])), own(np.zeros(0, "<U3"))),
+                  ("eU", own(np.zeros(0, "<U3")), own(np.array(["b", "a"]))),
+                  ("2d", plain(np.array([["b", "a"], ["c", "a"]])), plain(np.array([["a", "z"]]))),
+                  ("0d", plain(np.array("b")), own(np.array(["b", "c"]))),
+                  ("t3", operand("<U3", "t3", seed=3), operand("<U3", "r2", seed=5)),
+                  ("Sx", own(np.array(["a", "b"])), own(np.array([b"\xff", b"b"], dtype="|S1"))),
+                  ("nul", own(np.array(["a", "a\x00b", "", "\x00b"])), own(np.array(["a\x00b", "b", "", "a"]))),
+                  ("floats", own(np.array(["1.5", "nan", "2"])), own(np.array([1.5, np.nan, 2.0])))]
+    for key, x, y in set_pairs:
+        for name in ("intersect1d", "union1d", "setdiff1d", "setxor1d"):
+            setop(key, name, x, y)
+            if name != "union1d":
+                setop(key, name, x, y, assume_unique=True)
+        setop(key, "intersect1d", x, y, return_indices=True)
+        setop(key, "intersect1d", x, y, assume_unique=True, return_indices=True)
+
+    # ---- np.lexsort --------------------------------------------------------------------------------------------------------
+    def lexsort_case(layout, keys, axis=-1):
+        add(SETS, "lexsort", params={"axis": axis}, operands=keys, layout=layout,
+            call=lambda *ks, x=axis: np.lexsort(ks, axis=x))
+
+    for n in (5, 40, 1025):
+        k1 = own(np.array(_pick(rng, n, ["b", "a", "c", "ab", ""]), dtype="<U2"))
+        k2 = own(np.array(_pick(rng, n, ["x", "y", "xy"]), dtype="<U2"))
+        k3 = own(np.array([s.encode() for s in _pick(rng, n, ["q", "p", "pq", ""])], dtype="|S2"))
+        ki = own(rng.integers(0, 3, n))
+        kf = own(rng.integers(0, 4, n) / 2.0)
+        lexsort_case(f"U{n}", [k1])
+        lexsort_case(f"UU{n}", [k1, k2])
+        lexsort_case(f"UUS{n}", [k1, k2, k3])
+        lexsort_case(f"Ui{n}", [k1, ki])
+        lexsort_case(f"iU{n}", [ki, k1])
+        lexsort_case(f"fSU{n}", [kf, k3, k1])
+    m1 = plain(np.array(_pick(rng, 12, ["b", "a", "c", "ab"]), dtype="<U2").reshape(3, 4))
+    m2 = plain(np.array(_pick(rng, 12, ["x", "y"]), dtype="<U1").reshape(3, 4))
+    for ax in (0, 1, -1, 2, -3):
+        lexsort_case(f"2d-ax{ax}", [m1, m2], axis=ax)
+    lexsort_case("0d", [plain(np.array("b"))], axis=0)
+    lexsort_case("0d-1", [plain(np.array("b"))], axis=-1)
+    lexsort_case("e", [own(np.zeros(0, "<U2")), own(np.zeros(0, "<U2"))])
+    lexsort_case("shapes", [own(np.array(["a", "b"])), own(np.array(["a", "b", "c"]))])
+    lexsort_case("view", [operand("<U3", "s1", seed=1), operand("<U3", "r1", seed=2)])
+
+    # ---- np.sort_complex -----------------------------------------------------------------------------------------------
+    good = ["1+2j", "3", "-1j", "2.5", "1e1", "inf", "-inf", "nan", " 4 ", "+1-1j", "(1+1j)", "10", "9", "1+j", "-0"]
+    for spec in ("<U7", "|S7"):
+        kind = spec.lstrip("<|")[0]
+        enc_ = (lambda vs: [v.encode() for v in vs]) if kind == "S" else (lambda vs: vs)
+        cases = {"good": good, "bad": good[:4] + ["0x10"], "bad2": ["1+2j", "j1", "3"], "e": [], "one": ["7"],
+                 "spaces": ["  1", "1  ", "1 + 2j"]}
+        for key, vals in cases.items():
+            arr = np.array(enc_(vals), dtype=spec)
+            add(SETS, "sort_complex", operands=[own(arr)], layout=f"{key}{kind}", call=lambda a: np.sort_complex(a))
+        arr2 = np.array(enc_(good[:12]), dtype=spec).reshape(3, 4)
+        add(SETS, "sort_complex", operands=[plain(arr2)], layout=f"2d{kind}", call=lambda a: np.sort_complex(a))
+        add(SETS, "sort_complex", operands=[plain(arr2.T)], layout=f"2dT{kind}", call=lambda a: np.sort_complex(a))
+        add(SETS, "sort_complex", operands=[plain(np.array(enc_(["3"])[0], dtype=spec))], layout=f"0d{kind}",
+            call=lambda a: np.sort_complex(a))
+
+    # ---- np.histogram / histogram_bin_edges ------------------------------------------------------------------------------
+    def hist(layout, fn, data, bins, *, weights=None, density=False, rng_=None):
+        ops = [data]
+        params = {"fn": fn, "range": list(rng_) if rng_ is not None else None, "density": density}
+        if isinstance(bins, tuple):
+            params["bins_op"] = len(ops)
+            ops.append(bins)
+            params["bins"] = None
+        else:
+            params["bins"] = bins
+        if weights is not None:
+            params["weights_op"] = len(ops)
+            ops.append(weights)
+
+        def call(*views, p=params):
+            a = views[0]
+            b = views[p["bins_op"]] if "bins_op" in p else p["bins"]
+            w = views[p["weights_op"]] if "weights_op" in p else None
+            r = tuple(p["range"]) if p["range"] is not None else None
+            if p["fn"] == "histogram_bin_edges":
+                return np.histogram_bin_edges(a, b, r, w)
+            return np.histogram(a, b, r, density=p["density"], weights=w)
+
+        add(SETS, "hist", params=params, operands=ops, layout=layout, call=call)
+
+    # Words of at most two characters keep the 65,537-element operands (one past NumPy's block) small in the corpus.
+    words = ["ap", "fi", "ki", "pe", "pl", "da", "", "fi"]
+    for n in (8, 100, 65537):
+        for kind in ("U", "S"):
+            vals = _pick(rng, n, words)
+            data = own(np.array([v.encode() for v in vals] if kind == "S" else vals, dtype=f"{'|' if kind == 'S' else '<'}{kind}2"))
+            edges_t = own(np.array([b"ap", b"da", b"ki", b"pe"] if kind == "S" else ["ap", "da", "ki", "pe"]))
+            lay = f"{kind}n{n}"
+            hist(lay, "histogram", data, edges_t)
+            hist(lay, "histogram", data, edges_t, weights=own(rng.integers(1, 5, n).astype(np.float64)))
+            if n < 65537:
+                hist(lay, "histogram", data, edges_t, density=True)
+            if n < 65537 or kind == "S":
+                hist(lay, "histogram", data, edges_t, weights=own(rng.integers(-3, 4, n)))
+            if n in (8, 100):
+                hist(lay, "histogram", data, edges_t, weights=own((np.arange(n) % 3 == 0)))
+                hist(lay, "histogram", data, edges_t, weights=own(np.arange(n) * (1 + 1j)))
+                hist(lay, "histogram", data, edges_t, weights=own(np.arange(n, dtype=np.float32)))
+                hist(lay, "histogram_bin_edges", data, edges_t)
+    numbers = own(np.array(["1", "2.5", "10", "3", "-1", "0.5", "100", "2"]))
+    # Numeric edges come back as the operand itself: `plain` makes NumPy's operand the view the replay rebuilds (a 1-D
+    # numeric base is rebuilt as a view, see `target`), so their OWNDATA agree.
+    for edges, key in ((plain(np.array([0, 2, 5, 11])), "ints"), (plain(np.array([0.0, 2.5, 5.0])), "floats"),
+                       (plain(np.array([1, 10, 100])), "pow"), (own(np.array(["1", "2", "3"])), "text"),
+                       (own(np.array([b"1", b"2"])), "bytes")):
+        hist(f"nums-{key}", "histogram", numbers, edges)
+        hist(f"nums-{key}-w", "histogram", numbers, edges, weights=own(np.arange(8) * 0.5))
+        hist(f"nums-{key}-d", "histogram", numbers, edges, density=True)
+    for data, key in ((own(np.array([1, 2, 3, 10, 20])), "ints"), (own(np.array([0.5, 2.5, 30.0])), "floats")):
+        hist(f"{key}-textedges", "histogram", data, own(np.array(["1", "2", "3"])))
+    hist("decreasing", "histogram", own(np.array(["a", "b"])), own(np.array(["b", "a"])))
+    hist("int-bins", "histogram", own(np.array(["a", "b"])), 3)
+    hist("str-bins", "histogram", own(np.array(["a", "b"])), "auto")
+    hist("2d-data", "histogram", plain(np.array([["b", "a"], ["c", "d"]])), own(np.array(["a", "c", "e"])))
+    hist("t3-data", "histogram", operand("<U3", "t3", seed=4), own(np.array(["", "b", "d", "z"])))
+    hist("empty", "histogram", own(np.zeros(0, "<U2")), own(np.array(["a", "b"])))
+    hist("one-edge", "histogram", own(np.array(["a", "b"])), own(np.array(["a"])))
+    hist("w-shape", "histogram", own(np.array(["a", "b"])), own(np.array(["a", "c"])), weights=own(np.ones(3)))
+
+    # ---- np.quantile / np.percentile ------------------------------------------------------------------------------------
+    methods = ["lower", "higher", "nearest", "inverted_cdf", "closest_observation", "linear", "midpoint",
+               "averaged_inverted_cdf", "interpolated_inverted_cdf", "hazen", "weibull", "median_unbiased",
+               "normal_unbiased"]
+    t1 = _set_operand(rng, 9, "rand", "<U6")
+    s1_ = _set_operand(rng, 9, "rand", "|S6")
+    for key, op in (("U9", t1), ("S9", s1_)):
+        for m in methods:
+            for q in (0.0, 0.3, 0.5, 1.0):
+                _quant(key, op, q=q, method=m)
+            _quant(key, op, q=[0.0, 0.25, 0.8, 1.0], qkind="fl", method=m)
+            _quant(key, op, q=1, qkind="i", method=m)
+            _quant(key, op, q=0, qkind="i", method=m)
+            _quant(key, op, name="percentile", q=50.0, method=m)
+            _quant(key, op, name="percentile", q=[10.0, 90.0], qkind="fl", method=m)
+    big = _set_operand(rng, 3001, "cat", "<U6")
+    for m in ("lower", "higher", "nearest", "inverted_cdf", "closest_observation"):
+        _quant("U3001", big, q=[0.0, 0.1, 0.5, 0.999, 1.0], qkind="fl", method=m)
+    for qarr, qkey in ((np.array([0, 1]), "i64"), (np.array([True, False]), "bool"), (np.array(1, np.int8), "i8-0d"),
+                       (np.array([[0.0, 0.5], [1.0, 0.25]]), "f2d"), (np.array([[0, 1]], np.uint8), "u8-2d"),
+                       (np.zeros((1, 1, 1)), "f3d"), (np.zeros((0, 2)), "e2d"), (np.zeros(0), "e1d"),
+                       (np.array([0.5], np.float16), "f16"), (np.array([0.25, 0.75], np.float32), "f32"),
+                       (np.array([1.5]), "outside"), (np.array([np.nan]), "nan")):
+        for m in ("lower", "linear", "nearest", "midpoint"):
+            _quant(f"U9-{qkey}", t1, q=plain(qarr), qkind="arr", method=m)
+        _quant(f"U9-{qkey}-pct", t1, name="percentile", q=plain(qarr * 100 if qarr.dtype.kind == "f" else qarr),
+               qkind="arr", method="lower")
+    # Axes: one axis, a tuple, every layout, keepdims.
+    for lay in ("c2", "c3", "f2", "f3", "t3", "s2", "r2", "col", "bc", "bcol", "nx", "d5", "z0", "one", "e1", "e2", "e3"):
+        for spec in ("<U3", "|S3"):
+            op = operand(spec, lay, seed=8)
+            v = op[1]
+            axes = [None] + list(range(-v.ndim, v.ndim)) + ([(0, v.ndim - 1)] if v.ndim >= 2 else []) + \
+                ([(0, 1, 2)] if v.ndim >= 3 else []) + ([()] if v.ndim >= 1 else [])
+            for ax in axes:
+                for kd in (False, True):
+                    _quant(lay, op, q=0.5, axis=ax, method="lower", keepdims=kd)
+                    _quant(lay, op, q=[0.0, 1.0], qkind="fl", axis=ax, method="nearest", keepdims=kd)
+                _quant(lay, op, q=1, qkind="i", axis=ax, method="linear")
+                _quant(lay, op, q=0.5, axis=ax, method="linear")
+                _quant(lay, op, q=plain(np.array([[0.0, 1.0]])), qkind="arr", axis=ax, method="higher")
+            _quant(lay, op, q=0.5, axis=v.ndim + 1, method="lower")
+            if v.ndim >= 2:
+                _quant(lay, op, q=0.5, axis=(0, 0), method="lower")
+    # out=: NumPy's take checks (shape, the safe cast from out's dtype to the data's), the unsafe writeback.
+    t32 = plain(np.array([["d", "b", "x"], ["a", "c", "y"]]))
+    s32 = plain(np.array([[b"d", b"b", b"x"], [b"a", b"c", b"y"]]))
+    for key, op in (("U", t32), ("S", s32)):
+        # np.full, never np.empty: the out's prior bytes are part of the case and must not change between regenerations.
+        for out_arr, okey in ((np.full(3, "zzzzz", "<U5"), "U5"), (np.full(3, "z", "<U1"), "U1"),
+                              (np.full(3, b"zz", "|S2"), "S2"), (np.full(3, b"z", "|S1"), "S1"),
+                              (np.full(2, "zz", "<U3"), "short"), (np.full((1, 3), "zz", "<U3"), "kd"),
+                              (np.full(3, 7, np.int64), "int"), (np.full(3, 7.5, np.float64), "float"),
+                              (np.full((2, 3), "zz", "<U3"), "q2"), (None, "rev")):
+            if okey == "rev":
+                ob = np.full(3, "zz", "<U3")
+                o = (ob, ob[::-1])
+            else:
+                o = target(out_arr)
+            _quant(f"{key}-out{okey}", op, q=0.5, axis=0, method="lower", out=o)
+            _quant(f"{key}-out{okey}-kd", op, q=0.5, axis=0, method="lower", keepdims=True, out=o)
+            _quant(f"{key}-out{okey}-q2", op, q=[0.0, 1.0], qkind="fl", axis=0, method="higher", out=o)
+            _quant(f"{key}-out{okey}-lin", op, q=0.5, axis=0, method="linear", out=o)
+        _quant(f"{key}-out0d", op, q=0.5, axis=None, method="lower", out=target(np.full((), "zz", "<U4")))
+        _quant(f"{key}-out0d-kd", op, q=0.5, axis=None, method="lower", keepdims=True,
+               out=target(np.full((1, 1), "zz", "<U4")))
+        _quant(f"{key}-kd-scalar", op, q=0.5, axis=None, method="lower", keepdims=True)
+        _quant(f"{key}-kd-scalar-ax", op, q=0.5, axis=(0, 1), method="lower", keepdims=True)
+    # Empty reduced axes: the take path's IndexErrors and the interpolating methods' neighbour lookups.
+    for shape, axes in (((0,), [None, 0]), ((0, 3), [None, 0, 1, (0, 1)]), ((3, 0), [0, 1]), ((0, 0), [0, 1]),
+                        ((0, 2, 3), [(1, 2), (0, 2), 0])):
+        op = plain(np.zeros(shape, "<U2"))
+        for ax in axes:
+            for m in methods:
+                for q, qk in ((0.0, "f"), (0.5, "f"), (1.0, "f"), ([0.0, 0.5], "fl"), ([1.0, 0.0], "fl"), (1, "i"),
+                              (0, "i"), ([], "fl")):
+                    if m not in ("lower", "linear", "midpoint", "weibull", "inverted_cdf") and qk == "fl" and q:
+                        continue
+                    _quant(f"e{shape}", op, q=q, qkind=qk, axis=ax, method=m)
+    _quant("badmethod", t1, q=0.5, method="foo")
+    _quant("badmethod-q3d", t1, q=plain(np.zeros((1, 1, 1))), qkind="arr", method="foo")
+    _quant("q-outside", t1, q=1.5, method="lower")
+    _quant("pct-outside", t1, name="percentile", q=101.0, method="lower")
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
-              gen_strsort, gen_strchar, gen_strsearch, gen_strchararray]
+              gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strsets]
 
 
 def main():

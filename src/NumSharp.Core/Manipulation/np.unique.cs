@@ -185,9 +185,9 @@ namespace NumSharp
         ///   unspecified). See <see cref="unique_values"/>.</param>
         /// <returns>A <see cref="UniqueResult"/> carrying <c>values</c> and the requested outputs.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A fixed-width string array whose answer depends on the
-        ///     text (NumPy sorts it: the next phase of NumSharp's string support); at most one element to order, or slabs of
-        ///     zero width, are answered from the shape.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose answer depends on its
+        ///     text (computing on <c>StringDType</c> is phase 2's next stage); at most one element to order is answered from the
+        ///     shape. Fixed-width text (<c>S</c> / <c>U</c>) computes NumPy's answer.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html</remarks>
         public static UniqueResult unique(NDArray ar,
             bool return_index = false,
@@ -198,9 +198,9 @@ namespace NumSharp
             bool sorted = true)
         {
             using var plain = NDMatrixBoundary.PlainFor(ar);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy sorts text; string computation is the next phase of NumSharp's string support, so a string array
-            // whose answer depends on the text is refused here — after NumPy's one earlier check, the axis range. A shape
-            // that orders nothing (one element, zero-width slabs) continues: the instance unique answers it.
+            // NumPy's one check before it reads text, the axis range, then StringDType's deferral (a StringDType array
+            // whose answer depends on its text; one that orders nothing continues). Fixed-width text computes in the
+            // instance unique.
             NDArray.ThrowIfTextUnique(ar, axis);
             // Boundary scope: the instance unique's sort/argsort/mask internals are reclaimed at
             // exit; the present outputs are yielded (the UniqueResult carries only those arrays).

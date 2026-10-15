@@ -70,7 +70,10 @@ namespace NumSharp.Tests.Strings
                 case "unique":
                 {
                     bool ri = p["ri"].GetBoolean(), rv = p["rv"].GetBoolean(), rc = p["rc"].GetBoolean();
-                    var r = np.unique(a, ri, rv, rc, NullableInt(p, "axis"));
+                    // equal_nan / sorted appear only where a case sets them (section strsets); NumPy's defaults otherwise.
+                    bool equalNan = !p.TryGetValue("equal_nan", out var en) || en.GetBoolean();
+                    bool sorted = !p.TryGetValue("sorted", out var so) || so.GetBoolean();
+                    var r = np.unique(a, ri, rv, rc, NullableInt(p, "axis"), equalNan, sorted);
                     // NumPy returns the bare values without a flag, the tuple with one.
                     result = ri || rv || rc ? (object)(NDArray[])r : (NDArray)r;
                     return true;

@@ -8,10 +8,10 @@ namespace NumSharp.Tests.Backends.Strings
     /// <summary>
     ///     The text calls NumPy 2.4.2 computes on text but answers from the SHAPE: a truth test, count, index search, sort,
     ///     arg-reduction, unique, set routine or equality test over an empty array, over lines of one element, or over a pair
-    ///     the comparison operators have no loop for. NumSharp answers them now; the same calls over text NumPy reads stay
-    ///     deferred (<see cref="StringComputationNotSupportedException"/>). Every expected value was probed against NumPy
-    ///     2.4.2; the string oracle's <c>strshape</c> section replays the full matrix, these tests pin one representative of
-    ///     each rule.
+    ///     the comparison operators have no loop for. NumSharp answers them; since strings phase 2 (P2.2) the same calls
+    ///     over text NumPy reads compute too, and a few tests below pin that (the <c>*_Computes</c> ones, deferrals before).
+    ///     Every expected value was probed against NumPy 2.4.2; the string oracle's <c>strshape</c> section replays the full
+    ///     matrix, these tests pin one representative of each rule.
     /// </summary>
     [TestClass]
     public class StringShapeDecidedTests
@@ -202,13 +202,19 @@ namespace NumSharp.Tests.Backends.Strings
             r[1].shape.Should().Equal(new long[] { 0, 3 });
         }
 
+        /// <summary>
+        ///     <c>np.unique</c> and <c>np.unique_values</c> of text compute (P2.2 milestone C, was a deferral):
+        ///     <c>np.unique(['ab', 'c', 'de'])</c> is <c>['ab' 'c' 'de']</c> (&lt;U2). NumPy's <c>np.unique_values</c> returns
+        ///     <c>['c' 'ab' 'de']</c>, its <c>std::unordered_set</c>'s order; NumSharp returns the same set sorted (the
+        ///     documented order divergence).
+        /// </summary>
         [TestMethod]
-        public void Unique_OfText_Defers()
+        public void Unique_OfText_Computes()
         {
-            Action values = () => np.unique(U());
-            values.Should().Throw<StringComputationNotSupportedException>().WithMessage("unique is not supported*");
-            Action api = () => np.unique_values(U());
-            api.Should().Throw<StringComputationNotSupportedException>().WithMessage("unique_values is not supported*");
+            var values = (NDArray)np.unique(U());
+            values.dtype.str.Should().Be("<U2");
+            NDArray.AsStringArray(values).Should().Equal("ab", "c", "de");
+            NDArray.AsStringArray(np.unique_values(U())).Should().Equal("ab", "c", "de");
         }
 
         // ---------------------------------------------------------------- isin and the set routines
@@ -227,27 +233,34 @@ namespace NumSharp.Tests.Backends.Strings
             np.isin(U(), E()).flags.owndata.Should().BeFalse();
         }
 
+        /// <summary>
+        ///     <c>np.isin</c> that compares text computes (P2.2 milestone C, was a deferral): <c>np.isin(U, U)</c> is
+        ///     <c>[True True True]</c>; 20 numbers take the sort path, which writes them as text, and none of
+        ///     <c>'0'</c> … <c>'19'</c> is in <c>['ab', 'c', 'de']</c>: <c>[False False False]</c>. The table kind refuses text.
+        /// </summary>
         [TestMethod]
-        public void Isin_ThatComparesText_Defers_AndTableRefuses()
+        public void Isin_ThatComparesText_Computes_AndTableRefuses()
         {
-            Action same = () => np.isin(U(), U());
-            same.Should().Throw<StringComputationNotSupportedException>();
-            // 20 numbers take the sort path, which formats them as text: np.isin(['1'], np.arange(20)) is [True].
-            Action sortPath = () => np.isin(U(), np.arange(20));
-            sortPath.Should().Throw<StringComputationNotSupportedException>();
+            np.isin(U(), U()).ToArray<bool>().Should().Equal(true, true, true);
+            np.isin(U(), np.arange(20)).ToArray<bool>().Should().Equal(false, false, false);
             Action table = () => np.isin(U(), U(), kind: "table");
             table.Should().Throw<ValueError>().WithMessage("The 'table' method is only supported for boolean or integer arrays.*");
         }
 
+        /// <summary>
+        ///     <c>np.isin</c> of an empty <c>str</c> array against bytes: the sort path concatenates them into a <c>U</c>
+        ///     array, decoding the bytes as ASCII. ASCII bytes decode: an empty answer. A non-ASCII byte raises NumPy's
+        ///     <c>UnicodeDecodeError</c> (<c>'ascii' codec can't decode byte 0xff in position 0: ordinal not in
+        ///     range(128)</c>, probed against NumPy 2.4.2).
+        /// </summary>
         [TestMethod]
         public void Isin_OfAnEmptyStrArray_AgainstBytes_DependsOnTheBytes()
         {
-            // ASCII bytes decode without fail: an empty answer. A non-ASCII byte fails NumPy's decode after it sorts the
-            // bytes (its error names the first failing element of the sorted text): deferred.
             np.isin(E(), Bytes("x", "y")).size.Should().Be(0);
             var nonAscii = np.array(new object[] { new byte[] { 0xff }, new byte[] { (byte)'a' } }, dtype: "S");
             Action act = () => np.isin(E(), nonAscii);
-            act.Should().Throw<StringComputationNotSupportedException>();
+            act.Should().Throw<UnicodeDecodeError>()
+                .WithMessage("'ascii' codec can't decode byte 0xff in position 0: ordinal not in range(128)");
         }
 
         [TestMethod]
@@ -271,13 +284,19 @@ namespace NumSharp.Tests.Backends.Strings
             np.setdiff1d(np.arange(3), U()).ToArray<long>().Should().Equal(0L, 1L, 2L);
         }
 
+        /// <summary>
+        ///     The set routines that sort text compute (P2.2 milestone C, was a deferral): <c>np.union1d(['b'], ['b'])</c> is
+        ///     <c>['b']</c> (&lt;U1), <c>np.setxor1d(['ab', 'c', 'de'], [])</c> is <c>['ab' 'c' 'de']</c> (&lt;U2).
+        /// </summary>
         [TestMethod]
-        public void SetRoutines_ThatSortText_Defer()
+        public void SetRoutines_ThatSortText_Compute()
         {
-            Action union = () => np.union1d(U1(), U1());
-            union.Should().Throw<StringComputationNotSupportedException>().WithMessage("union1d is not supported*");
-            Action xor = () => np.setxor1d(U(), E());
-            xor.Should().Throw<StringComputationNotSupportedException>().WithMessage("setxor1d is not supported*");
+            var union = np.union1d(U1(), U1());
+            union.dtype.str.Should().Be("<U1");
+            NDArray.AsStringArray(union).Should().Equal("b");
+            var xor = np.setxor1d(U(), E());
+            xor.dtype.str.Should().Be("<U2");
+            NDArray.AsStringArray(xor).Should().Equal("ab", "c", "de");
         }
 
         // ---------------------------------------------------------------- equality

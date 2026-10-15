@@ -66,7 +66,7 @@ namespace NumSharp
         ///     are merged into one before the partition, a slice that holds only NaNs (or nothing) gives NaN, and an EMPTY
         ///     axis list reduces nothing.
         /// </summary>
-        /// <param name="a">The data (any real dtype; text is refused or deferred, see the exceptions).</param>
+        /// <param name="a">The data (any real dtype; text is refused as NumPy refuses it, see the exceptions).</param>
         /// <param name="q">The percentile, in [0, 100].</param>
         /// <param name="axis">The axes to reduce (negative values count from the end); null reduces the flattened
         ///     data.</param>
@@ -86,8 +86,9 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="method"/> is null.</exception>
         /// <exception cref="ArgumentException"><paramref name="method"/> is not one of NumPy's names, or
         ///     <paramref name="out"/> does not have the result's shape.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text data that NumPy partitions (see
-        ///     <see cref="Backends.Strings.NDStringUfuncs.QuantileAnswer"/> for the errors it raises first).</exception>
+        /// <exception cref="TypeError">Text data: NumPy's NaN test (<c>isnan</c> has no text loop), or for an empty input
+        ///     <c>np.nanmean</c>'s add.reduce refusal, after the axis checks (see
+        ///     <see cref="Backends.Strings.NDStringUfuncs.QuantileAnswer"/>).</exception>
         /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain: this overload has
         ///     no matrix rule, because NumPy's tuple-axis answer for a matrix is an artifact of matrix semantics inside its
         ///     own Python code (<c>np.nanpercentile(m, 50, axis=(0, 1))</c> returns the input's values).</remarks>
@@ -113,7 +114,7 @@ namespace NumSharp
         ///     first axis is q, a slice that holds only NaNs (or nothing) gives NaN, and an EMPTY axis list reduces
         ///     nothing.
         /// </summary>
-        /// <param name="a">The data (any real dtype; text is refused or deferred, see the exceptions).</param>
+        /// <param name="a">The data (any real dtype; text is refused as NumPy refuses it, see the exceptions).</param>
         /// <param name="q">The percentiles, each in [0, 100].</param>
         /// <param name="axis">The axes to reduce (negative values count from the end); null reduces the flattened
         ///     data.</param>
@@ -134,8 +135,9 @@ namespace NumSharp
         /// <exception cref="AxisError">An axis is out of range for <paramref name="a"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="method"/> is not one of NumPy's names, or
         ///     <paramref name="out"/> does not have the result's shape.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text data that NumPy partitions (see
-        ///     <see cref="Backends.Strings.NDStringUfuncs.QuantileAnswer"/> for the errors it raises first).</exception>
+        /// <exception cref="TypeError">Text data: NumPy's NaN test (<c>isnan</c> has no text loop), or for an empty input
+        ///     <c>np.nanmean</c>'s add.reduce refusal, after the axis checks (see
+        ///     <see cref="Backends.Strings.NDStringUfuncs.QuantileAnswer"/>).</exception>
         /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain: this overload has
         ///     no matrix rule, because NumPy's tuple-axis answer for a matrix is an artifact of matrix semantics inside its
         ///     own Python code.</remarks>
@@ -201,7 +203,7 @@ namespace NumSharp
             double[] qArr;
             if (q.ndim == 0)
             {
-                double v = Convert.ToDouble(q.GetAtIndex(0));
+                double v = QuantileValueAt(q, 0);
                 ValidatePercentile(v);
                 qArr = new[] { v / 100.0 };
             }
@@ -210,7 +212,7 @@ namespace NumSharp
                 qArr = new double[q.size];
                 for (long i = 0; i < q.size; i++)
                 {
-                    double v = Convert.ToDouble(q.GetAtIndex(i));
+                    double v = QuantileValueAt(q, i);
                     ValidatePercentile(v);
                     qArr[i] = v / 100.0;
                 }

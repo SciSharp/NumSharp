@@ -35,7 +35,7 @@ namespace NumSharp
         ///     into one, an even-sized (NaN-free) slice gives the mean of its two central values, a slice that holds only
         ///     NaNs (or nothing) gives NaN, and an EMPTY axis list reduces nothing.
         /// </summary>
-        /// <param name="a">The data (bool computes as its 0 / 1 values; text is refused or deferred, see the
+        /// <param name="a">The data (bool computes as its 0 / 1 values; text is refused as NumPy refuses it, see the
         ///     exceptions).</param>
         /// <param name="axis">The axes to reduce (negative values count from the end); null reduces the flattened
         ///     data.</param>
@@ -51,7 +51,8 @@ namespace NumSharp
         /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
         /// <exception cref="TypeError">Text data that NumPy's NaN test (or, for empty text data, its <c>nanmean</c>)
         ///     refuses (its verbatim text).</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text data that NumPy partitions.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array NumPy partitions (computing on
+        ///     <c>StringDType</c> is phase 2's next stage).</exception>
         /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain: this overload has
         ///     no matrix rule (NumPy's nanmedian of a matrix calls <c>matrix.sum</c> with <c>keepdims</c> and raises
         ///     TypeError for every axis).</remarks>

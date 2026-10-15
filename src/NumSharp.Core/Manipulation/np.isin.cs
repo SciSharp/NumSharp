@@ -27,10 +27,8 @@ namespace NumSharp
         ///     'table'.</c>), or <c>kind='table'</c> for a non-integer array.</exception>
         /// <exception cref="InvalidOperationException"><c>kind='table'</c> with a range wider than the dtype's maximum
         ///     (NumPy's RuntimeError text).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A string operand whose answer depends on the text (NumPy
-        ///     compares it). Answered from sizes and dtypes: an empty <paramref name="element"/>, an empty
-        ///     <paramref name="test_elements"/>, and a pair of different classes on NumPy's loop path (no <c>equal</c> loop, so
-        ///     nothing matches) — see <c>IsinText</c>.</exception>
+        /// <exception cref="UnicodeDecodeError">A string operand on NumPy's sort path whose concatenation decodes <c>S</c> text
+        ///     holding a byte that is not ASCII into <c>U</c> (see <c>IsinText</c>).</exception>
         // The woven boundary scope reclaims every intermediate this call tree creates — the ravels,
         // the promoted casts, the sort/table/hash machinery inside the helpers below — and the
         // yielded reshape view is the only survivor. The helpers stay scope-free on purpose.
@@ -41,10 +39,10 @@ namespace NumSharp
             using var plain = NDMatrixBoundary.PlainFor(element, test_elements);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (kind != null && kind != "sort" && kind != "table")
                 throw new ValueError($"Invalid kind: '{kind}'. Please use None, 'sort' or 'table'.");
-            // Text: NumPy's _isin compares text (the next phase of NumSharp's string support) unless the sizes and dtypes
-            // decide the answer — see IsinText.
+            // Text: NumPy's _isin statements over the text kernels (IsinText): its loop path for a small set, its sort path
+            // otherwise — each with NumPy's own answer, also where the two paths disagree on a text / number pair.
             if (Backends.Strings.NDStringUfuncs.IsString(element) || Backends.Strings.NDStringUfuncs.IsString(test_elements))
-                return IsinText(element, test_elements, invert, kind);
+                return IsinText(element, test_elements, assume_unique, invert, kind);
 
             // Result is shaped like element in C-order. Build the shape from the DIMENSIONS (a fresh
             // C-contiguous shape) — reusing element.Shape would carry a view's strides and scramble the
@@ -83,61 +81,115 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>_isin</c> when an operand holds strings (the <c>kind</c> name already validated), statement by
-        ///     statement down to its first comparison of text: NumSharp answers where the sizes and dtypes decide, and defers
-        ///     where NumPy compares the text.
+        ///     statement: the loop path for a small set, the sort path otherwise, each over NumSharp's text kernels.
         /// </summary>
         /// <param name="element">The tested values (the result has its shape).</param>
         /// <param name="test_elements">The set (flattened).</param>
+        /// <param name="assume_unique">NumPy's speed hint: the sort path skips its two <c>np.unique</c> calls and takes the
+        ///     first <c>len(ar1)</c> flags (the answer is then NumPy's, also for inputs that are not unique).</param>
         /// <param name="invert">Whether the answer is <c>not in</c>.</param>
-        /// <param name="kind">The validated <c>kind</c>: <c>"table"</c> refuses every string array.</param>
+        /// <param name="kind">The validated <c>kind</c>: <c>"table"</c> refuses every string array; <c>"sort"</c> and null
+        ///     take the same paths (the table method needs integer arrays).</param>
         /// <returns>A bool array of <paramref name="element"/>'s shape: a view of a fresh 1-D answer, as NumPy's reshape
         ///     returns it.</returns>
         /// <exception cref="ValueError"><c>kind='table'</c> (the method needs boolean or integer arrays).</exception>
-        /// <exception cref="StringComputationNotSupportedException">NumPy compares the text, or decodes bytes holding a
-        ///     non-ASCII byte into str (its error names the first failing element in the order of the sorted text).</exception>
+        /// <exception cref="UnicodeDecodeError">The sort path concatenates <c>S</c> text with <c>U</c> text, decoding the bytes
+        ///     as ASCII: a byte that is not ASCII fails, in the order of the unique values (the concatenation's order).</exception>
         /// <remarks>
         ///     <para>
-        ///     NumPy's statements, with <c>ar1</c> / <c>ar2</c> the two flattened arrays:
+        ///     NumPy's statements, with <c>ar1</c> / <c>ar2</c> the two flattened arrays (no <c>StringDType</c>, no object
+        ///     array, so <c>contains_object</c> is false):
         ///     <list type="bullet">
-        ///       <item><description>an empty <c>ar1</c> takes the sort path, where nothing is left to compare: an empty
-        ///       result (its <c>concatenate((ar1, ar2))</c> decodes <c>S</c> text into a <c>U</c> result first, which fails on
-        ///       a non-ASCII byte);</description></item>
-        ///       <item><description>otherwise <c>len(ar2) &lt; 10 * len(ar1) ** 0.145</c> takes the loop path,
-        ///       <c>mask |= (ar1 == a)</c> for each <c>a</c> in <c>ar2</c> (<c>&amp;= (ar1 != a)</c> under invert): no
-        ///       <c>a</c> leaves the starting mask (zeros, or ones), and so does a pair <c>equal</c> has no loop for — the
-        ///       operator answers all-False / all-True (<c>np.isin(['a', 'b'], [1, 2])</c> is <c>[False, False]</c>,
-        ///       probed); two strings of one class compare their text;</description></item>
-        ///       <item><description>the sort path compares (and, with numbers, formats) every value.</description></item>
+        ///       <item><description><c>len(ar2) &lt; 10 * len(ar1) ** 0.145</c> takes the LOOP path: <c>mask |= (ar1 == a)</c>
+        ///       for each <c>a</c> of <c>ar2</c> (<c>&amp;= (ar1 != a)</c> under invert). Two strings of one class compare
+        ///       their text; a pair <c>equal</c> has no loop for (text against a number, bytes against str) answers
+        ///       all-False / all-True, so it leaves the mask as it was (<c>np.isin(['1', '2'], [1, 2])</c> is
+        ///       <c>[False, False]</c>, probed).</description></item>
+        ///       <item><description>otherwise the SORT path: <c>np.unique</c> of each array (with <c>ar1</c>'s inverse),
+        ///       <c>np.concatenate</c> — which formats numbers into text and decodes bytes beside str, so the same pair
+        ///       compares EQUAL there (<c>np.isin(['1'], range(20))</c> is <c>[True]</c>) —, a stable argsort of the joined
+        ///       values, the flags of adjacent equal values scattered back in the order, and the inverse's
+        ///       gather.</description></item>
         ///     </list>
+        ///     An empty <c>ar1</c> takes the sort path (<c>len(ar2) &lt; 10 * 0 ** 0.145</c> is false): its concatenation
+        ///     still decodes <c>ar2</c>, and the answer is empty.
         ///     </para>
         /// </remarks>
-        private static NDArray IsinText(NDArray element, NDArray test_elements, bool invert, string kind)
+        private static NDArray IsinText(NDArray element, NDArray test_elements, bool assume_unique, bool invert, string kind)
         {
             // The table method exists only for boolean / integer arrays; NumPy checks before it reads a value.
             if (kind == "table")
                 throw new ValueError("The 'table' method is only supported for boolean or integer arrays. "
                     + "Please select 'sort' or None for kind.");
-            var text = Backends.Strings.NDStringUfuncs.IsString(element) ? element : test_elements;
-            long n1 = element.size, n2 = test_elements.size;
             var dims = (long[])element.Shape.dimensions.Clone();
             Shape shape = dims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(dims);
-            NDArray flat;
-            if (n1 == 0)
-            {
-                if (Backends.Strings.NDStringUfuncs.ConcatMayFailDecoding(element, test_elements))
-                    throw Backends.Strings.NDStringUfuncs.NextPhase("isin", text);
-                flat = np.zeros(Shape.Vector(0), NPTypeCode.Boolean);
-            }
-            // Python evaluates 10 * len(ar1) ** 0.145 in double precision, as Math.Pow does.
-            else if (n2 < 10.0 * Math.Pow(n1, 0.145)
-                     && (n2 == 0 || !Backends.Strings.NDStringUfuncs.ComparesText(element.dtype, test_elements.dtype)))
-                flat = np.full(Shape.Vector(n1), invert, NPTypeCode.Boolean);
-            else
-                throw Backends.Strings.NDStringUfuncs.NextPhase("isin", text);
             // NumPy reshapes _isin's 1-D answer to element's shape: the result is a view of it (flags.owndata False). The
             // view holds its own reference to the flat buffer.
-            using (flat)
-                return flat.reshape(shape);
+            using NDArray flat = IsinTextFlat(element, test_elements, assume_unique, invert);
+            return flat.reshape(shape);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_isin</c> over its two flattened operands when one holds strings (see <see cref="IsinText"/>): the
+        ///     1-D answer, one flag per element of <paramref name="element"/>.
+        /// </summary>
+        /// <param name="element">The tested values (flattened here, C order).</param>
+        /// <param name="test_elements">The set (flattened here).</param>
+        /// <param name="assume_unique">Whether NumPy's sort path skips its <c>np.unique</c> calls.</param>
+        /// <param name="invert">Whether the answer is <c>not in</c>.</param>
+        /// <returns>A fresh 1-D bool array.</returns>
+        /// <exception cref="UnicodeDecodeError">The sort path decodes <c>S</c> text holding a byte that is not ASCII.</exception>
+        /// <remarks>Scoped: the ravels, the unique arrays, the joined values, the order and the flags are reclaimed; only
+        ///     the answer survives.</remarks>
+        [NDScoped]
+        private static NDArray IsinTextFlat(NDArray element, NDArray test_elements, bool assume_unique, bool invert)
+        {
+            NDArray ar1 = np.ravel(element);
+            NDArray ar2 = np.ravel(test_elements);
+            long n1 = ar1.size, n2 = ar2.size;
+
+            // Python evaluates 10 * len(ar1) ** 0.145 in double precision, as Math.Pow does.
+            if (n2 < 10.0 * Math.Pow(n1, 0.145))
+            {
+                // The loop path: one comparison of ar1 with each value of ar2, OR-ed (AND-ed under invert) into the mask.
+                // A pair the comparison has no loop for answers all-False (all-True for !=), which leaves the mask as it
+                // is, so only a pair that compares text runs the kernel.
+                NDArray mask = np.full(Shape.Vector(n1), invert, NPTypeCode.Boolean);
+                if (n1 == 0 || !Backends.Strings.NDStringUfuncs.ComparesText(ar1.dtype, ar2.dtype))
+                    return mask;
+                for (long i = 0; i < n2; i++)
+                {
+                    using NDArray a = ar2[i.ToString()];
+                    using NDArray hit = invert ? np.not_equal(ar1, a) : np.equal(ar1, a);
+                    if (invert)
+                        np.logical_and(mask, hit, @out: mask);
+                    else
+                        np.logical_or(mask, hit, @out: mask);
+                }
+                return mask;
+            }
+
+            // The sort path. Without assume_unique each array is deduplicated (ar1 with its inverse, to map the flags back).
+            NDArray revIdx = null;
+            if (!assume_unique)
+            {
+                var u1 = ar1.unique(return_index: false, return_inverse: true);
+                ar1 = u1[0];
+                revIdx = u1[1];
+                ar2 = ar2.unique();
+            }
+            // ar = concatenate((ar1, ar2)) formats numbers into text and decodes bytes beside str (NumPy's promotion).
+            NDArray ar = np.concatenate((ar1, ar2), 0);
+            // "We need this to be a stable sort, so always use 'mergesort'": ar1's values come before ar2's equal ones.
+            NDArray order = np.argsort(ar, -1, kind: "mergesort");
+            NDArray sar = ar[order];
+            NDArray boolAr = invert ? sar["1:"] != sar[":-1"] : sar["1:"] == sar[":-1"];
+            NDArray flag = np.concatenate((boolAr, np.array(new[] { invert })), 0);
+            var ret = new NDArray(NPTypeCode.Boolean, Shape.Vector(ar.size), false);
+            ret[order] = flag;
+            // assume_unique keeps the first len(ar1) flags (NumPy's slice: a view); otherwise the inverse maps each original
+            // element to its flag (a fresh gather).
+            return assume_unique ? ret[$":{ar1.size}"] : ret[revIdx];
         }
 
         /// <summary>

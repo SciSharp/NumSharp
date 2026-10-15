@@ -38,7 +38,7 @@ namespace NumSharp
         ///     even-sized slice gives the mean of its two central values (NumPy's <c>mean(part[middle])</c>, not the
         ///     quantile lerp), an empty slice gives NaN, and an EMPTY axis list reduces nothing.
         /// </summary>
-        /// <param name="a">The data (bool computes as its 0 / 1 values; text is refused or deferred, see the
+        /// <param name="a">The data (bool computes as its 0 / 1 values; text is refused as NumPy refuses it, see the
         ///     exceptions).</param>
         /// <param name="axis">The axes to reduce (negative values count from the end); null reduces the flattened
         ///     data.</param>
@@ -53,7 +53,8 @@ namespace NumSharp
         /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
         /// <exception cref="TypeError">Text data or a text <paramref name="out"/> that NumPy's closing mean refuses (its
         ///     verbatim text).</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text data that NumPy partitions.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array NumPy partitions (computing on
+        ///     <c>StringDType</c> is phase 2's next stage).</exception>
         /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain: this overload has
         ///     no matrix rule, because NumPy's tuple-axis answer for a matrix is an artifact of matrix semantics inside its
         ///     own Python code (<c>np.median(m, axis=())</c> reduces axis 1).</remarks>

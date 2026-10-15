@@ -681,8 +681,10 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="AxisError">The axis is out of bounds.</exception>
         /// <exception cref="ValueError">An arg reduction (<c>argmax</c>, <c>argmin</c>, <c>nanargmax</c>,
         ///     <c>nanargmin</c>) over an empty reduced length.</exception>
-        /// <exception cref="StringComputationNotSupportedException">NumPy computes this call on text, or casts the text to
-        ///     a numeric <paramref name="dtype"/> (a parse).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> input whose reduction NumPy computes
+        ///     (computing on <c>StringDType</c> is phase 2's next stage).</exception>
+        /// <exception cref="InvalidOperationException">A fixed-width text input of a function the guard's table does not name
+        ///     (a wiring error inside NumSharp: every computing reduction answers before the guard).</exception>
         internal static void ThrowIfReduce(string op, NDArray a, int? axis, DType dtype = null)
         {
             if (IsVString(a))
@@ -931,8 +933,10 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="TypeError">A detailed <c>dtype=</c>, or NumPy's refusal.</exception>
         /// <exception cref="AxisError">An axis is out of bounds.</exception>
         /// <exception cref="ValueError">An axis appears twice.</exception>
-        /// <exception cref="StringComputationNotSupportedException">NumPy computes this call on text, or casts the text to
-        ///     a numeric <paramref name="dtype"/> (a parse).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> input whose reduction NumPy computes
+        ///     (computing on <c>StringDType</c> is phase 2's next stage).</exception>
+        /// <exception cref="InvalidOperationException">A fixed-width text input of a function the guard's table does not name
+        ///     (a wiring error inside NumSharp: every computing reduction answers before the guard).</exception>
         internal static void ThrowIfReduce(string op, NDArray a, int[] axes, DType dtype = null)
         {
             if (IsVString(a))
@@ -991,24 +995,36 @@ namespace NumSharp.Backends.Strings
         /// <param name="method">The <c>method=</c> argument.</param>
         /// <param name="axes">The reduction axes, or null for every axis.</param>
         /// <param name="qIsScalar">True when <c>q</c> is a scalar (no leading <c>q</c> axis in the result).</param>
-        /// <returns>The exception to throw (never null).</returns>
+        /// <param name="qIsInteger">True when <c>q</c> is an integer (or bool) array: 'linear' then indexes with the integer
+        ///     <c>(n - 1) * q</c>, NumPy's take path, instead of interpolating.</param>
+        /// <param name="q">The quantiles in C order (in [0, 1]), or null when the caller has none to give (the NaN forms,
+        ///     which never reach the interpolation). The first one names the neighbour an empty reduced length reports; an
+        ///     EMPTY q reads no neighbour.</param>
+        /// <returns>The exception to throw, or null when NumPy computes the answer on text (a selection method, or
+        ///     'linear' with an integer q): the caller then runs <see cref="NumSharp.Statistics.QuantileText.Compute"/>,
+        ///     which raises the take path's own errors (an empty axis among them).</returns>
         /// <exception cref="AxisError">An axis is out of bounds (thrown, as NumPy raises it first).</exception>
         /// <exception cref="ValueError">An axis appears twice (thrown).</exception>
-        /// <exception cref="ArgumentException">An unknown method (thrown, the numeric path's text).</exception>
+        /// <exception cref="ValueError">An unknown method (thrown, NumPy's <c>'x' is not a valid method</c> text).</exception>
         /// <remarks>
         ///     <para>
-        ///     An empty reduced length makes NumPy index an empty axis: a selection method's <c>take</c> raises
-        ///     <c>cannot do a non-empty take from an empty axes.</c>, an interpolating method's <c>arr[0]</c> raises
-        ///     <c>index 0 is out of bounds for axis 0 with size 0</c> (both IndexError, probed).
+        ///     The selection methods (<c>lower</c>, <c>higher</c>, <c>nearest</c>, <c>inverted_cdf</c>,
+        ///     <c>closest_observation</c>), and 'linear' with integer virtual indexes, only partition and pick: NumPy computes
+        ///     them on text. The interpolating ones index the neighbours and then subtract them: NumPy scalars when the result
+        ///     is a scalar (Python's <c>unsupported operand type(s) for -</c>), arrays otherwise (<c>subtract</c>'s no-loop
+        ///     text).
         ///     </para>
         ///     <para>
-        ///     Otherwise the selection methods (<c>lower</c>, <c>higher</c>, <c>nearest</c>, <c>inverted_cdf</c>,
-        ///     <c>closest_observation</c>) only partition and pick (the next phase), and the interpolating ones subtract the
-        ///     neighbours: NumPy scalars when the result is a scalar (Python's <c>unsupported operand type(s) for -</c>),
-        ///     arrays otherwise (<c>subtract</c>'s no-loop text).
+        ///     An empty reduced length makes the neighbour lookup raise first: <c>_get_indexes</c> clamps each virtual index
+        ///     into <c>[0, n - 1]</c> = <c>[0, -1]</c> and <c>arr[previous_indexes]</c> reports the first one in C order —
+        ///     <c>index 0 is out of bounds for axis 0 with size 0</c> for a negative virtual index, <c>index -1 …</c> for a
+        ///     zero one (<c>linear</c> / <c>midpoint</c> at q = 0, <c>weibull</c> at q = 1; probed, see
+        ///     <see cref="NumSharp.Statistics.QuantileText.EmptyAxisNeighbour"/>). An empty q looks nothing up and reaches the
+        ///     subtraction's refusal.
         ///     </para>
         /// </remarks>
-        internal static Exception QuantileAnswer(string op, NDArray a, string method, int[] axes, bool qIsScalar)
+        internal static Exception QuantileAnswer(string op, NDArray a, string method, int[] axes, bool qIsScalar,
+            bool qIsInteger = false, double[] q = null)
         {
             ValidateReduceAxes(op, a.ndim, axes);
             if (op is "nanpercentile" or "nanquantile")
@@ -1016,7 +1032,9 @@ namespace NumSharp.Backends.Strings
                 return a.size == 0 ? AddNotCompatible(a.dtype, "reduce") : NotSupportedForInputTypes("isnan");
 
             var parsed = NumSharp.Statistics.QuantileEngine.ParseMethod(method);
-            bool select = NumSharp.Statistics.QuantileEngine.IsDiscrete(parsed);
+            if (NumSharp.Statistics.QuantileEngine.IsDiscrete(parsed)
+                || (parsed == NumSharp.Statistics.QuantileMethod.Linear && qIsInteger))
+                return null;
 
             long reduced = 1;
             if (axes is null)
@@ -1024,12 +1042,14 @@ namespace NumSharp.Backends.Strings
             else
                 foreach (int ax in axes)
                     reduced *= a.Shape.dimensions[ax < 0 ? ax + a.ndim : ax];
-            if (reduced == 0)
-                return new IndexError(select ? "cannot do a non-empty take from an empty axes."
-                    : "index 0 is out of bounds for axis 0 with size 0");
+            if (reduced == 0 && (q is null || q.Length > 0))
+            {
+                // q is null only for a caller that has no quantiles at hand; 0.5's neighbour (0) is the answer for every
+                // interpolating method there.
+                long neighbour = NumSharp.Statistics.QuantileText.EmptyAxisNeighbour(parsed, q is null ? 0.5 : q[0]);
+                return new IndexError($"index {neighbour} is out of bounds for axis 0 with size 0");
+            }
 
-            if (select)
-                return NextPhase(op, a);
             int remaining = axes is null ? 0 : a.ndim - axes.Length;
             return QuantileError(op, a, method, scalarResult: qIsScalar && remaining == 0);
         }

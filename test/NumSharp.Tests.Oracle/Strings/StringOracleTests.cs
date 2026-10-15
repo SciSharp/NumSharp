@@ -330,6 +330,20 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void CharArrayAsData() => Run("strchararray");
 
         /// <summary>
+        ///     Section strsets (strings phase 2, P2.2 milestone C): set routines and statistics over <c>S</c> / <c>U</c>
+        ///     text — <c>np.unique</c> with every flag, axis and keyword over categorical, distinct, NUL-holding, long-prefix
+        ///     and non-ASCII data (rows compared field by field along an axis), the Array-API unique family,
+        ///     <c>np.isin</c> along both of NumPy's paths (the loop, the sort that writes numbers as text and decodes bytes),
+        ///     <c>intersect1d</c> / <c>union1d</c> / <c>setdiff1d</c> / <c>setxor1d</c>, <c>np.lexsort</c> over text and mixed
+        ///     keys, <c>np.sort_complex</c> (the text's order, then the parse), <c>np.histogram</c> /
+        ///     <c>histogram_bin_edges</c> with text or number edges, weights, density and data past NumPy's 65,536-element
+        ///     block, and <c>np.quantile</c> / <c>np.percentile</c> with every method, q form (a float, a list, a Python int,
+        ///     arrays of every dtype up to rank 3), axis form, keepdims and <c>out=</c>, over the catalog's layouts and empty
+        ///     axes. Strict, but for the one documented order divergence (<see cref="OrderExcuse"/>).
+        /// </summary>
+        [TestMethod] public void SetRoutinesAndStatistics() => Run("strsets");
+
+        /// <summary>
         ///     Lifetime gate of the <c>StringDType</c> sections (strings phase 1, P1.9): once every case of tstore / tcreate /
         ///     tmove / tcast has been replayed and its arrays are garbage, no string allocator is left alive — every buffer the
         ///     replay made (operands, results, temporaries of the gathers, scatters and casts, failed operations) ran its clear
@@ -380,7 +394,10 @@ namespace NumSharp.Tests.Strings
         /// </summary>
         private static readonly Dictionary<string, int> DeferralCeilings = new()
         {
-            ["reductions"] = 14, ["straxis"] = 50, ["strshape"] = 84, ["strsurface"] = 54, ["strma"] = 6, ["tma"] = 437,
+            // P2.2 milestone C answered the last fixed-width deferrals (reductions 14, straxis 50, strshape 84, strsurface 54,
+            // strma 6 before it): every section that holds only S / U computations is strict. tma: StringDType computations
+            // (P2.T and the StringDType part of P2.2).
+            ["tma"] = 437,
             // strchar: np.char.add of StringDType (2) and np.char.multiply of StringDType by an integer (1), which NumPy
             // computes and NumSharp's StringDType arithmetic (a later subphase) defers.
             ["strchar"] = 3,
@@ -395,7 +412,7 @@ namespace NumSharp.Tests.Strings
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
                 "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
-                "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray",
+                "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strsets",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)
@@ -438,8 +455,10 @@ namespace NumSharp.Tests.Strings
             }
             int excused = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedLayouts.ContainsKey(c.Id));
             int excusedClass = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedClasses.ContainsKey(c.Id));
+            int excusedOrder = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedOrders.ContainsKey(c.Id));
             Console.WriteLine($"[strings/{section}] {total} cases, {deferred} deferred to the computational phase, " +
-                              $"{excused} with an excused layout, {excusedClass} with an excused class, {failures.Count} failed");
+                              $"{excused} with an excused layout, {excusedClass} with an excused class, " +
+                              $"{excusedOrder} with an excused order, {failures.Count} failed");
             var listDeferred = Environment.GetEnvironmentVariable(ListDeferredVariable);
             if (!string.IsNullOrEmpty(listDeferred) && listDeferred != "0")
                 foreach (var d in deferredCases)
@@ -531,6 +550,14 @@ namespace NumSharp.Tests.Strings
             try
             {
                 var diffs = new List<string>();
+                // The one order divergence (OrderExcuse): NumSharp's sorted values are put in NumPy's hash order first, so
+                // the comparison below still requires NumPy's set, dtype, shape and layout.
+                var orderExcuse = OrderExcuse(c);
+                if (orderExcuse != null)
+                {
+                    ExcusedOrders.TryAdd(c.Id, orderExcuse);
+                    result = InNumPyOrder(c.Expected, result, diffs);
+                }
                 // The one class divergence of section strchararray (ClassExcuse): the result's class is compared with the
                 // class NumSharp's typed API returns there, everything else with NumPy's answer.
                 var classExcuse = ClassExcuse(c);
@@ -717,6 +744,77 @@ namespace NumSharp.Tests.Strings
                 || cls.GetString() != "ndarray")
                 return null;
             return "np.char.array with order= over string data: NumPy's np.asarray drops the chararray class";
+        }
+
+        /// <summary>
+        ///     The cases whose result ORDER is a known, documented divergence, keyed by case id with the reason. NumSharp's
+        ///     values are reordered into NumPy's order before the full comparison (<see cref="InNumPyOrder"/>), which therefore
+        ///     still requires NumPy's SET of values, its dtype, shape, layout and flags.
+        /// </summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> ExcusedOrders = new();
+
+        /// <summary>
+        ///     The one known order divergence: the unique values of text that NumPy HASHES. NumPy's <c>_unique1d</c> sends a
+        ///     call without index outputs to <c>_unique_hash</c>, whose text loops (<c>unique.cpp</c>'s <c>unique_string</c> /
+        ///     <c>unique_vstring</c>) return the distinct strings in a <c>std::unordered_set</c>'s iteration order, and sorts
+        ///     them only for <c>sorted=True</c>: <c>np.unique_values</c> (always <c>sorted=False</c>) and <c>np.unique(...,
+        ///     sorted=False)</c> without flags or an axis keep that order, the C++ library's hash, not reproducible in C#.
+        ///     NumSharp returns them sorted (documented on <see cref="np.unique_values"/>, the numeric dtypes' same
+        ///     divergence).
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>The reason, or null when the order must match NumPy's.</returns>
+        private static string OrderExcuse(StringOracleCorpus.Case c)
+        {
+            if (c.Error is not null || c.Params is null)
+                return null;
+            var p = c.Params;
+            if (c.Op == "unique_api" && p.TryGetValue("name", out var name) && name.ValueKind == JsonValueKind.String
+                && name.GetString() == "unique_values")
+                return "np.unique_values of text: NumPy's unordered_set hash order, NumSharp's sorted order (the same set)";
+            if (c.Op == "unique" && p.TryGetValue("sorted", out var sorted) && !sorted.GetBoolean()
+                && !p["ri"].GetBoolean() && !p["rv"].GetBoolean() && !p["rc"].GetBoolean()
+                && p["axis"].ValueKind == JsonValueKind.Null)
+                return "np.unique(sorted=False) of text: NumPy's unordered_set hash order, NumSharp's sorted order (the same set)";
+            return null;
+        }
+
+        /// <summary>
+        ///     A 1-D fixed-width text result reordered into NumPy's order: each of NumPy's elements (its C-order bytes, one
+        ///     element per itemsize) is found among NumSharp's, and NumSharp's array is gathered in NumPy's order. Every other
+        ///     result — another kind, another dtype or length (the comparison reports those) — is returned unchanged.
+        /// </summary>
+        /// <param name="exp">NumPy's answer.</param>
+        /// <param name="r">NumSharp's result.</param>
+        /// <param name="diffs">Receives the divergence when one of NumPy's values is not among NumSharp's.</param>
+        /// <returns>The reordered result (a fresh C-contiguous array, as NumPy's), or <paramref name="r"/>.</returns>
+        private static object InNumPyOrder(JsonElement exp, object r, List<string> diffs)
+        {
+            if (r is not NDArray a || a.ndim != 1 || exp.GetProperty("kind").GetString() != "array"
+                || !exp.TryGetProperty("buffer", out var buffer) || buffer.ValueKind != JsonValueKind.String
+                || a.dtype.str != exp.GetProperty("dtype").GetString() || a.dtype.itemsize == 0)
+                return r;
+            string gotHex = Convert.ToHexString(StringOracleCorpus.CBytes(a)).ToLowerInvariant();
+            string wantHex = buffer.GetString();
+            if (gotHex.Length != wantHex.Length)
+                return r;
+            int chunk = a.dtype.itemsize * 2;
+            int n = gotHex.Length / chunk;
+            // The values of a unique result are distinct, so each one names a single position.
+            var position = new Dictionary<string, long>(n);
+            for (int i = 0; i < n; i++)
+                position[gotHex.Substring(i * chunk, chunk)] = i;
+            var order = new long[n];
+            for (int i = 0; i < n; i++)
+            {
+                string want = wantHex.Substring(i * chunk, chunk);
+                if (!position.TryGetValue(want, out order[i]))
+                {
+                    diffs.Add($"NumSharp's values are not NumPy's set: NumPy's element {i} (bytes {want}) is missing");
+                    return r;
+                }
+            }
+            return a[np.array(order)];
         }
 
         /// <summary>Dispatches on the expectation kind.</summary>

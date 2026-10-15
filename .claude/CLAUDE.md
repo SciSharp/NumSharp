@@ -84,7 +84,10 @@ Sorting `S` / `U` text computes since P2.2 milestone A (2026-10-15): `np.sort` /
 `np.partition` / `np.argpartition` with NumPy's `kind` / `order` / `stable`, NumPy's order of equal strings included (see
 "Sorting & Searching" → "Text sorts"). Searching it computes since milestone B (2026-10-15): `np.argmax` / `np.argmin` /
 the nan forms / the methods, `np.searchsorted`, `np.digitize`, the bin search of `np.histogram2d` / `np.histogramdd`
-(see "Text searches"). The set routines, `lexsort`, `np.histogram` and the quantiles over text are the next milestones.
+(see "Text searches"). Its set routines and statistics compute since milestone C (2026-10-16): `np.unique` with every
+flag and axis and the Array-API unique family, `np.isin`, the four set routines, `np.lexsort`, `np.sort_complex`,
+`np.histogram` / `histogram_bin_edges`, the take path of `np.quantile` / `np.percentile` (see "Text set routines"). No
+`S` / `U` computation is deferred; `StringDType` computations are left (P2.T, then P2.2 over `T`).
 **`numpy.char` (2026-10-15, `docs/plans/np-char.md`, phase 1).** `np.@char` is the MODULE object `CharModule`
 (`APIs/np.char.cs`, `[ModuleName("np.char")]`) with an implicit conversion to the `Char` dtype it used to be, so
 `astype(np.@char)` / `a.dtype == np.@char` / `(DType, DType)` tuple keys keep working (a descriptor member needs
@@ -4054,6 +4057,58 @@ StringSearchTests.cs` (21); plan `docs/plans/strings-phase2.md`):
   JIT does not turn selects inside loops into cmov (`x = c ? a : b` stayed a branch on .NET 10); build masks with
   `-(long)Unsafe.As<bool, byte>(ref c)` and check the disassembly. (3) A gather lane mask taken against a group's
   starting best can admit a lane that an earlier lane of the group has since beaten.
+
+**Text set routines and statistics are NumPy's statements over the sort and search engines** (strings phase 2, P2.2
+milestone C, 2026-10-16; `Manipulation/NDArray.unique.Text.cs`, `Backends/Default/Sorting/TextDistinct.cs`,
+`Manipulation/np.isin.cs` (`IsinTextFlat`), the set routines' own files, `Sorting_Searching_Counting/np.{lexsort,
+sort_complex}.cs`, `Statistics/np.histogram.cs` (`HistogramCumulativeText`), `Statistics/QuantileText.cs` +
+`np.quantile.Text.cs`; gates the string oracle's `strsets` section (7,299 cases, strict but for one order excuse) +
+`Backends/Strings/StringSetsTests.cs` (18); plan `docs/plans/strings-phase2.md`):
+- **np.unique.** The flat path (axis None or a 1-D input): with flags, ONE stable text argsort serves every flag
+  (return_index needs NumPy's mergesort first occurrences; inverse and counts do not depend on the order of equal strings),
+  then NumPy's mask / cumsum / nonzero / diff statements. Values only: NumPy hashes (`unique.cpp` `unique_string`, FNV-1a
+  and memcmp) and sorts the set; `TextDistinct` runs the same pass (open addressing, the 32-bit hash beside each slot's
+  first-occurrence index) and sorts only the distinct strings, until more than max(256, n / 16) are distinct: then it gives
+  up and the flattened copy is sorted whole (faster on mostly distinct text). The axis path: rows ordered by `np.lexsort`
+  over their columns (NumPy's structured sort compares field by field), whole-row `not_equal` + `any` for the mask,
+  `reshape_uniq`'s moveaxis view back.
+- **Order excuse.** `np.unique_values` (always `sorted=False`) and `np.unique(sorted=False)` without flags return NumPy's
+  `std::unordered_set` order, which depends on the C++ library; NumSharp returns the values sorted. The string oracle
+  reorders NumSharp's values into NumPy's order before the full comparison (`OrderExcuse` / `InNumPyOrder`), so the set,
+  dtype and layout are still compared.
+- **isin and the set routines.** `_isin`'s loop path below `10 * len(ar1) ** 0.145` test elements (`ar1 == a`: text against
+  a number, or `S` against `U`, has no loop, so the mask stays) and its sort path (unique, concatenate — numbers written as
+  text, bytes decoded as ASCII with NumPy's `UnicodeDecodeError` —, a mergesort argsort); `assume_unique`'s answer over
+  duplicates reproduced. `intersect1d`'s `return_indices` are the mergesort argsort's first occurrences.
+- **lexsort / sort_complex.** `np.lexsort` is a stable argsort per key (text's default kind is NumPy's introsort, so the
+  call names `kind: "stable"`). `np.sort_complex` sorts the TEXT, then parses (`complex() arg is a malformed string` after
+  the sort).
+- **np.histogram of text** always takes NumPy's cumulative path: per 65,536-element block `np.sort` and the search of the
+  edges (a number edge is searched as its text, so a count can be NEGATIVE); with weights a default-kind argsort (NumPy's
+  tie order decides the float sum), cumsum and take; the running total is updated in place in its ntype (bool weights raise
+  NumPy's same_kind add error).
+- **np.quantile / np.percentile of text**: `_ureduce` (the axes, keepdims' `out[(Ellipsis,) + index_out]`, the merge
+  `reshape(kept + (-1,))` that NumPy refuses for a 0-long kept axis), `q.ndim > 2`, the method, then `_quantile`'s take
+  path for the selection methods and for 'linear' with an integer q: the partition is a full sort, then
+  `PyArray_TakeFrom`'s checks in order (out's shape, the safe cast from out's dtype — "Cannot cast scalar" for a 0-d out —,
+  the empty-axis IndexErrors, the unsafe writeback). The interpolating methods raise the subtract refusal, or over an empty
+  axis the IndexError of the first neighbour `_get_indexes` clamps (-1 for linear / midpoint at q = 0 and weibull at q =
+  1, else 0). keepdims over a 0-d result: Python's str / bytes tuple-index TypeErrors.
+- **Rode along (numeric quantiles, NumPy 2.4.2).** `q = np.asanyarray(q)` keeps a Python int an integer, so an integer q
+  TAKES the element over every dtype (`np.quantile([1., inf], 1)` is inf, the float q 1.0 interpolates to NaN): the `long q`
+  overloads and the array-q integer route. `weak_q = type(q) in (int, float)`: only a C# number keeps float16 / float32
+  data's dtype, a 0-d array q is strong (`QuantileEngine.Compute(weakQ:)`). New overloads `quantile` / `percentile(NDArray a,
+  NDArray q, int[] axis, ...)` (NumPy's array q with a tuple axis). An unknown method is NumPy's verbatim ValueError
+  (`'x' is not a valid method. Use one of: dict_keys([...])`, a ValueError is an ArgumentException). A float16 q reads.
+- **Perf** (NPY/NS, two pinned P-cores, fresh inputs, 206 cells at 1K / 100K): geomean 4.24× (1K 3.57×, 100K 5.02×), min
+  1.52×; `np.unique` 4.74×, `np.isin` loop path 13.6×, the set routines 3.4–4.5×, `np.lexsort` 4.58×, `np.quantile`
+  4.8–5.6×, `np.sort_complex` 6.27×. The hash pass took categorical `np.unique` and the set routines from 0.57–1.09× to
+  1.9–2.4×. Slowest: weighted histograms of text outside Latin-1 (1.52×), `np.unique` along an axis of 1K arrays (1.64×).
+- **Traps.** (1) A variable-length `Buffer.MemoryCopy` in a hot loop costs ~20 ns a call (the hash's 1–7 byte tail): three
+  fixed-size loads made the pass 3× faster. (2) A benchmark that disposes a result which IS an argument (`np.histogram`'s
+  bin_edges is the edges array) frees the caller's input, and the next call reads a pooled buffer's garbage ("bins must
+  increase monotonically"). (3) The string oracle rebuilds a 1-D numeric operand as a view (OWNDATA False), so a result
+  that is the operand itself needs `plain()` in the generator (`own()` records NumPy's True).
 
 **The index searches and index transforms return NumPy's objects** (2026-10-08, the open-bugs rundown's bug 8; plan
 `docs/plans/api-parameter-parity.md` X37; gates the layout-parity oracle's argwhere / flatnonzero / `unravel` / `ravelmi`

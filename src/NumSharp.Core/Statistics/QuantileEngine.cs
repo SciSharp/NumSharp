@@ -49,6 +49,14 @@ namespace NumSharp.Statistics
             m == QuantileMethod.InvertedCdf ||
             m == QuantileMethod.ClosestObservation;
 
+        /// <summary>
+        ///     NumPy's <c>_QuantileMethods[method]</c> lookup: the method named by one of NumPy's thirteen names.
+        /// </summary>
+        /// <param name="method">The method name (case-sensitive, NumPy's spelling).</param>
+        /// <returns>The method.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="method"/> is null.</exception>
+        /// <exception cref="ValueError">An unknown name: NumPy's text, <c>'x' is not a valid method. Use one of:
+        ///     dict_keys([...])</c>.</exception>
         internal static QuantileMethod ParseMethod(string method)
         {
             if (method == null) throw new ArgumentNullException(nameof(method));
@@ -68,13 +76,32 @@ namespace NumSharp.Statistics
                 case "median_unbiased":           return QuantileMethod.MedianUnbiased;
                 case "normal_unbiased":           return QuantileMethod.NormalUnbiased;
                 default:
-                    throw new ArgumentException(
-                        $"'{method}' is not a valid method. Use one of: linear, lower, higher, nearest, " +
-                        "midpoint, inverted_cdf, averaged_inverted_cdf, closest_observation, " +
-                        "interpolated_inverted_cdf, hazen, weibull, median_unbiased, normal_unbiased");
+                    // _quantile's `raise ValueError(f"{method!r} is not a valid method. Use one of: "
+                    // f"{_QuantileMethods.keys()}")`, verbatim: the name's Python repr, then the dict's key view in its
+                    // insertion order (ValueError is an ArgumentException, so existing catches still see it).
+                    throw new ValueError(
+                        $"{Backends.Printing.PyRepr.Str(method)} is not a valid method. Use one of: dict_keys(['inverted_cdf', " +
+                        "'averaged_inverted_cdf', 'closest_observation', 'interpolated_inverted_cdf', 'hazen', 'weibull', " +
+                        "'linear', 'median_unbiased', 'normal_unbiased', 'lower', 'higher', 'midpoint', 'nearest'])");
             }
         }
 
+        /// <summary>
+        ///     The numeric quantile engine behind <c>np.median</c> / <c>np.percentile</c> / <c>np.quantile</c> and their NaN
+        ///     forms: stages each reduced line, partitions it at the indexes the method needs and selects or interpolates.
+        /// </summary>
+        /// <param name="a">The numeric data.</param>
+        /// <param name="q">The quantiles in [0, 1], in C order.</param>
+        /// <param name="axisArr">The reduced axes, or null for the flattened data.</param>
+        /// <param name="out">An optional output array of the result's shape, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place (a copy is staged anyway).</param>
+        /// <param name="method">The estimation method.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="qIsScalar">Whether q is a scalar: the result then has no leading q axis.</param>
+        /// <param name="emptyReturnsNaN">np.median's rule: an empty reduced line yields NaN instead of raising.</param>
+        /// <param name="ignoreNaN">The np.nan* forms: NaN elements are skipped.</param>
+        /// <param name="allowBooleanContinuous">np.median's rule: bool data interpolates (through its mean) instead of
+        ///     raising NumPy's boolean-subtract TypeError.</param>
         /// <param name="medianMean">
         ///     When true, the even-size slice is reduced with NumPy's <c>np.median</c> rule —
         ///     the <b>mean</b> of the two central order statistics, <c>(a+b)/2</c> — instead of
@@ -85,12 +112,27 @@ namespace NumSharp.Statistics
         ///     <see cref="QuantileMethod.Linear"/> and q = 0.5 (the sole caller shape); ignored by
         ///     the complex path, whose <c>(1-γ)·a + γ·b</c> form already equals the mean at γ=0.5.
         /// </param>
+        /// <param name="weakQ">NumPy 2.4's <c>weak_q = type(q) in (int, float)</c>: true when q was a Python int or float
+        ///     (a C# number), whose interpolation weight is a WEAK float that keeps float16 / float32 data's dtype; false for
+        ///     a q ARRAY, 0-d included, whose float64 weight promotes the result to float64
+        ///     (<c>np.quantile(f32, np.array(0.5))</c> is float64). Null (the default) reads <paramref name="qIsScalar"/>,
+        ///     the rule of the callers that pass a C# number for a scalar q.</param>
+        /// <returns>The quantiles; <paramref name="out"/> itself when one is given; a read-only 0-d result for a scalar q
+        ///     over every axis (NumPy's scalar).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="q"/> is null.</exception>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">An axis repeats.</exception>
+        /// <exception cref="TypeError">Bool data with an interpolating method (NumPy's boolean-subtract text), unless
+        ///     <paramref name="allowBooleanContinuous"/>.</exception>
+        /// <exception cref="IndexOutOfRangeException">An empty reduced line without
+        ///     <paramref name="emptyReturnsNaN"/> (NumPy's IndexError text).</exception>
+        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
         [NDScoped]
         public static NDArray Compute(
             NDArray a, double[] q, int[] axisArr, NDArray @out,
             bool overwrite_input, QuantileMethod method, bool keepdims, bool qIsScalar,
             bool emptyReturnsNaN = false, bool ignoreNaN = false, bool allowBooleanContinuous = false,
-            bool medianMean = false)
+            bool medianMean = false, bool? weakQ = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (q is null) throw new ArgumentNullException(nameof(q));
@@ -123,7 +165,7 @@ namespace NumSharp.Statistics
                     "numpy boolean subtract, the `-` operator, is not supported, use the "
                     + "bitwise_xor, the `^` operator, or the logical_xor function instead.");
 
-            NPTypeCode outTypeCode = ResolveOutputDtype(a.typecode, method, qIsScalar);
+            NPTypeCode outTypeCode = ResolveOutputDtype(a.typecode, method, weakQ ?? qIsScalar);
 
             // NaN-ignoring (np.nan*) is only meaningful for dtypes that can hold a NaN.
             // Integer / bool / char rows never contain NaN, so the regular kernel (with
@@ -415,16 +457,22 @@ namespace NumSharp.Statistics
         ///         <list type="bullet">
         ///           <item>integer / bool / char → float64.</item>
         ///           <item>float64 → float64.</item>
-        ///           <item>float16 / float32 → float64 when <paramref name="qIsScalar"/> is
-        ///                 false (array q makes gamma a strong float64 that upcasts), but
-        ///                 the input width is preserved when q is a scalar (NEP50 weak
-        ///                 promotion). This is also why np.median(float32)→float32.</item>
+        ///           <item>float16 / float32 → float64 when <paramref name="weakQ"/> is
+        ///                 false (an array q, 0-d included, makes gamma a strong float64 that
+        ///                 upcasts), but the input width is preserved for NumPy 2.4's
+        ///                 <c>weak_q</c> (a Python int or float q: NEP50 weak promotion). This is
+        ///                 also why np.median(float32)→float32.</item>
         ///         </list>
         ///       </item>
         ///     </list>
         ///     Decimal and Complex are NumSharp-only and always preserved.
         /// </summary>
-        internal static NPTypeCode ResolveOutputDtype(NPTypeCode inTc, QuantileMethod method, bool qIsScalar)
+        /// <param name="inTc">The data's dtype.</param>
+        /// <param name="method">The estimation method.</param>
+        /// <param name="weakQ">Whether q is a weak Python number (NumPy's <c>weak_q</c>).</param>
+        /// <returns>The result's dtype.</returns>
+        /// <exception cref="NotSupportedException">A dtype the engine has no rule for.</exception>
+        internal static NPTypeCode ResolveOutputDtype(NPTypeCode inTc, QuantileMethod method, bool weakQ)
         {
             if (IsDiscrete(method))
                 return inTc;   // take() preserves the input dtype for every dtype
@@ -445,7 +493,7 @@ namespace NumSharp.Statistics
                     return NPTypeCode.Double;
                 case NPTypeCode.Half:
                 case NPTypeCode.Single:
-                    return qIsScalar ? inTc : NPTypeCode.Double;
+                    return weakQ ? inTc : NPTypeCode.Double;
                 case NPTypeCode.Double:
                     return NPTypeCode.Double;
                 case NPTypeCode.Decimal:
