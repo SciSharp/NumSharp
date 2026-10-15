@@ -93,13 +93,13 @@ namespace NumSharp.Backends.Strings
             view = null;
             var src = source.Storage;
             long count = src.VStringSlice.Count;
-            byte* bufferStart = src.Address, bufferEnd = src.Address + count * VStringAllocator.CellSize;
+            byte* bufferStart = src.Address, bufferEnd = src.Address + count * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
             byte* rawStart = raw.Storage.Address;
             // A fresh result is a different buffer; a view (or the cell array itself) lies inside the source's cells.
-            if (rawStart < bufferStart || rawStart >= bufferEnd || (rawStart - bufferStart) % VStringAllocator.CellSize != 0)
+            if (rawStart < bufferStart || rawStart >= bufferEnd || (rawStart - bufferStart) % VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING != 0)
                 return false;
             var rs = raw.Shape;
-            long baseCells = (rawStart - bufferStart) / VStringAllocator.CellSize;
+            long baseCells = (rawStart - bufferStart) / VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
             var shape = new Shape((long[])rs.dimensions.Clone(), (long[])rs.strides.Clone(), rs.offset + baseCells, count);
             if (!rs.IsWriteable && shape.IsWriteable)
                 shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
@@ -138,7 +138,7 @@ namespace NumSharp.Backends.Strings
                     NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.ZEROSIZE_OK | NDIterGlobalFlags.REFS_OK,
                     NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_NO_CASTING,
                     new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY });
-                VStringAllocator.AcquirePair(source.Allocator, outAllocator);
+                VStringAllocator.acquire_allocators(source.Allocator, outAllocator);
                 try
                 {
                     var inAllocator = source.Allocator;
@@ -151,7 +151,7 @@ namespace NumSharp.Backends.Strings
                 }
                 finally
                 {
-                    VStringAllocator.ReleasePair(source.Allocator, outAllocator);
+                    VStringAllocator.release_allocators(source.Allocator, outAllocator);
                 }
                 return result;
             }
@@ -183,7 +183,7 @@ namespace NumSharp.Backends.Strings
             long count = rs.InternalArray.Count;
             // The view's first element as a cell index of the temporary's buffer: a contiguous slice re-seats Address (offset
             // 0), a strided view keeps the buffer's address and a non-zero offset; the sum is right for both.
-            long first = ((byte*)rs.Address - (byte*)rs.InternalArray.Address) / VStringAllocator.CellSize + raw.Shape.offset;
+            long first = ((byte*)rs.Address - (byte*)rs.InternalArray.Address) / VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING + raw.Shape.offset;
             var baseArray = new NDArray(descr, new Shape(new[] { count }), true);
             NDArray view = null;
             try
@@ -202,7 +202,7 @@ namespace NumSharp.Backends.Strings
                         NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.ZEROSIZE_OK | NDIterGlobalFlags.REFS_OK,
                         NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_NO_CASTING,
                         new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY });
-                    VStringAllocator.AcquirePair(source.Allocator, outAllocator);
+                    VStringAllocator.acquire_allocators(source.Allocator, outAllocator);
                     try
                     {
                         var inAllocator = source.Allocator;
@@ -214,7 +214,7 @@ namespace NumSharp.Backends.Strings
                     }
                     finally
                     {
-                        VStringAllocator.ReleasePair(source.Allocator, outAllocator);
+                        VStringAllocator.release_allocators(source.Allocator, outAllocator);
                     }
                 }
                 return view;
@@ -261,7 +261,7 @@ namespace NumSharp.Backends.Strings
                     NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.ZEROSIZE_OK | NDIterGlobalFlags.REFS_OK,
                     fortran ? NPY_ORDER.NPY_FORTRANORDER : NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_NO_CASTING,
                     new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY });
-                VStringAllocator.AcquirePair(source.Allocator, outSlice.Allocator);
+                VStringAllocator.acquire_allocators(source.Allocator, outSlice.Allocator);
                 try
                 {
                     var inAllocator = source.Allocator;
@@ -274,7 +274,7 @@ namespace NumSharp.Backends.Strings
                 }
                 finally
                 {
-                    VStringAllocator.ReleasePair(source.Allocator, outSlice.Allocator);
+                    VStringAllocator.release_allocators(source.Allocator, outSlice.Allocator);
                 }
                 return result;
             }
@@ -311,7 +311,7 @@ namespace NumSharp.Backends.Strings
                 for (long i = 0; i < n; i++, s += ss, w += ws)
                 {
                     long j = *(long*)w;
-                    need += naNames[j] != null && VStringAllocator.IsNull(s) ? naBytes[j] : VStringAllocator.ArenaBytesForDuplicate(s);
+                    need += naNames[j] != null && VStringAllocator.isnull(s) ? naBytes[j] : VStringAllocator.ArenaBytesForDuplicate(s);
                 }
             });
             return need;
@@ -357,7 +357,7 @@ namespace NumSharp.Backends.Strings
                     NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.ZEROSIZE_OK | NDIterGlobalFlags.REFS_OK,
                     NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_NO_CASTING,
                     new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY });
-                VStringAllocator.AcquireAll(locked);
+                VStringAllocator.acquire_allocators(locked);
                 try
                 {
                     // The fresh result takes every duplicated medium / long string at its arena's cursor (see Rehome); an NA
@@ -377,7 +377,7 @@ namespace NumSharp.Backends.Strings
                 }
                 finally
                 {
-                    VStringAllocator.ReleaseAll(locked);
+                    VStringAllocator.release_allocators(locked);
                 }
                 return result;
             }
@@ -486,7 +486,7 @@ namespace NumSharp.Backends.Strings
                 NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.ZEROSIZE_OK | NDIterGlobalFlags.REFS_OK,
                 NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_NO_CASTING,
                 new[] { NDIterPerOpFlags.READWRITE });
-            allocator.Acquire();
+            allocator.acquire_allocator();
             try
             {
                 iter.ForEach((dataptrs, strides, n, aux) =>
@@ -497,14 +497,14 @@ namespace NumSharp.Backends.Strings
                     {
                         // free_and_copy: free the element first (a corrupt cell fails here), then duplicate the value into it
                         // (NpyString_dup of an NA source is pack_null; of a text, newsize).
-                        if (allocator.Free(d) < 0)
+                        if (allocator.free(d) < 0)
                             throw new OutOfMemoryException("Failed to deallocate string in string to string cast");
                         int status;
                         if (isNA)
-                            status = allocator.PackNull(d);
+                            status = allocator.pack_null(d);
                         else
                             fixed (byte* b = utf8)
-                                status = allocator.NewSize(b, utf8.Length, d);
+                                status = allocator.newsize(b, utf8.Length, d);
                         if (status < 0)
                             throw new OutOfMemoryException("Failed to allocate string in string to string cast");
                     }
@@ -512,7 +512,7 @@ namespace NumSharp.Backends.Strings
             }
             finally
             {
-                allocator.Release();
+                allocator.release_allocator();
             }
         }
 
@@ -740,7 +740,7 @@ namespace NumSharp.Backends.Strings
             try
             {
                 var valSlice = vals.Storage.VStringSlice;
-                byte* valBase = vals.Storage.Address + vals.Shape.offset * VStringAllocator.CellSize;
+                byte* valBase = vals.Storage.Address + vals.Shape.offset * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
                 long valCount = vals.size;
                 var inAllocator = valSlice.Allocator;
                 var outAllocator = dstSlice.Allocator;
@@ -752,7 +752,7 @@ namespace NumSharp.Backends.Strings
                     NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.ZEROSIZE_OK | NDIterGlobalFlags.REFS_OK,
                     NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_NO_CASTING,
                     new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READWRITE });
-                VStringAllocator.AcquirePair(inAllocator, outAllocator);
+                VStringAllocator.acquire_allocators(inAllocator, outAllocator);
                 try
                 {
                     iter.ForEach((dataptrs, strides, n, aux) =>
@@ -766,13 +766,13 @@ namespace NumSharp.Backends.Strings
                                 continue;
                             if ((ulong)k >= (ulong)valCount)
                                 throw new IndexOutOfRangeException($"A scatter mark {k} is outside the {valCount} value elements.");
-                            NDVStringCopy.CopyRun(valBase + k * VStringAllocator.CellSize, 0, d, 0, 1, inAllocator, outAllocator, naName);
+                            NDVStringCopy.CopyRun(valBase + k * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, 0, d, 0, 1, inAllocator, outAllocator, naName);
                         }
                     });
                 }
                 finally
                 {
-                    VStringAllocator.ReleasePair(inAllocator, outAllocator);
+                    VStringAllocator.release_allocators(inAllocator, outAllocator);
                 }
             }
             finally

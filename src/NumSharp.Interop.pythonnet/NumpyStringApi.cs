@@ -10,7 +10,7 @@ namespace NumSharp.Interop.PythonNet
     ///     <c>numpy._core._multiarray_umath._ARRAY_API</c> capsule — the same table a C extension compiled against NumPy
     ///     uses. It is how a <c>StringDType</c> (<c>T</c>) array crosses the bridge: NumPy keeps the text of every element
     ///     longer than 15 bytes in an allocator owned by the array's descriptor, outside the array buffer, so only NumPy's
-    ///     own functions can read (<see cref="Load"/>) or write (<see cref="Pack"/>, <see cref="PackNull"/>) those cells.
+    ///     own functions can read (<see cref="load"/>) or write (<see cref="pack"/>, <see cref="pack_null"/>) those cells.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -29,7 +29,7 @@ namespace NumSharp.Interop.PythonNet
     ///     </para>
     ///     <para>
     ///     <b>Locking and the GIL.</b> Every call runs under the GIL (the bridge's verbs hold it). A copy acquires the NumPy
-    ///     allocator ONCE (<see cref="Acquire"/>) and holds it for the whole element loop, as NumPy's own cast loops do; the
+    ///     allocator ONCE (<see cref="acquire_allocator"/>) and holds it for the whole element loop, as NumPy's own cast loops do; the
     ///     NumSharp side's allocator is locked inside it. NumSharp code never waits for a NumPy allocator, so the two locks
     ///     cannot be taken in the opposite order.
     ///     </para>
@@ -196,13 +196,13 @@ namespace NumSharp.Interop.PythonNet
 
         /// <summary>
         ///     <c>NpyString_acquire_allocator</c>: locks the allocator of the array whose descriptor is
-        ///     <paramref name="stringDType"/> and returns it. Pair with exactly one <see cref="Release"/>.
+        ///     <paramref name="stringDType"/> and returns it. Pair with exactly one <see cref="release_allocator"/>.
         /// </summary>
         /// <param name="stringDType">The array's own descriptor object (<c>arr.dtype</c>) — each NumPy <c>T</c> array has a
         ///     descriptor instance of its own, and views share it; the descriptor passed to a constructor is NOT the new
         ///     array's.</param>
         /// <returns>The locked allocator.</returns>
-        internal static IntPtr Acquire(PyObject stringDType)
+        internal static IntPtr acquire_allocator(PyObject stringDType)
         {
             // pythonnet 3.x marks Handle obsolete (it steers callers to its internal reference types) but keeps it public
             // through the whole [3.0.5, 4.0.0) range this package accepts; it is the object's address, exactly what the C
@@ -213,9 +213,9 @@ namespace NumSharp.Interop.PythonNet
             return _acquire(descriptor);
         }
 
-        /// <summary><c>NpyString_release_allocator</c>: unlocks an allocator <see cref="Acquire"/> returned.</summary>
+        /// <summary><c>NpyString_release_allocator</c>: unlocks an allocator <see cref="acquire_allocator"/> returned.</summary>
         /// <param name="allocator">The allocator.</param>
-        internal static void Release(IntPtr allocator) => _release(allocator);
+        internal static void release_allocator(IntPtr allocator) => _release(allocator);
 
         /// <summary>
         ///     <c>NpyString_load</c>: the text of a NumPy cell (the allocator must be held).
@@ -224,7 +224,7 @@ namespace NumSharp.Interop.PythonNet
         /// <param name="cell">The packed cell.</param>
         /// <param name="unpacked">Receives the text pointer and byte count.</param>
         /// <returns>0 for a string, 1 for an NA value, -1 for a cell NumPy cannot read (NumPy sets no Python error).</returns>
-        internal static int Load(IntPtr allocator, byte* cell, NpyStaticString* unpacked) => _load(allocator, cell, unpacked);
+        internal static int load(IntPtr allocator, byte* cell, NpyStaticString* unpacked) => _load(allocator, cell, unpacked);
 
         /// <summary>
         ///     <c>NpyString_pack</c>: frees a NumPy cell's old text and stores <paramref name="size"/> UTF-8 bytes in it (the
@@ -235,12 +235,12 @@ namespace NumSharp.Interop.PythonNet
         /// <param name="text">The UTF-8 text.</param>
         /// <param name="size">Its byte count.</param>
         /// <returns>0, or -1 when NumPy's allocation failed (NumPy sets no Python error).</returns>
-        internal static int Pack(IntPtr allocator, byte* cell, byte* text, long size) => _pack(allocator, cell, text, (nuint)size);
+        internal static int pack(IntPtr allocator, byte* cell, byte* text, long size) => _pack(allocator, cell, text, (nuint)size);
 
         /// <summary><c>NpyString_pack_null</c>: makes a NumPy cell an NA value (the allocator must be held).</summary>
         /// <param name="allocator">The cell's array's allocator.</param>
         /// <param name="cell">The packed cell.</param>
         /// <returns>0, or -1 when NumPy could not free the old text.</returns>
-        internal static int PackNull(IntPtr allocator, byte* cell) => _packNull(allocator, cell);
+        internal static int pack_null(IntPtr allocator, byte* cell) => _packNull(allocator, cell);
     }
 }

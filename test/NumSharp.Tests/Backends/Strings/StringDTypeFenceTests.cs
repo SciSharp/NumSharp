@@ -46,12 +46,12 @@ namespace NumSharp.Tests.Backends.Strings
         {
             if (!FencedMemory.IsSupported)
                 Assert.Inconclusive("FencedMemory needs Windows (reserved pages).");
-            using var fence = new FencedMemory(pages: (n * VStringAllocator.CellSize + FencedMemory.PageBytes - 1) / FencedMemory.PageBytes + 1);
-            byte* cells = fence.Place(n * (long)VStringAllocator.CellSize, atEnd);
-            new Span<byte>(cells, n * VStringAllocator.CellSize).Clear(); // all-zero cells are empty strings
+            using var fence = new FencedMemory(pages: (n * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING + FencedMemory.PageBytes - 1) / FencedMemory.PageBytes + 1);
+            byte* cells = fence.Place(n * (long)VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, atEnd);
+            new Span<byte>(cells, n * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING).Clear(); // all-zero cells are empty strings
             var allocator = new VStringAllocator();
             var descr = np.dtypes.StringDType();
-            var slice = new VStringArraySlice(new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(cells, n * (long)VStringAllocator.CellSize)), allocator, descr);
+            var slice = new VStringArraySlice(new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(cells, n * (long)VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING)), allocator, descr);
             try
             {
                 for (int i = 0; i < n; i++)
@@ -91,8 +91,8 @@ namespace NumSharp.Tests.Backends.Strings
                     using (var mask = np.array(Enumerable.Range(0, n).Select(i => i % 3 != 0).ToArray()))
                     using (var m = t[mask])
                         Enumerable.Range(0, (int)m.size).Select(i => (string)m.GetValue(i)).Should().Equal(expected.Where((_, i) => i % 3 != 0));
-                    t.tobytes().Length.Should().Be(n * VStringAllocator.CellSize);
-                    t["::-1"].tobytes().Length.Should().Be(n * VStringAllocator.CellSize);
+                    t.tobytes().Length.Should().Be(n * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING);
+                    t["::-1"].tobytes().Length.Should().Be(n * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING);
                     using (var back = np.array(new[] { "x" }, np.dtypes.StringDType()))
                     {
                         // a write INTO the fenced cells through the copy core (broadcast), then read back

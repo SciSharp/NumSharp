@@ -357,7 +357,7 @@ namespace NumSharp.Backends
         ///     overlap test). A route that copies or reinterprets elements must read <see cref="DTypeSize"/>, which refuses a
         ///     <c>StringDType</c> storage.
         /// </remarks>
-        internal int ItemBytes => InternalArray is VStringArraySlice ? VStringAllocator.CellSize : DTypeSize;
+        internal int ItemBytes => InternalArray is VStringArraySlice ? VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING : DTypeSize;
 
         /// <summary>
         ///     The shape representing the data in this storage.
@@ -1473,7 +1473,7 @@ namespace NumSharp.Backends
                 // pool noise would read as an arena offset or a heap pointer: NumPy's NPY_NEEDS_INIT, which fillZeros and
                 // overwriteAll cannot waive), and a new allocator owned by the cells' block. The overflow guard counts the
                 // cells' BYTES.
-                AllocationGuard.CheckDimensions(shape.dimensions, VStringAllocator.CellSize);
+                AllocationGuard.CheckDimensions(shape.dimensions, VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING);
                 var fresh = shape.ForFreshAllocation();
                 _Allocate(fresh, VStringArraySlice.Allocate(dtype, fresh.size));
                 return;

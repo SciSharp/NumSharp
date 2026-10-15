@@ -354,8 +354,9 @@ namespace NumSharp
         ///     </para>
         ///     <para>
         ///     A short text (1 to 15 bytes) is written straight into its zeroed cell — the cell <c>NpyString_pack</c> gives
-        ///     there (<see cref="VStringAllocator.NewEmptySize"/>: the bytes, then <c>Initialized | OutsideArena | size</c>);
-        ///     an empty text leaves the zero cell, NumPy's empty string.
+        ///     there (<see cref="VStringAllocator.newemptysize"/>: the bytes, then
+        ///     <c>NPY_STRING_INITIALIZED | NPY_STRING_OUTSIDE_ARENA | size</c>); an empty text leaves the zero cell,
+        ///     NumPy's empty string.
         ///     </para>
         /// </remarks>
         private sealed unsafe class LoadTxtVStringSink : LoadTxtSink
@@ -464,11 +465,11 @@ namespace NumSharp
                 using var cast = scalar.astype(_descr);
                 var slice = cast.Storage.VStringSlice;
                 var allocator = slice.Allocator;
-                allocator.Acquire();
+                allocator.acquire_allocator();
                 try
                 {
-                    byte* cell = slice.Address + cast.Shape.offset * VStringAllocator.CellSize;
-                    int isNull = allocator.Load(cell, out byte* buf, out long size);
+                    byte* cell = slice.Address + cast.Shape.offset * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+                    int isNull = allocator.load(cell, out byte* buf, out long size);
                     if (isNull < 0)
                         throw new OutOfMemoryException("Failed to load string in StringDType getitem");
                     if (isNull == 1)
@@ -478,7 +479,7 @@ namespace NumSharp
                 }
                 finally
                 {
-                    allocator.Release();
+                    allocator.release_allocator();
                 }
             }
 
@@ -501,7 +502,7 @@ namespace NumSharp
                     var allocator = slice.Allocator;
                     byte* cells = slice.Address;
                     var records = (long*)_records;
-                    allocator.Acquire();
+                    allocator.acquire_allocator();
                     try
                     {
                         // The exact arena the cells take, in one growth (the offsets are the cursor's, as NumPy's).
@@ -511,25 +512,25 @@ namespace NumSharp
                         {
                             long record = records[i];
                             long end = record >> 1;
-                            byte* cell = cells + i * VStringAllocator.CellSize;
+                            byte* cell = cells + i * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
                             if ((record & 1) != 0)
                             {
-                                if (allocator.PackNull(cell) < 0)
+                                if (allocator.pack_null(cell) < 0)
                                     throw new OutOfMemoryException("Failed to pack null string during StringDType setitem");
                             }
                             else
                             {
                                 long size = end - start;
-                                if (size > VStringAllocator.ShortMaxSize)
+                                if (size > VStringAllocator.NPY_SHORT_STRING_MAX_SIZE)
                                 {
-                                    if (allocator.Pack(cell, _text + start, size) < 0)
+                                    if (allocator.pack(cell, _text + start, size) < 0)
                                         throw new OutOfMemoryException("Failed to pack string during StringDType setitem");
                                 }
                                 else if (size > 0)
                                 {
                                     // The short cell NpyString_pack writes into a fresh (zero) cell.
-                                    Buffer.MemoryCopy(_text + start, cell, VStringAllocator.CellSize, size);
-                                    cell[15] = (byte)(VStringAllocator.Initialized | VStringAllocator.OutsideArena | size);
+                                    Buffer.MemoryCopy(_text + start, cell, VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, size);
+                                    cell[15] = (byte)(VStringAllocator.NPY_STRING_INITIALIZED | VStringAllocator.NPY_STRING_OUTSIDE_ARENA | size);
                                 }
                             }
                             start = end;
@@ -537,7 +538,7 @@ namespace NumSharp
                     }
                     finally
                     {
-                        allocator.Release();
+                        allocator.release_allocator();
                     }
                     return result;
                 }

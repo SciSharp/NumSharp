@@ -112,7 +112,7 @@ namespace NumSharp.Backends.Strings
             // The walk reads raw pointers of both storages, no NDArray wrapper is made (so no reference is counted or
             // released here: the caller keeps both buffers alive for the call).
             var srcView = src.Alias(bshape);
-            VStringAllocator.AcquirePair(inAllocator, outAllocator);
+            VStringAllocator.acquire_allocators(inAllocator, outAllocator);
             try
             {
                 // A destination whose cells hold no arena strings takes the duplicated medium / long strings at its arena's
@@ -128,8 +128,8 @@ namespace NumSharp.Backends.Strings
                         // (or an NA set on one), flagged OUTSIDE_ARENA, and its new text goes to the heap: counting it would
                         // hold arena space that nothing uses.
                         for (long i = 0; i < count; i++, s += ss, d += ds)
-                            if ((d[15] & ~VStringAllocator.Missing) == 0)
-                                need += naName != null && VStringAllocator.IsNull(s) ? naBytes : VStringAllocator.ArenaBytesForDuplicate(s);
+                            if ((d[15] & ~VStringAllocator.NPY_STRING_MISSING) == 0)
+                                need += naName != null && VStringAllocator.isnull(s) ? naBytes : VStringAllocator.ArenaBytesForDuplicate(s);
                     });
                     outAllocator.TryReserve(need);
                 }
@@ -138,7 +138,7 @@ namespace NumSharp.Backends.Strings
             }
             finally
             {
-                VStringAllocator.ReleasePair(inAllocator, outAllocator);
+                VStringAllocator.release_allocators(inAllocator, outAllocator);
             }
         }
 
@@ -154,10 +154,10 @@ namespace NumSharp.Backends.Strings
         private static void CopyRaw1D(UnmanagedStorage dst, UnmanagedStorage src, Shape bshape)
         {
             long n = dst.Shape.dimensions[0];
-            long ds = dst.Shape.strides[0] * VStringAllocator.CellSize;
-            long ss = (bshape.NDim == 0 ? 0 : bshape.strides[bshape.NDim - 1]) * VStringAllocator.CellSize;
-            byte* d = dst.Address + dst.Shape.offset * VStringAllocator.CellSize;
-            byte* s = src.Address + bshape.offset * VStringAllocator.CellSize;
+            long ds = dst.Shape.strides[0] * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+            long ss = (bshape.NDim == 0 ? 0 : bshape.strides[bshape.NDim - 1]) * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+            byte* d = dst.Address + dst.Shape.offset * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+            byte* s = src.Address + bshape.offset * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
             // PyArray_PrepareTwoRawArrayIter, ndim 1: "Always make a positive stride for the first operand".
             if (ds < 0)
             {
@@ -176,14 +176,14 @@ namespace NumSharp.Backends.Strings
             }
             var allocator = dst.VStringSlice.Allocator;
             byte[] naName = NAReplacement(src.VStringSlice, dst.VStringSlice);
-            allocator.Acquire();
+            allocator.acquire_allocator();
             try
             {
                 CopyRun(s, ss, d, ds, n, allocator, allocator, naName);
             }
             finally
             {
-                allocator.Release();
+                allocator.release_allocator();
             }
         }
 
@@ -223,13 +223,13 @@ namespace NumSharp.Backends.Strings
                     *(ulong*)(d + 8) = *(ulong*)(s + 8);
                     continue;
                 }
-                if (VStringAllocator.ShareMemory(s, inAllocator, d, outAllocator))
+                if (VStringAllocator.share_memory(s, inAllocator, d, outAllocator))
                     continue;
-                if (naName != null && VStringAllocator.IsNull(s))
+                if (naName != null && VStringAllocator.isnull(s))
                 {
                     // lossy but this is an unsafe cast so this is OK
                     fixed (byte* name = naName)
-                        if (outAllocator.Pack(d, name, naName.Length) < 0)
+                        if (outAllocator.pack(d, name, naName.Length) < 0)
                             throw new OutOfMemoryException("Failed to pack string in string to string cast.");
                 }
                 else
@@ -242,7 +242,7 @@ namespace NumSharp.Backends.Strings
         /// <summary>Whether NA cells copied into the destination become a medium or long text (an arena allocation each).</summary>
         /// <param name="naName">The NA replacement text (<see cref="NAReplacement"/>), or null.</param>
         /// <returns>True when the replacement text needs arena space.</returns>
-        internal static bool HasLongNAText(byte[] naName) => naName != null && naName.Length > VStringAllocator.ShortMaxSize;
+        internal static bool HasLongNAText(byte[] naName) => naName != null && naName.Length > VStringAllocator.NPY_SHORT_STRING_MAX_SIZE;
 
         /// <summary>
         ///     The arena bytes duplicating the cells an iteration over <paramref name="cells"/> visits takes in a fresh
@@ -266,7 +266,7 @@ namespace NumSharp.Backends.Strings
                 byte* s = (byte*)dataptrs[0];
                 long ss = strides[0];
                 for (long i = 0; i < n; i++, s += ss)
-                    need += naName != null && VStringAllocator.IsNull(s) ? naBytes : VStringAllocator.ArenaBytesForDuplicate(s);
+                    need += naName != null && VStringAllocator.isnull(s) ? naBytes : VStringAllocator.ArenaBytesForDuplicate(s);
             });
             return need;
         }
@@ -283,10 +283,10 @@ namespace NumSharp.Backends.Strings
         /// <returns>True when the destination may simply receive the source cell's 16 bytes.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool IsShortIntoPlainCell(byte sourceFlags, byte destinationFlags)
-            => (sourceFlags & VStringAllocator.FlagMask) == (VStringAllocator.Initialized | VStringAllocator.OutsideArena)
-               && (sourceFlags & VStringAllocator.ShortSizeMask) != 0
-               && (destinationFlags & VStringAllocator.Long) == 0
-               && (destinationFlags == 0 || (destinationFlags & VStringAllocator.OutsideArena) != 0);
+            => (sourceFlags & VStringAllocator.NPY_STRING_FLAG_MASK) == (VStringAllocator.NPY_STRING_INITIALIZED | VStringAllocator.NPY_STRING_OUTSIDE_ARENA)
+               && (sourceFlags & VStringAllocator.NPY_SHORT_STRING_SIZE_MASK) != 0
+               && (destinationFlags & VStringAllocator.NPY_STRING_LONG) == 0
+               && (destinationFlags == 0 || (destinationFlags & VStringAllocator.NPY_STRING_OUTSIDE_ARENA) != 0);
 
         /// <summary>
         ///     The text an NA cell becomes in this copy: the source NA object's <c>str()</c> as UTF-8 when the source descriptor
@@ -321,7 +321,7 @@ namespace NumSharp.Backends.Strings
         /// <returns>True for an assignment of every element onto itself.</returns>
         private static bool IdenticalElements(UnmanagedStorage dst, UnmanagedStorage src)
         {
-            if (dst.Address + dst.Shape.offset * VStringAllocator.CellSize != src.Address + src.Shape.offset * VStringAllocator.CellSize)
+            if (dst.Address + dst.Shape.offset * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING != src.Address + src.Shape.offset * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING)
                 return false;
             if (!ShapesMatch(dst.Shape, src.Shape))
                 return false;

@@ -595,7 +595,7 @@ After this plan, phase 2 loses P2.4 and gains the `T` forms of P2.1–P2.6 plus 
     refusal of 65; a text cell equal to a string NA stays text; the 4300-digit int NA; `FromArrayLike` over text. Planted
     defects: 4 of 4 caught. A scratch fuzz sweep of 2,000 `T` + 2,000 fixed-width cases: 0 failures. Unit 19,542 /
     19,541 (net10.0 / net8.0), oracle 344, interop 690 / 690 on both, ecosystem 94 + 1 skipped.
-  - Reported, not changed: NumSharp's `VStringAllocator.Load` (like numpy's `NpyString_load`) does not bound-check an arena
+  - Reported, not changed: NumSharp's `VStringAllocator.load` (like numpy's `NpyString_load`) does not bound-check an arena
     offset, so a cell corrupted by raw writes reads outside the arena; the codec's array-like decode still excludes a
     Python `str`, whose stated reason (no string dtype) phase 1 made stale — accepting it is the owner's call (pythonnet
     would then convert a `str` argument into an `NDArray` parameter).

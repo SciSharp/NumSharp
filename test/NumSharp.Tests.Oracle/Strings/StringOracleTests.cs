@@ -998,8 +998,8 @@ namespace NumSharp.Tests.Strings
         private static unsafe void CompareVStringCell(JsonElement want, NumSharp.Backends.Unmanaged.VStringArraySlice slice, long offset,
                                                       List<string> diffs, string label, ref int reported)
         {
-            byte* cell = slice.Address + offset * NumSharp.Backends.Strings.VStringAllocator.CellSize;
-            bool gotNA = NumSharp.Backends.Strings.VStringAllocator.IsNull(cell);
+            byte* cell = slice.Address + offset * NumSharp.Backends.Strings.VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+            bool gotNA = NumSharp.Backends.Strings.VStringAllocator.isnull(cell);
             bool wantNA = want.ValueKind == JsonValueKind.Object && want.TryGetProperty("na", out _);
             if (wantNA || gotNA)
             {

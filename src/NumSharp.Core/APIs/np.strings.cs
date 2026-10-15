@@ -122,7 +122,7 @@ namespace NumSharp
                 // i = np.maximum(i, 0)   (the C# literal is NumPy's weak Python int: i keeps its dtype)
                 using var reps = np.maximum(i, 0);
                 // a_len = str_len(a)
-                using var aLen = StrLen(a);
+                using var aLen = str_len(a);
                 // if np.any(a_len > sys.maxsize / np.maximum(i, 1)): raise OverflowError(...)
                 // sys.maxsize / x is the double loop: the Python int becomes 9.223372036854775807e18 and x a double.
                 using (var floor = np.maximum(reps, 1))
@@ -174,7 +174,7 @@ namespace NumSharp
             /// <returns>A fresh int64 array of <paramref name="x"/>'s dimensions.</returns>
             /// <exception cref="TypeError"><paramref name="x"/> is not text: NumPy's <c>ufunc 'str_len' did not contain a loop
             ///     with signature matching types &lt;class 'numpy.dtypes.Int64DType'&gt; -&gt; None</c>.</exception>
-            internal static NDArray StrLen(NDArray x)
+            internal static NDArray str_len(NDArray x)
             {
                 if (!NDStringUfuncs.IsString(x))
                     throw new TypeError($"ufunc 'str_len' did not contain a loop with signature matching types {x.dtype.Meta} -> None");

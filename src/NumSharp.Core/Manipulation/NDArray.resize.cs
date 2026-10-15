@@ -170,7 +170,7 @@ namespace NumSharp
                     long cells = copyBytes / itemsize;
                     var inAllocator = this.Storage.VStringSlice.Allocator;
                     var outAllocator = fresh.Storage.VStringSlice.Allocator;
-                    Backends.Strings.VStringAllocator.AcquirePair(inAllocator, outAllocator);
+                    Backends.Strings.VStringAllocator.acquire_allocators(inAllocator, outAllocator);
                     try
                     {
                         Backends.Strings.NDVStringCopy.CopyRun(src, itemsize, dst, itemsize, cells, inAllocator, outAllocator, null);
@@ -182,7 +182,7 @@ namespace NumSharp
                     }
                     finally
                     {
-                        Backends.Strings.VStringAllocator.ReleasePair(inAllocator, outAllocator);
+                        Backends.Strings.VStringAllocator.release_allocators(inAllocator, outAllocator);
                     }
                 }
                 else

@@ -314,7 +314,7 @@ namespace NumSharp.IO
                 if (n == 0)
                     return;
                 var slice = (VStringArraySlice)src.Storage.InternalArray;
-                byte* cells = (byte*)src.Storage.Address + src.Shape.offset * (long)VStringAllocator.CellSize;
+                byte* cells = (byte*)src.Storage.Address + src.Shape.offset * (long)VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
                 if (n == 1)
                 {
                     SaveElement(slice, cells, p);
@@ -327,7 +327,7 @@ namespace NumSharp.IO
                     WriteByte(MARK);
                     long batchEnd = Math.Min(n, done + BatchSize);
                     for (; done < batchEnd; done++)
-                        SaveElement(slice, cells + done * VStringAllocator.CellSize, p);
+                        SaveElement(slice, cells + done * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, p);
                     WriteByte(APPENDS);
                 }
             }
@@ -349,10 +349,10 @@ namespace NumSharp.IO
                 // The text is read under the allocator's lock (an arena or heap pointer is valid only while it is held);
                 // writes into the in-memory buffer never touch the stream, so they happen under the lock too. A payload of
                 // 64 KiB or more is copied out and written after the lock is released (it goes straight to the stream).
-                allocator.Acquire();
+                allocator.acquire_allocator();
                 try
                 {
-                    int isNull = allocator.Load(cell, out byte* buf, out long size);
+                    int isNull = allocator.load(cell, out byte* buf, out long size);
                     if (isNull < 0)
                         throw new OutOfMemoryException("Failed to load string in StringDType getitem");
                     if (isNull == 1)
@@ -378,7 +378,7 @@ namespace NumSharp.IO
                 }
                 finally
                 {
-                    allocator.Release();
+                    allocator.release_allocator();
                 }
                 if (large != null)
                     SaveTextWithoutBoundary(large, NoKey);
@@ -989,7 +989,7 @@ namespace NumSharp.IO
 
             long[] coords = fortran ? new long[shape.Length] : null;
             VStringAllocator allocator = slice.Allocator;
-            allocator.Acquire();
+            allocator.acquire_allocator();
             try
             {
                 allocator.TryReserve(arenaBytes);
@@ -1017,18 +1017,18 @@ namespace NumSharp.IO
                         slice.SetIndex(index, item.Obj is PyNoneValue ? null : item.Obj);
                         continue;
                     }
-                    byte* cell = slice.Address + index * VStringAllocator.CellSize;
+                    byte* cell = slice.Address + index * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
                     byte* text = reader.TextAt(item);
                     int rc = naUtf8 != null && new ReadOnlySpan<byte>(text, item.Length).SequenceEqual(naUtf8)
-                        ? allocator.PackNull(cell)
-                        : allocator.Pack(cell, text, item.Length);
+                        ? allocator.pack_null(cell)
+                        : allocator.pack(cell, text, item.Length);
                     if (rc < 0)
                         throw new OutOfMemoryException("Failed to pack string during StringDType setitem");
                 }
             }
             finally
             {
-                allocator.Release();
+                allocator.release_allocator();
             }
         }
 

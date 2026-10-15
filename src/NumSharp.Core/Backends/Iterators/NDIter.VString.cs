@@ -140,7 +140,7 @@ namespace NumSharp.Backends.Iteration
         {
             if (!IsBufferVString(op))
                 return;
-            NativeMemory.Clear(buffer, (nuint)(elements * VStringAllocator.CellSize));
+            NativeMemory.Clear(buffer, (nuint)(elements * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING));
             BufferAllocators[op] = new VStringAllocator();
         }
 
@@ -192,9 +192,9 @@ namespace NumSharp.Backends.Iteration
             var a = ArrayAllocators[op];
             var b = BufferAllocators[op];
             if (a != null && b != null)
-                VStringAllocator.AcquirePair(a, b);
+                VStringAllocator.acquire_allocators(a, b);
             else
-                (a ?? b)?.Acquire();
+                (a ?? b)?.acquire_allocator();
         }
 
         /// <summary>Releases what <see cref="Lock"/> took for operand <paramref name="op"/>.</summary>
@@ -204,9 +204,9 @@ namespace NumSharp.Backends.Iteration
             var a = ArrayAllocators[op];
             var b = BufferAllocators[op];
             if (a != null && b != null)
-                VStringAllocator.ReleasePair(a, b);
+                VStringAllocator.release_allocators(a, b);
             else
-                (a ?? b)?.Release();
+                (a ?? b)?.release_allocator();
         }
 
         /// <summary>
@@ -277,15 +277,15 @@ namespace NumSharp.Backends.Iteration
                     continue;   // the zeroed cells wait for the refill
                 var fromAllocator = BufferAllocators[op];
                 var toAllocator = ctx.BufferAllocators[op];
-                VStringAllocator.AcquirePair(fromAllocator, toAllocator);
+                VStringAllocator.acquire_allocators(fromAllocator, toAllocator);
                 try
                 {
-                    NDVStringCopy.CopyRun(from, VStringAllocator.CellSize, to, VStringAllocator.CellSize, source.BufferSize,
+                    NDVStringCopy.CopyRun(from, VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, to, VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, source.BufferSize,
                         fromAllocator, toAllocator, naName: null);
                 }
                 finally
                 {
-                    VStringAllocator.ReleasePair(fromAllocator, toAllocator);
+                    VStringAllocator.release_allocators(fromAllocator, toAllocator);
                 }
             }
             return ctx;

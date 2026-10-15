@@ -102,6 +102,6 @@ namespace NumSharp
         /// <summary>The address of a <c>StringDType</c> array's first cell (<c>PyArray_DATA</c>; 16-byte cells).</summary>
         /// <param name="a">A <c>StringDType</c> array.</param>
         /// <returns><c>Storage.Address + offset * 16</c>.</returns>
-        private static unsafe byte* FirstCell(NDArray a) => a.Storage.Address + a.Shape.offset * VStringAllocator.CellSize;
+        private static unsafe byte* FirstCell(NDArray a) => a.Storage.Address + a.Shape.offset * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
     }
 }

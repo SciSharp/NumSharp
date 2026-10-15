@@ -97,7 +97,7 @@ namespace NumSharp.Backends
                 // A StringDType element's bytes are its packed cell as it sits in this buffer (NumPy's tobytes): gathered
                 // raw in C order through the cell view — never duplicated into another allocator, which would change the
                 // arena offsets the cells hold.
-                long cellBytes = Count * (long)VStringAllocator.CellSize;
+                long cellBytes = Count * (long)VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
                 if (cellBytes == 0)
                     return;
                 using var cellView = new NDArray(VStringCellView());

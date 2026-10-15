@@ -83,10 +83,10 @@ namespace NumSharp.Interop.PythonNet
                 byte* source = NumpyStringApi.DataAddress(array, dims.Length);
                 VStringArraySlice destination = result.Storage.VStringSlice;
                 VStringAllocator outAllocator = destination.Allocator;
-                IntPtr npAllocator = NumpyStringApi.Acquire(numpyDtype);
+                IntPtr npAllocator = NumpyStringApi.acquire_allocator(numpyDtype);
                 try
                 {
-                    outAllocator.Acquire();
+                    outAllocator.acquire_allocator();
                     try
                     {
                         // Pass 1 settles every cell that allocates nothing (NA, empty, short) and sums the arena bytes the
@@ -105,12 +105,12 @@ namespace NumSharp.Interop.PythonNet
                     }
                     finally
                     {
-                        outAllocator.Release();
+                        outAllocator.release_allocator();
                     }
                 }
                 finally
                 {
-                    NumpyStringApi.Release(npAllocator);
+                    NumpyStringApi.release_allocator(npAllocator);
                 }
 
                 return result;
@@ -152,17 +152,17 @@ namespace NumSharp.Interop.PythonNet
                 // NumSharp strides count cells; the walk takes byte strides.
                 var sourceStrides = new long[shape.strides.Length];
                 for (int i = 0; i < sourceStrides.Length; i++)
-                    sourceStrides[i] = shape.strides[i] * VStringAllocator.CellSize;
-                byte* first = storage.Address + shape.offset * VStringAllocator.CellSize;
+                    sourceStrides[i] = shape.strides[i] * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+                byte* first = storage.Address + shape.offset * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
                 byte* destination = NumpyStringApi.DataAddress(result, shape.NDim);
 
                 // numpy gives every new array a descriptor INSTANCE of its own (its allocator lives there), so the allocator
                 // to lock is the result's, not the one passed to np.empty.
                 using PyObject resultDtype = result.GetAttr(PythonRuntimeInterop.NameDtype);
-                IntPtr npAllocator = NumpyStringApi.Acquire(resultDtype);
+                IntPtr npAllocator = NumpyStringApi.acquire_allocator(resultDtype);
                 try
                 {
-                    cells.Allocator.Acquire();
+                    cells.Allocator.acquire_allocator();
                     try
                     {
                         var copy = new ExportVisitor(cells.Allocator, npAllocator);
@@ -170,12 +170,12 @@ namespace NumSharp.Interop.PythonNet
                     }
                     finally
                     {
-                        cells.Allocator.Release();
+                        cells.Allocator.release_allocator();
                     }
                 }
                 finally
                 {
-                    NumpyStringApi.Release(npAllocator);
+                    NumpyStringApi.release_allocator(npAllocator);
                 }
 
                 return result;
@@ -575,7 +575,7 @@ namespace NumSharp.Interop.PythonNet
             for (long r = 0; r < rows; r++)
             {
                 byte* s = row;
-                for (long j = 0; j < inner; j++, s += innerStride, d += VStringAllocator.CellSize)
+                for (long j = 0; j < inner; j++, s += innerStride, d += VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING)
                     visitor.Visit(s, d);
                 for (int axis = nd - 2; axis >= 0; axis--)
                 {
@@ -593,8 +593,8 @@ namespace NumSharp.Interop.PythonNet
         /// <param name="flags">Byte 15 of the cell.</param>
         /// <returns>True when the cell moves as a plain 16-byte block.</returns>
         private static bool IsShortWithText(byte flags)
-            => (flags & VStringAllocator.FlagMask) == (VStringAllocator.Initialized | VStringAllocator.OutsideArena)
-               && (flags & VStringAllocator.ShortSizeMask) != 0;
+            => (flags & VStringAllocator.NPY_STRING_FLAG_MASK) == (VStringAllocator.NPY_STRING_INITIALIZED | VStringAllocator.NPY_STRING_OUTSIDE_ARENA)
+               && (flags & VStringAllocator.NPY_SHORT_STRING_SIZE_MASK) != 0;
 
         /// <summary>Copies one 16-byte cell.</summary>
         /// <param name="source">The source cell.</param>
@@ -640,15 +640,15 @@ namespace NumSharp.Interop.PythonNet
                     CopyCell(source, destination);
                     return;
                 }
-                if (VStringAllocator.IsNull(source))
+                if (VStringAllocator.isnull(source))
                 {
-                    if (_out.PackNull(destination) < 0)
+                    if (_out.pack_null(destination) < 0)
                         throw new OutOfMemoryException("Failed to pack null string while copying a numpy StringDType array");
                     return;
                 }
                 // Empty (an uninitialized all-zero cell, a short empty string, or a vstring of size 0): NumPy's dup packs the
                 // empty string, which leaves a fresh cell as it is.
-                if (VStringAllocator.Size(source) == 0)
+                if (VStringAllocator.size(source) == 0)
                     return;
                 ArenaBytes += VStringAllocator.ArenaBytesForDuplicate(source);
                 LongCells++;
@@ -682,12 +682,12 @@ namespace NumSharp.Interop.PythonNet
             public void Visit(byte* source, byte* destination)
             {
                 // Pass 1 settled every other cell; this test is the same partition, so each cell is handled once.
-                if (IsShortWithText(source[15]) || VStringAllocator.IsNull(source) || VStringAllocator.Size(source) == 0)
+                if (IsShortWithText(source[15]) || VStringAllocator.isnull(source) || VStringAllocator.size(source) == 0)
                     return;
                 NumpyStringApi.NpyStaticString text;
-                if (NumpyStringApi.Load(_numpy, source, &text) != 0)
+                if (NumpyStringApi.load(_numpy, source, &text) != 0)
                     throw new InvalidOperationException("numpy could not load a StringDType element (NpyString_load failed: a corrupt cell)");
-                if (_out.NewSize(text.buf, (long)text.size, destination) < 0)
+                if (_out.newsize(text.buf, (long)text.size, destination) < 0)
                     throw new OutOfMemoryException("Failed to allocate string while copying a numpy StringDType array");
             }
         }
@@ -726,17 +726,17 @@ namespace NumSharp.Interop.PythonNet
                     CopyCell(source, destination);
                     return;
                 }
-                if (VStringAllocator.IsNull(source))
+                if (VStringAllocator.isnull(source))
                 {
-                    if (NumpyStringApi.PackNull(_numpy, destination) < 0)
+                    if (NumpyStringApi.pack_null(_numpy, destination) < 0)
                         throw new OutOfMemoryException("Failed to pack null string while copying a StringDType array to numpy");
                     return;
                 }
-                if (VStringAllocator.Size(source) == 0)
+                if (VStringAllocator.size(source) == 0)
                     return;
-                if (_in.Load(source, out byte* text, out long size) < 0)
+                if (_in.load(source, out byte* text, out long size) < 0)
                     throw new InvalidOperationException("NumSharp could not load a StringDType element (a corrupt cell)");
-                if (NumpyStringApi.Pack(_numpy, destination, text, size) < 0)
+                if (NumpyStringApi.pack(_numpy, destination, text, size) < 0)
                     throw new OutOfMemoryException("Failed to pack string while copying a StringDType array to numpy");
             }
         }

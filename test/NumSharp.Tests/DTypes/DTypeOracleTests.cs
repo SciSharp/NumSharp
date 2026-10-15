@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using NumSharp.Backends.Iteration; // NPY_CASTING
+using NumSharp.Backends.Strings; // VStringAllocator: the port of NumPy's NpyString_ functions and static-string macros
 using NumSharp.IO; // PyLiteral.Repr: the Python repr the generator records
 
 namespace NumSharp.Tests.DTypes
@@ -17,7 +18,8 @@ namespace NumSharp.Tests.DTypes
     ///     (<c>DTypes/corpus/dtype_oracle.&lt;model&gt;.jsonl</c>, written by <c>test/oracle/gen_dtype_oracle.py</c>)
     ///     against <see cref="DType"/>, <see cref="DTypeMeta"/>, <see cref="DTypeFlags"/>, <c>np.dtypes</c> and the other
     ///     NumPy structs the DTypes folder ports (<see cref="ArrayMethod"/>, <see cref="ArrayMethodContext"/>,
-    ///     <see cref="DatetimeMetaData"/>, <see cref="VStringParameters"/>): every member
+    ///     <see cref="DatetimeMetaData"/>, <see cref="VStringParameters"/>), and the StringDType allocator
+    ///     (<see cref="VStringAllocator"/>, NumPy's <c>NpyString_*</c> functions and static-string macros): every member
     ///     NumPy names must exist here under NumPy's exact spelling, and every probed value, error, comparison, promotion,
     ///     class attribute and casting resolution must equal NumPy's. No Python runs at test time.
     /// </summary>
@@ -192,15 +194,46 @@ namespace NumSharp.Tests.DTypes
         };
 
         /// <summary>
-        ///     The C macros a class of the DTypes folder carries as a constant, with that class. The generator records each
-        ///     macro's value (the <c>macros</c> of the <c>members</c> record); the class must declare a constant of the
-        ///     macro's exact name with that value.
+        ///     The C macros a NumSharp class carries as a constant, with every class that carries it. The generator records
+        ///     each macro's value (the <c>macros</c> of the <c>members</c> record); each listed class must declare a constant
+        ///     of the macro's exact name with that value (public in a public class, internal allowed in an internal one). A
+        ///     macro can have several holders: the packed string's size is both the descriptor's itemsize
+        ///     (<see cref="VStringDTypeMeta"/>) and the cell stride of the allocator (<see cref="VStringAllocator"/>), and
+        ///     listing both keeps the two constants from drifting apart.
         /// </summary>
-        private static readonly Dictionary<string, Type> MacroHolders = new(StringComparer.Ordinal)
+        private static readonly Dictionary<string, Type[]> MacroHolders = new(StringComparer.Ordinal)
         {
-            ["NPY_NEEDS_INIT"] = typeof(DTypeMeta),
-            ["SIZEOF_NPY_PACKED_STATIC_STRING"] = typeof(VStringDTypeMeta),
-            ["ALIGNOF_NPY_PACKED_STATIC_STRING"] = typeof(VStringDTypeMeta),
+            ["NPY_NEEDS_INIT"] = new[] { typeof(DTypeMeta) },
+            ["SIZEOF_NPY_PACKED_STATIC_STRING"] = new[] { typeof(VStringDTypeMeta), typeof(VStringAllocator) },
+            ["ALIGNOF_NPY_PACKED_STATIC_STRING"] = new[] { typeof(VStringDTypeMeta) },
+            // static_string.c's flag byte and size limits, and static_string.h's NPY_MAX_STRING_SIZE.
+            ["NPY_STRING_MISSING"] = new[] { typeof(VStringAllocator) },
+            ["NPY_STRING_INITIALIZED"] = new[] { typeof(VStringAllocator) },
+            ["NPY_STRING_OUTSIDE_ARENA"] = new[] { typeof(VStringAllocator) },
+            ["NPY_STRING_LONG"] = new[] { typeof(VStringAllocator) },
+            ["NPY_STRING_FLAG_MASK"] = new[] { typeof(VStringAllocator) },
+            ["NPY_SHORT_STRING_SIZE_MASK"] = new[] { typeof(VStringAllocator) },
+            ["NPY_SHORT_STRING_MAX_SIZE"] = new[] { typeof(VStringAllocator) },
+            ["NPY_MEDIUM_STRING_MAX_SIZE"] = new[] { typeof(VStringAllocator) },
+            ["NPY_MAX_STRING_SIZE"] = new[] { typeof(VStringAllocator) },
+        };
+
+        /// <summary>
+        ///     The NumPy C function families a NumSharp class ports, keyed by the family's prefix, each with the functions
+        ///     that class does not port and why. The generator records every function of the family that NumPy's source
+        ///     defines (the <c>function_families</c> of the <c>members</c> record); each must be a method of the class named
+        ///     exactly as NumPy names it after the prefix (<c>NpyString_pack_null</c> is
+        ///     <see cref="VStringAllocator.pack_null"/>). A listed function must stay absent, so porting one turns the test
+        ///     red until its entry is removed; a family in the record that is not here fails too.
+        /// </summary>
+        private static readonly Dictionary<string, (Type Port, Dictionary<string, string> NotPorted)> FunctionPorts = new(StringComparer.Ordinal)
+        {
+            ["NpyString_"] = (typeof(VStringAllocator), new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["new_allocator"] = "the constructor (new VStringAllocator()): C# names a constructor after its class, and NumPy's malloc / free / realloc parameters are always NativeMemory here",
+                ["free_allocator"] = "the end of ClearAndFree, which the cells' memory block runs when its last view is released (NumPy's clear loop, then NpyString_free_allocator)",
+                ["cmp"] = "the order of two loaded strings, for StringDType's comparison ufuncs and sorting: phase 2 (docs/plans/strings-phase2.md, D12)",
+            }),
         };
 
         /// <summary>
@@ -237,9 +270,11 @@ namespace NumSharp.Tests.DTypes
         ///     Every name NumPy gives <c>numpy.dtype</c>, <c>numpy._DTypeMeta</c>, the DType class's C fields and NEP 42
         ///     slots, the <c>NPY_DT_*</c> flags, the byte-order macros, <c>numpy.dtypes</c> and the fields of the other
         ///     structs the DTypes folder ports (<see cref="StructPorts"/>: <see cref="ArrayMethod"/>,
-        ///     <see cref="ArrayMethodContext"/>, <see cref="DatetimeMetaData"/>, <see cref="VStringParameters"/>) and the C
-        ///     macros its classes carry as constants (<see cref="MacroHolders"/>, with NumPy's values) exists in C# under
-        ///     NumPy's spelling (case-sensitive), or is an explicit exemption that is still absent.
+        ///     <see cref="ArrayMethodContext"/>, <see cref="DatetimeMetaData"/>, <see cref="VStringParameters"/>), the C
+        ///     macros NumSharp's classes carry as constants (<see cref="MacroHolders"/>, with NumPy's values) and the C
+        ///     function families a class ports (<see cref="FunctionPorts"/>: <c>NpyString_*</c> on
+        ///     <see cref="VStringAllocator"/>) exists in C# under NumPy's spelling (case-sensitive), or is an explicit
+        ///     exemption that is still absent.
         /// </summary>
         [TestMethod]
         public void Members_ExistUnderNumPysNames()
@@ -323,24 +358,65 @@ namespace NumSharp.Tests.DTypes
             foreach (var mapped in StructPorts.Keys.Where(k => !structsSeen.Contains(k)))
                 problems.Add($"StructPorts maps {mapped}, which the oracle no longer records");
 
-            // The C macros a class carries as a constant: present under the macro's name, with NumPy's value.
+            // The C macros a class carries as a constant: present under the macro's name in every holder, with NumPy's value.
             var macrosSeen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var macro in m.GetProperty("macros").EnumerateObject())
             {
                 macrosSeen.Add(macro.Name);
-                if (!MacroHolders.TryGetValue(macro.Name, out var holder))
+                if (!MacroHolders.TryGetValue(macro.Name, out var holders))
                 {
                     problems.Add($"macro {macro.Name}: a NumPy macro this test does not map (add it to MacroHolders)");
                     continue;
                 }
-                var constant = holder.GetField(macro.Name, BindingFlags.Public | BindingFlags.Static);
-                if (constant == null || !constant.IsLiteral)
-                    problems.Add($"{macro.Name}: no {holder.Name} constant of that name");
-                else if (Convert.ToInt64(constant.GetValue(null), CultureInfo.InvariantCulture) != macro.Value.GetInt64())
-                    problems.Add($"{macro.Name}: {holder.Name} has {constant.GetValue(null)}, NumPy {macro.Value.GetInt64()}");
+                foreach (var holder in holders)
+                {
+                    // A public class must expose the constant publicly; an internal class (VStringAllocator) declares
+                    // internal constants, so those are looked up too.
+                    var flags = BindingFlags.Public | BindingFlags.Static | (holder.IsPublic ? 0 : BindingFlags.NonPublic);
+                    var constant = holder.GetField(macro.Name, flags);
+                    if (constant == null || !constant.IsLiteral)
+                        problems.Add($"{macro.Name}: no {holder.Name} constant of that name");
+                    else if (Convert.ToInt64(constant.GetValue(null), CultureInfo.InvariantCulture) != macro.Value.GetInt64())
+                        problems.Add($"{macro.Name}: {holder.Name} has {constant.GetValue(null)}, NumPy {macro.Value.GetInt64()}");
+                }
             }
             foreach (var mapped in MacroHolders.Keys.Where(k => !macrosSeen.Contains(k)))
                 problems.Add($"MacroHolders maps {mapped}, which the oracle no longer records");
+
+            // The C function families a class ports: every function is a method of the port under NumPy's name after the
+            // prefix, or a listed exemption that is still absent. The ports are internal classes with internal methods, so
+            // every declared method counts; an exemption whose function NumPy's source no longer defines is stale.
+            var familiesSeen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var family in m.GetProperty("function_families").EnumerateObject())
+            {
+                familiesSeen.Add(family.Name);
+                if (!FunctionPorts.TryGetValue(family.Name, out var port))
+                {
+                    problems.Add($"function family {family.Name}*: a NumPy family this test does not map (add it to FunctionPorts)");
+                    continue;
+                }
+                var declared = port.Port
+                    .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                    .Select(mi => mi.Name)
+                    .ToHashSet(StringComparer.Ordinal);
+                var functions = family.Value.EnumerateArray().Select(e => e.GetString()).ToHashSet(StringComparer.Ordinal);
+                foreach (var fn in functions)
+                {
+                    if (port.NotPorted.ContainsKey(fn))
+                    {
+                        if (declared.Contains(fn))
+                            problems.Add($"{family.Name}{fn} is now ported by {port.Port.Name}: remove it from FunctionPorts' exemptions");
+                    }
+                    else if (!declared.Contains(fn))
+                    {
+                        problems.Add($"{family.Name}{fn}: no {port.Port.Name} method '{fn}'");
+                    }
+                }
+                foreach (var stale in port.NotPorted.Keys.Where(k => !functions.Contains(k)))
+                    problems.Add($"FunctionPorts exempts {family.Name}{stale}, which NumPy's source no longer defines");
+            }
+            foreach (var mapped in FunctionPorts.Keys.Where(k => !familiesSeen.Contains(k)))
+                problems.Add($"FunctionPorts maps {mapped}*, which the oracle no longer records");
 
             foreach (var flag in m.GetProperty("dt_flags").EnumerateObject())
             {

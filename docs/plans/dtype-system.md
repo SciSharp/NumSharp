@@ -524,8 +524,23 @@ oracle sections closed the gaps between "NumPy refuses" and "NumPy computes":
   `SIZEOF_NPY_PACKED_STATIC_STRING` / `ALIGNOF_NPY_PACKED_STATIC_STRING`, and `DTypeMeta.NeedsInitFlag` is `NPY_NEEDS_INIT`.
   The oracle records that struct (unported: `base`, `array_owned`, `allocator`) and the three macros' values, which the
   replay's `MacroHolders` checks. The class records of `StrDType`, `BytesDType` and `StringDType` are compared there and
-  match NumPy. Not renamed, being outside the folder: `VStringAllocator` (NumPy's `NPY_STRING_*` flags and
-  `NpyString_*` functions under PascalCase names) and `NDArrayMethodFlags` (NumPy's `NPY_METH_*`).
+  match NumPy. In a second commit the same day the NumPy ports `strings` added outside the folder took NumPy's names:
+  `VStringAllocator`'s constants are `static_string.c`'s macros (`NPY_STRING_MISSING`, `NPY_STRING_INITIALIZED`,
+  `NPY_STRING_OUTSIDE_ARENA`, `NPY_STRING_LONG`, `NPY_STRING_FLAG_MASK`, `NPY_SHORT_STRING_SIZE_MASK`,
+  `NPY_SHORT_STRING_MAX_SIZE`, `NPY_MEDIUM_STRING_MAX_SIZE`, `NPY_MAX_STRING_SIZE`, `SIZEOF_NPY_PACKED_STATIC_STRING`;
+  were `Missing`, `Initialized`, `OutsideArena`, `Long`, `FlagMask`, `ShortSizeMask`, `ShortMaxSize`, `MediumMaxSize`,
+  `MaxStringSize`, `CellSize`), and its `NpyString_*` ports carry the function's name after the prefix (`load`, `pack`,
+  `pack_null`, `pack_empty`, `newsize`, `newemptysize`, `free`, `dup`, `isnull`, `size`, `share_memory`,
+  `acquire_allocator`, `release_allocator`, `acquire_allocators`, `release_allocators`; were `Load`, `Pack`, `PackNull`,
+  `PackEmpty`, `NewSize`, `NewEmptySize`, `Free`, `Dup`, `IsNull`, `Size`, `ShareMemory`, `Acquire`, `Release`,
+  `AcquirePair` / `AcquireAll`, `ReleasePair` / `ReleaseAll`). The pythonnet binding `NumpyStringApi` takes the same
+  names for the C API slots it calls; `np.strings.str_len` (was `StrLen`), `np.ClipmodeConverter`
+  (`PyArray_ClipmodeConverter`, was `ClipModeConverter`) and `StringCastingImpls.GetDatetimeISO8601StrLen`
+  (`NpyDatetime_GetDatetimeISO8601StrLen`, was `DatetimeIsoStrLen`) too. The oracle records `static_string.c`'s macros
+  and its `NpyString_` functions; the replay holds the allocator to them through `MacroHolders` (now several holders per
+  macro) and the new `FunctionPorts` (unported, self-retiring: `new_allocator`, the constructor; `free_allocator`, the
+  end of `ClearAndFree`; `cmp`, phase 2). Not renamed: `NDArrayMethodFlags` (journey4's, NumPy's `NPY_METH_*`), and the
+  CPython ports (pickle, codecs, `str()`), whose names are not NumPy's.
 * **Ported:** `dtype.isalignedstruct`, `len(dtype)` (`__len__`, 0 fields), `dtype[key]` (`__getitem__`, NumPy's KeyError),
   `dtype.metadata` and `np.dtype(dtype, align, copy, metadata)` (`arraydescr_new`'s statements: `copy` copies only a
   singleton, `metadata` always copies and merges without overwriting existing keys).

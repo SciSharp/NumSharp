@@ -2894,8 +2894,23 @@ port NumPy-internal C functions (`DatetimeMetaData.Divides`, `DTypeCasting.Parse
 `has_string_na`, `na_name`, `default_string`; `HasNAObject` has no field, NumPy reads a null `na_object`), the StringDType
 cell's constants are `VStringDTypeMeta.SIZEOF_NPY_PACKED_STATIC_STRING` / `ALIGNOF_NPY_PACKED_STATIC_STRING`, and the item
 flag is `DTypeMeta.NPY_NEEDS_INIT`; the oracle's `members` record carries that struct and the three macros' values
-(`MacroHolders`). `VStringAllocator` (`Backends/Strings/`, outside the folder) still uses PascalCase names for NumPy's
-`NPY_STRING_*` flags and `NpyString_*` functions.
+(`MacroHolders`). The NumPy ports `strings` added outside the folder follow the rule too (2026-10-15):
+`VStringAllocator` (`Backends/Strings/`, the port of `static_string.c`) carries the macro names (`NPY_STRING_MISSING`,
+`NPY_STRING_INITIALIZED`, `NPY_STRING_OUTSIDE_ARENA`, `NPY_STRING_LONG`, `NPY_STRING_FLAG_MASK`,
+`NPY_SHORT_STRING_SIZE_MASK`, `NPY_SHORT_STRING_MAX_SIZE`, `NPY_MEDIUM_STRING_MAX_SIZE`, `NPY_MAX_STRING_SIZE`,
+`SIZEOF_NPY_PACKED_STATIC_STRING`) and its `NpyString_*` ports the function's name after the prefix (`load`, `pack`,
+`pack_null`, `pack_empty`, `newsize`, `newemptysize`, `free`, `dup`, `isnull`, `size`, `share_memory`,
+`acquire_allocator`, `release_allocator`, and `acquire_allocators` / `release_allocators` with a two-allocator and a
+list overload each); the ports of `static_string.c`'s unprefixed helpers (`is_short_string`, `arena_malloc`, …) keep
+NumSharp names. The pythonnet binding `NumpyStringApi` names the C API slots it calls the same way (`load`, `pack`,
+`pack_null`, `acquire_allocator`, `release_allocator`); `np.strings.str_len` is the ufunc's name, `np.ClipmodeConverter`
+is `PyArray_ClipmodeConverter`, `StringCastingImpls.GetDatetimeISO8601StrLen` is `NpyDatetime_GetDatetimeISO8601StrLen`.
+The oracle's `members` record also carries `static_string.c`'s macros and its `NpyString_` functions: `MacroHolders`
+(a macro may have several holders; `SIZEOF_NPY_PACKED_STATIC_STRING` is both `VStringDTypeMeta`'s and
+`VStringAllocator`'s) and `FunctionPorts` (self-retiring exemptions: `new_allocator` is the constructor,
+`free_allocator` the end of `ClearAndFree`, `cmp` phase 2) hold the C# names and values to them. Not renamed:
+journey4's `NDArrayMethodFlags` (NumPy's `NPY_METH_*`), and the CPython ports (pickle, codecs, `str()`), whose names
+are not NumPy's.
 Ported with the pass: `isalignedstruct` (False), `__len__()` (0 fields), `__getitem__(key)` (NumPy's KeyError, quoted like
 Python's `str(KeyError)`), `metadata` + `np.dtype(dtype, align, copy, metadata)` (`copy` copies only a singleton;
 `metadata` always copies and merges without overwriting existing keys; equality/hash/printing ignore it). Fixed with it:
@@ -3109,7 +3124,7 @@ refused. Pinned by `SelectionTests` (`Take_FloatIndices_Throws_SameKind`, `Put_F
 neighbours of numpy.ma's put; plan `docs/plans/api-parameter-parity.md` X31; `Indexing/np.{put,take,clipmode}.cs`; gates
 `Indexing/np.put.take.NumPyPort.Test.cs`, the `ma_put` tier and the aliasing tier's `put_selfvals` / `put_selfidx` (243
 cases: the values or indices a view of the target); probed against 2.4.2):
-- **The mode** is `ClipModeConverter` (NumPy's `PyArray_ClipmodeConverter` + `clipmode_parser`), shared by `put`, `take`,
+- **The mode** is `ClipmodeConverter` (NumPy's `PyArray_ClipmodeConverter` + `clipmode_parser`), shared by `put`, `take`,
   `choose` and `ravel_multi_index`, and parsed FIRST: the first character selects, the exact lowercase spelling is
   required (`"Raise"` is `ValueError: Use one of 'clip', 'raise', or 'wrap' for clip mode`), an empty or unknown string
   is `ValueError: clipmode must be one of 'clip', 'raise', or 'wrap' (got 'bogus')`, `null` is NumPy's None (raise).

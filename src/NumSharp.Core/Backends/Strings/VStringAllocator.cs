@@ -15,20 +15,32 @@ namespace NumSharp.Backends.Strings
     ///     <para>
     ///     <b>The cell</b> (<c>npy_packed_static_string</c>, little-endian 64-bit layout). Bytes 0–7 hold an arena OFFSET or
     ///     a heap POINTER; bytes 8–15 hold the size, whose highest byte (byte 15) is the FLAGS byte:
-    ///     <see cref="Missing"/> (an NA value), <see cref="Initialized"/> (written at least once),
-    ///     <see cref="OutsideArena"/> (short or heap), <see cref="Long"/> (an arena string of more than 255 bytes, or a heap
-    ///     string). A string of up to <see cref="ShortMaxSize"/> bytes lives IN the cell: bytes 0–14 are the text and the low
-    ///     nibble of byte 15 is its length, with the flags <c>Initialized | OutsideArena</c>. An all-zero cell is an
-    ///     uninitialized empty string, so a zero-filled buffer is a buffer of <c>''</c> for free (NumPy's
-    ///     <c>NPY_NEEDS_INIT</c>).
+    ///     <see cref="NPY_STRING_MISSING"/> (an NA value), <see cref="NPY_STRING_INITIALIZED"/> (written at least once),
+    ///     <see cref="NPY_STRING_OUTSIDE_ARENA"/> (short or heap), <see cref="NPY_STRING_LONG"/> (an arena string of more
+    ///     than 255 bytes, or a heap string). A string of up to <see cref="NPY_SHORT_STRING_MAX_SIZE"/> bytes lives IN the
+    ///     cell: bytes 0–14 are the text and the low nibble of byte 15 is its length, with the flags
+    ///     <c>NPY_STRING_INITIALIZED | NPY_STRING_OUTSIDE_ARENA</c>. An all-zero cell is an uninitialized empty string, so a
+    ///     zero-filled buffer is a buffer of <c>''</c> for free (NumPy's <c>NPY_NEEDS_INIT</c>).
     ///     </para>
     ///     <para>
     ///     <b>The arena.</b> A medium string (16–255 bytes) is stored after a one-byte size prefix, a long one after an
     ///     eight-byte prefix; the cell holds the offset of the TEXT (after the prefix). The arena grows by reallocation to
     ///     125 % of what it needs, and its new tail is zeroed. A write that fits the old allocation reuses it (the prefix
     ///     records the allocation's capacity); a longer one goes to the heap. A string set to NA keeps its allocation's
-    ///     metadata (only the <see cref="Missing"/> bit is added), so a later write can reuse its arena space. After a short
-    ///     write the arena information is gone, and a later long write always goes to the heap.
+    ///     metadata (only the <see cref="NPY_STRING_MISSING"/> bit is added), so a later write can reuse its arena space.
+    ///     After a short write the arena information is gone, and a later long write always goes to the heap.
+    ///     </para>
+    ///     <para>
+    ///     <b>NumPy's names.</b> The constants carry the names of <c>static_string.c</c>'s macros (<c>NPY_STRING_*</c>,
+    ///     <c>NPY_SHORT_STRING_*</c>, <c>NPY_MEDIUM_STRING_MAX_SIZE</c>, <c>NPY_MAX_STRING_SIZE</c>; the cell size is
+    ///     <c>stringdtype/dtype.h</c>'s <c>SIZEOF_NPY_PACKED_STATIC_STRING</c>), and the members that port the
+    ///     <c>NpyString_*</c> functions carry the function's name after the prefix (<see cref="load"/>, <see cref="pack"/>,
+    ///     <see cref="pack_null"/>, <see cref="free"/>, <see cref="dup"/>, …). The two NumPy functions that take a list of
+    ///     allocators, <c>NpyString_acquire_allocators</c> and <c>NpyString_release_allocators</c>, have a two-allocator
+    ///     overload each. The ports of <c>static_string.c</c>'s unprefixed helpers (<c>is_short_string</c>,
+    ///     <c>arena_malloc</c>, <c>heap_or_arena_allocate</c>, <c>vstring_buffer</c>, …) keep NumSharp names, as do the
+    ///     members NumPy has no function for. The test <c>DTypeOracleTests.Members_ExistUnderNumPysNames</c> holds the class
+    ///     to the names and values it reads from NumPy's source.
     ///     </para>
     ///     <para>
     ///     <b>Ownership.</b> One allocator per BUFFER (NumPy gives every array that owns data its own descriptor instance
@@ -37,16 +49,17 @@ namespace NumSharp.Backends.Strings
     ///     which frees the heap strings, then the arena), so the allocator lives exactly as long as the last view of its
     ///     cells. Cells are never valid with another buffer's allocator: an offset reads someone else's arena, and a heap
     ///     pointer copied into another buffer would be freed twice. Every movement of <c>StringDType</c> elements therefore
-    ///     goes through <see cref="Dup"/>, never through a raw copy of the cells.
+    ///     goes through <see cref="dup"/>, never through a raw copy of the cells.
     ///     </para>
     ///     <para>
     ///     <b>Locking.</b> Like NumPy's allocator mutex: a caller takes the lock ONCE per operation
-    ///     (<see cref="Acquire"/> / <see cref="Release"/>, or <see cref="AcquirePair"/> for two allocators), then calls the
-    ///     per-cell members, which assume it is held. The allocator does not lock per element.
+    ///     (<see cref="acquire_allocator"/> / <see cref="release_allocator"/>, or
+    ///     <see cref="acquire_allocators(VStringAllocator, VStringAllocator)"/> for two allocators), then calls the per-cell
+    ///     members, which assume it is held. The allocator does not lock per element.
     ///     </para>
     ///     <para>
     ///     <b>Errors.</b> NumPy's members return -1 and the caller raises <c>MemoryError</c> with its own text; here the
-    ///     members return the same codes (0 success, -1 failure, 1 = "is null" for <see cref="Load"/>) and the callers
+    ///     members return the same codes (0 success, -1 failure, 1 = "is null" for <see cref="load"/>) and the callers
     ///     throw <see cref="OutOfMemoryException"/> with NumPy's text. Every pointer the allocator hands out is
     ///     <see cref="NativeMemory"/> memory (NumPy's <c>PyMem_RawMalloc</c>).
     ///     </para>
@@ -57,35 +70,40 @@ namespace NumSharp.Backends.Strings
         // the packed cell (static_string.c, NPY_BYTE_ORDER == NPY_LITTLE_ENDIAN, sizeof(size_t) == 8)
         // ------------------------------------------------------------------------------------------------------------
 
-        /// <summary>The size of one packed cell (<c>sizeof(npy_packed_static_string)</c>): the descriptor's itemsize.</summary>
-        internal const int CellSize = 16;
+        /// <summary>
+        ///     NumPy's <c>SIZEOF_NPY_PACKED_STATIC_STRING</c> (<c>stringdtype/dtype.h</c>): the size of one packed cell
+        ///     (<c>sizeof(npy_packed_static_string)</c>), so the stride between cells and the descriptor's itemsize. It
+        ///     is the same constant as <see cref="VStringDTypeMeta.SIZEOF_NPY_PACKED_STATIC_STRING"/>; the dtype oracle
+        ///     test holds both to NumPy's value, so the two cannot drift apart.
+        /// </summary>
+        internal const int SIZEOF_NPY_PACKED_STATIC_STRING = 16;
 
         /// <summary><c>NPY_STRING_MISSING</c>: the cell is an NA value (its other flags keep the old allocation's metadata).</summary>
-        internal const byte Missing = 0x80;
+        internal const byte NPY_STRING_MISSING = 0x80;
 
         /// <summary><c>NPY_STRING_INITIALIZED</c>: the element has been written at least once.</summary>
-        internal const byte Initialized = 0x40;
+        internal const byte NPY_STRING_INITIALIZED = 0x40;
 
-        /// <summary><c>NPY_STRING_OUTSIDE_ARENA</c>: the text is in the cell (short) or on the heap (with <see cref="Long"/>).</summary>
-        internal const byte OutsideArena = 0x20;
+        /// <summary><c>NPY_STRING_OUTSIDE_ARENA</c>: the text is in the cell (short) or on the heap (with <see cref="NPY_STRING_LONG"/>).</summary>
+        internal const byte NPY_STRING_OUTSIDE_ARENA = 0x20;
 
         /// <summary><c>NPY_STRING_LONG</c>: an arena string longer than 255 bytes (eight-byte prefix), or a heap string.</summary>
-        internal const byte Long = 0x10;
+        internal const byte NPY_STRING_LONG = 0x10;
 
         /// <summary><c>NPY_STRING_FLAG_MASK</c>: the high nibble of byte 15.</summary>
-        internal const byte FlagMask = 0xF0;
+        internal const byte NPY_STRING_FLAG_MASK = 0xF0;
 
         /// <summary><c>NPY_SHORT_STRING_SIZE_MASK</c>: the low nibble of byte 15, a short string's length.</summary>
-        internal const byte ShortSizeMask = 0x0F;
+        internal const byte NPY_SHORT_STRING_SIZE_MASK = 0x0F;
 
         /// <summary><c>NPY_SHORT_STRING_MAX_SIZE</c>: the longest text a cell holds itself (15 bytes).</summary>
-        internal const int ShortMaxSize = CellSize - 1;
+        internal const int NPY_SHORT_STRING_MAX_SIZE = SIZEOF_NPY_PACKED_STATIC_STRING - 1;
 
         /// <summary><c>NPY_MEDIUM_STRING_MAX_SIZE</c>: the longest arena string with a one-byte size prefix.</summary>
-        internal const int MediumMaxSize = 0xFF;
+        internal const int NPY_MEDIUM_STRING_MAX_SIZE = 0xFF;
 
         /// <summary><c>NPY_MAX_STRING_SIZE</c>: one byte of the size field is the flags, so a string has at most 2^56 − 1 bytes.</summary>
-        internal const long MaxStringSize = (1L << 56) - 1;
+        internal const long NPY_MAX_STRING_SIZE = (1L << 56) - 1;
 
         /// <summary>The mask that keeps the 56 size bits of the size field (<c>~HIGH_BYTE_MASK</c>).</summary>
         private const ulong SizeMask = 0x00FF_FFFF_FFFF_FFFFUL;
@@ -219,11 +237,11 @@ namespace NumSharp.Backends.Strings
         // locking (NpyString_acquire_allocator / NpyString_release_allocator / ..._allocators)
         // ------------------------------------------------------------------------------------------------------------
 
-        /// <summary>Acquires the allocator mutex (<c>NpyString_acquire_allocator</c>); pair it with exactly one <see cref="Release"/>.</summary>
-        internal void Acquire() => Monitor.Enter(_lock);
+        /// <summary>Acquires the allocator mutex (<c>NpyString_acquire_allocator</c>); pair it with exactly one <see cref="release_allocator"/>.</summary>
+        internal void acquire_allocator() => Monitor.Enter(_lock);
 
         /// <summary>Releases the allocator mutex (<c>NpyString_release_allocator</c>).</summary>
-        internal void Release() => Monitor.Exit(_lock);
+        internal void release_allocator() => Monitor.Exit(_lock);
 
         /// <summary>
         ///     Acquires two allocators' mutexes at once (<c>NpyString_acquire_allocators</c>): the same allocator twice is locked
@@ -232,42 +250,49 @@ namespace NumSharp.Backends.Strings
         /// </summary>
         /// <param name="a">The first allocator.</param>
         /// <param name="b">The second allocator (may be <paramref name="a"/>).</param>
-        internal static void AcquirePair(VStringAllocator a, VStringAllocator b)
+        internal static void acquire_allocators(VStringAllocator a, VStringAllocator b)
         {
             if (ReferenceEquals(a, b))
             {
-                a.Acquire();
+                a.acquire_allocator();
                 return;
             }
             var (first, second) = a._id < b._id ? (a, b) : (b, a);
-            first.Acquire();
-            second.Acquire();
+            first.acquire_allocator();
+            second.acquire_allocator();
         }
 
-        /// <summary>A unique, increasing number per allocator: the lock order of <see cref="AcquirePair"/>.</summary>
+        /// <summary>
+        ///     A unique, increasing number per allocator: the lock order of
+        ///     <see cref="acquire_allocators(VStringAllocator, VStringAllocator)"/> and of its list overload.
+        /// </summary>
         private readonly long _id = Interlocked.Increment(ref _nextId);
 
         /// <summary>The last <see cref="_id"/> handed out.</summary>
         private static long _nextId;
 
-        /// <summary>Releases what <see cref="AcquirePair"/> acquired (<c>NpyString_release_allocators</c>).</summary>
+        /// <summary>
+        ///     Releases what <see cref="acquire_allocators(VStringAllocator, VStringAllocator)"/> acquired
+        ///     (<c>NpyString_release_allocators</c> for two allocators).
+        /// </summary>
         /// <param name="a">The first allocator.</param>
         /// <param name="b">The second allocator (may be <paramref name="a"/>).</param>
-        internal static void ReleasePair(VStringAllocator a, VStringAllocator b)
+        internal static void release_allocators(VStringAllocator a, VStringAllocator b)
         {
-            a.Release();
+            a.release_allocator();
             if (!ReferenceEquals(a, b))
-                b.Release();
+                b.release_allocator();
         }
 
         /// <summary>
         ///     Acquires the mutexes of several allocators (<c>NpyString_acquire_allocators</c> for any count): the list is sorted
         ///     into lock order (<see cref="_id"/>) and each distinct allocator is locked once. Pair it with
-        ///     <see cref="ReleaseAll"/> on the SAME list, which this method leaves sorted.
+        ///     <see cref="release_allocators(System.Collections.Generic.List{VStringAllocator})"/> on the SAME list, which this
+        ///     method leaves sorted.
         /// </summary>
         /// <param name="allocators">The allocators (duplicates allowed); sorted in place.</param>
         /// <exception cref="ArgumentNullException"><paramref name="allocators"/> or one of its entries is null.</exception>
-        internal static void AcquireAll(System.Collections.Generic.List<VStringAllocator> allocators)
+        internal static void acquire_allocators(System.Collections.Generic.List<VStringAllocator> allocators)
         {
             if (allocators is null)
                 throw new ArgumentNullException(nameof(allocators));
@@ -281,20 +306,24 @@ namespace NumSharp.Backends.Strings
                 // The same allocator twice (two operands over one buffer) is locked once; the order is global, so two threads
                 // locking overlapping sets cannot deadlock.
                 if (!ReferenceEquals(a, previous))
-                    a.Acquire();
+                    a.acquire_allocator();
                 previous = a;
             }
         }
 
-        /// <summary>Releases what <see cref="AcquireAll"/> acquired, given the same (now sorted) list.</summary>
-        /// <param name="allocators">The list passed to <see cref="AcquireAll"/>.</param>
-        internal static void ReleaseAll(System.Collections.Generic.List<VStringAllocator> allocators)
+        /// <summary>
+        ///     Releases what <see cref="acquire_allocators(System.Collections.Generic.List{VStringAllocator})"/> acquired,
+        ///     given the same (now sorted) list (<c>NpyString_release_allocators</c>).
+        /// </summary>
+        /// <param name="allocators">The list passed to
+        ///     <see cref="acquire_allocators(System.Collections.Generic.List{VStringAllocator})"/>.</param>
+        internal static void release_allocators(System.Collections.Generic.List<VStringAllocator> allocators)
         {
             VStringAllocator previous = null;
             foreach (var a in allocators)
             {
                 if (!ReferenceEquals(a, previous))
-                    a.Release();
+                    a.release_allocator();
                 previous = a;
             }
         }
@@ -306,17 +335,17 @@ namespace NumSharp.Backends.Strings
         /// <summary>The flags of a cell (<c>STRING_FLAGS</c>).</summary>
         /// <param name="s">The cell.</param>
         /// <returns>The high nibble of byte 15.</returns>
-        internal static byte Flags(byte* s) => (byte)(s[15] & FlagMask);
+        internal static byte Flags(byte* s) => (byte)(s[15] & NPY_STRING_FLAG_MASK);
 
         /// <summary>Whether a cell holds its text itself (<c>is_short_string</c>: initialized and outside the arena, not missing, not long).</summary>
         /// <param name="s">The cell.</param>
         /// <returns>True for a short string.</returns>
-        internal static bool IsShort(byte* s) => Flags(s) == (Initialized | OutsideArena);
+        internal static bool IsShort(byte* s) => Flags(s) == (NPY_STRING_INITIALIZED | NPY_STRING_OUTSIDE_ARENA);
 
         /// <summary>Whether a cell is an NA value (<c>NpyString_isnull</c>).</summary>
         /// <param name="s">The cell.</param>
-        /// <returns>True when the <see cref="Missing"/> flag is set.</returns>
-        internal static bool IsNull(byte* s) => (s[15] & Missing) == Missing;
+        /// <returns>True when the <see cref="NPY_STRING_MISSING"/> flag is set.</returns>
+        internal static bool isnull(byte* s) => (s[15] & NPY_STRING_MISSING) == NPY_STRING_MISSING;
 
         /// <summary>The size field of a vstring cell without its flags byte (<c>VSTRING_SIZE</c>).</summary>
         /// <param name="s">The cell.</param>
@@ -325,7 +354,7 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>Sets a vstring cell's size and keeps its flags byte (<c>set_vstring_size</c>).</summary>
         /// <param name="s">The cell.</param>
-        /// <param name="size">The new size (at most <see cref="MaxStringSize"/>).</param>
+        /// <param name="size">The new size (at most <see cref="NPY_MAX_STRING_SIZE"/>).</param>
         private static void SetVStringSize(byte* s, ulong size)
         {
             byte flags = s[15];
@@ -336,19 +365,22 @@ namespace NumSharp.Backends.Strings
         /// <summary>The text length of a cell in bytes (<c>NpyString_size</c>): 0 for an NA value.</summary>
         /// <param name="s">The cell.</param>
         /// <returns>The UTF-8 byte count.</returns>
-        internal static long Size(byte* s)
+        internal static long size(byte* s)
         {
-            if (IsNull(s))
+            if (isnull(s))
                 return 0;
             if (IsShort(s))
-                return s[15] & ShortSizeMask;
+                return s[15] & NPY_SHORT_STRING_SIZE_MASK;
             return (long)VStringSize(s);
         }
 
-        /// <summary>Whether a cell is a heap string that owns memory (<c>OutsideArena</c> and not short, with a size).</summary>
+        /// <summary>
+        ///     Whether a cell is a heap string that owns memory: <see cref="NPY_STRING_OUTSIDE_ARENA"/> set, not a
+        ///     short string, and a nonzero size.
+        /// </summary>
         /// <param name="s">The cell.</param>
         /// <returns>True when freeing the cell frees heap memory.</returns>
-        internal static bool OwnsHeapString(byte* s) => (s[15] & OutsideArena) != 0 && !IsShort(s) && VStringSize(s) > 0;
+        internal static bool OwnsHeapString(byte* s) => (s[15] & NPY_STRING_OUTSIDE_ARENA) != 0 && !IsShort(s) && VStringSize(s) > 0;
 
         /// <summary>
         ///     The arena bytes a duplicate of this cell appends to a destination arena whose cells hold no arena strings (so no
@@ -359,10 +391,10 @@ namespace NumSharp.Backends.Strings
         /// <returns>The bytes <see cref="ArenaMalloc"/> would append for it.</returns>
         internal static long ArenaBytesForDuplicate(byte* s)
         {
-            if (IsNull(s) || IsShort(s))
+            if (isnull(s) || IsShort(s))
                 return 0;
             ulong size = VStringSize(s);
-            return size == 0 ? 0 : (long)(size <= MediumMaxSize ? size + 1 : size + 8);
+            return size == 0 ? 0 : (long)(size <= NPY_MEDIUM_STRING_MAX_SIZE ? size + 1 : size + 8);
         }
 
         /// <summary>
@@ -372,7 +404,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="size">The UTF-8 size.</param>
         /// <returns>The bytes, prefix included.</returns>
         internal static long ArenaBytesForText(long size)
-            => size <= ShortMaxSize ? 0 : size <= MediumMaxSize ? size + 1 : size + 8;
+            => size <= NPY_SHORT_STRING_MAX_SIZE ? 0 : size <= NPY_MEDIUM_STRING_MAX_SIZE ? size + 1 : size + 8;
 
         /// <summary>Whether this allocator holds any medium, long or heap string (a copy of its cells may need arena space).</summary>
         internal bool HoldsLongStrings => _arenaCursor > 0 || HeapStrings > 0;
@@ -443,7 +475,7 @@ namespace NumSharp.Backends.Strings
         /// <returns>The first text byte, or null.</returns>
         private byte* VStringBuffer(byte* s)
         {
-            if ((s[15] & OutsideArena) != 0)
+            if ((s[15] & NPY_STRING_OUTSIDE_ARENA) != 0)
                 return (byte*)*(ulong*)s;
             if (_arena == null)
                 return null;
@@ -463,7 +495,7 @@ namespace NumSharp.Backends.Strings
             if (InjectedFailure())
                 return null;
             // one extra size_t to store the size of the allocation
-            ulong storage = size <= MediumMaxSize ? size + 1 : size + 8;
+            ulong storage = size <= NPY_MEDIUM_STRING_MAX_SIZE ? size + 1 : size + 8;
             if (_arenaSize - _arenaCursor < storage)
             {
                 ulong minsize = _arenaCursor + storage;
@@ -477,7 +509,7 @@ namespace NumSharp.Backends.Strings
                     return null;
             }
             byte* ret;
-            if (size <= MediumMaxSize)
+            if (size <= NPY_MEDIUM_STRING_MAX_SIZE)
             {
                 _arena[_arenaCursor] = (byte)size;
                 ret = _arena + _arenaCursor + 1;
@@ -522,9 +554,9 @@ namespace NumSharp.Backends.Strings
         /// <param name="buf">Receives the first text byte (null for an NA value; a non-null pointer to nothing for <c>''</c>).</param>
         /// <param name="size">Receives the text size in bytes.</param>
         /// <returns>1 for an NA value, 0 for a string, -1 when an arena string's arena is missing (a corrupt cell).</returns>
-        internal int Load(byte* packed, out byte* buf, out long size)
+        internal int load(byte* packed, out byte* buf, out long size)
         {
-            if (IsNull(packed))
+            if (isnull(packed))
             {
                 size = 0;
                 buf = null;
@@ -532,7 +564,7 @@ namespace NumSharp.Backends.Strings
             }
             if (IsShort(packed))
             {
-                size = packed[15] & ShortSizeMask;
+                size = packed[15] & NPY_SHORT_STRING_SIZE_MASK;
                 buf = packed;
                 return 0;
             }
@@ -562,21 +594,21 @@ namespace NumSharp.Backends.Strings
         ///     (read from the size prefix); anything else allocates on the heap.
         /// </summary>
         /// <param name="toInit">The cell (its flags byte is updated).</param>
-        /// <param name="size">The text size (more than <see cref="ShortMaxSize"/>).</param>
+        /// <param name="size">The text size (more than <see cref="NPY_SHORT_STRING_MAX_SIZE"/>).</param>
         /// <param name="onHeap">Receives true for a heap allocation (the cell then stores the pointer, not an offset).</param>
         /// <returns>The first text byte, or null on failure.</returns>
         private byte* HeapOrArenaAllocate(byte* toInit, ulong size, out bool onHeap)
         {
             onHeap = false;
             byte flags = toInit[15];
-            if ((flags & OutsideArena) == 0)
+            if ((flags & NPY_STRING_OUTSIDE_ARENA) == 0)
             {
                 // Arena allocation or re-allocation.
                 if (flags == 0)
                 {
                     // string isn't previously allocated, so add to existing arena allocation
                     byte* ret = ArenaMalloc(size);
-                    toInit[15] = size <= MediumMaxSize ? Initialized : (byte)(Initialized | Long);
+                    toInit[15] = size <= NPY_MEDIUM_STRING_MAX_SIZE ? NPY_STRING_INITIALIZED : (byte)(NPY_STRING_INITIALIZED | NPY_STRING_LONG);
                     return ret;
                 }
                 // String was in arena. See if there is still space.
@@ -584,7 +616,7 @@ namespace NumSharp.Backends.Strings
                 byte* buf = VStringBuffer(toInit);
                 if (buf == null)
                     return null;
-                ulong allocSize = (flags & Long) != 0
+                ulong allocSize = (flags & NPY_STRING_LONG) != 0
                     ? Unsafe.ReadUnaligned<ulong>(buf - 8) // long string size not necessarily memory-aligned
                     : *(buf - 1);                          // medium string size is stored in a char
                 if (size <= allocSize)
@@ -593,7 +625,7 @@ namespace NumSharp.Backends.Strings
             }
             // Heap allocate
             onHeap = true;
-            toInit[15] = Initialized | OutsideArena | Long;
+            toInit[15] = NPY_STRING_INITIALIZED | NPY_STRING_OUTSIDE_ARENA | NPY_STRING_LONG;
             // A failure scheduled by a test (FailAllocationAfter): the same null an exhausted heap gives.
             if (InjectedFailure())
                 return null;
@@ -619,7 +651,7 @@ namespace NumSharp.Backends.Strings
         /// <returns>0, or -1 for an arena string outside the arena.</returns>
         private int HeapOrArenaDeallocate(byte* s)
         {
-            if ((s[15] & OutsideArena) != 0)
+            if ((s[15] & NPY_STRING_OUTSIDE_ARENA) != 0)
             {
                 // It's a heap string (not in the arena buffer) so it needs to be deallocated with free(). For heap strings
                 // the offset is a raw address so this cast is safe.
@@ -637,10 +669,10 @@ namespace NumSharp.Backends.Strings
         ///     string; an arena cell keeps its allocation and gets size 0, so a later write can reuse the arena space.
         /// </summary>
         /// <param name="s">The cell (its old text must already be freed when it was a heap string).</param>
-        internal static void PackEmpty(byte* s)
+        internal static void pack_empty(byte* s)
         {
-            if ((s[15] & OutsideArena) != 0)
-                s[15] = Initialized | OutsideArena; // This also sets short string size to 0.
+            if ((s[15] & NPY_STRING_OUTSIDE_ARENA) != 0)
+                s[15] = NPY_STRING_INITIALIZED | NPY_STRING_OUTSIDE_ARENA; // This also sets short string size to 0.
             else
                 SetVStringSize(s, 0);
         }
@@ -650,18 +682,18 @@ namespace NumSharp.Backends.Strings
         ///     the empty string, a short string's length, or an arena / heap allocation whose offset or pointer the cell stores.
         /// </summary>
         /// <param name="size">The text size.</param>
-        /// <param name="s">The cell (already freed with <see cref="Free"/>, or never written).</param>
-        /// <returns>0, or -1 when the size exceeds <see cref="MaxStringSize"/> or the memory is exhausted.</returns>
-        internal int NewEmptySize(long size, byte* s)
+        /// <param name="s">The cell (already freed with <see cref="free"/>, or never written).</param>
+        /// <returns>0, or -1 when the size exceeds <see cref="NPY_MAX_STRING_SIZE"/> or the memory is exhausted.</returns>
+        internal int newemptysize(long size, byte* s)
         {
             if (size == 0)
             {
-                PackEmpty(s);
+                pack_empty(s);
                 return 0;
             }
-            if ((ulong)size > MaxStringSize)
+            if ((ulong)size > NPY_MAX_STRING_SIZE)
                 return -1;
-            if (size > ShortMaxSize)
+            if (size > NPY_SHORT_STRING_MAX_SIZE)
             {
                 byte* buf = HeapOrArenaAllocate(s, (ulong)size, out bool onHeap);
                 if (buf == null)
@@ -673,7 +705,7 @@ namespace NumSharp.Backends.Strings
             {
                 // Size can be no larger than 15, so the size data is in the 4 least significant bits of the byte and it is
                 // safe to | with the flags. All other metadata of a previous allocation is wiped.
-                s[15] = (byte)(Initialized | OutsideArena | size);
+                s[15] = (byte)(NPY_STRING_INITIALIZED | NPY_STRING_OUTSIDE_ARENA | size);
             }
             return 0;
         }
@@ -682,17 +714,17 @@ namespace NumSharp.Backends.Strings
         ///     Allocates a cell's new text and copies <paramref name="size"/> bytes of <paramref name="init"/> into it
         ///     (<c>NpyString_newsize</c>).
         /// </summary>
-        /// <param name="init">The UTF-8 text (not inside this allocator's arena: see <see cref="Dup"/>).</param>
+        /// <param name="init">The UTF-8 text (not inside this allocator's arena: see <see cref="dup"/>).</param>
         /// <param name="size">The text size.</param>
         /// <param name="toInit">The cell (already freed, or never written).</param>
         /// <returns>0, or -1 on failure.</returns>
-        internal int NewSize(byte* init, long size, byte* toInit)
+        internal int newsize(byte* init, long size, byte* toInit)
         {
-            if (NewEmptySize(size, toInit) < 0)
+            if (newemptysize(size, toInit) < 0)
                 return -1;
             if (size == 0)
                 return 0;
-            byte* buf = size > ShortMaxSize ? VStringBuffer(toInit) : toInit;
+            byte* buf = size > NPY_SHORT_STRING_MAX_SIZE ? VStringBuffer(toInit) : toInit;
             Buffer.MemoryCopy(init, buf, size, size);
             return 0;
         }
@@ -704,18 +736,18 @@ namespace NumSharp.Backends.Strings
         /// </summary>
         /// <param name="s">The cell.</param>
         /// <returns>0, or -1 for a corrupt arena cell.</returns>
-        internal int Free(byte* s)
+        internal int free(byte* s)
         {
             // Unconditionally remove flag indicating something was missing. For that case, the string should have been
             // deallocated already, but test anyway in case we later implement the option to mask the string.
-            s[15] = (byte)(s[15] & ~Missing);
+            s[15] = (byte)(s[15] & ~NPY_STRING_MISSING);
             if (IsShort(s))
             {
-                if ((s[15] & ShortSizeMask) > 0)
+                if ((s[15] & NPY_SHORT_STRING_SIZE_MASK) > 0)
                 {
                     // zero buffer and set flags for initialized out-of-arena empty string.
-                    new Span<byte>(s, CellSize).Clear();
-                    s[15] = OutsideArena | Initialized;
+                    new Span<byte>(s, SIZEOF_NPY_PACKED_STATIC_STRING).Clear();
+                    s[15] = NPY_STRING_OUTSIDE_ARENA | NPY_STRING_INITIALIZED;
                 }
             }
             else if (VStringSize(s) > 0)
@@ -734,14 +766,14 @@ namespace NumSharp.Backends.Strings
         /// </summary>
         /// <param name="s">The cell.</param>
         /// <returns>0, or -1 on failure.</returns>
-        internal int PackNull(byte* s)
+        internal int pack_null(byte* s)
         {
-            if (Free(s) < 0)
+            if (free(s) < 0)
                 return -1;
             // preserve the flags because we allow mutation, so we need metadata about the original allocation associated
             // with this string in order to determine if there is space in the arena allocation for a new string after a
             // user mutates this one to a non-NULL value.
-            s[15] |= Missing;
+            s[15] |= NPY_STRING_MISSING;
             return 0;
         }
 
@@ -752,11 +784,11 @@ namespace NumSharp.Backends.Strings
         /// <param name="buf">The UTF-8 text (not inside this allocator's arena).</param>
         /// <param name="size">Its size in bytes.</param>
         /// <returns>0, or -1 on failure.</returns>
-        internal int Pack(byte* s, byte* buf, long size)
+        internal int pack(byte* s, byte* buf, long size)
         {
-            if (Free(s) < 0)
+            if (free(s) < 0)
                 return -1;
-            return NewSize(buf, size, s);
+            return newsize(buf, size, s);
         }
 
         /// <summary>
@@ -765,23 +797,23 @@ namespace NumSharp.Backends.Strings
         ///     (through a temporary copy when both cells share an allocator, because the new allocation can move the arena).
         /// </summary>
         /// <param name="input">The source cell.</param>
-        /// <param name="output">The destination cell (freed with <see cref="Free"/>, or never written).</param>
+        /// <param name="output">The destination cell (freed with <see cref="free"/>, or never written).</param>
         /// <param name="inAllocator">The source's allocator (locked).</param>
         /// <param name="outAllocator">The destination's allocator (locked; may be <paramref name="inAllocator"/>).</param>
         /// <returns>0, or -1 on failure.</returns>
-        internal static int Dup(byte* input, byte* output, VStringAllocator inAllocator, VStringAllocator outAllocator)
+        internal static int dup(byte* input, byte* output, VStringAllocator inAllocator, VStringAllocator outAllocator)
         {
-            if (IsNull(input))
-                return outAllocator.PackNull(output);
-            long size = Size(input);
+            if (isnull(input))
+                return outAllocator.pack_null(output);
+            long size = VStringAllocator.size(input); // qualified: the local of the same name hides the method
             if (size == 0)
             {
-                PackEmpty(output);
+                pack_empty(output);
                 return 0;
             }
             if (IsShort(input))
             {
-                Buffer.MemoryCopy(input, output, CellSize, CellSize);
+                Buffer.MemoryCopy(input, output, SIZEOF_NPY_PACKED_STATIC_STRING, SIZEOF_NPY_PACKED_STATIC_STRING);
                 return 0;
             }
             byte* inBuf;
@@ -797,7 +829,7 @@ namespace NumSharp.Backends.Strings
             {
                 inBuf = inAllocator.VStringBuffer(input);
             }
-            int ret = outAllocator.NewSize(inBuf, size, output);
+            int ret = outAllocator.newsize(inBuf, size, output);
             if (usedMalloc)
                 NativeMemory.Free(inBuf);
             return ret;
@@ -816,9 +848,9 @@ namespace NumSharp.Backends.Strings
         ///     cell) or <c>Failed to allocate string in {location}</c> (the memory is exhausted).</exception>
         internal static void FreeAndCopy(VStringAllocator inAllocator, VStringAllocator outAllocator, byte* input, byte* output, string location)
         {
-            if (outAllocator.Free(output) < 0)
+            if (outAllocator.free(output) < 0)
                 throw new OutOfMemoryException($"Failed to deallocate string in {location}");
-            if (Dup(input, output, inAllocator, outAllocator) < 0)
+            if (dup(input, output, inAllocator, outAllocator) < 0)
                 throw new OutOfMemoryException($"Failed to allocate string in {location}");
         }
 
@@ -831,9 +863,9 @@ namespace NumSharp.Backends.Strings
         /// <param name="s2">The second cell.</param>
         /// <param name="a2">Its allocator.</param>
         /// <returns>True when both cells point at the same text.</returns>
-        internal static bool ShareMemory(byte* s1, VStringAllocator a1, byte* s2, VStringAllocator a2)
+        internal static bool share_memory(byte* s1, VStringAllocator a1, byte* s2, VStringAllocator a2)
         {
-            if (!ReferenceEquals(a1, a2) || IsShort(s1) || IsShort(s2) || IsNull(s1) || IsNull(s2))
+            if (!ReferenceEquals(a1, a2) || IsShort(s1) || IsShort(s2) || isnull(s1) || isnull(s2))
                 return false;
             return a1.VStringBuffer(s1) == a2.VStringBuffer(s2);
         }
@@ -857,7 +889,7 @@ namespace NumSharp.Backends.Strings
         /// </remarks>
         internal void ClearAndFree(byte* cells, long count)
         {
-            Acquire();
+            acquire_allocator();
             try
             {
                 if (_freed)
@@ -865,7 +897,7 @@ namespace NumSharp.Backends.Strings
                 _freed = true;
                 for (long i = 0; i < count; i++)
                 {
-                    byte* s = cells + i * CellSize;
+                    byte* s = cells + i * SIZEOF_NPY_PACKED_STATIC_STRING;
                     if (OwnsHeapString(s))
                     {
                         NativeMemory.Free((void*)*(ulong*)s);
@@ -888,7 +920,7 @@ namespace NumSharp.Backends.Strings
             }
             finally
             {
-                Release();
+                release_allocator();
             }
         }
 

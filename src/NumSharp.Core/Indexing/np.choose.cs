@@ -518,19 +518,19 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Parse the clip mode with NumPy's <c>PyArray_ClipmodeConverter</c> (<see cref="ClipModeConverter"/>, the
+        ///     Parse the clip mode with NumPy's <c>PyArray_ClipmodeConverter</c> (<see cref="ClipmodeConverter"/>, the
         ///     parser <c>np.take</c>, <c>np.put</c> and <c>np.ravel_multi_index</c> share) and map it to the choose
         ///     kernel's constants.
         /// </summary>
         /// <param name="mode"><c>"raise"</c>, <c>"wrap"</c>, <c>"clip"</c>, or <c>null</c> (NumPy's <c>None</c>:
         ///     raise).</param>
         /// <returns>The <see cref="DirectILKernelGenerator"/> <c>ChooseMode*</c> constant.</returns>
-        /// <exception cref="ValueError">See <see cref="ClipModeConverter"/>: a misspelled mode (<c>Use one of 'clip',
+        /// <exception cref="ValueError">See <see cref="ClipmodeConverter"/>: a misspelled mode (<c>Use one of 'clip',
         ///     'raise', or 'wrap' for clip mode</c>) or any other string (<c>clipmode must be one of 'clip', 'raise', or
         ///     'wrap' (got 'bogus')</c>).</exception>
         /// <remarks>The mapping is spelled out, not assumed: the shared numbering and the choose kernel's are equal
         ///     today, and a switch keeps a later renumbering of either from silently selecting the wrong mode.</remarks>
-        private static int ParseChooseMode(string mode) => ClipModeConverter(mode) switch
+        private static int ParseChooseMode(string mode) => ClipmodeConverter(mode) switch
         {
             ClipModeWrap => DirectILKernelGenerator.ChooseModeWrap,
             ClipModeClip => DirectILKernelGenerator.ChooseModeClip,

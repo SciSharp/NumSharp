@@ -319,9 +319,9 @@ namespace NumSharp.Tests.Backends.Strings
         // ------------------------------------------------------------------------------------------------------------
 
         /// <summary>
-        ///     <c>Load</c> / <c>Size</c> of every cell kind, <c>Pack</c> of sizes around both boundaries, the arena's growth to
-        ///     125 % of its need, NA (size 0, load result 1), and <c>NewEmptySize</c>'s refusal of a size above
-        ///     <c>MaxStringSize</c> (NumPy's -1, which callers turn into a MemoryError).
+        ///     <c>load</c> / <c>size</c> of every cell kind, <c>pack</c> of sizes around both boundaries, the arena's growth to
+        ///     125 % of its need, NA (size 0, load result 1), and <c>newemptysize</c>'s refusal of a size above
+        ///     <c>NPY_MAX_STRING_SIZE</c> (NumPy's -1, which callers turn into a MemoryError).
         /// </summary>
         [TestMethod]
         public unsafe void Allocator_PackLoadSize()
@@ -331,7 +331,7 @@ namespace NumSharp.Tests.Backends.Strings
             {
                 var al = s.Allocator;
                 byte* c0 = s.Address;
-                al.Acquire();
+                al.acquire_allocator();
                 try
                 {
                     int[] sizes = { 0, 15, 16, 255, 256, 1000 };
@@ -340,37 +340,37 @@ namespace NumSharp.Tests.Backends.Strings
                         var text = new byte[sizes[i]];
                         Array.Fill(text, (byte)('a' + i));
                         fixed (byte* t = text)
-                            al.Pack(c0 + 16 * i, t, text.Length).Should().Be(0);
+                            al.pack(c0 + 16 * i, t, text.Length).Should().Be(0);
                     }
                     for (int i = 0; i < sizes.Length; i++)
                     {
-                        al.Load(c0 + 16 * i, out byte* buf, out long size).Should().Be(0);
+                        al.load(c0 + 16 * i, out byte* buf, out long size).Should().Be(0);
                         size.Should().Be(sizes[i]);
-                        VStringAllocator.Size(c0 + 16 * i).Should().Be(sizes[i]);
+                        VStringAllocator.size(c0 + 16 * i).Should().Be(sizes[i]);
                         if (size > 0)
                             buf[size - 1].Should().Be((byte)('a' + i));
                     }
                     VStringAllocator.IsShort(c0 + 16).Should().BeTrue();
                     VStringAllocator.IsShort(c0 + 32).Should().BeFalse();
-                    VStringAllocator.Flags(c0 + 64).Should().Be((byte)(VStringAllocator.Initialized | VStringAllocator.Long));
+                    VStringAllocator.Flags(c0 + 64).Should().Be((byte)(VStringAllocator.NPY_STRING_INITIALIZED | VStringAllocator.NPY_STRING_LONG));
                     // 16+1, 255+1, 256+8, 1000+8 bytes appended; the arena grew to 125 % of each need
                     al.ArenaUsed.Should().Be(17 + 256 + 264 + 1008);
                     // arena_malloc's growth: each time the arena is too small it becomes minsize + minsize / 4, with minsize the
                     // cursor plus the new allocation: 17 -> 21, 273 -> 341, 537 -> 671, 1545 -> 1931.
                     al.ArenaCapacity.Should().Be(1931);
 
-                    al.PackNull(c0).Should().Be(0);
-                    VStringAllocator.IsNull(c0).Should().BeTrue();
-                    VStringAllocator.Size(c0).Should().Be(0);
-                    al.Load(c0, out byte* nb, out long ns).Should().Be(1);
+                    al.pack_null(c0).Should().Be(0);
+                    VStringAllocator.isnull(c0).Should().BeTrue();
+                    VStringAllocator.size(c0).Should().Be(0);
+                    al.load(c0, out byte* nb, out long ns).Should().Be(1);
                     ((IntPtr)nb).Should().Be(IntPtr.Zero);
                     ns.Should().Be(0);
 
-                    al.NewEmptySize(VStringAllocator.MaxStringSize + 1, c0 + 16).Should().Be(-1, "past MaxStringSize");
+                    al.newemptysize(VStringAllocator.NPY_MAX_STRING_SIZE + 1, c0 + 16).Should().Be(-1, "past NPY_MAX_STRING_SIZE");
                 }
                 finally
                 {
-                    al.Release();
+                    al.release_allocator();
                 }
             }
             finally
@@ -380,8 +380,8 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     A size the arena cannot grow to (just under <c>MaxStringSize</c>) is NumPy's allocation failure (-1, so the caller
-        ///     raises the MemoryError), not an exception from the reallocation.
+        ///     A size the arena cannot grow to (just under <c>NPY_MAX_STRING_SIZE</c>) is NumPy's allocation failure (-1, so
+        ///     the caller raises the MemoryError), not an exception from the reallocation.
         /// </summary>
         [TestMethod]
         public unsafe void Allocator_ArenaGrowthFailure_IsMinusOne()
@@ -390,15 +390,15 @@ namespace NumSharp.Tests.Backends.Strings
             try
             {
                 var al = s.Allocator;
-                al.Acquire();
+                al.acquire_allocator();
                 try
                 {
-                    al.NewEmptySize(VStringAllocator.MaxStringSize, s.Address).Should().Be(-1);
-                    VStringAllocator.Size(s.Address).Should().Be(0, "the failed allocation leaves the cell empty");
+                    al.newemptysize(VStringAllocator.NPY_MAX_STRING_SIZE, s.Address).Should().Be(-1);
+                    VStringAllocator.size(s.Address).Should().Be(0, "the failed allocation leaves the cell empty");
                 }
                 finally
                 {
-                    al.Release();
+                    al.release_allocator();
                 }
             }
             finally
@@ -408,8 +408,8 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     <c>Dup</c> between two allocators and within one (through a temporary, because the new allocation can move the
-        ///     arena), <c>ShareMemory</c> (only two vstring cells of one allocator with one buffer), and <c>FreeAndCopy</c>'s
+        ///     <c>dup</c> between two allocators and within one (through a temporary, because the new allocation can move the
+        ///     arena), <c>share_memory</c> (only two vstring cells of one allocator with one buffer), and <c>FreeAndCopy</c>'s
         ///     MemoryError texts: a corrupt destination cell (an arena string outside the arena) is "Failed to deallocate".
         /// </summary>
         [TestMethod]
@@ -421,20 +421,20 @@ namespace NumSharp.Tests.Backends.Strings
             {
                 a[0] = new string('m', 30);
                 a[1] = "short";
-                VStringAllocator.AcquirePair(a.Allocator, b.Allocator);
+                VStringAllocator.acquire_allocators(a.Allocator, b.Allocator);
                 try
                 {
-                    VStringAllocator.Dup(a.Address, b.Address, a.Allocator, b.Allocator).Should().Be(0);
-                    VStringAllocator.Dup(a.Address + 16, b.Address + 16, a.Allocator, b.Allocator).Should().Be(0);
-                    VStringAllocator.Dup(a.Address, a.Address + 32, a.Allocator, a.Allocator).Should().Be(0, "a duplicate within one arena");
-                    VStringAllocator.ShareMemory(a.Address, a.Allocator, a.Address, a.Allocator).Should().BeTrue();
-                    VStringAllocator.ShareMemory(a.Address, a.Allocator, a.Address + 32, a.Allocator).Should().BeFalse();
-                    VStringAllocator.ShareMemory(a.Address, a.Allocator, b.Address, b.Allocator).Should().BeFalse();
-                    VStringAllocator.ShareMemory(a.Address + 16, a.Allocator, a.Address + 16, a.Allocator).Should().BeFalse("a short cell owns no buffer");
+                    VStringAllocator.dup(a.Address, b.Address, a.Allocator, b.Allocator).Should().Be(0);
+                    VStringAllocator.dup(a.Address + 16, b.Address + 16, a.Allocator, b.Allocator).Should().Be(0);
+                    VStringAllocator.dup(a.Address, a.Address + 32, a.Allocator, a.Allocator).Should().Be(0, "a duplicate within one arena");
+                    VStringAllocator.share_memory(a.Address, a.Allocator, a.Address, a.Allocator).Should().BeTrue();
+                    VStringAllocator.share_memory(a.Address, a.Allocator, a.Address + 32, a.Allocator).Should().BeFalse();
+                    VStringAllocator.share_memory(a.Address, a.Allocator, b.Address, b.Allocator).Should().BeFalse();
+                    VStringAllocator.share_memory(a.Address + 16, a.Allocator, a.Address + 16, a.Allocator).Should().BeFalse("a short cell owns no buffer");
                 }
                 finally
                 {
-                    VStringAllocator.ReleasePair(a.Allocator, b.Allocator);
+                    VStringAllocator.release_allocators(a.Allocator, b.Allocator);
                 }
                 b[0].Should().Be(new string('m', 30));
                 b[1].Should().Be("short");
@@ -445,14 +445,14 @@ namespace NumSharp.Tests.Backends.Strings
                 *(ulong*)(a.Address + 56) = 20UL | (0x40UL << 56);
                 Action copy = () =>
                 {
-                    VStringAllocator.AcquirePair(a.Allocator, b.Allocator);
+                    VStringAllocator.acquire_allocators(a.Allocator, b.Allocator);
                     try
                     {
                         VStringAllocator.FreeAndCopy(b.Allocator, a.Allocator, b.Address, a.Address + 48, "string to string cast");
                     }
                     finally
                     {
-                        VStringAllocator.ReleasePair(a.Allocator, b.Allocator);
+                        VStringAllocator.release_allocators(a.Allocator, b.Allocator);
                     }
                 };
                 copy.Should().Throw<OutOfMemoryException>().WithMessage("Failed to deallocate string in string to string cast");
@@ -466,16 +466,16 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     <c>AcquireAll</c> locks a set of allocators in one global order (each once, duplicates skipped) so two operations
-        ///     over the same allocators never deadlock; a null list or a null entry is refused.
+        ///     <c>acquire_allocators</c> locks a set of allocators in one global order (each once, duplicates skipped) so two
+        ///     operations over the same allocators never deadlock; a null list or a null entry is refused.
         /// </summary>
         [TestMethod]
-        public void Allocator_AcquireAll()
+        public void Allocator_AcquireAllocators()
         {
             var x = new VStringAllocator();
             var y = new VStringAllocator();
             var list = new List<VStringAllocator> { y, x, y };
-            VStringAllocator.AcquireAll(list);
+            VStringAllocator.acquire_allocators(list);
             try
             {
                 System.Threading.Monitor.IsEntered(GetLock(x)).Should().BeTrue();
@@ -483,12 +483,12 @@ namespace NumSharp.Tests.Backends.Strings
             }
             finally
             {
-                VStringAllocator.ReleaseAll(list);
+                VStringAllocator.release_allocators(list);
             }
             System.Threading.Monitor.IsEntered(GetLock(x)).Should().BeFalse();
-            Action nullList = () => VStringAllocator.AcquireAll(null);
+            Action nullList = () => VStringAllocator.acquire_allocators(null);
             nullList.Should().Throw<ArgumentNullException>();
-            Action nullEntry = () => VStringAllocator.AcquireAll(new List<VStringAllocator> { x, null });
+            Action nullEntry = () => VStringAllocator.acquire_allocators(new List<VStringAllocator> { x, null });
             nullEntry.Should().Throw<ArgumentNullException>().WithMessage("An allocator to lock is null.*");
         }
 

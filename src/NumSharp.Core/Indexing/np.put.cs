@@ -33,7 +33,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="values"/> is null (<c>None</c>) and <paramref name="a"/> is an integer
         ///     (or <c>decimal</c>) array.</exception>
         /// <exception cref="ValueError">A bad <paramref name="mode"/> (NumPy's <c>clipmode_parser</c> texts, see
-        ///     <see cref="ClipModeConverter"/>) — reported first, as NumPy parses it with the arguments —, then a read-only
+        ///     <see cref="ClipmodeConverter"/>) — reported first, as NumPy parses it with the arguments —, then a read-only
         ///     <paramref name="a"/> (<c>put: output array is read-only</c>).</exception>
         /// <exception cref="TypeError">The index dtype cannot be cast to int64 under the <c>safe</c> rule (float, complex,
         ///     uint64), an empty index array included.</exception>
@@ -111,7 +111,7 @@ namespace NumSharp
         /// <param name="values">The values: an <see cref="NDArray"/> (a C# literal's marked 0-d array is packed as the
         ///     Python scalar it stands for), a boxed C# number (packed by its kind), or anything
         ///     <see cref="NDArray.AsStoreValue"/> converts. Read in C order and cycled.</param>
-        /// <param name="mode">The clip mode string (<see cref="ClipModeConverter"/>).</param>
+        /// <param name="mode">The clip mode string (<see cref="ClipmodeConverter"/>).</param>
         /// <exception cref="ValueError">A bad <paramref name="mode"/>; then a read-only <paramref name="a"/>.</exception>
         /// <exception cref="TypeError">An index dtype that does not cast to int64 under <c>safe</c>.</exception>
         /// <exception cref="IndexError">A non-empty <paramref name="indices"/> into an empty <paramref name="a"/>, or an
@@ -147,7 +147,7 @@ namespace NumSharp
         {
             // array_put converts `mode` with PyArray_ClipmodeConverter while it parses its arguments: a bad mode is
             // reported before PyArray_PutTo looks at the target.
-            int modeInt = ClipModeConverter(mode);
+            int modeInt = ClipmodeConverter(mode);
 
             // PyArray_FailUnlessWriteable(self, "put: output array") is PyArray_PutTo's first check (probed 2.4.2:
             // put(ro, [], []) and put(ro, [oob], v) report read-only).

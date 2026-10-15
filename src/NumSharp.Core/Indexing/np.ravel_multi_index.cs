@@ -37,7 +37,7 @@ namespace NumSharp
         /// <exception cref="ValueError">
         ///     In NumPy's order: an order letter that is not C / F / A / K (<c>order must be one of 'C', 'F', 'A', or 'K'
         ///     (got 'X')</c>); a bad <paramref name="mode"/> (NumPy's <c>clipmode_parser</c> texts, see
-        ///     <see cref="ClipModeConverter"/>); an <c>'A'</c> or <c>'K'</c> order (<c>only 'C' or 'F' order is
+        ///     <see cref="ClipmodeConverter"/>); an <c>'A'</c> or <c>'K'</c> order (<c>only 'C' or 'F' order is
         ///     permitted</c>); a dims product that overflows int64 (<c>invalid dims: array size defined by dims is larger
         ///     than the maximum possible size.</c>); a coordinate count that differs from <paramref name="dims"/>' length
         ///     (<c>parameter multi_index must be a sequence of length N</c>); a zero dimension while there is a coordinate
@@ -71,7 +71,7 @@ namespace NumSharp
             // ravel strides refuse an 'A' / 'K' order and an overflowing product; only then are the coordinates read.
             NPY_ORDER npyOrder = OrderResolver.Convert(order);
             var modes = new int[dims.Length];
-            int singleMode = ClipModeConverter(mode);
+            int singleMode = ClipmodeConverter(mode);
             for (int d = 0; d < modes.Length; d++) modes[d] = singleMode;
             var ravelStrides = RavelStrides(dims, npyOrder);
             ValidateRavelInputs(multi_index, dims);
@@ -92,7 +92,7 @@ namespace NumSharp
         ///     out.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="multi_index"/> or <paramref name="dims"/> is null.</exception>
         /// <exception cref="ValueError">In NumPy's order: a bad order letter; a mode count that differs from the dimensions
-        ///     (<c>list of clipmodes has wrong length (1 instead of 2)</c>) or a bad mode (<see cref="ClipModeConverter"/>);
+        ///     (<c>list of clipmodes has wrong length (1 instead of 2)</c>) or a bad mode (<see cref="ClipmodeConverter"/>);
         ///     an <c>'A'</c> / <c>'K'</c> order; a dims product overflow; a coordinate count that differs from
         ///     <paramref name="dims"/>' length; a zero dimension with a coordinate to fold; (mode <c>raise</c>) a coordinate
         ///     out of range.</exception>
@@ -138,7 +138,7 @@ namespace NumSharp
             if (dims == null) throw new ArgumentNullException(nameof(dims));
             // NumPy's order, as in the array form: the order letter, the mode, the ravel strides, then the coordinates.
             NPY_ORDER npyOrder = OrderResolver.Convert(order);
-            int modeInt = ClipModeConverter(mode);
+            int modeInt = ClipmodeConverter(mode);
             var ravelStrides = RavelStrides(dims, npyOrder);
             if (coords.Length != dims.Length)
                 throw new ValueError($"parameter multi_index must be a sequence of length {dims.Length}");

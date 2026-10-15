@@ -18,8 +18,11 @@ Record kinds (field "kind"):
            values and the byte-order macros; and the C fields of the other structs the DTypes folder ports: the
            ArrayMethod (PyArrayMethodObject, PyBoundArrayMethodObject), its call context (PyArrayMethod_Context), the
            datetime unit (PyArray_DatetimeMetaData) and the StringDType parameters (PyArray_StringDTypeObject); and the
-           values of the C macros a class of the folder carries as a constant (NPY_NEEDS_INIT, the StringDType cell's
-           SIZEOF_ / ALIGNOF_NPY_PACKED_STATIC_STRING). The replay asserts each exists in C# under NumPy's spelling.
+           values of the C macros a class carries as a constant (NPY_NEEDS_INIT, the StringDType cell's
+           SIZEOF_ / ALIGNOF_NPY_PACKED_STATIC_STRING, static_string.c's NPY_STRING_* / NPY_SHORT_STRING_* /
+           NPY_MEDIUM_STRING_MAX_SIZE and static_string.h's NPY_MAX_STRING_SIZE); and the function families a class
+           ports (NpyString_*, the StringDType allocator API of static_string.c). The replay asserts each exists in C#
+           under NumPy's spelling (a family's functions without their prefix).
   descr    one descriptor built by a recipe and every numpy.dtype attribute of it, plus str / repr / len, the class
            name and the KeyError text of d[0].
   error    a recipe NumPy refuses: the exception type and str(e).
@@ -231,6 +234,21 @@ def members():
         "SIZEOF_NPY_PACKED_STATIC_STRING": string_dt.itemsize,
         "ALIGNOF_NPY_PACKED_STATIC_STRING": string_dt.alignment,
     }
+    # static_string.c / .h: the flag and size macros of the packed string. The plain numbers are read as written; the
+    # two C expressions are evaluated for this build's size_t (np.uintp): NPY_SHORT_STRING_MAX_SIZE is
+    # sizeof(npy_static_string) - 1 (a size_t and a pointer), NPY_MAX_STRING_SIZE is one byte short of a size_t.
+    sdir = os.path.join(src, "src", "multiarray", "stringdtype")
+    static_c = open(os.path.join(sdir, "static_string.c"), encoding="utf-8").read()
+    static_h = open(os.path.join(sdir, "static_string.h"), encoding="utf-8").read()
+    for m in re.finditer(r"^#define (NPY_(?:STRING|SHORT_STRING|MEDIUM_STRING)_\w+)\s+(0x[0-9A-Fa-f]+|\d+)\b", static_c, re.M):
+        macros[m.group(1)] = int(m.group(2), 0)
+    size_t = np.dtype(np.uintp).itemsize
+    if "#define NPY_SHORT_STRING_MAX_SIZE" not in static_c or "#define NPY_MAX_STRING_SIZE" not in static_h:
+        raise SystemExit("the static string size macros moved; update the generator")
+    macros["NPY_SHORT_STRING_MAX_SIZE"] = 2 * size_t - 1
+    macros["NPY_MAX_STRING_SIZE"] = (1 << 8 * (size_t - 1)) - 1
+    # The NpyString_ functions static_string.c defines (the public C API ones and the internal ones alike).
+    families = {"NpyString_": [m.group(1) for m in re.finditer(r"^NpyString_(\w+)\(", static_c, re.M)]}
 
     d = np.dtype("f8")
     obj = set(dir(object))
@@ -245,7 +263,7 @@ def members():
     emit("members", "all",
          dtype_public=public, dtype_dunders=dunders, dtypemeta_own=meta_own, dtypes_module=module,
          dt_slots=slots, dtypemeta_fields=meta_fields, dtype_slot_fields=slot_fields, dt_flags=flags,
-         struct_fields=struct_records, macros=macros,
+         struct_fields=struct_records, macros=macros, function_families=families,
          byteorder_macros={"NPY_LITTLE": "<", "NPY_BIG": ">", "NPY_NATIVE": "=", "NPY_SWAP": "s", "NPY_IGNORE": "|",
                            "NPY_NATBYTE": native, "NPY_OPPBYTE": swapped})
 

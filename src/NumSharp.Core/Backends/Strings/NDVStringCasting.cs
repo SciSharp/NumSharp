@@ -113,14 +113,14 @@ namespace NumSharp.Backends.Strings
                 run = (s, ss, d, ds, n) => NumberRun(s, ss, from, d, ds, n, allocator, nanToNA);
             }
 
-            allocator.Acquire();
+            allocator.acquire_allocator();
             try
             {
                 Walk(dst, src, run);
             }
             finally
             {
-                allocator.Release();
+                allocator.release_allocator();
             }
         }
 
@@ -160,7 +160,7 @@ namespace NumSharp.Backends.Strings
                     int w = 0;
                     for (int k = 0; k < len; k++)
                         w += EncodeCodePoint(u[k], buf + w);
-                    if (allocator.Pack(d, buf, size) < 0)
+                    if (allocator.pack(d, buf, size) < 0)
                         throw new OutOfMemoryException("Failed to allocate string in unicode to string cast");
                 }
             }
@@ -187,7 +187,7 @@ namespace NumSharp.Backends.Strings
                 while (len > 0 && s[len - 1] == 0)
                     len--;
                 NDUtf8.ThrowIfInvalid(new ReadOnlySpan<byte>(s, len));
-                if (allocator.Pack(d, s, len) < 0)
+                if (allocator.pack(d, s, len) < 0)
                     throw new OutOfMemoryException("Failed to allocate string in bytes to string cast");
             }
         }
@@ -221,7 +221,7 @@ namespace NumSharp.Backends.Strings
                 {
                     throw new RuntimeError("invalid value encountered in bool to string cast");
                 }
-                if (allocator.Pack(d, text, size) < 0)
+                if (allocator.pack(d, text, size) < 0)
                     throw new OutOfMemoryException("Failed to pack string in bool to string cast");
             }
         }
@@ -272,14 +272,14 @@ namespace NumSharp.Backends.Strings
                 {
                     if (nanToNA && double.IsNaN(*(double*)values))
                     {
-                        if (allocator.PackNull(cell) < 0)
+                        if (allocator.pack_null(cell) < 0)
                             throw new OutOfMemoryException("Failed to pack null string during float to string cast");
                         continue;
                     }
                     int len = NDTextFormat.Format(kind, values, chars);
                     for (int c = 0; c < len; c++)
                         text[c] = (byte)chars[c]; // every number's str() is ASCII
-                    if (allocator.Pack(cell, text, len) < 0)
+                    if (allocator.pack(cell, text, len) < 0)
                         throw new OutOfMemoryException("Failed to pack string while converting from python string");
                 }
             }
@@ -324,14 +324,14 @@ namespace NumSharp.Backends.Strings
                 run = (s, ss, d, ds, n) => ToNumberRun(s, ss, d, ds, n, to, allocator);
             }
 
-            allocator.Acquire();
+            allocator.acquire_allocator();
             try
             {
                 Walk(dst, src, run);
             }
             finally
             {
-                allocator.Release();
+                allocator.release_allocator();
             }
         }
 
@@ -345,7 +345,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="OutOfMemoryException"><c>Failed to load string in {context}</c>.</exception>
         private static bool Load(byte* cell, VStringAllocator allocator, out byte* buf, out long size, string context)
         {
-            int isNull = allocator.Load(cell, out buf, out size);
+            int isNull = allocator.load(cell, out buf, out size);
             if (isNull < 0)
                 throw new OutOfMemoryException($"Failed to load string in {context}");
             return isNull == 1;
@@ -486,7 +486,7 @@ namespace NumSharp.Backends.Strings
             {
                 // load_non_nullable_string: a corrupt cell has its own MemoryError text here, an NA element is the
                 // missing-data ValueError.
-                int isNull = allocator.Load(s, out byte* buf, out long size);
+                int isNull = allocator.load(s, out byte* buf, out long size);
                 if (isNull < 0)
                     throw new OutOfMemoryException("Failed to load string for conversion to a non-nullable type");
                 if (isNull == 1)

@@ -32,7 +32,7 @@ namespace NumSharp
         ///     NumPy's integer modes (<c>np.RAISE</c> and its siblings) have no C# spelling here; the C# signatures take a
         ///     string. An empty string used to mean <c>raise</c> in NumSharp's own parser; NumPy refuses it.
         /// </remarks>
-        internal static int ClipModeConverter(string mode)
+        internal static int ClipmodeConverter(string mode)
         {
             if (mode is null)
                 return ClipModeRaise;
@@ -67,12 +67,12 @@ namespace NumSharp
         ///     NumPy's <c>PyArray_ConvertClipmodeSequence</c>: one clip mode per dimension, from a sequence of mode strings
         ///     (<c>np.ravel_multi_index(..., mode=('raise', 'wrap'))</c>).
         /// </summary>
-        /// <param name="modes">One mode per dimension, each parsed by <see cref="ClipModeConverter"/>; <c>null</c> is
+        /// <param name="modes">One mode per dimension, each parsed by <see cref="ClipmodeConverter"/>; <c>null</c> is
         ///     NumPy's <c>None</c> (every dimension raises).</param>
         /// <param name="n">The number of dimensions the modes must cover.</param>
         /// <returns>The <paramref name="n"/> parsed modes.</returns>
         /// <exception cref="ValueError">A sequence of another length (<c>list of clipmodes has wrong length (1 instead of
-        ///     2)</c>), or a mode <see cref="ClipModeConverter"/> refuses (the first bad one, in order).</exception>
+        ///     2)</c>), or a mode <see cref="ClipmodeConverter"/> refuses (the first bad one, in order).</exception>
         internal static int[] ConvertClipmodeSequence(string[] modes, int n)
         {
             var result = new int[n];
@@ -82,7 +82,7 @@ namespace NumSharp
             if (modes.Length != n)
                 throw new ValueError($"list of clipmodes has wrong length ({modes.Length} instead of {n})");
             for (int i = 0; i < n; i++)
-                result[i] = ClipModeConverter(modes[i]);
+                result[i] = ClipmodeConverter(modes[i]);
             return result;
         }
 

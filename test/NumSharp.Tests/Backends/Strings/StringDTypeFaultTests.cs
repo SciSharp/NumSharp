@@ -153,7 +153,7 @@ namespace NumSharp.Tests.Backends.Strings
 
         /// <summary>
         ///     A slice clone and the allocator's own members on an exhausted allocator: <c>Clone</c> frees the half-built copy
-        ///     and raises the copy loop's text; <c>NewSize</c> returns -1; <c>FreeAndCopy</c> raises "Failed to allocate"; a heap
+        ///     and raises the copy loop's text; <c>newsize</c> returns -1; <c>FreeAndCopy</c> raises "Failed to allocate"; a heap
         ///     allocation the native heap refuses (a longer rewrite of an arena string) returns -1.
         /// </summary>
         [TestMethod]
@@ -171,25 +171,25 @@ namespace NumSharp.Tests.Backends.Strings
                 VStringAllocator.DisarmFaultInjection();
 
                 var al = s.Allocator;
-                al.Acquire();
+                al.acquire_allocator();
                 try
                 {
                     byte* text = stackalloc byte[30];
                     VStringAllocator.FailAllocationAfter(0);
-                    al.NewSize(text, 30, s.Address + 32).Should().Be(-1);
+                    al.newsize(text, 30, s.Address + 32).Should().Be(-1);
                     VStringAllocator.DisarmFaultInjection();
                     // A longer rewrite of the arena string in cell 0 moves to the heap; a size the native heap cannot give
                     // fails there (NativeMemory's OutOfMemoryException becomes NumPy's -1).
-                    al.Free(s.Address).Should().Be(0);
-                    al.NewEmptySize(1L << 55, s.Address).Should().Be(-1);
+                    al.free(s.Address).Should().Be(0);
+                    al.newemptysize(1L << 55, s.Address).Should().Be(-1);
                     new Span<byte>(s.Address, 16).Clear();
                 }
                 finally
                 {
-                    al.Release();
+                    al.release_allocator();
                 }
 
-                VStringAllocator.AcquirePair(s.Allocator, d.Allocator);
+                VStringAllocator.acquire_allocators(s.Allocator, d.Allocator);
                 try
                 {
                     VStringAllocator.FailAllocationAfter(0);
@@ -199,7 +199,7 @@ namespace NumSharp.Tests.Backends.Strings
                 finally
                 {
                     VStringAllocator.DisarmFaultInjection();
-                    VStringAllocator.ReleasePair(s.Allocator, d.Allocator);
+                    VStringAllocator.release_allocators(s.Allocator, d.Allocator);
                 }
             }
             finally

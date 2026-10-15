@@ -58,11 +58,11 @@ namespace NumSharp.Backends.Unmanaged
                 throw new ArgumentNullException(nameof(descr));
             if (descr.Meta is not VStringDTypeMeta)
                 throw new ArgumentException($"{descr.ToString(true)} is not a StringDType descriptor.", nameof(descr));
-            if (cells.Count % VStringAllocator.CellSize != 0)
+            if (cells.Count % VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING != 0)
                 throw new ArgumentException($"A buffer of {cells.Count} bytes is not a whole number of 16-byte cells.", nameof(cells));
             Cells = cells;
             Descr = descr;
-            Count = cells.Count / VStringAllocator.CellSize;
+            Count = cells.Count / VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
         }
 
         /// <summary>
@@ -83,7 +83,7 @@ namespace NumSharp.Backends.Unmanaged
                 throw new ArgumentNullException(nameof(descr));
             if (descr.Meta is not VStringDTypeMeta)
                 throw new ArgumentException($"{descr.ToString(true)} is not a StringDType descriptor.", nameof(descr));
-            long bytes = count * VStringAllocator.CellSize;
+            long bytes = count * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
             var allocator = new VStringAllocator();
             IntPtr ptr = SizeBucketedBufferPool.TakeZeroed(bytes);
             // The block OWNS the allocator: its release (the last view's Release, or the block's finalizer) runs NumPy's
@@ -117,10 +117,10 @@ namespace NumSharp.Backends.Unmanaged
         public long Count { get; }
 
         /// <summary>Bytes per element: one 16-byte cell.</summary>
-        public int ItemLength => VStringAllocator.CellSize;
+        public int ItemLength => VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
 
         /// <summary>Total cell bytes (<see cref="Count"/> × 16; the text in the allocator is not counted, as NumPy's <c>nbytes</c>).</summary>
-        public long BytesLength => Count * VStringAllocator.CellSize;
+        public long BytesLength => Count * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
 
         /// <summary>Always <see cref="NPTypeCode.String"/>: the lane shared with <c>S</c> / <c>U</c> (decision D4; the descriptor's
         ///     class tells the layouts apart).</summary>
@@ -149,10 +149,10 @@ namespace NumSharp.Backends.Unmanaged
         ///     text too long for a .NET string.</exception>
         public object GetIndex(long index)
         {
-            Allocator.Acquire();
+            Allocator.acquire_allocator();
             try
             {
-                int isNull = Allocator.Load(Address + index * VStringAllocator.CellSize, out byte* buf, out long size);
+                int isNull = Allocator.load(Address + index * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, out byte* buf, out long size);
                 if (isNull < 0)
                     throw new OutOfMemoryException("Failed to load string in StringDType getitem");
                 if (isNull == 1)
@@ -161,7 +161,7 @@ namespace NumSharp.Backends.Unmanaged
             }
             finally
             {
-                Allocator.Release();
+                Allocator.release_allocator();
             }
         }
 
@@ -185,14 +185,14 @@ namespace NumSharp.Backends.Unmanaged
             bool isNA = IsNAValue(value);
             Span<byte> scratch = stackalloc byte[StackEncodeBytes];
             ReadOnlySpan<byte> utf8 = isNA ? default : EncodeForStore(AsPyString(value, Descr.VString.coerce), scratch);
-            Allocator.Acquire();
+            Allocator.acquire_allocator();
             try
             {
-                PackValue(Address + index * VStringAllocator.CellSize, isNA, utf8);
+                PackValue(Address + index * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, isNA, utf8);
             }
             finally
             {
-                Allocator.Release();
+                Allocator.release_allocator();
             }
         }
 
@@ -214,7 +214,7 @@ namespace NumSharp.Backends.Unmanaged
             Span<byte> scratch = stackalloc byte[StackEncodeBytes];
             bool coerce = Descr.VString.coerce;
             bool hasNA = Descr.VString.HasNAObject; // no NA object: no value can be NA, skip the comparison per element
-            Allocator.Acquire();
+            Allocator.acquire_allocator();
             try
             {
                 for (int i = 0; i < values.Count; i++)
@@ -222,16 +222,16 @@ namespace NumSharp.Backends.Unmanaged
                     object value = values[i];
                     // The common element, a short ASCII string, written straight into its cell (what Pack gives for it).
                     if (value is string text && !(hasNA && IsNAValue(value))
-                        && TryWriteShortAscii(Address + (long)i * VStringAllocator.CellSize, text))
+                        && TryWriteShortAscii(Address + (long)i * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, text))
                         continue;
                     bool isNA = hasNA && IsNAValue(value);
                     ReadOnlySpan<byte> utf8 = isNA ? default : EncodeForStore(AsPyString(value, coerce), scratch);
-                    PackValue(Address + (long)i * VStringAllocator.CellSize, isNA, utf8);
+                    PackValue(Address + (long)i * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, isNA, utf8);
                 }
             }
             finally
             {
-                Allocator.Release();
+                Allocator.release_allocator();
             }
         }
 
@@ -251,15 +251,15 @@ namespace NumSharp.Backends.Unmanaged
         {
             int length = text.Length;
             byte flags = cell[15];
-            if (length == 0 || length > VStringAllocator.ShortMaxSize
-                || (flags & VStringAllocator.Long) != 0 || (flags != 0 && (flags & VStringAllocator.OutsideArena) == 0)
+            if (length == 0 || length > VStringAllocator.NPY_SHORT_STRING_MAX_SIZE
+                || (flags & VStringAllocator.NPY_STRING_LONG) != 0 || (flags != 0 && (flags & VStringAllocator.NPY_STRING_OUTSIDE_ARENA) == 0)
                 || !System.Text.Ascii.IsValid(text))
                 return false;
             *(ulong*)cell = 0;
             *(ulong*)(cell + 8) = 0;
             for (int k = 0; k < length; k++)
                 cell[k] = (byte)text[k];
-            cell[15] = (byte)(VStringAllocator.Initialized | VStringAllocator.OutsideArena | length);
+            cell[15] = (byte)(VStringAllocator.NPY_STRING_INITIALIZED | VStringAllocator.NPY_STRING_OUTSIDE_ARENA | length);
             return true;
         }
 
@@ -311,15 +311,15 @@ namespace NumSharp.Backends.Unmanaged
             byte[] utf8 = isNA ? null : NDUtf8.Encode(AsPyString(value, Descr.VString.coerce));
             if (Count == 0)
                 return;
-            Allocator.Acquire();
+            Allocator.acquire_allocator();
             try
             {
                 for (long i = 0; i < Count; i++)
-                    PackValue(Address + i * VStringAllocator.CellSize, isNA, utf8);
+                    PackValue(Address + i * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, isNA, utf8);
             }
             finally
             {
-                Allocator.Release();
+                Allocator.release_allocator();
             }
         }
 
@@ -369,13 +369,13 @@ namespace NumSharp.Backends.Unmanaged
         {
             if (isNA)
             {
-                if (Allocator.PackNull(cell) < 0)
+                if (Allocator.pack_null(cell) < 0)
                     throw new OutOfMemoryException("Failed to pack null string during StringDType setitem");
                 return;
             }
             fixed (byte* b = utf8)
             {
-                if (Allocator.Pack(cell, b, utf8.Length) < 0)
+                if (Allocator.pack(cell, b, utf8.Length) < 0)
                     throw new OutOfMemoryException("Failed to pack string during StringDType setitem");
             }
         }
@@ -406,7 +406,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">The number of elements.</param>
         /// <returns>A slice over the same buffer (a write through it is a write into this buffer).</returns>
         public IArraySlice Slice(long start, long count)
-            => new VStringArraySlice(Cells.Slice(start * VStringAllocator.CellSize, count * VStringAllocator.CellSize), Allocator, Descr);
+            => new VStringArraySlice(Cells.Slice(start * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, count * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING), Allocator, Descr);
 
         /// <summary>
         ///     A deep copy: a new buffer with a new allocator and every string DUPLICATED into it (NumPy's <c>NpyString_dup</c>
@@ -419,7 +419,7 @@ namespace NumSharp.Backends.Unmanaged
             var copy = Allocate(Descr, Count);
             try
             {
-                VStringAllocator.AcquirePair(Allocator, copy.Allocator);
+                VStringAllocator.acquire_allocators(Allocator, copy.Allocator);
                 try
                 {
                     byte* src = Address, dst = copy.Address;
@@ -429,16 +429,16 @@ namespace NumSharp.Backends.Unmanaged
                     {
                         long need = 0;
                         for (long i = 0; i < Count; i++)
-                            need += VStringAllocator.ArenaBytesForDuplicate(src + i * VStringAllocator.CellSize);
+                            need += VStringAllocator.ArenaBytesForDuplicate(src + i * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING);
                         copy.Allocator.TryReserve(need);
                     }
                     for (long i = 0; i < Count; i++)
-                        VStringAllocator.FreeAndCopy(Allocator, copy.Allocator, src + i * VStringAllocator.CellSize,
-                            dst + i * VStringAllocator.CellSize, "string to string cast");
+                        VStringAllocator.FreeAndCopy(Allocator, copy.Allocator, src + i * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING,
+                            dst + i * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, "string to string cast");
                 }
                 finally
                 {
-                    VStringAllocator.ReleasePair(Allocator, copy.Allocator);
+                    VStringAllocator.release_allocators(Allocator, copy.Allocator);
                 }
             }
             catch

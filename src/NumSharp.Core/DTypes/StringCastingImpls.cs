@@ -199,7 +199,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="unit">The datetime unit.</param>
         /// <returns>The width in characters.</returns>
-        internal static int DatetimeIsoStrLen(NPY_DATETIMEUNIT unit)
+        internal static int GetDatetimeISO8601StrLen(NPY_DATETIMEUNIT unit)
         {
             if (unit == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
                 return 4; /* Generic units can only be used to represent NaT */
@@ -251,7 +251,7 @@ namespace NumSharp
                 /* Find the correct string length, possibly based on the unit */
                 int size = ((DatetimeDTypeMeta)From).IsTimedelta
                     ? 21 /* This is arguably missing space for the unit */
-                    : DatetimeIsoStrLen(givenDescrs[0].DatetimeMetadata.Value.@base);
+                    : GetDatetimeISO8601StrLen(givenDescrs[0].DatetimeMetadata.Value.@base);
                 if (toMeta.IsUnicode)
                     size *= 4;
                 loopDescrs[1] = new DType(toMeta, DType.NPY_NATIVE, null, size, toMeta.TypeChar);

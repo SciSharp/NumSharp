@@ -38,7 +38,7 @@ namespace NumSharp
         ///     when <paramref name="out"/> is supplied).
         /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="indices"/> is null.</exception>
-        /// <exception cref="ValueError">A bad <paramref name="mode"/> (<see cref="ClipModeConverter"/>), checked first;
+        /// <exception cref="ValueError">A bad <paramref name="mode"/> (<see cref="ClipmodeConverter"/>), checked first;
         ///     an <paramref name="out"/> of another shape (<c>output array does not match result of ndarray.take</c>) or a
         ///     read-only one (<c>WRITEBACKIFCOPY base is read-only</c>).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
@@ -64,7 +64,7 @@ namespace NumSharp
             if (indices is null) throw new ArgumentNullException(nameof(indices));
 
             // array_take converts the mode (and parses the axis) with its arguments, before PyArray_TakeFrom runs.
-            int modeInt = ClipModeConverter(mode);
+            int modeInt = ClipmodeConverter(mode);
             return TakeFrom(a, indices, axis, @out, modeInt);
         }
 
@@ -101,7 +101,7 @@ namespace NumSharp
         /// <param name="indices">The integer index array; a C-contiguous int32/int64 one is read in place.</param>
         /// <param name="axis">The caller's axis, or null for a flat take.</param>
         /// <param name="out">The caller's destination, or null.</param>
-        /// <param name="mode">The parsed out-of-bounds policy (<see cref="ClipModeConverter"/>).</param>
+        /// <param name="mode">The parsed out-of-bounds policy (<see cref="ClipmodeConverter"/>).</param>
         /// <returns>The taken values: <paramref name="out"/> itself when given, else a new C-contiguous array of
         ///     <paramref name="a"/>'s dtype.</returns>
         /// <exception cref="AxisError">An out-of-range <paramref name="axis"/>.</exception>
