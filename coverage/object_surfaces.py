@@ -63,7 +63,9 @@ OBJECT_SURFACES = (
     ObjectSurface("polynomial.hermite.Hermite", "Polynomial objects"),
     ObjectSurface("polynomial.hermite_e.HermiteE", "Polynomial objects"),
     ObjectSurface("polynomial.laguerre.Laguerre", "Polynomial objects"),
-    ObjectSurface("ma.MaskedArray", "Masked arrays", disposition="subsystem"),
+    # NumSharp's numpy.ma implementation: NDMaskedArray is a standalone class (no NDArray base),
+    # so every member it credits is its own masked-array code, never an inherited ndarray member.
+    ObjectSurface("ma.MaskedArray", "Masked arrays", "NumSharp.NDMaskedArray"),
     ObjectSurface("matrix", "Matrix objects", "NumSharp.NDMatrix"),
     ObjectSurface("recarray", "Record arrays", disposition="subsystem"),
     ObjectSurface("record", "Record arrays", disposition="subsystem"),
@@ -73,7 +75,8 @@ OBJECT_SURFACES = (
     ObjectSurface("lib.npyio.NpzFile", "Archive objects", "NumSharp.IO.NpzFile"),
     ObjectSurface("__array_namespace_info__", "Array API introspection"),
     ObjectSurface("testing.suppress_warnings", "Test support", disposition="tooling"),
-    ObjectSurface("vectorize", "Function wrappers", disposition="tooling",
+    # np.vectorize returns NumSharp.Vectorized: the object NumPy's vectorize instances correspond to.
+    ObjectSurface("vectorize", "Function wrappers", "NumSharp.Vectorized",
                   protocols=("__call__",)),
     ObjectSurface("lib.NumpyVersion", "Runtime & diagnostics", disposition="tooling"),
 )

@@ -54,7 +54,7 @@ Availability says NumSharp *exposes* an API; the committed NumPy oracles say it 
 
 - `verified-direct` / `verified-alias` — credited (available/partial) row with contracts. Both count as **oracle-verified**.
 - `unverified` — available/partial NumPy API with no contracts: parity is declared, not proven. Some such APIs carry dedicated unit suites instead (see OracleSurfaceCoverageTests' sibling-owned and known-gap lists).
-- `uncredited` — contracts exercise the API but the catalog calls it missing/unsupported: a crediting gap (for example `numpy.ma.MaskedArray.*`, whose object surface has no CLR owner type yet).
+- `uncredited` — contracts exercise the API but the catalog calls it missing/unsupported: a crediting gap. None remain at generator 1.12.0; the last ones were `numpy.ma.MaskedArray.*`, credited once its object surface was mapped to its owner type `NDMaskedArray`.
 - `none` — everything else.
 
 **Outputs.**

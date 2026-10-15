@@ -24,7 +24,7 @@ from object_surfaces import OBJECT_SURFACE_PATHS, enrich_object_classes, object_
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_NUMPY_VERSION = "2.4.2"
-GENERATOR_VERSION = "1.11.0"
+GENERATOR_VERSION = "1.12.0"
 OUTPUT_FILES = ("coverage.json", "coverage.csv", "summary.md", "manifest.json")
 NUMSHARP_SOURCE_BASE_URL = "https://github.com/SciSharp/NumSharp/blob/master/"
 
