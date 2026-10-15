@@ -4,7 +4,7 @@ NumSharp has NumPy's two fixed-width text dtypes: `str_` (`U`, Unicode) and `byt
 
 Conversion between text and numbers works as in NumPy: a number written into a text array is its scalar's `str()`, and a text cast to a number is parsed by Python's `int()`, `float()` or `complex()`, with NumPy's errors.
 
-Computing on text arrives in stages. Comparisons, truth values, concatenation, repetition and sorting compute now, with NumPy's results. Searching, the set routines and the other `np.strings` functions throw `StringComputationNotSupportedException` until their stage lands. Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
+Computing on text arrives in stages. Comparisons, truth values, concatenation, repetition and sorting compute now, with NumPy's results, and so do the `numpy.char` module's comparisons, `add` and `multiply` (`np.@char`). Searching, the set routines and the other `np.strings` functions throw `StringComputationNotSupportedException` until their stage lands. Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
 
 NumPy 2's variable-width `StringDType` (`T`) stores, reads, writes, copies, casts, prints, goes to `.npy` files and through `np.loadtxt` / `np.savetxt` as in NumPy too; computing on it is the next phase (see [Variable-width text: `StringDType`](#variable-width-text-stringdtype)). NumPy's raw `void` (`V`) and `object` (`O`) dtypes stay unsupported.
 
@@ -16,7 +16,7 @@ NumPy 2's variable-width `StringDType` (`T`) stores, reads, writes, copies, cast
      Moving data → Moving_ViewsCopiesAndCasts, Moving_NonAsciiToBytes_Throws
      Converting between text and numbers → Converting_NumbersToText, Converting_TextToNumbers, Converting_StoresAndUfuncs, Converting_CSharpStringIsText
      Printing → Printing_StrAndRepr
-     Computing on text → Computing_Comparisons, Computing_TruthValues, Computing_ConcatenationAndRepetition, Computing_Sorting, Computing_NumPyRefusals, Computing_NextPhase, Computing_NeverEqualToNumbers, Computing_ChecksInNumPysOrder
+     Computing on text → Computing_Comparisons, Computing_TruthValues, Computing_ConcatenationAndRepetition, Computing_Sorting, Computing_CharModule, Computing_NumPyRefusals, Computing_NextPhase, Computing_NeverEqualToNumbers, Computing_ChecksInNumPysOrder
      Variable-width text: StringDType → StringDType_Creating, StringDType_NAObjects, StringDType_WritingElements, StringDType_MovingAndCasting, StringDType_Nditer, StringDType_TextFiles, StringDType_Refusals, StringDType_ByteswapIsACopy
      .npy files → Npy_RoundTrip, Npy_CharWritesAsU1, Npy_StringDTypeIsNumPysPickle
      The Char dtype → Char_IsTwoByteUtf16CodeUnit
@@ -288,6 +288,31 @@ np.sort(words, kind: "stable", stable: true); // ValueError: `kind` and keyword 
 ```
 
 Measured against NumPy 2.4.2 on the same machine (pinned to two cores): over fresh inputs of 1,000 strings every `np.sort`, `np.argsort`, `np.partition` and `np.argpartition` measured ran at least 1.58 times as fast as NumPy (3 times in the geometric mean), and over 100,000 and 1,000,000 strings they ran 1.7 to 19 times as fast. The slowest cases are argsorts of text outside Latin-1 (1.7 to 2 times NumPy's speed), whose characters take more room in the sort key, and argsorts of text with many repeated values (about twice NumPy's speed): NumSharp reproduces NumPy's order of the equal strings by replaying its introsort.
+
+### The `numpy.char` module
+
+`np.@char` is NumPy's `numpy.char` module. `char` is a C# keyword, so NumPy's `np.char.equal(a, b)` is `np.@char.equal(a, b)`. These functions compute now:
+
+- `equal`, `not_equal`, `less`, `less_equal`, `greater` and `greater_equal` compare two text arrays of one class after they remove the trailing NULs and ASCII whitespace (`' '`, `'\t'`, `'\n'`, `'\v'`, `'\f'`, `'\r'`) of each string. Other whitespace (`'\xa0'`, U+3000) and leading spaces stay.
+- `compare_chararrays(a1, a2, cmp, rstrip)` runs the comparison `cmp` (`"=="`, `"!="`, `"<"`, `"<="`, `">"` or `">="`, as a `string` or a `byte[]`), with the strip when `rstrip` is `true`.
+- `add` is `np.add`.
+- `multiply` is `np.strings.multiply`, but a count that is not an integer gives NumPy's `ValueError("Can only multiply by integers")`.
+
+```csharp
+var padded = np.array(new[] { "cat  ", "dog\t", "bird" });
+np.@char.equal(padded, "cat");                            // [ True False False]
+np.equal(padded, "cat");                                  // [False False False]
+np.@char.compare_chararrays(padded, "dog", "<", true);    // [ True False  True]
+np.@char.add(padded, "!");                                // ['cat  !' 'dog\t!' 'bird!'], <U6
+np.@char.multiply(np.array(new[] { "ab", "c" }), 3);      // ['ababab' 'ccc'], <U6
+np.@char.multiply(padded, 2.5);                           // ValueError: Can only multiply by integers
+```
+
+The array arguments are NumPy's array_likes: an `NDArray`, a C# `string` (NumPy's `str`), a `byte[]` (NumPy's `bytes`), a `string[]` or a `byte[][]` (a list of `bytes`). Two strings give a 0-d result. An `S` array against a `U` array is NumPy's `NotImplemented`, which NumSharp returns as `null`. A `StringDType` array is NumPy's `TypeError: comparison of non-string arrays`.
+
+`np.@char` also converts to the `Char` dtype, its meaning before the module existed, so `astype(np.@char)` and `a.dtype == np.@char` still work. Read a descriptor member through a cast: `((DType)np.@char).itemsize`.
+
+Measured against NumPy 2.4.2 (pinned to two cores, 1,000 to 1,000,000 strings): the comparisons ran 2.6 to 10 times as fast, `np.@char.add` 4.9 to 6.9 times, `np.@char.multiply` 1.5 to 5 times. The slowest multiply case is a fresh 96 MB result, where both libraries pay the same page faults.
 
 ### What is not computed yet
 
@@ -592,8 +617,10 @@ This is NumPy's `np.frombuffer` on a bytestring, and the general interop bridge.
 | `np.array(["1", "2"]).astype(float)` | `np.array(new[] { "1", "2" }).astype(np.float64)` |
 | `arr[0]` (a `numpy.str_`) | `arr.item(0)` (a C# `string`) |
 | `arr.tolist()` | `arr.tolist()` or `NDArray.AsStringArray(arr)` |
-| `a + b` / `np.char.add(a, b)` / `np.strings.add(a, b)` | `a + b` / `np.add(a, b)` / `np.strings.add(a, b)` |
-| `np.char.multiply(a, 3)` / `np.strings.multiply(a, 3)` | `np.strings.multiply(a, 3)` |
+| `a + b` / `np.char.add(a, b)` / `np.strings.add(a, b)` | `a + b` / `np.@char.add(a, b)` / `np.strings.add(a, b)` |
+| `np.char.multiply(a, 3)` / `np.strings.multiply(a, 3)` | `np.@char.multiply(a, 3)` / `np.strings.multiply(a, 3)` |
+| `np.char.equal(a, b)` (strips trailing whitespace) | `np.@char.equal(a, b)` |
+| `np.char.compare_chararrays(a, b, '<', True)` | `np.@char.compare_chararrays(a, b, "<", true)` |
 | `np.char.upper(arr)` / `np.strings.upper(arr)` | a later stage: `NDArray.AsStringArray(arr).Select(s => s.ToUpper())` |
 | `np.array(["a", "bb"], dtype=StringDType())` | `np.array(new[] { "a", "bb" }, np.dtypes.StringDType())` |
 | `StringDType(na_object=None)` | `np.dtypes.StringDType(na_object: null)` |
@@ -645,6 +672,8 @@ A `U` to `S` cast encodes ASCII only, as NumPy does. Keep non-ASCII text in a `U
 | `np.add(a, b)` / `a + b` / `np.strings.add(a, b)` over two text arrays of one class | The concatenation, as wide as the two widths together |
 | `np.strings.multiply(a, i)` / `np.multiply(a, i, out)` | The repetition, as wide as the longest one / cut to the width of `out` |
 | `np.sort` / `np.argsort` / `arr.sort()` / `np.partition` / `np.argpartition` | NumPy's results, NumPy's order of equal strings for every `kind`, NumPy's argument errors |
+| `np.@char.equal` … `np.@char.greater_equal`, `np.@char.compare_chararrays` | Comparisons after the trailing NULs and ASCII whitespace are removed; `null` (NumPy's `NotImplemented`) for `S` against `U` |
+| `np.@char.add` / `np.@char.multiply` | `np.add` / `np.strings.multiply`; a count that is not an integer is `ValueError("Can only multiply by integers")` |
 | Other computing calls (`np.unique`, `np.searchsorted`, ...) | `StringComputationNotSupportedException` (a later stage) |
 | NumPy's refusals (`np.sum`, `np.sqrt`, ...) | NumPy's exception and message |
 | `np.dtypes.StringDType(...)` / `np.dtype("T")` | NumPy's variable-width `StringDType`: storage, element access, copies, gathers, scatters, casts and printing as NumPy's; computing on it throws `StringComputationNotSupportedException` (phase 2) |

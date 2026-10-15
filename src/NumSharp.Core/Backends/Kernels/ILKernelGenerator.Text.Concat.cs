@@ -35,7 +35,10 @@ using NumSharp.Backends.Iteration;
 //     predictor cannot follow (measured: 30-40 ns per element for <U8 x 3, against ~7 here). The row is wider than the
 //     output (by one text width), so the last copy may overrun it: a cut repetition simply stores past the output width
 //     and the copy-out drops it. A one-unit text is NumPy's buffer_memset: a broadcast of that unit over the whole
-//     output when reps covers it, else the general helper (a partial fill).
+//     output when reps covers it, else a partial fill. When the last copy fits the element ((reps - 1) * len + width
+//     <= outWidth), the DIRECT form skips the row: the element is zeroed and the copies are stored straight into it (no
+//     read-back of overlapping stores, which the CPU cannot forward); a partial one-unit fill that does not fit keeps the
+//     general helper.
 //   * repetition, GENERAL form (wider texts / outputs): one direct call per element to RepeatElement (a C# helper: the
 //     element's work is a data-dependent copy loop, doubled copies for many repetitions), with the widths as constants.
 // =============================================================================
@@ -348,10 +351,11 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         ///     Emits the NARROW repetition kernel (see the file header): per element, the text's chunks into locals and its
-        ///     length from them; an empty text or a count below 1 zero-fills the output; a one-unit text is a broadcast fill
-        ///     (or, for a partial fill, the general helper); otherwise the overflow test, then the scratch row — zeroed,
-        ///     written with the text once per copy at <c>k * len</c> while <c>k &lt; reps</c> and the copy starts inside the
-        ///     output, and copied out at the output width.
+        ///     length from them; an empty text or a count below 1 zero-fills the output; a one-unit text whose count covers
+        ///     the output is a broadcast fill; otherwise (after the overflow test for a longer text) the DIRECT form when the
+        ///     last copy fits the element, else the scratch row — zeroed, written with the text once per copy at
+        ///     <c>k * len</c> while <c>k &lt; reps</c> and the copy starts inside the output, and copied out at the output
+        ///     width (a one-unit partial fill that does not fit takes the general helper instead).
         /// </summary>
         /// <param name="key">The kernel identity (a narrow one: <see cref="IsNarrowRepeat"/>).</param>
         /// <returns>The compiled kernel.</returns>
@@ -363,6 +367,16 @@ namespace NumSharp.Backends.Kernels
         ///     starts inside the output but runs past it is a cut repetition's partial copy (NumPy's <c>pad</c>) — or a
         ///     whole copy whose trailing NULs reach past the output — and the copy-out drops everything past the output
         ///     width, which is why the row is one text width longer than the output.
+        ///     </para>
+        ///     <para>
+        ///     <b>The direct form.</b> When <c>(reps - 1) * len + width &lt;= outWidth</c> every copy's whole chunk set lies
+        ///     inside the output element, so the element is zeroed and the copies are stored straight into it, in increasing
+        ///     order — the same bytes as the row, by the same overwrite argument. It exists because the row is read back
+        ///     right after overlapping unaligned stores, a load the CPU cannot forward from those stores: measured on
+        ///     <c>&lt;U8 × 3</c> elements, 8.3 ns per element through the row against 5.8 direct (plain C# prototype), and a
+        ///     one-unit partial fill, which called the general helper, now takes it too. The condition always holds when the
+        ///     longest text fills its width and the count is uniform (the shape <c>np.strings.multiply</c> sizes); a cut
+        ///     repetition or a copy that would cross the element's end keeps the row.
         ///     </para>
         ///     <para>
         ///     <b>Lifetime.</b> The row is <c>localloc</c> memory of this kernel call (freed on return), sized
@@ -411,6 +425,9 @@ namespace NumSharp.Backends.Kernels
                 var copyTop = il.DefineLabel();
                 var copyOut = il.DefineLabel();
                 var partialFill = il.DefineLabel();
+                var tryDirect = il.DefineLabel();
+                var notDirect = il.DefineLabel();
+                var directTop = il.DefineLabel();
                 var next = il.DefineLabel();
 
                 // The text's chunks, and len from the same values.
@@ -458,6 +475,57 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Br, next);
                 il.MarkLabel(noOverflow);
 
+                // The DIRECT form (see the method remarks): when the last copy's whole chunk set ends inside the element,
+                // ((reps - 1) * len + width <= outWidth), the element is zeroed and every copy stored straight into the
+                // output — no stack row, so no load waits on the overlapping stores before it. A one-unit text that only
+                // partly fills the output (oneUnit below) joins here too.
+                il.MarkLabel(tryDirect);
+                if (key.OutWidth >= key.Width)
+                {
+                    // reps <= outUnits keeps the product below small (it cannot overflow an int); a larger count cannot
+                    // fit anyway, since every copy is at least one unit long.
+                    il.Emit(OpCodes.Ldloc, reps);
+                    il.Emit(OpCodes.Ldc_I8, outUnits);
+                    il.Emit(OpCodes.Bgt, notDirect);
+                    il.Emit(OpCodes.Ldloc, reps);
+                    il.Emit(OpCodes.Ldc_I8, 1L);
+                    il.Emit(OpCodes.Sub);
+                    il.Emit(OpCodes.Conv_I4);
+                    il.Emit(OpCodes.Ldloc, length);
+                    il.Emit(OpCodes.Mul);
+                    il.Emit(OpCodes.Ldc_I4, key.Width);
+                    il.Emit(OpCodes.Add);
+                    il.Emit(OpCodes.Ldc_I4, key.OutWidth);
+                    il.Emit(OpCodes.Bgt, notDirect);
+                    // Zero the element, then the copies in increasing order: each copy's trailing NULs are overwritten by
+                    // the next copy's text, the last copy's land in the zeroed tail.
+                    ForEachTextChunk(il, planOut, site => EmitTextChunkStore(il, frame.Pointers[2], null, 0, site, planOut.Kind, lane, zero));
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Stloc, copyOffset);
+                    il.Emit(OpCodes.Ldc_I8, 0L);
+                    il.Emit(OpCodes.Stloc, copies);
+                    il.MarkLabel(directTop);
+                    il.Emit(OpCodes.Ldloc, copies);
+                    il.Emit(OpCodes.Ldloc, reps);
+                    il.Emit(OpCodes.Bge, next);
+                    ForEachTextChunk(il, planText, site =>
+                        EmitTextChunkStore(il, frame.Pointers[2], copyOffset, 0, site, planText.Kind, lane, textChunks[site.Index]));
+                    il.Emit(OpCodes.Ldloc, copyOffset);
+                    il.Emit(OpCodes.Ldloc, length);
+                    il.Emit(OpCodes.Add);
+                    il.Emit(OpCodes.Stloc, copyOffset);
+                    il.Emit(OpCodes.Ldloc, copies);
+                    il.Emit(OpCodes.Ldc_I8, 1L);
+                    il.Emit(OpCodes.Add);
+                    il.Emit(OpCodes.Stloc, copies);
+                    il.Emit(OpCodes.Br, directTop);
+                }
+                il.MarkLabel(notDirect);
+                // A one-unit partial fill that does not fit the direct form: the general helper (a fill, then zeros).
+                il.Emit(OpCodes.Ldloc, length);
+                il.Emit(OpCodes.Ldc_I4, key.Unit);
+                il.Emit(OpCodes.Beq, partialFill);
+
                 // The scratch row: zeroed at the output width (the copies cover the rest they touch).
                 ForEachTextChunk(il, planOut, site => EmitTextChunkStore(il, scratch, null, 0, site, planOut.Kind, lane, zero));
                 // for (off = 0, k = 0; k < reps && off < outWidth; off += len, k++) store the text at row + off.
@@ -499,11 +567,12 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Br, next);
 
                 // A one-unit text (NumPy's buffer_memset, never an overflow): reps covering the output is a broadcast of
-                // the unit over the whole width; a shorter fill is the general helper's (a fill, then zeros).
+                // the unit over the whole width; a shorter fill takes the direct form (copies of the one unit after a zero
+                // fill), or the general helper's when it does not fit (notDirect above).
                 il.MarkLabel(oneUnit);
                 il.Emit(OpCodes.Ldloc, reps);
                 il.Emit(OpCodes.Ldc_I8, outUnits);
-                il.Emit(OpCodes.Blt, partialFill);
+                il.Emit(OpCodes.Blt, tryDirect);
                 EmitTextBroadcastUnit(il, frame.Pointers[0], key.Unit, planOut.Kind, lane);
                 il.Emit(OpCodes.Stloc, outChunk);
                 ForEachTextChunk(il, planOut, site => EmitTextChunkStore(il, frame.Pointers[2], null, 0, site, planOut.Kind, lane, outChunk));

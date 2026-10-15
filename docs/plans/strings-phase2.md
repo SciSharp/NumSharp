@@ -842,6 +842,16 @@ dependencies land; C0 waits for the owner's decision C-D1, C3 for C-D3.
 
 ## 7. State log
 
+- **2026-10-15 — P2.1's rstrip flavor and two P2.3 speedups, from the `numpy.char` plan's phase 1**
+  (`docs/plans/np-char.md` → state log). The comparison key gained `Rstrip` (NumPy's `rstrip=True` loop:
+  `ILKernelGenerator.Text.Strip.cs`), which every comparison form serves. P2.3: `np.strings.multiply` reaches NumPy's
+  StringDType branch (`a * i`, deferred) and allocates its result with `NDArray.ForOverwrite` (no zero fill: the loop
+  writes every byte); the narrow repetition kernel gained a DIRECT form when the last copy fits the element (zero it,
+  store each copy into the output — no stack row read back after overlapping stores, and no helper call for a one-unit
+  partial fill). Measured on `<U8 × 3` with lengths 0–8 and trailing whitespace: `np.strings.multiply` 1.30× / 1.85× /
+  0.94× NumPy at 1K / 100K / 1M before, 2.42× / 4.95× / 1.52× after (the 1M cell is a fresh 96 MB result, page-fault
+  bound on both sides). Section `strarith` and `StringArithmeticTests` pass unchanged; two planted direct-form bugs
+  (no zero fill, one copy too many) fail both.
 - **2026-10-15 — P2.2 milestone A: sorting `S` / `U` text** (`9771aa9c`; `np.sort`, `ndarray.sort`, `np.argsort`,
   `np.partition`, `np.argpartition` with NumPy's `kind` / `order` / `stable`; `Backends/Default/Sorting/TextSort.cs`,
   `Backends/Kernels/ILKernelGenerator.Text.Sort.cs`, `Backends/Default/Sorting/SortKind.cs`).

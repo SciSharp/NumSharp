@@ -249,6 +249,10 @@ namespace NumSharp.Tests.Strings
             // keywords, P2.2) lives in its own partial.
             if (TryInvokeSort(c.Op, p, ops, out var sorted))
                 return sorted;
+            // Section strchar (numpy.char's stripping comparisons, compare_chararrays, add and multiply) passes its
+            // arguments as operands or Python values in its own partial.
+            if (TryInvokeChar(c.Op, p, ops, out var chars))
+                return chars;
             throw new InvalidOperationException($"the string oracle has no op '{c.Op}'");
         }
 

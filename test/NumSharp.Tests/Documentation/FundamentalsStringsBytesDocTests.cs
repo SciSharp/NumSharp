@@ -322,6 +322,34 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>
+        ///     The "The <c>numpy.char</c> module" snippets (the <c>numpy.char</c> plan's phase 1; every value probed against
+        ///     NumPy 2.4.2): a comparison that strips trailing whitespace against the plain ufunc, <c>compare_chararrays</c>,
+        ///     <c>np.char.add</c>, <c>np.char.multiply</c> and its ValueError rule, the <c>S</c> / <c>U</c> pair's
+        ///     <c>NotImplemented</c> (null), and <c>np.@char</c> still converting to the <c>Char</c> dtype.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_CharModule()
+        {
+            var padded = np.array(new[] { "cat  ", "dog\t", "bird" });
+            np.@char.equal(padded, "cat").ToArray<bool>().Should().Equal(true, false, false);
+            np.equal(padded, "cat").ToArray<bool>().Should().Equal(false, false, false);
+            np.@char.compare_chararrays(padded, "dog", "<", true).ToArray<bool>().Should().Equal(true, false, true);
+            np.@char.add(padded, "!").ToString(true).Should().Be("array(['cat  !', 'dog\\t!', 'bird!'], dtype='<U6')");
+            np.@char.multiply(np.array(new[] { "ab", "c" }), 3).ToString(true).Should().Be("array(['ababab', 'ccc'], dtype='<U6')");
+            Action notInteger = () => np.@char.multiply(padded, 2.5);
+            notInteger.Should().Throw<ValueError>().WithMessage("Can only multiply by integers");
+
+            ((bool)np.@char.equal("a ", "a")).Should().BeTrue();
+            np.@char.less(padded, new[] { "dog"u8.ToArray() }).Should().BeNull();   // NumPy's NotImplemented
+            Action vstring = () => np.@char.equal(np.array(new[] { "a" }, np.dtypes.StringDType()), "a");
+            vstring.Should().Throw<TypeError>().WithMessage("comparison of non-string arrays");
+
+            np.ones(new Shape(2L), np.@char).dtype.Should().Be(np.dtype("char"));
+            ((DType)np.@char).itemsize.Should().Be(2);
+        }
+
+        /// <summary>
         ///     What the doc page still lists as a later stage: the unique values and the binary searches refuse with
         ///     <see cref="StringComputationNotSupportedException"/> (a <see cref="NotSupportedException"/>); a string
         ///     <c>dtype=</c> request of <c>np.add</c> over numbers computes (the numbers written as text, then concatenated).

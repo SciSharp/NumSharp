@@ -40,6 +40,12 @@ namespace NumSharp.Backends.Strings
     ///     call per mask run. A mask into a cast output (a non-bool <c>out=</c>) keeps the per-run route over NDIter's
     ///     ARRAYMASK operand, whose write-masked copy-back leaves the masked-off elements untouched through the buffer.
     ///     </para>
+    ///     <para>
+    ///     <b>rstrip.</b> <c>numpy.char</c>'s six comparisons and <c>compare_chararrays</c> run the same routes with
+    ///     NumPy's <c>rstrip</c> loop — each element compared without its trailing NULs and ASCII whitespace — through
+    ///     <see cref="CompareChararrays"/>; the kernels carry it as one flag of their key, so the trivial loop, the rows
+    ///     kernels and the broadcast stages serve it unchanged.
+    ///     </para>
     /// </remarks>
     internal static class NDStringComparison
     {
@@ -117,20 +123,24 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     Computes <c>ufunc(x1, x2, out=out, where=where)</c> over two string arrays of one class, after
-        ///     <see cref="NDStringUfuncs.BinaryGuard"/> accepted the call.
+        ///     <see cref="NDStringUfuncs.BinaryGuard"/> accepted the call — or, with <paramref name="rstrip"/>, NumPy's
+        ///     <c>_umath_strings_richcompare(x1, x2, op, rstrip=True)</c> behind <c>numpy.char</c>'s comparisons and
+        ///     <c>compare_chararrays</c> (<see cref="CompareChararrays"/>).
         /// </summary>
         /// <param name="ufunc">One of the six comparison names (<see cref="IsComparison"/>).</param>
         /// <param name="x1">The first operand (<c>S</c> or <c>U</c>).</param>
         /// <param name="x2">The second operand, of the same class.</param>
         /// <param name="out">The <c>out=</c> operand, or null (its cast and shape were checked by the guard).</param>
         /// <param name="where">The bool <c>where=</c> mask, or null.</param>
+        /// <param name="rstrip">True to compare each element without its trailing NULs and ASCII whitespace (NumPy's
+        ///     <c>rstrip</c> loop); false (the default) for the comparison ufuncs.</param>
         /// <returns><paramref name="out"/> itself, or a fresh bool array of the broadcast shape.</returns>
         /// <exception cref="ArgumentException"><paramref name="ufunc"/> is not a comparison, or the operands are not two
         ///     strings of one class (a caller bug: the guard routes only those here).</exception>
         /// <exception cref="StringComputationNotSupportedException">A text <paramref name="out"/> (the guard keeps those
         ///     deferred: NumPy formats the bools as <c>'True'</c> / <c>'False'</c>, the number-to-text cast of a later
         ///     subphase; a direct caller reaches the iterator's buffered cast, which refuses it).</exception>
-        internal static unsafe NDArray Execute(string ufunc, NDArray x1, NDArray x2, NDArray @out, NDArray where)
+        internal static unsafe NDArray Execute(string ufunc, NDArray x1, NDArray x2, NDArray @out, NDArray where, bool rstrip = false)
         {
             if (!NDStringUfuncs.ComparesText(x1.dtype, x2.dtype))
                 throw new ArgumentException($"'{ufunc}' compares two strings of one class, not {x1.dtype} and {x2.dtype}.");
@@ -147,8 +157,8 @@ namespace NumSharp.Backends.Strings
             };
             int unit = x1.dtype.kind == 'U' ? 4 : 1;
             int w1 = x1.dtype.itemsize, w2 = x2.dtype.itemsize;
-            var shape = new TextCompareShape(op, unit, swap ? w2 : w1, swap ? w1 : w2, swap ? 1 : 0);
-            var kernel = GetKernel(op, unit, shape.WidthA, shape.WidthB, shape.AIndex);
+            var shape = new TextCompareShape(op, unit, swap ? w2 : w1, swap ? w1 : w2, swap ? 1 : 0, rstrip);
+            var kernel = GetKernel(op, unit, shape.WidthA, shape.WidthB, shape.AIndex, rstrip);
 
             var dims = NDStringUfuncs.BroadcastDims(x1, x2, @out, where);
             NDArray result = @out ?? new NDArray(NPTypeCode.Boolean, ResultShape(dims, x1, x2, where), false);
@@ -171,6 +181,48 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
+        ///     NumPy's <c>compare_chararrays</c> after its <c>cmp</c> parsing (multiarraymodule.c) — the body behind
+        ///     <c>np.char.compare_chararrays</c> and the six <c>np.char</c> comparisons: both operands must be fixed-width
+        ///     text, two strings of DIFFERENT classes answer NumPy's <c>NotImplemented</c>, and two of one class compare
+        ///     through <c>_umath_strings_richcompare</c> (an NpyIter that broadcasts the pair and allocates the bool result in
+        ///     KEEPORDER).
+        /// </summary>
+        /// <param name="ufunc">The comparison, as its ufunc name (<c>"equal"</c> … <c>"greater_equal"</c>; the facade parsed
+        ///     <c>cmp</c> into it).</param>
+        /// <param name="a1">The first operand.</param>
+        /// <param name="a2">The second operand.</param>
+        /// <param name="rstrip">True to compare each element without its trailing NULs and ASCII whitespace.</param>
+        /// <returns>The bool result (a 0-d array for two 0-d operands, as NumPy's iterator allocates it), or null for NumPy's
+        ///     <c>NotImplemented</c> (an <c>S</c> operand against a <c>U</c> one).</returns>
+        /// <exception cref="ArgumentNullException">An operand is null.</exception>
+        /// <exception cref="TypeError">An operand is not <c>S</c> / <c>U</c> text — a number, a bool, or a NEP 55
+        ///     <c>StringDType</c> array (<c>PyArray_ISSTRING</c> takes only the two fixed-width classes):
+        ///     <c>comparison of non-string arrays</c>.</exception>
+        /// <exception cref="IncorrectShapeException">Two operands of one class that do not broadcast (NumPy's NpyIter
+        ///     ValueError text: <c>operands could not be broadcast together with shapes (2,) (3,) </c>).</exception>
+        /// <remarks>
+        ///     NumPy's order: the string check first, then the class check (so an <c>S</c> / <c>U</c> pair of shapes that do
+        ///     not broadcast is <c>NotImplemented</c>, not a broadcast error), then the iterator.
+        /// </remarks>
+        internal static NDArray CompareChararrays(string ufunc, NDArray a1, NDArray a2, bool rstrip)
+        {
+            if (a1 is null)
+                throw new ArgumentNullException(nameof(a1));
+            if (a2 is null)
+                throw new ArgumentNullException(nameof(a2));
+            // PyArray_ISSTRING: NPY_STRING or NPY_UNICODE only — a StringDType array is not one.
+            if (!NDStringStorage.IsString(a1.dtype) || !NDStringStorage.IsString(a2.dtype))
+                throw new TypeError("comparison of non-string arrays");
+            // _umath_strings_richcompare: PyArray_TYPE(self) != PyArray_TYPE(other) returns Py_NotImplemented.
+            if (a1.dtype.Meta != a2.dtype.Meta)
+                return null;
+            var broadcast = NDStringUfuncs.BroadcastError(a1, a2, null, null);
+            if (broadcast is not null)
+                throw broadcast;
+            return Execute(ufunc, a1, a2, null, null, rstrip);
+        }
+
+        /// <summary>
         ///     The kernel for one comparison: the IL kernel, or (no dynamic code) the managed element loop that computes the
         ///     same NumPy semantics one unit at a time.
         /// </summary>
@@ -179,10 +231,12 @@ namespace NumSharp.Backends.Strings
         /// <param name="widthA">A's width in bytes.</param>
         /// <param name="widthB">B's width in bytes.</param>
         /// <param name="aIndex">The operand slot A is read from.</param>
+        /// <param name="rstrip">True for NumPy's <c>rstrip</c> loop (each element without its trailing NULs and ASCII
+        ///     whitespace).</param>
         /// <returns>The kernel (never null).</returns>
-        internal static NDInnerLoopFunc GetKernel(TextCompareOp op, int unit, int widthA, int widthB, int aIndex)
-            => ILKernelGenerator.GetTextCompareKernel(op, unit, widthA, widthB, aIndex)
-               ?? ManagedKernel(op, unit, widthA, widthB, aIndex);
+        internal static NDInnerLoopFunc GetKernel(TextCompareOp op, int unit, int widthA, int widthB, int aIndex, bool rstrip = false)
+            => ILKernelGenerator.GetTextCompareKernel(op, unit, widthA, widthB, aIndex, rstrip)
+               ?? ManagedKernel(op, unit, widthA, widthB, aIndex, rstrip);
 
         /// <summary>
         ///     The layout of a fresh result: NumPy's NpyIter output allocation over the two inputs and the mask (each votes
@@ -337,7 +391,8 @@ namespace NumSharp.Backends.Strings
         /// <param name="WidthA">A's element width in bytes.</param>
         /// <param name="WidthB">B's element width in bytes.</param>
         /// <param name="AIndex">The operand slot A is read from (1 for a swapped pair).</param>
-        private readonly record struct TextCompareShape(TextCompareOp Op, int Unit, int WidthA, int WidthB, int AIndex);
+        /// <param name="Rstrip">True for NumPy's <c>rstrip</c> loop (<c>numpy.char</c>'s comparisons).</param>
+        private readonly record struct TextCompareShape(TextCompareOp Op, int Unit, int WidthA, int WidthB, int AIndex, bool Rstrip = false);
 
         /// <summary>
         ///     The blend route of a <c>where=</c> mask into a bool output: the masked kernel computes every element and writes
@@ -358,7 +413,8 @@ namespace NumSharp.Backends.Strings
         {
             if (MaskedBlendDisabled || result.typecode != NPTypeCode.Boolean)
                 return false;
-            var masked = ILKernelGenerator.GetTextCompareMaskedKernel(shape.Op, shape.Unit, shape.WidthA, shape.WidthB, shape.AIndex);
+            var masked = ILKernelGenerator.GetTextCompareMaskedKernel(shape.Op, shape.Unit, shape.WidthA, shape.WidthB, shape.AIndex,
+                                                                     shape.Rstrip);
             if (masked is null)
                 return false;
 
@@ -377,7 +433,7 @@ namespace NumSharp.Backends.Strings
             if (!RowsDisabled && iter.CanRunRows)
             {
                 var rows = ILKernelGenerator.GetTextCompareRowsKernel(shape.Op, shape.Unit, shape.WidthA, shape.WidthB,
-                                                                     shape.AIndex, masked: true);
+                                                                     shape.AIndex, masked: true, shape.Rstrip);
                 if (rows is not null)
                 {
                     iter.ForEachRows(rows);
@@ -484,7 +540,7 @@ namespace NumSharp.Backends.Strings
             if (!RowsDisabled && iter.CanRunRows)
             {
                 var rows = ILKernelGenerator.GetTextCompareRowsKernel(shape.Op, shape.Unit, shape.WidthA, shape.WidthB,
-                                                                     shape.AIndex, masked: false);
+                                                                     shape.AIndex, masked: false, shape.Rstrip);
                 if (rows is not null)
                 {
                     iter.ForEachRows(rows);
@@ -509,15 +565,20 @@ namespace NumSharp.Backends.Strings
         /// <param name="widthA">A's width in bytes.</param>
         /// <param name="widthB">B's width in bytes.</param>
         /// <param name="aIndex">The operand slot A is read from.</param>
+        /// <param name="rstrip">True for NumPy's <c>rstrip</c> loop: each element compares without its trailing NULs and
+        ///     ASCII whitespace (<see cref="CompareStrippedElements"/>).</param>
         /// <returns>The kernel.</returns>
-        internal static unsafe NDInnerLoopFunc ManagedKernel(TextCompareOp op, int unit, int widthA, int widthB, int aIndex)
+        internal static unsafe NDInnerLoopFunc ManagedKernel(TextCompareOp op, int unit, int widthA, int widthB, int aIndex,
+                                                             bool rstrip = false)
             => (dataptrs, strides, count, auxdata) =>
             {
                 byte* pa = (byte*)dataptrs[aIndex], pb = (byte*)dataptrs[1 - aIndex], po = (byte*)dataptrs[2];
                 long sa = strides[aIndex], sb = strides[1 - aIndex], so = strides[2];
                 for (long i = 0; i < count; i++, pa += sa, pb += sb, po += so)
                 {
-                    int cmp = CompareElements(pa, widthA, pb, widthB, unit);
+                    int cmp = rstrip
+                        ? CompareStrippedElements(pa, widthA, pb, widthB, unit)
+                        : CompareElements(pa, widthA, pb, widthB, unit);
                     bool r = op switch
                     {
                         TextCompareOp.Equal => cmp == 0,
@@ -557,5 +618,25 @@ namespace NumSharp.Backends.Strings
                     return -1;
             return 0;
         }
+
+        /// <summary>
+        ///     NumPy's <c>Buffer&lt;enc&gt;::strcmp</c> with rstrip: both elements first lose their trailing NULs and
+        ///     ASCII whitespace (<c>Buffer::rstrip</c>: NUL, <c>' '</c>, <c>'\t'</c>, <c>'\n'</c>, <c>'\v'</c>, <c>'\f'</c>,
+        ///     <c>'\r'</c> — for <c>S</c> and <c>U</c> alike), then compare as <see cref="CompareElements"/> does.
+        /// </summary>
+        /// <param name="a">The first element.</param>
+        /// <param name="widthA">Its width in bytes.</param>
+        /// <param name="b">The second element.</param>
+        /// <param name="widthB">Its width in bytes.</param>
+        /// <param name="unit">1 for <c>S</c>, 4 for <c>U</c>.</param>
+        /// <returns>-1, 0 or 1.</returns>
+        /// <remarks>
+        ///     The managed kernel's element (hosts without dynamic code) and the wide IL body share these helpers
+        ///     (<see cref="ILKernelGenerator.TextKeptBytes"/>, <see cref="ILKernelGenerator.TextCompareKept"/>); the tests
+        ///     check both against a unit-by-unit port of NumPy's two functions.
+        /// </remarks>
+        internal static unsafe int CompareStrippedElements(byte* a, int widthA, byte* b, int widthB, int unit)
+            => ILKernelGenerator.TextCompareKept(a, ILKernelGenerator.TextKeptBytes(a, widthA, unit),
+                                                 b, ILKernelGenerator.TextKeptBytes(b, widthB, unit), unit);
     }
 }

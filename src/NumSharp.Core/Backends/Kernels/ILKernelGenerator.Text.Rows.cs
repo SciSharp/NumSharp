@@ -52,13 +52,14 @@ namespace NumSharp.Backends.Kernels
         /// <param name="widthB">B's element width in bytes.</param>
         /// <param name="aIndex">The operand slot A is read from (0 or 1).</param>
         /// <param name="masked">True for the masked form (four operands, <c>out = mask ? result : out</c>).</param>
+        /// <param name="rstrip">True for NumPy's <c>rstrip=True</c> loop (see <see cref="GetTextCompareKernel"/>).</param>
         /// <returns>The kernel, or null when dynamic code is unavailable or disabled (the caller keeps its 1-D route).</returns>
         /// <exception cref="ArgumentOutOfRangeException">A unit size other than 1 or 4, a width that is negative or not a
         ///     whole number of units, or an operand index other than 0 or 1.</exception>
         internal static NDInnerLoop2DFunc GetTextCompareRowsKernel(TextCompareOp op, int unit, int widthA, int widthB, int aIndex,
-                                                                    bool masked)
+                                                                    bool masked, bool rstrip = false)
         {
-            var key = ValidatedTextCompareKey(op, unit, widthA, widthB, aIndex);
+            var key = ValidatedTextCompareKey(op, unit, widthA, widthB, aIndex, rstrip);
             if (!TextKernelsAvailable)
                 return null;
             if (s_textCompareRowsKernels.TryGetValue((key, masked), out var cached))
@@ -85,11 +86,13 @@ namespace NumSharp.Backends.Kernels
         /// <param name="widthA">A's element width in bytes.</param>
         /// <param name="widthB">B's element width in bytes.</param>
         /// <param name="aIndex">The operand slot A is read from (0 or 1).</param>
+        /// <param name="rstrip">True for NumPy's <c>rstrip=True</c> loop (see <see cref="GetTextCompareKernel"/>).</param>
         /// <returns>The kernel, or null when dynamic code is unavailable or disabled.</returns>
         /// <exception cref="ArgumentOutOfRangeException">As <see cref="GetTextCompareRowsKernel"/>.</exception>
-        internal static NDInnerLoopFunc GetTextCompareMaskedKernel(TextCompareOp op, int unit, int widthA, int widthB, int aIndex)
+        internal static NDInnerLoopFunc GetTextCompareMaskedKernel(TextCompareOp op, int unit, int widthA, int widthB, int aIndex,
+                                                                   bool rstrip = false)
         {
-            var key = ValidatedTextCompareKey(op, unit, widthA, widthB, aIndex);
+            var key = ValidatedTextCompareKey(op, unit, widthA, widthB, aIndex, rstrip);
             if (!TextKernelsAvailable)
                 return null;
             if (s_textCompareMaskedKernels.TryGetValue(key, out var cached))
@@ -141,15 +144,17 @@ namespace NumSharp.Backends.Kernels
         /// <param name="widthA">A's width.</param>
         /// <param name="widthB">B's width.</param>
         /// <param name="aIndex">A's operand slot.</param>
+        /// <param name="rstrip">True for NumPy's <c>rstrip=True</c> loop.</param>
         /// <returns>The key.</returns>
         /// <exception cref="ArgumentOutOfRangeException">An invalid unit, width or operand slot.</exception>
-        private static TextCompareKey ValidatedTextCompareKey(TextCompareOp op, int unit, int widthA, int widthB, int aIndex)
+        private static TextCompareKey ValidatedTextCompareKey(TextCompareOp op, int unit, int widthA, int widthB, int aIndex,
+                                                              bool rstrip = false)
         {
             ValidateTextShape(unit, widthA);
             ValidateTextShape(unit, widthB);
             if (aIndex is not (0 or 1))
                 throw new ArgumentOutOfRangeException(nameof(aIndex), aIndex, "A comparison reads its operands from slots 0 and 1.");
-            return new TextCompareKey(op, unit, widthA, widthB, aIndex);
+            return new TextCompareKey(op, unit, widthA, widthB, aIndex, rstrip);
         }
 
         // =============================================================================================================
@@ -255,10 +260,14 @@ namespace NumSharp.Backends.Kernels
         // Shared pieces of the forms
         // =============================================================================================================
 
-        /// <summary>The method-name stem of a comparison kernel (shows in JIT diagnostics such as <c>DOTNET_JitDisasm</c>).</summary>
+        /// <summary>
+        ///     The method-name stem of a comparison kernel (shows in JIT diagnostics such as <c>DOTNET_JitDisasm</c>); the
+        ///     rstrip flavor ends in <c>_rs</c>, so <c>DOTNET_JitDisasm="NDTextCompare_*_rs*"</c> selects only it.
+        /// </summary>
         /// <param name="key">The comparison identity.</param>
         /// <returns>The stem.</returns>
-        private static string TextCompareName(TextCompareKey key) => $"NDTextCompare_{key.Op}_u{key.Unit}_{key.WidthA}_{key.WidthB}_a{key.AIndex}";
+        private static string TextCompareName(TextCompareKey key)
+            => $"NDTextCompare_{key.Op}_u{key.Unit}_{key.WidthA}_{key.WidthB}_a{key.AIndex}{(key.Rstrip ? "_rs" : "")}";
 
         /// <summary>The operand slots of a comparison kernel's frame: A, B, out, and the mask for the masked form.</summary>
         /// <param name="key">The comparison identity (its <c>AIndex</c> decides which slot is A).</param>

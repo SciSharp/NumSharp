@@ -110,6 +110,9 @@ namespace NumSharp
             /// <exception cref="ValueError">The broadcast result is empty ("zero-size array to reduction operation maximum
             ///     which has no identity": NumPy takes the max of the sizes).</exception>
             /// <exception cref="IncorrectShapeException"><paramref name="a"/> and <paramref name="i"/> do not broadcast.</exception>
+            /// <exception cref="StringComputationNotSupportedException">A NEP 55 <c>StringDType</c> <paramref name="a"/> with an
+            ///     integer count: NumPy's <c>a * i</c> branch, which NumSharp's <c>StringDType</c> arithmetic does not compute
+            ///     yet.</exception>
             public static NDArray multiply(NDArray a, NDArray i)
             {
                 if (a is null)
@@ -121,6 +124,10 @@ namespace NumSharp
                     throw new TypeError($"unsupported type {i.dtype} for operand 'i'");
                 // i = np.maximum(i, 0)   (the C# literal is NumPy's weak Python int: i keeps its dtype)
                 using var reps = np.maximum(i, 0);
+                // if a.dtype.char == "T": return a * i   (StringDType's own loop sizes its result; NumSharp's StringDType
+                // arithmetic is a later subphase, so this is the deferral NumPy's order reaches after the count check)
+                if (NDStringUfuncs.IsVString(a))
+                    return np.multiply(a, reps);
                 // a_len = str_len(a)
                 using var aLen = str_len(a);
                 // if np.any(a_len > sys.maxsize / np.maximum(i, 1)): raise OverflowError(...)
@@ -139,8 +146,13 @@ namespace NumSharp
                 // out_dtype = f"{a.dtype.char}{buffersizes.max()}"   (raises for an empty result, as NumPy's max does)
                 using var largest = np.amax(buffersizes);
                 var outDtype = OutputDescriptor(a.dtype, largest);
-                // out = np.empty_like(a, shape=buffersizes.shape, dtype=out_dtype)
-                var @out = np.empty_like(a, outDtype, buffersizes.Shape);
+                // out = np.empty_like(a, shape=buffersizes.shape, dtype=out_dtype) — empty_like's layout (a's memory order),
+                // but WITHOUT the zero fill a U allocation gets: the repetition loop below writes every byte of every
+                // element (the text copies, then NULs to the width), so the fill would only be overwritten. It cost a
+                // whole pass over the result (24.8 ms at 1M <U24, eagerly faulting fresh pages NumPy's calloc leaves
+                // lazy). On a failure (the overflow the loop reports) the buffer is disposed below, never returned.
+                // ((long[])Shape copies the dimensions, a 0-d shape included, as np.empty_like reads them.)
+                var @out = NDArray.ForOverwrite(outDtype, Shape.NewLikeLayout(a.Shape, 'K', (long[])buffersizes.Shape));
                 try
                 {
                     // return _multiply_ufunc(a, i, out=out)

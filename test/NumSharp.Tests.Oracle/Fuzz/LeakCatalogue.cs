@@ -413,6 +413,82 @@ namespace NumSharp.Tests.Fuzz
                 using var an = np.strings.multiply(a, n);
                 return np.strings.multiply("xy", n);
             });
+            // numpy.char ([ModuleName("np.char")], the np-char plan's phase 1): the string oracle's strchar section replays
+            // these through its own harness, outside the corpus sweep. Each comparison strips trailing whitespace; the entries
+            // also take the routes that allocate their own operands (a C# string, a byte[] / byte[][] as NumPy's bytes) and
+            // the refusals (NotImplemented's null, the TypeError, the ValueError of multiply), whose temporaries must be
+            // reclaimed too.
+            E(l, "np.char.equal", "U == U and a C# string; S against U (null)", f =>
+            {
+                using var a = np.array(new[] { "ab ", "c\t" });
+                using var e = np.@char.equal(a, a);
+                var none = np.@char.equal(a, new[] { "ab"u8.ToArray() });
+                return none is null ? np.@char.equal(a, "ab") : none;
+            });
+            E(l, "np.char.not_equal", "U != str", f =>
+            {
+                using var a = np.array(new[] { "ab ", "c" });
+                return np.@char.not_equal(a, "c ");
+            });
+            E(l, "np.char.less", "bytes < bytes (byte[][] operand)", f => np.@char.less(new[] { "a "u8.ToArray(), "b"u8.ToArray() }, "b"u8.ToArray()));
+            E(l, "np.char.less_equal", "U <= U, broadcast", f =>
+            {
+                // The column is a view of its own scratch base; both are the entry's to dispose.
+                using var flat = np.array(new[] { "ab ", "c" });
+                using var a = flat.reshape(2, 1);
+                using var b = np.array(new[] { "ab", "b", "d" });
+                return np.@char.less_equal(a, b);
+            });
+            E(l, "np.char.greater", "str > U; the non-string TypeError", f =>
+            {
+                using var a = np.array(new[] { "ab ", "c" });
+                using var n = np.array(new[] { 1, 2 });
+                try
+                {
+                    np.@char.greater(a, n);
+                }
+                catch (TypeError)
+                {
+                }
+                return np.@char.greater("b", a);
+            });
+            E(l, "np.char.greater_equal", "wide U (the wide body)", f =>
+            {
+                using var a = np.array(new[] { new string('x', 70) + " ", "y" });
+                return np.@char.greater_equal(a, new string('x', 70));
+            });
+            E(l, "np.char.compare_chararrays", "str and bytes cmp, both rstrip values, a refused cmp", f =>
+            {
+                using var a = np.array(new[] { "ab ", "c" });
+                using var lt = np.@char.compare_chararrays(a, "b", "<", true);
+                using var eq = np.@char.compare_chararrays(a, a, "=="u8.ToArray(), false);
+                try
+                {
+                    np.@char.compare_chararrays(a, a, "=", true);
+                }
+                catch (ValueError)
+                {
+                }
+                return np.@char.compare_chararrays(a, "c", ">=", true);
+            });
+            E(l, "np.char.add", "U + str", f =>
+            {
+                using var a = np.array(new[] { "ab", "c" });
+                return np.@char.add(a, "!");
+            });
+            E(l, "np.char.multiply", "U * int; a float count's ValueError", f =>
+            {
+                using var a = np.array(new[] { "ab", "c" });
+                try
+                {
+                    np.@char.multiply(a, 2.5);
+                }
+                catch (ValueError)
+                {
+                }
+                return np.@char.multiply(a, 3);
+            });
+            E(l, "np.char.ToString", "the module's repr", f => np.@char.ToString());
             // np.dtypes.StringDType (NEP 55, P1.2): the string oracle's tdtype section replays it, outside the corpus sweep.
             // A descriptor owns no array memory; the entries prove its construction (and the CPython protocols it runs on
             // the sentinel) leave no pooled buffer behind.

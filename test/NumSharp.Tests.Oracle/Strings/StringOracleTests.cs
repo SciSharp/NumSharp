@@ -292,6 +292,18 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void TextSorting() => Run("strsort");
 
         /// <summary>
+        ///     Section strchar (the <c>numpy.char</c> plan's phase 1): <c>np.char</c>'s six comparisons that strip trailing NULs
+        ///     and ASCII whitespace over every layout kind, cross-layout broadcasts and width pairs on both sides of the
+        ///     kernels' 64-unit limit; every strip unit and the whitespace NumPy keeps, units past U+10FFFF; the arguments as
+        ///     Python values (str, bytes, lists, numbers) with NumPy's refusals in its order (non-string, StringDType, the
+        ///     <c>S</c> / <c>U</c> pair's <c>NotImplemented</c> — NumSharp's null — before the broadcast);
+        ///     <c>compare_chararrays</c> with every <c>cmp</c> spelling (str, bytes, refused, a lone surrogate, None) and both
+        ///     <c>rstrip</c> values; <c>np.char.add</c>; <c>np.char.multiply</c> with its <c>ValueError</c> rule. Strict, but
+        ///     for the three StringDType additions / repetitions NumPy computes (deferred).
+        /// </summary>
+        [TestMethod] public void CharModuleFunctions() => Run("strchar");
+
+        /// <summary>
         ///     Lifetime gate of the <c>StringDType</c> sections (strings phase 1, P1.9): once every case of tstore / tcreate /
         ///     tmove / tcast has been replayed and its arrays are garbage, no string allocator is left alive — every buffer the
         ///     replay made (operands, results, temporaries of the gathers, scatters and casts, failed operations) ran its clear
@@ -342,6 +354,9 @@ namespace NumSharp.Tests.Strings
         {
             ["reductions"] = 24, ["straxis"] = 90, ["strshape"] = 142, ["strvalid"] = 5, ["strsurface"] = 67,
             ["strma"] = 18, ["tma"] = 437,
+            // strchar: np.char.add of StringDType (2) and np.char.multiply of StringDType by an integer (1), which NumPy
+            // computes and NumSharp's StringDType arithmetic (a later subphase) defers.
+            ["strchar"] = 3,
         };
 
         /// <summary>The corpus is complete: every section has cases and every case belongs to a section above.</summary>
@@ -353,7 +368,7 @@ namespace NumSharp.Tests.Strings
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
                 "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
-                "storenone", "tma", "tio", "strsort",
+                "storenone", "tma", "tio", "strsort", "strchar",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)
@@ -743,6 +758,11 @@ namespace NumSharp.Tests.Strings
                 case "masked_constant":
                     if (!ReferenceEquals(result, np.ma.masked))
                         diffs.Add($"expected numpy.ma's masked constant, got {Describe(result)}");
+                    break;
+                case "notimplemented":
+                    // Python's NotImplemented (numpy.char's comparisons of an S / U pair): NumSharp answers null.
+                    if (result is not null)
+                        diffs.Add($"expected null (NumPy's NotImplemented), got {Describe(result)}");
                     break;
                 case "none":
                     // NumPy's None — also the NA object an integer index returns from a StringDType(na_object=None) array,

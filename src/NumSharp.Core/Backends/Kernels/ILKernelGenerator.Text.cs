@@ -38,6 +38,9 @@ using NumSharp.Backends.Iteration;
 //     ExtractMostSignificantBits + TrailingZeroCount; scalar chunks: xor + TrailingZeroCount), then compare that unit
 //     unsigned, or decide from the tail. Greater / GreaterEqual are Less / LessEqual with the operands swapped (the
 //     kernel's A / B operand indices are emit-time constants).
+//   * comparison with rstrip (numpy.char's comparisons, compare_chararrays): NumPy's string_comparison_loop<rstrip=true>,
+//     where Buffer::rstrip first drops each element's trailing NULs and ASCII whitespace. One flag of the same key, so the
+//     1-D, rows, masked and broadcast-pattern forms all exist for it (ILKernelGenerator.Text.Strip.cs).
 //   * broadcast patterns: a stride-0 operand (a 0-d / scalar comparand, a broadcast row) is read ONCE per call — its
 //     chunks hoisted into locals before the loop, its tail's truth precomputed. Each pattern is a STAGE: a DynamicMethod
 //     of its own that the kernel forwards to with one call, compiled on its first call (the BroadcastPatterns rationale:
@@ -102,7 +105,11 @@ namespace NumSharp.Backends.Kernels
         /// <param name="WidthA">A's element width in bytes.</param>
         /// <param name="WidthB">B's element width in bytes.</param>
         /// <param name="AIndex">The operand index A is read from (0 or 1; B is the other).</param>
-        private readonly record struct TextCompareKey(TextCompareOp Op, int Unit, int WidthA, int WidthB, int AIndex);
+        /// <param name="Rstrip">NumPy's <c>rstrip=True</c> loop (<c>numpy.char</c>'s comparisons and
+        ///     <c>compare_chararrays</c>): both elements lose their trailing NULs and ASCII whitespace before they compare
+        ///     (<see cref="EmitTextStripCompareLoop"/>). False for the comparison ufuncs, whose loop compares the elements
+        ///     as they are.</param>
+        private readonly record struct TextCompareKey(TextCompareOp Op, int Unit, int WidthA, int WidthB, int AIndex, bool Rstrip = false);
 
         /// <summary>The identity of a truth kernel.</summary>
         /// <param name="Unit">The code-unit size: 1 for <c>S</c>, 4 for <c>U</c>.</param>
@@ -121,10 +128,14 @@ namespace NumSharp.Backends.Kernels
         /// <param name="widthB">B's element width in bytes.</param>
         /// <param name="aIndex">0 to compare operand 0 against operand 1; 1 for the swapped order (greater /
         ///     greater_equal run as less / less_equal of (x2, x1)).</param>
+        /// <param name="rstrip">True for NumPy's <c>rstrip=True</c> loop: each element compares without its trailing NULs
+        ///     and ASCII whitespace (<c>numpy.char</c>'s comparisons, <c>compare_chararrays</c>). False (the default) for the
+        ///     comparison ufuncs.</param>
         /// <returns>The kernel, or null when dynamic code is unavailable or disabled (the caller takes its managed route).</returns>
         /// <exception cref="ArgumentOutOfRangeException">A unit size other than 1 or 4, a negative width, a width that is
         ///     not a whole number of units, or an operand index other than 0 or 1.</exception>
-        internal static NDInnerLoopFunc GetTextCompareKernel(TextCompareOp op, int unit, int widthA, int widthB, int aIndex)
+        internal static NDInnerLoopFunc GetTextCompareKernel(TextCompareOp op, int unit, int widthA, int widthB, int aIndex,
+                                                             bool rstrip = false)
         {
             ValidateTextShape(unit, widthA);
             ValidateTextShape(unit, widthB);
@@ -132,7 +143,7 @@ namespace NumSharp.Backends.Kernels
                 throw new ArgumentOutOfRangeException(nameof(aIndex), aIndex, "A comparison reads its operands from slots 0 and 1.");
             if (!TextKernelsAvailable)
                 return null;
-            var key = new TextCompareKey(op, unit, widthA, widthB, aIndex);
+            var key = new TextCompareKey(op, unit, widthA, widthB, aIndex, rstrip);
             if (s_textCompareKernels.TryGetValue(key, out var cached))
                 return cached;
             try

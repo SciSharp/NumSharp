@@ -84,6 +84,16 @@ Sorting `S` / `U` text computes since P2.2 milestone A (2026-10-15): `np.sort` /
 `np.partition` / `np.argpartition` with NumPy's `kind` / `order` / `stable`, NumPy's order of equal strings included (see
 "Sorting & Searching" → "Text sorts"). Searching, the set routines, `lexsort`, the histograms and quantiles over text
 are the next milestones of P2.2.
+**`numpy.char` (2026-10-15, `docs/plans/np-char.md`, phase 1).** `np.@char` is the MODULE object `CharModule`
+(`APIs/np.char.cs`, `[ModuleName("np.char")]`) with an implicit conversion to the `Char` dtype it used to be, so
+`astype(np.@char)` / `a.dtype == np.@char` / `(DType, DType)` tuple keys keep working (a descriptor member needs
+`((DType)np.@char).itemsize`). Phase 1 computes the six comparisons and `compare_chararrays` that strip trailing NULs and
+ASCII whitespace (NumPy's `rstrip=True` loop: one `Rstrip` flag of the text comparison key, every kernel form;
+`ILKernelGenerator.Text.Strip.cs`: a bit-mask body for ≤ 64 code units, managed helpers beyond), `add` (= `np.add`) and
+`multiply` (`np.strings.multiply`, a TypeError re-raised as `ValueError("Can only multiply by integers")`). Array arguments
+are `object` (C-D6: a `string` is `str`, a `byte[]` is `bytes`, a `byte[][]` a list of bytes); an `S` / `U` pair answers
+NumPy's `NotImplemented` as `null`; a `StringDType` operand is `comparison of non-string arrays`. Oracle section
+`strchar` (2,790 cases). `chararray` (`NDCharArray`) and the other 43 functions are open.
 **Text ↔ number conversion is phase 1 (P1.1, 2026-10-12, `docs/plans/strings-phase1-completion.md`)** — NumPy's legacy
 casts, byte for byte: a number becomes its scalar's `str()` (`Backends/Strings/NDTextFormat.cs`: the float positional /
 scientific windows per type, float16 / float32 shortest digits, complex forms; an unsized `'U'` / `'S'` takes

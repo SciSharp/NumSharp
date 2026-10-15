@@ -42,7 +42,8 @@ namespace NumSharp
         public static readonly DType bool8 = bool_;
         public static readonly DType @bool = bool_;
 
-        public static readonly DType @char = typeof(char);
+        // np.@char is the numpy.char MODULE (APIs/np.char.cs); it converts implicitly to the Char dtype it used to hold
+        // here, so `astype(np.@char)` and `a.dtype == np.@char` keep their meaning.
 
         // NumPy: np.byte = int8 (signed, C char convention). NumSharp follows NumPy.
         // For .NET-style uint8 use np.uint8 / np.ubyte.

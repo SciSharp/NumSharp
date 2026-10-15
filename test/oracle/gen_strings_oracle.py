@@ -248,6 +248,9 @@ def expect_of(r, operands):
             else expect_of(r.r, operands)
     if r is np.ma.masked:
         return {"kind": "masked_constant"}
+    if r is NotImplemented:
+        # numpy.char's comparisons (compare_chararrays) answer NotImplemented for an S / U pair; NumSharp returns null.
+        return {"kind": "notimplemented"}
     if isinstance(r, np.ma.MaskedArray):
         return masked_expect(r)
     if r is None:
@@ -7383,11 +7386,247 @@ def gen_strsort():
                 layout=f"T{len(values)}", call=lambda a, x=ax: np.argsort(a, axis=x, kind="heapsort"))
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Section strchar: numpy.char's module functions (np-char plan, phase 1) — the six comparisons and compare_chararrays that
+# strip trailing whitespace, np.char.add and np.char.multiply — strict, except a StringDType add / multiply NumPy computes
+# (phase 2: NumSharp's StringDType arithmetic is a later subphase).
+# ----------------------------------------------------------------------------------------------------------------------
+
+# The units numpy's Buffer::rstrip removes (NUL and NumPyOS_ascii_isspace), and units it must KEEP: the other whitespace
+# (0x1c, 0x85, 0xa0, U+3000), neighbours of the strip set ('\b', '!'), high bytes, a supplementary-plane character.
+STRIP_UNITS = {"U": ["\x00", " ", "\t", "\n", "\x0b", "\x0c", "\r"],
+               "S": [b"\x00", b" ", b"\t", b"\n", b"\x0b", b"\x0c", b"\r"]}
+KEEP_UNITS = {"U": ["a", "b", "\x1c", "\x85", "\xa0", "　", "\U0001F600", "\x08", "!"],
+              "S": [b"a", b"b", b"\x1c", b"\x85", b"\xa0", b"\x80", b"\xff", b"\x08", b"!"]}
+STRIP_SET = {"U": "\x00 \t\n\x0b\x0c\r", "S": b"\x00 \t\n\x0b\x0c\r"}
+
+# Width pairs per class: equal widths, a longer second operand, a shorter one, the bit-mask kernel's 64-unit limit on
+# both sides (U64 / U65, S64 / S65) and two wide pairs past it.
+STRIP_WIDTHS = {
+    "U": [("U3", "U3"), ("U3", "U8"), ("U9", "U2"), ("U64", "U64"), ("U65", "U60"), ("U70", "U66")],
+    "S": [("S3", "S3"), ("S2", "S9"), ("S33", "S8"), ("S64", "S65"), ("S300", "S290")],
+}
+
+CHAR_CMP_OPS = ["equal", "not_equal", "less", "less_equal", "greater", "greater_equal"]
+
+
+def _strip_values(kind, width, n, seed, like=None):
+    """``n`` values of one class, at most ``width`` code units each, built so NumPy's strip rule decides many pairs.
+
+    Without ``like``: content (keep units, now and then a strip unit INSIDE the string) followed by a trailing run of
+    strip units, the lengths cycling. With ``like`` (the other operand's values), two values in three are derived from the
+    value at the same index: its stripped content with another trailing run (equal once stripped), with one unit changed,
+    or with one more content unit.
+
+    Args:
+        kind: ``"U"`` (str) or ``"S"`` (bytes).
+        width: the dtype's width in code units.
+        n: how many values.
+        seed: an offset that varies the cycles between operands.
+        like: the other operand's base values, or None.
+
+    Returns:
+        A list of ``n`` str / bytes values.
+    """
+    strip, keep, strip_set = STRIP_UNITS[kind], KEEP_UNITS[kind], STRIP_SET[kind]
+    join = "".join if kind == "U" else b"".join
+    out = []
+    for i in range(n):
+        if like is not None and (i + seed) % 3 != 0:
+            core = like[i % len(like)].rstrip(strip_set)[:width]
+            mode = (i * 7 + seed) % 4
+            if mode == 1 and core:
+                k = (i * 5 + seed) % len(core)
+                core = core[:k] + keep[(i + seed) % len(keep)] + core[k + 1:]
+            elif mode == 2 and len(core) < width:
+                core = core + keep[(i * 3 + seed) % len(keep)]
+            room = width - len(core)
+            trail = join(strip[(i * 3 + k + seed) % len(strip)] for k in range((i * 2 + seed) % (room + 1)))
+            out.append(core + trail)
+            continue
+        clen = (i * 3 + seed) % (width + 1)
+        content = join(keep[(i * 5 + k * 3 + seed) % len(keep)] if (i + k + seed) % 9 else strip[(i + k) % len(strip)]
+                       for k in range(clen))
+        tlen = (i * 2 + seed) % (width - clen + 1)
+        out.append(content + join(strip[(i * 3 + k + seed) % len(strip)] for k in range(tlen)))
+    return out
+
+
+def _strip_operand(spec, layout, seed, like=None):
+    """A (base, view) operand of dtype ``spec`` in one of LAYOUTS, its base built by ``_strip_values``.
+
+    Args:
+        spec: the dtype, ``"U3"`` / ``"S9"``.
+        layout: a LAYOUTS key.
+        seed: passed to ``_strip_values``.
+        like: the other operand's base values (same base length), or None.
+
+    Returns:
+        The (base, view) pair.
+    """
+    n, build = LAYOUTS[layout]
+    kind, width = spec[0], int(spec[1:])
+    base = np.array(_strip_values(kind, width, n, seed, like), dtype=spec) if n else np.zeros(0, dtype=spec)
+    return base, build(base)
+
+
+def _char_arg(v, operands):
+    """One argument of a numpy.char call as the replay rebuilds it: a (base, view) pair becomes an operand (``{"op": k}``),
+    a Python value travels encoded (``{"v": ...}``: a str, bytes, a list of them, a number, a bool, None).
+
+    Args:
+        v: the argument.
+        operands: the case's operand list (appended to).
+
+    Returns:
+        The argument's spec.
+    """
+    if isinstance(v, tuple) and len(v) == 2 and isinstance(v[0], np.ndarray):
+        operands.append(v)
+        return {"op": len(operands) - 1}
+    return {"v": enc(v)}
+
+
+def _char_call(op, args, call, *, layout="", phase=1, extra=None):
+    """Records one numpy.char call whose arguments may be operands or Python values (``_char_arg``).
+
+    Args:
+        op: the corpus op key (``char_cmp``, ``char_compare``, ``char_add``, ``char_multiply``).
+        args: the call's positional arguments, in order (operand pairs or Python values).
+        call: the NumPy call, taking the arguments in the same order (operand views substituted).
+        layout: the case's layout label.
+        phase: 1, or ``"compute"`` for a StringDType add / multiply NumPy computes.
+        extra: more params (the comparison's name, compare_chararrays' cmp / rstrip).
+    """
+    operands = []
+    specs = [_char_arg(a, operands) for a in args]
+    params = dict(extra or {})
+    params["args"] = specs
+
+    def run(*views):
+        it = iter(views)
+        real = [next(it) if "op" in s else a for s, a in zip(specs, args)]
+        return call(*real)
+
+    add("strchar", op, params=params, operands=operands, call=run, phase=phase, layout=layout)
+
+
+def gen_strchar():
+    """Section strchar: np.char's stripping comparisons and compare_chararrays, np.char.add and np.char.multiply."""
+    # A. The six comparisons over every layout kind (same layout for both operands) and the cross pairs, every width pair.
+    for kind, pairs in STRIP_WIDTHS.items():
+        for s1, s2 in pairs:
+            for l1, l2 in [(name, name) for name in LAYOUTS] + CMP_CROSS:
+                b1, v1 = _strip_operand(s1, l1, seed=41)
+                like = [x for x in b1.tolist()] if b1.size else None
+                b2, v2 = _strip_operand(s2, l2, seed=42, like=like if LAYOUTS[l1][0] == LAYOUTS[l2][0] else None)
+                for name in CHAR_CMP_OPS:
+                    _char_call("char_cmp", [(b1, v1), (b2, v2)], lambda x, y, f=getattr(np.char, name): f(x, y),
+                               layout=f"{s1}:{l1},{s2}:{l2}", extra={"name": name})
+
+    # B. Special units through an outer broadcast: every strip unit, the whitespace NumPy keeps, units past U+10FFFF
+    #    (unsigned values), and strip units inside a string / before it.
+    u_units = [0, 9, 10, 11, 12, 13, 32, 0x1C, 0x85, 0xA0, 0x3000, 0x110000, 0xFFFFFFFF, 0x41]
+    u_pairs = [0x41, 0x20, 0x41, 0x09, 0x41, 0x00, 0x20, 0x41, 0x41, 0x1C, 0x41, 0x110000, 0x41, 0x0D, 0x00, 0x41]
+    u_row = [0x41, 0x00, 0x41, 0x20, 0x20, 0x00, 0x41, 0x0B]
+    s_bytes = [b"", b" ", b"\t", b"\x0b", b"\x1c", b"\x85", b"\xa0", b"\x80", b"\xff", b"a", b"a ", b"a\t", b"a\x00",
+               b" a"]
+    for name in CHAR_CMP_OPS:
+        f = getattr(np.char, name)
+        _char_call("char_cmp", [_units_operand(u_units, 1, (len(u_units), 1)), _units_operand(u_units, 1, (1, len(u_units)))],
+                   lambda x, y, f=f: f(x, y), layout="U1:units", extra={"name": name})
+        _char_call("char_cmp", [_units_operand(u_pairs, 2, (8, 1)), _units_operand(u_row, 2, (1, 4))],
+                   lambda x, y, f=f: f(x, y), layout="U2:units", extra={"name": name})
+        _char_call("char_cmp", [plain(np.array(s_bytes, dtype="S2").reshape(-1, 1)),
+                                plain(np.array(s_bytes, dtype="S3").reshape(1, -1))],
+                   lambda x, y, f=f: f(x, y), layout="S:bytes", extra={"name": name})
+        # The first differing unit differs only in a HIGHER byte (U+3100 / U+3000, U+10000 / U+20000, U+0100 / U+0200)
+        # and the next units order the other way: a compare must read whole units, on both sides of the 64-unit limit.
+        for chars in [8, 70]:
+            pad = chars - 8
+            a_rows = [[0x61] * (4 + pad) + [0x3100, 0x61, 0x20, 0x00], [0x61] * (4 + pad) + [0x10000, 0x7A, 0x09, 0x00],
+                      [0x61] * (5 + pad) + [0x0100, 0x7A, 0x20]]
+            b_rows = [[0x61] * (4 + pad) + [0x3000, 0x7A, 0x00, 0x00], [0x61] * (4 + pad) + [0x20000, 0x61, 0x00, 0x00],
+                      [0x61] * (5 + pad) + [0x0200, 0x61, 0x00]]
+            _char_call("char_cmp", [_units_operand([u for r in a_rows for u in r], chars),
+                                    _units_operand([u for r in b_rows for u in r], chars)],
+                       lambda x, y, f=f: f(x, y), layout=f"U{chars}:highbyte", extra={"name": name})
+
+    # C. The arguments as Python values (NumPy's np.asanyarray / PyArray_FROM_O of them): a str, bytes, lists of each,
+    #    numbers and bools (no string array), and the refusals in NumPy's order (non-string, StringDType, the S / U mix
+    #    that answers NotImplemented, the broadcast).
+    u2 = _strip_operand("U4", "c2", seed=43)
+    s2 = _strip_operand("S4", "c2", seed=44)
+    t_spec = TSpec()
+    t1 = t_operand(t_spec, "c1", seed=3)
+    u_row3 = plain(np.array(["a ", "b\t", "c"]))
+    for name in CHAR_CMP_OPS:
+        f = getattr(np.char, name)
+        for x, y, label in [(u2, "a  ", "U,str"), ("b", u2, "str,U"), ("a ", "a\x00\t", "str,str"), (s2, b"a ", "S,bytes"),
+                            (b"\x80 ", s2, "bytes,S"), (b"a", b"a\t ", "bytes,bytes"), (["a ", "b"], "a", "list,str"),
+                            ([b"a ", b"b"], [b"a", b"b "], "blist,blist"), (u2, s2, "U,S"), (s2, u2, "S,U"), (u2, b"a", "U,bytes"),
+                            ("a", s2, "str,S"), (u2, 1, "U,int"), (1.5, u2, "float,U"), (True, False, "bool,bool"),
+                            (u2, [1, 2], "U,list"), (t1, t1, "T,T"), (u_row3, t1, "U,T"), (t1, "a", "T,str"),
+                            (plain(np.array(["a", "b"])), plain(np.array(["a", "b", "c"])), "U:2,U:3"),
+                            (plain(np.array([b"a", b"b"])), plain(np.array(["a", "b", "c"])), "S:2,U:3"),
+                            (plain(np.zeros((0, 3), "U2")), "a", "empty,str"), (plain(np.array("ab ")), "ab", "0d,str")]:
+            _char_call("char_cmp", [x, y], lambda a, b, f=f: f(a, b), layout=label, extra={"name": name})
+
+    # D. compare_chararrays: every cmp spelling (str and bytes; the six comparisons and the refused ones, a lone
+    #    surrogate, None) x rstrip, then the refusals' order (a bad cmp before everything else).
+    cmps = ["==", "!=", "<", "<=", ">", ">=", b"==", b"!=", b"<", b"<=", b">", b">=", "=", "=<", "<>", "", "===", "! ",
+            "é", "=é", "\ud800", "\x00", "=\x00", "==\x00", " =", "=>", b"\xff", b"", b"=", None]
+    pairs = [(_strip_operand("U3", "c2", seed=45), _strip_operand("U5", "bc", seed=46), "U3:c2,U5:bc"),
+             (_strip_operand("S3", "f2", seed=47), _strip_operand("S4", "c2", seed=48), "S3:f2,S4:c2")]
+    for cmp in cmps:
+        for rstrip in [True, False]:
+            for a1, a2, label in pairs:
+                _char_call("char_compare", [a1, a2, cmp, rstrip],
+                           lambda x, y, c, r: np.char.compare_chararrays(x, y, c, r), layout=label)
+    for a1, a2, label in [(t1, t1, "T,T"), (u2, s2, "U,S"), (u2, plain(np.array([1, 2])), "U,int"),
+                          (plain(np.array(["a", "b"])), plain(np.array(["a", "b", "c"])), "U:2,U:3"),
+                          (plain(np.array([b"a", b"b"])), plain(np.array(["a", "b", "c"])), "S:2,U:3")]:
+        for cmp in ["==", "=", None]:
+            _char_call("char_compare", [a1, a2, cmp, True], lambda x, y, c, r: np.char.compare_chararrays(x, y, c, r),
+                       layout=f"order:{label}")
+
+    # E. np.char.add (np.add itself): layouts, the str / bytes arguments, the mix and no-loop errors, a StringDType
+    #    operand (NumPy computes; phase 2 for NumSharp).
+    for l1, l2 in [("c2", "c2"), ("f2", "f2"), ("c2", "bc"), ("z0", "z0"), ("e2", "e2"), ("r2", "bcol"), ("t3", "t3")]:
+        for spec1, spec2 in [("U4", "U3"), ("S4", "S3")]:
+            _char_call("char_add", [_strip_operand(spec1, l1, seed=49), _strip_operand(spec2, l2, seed=50)],
+                       lambda x, y: np.char.add(x, y), layout=f"{spec1}:{l1},{spec2}:{l2}")
+    for x, y, label in [("a", "b ", "str,str"), (u2, "z", "U,str"), ("z", u2, "str,U"), (s2, b"z\x00", "S,bytes"),
+                        (b"", b"", "bytes,bytes"), (u2, s2, "U,S"), (u2, b"z", "U,bytes"), (u2, 1, "U,int"),
+                        (["a", "bc"], ["d"], "list,list")]:
+        _char_call("char_add", [x, y], lambda a, b: np.char.add(a, b), layout=label)
+    for x, y, label in [(t1, t1, "T,T"), (t1, "z", "T,str")]:
+        _char_call("char_add", [x, y], lambda a, b: np.char.add(a, b), layout=label, phase="compute")
+
+    # F. np.char.multiply: np.strings.multiply with every TypeError re-raised as ValueError("Can only multiply by
+    #    integers") — layouts and counts, the count kinds, a numeric / empty / str operand, the overflow (an
+    #    OverflowError passes through), a StringDType operand (NumPy computes an integer count; a float count is the
+    #    ValueError first).
+    for spec in ["U3", "S3", "U70"]:
+        for layout in ["c2", "f2", "t3", "r2", "s2", "bc", "z0", "one", "d5"]:
+            b, v = _strip_operand(spec, layout, seed=51)
+            for c in [plain(np.array(2)), plain(np.array(0)), plain(np.array(-3)), _count_operand(v, np.int64), 3]:
+                _char_call("char_multiply", [(b, v), c], lambda a, i: np.char.multiply(a, i), layout=f"{spec}:{layout}")
+    for c, label in [(2.5, "float"), (True, "bool"), ("x", "str"), (b"x", "bytes"), (plain(np.array(2, dtype="u8")), "u8"),
+                     (2 ** 62, "2**62"), (plain(np.array(2.0)), "f8"), ([1, 2, 3], "list:3"), (plain(np.array([[1], [2]])), "arr:col"),
+                     (plain(np.array(2, dtype="i1")), "i1")]:
+        _char_call("char_multiply", [u2, c], lambda a, i: np.char.multiply(a, i), layout=f"count:{label}")
+    for a, c, label in [([1, 2], 2, "a:list-int"), (plain(np.zeros(0, "U3")), 2, "a:empty"), ("ab", 3, "a:str"),
+                        (b"ab", 2, "a:bytes"), ("abc", 2 ** 62, "overflow"), (t1, 2.5, "T:float")]:
+        _char_call("char_multiply", [a, c], lambda x, i: np.char.multiply(x, i), layout=label)
+    _char_call("char_multiply", [t1, 2], lambda x, i: np.char.multiply(x, i), layout="T:int", phase="compute")
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
-              gen_strsort]
+              gen_strsort, gen_strchar]
 
 
 def main():

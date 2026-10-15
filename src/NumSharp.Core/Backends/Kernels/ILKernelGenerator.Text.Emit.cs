@@ -49,7 +49,8 @@ namespace NumSharp.Backends.Kernels
         /// <returns>The compiled kernel.</returns>
         private static NDInnerLoopFunc GenerateTextCompareKernel(TextCompareKey key)
         {
-            var dm = NewTextKernelMethod($"NDTextCompare_{key.Op}_u{key.Unit}_{key.WidthA}_{key.WidthB}_a{key.AIndex}");
+            // TextCompareName gives the same stem the 1-D kernel always had, plus "_rs" for the rstrip flavor.
+            var dm = NewTextKernelMethod(TextCompareName(key));
             var il = dm.GetILGenerator();
             var frame = EmitTextFrame(il, new[] { key.AIndex, 1 - key.AIndex, 2 });
 
@@ -98,8 +99,7 @@ namespace NumSharp.Backends.Kernels
         /// <returns>The stage, ready to be the target of a <c>call</c>.</returns>
         private static DynamicMethod GenerateTextCompareStage(TextCompareKey key, bool hoistA, bool hoistB)
         {
-            var dm = NewTextKernelMethod(
-                $"NDTextCompare_{key.Op}_u{key.Unit}_{key.WidthA}_{key.WidthB}_a{key.AIndex}_bp{(hoistA ? 1 : 0) | (hoistB ? 2 : 0)}");
+            var dm = NewTextKernelMethod($"{TextCompareName(key)}_bp{(hoistA ? 1 : 0) | (hoistB ? 2 : 0)}");
             var il = dm.GetILGenerator();
             var frame = EmitTextFrame(il, new[] { key.AIndex, 1 - key.AIndex, 2 });
             EmitTextCompareLoop(il, key, frame, hoistA, hoistB);
@@ -287,6 +287,13 @@ namespace NumSharp.Backends.Kernels
         private static void EmitTextCompareLoop(ILGenerator il, TextCompareKey key, TextFrame frame, bool hoistA, bool hoistB,
                                                 LocalBuilder mask = null)
         {
+            // NumPy's rstrip=True loop is a body of its own (the stripped lengths decide what the zero-padded compare
+            // reads); every form around it — the 1-D kernel, the broadcast stages, rows, masked — is the same.
+            if (key.Rstrip)
+            {
+                EmitTextStripCompareLoop(il, key, frame, hoistA, hoistB, mask);
+                return;
+            }
             int wA = key.WidthA, wB = key.WidthB;
             var prefix = PlanTextRange(0, Math.Min(wA, wB), key.Unit);
             var tail = PlanTextRange(Math.Min(wA, wB), Math.Abs(wA - wB), key.Unit);

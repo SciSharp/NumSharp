@@ -32,6 +32,10 @@ is oracle-verified in the coverage artifact.
 | `chararray` | None. `coverage/object_surfaces.py` lists `char.chararray` with disposition `subsystem` and no target. |
 | Object results | None. NumSharp has no object dtype (`split`, `rsplit`, `splitlines` return object arrays of lists in NumPy). |
 
+**Since 2026-10-15 (phase 1, see the state log at the end of §7):** `np.@char` is the module (C-D1), and C1 (the
+stripping comparisons, `compare_chararrays`), `add` and C4's `multiply` compute; the other functions, `chararray` and
+`np.char.array` / `asarray` are open.
+
 ---
 
 ## 1. What NumPy 2.4.2 does
@@ -431,6 +435,51 @@ C-D1 decision and C3 for C-D3.
    and the 36 re-exported functions. Both write into `gen_strings_oracle.py`: add sections, never reorder them.
 4. **The fixed whitespace lists** (C-D5) assume Unicode 15.0.0's `White_Space` (CPython 3.12). A pin test compares
    them with `unicodedata` output committed in the corpus.
+
+### State log
+
+- **2026-10-15 — phase 1: the module functions `numpy.strings` computes** (the owner's scope: "the `np.@char` facade,
+  `compare_chararrays` and the six comparisons that strip trailing whitespace, over S/U (T refused), `np.char.add` and
+  `np.char.multiply` (NumPy's ValueError rule), oracle section `strchar`"). Owner decisions taken: C-D1 (the module),
+  C-D6's `null` for `NotImplemented`.
+  - **Facade** (`APIs/np.char.cs`): `np.@char` is `CharModule` (`[ModuleName("np.char")]`, the `np.fft` shape), with
+    an implicit conversion to the `Char` `DType`; every former use compiles unchanged (58 in `np.find_common_type.cs`,
+    the tests). Array arguments are `object` read by C-D6's text rule (`TextOperand`: an `NDArray` itself, a `byte[]` a
+    0-d `S`, a sequence of `byte[]` an `S` array, else `NDArray.FromPythonOperand`); the members are `[NDScoped]`, so a
+    converted argument is reclaimed and the operands are rooted. `compare_chararrays` takes `cmp` as `string` (UTF-8,
+    NumPy's `s#`: a lone surrogate is CPython's UnicodeEncodeError) or `byte[]`; `null` is NumPy's `None` text.
+  - **The rstrip kernel** (`ILKernelGenerator.Text.Strip.cs`): one flag of P2.1's comparison key, so the 1-D kernel,
+    its broadcast stages, the rows and masked forms all exist for it. For at most 64 code units a bit-mask body: per
+    chunk, one load per operand feeds the equal bits and both strip-unit masks (`v == 0 | v == ' ' | min(v - 9, 4) ==
+    v - 9`); kept length `64 - lzcnt(~S & full)`; `d = tzcnt(~E)`; the units at `d` decide when `d` is inside both kept
+    strings, else the kept lengths (the last kept unit is nonzero). A scalar chunk (an element under 16 bytes) is
+    tested as the low lanes of a zeroed `Vector128`, its padding lanes masked off. Wider elements call
+    `TextKeptBytes` (a 32-byte backward scan) and `TextCompareKept` (`CommonPrefixLength`). A broadcast operand's kept
+    length and chunks are hoisted.
+  - **Driver** (`NDStringComparison.CompareChararrays`): NumPy's order — fixed-width text check (`PyArray_ISSTRING`:
+    a `StringDType` array is `comparison of non-string arrays`), the class check (`NotImplemented`, before the
+    broadcast), the broadcast, then P2.1's routes with `rstrip`.
+  - **`np.char.multiply`**: `np.strings.multiply` with `TypeError` → `ValueError("Can only multiply by integers")`.
+    `np.strings.multiply` gained NumPy's StringDType branch (`a * i` after the integer check: deferred) and dropped the
+    zero fill of its result (`NDArray.ForOverwrite`: the repetition writes every byte; 24.8 ms of eager zeroing at 1M
+    `<U24`). P2.3's narrow repetition kernel gained a DIRECT form (zero the element, store each copy into the output)
+    when the last copy fits, replacing the stack row whose read-back follows overlapping stores (8.3 → 5.8 ns per
+    `<U8 × 3` element) and the per-element helper call of a one-unit partial fill.
+  - **Gates.** Oracle section `strchar` (2,790 cases, 215 NumPy errors, 3 deferred StringDType computations, zero
+    excuses): the six comparisons over every layout kind and the cross pairs at 11 width pairs on both sides of the
+    64-unit limit, every strip unit and the whitespace NumPy keeps, units past U+10FFFF, first differences in a unit's
+    higher byte, the arguments as Python values with NumPy's refusals in order, `compare_chararrays` with 30 `cmp`
+    spellings × both `rstrip` values, `add`, `multiply`. Unit tests `Backends/Strings/CharModuleTests.cs` (12: every
+    kernel form against a literal port of `Buffer::rstrip` + `strcmp`, the facade's literals). 14 planted bugs, each
+    killed by the unit tests and by the oracle (M5, a wide `U` diff read unaligned, needed the high-byte cases). Leak
+    catalogue entries for the ten members.
+  - **Speed** (NPY/NS, two pinned P-cores, 1K / 100K / 1M, 57 cells): comparisons 2.6–10.5× (U8 4.8–6.2×, scalar
+    comparand 2.6–3.2×, U3 2.7–3.0×, the 64-unit limit 3.8–4.8×, wide U70 2.7–3.8×, wide S300 6.2–8.3×, strided /
+    F / column-broadcast 3.6–9.5×); `np.char.add` 4.9–6.9×; `np.char.multiply` 2.42× / 4.95× / 1.52× (the 1M cell
+    is a fresh 96 MB result: both sides pay the page faults; before the kernel and allocation changes 1.30× / 1.85× /
+    0.94×).
+  - **Open:** the other 43 functions (C3–C5), `chararray` (C2, the user's phase 2), C-D6's `None` (an
+    `ArgumentNullException` here; NumPy's object array).
 
 ---
 
