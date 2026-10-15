@@ -198,6 +198,7 @@ One optional companion package ships for the first time, co-versioned with **Num
 - The `numpy.dtype` / dtype-class oracle replays 4,683 NumPy 2.4.2 records per C `long` model (Windows and Linux NumPy): the member names (the C slots included), every attribute of 1,014 descriptors, comparisons, promotions, the dtype classes and 1,941 casting resolutions - `6f11dc5a`.
 - The string oracle's text I/O section replays 8,303 NumPy 2.4.2 cases of `np.loadtxt` / `np.savetxt` / `ndarray.tofile` / `np.fromfile` / `np.fromstring` over every option, codec family and `%` format, zero excuses - `f5f3e634`.
 - The text readers' validation: 50,000 random `np.fromstring` / `np.fromfile` cases, 181,500 `np.loadtxt` cases (70,000 of them tokenizer edges) and 35,000 `np.savetxt` / `ndarray.tofile` cases against NumPy 2.4.2, 0 divergences; new unit tests for the ported scanners and the correctly rounded double parser the readers share - `c9c6f02e`.
+- The text I/O oracle: 54,741 Linux NumPy 2.4.2 cases of `np.fromstring` / `np.fromfile` / `np.loadtxt` / `np.savetxt` / `ndarray.tofile` in eight sections (one of them a fixed grid of every scanner token, separator placement and high byte), replayed on every host (a file `np.savetxt` writes carries its Windows line-ending twin), zero excuses, 14 planted bugs killed - `252d6eea`.
 
 ### 💥 Breaking Changes
 - `DType` replaces `System.Type` as the dtype currency - `c916c579`, `68a02258`.
