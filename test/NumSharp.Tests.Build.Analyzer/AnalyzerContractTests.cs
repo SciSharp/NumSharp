@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
@@ -16,14 +17,14 @@ namespace NumSharp.Tests.Build.Analyzer
     public class AnalyzerContractTests
     {
         /// <summary>
-        ///     Both NDW012 descriptors (the dropped-NDArray text and the dropped-holder text) are default-on
-        ///     warnings that link the NDW012 anchor: a leak is a nudge, never a build-breaker.
+        ///     All three NDW012 descriptors (a dropped NDArray with the weaver, the same without it, and a dropped
+        ///     holder) are default-on warnings that link the NDW012 anchor: a leak is a nudge, never a build-breaker.
         /// </summary>
         [TestMethod]
         public void Ndw012_DefaultSeverity_IsWarning_And_EnabledByDefault()
         {
             var ds = new NDArrayLeakAnalyzer().SupportedDiagnostics.Where(x => x.Id == "NDW012").ToList();
-            Assert.AreEqual(2, ds.Count, "one NDW012 text for a dropped NDArray, one for a dropped holder");
+            Assert.AreEqual(3, ds.Count, "NDW012 texts: a dropped NDArray with and without the weaver, and a dropped holder");
             foreach (var d in ds)
             {
                 Assert.AreEqual(DiagnosticSeverity.Warning, d.DefaultSeverity,
@@ -121,6 +122,46 @@ namespace NumSharp.Tests.Build.Analyzer
                 StringAssert.Contains(description, fact, $"the NDW012 description must keep: {fact}");
             Assert.IsTrue(description.EndsWith("."), "a description ends with a period (RS1033)");
 
+            // Without the weaver the scope attributes are inert, so that text never offers one as a fix, counts
+            // only scopes opened by hand, makes explicit disposal the fix, and names installing the weaver.
+            string noWeaver = NDArrayLeakAnalyzer.Nw012NoWeaver.MessageFormat.ToString();
+            foreach (var fact in new[]
+                     {
+                         "Nothing in this method disposes, returns, stores, or scopes this {1}", // only what it knows
+                         "{0} is inert here: this project does not use the NumSharp.Build package", // why no [NDScoped]
+                         "Take the first that fits",
+                         "a call hands back an array the method already holds (@out, inplace: true)",
+                         "suppress only this line",
+                         "every call already runs inside a scope opened with NDScope.Open()", // the only scope there
+                         "[NDScoped] callers open none here",          // an inert attribute opens no scope
+                         "none runs it in a long loop",
+                         "this method is not public: [NDScopedCovered]",
+                         "(3) otherwise dispose it after its last use", // the best fix that works without the weaver
+                         "unless it may be an input (np.asarray(x))",
+                         "installing NumSharp.Build lets {0} reclaim them all", // the route to the attribute
+                     })
+                StringAssert.Contains(noWeaver, fact, $"the NDW012 no-weaver message must keep: {fact}");
+            Assert.IsFalse(noWeaver.Contains(": {0};") || noWeaver.Contains("Do not add {0}"),
+                "without the weaver the attribute is never offered as a case's fix");
+            Assert.IsTrue(noWeaver.Length <= Ndw012MessageCap,
+                $"the NDW012 no-weaver message is a build-log line: {noWeaver.Length} > {Ndw012MessageCap} characters");
+            Assert.IsFalse(noWeaver.Contains('\n') || noWeaver.Contains('\r'), "one build-log line");
+            Assert.IsTrue(noWeaver.EndsWith("."), "a multi-sentence message ends with a period (RS1032)");
+
+            string noWeaverDescription = NDArrayLeakAnalyzer.Nw012NoWeaver.Description.ToString();
+            foreach (var fact in new[]
+                     {
+                         "declares the NumSharp.Build weaver inactive",
+                         "inert (NDW013)",
+                         "no scope opens in the method or in an attributed caller",
+                         "dotnet add package NumSharp.Build",
+                         "route every return through scope.Returns(...)", // the hand scope's one rule
+                         "a return that skips it hands back a disposed array",
+                         "x.astype(t, copy: false)",
+                     })
+                StringAssert.Contains(noWeaverDescription, fact, $"the NDW012 no-weaver description must keep: {fact}");
+            Assert.IsTrue(noWeaverDescription.EndsWith("."), "a description ends with a period (RS1033)");
+
             string holder = NDArrayLeakAnalyzer.Nw012Holder.MessageFormat.ToString();
             foreach (var fact in new[]
                      {
@@ -181,6 +222,62 @@ namespace NumSharp.Tests.Build.Analyzer
             foreach (var line in new[] { sync, async })
                 Assert.IsTrue(line.Length <= Ndw012MessageCap + 40, $"rendered NDW012 line too long: {line.Length}");
             Assert.IsTrue(holder.Length <= Ndw012HolderMessageCap + 60, $"rendered holder line too long: {holder.Length}");
+        }
+
+        /// <summary>
+        ///     The NDArray text follows the weaver state the build declares, through the property NDW013 reads:
+        ///     <c>NumSharpBuildActive</c> present and not <c>true</c> (NumSharp's targets default it to
+        ///     <c>false</c>) selects the text that never offers the inert scope attribute; <c>true</c> (set by the
+        ///     weaver's targets) or an absent property (unknown) keeps the text that offers it. A property declared
+        ///     but empty is not <c>true</c>, so it reads as inactive, as NDW013 reads it; case and surrounding
+        ///     spaces do not matter. A dropped holder keeps its own text in every state, since no scope attribute
+        ///     reclaims it either way.
+        /// </summary>
+        /// <param name="active">The declared <c>NumSharpBuildActive</c> value, or null for an absent property.</param>
+        /// <param name="expectNoWeaver">Whether the no-weaver text must be chosen for the dropped NDArrays.</param>
+        /// <returns>The asynchronous test run.</returns>
+        [DataTestMethod]
+        [DataRow("false", true)]
+        [DataRow("False", true)]
+        [DataRow("", true)]
+        [DataRow("true", false)]
+        [DataRow(" TRUE ", false)]
+        [DataRow(null, false)]
+        public async Task Ndw012_FollowsTheDeclaredWeaverState(string active, bool expectNoWeaver)
+        {
+            const string src = "using NumSharp;\nusing System.Threading.Tasks;\n" +
+                               "public sealed class Batch : System.IDisposable {\n" +
+                               "  private NDArray _a;\n" +
+                               "  public Batch(NDArray a) { _a = a; }\n" +
+                               "  public void Dispose() => _a.Dispose();\n}\n" +
+                               "public static class T {\n" +
+                               "  public static void Sync(NDArray a, NDArray b) { var t = a + b; }\n" +
+                               "  public static async Task Async(NDArray a, NDArray b) { var t = a + b; await Task.Yield(); }\n" +
+                               "  public static void Holder(NDArray a) { var batch = new Batch(a); }\n}";
+            var options = active is null ? null : AnalyzerTestHarness.BuildProperties(("NumSharpBuildActive", active));
+            var r = await AnalyzerTestHarness.RunAsync(src, "ndw012_weaver_state.cs", ImmutableArray<MetadataReference>.Empty, options);
+            Assert.IsTrue(r.CompileErrors.IsEmpty, "inline source must compile");
+
+            var leaks = r.Ndw.Where(x => x.Id == "NDW012").OrderBy(AnalyzerTestHarness.LineOf).ToList();
+            Assert.AreEqual(3, leaks.Count, "one leak per method");
+            var expected = expectNoWeaver ? NDArrayLeakAnalyzer.Nw012NoWeaver : NDArrayLeakAnalyzer.Nw012;
+            Assert.AreSame(expected, leaks[0].Descriptor, $"sync leak, NumSharpBuildActive='{active ?? "<absent>"}'");
+            Assert.AreSame(expected, leaks[1].Descriptor, $"async leak, NumSharpBuildActive='{active ?? "<absent>"}'");
+            Assert.AreSame(NDArrayLeakAnalyzer.Nw012Holder, leaks[2].Descriptor, "a holder keeps the holder text");
+
+            if (expectNoWeaver)
+            {
+                // Each method still names the attribute that WOULD fit it, as the inert one.
+                StringAssert.Contains(leaks[0].GetMessage(), "[NDScoped] is inert here");
+                StringAssert.Contains(leaks[1].GetMessage(), "[NDScopedAsync] is inert here");
+                Assert.IsFalse(leaks[0].GetMessage().Contains("creates arrays: [NDScoped];"),
+                    "without the weaver no case offers the attribute as its fix");
+            }
+            else
+            {
+                StringAssert.Contains(leaks[0].GetMessage(), "creates arrays: [NDScoped];");
+                StringAssert.Contains(leaks[1].GetMessage(), "creates arrays: [NDScopedAsync];");
+            }
         }
 
         [TestMethod]

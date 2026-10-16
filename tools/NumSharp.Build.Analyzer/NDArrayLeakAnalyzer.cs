@@ -134,6 +134,54 @@ namespace NumSharp.Build.Analyzer
             helpLinkUri: HelpLink);
 
         /// <summary>
+        ///     NDW012 for a dropped <c>NDArray</c> in a project whose build DECLARES the NumSharp.Build weaver
+        ///     inactive (<c>build_property.NumSharpBuildActive</c> present and not <c>true</c>: NumSharp's targets
+        ///     default it to <c>false</c>, the weaver's targets set <c>true</c> when they will weave). There
+        ///     <c>[NDScoped]</c> and <c>[NDScopedAsync]</c> are inert (NDW013): the method keeps its body, no scope
+        ///     opens, and an attributed CALLER opens none either. So this text does not offer the attribute as a
+        ///     fix, counts only scopes opened with <c>NDScope.Open()</c> as a caller's scope, makes explicit
+        ///     disposal the fix, and names installing NumSharp.Build as the way to scope a method with many
+        ///     temporaries. <c>{0}</c> and <c>{1}</c> are as in <see cref="Nw012"/>.
+        /// </summary>
+        /// <remarks>
+        ///     The best fix depends on the project: with the weaver, <c>[NDScoped]</c> ranks above explicit
+        ///     disposal because it reclaims every array the method creates, including the temporaries this
+        ///     analysis deliberately leaves unflagged (read only through a member call) and those on exception
+        ///     paths; without it, the attribute changes nothing and explicit disposal is the best fix that works.
+        ///     An ABSENT property (a build importing neither targets file) is unknown and keeps
+        ///     <see cref="Nw012"/>, the same reading NDW013 gives it.
+        /// </remarks>
+        internal static readonly DiagnosticDescriptor Nw012NoWeaver = new DiagnosticDescriptor(
+            "NDW012",
+            "NDArray is created but never disposed, returned, stored, or scoped (left to the finalizer)",
+            "Nothing in this method disposes, returns, stores, or scopes this {1}. {0} is inert here: this project " +
+            "does not use the NumSharp.Build package. Take the first that fits: (1) a call " +
+            "hands back an array the method already holds (@out, inplace: true): suppress only this line; (2) every " +
+            "call already runs inside a scope opened with NDScope.Open() ([NDScoped] callers open none here), none " +
+            "runs it in a long loop, and this method is not public: [NDScopedCovered]; (3) otherwise dispose it " +
+            "after its last use, unless it may be an input (np.asarray(x)). For a method with many temporaries that " +
+            "keeps none past the call, installing NumSharp.Build lets {0} reclaim them all.",
+            Category,
+            DiagnosticSeverity.Warning,
+            isEnabledByDefault: true,
+            description: "This project's build declares the NumSharp.Build weaver inactive (NumSharpBuildActive is " +
+                         "not true), so [NDScoped] and [NDScopedAsync] are inert (NDW013): no scope opens in the " +
+                         "method or in an attributed caller, and the array waits for the finalizer. This check reads " +
+                         "one method at a time and cannot see a scope a caller opened with NDScope.Open(). Case 1, " +
+                         "not a leak: a call hands back an array the method already holds (@out, inplace: true; not a " +
+                         "view or copy) or the callee takes the array over: suppress only that line, with a comment. " +
+                         "Case 2: every call of a non-public method runs on the calling thread inside a scope a " +
+                         "caller opened with NDScope.Open(), no caller runs it in a long loop, and the method creates " +
+                         "no array after an await: [NDScopedCovered], free at run time. Case 3: dispose the array " +
+                         "after its last use, never an array the method returns, stores, or was given, nor one that " +
+                         "may be an input (np.asarray(x), x.astype(t, copy: false)). A method with many temporaries " +
+                         "can instead install the weaver ('dotnet add package NumSharp.Build', a build-time " +
+                         "dependency) and take [NDScoped] or [NDScopedAsync] under the conditions on the help page, " +
+                         "or open a scope by hand ('using var scope = NDScope.Open();') and route every return " +
+                         "through scope.Returns(...); a return that skips it hands back a disposed array.",
+            helpLinkUri: HelpLink);
+
+        /// <summary>
         ///     NDW012 for a dropped DISPOSABLE that stores NDArrays: a holder class, NumSharp's <c>np.nditer</c>
         ///     iterator, an <c>NpzFile</c>, or an array of them. It has a text of its own because the scope
         ///     attributes cannot fix it: an <c>NDScope</c> reclaims only the NDArrays created during the
@@ -160,12 +208,13 @@ namespace NumSharp.Build.Analyzer
             helpLinkUri: HelpLink);
 
         /// <summary>
-        ///     The two NDW012 texts: one id and one severity, two messages, because the fix for a dropped NDArray
-        ///     (find who reclaims it, then scope, cover, suppress, or dispose) differs from the fix for a dropped
-        ///     holder (always dispose it).
+        ///     The three NDW012 texts: one id and one severity, three messages, because the best fix differs. A
+        ///     dropped NDArray with the weaver active (or its state unknown): find who reclaims it, then suppress,
+        ///     cover, scope, or dispose. The same without the weaver: suppress, cover, or dispose, since the scope
+        ///     attributes are inert there. A dropped holder: always dispose it.
         /// </summary>
         public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-            ImmutableArray.Create(Nw012, Nw012Holder);
+            ImmutableArray.Create(Nw012, Nw012NoWeaver, Nw012Holder);
 
         public override void Initialize(AnalysisContext context)
         {
@@ -180,9 +229,32 @@ namespace NumSharp.Build.Analyzer
                 // The ownership model makes NDArray-owning DISPOSABLES (a consumer's holder class,
                 // NumSharp's own np.nditer iterator) owned values too: ownership is contagious.
                 var model = new OwnershipModel(known, start.Compilation);
-                start.RegisterOperationBlockAction(c => new BlockScan(known, model, c).Run());
+
+                // Read once per compilation: the build property is global, and it decides which text
+                // offers [NDScoped] (it is inert when the weaver is declared inactive).
+                bool weaverInactive = WeaverDeclaredInactive(start.Options.AnalyzerConfigOptionsProvider.GlobalOptions);
+                start.RegisterOperationBlockAction(c => new BlockScan(known, model, c, weaverInactive).Run());
             });
         }
+
+        /// <summary>
+        ///     True when the build DECLARES the NumSharp.Build weaver inactive: <c>NumSharpBuildActive</c> is
+        ///     present (NumSharp's targets default it to <c>false</c>; the weaver's targets set <c>true</c> when
+        ///     they will weave) and is not <c>true</c>. An absent property, a build importing neither targets file,
+        ///     is unknown and answers false, so such a build keeps the text that offers <c>[NDScoped]</c>, the
+        ///     reading NDW013 gives the same property.
+        /// </summary>
+        /// <remarks>
+        ///     NDW013's opt-out (<c>NumSharpDisableWeaverMissingWarning</c>) does not count here, unlike in
+        ///     NDW013's own check: it silences a warning about inert attributes, but the attributes stay inert, so
+        ///     offering <c>[NDScoped]</c> as a fix would still be wrong.
+        /// </remarks>
+        /// <param name="options">The compilation's global analyzer options, where MSBuild's generated editorconfig
+        ///     puts every <c>CompilerVisibleProperty</c> as <c>build_property.&lt;name&gt;</c>.</param>
+        /// <returns>True when <see cref="Nw012NoWeaver"/> applies to every dropped NDArray of the compilation.</returns>
+        private static bool WeaverDeclaredInactive(AnalyzerConfigOptions options)
+            => options.TryGetValue("build_property.NumSharpBuildActive", out var active) &&
+               !string.Equals(active?.Trim(), "true", System.StringComparison.OrdinalIgnoreCase);
 
         private enum Disposition
         {
@@ -198,6 +270,10 @@ namespace NumSharp.Build.Analyzer
             private readonly OwnershipModel _model;
             private readonly OperationBlockAnalysisContext _ctx;
 
+            // True when the build declared the weaver inactive: a dropped NDArray then gets the text that does
+            // not offer [NDScoped] (inert without NumSharp.Build). Fixed per compilation.
+            private readonly bool _weaverInactive;
+
             // local → its non-write value uses; the owning locals; the ones a 'using' already reclaims;
             // and the expressions that FEED a local (skipped in the expression pass — reported via the local).
             private readonly Dictionary<ILocalSymbol, List<IOperation>> _localUses =
@@ -207,11 +283,18 @@ namespace NumSharp.Build.Analyzer
             private readonly HashSet<ILocalSymbol> _usingLocals = new HashSet<ILocalSymbol>(SymbolEqualityComparer.Default);
             private readonly HashSet<IOperation> _localSourceExprs = new HashSet<IOperation>();
 
-            public BlockScan(KnownTypes k, OwnershipModel model, OperationBlockAnalysisContext ctx)
+            /// <summary>Prepares the scan of one operation block; <see cref="Run"/> does the work.</summary>
+            /// <param name="k">NumSharp's types, resolved once per compilation.</param>
+            /// <param name="model">The ownership model (which values are owned, contagion included).</param>
+            /// <param name="ctx">The block being analyzed; diagnostics are reported through it.</param>
+            /// <param name="weaverInactive">True when the build declared the weaver inactive, which selects
+            ///     <see cref="Nw012NoWeaver"/> for a dropped NDArray.</param>
+            public BlockScan(KnownTypes k, OwnershipModel model, OperationBlockAnalysisContext ctx, bool weaverInactive)
             {
                 _k = k;
                 _model = model;
                 _ctx = ctx;
+                _weaverInactive = weaverInactive;
             }
 
             public void Run()
@@ -266,17 +349,21 @@ namespace NumSharp.Build.Analyzer
 
             /// <summary>
             ///     Reports one leaked value with the text that fits it: the holder text for a disposable that stores
-            ///     NDArrays (only its own <c>Dispose</c> reclaims it, so no scope attribute is suggested), else the
-            ///     NDArray text, which names the scope attribute that fits the enclosing method.
+            ///     NDArrays (only its own <c>Dispose</c> reclaims it, so no scope attribute is suggested); for an
+            ///     NDArray, the text that offers the scope attribute fitting the enclosing method, or, when the build
+            ///     declared the weaver inactive, the text that does not (the attribute would be inert).
             /// </summary>
             /// <param name="loc">Where the value is created: a local's declarator, or the leaking expression.</param>
             /// <param name="method">The method whose body drops the value; decides <c>[NDScoped]</c> versus <c>[NDScopedAsync]</c>.</param>
-            /// <param name="type">The value's static type; decides between the two texts and how the value is named.</param>
+            /// <param name="type">The value's static type; decides between the texts and how the value is named.</param>
             private void Report(Location loc, IMethodSymbol method, ITypeSymbol type)
             {
-                var diagnostic = IsHolderValue(type)
-                    ? Diagnostic.Create(Nw012Holder, loc, DescribeOwned(type))
-                    : Diagnostic.Create(Nw012, loc, EnclosingSuggestion(method), DescribeOwned(type));
+                Diagnostic diagnostic;
+                if (IsHolderValue(type))
+                    diagnostic = Diagnostic.Create(Nw012Holder, loc, DescribeOwned(type));
+                else
+                    diagnostic = Diagnostic.Create(_weaverInactive ? Nw012NoWeaver : Nw012, loc,
+                        EnclosingSuggestion(method), DescribeOwned(type));
                 _ctx.ReportDiagnostic(diagnostic);
             }
 

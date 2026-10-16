@@ -534,6 +534,26 @@ and frees them only when it closes. So a case does not apply in two situations:
 - The array is created in a lambda or task that runs on another thread, or after the scope has closed.
   No scope tracks it.
 
+**Why this order.** The cases run from the best fix to the most manual one. Case 1 changes nothing, and
+any other fix applied to a value that is not a leak can dispose an array that is still in use. Case 2
+costs nothing at run time. Case 3 reclaims every array the method creates: the flagged one, the
+temporaries this check deliberately leaves unflagged (those read only through a member call), and the
+ones on an exception path. It costs one scope per call. Case 4 frees only the array you dispose, but it
+needs no package and works everywhere.
+
+**Without NumSharp.Build.** `[NDScoped]` and `[NDScopedAsync]` are woven by the
+[`NumSharp.Build`](#quick-start) package; without it they are inert (NDW013), and a caller marked with
+one opens no scope either. The analyzer reads the same build property NDW013 reads
+(`NumSharpBuildActive`: NumSharp's targets default it to `false`, NumSharp.Build's targets set `true`
+when they weave). When the build declares the weaver inactive, a dropped NDArray gets a text with three
+cases instead of four. Case 1 is unchanged. Case 2 counts only scopes a caller opened with
+`NDScope.Open()`. Case 3 is to dispose the array, because the scope attribute would change nothing.
+The text then names installing NumSharp.Build as the way to scope a method with many temporaries. A
+scope opened by hand (see [Hand-scoping](#hand-scoping)) also works without the weaver, as long as every
+return goes through `scope.Returns(...)`; a return that skips it hands back a disposed array. When the
+property is absent (a build that imports neither targets file), the weaver's state is unknown and the
+four-case text stays.
+
 A method that is already `[NDScoped]`/`[NDScopedAsync]` or `[NDScopedCovered]`, or that opens an
 `NDScope` itself, is **exempt**, and so is an override that [inherits](#inheritance---virtual-abstract-and-interface-members)
 one of those attributes. Returning the value, storing it, or passing it to a non-NumSharp API are all
@@ -777,7 +797,7 @@ Same code, same fix, whichever layer fires.
 | `NDW009` | an `async` method, async iterator, or `Task`/`ValueTask`-returning method marked `[NDScoped]` | mark it `[NDScopedAsync]` (that attribute owns the shapes that suspend across `await`) |
 | `NDW010` | a plain synchronous method or a **synchronous** iterator marked `[NDScopedAsync]` | mark it `[NDScoped]` (synchronous bodies and synchronous iterators are its job) |
 | `NDW011` | a method carries BOTH `[NDScoped]` and `[NDScopedAsync]` | keep only the one that matches the method's scoping model |
-| [`NDW012`](#ndw012) | an NDArray, or a disposable that stores NDArrays, is created but never returned, out'd, stored, disposed, or reclaimed by an `NDScope` - left to the finalizer | follow the [ordered procedure](#ndw012) the message carries: suppress a false positive (a call that returns an array the method already holds, a callee that takes it over), mark `[NDScopedCovered]` when every call already runs under a scope, mark `[NDScoped]`/`[NDScopedAsync]` only for a method that keeps no array past the call and returns no holder, else dispose it; a dropped holder is always disposed (no scope attribute reclaims it); tune via `.editorconfig` (`dotnet_diagnostic.NDW012.severity`) |
+| [`NDW012`](#ndw012) | an NDArray, or a disposable that stores NDArrays, is created but never returned, out'd, stored, disposed, or reclaimed by an `NDScope` - left to the finalizer | follow the [ordered procedure](#ndw012) the message carries, best fix first: suppress a false positive (a call that returns an array the method already holds, a callee that takes it over), mark `[NDScopedCovered]` when every caller already has a scope, mark `[NDScoped]`/`[NDScopedAsync]` only for a method that keeps no array past the call and returns no holder, else dispose it. Without NumSharp.Build the text drops the scope attribute (it would be inert) and counts only scopes opened with `NDScope.Open()`. A dropped holder is always disposed (no scope attribute reclaims it). Tune via `.editorconfig` (`dotnet_diagnostic.NDW012.severity`) |
 | [`NDW013`](#ndw013) | `[NDScoped]`/`[NDScopedAsync]`/`[NDScopedExit]` used - carried by the member itself, or [inherited](#inheritance---virtual-abstract-and-interface-members) from a declaration in this or another assembly - but the `NumSharp.Build` package is not installed (or `-p:SkipNDScopeWeave=true`): the attributes are inert and the temporaries leak. Reported per member by the analyzer; project-wide by the MSBuild fallback scan when no analyzer runs | install `NumSharp.Build`, or remove the attributes (mark an inheriting override `[NDScopedCovered]`; detach a retained argument by hand with `NDScope.Detach`) and dispose by hand; suppress with `-p:NumSharpDisableWeaverMissingWarning=true` |
 | `NDW014` | `[NDScopedExit]` on an unsupported parameter type (a `ref`/`out`/`in`, a scalar, a bare buffer, an `INDArrayCarrier` struct, or a tuple with an ND-carrying component `Detach` cannot see through) | hand-detach with `NDScope.Detach` |
 | `NDW015` | an `out` parameter whose NDArray-carrying shape the out-escape cannot yield (`out List<NDArray>`, `out Task<NDArray>`, `out NDArray[,]`, `out T` with `T : NDArray`) | [hand-scope](#hand-scoping) and yield the final value explicitly |
