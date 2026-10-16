@@ -481,13 +481,14 @@ public NDArray Bad(NDArray a, NDArray b)
 }
 ```
 
-**What the message tells you to do.** The warning text is an ordered procedure, written so that a
-person or a coding agent can act on the build-log line alone. Adding `[NDScoped]` is not the reflex
-fix, because of the one fact the text starts from: when a scoped method finishes, its scope disposes
-**every** array created during the call, by the method or by anything it calls, except what the method
-returns, yields or assigns to `out` parameters and what was detached with `NDScope.Detach`. An array
-that is still in use somewhere else is disposed with the rest. So the text asks you to act on the first
-case that holds:
+**What the message tells you to do.** The warning line names the four fixes below in the order to try
+them, in a few words each, and the help link the compiler prints after it leads here; the diagnostic's
+description (shown on demand by an IDE) carries the same conditions in short form. Adding `[NDScoped]`
+is not the reflex fix, because of the one fact the line starts from: when a scoped method finishes, its
+scope disposes **every** array created during the call, by the method or by anything it calls, except
+what the method returns, yields or assigns to `out` parameters and what was detached with
+`NDScope.Detach`. An array that is still in use somewhere else is disposed with the rest. So act on the
+first case that holds:
 
 1. **Not a leak.** The value is, or contains only, arrays the method already holds (an `@out` argument
    that the call returns, or the receiver of `inplace: true`; a view or a copy of one does not count),

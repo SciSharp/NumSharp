@@ -34,68 +34,92 @@ namespace NumSharp.Tests.Build.Analyzer
         }
 
         /// <summary>
-        ///     Pins the fix procedure the NDW012 texts carry, because coding agents act on the build-log line
-        ///     alone. The dropped-NDArray text must: say what the scope attribute disposes; forbid adding it as a
-        ///     reflex; give the false-positive exit; prefer <c>[NDScopedCovered]</c> when every call is scoped,
-        ///     with the ways a search for callers goes wrong (delegates, interfaces, base virtuals, threads, an
-        ///     await); name every shape where a scope disposes a live array or stops reclaiming one (an array kept
-        ///     past the call, a static cache, a holder inside a tuple, a pointer, a long loop, a lambda or task
-        ///     that runs elsewhere or later, a constructor); and end in explicit disposal that never touches a
-        ///     returned, stored, given or passthrough array. The holder text must say that no scope attribute
-        ///     fixes it. Wording may change; these facts may not.
+        ///     The longest a message format may be. A build prints the message once per warning site and again in
+        ///     its summary, so a long text floods logs (NumSharp.Core has 171 NDW012 sites) and an agent's context;
+        ///     the full conditions belong in the description and on the help page, whose link the compiler prints
+        ///     after the message. The NDArray text sits just under this cap: it is the shortest that still names
+        ///     every fix with the words that block a use-after-free.
+        /// </summary>
+        private const int Ndw012MessageCap = 640;
+
+        /// <summary>Cap for the holder text, whose fix has a single branch (dispose it, or suppress a hand-off).</summary>
+        private const int Ndw012HolderMessageCap = 400;
+
+        /// <summary>
+        ///     Pins what each NDW012 tier must carry. The MESSAGE (the build-log line an agent acts on) must forbid
+        ///     adding the scope attribute as a reflex and say why, then give the four fixes in order with the words
+        ///     that block their misuse: the false-positive exit (a call handing back an array the method already
+        ///     holds), <c>[NDScopedCovered]</c> for scoped, non-public methods, the scope attribute only when no
+        ///     new array is stored, cached, captured or handed out in a holder and no long loop creates arrays, and
+        ///     disposal that spares a possible input; and it must stay short. The DESCRIPTION must carry every
+        ///     condition the message abbreviates (the per-method limit, detaching, delegate and base-virtual
+        ///     callers, threads and awaits, static caches, the return shapes a scope yields, the tuple gap, pointers,
+        ///     constructors, loops, lambdas and tasks). The holder text must say that no scope attribute fixes it.
+        ///     Wording may change; these facts and the caps may not.
         /// </summary>
         [TestMethod]
-        public void Ndw012_Messages_CarryTheFixProcedure()
+        public void Ndw012_Texts_CarryTheFixProcedure_AndStayShort()
         {
-            string array = NDArrayLeakAnalyzer.Nw012.MessageFormat.ToString();
+            string message = NDArrayLeakAnalyzer.Nw012.MessageFormat.ToString();
             foreach (var fact in new[]
                      {
-                         "cannot see a scope that a caller opened",    // why a covered helper is flagged
-                         "except those it returns, yields, or assigns to out parameters", // what a scope keeps
-                         "Do not add {0} just to silence this warning", // no reflex attribute
-                         "act on the first case that holds",           // an ordered procedure
-                         "an @out argument that the call returns",     // false positive: a call returning its out array
-                         "a view or copy of one does not count",       // a view is a new array
-                         "#pragma warning disable NDW012",             // the false-positive exit
-                         "with a comment that gives the reason",
-                         "silences every NDW012 in it",                // a mark is a whole-method decision
-                         "a constructor cannot take them",             // CS0592: Method/Property-only attributes
-                         "can run many times",                         // a scope held across a long loop
-                         "here or in a caller",                        // a caller's loop holds a covered helper's arrays
-                         "runs on another thread or after that scope closes", // arrays no scope tracks
-                         "count calls through a delegate, interface, or base virtual", // callers a search misses
-                         "on the calling thread",
-                         "creates no array after an await",            // a covered async helper
-                         "nothing outside this assembly can call it",  // [NDScopedCovered] needs every caller known
-                         "mark it [NDScopedCovered], which costs nothing at run time, not {0}", // no nested scope
-                         "static cache",                               // a callee's cache is tracked by the scope
-                         "NDScope.Detach",                             // the legal way to keep an array
-                         "an [NDScopedExit] parameter",
-                         "an INDArrayCarrier struct, a tuple of those", // the return shapes a scope yields
-                         "even inside a tuple",                        // the weaver's silent tuple gap
-                         "no pointer into a temporary",
-                         "returns, yields, or assigns to out parameters is an NDArray", // iterators yield, too
-                         "callers [NDScoped] ([NDScopedAsync] for an async one) under these same conditions", // each caller its own kind
-                         "'using var t = ...;'",                       // the fallback
-                         "before the next pass",                       // per-pass arrays
-                         "never an array the method returns, stores, or was given",
-                         "np.asarray(x)",                              // never dispose a possible passthrough
+                         "Do not add {0} just to silence this",        // no reflex attribute
+                         "it disposes every array the call creates except what the method returns", // why
+                         "Take the first case that fits",              // an ordered procedure
+                         "a call hands back an array the method already holds (@out, inplace: true)", // false positive
+                         "suppress only this line",                    // a line, never a whole file
+                         "every call already runs under a scope and the method is not public: [NDScopedCovered]",
+                         "stored, cached, captured, or put in a holder the method hands out", // use-after-free shapes
+                         "no long loop in it creates arrays: {0}",     // a scope frees only when it closes
+                         "otherwise dispose it after its last use",    // the fallback
+                         "unless it may be an input (np.asarray(x))",  // never dispose a possible passthrough
                      })
-                StringAssert.Contains(array, fact, $"the NDW012 NDArray text must keep: {fact}");
-            Assert.IsFalse(array.Contains('\n') || array.Contains('\r'), "one build-log line");
-            Assert.IsTrue(array.EndsWith("."), "a multi-sentence message ends with a period (RS1032)");
+                StringAssert.Contains(message, fact, $"the NDW012 message must keep: {fact}");
+            Assert.IsTrue(message.Length <= Ndw012MessageCap,
+                $"the NDW012 message is a build-log line, not a document: {message.Length} > {Ndw012MessageCap} characters; " +
+                "move detail to the description and the help page");
+            Assert.IsFalse(message.Contains('\n') || message.Contains('\r'), "one build-log line");
+            Assert.IsTrue(message.EndsWith("."), "a multi-sentence message ends with a period (RS1032)");
+
+            string description = NDArrayLeakAnalyzer.Nw012.Description.ToString();
+            foreach (var fact in new[]
+                     {
+                         "cannot see a scope a caller opened",         // why a covered helper is flagged
+                         "except what it returns, yields, or assigns to out parameters", // what a scope keeps
+                         "NDScope.Detach",                             // the legal way to keep an array
+                         "not a view or copy",                         // a view is a new array
+                         "the callee takes the array over",            // the other false-positive class
+                         "with a comment",
+                         "counting delegate, interface, and base-virtual calls", // callers a search misses
+                         "runs on the calling thread",
+                         "no array after an await",                    // a covered async helper
+                         "static cache",                               // a callee's cache is tracked by the scope
+                         "an [NDScopedExit] parameter",
+                         "INDArrayCarrier structs, tuples of those",   // the return shapes a scope yields
+                         "comes back disposed, even inside a tuple",   // the weaver's silent tuple gap
+                         "no pointer into a temporary",
+                         "its unscoped callers",                       // scoping the callers instead
+                         "a constructor",                              // CS0592: Method/Property-only attributes
+                         "a long loop that creates arrays",
+                         "on another thread or after the scope closed", // arrays no scope tracks
+                         "never an array the method returns, stores, or was given",
+                         "x.astype(t, copy: false)",                   // another possible passthrough
+                     })
+                StringAssert.Contains(description, fact, $"the NDW012 description must keep: {fact}");
+            Assert.IsTrue(description.EndsWith("."), "a description ends with a period (RS1033)");
 
             string holder = NDArrayLeakAnalyzer.Nw012Holder.MessageFormat.ToString();
             foreach (var fact in new[]
                      {
-                         "never calls this object's Dispose",
+                         "An NDScope never calls its Dispose",
                          "neither [NDScoped] nor [NDScopedCovered] fixes this",
-                         "act on the first case that holds",
-                         "#pragma warning disable NDW012",
-                         "'.Close()'",
-                         "hold the collection in a 'using' first",
+                         "Close()",
+                         "suppress only this line if the method it is passed to disposes or returns it",
+                         "hold the collection in a 'using'",
                      })
                 StringAssert.Contains(holder, fact, $"the NDW012 holder text must keep: {fact}");
+            Assert.IsTrue(holder.Length <= Ndw012HolderMessageCap,
+                $"the NDW012 holder message is a build-log line: {holder.Length} > {Ndw012HolderMessageCap} characters");
             Assert.IsFalse(holder.Contains('\n') || holder.Contains('\r'), "one build-log line");
             Assert.IsTrue(holder.EndsWith("."), "a multi-sentence message ends with a period (RS1032)");
         }
@@ -103,8 +127,8 @@ namespace NumSharp.Tests.Build.Analyzer
         /// <summary>
         ///     Each leak gets the text that fits it: a dropped NDArray in a synchronous method names
         ///     <c>[NDScoped]</c>, one in an async method names <c>[NDScopedAsync]</c> and never the synchronous
-        ///     attribute (while the advice for its callers names each kind, because a caller's kind is its own),
-        ///     and a dropped holder gets the holder text, which offers no scope attribute as a fix.
+        ///     attribute, and a dropped holder gets the holder text, which offers no scope attribute as a fix.
+        ///     Every rendered line stays under the cap, the longer async attribute name included.
         /// </summary>
         [TestMethod]
         public async Task Ndw012_PicksTheTextThatFitsTheValue()
@@ -127,21 +151,23 @@ namespace NumSharp.Tests.Build.Analyzer
             string sync = leaks[0].GetMessage(), async = leaks[1].GetMessage(), holder = leaks[2].GetMessage();
             Assert.AreSame(NDArrayLeakAnalyzer.Nw012, leaks[0].Descriptor);
             StringAssert.Contains(sync, "This NDArray is never disposed", "the value is named");
-            StringAssert.Contains(sync, "mark it [NDScoped],", "a synchronous method is offered [NDScoped]");
+            StringAssert.Contains(sync, "Do not add [NDScoped] just to silence this", "the warning names the sync attribute");
+            StringAssert.Contains(sync, "creates arrays: [NDScoped];", "a synchronous method is offered [NDScoped]");
 
             Assert.AreSame(NDArrayLeakAnalyzer.Nw012, leaks[1].Descriptor);
-            StringAssert.Contains(async, "Do not add [NDScopedAsync] just to silence this warning", "the warning names the async attribute");
-            StringAssert.Contains(async, "mark it [NDScopedAsync],", "an async method is offered [NDScopedAsync]");
-            Assert.IsFalse(async.Contains("mark it [NDScoped],") || async.Contains("Do not add [NDScoped] "),
+            StringAssert.Contains(async, "Do not add [NDScopedAsync] just to silence this", "the warning names the async attribute");
+            StringAssert.Contains(async, "creates arrays: [NDScopedAsync];", "an async method is offered [NDScopedAsync]");
+            Assert.IsFalse(async.Contains("arrays: [NDScoped];") || async.Contains("Do not add [NDScoped] "),
                 "an async method is never offered the synchronous attribute");
-            // The callers' attribute is named per caller, never copied from this method's slot: a synchronous
-            // caller of an async method takes [NDScoped] (the weaver rejects the wrong one, NDW009/NDW010).
-            StringAssert.Contains(async, "mark its unscoped callers [NDScoped] ([NDScopedAsync] for an async one)");
-            StringAssert.Contains(sync, "mark its unscoped callers [NDScoped] ([NDScopedAsync] for an async one)");
 
             Assert.AreSame(NDArrayLeakAnalyzer.Nw012Holder, leaks[2].Descriptor);
             StringAssert.Contains(holder, "This 'Batch' instance (a disposable that stores NDArrays) is never disposed");
             StringAssert.Contains(holder, "neither [NDScoped] nor [NDScopedCovered] fixes this");
+
+            // The rendered lines, not just the formats, stay short: [NDScopedAsync] fills two slots.
+            foreach (var line in new[] { sync, async })
+                Assert.IsTrue(line.Length <= Ndw012MessageCap + 40, $"rendered NDW012 line too long: {line.Length}");
+            Assert.IsTrue(holder.Length <= Ndw012HolderMessageCap + 60, $"rendered holder line too long: {holder.Length}");
         }
 
         [TestMethod]
